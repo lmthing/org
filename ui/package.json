@@ -1,0 +1,25 @@
+{
+  "name": "@lmthing/thing-ui",
+  "version": "1.0.0",
+  "description": "LMThing REPL web view UI components",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./thing-web-view": "./src/thing-web-view/index.tsx",
+    "./thing-web-view/*": "./src/thing-web-view/*"
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@lmthing/repl": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "author": "LMThing",
+  "license": "MIT"
+}

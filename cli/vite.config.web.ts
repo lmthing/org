@@ -7,8 +7,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@lmthing/ui": resolve(__dirname, "../ui/src"),
-      "@lmthing/css": resolve(__dirname, "../css/src"),
+      "@lmthing/thing-ui": resolve(__dirname, "../ui/src"),
+      "@lmthing/css": resolve(__dirname, "../../libs/css/src"),
       "@lmthing/repl": resolve(__dirname, "../repl/src"),
     },
   },

@@ -6,11 +6,11 @@ import type {
 } from "@lmthing/repl";
 
 // Re-export types and blocksReducer from the shared UI library
-export type { UIBlock, BlockAction, ConversationSummary, AgentAction } from "@lmthing/ui/components/thing/thing-web-view/types";
-export { blocksReducer } from "@lmthing/ui/components/thing/thing-web-view/blocks";
+export type { UIBlock, BlockAction, ConversationSummary, AgentAction } from "@lmthing/thing-ui/thing-web-view/types";
+export { blocksReducer } from "@lmthing/thing-ui/thing-web-view/blocks";
 
-import type { UIBlock, AgentAction, ConversationSummary } from "@lmthing/ui/components/thing/thing-web-view/types";
-import { blocksReducer } from "@lmthing/ui/components/thing/thing-web-view/blocks";
+import type { UIBlock, AgentAction, ConversationSummary } from "@lmthing/thing-ui/thing-web-view/types";
+import { blocksReducer } from "@lmthing/thing-ui/thing-web-view/blocks";
 
 // ── Snapshot State ──
 

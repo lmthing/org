@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useReplSession } from './rpc-client'
-import type { UIBlock } from '@lmthing/ui/components/thing/thing-web-view/types'
+import type { UIBlock } from '@lmthing/thing-ui/thing-web-view/types'
 import type { ConversationTurn } from '@lmthing/repl'
-import { ThingWebView } from '@lmthing/ui/components/thing/thing-web-view'
+import { ThingWebView } from '@lmthing/thing-ui/thing-web-view'
 
 const WS_URL = (import.meta as any).env?.VITE_WS_URL ?? 'ws://localhost:3010'
 
