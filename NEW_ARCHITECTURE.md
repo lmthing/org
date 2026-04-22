@@ -7,7 +7,7 @@ An LLM writes TypeScript into a persistent QuickJS sandbox. Global functions are
 - **Sandbox** = QuickJS isolate (persistent heap across the session, hermetically isolated from Node.js)
 - **Context window** = stack
 - **`.d.ts`** = the instruction surface (no prompt engineering)
-- **Worktree** = append-only git history of `session.ts`, one commit per executed statement
+- **Snapshot stack** = in-memory per-statement checkpoints of virtual file + serialized scope, enabling O(1) rollback and fork
 
 System prompt: _"Write TypeScript into a live REPL. Call inspect() to examine state. Types define the API. Write code, not commentary."_
 
@@ -262,88 +262,101 @@ QuickJS doesn't expose a global enumeration API. The sandbox tracks declared nam
 
 ---
 
-## Git Worktree Checkpointing
+## Snapshot Stack
 
-Every statement executed in the sandbox is committed to a dedicated git worktree. This gives each session a full, replayable, diff-inspectable history.
+REPL state after each statement has two parts: the **virtual file** (accumulated `session.ts` text) and the **sandbox heap** (live QuickJS variable values). The harness keeps both as an in-memory append-only stack — one entry per successfully executed statement. Rollback and fork are O(1) pointer operations; no subprocesses, no disk I/O in the hot path.
 
-### Session worktree
+Git is *not* used for per-statement REPL state. It is reserved for **file writes** (the ` ```path ``` ` four-backtick blocks that persist space files and knowledge markdown), where commit history and diffs have real value — see PLAN.md Phase 5.
 
-At session start, a temporary git repo is initialized:
+### Snapshot shape
 
+```typescript
+interface Snapshot {
+  stmtN: number             // monotonic statement index
+  statement: string         // the source statement that produced this state
+  codeWindow: string        // accumulated session.ts at this point
+  scope: SerializedScope    // JSON-serialized QuickJS heap (declared names → values)
+  yieldKind?: 'inspect' | 'ask' | 'fork' | 'task'  // marks yield points
+  parent?: number           // for fork snapshots: index in the parent stack
+  timestamp: number
+}
+
+interface SerializedScope {
+  primitives: Record<string, unknown>      // JSON-safe values
+  references: Record<string, RefHandle>    // non-serializable values (functions, class instances) kept as QuickJS handles
+  types: Record<string, string>            // type descriptors for the scope table
+}
 ```
-{tmpDir}/sessions/{sessionId}/
-  .git/
-  session.ts        ← append-only; every committed statement
+
+### Per-statement checkpoint
+
+After a statement executes successfully:
+
+```typescript
+snapshots.push({
+  stmtN: ++n,
+  statement: code,
+  codeWindow: codeLines.join('\n'),
+  scope: sandbox.dumpScope(),
+  timestamp: Date.now(),
+})
 ```
 
-The `session.ts` file is the virtual file used for tsc type-checking. After each statement executes successfully, the harness:
-
-1. Appends the statement to `session.ts`
-2. Runs `git add session.ts`
-3. Commits: `git commit -m "stmt {n}: {first_60_chars}"`
-
-Failed statements (type errors, runtime errors) are **not committed** — the virtual file stays at the last successful state.
-
-### Commit anatomy
-
-| Commit message | Trigger |
-|---|---|
-| `init: session {id}` | Session start (empty `session.ts`) |
-| `stmt {n}: {summary}` | Successful statement execution |
-| `inspect {n}` | `inspect()` yield — tagged `inspect-{n}` |
-| `ask {n}` | `ask()` yield — tagged `ask-{n}` |
-| `rollback {n}` | `rollback(k)` call — resets to `HEAD~k` |
-
-### Tags
-
-```
-inspect-1, inspect-2, ...   ← yield points (context reconstruction boundaries)
-ask-1, ask-2, ...           ← ask() yield points
-fork-{id}                   ← branch tip for each fork() call
-snapshot-{name}             ← test harness snapshots (see Testing)
-```
+Failed statements (type errors, runtime errors) do not append. The virtual file stays at the last successful state, which is what tsc sees for the next type-check.
 
 ### Rollback
 
-`rollback(k)` resets the worktree and the QuickJS scope together:
-
-```
+```typescript
 rollback(2)
-  → git reset --hard HEAD~2    (truncate virtual file)
-  → restore QuickJS scope from checkpoint stored at HEAD~2
+  → const target = snapshots[snapshots.length - 1 - 2]
+  → sandbox.restoreScope(target.scope)
+  → codeLines.length = target.codeWindow lines
+  → snapshots.splice(-2)
 ```
 
-Scope checkpoints are stored as JSON alongside each commit (not in the worktree — in an out-of-tree map keyed by commit SHA):
+Pure pointer arithmetic plus one scope restore. No subprocess overhead.
+
+### Fork
+
+Each `fork()` creates an independent QuickJS context (heaps cannot be shared) seeded from a snapshot:
 
 ```typescript
-// After each stmt commit
-const sha = execSync('git rev-parse HEAD')
-scopeCheckpoints.set(sha, sandbox.dumpScope())
-
-// On rollback(k)
-const targetSha = execSync(`git rev-parse HEAD~${k}`)
-sandbox.restoreScope(scopeCheckpoints.get(targetSha))
+const parent = snapshots[snapshots.length - 1]
+const forkCtx = module.newAsyncContext()
+forkCtx.loadScope(parent.scope)          // restore declared vars into the new heap
+const forkStack: Snapshot[] = [{ ...parent, parent: parent.stmtN }]
 ```
 
-### Fork branches
+Fork result is injected back into the parent's scope as `forkResult_{id}`, and a single synthetic snapshot records the merge point. Fork stacks are discarded after the fork resolves.
 
-Each `fork()` call creates a branch in the same worktree:
+### Scope serialization
 
-```
-main: stmt 1 → stmt 2 → inspect-1
-                              ↓ fork-a1b2 branch
-                          fork stmt 1 → fork stmt 2
-```
+JSON handles primitives, arrays, plain objects. Non-serializable values (functions, class instances, closures) are kept as live `QuickJSHandle`s in the `references` map — they survive rollback because the QuickJS context is the same; fork restoration requires the caller to declare which references can cross the context boundary (via `inject:` in the fork spec).
 
-Fork branches are merged back (squash) into main as a single `fork-result` commit when the fork resolves.
+### Yield-point snapshots
 
-### Session cleanup
+The stack entries produced at `inspect()`, `ask()`, and task completions are flagged with `yieldKind`. The context reconstruction layer reads these to rebuild the `__scope` / `__askResult` / `__taskResult_*` blocks without rescanning the full stack.
 
-Worktrees are ephemeral by default — deleted when the session ends. To persist for debugging or test replay:
+### Optional git export
+
+For post-mortem debugging, the snapshot stack can be flushed to a git worktree on demand:
 
 ```typescript
-runAgent({ keepWorktree: true })  // worktree survives; path logged at exit
+session.exportToGit(path)   // writes session.ts commits statement-by-statement
 ```
+
+This is an opt-in debugging aid — not a hot-path operation. Production sessions run entirely in memory.
+
+### Session persistence (optional)
+
+Sessions that need to survive process restarts can serialize the snapshot stack to SQLite or a JSON file:
+
+```typescript
+session.persist(path)                       // write stack + last scope
+const resumed = await Session.resume(path)  // rebuild from disk
+```
+
+Resumption rebuilds the QuickJS context from the last snapshot's `scope`. Live references that can't be serialized are lost — the resumed session starts from the serializable subset of the heap.
 
 ---
 
@@ -657,7 +670,7 @@ Every event logged at statement granularity. Never summarized. Full context reco
 
 ## Testing
 
-The test system is **code-first**: tests are TypeScript files that drive sessions programmatically. Snapshots are git states, not serialized text files — comparing a snapshot means diffing `session.ts` against a tagged commit in the worktree.
+The test system is **code-first**: tests are TypeScript files that drive sessions programmatically. Snapshots are JSON files committed to the package (Vitest convention) — a snapshot captures the serialized state of interest (scope, code window, message array, generated LLM output) at a named point.
 
 ### Test harness
 
@@ -673,8 +686,8 @@ defineTest('basic arithmetic', async (h: TestHarness) => {
   await s.execute(`const y = x * 3`)
   s.assertScope({ y: 6 })
 
-  s.assertCommits(2)          // 2 stmt commits in worktree
-  s.snapshot('after-math')    // git tag snapshot-after-math at HEAD
+  s.assertStmtCount(2)             // 2 snapshots on the stack
+  s.matchSnapshot('after-math')    // compares full state bundle vs __snapshots__/
 })
 ```
 
@@ -682,8 +695,14 @@ defineTest('basic arithmetic', async (h: TestHarness) => {
 
 ```typescript
 interface TestHarness {
-  /** Create an isolated session with its own QuickJS context + git worktree. */
+  /** Create an isolated session with its own QuickJS context and snapshot stack. */
   session(opts?: Partial<SessionConfig>): Promise<TestSession>
+
+  /** Load a pre-built session state from a JSON fixture (replay tests). */
+  fixture(name: string): Promise<TestSession>
+
+  /** Real-LLM helper; skipped when API keys are absent. */
+  llm(size: 'small' | 'large', systemPrompt: string, userPrompt: string): Promise<string>
 }
 ```
 
@@ -691,80 +710,78 @@ interface TestHarness {
 
 ```typescript
 interface TestSession {
-  /** Execute a TypeScript statement. Commits to worktree on success. */
+  /** Execute a TypeScript statement. Pushes a snapshot on success. */
   execute(code: string): Promise<ExecuteResult>
 
   /** Trigger an inspect() yield and return the reconstructed context. */
   inspect(): Promise<InspectSnapshot>
 
-  /** Assert that named scope variables match expected values (deep equal). */
+  /** Deep-equal assertion against named scope variables. */
   assertScope(expected: Partial<Record<string, unknown>>): void
 
-  /** Assert the number of stmt commits in the worktree. */
-  assertCommits(n: number): void
+  /** Snapshot-stack size assertion. */
+  assertStmtCount(n: number): void
 
-  /** Assert that git log matches a predicate. */
-  assertGitLog(predicate: (commits: GitCommit[]) => boolean): void
-
-  /** Assert that session.ts content matches a string or regex. */
-  assertSessionFile(expected: string | RegExp): void
+  /** Virtual-file content assertion. */
+  assertCodeWindow(expected: string | RegExp): void
 
   /**
-   * Tag HEAD as `snapshot-{name}`. On re-run, compare current session.ts
-   * against the tagged state. Fails if diff is non-empty (unless --update-snapshots).
+   * Compare the full state bundle { scope, codeWindow, messages } against
+   * __snapshots__/{testFile}.snap. Writes on first run; fails on mismatch;
+   * updates when --update-snapshots is passed. Vitest serializer.
    */
-  snapshot(name: string): void
+  matchSnapshot(name: string): void
 
-  /** Restore the worktree to a named snapshot and return a new session continuing from there. */
+  /** Restore the session to a named snapshot from disk, return a fresh session from there. */
   replayFrom(snapshotName: string): Promise<TestSession>
 
-  /** Get the path to this session's git worktree. */
-  getWorktreePath(): string
+  /** Rollback K statements in-session (exercises the snapshot stack). */
+  rollback(k: number): void
 
-  /** Get raw QuickJS scope dump. */
+  /** Raw scope dump — useful for ad-hoc assertions. */
   dumpScope(): Record<string, unknown>
+
+  /** Export the snapshot stack to a git worktree for post-mortem inspection (opt-in). */
+  exportToGit(path: string): Promise<void>
 }
 ```
 
 ### Snapshot semantics
 
-A snapshot is a git tag in the session worktree:
+Snapshots are Vitest-style: stored as serialized state bundles in `__snapshots__/*.snap` files next to the test. On first run the file is written; on subsequent runs the current state is compared to the file.
 
+The state bundle is always the same shape, so a single `matchSnapshot(name)` captures everything a reviewer needs:
+
+```typescript
+interface SnapshotBundle {
+  scope: Record<string, unknown>      // post-execution scope
+  codeWindow: string                  // accumulated session.ts
+  messages?: Message[]                // session.getMessages() for multi-turn tests
+  generatedCode?: string              // for LLM tests, the last generated code block
+  stmtCount: number
+}
 ```
-snapshot-{name} → commit SHA → session.ts content at that point
-```
 
-On first run, `snapshot(name)` tags HEAD. On subsequent runs, it diffs `session.ts` at HEAD against `session.ts` at the snapshot tag:
-
-```bash
-git diff snapshot-{name} HEAD -- session.ts
-```
-
-If the diff is non-empty, the test fails and prints the diff. Pass `--update-snapshots` to move the tag to the current HEAD.
-
-This means snapshots track **the exact code the session accumulated**, not serialized scope values — it's the same code-first approach used throughout the system.
+Diffs are readable text (the Vitest default serializer). `--update-snapshots` rewrites the `.snap` files.
 
 ### LLM integration tests
-
-Tests that call real LLMs inject the model output into `session.execute()`:
 
 ```typescript
 defineTest('[small] stop: called with correct value', async (h) => {
   const s = await h.session({ model: 'small' })
   const code = await h.llm('small', STOP_DOCS, 'Set answer = 42, then call stop(answer).')
 
-  s.snapshot('generated-code')          // snapshot the generated code before execution
   await s.execute(code)
   s.assertScope({ answer: 42 })
-  s.snapshot('scope-after')             // snapshot scope state after execution
+  s.matchSnapshot('stop-correct-value')   // captures { generatedCode, scope, codeWindow }
 })
 ```
 
-`h.llm(size, systemPrompt, userPrompt)` calls the real LLM and returns the generated code string. Tests are skipped when API keys are absent.
+Each model size produces its own snapshot entry (Vitest uses the test name, so `[small]` / `[large]` prefixes live in separate entries). Tests skip automatically when API keys are absent.
 
 ### Space tests
 
-Space tests still use `lmthing test --space <path>`, but the test files inside now use `TestHarness` for session-level assertions:
+Space tests still run via `lmthing test --space <path>`:
 
 ```typescript
 // spaces/space-creator/tests/space-creator.test.ts
@@ -773,49 +790,53 @@ import { defineTest } from '@lmthing/repl/testing'
 defineTest('[small] SpaceArchitect: writes package.json', async (h) => {
   const s = await h.session({ space: 'space-creator', agent: 'SpaceArchitect' })
   await s.sendMessage('Create a space called test-counter')
-  s.assertSessionFile(/package\.json/)
-  s.snapshot('space-creator-package-json')
+  s.assertCodeWindow(/package\.json/)
+  s.matchSnapshot('space-creator-package-json')
 })
 ```
 
 ### Test runner
 
 ```bash
-# Unit tests (fast, no LLM)
-pnpm test
-
-# LLM integration tests
-pnpm vitest run src/sandbox/globals-llm.test.ts
-
-# Space tests
-lmthing test --space org/libs/thing/spaces/space-creator
-
-# Update all snapshots
-pnpm vitest run --update-snapshots
+pnpm test                                                    # unit, fast, no LLM
+pnpm vitest run src/sandbox/globals-llm.test.ts              # LLM integration
+lmthing test --space org/libs/thing/spaces/space-creator     # space tests
+pnpm vitest run --update-snapshots                           # refresh .snap files
 ```
 
-`--update-snapshots` moves every `snapshot-{name}` git tag to the current HEAD in each session worktree. Snapshot tags are committed to the test fixture repo under `tests/__snapshots__/` (a bare git repo checked into the package).
+### Fixtures
 
-### Test isolation guarantees
-
-Each `h.session()` call:
-1. Creates a fresh `QuickJSContext` — no shared heap with other tests
-2. Initializes a new git worktree in a temp directory
-3. Cleans up both when the test completes (unless `--keep-worktrees` is passed)
-
-Tests run in parallel by default (Vitest workers). Worktrees are in separate temp dirs so there is no cross-test git state.
-
-### Fixture worktrees
-
-For tests that need a pre-built session state, fixture worktrees are stored as bare git repos in the package:
+Pre-built session states are stored as JSON under `__fixtures__/`:
 
 ```
 repl/src/sandbox/__fixtures__/
-  arithmetic-baseline.git/   ← bare git repo; replayFrom() clones this
-  etl-pipeline.git/
+  arithmetic-baseline.json   ← SnapshotBundle + full stack
+  etl-pipeline.json
 ```
 
-`h.fixture('arithmetic-baseline')` clones the fixture repo into a fresh temp worktree and returns a `TestSession` positioned at its HEAD. This allows testing rollback, replay, and context reconstruction without running LLMs.
+`h.fixture('arithmetic-baseline')` loads the file, rebuilds a QuickJS context seeded from the fixture's final scope, and primes the snapshot stack. Rollback, replay, and context reconstruction can be tested without running LLMs.
+
+### Test isolation
+
+Each `h.session()` call creates a fresh `QuickJSContext` and a fresh in-memory snapshot stack. No shared state between tests. Vitest workers run in parallel; since everything is in-memory the only shared resource is the `QuickJSWASMModule` singleton, which is read-only after initialization.
+
+### Debugging failed tests
+
+Failing tests can export their final state for inspection:
+
+```typescript
+defineTest('etl pipeline', async (h) => {
+  const s = await h.session()
+  try {
+    // ...
+  } catch (e) {
+    await s.exportToGit('./debug/etl-failure')   // writes a browsable git history
+    throw e
+  }
+})
+```
+
+This is the bridge between the fast in-memory default and the richer debugging affordance git provides — opt in only when a test actually fails.
 
 ---
 
@@ -836,11 +857,12 @@ repl/src/sandbox/__fixtures__/
 13. Cross-pipeline dependencies: allow `dependsOn: ["other-pipeline:task-id"]`?
 14. Task result size limits: truncate large results before injecting into `__deps`?
 15. QuickJS async: `QuickJSAsyncContext` runs in a separate WASM module (larger binary) — should the sync context be used for pure-code sessions and async context only when needed?
-16. Worktree persistence policy: keep on crash/timeout for post-mortem debugging? Auto-expire after N days?
-17. Scope checkpoint serialization: JSON.stringify loses non-serializable values (functions, class instances) — use a custom serializer or store handles directly in QuickJS?
+16. Snapshot stack memory cost: a 500-statement session with rich scope may hold many MB of snapshots — cap stack depth, compress older entries, or evict on pressure?
+17. Non-serializable scope values (functions, class instances, closures) survive rollback via live QuickJS handles, but can't cross fork contexts or be persisted — is a `@serializable` marker / schema hint needed, or is "best-effort JSON" good enough?
+18. Session persistence format: SQLite vs single JSON file — does anyone need to *query* snapshot history, or is flat-file enough?
 
 ---
 
 ## Glossary
 
-**Sandbox**: persistent QuickJS isolate — a separate JS engine (WASM) with no shared heap with the host Node.js process. **Virtual file**: append-only `session.ts` for tsc type-checking. **Yield point**: global call that pauses generation (`inspect`, `ask`). **Inspect cycle**: generate → execute → inspect → reconstruct → resume. **`__scope`**: debugger-style scope object in every reconstruction. **Async error injection**: runtime errors surfaced mid-stream as comments. **Task DAG**: directed acyclic graph of tasks with dependency edges; the orchestrator parallelizes independent paths. **Ask cycle**: generate → render UI → wait for user → reconstruct with response → resume. **Worktree**: temporary git repository initialized per session; accumulates one commit per executed statement. **Scope checkpoint**: JSON snapshot of the QuickJS scope saved alongside each worktree commit, enabling `rollback()` to restore both the virtual file and the heap state. **Snapshot (test)**: a git tag in a session worktree marking a known-good state; test assertions diff `session.ts` against the tagged commit. **Fixture worktree**: a bare git repo checked into the test package that seeds a pre-built session state for deterministic replay tests.
+**Sandbox**: persistent QuickJS isolate — a separate JS engine (WASM) with no shared heap with the host Node.js process. **Virtual file**: append-only `session.ts` for tsc type-checking. **Yield point**: global call that pauses generation (`inspect`, `ask`). **Inspect cycle**: generate → execute → inspect → reconstruct → resume. **`__scope`**: debugger-style scope object in every reconstruction. **Async error injection**: runtime errors surfaced mid-stream as comments. **Task DAG**: directed acyclic graph of tasks with dependency edges; the orchestrator parallelizes independent paths. **Ask cycle**: generate → render UI → wait for user → reconstruct with response → resume. **Snapshot stack**: in-memory append-only list of per-statement checkpoints (virtual file + serialized scope); provides O(1) rollback and the substrate for fork. **Serialized scope**: JSON-safe dump of declared variables plus a reference map for non-serializable values (kept as live QuickJS handles). **Snapshot (test)**: a serialized `SnapshotBundle` written to `__snapshots__/*.snap` (Vitest convention); test re-runs diff the current state against the file. **Fixture**: a JSON file in `__fixtures__/` that seeds a `TestSession` with a pre-built snapshot stack for deterministic replay tests. **Export to git**: opt-in debug affordance that flushes the snapshot stack to a browsable git worktree — used on test failure or demand, never on the hot path.
