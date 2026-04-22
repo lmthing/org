@@ -1,12 +1,13 @@
-# LLM-REPL (concise spec v3)
+# LLM-REPL (concise spec v4)
 
 ## Concept
 
-An LLM writes TypeScript into a persistent V8 sandbox. Global functions are syscalls that yield to an orchestrator, which reconstructs context and resumes generation. Code is type-checked by tsc's language service before execution.
+An LLM writes TypeScript into a persistent QuickJS sandbox. Global functions are syscalls that yield to an orchestrator, which reconstructs context and resumes generation. Code is type-checked by tsc's language service before execution. Every executed statement is committed to a git worktree — giving the session a full, replayable history.
 
-- **Sandbox** = heap (persistent across the session)
+- **Sandbox** = QuickJS isolate (persistent heap across the session, hermetically isolated from Node.js)
 - **Context window** = stack
 - **`.d.ts`** = the instruction surface (no prompt engineering)
+- **Worktree** = append-only git history of `session.ts`, one commit per executed statement
 
 System prompt: _"Write TypeScript into a live REPL. Call inspect() to examine state. Types define the API. Write code, not commentary."_
 
@@ -175,6 +176,174 @@ LLM tokens → boundary detector → tsc diagnostics → sandbox execution
 ```
 
 **Rollback**: only operation that truncates the virtual file. Side effects can't be undone.
+
+---
+
+## Sandbox: QuickJS
+
+The sandbox uses **QuickJS** (via `quickjs-emscripten`) instead of Node.js `vm.Context`. QuickJS is a separate JS engine compiled to WASM — it shares no heap with the host Node.js process and has no access to Node APIs unless explicitly bridged.
+
+### Why QuickJS over vm.Context
+
+| Property | `vm.Context` (old) | QuickJS (new) |
+|---|---|---|
+| Isolation | Same V8 process — prototype pollution, shared globals | Separate engine — no shared heap |
+| Globals leakage | Must block each dangerous global explicitly | Nothing available unless injected |
+| Memory limits | Node.js process limit only | Per-VM memory limit at engine level |
+| Determinism | Non-deterministic (GC, JIT, timers shared) | Deterministic under interrupt handler |
+| Serialization | Not possible | Heap can be snapshotted via handle marshaling |
+| TypeScript | tsc API in host, execute transpiled JS | tsc API in host, execute transpiled JS |
+
+### Lifecycle
+
+```
+getQuickJS()                          → QuickJSWASMModule (once at startup)
+    ↓
+module.newContext({ maxStackSizeMb })  → QuickJSContext   (one per session)
+    ↓
+context.evalCode(transpiled_js)        → QuickJSHandle    (per statement)
+    ↓
+handle.dispose() + context.dispose()  (at session end)
+```
+
+The `QuickJSWASMModule` is a singleton loaded once. Each session gets its own `QuickJSContext` with a fresh heap.
+
+### Injecting globals
+
+Host-side objects (callbacks, catalog functions, structured data) cross the QuickJS boundary via handle marshaling:
+
+```typescript
+// Inject a function global
+const stopHandle = context.newFunction('stop', (valueHandle) => {
+  const value = context.dump(valueHandle)  // QuickJS → JS
+  onStop(value)
+  return context.undefined
+})
+context.setProp(context.global, 'stop', stopHandle)
+stopHandle.dispose()
+
+// Inject a data value
+const configHandle = context.evalCode(JSON.stringify(config))
+context.setProp(context.global, '__config', configHandle.value)
+configHandle.dispose()
+```
+
+All handles must be disposed. The `Scope` utility from `quickjs-emscripten` tracks handles for bulk disposal.
+
+### Async operations
+
+`QuickJSAsyncContext` is used for sessions that require async globals (`ask`, `fork`, catalog functions):
+
+```typescript
+const context = module.newAsyncContext()
+await context.evalCodeAsync(transpiled_js)
+```
+
+The host event loop drives QuickJS async via `context.executePendingJobs()` called after each statement.
+
+### Memory and CPU limits
+
+```typescript
+const runtime = module.newRuntime()
+runtime.setMemoryLimit(64 * 1024 * 1024)      // 64 MB per session
+runtime.setMaxStackSize(2 * 1024 * 1024)       // 2 MB stack
+runtime.setInterruptHandler(() => {
+  return Date.now() - startMs > timeoutMs       // true → throw InterruptError
+})
+```
+
+### TypeScript compilation
+
+TypeScript is compiled to JavaScript in the host (Node.js) using the TypeScript compiler API — identical to the current flow. The resulting `.js` is sent to `context.evalCode()`. QuickJS sees only plain JavaScript.
+
+### Scope extraction
+
+QuickJS doesn't expose a global enumeration API. The sandbox tracks declared names via the same AST-based approach used today (extract declarations before execution), then reads values back via `context.getProp(context.global, name)` and `context.dump(handle)`.
+
+---
+
+## Git Worktree Checkpointing
+
+Every statement executed in the sandbox is committed to a dedicated git worktree. This gives each session a full, replayable, diff-inspectable history.
+
+### Session worktree
+
+At session start, a temporary git repo is initialized:
+
+```
+{tmpDir}/sessions/{sessionId}/
+  .git/
+  session.ts        ← append-only; every committed statement
+```
+
+The `session.ts` file is the virtual file used for tsc type-checking. After each statement executes successfully, the harness:
+
+1. Appends the statement to `session.ts`
+2. Runs `git add session.ts`
+3. Commits: `git commit -m "stmt {n}: {first_60_chars}"`
+
+Failed statements (type errors, runtime errors) are **not committed** — the virtual file stays at the last successful state.
+
+### Commit anatomy
+
+| Commit message | Trigger |
+|---|---|
+| `init: session {id}` | Session start (empty `session.ts`) |
+| `stmt {n}: {summary}` | Successful statement execution |
+| `inspect {n}` | `inspect()` yield — tagged `inspect-{n}` |
+| `ask {n}` | `ask()` yield — tagged `ask-{n}` |
+| `rollback {n}` | `rollback(k)` call — resets to `HEAD~k` |
+
+### Tags
+
+```
+inspect-1, inspect-2, ...   ← yield points (context reconstruction boundaries)
+ask-1, ask-2, ...           ← ask() yield points
+fork-{id}                   ← branch tip for each fork() call
+snapshot-{name}             ← test harness snapshots (see Testing)
+```
+
+### Rollback
+
+`rollback(k)` resets the worktree and the QuickJS scope together:
+
+```
+rollback(2)
+  → git reset --hard HEAD~2    (truncate virtual file)
+  → restore QuickJS scope from checkpoint stored at HEAD~2
+```
+
+Scope checkpoints are stored as JSON alongside each commit (not in the worktree — in an out-of-tree map keyed by commit SHA):
+
+```typescript
+// After each stmt commit
+const sha = execSync('git rev-parse HEAD')
+scopeCheckpoints.set(sha, sandbox.dumpScope())
+
+// On rollback(k)
+const targetSha = execSync(`git rev-parse HEAD~${k}`)
+sandbox.restoreScope(scopeCheckpoints.get(targetSha))
+```
+
+### Fork branches
+
+Each `fork()` call creates a branch in the same worktree:
+
+```
+main: stmt 1 → stmt 2 → inspect-1
+                              ↓ fork-a1b2 branch
+                          fork stmt 1 → fork stmt 2
+```
+
+Fork branches are merged back (squash) into main as a single `fork-result` commit when the fork resolves.
+
+### Session cleanup
+
+Worktrees are ephemeral by default — deleted when the session ends. To persist for debugging or test replay:
+
+```typescript
+runAgent({ keepWorktree: true })  // worktree survives; path logged at exit
+```
 
 ---
 
@@ -486,6 +655,170 @@ Every event logged at statement granularity. Never summarized. Full context reco
 
 ---
 
+## Testing
+
+The test system is **code-first**: tests are TypeScript files that drive sessions programmatically. Snapshots are git states, not serialized text files — comparing a snapshot means diffing `session.ts` against a tagged commit in the worktree.
+
+### Test harness
+
+```typescript
+import { defineTest, type TestHarness } from '@lmthing/repl/testing'
+
+defineTest('basic arithmetic', async (h: TestHarness) => {
+  const s = await h.session()
+
+  await s.execute(`const x = 1 + 1`)
+  s.assertScope({ x: 2 })
+
+  await s.execute(`const y = x * 3`)
+  s.assertScope({ y: 6 })
+
+  s.assertCommits(2)          // 2 stmt commits in worktree
+  s.snapshot('after-math')    // git tag snapshot-after-math at HEAD
+})
+```
+
+### `TestHarness`
+
+```typescript
+interface TestHarness {
+  /** Create an isolated session with its own QuickJS context + git worktree. */
+  session(opts?: Partial<SessionConfig>): Promise<TestSession>
+}
+```
+
+### `TestSession`
+
+```typescript
+interface TestSession {
+  /** Execute a TypeScript statement. Commits to worktree on success. */
+  execute(code: string): Promise<ExecuteResult>
+
+  /** Trigger an inspect() yield and return the reconstructed context. */
+  inspect(): Promise<InspectSnapshot>
+
+  /** Assert that named scope variables match expected values (deep equal). */
+  assertScope(expected: Partial<Record<string, unknown>>): void
+
+  /** Assert the number of stmt commits in the worktree. */
+  assertCommits(n: number): void
+
+  /** Assert that git log matches a predicate. */
+  assertGitLog(predicate: (commits: GitCommit[]) => boolean): void
+
+  /** Assert that session.ts content matches a string or regex. */
+  assertSessionFile(expected: string | RegExp): void
+
+  /**
+   * Tag HEAD as `snapshot-{name}`. On re-run, compare current session.ts
+   * against the tagged state. Fails if diff is non-empty (unless --update-snapshots).
+   */
+  snapshot(name: string): void
+
+  /** Restore the worktree to a named snapshot and return a new session continuing from there. */
+  replayFrom(snapshotName: string): Promise<TestSession>
+
+  /** Get the path to this session's git worktree. */
+  getWorktreePath(): string
+
+  /** Get raw QuickJS scope dump. */
+  dumpScope(): Record<string, unknown>
+}
+```
+
+### Snapshot semantics
+
+A snapshot is a git tag in the session worktree:
+
+```
+snapshot-{name} → commit SHA → session.ts content at that point
+```
+
+On first run, `snapshot(name)` tags HEAD. On subsequent runs, it diffs `session.ts` at HEAD against `session.ts` at the snapshot tag:
+
+```bash
+git diff snapshot-{name} HEAD -- session.ts
+```
+
+If the diff is non-empty, the test fails and prints the diff. Pass `--update-snapshots` to move the tag to the current HEAD.
+
+This means snapshots track **the exact code the session accumulated**, not serialized scope values — it's the same code-first approach used throughout the system.
+
+### LLM integration tests
+
+Tests that call real LLMs inject the model output into `session.execute()`:
+
+```typescript
+defineTest('[small] stop: called with correct value', async (h) => {
+  const s = await h.session({ model: 'small' })
+  const code = await h.llm('small', STOP_DOCS, 'Set answer = 42, then call stop(answer).')
+
+  s.snapshot('generated-code')          // snapshot the generated code before execution
+  await s.execute(code)
+  s.assertScope({ answer: 42 })
+  s.snapshot('scope-after')             // snapshot scope state after execution
+})
+```
+
+`h.llm(size, systemPrompt, userPrompt)` calls the real LLM and returns the generated code string. Tests are skipped when API keys are absent.
+
+### Space tests
+
+Space tests still use `lmthing test --space <path>`, but the test files inside now use `TestHarness` for session-level assertions:
+
+```typescript
+// spaces/space-creator/tests/space-creator.test.ts
+import { defineTest } from '@lmthing/repl/testing'
+
+defineTest('[small] SpaceArchitect: writes package.json', async (h) => {
+  const s = await h.session({ space: 'space-creator', agent: 'SpaceArchitect' })
+  await s.sendMessage('Create a space called test-counter')
+  s.assertSessionFile(/package\.json/)
+  s.snapshot('space-creator-package-json')
+})
+```
+
+### Test runner
+
+```bash
+# Unit tests (fast, no LLM)
+pnpm test
+
+# LLM integration tests
+pnpm vitest run src/sandbox/globals-llm.test.ts
+
+# Space tests
+lmthing test --space org/libs/thing/spaces/space-creator
+
+# Update all snapshots
+pnpm vitest run --update-snapshots
+```
+
+`--update-snapshots` moves every `snapshot-{name}` git tag to the current HEAD in each session worktree. Snapshot tags are committed to the test fixture repo under `tests/__snapshots__/` (a bare git repo checked into the package).
+
+### Test isolation guarantees
+
+Each `h.session()` call:
+1. Creates a fresh `QuickJSContext` — no shared heap with other tests
+2. Initializes a new git worktree in a temp directory
+3. Cleans up both when the test completes (unless `--keep-worktrees` is passed)
+
+Tests run in parallel by default (Vitest workers). Worktrees are in separate temp dirs so there is no cross-test git state.
+
+### Fixture worktrees
+
+For tests that need a pre-built session state, fixture worktrees are stored as bare git repos in the package:
+
+```
+repl/src/sandbox/__fixtures__/
+  arithmetic-baseline.git/   ← bare git repo; replayFrom() clones this
+  etl-pipeline.git/
+```
+
+`h.fixture('arithmetic-baseline')` clones the fixture repo into a fresh temp worktree and returns a `TestSession` positioned at its HEAD. This allows testing rollback, replay, and context reconstruction without running LLMs.
+
+---
+
 ## Open Questions
 
 1. Statement boundary granularity for semicolon-less code
@@ -502,9 +835,12 @@ Every event logged at statement granularity. Never summarized. Full context reco
 12. Task cancellation: cooperative (task checks a signal) vs preemptive (kill completion)?
 13. Cross-pipeline dependencies: allow `dependsOn: ["other-pipeline:task-id"]`?
 14. Task result size limits: truncate large results before injecting into `__deps`?
+15. QuickJS async: `QuickJSAsyncContext` runs in a separate WASM module (larger binary) — should the sync context be used for pure-code sessions and async context only when needed?
+16. Worktree persistence policy: keep on crash/timeout for post-mortem debugging? Auto-expire after N days?
+17. Scope checkpoint serialization: JSON.stringify loses non-serializable values (functions, class instances) — use a custom serializer or store handles directly in QuickJS?
 
 ---
 
 ## Glossary
 
-**Sandbox**: persistent V8 isolate. **Virtual file**: append-only `session.ts` for tsc. **Yield point**: global call that pauses generation (`inspect`, `ask`). **Inspect cycle**: generate → execute → inspect → reconstruct → resume. **`__scope`**: debugger-style scope object in every reconstruction. **Async error injection**: runtime errors surfaced mid-stream as comments. **Task DAG**: directed acyclic graph of tasks with dependency edges; the orchestrator parallelizes independent paths. **Ask cycle**: generate → render UI → wait for user → reconstruct with response → resume.
+**Sandbox**: persistent QuickJS isolate — a separate JS engine (WASM) with no shared heap with the host Node.js process. **Virtual file**: append-only `session.ts` for tsc type-checking. **Yield point**: global call that pauses generation (`inspect`, `ask`). **Inspect cycle**: generate → execute → inspect → reconstruct → resume. **`__scope`**: debugger-style scope object in every reconstruction. **Async error injection**: runtime errors surfaced mid-stream as comments. **Task DAG**: directed acyclic graph of tasks with dependency edges; the orchestrator parallelizes independent paths. **Ask cycle**: generate → render UI → wait for user → reconstruct with response → resume. **Worktree**: temporary git repository initialized per session; accumulates one commit per executed statement. **Scope checkpoint**: JSON snapshot of the QuickJS scope saved alongside each worktree commit, enabling `rollback()` to restore both the virtual file and the heap state. **Snapshot (test)**: a git tag in a session worktree marking a known-good state; test assertions diff `session.ts` against the tagged commit. **Fixture worktree**: a bare git repo checked into the test package that seeds a pre-built session state for deterministic replay tests.
