@@ -4,7 +4,7 @@ import { InputBar } from './InputBar'
 import { Sidebar } from './Sidebar'
 import { ConversationSidebar } from './ConversationSidebar'
 
-import '@lmthing/css/components/thing/thing-web-view/index.css'
+import './index.css'
 
 export interface ThingWebViewProps {
   session: ThingWebViewSession
