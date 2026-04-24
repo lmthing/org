@@ -58,8 +58,7 @@ The LLM may create new TypeScript functions during execution.
 - Type emission must be deterministic from runtime function registry state.
 
 ## Migration Notes
-- Replace all fork callsites using `inject: string[]` with:
-- Migration scope: all runtime and space callsites that invoke `fork()` (search for `fork(` and `inject:` together).
+- Replace all fork call sites using `inject: string[]` with `inject: { variables: [...], functions: [...] }` across runtime and space code (search for `fork(` and `inject:` together).
 
 ```ts
 inject: { variables: [...], functions: [...] }
