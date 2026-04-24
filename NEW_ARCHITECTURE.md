@@ -6,14 +6,14 @@ An LLM writes TypeScript into a persistent QuickJS sandbox. Global functions are
 
 - **Sandbox** = QuickJS isolate (persistent heap across the session, hermetically isolated from Node.js)
 - **Context window** = stack
-- **`.d.ts`** = the instruction surface (no prompt engineering)
+- **`system.d.ts`** = the instruction surface (no prompt engineering, refreshed on inspect)
 - **Snapshot stack** = in-memory per-statement checkpoints of virtual file + serialized scope, enabling O(1) rollback and fork
 
 System prompt: _"Write TypeScript into a live REPL. Call inspect() to examine state. Types define the API. Write code, not commentary."_
 
 ---
 
-## API (`llm-repl.d.ts`)
+## API (`system.d.ts`)
 
 ```typescript
 // ─── Yield ──────────────────────────────────────────
@@ -105,9 +105,14 @@ declare function budget(): Budget; // sync, no yield
 
 // ─── Parallelism ────────────────────────────────────
 
+interface ForkInject {
+  variables?: unknown[]; // values copied into the fork scope
+  functions?: Array<(...args: any[]) => unknown>; // TS functions bound into the fork scope
+}
+
 declare function fork<T>(opts: {
   instruction: string;
-  inject?: string[];
+  inject?: ForkInject;
   tokenBudget?: number;
 }): Promise<ForkResult<T>>;
 
@@ -331,7 +336,17 @@ Fork result is injected back into the parent's scope as `forkResult_{id}`, and a
 
 ### Scope serialization
 
-JSON handles primitives, arrays, plain objects. Non-serializable values (functions, class instances, closures) are kept as live `QuickJSHandle`s in the `references` map — they survive rollback because the QuickJS context is the same; fork restoration requires the caller to declare which references can cross the context boundary (via `inject:` in the fork spec).
+JSON handles primitives, arrays, plain objects. Non-serializable values (functions, class instances, closures) are kept as live `QuickJSHandle`s in the `references` map — they survive rollback because the QuickJS context is the same; fork restoration requires the caller to explicitly pass cross-context values via `inject.variables` / `inject.functions`.
+
+### Dynamic function surface
+
+The LLM may define new TypeScript functions during execution. On the next `inspect()` cycle, the orchestrator:
+
+1. Infers and stabilizes function signatures from the current program state
+2. Merges those signatures into `system.d.ts`
+3. Persists function implementations to `functions.ts`
+
+This makes newly created functions first-class typed APIs in subsequent turns and available for future `fork(..., { inject: { functions: [...] } })` calls.
 
 ### Yield-point snapshots
 
@@ -527,7 +542,10 @@ Forked completions get their own minimal context:
 // {instruction}
 
 const __scope = {
-  /* only injected vars */
+  /* only inject.variables entries */
+};
+const __functions = {
+  /* only inject.functions entries */
 };
 const __budget = { tokensRemaining: 2048 };
 
