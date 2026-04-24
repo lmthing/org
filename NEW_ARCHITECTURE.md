@@ -54,11 +54,11 @@ The LLM may create new TypeScript functions during execution.
 - `inject` must be an object.
 - Unknown keys in `inject` are rejected.
 - `variables` and `functions` must be arrays of unique string identifiers.
-- Injected function names must resolve to registered callable symbols.
+- Injected function names must resolve to registered callable symbols; unresolved names fail fork setup with a validation error before execution.
 - Type emission must be deterministic from runtime function registry state.
 
 ## Migration Notes
-- Replace all fork call sites using `inject: string[]` with `inject: { variables: [...], functions: [...] }` across runtime and space code (search for `fork(` and `inject:` together).
+- Replace all fork call sites using `inject: string[]` with `inject: { variables: [...], functions: [...] }` across runtime and space code (use multiline/AST-aware search where needed; `fork(` + `inject:` is only a starting heuristic).
 
 ```ts
 inject: { variables: [...], functions: [...] }
