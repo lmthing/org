@@ -59,6 +59,7 @@ The LLM may create new TypeScript functions during execution.
 
 ## Migration Notes
 - Replace all fork callsites using `inject: string[]` with:
+- Migration scope: all runtime and space callsites that invoke `fork()` (search for `fork(` and `inject:` together).
 
 ```ts
 inject: { variables: [...], functions: [...] }
