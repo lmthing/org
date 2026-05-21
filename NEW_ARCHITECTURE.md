@@ -6,7 +6,7 @@ An LLM writes TypeScript into a persistent QuickJS sandbox. Global functions are
 
 - **Sandbox** = QuickJS isolate (separate engine, no host heap access) · **Context window** = stack · **`.d.ts`** = instruction surface · **Git** = yield-point history · **Trace** = statement-level log · **Render surface** = JSX shown to user via `display()`/`ask()`
 
-System prompt: _"Write TypeScript into a live REPL. Semicolons required. Use `await` for async operations — always annotate the awaited type: `const x = await expr as MyType`. Downstream statements are type-checked speculatively using your annotation and execute when the Promise resolves. End each completion with inspect() to commit state and get a fresh context. Use display() to show progress, ask() to get user input. Use tasklist() to track structured work. Types define the API. Comments are traced as reasoning. Use checkpoint() before risky operations. Function and class declarations are automatically captured into the session space and available immediately as globals; React components with a submit prop become form components, others become view components. They appear as TypeScript interfaces in the system prompt after the next inspect(). Re-declaring an existing function is a contract error — read it first with Space.current().read(), then update with .patch() or .write()."_
+System prompt: _"Write TypeScript into a live REPL. Semicolons required. Use `await` for async operations — always annotate the awaited type: `const x = await expr as MyType`. Downstream statements are type-checked speculatively using your annotation and execute when the Promise resolves. End each completion with inspect() to commit state and get a fresh context. Use display() to show progress, ask() to get user input. Use tasklist() to track structured work. Types define the API. Comments are traced as reasoning. Use checkpoint() before risky operations. Top-level function, class, and `const name = (…) => …` / `const name = function (…)` / `const name = class …` declarations are automatically captured into the session space and available immediately as globals (see Capture Rule for the precise predicate); React components (declarations returning JSX) with a `submit` prop become form components, others become view components. They appear as TypeScript interfaces in the system prompt after the next inspect(). Re-declaring an existing function is a contract error — read it first with Space.current().read(), then update with .patch() or .write()."_
 
 ---
 
@@ -127,7 +127,7 @@ graph TB
 
 1. **Session Boot** — A space (file tree of agents, tasklists, functions, components, knowledge) is compiled by the pure `loadSpace()` function into a `SessionConfig` overlay: the system prompt comes from the agent's `instruct.md` plus a manifest of all visible spaces, an extra `.d.ts` is generated from `functions/`/`components/`/`actions`, scope is preloaded with compacted `__knowledge`, host functions are registered, and the renderer's component registry is populated. An empty **session space** is also created at `session-{id}/space/` and included in the manifest — the model can populate it at any time via `Space.current()`.
 
-2. **Execution Loop** — The LLM streams tokens; the boundary detector uses the TypeScript scanner to split complete statements. Function and class declarations are intercepted before execution: they are written into the session space (`functions/{name}.ts` or `components/view|form/{Name}.tsx`) and wired as host-bridged globals immediately — they do not appear in `session.ts`. React components are classified by whether their props type includes a `submit` field (form) or not (view). All other statements are routed to tsc (strict, with type inference feedback), transpiled, and evaluated in the QuickJS context. Statements are appended to `session.ts` only after successful execution. Type errors, runtime errors, and tsc inferred types loop back to the LLM as comments. When a statement contains a top-level `await`, the runtime enters speculative mode: subsequent statements are type-checked as they stream but buffered rather than executed. When the awaited Promise resolves, buffered statements execute in order. If a buffered statement errors, remaining buffered statements are discarded and the error is injected as a comment.
+2. **Execution Loop** — The LLM streams tokens; the boundary detector uses the TypeScript scanner to split complete statements. **Capturable** declarations (see Capture Rule: top-level `function`/`class` declarations and single-declarator `const` whose initializer is an ArrowFunction, FunctionExpression, or ClassExpression literal) are intercepted before execution and written into the session space (`functions/{name}.ts` or `components/view|form/{Name}.tsx`) with the original source preserved verbatim, and wired as host-bridged globals immediately — they do not appear in `session.ts`. React components (capturable declarations returning JSX) are classified by whether their props type includes a callable `submit` field (form) or not (view); untyped props default to view. All other statements are routed to tsc (strict, with type inference feedback), transpiled, and evaluated in the QuickJS context. Statements are appended to `session.ts` only after successful execution. Type errors, runtime errors, and tsc inferred types loop back to the LLM as comments. When a statement contains a top-level `await`, the runtime enters speculative mode: subsequent statements are type-checked as they stream but buffered rather than executed. When the awaited Promise resolves, buffered statements execute in order. If a buffered statement errors, remaining buffered statements are discarded and the error is injected as a comment.
 
 3. **Yield** — `inspect()` aborts the LLM stream immediately on execution, then awaits only the Promises explicitly passed as arguments. `inspect()`'s `timeout` is a soft cap: when it elapses, generation resumes with settled Promises resolved and unsettled ones still pending — no forced rejection. Each Promise carries its own logical timeout (`ask`: 5 min default; `fetch`: governed by `AbortSignal`). After awaiting, the new state is committed to git, `scope.json` is derived, `heap.bin` is marshaled, and context reconstruction runs (priority-ordered sections, truncated to fit the configured budget). The reconstruction is sent as a single `role: "user"` message, replacing the previous one. A new LLM completion starts with this fresh context.
 
@@ -138,6 +138,237 @@ graph TB
 6. **Persistent State** — Each session is a git repo. `session.ts` contains only value-producing statements — function and class declarations are intercepted by the boundary detector and written directly into the session space, never appearing here. `heap.bin` is the scope snapshot (marshaled plain values), `scope.json` is the lossy derived view (same data as `__scope`, serialised as JSON), `meta.json` tracks budget/tasks/pins/errors, `trace.jsonl` logs every statement.
 
 7. **Fork** — `fork()` spawns a fresh QuickJS context on a git branch with scope re-seeded from `heap.bin` (minus `exclude`). Session space functions are re-injected as host-bridged globals. The child runs autonomously and calls `resolve(result)` to terminate the fork and resolve the parent's `Promise<ForkResult<T>>`. Fork token usage counts against the parent session's `tokensRemaining`.
+
+---
+
+## Package Layout
+
+Two packages. The core runtime is independent of the CLI/renderer so it can be embedded in a browser app.
+
+```
+sdk/org/
+├── llm-repl/                  — Core runtime (no CLI, no renderer)
+│   src/
+│   ├── lib/                   ← One directory per capability layer
+│   │   ├── sandbox/           — L0: QuickJS isolate, boundary detector, trace.jsonl
+│   │   ├── typecheck/         — L1: tsc strict, type inference feedback, 3-retry loop
+│   │   ├── inspect/           — L2: inspect(), budget tracking, __errors section
+│   │   ├── checkpoint/        — L3: checkpoint(), rollback()
+│   │   ├── fork/              — L4: fork(), resolve(), fork-scoped display slots
+│   │   ├── memory/            — L5: pin(), compact(), expand()
+│   │   ├── tasklist/          — L6: tasklist(), task DAG, __tasks section
+│   │   ├── io/                — L7: fetch() allowlist, fs.*, require()
+│   │   ├── render/            — L8: display(), ask(), JSX descriptor tree, submit bridge
+│   │   ├── snapshot/          — L9: base snapshots, scope re-seeding across sessions
+│   │   └── spaces/            — L10: Space class, actions, .d.ts overlay, knowledge preload
+│   ├── session/               — Session assembly, git repo, scope.json, heap.bin, meta.json
+│   ├── context/               — Context reconstruction: priority-ordered sections, decay
+│   ├── hooks/                 — Hook registry, executor, pattern matcher
+│   ├── knowledge/             — Domain/field/option tree, decay tiers, loadKnowledge()
+│   ├── catalog/               — Catalog modules as QuickJS host bridges
+│   ├── security/              — JSX sanitizer, function registry
+│   └── index.ts               — Assembles lib modules into a Session
+└── llm-repl-cli/              — CLI binary + browser server
+    src/
+    ├── providers/             — Vercel AI SDK v6, provider:modelId resolution, model alias env vars
+    ├── router/                — Orchestrator router (see Model Orchestration section)
+    ├── cli/                   — Arg parsing, agent loop, TypeScript export classifier
+    ├── rpc/                   — WebSocket server, RPC client, session event stream
+    ├── ink/                   — Ink terminal renderer (consumes render/ descriptors)
+    └── web/                   — React browser renderer (consumes render/ descriptors)
+```
+
+**Discoverability principle:** each `lib/{name}/` directory is self-contained — implementation, unit tests, and an `eval/` subdirectory with a real LLM interaction dataset, a grader, and per-model-class prompt variants. A contributor looking for how `inspect()` works opens `lib/inspect/`. A contributor tuning the prompt for a 7B model opens `lib/inspect/eval/prompts/7-14b.md`. No cross-directory hunting.
+
+```
+lib/inspect/
+├── index.ts           — Runtime implementation
+├── inspect.test.ts    — Unit tests (no LLM required)
+└── eval/
+    ├── dataset.jsonl  — Real LLM session traces: { input, expected_trace_events, min_model }
+    ├── grade.ts       — LLM-based grader: runs dataset, scores with an LLM judge
+    └── prompts/
+        ├── 1-3b.md
+        ├── 7-14b.md
+        ├── 30-70b.md
+        ├── frontier.md
+        └── reasoning.md
+```
+
+---
+
+## Reuse
+
+The new packages are a targeted rewrite of `@lmthing/repl` + `lmthing` CLI. Most subsystems have a direct equivalent.
+
+**Carry over as-is:**
+- Space file structure and `loadSpace()` pattern (`repl/src/spaces/`, `cli/src/cli/agent-loader.ts`)
+- Knowledge system: domain/field/option/selector model, decay tiers (`repl/src/knowledge/`)
+- Knowledge decay and stop/error decay (`repl/src/context/knowledge-decay.ts`, `stop-decay.ts`)
+- Hook system: registry, executor, pattern matcher (`repl/src/hooks/`) — new stage names added: `before-tsc`, `on-function-capture`
+- Provider resolution: `provider:modelId` format, lazy-loaded provider modules, model alias env vars (`cli/src/providers/resolver.ts`) — **Vercel AI SDK v6 (`streamText()`) is not replaced**
+- UI components: display/form component set, JSX descriptor pattern (`cli/src/components/`, `ui/`)
+- JSX sanitizer (`repl/src/security/jsx-sanitizer.ts`)
+- CLI arg parsing (`cli/src/cli/args.ts`)
+- WebSocket/RPC server pattern (`cli/src/cli/server.ts`, `cli/src/rpc/`)
+- Catalog module logic (becomes QuickJS host bridge registrations)
+
+**Adapt:**
+- Statement/boundary detector: upgrade heuristic bracket tracker to TypeScript scanner API
+- Stream controller: add tsc pipeline stage and speculative buffer for top-level `await`
+- System prompt builder: add `.d.ts` overlay generation, hard-pinned sections (`__budget`, `__tasklist_nudge`, `__currentStep`), priority-ordered truncation
+- Scope generator: same serialization logic, now writes to both `scope.json` and `__scope` context section
+- Agent loop: turn boundary driven by `inspect()` call, not stream end
+- TypeScript export classifier: drives function/class interception into session space
+- Session snapshot: serialize to `scope.json` + `heap.bin` + `meta.json` on disk rather than in-memory object
+
+**Rewrite / new:**
+- Sandbox: `vm.Context` → QuickJS WASM isolate (enables browser embedding)
+- Executor: esbuild → tsc strict type-check with inference feedback + QuickJS eval
+- Git integration: now central — every `inspect()` commits; not optional
+- trace.jsonl: full event log, 60+ event types, O_APPEND + fsync
+- Speculative mode: buffer statements during top-level `await`
+- Function/class interception: written to session space, never to `session.ts`
+- Context reconstruction: priority-ordered sections in a single `role: "user"` message
+- Ink terminal renderer: new
+
+---
+
+## Model Orchestration
+
+A **router** runs on the host (Node.js / browser worker) and fires at two points in the session lifecycle:
+
+1. `new_message` — before the first REPL completion for a new user instruction
+2. `post_inspect` — after every `inspect()` commit, before the next completion starts
+
+The router reads session state and outputs a JSON routing decision. It never touches QuickJS.
+
+**Router visibility**: the routing JSON itself (role, model, adapter, rationale) is **not** surfaced to the executing model — it lives only in `trace.jsonl` as `router_decision` events. But the **effects** of routing decisions can be visible: when the router sets a context flag, the next context reconstruction may include a corresponding block (a budget warning line in `__budget`, a heap warning in `__budget`, or an expanded `__errors` / source-tail under `recovery_context`). The executor reads those blocks as session state, not as verdicts. In short: the executor sees what the router observed (high error rate, low budget, heap pressure), never what the router decided to do about it.
+
+### Model Aliases
+
+Aliases are resolved via env vars using the existing provider resolver (`LLM_REPL_MODEL_{ALIAS}=provider:modelId`). The `-R` suffix enables extended thinking via Vercel AI SDK `providerOptions`.
+
+| Alias | Purpose |
+|-------|---------|
+| `XS` | Classification, boolean decisions, single-field JSON — fastest |
+| `XS-R` | XS + reasoning ON (reserved) |
+| `S` | Fast code gen, narrow API surface, short linear sessions |
+| `S-R` | S + reasoning ON — light ambiguity resolution |
+| `M` | Multi-step code, dependency-aware task graphs |
+| `M-R` | M + reasoning ON — error diagnosis, moderate replanning |
+| `L` | Full spec coverage, fork orchestration, long sessions, space actions |
+| `L-R` | L + reasoning ON — fork-aware planning, deep ambiguity, recovery |
+| `XL` | Maximum code quality (reserved) |
+| `XL-R` | Frontier reasoning (reserved) |
+
+Example env:
+```
+LLM_REPL_MODEL_XS=openai:gpt-4o-mini
+LLM_REPL_MODEL_S=openai:gpt-4o
+LLM_REPL_MODEL_M=anthropic:claude-sonnet-4-6
+LLM_REPL_MODEL_L=anthropic:claude-opus-4-7
+LLM_REPL_MODEL_L_R=anthropic:claude-opus-4-7   # providerOptions.thinking.type = "enabled"
+```
+
+### Roles
+
+| Role | Model | Reasoning | Purpose |
+|------|-------|-----------|---------|
+| `ANALYZER` | XS | OFF | Classify instruction difficulty — always first on `new_message` |
+| `PLANNER_SHALLOW` | S | OFF | Emit flat `tasklist()` call, no `dependsOn` |
+| `PLANNER_STANDARD` | M | OFF | Emit structured `tasklist()` with `dependsOn` edges |
+| `PLANNER_DEEP` | L-R | ON | Fork-aware planning, handles ambiguity, may emit `ask()` |
+| `EXEC_TRIVIAL` | S | OFF | Execute L0–L2 tasks |
+| `EXEC_STANDARD` | M | OFF | Execute L0–L6 tasks |
+| `EXEC_COMPLEX` | L | OFF | Execute L0–L10 tasks |
+| `RECOVERY` | M-R or L-R | ON | Diagnose errors, replan, emit corrective `rollback()` or revised tasks |
+
+**Key constraint:** reasoning is always OFF for executor roles. Reasoning is expressed as TypeScript comments inside the REPL — the executor uses the live sandbox as its scratchpad, not think blocks.
+
+### LoRA Adapter Selection
+
+The same base model serves multiple roles via different adapters. The `adapter` field is passed to the AI SDK call as a provider option:
+
+```
+S   →  s-planner-shallow  |  s-exec-trivial
+M   →  m-planner-standard |  m-exec-standard  |  m-recovery
+L   →  l-planner-deep     |  l-exec-complex
+L-R →  l-r-planner-deep   |  l-r-recovery
+```
+
+### Routing Rules
+
+**On `new_message`:**
+1. Always route to `ANALYZER` first (XS, single-turn).
+2. On ANALYZER output:
+   - `trivial` → skip planner → `EXEC_TRIVIAL` (S)
+   - `easy` → `PLANNER_SHALLOW` (S)
+   - `medium` → `PLANNER_STANDARD` (M)
+   - `hard` | `ambiguous` → `PLANNER_DEEP` (L-R) — deep planner emits `ask()` if clarification needed before `tasklist()`
+
+**On `post_inspect`** (first match wins):
+1. `annotation_mismatch_streak >= 2` AND current executor tier < L → **escalate one tier** (S → M, M → L); reset `annotation_mismatch_streak` to 0; trace `annotation_escalation`. Smaller models that can't reliably write type annotations get bumped before they burn the session on repeated mismatch cycles.
+2. `error_streak >= 2` AND cached difficulty ∈ {`trivial`, `easy`} AND ANALYZER has not re-fired this instruction → **re-run ANALYZER** with current session state; replace cached difficulty with the new classification; continue routing as if this were a `new_message` (planner tier may upgrade). At most one re-analyze per user instruction.
+3. `error_streak >= 3` → `RECOVERY` (L-R)
+4. `stuck_tasks` present + any difficulty `hard` → `RECOVERY` (L-R)
+5. `stuck_tasks` present + all difficulty ≤ `medium` → `RECOVERY` (M-R)
+6. Rejected fork + `error_streak >= 1` → `RECOVERY` (L-R)
+7. No `tasklist()` called yet → re-route to same planner tier
+8. Active tasks: route executor by hardest `in_progress` task difficulty (`trivial/easy` → EXEC_TRIVIAL, `medium` → EXEC_STANDARD, `hard` → EXEC_COMPLEX)
+9. All tasks done, no `emit()` yet → EXEC_STANDARD (emit best-effort result)
+10. `tokensRemaining < 2000` → EXEC_STANDARD with `budget_warning` flag
+11. `heapMB > 200` → keep current executor, add `heap_warning` flag
+
+If `active_role == RECOVERY` and `error_streak` is still climbing: escalate M-R → L-R. Never loop on M-R indefinitely.
+
+**Re-analyze scope**: rule 2 covers the under-estimation case (instruction was harder than ANALYZER thought). The over-estimation case (instruction was easier than ANALYZER thought) is **not** auto-detected — the executor stays at its assigned tier until the next user message. Rationale: over-estimation costs tokens but never causes incorrect behavior; under-estimation can stall a session, so it warrants the extra XS call. The re-analyze fires at most once per user instruction (tracked in router state as `analyzer_refires`).
+
+### ANALYZER Sub-Prompt
+
+The ANALYZER is a single-turn XS call that runs before any planner. Output is always this JSON:
+
+```json
+{
+  "difficulty": "trivial" | "easy" | "medium" | "hard" | "ambiguous",
+  "skip_planner": true | false,
+  "estimated_tasks": 1–20,
+  "needs_fork": bool,
+  "needs_ask": bool,
+  "rationale": "one sentence"
+}
+```
+
+`skip_planner: true` only when `difficulty == "trivial"`.
+
+### Context Flags
+
+The router may set flags that inject additional blocks into the next context reconstruction:
+
+| Flag | Injected block |
+|------|----------------|
+| `budget_warning` | `// ⚠ Budget warning: {tokensRemaining} tokens remaining. Emit best-effort result and close.` |
+| `heap_warning` | `// ⚠ Heap pressure: {heapMB}MB used of {heapMaxMB}MB. Compact large variables before next inspect().` |
+| `recovery_context` | Full `__errors` (not truncated to 3) + last 50 statements of `session.ts` (not default 20) + git log of last 5 checkpoints |
+
+### Router Output Format
+
+```json
+{
+  "role": "EXEC_STANDARD",
+  "model": "M",
+  "adapter": "m-exec-standard",
+  "reasoning_on": false,
+  "context_flags": {
+    "budget_warning": false,
+    "heap_warning": false,
+    "recovery_context": false
+  },
+  "rationale": "All in-progress tasks are medium difficulty; standard executor sufficient."
+}
+```
+
+`rationale` is one sentence, logged to `trace.jsonl` as `router_decision.rationale`. The rationale and the full routing JSON are never injected into the executor's context; only the flag-driven blocks described in [Context Flags](#context-flags) are.
 
 ---
 
@@ -230,8 +461,14 @@ declare function ask<T = string>(
 
 // ─── Built-in UI Components ─────────────────────────
 // Work in both Ink (terminal) and browser React runtimes.
-// JSX is transpiled using the automatic JSX transform; _jsx/_jsxs/_Fragment
-// are injected into the QuickJS scope — React itself is not required there.
+// JSX uses the automatic transform: tsc config is { jsx: "react-jsx" }, which
+// emits `import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from
+// "react/jsx-runtime"`. The require-rewrite transformer (see require() doc)
+// turns these imports into `const { jsx: _jsx, ... } = require("react/jsx-runtime")`.
+// The host registers a virtual `react/jsx-runtime` module that returns host
+// functions building descriptor trees (element type + props). React itself is
+// not loaded inside QuickJS; the descriptors are re-hydrated by Ink or React
+// in the host renderer.
 
 declare const TextInput: FC<{ label?: string; placeholder?: string }>;
 declare const Select: FC<{ options: string[]; label?: string; multi?: boolean }>;
@@ -340,7 +577,23 @@ interface ForkHandle<T> extends Promise<ForkResult<T>> {
 
 // ─── Checkpoints & Rollback ─────────────────────────
 
-/** Named savepoint → git tag `cp-{label}` + scope snapshot (marshaled plain values). No yield. */
+/**
+ * Named savepoint → git tag `cp-{label}` + scope snapshot.
+ *
+ * Auto-settles all pending Promises in scope before committing: every Promise
+ * the host can see in the current QuickJS scope is awaited (each respects its
+ * own logical timeout — ask: 5 min, fetch: AbortSignal, fork: tokenBudget).
+ * This guarantees heap.bin captures fully settled values, so rollback to this
+ * checkpoint is consistent.
+ *
+ * If any Promise's logical timeout fires before resolution, it is recorded as
+ * rejected (kind: "timeout") in the snapshot. checkpoint() returns once every
+ * Promise has either resolved or rejected.
+ *
+ * Does NOT yield to the LLM — the LLM stream continues unaffected after the
+ * settle completes. A `checkpoint_settle_wait` trace event is emitted with the
+ * number of Promises awaited and the elapsed time.
+ */
 declare function checkpoint(label: string): void;
 
 /**
@@ -635,8 +888,16 @@ interface TaskNode {
    * called. Same operator set as InspectQuery.filter but `el` is not bound —
    * use scope variable names directly: "confirmed == true" or "items.length > 0".
    * Allowed: property access, ==, !=, <, >, <=, >=, &&, ||, !, literals.
+   *
+   * Evaluation runs inside the same QuickJS context that holds the scope.
+   * The orchestrator parses the expression on the host into an AST (validating
+   * the restricted grammar), then walks it inside QuickJS via a small bridge
+   * that resolves identifiers and property paths against the live scope using
+   * the QuickJS handle API. No marshaling — values stay in the sandbox.
    * If the expression evaluates to falsy the task transitions to "skipped"
    * automatically — treated as done for dependency resolution. start() is a no-op.
+   * A parse failure (grammar violation) is a kind: "contract" error at tasklist
+   * registration time; the bad expression is rejected and the tasklist is not created.
    */
   condition?: string;
 }
@@ -716,8 +977,11 @@ declare const fs: {
  * Ambient module declarations for each entry in SessionConfig.availableModules
  * are generated at session boot and appended to the .d.ts overlay, so tsc
  * sees correct types for require('lodash'), require('date-fns'), etc.
- * TypeScript import statements (import x from 'y') are transpiled to require()
- * calls by tsc's CommonJS output — ES module semantics are not available.
+ * TypeScript `import x from 'y'` statements are rewritten to `const x = require('y')`
+ * by a custom tsc transformer that runs before emit. The emit target is ESM
+ * (target ES2022, module ESNext) so top-level await is supported natively; the
+ * require() calls are host-bridged into the same module registry. ES module
+ * features beyond TLA (live bindings, dynamic import) are not exposed.
  */
 declare function require(module: string): unknown;
 
@@ -833,12 +1097,19 @@ getQuickJS()                            → QuickJSWASMModule  (once at startup)
 module.newContext({ maxStackSizeMb })   → QuickJSContext    (one per session)
     ↓
 inject globals via host function handles (inspect, display, ask, fork, …)
-inject JSX runtime handles (_jsx, _jsxs, _Fragment) for JSX transpilation
+register virtual module `react/jsx-runtime` returning host-bridged
+  { jsx, jsxs, Fragment } that build descriptor trees. tsc-emitted
+  `import { jsx as _jsx, ... } from "react/jsx-runtime"` is rewritten to
+  require() by the import transformer and resolves to these host functions.
     ↓
 per statement:
-  transpile (host tsc, CommonJS output, import → require(), top-level await preserved)
+  transpile (host tsc, target ES2022, module ESNext, top-level await preserved)
+  custom tsc transformer rewrites `import x from 'pkg'` → `const x = require('pkg')`
+  for whitelisted modules before emit. The output is ESM-syntax with require() calls
+  embedded — semantically a module, so TLA is legal.
   IF no pending speculative buffer:
-    eval via context.evalCodeAsync()
+    eval via context.evalCodeAsync(transpiled, '<stmt>', { type: 'module' })
+    — module mode is required for native top-level await support
     IF statement contains top-level await:
       Promise is running; enter speculative mode — subsequent statements buffered
     IF successful (no await): append to session.ts, marshal result back
@@ -929,6 +1200,31 @@ const result = await somePromise as { id: number; name: string };     // inline 
 const x = await unknownSource as unknown;                              // disables downstream speculative type checking; never use `as any`
 ```
 
+The convention is rare in pretraining data, so it must be **actively taught** in the prompt rather than relied upon. The `lib/sandbox/eval/prompts/{class}.md` variants each contain a dedicated `### Awaiting async values` section with examples tuned to the model class: 1–3B and 7–14B variants carry 5–6 worked examples covering the common shapes (typed fs/sdk return → no annotation; fetch JSON → object/array literal annotation; union return → discriminated union annotation; unknown source → `as unknown`); 30–70B and frontier variants are terser (2–3 examples). All variants make the cost explicit: a missing or wrong annotation triggers a yield with a discarded buffer.
+
+**Annotation required only when tsc cannot infer concretely**. If tsc infers a concrete non-`any` type from the await expression (e.g. `string` from `fs.readFile('x', 'utf-8')`), the annotation is optional and downstream speculative checking proceeds normally. The annotation is *required* iff tsc would otherwise infer `any`, `unknown`, or `Promise<any>`.
+
+**First-omission grace** (per session): the first time the model omits an annotation on an await where tsc cannot infer concretely, the host does **not** treat it as a type error. Instead:
+1. Speculative type-checking is **disabled** for that await's buffer (statements are buffered for execution but not type-checked).
+2. The await runs to completion.
+3. On resolve, the host derives a JSON-Schema-ish shape from the actual value and injects a hint into the next context: `// hint: annotate awaits like this — const <name> = await <expr> as <derivedShape>; (one free pass used; subsequent omissions are errors).`
+4. The buffer flushes and executes normally.
+
+After the first-omission grace is consumed (tracked in `meta.json` as `annotation_grace_used: true`), any subsequent omission on a non-inferable await is a `kind: "type"` error: `// error: missing type annotation on await — use 'as Type' (see prior hint).` The await statement is not appended; the buffer is discarded.
+
+**Mismatch nudge includes the inferred shape**: when the resolved value is not structurally assignable to the annotated type, the `__speculative_nudge` block includes a suggested annotation derived from the actual value:
+
+```typescript
+// ─── __speculative_nudge ─────────────────────────────────────
+// Speculative type mismatch: await was annotated as User[] but resolved to
+// { error: string; code: number }.
+// Suggested annotation: as { error: string; code: number }
+// Discarded buffer:
+//   const names = users.map(u => u.name);
+//   ...
+// Re-write the await with the correct type and continue.
+```
+
 **Four-backtick file blocks**: before the TypeScript scanner runs, the stream accumulator scans for four-backtick fence openings (` ```` `). These are intercepted as file operations — not sent to tsc or QuickJS, and never appended to `session.ts`.
 
 - **Write block**: ` ````path/to/file ` … ` ```` ` — creates or overwrites `/session/{id}/files/{path}`. Path must be relative with no `..` traversal.
@@ -937,7 +1233,46 @@ const x = await unknownSource as unknown;                              // disabl
 - Committed at the next `inspect()` or `checkpoint()`.
 - Trace events: `file_write` (path · bytes) and `file_diff` (path · hunks applied).
 
-**Boundary detection**: the TypeScript scanner (`ts.createScanner()`) tokenizes the stream incrementally. Statement boundaries are detected at depth-0 semicolons using scanner state — correctly handles JSX, generics (`foo<T>()`), type assertions, regex literals, and comments inside strings. At each boundary, the AST node type determines routing: function declarations (`function`, `const = () =>`, `class`) are written to the session space and wired as host-bridged globals immediately — never sent to tsc/QuickJS. React components (functions returning JSX) are further classified: props type includes a `submit` field → form component (`components/form/`), otherwise → view component (`components/view/`). **Re-declaration is blocked**: if the declared name already exists in the session space, a `kind: "contract"` error is injected (`// error: 'name' is already declared — use Space.current().read('functions/name.ts') then .patch() or .write() to update it`) and the declaration is discarded. All other statements proceed to tsc and QuickJS. `inspect()` calls are intercepted when the statement executes in QuickJS (possibly from the speculative buffer). The LLM stream is aborted immediately when `inspect()` executes — any tokens buffered after the boundary are discarded.
+**Boundary detection**: the TypeScript scanner (`ts.createScanner()`) tokenizes the stream incrementally. Statement boundaries are detected at depth-0 semicolons using scanner state — correctly handles JSX, generics (`foo<T>()`), type assertions, regex literals, and comments inside strings. At each boundary, the **capture rule** below determines routing: capturable declarations are written to the session space and wired as host-bridged globals immediately, never sent to tsc/QuickJS. All other statements proceed to tsc and QuickJS. `inspect()` calls are intercepted when the statement executes in QuickJS (possibly from the speculative buffer). The LLM stream is aborted immediately when `inspect()` executes — any tokens buffered after the boundary are discarded.
+
+### Capture rule
+
+A top-level statement is **capturable** (routed to the session space instead of `session.ts`) iff one of the following holds:
+
+1. `FunctionDeclaration` with an identifier name — e.g. `function foo() {}`, `export function foo() {}`.
+2. `ClassDeclaration` with an identifier name — e.g. `class Foo {}`.
+3. `VariableStatement` where **all** of the following hold:
+   - `declarationList.flags` includes `NodeFlags.Const` (no `let`, no `var`).
+   - Exactly one `VariableDeclaration` in the list.
+   - The declarator's `name` is an `Identifier` (no destructuring).
+   - The declarator has an `initializer` whose kind is one of: `ArrowFunction`, `FunctionExpression`, `ClassExpression`.
+
+Everything else routes to `session.ts` and executes normally, including:
+
+- `let f = () => {}` — `let` is excluded so reassignment doesn't fight capture. A `// hint: use const to capture as a session-space function` comment is injected once per name.
+- `const a = 1, b = () => {}` — multi-declarator lists are not split; the whole statement stays a value.
+- `const [a, b] = ...` — destructuring is not capturable.
+- `const handler = makeHandler()` — `CallExpression` initializer; the result is a value, not a literal.
+- `const obj = { method() {} }` — `ObjectLiteralExpression`, not a function literal at the top.
+- `const Card = memo(({name}) => <div/>)` — HOC-wrapped; `CallExpression` initializer is not capturable. To capture an HOC-wrapped component, declare the inner component first (capturable), then assign the wrapped form to a value (`const CardMemo = memo(Card)` — stored in `session.ts`).
+- Anonymous IIFEs and bare expression statements.
+
+**Component classification** (only for capturable function-like declarations):
+
+1. Determine the return type — explicit annotation if present, otherwise tsc's inferred return type.
+2. If the return type is structurally assignable to `JSX.Element` / `ReactElement`, the declaration is a **component**. Otherwise it is a **plain function** and is written to `functions/{name}.ts`.
+3. For components, classify by props:
+   - Props type has a property named `submit` whose type is callable → **form component** (`components/form/{Name}.tsx`).
+   - Otherwise → **view component** (`components/view/{Name}.tsx`).
+4. **Untyped props** (`const Card = (p) => <div/>` with no props annotation and tsc cannot infer a `submit` field) default to **view**.
+
+**Source fidelity**: the **original source text** of the declaration (verbatim, including leading comments and formatting) is written to the target file. The host does not re-emit from the AST. This preserves model intent and lets `Space.current().read()` round-trip exactly what the model wrote.
+
+**Re-declaration is blocked**: if the declared name already exists in the session space, a `kind: "contract"` error is injected (`// error: 'name' is already declared — use Space.current().read('functions/name.ts') then .patch() or .write() to update it`) and the declaration is discarded.
+
+**Closure caveat**: a value like `const c = makeCounter()` captures the closure of `makeCounter` at call time. If `makeCounter` is later patched in the session space, `c` retains the old closure — patching does not retroactively update existing instances. The model is expected to re-invoke the factory to get an instance bound to the new implementation.
+
+**Class deletion cascade**: if a captured class is removed from the session space (via `Space.current().remove('functions/MyClass.ts')`), the host walks the live QuickJS scope at the next yield and **nullifies** any variable whose value is an instance of that class — the binding is replaced with `null` and a `class_instance_nullified` trace event is emitted per affected variable. The model sees the nullified variables in the next `__scope` with `/* nullified: class <Name> removed */`. This is aggressive but predictable: it makes class deletion a real operation rather than silently leaving dangling instances that throw on first method call.
 
 **Type errors**: not executed, not appended to session.ts. Error injected as comment, 3 retries, then auto-rollback + nudge. tsc strict is always on.
 
@@ -1066,15 +1401,16 @@ session-{id}/
 
 `heap.bin` is a **scope snapshot** — a marshaled binary of all current top-level variable values that QuickJS can serialize across the WASM boundary: primitives, plain objects, arrays, Sets, Maps (with serializable entries). It is the source of truth for rollback.
 
-**What `heap.bin` captures**: all variables whose values are fully representable as JSON-equivalent structures — primitives, plain objects, arrays, Sets, Maps. Exact, round-trip safe, capped at 64MB. Since functions and classes live in the session space (not in `session.ts`), the snapshot captures the complete session state.
+**What `heap.bin` captures**: all variables whose values are fully representable as JSON-equivalent structures — primitives, plain objects, arrays, Sets, Maps. Exact, round-trip safe, capped at 64MB.
 
 **What `heap.bin` does NOT capture**:
 - **Host-bridged handles** — the injected globals (`fetch`, `display`, `ask`, session space functions, etc.), open Response objects, QuickJS ↔ host callbacks. These re-bind automatically from the current host environment on restore.
-- **Pending promises** — the QuickJS event loop state is not snapshotted. Pending Promises are stored as `undefined` in the snapshot and will not resume on restore. Call `inspect()` before `checkpoint()` to settle all in-flight operations first.
+- **Pending promises** — the QuickJS event loop state is not snapshotted. `checkpoint()` auto-settles every pending Promise in scope before committing (see API definition), so checkpoint-sourced snapshots are always consistent. For `inspect()`-sourced snapshots, only Promises passed as arguments are settled — un-passed pending Promises are stored as `undefined` in `heap.bin` and will not resume on restore. Restore from an `inspect-{n}` ref where un-passed Promises were pending leaves those bindings as `undefined`.
+- **Custom class instances** — instances of any user-defined class (declared via the capture rule and stored in the session space) are **non-portable**. At marshal time they are stored as an orphan placeholder: `{ __orphaned: "<ClassName>", __keys: [...ownEnumerableKeys] }`. After restore, the variable holds this placeholder. Reading enumerable own properties works (data is preserved), but calling any method throws `OrphanedInstance: '<name>' was an instance of <ClassName> at marshal time; rebuild via 'new <ClassName>(...)' to use methods.` This keeps marshaling cheap and predictable — the model is expected to reconstruct instances from primitive state when rollback or restart is part of the workflow.
 
 **Restore procedure** (rollback by label, fork seeding):
-1. Create a fresh QuickJS context with globals re-injected (including session space functions as host-bridged globals).
-2. Deserialize `heap.bin` into the context — scope variables are seeded with their snapshotted values. Done.
+1. Create a fresh QuickJS context with globals re-injected (including session space functions/classes as host-bridged globals).
+2. Deserialize `heap.bin` into the context — scope variables are seeded with their snapshotted values; orphan placeholders are installed for any custom class instances. Done.
 
 If `heap.bin` exceeds 64MB: the commit skips it and emits `snapshot_skipped`. `rollback()` to a point beyond the last valid snapshot is blocked (`RollbackBlockedError`).
 
@@ -1236,11 +1572,13 @@ Tiers apply globally; `pin()` overrides per-variable (always full, never decayed
 
 ## Rollback
 
-**By label** (preferred): `rollback("before-transform")` → restore scope snapshot from `cp-before-transform` git tag. Fresh QuickJS context: deserialize `heap.bin`, re-inject session space functions as host-bridged globals. Pins set after the target ref are dropped.
+**By label** (preferred): `rollback("before-transform")` → `git reset --hard cp-before-transform` on the session repo. All committed artifacts revert in one operation: `session.ts`, `scope.json`, `heap.bin`, `meta.json`, and the entire `space/` tree. Fresh QuickJS context: deserialize the restored `heap.bin`, re-inject session-space functions/classes from the restored `space/` as host-bridged globals. Pins set after the target ref are dropped.
 
-**By count**: `rollback(3)` → walk `trace.jsonl` back 3 executed statements, truncate `session.ts` accordingly. Restore from the nearest prior checkpoint snapshot via the same procedure.
+**By count**: `rollback(3)` → walk `trace.jsonl` back 3 `execute` events (value-producing statements only; `function_captured` events are skipped — they're not counted), find the nearest prior checkpoint commit that covers that point, and `git reset --hard` to it. Restore from the resulting state via the same procedure. Captures that happened within the walked-back span are reverted by the `git reset`, not by the count.
 
-Side effects (fetch, fs writes) are not undone by rollback. `session.ts` contains only value-producing statements — there are no function definitions to re-execute.
+**Session-space implication**: any function, class, or component captured into the session space *after* the target ref disappears on rollback. This is intentional — it keeps `heap.bin` and the session space coherent (a scope variable that was an instance of class `X` defined after the target ref would otherwise become an orphan immediately). If the model wants to preserve a captured artifact across a rollback, it should `Space.current().read()` the source first and re-emit it after the rollback.
+
+Side effects (fetch, fs writes under `/session/{id}/files/`) are **not** undone by rollback — the file system is outside the git tree. `session.ts` contains only value-producing statements — there are no function definitions to re-execute.
 
 ---
 
@@ -1510,16 +1848,18 @@ Invariants that implementors must maintain. Violations in any direction produce 
 | Contract | Rule |
 | --- | --- |
 | Append timing | Statements are appended to `session.ts` only after successful QuickJS execution — not before, not on type error, not on timeout/OOM. |
-| Function auto-routing | Function and class declarations are intercepted by the boundary detector before tsc/QuickJS and written into the session space. They never appear in `session.ts`. React components are classified by whether props include a `submit` field: yes → form component, no → view component. |
+| Function auto-routing | Capturable declarations (see Capture Rule: top-level `function`/`class`, and single-declarator `const` whose initializer is an ArrowFunction, FunctionExpression, or ClassExpression literal) are intercepted by the boundary detector before tsc/QuickJS and written into the session space with the original source preserved verbatim. They never appear in `session.ts`. Multi-declarator lists, destructuring, `let`/`var`, and non-literal initializers (CallExpression, ObjectLiteral, etc.) stay in `session.ts`. React components are classified by whether props include a callable `submit` field: yes → form, no → view; untyped props default to view. |
 | No re-declaration | Declaring a function or class whose name already exists in the session space is a `kind: "contract"` error. The declaration is discarded. Update via `Space.current().read()` then `.patch()` or `.write()`. |
 | Commit atomicity | All files (`session.ts`, `scope.json`, `heap.bin`, `meta.json`) are committed in the same git operation at yield points. Partial commits are not valid state. |
-| Statement/trace alignment | Every `execute` event in `trace.jsonl` corresponds exactly to a statement in `session.ts`. Rolling back N statements removes N trace entries and the same N lines from `session.ts`. |
+| Statement/trace alignment | Every `execute` event in `trace.jsonl` corresponds exactly to one line in `session.ts` (value-producing statements only). Captured declarations emit `function_captured` instead — they never produce an `execute` event and never appear in `session.ts`. `rollback(N)` walks back N `execute` events only; captures within that span are reverted via the full `git reset --hard` that rollback performs (see Rollback atomicity contract), not via the count. |
 | Pin ref-scoping | Pin metadata is stored with the git ref at which `pin()` was called. Rollback past that ref removes the pin. |
 | Fork budget | Fork token usage debits the parent's `tokensRemaining` in real time. A fork cannot consume tokens beyond `min(fork.tokenBudget, parent.tokensRemaining)` at spawn time. |
 | Contract errors | Host-bridge rejections (DAG violations, rollback blocks) use `kind: "contract"`. They never dirty scope. |
 | Display after rollback | `display_invalidate(cutoffIndex)` is emitted on any rollback. Renderer drops elements first written after `cutoffIndex`. |
 | Speculative append | Buffered statements are appended to `session.ts` only when they execute successfully after the await resolves — not when they are type-checked into the buffer. |
-| Speculative type annotation | A `as Type` annotation on an `await` expression is used by tsc for downstream type-checking. On resolve, the actual value is structurally checked against the annotation. A mismatch rolls back the await statement, discards the buffer, and yields with `__speculative_nudge` and the actual value expanded. The LLM rewrites the annotation in the next cycle. |
+| Speculative type annotation | A `as Type` annotation on an `await` expression is used by tsc for downstream type-checking. Required iff tsc would otherwise infer `any`/`unknown`/`Promise<any>`. On resolve, the actual value is structurally checked against the annotation. A mismatch rolls back the await statement, discards the buffer, and yields with `__speculative_nudge` (including a suggested annotation derived from the actual value) and the actual value expanded. The LLM rewrites the annotation in the next cycle. |
+| Annotation first-omission grace | The first non-inferable `await` per session that lacks a `as Type` annotation does not error. Speculative checking is disabled for that await's buffer; on resolve, the host derives a shape from the actual value and injects a hint. `meta.json.annotation_grace_used` is set to true. Subsequent non-inferable awaits without annotation are `kind: "type"` errors. |
+| Annotation mismatch escalation | Two consecutive `speculative_type_mismatch` events within a single user instruction promote the executor one tier (S → M, M → L). `annotation_mismatch_streak` resets on each successful await resolution and on escalation. Capped at one escalation per instruction. |
 | sleep cap | `sleep(ms)` clamps `ms` to `[0, 60000]` silently. No error is injected for out-of-range values. |
 | Optional task failure | `fail(id)` on a task with `optional: true` marks it `"failed"` and immediately makes all dependent tasks eligible. |
 | Conditional task skip | `start(id)` on a task whose `condition` evaluates to falsy transitions it to `"skipped"` (treated as done for DAG resolution) and returns without error. |
@@ -1530,30 +1870,38 @@ Invariants that implementors must maintain. Violations in any direction produce 
 | Fork inject no-op | `inject()` when the fork has no pending ask() is silently ignored — no error, no trace event. |
 | Class stub in .functions | `loadFunction(name)` on a class populates `.functions.{name}` with a collapsed stub and a .d.ts hint comment. Using methods on the stub produces a tsc error: `// error: 'DataProcessor' is a collapsed class — call loadFunction('DataProcessor', { expand: true }) then inspect() to expand`. Call `loadFunction(name, { expand: true })` + `inspect()` to replace the stub with the full interface. |
 | loadFunction idempotent | `loadFunction(name)` when the function is already loaded, or `loadFunction(name, { expand: true })` when already fully expanded, is a no-op; no event is traced. |
+| Class instances non-portable | Instances of user-defined captured classes are stored in `heap.bin` as orphan placeholders (`{ __orphaned, __keys }`). After restore, own-property reads work; method calls throw `OrphanedInstance`. Model rebuilds instances explicitly when needed across yield boundaries. |
+| Class deletion cascade | Removing a captured class from the session space nullifies every live scope variable holding an instance of it at the next yield. Variables appear as `null` with a `/* nullified: class <Name> removed */` comment in `__scope`; `class_instance_nullified` is traced per variable. |
+| Rollback atomicity | `rollback()` is a single `git reset --hard` over the session repo. `session.ts`, `scope.json`, `heap.bin`, `meta.json`, and the `space/` tree all revert together. Captured artifacts added after the target ref disappear. Side effects under `/session/{id}/files/` (outside the git tree) are not undone. |
+| Checkpoint settles Promises | `checkpoint()` awaits every pending Promise in scope before committing. A Promise whose logical timeout fires before resolution is recorded as rejected (kind: "timeout"). `inspect()` does **not** auto-settle — only Promises passed as args are awaited. Restoring from an `inspect-{n}` snapshot where Promises were pending leaves those bindings as `undefined`. |
 
 ---
 
 ## Layers
 
-| Layer | Adds                                    | Eval focus                           |
-| ----- | --------------------------------------- | ------------------------------------ |
-| 0     | Sandbox + boundary detector + trace     | Error rate                           |
-| 1     | tsc (strict) + retries + type inference | Self-correction rate                 |
-| 2     | inspect, budget, \_\_errors             | Inspect frequency, budget tracking   |
-| 3     | checkpoint, rollback                    | Checkpoint quality, rollback success |
-| 4     | fork + resolve                          | Speedup, fork success rate           |
-| 5     | pin, compact, expand                    | Context utilization                  |
-| 6     | tasklist                                | Task completion, DAG scheduling      |
-| 7     | fetch, fs, require                      | E2E completion                       |
-| 8     | display, ask (JSX)                      | Render correctness, clarification quality |
-| 9     | Base snapshots                          | Cross-session reuse                  |
-| 10    | Spaces (actions, tasklists, knowledge, agent .d.ts overlay, Space class) | Action success rate, tasklist completion, knowledge expansion accuracy, space authoring |
+Each layer corresponds to a `lib/{name}/` directory in `llm-repl/src/lib/`.
 
-**Model thresholds**: 1–3B → L0–1 · 7–14B → L0–3 · 30–70B → L0–6 · Frontier → all.
+| Layer | `lib/` dir | Adds | Eval focus | Min model class |
+| ----- | ---------- | ---- | ---------- | --------------- |
+| 0 | `sandbox` | QuickJS isolate + boundary detector + trace | Error rate | 1–3B |
+| 1 | `typecheck` | tsc strict + retries + type inference feedback | Self-correction rate | 1–3B |
+| 2 | `inspect` | inspect(), budget, \_\_errors | Inspect frequency, dead-code-after-inspect rate | 7–14B |
+| 3 | `checkpoint` | checkpoint(), rollback() | Checkpoint quality, rollback success | 7–14B |
+| 4 | `fork` | fork(), resolve() | Speedup, fork success rate, budget overrun rate | 7–14B |
+| 5 | `memory` | pin(), compact(), expand() | Context utilization, proactive-vs-auto compact ratio | 30–70B |
+| 6 | `tasklist` | tasklist(), task DAG | Task completion, DAG scheduling correctness | 30–70B |
+| 7 | `io` | fetch(), fs.*, require() | E2E completion | 30–70B |
+| 8 | `render` | display(), ask() (JSX) | Render correctness, clarification quality | 30–70B |
+| 9 | `snapshot` | Base snapshots | Cross-session scope reuse rate, snapshot skip rate | Frontier |
+| 10 | `spaces` | Space class, actions, tasklists, knowledge overlay, agent .d.ts | Action success rate, tasklist completion, knowledge expansion accuracy, space authoring | Frontier |
+
+**Model thresholds**: 1–3B → L0–1 · 7–14B → L0–3 · 30–70B → L0–6 · Frontier → all · Reasoning → all (with reasoning-variant prompts; see Eval section).
 
 ---
 
 ## Eval
+
+### Metrics
 
 **Core**: task completion, token efficiency, error rate, recovery rate.
 
@@ -1569,7 +1917,85 @@ Invariants that implementors must maintain. Violations in any direction produce 
 
 **Git-derived**: yield density, scope diff between inspects, branch count, rollback ratio, contract error rate.
 
-**Test tiers**: 1 pure code → 2 +inspect → 3 +type inference → 4 +checkpoint/rollback → 5 +fork → 6 +compact → 7 +tasks+I/O → 8 +ask → 9 +base snapshot.
+### Test Tiers (CI Gates)
+
+Each tier activates the layers below it cumulatively:
+
+```
+Tier 1 — sandbox
+Tier 2 — sandbox + inspect
+Tier 3 — sandbox + inspect + typecheck
+Tier 4 — sandbox–typecheck + checkpoint
+Tier 5 — sandbox–checkpoint + fork
+Tier 6 — sandbox–fork + memory
+Tier 7 — sandbox–memory + tasklist + io
+Tier 8 — sandbox–io + render
+Tier 9 — sandbox–render + snapshot
+```
+
+### Model Classes
+
+Evals are gated by model class. Each layer has a minimum class — running it below that threshold is expected to produce random results.
+
+| Class | Examples | Notes |
+|-------|----------|-------|
+| 1–3B | Phi-3 mini, Gemma 2B | L0–1 only |
+| 7–14B | Mistral 7B, Llama 3.1 8B | L0–3 |
+| 30–70B | Llama 3.1 70B, Qwen 72B | L0–6 |
+| Frontier | GPT-4o, Claude Sonnet/Opus, Gemini Pro | All layers |
+| Reasoning | o3, o4-mini, Claude extended thinking | All layers + reasoning-variant prompts |
+
+**Reasoning model considerations:** Reasoning models plan internally before emitting tokens. Their prompt variants (`eval/prompts/reasoning.md` in each lib) differ in three ways: (1) no chain-of-thought instructions — they already reason; (2) TypeScript-only constraint is explicit — no interleaved prose; (3) `inspect()` frequency nudge is softer — reasoning models anticipate future steps and batch work more naturally. Grading for reasoning models does not penalize long think blocks; only the emitted TypeScript stream is scored.
+
+### Prompt Optimization Per Layer
+
+Each `lib/{name}/eval/` holds a dataset of real LLM session traces and a grader:
+
+```
+lib/inspect/eval/
+├── dataset.jsonl      — { input, expected_trace_events, min_model } records
+├── grade.ts           — calls an LLM judge to score each output; reports layer metric
+└── prompts/
+    ├── 1-3b.md        — prompt variant for 1–3B models
+    ├── 7-14b.md
+    ├── 30-70b.md
+    ├── frontier.md
+    └── reasoning.md
+```
+
+Optimization workflow:
+```
+pnpm eval --lib inspect --model 7b      # run grader with 7-14b.md variant
+# edit lib/inspect/eval/prompts/7-14b.md
+pnpm eval --lib inspect --model 7b      # re-run; iterate until score threshold met
+```
+
+Each layer is tuned in isolation. Changing `lib/inspect/eval/prompts/frontier.md` does not affect `lib/checkpoint/`.
+
+### Orchestrator Role Evals
+
+The router and each role are also evaluated independently:
+
+```
+router/eval/
+├── dataset.jsonl      — session state snapshots → expected routing JSON
+├── grade.ts           — LLM judge scores routing decisions
+└── prompts/
+    ├── router.md      — router system prompt (loaded at runtime)
+    └── analyzer.md    — ANALYZER system prompt (loaded at runtime)
+```
+
+Role eval metrics:
+- **ANALYZER**: classification accuracy (difficulty label) vs. human-labeled dataset
+- **PLANNER_\***: task graph quality — correct `dependsOn` edges, appropriate difficulty labels, no over-planning
+- **EXEC_\***: task completion per layer gate, inspect frequency, dead-code-after-inspect rate
+- **RECOVERY**: rollback correctness, `error_streak` reduction rate, revised task success rate
+
+```
+pnpm eval --role EXEC_STANDARD --model M
+pnpm eval --role RECOVERY --model M-R
+pnpm eval --role PLANNER_DEEP --model L-R
+```
 
 ---
 
@@ -1577,4 +2003,4 @@ Invariants that implementors must maintain. Violations in any direction produce 
 
 One JSON line per event. Append-only, never summarized. Written with O_APPEND + fsync per event. Full reconstructions in `trace-contexts/cycle-{n}.ts`.
 
-Events: `session_start`, `space_load`, `space_reload` (after inspect when space files changed), `space_reload_failed` (path · error), `agent_activate`, `completion_start/end`, `reasoning`, `statement_received`, `function_captured` (name · kind: function|class|view_component|form_component · path in session space), `function_redeclare_blocked` (name · existing path · contract error injected), `type_check_pass/fail`, `type_inferred`, `execute`, `runtime_error`, `contract_violation` (host-bridge rejection · kind), `promise_resolve`, `promise_reject`, `timeout`, `oom`, `inspect`, `inspect_settle` (promises awaited at inspect time), `checkpoint`, `rollback`, `snapshot_skipped`, `fork_spawn/resolve/reject`, `fork_budget_warning` (tokensRemaining · warnAt threshold), `fork_resolve` (fork terminated via resolve()), `compact`, `expand`, `pin/unpin`, `auto_compact`, `tasklist_register`, `tasklist_update` (id · node · old_status → new_status), `action_invoke`, `action_resolve`, `tasklist_step_enter/exit`, `knowledge_expand`, `space_file_read` (path), `space_file_write` (method · path), `space_file_remove` (path), `space_file_list` (path · count), `display`, `display_invalidate` (cutoffIndex on rollback), `ask`, `ask_resolve`, `ask_timeout`, `ask_cancelled` (session end, no fallback), `binding_orphaned` (name · removed from .d.ts overlay), `speculative_buffer_start` (await encountered · annotated type), `speculative_type_check_pass/fail` (per buffered statement), `speculative_buffer_overflow` (maxTokens hit · tokens accumulated · LLM stream paused), `speculative_execute` (buffered statement executed after await resolved), `speculative_type_mismatch` (resolved type incompatible with annotation · triggers rollback + yield · actual value logged), `speculative_aborted` (buffered statement errored · remaining buffer size), `context_reconstruct`, `budget_check`, `session_end`, `sleep` (ms · resolved after delay), `file_write` (path · bytes), `file_diff` (path · hunks applied), `file_diff_no_read` (path · contract error injected), `task_skip` (tasklist id · task id · condition expression), `hook_execute` (id · phase · action returned), `hook_side_effect_error` (id · error message), `hook_disabled` (id · consecutive failures), `hook_phase_mismatch` (id · action · phase), `fork_ask` (fork id · ui descriptor), `fork_ask_inject` (fork id), `fork_ask_timeout` (fork id), `function_load` (name · space · kind: function|class), `function_load_expand` (name · space · method count).
+Events: `session_start`, `space_load`, `space_reload` (after inspect when space files changed), `space_reload_failed` (path · error), `agent_activate`, `completion_start/end`, `reasoning`, `statement_received`, `function_captured` (name · kind: function|class|view_component|form_component · path in session space), `function_redeclare_blocked` (name · existing path · contract error injected), `type_check_pass/fail`, `type_inferred`, `execute`, `runtime_error`, `contract_violation` (host-bridge rejection · kind), `promise_resolve`, `promise_reject`, `timeout`, `oom`, `inspect`, `inspect_settle` (promises awaited at inspect time), `checkpoint`, `checkpoint_settle_wait` (label · pendingCount · elapsedMs), `rollback`, `snapshot_skipped`, `fork_spawn/resolve/reject`, `fork_budget_warning` (tokensRemaining · warnAt threshold), `fork_resolve` (fork terminated via resolve()), `compact`, `expand`, `pin/unpin`, `auto_compact`, `tasklist_register`, `tasklist_update` (id · node · old_status → new_status), `action_invoke`, `action_resolve`, `tasklist_step_enter/exit`, `knowledge_expand`, `space_file_read` (path), `space_file_write` (method · path), `space_file_remove` (path), `space_file_list` (path · count), `display`, `display_invalidate` (cutoffIndex on rollback), `ask`, `ask_resolve`, `ask_timeout`, `ask_cancelled` (session end, no fallback), `binding_orphaned` (name · removed from .d.ts overlay), `class_instance_orphaned` (name · class · cycle — marshaled as orphan placeholder in heap.bin), `class_instance_nullified` (name · class · cycle — cascade after class removal), `speculative_buffer_start` (await encountered · annotated type), `speculative_type_check_pass/fail` (per buffered statement), `speculative_buffer_overflow` (maxTokens hit · tokens accumulated · LLM stream paused), `speculative_execute` (buffered statement executed after await resolved), `speculative_type_mismatch` (resolved type incompatible with annotation · triggers rollback + yield · actual value logged), `speculative_aborted` (buffered statement errored · remaining buffer size), `annotation_missing_grace` (await source · derived shape · hint injected), `annotation_missing_error` (await source · cycle), `annotation_escalation` (prior_tier · new_tier · annotation_mismatch_streak), `context_reconstruct`, `budget_check`, `session_end`, `sleep` (ms · resolved after delay), `file_write` (path · bytes), `file_diff` (path · hunks applied), `file_diff_no_read` (path · contract error injected), `task_skip` (tasklist id · task id · condition expression), `hook_execute` (id · phase · action returned), `hook_side_effect_error` (id · error message), `hook_disabled` (id · consecutive failures), `hook_phase_mismatch` (id · action · phase), `fork_ask` (fork id · ui descriptor), `fork_ask_inject` (fork id), `fork_ask_timeout` (fork id), `function_load` (name · space · kind: function|class), `function_load_expand` (name · space · method count), `router_decision` (trigger · role · model · adapter · reasoning_on · error_streak · stuck_tasks · rationale · cycle), `analyzer_refire` (cycle · prior_difficulty · new_difficulty · error_streak).
