@@ -17,6 +17,8 @@ describe('rpc/interface', () => {
         scope: [],
         asyncTasks: [],
         activeFormId: null,
+        tasklistsState: { tasklists: new Map() },
+        agentEntries: [],
       }),
       getConversationState: async () => ({ messages: [], systemPrompt: '' } as any),
       subscribe: async function* () {},
@@ -41,6 +43,8 @@ describe('rpc/interface', () => {
       scope: [],
       asyncTasks: [],
       activeFormId: null,
+      tasklistsState: { tasklists: new Map() },
+      agentEntries: [],
     }
     expect(snap.status).toBe('idle')
   })

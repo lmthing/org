@@ -6,10 +6,63 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./lib/sandbox/index": {
+      "types": "./src/lib/sandbox/index.ts",
+      "import": "./src/lib/sandbox/index.ts"
+    },
+    "./lib/sandbox/trace": {
+      "types": "./src/lib/sandbox/trace.ts",
+      "import": "./src/lib/sandbox/trace.ts"
+    },
+    "./lib/inspect/index": {
+      "types": "./src/lib/inspect/index.ts",
+      "import": "./src/lib/inspect/index.ts"
+    },
+    "./lib/inspect/budget": {
+      "types": "./src/lib/inspect/budget.ts",
+      "import": "./src/lib/inspect/budget.ts"
+    },
+    "./lib/checkpoint/checkpoint": {
+      "types": "./src/lib/checkpoint/checkpoint.ts",
+      "import": "./src/lib/checkpoint/checkpoint.ts"
+    },
+    "./lib/render/render": {
+      "types": "./src/lib/render/render.ts",
+      "import": "./src/lib/render/render.ts"
+    },
+    "./lib/memory/memory": {
+      "types": "./src/lib/memory/memory.ts",
+      "import": "./src/lib/memory/memory.ts"
+    },
+    "./lib/tasklist/tasklist": {
+      "types": "./src/lib/tasklist/tasklist.ts",
+      "import": "./src/lib/tasklist/tasklist.ts"
+    },
+    "./lib/io/io": {
+      "types": "./src/lib/io/io.ts",
+      "import": "./src/lib/io/io.ts"
+    },
+    "./lib/fork/fork": {
+      "types": "./src/lib/fork/fork.ts",
+      "import": "./src/lib/fork/fork.ts"
+    },
+    "./lib/snapshot/snapshot": {
+      "types": "./src/lib/snapshot/snapshot.ts",
+      "import": "./src/lib/snapshot/snapshot.ts"
+    },
+    "./session/assembly": {
+      "types": "./src/session/assembly.ts",
+      "import": "./src/session/assembly.ts"
+    },
+    "./context/reconstruction": {
+      "types": "./src/context/reconstruction.ts",
+      "import": "./src/context/reconstruction.ts"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "scripts": {
     "build": "tsup",

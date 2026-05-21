@@ -129,8 +129,10 @@ export class IoEngine {
       try {
         response = await fetch(urlStr, {
           method: initObj['method'] as string | undefined,
-          headers: initObj['headers'] as HeadersInit | undefined,
-          body: initObj['body'] as BodyInit | undefined,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          headers: initObj['headers'] as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          body: initObj['body'] as any,
           signal,
         });
       } finally {
