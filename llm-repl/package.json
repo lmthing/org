@@ -15,7 +15,8 @@
     "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx --env-file ../.env scripts/eval.ts"
   },
   "dependencies": {
     "ai": "^6.0.86",
