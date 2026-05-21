@@ -72,6 +72,26 @@ The branch on L2 → {L3, L4} is real: checkpoint and fork are independent capab
 3. **Carry-overs land first, in `llm-repl/src/`** as plain ports (no behavior change). New stage strings (`before-tsc`, `on-function-capture`) are added to the hook phase enum but unwired until L0/L1 land.
 4. **Existing `repl/` and `cli/` are not modified** until Phase 13. Consumers (Studio, Computer, Chat) keep working throughout.
 
+### Eval prerequisites — env setup
+
+The Azure credentials and all model aliases are already configured in `.env` at the repo root. For reference:
+
+```
+# Provider credentials
+AZURE_API_KEY=<key>
+AZURE_RESOURCE_NAME=<resource>
+
+# Model aliases — map eval model classes to deployed provider:modelId
+LM_MODEL_XS=azure:claude-haiku-4-5       # 1–3B class
+LM_MODEL_S=azure:gpt-4.1-mini            # 7–14B class
+LM_MODEL_M=azure:claude-sonnet-4-6       # 30–70B class
+LM_MODEL_M_R=azure:DeepSeek-R1-0528      # 30–70B + reasoning
+LM_MODEL_L=azure:gpt-5.5                 # frontier class
+LM_MODEL_L_R=azure:Kimi-K2.6             # frontier + reasoning
+```
+
+The eval runner resolves `--model <class>` to these aliases: `1b` → `XS`, `7b` → `S`, `30b`/`frontier` → `M` or `L`, reasoning variants append `_R`. Any missing alias causes the grader to skip that model class with a warning rather than hard-fail, so partial env setups are safe for iterating on a single layer.
+
 ---
 
 ## Phase 0 — Submodule bump + scaffolding + carry-overs
@@ -89,7 +109,7 @@ The branch on L2 → {L3, L4} is real: checkpoint and fork are independent capab
    - `cli/src/rpc/` + `cli/src/cli/server.ts` → `llm-repl-cli/src/rpc/` (skeleton — message types may extend in Phase 13)
    - `cli/src/cli/args.ts` → `llm-repl-cli/src/cli/args.ts`
    - `cli/src/cli/agent-loader.ts` + `repl/src/spaces/dynamic-loader.ts` → `llm-repl/src/lib/spaces/loader.ts` (skeleton only — full `Space` class lands in L10)
-4. **Eval runner stub:** `llm-repl/scripts/eval.ts` — invokes per-lib `grade.ts` based on `--lib <name>` and `--model <class>` args. No-op when no `grade.ts` exists yet. Plumbs `LLM_REPL_MODEL_*` aliases through existing provider resolver.
+4. **Eval runner stub:** `llm-repl/scripts/eval.ts` — invokes per-lib `grade.ts` based on `--lib <name>` and `--model <class>` args. No-op when no `grade.ts` exists yet. Plumbs `LM_MODEL_*` aliases through existing provider resolver.
 5. **`llm-repl.d.ts` canonical surface** — drop in the API block from spec L375–999 as the authoritative `.d.ts`. Each layer fills in the runtime behind these declarations.
 
 **Exit:** `pnpm -F llm-repl build` and `pnpm -F llm-repl-cli build` succeed; ported module tests pass without modification.
@@ -259,7 +279,7 @@ Deliverables:
 
 - `router.ts` — implements every routing rule from spec §"Routing Rules" in order (L302–323): annotation-escalation (rule 1), re-analyze (rule 2), recovery escalation M-R/L-R (rules 3–6), no-tasklist-yet, in-progress-task-difficulty tier selection, finish-up, budget warning, heap warning.
 - `analyzer.ts` — single-turn XS call. JSON output schema per spec §"ANALYZER Sub-Prompt" L327–342 (`difficulty`, `skip_planner`, `estimated_tasks`, `needs_fork`, `needs_ask`, `rationale`).
-- LoRA adapter selection via AI SDK `providerOptions` (spec L289–298). Model aliases via existing env-var resolver (`LLM_REPL_MODEL_{ALIAS}`, `-R` suffix toggles reasoning).
+- LoRA adapter selection via AI SDK `providerOptions` (spec L289–298). Model aliases via existing env-var resolver (`LM_MODEL_{ALIAS}`, `-R` suffix toggles reasoning).
 - Router state: `error_streak`, `annotation_mismatch_streak`, `analyzer_refires`, cached difficulty. Reset rules per spec.
 - Router emits **only** `router_decision` events to `trace.jsonl` (spec L246) — routing JSON never injected into executor context. Effects are visible only through context flags (`budget_warning`, `heap_warning`, `recovery_context`) which expand specific reconstruction blocks per spec L344–352.
 - `router/eval/` with router dataset + grader and prompts (`router.md`, `analyzer.md`).

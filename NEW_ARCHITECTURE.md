@@ -247,7 +247,7 @@ The router reads session state and outputs a JSON routing decision. It never tou
 
 ### Model Aliases
 
-Aliases are resolved via env vars using the existing provider resolver (`LLM_REPL_MODEL_{ALIAS}=provider:modelId`). The `-R` suffix enables extended thinking via Vercel AI SDK `providerOptions`.
+Aliases are resolved via env vars using the existing provider resolver (`LM_MODEL_{ALIAS}=provider:modelId`). The `-R` suffix enables extended thinking via Vercel AI SDK `providerOptions`.
 
 | Alias | Purpose |
 |-------|---------|
@@ -264,11 +264,11 @@ Aliases are resolved via env vars using the existing provider resolver (`LLM_REP
 
 Example env:
 ```
-LLM_REPL_MODEL_XS=openai:gpt-4o-mini
-LLM_REPL_MODEL_S=openai:gpt-4o
-LLM_REPL_MODEL_M=anthropic:claude-sonnet-4-6
-LLM_REPL_MODEL_L=anthropic:claude-opus-4-7
-LLM_REPL_MODEL_L_R=anthropic:claude-opus-4-7   # providerOptions.thinking.type = "enabled"
+LM_MODEL_XS=openai:gpt-4o-mini
+LM_MODEL_S=openai:gpt-4o
+LM_MODEL_M=anthropic:claude-sonnet-4-6
+LM_MODEL_L=anthropic:claude-opus-4-7
+LM_MODEL_L_R=anthropic:claude-opus-4-7   # providerOptions.thinking.type = "enabled"
 ```
 
 ### Roles

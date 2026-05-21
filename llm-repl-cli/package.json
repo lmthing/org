@@ -1,0 +1,59 @@
+{
+  "name": "@lmthing/llm-repl-cli",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "llm-repl": "dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lmthing/llm-repl": "workspace:*",
+    "@lmthing/repl": "workspace:*",
+    "ai": "^6.0.86",
+    "typescript": "^5.7.0",
+    "zod": "^4.1.13"
+  },
+  "peerDependencies": {
+    "@ai-sdk/amazon-bedrock": "^4.0.0",
+    "@ai-sdk/anthropic": "^3.0.0",
+    "@ai-sdk/azure": "^3.0.0",
+    "@ai-sdk/cohere": "^3.0.0",
+    "@ai-sdk/google": "^3.0.0",
+    "@ai-sdk/groq": "^3.0.0",
+    "@ai-sdk/mistral": "^3.0.0",
+    "@ai-sdk/openai": "^3.0.0",
+    "@ai-sdk/openai-compatible": "^0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@ai-sdk/amazon-bedrock": { "optional": true },
+    "@ai-sdk/anthropic": { "optional": true },
+    "@ai-sdk/azure": { "optional": true },
+    "@ai-sdk/cohere": { "optional": true },
+    "@ai-sdk/google": { "optional": true },
+    "@ai-sdk/groq": { "optional": true },
+    "@ai-sdk/mistral": { "optional": true },
+    "@ai-sdk/openai": { "optional": true },
+    "@ai-sdk/openai-compatible": { "optional": true }
+  },
+  "devDependencies": {
+    "@ai-sdk/provider": "*",
+    "@swc/core": "^1.10.0",
+    "@types/node": "^22.0.0",
+    "dotenv": "catalog:",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "vitest": "catalog:"
+  }
+}
