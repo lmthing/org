@@ -38,7 +38,21 @@ interface Budget {
   tokensUsed: number;
   inspectCount: number;
   nearingLimit: boolean;
-  execution: { statementsTotal: number; heapMB: number; heapMaxMB: number };
+  forksActive: number;
+  forksCompleted: number;
+  context: {
+    used: number;
+    max: number;
+    scopeTokens: number;
+    sourceTokens: number;
+    wastedOnAbort: number;
+  };
+  execution: {
+    statementsTotal: number;
+    statementsSinceInspect: number;
+    heapMB: number;
+    heapMaxMB: number;
+  };
 }
 declare function budget(): Budget;
 declare function sleep(ms: number): Promise<void>;

@@ -66,3 +66,47 @@ export interface SerializedJSX {
   props: Record<string, unknown>
   children?: (SerializedJSX | string)[]
 }
+
+// ── Session meta ──
+
+export interface MetaJson {
+  budgetTokensUsed: number;
+  budgetTokensRemaining: number;
+  inspectCount: number;
+  annotationGraceUsed: boolean;
+  pins: Record<string, { maxTokens?: number }>;
+  compactions: Record<string, { strategy: string; value: string }>;
+  errors: SessionError[];
+  tasks: TaskRecord[];
+}
+
+export interface TaskRecord {
+  tasklistId: string;
+  id: string;
+  label: string;
+  status: 'pending' | 'in_progress' | 'done' | 'failed' | 'skipped';
+  deps?: string[];
+  optional?: boolean;
+}
+
+export interface SessionError {
+  kind: 'contract' | 'type' | 'runtime' | 'timeout' | 'oom' | 'permission';
+  message: string;
+  statement?: string;
+  stack?: string;
+  cycle: number;
+  attempt?: number;
+}
+
+export interface PinRecord {
+  name: string;
+  cycleAdded: number;
+  maxTokens?: number;
+  gitRef: string;
+}
+
+export interface CompactionRecord {
+  name: string;
+  strategy: 'schema' | 'sample' | 'summary' | 'hash';
+  compressed: string;
+}

@@ -228,7 +228,7 @@ describe('TraceWriter', () => {
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe('session_start');
     expect(typeof events[0].ts).toBe('number');
-    expect((events[0] as { sessionId: string }).sessionId).toBe('abc');
+    expect((events[0] as unknown as { sessionId: string }).sessionId).toBe('abc');
   });
 
   it('writes multiple events as separate lines', () => {
