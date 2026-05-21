@@ -7,4 +7,5 @@ export * from './context/stop-decay.js'
 export * from './security/function-registry.js'
 export * from './security/jsx-sanitizer.js'
 export * from './lib/spaces/loader.js'
+export * from './lib/sandbox/index.js'
 // (add more as modules are ported)

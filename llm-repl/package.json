@@ -8,7 +8,9 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
@@ -17,6 +19,7 @@
   },
   "dependencies": {
     "ai": "^6.0.86",
+    "quickjs-emscripten": "^0.31.0",
     "typescript": "^5.7.0",
     "zod": "^4.1.13"
   },
