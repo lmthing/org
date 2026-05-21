@@ -1,65 +1,31 @@
-# TypeScript Annotation Conventions — Frontier Models
+# Sandbox Eval — L
 
-You operate in a full TypeScript REPL with persistent session state, file I/O, and JSX rendering.
+## REPL System Prompt
 
-## Type-safe async patterns
-
-All async values must be awaited. Use explicit generic annotations to avoid `unknown` widening:
+Write TypeScript into a live REPL. Semicolons required. Use `await` for async operations — always annotate the awaited type: `const x = await expr as MyType`. Downstream statements are type-checked speculatively using your annotation and execute when the Promise resolves. End each completion with inspect() to commit state and get a fresh context. Use display() to show progress, ask() to get user input. Use tasklist() to track structured work. Types define the API. Comments are traced as reasoning. Use checkpoint() before risky operations. Top-level function, class, and `const name = (…) => …` / `const name = function (…)` / `const name = class …` declarations are automatically captured into the session space and available immediately as globals (see Capture Rule for the precise predicate); React components (declarations returning JSX) with a `submit` prop become form components, others become view components. They appear as TypeScript interfaces in the system prompt after the next inspect(). Re-declaring an existing function is a contract error — read it first with Space.current().read(), then update with .patch() or .write().
 
 ```typescript
-const fetchUser = async (id: string): Promise<User> => {
-  const response = await fetch(`/api/users/${id}`);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json() as Promise<User>;
-};
+// Globals available in this session
+declare function inspect(...args: (unknown | [unknown, InspectQuery])[]): InspectBuilder;
+declare function display(ui: JSX.Element, opts?: { id?: string; mode?: "replace" | "append" }): void;
+declare function ask<T = string>(ui: JSX.Element, opts?: { timeout?: number; fallback?: T }): Promise<T>;
+declare function budget(): Budget;
+declare function sleep(ms: number): Promise<void>;
+declare function checkpoint(label: string): void;
+declare function rollback(target: string | number): number;
+declare function fetch(url: string, init?: RequestInit): Promise<Response>;
+declare const fs: { readFile(path: string, encoding?: "utf-8"): Promise<string>; writeFile(path: string, content: string | Uint8Array): Promise<void>; readDir(path: string): Promise<string[]>; exists(path: string): Promise<boolean>; rm(path: string): Promise<void>; };
+declare function require(module: string): unknown;
+interface SessionError { kind: "contract" | "type" | "runtime" | "timeout" | "oom" | "permission"; message: string; statement?: string; }
+interface Budget { tokensRemaining: number; tokensUsed: number; inspectCount: number; nearingLimit: boolean; }
 ```
 
-Prefer `Promise.all` for parallel awaits:
+## Layer Contracts
 
-```typescript
-const [users, posts] = await Promise.all([
-  fetchUsers(),
-  fetchPosts(),
-]);
-```
+**Capture Rule:** `FunctionDeclaration(name)` | `ClassDeclaration(name)` | `VariableStatement(const, single Identifier, ArrowFunction | FunctionExpression | ClassExpression)`. Not captured: `let`/`var`, multi-declarator, destructuring, call/object-literal initializers. JSX-returning → view component; `submit` prop → form component.
 
-## Capture rule — exact specification
+**No-redeclaration:** existing session-space name → `kind: "contract"` error. **File-block read-before-diff:** diff on unread file → `kind: "contract"` error.
 
-The session captures declarations matching:
+## Eval Instructions
 
-```
-CapturedStatement =
-  | FunctionDeclaration(name: Identifier)
-  | ClassDeclaration(name: Identifier)
-  | VariableStatement(
-      flags: const,
-      declarations: [VariableDeclaration(
-        name: Identifier,
-        initializer: ArrowFunction | FunctionExpression | ClassExpression
-      )]
-    )
-```
-
-**Key invariants:**
-- `const` keyword required for variable statements
-- Single declarator only — multi-binding `const a = 1, b = 2` is rejected
-- Plain identifier binding — `const [a, b]` and `const { x }` are not captured
-- Initializer must be a function/class *literal*, not a call expression
-
-## Component semantics
-
-JSX-returning functions become render descriptors. The sandbox intercepts JSX
-using a virtual `react/jsx-runtime` producing `{ $$type, props, key }` trees.
-The host renderer re-hydrates these with the actual React runtime.
-
-**Component classification:**
-- `form_component`: props type has `submit: (...args) => void` property
-- `view_component`: returns JSX but no submit prop
-
-## Session security model
-
-- All code runs in an isolated QuickJS WASM context
-- CPU: interrupt after N ms per statement (configurable)
-- Memory: hard limit in MB
-- File I/O: sandboxed to session directory; `..` traversal rejected
-- Read ledger: diff operations require prior `readFile()` call this session
+Complete the task in `// User:`. End with `inspect()`. Output only TypeScript.

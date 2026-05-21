@@ -35,7 +35,7 @@ sdk/org/
 Each `lib/<name>/` is self-contained per the spec's discoverability rule (L181–196):
 
 ```
-index.ts · <name>.test.ts · eval/{dataset.jsonl, grade.ts, prompts/{1-3b,7-14b,30-70b,frontier,reasoning}.md}
+index.ts · <name>.test.ts · eval/{dataset.jsonl, grade.ts, prompts/{xs,s,m,m_r,l,l_r}.md}
 ```
 
 ---
@@ -68,7 +68,7 @@ The branch on L2 → {L3, L4} is real: checkpoint and fork are independent capab
 ## Phasing Principles
 
 1. **Layer-ordered build (L0 → L10).** Each phase compiles + ships its own eval suite before the next starts (spec §"Discoverability").
-2. **Vertical green-bar per phase.** Every phase ends with: unit tests pass · `pnpm eval --lib <name> --model <min-class>` runs end-to-end against a real provider · the `trace.jsonl` events specified for that layer are asserted present.
+2. **Vertical green-bar per phase.** Every phase ends with: unit tests pass · `pnpm eval --lib <name> --model <min-class>` runs end-to-end against a real provider · the `trace.jsonl` events specified for that layer are asserted present · eval prompts embed the static REPL system prompt and layer-relevant API types; grader user turns use context reconstruction format.
 3. **Carry-overs land first, in `llm-repl/src/`** as plain ports (no behavior change). New stage strings (`before-tsc`, `on-function-capture`) are added to the hook phase enum but unwired until L0/L1 land.
 4. **Existing `repl/` and `cli/` are not modified** until Phase 13. Consumers (Studio, Computer, Chat) keep working throughout.
 
@@ -135,7 +135,7 @@ Deliverables under `llm-repl/src/lib/sandbox/`:
 - `trace.ts` — `trace.jsonl` writer with `O_APPEND + fsync` per event (spec L1377, L2004). Replay logic for uncommitted suffix on host restart: find last committed git ref, read suffix, replay events into in-memory state. Event schema is the canonical list at spec L2006.
 - `host-bridge.ts` — handle-marshaling pattern for host functions injected as globals. JSX descriptor marshaling (numeric handle IDs for callbacks). Virtual `react/jsx-runtime` module returning host functions that build descriptor trees — React itself never loaded inside QuickJS.
 - `require.ts` — host module registry. tsc transformer that rewrites `import x from 'pkg'` → `const x = require('pkg')` pre-emit. Ambient `.d.ts` declarations auto-generated for every entry in `SessionConfig.availableModules`.
-- **Eval** `eval/dataset.jsonl` ~30 traces covering capture-rule edges (all positive + negative cases above), file-block writes/diffs (with and without prior read), JSX inside template literals; `eval/grade.ts` LLM-judge scoring **error rate**. Prompts for all six model aliases (`xs.md`, `s.md`, `m.md`, `m_r.md`, `l.md`, `l_r.md`).
+- **Eval** `eval/dataset.jsonl` ~30 traces covering capture-rule edges (all positive + negative cases above), file-block writes/diffs (with and without prior read), JSX inside template literals; `eval/grade.ts` LLM-judge scoring **error rate**. Prompts for all six model aliases (`xs.md`, `s.md`, `m.md`, `m_r.md`, `l.md`, `l_r.md`). Each prompt embeds the verbatim static REPL system prompt, layer-0 API declarations, and sandbox-layer contracts (Capture Rule, No-redeclaration, File-block read-before-diff). `grade.ts` formats user turns as context reconstruction (`__budget`, `__scope`, `// User:` task comment).
 
 **Exit:** unit tests cover every Capture Rule clause (positive + negative). `pnpm eval --lib sandbox --model XS` emits a baseline error-rate score. `trace.jsonl` contains `session_start`, `statement_received`, `function_captured`, `function_redeclare_blocked`, `execute`, `file_write`, `file_diff`, `file_diff_no_read`, `runtime_error`, `timeout`, `oom`.
 
@@ -152,7 +152,7 @@ Deliverables under `llm-repl/src/lib/typecheck/`:
 - `speculative.ts` — buffer for statements emitted while a top-level `await` is in flight. Per-statement structural type-check against the annotated awaited type; structural assignability check on `Promise.resolve`. Mismatch path: discard buffer, auto-inject `inspect(__resolved)`, build `__speculative_nudge` with derived shape (spec L1500–1514). Overflow path: `speculative.maxTokens` hit → abort LLM stream, hold buffer, build `__speculative_pending`. Nested buffer stacking for nested `await` (each await opens its own buffer; mismatch only discards the innermost).
 - `annotation-grace.ts` — **first-omission grace per session** (spec contract L1861). On the first non-inferable await without `as Type`, disable speculative checking for that buffer; derive a JSON-Schema-ish shape on resolve; inject hint; flip `meta.json.annotation_grace_used = true`. Subsequent omissions are `kind: "type"` errors.
 - Trace events added: `type_check_pass/fail`, `type_inferred`, `speculative_buffer_start`, `speculative_type_check_pass/fail`, `speculative_buffer_overflow`, `speculative_execute`, `speculative_type_mismatch`, `speculative_aborted`, `annotation_missing_grace`, `annotation_missing_error`.
-- **Eval focus:** self-correction rate. Dataset includes type-error→retry→fix traces and annotation-mismatch traces.
+- **Eval focus:** self-correction rate. Dataset includes type-error→retry→fix traces and annotation-mismatch traces. Prompts embed the verbatim static REPL system prompt, layer-0/1 API declarations, and typecheck-layer contracts (Speculative annotation, Annotation grace, Mismatch escalation, Append timing). `grade.ts` formats user turns as context reconstruction with `__errors: SessionError[]` for self-correction cases.
 
 **Exit:** type-error retry closes within 3 attempts on the eval set; speculative tests cover correct annotation, wrong annotation (mismatch yield), buffer overflow, nested await.
 

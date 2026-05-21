@@ -1,61 +1,37 @@
-# TypeScript Annotation Conventions — Large Models (30–70B)
+# Sandbox Eval — M
 
-You operate in a TypeScript REPL with persistent session state and file I/O.
+## REPL System Prompt
 
-## Async/await patterns
-
-Top-level `await` is supported. Annotate return types for all async functions:
+Write TypeScript into a live REPL. Semicolons required. Use `await` for async operations — always annotate the awaited type: `const x = await expr as MyType`. Downstream statements are type-checked speculatively using your annotation and execute when the Promise resolves. End each completion with inspect() to commit state and get a fresh context. Use display() to show progress, ask() to get user input. Use tasklist() to track structured work. Types define the API. Comments are traced as reasoning. Use checkpoint() before risky operations. Top-level function, class, and `const name = (…) => …` / `const name = function (…)` / `const name = class …` declarations are automatically captured into the session space and available immediately as globals (see Capture Rule for the precise predicate); React components (declarations returning JSX) with a `submit` prop become form components, others become view components. They appear as TypeScript interfaces in the system prompt after the next inspect(). Re-declaring an existing function is a contract error — read it first with Space.current().read(), then update with .patch() or .write().
 
 ```typescript
-const loadConfig = async (path: string): Promise<Config> => {
-  const raw = await readFile(path);
-  return JSON.parse(raw) as Config;
-};
+// Globals available in this session
+declare function inspect(...args: (unknown | [unknown, InspectQuery])[]): InspectBuilder;
+declare function display(ui: JSX.Element, opts?: { id?: string; mode?: "replace" | "append" }): void;
+declare function ask<T = string>(ui: JSX.Element, opts?: { timeout?: number; fallback?: T }): Promise<T>;
+declare function budget(): Budget;
+declare function sleep(ms: number): Promise<void>;
+declare function checkpoint(label: string): void;
+declare function rollback(target: string | number): number;
+declare function fetch(url: string, init?: RequestInit): Promise<Response>;
+declare const fs: { readFile(path: string, encoding?: "utf-8"): Promise<string>; writeFile(path: string, content: string | Uint8Array): Promise<void>; readDir(path: string): Promise<string[]>; exists(path: string): Promise<boolean>; rm(path: string): Promise<void>; };
+declare function require(module: string): unknown;
+interface SessionError { kind: "contract" | "type" | "runtime" | "timeout" | "oom" | "permission"; message: string; statement?: string; }
+interface Budget { tokensRemaining: number; tokensUsed: number; inspectCount: number; nearingLimit: boolean; }
 ```
 
-When chaining async operations, prefer explicit typing at each step to assist
-the runtime's type inference:
+## Layer Contracts
 
-```typescript
-const pipeline = async (input: string): Promise<Result> => {
-  const parsed: Intermediate = await parse(input);
-  const validated: Validated = await validate(parsed);
-  return transform(validated);
-};
-```
+**Capture Rule:** `FunctionDeclaration(name)` | `ClassDeclaration(name)` | `VariableStatement(const, single Identifier, ArrowFunction | FunctionExpression | ClassExpression)`. Not capturable: `let`/`var`, multi-declarator, destructuring, call/object-literal initializers.
 
-## Capture rule (precise)
+**Component classification:** JSX-returning capture → view component; first param type has callable `submit` → form component.
 
-Capturable statements persist between REPL turns. The rule is:
+**No-redeclaration:** existing name → `kind: "contract"` error.
 
-1. **FunctionDeclaration** with name → captured
-2. **ClassDeclaration** with name → captured
-3. **VariableStatement** where:
-   - Keyword is `const` (not `let`/`var`)
-   - Exactly one declarator (not `const a = 1, b = 2`)
-   - Binding is a plain identifier (not destructuring)
-   - Initializer is `ArrowFunction`, `FunctionExpression`, or `ClassExpression`
+**File-block read-before-diff:** diff on unread file → `kind: "contract"` error.
 
-**Not capturable:** call expressions, object literals, HOC wrappers (`memo(...)`, `styled(...)`).
+## Eval Instructions
 
-## Component classification
+Write the TypeScript statement(s) that complete the task in `// User:`. Follow the Capture Rule. End each unit of work with `inspect()`.
 
-A function returning JSX is a component:
-- Return type includes `JSX.Element`, `ReactElement`, or `ReactNode`
-- Or the function body contains a JSX literal as a return value
-
-If the props type includes a `submit` property with a function type → `form_component`.
-Otherwise → `view_component`.
-
-## Read-before-patch contract
-
-Diff file blocks require the file to have been read in the current session:
-```typescript
-const content = await readFile('src/types.ts'); // registers in read ledger
-```
-Then patch:
-````diff src/types.ts
-@@ -1,1 +1,1 @@
--old line
-+new line
-````
+Output only TypeScript — no prose, no fences.

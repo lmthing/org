@@ -107,16 +107,28 @@ async function runSelfCorrectionCase(
       };
     }
 
-    // Inject error comments and ask the model to fix
-    const errorComments = tscResult.diagnostics
-      .map(d => `// tsc(${d.code}): ${d.message.replace(/\n/g, ' ')}`)
-      .join('\n');
-    const annotated = `${errorComments}\n${current}`;
+    // Build context reconstruction user turn with __errors in production format
+    const errorsJson = JSON.stringify(
+      tscResult.diagnostics.map(d => ({
+        kind: 'type',
+        message: `tsc(${d.code}): ${d.message.replace(/\n/g, ' ')}`,
+        statement: current,
+      })),
+      null,
+      2,
+    );
+    const userTurn = [
+      `// ═══ inspect #${attempt} ═══`,
+      ``,
+      `const __budget: Budget = { tokensUsed: 0, tokensRemaining: 8000, inspectCount: ${attempt - 1}, nearingLimit: false };`,
+      `const __scope = {};`,
+      `const __errors: SessionError[] = ${errorsJson};`,
+    ].join('\n');
 
     const { text } = await generateText({
       model,
       system: systemPrompt,
-      prompt: `Fix the TypeScript type error:\n\n\`\`\`typescript\n${annotated}\n\`\`\`\n\nReturn only the corrected statement.`,
+      prompt: userTurn,
     });
 
     // Extract raw statement — strip markdown fences if present
@@ -137,10 +149,18 @@ async function runCleanPassCase(
 ): Promise<CaseResult> {
   const task = entry.description;
 
+  const userTurn = [
+    `// ═══ inspect #1 ═══`,
+    ``,
+    `const __budget: Budget = { tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false };`,
+    `const __scope = {};`,
+    `// User: ${task}`,
+  ].join('\n');
+
   const { text } = await generateText({
     model,
     system: systemPrompt,
-    prompt: `Write a TypeScript statement that: ${task}\n\nReturn only the TypeScript statement.`,
+    prompt: userTurn,
   });
 
   const statement = stripFences(text.trim());

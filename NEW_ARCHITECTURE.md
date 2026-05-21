@@ -178,7 +178,9 @@ sdk/org/
     └── web/                   — React browser renderer (consumes render/ descriptors)
 ```
 
-**Discoverability principle:** each `lib/{name}/` directory is self-contained — implementation, unit tests, and an `eval/` subdirectory with a real LLM interaction dataset, a grader, and per-model-class prompt variants. A contributor looking for how `inspect()` works opens `lib/inspect/`. A contributor tuning the prompt for a 7B model opens `lib/inspect/eval/prompts/7-14b.md`. No cross-directory hunting.
+**Discoverability principle:** each `lib/{name}/` directory is self-contained — implementation, unit tests, and an `eval/` subdirectory with a real LLM interaction dataset, a grader, and per-alias prompt variants. A contributor looking for how `inspect()` works opens `lib/inspect/`. A contributor tuning the prompt for the M alias opens `lib/inspect/eval/prompts/m.md`. No cross-directory hunting.
+
+Each prompt file opens with the verbatim static system prompt and layer-relevant `.d.ts` declarations, followed by layer-specific contracts and alias-tuned eval instructions. The grader passes the prompt as the `system:` parameter and formats user turns using the context reconstruction structure (`__budget`, `__scope`, `__errors`).
 
 ```
 lib/inspect/
@@ -188,11 +190,12 @@ lib/inspect/
     ├── dataset.jsonl  — Real LLM session traces: { input, expected_trace_events, min_model }
     ├── grade.ts       — LLM-based grader: runs dataset, scores with an LLM judge
     └── prompts/
-        ├── 1-3b.md
-        ├── 7-14b.md
-        ├── 30-70b.md
-        ├── frontier.md
-        └── reasoning.md
+        ├── xs.md
+        ├── s.md
+        ├── m.md
+        ├── m_r.md
+        ├── l.md
+        └── l_r.md
 ```
 
 ---
@@ -1200,7 +1203,7 @@ const result = await somePromise as { id: number; name: string };     // inline 
 const x = await unknownSource as unknown;                              // disables downstream speculative type checking; never use `as any`
 ```
 
-The convention is rare in pretraining data, so it must be **actively taught** in the prompt rather than relied upon. The `lib/sandbox/eval/prompts/{class}.md` variants each contain a dedicated `### Awaiting async values` section with examples tuned to the model class: 1–3B and 7–14B variants carry 5–6 worked examples covering the common shapes (typed fs/sdk return → no annotation; fetch JSON → object/array literal annotation; union return → discriminated union annotation; unknown source → `as unknown`); 30–70B and frontier variants are terser (2–3 examples). All variants make the cost explicit: a missing or wrong annotation triggers a yield with a discarded buffer.
+The convention is rare in pretraining data, so it must be **actively taught** in the prompt rather than relied upon. The `lib/sandbox/eval/prompts/{alias}.md` variants each contain a dedicated `### Awaiting async values` section with examples tuned to the alias: XS and S variants carry 5–6 worked examples covering the common shapes (typed fs/sdk return → no annotation; fetch JSON → object/array literal annotation; union return → discriminated union annotation; unknown source → `as unknown`); M and L variants are terser (2–3 examples). All variants make the cost explicit: a missing or wrong annotation triggers a yield with a discarded buffer.
 
 **Annotation required only when tsc cannot infer concretely**. If tsc infers a concrete non-`any` type from the await expression (e.g. `string` from `fs.readFile('x', 'utf-8')`), the annotation is optional and downstream speculative checking proceeds normally. The annotation is *required* iff tsc would otherwise infer `any`, `unknown`, or `Promise<any>`.
 

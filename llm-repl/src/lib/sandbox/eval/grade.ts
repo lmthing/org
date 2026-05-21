@@ -75,10 +75,18 @@ async function runCaptureCase(
   const expectedCapturable = entry.expected['capturable'] as boolean ?? true;
   const expectedKind = entry.expected['kind'] as string | undefined;
 
+  const userTurn = [
+    `// ═══ inspect #1 ═══`,
+    ``,
+    `const __budget: Budget = { tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false };`,
+    `const __scope = {};`,
+    `// User: ${task}`,
+  ].join('\n');
+
   const { text } = await generateText({
     model,
     system: systemPrompt,
-    prompt: `Write a TypeScript statement that: ${task}\n\nReturn only the TypeScript statement — no explanation, no fences.`,
+    prompt: userTurn,
   });
 
   const statement = stripFences(text.trim());
