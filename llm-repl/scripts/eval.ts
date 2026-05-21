@@ -71,7 +71,7 @@ if (lib) {
 
 if (values.role) {
   const role = values.role;
-  const gradePath = resolve(__dirname, '..', 'src', 'router', 'eval', 'grade.ts');
+  const gradePath = resolve(__dirname, '..', '..', 'llm-repl-cli', 'src', 'router', 'eval', 'grade.ts');
   if (!existsSync(gradePath)) {
     console.log(`No router grade.ts at ${gradePath} — skipping (not yet implemented)`);
     process.exit(0);
