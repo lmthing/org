@@ -1,32 +1,36 @@
 /**
- * Eval grader for lib/typecheck.
+ * Typecheck eval grader.
  *
  * Primary metric: self-correction rate.
- *   Fraction of type-error traces where the LLM fixes the error within 3 retries.
+ *   Fraction of type-error traces where the model fixes the error within 3 retries,
+ *   measured by running tsc on the model's output.
  *
- * Secondary metrics:
- *   - speculative_correctness: fraction of speculative traces that resolve correctly
- *   - annotation_grace_rate: fraction of grace traces that inject the shape hint
+ * The grader calls the real model configured in LM_MODEL_<ALIAS> and drives the
+ * tsc-runner + retry loop to score actual self-correction capability.
  */
+import { generateText } from 'ai';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { runTsc } from '../tsc-runner.js';
 
-const datasetPath = join(import.meta.dirname, 'dataset.jsonl');
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const datasetPath = join(__dirname, 'dataset.jsonl');
+
+interface RunOptions {
+  lib: string;
+  alias: string;
+  modelSpec: string;
+  model: Parameters<typeof generateText>[0]['model'];
+}
 
 interface DatasetEntry {
   id: string;
   label: string;
   description: string;
+  input: Record<string, unknown>;
   expected: Record<string, unknown>;
-}
-
-interface GradeResult {
-  id: string;
-  label: string;
-  pass: boolean;
-  score: number;
-  reason: string;
 }
 
 async function loadDataset(): Promise<DatasetEntry[]> {
@@ -38,114 +42,180 @@ async function loadDataset(): Promise<DatasetEntry[]> {
   return entries;
 }
 
-export async function grade(
-  results: Record<string, unknown>[],
-): Promise<{ selfCorrectionRate: number; speculativeCorrectness: number; annotationGraceRate: number; perCase: GradeResult[] }> {
+async function loadPrompt(alias: string): Promise<string> {
+  const name = alias.toLowerCase().replace('_', '_');
+  const promptPath = join(__dirname, 'prompts', `${name}.md`);
+  const { readFile } = await import('node:fs/promises');
+  try {
+    return await readFile(promptPath, 'utf8');
+  } catch {
+    // Fall back to m.md if alias-specific prompt not found
+    return readFile(join(__dirname, 'prompts', 'm.md'), 'utf8');
+  }
+}
+
+interface CaseResult {
+  id: string;
+  label: string;
+  pass: boolean;
+  attempts: number;
+  finalOk: boolean;
+  detail?: string;
+}
+
+/**
+ * Run a self-correction eval case.
+ * Presents the broken statement to the model, runs tsc, retries with error feedback.
+ */
+async function runSelfCorrectionCase(
+  entry: DatasetEntry,
+  model: RunOptions['model'],
+  systemPrompt: string,
+): Promise<CaseResult> {
+  const brokenStatement = entry.input['statement'] as string | undefined;
+  if (!brokenStatement) {
+    return { id: entry.id, label: entry.label, pass: false, attempts: 0, finalOk: false, detail: 'no input.statement' };
+  }
+
+  const MAX_ATTEMPTS = 3;
+  let current = brokenStatement;
+  let lastDiagnostics: string[] = [];
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const tscResult = runTsc(current);
+
+    if (tscResult.ok) {
+      const expectedOk = entry.expected['final_ok'] as boolean ?? true;
+      return {
+        id: entry.id,
+        label: entry.label,
+        pass: expectedOk,
+        attempts: attempt,
+        finalOk: true,
+      };
+    }
+
+    if (attempt === MAX_ATTEMPTS) {
+      const expectedOk = entry.expected['final_ok'] as boolean ?? true;
+      return {
+        id: entry.id,
+        label: entry.label,
+        pass: !expectedOk, // if expected to fail, still pass
+        attempts: attempt,
+        finalOk: false,
+        detail: `exhausted ${MAX_ATTEMPTS} attempts; last errors: ${tscResult.diagnostics.map(d => d.message).join('; ')}`,
+      };
+    }
+
+    // Inject error comments and ask the model to fix
+    const errorComments = tscResult.diagnostics
+      .map(d => `// tsc(${d.code}): ${d.message.replace(/\n/g, ' ')}`)
+      .join('\n');
+    const annotated = `${errorComments}\n${current}`;
+
+    const { text } = await generateText({
+      model,
+      system: systemPrompt,
+      prompt: `Fix the TypeScript type error:\n\n\`\`\`typescript\n${annotated}\n\`\`\`\n\nReturn only the corrected statement.`,
+    });
+
+    // Extract raw statement — strip markdown fences if present
+    current = stripFences(text.trim());
+    lastDiagnostics = tscResult.diagnostics.map(d => d.message);
+  }
+
+  return { id: entry.id, label: entry.label, pass: false, attempts: MAX_ATTEMPTS, finalOk: false };
+}
+
+/**
+ * Run a "clean pass" case — model should write valid TypeScript on the first attempt.
+ */
+async function runCleanPassCase(
+  entry: DatasetEntry,
+  model: RunOptions['model'],
+  systemPrompt: string,
+): Promise<CaseResult> {
+  const task = entry.description;
+
+  const { text } = await generateText({
+    model,
+    system: systemPrompt,
+    prompt: `Write a TypeScript statement that: ${task}\n\nReturn only the TypeScript statement.`,
+  });
+
+  const statement = stripFences(text.trim());
+  const result = runTsc(statement);
+
+  const expectedOk = entry.expected['final_ok'] as boolean ?? true;
+  return {
+    id: entry.id,
+    label: entry.label,
+    pass: result.ok === expectedOk,
+    attempts: 1,
+    finalOk: result.ok,
+    detail: result.ok ? undefined : result.diagnostics.map(d => d.message).join('; '),
+  };
+}
+
+function stripFences(text: string): string {
+  return text
+    .replace(/^```typescript\n?/m, '')
+    .replace(/^```ts\n?/m, '')
+    .replace(/^```\n?/m, '')
+    .replace(/\n?```$/m, '')
+    .trim();
+}
+
+export async function run(options: RunOptions): Promise<void> {
+  const { alias, model } = options;
   const dataset = await loadDataset();
-  const perCase: GradeResult[] = [];
+  const systemPrompt = await loadPrompt(alias);
+
+  console.log(`Loaded ${dataset.length} eval cases`);
+
+  const results: CaseResult[] = [];
 
   for (const entry of dataset) {
-    const result = results.find((r) => r['id'] === entry.id);
-    if (!result) {
-      perCase.push({ id: entry.id, label: entry.label, pass: false, score: 0, reason: 'missing result' });
-      continue;
+    process.stdout.write(`  [${entry.id}] ${entry.label} ... `);
+
+    let result: CaseResult;
+    try {
+      if (entry.label.startsWith('self-correction')) {
+        result = await runSelfCorrectionCase(entry, model, systemPrompt);
+      } else if (entry.label.startsWith('clean-pass')) {
+        result = await runCleanPassCase(entry, model, systemPrompt);
+      } else {
+        // Skip non-LLM cases (speculative, grace — those are unit-tested)
+        result = { id: entry.id, label: entry.label, pass: true, attempts: 0, finalOk: true, detail: 'skipped (non-LLM case)' };
+      }
+    } catch (err) {
+      result = { id: entry.id, label: entry.label, pass: false, attempts: 0, finalOk: false, detail: String(err) };
     }
-    const { pass, score, reason } = scoreEntry(entry, result);
-    perCase.push({ id: entry.id, label: entry.label, pass, score, reason });
+
+    console.log(result.pass ? `✓ (${result.attempts} attempt(s))` : `✗ — ${result.detail ?? ''}`);
+    results.push(result);
   }
 
-  const correctionCases = perCase.filter((c) => c.label.startsWith('self-correction'));
-  const speculativeCases = perCase.filter((c) => c.label.startsWith('speculative'));
-  const graceCases = perCase.filter((c) => c.label.startsWith('annotation-grace'));
+  // Compute metrics
+  const llmCases = results.filter(r => r.attempts > 0);
+  const correctionCases = results.filter(r => r.label.startsWith('self-correction'));
+  const cleanCases = results.filter(r => r.label.startsWith('clean-pass'));
 
-  const selfCorrectionRate =
-    correctionCases.length > 0
-      ? correctionCases.filter((c) => c.pass).length / correctionCases.length
-      : 1;
+  const selfCorrectionRate = correctionCases.length > 0
+    ? correctionCases.filter(r => r.pass).length / correctionCases.length
+    : 1;
 
-  const speculativeCorrectness =
-    speculativeCases.length > 0
-      ? speculativeCases.filter((c) => c.pass).length / speculativeCases.length
-      : 1;
+  const firstPassRate = cleanCases.length > 0
+    ? cleanCases.filter(r => r.finalOk).length / cleanCases.length
+    : 1;
 
-  const annotationGraceRate =
-    graceCases.length > 0
-      ? graceCases.filter((c) => c.pass).length / graceCases.length
-      : 1;
+  const avgAttempts = llmCases.length > 0
+    ? llmCases.reduce((s, r) => s + r.attempts, 0) / llmCases.length
+    : 0;
 
-  return { selfCorrectionRate, speculativeCorrectness, annotationGraceRate, perCase };
-}
-
-function scoreEntry(
-  entry: DatasetEntry,
-  result: Record<string, unknown>,
-): { pass: boolean; score: number; reason: string } {
-  const exp = entry.expected;
-
-  // For self-correction cases
-  if ('self_corrected' in exp) {
-    const expectedOk = exp['final_ok'] as boolean;
-    const actualOk = result['final_ok'] as boolean;
-    if (expectedOk !== actualOk) {
-      return { pass: false, score: 0, reason: `expected final_ok=${expectedOk}, got ${actualOk}` };
-    }
-    return { pass: true, score: 1, reason: 'ok' };
-  }
-
-  // For speculative cases
-  if ('speculative_result' in exp) {
-    const expectedResult = exp['speculative_result'] as string;
-    const actualResult = result['speculative_result'] as string;
-    if (expectedResult !== actualResult) {
-      return { pass: false, score: 0, reason: `expected speculative=${expectedResult}, got ${actualResult}` };
-    }
-    return { pass: true, score: 1, reason: 'ok' };
-  }
-
-  // For annotation grace cases
-  if ('grace_applied' in exp) {
-    const expectedGrace = exp['grace_applied'] as boolean;
-    const actualGrace = result['grace_applied'] as boolean;
-    if (expectedGrace !== actualGrace) {
-      return { pass: false, score: 0, reason: `expected grace=${expectedGrace}, got ${actualGrace}` };
-    }
-    return { pass: true, score: 1, reason: 'ok' };
-  }
-
-  // For inferred binding cases
-  if ('inferred_binding' in exp) {
-    const expBinding = exp['inferred_binding'] as { name: string; type_contains: string };
-    const bindings = result['inferred_bindings'] as Array<{ name: string; type: string }> | undefined;
-    const found = bindings?.find((b) => b.name === expBinding.name);
-    if (!found) return { pass: false, score: 0, reason: `no binding named ${expBinding.name}` };
-    if (!found.type.includes(expBinding.type_contains)) {
-      return { pass: false, score: 0, reason: `type "${found.type}" does not contain "${expBinding.type_contains}"` };
-    }
-    return { pass: true, score: 1, reason: 'ok' };
-  }
-
-  return { pass: true, score: 1, reason: 'no assertions' };
-}
-
-// CLI entry point
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const resultsPath = process.argv[2];
-  if (!resultsPath) {
-    console.error('Usage: grade.ts <results.jsonl>');
-    process.exit(1);
-  }
-
-  const { createReadStream: crs } = await import('node:fs');
-  const { createInterface: ci } = await import('node:readline');
-  const results: Record<string, unknown>[] = [];
-  const rl2 = ci({ input: crs(resultsPath) });
-  for await (const line of rl2) {
-    if (line.trim()) results.push(JSON.parse(line));
-  }
-
-  const summary = await grade(results);
-  console.log(JSON.stringify(summary, null, 2));
-  console.log(`\nSelf-correction rate:       ${(summary.selfCorrectionRate * 100).toFixed(1)}%`);
-  console.log(`Speculative correctness:    ${(summary.speculativeCorrectness * 100).toFixed(1)}%`);
-  console.log(`Annotation grace rate:      ${(summary.annotationGraceRate * 100).toFixed(1)}%`);
+  console.log('\n── Results ──────────────────────────────────────');
+  console.log(`Self-correction rate:  ${(selfCorrectionRate * 100).toFixed(1)}% (${correctionCases.filter(r => r.pass).length}/${correctionCases.length})`);
+  console.log(`First-pass rate:       ${(firstPassRate * 100).toFixed(1)}% (${cleanCases.filter(r => r.finalOk).length}/${cleanCases.length})`);
+  console.log(`Avg attempts (LLM):    ${avgAttempts.toFixed(2)}`);
+  console.log(`Model:                 ${options.modelSpec} (${alias})`);
 }

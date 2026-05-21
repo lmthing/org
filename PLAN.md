@@ -90,7 +90,7 @@ LM_MODEL_L=azure:gpt-5.5                 # frontier class
 LM_MODEL_L_R=azure:Kimi-K2.6             # frontier + reasoning
 ```
 
-The eval runner resolves `--model <class>` to these aliases: `1b` → `XS`, `7b` → `S`, `30b`/`frontier` → `M` or `L`, reasoning variants append `_R`. Any missing alias causes the grader to skip that model class with a warning rather than hard-fail, so partial env setups are safe for iterating on a single layer.
+The eval runner accepts `--model <ALIAS>` directly — `XS | S | M | M_R | L | L_R` — and resolves to the corresponding `LM_MODEL_<ALIAS>` env var. Any missing alias causes the grader to skip with a warning rather than hard-fail, so partial env setups are safe for iterating on a single layer.
 
 ---
 
@@ -109,7 +109,7 @@ The eval runner resolves `--model <class>` to these aliases: `1b` → `XS`, `7b`
    - `cli/src/rpc/` + `cli/src/cli/server.ts` → `llm-repl-cli/src/rpc/` (skeleton — message types may extend in Phase 13)
    - `cli/src/cli/args.ts` → `llm-repl-cli/src/cli/args.ts`
    - `cli/src/cli/agent-loader.ts` + `repl/src/spaces/dynamic-loader.ts` → `llm-repl/src/lib/spaces/loader.ts` (skeleton only — full `Space` class lands in L10)
-4. **Eval runner stub:** `llm-repl/scripts/eval.ts` — invokes per-lib `grade.ts` based on `--lib <name>` and `--model <class>` args. No-op when no `grade.ts` exists yet. Plumbs `LM_MODEL_*` aliases through existing provider resolver.
+4. **Eval runner stub:** `llm-repl/scripts/eval.ts` — invokes per-lib `grade.ts` based on `--lib <name>` and `--model <ALIAS>` args (`XS | S | M | M_R | L | L_R`). No-op when no `grade.ts` exists yet. Resolves alias to `LM_MODEL_<ALIAS>` env var.
 5. **`llm-repl.d.ts` canonical surface** — drop in the API block from spec L375–999 as the authoritative `.d.ts`. Each layer fills in the runtime behind these declarations.
 
 **Exit:** `pnpm -F llm-repl build` and `pnpm -F llm-repl-cli build` succeed; ported module tests pass without modification.
@@ -135,9 +135,9 @@ Deliverables under `llm-repl/src/lib/sandbox/`:
 - `trace.ts` — `trace.jsonl` writer with `O_APPEND + fsync` per event (spec L1377, L2004). Replay logic for uncommitted suffix on host restart: find last committed git ref, read suffix, replay events into in-memory state. Event schema is the canonical list at spec L2006.
 - `host-bridge.ts` — handle-marshaling pattern for host functions injected as globals. JSX descriptor marshaling (numeric handle IDs for callbacks). Virtual `react/jsx-runtime` module returning host functions that build descriptor trees — React itself never loaded inside QuickJS.
 - `require.ts` — host module registry. tsc transformer that rewrites `import x from 'pkg'` → `const x = require('pkg')` pre-emit. Ambient `.d.ts` declarations auto-generated for every entry in `SessionConfig.availableModules`.
-- **Eval** `eval/dataset.jsonl` ~30 traces covering capture-rule edges (all positive + negative cases above), file-block writes/diffs (with and without prior read), JSX inside template literals; `eval/grade.ts` LLM-judge scoring **error rate**. Prompts for all five model classes (1-3b, 7-14b, 30-70b, frontier, reasoning).
+- **Eval** `eval/dataset.jsonl` ~30 traces covering capture-rule edges (all positive + negative cases above), file-block writes/diffs (with and without prior read), JSX inside template literals; `eval/grade.ts` LLM-judge scoring **error rate**. Prompts for all six model aliases (`xs.md`, `s.md`, `m.md`, `m_r.md`, `l.md`, `l_r.md`).
 
-**Exit:** unit tests cover every Capture Rule clause (positive + negative). `pnpm eval --lib sandbox --model 1b` emits a baseline error-rate score. `trace.jsonl` contains `session_start`, `statement_received`, `function_captured`, `function_redeclare_blocked`, `execute`, `file_write`, `file_diff`, `file_diff_no_read`, `runtime_error`, `timeout`, `oom`.
+**Exit:** unit tests cover every Capture Rule clause (positive + negative). `pnpm eval --lib sandbox --model XS` emits a baseline error-rate score. `trace.jsonl` contains `session_start`, `statement_received`, `function_captured`, `function_redeclare_blocked`, `execute`, `file_write`, `file_diff`, `file_diff_no_read`, `runtime_error`, `timeout`, `oom`.
 
 ---
 
@@ -175,7 +175,7 @@ Deliverables:
   - Scope generator adapts `repl/src/context/scope-generator.ts` — same serialization logic, now writes both `scope.json` (disk) and `__scope` (context section)
 - Trace events added: `inspect`, `inspect_settle`, `context_reconstruct`, `budget_check`, plus the full list under "Eval focus" below.
 
-**Exit:** end-to-end smoke — LLM streams TS → boundary detector → tsc → QuickJS → `inspect()` → git commit → reconstruction → new completion. `pnpm eval --lib inspect --model 7b` measures **inspect frequency** and **dead-code-after-inspect rate** (must be 0). Snapshot round-trips via `heap.bin`.
+**Exit:** end-to-end smoke — LLM streams TS → boundary detector → tsc → QuickJS → `inspect()` → git commit → reconstruction → new completion. `pnpm eval --lib inspect --model S` measures **inspect frequency** and **dead-code-after-inspect rate** (must be 0). Snapshot round-trips via `heap.bin`.
 
 ---
 
@@ -189,7 +189,7 @@ Deliverables under `llm-repl/src/lib/checkpoint/`:
 - `rollback(target)` — by label OR by N statements. Spec §"Rollback" (L1573–1582): `git reset --hard` on the session repo; **all artifacts** revert (session.ts, scope.json, heap.bin, meta.json, entire `space/` tree). Fresh QuickJS context deserialized from restored heap.bin; session-space functions/classes re-bridged. Pins after target ref dropped. `RollbackBlockedError` if past the last valid snapshot (when a prior commit skipped `heap.bin` due to >64MB size). Returns count of statements rewound.
 - Count-mode `rollback(N)` walks `trace.jsonl` back N `execute` events (skipping `function_captured` events, per spec "Statement/trace alignment" contract L1854).
 
-**Exit:** rollback tests cover orphan placeholders (class instances become `OrphanedInstance` on method call after rollback restore — spec L1409); checkpoint auto-settle covers ask + fetch + fork-timeout cases. `pnpm eval --lib checkpoint --model 7b` measures **checkpoint quality / rollback success rate**.
+**Exit:** rollback tests cover orphan placeholders (class instances become `OrphanedInstance` on method call after rollback restore — spec L1409); checkpoint auto-settle covers ask + fetch + fork-timeout cases. `pnpm eval --lib checkpoint --model S` measures **checkpoint quality / rollback success rate**.
 
 ---
 
@@ -207,25 +207,25 @@ Deliverables under `llm-repl/src/lib/fork/`:
 - **Fork `ask()` routes to parent surface** (spec L1561): fork's `.d.ts` replaces generic `ask<T>` with `Promise<string>`-returning form; UI renders in parent slot labelled by fork id; resolves on `forkHandle.inject(answer)` or 5-minute timeout (uses fallback if provided, else rejects with `TimeoutError`). `__fork_asks` hard-pinned section injected in parent reconstruction while any such ask is pending.
 - Trace events: `fork_spawn/resolve/reject`, `fork_budget_warning`, `fork_ask`, `fork_ask_inject`, `fork_ask_timeout`.
 
-**Exit:** parent + 2 concurrent forks complete; budget warning injected at threshold; nested `fork()` rejected (absent from fork `.d.ts` — tsc compile-time enforcement, spec L1555). `pnpm eval --lib fork --model 7b` measures fork success rate and budget overrun rate.
+**Exit:** parent + 2 concurrent forks complete; budget warning injected at threshold; nested `fork()` rejected (absent from fork `.d.ts` — tsc compile-time enforcement, spec L1555). `pnpm eval --lib fork --model S` measures fork success rate and budget overrun rate.
 
 ---
 
 ## Phase 6 — L5: `lib/memory`
 
-`pin/unpin`, `compact/expand` (orchestrator-chosen strategy from `'schema' | 'sample' | 'summary' | 'hash'`), dotted-path support (`__knowledge.grading.level`), auto-compact under context pressure (spec L1458). **Eval focus:** proactive-vs-auto compact ratio. Min model class: 30–70B.
+`pin/unpin`, `compact/expand` (orchestrator-chosen strategy from `'schema' | 'sample' | 'summary' | 'hash'`), dotted-path support (`__knowledge.grading.level`), auto-compact under context pressure (spec L1458). **Eval focus:** proactive-vs-auto compact ratio. Min alias: M (`pnpm eval --lib memory --model M`).
 
 ---
 
 ## Phase 7 — L6: `lib/tasklist`
 
-`tasklist(id, dag)` returning `TasklistHandle`. DAG enforcement at host bridge (`start(id)` on un-`done` deps → `kind: "contract"` error; scope clean — spec L1287). `condition` expression parsed by the same restricted grammar as `InspectQuery.filter`, evaluated inside QuickJS via handle walk; falsy → `"skipped"` and dependents unblocked. `optional: true` failures unblock dependents (spec contract L1864). `outputSchema` JSON-Schema validated on `finish(id)` against the runtime variable named after the step id. `__tasklist_nudge` injected on every `inspect()` when any tasklist has unfinished nodes. **Eval focus:** DAG scheduling correctness.
+`tasklist(id, dag)` returning `TasklistHandle`. DAG enforcement at host bridge (`start(id)` on un-`done` deps → `kind: "contract"` error; scope clean — spec L1287). `condition` expression parsed by the same restricted grammar as `InspectQuery.filter`, evaluated inside QuickJS via handle walk; falsy → `"skipped"` and dependents unblocked. `optional: true` failures unblock dependents (spec contract L1864). `outputSchema` JSON-Schema validated on `finish(id)` against the runtime variable named after the step id. `__tasklist_nudge` injected on every `inspect()` when any tasklist has unfinished nodes. **Eval focus:** DAG scheduling correctness. Min alias: M (`pnpm eval --lib tasklist --model M`).
 
 ---
 
 ## Phase 8 — L7: `lib/io`
 
-`fetch(url, init)` with domain allowlist (`PermissionError` outside list), pre-buffered response body up to `maxFetchResponseBytes`, `.text/.json/.bytes` sync getters from buffer, AbortSignal timeouts. `fs.*` sandboxed to `/session/{id}/files/` (side effects **not** undone by rollback — spec L1581). `require(module)` whitelisted npm packages with auto-generated ambient `.d.ts` (mechanism from L0's `require.ts`, list-driven from `SessionConfig.availableModules`). **Eval focus:** end-to-end task completion.
+`fetch(url, init)` with domain allowlist (`PermissionError` outside list), pre-buffered response body up to `maxFetchResponseBytes`, `.text/.json/.bytes` sync getters from buffer, AbortSignal timeouts. `fs.*` sandboxed to `/session/{id}/files/` (side effects **not** undone by rollback — spec L1581). `require(module)` whitelisted npm packages with auto-generated ambient `.d.ts` (mechanism from L0's `require.ts`, list-driven from `SessionConfig.availableModules`). **Eval focus:** end-to-end task completion. Min alias: S (`pnpm eval --lib io --model S`).
 
 ---
 
@@ -248,7 +248,7 @@ Under `llm-repl-cli/src/ink/` and `llm-repl-cli/src/web/`: descriptor → Ink (t
 
 ## Phase 10 — L9: `lib/snapshot`
 
-Base snapshots — cross-session scope reuse via `SessionConfig.baseSnapshot`. Re-seed `heap.bin` into a fresh QuickJS context with session-space functions re-bridged. Skip-snapshot path when heap > 64MB (`snapshot_skipped` event; rollback blocked past that point). Min model class: Frontier.
+Base snapshots — cross-session scope reuse via `SessionConfig.baseSnapshot`. Re-seed `heap.bin` into a fresh QuickJS context with session-space functions re-bridged. Skip-snapshot path when heap > 64MB (`snapshot_skipped` event; rollback blocked past that point). Min alias: L (`pnpm eval --lib snapshot --model L`).
 
 ---
 
@@ -267,7 +267,7 @@ Deliverables under `llm-repl/src/lib/spaces/`:
 - **Class deletion cascade** (spec L1275, L1874): on `remove('functions/MyClass.ts')`, walk live QuickJS scope at next yield and nullify any variable whose value is an instance; `class_instance_nullified` traced per variable.
 - Adapts `repl/src/spaces/dynamic-loader.ts` + `repl/src/spaces/creator.ts` + `cli/src/cli/agent-loader.ts` — same file-tree contract, new programmatic surface.
 
-**Eval focus:** action success rate, tasklist completion, knowledge expansion accuracy, space authoring. Min model class: Frontier.
+**Eval focus:** action success rate, tasklist completion, knowledge expansion accuracy, space authoring. Min alias: L (`pnpm eval --lib spaces --model L`).
 
 ---
 
@@ -283,7 +283,7 @@ Deliverables:
 - Router state: `error_streak`, `annotation_mismatch_streak`, `analyzer_refires`, cached difficulty. Reset rules per spec.
 - Router emits **only** `router_decision` events to `trace.jsonl` (spec L246) — routing JSON never injected into executor context. Effects are visible only through context flags (`budget_warning`, `heap_warning`, `recovery_context`) which expand specific reconstruction blocks per spec L344–352.
 - `router/eval/` with router dataset + grader and prompts (`router.md`, `analyzer.md`).
-- Per-role evals callable as `pnpm eval --role <ROLE> --model <CLASS>` (spec L1994–1997).
+- Per-role evals callable as `pnpm eval --role <ROLE> --model <ALIAS>` (spec L1994–1997).
 
 **Exit:** router decisions on the eval dataset match expected role+model+flags; annotation-escalation triggers at streak 2; re-analyze fires at most once per user instruction.
 
@@ -306,7 +306,7 @@ Deliverables:
 - `sdk/org/llm-repl/src/lib/inspect/{index,budget}.ts` + `src/session/` + `src/context/reconstruction.ts`
 - `sdk/org/llm-repl/src/lib/{checkpoint,fork,memory,tasklist,io,render,snapshot,spaces}/index.ts` (+ supporting files per phase)
 - `sdk/org/llm-repl-cli/src/{router,cli,ink,web}/`
-- Each `lib/<name>/eval/` directory: `dataset.jsonl`, `grade.ts`, prompts for all five model classes.
+- Each `lib/<name>/eval/` directory: `dataset.jsonl`, `grade.ts`, prompts for all six model aliases (`xs.md`, `s.md`, `m.md`, `m_r.md`, `l.md`, `l_r.md`).
 - `sdk/org/llm-repl/llm-repl.d.ts` — canonical surface API (matches spec §"API" L375–999).
 
 ## Critical Files (ported, no behavior change)
@@ -327,12 +327,12 @@ Deliverables:
 Each phase exits when **all three** hold:
 
 1. **Unit tests** — `pnpm -F llm-repl test --filter lib/<layer>` green; specific assertions for every spec subsection in that layer.
-2. **Eval grader** — `pnpm eval --lib <layer> --model <min-class>` runs end-to-end against a real provider (Vercel AI SDK) and emits scores ≥ baseline threshold for the layer's primary metric: L0 = error rate; L1 = self-correction rate; L2 = dead-code-after-inspect rate (must be 0); L3 = rollback success rate; L4 = fork success + budget overrun rate; L5 = proactive-vs-auto compact ratio; L6 = DAG scheduling correctness; L7 = E2E completion; L8 = render correctness + clarification quality; L9 = cross-session scope reuse rate; L10 = action success rate.
+2. **Eval grader** — `pnpm eval --lib <layer> --model <ALIAS>` runs end-to-end against the real model configured in `LM_MODEL_<ALIAS>` and emits scores ≥ baseline threshold for the layer's primary metric: L0 = error rate; L1 = self-correction rate; L2 = dead-code-after-inspect rate (must be 0); L3 = rollback success rate; L4 = fork success + budget overrun rate; L5 = proactive-vs-auto compact ratio; L6 = DAG scheduling correctness; L7 = E2E completion; L8 = render correctness + clarification quality; L9 = cross-session scope reuse rate; L10 = action success rate.
 3. **Trace assertions** — `trace.jsonl` from the eval run contains every event the layer is supposed to emit (matched against the canonical list at spec L2006).
 
 **End-to-end verification at the close of Phase 13:**
 
 - Run `llm-repl run` with a frontier model on a multi-layer scenario: build a small space, fork two parallel research tasks, use `ask()` for clarification, `checkpoint()` before a risky op, `rollback()` after an injected error. Verify trace event ordering matches the spec's pipeline diagram (spec §"Pipeline" L1154).
 - Run the browser renderer against the same session via the WS bridge to confirm parity.
-- Run `pnpm eval --role EXEC_STANDARD --model M`, `--role RECOVERY --model M-R`, `--role PLANNER_DEEP --model L-R` and confirm all role gates clear.
+- Run `pnpm eval --role EXEC_STANDARD --model M`, `--role RECOVERY --model M_R`, `--role PLANNER_DEEP --model L_R` and confirm all role gates clear.
 - Run all three existing consumer apps (Studio, Computer, Chat) against the new package and confirm no regression in their primary flows before deleting `repl/` and `cli/`.
