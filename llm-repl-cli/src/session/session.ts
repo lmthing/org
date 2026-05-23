@@ -42,6 +42,7 @@ import { RenderEngine } from "@lmthing/llm-repl/lib/render/render";
 import { MemoryEngine } from "@lmthing/llm-repl/lib/memory/memory";
 import { TasklistEngine } from "@lmthing/llm-repl/lib/tasklist/tasklist";
 import { IoEngine } from "@lmthing/llm-repl/lib/io/io";
+import { ForkEngine } from "@lmthing/llm-repl/lib/fork/fork";
 import {
   registerInspectGlobals,
   evalFilter,
@@ -253,6 +254,43 @@ export async function runSpaceSession(opts: RunSpaceSessionOptions): Promise<Run
     moduleRegistry,
   }).registerGlobals(ctx);
 
+  new ForkEngine({
+    assembly,
+    budgetTracker,
+    trace,
+    seedChildScope: (_exclude: string[]) => ({}),
+    onBudgetWarning: (_forkId: string, _remaining: number) => {},
+  }).registerGlobals(ctx);
+
+  // Override fork() with a real single-turn LLM executor.
+  // The ForkEngine stub creates Promises that never resolve; this override runs
+  // the instruction immediately via streamText() and resolves with the result.
+  injectGlobal(ctx, "fork", async (optsArg: unknown) => {
+    const forkOpts = optsArg as { instruction?: string; tokenBudget?: number };
+    const instruction = forkOpts?.instruction ?? "";
+    const modelMatch = instruction.match(/^\[model:(\w+)\]\s*/);
+    const forkAlias = (modelMatch?.[1] as ModelAlias) ?? "XS";
+    const cleanInstruction = instruction.replace(/^\[model:\w+\]\s*/, "");
+    const forkModel = await resolveLLM(forkAlias);
+    const forkStream = streamText({
+      model: forkModel,
+      system: "You are executing a sub-task. Return ONLY valid JSON. No prose, no markdown fences.",
+      prompt: cleanInstruction,
+      maxTokens: forkOpts?.tokenBudget ?? 2000,
+    });
+    let text = "";
+    for await (const chunk of forkStream.textStream) text += chunk;
+    try {
+      const usage = await forkStream.usage;
+      budgetTracker.recordApiUsage(usage.inputTokens ?? 0, usage.outputTokens ?? 0);
+    } catch { /* ignore */ }
+    const cleaned = text.trim().replace(/^```(?:json)?\n?|\n?```$/g, "").trim();
+    let value: unknown;
+    try { value = JSON.parse(cleaned); } catch { value = cleaned || null; }
+    trace.write({ type: "fork_resolve", alias: forkAlias, chars: cleanInstruction.length });
+    return value;
+  });
+
   let inspectCall: InspectCall | null = null;
   registerInspectGlobals(ctx, {
     budget: budgetTracker,
@@ -275,6 +313,72 @@ export async function runSpaceSession(opts: RunSpaceSessionOptions): Promise<Run
   for (const [name, fn] of Object.entries(hostFunctions)) {
     injectGlobal(ctx, name, fn);
   }
+
+  // ── Space global — L10 shim ──────────────────────────────────────────────
+  // createDynamicSpaceLoader is a Phase-11 stub; inject a minimal working shim.
+  const spaceFilesDir = join(sessionDir, "space", "files");
+  await mkdir(spaceFilesDir, { recursive: true });
+
+  injectGlobal(ctx, "__Space_write", async (pathArg: unknown, contentArg: unknown) => {
+    const rel = String(pathArg ?? "");
+    const content = String(contentArg ?? "");
+    const abs = join(spaceFilesDir, rel);
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, content, "utf-8");
+    trace.write({ type: "space_file_write", method: "write", path: abs });
+    return undefined;
+  });
+
+  injectGlobal(ctx, "__Space_delegate", async (spaceNameArg: unknown, agentArg: unknown, methodArg: unknown, instructionArg: unknown) => {
+    const spaceName = String(spaceNameArg ?? "");
+    const agentSlug = String(agentArg ?? "");
+    const instruction = String(instructionArg ?? "");
+    const knownSpaceDirs: Record<string, string> = {
+      research: join(baseDir, "..", "spaces", "research"),
+      cooking: opts.spaceDir,
+    };
+    const subSpaceDir = knownSpaceDirs[spaceName] ?? join(dirname(opts.spaceDir), spaceName);
+    trace.write({ type: "space_delegate", space: spaceName, agent: agentSlug, method: String(methodArg), instructionLen: instruction.length });
+    const sub = await runSpaceSession({
+      spaceDir: subSpaceDir,
+      task: instruction,
+      agent: agentSlug,
+      modelAlias,
+      maxCycles: 4,
+      baseDir,
+      verbose: false,
+    });
+    return { output: sub.output, status: sub.manifest.finalStatus };
+  });
+
+  // Evaluate the Space namespace into QuickJS so LLM code can call Space.load(...).
+  ctx.evalCode(`
+    var Space = (function() {
+      function _makeProxy(spaceName) {
+        var _loaded = {};
+        return {
+          loadAgent: function(slug) { _loaded[slug] = true; return this; },
+          agents: new Proxy({}, {
+            get: function(_, agentSlug) {
+              return new Proxy({}, {
+                get: function(__, method) {
+                  return function(opts, instruction) {
+                    var instr = typeof instruction === 'string' ? instruction : (typeof opts === 'string' ? opts : JSON.stringify(opts));
+                    return __Space_delegate(spaceName, agentSlug, method, instr);
+                  };
+                }
+              });
+            }
+          }),
+          write: function(path, content) { return __Space_write(path, content); }
+        };
+      }
+      return {
+        load: function(name) { return _makeProxy(name); },
+        current: function() { return _makeProxy('current'); }
+      };
+    })();
+  `);
 
   // Register the flow's sink global; calling it terminates the session.
   let finalOutput: string | null = null;
