@@ -1,5 +1,11 @@
 # Implementation Plan — `llm-repl` v4.3
 
+## Status
+
+**All phases (L0–L13) are implemented.** `llm-repl/` and `llm-repl-cli/` are fully built and running. The `repl/` and `cli/` legacy packages remain in the workspace pending consumer migration (Phase 13 cutover). `spaces/` is live at the repo root and the deep_research space has been validated end-to-end.
+
+---
+
 ## Context
 
 `sdk/org/NEW_ARCHITECTURE.md` (spec v4.3 — currently only on `origin/main` at commit `e17d60f`; the submodule HEAD in this repo is `38e26ce` (v4) and must be advanced as the first step) defines a ground-up redesign of the streaming TypeScript REPL agent.
@@ -82,13 +88,15 @@ AZURE_API_KEY=<key>
 AZURE_RESOURCE_NAME=<resource>
 
 # Model aliases — map eval model classes to deployed provider:modelId
-LM_MODEL_XS=azure:claude-haiku-4-5       # 1–3B class
-LM_MODEL_S=azure:gpt-4.1-mini            # 7–14B class
-LM_MODEL_M=azure:claude-sonnet-4-6       # 30–70B class
-LM_MODEL_M_R=azure:DeepSeek-R1-0528      # 30–70B + reasoning
-LM_MODEL_L=azure:gpt-5.5                 # frontier class
-LM_MODEL_L_R=azure:Kimi-K2.6             # frontier + reasoning
+LM_MODEL_XS=azure:gpt-5.4-mini           # fast classification, cheapest
+LM_MODEL_S=azure:gpt-4.1-mini            # fast code gen, short sessions
+LM_MODEL_M=azure:DeepSeek-V4-Flash       # multi-step code, task graphs
+LM_MODEL_M_R=azure:grok-4-1-fast-reasoning  # M + reasoning (recovery, replanning)
+LM_MODEL_L=azure:gpt-5.4                 # frontier class, long sessions
+LM_MODEL_L_R=azure:Kimi-K2.6             # frontier + reasoning (deep planning)
 ```
+
+Prices for each alias are loaded from `llm-repl-cli/prices.json` at session start. Run `pnpm fetch-prices` from `llm-repl-cli/` to refresh from the Azure retail API.
 
 The eval runner accepts `--model <ALIAS>` directly — `XS | S | M | M_R | L | L_R` — and resolves to the corresponding `LM_MODEL_<ALIAS>` env var. Any missing alias causes the grader to skip with a warning rather than hard-fail, so partial env setups are safe for iterating on a single layer.
 

@@ -4,6 +4,7 @@ packages:
   - ui
   - llm-repl
   - llm-repl-cli
+  - spaces/*
 
 catalog:
   "@modelcontextprotocol/sdk": "^1.0.0"

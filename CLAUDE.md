@@ -63,6 +63,8 @@ Each `lib/{name}/` directory is self-contained: implementation, unit tests, and 
 sdk/org/
 ├── llm-repl/
 ├── llm-repl-cli/
+├── spaces/        (runtime directories, not packages — loaded via --space flag)
+│   └── research/  — deep_research flow (3 steps, 8-node DAG)
 ├── cli/           (legacy)
 ├── repl/          (legacy)
 ├── ui/            (legacy, consumed via path alias)
@@ -82,6 +84,7 @@ pnpm eval           # run layer eval suite (--lib <layer> --model <ALIAS>)
 
 # From sdk/org/llm-repl-cli/
 pnpm build          # tsup → dist/index.js + dist/bin.js
+pnpm fetch-prices   # download latest Azure retail prices → prices.json
 ```
 
 **Build outputs:**
@@ -131,6 +134,8 @@ Test framework: **Vitest**. Each `lib/<layer>/` has a co-located `<layer>.test.t
 | `reconstruction` | `llm-repl/src/context/reconstruction.ts` | Priority-ordered context sections → single `role: "user"` message |
 | `Space` | `llm-repl/src/lib/spaces/index.ts` | L10 — Space class, .d.ts overlay, class deletion cascade |
 | Router | `llm-repl-cli/src/router/router.ts` | ANALYZER + 13 routing rules, fires at `new_message` / `post_inspect` |
+| `BudgetTracker` | `llm-repl/src/lib/inspect/budget.ts` | Token + dollar cost tracking per session; accepts `ModelPricing` |
+| `loadModelPricing()` | `llm-repl-cli/src/session/session.ts` | Loads per-model prices from `prices.json` at session start |
 
 ---
 
@@ -154,6 +159,46 @@ Providers are resolved in `llm-repl-cli/src/providers/`. Uses **Vercel AI SDK v6
 Supported: `openai/*`, `anthropic/*`, `google/*`, `azure/*`, `groq/*`, `mistral/*`, `cohere/*`, `bedrock/*`, or any OpenAI-compatible endpoint.
 
 Model aliases resolved from `LM_MODEL_{ALIAS}` env vars. `-R` suffix enables extended thinking via `providerOptions`.
+
+**Active model assignments** (Azure deployments on `lmthing-resource`, swedencentral):
+
+| Alias | Model | Role |
+|-------|-------|------|
+| `XS` | `azure:gpt-5.4-mini` | Classification, boolean decisions — cheapest |
+| `S`  | `azure:gpt-4.1-mini` | Fast code gen, short sessions |
+| `M`  | `azure:DeepSeek-V4-Flash` | Multi-step code, task graphs |
+| `L`  | `azure:gpt-5.4` | Full spec coverage, long sessions |
+| `M_R` | `azure:grok-4-1-fast-reasoning` | M + reasoning (recovery, replanning) |
+| `L_R` | `azure:Kimi-K2.6` | L + reasoning (deep planning, forks) |
+
+## Pricing
+
+Per-model prices are stored in `llm-repl-cli/prices.json` and loaded at session start by `loadModelPricing()`. The `BudgetTracker` uses them to accumulate `inputTokensUsed`, `outputTokensUsed`, and `costUsd` as API calls are made.
+
+**Current prices (GlobalStandard, swedencentral, per 1K tokens):**
+
+| Model | Input | Output |
+|-------|-------|--------|
+| `gpt-5.4-mini` | $0.000250 | $0.002000 |
+| `gpt-4.1-mini` | $0.000400 | $0.001600 |
+| `DeepSeek-V4-Flash` | $0.000190 | $0.000510 |
+| `gpt-5.4` | $0.001250 | $0.010000 |
+| `grok-4-1-fast-reasoning` | $0.000200 | $0.000500 |
+| `Kimi-K2.6` | $0.000950 | $0.004000 |
+| `DeepSeek-R1-0528` | $0.001350 | $0.005400 |
+
+Run `pnpm fetch-prices` from `llm-repl-cli/` to refresh prices from the Azure retail API. To add a new model, append an entry to `MODEL_MAP` in `scripts/fetch-prices.ts` and re-run.
+
+**Session cost logging** — `session.ts` logs to stderr after every cycle:
+```
+  cost: $0.000423 cycle · $0.000814 total
+```
+and at session end:
+```
+── session complete · 3 cycles · $0.001237 total cost ──
+```
+
+`budget()` inside the sandbox also exposes `costUsd`, `inputTokensUsed`, and `outputTokensUsed` so the running model can observe its own spend.
 
 ---
 

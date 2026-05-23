@@ -265,13 +265,14 @@ Aliases are resolved via env vars using the existing provider resolver (`LM_MODE
 | `XL` | Maximum code quality (reserved) |
 | `XL-R` | Frontier reasoning (reserved) |
 
-Example env:
+Example env (current Azure deployment on `lmthing-resource`, swedencentral):
 ```
-LM_MODEL_XS=openai:gpt-4o-mini
-LM_MODEL_S=openai:gpt-4o
-LM_MODEL_M=anthropic:claude-sonnet-4-6
-LM_MODEL_L=anthropic:claude-opus-4-7
-LM_MODEL_L_R=anthropic:claude-opus-4-7   # providerOptions.thinking.type = "enabled"
+LM_MODEL_XS=azure:gpt-5.4-mini
+LM_MODEL_S=azure:gpt-4.1-mini
+LM_MODEL_M=azure:DeepSeek-V4-Flash
+LM_MODEL_L=azure:gpt-5.4
+LM_MODEL_M_R=azure:grok-4-1-fast-reasoning
+LM_MODEL_L_R=azure:Kimi-K2.6
 ```
 
 ### Roles
@@ -491,6 +492,12 @@ interface AskProps<T> {
 interface Budget {
   tokensRemaining: number;
   tokensUsed: number;
+  /** Input tokens consumed by LLM API calls this session. */
+  inputTokensUsed: number;
+  /** Output tokens consumed by LLM API calls this session. */
+  outputTokensUsed: number;
+  /** Accumulated dollar cost this session (0 when no pricing is configured). */
+  costUsd: number;
   inspectCount: number;
   forksActive: number;
   forksCompleted: number;
@@ -1877,6 +1884,9 @@ Invariants that implementors must maintain. Violations in any direction produce 
 | Class deletion cascade | Removing a captured class from the session space nullifies every live scope variable holding an instance of it at the next yield. Variables appear as `null` with a `/* nullified: class <Name> removed */` comment in `__scope`; `class_instance_nullified` is traced per variable. |
 | Rollback atomicity | `rollback()` is a single `git reset --hard` over the session repo. `session.ts`, `scope.json`, `heap.bin`, `meta.json`, and the `space/` tree all revert together. Captured artifacts added after the target ref disappear. Side effects under `/session/{id}/files/` (outside the git tree) are not undone. |
 | Checkpoint settles Promises | `checkpoint()` awaits every pending Promise in scope before committing. A Promise whose logical timeout fires before resolution is recorded as rejected (kind: "timeout"). `inspect()` does **not** auto-settle — only Promises passed as args are awaited. Restoring from an `inspect-{n}` snapshot where Promises were pending leaves those bindings as `undefined`. |
+| inspect arg injection | After `inspect()` commits and before the next cycle's eval begins, every named arg value is injected into the QuickJS context as a global `__${name}` (via `marshalToQuickJS` + `ctx.setProp`). This is what makes `__excerpts`, `__topUrls`, etc. usable in the next cycle's code — the reconstruction shows them as `const __name = value` for LLM reading, but the sandbox must also hold them as live QuickJS values. |
+| inspect tuple disambiguation | An `inspect()` argument is treated as `[value, InspectQuery]` only when it is exactly 2 elements AND the second element is a plain object (not an array, not null) whose every key is a valid InspectQuery key (`path`, `slice`, `depth`, `filter`, `sample`, `keys`, `count`, `search`). Any other array — including a 1-element array or an array whose second element has non-InspectQuery keys — is treated as a bare value. |
+| Tasklist DAG node format | DAG nodes are `Record<taskId, { description: string; deps?: string[]; optional?: boolean; condition?: string; outputSchema?: object }>`. The map key is the task id — nodes have no `id` or `label` field. `description` is the human-readable label. Implementations must use `Object.entries(dag)` to recover task ids; `node.id` is always `undefined`. |
 
 ---
 
