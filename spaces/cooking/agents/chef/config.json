@@ -1,0 +1,14 @@
+{
+  "knowledge": {
+    "cuisine": { "style": true },
+    "technique": { "method": true },
+    "dietary": { "restriction": true }
+  },
+  "components": [],
+  "functions": [
+    "scaleRecipe",
+    "parseIngredients",
+    "convertUnits",
+    "nutritionLookup"
+  ]
+}

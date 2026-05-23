@@ -1,0 +1,5 @@
+{
+  "type": "select",
+  "variableName": "cuisineStyle",
+  "default": "general"
+}

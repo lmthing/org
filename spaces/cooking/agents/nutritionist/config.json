@@ -1,0 +1,11 @@
+{
+  "knowledge": {
+    "dietary": { "restriction": true }
+  },
+  "components": [],
+  "functions": [
+    "nutritionLookup",
+    "scaleRecipe",
+    "parseIngredients"
+  ]
+}

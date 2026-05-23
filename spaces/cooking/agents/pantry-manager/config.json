@@ -1,0 +1,11 @@
+{
+  "knowledge": {
+    "cuisine": { "style": true }
+  },
+  "components": [],
+  "functions": [
+    "parseIngredients",
+    "convertUnits",
+    "scaleRecipe"
+  ]
+}

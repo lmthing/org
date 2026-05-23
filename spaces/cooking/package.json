@@ -1,0 +1,26 @@
+{
+  "name": "cooking",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cooking space — recipe research, meal planning, nutritional analysis, guided cooking",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "import": "./index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lmthing/llm-repl": "workspace:*",
+    "dotenv": "^16.4.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

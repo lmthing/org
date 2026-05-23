@@ -1,0 +1,11 @@
+{
+  "knowledge": {
+    "cuisine": { "style": true },
+    "technique": { "method": true }
+  },
+  "components": [],
+  "functions": [
+    "parseIngredients",
+    "scaleRecipe"
+  ]
+}
