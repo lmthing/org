@@ -2,7 +2,17 @@
 
 ## Status
 
-**All phases (L0–L13) are implemented.** `llm-repl/` and `llm-repl-cli/` are fully built and running. The `repl/` and `cli/` legacy packages remain in the workspace pending consumer migration (Phase 13 cutover). `spaces/` is live at the repo root and the deep_research space has been validated end-to-end.
+**All phases (L0–L13) are implemented.** `llm-repl/` and `llm-repl-cli/` are fully built and running. The `repl/` and `cli/` legacy packages remain in the workspace pending consumer migration (Phase 13 cutover). `spaces/` is live at the repo root; `research` (deep_research flow) and `cooking` (recipe_discovery, cook_recipe, meal_plan flows) are both validated end-to-end.
+
+### Implementation divergences from spec
+
+Two layers have partial stubs with working overrides in `session.ts`. Both are intentional shortcuts that unblock space development without completing the full spec contract:
+
+**L4 `fork()` — single-turn LLM call, not a child QuickJS branch.**
+`ForkEngine.registerGlobals()` wires the Promise infrastructure but the child execution loop is not implemented. `session.ts` overrides the `fork` global with a real `streamText` call that executes the instruction in a single LLM turn and resolves immediately. The `[model:ALIAS]` prefix in the instruction string selects the model tier. Calls are sequential (not truly parallel). Full spec behaviour (concurrent child QuickJS sessions on git branches) is needed when fork sub-tasks require multi-cycle completions of their own. See NEW_ARCHITECTURE.md §"Implementation Decisions / fork()" for the full decision log.
+
+**L10 `Space` global — shim in session.ts, not `createDynamicSpaceLoader`.**
+`createDynamicSpaceLoader` throws `"not implemented — Phase 11 (L10)"`. `session.ts` injects a working shim via `ctx.evalCode` + two backing host functions (`__Space_write`, `__Space_delegate`). `Space.load(name)` resolves space names via a hardcoded map (`research`, `cooking`); add new entries to `knownSpaceDirs` in `session.ts` when adding spaces. `Space.current().write(path, content)` writes to `session-{id}/space/files/`. Full spec contract (dynamic `.d.ts` overlay refresh after inspect, `SpaceHandle` lazy-load, class deletion cascade) is deferred. See NEW_ARCHITECTURE.md §"Implementation Decisions / Space global" for details.
 
 ---
 
@@ -205,9 +215,11 @@ Deliverables under `llm-repl/src/lib/checkpoint/`:
 
 **Goal:** parallel completions in fresh QuickJS contexts, on git branches.
 
-Deliverables under `llm-repl/src/lib/fork/`:
+**Current state:** `ForkEngine` is implemented and `registerGlobals()` wires the Promise infrastructure. The child QuickJS execution loop is not implemented — `session.ts` overrides `fork` with a single-turn `streamText` call (see Status §"Implementation divergences"). This is sufficient for JSON-returning sub-tasks with `[model:ALIAS]` tier selection.
 
-- `fork({ instruction, exclude, tokenBudget, warnAt })` returning `ForkHandle<T> extends Promise<ForkResult<T>>` with `inject(answer)` for routing parent-surface `ask()` responses back into the fork.
+Remaining spec work for full parallel QuickJS forks:
+
+- Wire child execution loop in `session.ts`: for each pending fork, spawn an LLM completion with the fork instruction + seeded scope, stream into a fresh QuickJS context, call `forkEngine.resolve(forkId, value)` when `resolve()` is called inside the child.
 - Branch `fork/{id}` seeded from parent `heap.bin` minus `exclude`. Session-space functions re-injected as host-bridged globals in the child.
 - `resolve<T>(value)` global available **in forks only** — absent from main session `.d.ts`.
 - **Fork token budget** counts against parent `tokensRemaining` in real time (spec contract L1856). `Budget.nearingLimit = true` and `// ⚠ Budget warning: ...` injected at `warnAt` (default 20% of `tokenBudget`, min 500). Fork kills with `BudgetExceeded` if cap exhausted before `resolve()`.
@@ -264,16 +276,16 @@ Base snapshots — cross-session scope reuse via `SessionConfig.baseSnapshot`. R
 
 **Goal:** the `Space` class and the `.d.ts` overlay generator — the headline runtime API.
 
-Deliverables under `llm-repl/src/lib/spaces/`:
+**Current state:** `Space` class (`lib/spaces/space.ts`) implements `Space.current()`, `write()`, `addFunction/Agent/KnowledgeDomain`, and the full mutation surface. `createDynamicSpaceLoader` is a stub. `session.ts` injects a working `Space` shim (see Status §"Implementation divergences") that covers `Space.load(name).agents.{slug}.{method}()` via `__Space_delegate` and `Space.current().write()` via `__Space_write`. This is sufficient for all current space usage.
 
-- `Space` class — `new Space(name)`, `Space.current()` (session-scoped, auto-created at boot under `session-{id}/space/` — spec L1617), `Space.load(name)` → `SpaceHandle`.
-- Mutation methods (`addFunction`, `addViewComponent`, `addFormComponent`, `addTaskList`, `addAgent`, `addKnowledgeDomain/Field/Option`, `read`, `patch`, `list`, `write`, `remove`) — all return `this`. Each method writes files **and** wires the runtime binding immediately; `loadSpace()` re-runs after the next inspect to refresh system prompt + `.d.ts` overlay.
-- `SpaceHandle` with lazy `loadAgent/loadFunction/loadComponent/loadKnowledge` and populated `.agents`, `.functions`, `.components` records.
+Remaining spec work:
+
+- Wire `createDynamicSpaceLoader` in `loader.ts` so `Space.load(name)` → `SpaceHandle` without the `session.ts` shim. Space name resolution should be config-driven, not a hardcoded map.
+- `SpaceHandle` with lazy `loadAgent/loadFunction/loadComponent/loadKnowledge` and populated `.agents`, `.functions`, `.components` records returning proper typed interfaces.
 - **Two-step class load** (spec contract "Class stub in .functions" L1871): `loadFunction(name)` populates `.functions.{name}` with a collapsed stub + `.d.ts` hint comment; method use produces a tsc error pointing to `loadFunction(name, { expand: true })` + `inspect()` to replace stub with full interface.
-- `.d.ts` overlay generator — branded `SpaceHandle` types per visible space, agent action signatures from tasklist config (with knowledge field type unions per spec L1754), function/component signatures from captured source, ambient module declarations for `availableModules`.
+- `.d.ts` overlay generator — branded `SpaceHandle` types per visible space, agent action signatures from tasklist config (with knowledge field type unions per spec L1754), function/component signatures from captured source, ambient module declarations for `availableModules`. Currently the overlay is present in `buildAgentPrompt` but not dynamically refreshed after `Space` mutations.
 - `loadSpace()` failure path: keep prior `SessionConfig`, inject `space_reload_failed` error (kind: "contract") naming the offending file (spec L1699).
 - **Class deletion cascade** (spec L1275, L1874): on `remove('functions/MyClass.ts')`, walk live QuickJS scope at next yield and nullify any variable whose value is an instance; `class_instance_nullified` traced per variable.
-- Adapts `repl/src/spaces/dynamic-loader.ts` + `repl/src/spaces/creator.ts` + `cli/src/cli/agent-loader.ts` — same file-tree contract, new programmatic surface.
 
 **Eval focus:** action success rate, tasklist completion, knowledge expansion accuracy, space authoring. Min alias: L (`pnpm eval --lib spaces --model L`).
 
@@ -307,6 +319,16 @@ Deliverables:
 
 ---
 
+## Flow Step Design Rule
+
+The step-to-cycle mapping is `flow.steps[Math.min(cycle - 1, flow.steps.length - 1)]`. For an N-step flow, cycle K shows step `min(K-1, N-1)`. **Each step must complete all its tasks in one cycle** — multiple `await inspect()` calls within a step advance the step index on the second call, showing the next step's instructions to an LLM that hasn't finished the current step.
+
+The correct pattern: do all task work (including sequential `await fork(...)` calls), call `__flow.finish()` for each task, then end with a **single** terminal call — either `await inspect(result)` or the flow sink.
+
+For flows requiring more cycles than steps (user interaction, long processing), set `maxCycles` in the flow's `index.md` frontmatter.
+
+---
+
 ## Critical Files (new)
 
 - `sdk/org/llm-repl/src/lib/sandbox/{quickjs,boundary,capture,file-blocks,trace,host-bridge,require}.ts`
@@ -314,8 +336,18 @@ Deliverables:
 - `sdk/org/llm-repl/src/lib/inspect/{index,budget}.ts` + `src/session/` + `src/context/reconstruction.ts`
 - `sdk/org/llm-repl/src/lib/{checkpoint,fork,memory,tasklist,io,render,snapshot,spaces}/index.ts` (+ supporting files per phase)
 - `sdk/org/llm-repl-cli/src/{router,cli,ink,web}/`
+- `sdk/org/llm-repl-cli/src/session/session.ts` — contains fork() and Space shim overrides; update when completing L4 / L10 spec work
 - Each `lib/<name>/eval/` directory: `dataset.jsonl`, `grade.ts`, prompts for all six model aliases (`xs.md`, `s.md`, `m.md`, `m_r.md`, `l.md`, `l_r.md`).
 - `sdk/org/llm-repl/llm-repl.d.ts` — canonical surface API (matches spec §"API" L375–999).
+
+## Spaces (runtime directories, not packages)
+
+| Space | Path | Flows | Notes |
+|-------|------|-------|-------|
+| `research` | `spaces/research/` | `deep_research` | Validated end-to-end |
+| `cooking` | `spaces/cooking/` | `recipe_discovery`, `cook_recipe`, `meal_plan` | recipe_discovery validated end-to-end |
+
+Add new spaces under `spaces/<name>/`. No `package.json` needed — the CLI loads them via `--space <path>`. Register new space names in the `knownSpaceDirs` map in `session.ts` for `Space.load()` cross-space delegation to work.
 
 ## Critical Files (ported, no behavior change)
 

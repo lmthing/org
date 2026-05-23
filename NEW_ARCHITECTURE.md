@@ -2016,4 +2016,133 @@ pnpm eval --role PLANNER_DEEP --model L-R
 
 One JSON line per event. Append-only, never summarized. Written with O_APPEND + fsync per event. Full reconstructions in `trace-contexts/cycle-{n}.ts`.
 
-Events: `session_start`, `space_load`, `space_reload` (after inspect when space files changed), `space_reload_failed` (path · error), `agent_activate`, `completion_start/end`, `reasoning`, `statement_received`, `function_captured` (name · kind: function|class|view_component|form_component · path in session space), `function_redeclare_blocked` (name · existing path · contract error injected), `type_check_pass/fail`, `type_inferred`, `execute`, `runtime_error`, `contract_violation` (host-bridge rejection · kind), `promise_resolve`, `promise_reject`, `timeout`, `oom`, `inspect`, `inspect_settle` (promises awaited at inspect time), `checkpoint`, `checkpoint_settle_wait` (label · pendingCount · elapsedMs), `rollback`, `snapshot_skipped`, `fork_spawn/resolve/reject`, `fork_budget_warning` (tokensRemaining · warnAt threshold), `fork_resolve` (fork terminated via resolve()), `compact`, `expand`, `pin/unpin`, `auto_compact`, `tasklist_register`, `tasklist_update` (id · node · old_status → new_status), `action_invoke`, `action_resolve`, `tasklist_step_enter/exit`, `knowledge_expand`, `space_file_read` (path), `space_file_write` (method · path), `space_file_remove` (path), `space_file_list` (path · count), `display`, `display_invalidate` (cutoffIndex on rollback), `ask`, `ask_resolve`, `ask_timeout`, `ask_cancelled` (session end, no fallback), `binding_orphaned` (name · removed from .d.ts overlay), `class_instance_orphaned` (name · class · cycle — marshaled as orphan placeholder in heap.bin), `class_instance_nullified` (name · class · cycle — cascade after class removal), `speculative_buffer_start` (await encountered · annotated type), `speculative_type_check_pass/fail` (per buffered statement), `speculative_buffer_overflow` (maxTokens hit · tokens accumulated · LLM stream paused), `speculative_execute` (buffered statement executed after await resolved), `speculative_type_mismatch` (resolved type incompatible with annotation · triggers rollback + yield · actual value logged), `speculative_aborted` (buffered statement errored · remaining buffer size), `annotation_missing_grace` (await source · derived shape · hint injected), `annotation_missing_error` (await source · cycle), `annotation_escalation` (prior_tier · new_tier · annotation_mismatch_streak), `context_reconstruct`, `budget_check`, `session_end`, `sleep` (ms · resolved after delay), `file_write` (path · bytes), `file_diff` (path · hunks applied), `file_diff_no_read` (path · contract error injected), `task_skip` (tasklist id · task id · condition expression), `hook_execute` (id · phase · action returned), `hook_side_effect_error` (id · error message), `hook_disabled` (id · consecutive failures), `hook_phase_mismatch` (id · action · phase), `fork_ask` (fork id · ui descriptor), `fork_ask_inject` (fork id), `fork_ask_timeout` (fork id), `function_load` (name · space · kind: function|class), `function_load_expand` (name · space · method count), `router_decision` (trigger · role · model · adapter · reasoning_on · error_streak · stuck_tasks · rationale · cycle), `analyzer_refire` (cycle · prior_difficulty · new_difficulty · error_streak).
+Events: `session_start`, `space_load`, `space_reload` (after inspect when space files changed), `space_reload_failed` (path · error), `agent_activate`, `completion_start/end`, `reasoning`, `statement_received`, `function_captured` (name · kind: function|class|view_component|form_component · path in session space), `function_redeclare_blocked` (name · existing path · contract error injected), `type_check_pass/fail`, `type_inferred`, `execute`, `runtime_error`, `contract_violation` (host-bridge rejection · kind), `promise_resolve`, `promise_reject`, `timeout`, `oom`, `inspect`, `inspect_settle` (promises awaited at inspect time), `checkpoint`, `checkpoint_settle_wait` (label · pendingCount · elapsedMs), `rollback`, `snapshot_skipped`, `fork_spawn/resolve/reject`, `fork_budget_warning` (tokensRemaining · warnAt threshold), `fork_resolve` (fork terminated via resolve()), `compact`, `expand`, `pin/unpin`, `auto_compact`, `tasklist_register`, `tasklist_update` (id · node · old_status → new_status), `action_invoke`, `action_resolve`, `tasklist_step_enter/exit`, `knowledge_expand`, `space_file_read` (path), `space_file_write` (method · path), `space_file_remove` (path), `space_file_list` (path · count), `display`, `display_invalidate` (cutoffIndex on rollback), `ask`, `ask_resolve`, `ask_timeout`, `ask_cancelled` (session end, no fallback), `binding_orphaned` (name · removed from .d.ts overlay), `class_instance_orphaned` (name · class · cycle — marshaled as orphan placeholder in heap.bin), `class_instance_nullified` (name · class · cycle — cascade after class removal), `speculative_buffer_start` (await encountered · annotated type), `speculative_type_check_pass/fail` (per buffered statement), `speculative_buffer_overflow` (maxTokens hit · tokens accumulated · LLM stream paused), `speculative_execute` (buffered statement executed after await resolved), `speculative_type_mismatch` (resolved type incompatible with annotation · triggers rollback + yield · actual value logged), `speculative_aborted` (buffered statement errored · remaining buffer size), `annotation_missing_grace` (await source · derived shape · hint injected), `annotation_missing_error` (await source · cycle), `annotation_escalation` (prior_tier · new_tier · annotation_mismatch_streak), `context_reconstruct`, `budget_check`, `session_end`, `sleep` (ms · resolved after delay), `file_write` (path · bytes), `file_diff` (path · hunks applied), `file_diff_no_read` (path · contract error injected), `task_skip` (tasklist id · task id · condition expression), `hook_execute` (id · phase · action returned), `hook_side_effect_error` (id · error message), `hook_disabled` (id · consecutive failures), `hook_phase_mismatch` (id · action · phase), `fork_ask` (fork id · ui descriptor), `fork_ask_inject` (fork id), `fork_ask_timeout` (fork id), `function_load` (name · space · kind: function|class), `function_load_expand` (name · space · method count), `router_decision` (trigger · role · model · adapter · reasoning_on · error_streak · stuck_tasks · rationale · cycle), `analyzer_refire` (cycle · prior_difficulty · new_difficulty · error_streak), `space_delegate` (space · agent · method · instructionLen), `fork_resolve` (alias · chars — single-turn fork completion).
+
+---
+
+## Implementation Decisions
+
+Decisions made during live development that diverge from or refine the spec above.
+
+### fork() — single-turn LLM call, not a child QuickJS branch
+
+**Spec:** `fork()` spawns a fresh QuickJS context on a git branch, re-seeds scope from `heap.bin`, runs an autonomous completion, and terminates via `resolve(result)`.
+
+**Current implementation:** `ForkEngine` (L4) creates the Promise infrastructure correctly, but the child QuickJS execution loop — spawning an LLM completion, running it, and calling `forkEngine.resolve(forkId, value)` — is not wired in `session.ts`. Instead, `session.ts` overrides the `fork` global after `ForkEngine.registerGlobals()` with a real single-turn `streamText` call:
+
+```typescript
+// llm-repl-cli/src/session/session.ts (after ForkEngine.registerGlobals)
+injectGlobal(ctx, "fork", async (optsArg: unknown) => {
+  const instruction = (optsArg as { instruction?: string })?.instruction ?? "";
+  const modelMatch = instruction.match(/^\[model:(\w+)\]\s*/);
+  const forkAlias = (modelMatch?.[1] as ModelAlias) ?? "XS";
+  const cleanInstruction = instruction.replace(/^\[model:\w+\]\s*/, "");
+  const forkModel = await resolveLLM(forkAlias);
+  const stream = streamText({ model: forkModel, system: "Return ONLY valid JSON.", prompt: cleanInstruction });
+  let text = ""; for await (const chunk of stream.textStream) text += chunk;
+  // ... parse JSON, record usage, trace fork_resolve
+  return value;
+});
+```
+
+**Key contract:** `await fork({...})` resolves to the parsed JSON value immediately (no pending Promise). Flow step code must `await fork(...)` directly; the returned value is the result, not a handle. Calls are sequential (each waits for the previous API call), not truly parallel, but the model alias selection still allows routing sub-tasks to cheaper/smaller models via the `[model:ALIAS]` prefix.
+
+**Trace event:** `fork_resolve` with `{ alias, chars }` (not `forkId`) distinguishes single-turn forks from the future full-QuickJS-branch forks.
+
+**When to implement full spec:** When truly parallel execution (simultaneous API calls) is needed, or when fork sub-tasks require multiple inspect() cycles of their own. Single-turn is sufficient for JSON-returning sub-tasks.
+
+---
+
+### [model:ALIAS] prefix convention for fork() and delegate()
+
+Fork and delegate instructions may embed a model size hint as the first token: `[model:XS|S|M|L|M_R|L_R]`. The host parses this prefix and strips it before sending the instruction to the LLM, selecting the appropriate tier via `resolveLLM(alias)`.
+
+```typescript
+// In fork:
+const searchPlan = await fork<{ queries: string[] }>({
+  instruction: "[model:XS] Generate 2 search queries for: carbonara. Return JSON.",
+  tokenBudget: 800,
+});
+
+// In delegate — modelAlias field:
+const sub = await delegate({ space: "/path/to/space", agent: "researcher", task: "...", modelAlias: "S" });
+```
+
+The `[model:ALIAS]` form is the LLM-facing convention (readable in agent instructions and flow step code); `modelAlias` is the programmatic delegate API field.
+
+---
+
+### Space global — shim in session.ts, not createDynamicSpaceLoader
+
+**Spec:** `Space.load(name)` is provided by `createDynamicSpaceLoader` (L10 `lib/spaces/loader.ts`).
+
+**Current implementation:** `createDynamicSpaceLoader` is a stub that throws `"not implemented — Phase 11 (L10)"`. `session.ts` injects a working `Space` shim directly via QuickJS eval + backing host functions:
+
+```typescript
+// Backing host functions (injected via injectGlobal):
+// __Space_write(path, content) — writes to session-{id}/space/files/{path}
+// __Space_delegate(spaceName, agentSlug, method, instruction) — runs runSpaceSession
+
+// QuickJS-side namespace (via ctx.evalCode):
+var Space = {
+  load: (name) => _makeProxy(name),    // proxy: agents.{slug}.{method}(opts, instr)
+  current: () => _makeProxy('current') // proxy: write(path, content)
+};
+```
+
+`Space.load(name).agents.{slug}.{method}(opts, instruction)` routes to `__Space_delegate` which resolves the space name against a hardcoded map (`research` → `../spaces/research`, `cooking` → current spaceDir) and calls `runSpaceSession`. Cross-space agent calls are synchronous sub-sessions from the QuickJS point of view.
+
+`Space.current().write(path, content)` writes to `session-{id}/space/files/{path}` (separate from `session-{id}/space/` which holds agent/flow definitions).
+
+**Known space name resolution:** only `"research"` and `"cooking"` are hardcoded. Add entries to the `knownSpaceDirs` map in session.ts for new spaces.
+
+---
+
+### Flow step design — one cycle per step
+
+The step-to-cycle mapping in `session.ts` is `flow.steps[Math.min(cycle - 1, flow.steps.length - 1)]`. For a 2-step flow (steps 0 and 1):
+- Cycle 1 → step 0 instructions
+- Cycle 2+ → step 1 instructions (capped)
+
+**Rule:** each flow step must complete all its `tasks` within a single LLM cycle and end with exactly one terminal call — either `await inspect(result)` or the flow sink. Multiple `await inspect()` calls within one step cause the runtime to advance to the next step's instructions on the next cycle, confusing the LLM mid-task.
+
+**Pattern for multi-task steps:**
+
+```typescript
+// ✓ correct — all tasks in one cycle, one terminal inspect
+__flow.start("plan_search");
+const plan = await fork<...>({ instruction: "[model:XS] ...", tokenBudget: 800 });
+__flow.finish("plan_search", plan as object);
+
+__flow.start("search");
+const results = []; for (const q of plan.queries) { results.push(await fork<...>({...})); }
+__flow.finish("search", { results });
+
+await inspect(results);  // single yield — advances to next step
+
+// ✗ wrong — multiple inspects within a step advance step too early
+__flow.start("plan_search");
+const plan = await fork<...>({...});
+await inspect(plan);     // ← step advances to step 1 here
+
+__flow.start("search");  // ← this code runs with step-1 instructions, not step-0
+```
+
+For steps with genuine multi-cycle work (e.g. an `ask()` that needs a full user round-trip), use `maxCycles` to give the flow enough cycles.
+
+---
+
+### Spaces directory
+
+`spaces/` at the repo root is the space registry. Currently active spaces:
+
+| Space | Path | Flows | Status |
+|-------|------|-------|--------|
+| `research` | `spaces/research/` | `deep_research` | Validated end-to-end |
+| `cooking` | `spaces/cooking/` | `recipe_discovery`, `cook_recipe`, `meal_plan` | Validated (`recipe_discovery` end-to-end) |
+
+`spaces/` is covered by the `pnpm-workspace.yaml` glob but spaces are runtime directories, not packages — they have no `package.json`. The CLI loads them via `--space <path>`.
+
+**Cooking space agents:** `chef` (orchestrator), `recipe-researcher` (web discovery), `nutritionist` (nutrition analysis), `pantry-manager` (inventory).
+
+**Cooking space functions:** `scaleRecipe`, `parseIngredients`, `convertUnits`, `nutritionLookup` (USDA FoodData Central + Open Food Facts fallback).
