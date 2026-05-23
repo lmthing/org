@@ -1,0 +1,12 @@
+{
+  "knowledge": {
+    "doctype": { "format": true }
+  },
+  "components": [],
+  "functions": [
+    "fetchPage",
+    "readPdf",
+    "readDocument",
+    "extractLinks"
+  ]
+}

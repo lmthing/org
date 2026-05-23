@@ -1,0 +1,12 @@
+{
+  "knowledge": {
+    "provider": { "api": true },
+    "strategy": { "mode": true }
+  },
+  "components": [],
+  "functions": [
+    "webSearch",
+    "extractLinks",
+    "siteMap"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "label": "Search Providers",
+  "description": "Web search API providers and their strengths",
+  "icon": "🔎",
+  "color": "#3498db",
+  "renderAs": "section"
+}

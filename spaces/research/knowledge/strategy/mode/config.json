@@ -1,0 +1,9 @@
+{
+  "label": "Mode",
+  "description": "Which research mode to apply",
+  "fieldType": "select",
+  "required": false,
+  "default": "broad",
+  "variableName": "mode",
+  "renderAs": "field"
+}

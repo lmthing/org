@@ -1,0 +1,39 @@
+{
+  "name": "research",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deep web research space — multi-provider search, context-efficient page reading, PDF/doc extraction",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "import": "./index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lmthing/llm-repl": "workspace:*",
+    "quickjs-emscripten": "^0.31.0",
+    "ai": "^6.0.86",
+    "@ai-sdk/azure": "^2.0.0",
+    "@ai-sdk/anthropic": "^2.0.0",
+    "@ai-sdk/openai": "^2.0.0",
+    "@mozilla/readability": "^0.5.0",
+    "dotenv": "^16.4.0",
+    "jsdom": "^25.0.0",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1",
+    "turndown": "^7.2.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^22.0.0",
+    "@types/pdf-parse": "^1.1.4",
+    "@types/turndown": "^5.0.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

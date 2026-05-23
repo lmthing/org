@@ -1,0 +1,7 @@
+{
+  "label": "Document Type",
+  "description": "Document formats and how to extract them efficiently",
+  "icon": "📄",
+  "color": "#9b59b6",
+  "renderAs": "section"
+}
