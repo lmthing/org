@@ -2,9 +2,17 @@
  * Token budget tracking for session context management.
  */
 
+export interface ModelPricing {
+  inputPer1K: number;
+  outputPer1K: number;
+}
+
 export interface Budget {
   tokensRemaining: number;
   tokensUsed: number;
+  inputTokensUsed: number;
+  outputTokensUsed: number;
+  costUsd: number;
   inspectCount: number;
   forksActive: number;
   forksCompleted: number;
@@ -27,8 +35,12 @@ export interface Budget {
 export class BudgetTracker {
   private readonly _max: number;
   private readonly _warnAt: number;
+  private readonly _pricing: ModelPricing | null;
 
   private _used = 0;
+  private _inputTokensUsed = 0;
+  private _outputTokensUsed = 0;
+  private _costUsd = 0;
   private _inspectCount = 0;
   private _wastedOnAbort = 0;
   private _statementsTotal = 0;
@@ -45,10 +57,12 @@ export class BudgetTracker {
     contextWindowTokens: number;
     budgetRatio?: number;
     warnAt?: number;
+    pricing?: ModelPricing;
   }) {
     const ratio = opts.budgetRatio ?? 0.8;
     this._max = Math.floor(opts.contextWindowTokens * ratio);
     this._warnAt = opts.warnAt ?? Math.floor(this._max * 0.9);
+    this._pricing = opts.pricing ?? null;
   }
 
   get tokensRemaining(): number {
@@ -57,6 +71,10 @@ export class BudgetTracker {
 
   get tokensUsed(): number {
     return this._used;
+  }
+
+  get costUsd(): number {
+    return this._costUsd;
   }
 
   get inspectCount(): number {
@@ -69,6 +87,18 @@ export class BudgetTracker {
 
   recordTokens(count: number): void {
     this._used += count;
+  }
+
+  recordApiUsage(inputTokens: number, outputTokens: number): void {
+    this._inputTokensUsed += inputTokens;
+    this._outputTokensUsed += outputTokens;
+    this._used += inputTokens + outputTokens;
+    if (this._pricing) {
+      this._costUsd +=
+        (inputTokens * this._pricing.inputPer1K +
+          outputTokens * this._pricing.outputPer1K) /
+        1000;
+    }
   }
 
   recordInspect(): void {
@@ -111,6 +141,9 @@ export class BudgetTracker {
     return {
       tokensRemaining: this.tokensRemaining,
       tokensUsed: this._used,
+      inputTokensUsed: this._inputTokensUsed,
+      outputTokensUsed: this._outputTokensUsed,
+      costUsd: this._costUsd,
       inspectCount: this._inspectCount,
       forksActive: this._forksActive,
       forksCompleted: this._forksCompleted,

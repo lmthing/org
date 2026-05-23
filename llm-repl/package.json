@@ -58,6 +58,26 @@
     "./context/reconstruction": {
       "types": "./src/context/reconstruction.ts",
       "import": "./src/context/reconstruction.ts"
+    },
+    "./lib/spaces/index": {
+      "types": "./src/lib/spaces/index.ts",
+      "import": "./src/lib/spaces/index.ts"
+    },
+    "./lib/spaces/disk": {
+      "types": "./src/lib/spaces/disk.ts",
+      "import": "./src/lib/spaces/disk.ts"
+    },
+    "./lib/spaces/library-dts": {
+      "types": "./src/lib/spaces/library-dts.ts",
+      "import": "./src/lib/spaces/library-dts.ts"
+    },
+    "./lib/spaces/overlay-dts": {
+      "types": "./src/lib/spaces/overlay-dts.ts",
+      "import": "./src/lib/spaces/overlay-dts.ts"
+    },
+    "./lib/typecheck/index": {
+      "types": "./src/lib/typecheck/index.ts",
+      "import": "./src/lib/typecheck/index.ts"
     }
   },
   "files": [

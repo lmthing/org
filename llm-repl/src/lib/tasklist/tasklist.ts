@@ -210,11 +210,11 @@ class TasklistHandleImpl implements TasklistHandle {
   }
 
   getAll(): TaskRecord[] {
-    return Object.values(this._dag).map((node) => ({
+    return Object.entries(this._dag).map(([taskId, node]) => ({
       tasklistId: this.id,
-      id: node.id,
-      label: node.label,
-      status: this._statuses.get(node.id) ?? 'pending',
+      id: taskId,
+      label: node.label ?? (node as unknown as Record<string, unknown>)['description'] as string ?? taskId,
+      status: this._statuses.get(taskId) ?? 'pending',
       deps: node.deps,
       optional: node.optional,
     }));
@@ -273,6 +273,16 @@ export class TasklistEngine {
   }
 
   register(id: string, dag: TasklistDag): TasklistHandle {
+    // If a tasklist with this id is already registered, return the existing
+    // handle so task state persists across cycles. Re-calling `tasklist(id, dag)`
+    // with the same DAG is the canonical way for the LLM to obtain the handle
+    // after a yield — QuickJS top-level `const` bindings don't survive across
+    // separate `evalCodeAsync` calls.
+    const existing = this._handles.get(id);
+    if (existing) {
+      this._trace.write({ type: 'tasklist_rebind', tasklistId: id });
+      return existing;
+    }
     const handle = new TasklistHandleImpl(id, dag, this._trace, this._evalFilter);
     this._handles.set(id, handle);
     this._trace.write({ type: 'tasklist_register', tasklistId: id, tasks: Object.keys(dag) });

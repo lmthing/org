@@ -354,6 +354,23 @@ export class InspectSignal extends Error {
   }
 }
 
+// ── Tuple detection ──
+
+const INSPECT_QUERY_KEYS = new Set(['path', 'slice', 'depth', 'filter', 'sample', 'keys', 'count', 'search']);
+
+/**
+ * Returns true only if `raw` looks like an explicit `[value, InspectQuery]` tuple
+ * (exactly 2 elements, second is an object with only InspectQuery fields).
+ * Bare arrays like `["url1", "url2"]` must NOT be treated as tuples.
+ */
+function isInspectTuple(raw: unknown[]): boolean {
+  if (raw.length !== 2) return false;
+  const second = raw[1];
+  if (second === null || typeof second !== 'object' || Array.isArray(second)) return false;
+  const keys = Object.keys(second as object);
+  return keys.length > 0 && keys.every((k) => INSPECT_QUERY_KEYS.has(k));
+}
+
 // ── registerInspectGlobals ──
 
 export function registerInspectGlobals(
@@ -398,7 +415,7 @@ __InspectBuilder.prototype.options = function(opts) {
     const args: InspectArg[] = [];
     for (const handle of argHandles) {
       const raw = marshalToHost(ctx, handle);
-      if (Array.isArray(raw) && raw.length >= 1) {
+      if (Array.isArray(raw) && isInspectTuple(raw)) {
         const [value, query] = raw as [unknown, InspectQuery | undefined];
         args.push({ name: '', value, query });
       } else {
@@ -432,3 +449,9 @@ __InspectBuilder.prototype.options = function(opts) {
   ctx.setProp(ctx.global, 'budget', budgetFn);
   budgetFn.dispose();
 }
+
+// ── Preview serializer (re-exported) ──
+export { previewSerialize, type PreviewLimits } from "./serialize.js";
+
+// ── Source AST name recovery for inspect args ──
+export { extractInspectArgNames, type InspectCallNames } from "./extract-names.js";

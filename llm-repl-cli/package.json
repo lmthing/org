@@ -3,25 +3,35 @@
   "version": "0.0.1",
   "type": "module",
   "bin": {
-    "llm-repl": "dist/bin.js"
+    "llm-repl": "./src/cli/space-bin.ts"
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./session": {
+      "types": "./src/session/index.ts",
+      "import": "./src/session/index.ts"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "src/session", "src/cli/space-bin.ts"],
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "llm-repl": "tsx src/cli/space-bin.ts",
+    "fetch-prices": "tsx scripts/fetch-prices.ts"
   },
   "dependencies": {
     "@lmthing/llm-repl": "workspace:*",
     "@lmthing/repl": "workspace:*",
+    "@ai-sdk/azure": "^3.0.0",
+    "@ai-sdk/anthropic": "^3.0.0",
+    "@ai-sdk/openai": "^3.0.0",
     "ai": "^6.0.86",
+    "dotenv": "catalog:",
     "typescript": "^5.7.0",
     "zod": "^4.1.13"
   },

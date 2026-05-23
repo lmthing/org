@@ -8,6 +8,8 @@ import {
 } from './scope-serializer.js';
 import type { PromiseState } from './scope-serializer.js';
 import type { MetaJson, SessionError, CompactionRecord, TaskRecord } from '../session/types.js';
+import { applyQuery } from '../lib/inspect/index.js';
+import { previewSerialize } from '../lib/inspect/serialize.js';
 
 // ── Types ──
 
@@ -45,6 +47,9 @@ export interface ReconstructionInput {
   typeFeedback?: string;
   budgetTokensRemaining: number;
   budgetTokensUsed: number;
+  budgetInputTokensUsed: number;
+  budgetOutputTokensUsed: number;
+  budgetCostUsd: number;
   budgetContext: { used: number; max: number; scopeTokens: number; sourceTokens: number; wastedOnAbort: number };
   budgetExecution: { statementsTotal: number; statementsSinceInspect: number; heapMB: number; heapMaxMB: number };
   forksActive: number;
@@ -148,6 +153,9 @@ export function buildReconstruction(input: ReconstructionInput): string {
     `const __budget: Budget = {`,
     `  tokensRemaining: ${input.budgetTokensRemaining},`,
     `  tokensUsed: ${input.budgetTokensUsed},`,
+    `  inputTokensUsed: ${input.budgetInputTokensUsed},`,
+    `  outputTokensUsed: ${input.budgetOutputTokensUsed},`,
+    `  costUsd: ${input.budgetCostUsd.toFixed(6)},`,
     `  inspectCount: ${input.inspectNumber},`,
     `  forksActive: ${input.forksActive},`,
     `  forksCompleted: ${input.forksCompleted},`,
@@ -172,9 +180,8 @@ export function buildReconstruction(input: ReconstructionInput): string {
 
   // ── Hard-pinned: __tasklist_nudge ──
   if (input.tasklistNudge) {
-    const block = `// __tasklist_nudge: ${input.tasklistNudge}`;
-    sections.push(block);
-    remainingTokens -= approxTokens(block);
+    sections.push(input.tasklistNudge);
+    remainingTokens -= approxTokens(input.tasklistNudge);
   }
 
   // ── Hard-pinned: __currentStep ──
@@ -231,12 +238,14 @@ export function buildReconstruction(input: ReconstructionInput): string {
     }
   }
 
-  // ── Priority 3: expanded vars ──
+  // ── Priority 3: expanded vars (truncated preview; LLM re-queries to drill in) ──
   for (const arg of input.expandedArgs) {
-    const repr = arg.query
-      ? JSON.stringify(arg.value, null, 2)
-      : JSON.stringify(arg.value, null, 2);
-    const block = `const __${arg.name} = ${repr};`;
+    // Apply InspectQuery if provided (slice/path/filter/sample/keys/count/search)
+    // to narrow the value first, THEN preview-truncate what remains.
+    const narrowed = arg.query ? applyQuery(arg.value, arg.query) : arg.value;
+    const name = arg.name && arg.name.length > 0 ? arg.name : `arg${input.expandedArgs.indexOf(arg)}`;
+    const repr = previewSerialize(narrowed, {}, name);
+    const block = `const __${name} = ${repr};`;
     if (remainingTokens > approxTokens(block)) {
       sections.push(block);
       remainingTokens -= approxTokens(block);

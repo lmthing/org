@@ -22,6 +22,13 @@ export function marshalToQuickJS(
   if (typeof value === 'string') {
     return ctx.newString(value);
   }
+  if (typeof value === 'function') {
+    // Wrap host function as a callable QuickJS handle. Without this, host
+    // functions returned as object properties (e.g. tasklist().start) would
+    // hit the String() fallback and become strings — calls would throw
+    // "not a function" inside the sandbox.
+    return wrapHostFunction(ctx, value as (...args: unknown[]) => unknown);
+  }
   if (Array.isArray(value)) {
     const arr = ctx.newArray();
     for (let i = 0; i < value.length; i++) {
@@ -44,6 +51,49 @@ export function marshalToQuickJS(
   return ctx.newString(String(value));
 }
 
+function wrapHostFunction(
+  ctx: QuickJSAsyncContext,
+  fn: (...args: unknown[]) => unknown,
+): QuickJSHandle {
+  return ctx.newFunction(fn.name || 'anonymous', (...argHandles: QuickJSHandle[]) => {
+    const args = argHandles.map((h) => marshalToHost(ctx, h));
+    let result: unknown;
+    try {
+      result = fn(...args);
+    } catch (err) {
+      // Surface host throw as QuickJS throw, not a silent string.
+      const errHandle = ctx.newError(err instanceof Error ? err : new Error(String(err)));
+      // Throwing inside a host-function callback is signalled by returning
+      // the error handle wrapped in a special way; in this codebase we just
+      // dispatch as a thrown Error via the bridge's host-throw path. The
+      // simplest correct behavior is to re-marshal undefined and rely on
+      // QuickJS to surface the error from a subsequent .then; but for sync
+      // calls we throw via ctx.throw and return undefined.
+      ctx.throw(errHandle);
+      errHandle.dispose();
+      return ctx.undefined;
+    }
+    if (result instanceof Promise) {
+      const deferred = ctx.newPromise();
+      result
+        .then((v) => {
+          const h = marshalToQuickJS(ctx, v);
+          deferred.resolve(h);
+          h.dispose();
+          ctx.runtime.executePendingJobs();
+        })
+        .catch((e: unknown) => {
+          const eHandle = ctx.newString(e instanceof Error ? e.message : String(e));
+          deferred.reject(eHandle);
+          eHandle.dispose();
+          ctx.runtime.executePendingJobs();
+        });
+      return deferred.handle;
+    }
+    return marshalToQuickJS(ctx, result);
+  });
+}
+
 // ── Marshal QuickJS → host ──
 
 export function marshalToHost(
@@ -61,6 +111,9 @@ export function injectGlobal(
   fn: (...args: unknown[]) => unknown | Promise<unknown>,
 ): void {
   const fnHandle = ctx.newFunction(name, (...argHandles: QuickJSHandle[]) => {
+    // marshalToHost copies the value out; the underlying QuickJS handles are
+    // not borrowed long-term by the host. QuickJS owns argHandles itself for
+    // C-to-host bridges (WeakLifetime), so we must NOT dispose them here.
     const args = argHandles.map((h) => marshalToHost(ctx, h));
     const result = fn(...args);
     if (result instanceof Promise) {
