@@ -66,6 +66,12 @@ export type UIBlock =
   | { type: 'fork_spawn'; id: string; forkId: string; instruction: string; tokenCap: number; resolved: boolean; tokensUsed?: number }
   | { type: 'checkpoint'; id: string; label: string }
   | { type: 'space_info'; id: string; agentSlug: string; flowSlug: string; spaceDir: string }
+  | {
+      type: 'knowledge_form'
+      id: string
+      agentSlug: string
+      fields: Array<{ domain: string; field: string; label: string; options: string[] }>
+    }
 
 export type BlockAction =
   | { type: 'event'; event: Record<string, unknown> }
@@ -80,6 +86,14 @@ export interface AgentAction {
   description: string
 }
 
+// ── Space Agent Info (for @ picker) ──
+
+export interface SpaceAgentInfo {
+  slug: string
+  title: string
+  requiredKnowledge: Array<{ domain: string; field: string; options: string[]; label?: string }>
+}
+
 // ── Session Interface ──
 
 export interface ThingWebViewSession {
@@ -87,6 +101,7 @@ export interface ThingWebViewSession {
   snapshot: UISessionSnapshot
   blocks: UIBlock[]
   actions: AgentAction[]
+  agents?: SpaceAgentInfo[]
   conversations: ConversationSummary[]
   loadedConversation: { id: string; state: unknown } | null
   sendMessage: (text: string) => void
@@ -96,6 +111,8 @@ export interface ThingWebViewSession {
   cancelTask: (taskId: string, message?: string) => void
   pause: () => void
   resume: () => void
+  switchAgent?: (slug: string) => void
+  submitKnowledge?: (id: string, data: Record<string, string>) => void
   saveConversation: (id: string) => void
   requestConversations: () => void
   loadConversation: (id: string) => void

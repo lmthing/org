@@ -74,6 +74,8 @@ export function ThingWebView({
           activeFormId={isLiveView ? snapshot.activeFormId : null}
           onSubmitForm={session.submitForm}
           onCancelAsk={session.cancelAsk}
+          onSubmitKnowledge={session.submitKnowledge}
+          onCancelKnowledge={(id) => session.submitKnowledge?.(id, {})}
         />
         {isLiveView && (
           <InputBar
@@ -83,6 +85,8 @@ export function ThingWebView({
             status={snapshot.status}
             disabled={!connected}
             actions={session.actions}
+            agents={session.agents ?? []}
+            onSwitchAgent={session.switchAgent}
           />
         )}
       </div>
@@ -95,5 +99,5 @@ export function ThingWebView({
   )
 }
 
-export type { ThingWebViewSession, UIBlock, BlockAction, AgentAction, ConversationSummary, SessionSnapshot, UISessionSnapshot } from './types'
+export type { ThingWebViewSession, UIBlock, BlockAction, AgentAction, SpaceAgentInfo, ConversationSummary, SessionSnapshot, UISessionSnapshot } from './types'
 export { blocksReducer } from './blocks'

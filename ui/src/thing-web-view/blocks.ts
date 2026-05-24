@@ -163,12 +163,20 @@ export function blocksReducer(blocks: UIBlock[], action: BlockAction): UIBlock[]
         },
       ]
 
-    case 'space_info':
-      // Only add if not already present (first one wins)
-      if (blocks.some((b) => b.type === 'space_info')) return blocks
+    case 'space_info': {
+      const updated = blocks.map((b) =>
+        b.type === 'space_info'
+          ? {
+              ...b,
+              agentSlug: (ev['agentSlug'] as string) ?? b.agentSlug,
+              flowSlug: (ev['flowSlug'] as string) ?? b.flowSlug,
+            }
+          : b,
+      )
+      if (updated.some((b) => b.type === 'space_info')) return updated
       return [
         {
-          type: 'space_info',
+          type: 'space_info' as const,
           id: 'space_info',
           agentSlug: (ev['agentSlug'] as string) ?? '',
           flowSlug: (ev['flowSlug'] as string) ?? '',
@@ -176,6 +184,21 @@ export function blocksReducer(blocks: UIBlock[], action: BlockAction): UIBlock[]
         },
         ...blocks,
       ]
+    }
+
+    case 'knowledge_form':
+      return [
+        ...blocks,
+        {
+          type: 'knowledge_form' as const,
+          id: ev['id'] as string,
+          agentSlug: (ev['agentSlug'] as string) ?? '',
+          fields: (ev['fields'] as Array<{ domain: string; field: string; label: string; options: string[] }>) ?? [],
+        },
+      ]
+
+    case 'knowledge_form_done':
+      return blocks.filter((b) => !(b.type === 'knowledge_form' && b.id === (ev['id'] as string)))
 
     default:
       return blocks

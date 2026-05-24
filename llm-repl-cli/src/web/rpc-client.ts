@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useReducer } from 'react'
 
-export type { UIBlock, BlockAction, ConversationSummary, AgentAction } from '@lmthing/thing-ui/thing-web-view/types'
+export type { UIBlock, BlockAction, ConversationSummary, AgentAction, SpaceAgentInfo } from '@lmthing/thing-ui/thing-web-view/types'
 export { blocksReducer } from '@lmthing/thing-ui/thing-web-view/blocks'
 
-import type { UIBlock, AgentAction, ConversationSummary } from '@lmthing/thing-ui/thing-web-view/types'
+import type { UIBlock, AgentAction, ConversationSummary, SpaceAgentInfo } from '@lmthing/thing-ui/thing-web-view/types'
 import { blocksReducer } from '@lmthing/thing-ui/thing-web-view/blocks'
 
 // ── Snapshot ──────────────────────────────────────────────────────────────────
@@ -89,6 +89,7 @@ export interface UseReplSessionResult {
   blocks: UIBlock[]
   connected: boolean
   actions: AgentAction[]
+  agents: SpaceAgentInfo[]
   conversations: ConversationSummary[]
   loadedConversation: { id: string; state: unknown } | null
   sendMessage: (text: string) => void
@@ -98,6 +99,8 @@ export interface UseReplSessionResult {
   pause: () => void
   resume: () => void
   intervene: (text: string) => void
+  switchAgent: (slug: string) => void
+  submitKnowledge: (id: string, data: Record<string, string>) => void
   saveConversation: (id: string) => void
   requestConversations: () => void
   loadConversation: (id: string) => void
@@ -107,6 +110,7 @@ export function useReplSession(url = 'ws://localhost:3010'): UseReplSessionResul
   const [snapshot, setSnapshot] = useState<SessionSnapshot>(EMPTY_SNAPSHOT)
   const [connected, setConnected] = useState(false)
   const [actions, setActions] = useState<AgentAction[]>([])
+  const [agents, setAgents] = useState<SpaceAgentInfo[]>([])
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [loadedConversation, setLoadedConversation] = useState<{
     id: string
@@ -131,6 +135,8 @@ export function useReplSession(url = 'ws://localhost:3010'): UseReplSessionResul
         setSnapshot(data['data'] as SessionSnapshot)
       } else if (data['type'] === 'actions') {
         setActions(data['data'] as AgentAction[])
+      } else if (data['type'] === 'space_metadata') {
+        setAgents((data['agents'] as SpaceAgentInfo[]) ?? [])
       } else if (data['type'] === 'conversations') {
         setConversations(data['data'] as ConversationSummary[])
       } else if (data['type'] === 'conversationLoaded') {
@@ -178,6 +184,7 @@ export function useReplSession(url = 'ws://localhost:3010'): UseReplSessionResul
     blocks,
     connected,
     actions,
+    agents,
     conversations,
     loadedConversation,
     sendMessage,
@@ -187,6 +194,8 @@ export function useReplSession(url = 'ws://localhost:3010'): UseReplSessionResul
     pause: () => send({ type: 'pause' }),
     resume: () => send({ type: 'resume' }),
     intervene,
+    switchAgent: (slug: string) => send({ type: 'switchAgent', agent: slug }),
+    submitKnowledge: (id: string, data: Record<string, string>) => send({ type: 'submitKnowledge', id, data }),
     saveConversation: (id: string) => send({ type: 'saveConversation', id }),
     requestConversations: () => send({ type: 'listConversations' }),
     loadConversation: (id: string) => {

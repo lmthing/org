@@ -104,6 +104,10 @@ export function createSpaceChatServer(
             session.resume();
           } else if (msg['type'] === 'intervene') {
             session.handleIntervention(msg['text'] as string);
+          } else if (msg['type'] === 'switchAgent') {
+            session.switchAgent(msg['agent'] as string);
+          } else if (msg['type'] === 'submitKnowledge') {
+            session.submitKnowledge(msg['id'] as string, msg['data'] as Record<string, string>);
           }
           res.writeHead(200, corsHeaders);
           res.end('{"ok":true}');
@@ -172,6 +176,9 @@ export function createSpaceChatServer(
     const snap = session.snapshot();
     ws.send(JSON.stringify({ type: 'snapshot', data: snap }));
 
+    // Send space metadata so client @ picker is always populated
+    ws.send(JSON.stringify({ type: 'space_metadata', agents: session.agentInfos() }));
+
     ws.on('message', async (data: Buffer) => {
       try {
         const msg = JSON.parse(data.toString()) as Record<string, unknown>;
@@ -195,6 +202,15 @@ export function createSpaceChatServer(
             break;
           case 'intervene':
             session.handleIntervention(msg['text'] as string);
+            break;
+          case 'switchAgent':
+            session.switchAgent(msg['agent'] as string);
+            break;
+          case 'submitKnowledge':
+            session.submitKnowledge(msg['id'] as string, (msg['data'] ?? {}) as Record<string, string>);
+            break;
+          case 'cancelTask':
+            session.cancelTask?.(msg['taskId'] as string, msg['message'] as string | undefined);
             break;
           case 'getSnapshot': {
             const snap = session.snapshot();

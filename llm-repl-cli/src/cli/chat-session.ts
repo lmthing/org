@@ -51,13 +51,21 @@ import {
   listFlows,
   buildAgentPrompt,
   buildUserPrompt,
+  parseFrontmatter,
 } from '@lmthing/llm-repl/lib/spaces/index';
+import type { LoadedDiskSpace } from '@lmthing/llm-repl/lib/spaces/disk';
 import { runTsc } from '@lmthing/llm-repl/lib/typecheck/index';
 
 import { resolveLLM, type ModelAlias } from '../session/model.js';
 import { runSpaceSession } from '../session/index.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
+
+export interface SpaceAgentInfo {
+  slug: string;
+  title: string;
+  requiredKnowledge: Array<{ domain: string; field: string; options: string[]; label?: string }>;
+}
 
 export type SessionStatus =
   | 'idle'
@@ -208,6 +216,9 @@ export class SpaceChatSession extends EventEmitter {
   private _ambientDts = '';
   private _model!: LanguageModel;
   private _pendingInjectArgs: Array<{ name: string; value: unknown }> = [];
+  private _diskSpace: LoadedDiskSpace | undefined;
+  private _pendingKnowledge: Record<string, string> | undefined;
+  private _knowledgeFormId: string | null = null;
 
   constructor(private readonly _opts: ChatSessionOptions) {
     super();
@@ -369,6 +380,7 @@ export class SpaceChatSession extends EventEmitter {
       sessionDir: this.sessionDir,
       trace: this._trace,
     });
+    this._diskSpace = loadedSpace;
 
     // Load host functions
     const spaceModule = await importSpaceModule(spaceDir);
@@ -478,6 +490,18 @@ export class SpaceChatSession extends EventEmitter {
       spaceDir: this._opts.spaceDir,
     });
 
+    // Emit space metadata so client can populate @ picker
+    this._emitEvent({
+      type: 'space_metadata',
+      agents: this._buildAgentInfos(),
+    });
+
+    // Emit current agent's actions for the / picker
+    const initialAgentActions = this._getAgentActions(this._agentSlug);
+    if (initialAgentActions.length > 0) {
+      this._emitEvent({ type: 'actions', data: initialAgentActions });
+    }
+
     this._setStatus('idle');
   }
 
@@ -487,14 +511,25 @@ export class SpaceChatSession extends EventEmitter {
     if (this._status === 'executing') return; // debounce
     this._setStatus('executing');
 
+    // Prepend any pending knowledge context selections
+    let effectiveText = text;
+    if (this._pendingKnowledge) {
+      const ctx = Object.entries(this._pendingKnowledge)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ');
+      if (ctx) effectiveText = `[Knowledge context: ${ctx}]\n${text}`;
+      this._pendingKnowledge = undefined;
+    }
+
     const cycle = ++this._cycle;
     const blockId = `cycle_${cycle}_${Date.now()}`;
 
     try {
       const spaceDir = this._opts.spaceDir;
-      const flowSlug = this._opts.flow ?? (await listFlows(spaceDir))[0]!;
+      const flowSlug = this._flowSlug || (await listFlows(spaceDir))[0]!;
       const flow = await loadFlow(spaceDir, flowSlug);
-      const agentSlug = this._opts.agent ?? flow.defaultAgent ?? (await listAgents(spaceDir))[0]!;
+      const agentSlug = this._agentSlug || flow.defaultAgent || (await listAgents(spaceDir))[0]!;
       const agent = await loadAgent(spaceDir, agentSlug);
 
       const built = await buildAgentPrompt({
@@ -507,7 +542,7 @@ export class SpaceChatSession extends EventEmitter {
 
       const userPrompt = buildUserPrompt({
         cycle,
-        task: text,
+        task: effectiveText,
         ...(this._reconstruction ? { reconstruction: this._reconstruction } : {}),
       });
 
@@ -788,7 +823,101 @@ export class SpaceChatSession extends EventEmitter {
     }
   }
 
+  switchAgent(slug: string): void {
+    if (!this._diskSpace) return;
+    const agentEntry = this._diskSpace.agents.find((a) => a.slug === slug);
+    if (!agentEntry) return;
+    this._agentSlug = slug;
+
+    // Emit updated space_info
+    this._emitEvent({
+      type: 'space_info',
+      agentSlug: this._agentSlug,
+      flowSlug: this._flowSlug,
+      spaceDir: this._opts.spaceDir,
+    });
+
+    // Emit this agent's actions for the / picker
+    const agentActions = this._getAgentActions(slug);
+    this._emitEvent({ type: 'actions', data: agentActions });
+
+    // If the agent has dynamic (true) knowledge fields, show a form
+    const agentInfo = this._buildAgentInfos().find((a) => a.slug === slug);
+    if (agentInfo && agentInfo.requiredKnowledge.length > 0) {
+      const formId = `kf_${Date.now()}`;
+      this._knowledgeFormId = formId;
+      this._emitEvent({
+        type: 'knowledge_form',
+        id: formId,
+        agentSlug: slug,
+        fields: agentInfo.requiredKnowledge.map((f) => ({
+          domain: f.domain,
+          field: f.field,
+          label: f.label ?? f.field,
+          options: f.options,
+        })),
+      });
+    }
+  }
+
+  agentInfos(): SpaceAgentInfo[] {
+    return this._buildAgentInfos();
+  }
+
+  submitKnowledge(id: string, data: Record<string, string>): void {
+    if (id !== this._knowledgeFormId) return;
+    this._pendingKnowledge = data;
+    this._knowledgeFormId = null;
+    this._emitEvent({ type: 'knowledge_form_done', id });
+  }
+
   // ── Private ───────────────────────────────────────────────────────────────
+
+  private _buildAgentInfos(): SpaceAgentInfo[] {
+    if (!this._diskSpace) return [];
+    return this._diskSpace.agents.map((diskAgent) => {
+      const knowledgeCfg = (diskAgent.config['knowledge'] ?? {}) as Record<string, Record<string, unknown>>;
+      const requiredKnowledge: SpaceAgentInfo['requiredKnowledge'] = [];
+      for (const [domain, fields] of Object.entries(knowledgeCfg)) {
+        for (const [field, value] of Object.entries(fields)) {
+          // Only include dynamic fields (value === true); array values are pre-loaded automatically
+          if (value !== true) continue;
+          const domainEntry = this._diskSpace!.knowledge.find((k) => k.domain === domain);
+          const fieldEntry = domainEntry?.fields.find((f) => f.field === field);
+          const options = fieldEntry?.options.map((o) => o.option) ?? [];
+          const label = (fieldEntry?.config?.['label'] as string | undefined) ?? field;
+          requiredKnowledge.push({ domain, field, options, label });
+        }
+      }
+      // Parse title from instruct.md frontmatter
+      let title = diskAgent.slug;
+      try {
+        const { data: instructData } = parseFrontmatter(diskAgent.instruct);
+        if (typeof instructData['title'] === 'string') title = instructData['title'];
+      } catch { /* fall back to slug */ }
+      return { slug: diskAgent.slug, title, requiredKnowledge };
+    });
+  }
+
+  private _getAgentActions(slug: string): Array<{ id: string; label: string; description: string }> {
+    if (!this._diskSpace) return [];
+    const diskAgent = this._diskSpace.agents.find((a) => a.slug === slug);
+    if (!diskAgent) return [];
+    try {
+      const { data } = parseFrontmatter(diskAgent.instruct);
+      const actions = data['actions'] as Array<Record<string, unknown>> | undefined;
+      if (!Array.isArray(actions)) return [];
+      return actions
+        .filter((a) => a['id'] && a['label'])
+        .map((a) => ({
+          id: String(a['id']),
+          label: String(a['label']),
+          description: String(a['description'] ?? ''),
+        }));
+    } catch {
+      return [];
+    }
+  }
 
   private _setStatus(status: SessionStatus): void {
     this._status = status;

@@ -9,9 +9,11 @@ interface ChatViewProps {
   activeFormId: string | null
   onSubmitForm: (formId: string, data: Record<string, unknown>) => void
   onCancelAsk: (formId: string) => void
+  onSubmitKnowledge?: (id: string, data: Record<string, string>) => void
+  onCancelKnowledge?: (id: string) => void
 }
 
-export function ChatView({ blocks, status, activeFormId, onSubmitForm, onCancelAsk }: ChatViewProps) {
+export function ChatView({ blocks, status, activeFormId, onSubmitForm, onCancelAsk, onSubmitKnowledge, onCancelKnowledge }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
 
@@ -51,6 +53,8 @@ export function ChatView({ blocks, status, activeFormId, onSubmitForm, onCancelA
           activeFormId={activeFormId}
           onSubmitForm={onSubmitForm}
           onCancelAsk={onCancelAsk}
+          onSubmitKnowledge={onSubmitKnowledge}
+          onCancelKnowledge={onCancelKnowledge}
         />
       ))}
 

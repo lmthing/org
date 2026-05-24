@@ -60,8 +60,8 @@ export function parseFrontmatterBlock(fm: string): Record<string, unknown> {
 function parseBlock(lines: string[]): unknown {
   const cleaned = lines.filter((l) => l.trim().length > 0);
   if (cleaned.length === 0) return '';
-  // List form
-  if (cleaned.every((l) => /^\s*-\s/.test(l))) {
+  // List form — detected by first line starting with `- ` (multi-line items have non-dash continuation lines)
+  if (cleaned.length > 0 && /^\s*-\s/.test(cleaned[0]!)) {
     const items: unknown[] = [];
     let buf: string[] = [];
     for (const l of cleaned) {

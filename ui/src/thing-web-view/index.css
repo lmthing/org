@@ -812,6 +812,82 @@
   margin-bottom: 4px;
 }
 
+/* ── Knowledge form block ── */
+
+.twv-knowledge-form-block {
+  padding: 12px 16px;
+  border-left: 3px solid var(--twv-accent);
+  background: var(--twv-surface-primary);
+  border-radius: 0 6px 6px 0;
+  margin: 4px 0;
+}
+
+.twv-knowledge-form-block__header {
+  font-size: 13px;
+  margin-bottom: 12px;
+  opacity: 0.9;
+}
+
+.twv-knowledge-form-block__field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.twv-knowledge-form-block__label {
+  font-size: 12px;
+  opacity: 0.7;
+  min-width: 100px;
+  text-transform: capitalize;
+}
+
+.twv-knowledge-form-block__select {
+  flex: 1;
+  background: var(--twv-surface-secondary, rgba(255,255,255,0.05));
+  border: 1px solid var(--twv-border);
+  border-radius: 4px;
+  color: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.twv-knowledge-form-block__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.twv-knowledge-form-block__submit {
+  background: var(--twv-accent);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 14px;
+}
+
+.twv-knowledge-form-block__submit:hover {
+  opacity: 0.85;
+}
+
+.twv-knowledge-form-block__cancel {
+  background: none;
+  border: 1px solid var(--twv-border);
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.6;
+  padding: 4px 14px;
+}
+
+.twv-knowledge-form-block__cancel:hover {
+  opacity: 0.9;
+}
+
 /* ── Responsive ── */
 
 @media (max-width: 1024px) {

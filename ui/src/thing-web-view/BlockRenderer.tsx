@@ -8,9 +8,11 @@ interface BlockRendererProps {
   activeFormId: string | null
   onSubmitForm: (formId: string, data: Record<string, unknown>) => void
   onCancelAsk: (formId: string) => void
+  onSubmitKnowledge?: (id: string, data: Record<string, string>) => void
+  onCancelKnowledge?: (id: string) => void
 }
 
-export function BlockRenderer({ block, activeFormId, onSubmitForm, onCancelAsk }: BlockRendererProps) {
+export function BlockRenderer({ block, activeFormId, onSubmitForm, onCancelAsk, onSubmitKnowledge, onCancelKnowledge }: BlockRendererProps) {
   switch (block.type) {
     case 'user':
       return <UserBubble text={block.text} />
@@ -77,6 +79,15 @@ export function BlockRenderer({ block, activeFormId, onSubmitForm, onCancelAsk }
 
     case 'space_info':
       return <SpaceInfoBlock block={block} />
+
+    case 'knowledge_form':
+      return (
+        <KnowledgeFormBlock
+          block={block}
+          onSubmit={(id, data) => onSubmitKnowledge?.(id, data)}
+          onCancel={(id) => onCancelKnowledge?.(id)}
+        />
+      )
 
     default:
       return null
@@ -354,6 +365,63 @@ function ForkBlockUI({ block }: { block: Extract<UIBlock, { type: 'fork_spawn' }
           {truncated}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Knowledge form ────────────────────────────────────────────────────────────
+
+function KnowledgeFormBlock({
+  block,
+  onSubmit,
+  onCancel,
+}: {
+  block: Extract<UIBlock, { type: 'knowledge_form' }>
+  onSubmit: (id: string, data: Record<string, string>) => void
+  onCancel: (id: string) => void
+}) {
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {}
+    for (const f of block.fields) init[`${f.domain}.${f.field}`] = f.options[0] ?? ''
+    return init
+  })
+
+  return (
+    <div className="twv-agent-block twv-knowledge-form-block">
+      <div className="twv-knowledge-form-block__header">
+        Configure <strong>@{block.agentSlug}</strong>
+      </div>
+      {block.fields.map((f) => {
+        const key = `${f.domain}.${f.field}`
+        return (
+          <div key={key} className="twv-knowledge-form-block__field">
+            <label className="twv-knowledge-form-block__label">{f.label || f.field}</label>
+            <select
+              className="twv-knowledge-form-block__select"
+              value={values[key] ?? ''}
+              onChange={(e) => setValues((prev) => ({ ...prev, [key]: e.target.value }))}
+            >
+              {f.options.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+        )
+      })}
+      <div className="twv-knowledge-form-block__actions">
+        <button
+          className="twv-knowledge-form-block__submit"
+          onClick={() => onSubmit(block.id, values)}
+        >
+          Apply
+        </button>
+        <button
+          className="twv-knowledge-form-block__cancel"
+          onClick={() => onCancel(block.id)}
+        >
+          Skip
+        </button>
+      </div>
     </div>
   )
 }
