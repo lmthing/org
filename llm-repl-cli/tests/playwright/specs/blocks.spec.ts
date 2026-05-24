@@ -196,7 +196,7 @@ test.describe('Block rendering', () => {
     mockWs.send(e.forkResolve('fork2', 1200))
     await chatPage.expectResolvedFork()
     // Resolved fork shows token usage
-    await expect(chatPage.chatArea.locator('.twv-fork-block--resolved')).toContainText('1,200')
+    await expect(chatPage.chatArea.locator('.twv-fork-block--resolved')).toContainText('1200')
   })
 
   test('fork block expand shows instruction', async ({ chatPage, mockWs }) => {

@@ -1946,6 +1946,20 @@ Tier 8 — sandbox–io + render
 Tier 9 — sandbox–render + snapshot
 ```
 
+### Playwright E2E Test Suite (`llm-repl-cli/tests/playwright/`)
+
+Browser-level tests for the chat UI and WebSocket session protocol. Uses Playwright v1.56.1 with `page.routeWebSocket` for WS interception — no real LLM API calls required for the main project.
+
+- **`chrome` project** — 119 tests, fast, no external deps; runs in CI unconditionally
+- **`llm-judge` project** — 12 visual/content tests graded by an Anthropic judge model; skipped when `ANTHROPIC_API_KEY` is absent
+
+```bash
+pnpm test:e2e            # chrome project only
+pnpm test:e2e:judge      # both projects (needs ANTHROPIC_API_KEY)
+```
+
+For unit-testing `SpaceChatSession` without real API calls, use `MockLLM` from `tests/helpers/mock-llm.ts` (wraps AI SDK `MockLanguageModelV3`; inject via the `model` option on `ChatSessionOptions` / `SpaceChatServerOptions`).
+
 ### Model Classes
 
 Evals are gated by model class. Each layer has a minimum class — running it below that threshold is expected to produce random results.

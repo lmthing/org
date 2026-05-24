@@ -35,7 +35,8 @@ test.describe('Message sending', () => {
 
   test('empty message is not sent', async ({ chatPage, mockWs }) => {
     await chatPage.typeMessage('   ')
-    await chatPage.sendButton.click()
+    // Whitespace-only input: send button should remain disabled
+    await chatPage.expectSendButtonDisabled()
     // No user bubble, no WS message
     await expect(chatPage.userBubbles()).toHaveCount(0)
     const received = mockWs.getReceived().filter((m) => m['type'] === 'sendMessage')

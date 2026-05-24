@@ -46,38 +46,24 @@ test.describe('WebSocket connection', () => {
     await expect(page.locator('.twv-paused-badge')).toBeVisible({ timeout: 4000 })
   })
 
-  test('requests conversation list after connecting', async ({ mockWs }) => {
+  test('requests conversation list after connecting', async ({ chatPage, mockWs }) => {
+    // chatPage fixture navigates to '/' and waits for WS; the app sends listConversations on init
     const msg = await mockWs.waitForMessage((m) => m['type'] === 'listConversations', 4000)
     expect(msg['type']).toBe('listConversations')
   })
 
-  test('receives and applies space metadata (agents list)', async ({ page }) => {
-    const { WsMock } = await import('../fixtures/ws-mock.js')
-    const mock = new WsMock()
-    await mock.install(page)
-
-    // Send agents in space metadata
-    mock.send(e.spaceMetadata([
+  test('receives and applies space metadata (agents list)', async ({ chatPage, mockWs }) => {
+    // Send space metadata with a known agent slug
+    mockWs.send(e.spaceMetadata([
       { slug: 'researcher', title: 'Research Agent', requiredKnowledge: [] },
     ]))
-
-    await page.goto('/')
-    await page.locator('.thing-web-view').waitFor({ state: 'visible' })
 
     // Type @ in the input to trigger agent picker
-    const input = page.getByLabel('Message input')
-    // Wait for connection first
-    await expect(page.locator('.twv-connection-bar')).toBeHidden({ timeout: 6000 })
-
-    // Send agents after connected
-    mock.send(e.spaceMetadata([
-      { slug: 'researcher', title: 'Research Agent', requiredKnowledge: [] },
-    ]))
-
+    const input = chatPage.page.getByLabel('Message input')
     await input.fill('@researcher')
     // Dropdown should show the researcher agent
-    await expect(page.locator('.twv-actions-dropdown')).toBeVisible({ timeout: 3000 })
-    await expect(page.locator('.twv-actions-dropdown')).toContainText('researcher')
+    await expect(chatPage.page.locator('.twv-actions-dropdown')).toBeVisible({ timeout: 3000 })
+    await expect(chatPage.page.locator('.twv-actions-dropdown')).toContainText('researcher')
   })
 
   test('banner shows WS URL when disconnected', async ({ page }) => {

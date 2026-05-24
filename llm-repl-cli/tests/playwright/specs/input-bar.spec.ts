@@ -200,7 +200,8 @@ test.describe('InputBar', () => {
       const lotsOfLines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n')
       await chatPage.messageInput.fill(lotsOfLines)
       const box = await chatPage.messageInput.boundingBox()
-      expect(box?.height).toBeLessThanOrEqual(205)
+      // max-height: 200px is content-box; padding (20px) + border (2px) adds ~22px to bbox
+      expect(box?.height).toBeLessThanOrEqual(230)
     })
   })
 })
