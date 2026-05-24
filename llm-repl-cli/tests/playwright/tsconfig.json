@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@lmthing/thing-ui/*": ["../../../ui/src/*"],
+      "@lmthing/repl": ["../../../repl/src/index.ts"],
+      "@lmthing/llm-repl": ["../../../llm-repl/src/index.ts"]
+    }
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["node_modules"]
+}

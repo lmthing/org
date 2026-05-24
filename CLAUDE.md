@@ -111,6 +111,29 @@ pnpm typecheck      # tsc --noEmit
 
 Test framework: **Vitest**. Each `lib/<layer>/` has a co-located `<layer>.test.ts`. The eval runner is at `llm-repl/scripts/eval.ts`.
 
+### Playwright E2E Tests (`llm-repl-cli/tests/playwright/`)
+
+```bash
+# From sdk/org/llm-repl-cli/
+pnpm test:e2e             # chromium only, no LLM API required (119 tests)
+pnpm test:e2e:judge       # includes LLM-as-judge visual tests (needs ANTHROPIC_API_KEY)
+```
+
+Two Playwright projects (v1.56.1):
+- **`chrome`** — 119 tests, fast, no external dependencies; uses `page.routeWebSocket` for WS interception
+- **`llm-judge`** — 12 visual tests graded by Claude; skipped automatically if `ANTHROPIC_API_KEY` is not set
+
+Key fixtures and helpers:
+
+| Path | Export | Purpose |
+|------|--------|---------|
+| `tests/helpers/events.ts` | WS event factories | Build typed WebSocket event objects for mock responses |
+| `tests/fixtures/ws-mock.ts` | `WsMock` | WebSocket mock — intercepts `routeWebSocket`, queues server-push events |
+| `tests/fixtures/chat-page.ts` | `ChatPage` | Page Object Model for the chat UI |
+| `tests/fixtures/llm-judge.ts` | `LLMJudge` | Anthropic-backed judge for visual/content assertions |
+| `tests/fixtures/index.ts` | `test` | Combined Playwright test base with all fixtures merged |
+| `tests/helpers/mock-llm.ts` | `MockLLM` | Unit-test helper — wraps AI SDK `MockLanguageModelV3`; inject via `model` option on `ChatSessionOptions` / `SpaceChatServerOptions` to run `SpaceChatSession` without real API calls |
+
 **Eval model aliases** (resolved from env vars `LM_MODEL_<ALIAS>`):
 
 | Alias | Class |

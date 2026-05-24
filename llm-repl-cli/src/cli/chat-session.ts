@@ -80,6 +80,8 @@ export interface ChatSessionOptions {
   agent?: string;
   flow?: string;
   modelAlias?: ModelAlias;
+  /** Inject a pre-built LanguageModel (skips resolveLLM; useful for testing). */
+  model?: LanguageModel;
   baseDir?: string;
   verbose?: boolean;
   sessionId?: string;
@@ -469,8 +471,8 @@ export class SpaceChatSession extends EventEmitter {
     });
     this._ambientDts = built.ambientDts;
 
-    // Store model reference
-    this._model = await resolveLLM(this._opts.modelAlias ?? 'L');
+    // Store model reference (injected model takes precedence over env-var resolution)
+    this._model = this._opts.model ?? await resolveLLM(this._opts.modelAlias ?? 'L');
 
     this._trace.write({
       type: 'space_loaded',

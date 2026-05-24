@@ -23,6 +23,10 @@
     "build:full": "pnpm build:web && pnpm embed:web && pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test --config tests/playwright/playwright.config.ts --project=chrome",
+    "test:e2e:judge": "playwright test --config tests/playwright/playwright.config.ts --project=llm-judge",
+    "test:e2e:all": "playwright test --config tests/playwright/playwright.config.ts",
+    "test:e2e:ui": "playwright test --config tests/playwright/playwright.config.ts --ui",
     "typecheck": "tsc --noEmit",
     "llm-repl": "tsx src/cli/space-bin.ts",
     "web": "tsx src/cli/space-bin.ts --web",
@@ -64,6 +68,7 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "*",
+    "@playwright/test": "1.56.1",
     "@swc/core": "^1.10.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
