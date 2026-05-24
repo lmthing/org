@@ -1,0 +1,1 @@
+{ "type": "multiSelect", "variableName": "interactionTypes", "default": ["drug_drug"] }

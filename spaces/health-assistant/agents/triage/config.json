@@ -1,0 +1,8 @@
+{
+  "knowledge": {
+    "triage": { "urgency": true },
+    "specialty": { "area": true }
+  },
+  "functions": ["loadHistory", "saveRecord"],
+  "components": ["DocumentUpload"]
+}

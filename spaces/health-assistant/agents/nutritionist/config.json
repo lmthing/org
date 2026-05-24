@@ -1,0 +1,8 @@
+{
+  "knowledge": {
+    "nutrition": { "diet": true, "supplement": true },
+    "specialty": { "area": true }
+  },
+  "functions": ["loadHistory", "saveRecord"],
+  "components": ["HealthTimeline", "LabResultCard"]
+}

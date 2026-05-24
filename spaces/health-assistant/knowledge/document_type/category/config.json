@@ -1,0 +1,1 @@
+{ "type": "select", "variableName": "documentCategory", "default": "lab_results" }

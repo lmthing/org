@@ -1,0 +1,8 @@
+{
+  "knowledge": {
+    "document_type": { "category": true },
+    "specialty": { "area": true }
+  },
+  "functions": ["analyzeImage", "saveRecord", "loadHistory"],
+  "components": ["HealthTimeline", "LabResultCard"]
+}
