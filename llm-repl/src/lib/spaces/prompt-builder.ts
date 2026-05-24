@@ -72,6 +72,8 @@ export interface LoadedAgent {
   data: Record<string, unknown>;
   title: string;
   body: string;
+  /** Parsed `config.json` — knowledge selectors, functions, components. */
+  config?: Record<string, unknown>;
 }
 
 // ── Disk readers ───────────────────────────────────────────────────────────
@@ -91,11 +93,19 @@ export async function loadAgent(spaceDir: string, slug: string): Promise<LoadedA
     throw new Error(`Agent not found: ${slug} (looked for ${path})`);
   }
   const { data, body } = parseFrontmatter(raw);
+
+  let config: Record<string, unknown> | undefined;
+  const configRaw = await safeRead(join(spaceDir, 'agents', slug, 'config.json'));
+  if (configRaw) {
+    try { config = JSON.parse(configRaw) as Record<string, unknown>; } catch { /* malformed config — skip */ }
+  }
+
   return {
     slug,
     data,
     title: (data.title as string) ?? slug,
     body: body.trim(),
+    config,
   };
 }
 
