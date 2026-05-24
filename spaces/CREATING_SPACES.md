@@ -286,7 +286,7 @@ Declares which knowledge domains, functions, and components this agent uses:
 {
   "knowledge": {
     "<domain>": {
-      "<field>": true
+      "<field>": true | ["<option>", "<option>"]
     }
   },
   "functions": ["FunctionName1", "FunctionName2"],
@@ -294,7 +294,15 @@ Declares which knowledge domains, functions, and components this agent uses:
 }
 ```
 
-- `knowledge` selectors follow the `domain / field` hierarchy from the `knowledge/` directory. Set to `true` to load all options in that field.
+The `knowledge` value for a field controls what is available at session start:
+
+| Value | Behaviour |
+|-------|-----------|
+| `true` | The field is enabled; the agent can load options from it dynamically at runtime via `Space.current().loadKnowledge(...)`. No options are pre-loaded. |
+| `["option1", "option2"]` | Those specific options are pre-loaded into the system prompt at session start. The agent has their content from cycle 1 without any explicit load call. |
+
+Use `true` when the agent selects which option applies based on context (e.g. the user's intent determines which strategy mode to load). Use an array when certain options are always needed regardless of context.
+
 - `functions` lists function names to expose; must match keys in `hostFunctions`.
 - `components` lists component names to include in the DTS overlay.
 
@@ -303,13 +311,16 @@ Declares which knowledge domains, functions, and components this agent uses:
 ```json
 {
   "knowledge": {
-    "strategy": { "mode": true },
-    "provider": { "api": true }
+    "cuisine": { "style": ["italian", "french"] },
+    "technique": { "method": true },
+    "dietary": { "restriction": true }
   },
   "functions": ["fetchData", "aggregateRows"],
   "components": ["DataTable", "ReportForm"]
 }
 ```
+
+Here `cuisine/style` pre-loads the Italian and French option bodies at session start. `technique/method` and `dietary/restriction` are enabled but empty until the agent calls `loadKnowledge` to pull in the specific option it needs.
 
 ---
 
@@ -692,6 +703,10 @@ Expect 20–40% of URLs to be duplicates or low-signal pages.
 
 ### Declaring knowledge in agent config
 
+There are two ways to declare a field in `config.json`:
+
+**`true` — dynamic field.** The field is enabled; the agent loads specific options at runtime based on context. No content is injected at session start.
+
 ```json
 {
   "knowledge": {
@@ -701,16 +716,39 @@ Expect 20–40% of URLs to be duplicates or low-signal pages.
 }
 ```
 
-Setting a field to `true` loads all options in that field into the system prompt. The content is available as `__knowledge.<domain>.<field>` in the sandbox.
+**Array of slugs — pre-loaded options.** The listed options are injected into the system prompt at session start. The agent has their content from cycle 1 without any explicit call.
 
-### Loading knowledge selectively at runtime
+```json
+{
+  "knowledge": {
+    "cuisine": { "style": ["italian", "french"] },
+    "dietary": { "restriction": ["vegan", "gluten_free"] }
+  }
+}
+```
 
-The agent can also load specific knowledge options at runtime:
+You can mix both forms across fields of the same agent:
+
+```json
+{
+  "knowledge": {
+    "cuisine":   { "style": ["italian", "french"] },
+    "technique": { "method": true },
+    "dietary":   { "restriction": true }
+  }
+}
+```
+
+`cuisine/style` is pre-loaded with two specific options; `technique/method` and `dietary/restriction` are enabled but loaded on demand.
+
+### Loading a knowledge option at runtime
+
+When a field is declared `true`, the agent loads the relevant option once the context makes the choice clear:
 
 ```ts
-Space.current().loadKnowledge("strategy", "mode", "deep");
+Space.current().loadKnowledge("technique", "method", "braising");
 await inspect();
-// __knowledge.strategy.mode now contains the "deep" option body
+// __knowledge.technique.method now contains the braising option body
 ```
 
 ---
