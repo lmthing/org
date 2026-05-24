@@ -26,6 +26,23 @@ interface Budget { tokensRemaining: number; tokensUsed: number; inspectCount: nu
 
 **No-redeclaration:** existing session-space name → `kind: "contract"` error. **File-block read-before-diff:** diff on unread file → `kind: "contract"` error.
 
+**ask() — one call per step:** Never call `ask()` more than once per `inspect()` step. Combine all inputs into a single `ask()` call by wrapping fields in a `<div>`. Each input component needs a `name` prop; `ask()` resolves to a `Record<string, string>` keyed by those names.
+Built-in input components (always available): `TextInput`, `TextArea`, `NumberInput`, `Slider`, `Checkbox`, `Select`, `MultiSelect`, `DatePicker` — all accept `name` (required), `label`, `placeholder`, `defaultValue`.
+```typescript
+// ✓ correct — all fields in one ask()
+const answers = await ask<Record<string, string>>(
+  <div>
+    <TextInput name="dish" label="What dish?" />
+    <NumberInput name="servings" label="Servings?" defaultValue={4} />
+    <TextInput name="restrictions" label="Dietary restrictions?" />
+  </div>,
+  { fallback: { dish: "pasta", servings: "4", restrictions: "" } },
+);
+// access: answers.dish, answers.servings, answers.restrictions
+
+// ✗ wrong — multiple ask() calls produce unsubmittable separate forms
+```
+
 ## Eval Instructions
 
 Complete the task in `// User:`. End with `inspect()`. Output only TypeScript.

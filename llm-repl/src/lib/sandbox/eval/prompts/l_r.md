@@ -35,6 +35,20 @@ JSX-returning + `submit` prop → form component; JSX-returning, no `submit` →
 
 **No-redeclaration** | **File-block read-before-diff** — violations → `kind: "contract"` error.
 
+**ask() — one call per step:** Never call `ask()` more than once per `inspect()` step. Combine all inputs into a single `ask()` call by wrapping fields in a `<div>`. Each input needs a `name` prop; `ask()` resolves to `Record<string, string>` keyed by those names.
+Built-in input components (always available): `TextInput`, `TextArea`, `NumberInput`, `Slider`, `Checkbox`, `Select`, `MultiSelect`, `DatePicker` — all accept `name` (required), `label`, `placeholder`, `defaultValue`.
+```typescript
+// ✓ correct
+const answers = await ask<Record<string, string>>(
+  <div>
+    <TextInput name="dish" label="What dish?" />
+    <NumberInput name="servings" label="Servings?" defaultValue={4} />
+  </div>,
+  { fallback: { dish: "pasta", servings: "4" } },
+);
+// ✗ wrong — multiple ask() calls produce separate unsubmittable forms
+```
+
 ## Eval Instructions
 
 Use your full reasoning capacity to verify each statement against the Capture Rule before emitting. Trace the predicate tree; identify component kind if JSX is returned.

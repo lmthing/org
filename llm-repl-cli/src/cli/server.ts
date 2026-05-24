@@ -180,8 +180,17 @@ export function createSpaceChatServer(
     const snap = session.snapshot();
     ws.send(JSON.stringify({ type: 'snapshot', data: snap }));
 
+    // Replay space_info so the header block renders correctly
+    ws.send(JSON.stringify({ type: 'space_info', agentSlug: snap.agentSlug, flowSlug: snap.flowSlug, spaceDir: snap.spaceDir }));
+
     // Send space metadata so client @ picker is always populated
     ws.send(JSON.stringify({ type: 'space_metadata', agents: session.agentInfos() }));
+
+    // Send current agent's actions so / picker is populated
+    const currentActions = session.currentActions();
+    if (currentActions.length > 0) {
+      ws.send(JSON.stringify({ type: 'actions', data: currentActions }));
+    }
 
     ws.on('message', async (data: Buffer) => {
       try {
@@ -213,9 +222,7 @@ export function createSpaceChatServer(
           case 'submitKnowledge':
             session.submitKnowledge(msg['id'] as string, (msg['data'] ?? {}) as Record<string, string>);
             break;
-          case 'cancelTask':
-            session.cancelTask?.(msg['taskId'] as string, msg['message'] as string | undefined);
-            break;
+
           case 'getSnapshot': {
             const snap = session.snapshot();
             ws.send(JSON.stringify({ type: 'snapshot', data: snap }));

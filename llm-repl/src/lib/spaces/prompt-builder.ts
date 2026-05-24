@@ -356,26 +356,6 @@ __flow.finish("nodeId", value);   // validates schema and unblocks dependents
 Do not skip ahead or finish a node out of order — the runtime will reject it. **Only handle the nodes assigned to this cycle**; do NOT race through later phases. End the cycle by surfacing the values produced via \`await inspect(...)\`.`;
   }
 
-  // ── Sub-agent invocation hint (always available) ─────────────────────────
-  const delegateHint = `
-
-## Delegating to another agent
-
-You can run another agent (in this space or another) as a sub-session and use its output:
-
-\`\`\`ts
-const sub = await delegate({
-  // omit \`space\` to use the current space
-  space: "/abs/path/to/other-space",
-  agent: "<slug>",        // optional — falls back to that flow's default
-  flow: "<slug>",         // optional — falls back to first flow
-  task: "<the sub-task>",
-});
-// sub.output is the sink output of the sub-session (string).
-\`\`\`
-
-Use this to specialize: e.g. spawn a \`reader\` for deep extraction on one URL, or call into a different space's flow.`;
-
   const systemPrompt = `${PREAMBLE}
 
 ## Agent: ${agent.title}
@@ -385,15 +365,36 @@ ${agent.body}
 ## Flow: ${flow.title} — step ${step.number} of ${flow.steps.length} (${step.name})
 
 ${step.body}
-${extraBlock}${knowledgeBlock}${tasklistBlock}${delegateHint}
+${extraBlock}${knowledgeBlock}${tasklistBlock}
 
 ## Host surface
 
-Library primitives (\`inspect\`, \`display\`, \`ask\`, \`budget\`, \`checkpoint\`, \`pin\`, \`compact\`, \`fork\`, \`tasklist\`, \`delegate\`, \`fetch\`, \`fs\`, …), the flow's sink \`${flow.sink.name}\`, and the space's auto-discovered functions and components are all type-visible to \`tsc\` when your TypeScript is compiled. A diagnostic naming the offending function/argument will be surfaced if you call something incorrectly.
+Library primitives (\`inspect\`, \`display\`, \`ask\`, \`budget\`, \`checkpoint\`, \`pin\`, \`compact\`, \`fork\`, \`tasklist\`, \`fetch\`, \`fs\`, …), the flow's sink \`${flow.sink.name}\`, and the space's auto-discovered functions and components are all type-visible to \`tsc\` when your TypeScript is compiled. A diagnostic naming the offending function/argument will be surfaced if you call something incorrectly.
 
 ## Termination
 
 Call **\`${flow.sink.name}\`** — ${flow.sink.description} — exactly once when ready to end the session. Signature: \`${flow.sink.signature}\`.
+
+## ask() — one form per step
+
+Never call \`ask()\` more than once per cycle. Combine all inputs into a **single** \`ask()\` call by wrapping fields in a \`<div>\`. Each input component must have a \`name\` prop — \`ask()\` resolves to a \`Record<string, string>\` keyed by those names.
+
+Built-in input components (always available as globals): \`TextInput\`, \`TextArea\`, \`NumberInput\`, \`Slider\`, \`Checkbox\`, \`Select\`, \`MultiSelect\`, \`DatePicker\` — all accept \`name\` (required), \`label\`, \`placeholder\`, \`defaultValue\`.
+
+\`\`\`ts
+// ✓ correct — all fields in one ask()
+const answers = await ask<Record<string, string>>(
+  <div>
+    <TextInput name="dish" label="What would you like to cook?" />
+    <NumberInput name="servings" label="Servings?" defaultValue={4} />
+    <TextInput name="restrictions" label="Dietary restrictions (leave blank if none)" />
+  </div>,
+  { fallback: { dish: "pasta", servings: "4", restrictions: "" } },
+);
+// access: answers.dish  answers.servings  answers.restrictions
+
+// ✗ wrong — multiple ask() calls create separate unsubmittable forms
+\`\`\`
 
 ## Rules
 

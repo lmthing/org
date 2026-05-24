@@ -7,9 +7,9 @@
  * boundary. Reconstruction accumulates across turns so the model has full context.
  */
 import { EventEmitter } from 'node:events';
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +25,7 @@ import {
   ModuleRegistry,
   injectGlobal,
   marshalToQuickJS,
+  injectJsxRuntime,
 } from '@lmthing/llm-repl/lib/sandbox/index';
 import { SessionAssembly } from '@lmthing/llm-repl/session/assembly';
 import { BudgetTracker } from '@lmthing/llm-repl/lib/inspect/budget';
@@ -304,6 +305,29 @@ export class SpaceChatSession extends EventEmitter {
       },
     });
     this._renderEngine.registerGlobals(ctx);
+    injectJsxRuntime(ctx);
+
+    // Override JSX runtime to produce SerializedJSX { component, props, children } format
+    // and inject built-in component names as string globals so `<TextInput />` resolves.
+    ctx.evalCode(`
+(function() {
+  function makeNode(type, props) {
+    var node = { component: typeof type === 'function' ? (type.displayName || type.name || 'Unknown') : String(type), props: {}, children: [] };
+    if (props) {
+      var kids = props.children;
+      for (var k in props) { if (k !== 'children' && Object.prototype.hasOwnProperty.call(props, k)) node.props[k] = props[k]; }
+      if (kids !== undefined) {
+        node.children = Array.isArray(kids) ? kids : [kids];
+      }
+    }
+    return node;
+  }
+  globalThis.__jsxRuntime = { jsx: makeNode, jsxs: makeNode, Fragment: '__Fragment__' };
+  // Built-in component name globals
+  var comps = ['TextInput','TextArea','NumberInput','Slider','Checkbox','Select','MultiSelect','DatePicker'];
+  for (var i = 0; i < comps.length; i++) globalThis[comps[i]] = comps[i];
+})();
+`, '__jsx-setup.js');
 
     new MemoryEngine({ trace: this._trace, budgetTracker: this._budgetTracker }).registerGlobals(ctx);
 
@@ -404,13 +428,27 @@ export class SpaceChatSession extends EventEmitter {
       return undefined;
     });
 
+    injectGlobal(ctx, '__Space_read', async (pathArg: unknown) => {
+      const rel = String(pathArg ?? '');
+      const abs = join(spaceFilesDir, rel);
+      try { return await readFile(abs, 'utf-8'); } catch { return null; }
+    });
+
+    injectGlobal(ctx, '__Space_list', async (dirArg: unknown) => {
+      const rel = String(dirArg ?? '');
+      const abs = join(spaceFilesDir, rel);
+      try { return await readdir(abs); } catch { return []; }
+    });
+
     injectGlobal(ctx, '__Space_delegate', async (spaceNameArg: unknown, agentArg: unknown, methodArg: unknown, instructionArg: unknown) => {
       const spaceName = String(spaceNameArg ?? '');
       const agentSlugArg = String(agentArg ?? '');
       const instruction = String(instructionArg ?? '');
+      const currentSpaceName = basename(spaceDir);
       const knownSpaceDirs: Record<string, string> = {
+        current: spaceDir,
+        [currentSpaceName]: spaceDir,
         research: join(baseDir, '..', 'spaces', 'research'),
-        cooking: spaceDir,
       };
       const subSpaceDir = knownSpaceDirs[spaceName] ?? join(dirname(spaceDir), spaceName);
       this._trace.write({ type: 'space_delegate', space: spaceName, agent: agentSlugArg, method: String(methodArg), instructionLen: instruction.length });
@@ -443,7 +481,9 @@ export class SpaceChatSession extends EventEmitter {
                 });
               }
             }),
-            write: function(path, content) { return __Space_write(path, content); }
+            write: function(path, content) { return __Space_write(path, content); },
+            read: function(path) { return __Space_read(path); },
+            list: function(dir) { return __Space_list(dir || ''); }
           };
         }
         return {
@@ -596,7 +636,13 @@ export class SpaceChatSession extends EventEmitter {
           }
         }
 
-        const wrapped = `(async () => {\n${tsc.js}\n})();`;
+        // Strip ES module import statements — they're invalid inside an async IIFE in QuickJS.
+        // JSX import (react/jsx-runtime) is replaced by binding from the pre-injected global.
+        let jsForEval = tsc.js.replace(/^import\s+.*?(?:;|$)/gm, '').trimStart();
+        if (jsForEval.includes('_jsx') || jsForEval.includes('_jsxs')) {
+          jsForEval = 'const { jsx: _jsx, jsxs: _jsxs, Fragment: _Fragment } = globalThis.__jsxRuntime;\n' + jsForEval;
+        }
+        const wrapped = `(async () => {\n${jsForEval}\n})();`;
         try {
           const result = await ctx.evalCodeAsync(wrapped);
           ctx.runtime.executePendingJobs();
@@ -638,6 +684,7 @@ export class SpaceChatSession extends EventEmitter {
                     const name = typeof errVal === 'object' && errVal ? (errVal as { name?: string }).name : undefined;
                     const message = typeof errVal === 'string' ? errVal : (errVal as { message?: string })?.message ?? JSON.stringify(errVal);
                     if (name !== 'InspectSignal') {
+                      process.stderr.write(`  [eval error] ${name}: ${message}\n`);
                       this._emitEvent({
                         type: 'error',
                         blockId: `err_${blockId}`,
@@ -746,6 +793,14 @@ export class SpaceChatSession extends EventEmitter {
         forksCompleted: budget.forksCompleted,
         nearingLimit: budget.nearingLimit,
       });
+
+      // Auto-continue: if inspect() fired and the task isn't done, kick off the next cycle.
+      // Reset to idle first — handleUserMessage guards against re-entry while executing.
+      if (this._inspectCall && this._status !== 'complete' && this._status !== 'waiting_for_input') {
+        this._setStatus('idle');
+        setImmediate(() => void this.handleUserMessage(text));
+        return;
+      }
 
       if (this._status !== 'complete' && this._status !== 'waiting_for_input') {
         this._setStatus('idle');
@@ -864,6 +919,10 @@ export class SpaceChatSession extends EventEmitter {
 
   agentInfos(): SpaceAgentInfo[] {
     return this._buildAgentInfos();
+  }
+
+  currentActions(): Array<{ id: string; label: string; description: string }> {
+    return this._getAgentActions(this._agentSlug);
   }
 
   submitKnowledge(id: string, data: Record<string, string>): void {

@@ -46,6 +46,20 @@ Not captured: `let`/`var`, multi-declarator, destructuring, call-expression or o
 
 **File-block read-before-diff:** diff block on file not read via `fs.readFile()` this cycle → `kind: "contract"` error.
 
+**ask() — one call per step:** Never call `ask()` more than once per `inspect()` step. Combine all inputs into a single `ask()` call using a `<div>` wrapper. Each input needs a `name` prop; `ask()` resolves to `Record<string, string>` keyed by those names.
+Built-in input components (always available): `TextInput`, `TextArea`, `NumberInput`, `Slider`, `Checkbox`, `Select`, `MultiSelect`, `DatePicker` — all accept `name` (required), `label`, `placeholder`, `defaultValue`.
+```typescript
+// ✓ correct
+const answers = await ask<Record<string, string>>(
+  <div>
+    <TextInput name="dish" label="What dish?" />
+    <NumberInput name="servings" label="Servings?" defaultValue={4} />
+  </div>,
+  { fallback: { dish: "pasta", servings: "4" } },
+);
+// ✗ wrong — multiple ask() calls produce separate unsubmittable forms
+```
+
 ## Eval Instructions
 
 Use your reasoning to verify the Capture Rule predicate before emitting output. Trace through the decision tree for each declaration.

@@ -35,6 +35,20 @@ Not captured: `let`/`var`, multi-declarator, destructuring, call-expression or o
 
 **File-block read-before-diff:** diff block on unread file → `kind: "contract"` error.
 
+**ask() — one call per step:** Never call `ask()` more than once per `inspect()` step. Combine all inputs into a single `ask()` call using a `<div>` wrapper. Each input needs a `name` prop; `ask()` resolves to `Record<string, string>` keyed by those names.
+Built-in input components (always available): `TextInput`, `TextArea`, `NumberInput`, `Slider`, `Checkbox`, `Select`, `MultiSelect`, `DatePicker` — all accept `name` (required), `label`, `placeholder`, `defaultValue`.
+```typescript
+// ✓ correct
+const answers = await ask<Record<string, string>>(
+  <div>
+    <TextInput name="dish" label="What dish?" />
+    <NumberInput name="servings" label="Servings?" defaultValue={4} />
+  </div>,
+  { fallback: { dish: "pasta", servings: "4" } },
+);
+// ✗ wrong — multiple ask() calls produce separate unsubmittable forms
+```
+
 ## Eval Instructions
 
 Write TypeScript statements matching the task in `// User:`. Follow the Capture Rule for declarations.
