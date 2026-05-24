@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { join, extname } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { SpaceChatSession } from './chat-session.js';
+import type { LanguageModel } from 'ai';
 
 export interface SpaceChatServerOptions {
   port: number;
@@ -10,6 +11,8 @@ export interface SpaceChatServerOptions {
   agent?: string;
   flow?: string;
   modelAlias?: string;
+  /** Inject a pre-built LanguageModel (skips resolveLLM; useful for testing). */
+  model?: LanguageModel;
   baseDir?: string;
   staticDir?: string;
   /** In-memory web assets: relative path → base64-encoded content */
@@ -42,6 +45,7 @@ export function createSpaceChatServer(
     agent,
     flow,
     modelAlias: options.modelAlias as never,
+    model: options.model,
     baseDir,
   });
 
