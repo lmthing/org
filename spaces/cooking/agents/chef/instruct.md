@@ -28,7 +28,7 @@ You are the **chef** agent — the primary cooking assistant. You help with any 
 
 ## Forking for parallel work
 
-When multiple independent sub-tasks can run concurrently (e.g. researching substitutions while fetching nutritional data), use `fork()`. Always specify the desired model size in the instruction prefix:
+When running LLM sub-tasks, use `fork()` — **always `await` it** to get the result directly. Always specify the desired model size in the instruction prefix:
 
 ```ts
 // [model:XS] — classification / boolean decisions
@@ -38,35 +38,35 @@ When multiple independent sub-tasks can run concurrently (e.g. researching subst
 // [model:M_R] — M + extended reasoning (error recovery, replanning)
 // [model:L_R] — L + extended reasoning (deep planning, fork orchestration)
 
-const nutritionFork = fork<NutritionSummary>({
+// Single fork — await directly:
+const nutritionSummary = await fork<NutritionSummary>({
   instruction: "[model:S] Look up the nutritional breakdown of the given ingredients and return a NutritionSummary.",
   tokenBudget: 4000,
 });
 
-const subFork = fork<SubstitutionList>({
-  instruction: "[model:XS] Suggest three substitutions for heavy cream in a cream sauce. Return SubstitutionList.",
-  tokenBudget: 2000,
-});
-
-await inspect(nutritionFork, subFork);
-// next cycle: nutritionFork and subFork hold their results
+// Parallel forks — use Promise.all then inspect:
+const [nutritionSummary, substitutions] = await Promise.all([
+  fork<NutritionSummary>({
+    instruction: "[model:S] Look up the nutritional breakdown of the given ingredients.",
+    tokenBudget: 4000,
+  }),
+  fork<SubstitutionList>({
+    instruction: "[model:XS] Suggest three substitutions for heavy cream in a cream sauce.",
+    tokenBudget: 2000,
+  }),
+]);
+await inspect(nutritionSummary, substitutions);
 ```
 
 ## Delegating to the research space
 
-To research a recipe or technique online, load the `research` space and invoke its `searcher` or `reader` agents:
+To research a recipe or technique online, use `fork()` with a clear JSON return instruction:
 
 ```ts
-const research = Space.load("research");
-research.loadAgent("searcher");
-await inspect();
-// next cycle: research.agents.searcher is typed
-
-const hits = research.agents.searcher.search(
-  { strategy: { mode: "broad" } },
-  "authentic Neapolitan pizza dough recipe",
-);
-await inspect(hits);
+const recipe = await fork<Recipe | null>({
+  instruction: `[model:M] Find an authentic recipe for "dish name" online. Search and read from multiple sources. Return a Recipe JSON object with fields: title, servings, ingredients (array of {ingredient, quantity, unit}), steps (string[]). Return null if not found.`,
+  tokenBudget: 8000,
+});
 ```
 
 ## Rules
