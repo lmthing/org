@@ -17,6 +17,8 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runSpaceSession } from "../session/index.js";
 import type { ModelAlias } from "../session/model.js";
+import { createSpaceChatServer } from "./server.js";
+import webAssets from "./web-assets.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -49,6 +51,8 @@ interface Args {
   maxCycles?: number;
   baseDir?: string;
   verbose: boolean;
+  web: boolean;
+  port: number;
 }
 
 function printHelp(): void {
@@ -80,6 +84,8 @@ function parseArgs(argv: string[]): Args {
     task: "",
     modelAlias: "L",
     verbose: false,
+    web: false,
+    port: 3010,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -91,11 +97,12 @@ function parseArgs(argv: string[]): Args {
       case "--cycles": defaults.maxCycles = parseInt(argv[++i]!, 10); break;
       case "--base-dir": defaults.baseDir = resolve(argv[++i]!); break;
       case "-v": case "--verbose": defaults.verbose = true; break;
+      case "--web": defaults.web = true; break;
+      case "--port": defaults.port = parseInt(argv[++i]!, 10); break;
       case "-h": case "--help": printHelp(); process.exit(0);
       default: positional.push(a!);
     }
   }
-  if (positional.length === 0) { printHelp(); process.exit(1); }
   if (!defaults.spaceDir) {
     console.error("✗ --space <path> is required");
     process.exit(1);
@@ -110,6 +117,25 @@ async function main(): Promise<void> {
   console.error(`▸ model: ${args.modelAlias} (${process.env[`LM_MODEL_${args.modelAlias}`] ?? "<unset>"})`);
   if (args.agent) console.error(`▸ agent: ${args.agent}`);
   if (args.flow) console.error(`▸ flow: ${args.flow}`);
+
+  // ── Web chat mode ──
+  if (args.web) {
+    const { server } = createSpaceChatServer({
+      port: args.port,
+      spaceDir: args.spaceDir!,
+      agent: args.agent,
+      flow: args.flow,
+      modelAlias: args.modelAlias,
+      baseDir: args.baseDir,
+      webAssets,
+    });
+    console.error(`▸ web UI: http://localhost:${args.port}`);
+    console.error("  Press Ctrl+C to stop.");
+    // Keep alive
+    process.on("SIGINT", () => { server.close(); process.exit(0); });
+    process.on("SIGTERM", () => { server.close(); process.exit(0); });
+    return; // don't fall through to batch mode
+  }
 
   const { manifest, sessionDir, output } = await runSpaceSession({
     spaceDir: args.spaceDir!,

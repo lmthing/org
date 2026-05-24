@@ -58,6 +58,26 @@ export function BlockRenderer({ block, activeFormId, onSubmitForm, onCancelAsk }
           <span>Task <strong>{block.tasklistId}/{block.taskId}</strong> complete</span>
         </div>
       )
+
+    // ── New llm-repl-cli blocks ──
+
+    case 'budget_update':
+      return <BudgetBar block={block} />
+
+    case 'fork_spawn':
+      return <ForkBlockUI block={block} />
+
+    case 'checkpoint':
+      return (
+        <div className="twv-agent-block twv-checkpoint-block">
+          <span className="twv-checkpoint-icon">&#x29C9;</span>
+          <span>Checkpoint: <strong>{block.label}</strong></span>
+        </div>
+      )
+
+    case 'space_info':
+      return <SpaceInfoBlock block={block} />
+
     default:
       return null
   }
@@ -78,7 +98,7 @@ function CodeBlockUI({ code, lineCount, streaming }: { code: string; lineCount: 
 
   return (
     <div className="twv-agent-block twv-collapsible twv-code-block">
-      <button className="twv-collapsible__header" onClick={() => setCollapsed(c => !c)}>
+      <button className="twv-collapsible__header" onClick={() => setCollapsed((c: boolean) => !c)}>
         <span className={`twv-collapsible__chevron ${collapsed ? '' : 'twv-collapsible__chevron--open'}`}>&#x25B6;</span>
         <span className="twv-collapsible__summary">Code</span>
         <span className="twv-collapsible__meta">
@@ -104,7 +124,7 @@ function ReadBlockUI({ payload }: { payload: Record<string, unknown> }) {
 
   return (
     <div className="twv-agent-block twv-collapsible twv-read-block">
-      <button className="twv-collapsible__header" onClick={() => setCollapsed(c => !c)}>
+      <button className="twv-collapsible__header" onClick={() => setCollapsed((c: boolean) => !c)}>
         <span className={`twv-collapsible__chevron ${collapsed ? '' : 'twv-collapsible__chevron--open'}`}>&#x25B6;</span>
         <span className="twv-collapsible__summary">Read &mdash; {summary}</span>
       </button>
@@ -122,7 +142,7 @@ function ErrorBlockUI({ error }: { error: { type: string; message: string; line:
 
   return (
     <div className="twv-agent-block twv-collapsible twv-error-block">
-      <button className="twv-collapsible__header" onClick={() => setCollapsed(c => !c)}>
+      <button className="twv-collapsible__header" onClick={() => setCollapsed((c: boolean) => !c)}>
         <span className={`twv-collapsible__chevron ${collapsed ? '' : 'twv-collapsible__chevron--open'}`}>&#x25B6;</span>
         <span className="twv-collapsible__summary">Error &mdash; {error.type}: {error.message}</span>
       </button>
@@ -146,7 +166,7 @@ function HookBlockUI({ hookId, action, detail }: { hookId: string; action: strin
 
   return (
     <div className={`twv-agent-block twv-collapsible twv-hook-block ${isInterruptive ? `twv-hook-block--${action}` : ''}`}>
-      <button className="twv-collapsible__header" onClick={() => setCollapsed(c => !c)}>
+      <button className="twv-collapsible__header" onClick={() => setCollapsed((c: boolean) => !c)}>
         <span className={`twv-collapsible__chevron ${collapsed ? '' : 'twv-collapsible__chevron--open'}`}>&#x25B6;</span>
         <span className="twv-collapsible__summary">
           Hook &mdash; {hookId}
@@ -274,4 +294,79 @@ function summarizeValue(v: unknown): string {
   if (Array.isArray(v)) return `[${v.length}]`
   if (typeof v === 'object') return `{${Object.keys(v).length}}`
   return String(v)
+}
+
+// ── Budget bar ────────────────────────────────────────────────────────────────
+
+function BudgetBar({ block }: { block: Extract<UIBlock, { type: 'budget_update' }> }) {
+  const total = block.tokensUsed + block.tokensRemaining
+  const pct = total > 0 ? Math.round((block.tokensUsed / total) * 100) : 0
+  const barColor = block.nearingLimit ? '#ef4444' : pct > 60 ? '#f59e0b' : '#22c55e'
+
+  return (
+    <div className="twv-agent-block twv-budget-block">
+      <div className="twv-budget-bar" style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+        <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', borderRadius: 3, height: 6, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: barColor, transition: 'width 0.3s' }} />
+        </div>
+        <span style={{ opacity: 0.7, whiteSpace: 'nowrap' }}>
+          {block.tokensUsed.toLocaleString()} / {(block.tokensUsed + block.tokensRemaining).toLocaleString()} tokens
+        </span>
+        <span style={{ fontFamily: 'monospace', opacity: 0.8 }}>
+          ${block.cycleCostUsd > 0 ? block.cycleCostUsd.toFixed(6) : block.costUsd.toFixed(6)}
+        </span>
+        {(block.forksActive > 0 || block.forksCompleted > 0) && (
+          <span style={{ opacity: 0.6 }}>
+            &#x2387; {block.forksActive} active / {block.forksCompleted} done
+          </span>
+        )}
+        {block.nearingLimit && (
+          <span style={{ color: '#ef4444', fontWeight: 600 }}>&#x26A0; nearing limit</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Fork block ────────────────────────────────────────────────────────────────
+
+function ForkBlockUI({ block }: { block: Extract<UIBlock, { type: 'fork_spawn' }> }) {
+  const [collapsed, setCollapsed] = useState(true)
+  const truncated = block.instruction.length > 80
+    ? block.instruction.slice(0, 77) + '...'
+    : block.instruction
+
+  return (
+    <div className={`twv-agent-block twv-collapsible twv-fork-block ${block.resolved ? 'twv-fork-block--resolved' : 'twv-fork-block--pending'}`}>
+      <button className="twv-collapsible__header" onClick={() => setCollapsed((c: boolean) => !c)}>
+        <span className={`twv-collapsible__chevron ${collapsed ? '' : 'twv-collapsible__chevron--open'}`}>&#x25B6;</span>
+        <span className="twv-collapsible__summary">
+          Fork {block.forkId}
+          {block.resolved
+            ? <span style={{ marginLeft: 8, color: '#22c55e', fontSize: 11 }}>&#x2713; resolved ({block.tokensUsed ?? 0} tokens)</span>
+            : <span style={{ marginLeft: 8, opacity: 0.5, fontSize: 11 }}>&#x27F3; running</span>
+          }
+        </span>
+        <span className="twv-collapsible__meta">{block.tokenCap.toLocaleString()} cap</span>
+      </button>
+      {!collapsed && (
+        <div className="twv-collapsible__body" style={{ padding: '8px 12px', fontSize: 13 }}>
+          {truncated}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Space info ────────────────────────────────────────────────────────────────
+
+function SpaceInfoBlock({ block }: { block: Extract<UIBlock, { type: 'space_info' }> }) {
+  const spaceName = block.spaceDir.split('/').pop() ?? block.spaceDir
+  return (
+    <div className="twv-agent-block twv-space-info-block" style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 12, opacity: 0.7, padding: '6px 12px' }}>
+      <span>&#x25A6; space: <strong>{spaceName}</strong></span>
+      <span>agent: <strong>{block.agentSlug}</strong></span>
+      <span>flow: <strong>{block.flowSlug}</strong></span>
+    </div>
+  )
 }

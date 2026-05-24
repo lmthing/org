@@ -10,7 +10,7 @@
     "outDir": "./dist",
     "declaration": true,
     "declarationDir": "./dist",
-    "types": ["node", "vitest/globals"],
+    "types": ["node", "vitest/globals", "react", "react-dom"],
     "paths": {
       "@lmthing/thing-ui": ["../ui/src"],
       "@lmthing/thing-ui/*": ["../ui/src/*"]

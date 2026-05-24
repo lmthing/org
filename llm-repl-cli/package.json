@@ -18,10 +18,14 @@
   "files": ["dist", "src/session", "src/cli/space-bin.ts"],
   "scripts": {
     "build": "tsup",
+    "build:web": "vite build --config vite.config.web.ts",
+    "embed:web": "node scripts/embed-web.mjs",
+    "build:full": "pnpm build:web && pnpm embed:web && pnpm build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "llm-repl": "tsx src/cli/space-bin.ts",
+    "web": "tsx src/cli/space-bin.ts --web",
     "fetch-prices": "tsx scripts/fetch-prices.ts"
   },
   "dependencies": {
@@ -33,6 +37,7 @@
     "ai": "^6.0.86",
     "dotenv": "catalog:",
     "typescript": "^5.7.0",
+    "ws": "^8.18.0",
     "zod": "^4.1.13"
   },
   "peerDependencies": {
@@ -61,9 +66,16 @@
     "@ai-sdk/provider": "*",
     "@swc/core": "^1.10.0",
     "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/ws": "^8.5.0",
+    "@vitejs/plugin-react": "^4.0.0",
     "dotenv": "catalog:",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "tsup": "^8.0.0",
     "tsx": "^4.0.0",
+    "vite": "^6.0.0",
     "vitest": "catalog:"
   }
 }

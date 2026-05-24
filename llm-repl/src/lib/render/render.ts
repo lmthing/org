@@ -61,6 +61,9 @@ export class RenderEngine {
   private readonly _trace: TraceWriter;
   private readonly _config: RenderConfig;
   private readonly _onAskSubmit?: (id: string, value: unknown) => void;
+  private readonly _onDisplay?: (id: string | null, descriptor: unknown) => void;
+  private readonly _onAskStart?: (id: string, descriptor: unknown) => void;
+  private readonly _onAskEnd?: (id: string) => void;
   private _displayEntries: DisplayEntry[] = [];
   private _pendingAsks: Map<string, AskEntry> = new Map();
   private _cycle = 0;
@@ -71,10 +74,16 @@ export class RenderEngine {
     trace: TraceWriter;
     config: RenderConfig;
     onAskSubmit?: (id: string, value: unknown) => void;
+    onDisplay?: (id: string | null, descriptor: unknown) => void;
+    onAskStart?: (id: string, descriptor: unknown) => void;
+    onAskEnd?: (id: string) => void;
   }) {
     this._trace = opts.trace;
     this._config = opts.config;
     this._onAskSubmit = opts.onAskSubmit;
+    this._onDisplay = opts.onDisplay;
+    this._onAskStart = opts.onAskStart;
+    this._onAskEnd = opts.onAskEnd;
   }
 
   registerGlobals(ctx: QuickJSAsyncContext): void {
@@ -146,6 +155,7 @@ export class RenderEngine {
       if (existingIdx !== -1) {
         this._displayEntries[existingIdx] = { id, descriptor, statementIndex, cycle: this._cycle };
         this._trace.write({ type: 'display', id, mode: 'replace', statementIndex });
+        this._onDisplay?.(id, descriptor);
         return;
       }
     }
@@ -163,6 +173,7 @@ export class RenderEngine {
     }
 
     this._trace.write({ type: 'display', id, mode: 'append', statementIndex });
+    this._onDisplay?.(id, descriptor);
   }
 
   ask<T = string>(descriptor: unknown, opts: AskOptions<T>, statementIndex: number): Promise<T> {
@@ -177,9 +188,11 @@ export class RenderEngine {
 
         if (hasFallback) {
           this._trace.write({ type: 'ask_timeout', id, statementIndex });
+          this._onAskEnd?.(id);
           resolve(opts.fallback as T);
         } else {
           this._trace.write({ type: 'ask_timeout', id, statementIndex });
+          this._onAskEnd?.(id);
           reject(new TimeoutError());
         }
       }, timeoutMs);
@@ -197,6 +210,7 @@ export class RenderEngine {
 
       this._pendingAsks.set(id, entry);
       this._trace.write({ type: 'ask', id, statementIndex, timeout: timeoutMs });
+      this._onAskStart?.(id, descriptor);
     });
   }
 
@@ -207,6 +221,7 @@ export class RenderEngine {
     clearTimeout(entry.timeout);
     this._pendingAsks.delete(id);
     this._trace.write({ type: 'ask_resolve', id, statementIndex: entry.statementIndex });
+    this._onAskEnd?.(id);
     entry.resolve(value);
   }
 

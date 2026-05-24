@@ -18,6 +18,27 @@ export interface ConversationSummary {
   turnCount: number
 }
 
+// ── Minimal snapshot shape required by UI components ──
+
+export interface UISessionSnapshot {
+  status: 'idle' | 'executing' | 'waiting_for_input' | 'paused' | 'complete' | 'error'
+  asyncTasks: Array<{ id: string; label: string; status: string; elapsed: number }>
+  activeFormId: string | null
+  /** Extended fields present when using llm-repl-cli */
+  budget?: {
+    tokensUsed: number
+    tokensRemaining: number
+    costUsd: number
+    forksActive: number
+    forksCompleted: number
+    nearingLimit: boolean
+  }
+  agentSlug?: string
+  flowSlug?: string
+  spaceDir?: string
+  cycle?: number
+}
+
 // ── UI Block Model ──
 
 export type UIBlock =
@@ -29,16 +50,25 @@ export type UIBlock =
   | { type: 'display'; id: string; jsx: SerializedJSX }
   | { type: 'form'; id: string; jsx: SerializedJSX; status: 'active' | 'submitted' | 'timeout' }
   | { type: 'tasklist_declared'; id: string; tasklistId: string; plan: Tasklist }
+  | { type: 'task_complete'; id: string; tasklistId: string; taskId: string; output: Record<string, unknown> }
+  // ── New blocks for llm-repl-cli features ──
   | {
-      type: 'task_complete'
+      type: 'budget_update'
       id: string
-      tasklistId: string
-      taskId: string
-      output: Record<string, any>
+      tokensUsed: number
+      tokensRemaining: number
+      costUsd: number
+      cycleCostUsd: number
+      forksActive: number
+      forksCompleted: number
+      nearingLimit: boolean
     }
+  | { type: 'fork_spawn'; id: string; forkId: string; instruction: string; tokenCap: number; resolved: boolean; tokensUsed?: number }
+  | { type: 'checkpoint'; id: string; label: string }
+  | { type: 'space_info'; id: string; agentSlug: string; flowSlug: string; spaceDir: string }
 
 export type BlockAction =
-  | { type: 'event'; event: import('@lmthing/repl').SessionEvent }
+  | { type: 'event'; event: Record<string, unknown> }
   | { type: 'add_user_message'; id: string; text: string }
   | { type: 'reset' }
 
@@ -54,11 +84,11 @@ export interface AgentAction {
 
 export interface ThingWebViewSession {
   connected: boolean
-  snapshot: SessionSnapshot
+  snapshot: UISessionSnapshot
   blocks: UIBlock[]
   actions: AgentAction[]
   conversations: ConversationSummary[]
-  loadedConversation: { id: string; state: ConversationState } | null
+  loadedConversation: { id: string; state: unknown } | null
   sendMessage: (text: string) => void
   intervene: (text: string) => void
   submitForm: (formId: string, data: Record<string, unknown>) => void

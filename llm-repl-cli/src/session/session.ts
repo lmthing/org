@@ -190,6 +190,32 @@ function stripModuleArtifacts(text: string): string {
     .trim();
 }
 
+// ── Knowledge selector helpers ───────────────────────────────────────────────
+
+/**
+ * Derive pre-load selectors from an agent's config.json knowledge field.
+ * Fields set to an array of option slugs are pre-loaded into the system
+ * prompt. Fields set to `true` are enabled for dynamic loading only.
+ */
+function agentKnowledgeSelectors(
+  config: Record<string, unknown> | undefined,
+): Array<{ domain: string; field: string; option: string }> {
+  const knowledge = config?.knowledge as Record<string, Record<string, unknown>> | undefined;
+  if (!knowledge) return [];
+  const selectors: Array<{ domain: string; field: string; option: string }> = [];
+  for (const [domain, fields] of Object.entries(knowledge)) {
+    for (const [field, value] of Object.entries(fields)) {
+      if (Array.isArray(value)) {
+        for (const option of value) {
+          if (typeof option === 'string') selectors.push({ domain, field, option });
+        }
+      }
+      // value === true → dynamic only, nothing pre-loaded
+    }
+  }
+  return selectors;
+}
+
 // ── Main driver ─────────────────────────────────────────────────────────────
 
 export async function runSpaceSession(opts: RunSpaceSessionOptions): Promise<RunSpaceSessionResult> {
@@ -276,7 +302,7 @@ export async function runSpaceSession(opts: RunSpaceSessionOptions): Promise<Run
       model: forkModel,
       system: "You are executing a sub-task. Return ONLY valid JSON. No prose, no markdown fences.",
       prompt: cleanInstruction,
-      maxTokens: forkOpts?.tokenBudget ?? 2000,
+      maxOutputTokens: forkOpts?.tokenBudget ?? 2000,
     });
     let text = "";
     for await (const chunk of forkStream.textStream) text += chunk;
@@ -474,12 +500,15 @@ export async function runSpaceSession(opts: RunSpaceSessionOptions): Promise<Run
         ? await loadAgent(opts.spaceDir, stepAgentSlug)
         : agent;
 
+      const configSelectors = agentKnowledgeSelectors(cycleAgent.config);
+      const knowledge = [...configSelectors, ...(opts.knowledge ?? [])];
+
       const built = await buildAgentPrompt({
         spaceDir: opts.spaceDir,
         agent: cycleAgent,
         flow,
         cycle,
-        ...(opts.knowledge ? { knowledge: opts.knowledge } : {}),
+        ...(knowledge.length > 0 ? { knowledge } : {}),
         ...(opts.extraContext ? { extraContext: opts.extraContext } : {}),
       });
       const userPrompt = buildUserPrompt({
