@@ -1,0 +1,9 @@
+{
+  "label": "Feed Type",
+  "description": "RSS, Atom, or JSON Feed format",
+  "fieldType": "select",
+  "required": false,
+  "variableName": "feedType",
+  "default": "rss",
+  "renderAs": "field"
+}

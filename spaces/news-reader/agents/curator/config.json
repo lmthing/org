@@ -1,0 +1,22 @@
+{
+  "knowledge": {
+    "topic": { "category": true },
+    "feed_source": { "type": true },
+    "briefing": { "format": true },
+    "credibility": { "criteria": true }
+  },
+  "functions": [
+    "fetchRSS",
+    "searchNews",
+    "readOpml",
+    "getDomainInfo",
+    "extractEntities",
+    "fetchArticle"
+  ],
+  "components": [
+    "ArticleCard",
+    "NewsBriefing",
+    "FeedList",
+    "BriefingPreferences"
+  ]
+}

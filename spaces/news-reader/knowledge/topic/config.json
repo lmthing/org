@@ -1,0 +1,7 @@
+{
+  "label": "News Topics",
+  "description": "Topic categories for news classification and filtering",
+  "icon": "tags",
+  "color": "#9b59b6",
+  "renderAs": "section"
+}

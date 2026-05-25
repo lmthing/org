@@ -1,0 +1,9 @@
+{
+  "label": "Format",
+  "description": "Briefing output format",
+  "fieldType": "select",
+  "required": false,
+  "variableName": "briefingFormat",
+  "default": "morning_digest",
+  "renderAs": "field"
+}

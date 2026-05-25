@@ -1,0 +1,17 @@
+{
+  "knowledge": {
+    "credibility": { "criteria": ["editorial", "transparency", "bias_detection"] },
+    "topic": { "category": true }
+  },
+  "functions": [
+    "searchNews",
+    "fetchArticle",
+    "compareSources",
+    "extractEntities",
+    "getDomainInfo"
+  ],
+  "components": [
+    "ComparisonTable",
+    "SourceCredibility"
+  ]
+}
