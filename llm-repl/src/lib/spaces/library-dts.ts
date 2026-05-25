@@ -131,14 +131,33 @@ declare function expand(name: string): void;
 
 // ── Tasklist ────────────────────────────────────────────────────────────────
 
-declare interface TasklistResult { value: unknown }
-declare interface ActionBuilder extends Promise<TasklistResult> {}
-declare interface TasklistHandle {
-  start(id: string): void;
-  finish(id: string, value?: unknown): void;
-  cancel(): void;
+declare type TaskStatus = 'pending' | 'in_progress' | 'done' | 'failed' | 'skipped';
+declare interface TaskRecord {
+  tasklistId: string;
+  id: string;
+  label: string;
+  status: TaskStatus;
+  deps?: string[];
+  optional?: boolean;
 }
-declare interface TaskDag { [id: string]: { description: string; dependsOn?: string[]; instructions?: string; outputSchema?: unknown } }
+declare interface TasklistHandle {
+  id: string;
+  start(taskId: string): void;
+  finish(taskId: string, value?: unknown): void;
+  fail(taskId: string): void;
+  skip(taskId: string): void;
+  /** Returns the current status of a task. */
+  status(taskId: string): TaskStatus;
+  /** Returns the value passed to finish() for a task, or null if not done / no value stored. */
+  output(taskId: string): unknown;
+  /** Alias for output(). */
+  result(taskId: string): unknown;
+  /** Returns all task records with current statuses. */
+  getAll(): TaskRecord[];
+  /** Returns a comment-formatted status nudge string, or null if all done. */
+  nudge(): string | null;
+}
+declare interface TaskDag { [id: string]: { description: string; dependsOn?: string[]; deps?: string[]; instructions?: string; outputSchema?: unknown; condition?: string; optional?: boolean } }
 declare function tasklist(id: string, dag: TaskDag): TasklistHandle;
 
 // ── I/O ─────────────────────────────────────────────────────────────────────
@@ -201,13 +220,25 @@ declare function delegate(spec: DelegateSpec): Promise<DelegateResult>;
 // ── Space ───────────────────────────────────────────────────────────────────
 
 declare interface SpaceHandle {
+  name: string;
+  agents: Record<string, unknown>;
+  functions: Record<string, unknown>;
+  components: Record<string, unknown>;
+  knowledge: Record<string, unknown>;
   loadAgent(role: string): void;
   loadFunction(name: string, opts?: { expand?: boolean }): void;
   loadComponent(name: string): void;
   loadKnowledge(domain: string, field: string, option?: string): void;
-  agents: Record<string, unknown>;
-  functions: Record<string, unknown>;
-  components: Record<string, unknown>;
+  /** Read a file from the space directory. */
+  read(path: string): Promise<string>;
+  /** Write (create or overwrite) a file in the space directory. */
+  write(path: string, content: string): Promise<void>;
+  /** Find-and-replace patch a file in the space directory. */
+  patch(path: string, from: string, to: string): Promise<void>;
+  /** List entries under a path in the space directory. */
+  list(path?: string): Promise<string[]>;
+  /** Remove a file from the space directory. */
+  remove(path: string): Promise<void>;
 }
 
 declare class Space {

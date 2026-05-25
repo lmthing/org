@@ -25,6 +25,10 @@ export interface TasklistHandle {
   fail(taskId: string): void;
   skip(taskId: string): void;
   status(taskId: string): TaskStatus;
+  /** Returns the value passed to finish() for a task, or null if not done / no value. */
+  output(taskId: string): unknown;
+  /** Alias for output(). */
+  result(taskId: string): unknown;
   getAll(): TaskRecord[];
   nudge(): string | null;
 }
@@ -93,6 +97,7 @@ class TasklistHandleImpl implements TasklistHandle {
   readonly id: string;
   private readonly _dag: TasklistDag;
   private readonly _statuses: Map<string, TaskStatus>;
+  private readonly _outputs: Map<string, unknown> = new Map();
   private readonly _trace: TraceWriter;
   private readonly _evalFilter: (filterExpr: string, el: unknown) => boolean;
 
@@ -167,6 +172,7 @@ class TasklistHandleImpl implements TasklistHandle {
       }
     }
 
+    if (value !== undefined) this._outputs.set(taskId, value);
     this._statuses.set(taskId, 'done');
     this._trace.write({
       type: 'tasklist_update',
@@ -175,6 +181,14 @@ class TasklistHandleImpl implements TasklistHandle {
       from,
       to: 'done',
     });
+  }
+
+  output(taskId: string): unknown {
+    return this._outputs.get(taskId) ?? null;
+  }
+
+  result(taskId: string): unknown {
+    return this._outputs.get(taskId) ?? null;
   }
 
   fail(taskId: string): void {
@@ -330,6 +344,8 @@ export class TasklistEngine {
         fail: (taskId: unknown) => handle.fail(taskId as string),
         skip: (taskId: unknown) => handle.skip(taskId as string),
         status: (taskId: unknown) => handle.status(taskId as string),
+        output: (taskId: unknown) => handle.output(taskId as string),
+        result: (taskId: unknown) => handle.output(taskId as string),
         getAll: () => handle.getAll(),
         nudge: () => handle.nudge(),
       };
