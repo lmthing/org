@@ -118,6 +118,9 @@ class TasklistHandleImpl implements TasklistHandle {
 
     const from = this._statuses.get(taskId)!;
 
+    // Idempotent: already done or in-progress — skip silently
+    if (from === 'done' || from === 'skipped' || from === 'in_progress') return;
+
     // Check deps
     const blockers: string[] = [];
     for (const dep of node.deps ?? []) {
@@ -300,6 +303,18 @@ export class TasklistEngine {
       if (nudge) parts.push(nudge);
     }
     return parts.length > 0 ? parts.join('\n') : null;
+  }
+
+  getCompletedTaskIds(): Set<string> {
+    const done = new Set<string>();
+    for (const handle of this._handles.values()) {
+      for (const record of handle.getAll()) {
+        if (record.status === 'done' || record.status === 'skipped') {
+          done.add(record.id);
+        }
+      }
+    }
+    return done;
   }
 
   registerGlobals(ctx: QuickJSAsyncContext): void {

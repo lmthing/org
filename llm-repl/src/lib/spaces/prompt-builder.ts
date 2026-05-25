@@ -236,8 +236,14 @@ export interface BuildPromptInput {
   spaceDir: string;
   agent: LoadedAgent;
   flow: LoadedFlow;
-  /** 1-based cycle number — selects which flow step is the current task. */
+  /** 1-based cycle number — used as fallback step selector when stepIndex is not provided. */
   cycle: number;
+  /**
+   * 0-based index of the current flow step. When provided, overrides the
+   * default `cycle - 1` step selection so steps advance by task completion
+   * rather than raw cycle count.
+   */
+  stepIndex?: number;
   /** Optional knowledge selectors to splice into the prompt. */
   knowledge?: Array<{ domain: string; field: string; option?: string }>;
   /** Optional extra preamble lines (e.g. "configured providers: ..."). */
@@ -298,7 +304,8 @@ Only request what you'll actually read in the next cycle.`;
 
 export async function buildAgentPrompt(input: BuildPromptInput): Promise<BuiltPrompt> {
   const { spaceDir, agent, flow, cycle, extraContext = [] } = input;
-  const step = flow.steps[Math.min(cycle - 1, flow.steps.length - 1)];
+  const rawIdx = input.stepIndex ?? (cycle - 1);
+  const step = flow.steps[Math.min(rawIdx, flow.steps.length - 1)];
   if (!step) throw new Error(`Flow ${flow.slug} has no step for cycle ${cycle}`);
 
   const knowledgeSlices = input.knowledge ? await loadKnowledge(spaceDir, input.knowledge) : [];
@@ -353,7 +360,17 @@ __flow.start("nodeId");          // mark in-progress; runtime enforces dependsOn
 __flow.finish("nodeId", value);   // validates schema and unblocks dependents
 \`\`\`
 
-Do not skip ahead or finish a node out of order — the runtime will reject it. **Only handle the nodes assigned to this cycle**; do NOT race through later phases. End the cycle by surfacing the values produced via \`await inspect(...)\`.`;
+Do not skip ahead or finish a node out of order — the runtime will reject it. **Only handle the nodes assigned to this cycle**; do NOT race through later phases. End the cycle by surfacing the values produced via \`await inspect(...)\`.
+
+**Critical**: Nodes marked \`[✓] done\` in the reconstruction are already complete — **do not re-start them**. Check before running each node's section:
+\`\`\`ts
+if (__flow.status("nodeId") !== "done") {
+  __flow.start("nodeId");
+  // ... do work
+  __flow.finish("nodeId", value);
+}
+\`\`\`
+Skip any node whose status is already \`"done"\` or \`"skipped"\`.`;
   }
 
   const systemPrompt = `${PREAMBLE}
@@ -400,9 +417,14 @@ const answers = await ask<Record<string, string>>(
 
 - Output ONLY executable TypeScript, no commentary, no markdown fences.
 - Use top-level \`await\` directly — no IIFEs needed.
-- Wrap risky host calls in try/catch so one failure doesn't kill the cycle.
+- Do NOT wrap host calls in bare try/catch — let errors surface so the runtime can show them.
 - End each non-final cycle with \`await inspect(var1, var2, ...)\`.
-- End the final cycle with exactly one call to \`${flow.sink.name}\`.`;
+- End the final cycle with exactly one call to \`${flow.sink.name}\`.
+
+## delegate() vs fork()
+
+- \`fork(opts)\` — single-turn LLM call **in the current session context**. Returns a typed value directly. Use for data lookup, transformation, and analysis sub-tasks that don't need an agent persona.
+- \`delegate(spec)\` — invokes **another agent** (in this space or a different one) as a complete sub-session with its own agent instructions, flow, and knowledge. Returns \`{ output, status }\`. Use when the sub-task needs a different agent persona or a multi-step flow of its own.`;
 
   return { systemPrompt, ambientDts, activeStepName: step.name };
 }

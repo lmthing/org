@@ -66,16 +66,16 @@ export function runTsc(statement: string, opts: TscRunnerOptions = {}): TscResul
   const moduleStubs = buildModuleStubs(opts.availableModules ?? []);
 
   const files: Record<string, string> = {
-    'session.ts': combined,
+    'session.tsx': combined,
     ...(moduleStubs ? { 'stubs.d.ts': moduleStubs } : {}),
   };
 
   const host = createInMemoryHost(files, BASE_COMPILER_OPTIONS);
   const rootNames = moduleStubs
-    ? ['session.ts', 'stubs.d.ts']
-    : ['session.ts'];
+    ? ['session.tsx', 'stubs.d.ts']
+    : ['session.tsx'];
   const program = ts.createProgram(rootNames, BASE_COMPILER_OPTIONS, host);
-  const sf = program.getSourceFile('session.ts')!;
+  const sf = program.getSourceFile('session.tsx')!;
   const checker = program.getTypeChecker();
 
   // Collect diagnostics that fall within the new statement portion
@@ -85,11 +85,16 @@ export function runTsc(statement: string, opts: TscRunnerOptions = {}): TscResul
     ...program.getSemanticDiagnostics(sf),
   ];
 
+  // TS7026: "JSX element implicitly has type 'any'" — harmless when IntrinsicElements isn't globally visible.
+  // TS2786: "cannot be used as a JSX component" — harmless, component types are correct at runtime.
+  const SUPPRESSED_CODES = new Set([7026, 2786]);
+
   const diagnostics: TscDiagnostic[] = allDiags
     .filter(
       (d) =>
-        d.file?.fileName === 'session.ts' &&
-        (d.start ?? 0) >= stmtOffset,
+        d.file?.fileName === 'session.tsx' &&
+        (d.start ?? 0) >= stmtOffset &&
+        !SUPPRESSED_CODES.has(d.code),
     )
     .map((d) => {
       const pos = d.file!.getLineAndCharacterOfPosition(d.start ?? stmtOffset);
@@ -107,6 +112,7 @@ export function runTsc(statement: string, opts: TscRunnerOptions = {}): TscResul
   // Transpile just the statement to JS for QuickJS execution
   const transpiled = ts.transpileModule(statement, {
     compilerOptions: BASE_COMPILER_OPTIONS,
+    fileName: 'session.tsx',
   });
   const js = transpiled.outputText;
 

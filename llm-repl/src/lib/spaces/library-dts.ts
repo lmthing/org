@@ -55,14 +55,29 @@ declare function ask<T = string>(
   opts?: { timeout?: number; fallback?: T }
 ): Promise<T>;
 
+// ── JSX namespace (required for JSX syntax to type-check) ───────────────────
+declare namespace JSX {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type Element = any;
+  interface ElementAttributesProperty { props: object; }
+  interface IntrinsicElements { [tag: string]: Record<string, unknown> }
+}
+
 // Built-in UI components — descriptors rehydrated by Ink/React in the host.
-declare const TextInput: (props: { label?: string; placeholder?: string }) => unknown;
-declare const Select: (props: { options: string[]; label?: string; multi?: boolean }) => unknown;
-declare const Confirm: (props: { message: string }) => unknown;
-declare const Table: (props: { data: Record<string, unknown>[] }) => unknown;
-declare const ProgressBar: (props: { value: number; label?: string }) => unknown;
-declare const Markdown: (props: { children: string }) => unknown;
-declare const CodeBlock: (props: { language?: string; children: string }) => unknown;
+// All components accept a "name" prop (required by ask() to key form values).
+type ComponentProps = { name?: string; label?: string; placeholder?: string; defaultValue?: unknown; [k: string]: unknown };
+declare const TextInput: (props: ComponentProps) => JSX.Element;
+declare const TextArea: (props: ComponentProps) => JSX.Element;
+declare const NumberInput: (props: ComponentProps) => JSX.Element;
+declare const Slider: (props: ComponentProps & { min?: number; max?: number; step?: number }) => JSX.Element;
+declare const Checkbox: (props: ComponentProps) => JSX.Element;
+declare const Select: (props: ComponentProps & { options: Array<string | { label: string; value: string }> }) => JSX.Element;
+declare const MultiSelect: (props: ComponentProps & { options: Array<string | { label: string; value: string }> }) => JSX.Element;
+declare const DatePicker: (props: ComponentProps) => JSX.Element;
+declare const Table: (props: { data: Record<string, unknown>[] }) => JSX.Element;
+declare const ProgressBar: (props: { value: number; label?: string }) => JSX.Element;
+declare const Markdown: (props: { children: string }) => JSX.Element;
+declare const CodeBlock: (props: { language?: string; children: string }) => JSX.Element;
 
 // ── Budget & timing ─────────────────────────────────────────────────────────
 
