@@ -1,4 +1,4 @@
-import { createElement, useState } from 'react'
+import { createElement, useState, Fragment } from 'react'
 import type { SerializedJSX } from './types'
 
 const SAFE_ELEMENTS = new Set([
@@ -102,6 +102,87 @@ function BuiltinDatePicker({ name, label, defaultValue = '' }: Record<string, un
   )
 }
 
+// Inline spans within a line: **bold**, *italic*, `code`
+function renderInline(text: string, key: number): React.ReactNode[] {
+  const parts: React.ReactNode[] = []
+  const re = /(\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g
+  let last = 0
+  let m: RegExpExecArray | null
+  let idx = 0
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index))
+    if (m[2] != null) parts.push(createElement('strong', { key: `${key}-b${idx}` }, m[2]))
+    else if (m[3] != null) parts.push(createElement('em', { key: `${key}-i${idx}` }, m[3]))
+    else if (m[4] != null) parts.push(createElement('code', { key: `${key}-c${idx}`, style: { fontFamily: 'monospace', background: 'rgba(0,0,0,0.06)', padding: '0 3px', borderRadius: 3 } }, m[4]))
+    last = m.index + m[0].length
+    idx++
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return parts
+}
+
+function BuiltinMarkdown({ children }: Record<string, unknown>) {
+  const raw = Array.isArray(children) ? children.join('') : String(children ?? '')
+  const lines = raw.split('\n')
+  const nodes: React.ReactNode[] = []
+  let i = 0
+  let listItems: React.ReactNode[] = []
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      nodes.push(createElement('ul', { key: `ul-${i}`, style: { margin: '6px 0 6px 20px', padding: 0 } }, ...listItems))
+      listItems = []
+    }
+  }
+
+  while (i < lines.length) {
+    const line = lines[i]!
+    const hMatch = /^(#{1,4})\s+(.+)$/.exec(line)
+    if (hMatch) {
+      flushList()
+      const level = Math.min(hMatch[1]!.length, 4)
+      const tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4'
+      const sizes = { h1: '1.4em', h2: '1.2em', h3: '1.05em', h4: '1em' }
+      nodes.push(createElement(tag, { key: `h-${i}`, style: { margin: '10px 0 4px', fontSize: sizes[tag] } }, ...renderInline(hMatch[2]!, i)))
+      i++; continue
+    }
+    const listMatch = /^[-*]\s+(.+)$/.exec(line)
+    if (listMatch) {
+      listItems.push(createElement('li', { key: `li-${i}`, style: { margin: '2px 0' } }, ...renderInline(listMatch[1]!, i)))
+      i++; continue
+    }
+    if (/^---+$/.test(line.trim())) {
+      flushList()
+      nodes.push(createElement('hr', { key: `hr-${i}`, style: { border: 'none', borderTop: '1px solid var(--twv-border, #e0e0e0)', margin: '8px 0' } }))
+      i++; continue
+    }
+    if (line.trim() === '') {
+      flushList()
+      i++; continue
+    }
+    flushList()
+    nodes.push(createElement('p', { key: `p-${i}`, style: { margin: '4px 0' } }, ...renderInline(line, i)))
+    i++
+  }
+  flushList()
+  return createElement(Fragment, null, ...nodes)
+}
+
+function BuiltinTable({ data }: Record<string, unknown>) {
+  if (!Array.isArray(data) || data.length === 0) return createElement('div', null, '(empty table)')
+  const cols = Object.keys(data[0] as Record<string, unknown>)
+  return createElement('table', { style: { borderCollapse: 'collapse', width: '100%', fontSize: 13 } },
+    createElement('thead', null, createElement('tr', null, ...cols.map(c =>
+      createElement('th', { key: c, style: { padding: '4px 8px', borderBottom: '2px solid var(--twv-border, #e0e0e0)', textAlign: 'left' } }, c)
+    ))),
+    createElement('tbody', null, ...(data as Record<string, unknown>[]).map((row, ri) =>
+      createElement('tr', { key: ri }, ...cols.map(c =>
+        createElement('td', { key: c, style: { padding: '4px 8px', borderBottom: '1px solid var(--twv-border, #e0e0e0)' } }, String((row as Record<string, unknown>)[c] ?? ''))
+      ))
+    ))
+  )
+}
+
 const COMPONENT_REGISTRY: Record<string, React.ComponentType<any>> = {
   TextInput: BuiltinTextInput,
   TextArea: BuiltinTextArea,
@@ -111,6 +192,8 @@ const COMPONENT_REGISTRY: Record<string, React.ComponentType<any>> = {
   Select: BuiltinSelect,
   MultiSelect: BuiltinMultiSelect,
   DatePicker: BuiltinDatePicker,
+  Markdown: BuiltinMarkdown,
+  Table: BuiltinTable,
 }
 
 // ── Renderer ──

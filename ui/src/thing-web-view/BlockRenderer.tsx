@@ -433,8 +433,8 @@ function SpaceInfoBlock({ block }: { block: Extract<UIBlock, { type: 'space_info
   return (
     <div className="twv-agent-block twv-space-info-block" style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 12, opacity: 0.7, padding: '6px 12px' }}>
       <span>&#x25A6; space: <strong>{spaceName}</strong></span>
-      <span>agent: <strong>{block.agentSlug}</strong></span>
-      <span>flow: <strong>{block.flowSlug}</strong></span>
+      <span>agent: <strong>{block.agentSlug || '—'}</strong></span>
+      <span>flow: <strong>{block.flowSlug || '—'}</strong></span>
     </div>
   )
 }

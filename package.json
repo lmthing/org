@@ -1,0 +1,7 @@
+{
+  "name": "lmthing-org",
+  "private": true,
+  "scripts": {
+    "space": "llm-repl-cli/node_modules/.bin/tsx llm-repl-cli/src/cli/space-bin.ts"
+  }
+}
