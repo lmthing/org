@@ -70,6 +70,20 @@ function commentBlock(text: string): string {
     .join('\n');
 }
 
+function indentBlock(text: string, spaces: number): string {
+  const pad = ' '.repeat(spaces);
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `${pad}${line}` : ''))
+    .join('\n');
+}
+
+function treeBlock(label: string, body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) return commentBlock(`  ${label}`);
+  return commentBlock(`  ${label}\n${indentBlock(body, 2)}`);
+}
+
 /**
  * Run a self-correction eval case.
  * Presents the broken statement to the model, runs tsc, retries with error feedback.
@@ -124,13 +138,19 @@ async function runSelfCorrectionCase(
       null,
       2,
     );
-    const budgetBlock = commentBlock(
-      `__budget:\n{ tokensUsed: 0, tokensRemaining: 8000, inspectCount: ${attempt - 1}, nearingLimit: false }`,
+    const budgetBlock = treeBlock(
+      '__budget',
+      [
+        `tokensUsed: 0`,
+        `tokensRemaining: 8000`,
+        `inspectCount: ${attempt - 1}`,
+        `nearingLimit: false`,
+      ].join('\n'),
     );
-    const scopeBlock = commentBlock(`__scope:\n{}`);
-    const errorsBlock = commentBlock(`__errors:\n${errorsJson}`);
+    const scopeBlock = treeBlock('__scope', '');
+    const errorsBlock = treeBlock('__errors', errorsJson);
     const userTurn = [
-      `// ═══ inspect #${attempt} ═══`,
+      `Reconstruction (inspect #${attempt})`,
       ``,
       budgetBlock,
       scopeBlock,
@@ -161,12 +181,18 @@ async function runCleanPassCase(
 ): Promise<CaseResult> {
   const task = entry.description;
 
-  const budgetBlock = commentBlock(
-    `__budget:\n{ tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false }`,
+  const budgetBlock = treeBlock(
+    '__budget',
+    [
+      `tokensUsed: 0`,
+      `tokensRemaining: 8000`,
+      `inspectCount: 0`,
+      `nearingLimit: false`,
+    ].join('\n'),
   );
-  const scopeBlock = commentBlock(`__scope:\n{}`);
+  const scopeBlock = treeBlock('__scope', '');
   const userTurn = [
-    `// ═══ inspect #1 ═══`,
+    `Reconstruction (inspect #1)`,
     ``,
     budgetBlock,
     scopeBlock,

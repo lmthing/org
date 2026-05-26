@@ -178,22 +178,22 @@ describe('buildReconstruction', () => {
 
   it('contains inspect header', () => {
     const out = buildReconstruction(makeInput());
-    expect(out).toContain('// ═══ inspect #3 ═══');
+    expect(out).toContain('Reconstruction (inspect #3)');
   });
 
   it('contains __scope block', () => {
     const out = buildReconstruction(makeInput());
-    expect(out).toContain('// __scope:');
+    expect(out).toContain('  __scope');
   });
 
   it('contains __budget block', () => {
     const out = buildReconstruction(makeInput());
-    expect(out).toContain('// __budget:');
+    expect(out).toContain('  __budget');
   });
 
   it('hard-pinned budget is always present', () => {
     const out = buildReconstruction(makeInput({ tokenBudget: 10 }));
-    expect(out).toContain('// __budget:');
+    expect(out).toContain('  __budget');
   });
 
   it('respects decay tiers — early has longer source tail', () => {
@@ -201,8 +201,11 @@ describe('buildReconstruction', () => {
     const earlyOut = buildReconstruction(makeInput({ inspectNumber: 2, sessionTs: lines100, tokenBudget: 100000 }));
     const lateOut = buildReconstruction(makeInput({ inspectNumber: 20, sessionTs: lines100, tokenBudget: 100000 }));
     // Late should have fewer source lines shown
-    const earlySourceLines = earlyOut.split('\n').filter(l => l.startsWith('const v')).length;
-    const lateSourceLines = lateOut.split('\n').filter(l => l.startsWith('const v')).length;
+    const stripPrefix = (line: string) => line.replace(/^[│├└─\s]+/, '').trimStart();
+    const earlySourceLines = earlyOut.split('\n')
+      .filter((l) => stripPrefix(l).startsWith('const v')).length;
+    const lateSourceLines = lateOut.split('\n')
+      .filter((l) => stripPrefix(l).startsWith('const v')).length;
     expect(earlySourceLines).toBeGreaterThan(lateSourceLines);
   });
 });

@@ -1467,44 +1467,48 @@ Built from committed state when `inspect()` fires. Token budget = `contextWindow
 
 When `__scope` alone exceeds budget: auto-compact largest non-pinned vars, reduce depth to 1, omit vars not accessed in 3 cycles. Model sees: `// ⚠ Context pressure: {n} variables auto-compacted.`
 
-### Format (TypeScript — matches the model's read/write language)
+### Format (tree-style comments — readable, non-executable)
 
 ```typescript
-// ═══ inspect #3 ═══
-
-const __scope = {
-  config: /* pinned */ { apiUrl: "https://api.example.com", batchSize: 50 },
-  users: /* Promise<User[]> → resolved */ { length: 247 },
-  oldest: { id: 89, name: "Margaret Chen", age: 94, city: "Portland" },
-  userName: /* Promise<string> → pending */ undefined,
-  report: /* Promise<ForkResult> → resolved */ { status: "resolved", tokensUsed: 412 },
-};
-
-const __users = [
-  // expanded, depth 2
-  { id: 1, name: "Alice", age: 32, city: "Portland" },
-  { id: 2, name: "Bob", age: 28, city: "Seattle" },
-];
-
-const __errors: SessionError[] = [
-  {
-    kind: "type",
-    message: "Property 'nme' does not exist on 'User'",
-    statement: "users.map(u => u.nme)",
-    cycle: 2,
-    attempt: 1,
-  },
-];
-
-const __budget: Budget = {
-  /* ... */
-};
-const __tasks: Task[] = [
-  /* ... */
-];
-const __forks = { fork_g7h8: { status: "resolved", tokensUsed: 620 } };
-// ── git: HEAD inspect-3 (a1b2c3d), cp: before-transform ──
-/* ... source tail ... */
+// Reconstruction (inspect #3)
+//   __scope
+//     config: /* pinned */ { apiUrl: "https://api.example.com", batchSize: 50 },
+//     users: /* Promise<User[]> → resolved */ { length: 247 },
+//     oldest: { id: 89, name: "Margaret Chen", age: 94, city: "Portland" },
+//     userName: /* Promise<string> → pending */ undefined,
+//     report: /* Promise<ForkResult> → resolved */ { status: "resolved", tokensUsed: 412 },
+//
+//   __users
+//     // expanded, depth 2
+//     { id: 1, name: "Alice", age: 32, city: "Portland" },
+//     { id: 2, name: "Bob", age: 28, city: "Seattle" },
+//
+//   __errors
+//     {
+//       kind: "type",
+//       message: "Property 'nme' does not exist on 'User'",
+//       statement: "users.map(u => u.nme)",
+//       cycle: 2,
+//       attempt: 1,
+//     },
+//
+//   __budget
+//     tokensRemaining: 7900
+//     tokensUsed: 100
+//     inspectCount: 3
+//     nearingLimit: false
+//
+//   __tasks
+//     { id: "plan_search", label: "Plan search", status: "pending" }
+//
+//   __forks
+//     fork_g7h8: { status: "resolved", tokensUsed: 620 }
+//
+//   git
+//     HEAD inspect-3 (a1b2c3d), cp: before-transform
+//
+//   source tail
+//     /* ... */
 ```
 
 When a speculative type mismatch yield fires, the context also contains:

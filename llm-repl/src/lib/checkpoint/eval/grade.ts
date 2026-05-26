@@ -119,6 +119,20 @@ function commentBlock(text: string): string {
     .join('\n');
 }
 
+function indentBlock(text: string, spaces: number): string {
+  const pad = ' '.repeat(spaces);
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `${pad}${line}` : ''))
+    .join('\n');
+}
+
+function treeBlock(label: string, body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) return commentBlock(`  ${label}`);
+  return commentBlock(`  ${label}\n${indentBlock(body, 2)}`);
+}
+
 async function runCheckpointCase(
   entry: DatasetEntry,
   model: RunOptions['model'],
@@ -132,8 +146,9 @@ async function runCheckpointCase(
     .map(([k, v]) => `  ${k}: ${JSON.stringify(v)},`)
     .join('\n');
 
-  const scopeBlock = commentBlock(
-    scopeLines ? `__scope:\n{\n${scopeLines}\n}` : `__scope:\n{}`,
+  const scopeBlock = treeBlock(
+    '__scope',
+    scopeLines ? scopeLines.replace(/^\s{2}/gm, '') : '',
   );
 
   const userTurn = [

@@ -99,7 +99,7 @@ export interface SpawnResult {
   issues?: string[]
 }
 
-export { SpaceHandle } from './space.js';
+export type { SpaceHandle } from './space.js';
 
 // ── Loader Registry and Context ──
 

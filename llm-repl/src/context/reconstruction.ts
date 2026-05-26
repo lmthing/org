@@ -64,11 +64,48 @@ function approxTokens(s: string): number {
   return Math.ceil(s.length / 4);
 }
 
-function commentBlock(text: string): string {
+function normalizeBlock(text: string): string[] {
   return text
     .split('\n')
-    .map((line) => (line.length > 0 ? `// ${line}` : '//'))
-    .join('\n');
+    .map((line) => line.replace(/^\s{2}/, '').trimEnd())
+    .filter((line) => line.length > 0);
+}
+
+function stripCommentPrefix(text: string): string[] {
+  return text
+    .split('\n')
+    .map((line) => line.replace(/^\s*\/\/\s?/, '').trimEnd())
+    .filter((line) => line.length > 0);
+}
+
+function renderIndentedTree(lines: string[]): string[] {
+  return lines
+    .map((raw) => {
+      const indent = Math.floor(raw.match(/^\s*/)?.[0].length ?? 0);
+      const level = Math.floor(indent / 2);
+      const text = raw.trimStart();
+      if (text.length === 0) return '';
+      const prefix = '  '.repeat(level + 1);
+      return `${prefix}${text}`;
+    })
+    .filter((line) => line.length > 0);
+}
+
+interface TreeBlock {
+  label: string;
+  lines: string[];
+}
+
+function renderBlockLines(block: TreeBlock, isLast: boolean): string[] {
+  const branch = '  ';
+  const childPrefix = '  ';
+  const out: string[] = [`${branch}${block.label}`];
+  for (const line of block.lines) out.push(`${childPrefix}${line}`);
+  return out;
+}
+
+function renderBlock(block: TreeBlock, isLast: boolean): string {
+  return renderBlockLines(block, isLast).join('\n');
 }
 
 function decayTier(inspectCount: number): 'early' | 'mid' | 'late' {
@@ -150,74 +187,73 @@ export function buildReconstruction(input: ReconstructionInput): string {
   const tailLines = sourceTailLines(tier);
   let remainingTokens = input.tokenBudget;
 
-  const sections: string[] = [];
-
-  // ── Header (always) ──
-  sections.push(`// ═══ inspect #${input.inspectNumber} ═══`);
+  const blocks: TreeBlock[] = [];
 
   // ── Hard-pinned: __budget (always) ──
-  const budgetBlock = commentBlock([
-    `__budget:`,
-    `{`,
-    `  tokensRemaining: ${input.budgetTokensRemaining},`,
-    `  tokensUsed: ${input.budgetTokensUsed},`,
-    `  inputTokensUsed: ${input.budgetInputTokensUsed},`,
-    `  outputTokensUsed: ${input.budgetOutputTokensUsed},`,
-    `  costUsd: ${input.budgetCostUsd.toFixed(6)},`,
-    `  inspectCount: ${input.inspectNumber},`,
-    `  forksActive: ${input.forksActive},`,
-    `  forksCompleted: ${input.forksCompleted},`,
-    `  nearingLimit: ${input.nearingLimit},`,
-    `  context: {`,
-    `    used: ${input.budgetContext.used},`,
-    `    max: ${input.budgetContext.max},`,
-    `    scopeTokens: ${input.budgetContext.scopeTokens},`,
-    `    sourceTokens: ${input.budgetContext.sourceTokens},`,
-    `    wastedOnAbort: ${input.budgetContext.wastedOnAbort},`,
-    `  },`,
-    `  execution: {`,
-    `    statementsTotal: ${input.budgetExecution.statementsTotal},`,
-    `    statementsSinceInspect: ${input.budgetExecution.statementsSinceInspect},`,
-    `    heapMB: ${input.budgetExecution.heapMB},`,
-    `    heapMaxMB: ${input.budgetExecution.heapMaxMB},`,
-    `  },`,
-    `}`,
-  ].join('\n'));
-  sections.push(budgetBlock);
-  remainingTokens -= approxTokens(budgetBlock);
+  const budgetBlock: TreeBlock = {
+    label: '__budget',
+    lines: renderIndentedTree([
+      `tokensRemaining: ${input.budgetTokensRemaining}`,
+      `tokensUsed: ${input.budgetTokensUsed}`,
+      `inputTokensUsed: ${input.budgetInputTokensUsed}`,
+      `outputTokensUsed: ${input.budgetOutputTokensUsed}`,
+      `costUsd: ${input.budgetCostUsd.toFixed(6)}`,
+      `inspectCount: ${input.inspectNumber}`,
+      `forksActive: ${input.forksActive}`,
+      `forksCompleted: ${input.forksCompleted}`,
+      `nearingLimit: ${input.nearingLimit}`,
+      `context`,
+      `  used: ${input.budgetContext.used}`,
+      `  max: ${input.budgetContext.max}`,
+      `  scopeTokens: ${input.budgetContext.scopeTokens}`,
+      `  sourceTokens: ${input.budgetContext.sourceTokens}`,
+      `  wastedOnAbort: ${input.budgetContext.wastedOnAbort}`,
+      `execution`,
+      `  statementsTotal: ${input.budgetExecution.statementsTotal}`,
+      `  statementsSinceInspect: ${input.budgetExecution.statementsSinceInspect}`,
+      `  heapMB: ${input.budgetExecution.heapMB}`,
+      `  heapMaxMB: ${input.budgetExecution.heapMaxMB}`,
+    ]),
+  };
+  blocks.push(budgetBlock);
+  remainingTokens -= approxTokens(renderBlock(budgetBlock, false));
 
   // ── Hard-pinned: __tasklist_nudge ──
   if (input.tasklistNudge) {
-    sections.push(input.tasklistNudge);
-    remainingTokens -= approxTokens(input.tasklistNudge);
+    const block: TreeBlock = {
+      label: '__tasklist_nudge',
+      lines: renderIndentedTree(stripCommentPrefix(input.tasklistNudge)),
+    };
+    blocks.push(block);
+    remainingTokens -= approxTokens(renderBlock(block, false));
   }
 
   // ── Hard-pinned: __currentStep ──
   if (input.currentStep) {
-    const block = `// __currentStep: ${input.currentStep}`;
-    sections.push(block);
-    remainingTokens -= approxTokens(block);
+    const block: TreeBlock = { label: `__currentStep (comment): ${JSON.stringify(input.currentStep)}`, lines: [] };
+    blocks.push(block);
+    remainingTokens -= approxTokens(renderBlock(block, false));
   }
 
   // ── Hard-pinned: __speculative_nudge ──
   if (input.speculativeNudge) {
-    const block = `// __speculative_nudge: ${input.speculativeNudge}`;
-    sections.push(block);
-    remainingTokens -= approxTokens(block);
+    const block: TreeBlock = { label: `__speculative_nudge (comment): ${JSON.stringify(input.speculativeNudge)}`, lines: [] };
+    blocks.push(block);
+    remainingTokens -= approxTokens(renderBlock(block, false));
   }
 
   // ── Hard-pinned: __speculative_pending ──
   if (input.speculativePending) {
-    const block = `// __speculative_pending: ${input.speculativePending}`;
-    sections.push(block);
-    remainingTokens -= approxTokens(block);
+    const block: TreeBlock = { label: `__speculative_pending (comment): ${JSON.stringify(input.speculativePending)}`, lines: [] };
+    blocks.push(block);
+    remainingTokens -= approxTokens(renderBlock(block, false));
   }
 
   // ── Hard-pinned: __fork_asks ──
   if (input.forkAsks) {
-    const block = `// __fork_asks: ${input.forkAsks}`;
-    sections.push(block);
-    remainingTokens -= approxTokens(block);
+    const block: TreeBlock = { label: `__fork_asks (comment): ${JSON.stringify(input.forkAsks)}`, lines: [] };
+    blocks.push(block);
+    remainingTokens -= approxTokens(renderBlock(block, false));
   }
 
   // ── Priority 1: __scope ──
@@ -230,19 +266,32 @@ export function buildReconstruction(input: ReconstructionInput): string {
     lastAccessedCycle: input.lastAccessedCycle,
     inspectCount: input.inspectNumber,
   };
-  const scopeBody = serializeScopeBlock(input.scope, scopeOpts);
-  const scopeBlock = commentBlock(`__scope:\n{\n${scopeBody}\n}`);
-  if (remainingTokens > approxTokens(scopeBlock)) {
-    sections.push(scopeBlock);
-    remainingTokens -= approxTokens(scopeBlock);
+  const scopeBody = normalizeBlock(serializeScopeBlock(input.scope, scopeOpts));
+  const scopeBlock: TreeBlock = { label: '__scope', lines: renderIndentedTree(scopeBody) };
+  if (remainingTokens > approxTokens(renderBlock(scopeBlock, false))) {
+    blocks.push(scopeBlock);
+    remainingTokens -= approxTokens(renderBlock(scopeBlock, false));
   }
 
   // ── Priority 2: __errors ──
   if (input.errors.length > 0) {
-    const errBlock = commentBlock(`__errors:\n${formatErrors(input.errors, tier)}`);
-    if (remainingTokens > approxTokens(errBlock)) {
-      sections.push(errBlock);
-      remainingTokens -= approxTokens(errBlock);
+    const errLines: string[] = [];
+    const count = tier === 'early' ? 3 : tier === 'mid' ? 2 : 1;
+    const subset = input.errors.slice(-count);
+    for (let i = 0; i < subset.length; i++) {
+      const e = subset[i]!;
+      errLines.push(`[${i}]`);
+      errLines.push(`  kind: "${e.kind}"`);
+      errLines.push(`  message: ${JSON.stringify(e.message)}`);
+      if (e.statement) errLines.push(`  statement: ${JSON.stringify(e.statement)}`);
+      if (tier === 'early' && e.stack) errLines.push(`  stack: ${JSON.stringify(e.stack)}`);
+      if (tier !== 'late') errLines.push(`  cycle: ${e.cycle}`);
+      if (tier === 'early' && e.attempt !== undefined) errLines.push(`  attempt: ${e.attempt}`);
+    }
+    const errBlock: TreeBlock = { label: '__errors', lines: renderIndentedTree(errLines) };
+    if (remainingTokens > approxTokens(renderBlock(errBlock, false))) {
+      blocks.push(errBlock);
+      remainingTokens -= approxTokens(renderBlock(errBlock, false));
     }
   }
 
@@ -253,36 +302,44 @@ export function buildReconstruction(input: ReconstructionInput): string {
     const narrowed = arg.query ? applyQuery(arg.value, arg.query) : arg.value;
     const name = arg.name && arg.name.length > 0 ? arg.name : `arg${input.expandedArgs.indexOf(arg)}`;
     const repr = previewSerialize(narrowed, {}, name);
-    const block = commentBlock(`__${name}:\n${repr}`);
-    if (remainingTokens > approxTokens(block)) {
-      sections.push(block);
-      remainingTokens -= approxTokens(block);
+    const block: TreeBlock = {
+      label: `__${name} (inspect preview)`,
+      lines: renderIndentedTree(repr.split('\n')),
+    };
+    if (remainingTokens > approxTokens(renderBlock(block, false))) {
+      blocks.push(block);
+      remainingTokens -= approxTokens(renderBlock(block, false));
     }
   }
 
   // ── Priority 4: source tail ──
   if (input.sessionTs) {
     const tail = getSourceTail(input.sessionTs, tailLines);
-    const block = `/* source tail */\n${tail}`;
-    if (remainingTokens > approxTokens(block)) {
-      sections.push(block);
-      remainingTokens -= approxTokens(block);
+    const block: TreeBlock = {
+      label: 'sourceTail',
+      lines: renderIndentedTree(tail.split('\n').map((line) => line.trimEnd())),
+    };
+    if (remainingTokens > approxTokens(renderBlock(block, false))) {
+      blocks.push(block);
+      remainingTokens -= approxTokens(renderBlock(block, false));
     }
   }
 
   // ── Priority 5: __tasks ──
-  const taskBlock = commentBlock(`__tasks:\n${formatTasks(input.meta.tasks)}`);
-  if (remainingTokens > approxTokens(taskBlock)) {
-    sections.push(taskBlock);
-    remainingTokens -= approxTokens(taskBlock);
+  const taskLines = normalizeBlock(formatTasks(input.meta.tasks));
+  const taskBlock: TreeBlock = { label: '__tasks', lines: renderIndentedTree(taskLines) };
+  if (remainingTokens > approxTokens(renderBlock(taskBlock, false))) {
+    blocks.push(taskBlock);
+    remainingTokens -= approxTokens(renderBlock(taskBlock, false));
   }
 
   // ── Priority 6: __forks ──
   if (input.forkStates && Object.keys(input.forkStates).length > 0) {
-    const block = commentBlock(`__forks:\n${formatForks(input.forkStates)}`);
-    if (remainingTokens > approxTokens(block)) {
-      sections.push(block);
-      remainingTokens -= approxTokens(block);
+    const forkLines = normalizeBlock(formatForks(input.forkStates));
+    const block: TreeBlock = { label: '__forks', lines: renderIndentedTree(forkLines) };
+    if (remainingTokens > approxTokens(renderBlock(block, false))) {
+      blocks.push(block);
+      remainingTokens -= approxTokens(renderBlock(block, false));
     }
   }
 
@@ -295,10 +352,13 @@ export function buildReconstruction(input: ReconstructionInput): string {
           ? Math.ceil(input.displayEntries.length / 2)
           : Math.ceil(input.displayEntries.length / 4);
     const entries = input.displayEntries.slice(0, maxEntries);
-    const block = `// __display:\n${entries.map((e) => `//   ${e}`).join('\n')}`;
-    if (remainingTokens > approxTokens(block)) {
-      sections.push(block);
-      remainingTokens -= approxTokens(block);
+    const block: TreeBlock = {
+      label: '__display',
+      lines: renderIndentedTree(entries.map((e) => `- ${e}`)),
+    };
+    if (remainingTokens > approxTokens(renderBlock(block, false))) {
+      blocks.push(block);
+      remainingTokens -= approxTokens(renderBlock(block, false));
     }
   }
 
@@ -307,22 +367,34 @@ export function buildReconstruction(input: ReconstructionInput): string {
     const cpList = input.git.checkpoints.length > 0
       ? ` cp: ${input.git.checkpoints.join(', ')}`
       : '';
-    const gitLine = `// ── git: HEAD ${input.git.head} (${input.git.branch})${cpList} ──`;
-    if (remainingTokens > approxTokens(gitLine)) {
-      sections.push(gitLine);
-      remainingTokens -= approxTokens(gitLine);
+    const gitBlock: TreeBlock = {
+      label: 'git',
+      lines: renderIndentedTree([`HEAD ${input.git.head} (${input.git.branch})${cpList}`]),
+    };
+    if (remainingTokens > approxTokens(renderBlock(gitBlock, false))) {
+      blocks.push(gitBlock);
+      remainingTokens -= approxTokens(renderBlock(gitBlock, false));
     }
   }
 
   // ── Priority 9: type feedback ──
   if (input.typeFeedback) {
-    const block = `// __type_feedback: ${input.typeFeedback}`;
-    if (remainingTokens > approxTokens(block)) {
-      sections.push(block);
+    const block: TreeBlock = {
+      label: '__type_feedback',
+      lines: renderIndentedTree([input.typeFeedback]),
+    };
+    if (remainingTokens > approxTokens(renderBlock(block, false))) {
+      blocks.push(block);
     }
   }
 
-  return sections.join('\n\n');
+  const outLines: string[] = [`Reconstruction (inspect #${input.inspectNumber})`];
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    const isLast = i === blocks.length - 1;
+    outLines.push(...renderBlockLines(block, isLast));
+  }
+  return outLines.join('\n');
 }
 
 // Re-export for consumers

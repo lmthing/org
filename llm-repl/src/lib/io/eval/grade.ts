@@ -112,6 +112,20 @@ function commentBlock(text: string): string {
     .join('\n');
 }
 
+function indentBlock(text: string, spaces: number): string {
+  const pad = ' '.repeat(spaces);
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `${pad}${line}` : ''))
+    .join('\n');
+}
+
+function treeBlock(label: string, body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) return commentBlock(`  ${label}`);
+  return commentBlock(`  ${label}\n${indentBlock(body, 2)}`);
+}
+
 async function runIoCase(
   entry: DatasetEntry,
   model: RunOptions['model'],
@@ -119,12 +133,22 @@ async function runIoCase(
 ): Promise<CaseResult> {
   const task = entry.input['task'] as string ?? entry.description;
 
-  const budgetBlock = commentBlock(
-    `__budget:\n{ tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false, forksActive: 0, forksCompleted: 0, context: { used: 0, max: 8000, scopeTokens: 0, sourceTokens: 0, wastedOnAbort: 0 }, execution: { statementsTotal: 0, statementsSinceInspect: 0, heapMB: 0, heapMaxMB: 64 } }`,
+  const budgetBlock = treeBlock(
+    '__budget',
+    [
+      `tokensUsed: 0`,
+      `tokensRemaining: 8000`,
+      `inspectCount: 0`,
+      `nearingLimit: false`,
+      `forksActive: 0`,
+      `forksCompleted: 0`,
+      `context: { used: 0, max: 8000, scopeTokens: 0, sourceTokens: 0, wastedOnAbort: 0 }`,
+      `execution: { statementsTotal: 0, statementsSinceInspect: 0, heapMB: 0, heapMaxMB: 64 }`,
+    ].join('\n'),
   );
-  const scopeBlock = commentBlock(`__scope:\n{}`);
+  const scopeBlock = treeBlock('__scope', '');
   const userTurn = [
-    `// ═══ inspect #1 ═══`,
+    `Reconstruction (inspect #1)`,
     ``,
     budgetBlock,
     scopeBlock,

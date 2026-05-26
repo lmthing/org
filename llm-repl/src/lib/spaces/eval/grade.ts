@@ -111,6 +111,20 @@ function commentBlock(text: string): string {
     .join('\n');
 }
 
+function indentBlock(text: string, spaces: number): string {
+  const pad = ' '.repeat(spaces);
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `${pad}${line}` : ''))
+    .join('\n');
+}
+
+function treeBlock(label: string, body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) return commentBlock(`  ${label}`);
+  return commentBlock(`  ${label}\n${indentBlock(body, 2)}`);
+}
+
 async function runSpaceCase(
   entry: DatasetEntry,
   model: RunOptions['model'],
@@ -131,7 +145,7 @@ async function runSpaceCase(
   const contextLines: string[] = [`// ═══ spaces eval ═══`, ``];
 
   if (scopeLines) {
-    contextLines.push(commentBlock(`__scope:\n{\n${scopeLines}\n}`));
+    contextLines.push(treeBlock('__scope', scopeLines.replace(/^\s{2}/gm, '')));
   }
 
   if (spaceFilesSection) {
