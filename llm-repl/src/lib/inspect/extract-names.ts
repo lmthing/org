@@ -52,10 +52,9 @@ export function extractInspectArgNames(source: string): InspectCallNames | null 
     if (ts.isArrayLiteralExpression(arg) && arg.elements.length >= 1) {
       const first = arg.elements[0]!;
       if (ts.isIdentifier(first)) return first.text;
-      // could also be a property access like excerpts[0].text — name by source
-      return first.getText(sf);
+      return leafName(first) ?? '';
     }
-    return arg.getText(sf);
+    return leafName(arg) ?? '';
   });
 
   // Detect chained .options(...)
@@ -66,6 +65,27 @@ export function extractInspectArgNames(source: string): InspectCallNames | null 
     || false;
 
   return { names, hasOptions };
+}
+
+/**
+ * Derive a valid identifier name from an expression, or return null.
+ * - `a.b?.c`  → "c"   (rightmost property name)
+ * - `a as T`  → recurse on `a`
+ * - `await x` → recurse on `x`
+ * - `a[0]`    → "a"   (object name)
+ * - anything else → null (caller falls back to argN)
+ */
+function leafName(node: ts.Node): string | null {
+  if (ts.isIdentifier(node)) return node.text;
+  if (ts.isPropertyAccessExpression(node)) return node.name.text;
+  if (ts.isAsExpression(node)) return leafName(node.expression);
+  if (ts.isAwaitExpression(node)) return leafName(node.expression);
+  if (ts.isParenthesizedExpression(node)) return leafName(node.expression);
+  if (ts.isNonNullExpression(node)) return leafName(node.expression);
+  if (ts.isElementAccessExpression(node)) return leafName(node.expression);
+  // `a ?? b`, `a || b`, `a && b` — derive name from the left (primary) operand
+  if (ts.isBinaryExpression(node)) return leafName(node.left);
+  return null;
 }
 
 function unwrapOptions(node: ts.CallExpression): ts.CallExpression {
