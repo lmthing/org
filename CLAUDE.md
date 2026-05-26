@@ -190,7 +190,7 @@ Model aliases resolved from `LM_MODEL_{ALIAS}` env vars. `-R` suffix enables ext
 | `XS` | `azure:gpt-5.4-mini` | Classification, boolean decisions — cheapest |
 | `S`  | `azure:gpt-4.1-mini` | Fast code gen, short sessions |
 | `M`  | `azure:DeepSeek-V4-Flash` | Multi-step code, task graphs |
-| `L`  | `azure:gpt-5.4` | Full spec coverage, long sessions |
+| `L`  | `azure:DeepSeek-V4-Pro` | Full spec coverage, long sessions |
 | `M_R` | `azure:grok-4-1-fast-reasoning` | M + reasoning (recovery, replanning) |
 | `L_R` | `azure:Kimi-K2.6` | L + reasoning (deep planning, forks) |
 
@@ -205,6 +205,7 @@ Per-model prices are stored in `llm-repl-cli/prices.json` and loaded at session 
 | `gpt-5.4-mini` | $0.000250 | $0.002000 |
 | `gpt-4.1-mini` | $0.000400 | $0.001600 |
 | `DeepSeek-V4-Flash` | $0.000190 | $0.000510 |
+| `DeepSeek-V4-Pro` | $0.001740 | $0.003480 |
 | `gpt-5.4` | $0.001250 | $0.010000 |
 | `grok-4-1-fast-reasoning` | $0.000200 | $0.000500 |
 | `Kimi-K2.6` | $0.000950 | $0.004000 |

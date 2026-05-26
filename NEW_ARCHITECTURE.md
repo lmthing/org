@@ -2153,10 +2153,85 @@ For steps with genuine multi-cycle work (e.g. an `ask()` that needs a full user 
 | Space | Path | Flows | Status |
 |-------|------|-------|--------|
 | `research` | `spaces/research/` | `deep_research` | Validated end-to-end |
-| `cooking` | `spaces/cooking/` | `recipe_discovery`, `cook_recipe`, `meal_plan` | Validated (`recipe_discovery` end-to-end) |
+| `cooking` | `spaces/cooking/` | `recipe_discovery`, `cook_recipe`, `meal_plan` | Validated end-to-end (all 3 flows) |
 
 `spaces/` is covered by the `pnpm-workspace.yaml` glob but spaces are runtime directories, not packages — they have no `package.json`. The CLI loads them via `--space <path>`.
 
 **Cooking space agents:** `chef` (orchestrator), `recipe-researcher` (web discovery), `nutritionist` (nutrition analysis), `pantry-manager` (inventory).
 
 **Cooking space functions:** `scaleRecipe`, `parseIngredients`, `convertUnits`, `nutritionLookup` (USDA FoodData Central + Open Food Facts fallback).
+
+---
+
+### `__xxx` scope variable guard preamble
+
+**Problem:** LLM-generated code often references `__scopeVar ?? fallback` patterns, but QuickJS throws `ReferenceError` for completely undeclared identifiers — unlike Node.js's `undefined` for `var`-scoped globals. If a `__xxx` variable was never `inspect()`-ed into scope, `const x = __xxx ?? []` throws instead of falling back.
+
+**Fix:** Before each eval, `chat-session.ts` scans the transpiled JS for any `__`-prefixed identifiers that are referenced but not locally declared in the same code. For each such variable, it prepends a `var` guard:
+
+```typescript
+const referencedScopeVars = [...jsForEval.matchAll(/\b(__[a-zA-Z_][a-zA-Z0-9_]*)\b/g)].map(m => m[1]!);
+const declaredScopeVars = new Set([...jsForEval.matchAll(/\b(?:var|let|const)\s+(__[a-zA-Z_][a-zA-Z0-9_]*)\b/g)].map(m => m[1]!));
+const guardPreamble = [...new Set(referencedScopeVars)]
+  .filter(v => !declaredScopeVars.has(v))
+  .map(v => `if (typeof ${v} === 'undefined') var ${v};`)
+  .join('\n');
+if (guardPreamble) jsForEval = guardPreamble + '\n' + jsForEval;
+```
+
+This makes `__adjustments ?? []`, `__priorResults ?? {}`, etc. safe on first use without requiring a prior `inspect()` call.
+
+---
+
+### JSX type-checking fixes
+
+Three changes were needed for JSX in the QuickJS sandbox to type-check cleanly:
+
+1. **`JSX.Element = any` (not `unknown`)** in `lib/spaces/library-dts.ts`. With `unknown`, TypeScript raises TS2786 ("cannot be used as a JSX component") on every component because it can't verify assignability. `any` suppresses that while still providing the namespace for JSX syntax to be recognized.
+
+2. **Suppressed error codes** in `lib/typecheck/tsc-runner.ts`: `SUPPRESSED_CODES = new Set([7026, 2786])`. TS7026 ("JSX element implicitly has type 'any'") fires when `IntrinsicElements` isn't globally visible. TS2786 fires on component invocations. Both are harmless — the components are correct at runtime; the type surface just doesn't have the full React type graph inside QuickJS.
+
+3. **Virtual filename `session.tsx`** (not `session.ts`) so TypeScript recognizes JSX syntax at all. This was already in place but is the prerequisite for the above fixes to matter.
+
+---
+
+### `tasklist.start()` idempotency
+
+`TasklistEngine.start(id)` now returns early without error if the task is already `done`, `skipped`, or `in_progress`. This prevents double-`start()` errors when cycle 2 replays setup code from cycle 1 (a common LLM pattern where the model recaps prior work before continuing). The guard:
+
+```typescript
+const from = node.status;
+if (from === 'done' || from === 'skipped' || from === 'in_progress') return;
+```
+
+---
+
+### Flow step index from completed task IDs
+
+**Problem:** The original step index used raw cycle count (`cycle - 1`), so a flow with 3 cycles and 2 steps would show step 1 instructions on cycle 3 even if the first step's tasks were already complete.
+
+**Fix:** Step index is now derived from `getCompletedTaskIds()` on the `TasklistEngine`. The flow step advances when all tasks for a step have been finished, regardless of how many cycles it took. This allows multi-cycle steps (with `maxCycles` set in frontmatter) to stay on the correct step instructions.
+
+---
+
+### `Space.current().loadKnowledge()` — proxy stub
+
+The `SpaceHandle` DTS declares `loadKnowledge(domain, field, option?)`, but the QuickJS-side Space proxy in `chat-session.ts` didn't implement it. LLM code calling `Space.current().loadKnowledge(...)` threw `TypeError: not a function`.
+
+Fix: added `loadKnowledge: function() { return undefined; }` to the proxy object. The method is a no-op that silently succeeds — the LLM can call it for its semantic value in the code without needing the host to actually expand knowledge (the space's preloaded knowledge is already in the system prompt).
+
+---
+
+### `delegate()` global
+
+`delegate(spec)` runs a full sub-session in another space or with a different agent and awaits its terminal sink. Implementation in `chat-session.ts` via `__delegate` host function backed by `runSpaceSession`:
+
+```typescript
+injectGlobal(ctx, "__delegate", async (specArg: unknown) => {
+  const spec = specArg as DelegateSpec;
+  const result = await runSpaceSession({ spaceDir: spec.space ?? spaceDir, agentSlug: spec.agent, flowSlug: spec.flow, task: spec.task, modelAlias: spec.modelAlias, maxCycles: spec.maxCycles });
+  return result; // { output, sessionDir, status }
+});
+```
+
+The QuickJS-side binding is a thin wrapper: `async function delegate(spec) { return await __delegate(spec); }`. The sub-session runs synchronously from the calling session's point of view — `await delegate(...)` blocks until the sub-session terminates. The sub-session has its own QuickJS sandbox, git repo, and scope; only the `output` value flows back.

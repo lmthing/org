@@ -2,7 +2,7 @@
 
 ## Status
 
-**All phases (L0–L13) are implemented.** `llm-repl/` and `llm-repl-cli/` are fully built and running. The `repl/` and `cli/` legacy packages remain in the workspace pending consumer migration (Phase 13 cutover). `spaces/` is live at the repo root; `research` (deep_research flow) and `cooking` (recipe_discovery, cook_recipe, meal_plan flows) are both validated end-to-end.
+**All phases (L0–L13) are implemented.** `llm-repl/` and `llm-repl-cli/` are fully built and running. The `repl/` and `cli/` legacy packages remain in the workspace pending consumer migration (Phase 13 cutover). `spaces/` is live at the repo root; `research` (deep_research flow) and `cooking` (all three flows: `recipe_discovery`, `cook_recipe`, `meal_plan`) are both validated end-to-end.
 
 ### Implementation divergences from spec
 
@@ -12,7 +12,19 @@ Two layers have partial stubs with working overrides in `session.ts`. Both are i
 `ForkEngine.registerGlobals()` wires the Promise infrastructure but the child execution loop is not implemented. `session.ts` overrides the `fork` global with a real `streamText` call that executes the instruction in a single LLM turn and resolves immediately. The `[model:ALIAS]` prefix in the instruction string selects the model tier. Calls are sequential (not truly parallel). Full spec behaviour (concurrent child QuickJS sessions on git branches) is needed when fork sub-tasks require multi-cycle completions of their own. See NEW_ARCHITECTURE.md §"Implementation Decisions / fork()" for the full decision log.
 
 **L10 `Space` global — shim in session.ts, not `createDynamicSpaceLoader`.**
-`createDynamicSpaceLoader` throws `"not implemented — Phase 11 (L10)"`. `session.ts` injects a working shim via `ctx.evalCode` + two backing host functions (`__Space_write`, `__Space_delegate`). `Space.load(name)` resolves space names via a hardcoded map (`research`, `cooking`); add new entries to `knownSpaceDirs` in `session.ts` when adding spaces. `Space.current().write(path, content)` writes to `session-{id}/space/files/`. Full spec contract (dynamic `.d.ts` overlay refresh after inspect, `SpaceHandle` lazy-load, class deletion cascade) is deferred. See NEW_ARCHITECTURE.md §"Implementation Decisions / Space global" for details.
+`createDynamicSpaceLoader` throws `"not implemented — Phase 11 (L10)"`. `session.ts` injects a working shim via `ctx.evalCode` + two backing host functions (`__Space_write`, `__Space_delegate`). `Space.load(name)` resolves space names via a hardcoded map (`research`, `cooking`); add new entries to `knownSpaceDirs` in `session.ts` when adding spaces. `Space.current().write(path, content)` writes to `session-{id}/space/files/`. `Space.current().loadKnowledge(domain, field, option?)` is present as a no-op stub in the proxy (silently returns `undefined`). Full spec contract (dynamic `.d.ts` overlay refresh after inspect, `SpaceHandle` lazy-load, class deletion cascade) is deferred. See NEW_ARCHITECTURE.md §"Implementation Decisions / Space global" for details.
+
+**`__xxx` scope variable guard preamble.**
+Before each QuickJS eval, `chat-session.ts` scans the transpiled JS for any `__`-prefixed identifiers referenced but not locally declared. For each, it prepends `if (typeof __xxx === 'undefined') var __xxx;`. This prevents `ReferenceError` when LLM code writes `__priorResult ?? fallback` for a variable that was never `inspect()`-ed into scope. See NEW_ARCHITECTURE.md §"Implementation Decisions / `__xxx` scope variable guard preamble".
+
+**JSX type-checking: `JSX.Element = any`, TS7026 + TS2786 suppressed.**
+`lib/spaces/library-dts.ts` uses `type Element = any` (not `unknown`) in the JSX namespace so component invocations type-check without the full React type graph. `lib/typecheck/tsc-runner.ts` suppresses TS7026 and TS2786 which fire harmlessly when `IntrinsicElements` isn't globally visible. See NEW_ARCHITECTURE.md §"Implementation Decisions / JSX type-checking fixes".
+
+**`tasklist.start()` is idempotent.**
+Returns early without error if the task is already `done`, `skipped`, or `in_progress`. Prevents double-start errors when LLM recap code re-calls `start()` in a later cycle.
+
+**Flow step index from completed task IDs.**
+Step index is derived from `getCompletedTaskIds()` on `TasklistEngine` rather than raw cycle count. This keeps the correct step instructions visible in multi-cycle steps.
 
 ---
 
@@ -345,7 +357,7 @@ For flows requiring more cycles than steps (user interaction, long processing), 
 | Space | Path | Flows | Notes |
 |-------|------|-------|-------|
 | `research` | `spaces/research/` | `deep_research` | Validated end-to-end |
-| `cooking` | `spaces/cooking/` | `recipe_discovery`, `cook_recipe`, `meal_plan` | recipe_discovery validated end-to-end |
+| `cooking` | `spaces/cooking/` | `recipe_discovery`, `cook_recipe`, `meal_plan` | All 3 flows validated end-to-end |
 
 Add new spaces under `spaces/<name>/`. No `package.json` needed — the CLI loads them via `--space <path>`. Register new space names in the `knownSpaceDirs` map in `session.ts` for `Space.load()` cross-space delegation to work.
 
