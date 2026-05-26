@@ -105,6 +105,13 @@ function stripFences(text: string): string {
     .trim();
 }
 
+function commentBlock(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `// ${line}` : '//'))
+    .join('\n');
+}
+
 async function runIoCase(
   entry: DatasetEntry,
   model: RunOptions['model'],
@@ -112,11 +119,15 @@ async function runIoCase(
 ): Promise<CaseResult> {
   const task = entry.input['task'] as string ?? entry.description;
 
+  const budgetBlock = commentBlock(
+    `__budget:\n{ tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false, forksActive: 0, forksCompleted: 0, context: { used: 0, max: 8000, scopeTokens: 0, sourceTokens: 0, wastedOnAbort: 0 }, execution: { statementsTotal: 0, statementsSinceInspect: 0, heapMB: 0, heapMaxMB: 64 } }`,
+  );
+  const scopeBlock = commentBlock(`__scope:\n{}`);
   const userTurn = [
     `// ═══ inspect #1 ═══`,
     ``,
-    `const __budget: Budget = { tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false, forksActive: 0, forksCompleted: 0, context: { used: 0, max: 8000, scopeTokens: 0, sourceTokens: 0, wastedOnAbort: 0 }, execution: { statementsTotal: 0, statementsSinceInspect: 0, heapMB: 0, heapMaxMB: 64 } };`,
-    `const __scope = {};`,
+    budgetBlock,
+    scopeBlock,
     `// User: ${task}`,
   ].join('\n');
 

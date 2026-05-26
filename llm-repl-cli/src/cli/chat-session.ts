@@ -55,6 +55,9 @@ import {
   buildAgentPrompt,
   buildUserPrompt,
   parseFrontmatter,
+  registerActiveSpace,
+  setSessionContext,
+  loadSpace,
 } from '@lmthing/llm-repl/lib/spaces/index';
 import type { LoadedDiskSpace } from '@lmthing/llm-repl/lib/spaces/disk';
 import { runTsc } from '@lmthing/llm-repl/lib/typecheck/index';
@@ -195,6 +198,275 @@ async function importSpaceModule(spaceDir: string): Promise<SpaceModule> {
   return mod as SpaceModule;
 }
 
+const standardBuiltins = new Set([
+  'globalThis', 'global', 'console', 'process', 'Buffer', 'setTimeout', 'clearTimeout',
+  'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'jsx', 'display',
+  'ask', 'fetch', 'fs', 'require', 'budget', 'tasklist', 'inspect', 'checkpoint',
+  'rollback', 'pin', 'compact', 'expand', 'resolve', 'Space', 'actions', 'delegate',
+  'Object', 'Function', 'Array', 'Number', 'parseFloat', 'parseInt', 'Infinity', 'NaN',
+  'undefined', 'Boolean', 'String', 'Symbol', 'Date', 'RegExp', 'Error', 'EvalError',
+  'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError', 'JSON',
+  'Math', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Proxy', 'Reflect', 'Promise',
+  'Symbol', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array',
+  'Int32Array', 'Uint32Array', 'Float32Array', 'Float64Array', 'BigInt64Array',
+  'BigUint64Array', 'Atomics', 'DataView', 'SharedArrayBuffer', 'WebAssembly',
+  '__jsxRuntime', '__inspectSetOptions', '__InspectBuilder'
+]);
+
+function getSandboxScope(ctx: any, excludeKeys: string[] = []): Record<string, unknown> {
+  const keysHandle = ctx.evalCode('Object.keys(globalThis)');
+  const keys = ctx.dump(keysHandle) as string[];
+  keysHandle.dispose();
+
+  const scope: Record<string, unknown> = {};
+  const excludeSet = new Set(excludeKeys);
+
+  for (const key of keys) {
+    if (standardBuiltins.has(key) || excludeSet.has(key)) {
+      continue;
+    }
+    const propHandle = ctx.getProp(ctx.global, key);
+    try {
+      scope[key] = marshalToHost(ctx, propHandle);
+    } catch {
+      // ignore
+    } finally {
+      propHandle.dispose();
+    }
+  }
+  return scope;
+}
+
+async function runChildForkVM(opts: {
+  forkId: string;
+  instruction: string;
+  tokenCap: number;
+  seededScope: Record<string, unknown>;
+  baseDir: string;
+  sessionDir: string;
+  trace: TraceWriter;
+  budgetTracker: BudgetTracker;
+  forkEngine: ForkEngine;
+}) {
+  const { forkId, instruction, tokenCap, seededScope, baseDir, sessionDir, trace, budgetTracker, forkEngine } = opts;
+
+  // 1. Spawning child Sandbox context
+  const childCtx = (await createSandboxSession({
+    maxHeapMB: 64,
+    maxStackSizeMb: 4,
+    maxStatementMs: 60000,
+  })).ctx;
+
+  try {
+    // 2. Seed context scope with variables
+    for (const [key, value] of Object.entries(seededScope)) {
+      try {
+        const handle = marshalToQuickJS(childCtx, value);
+        childCtx.setProp(childCtx.global, key, handle);
+        handle.dispose();
+      } catch {
+        // ignore
+      }
+    }
+
+    // Register libraries on child
+    new MemoryEngine({ trace, budgetTracker }).registerGlobals(childCtx);
+    const tasklistEngine = new TasklistEngine({
+      trace,
+      evalFilter: (_filter: string, el: unknown) => evalFilter({ type: "literal", value: true }, el),
+    });
+    tasklistEngine.registerGlobals(childCtx);
+    
+    const moduleRegistry = new ModuleRegistry(childCtx);
+    new IoEngine({
+      trace,
+      fetch: { allowedDomains: ["*"], maxResponseBytes: 5 * 1024 * 1024, defaultTimeoutMs: 30000 },
+      fs: { sandboxRoot: sessionDir, maxFileSizeBytes: 10 * 1024 * 1024 },
+      moduleRegistry,
+    }).registerGlobals(childCtx);
+
+    forkEngine.registerGlobals(childCtx, true);
+
+    // Override ask inside child to route to parent
+    injectGlobal(childCtx, 'ask', async (uiHandle: unknown) => {
+      const ui = String(uiHandle ?? '');
+      const answer = await forkEngine.registerForkAsk(forkId, ui);
+      return answer;
+    });
+
+    // Override resolve inside child to omit the forkId parameter
+    injectGlobal(childCtx, 'resolve', (valueArg: unknown) => {
+      return forkEngine.resolve(forkId, valueArg);
+    });
+
+    // Setup Space inside child VM via host bridge functions
+    injectGlobal(childCtx, '__space_load', (nameArg: unknown) => {
+      return loadSpace(String(nameArg ?? ''));
+    });
+    injectGlobal(childCtx, '__space_current', () => {
+      return loadSpace(basename(sessionDir));
+    });
+    childCtx.evalCode(`
+      var Space = {
+        load: function(name) { return __space_load(name); },
+        current: function() { return __space_current(); }
+      };
+    `);
+
+    // Also register standard JSX runtime if needed
+    injectJsxRuntime(childCtx);
+
+    // 3. Child agent execution loop
+    const modelMatch = instruction.match(/^\[model:(\w+)\]\s*/);
+    const forkAlias = (modelMatch?.[1] as ModelAlias) ?? 'XS';
+    const cleanInstruction = instruction.replace(/^\[model:\w+\]\s*/, '');
+    const forkModel = await resolveLLM(forkAlias);
+
+    const systemPrompt = `You are a parallel child agent worker executing a sub-task.
+Your task instruction is: "${cleanInstruction}"
+You must write TypeScript code that solves this task.
+Return ONLY valid, executable TypeScript code. No prose, no markdown fences.
+Always end your execution with inspect() or resolve(result).
+If you have completed the task and got the final result, call resolve(result) to finish.
+`;
+
+    let childCycle = 1;
+    let childReconstruction: string | undefined = undefined;
+    let lastChildCode = '';
+
+    while (true) {
+      // Check budget
+      const states = forkEngine.getForkStates();
+      const state = states.get(forkId);
+      if (!state || state.status === 'resolved' || state.status === 'rejected') {
+        break;
+      }
+
+      const userPrompt = buildUserPrompt({
+        cycle: childCycle,
+        task: childReconstruction ? 'Please continue task.' : cleanInstruction,
+        ...(childReconstruction ? { reconstruction: childReconstruction } : {}),
+      });
+
+      const stream = streamText({
+        model: forkModel,
+        system: systemPrompt,
+        prompt: userPrompt,
+      });
+
+      let assistantText = '';
+      for await (const chunk of stream.textStream) {
+        assistantText += chunk;
+      }
+
+      // Record tokens
+      try {
+        const usage = await stream.usage;
+        forkEngine.recordForkTokens(forkId, (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0));
+      } catch {
+        // ignore
+      }
+
+      // Run typecheck and execute
+      let codeToRun = assistantText.trim().replace(/^```(?:json|ts|tsx|js)?\n?|\n?```$/g, '').trim();
+      let tscResult = codeToRun.length > 0 ? runTsc(codeToRun, { sessionContext: '', availableModules: ['react', 'react/jsx-runtime'] }) : { diagnostics: [], js: '' };
+
+      // Strip ES module import statements
+      let jsForEval = tscResult.js.replace(/^import\s+.*?(?:;|$)/gm, '').trimStart();
+      if (jsForEval.includes('_jsx') || jsForEval.includes('_jsxs')) {
+        jsForEval = 'const { jsx: _jsx, jsxs: _jsxs, Fragment: _Fragment } = globalThis.__jsxRuntime;\n' + jsForEval;
+      }
+      const wrapped = `(async () => {\n${jsForEval}\n})();`;
+
+      let childInspectCall: any = null;
+      registerInspectGlobals(childCtx, {
+        budget: budgetTracker,
+        trace,
+        onInspect: (call) => {
+          childInspectCall = call;
+        },
+      });
+
+      try {
+        const result = await childCtx.evalCodeAsync(wrapped);
+        childCtx.runtime.executePendingJobs();
+
+        if (result.error) {
+          const errVal = childCtx.dump(result.error) as any;
+          result.error.dispose();
+          const name = errVal?.name ?? 'Error';
+          const msg = errVal?.message ?? String(errVal);
+
+          if (name.includes('__fork_resolved') || msg.includes('__fork_resolved')) {
+            // Clean resolve!
+            break;
+          }
+          // Log other errors
+          trace.write({ type: 'fork_error', forkId, error: { type: name, message: msg } });
+        } else {
+          result.value.dispose();
+        }
+      } catch (e: any) {
+        if (e.message?.includes('__fork_resolved')) {
+          break;
+        }
+        trace.write({ type: 'fork_error', forkId, error: { type: 'HostError', message: e.message } });
+      }
+
+      // Check if child yields via inspect()
+      if (childInspectCall) {
+        const budgetSnapshot = budgetTracker.snapshot();
+        const inspectArgs = childInspectCall.args.map((a: any, i: number) => ({
+          name: a.name || `arg${i}`,
+          value: a.value,
+        }));
+
+        childReconstruction = buildReconstruction({
+          inspectNumber: childCycle,
+          sessionTs: lastChildCode,
+          scope: getSandboxScope(childCtx),
+          meta: {
+            budgetTokensUsed: budgetSnapshot.tokensUsed,
+            budgetTokensRemaining: budgetSnapshot.tokensRemaining,
+            inspectCount: childCycle,
+            annotationGraceUsed: false,
+            pins: {},
+            compactions: {},
+            errors: [],
+            tasks: [],
+          },
+          pins: new Set(),
+          compactions: new Map(),
+          promiseStates: new Map(),
+          lastAccessedCycle: new Map(),
+          errors: [],
+          expandedArgs: inspectArgs,
+          git: { head: 'HEAD', checkpoints: [], branch: `fork/${forkId}` },
+          budgetTokensRemaining: budgetSnapshot.tokensRemaining,
+          budgetTokensUsed: budgetSnapshot.tokensUsed,
+          budgetInputTokensUsed: budgetSnapshot.inputTokensUsed,
+          budgetOutputTokensUsed: budgetSnapshot.outputTokensUsed,
+          budgetCostUsd: budgetSnapshot.costUsd,
+          budgetContext: budgetSnapshot.context,
+          budgetExecution: budgetSnapshot.execution,
+          forksActive: 0,
+          forksCompleted: 0,
+          nearingLimit: budgetSnapshot.nearingLimit,
+          tokenBudget: tokenCap,
+        });
+
+        childCycle++;
+        lastChildCode = codeToRun;
+      } else {
+        // If it didn't call inspect() or resolve(), wait a bit and break or retry
+        break;
+      }
+    }
+  } finally {
+    childCtx.dispose();
+  }
+}
+
 // ── SpaceChatSession ──────────────────────────────────────────────────────────
 
 export class SpaceChatSession extends EventEmitter {
@@ -230,19 +502,19 @@ export class SpaceChatSession extends EventEmitter {
   private _pendingKnowledge: Record<string, string> | undefined;
   private _knowledgeFormId: string | null = null;
 
+  private readonly _baseDir: string;
+
   constructor(private readonly _opts: ChatSessionOptions) {
     super();
     this.sessionId = _opts.sessionId ?? randomUUID();
-    const baseDir = _opts.baseDir ?? join(tmpdir(), 'llm-repl-sessions');
-    this.sessionDir = join(baseDir, `session-${this.sessionId}`);
+    this._baseDir = _opts.baseDir ?? join(tmpdir(), 'llm-repl-sessions');
+    this.sessionDir = join(this._baseDir, `session-${this.sessionId}`);
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
   async init(): Promise<void> {
     await mkdir(this.sessionDir, { recursive: true });
-
-    const baseDir = this._opts.baseDir ?? join(tmpdir(), 'llm-repl-sessions');
 
     this._trace = new EventingTraceWriter(
       join(this.sessionDir, 'trace.jsonl'),
@@ -252,7 +524,7 @@ export class SpaceChatSession extends EventEmitter {
       },
     );
 
-    this._assembly = new SessionAssembly(baseDir, this.sessionId);
+    this._assembly = new SessionAssembly(this._baseDir, this.sessionId);
     await this._assembly.init();
 
     // ── Load space/agent/flow ──
@@ -367,48 +639,27 @@ export class SpaceChatSession extends EventEmitter {
       moduleRegistry,
     }).registerGlobals(ctx);
 
-    new ForkEngine({
+    let forkEngine: ForkEngine;
+    forkEngine = new ForkEngine({
       assembly: this._assembly,
       budgetTracker: this._budgetTracker,
       trace: this._trace,
-      seedChildScope: (_exclude: string[]) => ({}),
+      seedChildScope: (exclude: string[]) => getSandboxScope(ctx, exclude),
       onBudgetWarning: (_forkId: string, _remaining: number) => {},
-    }).registerGlobals(ctx);
-
-    // Override fork() with real single-turn LLM executor
-    injectGlobal(ctx, 'fork', async (optsArg: unknown) => {
-      const forkOpts = optsArg as { instruction?: string; tokenBudget?: number };
-      const instruction = forkOpts?.instruction ?? '';
-      const modelMatch = instruction.match(/^\[model:(\w+)\]\s*/);
-      const forkAlias = (modelMatch?.[1] as ModelAlias) ?? 'XS';
-      const cleanInstruction = instruction.replace(/^\[model:\w+\]\s*/, '');
-      process.stderr.write(`  [fork] starting alias=${forkAlias} budget=${forkOpts?.tokenBudget}\n`);
-      const forkModel = await resolveLLM(forkAlias);
-      const forkStream = streamText({
-        model: forkModel,
-        system: 'You are executing a sub-task. Return ONLY valid JSON. No prose, no markdown fences.',
-        prompt: cleanInstruction,
-        maxOutputTokens: Math.min(forkOpts?.tokenBudget ?? 2000, 4000),
-      });
-      let text = '';
-      for await (const chunk of forkStream.textStream) text += chunk;
-      process.stderr.write(`  [fork] completed alias=${forkAlias} chars=${text.length}\n`);
-      try {
-        const usage = await forkStream.usage;
-        this._budgetTracker.recordApiUsage(usage.inputTokens ?? 0, usage.outputTokens ?? 0);
-      } catch {
-        /* ignore */
-      }
-      const cleaned = text.trim().replace(/^```(?:json)?\n?|\n?```$/g, '').trim();
-      let value: unknown;
-      try {
-        value = JSON.parse(cleaned);
-      } catch {
-        value = cleaned || null;
-      }
-      this._trace.write({ type: 'fork_resolve', alias: forkAlias, chars: cleanInstruction.length });
-      return value;
+      onForkSpawn: (forkId, instruction, tokenCap, seededScope) =>
+        runChildForkVM({
+          forkId,
+          instruction,
+          tokenCap,
+          seededScope,
+          baseDir: this._baseDir,
+          sessionDir: this.sessionDir,
+          trace: this._trace,
+          budgetTracker: this._budgetTracker,
+          forkEngine,
+        }),
     });
+    forkEngine.registerGlobals(ctx);
 
     new SnapshotEngine({
       assembly: this._assembly,
@@ -500,90 +751,29 @@ export class SpaceChatSession extends EventEmitter {
       injectGlobal(ctx, name, fn);
     }
 
-    // Space file writer shim
-    const spaceFilesDir = join(this.sessionDir, 'space', 'files');
-    await mkdir(spaceFilesDir, { recursive: true });
+    // Setup Space system context and register active space
+    setSessionContext(this.sessionDir, this._trace, this._baseDir);
+    registerActiveSpace(loadedSpace.name, loadedSpace.handle);
 
-    injectGlobal(ctx, '__Space_write', async (pathArg: unknown, contentArg: unknown) => {
-      const rel = String(pathArg ?? '');
-      const content = String(contentArg ?? '');
-      const abs = join(spaceFilesDir, rel);
-      await mkdir(dirname(abs), { recursive: true });
-      await writeFile(abs, content, 'utf-8');
-      this._trace.write({ type: 'space_file_write', method: 'write', path: abs });
-      return undefined;
+    // Inject standard Space namespace global via host bridge functions
+    injectGlobal(ctx, '__space_load', (nameArg: unknown) => {
+      const spaceName = String(nameArg ?? '');
+      return loadSpace(spaceName);
     });
-
-    injectGlobal(ctx, '__Space_read', (pathArg: unknown) => {
-      const rel = String(pathArg ?? '');
-      const abs = join(spaceFilesDir, rel);
-      try { return readFileSync(abs, 'utf-8'); } catch { return null; }
+    injectGlobal(ctx, '__space_current', () => {
+      return loadSpace(basename(this.sessionDir));
     });
-
-    injectGlobal(ctx, '__Space_list', (dirArg: unknown) => {
-      const rel = String(dirArg ?? '');
-      const abs = join(spaceFilesDir, rel);
-      try { return readdirSync(abs); } catch { return []; }
-    });
-
-    injectGlobal(ctx, '__Space_delegate', async (spaceNameArg: unknown, agentArg: unknown, methodArg: unknown, instructionArg: unknown) => {
-      const spaceName = String(spaceNameArg ?? '');
-      const agentSlugArg = String(agentArg ?? '');
-      const instruction = String(instructionArg ?? '');
-      const currentSpaceName = basename(spaceDir);
-      const knownSpaceDirs: Record<string, string> = {
-        current: spaceDir,
-        [currentSpaceName]: spaceDir,
-        research: join(baseDir, '..', 'spaces', 'research'),
-      };
-      const subSpaceDir = knownSpaceDirs[spaceName] ?? join(dirname(spaceDir), spaceName);
-      this._trace.write({ type: 'space_delegate', space: spaceName, agent: agentSlugArg, method: String(methodArg), instructionLen: instruction.length });
-      const sub = await runSpaceSession({
-        spaceDir: subSpaceDir,
-        task: instruction,
-        agent: agentSlugArg,
-        modelAlias: this._opts.modelAlias,
-        maxCycles: 4,
-        baseDir,
-        verbose: false,
-      });
-      return { output: sub.output, status: sub.manifest.finalStatus };
-    });
-
     ctx.evalCode(`
-      var Space = (function() {
-        function _makeProxy(spaceName) {
-          return {
-            loadAgent: function(slug) { return this; },
-            agents: new Proxy({}, {
-              get: function(_, agentSlug) {
-                return new Proxy({}, {
-                  get: function(__, method) {
-                    return function(opts, instruction) {
-                      var instr = typeof instruction === 'string' ? instruction : (typeof opts === 'string' ? opts : JSON.stringify(opts));
-                      return __Space_delegate(spaceName, agentSlug, method, instr);
-                    };
-                  }
-                });
-              }
-            }),
-            write: function(path, content) { return __Space_write(path, content); },
-            read: function(path) { return __Space_read(path); },
-            list: function(dir) { return __Space_list(dir || ''); },
-            loadKnowledge: function() { return undefined; }
-          };
-        }
-        return {
-          load: function(name) { return _makeProxy(name); },
-          current: function() { return _makeProxy('current'); }
-        };
-      })();
+      var Space = {
+        load: function(name) { return __space_load(name); },
+        current: function() { return __space_current(); }
+      };
     `);
 
     // delegate() — run another agent as a complete sub-session
     const currentSpaceDir = spaceDir;
     const sessionModelAlias = this._opts.modelAlias;
-    const sessionBaseDir = baseDir;
+    const sessionBaseDir = this._baseDir;
     injectGlobal(ctx, 'delegate', async (specRaw: unknown) => {
       const spec = specRaw as {
         space?: string; agent?: string; flow?: string; task: string;
@@ -692,19 +882,8 @@ export class SpaceChatSession extends EventEmitter {
         if (actions.length > 0) this._emitEvent({ type: 'actions', data: actions });
       }
 
-      // Compute which flow step is active based on completed tasks (not raw cycle number)
-      const completedTaskIds = this._tasklistEngine.getCompletedTaskIds();
-      let stepIndex = 0;
-      for (let si = 0; si < flow.steps.length; si++) {
-        const stepTasks = Array.isArray(flow.steps[si]!.data.tasks)
-          ? (flow.steps[si]!.data.tasks as unknown[]).map(String)
-          : [];
-        if (stepTasks.length === 0 || stepTasks.some(t => !completedTaskIds.has(t))) {
-          stepIndex = si;
-          break;
-        }
-        stepIndex = si + 1 < flow.steps.length ? si + 1 : si;
-      }
+      // Compute which flow step is active based on cycle count (spec v4.3)
+      const stepIndex = Math.min(cycle - 1, flow.steps.length - 1);
 
       const built = await buildAgentPrompt({
         spaceDir,
@@ -795,16 +974,7 @@ export class SpaceChatSession extends EventEmitter {
         // JSX import (react/jsx-runtime) is replaced by binding from the pre-injected global.
         let jsForEval = tsc.js.replace(/^import\s+.*?(?:;|$)/gm, '').trimStart();
 
-        // Guard any __scopeVar references that are NOT locally declared — prevents ReferenceError
-        // when LLM references a prior-cycle inspect() variable that was never actually stored.
-        // The ?? fallback in the generated code will then handle the undefined gracefully.
-        const referencedScopeVars = [...jsForEval.matchAll(/\b(__[a-zA-Z_][a-zA-Z0-9_]*)\b/g)].map(m => m[1]!);
-        const declaredScopeVars = new Set([...jsForEval.matchAll(/\b(?:var|let|const)\s+(__[a-zA-Z_][a-zA-Z0-9_]*)\b/g)].map(m => m[1]!));
-        const guardPreamble = [...new Set(referencedScopeVars)]
-          .filter(v => !declaredScopeVars.has(v))
-          .map(v => `if (typeof ${v} === 'undefined') var ${v};`)
-          .join('\n');
-        if (guardPreamble) jsForEval = guardPreamble + '\n' + jsForEval;
+
         if (jsForEval.includes('_jsx') || jsForEval.includes('_jsxs')) {
           jsForEval = 'const { jsx: _jsx, jsxs: _jsxs, Fragment: _Fragment } = globalThis.__jsxRuntime;\n' + jsForEval;
         }

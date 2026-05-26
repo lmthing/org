@@ -112,6 +112,13 @@ function hasCheckpointBeforeRisky(code: string): boolean {
   return false;
 }
 
+function commentBlock(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `// ${line}` : '//'))
+    .join('\n');
+}
+
 async function runCheckpointCase(
   entry: DatasetEntry,
   model: RunOptions['model'],
@@ -125,10 +132,14 @@ async function runCheckpointCase(
     .map(([k, v]) => `  ${k}: ${JSON.stringify(v)},`)
     .join('\n');
 
+  const scopeBlock = commentBlock(
+    scopeLines ? `__scope:\n{\n${scopeLines}\n}` : `__scope:\n{}`,
+  );
+
   const userTurn = [
     `// ═══ checkpoint eval ═══`,
     ``,
-    scopeLines ? `const __scope = {\n${scopeLines}\n};` : `const __scope = {};`,
+    scopeBlock,
     sessionTs ? `/* source tail */\n${sessionTs}` : '',
     `// User: ${task}`,
   ]

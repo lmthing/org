@@ -3,6 +3,8 @@ export type { SpaceHandle, SpaceComponentKind, SpaceEntryKind, OrphanedClassVar 
 export {
   loadSpace,
   createDynamicSpaceLoader,
+  registerActiveSpace,
+  setSessionContext,
 } from './loader.js';
 export { loadSpaceFromDisk } from './disk.js';
 export { LIBRARY_AMBIENT_DTS } from './library-dts.js';

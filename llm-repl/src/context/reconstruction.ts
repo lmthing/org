@@ -64,6 +64,13 @@ function approxTokens(s: string): number {
   return Math.ceil(s.length / 4);
 }
 
+function commentBlock(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `// ${line}` : '//'))
+    .join('\n');
+}
+
 function decayTier(inspectCount: number): 'early' | 'mid' | 'late' {
   if (inspectCount <= 5) return 'early';
   if (inspectCount <= 15) return 'mid';
@@ -149,8 +156,9 @@ export function buildReconstruction(input: ReconstructionInput): string {
   sections.push(`// ═══ inspect #${input.inspectNumber} ═══`);
 
   // ── Hard-pinned: __budget (always) ──
-  const budgetBlock = [
-    `const __budget: Budget = {`,
+  const budgetBlock = commentBlock([
+    `__budget:`,
+    `{`,
     `  tokensRemaining: ${input.budgetTokensRemaining},`,
     `  tokensUsed: ${input.budgetTokensUsed},`,
     `  inputTokensUsed: ${input.budgetInputTokensUsed},`,
@@ -173,8 +181,8 @@ export function buildReconstruction(input: ReconstructionInput): string {
     `    heapMB: ${input.budgetExecution.heapMB},`,
     `    heapMaxMB: ${input.budgetExecution.heapMaxMB},`,
     `  },`,
-    `};`,
-  ].join('\n');
+    `}`,
+  ].join('\n'));
   sections.push(budgetBlock);
   remainingTokens -= approxTokens(budgetBlock);
 
@@ -223,7 +231,7 @@ export function buildReconstruction(input: ReconstructionInput): string {
     inspectCount: input.inspectNumber,
   };
   const scopeBody = serializeScopeBlock(input.scope, scopeOpts);
-  const scopeBlock = `const __scope = {\n${scopeBody}\n};`;
+  const scopeBlock = commentBlock(`__scope:\n{\n${scopeBody}\n}`);
   if (remainingTokens > approxTokens(scopeBlock)) {
     sections.push(scopeBlock);
     remainingTokens -= approxTokens(scopeBlock);
@@ -231,7 +239,7 @@ export function buildReconstruction(input: ReconstructionInput): string {
 
   // ── Priority 2: __errors ──
   if (input.errors.length > 0) {
-    const errBlock = `const __errors: SessionError[] = ${formatErrors(input.errors, tier)};`;
+    const errBlock = commentBlock(`__errors:\n${formatErrors(input.errors, tier)}`);
     if (remainingTokens > approxTokens(errBlock)) {
       sections.push(errBlock);
       remainingTokens -= approxTokens(errBlock);
@@ -245,7 +253,7 @@ export function buildReconstruction(input: ReconstructionInput): string {
     const narrowed = arg.query ? applyQuery(arg.value, arg.query) : arg.value;
     const name = arg.name && arg.name.length > 0 ? arg.name : `arg${input.expandedArgs.indexOf(arg)}`;
     const repr = previewSerialize(narrowed, {}, name);
-    const block = `const __${name} = ${repr};`;
+    const block = commentBlock(`__${name}:\n${repr}`);
     if (remainingTokens > approxTokens(block)) {
       sections.push(block);
       remainingTokens -= approxTokens(block);
@@ -263,7 +271,7 @@ export function buildReconstruction(input: ReconstructionInput): string {
   }
 
   // ── Priority 5: __tasks ──
-  const taskBlock = `const __tasks: Task[] = ${formatTasks(input.meta.tasks)};`;
+  const taskBlock = commentBlock(`__tasks:\n${formatTasks(input.meta.tasks)}`);
   if (remainingTokens > approxTokens(taskBlock)) {
     sections.push(taskBlock);
     remainingTokens -= approxTokens(taskBlock);
@@ -271,7 +279,7 @@ export function buildReconstruction(input: ReconstructionInput): string {
 
   // ── Priority 6: __forks ──
   if (input.forkStates && Object.keys(input.forkStates).length > 0) {
-    const block = `const __forks = ${formatForks(input.forkStates)};`;
+    const block = commentBlock(`__forks:\n${formatForks(input.forkStates)}`);
     if (remainingTokens > approxTokens(block)) {
       sections.push(block);
       remainingTokens -= approxTokens(block);

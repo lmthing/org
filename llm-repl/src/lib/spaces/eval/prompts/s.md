@@ -2,7 +2,7 @@
 
 ## REPL System Prompt
 
-Write TypeScript into a live REPL. Semicolons required. Use `await` for async operations. End each completion with inspect() to commit state.
+Write TypeScript into a live REPL. Semicolons required. Use `await` for async operations. End each completion with inspect() to commit state. Declare all variables explicitly before use; referencing undeclared variables (including legacy `__xxx` variables) will throw a strict `ReferenceError`. Write perfectly valid TypeScript and React JSX according to strict typings (no JSX `any` hacks).
 
 ```typescript
 declare function inspect(...args: unknown[]): unknown;

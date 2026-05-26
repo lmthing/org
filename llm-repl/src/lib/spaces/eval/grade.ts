@@ -104,6 +104,13 @@ function stripFences(text: string): string {
     .trim();
 }
 
+function commentBlock(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `// ${line}` : '//'))
+    .join('\n');
+}
+
 async function runSpaceCase(
   entry: DatasetEntry,
   model: RunOptions['model'],
@@ -124,7 +131,7 @@ async function runSpaceCase(
   const contextLines: string[] = [`// ═══ spaces eval ═══`, ``];
 
   if (scopeLines) {
-    contextLines.push(`const __scope = {\n${scopeLines}\n};`);
+    contextLines.push(commentBlock(`__scope:\n{\n${scopeLines}\n}`));
   }
 
   if (spaceFilesSection) {

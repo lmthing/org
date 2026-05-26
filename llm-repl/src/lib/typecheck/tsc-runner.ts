@@ -85,9 +85,7 @@ export function runTsc(statement: string, opts: TscRunnerOptions = {}): TscResul
     ...program.getSemanticDiagnostics(sf),
   ];
 
-  // TS7026: "JSX element implicitly has type 'any'" — harmless when IntrinsicElements isn't globally visible.
-  // TS2786: "cannot be used as a JSX component" — harmless, component types are correct at runtime.
-  const SUPPRESSED_CODES = new Set([7026, 2786]);
+  const SUPPRESSED_CODES = new Set<number>();
 
   const diagnostics: TscDiagnostic[] = allDiags
     .filter(

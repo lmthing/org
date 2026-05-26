@@ -183,17 +183,17 @@ describe('buildReconstruction', () => {
 
   it('contains __scope block', () => {
     const out = buildReconstruction(makeInput());
-    expect(out).toContain('const __scope = {');
+    expect(out).toContain('// __scope:');
   });
 
   it('contains __budget block', () => {
     const out = buildReconstruction(makeInput());
-    expect(out).toContain('const __budget: Budget = {');
+    expect(out).toContain('// __budget:');
   });
 
   it('hard-pinned budget is always present', () => {
     const out = buildReconstruction(makeInput({ tokenBudget: 10 }));
-    expect(out).toContain('const __budget');
+    expect(out).toContain('// __budget:');
   });
 
   it('respects decay tiers — early has longer source tail', () => {

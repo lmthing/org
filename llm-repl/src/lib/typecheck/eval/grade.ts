@@ -63,6 +63,13 @@ interface CaseResult {
   detail?: string;
 }
 
+function commentBlock(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `// ${line}` : '//'))
+    .join('\n');
+}
+
 /**
  * Run a self-correction eval case.
  * Presents the broken statement to the model, runs tsc, retries with error feedback.
@@ -117,12 +124,17 @@ async function runSelfCorrectionCase(
       null,
       2,
     );
+    const budgetBlock = commentBlock(
+      `__budget:\n{ tokensUsed: 0, tokensRemaining: 8000, inspectCount: ${attempt - 1}, nearingLimit: false }`,
+    );
+    const scopeBlock = commentBlock(`__scope:\n{}`);
+    const errorsBlock = commentBlock(`__errors:\n${errorsJson}`);
     const userTurn = [
       `// ═══ inspect #${attempt} ═══`,
       ``,
-      `const __budget: Budget = { tokensUsed: 0, tokensRemaining: 8000, inspectCount: ${attempt - 1}, nearingLimit: false };`,
-      `const __scope = {};`,
-      `const __errors: SessionError[] = ${errorsJson};`,
+      budgetBlock,
+      scopeBlock,
+      errorsBlock,
     ].join('\n');
 
     const { text } = await generateText({
@@ -149,11 +161,15 @@ async function runCleanPassCase(
 ): Promise<CaseResult> {
   const task = entry.description;
 
+  const budgetBlock = commentBlock(
+    `__budget:\n{ tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false }`,
+  );
+  const scopeBlock = commentBlock(`__scope:\n{}`);
   const userTurn = [
     `// ═══ inspect #1 ═══`,
     ``,
-    `const __budget: Budget = { tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false };`,
-    `const __scope = {};`,
+    budgetBlock,
+    scopeBlock,
     `// User: ${task}`,
   ].join('\n');
 

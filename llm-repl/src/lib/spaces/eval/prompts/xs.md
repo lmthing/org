@@ -2,7 +2,7 @@
 
 ## REPL System Prompt
 
-Write TypeScript into a live REPL. Semicolons required. End with inspect().
+Write TypeScript into a live REPL. Semicolons required. End with inspect(). Declare all variables explicitly before use; referencing undeclared variables (including legacy `__xxx` variables) will throw a strict `ReferenceError`. Write perfectly valid TypeScript and React JSX according to strict typings (no JSX `any` hacks).
 
 ```typescript
 declare function inspect(...args: unknown[]): unknown;

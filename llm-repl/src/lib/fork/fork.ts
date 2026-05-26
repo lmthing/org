@@ -78,6 +78,12 @@ export class ForkEngine {
   private readonly _trace: TraceWriter;
   private readonly _seedChildScope: (exclude: string[]) => Record<string, unknown>;
   private readonly _onBudgetWarning: (forkId: string, tokensRemaining: number) => void;
+  private readonly _onForkSpawn?: (
+    forkId: string,
+    instruction: string,
+    tokenCap: number,
+    seededScope: Record<string, unknown>,
+  ) => Promise<void>;
 
   private readonly _forks = new Map<string, ForkEntry>();
 
@@ -87,12 +93,19 @@ export class ForkEngine {
     trace: TraceWriter;
     seedChildScope: (exclude: string[]) => Record<string, unknown>;
     onBudgetWarning: (forkId: string, tokensRemaining: number) => void;
+    onForkSpawn?: (
+      forkId: string,
+      instruction: string,
+      tokenCap: number,
+      seededScope: Record<string, unknown>,
+    ) => Promise<void>;
   }) {
     this._assembly = opts.assembly;
     this._budgetTracker = opts.budgetTracker;
     this._trace = opts.trace;
     this._seedChildScope = opts.seedChildScope;
     this._onBudgetWarning = opts.onBudgetWarning;
+    this._onForkSpawn = opts.onForkSpawn;
   }
 
   fork<T = unknown>(opts: ForkOptions): ForkHandle<T> {
@@ -108,7 +121,7 @@ export class ForkEngine {
     const warnAt = opts.warnAt ?? defaultWarnAt;
 
     // Seed child scope
-    this._seedChildScope(opts.exclude ?? []);
+    const seededScope = this._seedChildScope(opts.exclude ?? []);
 
     let resolveHandle!: (result: ForkResult<unknown>) => void;
     let rejectHandle!: (err: Error) => void;
@@ -143,6 +156,27 @@ export class ForkEngine {
 
     // Update parent budget tracker fork counts
     this._syncForkCounts();
+
+    // Asynchronously launch child VM loop
+    if (this._onForkSpawn) {
+      setImmediate(() => {
+        this._onForkSpawn!(forkId, opts.instruction, tokenCap, seededScope).catch((err) => {
+          const forkEntry = this._forks.get(forkId);
+          if (forkEntry && (forkEntry.state.status === 'pending' || forkEntry.state.status === 'asking')) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            forkEntry.state = { status: 'rejected', error: errorMsg, tokensUsed: forkEntry.tokensUsed };
+            this._trace.write({ type: 'fork_reject', forkId, reason: errorMsg, tokensUsed: forkEntry.tokensUsed });
+            forkEntry.resolve({
+              status: 'rejected',
+              error: errorMsg,
+              tokensUsed: forkEntry.tokensUsed,
+              forkId,
+            });
+            this._syncForkCounts();
+          }
+        });
+      });
+    }
 
     // Attach forkId + inject to the promise
     const handle = promise as ForkHandle<T>;

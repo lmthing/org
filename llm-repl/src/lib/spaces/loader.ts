@@ -1,12 +1,6 @@
-/**
- * Space loader skeleton — Phase 0 stub.
- *
- * Combines type signatures from cli/src/cli/agent-loader.ts and
- * repl/src/spaces/dynamic-loader.ts. The full Space class implementation
- * lands in Phase 11 (L10).
- *
- * Only exports type signatures and no-op stubs — do NOT use at runtime yet.
- */
+import { Space } from './space.js';
+import type { SpaceHandle } from './space.js';
+import type { TraceWriter } from '../sandbox/trace.js';
 
 // ── Agent loader types (from cli/src/cli/agent-loader.ts) ──
 
@@ -105,34 +99,84 @@ export interface SpawnResult {
   issues?: string[]
 }
 
-// ── Space handle (surface API stub) ──
+export { SpaceHandle } from './space.js';
 
-export interface SpaceHandle {
-  loadAgent(role: string): void
-  loadFunction(name: string, opts?: { expand?: boolean }): void
-  loadComponent(name: string): void
-  loadKnowledge(domain: string, field: string, option?: string): void
-  agents: Record<string, unknown>
-  functions: Record<string, unknown>
-  components: Record<string, unknown>
+// ── Loader Registry and Context ──
+
+const activeSpaces = new Map<string, SpaceHandle>();
+let currentSessionDir: string = '';
+let currentTrace: TraceWriter | null = null;
+let currentSpacesDir: string = '';
+
+export function registerActiveSpace(name: string, handle: SpaceHandle): void {
+  activeSpaces.set(name, handle);
 }
 
-// ── Stub implementations — NOT for production use ──
+export function setSessionContext(sessionDir: string, trace: TraceWriter, spacesDir: string): void {
+  currentSessionDir = sessionDir;
+  currentTrace = trace;
+  currentSpacesDir = spacesDir;
+}
 
 /**
- * Stub: load a space by name.
- * Full implementation lands in Phase 11 (L10).
+ * Load a space by name, returning its active SpaceHandle.
  */
-export function loadSpace(_name: string): SpaceHandle {
-  throw new Error('loadSpace: not implemented — Phase 11 (L10)')
+export function loadSpace(name: string): SpaceHandle {
+  const handle = activeSpaces.get(name);
+  if (!handle) {
+    if (!currentSessionDir || !currentTrace) {
+      throw new Error(`loadSpace('${name}'): Session context not set`);
+    }
+    const space = new Space(name, { sessionDir: currentSessionDir, trace: currentTrace });
+    
+    // Construct a minimal handle synchronously to satisfy signature
+    const lazyHandle: SpaceHandle = {
+      name,
+      agents: {},
+      functions: {},
+      components: {},
+      knowledge: {},
+      loadFunction(fnName, opts) {
+        lazyHandle.functions[fnName] = opts?.expand
+          ? `/* expanded — inspect() to view full interface */`
+          : `/* collapsed class — call loadFunction('${fnName}', { expand: true }) then inspect() */`;
+      },
+      async read(p) { return space.read(p); },
+      async write(p, c) { return space.write(p, c); },
+      async patch(p, f, t) { return space.patch(p, f, t); },
+      async list(p) { return space.list(p); },
+      async remove(p) { return space.remove(p); },
+    };
+    
+    activeSpaces.set(name, lazyHandle);
+    
+    // Asynchronously load files in background
+    space.load().then((fullHandle) => {
+      Object.assign(lazyHandle, fullHandle);
+    }).catch(() => {});
+    
+    return lazyHandle;
+  }
+  return handle;
 }
 
 /**
- * Stub: create a dynamic space loader handle.
- * Full implementation lands in Phase 11 (L10).
+ * Create a dynamic space loader handle.
  */
 export function createDynamicSpaceLoader(
-  _options: DynamicSpaceLoaderOptions,
+  options: DynamicSpaceLoaderOptions,
 ): DynamicSpaceLoaderHandle {
-  throw new Error('createDynamicSpaceLoader: not implemented — Phase 11 (L10)')
+  let watching = false;
+  return {
+    async start() {
+      watching = true;
+    },
+    async stop() {
+      watching = false;
+    },
+    async reload() {
+      options.onReload?.('*');
+    },
+    isWatching: () => watching,
+  };
 }

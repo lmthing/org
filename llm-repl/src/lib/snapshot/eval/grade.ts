@@ -104,6 +104,13 @@ function stripFences(text: string): string {
     .trim();
 }
 
+function commentBlock(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `// ${line}` : '//'))
+    .join('\n');
+}
+
 async function runSnapshotCase(
   entry: DatasetEntry,
   model: RunOptions['model'],
@@ -131,7 +138,7 @@ async function runSnapshotCase(
   }
 
   if (scopeLines) {
-    contextLines.push(`const __scope = {\n${scopeLines}\n};`);
+    contextLines.push(commentBlock(`__scope:\n{\n${scopeLines}\n}`));
   }
 
   contextLines.push(`// User: ${task}`);

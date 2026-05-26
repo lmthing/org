@@ -57,8 +57,7 @@ declare function ask<T = string>(
 
 // ── JSX namespace (required for JSX syntax to type-check) ───────────────────
 declare namespace JSX {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  type Element = any;
+  type Element = unknown;
   interface ElementAttributesProperty { props: object; }
   interface IntrinsicElements { [tag: string]: Record<string, unknown> }
 }

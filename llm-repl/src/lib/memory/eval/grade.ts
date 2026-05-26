@@ -81,6 +81,13 @@ function stripFences(text: string): string {
     .trim();
 }
 
+function commentBlock(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `// ${line}` : '//'))
+    .join('\n');
+}
+
 async function runMemoryCase(
   entry: DatasetEntry,
   model: RunOptions['model'],
@@ -106,11 +113,16 @@ async function runMemoryCase(
     .map(([k, v]) => `  ${k}: ${JSON.stringify(v)},`)
     .join('\n');
 
+  const budgetBlock = commentBlock(`__budget:\n${JSON.stringify(budgetObj)}`);
+  const scopeBlock = commentBlock(
+    scopeLines ? `__scope:\n{\n${scopeLines}\n}` : `__scope:\n{}`,
+  );
+
   const userTurn = [
     `// ═══ inspect #${(budgetObj['inspectCount'] as number) ?? 5} ═══`,
     ``,
-    `const __budget: Budget = ${JSON.stringify(budgetObj)};`,
-    scopeLines ? `const __scope = {\n${scopeLines}\n};` : `const __scope = {};`,
+    budgetBlock,
+    scopeBlock,
     sessionTs ? `/* source tail */\n${sessionTs}` : '',
     `// User: ${task}`,
   ]

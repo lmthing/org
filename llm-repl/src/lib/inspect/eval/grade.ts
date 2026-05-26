@@ -85,6 +85,13 @@ function hasDeadCodeAfterInspect(code: string): boolean {
   return stmts.length > 0 || (remainder !== null && remainder.trim().length > 0);
 }
 
+function commentBlock(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? `// ${line}` : '//'))
+    .join('\n');
+}
+
 async function runInspectCase(
   entry: DatasetEntry,
   model: RunOptions['model'],
@@ -98,11 +105,18 @@ async function runInspectCase(
     .map(([k, v]) => `  ${k}: ${JSON.stringify(v)},`)
     .join('\n');
 
+  const budgetBlock = commentBlock(
+    `__budget:\n{ tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false, forksActive: 0, forksCompleted: 0, context: { used: 0, max: 8000, scopeTokens: 0, sourceTokens: 0, wastedOnAbort: 0 }, execution: { statementsTotal: 0, statementsSinceInspect: 0, heapMB: 0, heapMaxMB: 64 } }`,
+  );
+  const scopeBlock = commentBlock(
+    scopeLines ? `__scope:\n{\n${scopeLines}\n}` : `__scope:\n{}`,
+  );
+
   const userTurn = [
     `// ═══ inspect #1 ═══`,
     ``,
-    `const __budget: Budget = { tokensUsed: 0, tokensRemaining: 8000, inspectCount: 0, nearingLimit: false, forksActive: 0, forksCompleted: 0, context: { used: 0, max: 8000, scopeTokens: 0, sourceTokens: 0, wastedOnAbort: 0 }, execution: { statementsTotal: 0, statementsSinceInspect: 0, heapMB: 0, heapMaxMB: 64 } };`,
-    scopeLines ? `const __scope = {\n${scopeLines}\n};` : `const __scope = {};`,
+    budgetBlock,
+    scopeBlock,
     sessionTs ? `/* source tail */\n${sessionTs}` : '',
     `// User: ${task}`,
   ]

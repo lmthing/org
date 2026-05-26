@@ -123,9 +123,10 @@ class TasklistHandleImpl implements TasklistHandle {
 
     const from = this._statuses.get(taskId)!;
 
-    // Idempotent: already done or in-progress — skip silently
-    if (from === 'done' || from === 'skipped' || from === 'in_progress') return;
-
+    // Strict state transitions: cannot start an already started/completed task
+    if (from === 'done' || from === 'skipped' || from === 'in_progress') {
+      throw new ContractError(`Task '${taskId}' is already ${from}`);
+    }
     // Check deps
     const blockers: string[] = [];
     for (const dep of node.deps ?? []) {

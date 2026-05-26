@@ -20,7 +20,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -34,6 +34,8 @@ import {
   ModuleRegistry,
   injectGlobal,
   marshalToQuickJS,
+  marshalToHost,
+  injectJsxRuntime,
 } from "@lmthing/llm-repl/lib/sandbox/index";
 import { SessionAssembly } from "@lmthing/llm-repl/session/assembly";
 import { BudgetTracker } from "@lmthing/llm-repl/lib/inspect/budget";
@@ -58,6 +60,9 @@ import {
   listFlows,
   buildAgentPrompt,
   buildUserPrompt,
+  registerActiveSpace,
+  setSessionContext,
+  loadSpace,
 } from "@lmthing/llm-repl/lib/spaces/index";
 import { runTsc, type TscDiagnostic } from "@lmthing/llm-repl/lib/typecheck/index";
 
@@ -217,6 +222,275 @@ function agentKnowledgeSelectors(
   return selectors;
 }
 
+const standardBuiltins = new Set([
+  'globalThis', 'global', 'console', 'process', 'Buffer', 'setTimeout', 'clearTimeout',
+  'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'jsx', 'display',
+  'ask', 'fetch', 'fs', 'require', 'budget', 'tasklist', 'inspect', 'checkpoint',
+  'rollback', 'pin', 'compact', 'expand', 'resolve', 'Space', 'actions', 'delegate',
+  'Object', 'Function', 'Array', 'Number', 'parseFloat', 'parseInt', 'Infinity', 'NaN',
+  'undefined', 'Boolean', 'String', 'Symbol', 'Date', 'RegExp', 'Error', 'EvalError',
+  'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError', 'JSON',
+  'Math', 'Map', 'Set', 'WeakMap', 'WeakSet', 'Proxy', 'Reflect', 'Promise',
+  'Symbol', 'Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array',
+  'Int32Array', 'Uint32Array', 'Float32Array', 'Float64Array', 'BigInt64Array',
+  'BigUint64Array', 'Atomics', 'DataView', 'SharedArrayBuffer', 'WebAssembly',
+  '__jsxRuntime', '__inspectSetOptions', '__InspectBuilder'
+]);
+
+function getSandboxScope(ctx: any, excludeKeys: string[] = []): Record<string, unknown> {
+  const keysHandle = ctx.evalCode('Object.keys(globalThis)');
+  const keys = ctx.dump(keysHandle) as string[];
+  keysHandle.dispose();
+
+  const scope: Record<string, unknown> = {};
+  const excludeSet = new Set(excludeKeys);
+
+  for (const key of keys) {
+    if (standardBuiltins.has(key) || excludeSet.has(key)) {
+      continue;
+    }
+    const propHandle = ctx.getProp(ctx.global, key);
+    try {
+      scope[key] = marshalToHost(ctx, propHandle);
+    } catch {
+      // ignore
+    } finally {
+      propHandle.dispose();
+    }
+  }
+  return scope;
+}
+
+async function runChildForkVM(opts: {
+  forkId: string;
+  instruction: string;
+  tokenCap: number;
+  seededScope: Record<string, unknown>;
+  baseDir: string;
+  sessionDir: string;
+  trace: TraceWriter;
+  budgetTracker: BudgetTracker;
+  forkEngine: ForkEngine;
+}) {
+  const { forkId, instruction, tokenCap, seededScope, baseDir, sessionDir, trace, budgetTracker, forkEngine } = opts;
+
+  // 1. Spawning child Sandbox context
+  const childCtx = (await createSandboxSession({
+    maxHeapMB: 64,
+    maxStackSizeMb: 4,
+    maxStatementMs: 60000,
+  })).ctx;
+
+  try {
+    // 2. Seed context scope with variables
+    for (const [key, value] of Object.entries(seededScope)) {
+      try {
+        const handle = marshalToQuickJS(childCtx, value);
+        childCtx.setProp(childCtx.global, key, handle);
+        handle.dispose();
+      } catch {
+        // ignore
+      }
+    }
+
+    // Register libraries on child
+    new MemoryEngine({ trace, budgetTracker }).registerGlobals(childCtx);
+    const tasklistEngine = new TasklistEngine({
+      trace,
+      evalFilter: (_filter: string, el: unknown) => evalFilter({ type: "literal", value: true }, el),
+    });
+    tasklistEngine.registerGlobals(childCtx);
+    
+    const moduleRegistry = new ModuleRegistry(childCtx);
+    new IoEngine({
+      trace,
+      fetch: { allowedDomains: ["*"], maxResponseBytes: 5 * 1024 * 1024, defaultTimeoutMs: 30000 },
+      fs: { sandboxRoot: sessionDir, maxFileSizeBytes: 10 * 1024 * 1024 },
+      moduleRegistry,
+    }).registerGlobals(childCtx);
+
+    forkEngine.registerGlobals(childCtx, true);
+
+    // Override ask inside child to route to parent
+    injectGlobal(childCtx, 'ask', async (uiHandle: unknown) => {
+      const ui = String(uiHandle ?? '');
+      const answer = await forkEngine.registerForkAsk(forkId, ui);
+      return answer;
+    });
+
+    // Override resolve inside child to omit the forkId parameter
+    injectGlobal(childCtx, 'resolve', (valueArg: unknown) => {
+      return forkEngine.resolve(forkId, valueArg);
+    });
+
+    // Setup Space inside child VM via host bridge functions
+    injectGlobal(childCtx, '__space_load', (nameArg: unknown) => {
+      return loadSpace(String(nameArg ?? ''));
+    });
+    injectGlobal(childCtx, '__space_current', () => {
+      return loadSpace(basename(sessionDir));
+    });
+    childCtx.evalCode(`
+      var Space = {
+        load: function(name) { return __space_load(name); },
+        current: function() { return __space_current(); }
+      };
+    `);
+
+    // Also register standard JSX runtime if needed
+    injectJsxRuntime(childCtx);
+
+    // 3. Child agent execution loop
+    const modelMatch = instruction.match(/^\[model:(\w+)\]\s*/);
+    const forkAlias = (modelMatch?.[1] as ModelAlias) ?? 'XS';
+    const cleanInstruction = instruction.replace(/^\[model:\w+\]\s*/, '');
+    const forkModel = await resolveLLM(forkAlias);
+
+    const systemPrompt = `You are a parallel child agent worker executing a sub-task.
+Your task instruction is: "${cleanInstruction}"
+You must write TypeScript code that solves this task.
+Return ONLY valid, executable TypeScript code. No prose, no markdown fences.
+Always end your execution with inspect() or resolve(result).
+If you have completed the task and got the final result, call resolve(result) to finish.
+`;
+
+    let childCycle = 1;
+    let childReconstruction: string | undefined = undefined;
+    let lastChildCode = '';
+
+    while (true) {
+      // Check budget
+      const states = forkEngine.getForkStates();
+      const state = states.get(forkId);
+      if (!state || state.status === 'resolved' || state.status === 'rejected') {
+        break;
+      }
+
+      const userPrompt = buildUserPrompt({
+        cycle: childCycle,
+        task: childReconstruction ? 'Please continue task.' : cleanInstruction,
+        ...(childReconstruction ? { reconstruction: childReconstruction } : {}),
+      });
+
+      const stream = streamText({
+        model: forkModel,
+        system: systemPrompt,
+        prompt: userPrompt,
+      });
+
+      let assistantText = '';
+      for await (const chunk of stream.textStream) {
+        assistantText += chunk;
+      }
+
+      // Record tokens
+      try {
+        const usage = await stream.usage;
+        forkEngine.recordForkTokens(forkId, (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0));
+      } catch {
+        // ignore
+      }
+
+      // Run typecheck and execute
+      let codeToRun = assistantText.trim().replace(/^```(?:json|ts|tsx|js)?\n?|\n?```$/g, '').trim();
+      let tscResult = codeToRun.length > 0 ? runTsc(codeToRun, { sessionContext: '', availableModules: ['react', 'react/jsx-runtime'] }) : { diagnostics: [], js: '' };
+
+      // Strip ES module import statements
+      let jsForEval = tscResult.js.replace(/^import\s+.*?(?:;|$)/gm, '').trimStart();
+      if (jsForEval.includes('_jsx') || jsForEval.includes('_jsxs')) {
+        jsForEval = 'const { jsx: _jsx, jsxs: _jsxs, Fragment: _Fragment } = globalThis.__jsxRuntime;\n' + jsForEval;
+      }
+      const wrapped = `(async () => {\n${jsForEval}\n})();`;
+
+      let childInspectCall: any = null;
+      registerInspectGlobals(childCtx, {
+        budget: budgetTracker,
+        trace,
+        onInspect: (call) => {
+          childInspectCall = call;
+        },
+      });
+
+      try {
+        const result = await childCtx.evalCodeAsync(wrapped);
+        childCtx.runtime.executePendingJobs();
+
+        if (result.error) {
+          const errVal = childCtx.dump(result.error) as any;
+          result.error.dispose();
+          const name = errVal?.name ?? 'Error';
+          const msg = errVal?.message ?? String(errVal);
+
+          if (name.includes('__fork_resolved') || msg.includes('__fork_resolved')) {
+            // Clean resolve!
+            break;
+          }
+          // Log other errors
+          trace.write({ type: 'fork_error', forkId, error: { type: name, message: msg } });
+        } else {
+          result.value.dispose();
+        }
+      } catch (e: any) {
+        if (e.message?.includes('__fork_resolved')) {
+          break;
+        }
+        trace.write({ type: 'fork_error', forkId, error: { type: 'HostError', message: e.message } });
+      }
+
+      // Check if child yields via inspect()
+      if (childInspectCall) {
+        const budgetSnapshot = budgetTracker.snapshot();
+        const inspectArgs = childInspectCall.args.map((a: any, i: number) => ({
+          name: a.name || `arg${i}`,
+          value: a.value,
+        }));
+
+        childReconstruction = buildReconstruction({
+          inspectNumber: childCycle,
+          sessionTs: lastChildCode,
+          scope: getSandboxScope(childCtx),
+          meta: {
+            budgetTokensUsed: budgetSnapshot.tokensUsed,
+            budgetTokensRemaining: budgetSnapshot.tokensRemaining,
+            inspectCount: childCycle,
+            annotationGraceUsed: false,
+            pins: {},
+            compactions: {},
+            errors: [],
+            tasks: [],
+          },
+          pins: new Set(),
+          compactions: new Map(),
+          promiseStates: new Map(),
+          lastAccessedCycle: new Map(),
+          errors: [],
+          expandedArgs: inspectArgs,
+          git: { head: 'HEAD', checkpoints: [], branch: `fork/${forkId}` },
+          budgetTokensRemaining: budgetSnapshot.tokensRemaining,
+          budgetTokensUsed: budgetSnapshot.tokensUsed,
+          budgetInputTokensUsed: budgetSnapshot.inputTokensUsed,
+          budgetOutputTokensUsed: budgetSnapshot.outputTokensUsed,
+          budgetCostUsd: budgetSnapshot.costUsd,
+          budgetContext: budgetSnapshot.context,
+          budgetExecution: budgetSnapshot.execution,
+          forksActive: 0,
+          forksCompleted: 0,
+          nearingLimit: budgetSnapshot.nearingLimit,
+          tokenBudget: tokenCap,
+        });
+
+        childCycle++;
+        lastChildCode = codeToRun;
+      } else {
+        // If it didn't call inspect() or resolve(), wait a bit and break or retry
+        break;
+      }
+    }
+  } finally {
+    childCtx.dispose();
+  }
+}
+
 // ── Main driver ─────────────────────────────────────────────────────────────
 
 export async function runSpaceSession(opts: RunSpaceSessionOptions): Promise<RunSpaceSessionResult> {
@@ -295,42 +569,27 @@ export async function runSpaceSession(opts: RunSpaceSessionOptions): Promise<Run
     moduleRegistry,
   }).registerGlobals(ctx);
 
-  new ForkEngine({
+  let forkEngine: ForkEngine;
+  forkEngine = new ForkEngine({
     assembly,
     budgetTracker,
     trace,
-    seedChildScope: (_exclude: string[]) => ({}),
+    seedChildScope: (exclude: string[]) => getSandboxScope(ctx, exclude),
     onBudgetWarning: (_forkId: string, _remaining: number) => {},
-  }).registerGlobals(ctx);
-
-  // Override fork() with a real single-turn LLM executor.
-  // The ForkEngine stub creates Promises that never resolve; this override runs
-  // the instruction immediately via streamText() and resolves with the result.
-  injectGlobal(ctx, "fork", async (optsArg: unknown) => {
-    const forkOpts = optsArg as { instruction?: string; tokenBudget?: number };
-    const instruction = forkOpts?.instruction ?? "";
-    const modelMatch = instruction.match(/^\[model:(\w+)\]\s*/);
-    const forkAlias = (modelMatch?.[1] as ModelAlias) ?? "XS";
-    const cleanInstruction = instruction.replace(/^\[model:\w+\]\s*/, "");
-    const forkModel = await resolveLLM(forkAlias);
-    const forkStream = streamText({
-      model: forkModel,
-      system: "You are executing a sub-task. Return ONLY valid JSON. No prose, no markdown fences.",
-      prompt: cleanInstruction,
-      maxOutputTokens: forkOpts?.tokenBudget ?? 2000,
-    });
-    let text = "";
-    for await (const chunk of forkStream.textStream) text += chunk;
-    try {
-      const usage = await forkStream.usage;
-      budgetTracker.recordApiUsage(usage.inputTokens ?? 0, usage.outputTokens ?? 0);
-    } catch { /* ignore */ }
-    const cleaned = text.trim().replace(/^```(?:json)?\n?|\n?```$/g, "").trim();
-    let value: unknown;
-    try { value = JSON.parse(cleaned); } catch { value = cleaned || null; }
-    trace.write({ type: "fork_resolve", alias: forkAlias, chars: cleanInstruction.length });
-    return value;
+    onForkSpawn: (forkId, instruction, tokenCap, seededScope) =>
+      runChildForkVM({
+        forkId,
+        instruction,
+        tokenCap,
+        seededScope,
+        baseDir,
+        sessionDir,
+        trace,
+        budgetTracker,
+        forkEngine,
+      }),
   });
+  forkEngine.registerGlobals(ctx);
 
   let inspectCall: InspectCall | null = null;
   registerInspectGlobals(ctx, {
@@ -355,70 +614,23 @@ export async function runSpaceSession(opts: RunSpaceSessionOptions): Promise<Run
     injectGlobal(ctx, name, fn);
   }
 
-  // ── Space global — L10 shim ──────────────────────────────────────────────
-  // createDynamicSpaceLoader is a Phase-11 stub; inject a minimal working shim.
-  const spaceFilesDir = join(sessionDir, "space", "files");
-  await mkdir(spaceFilesDir, { recursive: true });
+  // Setup Space system context and register active space
+  setSessionContext(sessionDir, trace, baseDir);
+  registerActiveSpace(loadedSpace.name, loadedSpace.handle);
 
-  injectGlobal(ctx, "__Space_write", async (pathArg: unknown, contentArg: unknown) => {
-    const rel = String(pathArg ?? "");
-    const content = String(contentArg ?? "");
-    const abs = join(spaceFilesDir, rel);
-    await mkdir(dirname(abs), { recursive: true });
-    await writeFile(abs, content, "utf-8");
-    trace.write({ type: "space_file_write", method: "write", path: abs });
-    return undefined;
+  // Inject standard Space namespace global via host bridge functions
+  injectGlobal(ctx, "__space_load", (nameArg: unknown) => {
+    const spaceName = String(nameArg ?? "");
+    return loadSpace(spaceName);
   });
-
-  injectGlobal(ctx, "__Space_delegate", async (spaceNameArg: unknown, agentArg: unknown, methodArg: unknown, instructionArg: unknown) => {
-    const spaceName = String(spaceNameArg ?? "");
-    const agentSlug = String(agentArg ?? "");
-    const instruction = String(instructionArg ?? "");
-    const knownSpaceDirs: Record<string, string> = {
-      research: join(baseDir, "..", "spaces", "research"),
-      cooking: opts.spaceDir,
-    };
-    const subSpaceDir = knownSpaceDirs[spaceName] ?? join(dirname(opts.spaceDir), spaceName);
-    trace.write({ type: "space_delegate", space: spaceName, agent: agentSlug, method: String(methodArg), instructionLen: instruction.length });
-    const sub = await runSpaceSession({
-      spaceDir: subSpaceDir,
-      task: instruction,
-      agent: agentSlug,
-      modelAlias,
-      maxCycles: 4,
-      baseDir,
-      verbose: false,
-    });
-    return { output: sub.output, status: sub.manifest.finalStatus };
+  injectGlobal(ctx, "__space_current", () => {
+    return loadSpace(basename(sessionDir));
   });
-
-  // Evaluate the Space namespace into QuickJS so LLM code can call Space.load(...).
   ctx.evalCode(`
-    var Space = (function() {
-      function _makeProxy(spaceName) {
-        var _loaded = {};
-        return {
-          loadAgent: function(slug) { _loaded[slug] = true; return this; },
-          agents: new Proxy({}, {
-            get: function(_, agentSlug) {
-              return new Proxy({}, {
-                get: function(__, method) {
-                  return function(opts, instruction) {
-                    var instr = typeof instruction === 'string' ? instruction : (typeof opts === 'string' ? opts : JSON.stringify(opts));
-                    return __Space_delegate(spaceName, agentSlug, method, instr);
-                  };
-                }
-              });
-            }
-          }),
-          write: function(path, content) { return __Space_write(path, content); }
-        };
-      }
-      return {
-        load: function(name) { return _makeProxy(name); },
-        current: function() { return _makeProxy('current'); }
-      };
-    })();
+    var Space = {
+      load: function(name) { return __space_load(name); },
+      current: function() { return __space_current(); }
+    };
   `);
 
   // Register the flow's sink global; calling it terminates the session.
