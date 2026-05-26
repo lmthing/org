@@ -62,6 +62,7 @@ import {
 import { runTsc, type TscDiagnostic } from "@lmthing/llm-repl/lib/typecheck/index";
 
 import { resolveLLM, type ModelAlias } from "./model.js";
+import { renderDisplay, promptAsk } from "../cli/ink-renderer.js";
 
 // ── Public types ────────────────────────────────────────────────────────────
 
@@ -265,7 +266,21 @@ export async function runSpaceSession(opts: RunSpaceSessionOptions): Promise<Run
     assembly, trace,
     onSettle: async () => ({ pendingCount: 0, elapsedMs: 0, timeouts: [] }),
   }).registerGlobals(ctx);
-  new RenderEngine({ trace, config: { maxEntries: 100, maxTokens: 4000 } }).registerGlobals(ctx);
+  const renderEngine = new RenderEngine({
+    trace,
+    config: { maxEntries: 100, maxTokens: 4000 },
+    onDisplay: (_id, descriptor) => {
+      renderDisplay(descriptor);
+    },
+    onAskStart: (formId, descriptor) => {
+      promptAsk(descriptor).then((value) => {
+        renderEngine.submitAsk(formId, value);
+      }).catch(() => {
+        renderEngine.submitAsk(formId, { _cancelled: true });
+      });
+    },
+  });
+  renderEngine.registerGlobals(ctx);
   new MemoryEngine({ trace, budgetTracker }).registerGlobals(ctx);
   const tasklistEngine = new TasklistEngine({
     trace,

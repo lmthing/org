@@ -26,6 +26,11 @@ const MODEL_MAP: Record<string, { product: string; inputSku: string; outputSku: 
     inputSku: "V4 Flash Inp glbl",
     outputSku: "V4 Flash Outp glbl",
   },
+  "DeepSeek-V4-Pro": {
+    product: "Azure Deepseek Models",
+    inputSku: "V4 Pro Inp glbl",
+    outputSku: "V4 Pro Outp glbl",
+  },
   "gpt-5.4-mini": {
     product: "Azure OpenAI GPT5",
     inputSku: "GPT 5 Mini Inpt Glbl",

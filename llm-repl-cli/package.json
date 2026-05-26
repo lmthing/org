@@ -40,6 +40,9 @@
     "@ai-sdk/openai": "^3.0.0",
     "ai": "^6.0.86",
     "dotenv": "catalog:",
+    "ink": "^7.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.0.0",
     "typescript": "^5.7.0",
     "ws": "^8.18.0",
     "zod": "^4.1.13"

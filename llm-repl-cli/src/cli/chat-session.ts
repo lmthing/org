@@ -900,7 +900,9 @@ export class SpaceChatSession extends EventEmitter {
           value,
         }));
         for (const { name } of inspectArgs) {
-          this._inspectVarNames.add(name);
+          if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) {
+            this._inspectVarNames.add(name);
+          }
         }
 
         // Emit read event
