@@ -8,7 +8,7 @@
  */
 import { EventEmitter } from 'node:events';
 import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -25,6 +25,7 @@ import {
   ModuleRegistry,
   injectGlobal,
   marshalToQuickJS,
+  marshalToHost,
   injectJsxRuntime,
 } from '@lmthing/llm-repl/lib/sandbox/index';
 import { SessionAssembly } from '@lmthing/llm-repl/session/assembly';
@@ -42,6 +43,7 @@ import {
   evalFilter,
   extractInspectArgNames,
   type InspectCall,
+  type InspectArg,
 } from '@lmthing/llm-repl/lib/inspect/index';
 import { buildReconstruction } from '@lmthing/llm-repl/context/reconstruction';
 import {
@@ -212,13 +214,18 @@ export class SpaceChatSession extends EventEmitter {
   private _renderEngine!: RenderEngine;
   private _tasklistEngine!: TasklistEngine;
   private _inspectCall: InspectCall | null = null;
+  // Set to true just before resolving the inspect deferred — triggers
+  // a one-shot QuickJS interrupt that bypasses user try/catch blocks.
+  private _interruptInspect = false;
 
   // Space/agent/flow metadata
   private _agentSlug = '';
   private _flowSlug = '';
+  private _slugsExposed = false;
   private _ambientDts = '';
   private _model!: LanguageModel;
   private _pendingInjectArgs: Array<{ name: string; value: unknown }> = [];
+  private _inspectVarNames = new Set<string>();
   private _diskSpace: LoadedDiskSpace | undefined;
   private _pendingKnowledge: Record<string, string> | undefined;
   private _knowledgeFormId: string | null = null;
@@ -280,6 +287,17 @@ export class SpaceChatSession extends EventEmitter {
     });
     const ctx = this._sandbox.ctx;
 
+    // One-shot interrupt handler: fires when _interruptInspect is true,
+    // then immediately resets itself. This stops QuickJS execution at the
+    // inspect() call site in a way that bypasses user try/catch blocks.
+    ctx.runtime.setInterruptHandler(() => {
+      if (this._interruptInspect) {
+        this._interruptInspect = false;
+        return true;
+      }
+      return false;
+    });
+
     // ── Engines ──
     new CheckpointEngine({
       assembly: this._assembly,
@@ -300,7 +318,11 @@ export class SpaceChatSession extends EventEmitter {
         this._emitEvent({ type: 'ask_start', formId, jsx: descriptor });
       },
       onAskEnd: (formId) => {
-        if (this._activeFormId === formId) this._activeFormId = null;
+        if (this._activeFormId === formId) {
+          this._activeFormId = null;
+          // Restore executing status when form ends (timeout fallback or external submit)
+          if (this._status === 'waiting_for_input') this._setStatus('executing');
+        }
         this._emitEvent({ type: 'ask_end', formId });
       },
     });
@@ -324,7 +346,7 @@ export class SpaceChatSession extends EventEmitter {
   }
   globalThis.__jsxRuntime = { jsx: makeNode, jsxs: makeNode, Fragment: '__Fragment__' };
   // Built-in component name globals
-  var comps = ['TextInput','TextArea','NumberInput','Slider','Checkbox','Select','MultiSelect','DatePicker'];
+  var comps = ['TextInput','TextArea','NumberInput','Slider','Checkbox','Select','MultiSelect','DatePicker','Markdown','Table','Progress','Badge','Card','Button','Image','Link','Code','Alert','Chart','Form'];
   for (var i = 0; i < comps.length; i++) globalThis[comps[i]] = comps[i];
 })();
 `, '__jsx-setup.js');
@@ -360,15 +382,17 @@ export class SpaceChatSession extends EventEmitter {
       const modelMatch = instruction.match(/^\[model:(\w+)\]\s*/);
       const forkAlias = (modelMatch?.[1] as ModelAlias) ?? 'XS';
       const cleanInstruction = instruction.replace(/^\[model:\w+\]\s*/, '');
+      process.stderr.write(`  [fork] starting alias=${forkAlias} budget=${forkOpts?.tokenBudget}\n`);
       const forkModel = await resolveLLM(forkAlias);
       const forkStream = streamText({
         model: forkModel,
         system: 'You are executing a sub-task. Return ONLY valid JSON. No prose, no markdown fences.',
         prompt: cleanInstruction,
-        maxOutputTokens: forkOpts?.tokenBudget ?? 2000,
+        maxOutputTokens: Math.min(forkOpts?.tokenBudget ?? 2000, 4000),
       });
       let text = '';
       for await (const chunk of forkStream.textStream) text += chunk;
+      process.stderr.write(`  [fork] completed alias=${forkAlias} chars=${text.length}\n`);
       try {
         const usage = await forkStream.usage;
         this._budgetTracker.recordApiUsage(usage.inputTokens ?? 0, usage.outputTokens ?? 0);
@@ -400,6 +424,68 @@ export class SpaceChatSession extends EventEmitter {
       },
     });
 
+    // Override inspect() so that Promise args (e.g. fork handles) are awaited
+    // before the call is recorded. This ensures `await inspect(fork(...))` works
+    // correctly — the cycle pauses until the fork LLM resolves.
+    {
+      const inspectFn = ctx.newFunction('inspect', (...argHandles) => {
+        // Duplicate handles to keep them alive past this sync call
+        const dupHandles = argHandles.map((h) => h.dup());
+        const deferred = ctx.newPromise();
+
+        (async () => {
+          const args: InspectArg[] = [];
+          for (const handle of dupHandles) {
+            let value: unknown;
+            const thenHandle = ctx.getProp(handle, 'then');
+            const isPromise = ctx.typeof(thenHandle) === 'function';
+            thenHandle.dispose();
+
+            if (isPromise) {
+              // Pump the QuickJS event loop until this Promise resolves
+              const pump = setInterval(() => ctx.runtime.executePendingJobs(), 50);
+              try {
+                const resolved = await ctx.resolvePromise(handle);
+                if (resolved.error) {
+                  resolved.error.dispose();
+                  value = null;
+                } else {
+                  value = marshalToHost(ctx, resolved.value);
+                  resolved.value.dispose();
+                }
+              } finally {
+                clearInterval(pump);
+              }
+            } else {
+              value = marshalToHost(ctx, handle);
+            }
+            handle.dispose();
+            args.push({ name: '', value });
+          }
+
+          const call: InspectCall = { args, timeout: 30000 };
+          this._inspectCall = call;
+          this._trace.write({ type: 'inspect', argCount: args.length });
+          process.stderr.write(`  [inspect] recorded ${args.length} args, triggering interrupt\n`);
+          // Arm the one-shot interrupt, then resolve the deferred so QuickJS
+          // resumes from the `await inspect(...)` call — the very next bytecode
+          // instruction hits the interrupt, stopping execution unconditionally.
+          // This bypasses user try/catch blocks (unlike throwing a JS Error).
+          this._interruptInspect = true;
+          deferred.resolve(ctx.undefined);
+          ctx.runtime.executePendingJobs();
+        })().catch((err) => {
+          process.stderr.write(`  [inspect] async error: ${err}\n`);
+          deferred.resolve(ctx.undefined);
+          ctx.runtime.executePendingJobs();
+        });
+
+        return deferred.handle;
+      });
+      ctx.setProp(ctx.global, 'inspect', inspectFn);
+      inspectFn.dispose();
+    }
+
     // ── Load space ──
     const loadedSpace = await loadSpaceFromDisk({
       sourceDir: spaceDir,
@@ -428,16 +514,16 @@ export class SpaceChatSession extends EventEmitter {
       return undefined;
     });
 
-    injectGlobal(ctx, '__Space_read', async (pathArg: unknown) => {
+    injectGlobal(ctx, '__Space_read', (pathArg: unknown) => {
       const rel = String(pathArg ?? '');
       const abs = join(spaceFilesDir, rel);
-      try { return await readFile(abs, 'utf-8'); } catch { return null; }
+      try { return readFileSync(abs, 'utf-8'); } catch { return null; }
     });
 
-    injectGlobal(ctx, '__Space_list', async (dirArg: unknown) => {
+    injectGlobal(ctx, '__Space_list', (dirArg: unknown) => {
       const rel = String(dirArg ?? '');
       const abs = join(spaceFilesDir, rel);
-      try { return await readdir(abs); } catch { return []; }
+      try { return readdirSync(abs); } catch { return []; }
     });
 
     injectGlobal(ctx, '__Space_delegate', async (spaceNameArg: unknown, agentArg: unknown, methodArg: unknown, instructionArg: unknown) => {
@@ -483,7 +569,8 @@ export class SpaceChatSession extends EventEmitter {
             }),
             write: function(path, content) { return __Space_write(path, content); },
             read: function(path) { return __Space_read(path); },
-            list: function(dir) { return __Space_list(dir || ''); }
+            list: function(dir) { return __Space_list(dir || ''); },
+            loadKnowledge: function() { return undefined; }
           };
         }
         return {
@@ -492,6 +579,33 @@ export class SpaceChatSession extends EventEmitter {
         };
       })();
     `);
+
+    // delegate() — run another agent as a complete sub-session
+    const currentSpaceDir = spaceDir;
+    const sessionModelAlias = this._opts.modelAlias;
+    const sessionBaseDir = baseDir;
+    injectGlobal(ctx, 'delegate', async (specRaw: unknown) => {
+      const spec = specRaw as {
+        space?: string; agent?: string; flow?: string; task: string;
+        modelAlias?: string; maxCycles?: number;
+      };
+      const subSpaceDir = spec.space
+        ? (spec.space.startsWith('/') ? spec.space : join(dirname(currentSpaceDir), spec.space))
+        : currentSpaceDir;
+      this._trace.write({ type: 'delegate_start', space: subSpaceDir, agent: spec.agent ?? '', task: spec.task.slice(0, 100) });
+      const sub = await runSpaceSession({
+        spaceDir: subSpaceDir,
+        task: spec.task,
+        agent: spec.agent,
+        flow: spec.flow,
+        modelAlias: (spec.modelAlias ?? sessionModelAlias) as ModelAlias | undefined,
+        maxCycles: spec.maxCycles ?? 6,
+        baseDir: sessionBaseDir,
+        verbose: false,
+      });
+      this._trace.write({ type: 'delegate_done', status: sub.manifest.finalStatus, outputBytes: (sub.output ?? '').length });
+      return { output: sub.output, sessionDir: sub.manifest.sessionDir, status: sub.manifest.finalStatus };
+    });
 
     // Sink: when the flow's sink fires, mark the session complete
     injectGlobal(ctx, flow.sink.name, (...a: unknown[]) => {
@@ -524,11 +638,11 @@ export class SpaceChatSession extends EventEmitter {
       sink: flow.sink.name,
     });
 
-    // Emit initial space_info block for the UI
+    // Emit initial space_info with no pre-selection — user must pick agent/flow explicitly
     this._emitEvent({
       type: 'space_info',
-      agentSlug: this._agentSlug,
-      flowSlug: this._flowSlug,
+      agentSlug: '',
+      flowSlug: '',
       spaceDir: this._opts.spaceDir,
     });
 
@@ -537,12 +651,6 @@ export class SpaceChatSession extends EventEmitter {
       type: 'space_metadata',
       agents: this._buildAgentInfos(),
     });
-
-    // Emit current agent's actions for the / picker
-    const initialAgentActions = this._getAgentActions(this._agentSlug);
-    if (initialAgentActions.length > 0) {
-      this._emitEvent({ type: 'actions', data: initialAgentActions });
-    }
 
     this._setStatus('idle');
   }
@@ -574,13 +682,41 @@ export class SpaceChatSession extends EventEmitter {
       const agentSlug = this._agentSlug || flow.defaultAgent || (await listAgents(spaceDir))[0]!;
       const agent = await loadAgent(spaceDir, agentSlug);
 
+      // Broadcast resolved agent/flow to UI on first cycle (or after explicit switch)
+      if (cycle === 1 || !this._slugsExposed) {
+        this._agentSlug = agentSlug;
+        this._flowSlug = flowSlug;
+        this._slugsExposed = true;
+        this._emitEvent({ type: 'space_info', agentSlug, flowSlug, spaceDir });
+        const actions = this._getAgentActions(agentSlug);
+        if (actions.length > 0) this._emitEvent({ type: 'actions', data: actions });
+      }
+
+      // Compute which flow step is active based on completed tasks (not raw cycle number)
+      const completedTaskIds = this._tasklistEngine.getCompletedTaskIds();
+      let stepIndex = 0;
+      for (let si = 0; si < flow.steps.length; si++) {
+        const stepTasks = Array.isArray(flow.steps[si]!.data.tasks)
+          ? (flow.steps[si]!.data.tasks as unknown[]).map(String)
+          : [];
+        if (stepTasks.length === 0 || stepTasks.some(t => !completedTaskIds.has(t))) {
+          stepIndex = si;
+          break;
+        }
+        stepIndex = si + 1 < flow.steps.length ? si + 1 : si;
+      }
+
       const built = await buildAgentPrompt({
         spaceDir,
         agent,
         flow,
         cycle,
+        stepIndex,
       });
       this._ambientDts = built.ambientDts;
+      if (this._inspectVarNames.size > 0) {
+        this._ambientDts += '\n' + [...this._inspectVarNames].map(n => `declare const __${n}: unknown;`).join('\n');
+      }
 
       const userPrompt = buildUserPrompt({
         cycle,
@@ -623,22 +759,52 @@ export class SpaceChatSession extends EventEmitter {
         /* ignore */
       }
 
-      // Execute the code
-      const cleaned = stripModuleArtifacts(stripFences(assistantText.trim()));
+      // Execute the code — with up to 2 typecheck-retry rounds
+      let codeToRun = stripModuleArtifacts(stripFences(assistantText.trim()));
+      let tscResult = codeToRun.length > 0 ? runTsc(codeToRun, { sessionContext: this._ambientDts, availableModules: ['react', 'react/jsx-runtime'] }) : { diagnostics: [], js: '' };
+      for (let tscAttempt = 0; tscAttempt < 2 && tscResult.diagnostics.length > 0; tscAttempt++) {
+        const errLines = tscResult.diagnostics.slice(0, 5)
+          .map(d => `  TS${d.code} L${d.line}:${d.column}: ${d.message.slice(0, 200)}`).join('\n');
+        process.stderr.write(`  [tsc retry ${tscAttempt + 1}] ${tscResult.diagnostics.length} error(s)\n`);
+        this._emitEvent({ type: 'code', lines: `\n// [TypeScript errors — retrying]\n`, blockId });
+        const fixStream = streamText({
+          model: this._model,
+          system: built.systemPrompt,
+          prompt: `Your previous code had TypeScript errors:\n${errLines}\n\nHere is the code that failed:\n\`\`\`ts\n${codeToRun}\n\`\`\`\n\nOutput corrected TypeScript only — no prose, no fences.`,
+        });
+        let fixedText = '';
+        for await (const chunk of fixStream.textStream) {
+          fixedText += chunk;
+          this._emitEvent({ type: 'code', lines: chunk, blockId });
+        }
+        try {
+          const usage = await fixStream.usage;
+          this._budgetTracker.recordApiUsage(usage.inputTokens ?? 0, usage.outputTokens ?? 0);
+        } catch { /* ignore */ }
+        codeToRun = stripModuleArtifacts(stripFences(fixedText.trim()));
+        tscResult = codeToRun.length > 0 ? runTsc(codeToRun, { sessionContext: this._ambientDts, availableModules: ['react', 'react/jsx-runtime'] }) : { diagnostics: [], js: '' };
+      }
+
+      const cleaned = codeToRun;
       await writeFile(join(this.sessionDir, `cycle-${cycle}.ts`), cleaned, 'utf-8');
 
       if (cleaned.length > 0) {
-        const tsc = runTsc(cleaned, { sessionContext: this._ambientDts });
-
-        if (this._opts.verbose && tsc.diagnostics.length > 0) {
-          for (const d of tsc.diagnostics.slice(0, 5)) {
-            process.stderr.write(`  ⚠ TS${d.code} L${d.line}:${d.column} ${d.message.slice(0, 200)}\n`);
-          }
-        }
+        const tsc = tscResult;
 
         // Strip ES module import statements — they're invalid inside an async IIFE in QuickJS.
         // JSX import (react/jsx-runtime) is replaced by binding from the pre-injected global.
         let jsForEval = tsc.js.replace(/^import\s+.*?(?:;|$)/gm, '').trimStart();
+
+        // Guard any __scopeVar references that are NOT locally declared — prevents ReferenceError
+        // when LLM references a prior-cycle inspect() variable that was never actually stored.
+        // The ?? fallback in the generated code will then handle the undefined gracefully.
+        const referencedScopeVars = [...jsForEval.matchAll(/\b(__[a-zA-Z_][a-zA-Z0-9_]*)\b/g)].map(m => m[1]!);
+        const declaredScopeVars = new Set([...jsForEval.matchAll(/\b(?:var|let|const)\s+(__[a-zA-Z_][a-zA-Z0-9_]*)\b/g)].map(m => m[1]!));
+        const guardPreamble = [...new Set(referencedScopeVars)]
+          .filter(v => !declaredScopeVars.has(v))
+          .map(v => `if (typeof ${v} === 'undefined') var ${v};`)
+          .join('\n');
+        if (guardPreamble) jsForEval = guardPreamble + '\n' + jsForEval;
         if (jsForEval.includes('_jsx') || jsForEval.includes('_jsxs')) {
           jsForEval = 'const { jsx: _jsx, jsxs: _jsxs, Fragment: _Fragment } = globalThis.__jsxRuntime;\n' + jsForEval;
         }
@@ -666,7 +832,7 @@ export class SpaceChatSession extends EventEmitter {
                 const winner = await Promise.race([
                   resolvedPromise.then((v) => ({ kind: 'ok' as const, v })),
                   new Promise<{ kind: 'timeout' }>((r) =>
-                    setTimeout(() => r({ kind: 'timeout' }), 120000),
+                    setTimeout(() => r({ kind: 'timeout' }), 600000),
                   ),
                 ]);
                 clearInterval(pump);
@@ -683,7 +849,10 @@ export class SpaceChatSession extends EventEmitter {
                     resolved.error.dispose();
                     const name = typeof errVal === 'object' && errVal ? (errVal as { name?: string }).name : undefined;
                     const message = typeof errVal === 'string' ? errVal : (errVal as { message?: string })?.message ?? JSON.stringify(errVal);
-                    if (name !== 'InspectSignal') {
+                    // Suppress errors that are expected inspect() stops:
+                    // - InspectSignal: explicit JS throw (legacy path)
+                    // - Any error when _inspectCall is set: the QuickJS interrupt fired
+                    if (name !== 'InspectSignal' && !this._inspectCall) {
                       process.stderr.write(`  [eval error] ${name}: ${message}\n`);
                       this._emitEvent({
                         type: 'error',
@@ -730,6 +899,9 @@ export class SpaceChatSession extends EventEmitter {
           name: `__${name}`,
           value,
         }));
+        for (const { name } of inspectArgs) {
+          this._inspectVarNames.add(name);
+        }
 
         // Emit read event
         const readPayload: Record<string, unknown> = {};
@@ -796,8 +968,10 @@ export class SpaceChatSession extends EventEmitter {
 
       // Auto-continue: if inspect() fired and the task isn't done, kick off the next cycle.
       // Reset to idle first — handleUserMessage guards against re-entry while executing.
+      process.stderr.write(`  [cycle ${cycle}] post-eval: inspectCall=${!!this._inspectCall} status=${this._status}\n`);
       if (this._inspectCall && this._status !== 'complete' && this._status !== 'waiting_for_input') {
         this._setStatus('idle');
+        process.stderr.write(`  [cycle ${cycle}] auto-continue → cycle ${cycle + 1}\n`);
         setImmediate(() => void this.handleUserMessage(text));
         return;
       }
@@ -806,6 +980,7 @@ export class SpaceChatSession extends EventEmitter {
         this._setStatus('idle');
       }
     } catch (e) {
+      process.stderr.write(`  [cycle ${this._cycle}] outer catch: ${e instanceof Error ? e.stack : String(e)}\n`);
       this._emitEvent({
         type: 'error',
         blockId: `err_${blockId}`,
@@ -864,8 +1039,8 @@ export class SpaceChatSession extends EventEmitter {
             nearingLimit: budget.nearingLimit,
           }
         : { tokensUsed: 0, tokensRemaining: 64000, costUsd: 0, forksActive: 0, forksCompleted: 0, nearingLimit: false },
-      agentSlug: this._agentSlug,
-      flowSlug: this._flowSlug,
+      agentSlug: this._slugsExposed ? this._agentSlug : '',
+      flowSlug: this._slugsExposed ? this._flowSlug : '',
       spaceDir: this._opts.spaceDir,
       cycle: this._cycle,
     };
@@ -885,6 +1060,7 @@ export class SpaceChatSession extends EventEmitter {
     const agentEntry = this._diskSpace.agents.find((a) => a.slug === slug);
     if (!agentEntry) return;
     this._agentSlug = slug;
+    this._slugsExposed = true;
 
     // Emit updated space_info
     this._emitEvent({
