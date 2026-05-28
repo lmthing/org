@@ -25,7 +25,7 @@ my-space/
   knowledge/
     domain/
       field/
-        _field.md       ← frontmatter: type, variable, default
+        index.md        ← frontmatter: type, variable, default; body = description
         option-a.md
         option-b.md
 ```

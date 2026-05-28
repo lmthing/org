@@ -167,12 +167,11 @@ async function loadKnowledge(dir: string): Promise<KnowledgeTree> {
       const fieldDir = join(domainDir, fieldSlug);
       if (!(await dirExists(fieldDir))) continue;
 
-      // Read field metadata from _field.md or _meta.md
       let type = 'string';
       let variableName = fieldSlug;
       let defaultValue: unknown;
 
-      const metaPath = join(fieldDir, '_field.md');
+      const metaPath = join(fieldDir, 'index.md');
       if (await fileExists(metaPath)) {
         const raw = await readFile(metaPath, 'utf8');
         const { data } = parseFrontmatter(raw);
@@ -181,11 +180,11 @@ async function loadKnowledge(dir: string): Promise<KnowledgeTree> {
         if ('default' in data) defaultValue = data['default'];
       }
 
-      // Collect options (all .md files except _field.md)
+      // Collect options (all .md files except index.md)
       const options: Record<string, string> = {};
       const optionFiles = await listDir(fieldDir);
       for (const optFile of optionFiles) {
-        if (!optFile.endsWith('.md') || optFile.startsWith('_')) continue;
+        if (!optFile.endsWith('.md') || optFile === 'index.md') continue;
         const optionSlug = basename(optFile, '.md');
         options[optionSlug] = join(fieldDir, optFile);
       }

@@ -84,5 +84,5 @@ No validation for component names — missing components silently produce fallba
 | `components/form/<Name>/ink.tsx` | no | Ink component |
 | `components/view/<Name>.tsx` | no | React view component |
 | `tasklists/<slug>/<N>-<id>.md` | no | `---\nid: X\noutput: {...}\n---\ninstruction` |
-| `knowledge/<domain>/<field>/_field.md` | no | `---\ntype: string\nvariable: X\n---` |
+| `knowledge/<domain>/<field>/index.md` | no | frontmatter: `type`, `variable`, `default`; body = field description |
 | `knowledge/<domain>/<field>/<option>.md` | no | knowledge content |
