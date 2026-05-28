@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Environment — contains API keys, never commit
+.env
+.env.local
+.env.*.local
+
+# Trace/debug output
+trace.jsonl
+*.trace.jsonl
