@@ -6,7 +6,7 @@ declare function loadKnowledge(...path: string[]): Promise<unknown>;
 declare function sleep(duration: string): Promise<void>;
 declare function tasklist(name: string): Promise<unknown>;
 declare function fork<T>(opts: ForkOpts<T>): Promise<T>;
-declare function delegate(target: string, queryOrAction: DelegateQuery | string, opts?: DelegateOpts): Promise<unknown>;
+declare function delegate(packageName: string, agentName: string, action: string, opts?: DelegateOpts): Promise<unknown>;
 
 declare interface JSXDescriptor {
   type: string | ((...args: unknown[]) => unknown);
@@ -43,12 +43,6 @@ declare interface ForkOpts<T> {
   output: Record<string, string>;
   seed?: Record<string, unknown>;
   timeout?: number;
-}
-
-declare interface DelegateQuery {
-  query: string;
-  context?: unknown;
-  output?: Record<string, string>;
 }
 
 declare interface DelegateOpts {

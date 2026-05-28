@@ -1,11 +1,12 @@
 import type { Space, AgentDef } from '../spaces/load.js';
+import type { ResolvedDep } from '../spaces/agent.js';
 import { getAgentFunctions } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
 
 export interface SystemBlockOpts {
   space: Space;
   agent: AgentDef;
-  directDeps: Array<{ space: Space; agent: AgentDef }>;
+  directDeps: ResolvedDep[];
 }
 
 const RUNTIME_PREAMBLE = `
@@ -30,7 +31,7 @@ const GLOBALS_SUMMARY = `
 - \`sleep(duration)\` — pause execution for a duration like "1s", "500ms" (yields)
 - \`tasklist(name)\` — run a named tasklist and return its goal output (yields)
 - \`fork(opts)\` — spawn a child task and await its result (yields)
-- \`delegate(target, queryOrAction, opts?)\` — delegate to another agent (yields)
+- \`delegate(packageName, agentName, action, opts?)\` — delegate to another agent's action (yields)
 
 Value-yielding globals (ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate) end the current turn.
 display() is void and does not end the turn.
@@ -102,15 +103,19 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
 
   // 5. Direct dependency agents
   if (directDeps.length > 0) {
-    const depParts = directDeps.map(({ agent: depAgent }) => {
-      const actionSummary = depAgent.actions
+    const depParts = directDeps.map(({ agent: depAgent, target }) => {
+      const slash = target.lastIndexOf('/');
+      const pkgName = target.slice(0, slash);
+      const agentName = target.slice(slash + 1);
+      const actionLines = depAgent.actions
         .map((a) => `  - \`${a.id}\`: ${a.description}`)
         .join('\n');
-      return `## ${depAgent.slug} — ${depAgent.title}\n${actionSummary}`;
+      const callExample = depAgent.actions[0]
+        ? `delegate("${pkgName}", "${agentName}", "${depAgent.actions[0].id}", { query, context })`
+        : `delegate("${pkgName}", "${agentName}", actionId)`;
+      return `## ${target} — ${depAgent.title}\n${actionLines}\n\n  Example: \`${callExample}\``;
     });
-    sections.push(
-      `# Delegatable Agents\n\nUse \`delegate("space/${agent.slug}", "action_id")\` to invoke:\n\n${depParts.join('\n\n')}`,
-    );
+    sections.push(`# Delegatable Agents\n\n${depParts.join('\n\n')}`);
   }
 
   return sections.join('\n\n');

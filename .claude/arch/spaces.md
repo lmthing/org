@@ -79,10 +79,34 @@ No validation for component names — missing components silently produce fallba
 | Path | Required | Contains |
 |------|----------|---------|
 | `agents/<slug>/instruct.md` | yes | frontmatter with all agent config + body = system prompt |
-| `functions/<name>.ts` | no | `export function <name>(...) { ... }` |
+| `package.json` | no | npm dependencies for space functions; triggers `npm install` on `loadSpace` |
+| `functions/<name>.ts` | no | `export function <name>(...) { ... }`; bundled with esbuild when `node_modules` present |
 | `components/form/<Name>/web.tsx` | no | React component with `interface Props` |
 | `components/form/<Name>/ink.tsx` | no | Ink component |
 | `components/view/<Name>.tsx` | no | React view component |
 | `tasklists/<slug>/<N>-<id>.md` | no | `---\nid: X\noutput: {...}\n---\ninstruction` |
 | `knowledge/<domain>/<field>/index.md` | no | frontmatter: `type`, `variable`, `default`; body = field description |
 | `knowledge/<domain>/<field>/<option>.md` | no | knowledge content |
+
+## Dependencies
+
+If a space has a `package.json`, `loadSpace` runs `npm install` automatically when `node_modules` is missing. Functions in `functions/` are then bundled with esbuild (`bundle: true`, `format: 'esm'`, `platform: 'browser'`) so their npm imports are inlined before injection into the QuickJS VM. `Space.nodeModulesDir` is set to the installed `node_modules` path.
+
+## Space-to-Space Dependencies (npm spaces)
+
+A space can declare other spaces as npm dependencies. Any `package.json` dependency whose installed directory contains an `agents/` folder is treated as a **dependent space** and loaded eagerly into `Space.dependentSpaces` (keyed by npm package name).
+
+### Agent `dependencies` in `instruct.md`
+
+```yaml
+dependencies:
+  - "@my-org/cooking-space/chef"   # specific agent from an npm space
+  - "@my-org/cooking-space/*"      # all agents from an npm space
+  - "sommelier/pairing"            # legacy: match by last dir component
+```
+
+`resolveDirectDeps(space, dependencies)` (in `spaces/agent.ts`) expands these to `ResolvedDep[]` — each with `{ space, agent, target }` where `target` is the exact string for `delegate()`.
+
+### Delegation
+
+The `DelegateRegistry` is seeded with dependent spaces (keyed by package name and dir) so `delegate("@my-org/space", "agent", "action_id", ...)` resolves correctly at runtime. The system block's **Delegatable Agents** section shows the exact `delegate()` call for each resolved dep.

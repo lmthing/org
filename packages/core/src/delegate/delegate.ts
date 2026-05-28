@@ -1,18 +1,19 @@
 import type { RenderHost, Clock } from '../session/types.js';
 import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
-import type { DelegateQuery, DelegateOpts } from '../globals/delegate.js';
+import type { DelegateOpts } from '../globals/delegate.js';
 import type { DelegateRegistry } from './registry.js';
+import { resolveDirectDeps } from '../spaces/agent.js';
 import { createVM } from '../sandbox/quickjs.js';
 import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { buildSystemBlock } from '../context/system-block.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
-import { validateOutput } from '../tasklist/schema.js';
 
 export interface RunDelegateOpts {
-  target: string;
-  queryOrAction: DelegateQuery | string;
+  packageName: string;
+  agentName: string;
+  action: string;
   delegateOpts?: DelegateOpts;
   registry: DelegateRegistry;
   renderHost: RenderHost;
@@ -24,23 +25,23 @@ export interface RunDelegateOpts {
 }
 
 export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
+  const target = `${opts.packageName}/${opts.agentName}`;
+
   if (opts.depth >= opts.maxDepth) {
     throw new Error(
-      `Maximum delegation depth (${opts.maxDepth}) exceeded at target "${opts.target}"`,
+      `Maximum delegation depth (${opts.maxDepth}) exceeded at target "${target}"`,
     );
   }
 
-  const { space, agent } = await opts.registry.resolveLazy(opts.target);
+  const { space, agent } = await opts.registry.resolveLazy(target);
 
-  const directDeps: Array<{ space: typeof space; agent: typeof agent }> = [];
-  for (const dep of agent.dependencies) {
-    try {
-      const depResult = opts.registry.resolve(dep);
-      directDeps.push(depResult);
-    } catch {
-      // Ignore unresolvable deps at this stage
-    }
+  // Seed registry with this space's npm deps so nested delegates can resolve them
+  for (const [pkgName, depSpace] of Object.entries(space.dependentSpaces)) {
+    opts.registry.addSpace(pkgName, depSpace);
+    opts.registry.addSpace(depSpace.dir, depSpace);
   }
+
+  const directDeps = resolveDirectDeps(space, agent.dependencies);
 
   const systemBlock = buildSystemBlock({ space, agent, directDeps });
 
@@ -49,41 +50,20 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   try {
     const history = new MessageHistory();
 
-    // Build user message based on query mode
-    let userMessage: string;
-    let outputSchema: Record<string, string> | undefined;
-
-    if (typeof opts.queryOrAction === 'string') {
-      // Mode 2: explicit action ID
-      const actionId = opts.queryOrAction;
-      const action = agent.actions.find((a) => a.id === actionId);
-      if (!action) {
-        throw new Error(`Action "${actionId}" not found on agent "${agent.slug}"`);
-      }
-
-      const query = opts.delegateOpts?.query ?? '';
-      const context = opts.delegateOpts?.context;
-      userMessage = [
-        `Run action: ${actionId}`,
-        query ? `Query: ${query}` : '',
-        context ? `Context: ${JSON.stringify(context)}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
-    } else {
-      // Mode 1: query with optional output schema
-      const query = opts.queryOrAction;
-      outputSchema = query.output;
-      userMessage = [
-        `Query: ${query.query}`,
-        query.context ? `Context: ${JSON.stringify(query.context)}` : '',
-        outputSchema
-          ? `Expected output schema: ${JSON.stringify(outputSchema)}`
-          : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
+    const actionDef = agent.actions.find((a) => a.id === opts.action);
+    if (!actionDef) {
+      throw new Error(`Action "${opts.action}" not found on agent "${agent.slug}"`);
     }
+
+    const query = opts.delegateOpts?.query ?? '';
+    const context = opts.delegateOpts?.context;
+    const userMessage = [
+      `Run action: ${opts.action}`,
+      query ? `Query: ${query}` : '',
+      context ? `Context: ${JSON.stringify(context)}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
 
     history.append({ role: 'user', content: userMessage, blockType: 'normal' });
 
@@ -93,10 +73,6 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
 
     const captureHandle = marshalToQuickJS(vm.ctx, {
       resolve: (value: unknown) => {
-        if (outputSchema && !validateOutput(outputSchema, value)) {
-          // Log mismatch but still capture
-          opts.renderHost.log(`Delegate output schema mismatch for "${opts.target}"`);
-        }
         capturedResult = value;
         resultCaptured = true;
       },
@@ -169,15 +145,17 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
           return forkEngine.fork(req.args[0] as import('../fork/fork.js').ForkTask);
         }
         if (req.kind === 'delegate') {
-          const [target, queryOrAction, delegateOpts2] = req.args as [
+          const [packageName, agentName, action, delegateOpts2] = req.args as [
             string,
-            DelegateQuery | string,
+            string,
+            string,
             DelegateOpts | undefined,
           ];
           return runDelegate({
             ...opts,
-            target,
-            queryOrAction,
+            packageName,
+            agentName,
+            action,
             delegateOpts: delegateOpts2,
             depth: opts.depth + 1,
           });

@@ -28,7 +28,7 @@ export { createLoadKnowledgeGlobal, loadKnowledgeFile } from './globals/load-kno
 export { createForkGlobal } from './globals/fork.js';
 export type { ForkGlobalOpts } from './globals/fork.js';
 export { createDelegateGlobal } from './globals/delegate.js';
-export type { DelegateQuery, DelegateOpts } from './globals/delegate.js';
+export type { DelegateOpts } from './globals/delegate.js';
 export { createTasklistGlobal } from './globals/tasklist.js';
 
 // Context
@@ -64,7 +64,8 @@ export type {
   KnowledgeDomain,
   KnowledgeField,
 } from './spaces/load.js';
-export { getAgentFunctions } from './spaces/agent.js';
+export { getAgentFunctions, resolveDirectDeps } from './spaces/agent.js';
+export type { ResolvedDep } from './spaces/agent.js';
 export { getAgentComponents } from './spaces/components.js';
 export { resolveKnowledge } from './spaces/knowledge.js';
 export { parseFrontmatter } from './spaces/frontmatter.js';

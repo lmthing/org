@@ -1,12 +1,16 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, basename, extname } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { parseFrontmatter } from './frontmatter.js';
 
 export interface Space {
   dir: string;
+  packageName?: string; // npm package name from own package.json
   agents: Record<string, AgentDef>;
   tasklists: Record<string, TasklistDir>; // slug -> sorted md files
-  functions: Record<string, string>; // name -> source
+  functions: Record<string, string>; // name -> source (TS) or bundled JS when node_modules present
+  nodeModulesDir?: string; // set when space has package.json with installed deps
+  dependentSpaces: Record<string, Space>; // packageName -> loaded Space for npm space deps
   components: {
     view: Record<string, string>; // name -> source
     form: Record<string, { web: string; ink: string }>; // name -> {web, ink} sources
@@ -84,7 +88,10 @@ async function listDir(dir: string): Promise<string[]> {
   }
 }
 
-async function loadFunctions(dir: string): Promise<Record<string, string>> {
+async function loadFunctions(
+  dir: string,
+  nodeModulesDir?: string,
+): Promise<Record<string, string>> {
   const functionsDir = join(dir, 'functions');
   if (!(await dirExists(functionsDir))) return {};
 
@@ -94,8 +101,27 @@ async function loadFunctions(dir: string): Promise<Record<string, string>> {
   for (const file of files) {
     if (file.endsWith('.ts') || file.endsWith('.tsx')) {
       const name = basename(file, extname(file));
-      const source = await readFile(join(functionsDir, file), 'utf8');
-      result[name] = source;
+
+      if (nodeModulesDir) {
+        const { build } = await import('esbuild');
+        const src = await readFile(join(functionsDir, file), 'utf8');
+        const buildResult = await build({
+          stdin: {
+            contents: src,
+            loader: file.endsWith('.tsx') ? 'tsx' : 'ts',
+            resolveDir: functionsDir,
+            sourcefile: file,
+          },
+          bundle: true,
+          format: 'esm',
+          write: false,
+          platform: 'browser',
+          absWorkingDir: dir,
+        });
+        result[name] = buildResult.outputFiles[0]!.text;
+      } else {
+        result[name] = await readFile(join(functionsDir, file), 'utf8');
+      }
     }
   }
 
@@ -286,6 +312,44 @@ export async function loadSpace(dir: string): Promise<Space> {
     throw new Error(`Space at "${dir}" must have at least one agent`);
   }
 
+  // Detect package.json, install deps, read own name, load npm space deps
+  const pkgJsonPath = join(dir, 'package.json');
+  const nodeModulesPath = join(dir, 'node_modules');
+  let packageName: string | undefined;
+  let nodeModulesDir: string | undefined;
+  const dependentSpaces: Record<string, Space> = {};
+
+  if (await fileExists(pkgJsonPath)) {
+    const pkgData = JSON.parse(await readFile(pkgJsonPath, 'utf8')) as Record<string, unknown>;
+    if (typeof pkgData['name'] === 'string') packageName = pkgData['name'];
+
+    if (!(await dirExists(nodeModulesPath))) {
+      const result = spawnSync('npm', ['install'], { cwd: dir, stdio: 'inherit' });
+      if (result.status !== 0) {
+        throw new Error(`Failed to install dependencies for space at "${dir}"`);
+      }
+    }
+
+    if (await dirExists(nodeModulesPath)) {
+      nodeModulesDir = nodeModulesPath;
+
+      // Load npm dependencies that are spaces (have an agents/ directory)
+      const allDeps = {
+        ...((pkgData['dependencies'] as Record<string, string> | undefined) ?? {}),
+      };
+      for (const depName of Object.keys(allDeps)) {
+        const depDir = join(dir, 'node_modules', depName);
+        if (await dirExists(join(depDir, 'agents'))) {
+          try {
+            dependentSpaces[depName] = await loadSpace(depDir);
+          } catch {
+            // Not a valid space, skip
+          }
+        }
+      }
+    }
+  }
+
   // Load all agents
   const agents: Record<string, AgentDef> = {};
   for (const slug of agentDirs) {
@@ -306,8 +370,8 @@ export async function loadSpace(dir: string): Promise<Space> {
     }
   }
 
-  // Load functions
-  const functions = await loadFunctions(dir);
+  // Load functions (bundled when node_modules available)
+  const functions = await loadFunctions(dir, nodeModulesDir);
 
   // Validate: every config.functions entry has a file
   for (const agent of Object.values(agents)) {
@@ -326,5 +390,5 @@ export async function loadSpace(dir: string): Promise<Space> {
   // Load knowledge
   const knowledge = await loadKnowledge(dir);
 
-  return { dir, agents, tasklists, functions, components, knowledge };
+  return { dir, packageName, agents, tasklists, functions, nodeModulesDir, dependentSpaces, components, knowledge };
 }

@@ -26,6 +26,10 @@ export class DelegateRegistry {
     throw new Error(`Cannot resolve delegate target "${target}": agent not found`);
   }
 
+  addSpace(key: string, space: Space): void {
+    if (!this.spaces.has(key)) this.spaces.set(key, space);
+  }
+
   async preloadDirect(space: Space, agent: AgentDef): Promise<void> {
     for (const dep of agent.dependencies) {
       const [_spaceName, depAgentSlug] = this.parseTarget(dep);
@@ -71,7 +75,7 @@ export class DelegateRegistry {
   }
 
   private matchesSpace(space: Space, name: string): boolean {
-    // Match by directory path or last component of path
+    if (space.packageName === name) return true;
     return space.dir === name || space.dir.endsWith('/' + name);
   }
 }

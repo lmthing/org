@@ -21,7 +21,7 @@ import { runTurnLoop } from '../eval/turn-loop.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
 import { transpileStatement } from '../typecheck/transpile.js';
-import { getAgentFunctions } from '../spaces/agent.js';
+import { getAgentFunctions, resolveDirectDeps } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
 import { loadSnapshot } from './snapshot.js';
 import type { Snapshot } from './snapshot.js';
@@ -64,8 +64,8 @@ export class Session {
     // 4. Inject all globals
     this.injectGlobals();
 
-    // 5. Load direct dependencies
-    const directDeps = await this.loadDirectDeps(this.space, agent.dependencies);
+    // 5. Resolve direct dependencies
+    const directDeps = resolveDirectDeps(this.space, agent.dependencies);
 
     // 6. Build system block
     const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps });
@@ -137,8 +137,8 @@ export class Session {
     // Append new user message
     this.history.append({ role: 'user', content: message, blockType: 'normal' });
 
-    // Load direct deps and build system block
-    const directDeps = await this.loadDirectDeps(this.space, agent.dependencies);
+    // Resolve direct deps and build system block
+    const directDeps = resolveDirectDeps(this.space, agent.dependencies);
     const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps });
     const agentFunctions = getAgentFunctions(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
@@ -253,27 +253,6 @@ export class Session {
     }
   }
 
-  private async loadDirectDeps(
-    space: Space,
-    dependencies: string[],
-  ): Promise<Array<{ space: Space; agent: import('../spaces/load.js').AgentDef }>> {
-    const result = [];
-
-    for (const dep of dependencies) {
-      const parts = dep.split('/');
-      if (parts.length !== 2) continue;
-
-      const [_spaceName, agentSlug] = parts;
-      // For now, look up in same space
-      const depAgent = space.agents[agentSlug!];
-      if (depAgent) {
-        result.push({ space, agent: depAgent });
-      }
-    }
-
-    return result;
-  }
-
   private async handleYield(req: YieldRequest): Promise<unknown> {
     switch (req.kind) {
       case 'ask': {
@@ -331,19 +310,25 @@ export class Session {
         return forkEngine.fork(forkOpts);
       }
       case 'delegate': {
-        const [target, queryOrAction, delegateOpts] = req.args as [
+        const [packageName, agentName, action, delegateOpts] = req.args as [
           string,
-          import('../globals/delegate.js').DelegateQuery | string,
+          string,
+          string,
           import('../globals/delegate.js').DelegateOpts | undefined,
         ];
         if (!this.space) throw new Error('Space not loaded');
         const { runDelegate } = await import('../delegate/delegate.js');
         const { DelegateRegistry } = await import('../delegate/registry.js');
-        const spaceMap = new Map([[this.opts.spaceDir, this.space]]);
+        const spaceMap = new Map<string, Space>([[this.opts.spaceDir, this.space]]);
+        for (const [pkgName, depSpace] of Object.entries(this.space.dependentSpaces)) {
+          spaceMap.set(pkgName, depSpace);
+          spaceMap.set(depSpace.dir, depSpace);
+        }
         const registry = new DelegateRegistry(spaceMap);
         return runDelegate({
-          target,
-          queryOrAction,
+          packageName,
+          agentName,
+          action,
           delegateOpts,
           registry,
           renderHost: this.opts.renderHost,

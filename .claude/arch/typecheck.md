@@ -37,7 +37,7 @@ declare function inspect(...values: unknown[]): Promise<unknown>;
 declare function sleep(duration: string): Promise<void>;
 declare function loadKnowledge(...path: string[]): Promise<unknown>;
 declare function fork(opts: ForkOpts): Promise<unknown>;
-declare function delegate(target: string, queryOrAction: ...): Promise<unknown>;
+declare function delegate(packageName: string, agentName: string, action: string, opts?: DelegateOpts): Promise<unknown>;
 declare function tasklist(name: string): Promise<unknown>;
 
 interface JSXDescriptor {
