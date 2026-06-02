@@ -4,17 +4,23 @@
 
 - `packages/core/src/spaces/load.ts` — `loadSpace(dir): Promise<Space>`
 - `packages/core/src/spaces/frontmatter.ts` — YAML frontmatter parser
-- `packages/core/src/spaces/agent.ts` — `getAgentFunctions`
+- `packages/core/src/spaces/agent.ts` — `getAgentFunctions`, `getAgentFunctionsBundled`, `resolveDirectDeps`
 - `packages/core/src/spaces/components.ts` — `getAgentComponents`
+- `packages/core/src/spaces/knowledge.ts` — knowledge tree loading
+- `packages/core/src/spaces/tasklist-load.ts` — tasklist directory loading
 
 ## Space Type
 
 ```typescript
 interface Space {
   dir: string;
+  packageName?: string;                      // own npm package name (from package.json)
   agents: Record<string, AgentDef>;
   tasklists: Record<string, TasklistDir>;
-  functions: Record<string, string>;         // name → TypeScript source
+  functions: Record<string, string>;         // name → TypeScript source (always)
+  functionsBundled: Record<string, string>;  // name → bundled JS (only when node_modules present)
+  nodeModulesDir?: string;                   // set when space has package.json with installed deps
+  dependentSpaces: Record<string, Space>;    // packageName → loaded Space for npm space deps
   components: {
     view: Record<string, string>;            // name → source
     form: Record<string, { web: string; ink: string }>;  // name → {web, ink}

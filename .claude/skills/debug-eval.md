@@ -58,7 +58,7 @@ In `session.ts`:
 ### Space function not available
 
 `session.ts:injectSpaceFunctions(agentFunctions)` is called after `getAgentFunctions(space, agent)`. Check:
-1. The function name is listed in `agents/<slug>/config.md` under `functions:`.
+1. The function name is listed in `agents/<slug>/instruct.md` frontmatter under `functions:`.
 2. The file `functions/<name>.ts` exists and exports a function with the exact same name.
 3. The `[warn] failed to inject function` log message — it will show the actual transpile error.
 

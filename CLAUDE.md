@@ -23,6 +23,8 @@ Run the CLI against a fixture space:
 ```bash
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --agent chef "make pasta"
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000     # browser mode
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --trace /tmp/trace.jsonl "make pasta"
 ```
 
 ## Packages
@@ -39,11 +41,11 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --agent chef "make 
 
 ```
 packages/core/src/
-  sandbox/     quickjs.ts host-bridge.ts boundary.ts    ← VM + marshalling + statement splitting
-  eval/        turn-loop.ts yield.ts error-rewind.ts     ← the execution engine
-  typecheck/   tsc.ts library-dts.ts overlay.ts transpile.ts
+  sandbox/     quickjs.ts host-bridge.ts boundary.ts jsx-runtime.ts trace.ts  ← VM + marshalling + tracing
+  eval/        turn-loop.ts yield.ts error-rewind.ts stream-types.ts           ← the execution engine
+  typecheck/   tsc.ts library-dts.ts overlay.ts overlay-dts.ts transpile.ts
   globals/     ask.ts sleep.ts display.ts inspect.ts fork.ts delegate.ts tasklist.ts load-knowledge.ts serialize.ts
-  spaces/      load.ts frontmatter.ts agent.ts components.ts
+  spaces/      load.ts frontmatter.ts agent.ts components.ts knowledge.ts tasklist-load.ts
   tasklist/    dag.ts orchestrator.ts condition-dsl.ts schema.ts
   fork/        fork.ts
   delegate/    delegate.ts registry.ts
@@ -53,8 +55,9 @@ packages/core/src/
 packages/cli/src/
   providers/   resolve.ts aliases.ts
   stream/      stream.ts
-  render/      ink-renderer.tsx
+  render/      ink-renderer.tsx html-to-terminal.ts
   rpc/         server.ts events.ts
+  web/         serve.ts                                                          ← esbuild bundle + HTTP+WS server
   cli/         bin.ts args.ts
 
 packages/ui/src/
@@ -67,9 +70,10 @@ packages/ui/src/
 - Each `evalStatement(code)` call is an isolated ES module. Variables do not persist between evals — the turn loop appends `globalThis['x'] = x` assignments after each statement so the next module can read them as globals.
 - `accumulatedContext` in the turn loop persists across yield continuations (variables stay in typecheck scope). Only error retries start fresh.
 - JSX in model output is transpiled to `React.createElement(...)` via `transpileStatement()` before VM eval. A React shim and component stubs are injected at session start.
-- Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`.
+- Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
 - The QuickJS VM uses sync `evalCode` + manual `executePendingJobs` loop — NOT `evalCodeAsync`, which deadlocks when awaiting user input.
 - `.env` is loaded from `process.cwd()` only (where the script is run, not the package dir).
+- `Tracer` writes NDJSON to `--trace <file>` (each event is a JSON line). Pass `NULL_TRACER` to disable. The tracer is threaded through session → fork → delegate.
 
 ## Environment
 

@@ -38,7 +38,7 @@ for (const [pkgName, depSpace] of Object.entries(space.dependentSpaces)) {
 const registry = new DelegateRegistry(spaceMap);
 ```
 
-`registry.resolve(target)` splits at the last `/`, checks `space.packageName`, `space.dir`, and last dir component via `matchesSpace`. `registry.resolveLazy(target)` falls back to loading from the filesystem when not found.
+`runDelegate` always calls `registry.resolveLazy(target)`, which looks up the map first then falls back to loading the space from the filesystem (by dir path) when not cached.
 
 `registry.addSpace(key, space)` adds a space without overwriting an existing entry — used by `runDelegate` to seed nested registries with the resolved space's own `dependentSpaces`.
 
@@ -46,9 +46,9 @@ const registry = new DelegateRegistry(spaceMap);
 
 `runDelegate` creates a fresh child session (own VM + history). The child:
 - Receives a system block built from its own space/agent + its own `directDeps`
-- Is seeded only with the `context` passed by the caller
-- Runs until it produces a goal output (via a `tasklist()` call)
-- Returns the goal output to the parent as VARIABLES
+- Is seeded with `context` passed by the caller (and `query` as a free-text instruction)
+- Has a `currentTask` global injected with `{ resolve(value) }` — the child must call `currentTask.resolve(result)` to return a value
+- Runs `runTurnLoop` until the model calls `currentTask.resolve(...)`, then returns `capturedResult` to the parent
 
 ## Caps
 

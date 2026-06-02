@@ -15,9 +15,11 @@
 ```typescript
 interface ForkGlobalOpts {
   instruction: string;
-  output?: Record<string, string>;  // { field: type } schema
-  seed?: Record<string, unknown>;   // JSON-serializable scope vars to pass in
-  timeout?: number;                 // ms, default varies
+  output: Record<string, string>;          // required: { field: type } schema
+  seed?: Record<string, unknown>;          // JSON-serializable scope vars to pass in
+  timeout?: number;                        // ms
+  taskId?: string;                         // set by orchestrator for trace labelling
+  upstreamOutputs?: Record<string, unknown>; // set by orchestrator; passed as seed context
 }
 ```
 
