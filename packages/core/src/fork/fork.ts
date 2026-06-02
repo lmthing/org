@@ -8,6 +8,8 @@ import { runTurnLoop } from '../eval/turn-loop.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { validateOutput } from '../tasklist/schema.js';
 import { marshalToQuickJS } from '../sandbox/host-bridge.js';
+import { NULL_TRACER } from '../sandbox/trace.js';
+import type { Tracer } from '../sandbox/trace.js';
 
 export interface ForkTask {
   instruction: string;
@@ -26,6 +28,7 @@ interface ForkEngineOpts {
   renderHost: RenderHost;
   streamFn: (opts: StreamOpts) => Promise<StreamSession>;
   clock?: Clock;
+  tracer?: Tracer;
 }
 
 export class ForkEngine {
@@ -163,13 +166,23 @@ export class ForkEngine {
         const history = new MessageHistory();
         history.append({ role: 'user', content: userMessage, blockType: 'normal' });
 
-        const systemBlock = `You are executing a task. When complete, call currentTask.resolve(value) with an object matching the output schema. Do not ask for clarification — work with what you have.`;
+        const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
+        const ambientDts = LIBRARY_DTS + '\n' + currentTaskDts;
+
+        const systemBlock = [
+          'CRITICAL INSTRUCTION: You are a TypeScript code execution agent. You MUST respond with TypeScript code ONLY. Do NOT write any prose, explanations, JSON, markdown, or natural language. Your entire response will be fed directly into a TypeScript evaluator.',
+          '',
+          'Respond with valid TypeScript statements only. Use top-level `await` for async operations. Do not wrap code in functions or markdown code blocks.',
+          '',
+          'When your task is complete, call `currentTask.resolve(value)` with an object matching the output schema.',
+          'Do not ask for clarification — work with what you have.',
+        ].join('\n');
 
         const result = await runTurnLoop({
           vm,
           history,
           systemBlock,
-          ambientDts: LIBRARY_DTS,
+          ambientDts,
           renderHost: this.opts.renderHost,
           streamFn: this.opts.streamFn,
           processYield: async (req) => {
@@ -187,6 +200,8 @@ export class ForkEngine {
             return undefined;
           },
           maxRetries: 3,
+          tracer: this.opts.tracer ?? NULL_TRACER,
+          traceContext: `fork:${task.taskId ?? 'unknown'}`,
         });
 
         if (!resolved) {

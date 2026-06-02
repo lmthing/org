@@ -44,11 +44,14 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       }
       case '--web': {
-        const val = args.shift();
-        if (!val) throw new Error('--web requires a port number');
-        const port = parseInt(val, 10);
-        if (isNaN(port)) throw new Error(`--web requires a valid port number, got "${val}"`);
-        result.webPort = port;
+        // Optional port argument: --web [port]  (defaults to 3000)
+        const next = args[0];
+        if (next && /^\d+$/.test(next)) {
+          args.shift();
+          result.webPort = parseInt(next, 10);
+        } else {
+          result.webPort = 3000;
+        }
         break;
       }
       default: {
@@ -66,8 +69,9 @@ export function parseArgs(argv: string[]): CliArgs {
   if (!result.space) {
     throw new Error('--space <dir> is required');
   }
-  if (!result.message) {
-    throw new Error('A message argument is required');
+  // message is only required in terminal mode
+  if (!result.webPort && !result.message) {
+    throw new Error('A message argument is required (or use --web for browser mode)');
   }
 
   return result as CliArgs;

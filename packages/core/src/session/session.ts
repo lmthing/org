@@ -25,6 +25,7 @@ import { getAgentFunctions, getAgentFunctionsBundled, resolveDirectDeps } from '
 import { getAgentComponents } from '../spaces/components.js';
 import { loadSnapshot } from './snapshot.js';
 import type { Snapshot } from './snapshot.js';
+import { Tracer } from '../sandbox/trace.js';
 
 export class Session {
   private opts: SessionOpts;
@@ -33,12 +34,14 @@ export class Session {
   private history: MessageHistory;
   private space: Space | null = null;
   private sessionId: string;
+  private tracer: Tracer;
 
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
     this.deps = deps;
     this.history = new MessageHistory();
     this.sessionId = randomUUID();
+    this.tracer = new Tracer(opts.traceFile ?? null);
   }
 
   async start(initialMessage: string): Promise<void> {
@@ -92,6 +95,8 @@ export class Session {
       blockType: 'normal',
     });
 
+    this.tracer.write({ ts: Date.now(), type: 'session_start', sessionId: this.sessionId, spaceDir: this.opts.spaceDir, agentSlug: resolvedSlug! });
+
     // 8. Run turn loop until done or error
     await runTurnLoop({
       vm: this.vm,
@@ -102,6 +107,8 @@ export class Session {
       streamFn: this.deps.streamFn,
       processYield: (req) => this.handleYield(req),
       maxRetries: this.opts.maxRetries,
+      tracer: this.tracer,
+      traceContext: 'session',
     });
   }
 
@@ -162,6 +169,8 @@ export class Session {
       streamFn: this.deps.streamFn,
       processYield: (req) => this.handleYield(req),
       maxRetries: this.opts.maxRetries,
+      tracer: this.tracer,
+      traceContext: 'session',
     });
   }
 
@@ -302,6 +311,7 @@ export class Session {
           renderHost: this.opts.renderHost,
           streamFn: this.deps.streamFn,
           clock: this.opts.clock,
+          tracer: this.tracer,
         });
         return runTasklist({ name, space: this.space, forkEngine });
       }
@@ -317,6 +327,7 @@ export class Session {
           renderHost: this.opts.renderHost,
           streamFn: this.deps.streamFn,
           clock: this.opts.clock,
+          tracer: this.tracer,
         });
         return forkEngine.fork(forkOpts);
       }
@@ -348,6 +359,7 @@ export class Session {
           maxDepth: 5,
           maxConcurrentForks: this.opts.maxConcurrentForks ?? 4,
           clock: this.opts.clock,
+          tracer: this.tracer,
         });
       }
       default:

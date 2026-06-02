@@ -3,6 +3,8 @@ import type { MessageHistory } from '../context/history.js';
 import type { RenderHost } from '../session/types.js';
 import type { YieldRequest } from './yield.js';
 import type { StreamOpts, StreamSession } from './stream-types.js';
+import { NULL_TRACER } from '../sandbox/trace.js';
+import type { Tracer } from '../sandbox/trace.js';
 import { BoundaryDetector } from '../sandbox/boundary.js';
 import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
@@ -20,11 +22,16 @@ export interface TurnLoopDeps {
   streamFn: (opts: StreamOpts) => Promise<StreamSession>;
   processYield: (req: YieldRequest) => Promise<unknown>;
   maxRetries?: number;
+  tracer?: Tracer;
+  /** Label for trace events — e.g. 'session', 'fork:analyze_dish', 'delegate:pairing' */
+  traceContext?: string;
 }
 
 export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'> {
   const { vm, history, systemBlock, ambientDts, renderHost, streamFn, processYield } = deps;
   const maxRetries = deps.maxRetries ?? 3;
+  const tracer = deps.tracer ?? NULL_TRACER;
+  const ctx = deps.traceContext ?? 'session';
 
   let attempt = 0;
   let accumulatedContext = ''; // persists across yield-continuations; only resets on a fresh start
@@ -34,6 +41,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     const contextSnapshot = accumulatedContext; // restore on error so re-tries don't see partial turn
 
     const promptMessages = history.getPromptMessages();
+    tracer.write({ ts: Date.now(), type: 'llm_request', context: ctx, system: systemBlock, messages: promptMessages });
     const stream = await streamFn({ system: systemBlock, messages: promptMessages });
 
     const detector = new BoundaryDetector();
@@ -54,6 +62,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         for (const stmt of statements) {
           hadStatements = true;
           renderHost.log(`[stmt] ${stmt.slice(0, 120)}`);
+          tracer.write({ ts: Date.now(), type: 'statement', context: ctx, code: stmt });
 
           const tscResult = runTsc({ ambientDts, sessionContext: accumulatedContext, statement: stmt });
           if (!tscResult.ok) {
@@ -62,6 +71,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
             aborted = true;
             turnError = errMsg;
             failingStatement = stmt;
+            tracer.write({ ts: Date.now(), type: 'typecheck_error', context: ctx, statement: stmt, message: errMsg, attempt });
             break;
           }
 
@@ -81,6 +91,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
             aborted = true;
             turnError = evalResult.error;
             failingStatement = stmt;
+            tracer.write({ ts: Date.now(), type: 'eval_error', context: ctx, statement: stmt, message: evalResult.error });
             break;
           }
 
@@ -142,6 +153,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
 
     if (assistantContent.trim()) {
       renderHost.log(`[model response]\n${assistantContent.trim().slice(0, 500)}\n[/model response]`);
+      tracer.write({ ts: Date.now(), type: 'llm_response', context: ctx, attempt, text: assistantContent.trim() });
       history.append({ role: 'assistant', content: assistantContent.trim(), blockType: 'normal' });
     }
 
@@ -161,10 +173,12 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       const boundNames = extractBindingNames(yieldingStatement);
 
       for (const yieldReq of yields) {
+        tracer.write({ ts: Date.now(), type: 'yield', context: ctx, kind: yieldReq.kind, args: yieldReq.args });
         let resolved: unknown;
         try {
           // processYield does the actual async work (renders form, sleeps, etc.)
           resolved = await processYield(yieldReq);
+          tracer.write({ ts: Date.now(), type: 'yield_resolved', context: ctx, kind: yieldReq.kind, value: resolved });
           // Resolve the JS Promise — triggers VM deferred resolution as a microtask
           yieldReq.deferred.resolve(resolved);
           // Flush microtasks so the VM deferred resolves and executePendingJobs runs

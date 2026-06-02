@@ -2,6 +2,8 @@ import type { RenderHost, Clock } from '../session/types.js';
 import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
 import type { DelegateOpts } from '../globals/delegate.js';
 import type { DelegateRegistry } from './registry.js';
+import type { Tracer } from '../sandbox/trace.js';
+import { NULL_TRACER } from '../sandbox/trace.js';
 import { resolveDirectDeps, getAgentFunctions, getAgentFunctionsBundled } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
 import { createVM } from '../sandbox/quickjs.js';
@@ -25,6 +27,7 @@ export interface RunDelegateOpts {
   maxDepth: number;
   maxConcurrentForks: number;
   clock?: Clock;
+  tracer?: Tracer;
 }
 
 export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
@@ -220,6 +223,8 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
         return undefined;
       },
       maxRetries: 3,
+      tracer: opts.tracer ?? NULL_TRACER,
+      traceContext: `delegate:${opts.packageName}/${opts.agentName}/${opts.action}`,
     });
 
     return resultCaptured ? capturedResult : undefined;
