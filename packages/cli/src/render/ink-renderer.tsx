@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Text, Box, render } from 'ink';
+import TextInput from 'ink-text-input';
 import type { RenderHost } from '@repl/core';
 
 interface JSXDescriptor {
@@ -18,6 +19,23 @@ function isDescriptor(v: unknown): v is JSXDescriptor {
   );
 }
 
+interface TextInputFormProps {
+  label: string;
+  onSubmit: (value: string) => void;
+}
+
+function TextInputForm({ label, onSubmit }: TextInputFormProps): React.ReactElement {
+  const [value, setValue] = useState('');
+  return (
+    <Box flexDirection="column">
+      <Text bold>{label}</Text>
+      <Box>
+        <Text color="cyan">&gt; </Text>
+        <TextInput value={value} onChange={setValue} onSubmit={onSubmit} />
+      </Box>
+    </Box>
+  );
+}
 
 function renderDescriptor(desc: unknown): React.ReactNode {
   if (desc === null || desc === undefined) return null;
@@ -39,29 +57,13 @@ function renderDescriptor(desc: unknown): React.ReactNode {
 
   switch (type) {
     case 'h1':
-      return (
-        <Text bold color="cyan">
-          {children}
-        </Text>
-      );
+      return <Text bold color="cyan">{children}</Text>;
     case 'h2':
-      return (
-        <Text bold color="blue">
-          {children}
-        </Text>
-      );
+      return <Text bold color="blue">{children}</Text>;
     case 'h3':
-      return (
-        <Text bold>
-          {children}
-        </Text>
-      );
+      return <Text bold>{children}</Text>;
     case 'p':
-      return (
-        <Box marginBottom={1}>
-          <Text>{children}</Text>
-        </Box>
-      );
+      return <Box marginBottom={1}><Text>{children}</Text></Box>;
     case 'span':
       return <Text color={color} bold={bold}>{children}</Text>;
     case 'code': {
@@ -102,46 +104,60 @@ function renderDescriptor(desc: unknown): React.ReactNode {
 }
 
 export class InkRenderHost implements RenderHost {
+  // plain=true: use direct stdin reads (for automated/agent callers like Claude Code)
+  // plain=false (default): use Ink TextInput (for human interactive use)
+  constructor(private readonly plain = false) {}
+
   display(descriptor: unknown): void {
     const { unmount } = render(
       <Box flexDirection="column">{renderDescriptor(descriptor)}</Box>,
     );
-    // Render and immediately unmount static content (appended to stdout)
-    // For streaming UI, a more sophisticated approach would be needed
     setTimeout(() => unmount(), 0);
   }
 
   ask(_id: string, descriptor: unknown): Promise<unknown> {
-    // Use direct stdin I/O instead of Ink's TextInput to avoid raw-mode conflicts.
-    // Ink's useInput requires setRawMode(true) which depends on icrnl being disabled;
-    // this is unreliable across PTY environments. Direct stdin 'readable' works in
-    // any cooked-mode terminal (handles both \r and \n as line end).
     const label = isDescriptor(descriptor)
       ? typeof descriptor.props['label'] === 'string'
         ? descriptor.props['label']
-        : descriptor.type
+        : String(descriptor.type)
       : 'Input';
 
-    process.stdout.write(`\n${label}\n> `);
-
-    return new Promise((resolve) => {
-      process.stdin.setEncoding('utf8');
-      let buf = '';
-      const onReadable = () => {
-        let chunk: string | null;
-        while ((chunk = process.stdin.read() as string | null) !== null) {
-          buf += chunk;
-          const rIdx = buf.indexOf('\r');
-          const nIdx = buf.indexOf('\n');
-          const idx = rIdx === -1 ? nIdx : nIdx === -1 ? rIdx : Math.min(rIdx, nIdx);
-          if (idx !== -1) {
-            process.stdin.off('readable', onReadable);
-            resolve(buf.slice(0, idx).trim());
-            return;
+    if (this.plain) {
+      // Direct stdin reads: works in any PTY regardless of icrnl/raw-mode state.
+      // Used when --claude flag is set so automated callers can pipe answers.
+      process.stdout.write(`\n${label}\n> `);
+      return new Promise((resolve) => {
+        process.stdin.setEncoding('utf8');
+        let buf = '';
+        const onReadable = () => {
+          let chunk: string | null;
+          while ((chunk = process.stdin.read() as string | null) !== null) {
+            buf += chunk;
+            const rIdx = buf.indexOf('\r');
+            const nIdx = buf.indexOf('\n');
+            const idx = rIdx === -1 ? nIdx : nIdx === -1 ? rIdx : Math.min(rIdx, nIdx);
+            if (idx !== -1) {
+              process.stdin.off('readable', onReadable);
+              resolve(buf.slice(0, idx).trim());
+              return;
+            }
           }
-        }
-      };
-      process.stdin.on('readable', onReadable);
+        };
+        process.stdin.on('readable', onReadable);
+      });
+    }
+
+    // Human mode: Ink TextInput with cursor, edit support, styled prompt.
+    return new Promise((resolve) => {
+      const { unmount } = render(
+        <TextInputForm
+          label={label}
+          onSubmit={(value) => {
+            unmount();
+            resolve(value);
+          }}
+        />,
+      );
     });
   }
 

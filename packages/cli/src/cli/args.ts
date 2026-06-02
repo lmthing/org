@@ -6,6 +6,7 @@ export interface CliArgs {
   traceFile?: string;
   webPort?: number;
   repl?: boolean;
+  claude?: boolean;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -47,6 +48,10 @@ export function parseArgs(argv: string[]): CliArgs {
       case '--repl':
       case '-r': {
         result.repl = true;
+        break;
+      }
+      case '--claude': {
+        result.claude = true;
         break;
       }
       case '--web': {

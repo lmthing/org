@@ -95,7 +95,7 @@ async function main(): Promise<void> {
     // Keep process alive
   } else if (args.repl) {
     // Interactive REPL mode: persistent session, multi-turn conversation
-    const renderHost = new InkRenderHost();
+    const renderHost = new InkRenderHost(args.claude);
     const session = new Session(
       {
         spaceDir: args.space,
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
     session.dispose();
   } else {
     // Terminal mode: single message, run to completion
-    const renderHost = new InkRenderHost();
+    const renderHost = new InkRenderHost(args.claude);
     const session = new Session(
       {
         spaceDir: args.space,
