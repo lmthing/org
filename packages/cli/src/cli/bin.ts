@@ -31,6 +31,34 @@ import { startWebServer } from '../web/serve.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Read one line using the same 'readable' + read() paused-mode pattern Ink uses.
+// Avoids 'data' listeners (which force flowing mode) and readline (which leaves
+// permanent emitKeypressEvents listeners) — both break Ink's raw-mode stdin.read().
+function readLine(question: string): Promise<string> {
+  process.stdout.write(question);
+  process.stdin.setEncoding('utf8');
+  return new Promise((resolve) => {
+    let buf = '';
+    const onReadable = () => {
+      let chunk: string | null;
+      while ((chunk = process.stdin.read() as string | null) !== null) {
+        buf += chunk;
+        const rIdx = buf.indexOf('\r');
+        const nIdx = buf.indexOf('\n');
+        const idx = rIdx === -1 ? nIdx : nIdx === -1 ? rIdx : Math.min(rIdx, nIdx);
+        if (idx !== -1) {
+          process.stdin.off('readable', onReadable);
+          // Do NOT pause() — pause() sets kPaused=true which prevents Ink's
+          // later read(0) from calling _read(), so the TTY never starts reading.
+          resolve(buf.slice(0, idx).trim());
+          return;
+        }
+      }
+    };
+    process.stdin.on('readable', onReadable);
+  });
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
@@ -65,8 +93,47 @@ async function main(): Promise<void> {
     const appTsxPath = join(__dirname, '..', 'web', 'app.tsx');
     await startWebServer({ port: args.webPort, session, renderHost, space, agentSlug, appTsxPath });
     // Keep process alive
+  } else if (args.repl) {
+    // Interactive REPL mode: persistent session, multi-turn conversation
+    const renderHost = new InkRenderHost();
+    const session = new Session(
+      {
+        spaceDir: args.space,
+        agentSlug,
+        modelAlias: modelSpec,
+        renderHost,
+        traceFile: args.traceFile,
+      },
+      { streamFn },
+    );
+
+    process.on('SIGINT', () => { session.dispose(); process.exit(0); });
+
+    process.stdout.write(`REPL — space: ${args.space}  agent: ${agentSlug}\nType a message, or "exit" to quit.\n\n`);
+
+    // First message — may have been passed as a positional arg or prompted
+    let firstMessage = args.message;
+    if (!firstMessage) {
+      firstMessage = await readLine('> ');
+      if (!firstMessage.trim() || firstMessage.trim() === 'exit') {
+        session.dispose();
+        return;
+      }
+    }
+
+    await session.start(firstMessage.trim());
+
+    // Subsequent messages continue the same session
+    while (true) {
+      const input = await readLine('\n> ');
+      const trimmed = input.trim();
+      if (!trimmed || trimmed === 'exit' || trimmed === 'quit') break;
+      await session.continue(trimmed);
+    }
+
+    session.dispose();
   } else {
-    // Terminal mode: use Ink renderer
+    // Terminal mode: single message, run to completion
     const renderHost = new InkRenderHost();
     const session = new Session(
       {

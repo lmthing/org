@@ -5,6 +5,7 @@ export interface CliArgs {
   model?: string;
   traceFile?: string;
   webPort?: number;
+  repl?: boolean;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -43,6 +44,11 @@ export function parseArgs(argv: string[]): CliArgs {
         result.traceFile = val;
         break;
       }
+      case '--repl':
+      case '-r': {
+        result.repl = true;
+        break;
+      }
       case '--web': {
         // Optional port argument: --web [port]  (defaults to 3000)
         const next = args[0];
@@ -69,9 +75,9 @@ export function parseArgs(argv: string[]): CliArgs {
   if (!result.space) {
     throw new Error('--space <dir> is required');
   }
-  // message is only required in terminal mode
-  if (!result.webPort && !result.message) {
-    throw new Error('A message argument is required (or use --web for browser mode)');
+  // message is only required in terminal (non-interactive, non-web) mode
+  if (!result.webPort && !result.repl && !result.message) {
+    throw new Error('A message argument is required (or use --web for browser mode, --repl for interactive mode)');
   }
 
   return result as CliArgs;

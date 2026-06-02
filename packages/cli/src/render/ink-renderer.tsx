@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Text, Box, render } from 'ink';
-import TextInput from 'ink-text-input';
 import type { RenderHost } from '@repl/core';
 
 interface JSXDescriptor {
@@ -19,33 +18,6 @@ function isDescriptor(v: unknown): v is JSXDescriptor {
   );
 }
 
-interface TextInputFormProps {
-  descriptor: JSXDescriptor;
-  onSubmit: (value: unknown) => void;
-}
-
-function TextInputForm({ descriptor, onSubmit }: TextInputFormProps): React.ReactElement {
-  const [value, setValue] = useState('');
-
-  const label =
-    typeof descriptor.props['label'] === 'string'
-      ? descriptor.props['label']
-      : 'Input';
-
-  const handleSubmit = (val: string) => {
-    onSubmit(val);
-  };
-
-  return (
-    <Box flexDirection="column">
-      <Text bold>{label}</Text>
-      <Box>
-        <Text>&gt; </Text>
-        <TextInput value={value} onChange={setValue} onSubmit={handleSubmit} />
-      </Box>
-    </Box>
-  );
-}
 
 function renderDescriptor(desc: unknown): React.ReactNode {
   if (desc === null || desc === undefined) return null;
@@ -140,21 +112,36 @@ export class InkRenderHost implements RenderHost {
   }
 
   ask(_id: string, descriptor: unknown): Promise<unknown> {
-    return new Promise((resolve) => {
-      if (!isDescriptor(descriptor)) {
-        resolve(null);
-        return;
-      }
+    // Use direct stdin I/O instead of Ink's TextInput to avoid raw-mode conflicts.
+    // Ink's useInput requires setRawMode(true) which depends on icrnl being disabled;
+    // this is unreliable across PTY environments. Direct stdin 'readable' works in
+    // any cooked-mode terminal (handles both \r and \n as line end).
+    const label = isDescriptor(descriptor)
+      ? typeof descriptor.props['label'] === 'string'
+        ? descriptor.props['label']
+        : descriptor.type
+      : 'Input';
 
-      const { unmount } = render(
-        <TextInputForm
-          descriptor={descriptor as JSXDescriptor}
-          onSubmit={(value) => {
-            unmount();
-            resolve(value);
-          }}
-        />,
-      );
+    process.stdout.write(`\n${label}\n> `);
+
+    return new Promise((resolve) => {
+      process.stdin.setEncoding('utf8');
+      let buf = '';
+      const onReadable = () => {
+        let chunk: string | null;
+        while ((chunk = process.stdin.read() as string | null) !== null) {
+          buf += chunk;
+          const rIdx = buf.indexOf('\r');
+          const nIdx = buf.indexOf('\n');
+          const idx = rIdx === -1 ? nIdx : nIdx === -1 ? rIdx : Math.min(rIdx, nIdx);
+          if (idx !== -1) {
+            process.stdin.off('readable', onReadable);
+            resolve(buf.slice(0, idx).trim());
+            return;
+          }
+        }
+      };
+      process.stdin.on('readable', onReadable);
     });
   }
 

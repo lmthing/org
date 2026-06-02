@@ -35,6 +35,8 @@ export class Session {
   private space: Space | null = null;
   private sessionId: string;
   private tracer: Tracer;
+  private systemBlock: string | null = null;
+  private ambientDts: string | null = null;
 
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
@@ -42,6 +44,29 @@ export class Session {
     this.history = new MessageHistory();
     this.sessionId = randomUUID();
     this.tracer = new Tracer(opts.traceFile ?? null);
+  }
+
+  async continue(message: string): Promise<void> {
+    if (!this.vm || !this.systemBlock || !this.ambientDts) {
+      throw new Error('Session not started — call start() first');
+    }
+    this.history.append({
+      role: 'user',
+      content: `Write TypeScript code to accomplish the following task. Respond with TypeScript code only.\n\nTask: ${message}`,
+      blockType: 'normal',
+    });
+    await runTurnLoop({
+      vm: this.vm,
+      history: this.history,
+      systemBlock: this.systemBlock,
+      ambientDts: this.ambientDts,
+      renderHost: this.opts.renderHost,
+      streamFn: this.deps.streamFn,
+      processYield: (req) => this.handleYield(req),
+      maxRetries: this.opts.maxRetries,
+      tracer: this.tracer,
+      traceContext: 'session',
+    });
   }
 
   async start(initialMessage: string): Promise<void> {
@@ -79,6 +104,8 @@ export class Session {
     const agentComponents = getAgentComponents(this.space, agent);
     const overlay = buildOverlay(agentFunctions, agentComponents);
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
+    this.systemBlock = systemBlock;
+    this.ambientDts = ambientDts;
 
     // 6c. Inject space functions and JSX runtime into VM
     this.injectSpaceFunctions(agentFunctions, agentFunctionsBundled);
