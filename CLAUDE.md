@@ -25,7 +25,24 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --agent chef "make pasta"
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000     # browser mode
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --trace /tmp/trace.jsonl "make pasta"
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl         # interactive multi-turn (human)
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # interactive multi-turn (agent/automated)
 ```
+
+### REPL mode (`--repl`)
+
+Starts a persistent session. Each message typed at `>` runs `session.start()` for the first turn, then `session.continue()` for subsequent turns — the VM, scope, and message history are preserved across turns.
+
+Type `exit` or press Ctrl+C to quit.
+
+A first message can be supplied as a positional argument to skip the initial prompt:
+```bash
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl "make pasta"
+```
+
+### `--claude` flag
+
+Switches `InkRenderHost.ask()` from Ink's `TextInput` widget to a plain stdout/stdin approach. Use this when the CLI is driven programmatically (Claude Code, scripts, tmux automation) where raw-mode PTY assumptions don't hold. Without `--claude`, ask() renders an interactive Ink form for human use.
 
 ## Packages
 
@@ -92,6 +109,18 @@ LM_MODEL=M
 
 Provider support: `azure`, `anthropic`, `openai`, `google`, `mistral`. Format: `provider:modelId`.
 
+## Session API
+
+`Session` in `packages/core/src/session/session.ts`:
+
+- `session.start(message)` — loads the space, creates the VM, injects globals, runs the turn loop from a fresh user message.
+- `session.continue(message)` — appends a new user message to the existing history and re-runs the turn loop on the same VM and scope. Throws if called before `start()`. Used by `--repl` mode.
+- `session.dispose()` — tears down the QuickJS VM.
+
+## Known issues
+
+See `.issues/` for open bug reports. When all issues are resolved this section will be empty.
+
 ## Fixtures
 
 Two reference spaces for end-to-end testing:
@@ -105,9 +134,15 @@ See `@.claude/arch/spaces.md` for space file layout.
 
 Tests are co-located: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
 
-Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tsc.test.ts`.
+Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tsc.test.ts`, `fork.test.ts`.
 
 No linting or formatting config — TypeScript strict mode is the sole quality gate.
+
+## Rules
+
+- **Always test every fix.** After fixing a bug, write or run a test that would have caught it. No fix is done until it is tested.
+- **Issue lifecycle.** When a bug is found, create a file in `.issues/`. When it is fixed and tested, delete the file and remove it from the Known issues list in this file.
+- **No issue file = no known bugs.** Keep `.issues/` empty by fixing things, not by ignoring them.
 
 ## Skills
 

@@ -1,7 +1,7 @@
 import type { RenderHost, Clock } from '../session/types.js';
 import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
 import type { Message } from '../context/history.js';
-import { createVM } from '../sandbox/quickjs.js';
+import { createVM, type VM } from '../sandbox/quickjs.js';
 import { injectGlobal } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
@@ -70,31 +70,36 @@ export class ForkEngine {
 
   private async runFork<T>(task: ForkTask): Promise<T> {
     return new Promise<T>(async (resolve, reject) => {
-      let resolved = false;
+      let settled = false;
+      let didResolve = false;
+      let resolvedValue: unknown;
+      let resolvedError: Error | undefined;
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+      function settle(fn: () => void): void {
+        if (settled) return;
+        settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        fn();
+      }
 
       // Set up timeout
       if (task.timeout && task.timeout > 0) {
         const clock = this.opts.clock;
         if (clock) {
           clock.setTimeout(() => {
-            if (!resolved) {
-              resolved = true;
-              reject(new Error(`Fork timed out after ${task.timeout}ms`));
-            }
+            settle(() => reject(new Error(`Fork timed out after ${task.timeout}ms`)));
           }, task.timeout);
         } else {
           timeoutId = setTimeout(() => {
-            if (!resolved) {
-              resolved = true;
-              reject(new Error(`Fork timed out after ${task.timeout}ms`));
-            }
+            settle(() => reject(new Error(`Fork timed out after ${task.timeout}ms`)));
           }, task.timeout);
         }
       }
 
+      let vm: VM | undefined;
       try {
-        const vm = await createVM();
+        vm = await createVM();
 
         // Inject seed variables
         if (task.seed) {
@@ -110,25 +115,20 @@ export class ForkEngine {
           }
         }
 
-        // Inject currentTask.resolve global
+        // Inject currentTask.resolve global.
+        // IMPORTANT: do NOT call vm.dispose() from inside this callback. We are
+        // executing inside a QuickJS function call frame; disposing the runtime here
+        // causes JS_FreeRuntime to abort because live GC handles are still on the
+        // stack. Instead we record the result and dispose the VM after runTurnLoop exits.
         const outputSchema = task.output;
         const resolveGlobal = {
           resolve: (value: unknown) => {
+            if (didResolve) return;
+            didResolve = true;
             if (!validateOutput(outputSchema, value)) {
-              const schemaStr = JSON.stringify(outputSchema);
-              vm.dispose();
-              if (!resolved) {
-                resolved = true;
-                if (timeoutId) clearTimeout(timeoutId);
-                reject(new Error(`Fork output does not match schema ${schemaStr}`));
-              }
-              return;
-            }
-            vm.dispose();
-            if (!resolved) {
-              resolved = true;
-              if (timeoutId) clearTimeout(timeoutId);
-              resolve(value as T);
+              resolvedError = new Error(`Fork output does not match schema ${JSON.stringify(outputSchema)}`);
+            } else {
+              resolvedValue = value;
             }
           },
         };
@@ -143,8 +143,9 @@ export class ForkEngine {
         const { createInspectGlobal } = await import('../globals/inspect.js');
         const { createSleepGlobal } = await import('../globals/sleep.js');
 
+        const capturedVm = vm;
         const pushYield = (req: import('../eval/yield.js').YieldRequest) => {
-          vm.pendingYields.push(req);
+          capturedVm.pendingYields.push(req);
         };
 
         type AnyFn = (...args: unknown[]) => unknown;
@@ -204,16 +205,23 @@ export class ForkEngine {
           traceContext: `fork:${task.taskId ?? 'unknown'}`,
         });
 
-        if (!resolved) {
-          if (timeoutId) clearTimeout(timeoutId);
-          reject(new Error(`Fork completed without calling currentTask.resolve() (result: ${result})`));
-        }
+        // All QuickJS call frames have exited — safe to dispose.
+        vm.dispose();
+        vm = undefined;
+
+        settle(() => {
+          if (didResolve) {
+            resolvedError ? reject(resolvedError) : resolve(resolvedValue as T);
+          } else {
+            reject(new Error(`Fork completed without calling currentTask.resolve() (result: ${result})`));
+          }
+        });
       } catch (err) {
-        if (!resolved) {
-          resolved = true;
-          if (timeoutId) clearTimeout(timeoutId);
-          reject(err);
+        if (vm) {
+          try { vm.dispose(); } catch { /* ignore dispose errors in error path */ }
+          vm = undefined;
         }
+        settle(() => reject(err));
       }
     });
   }

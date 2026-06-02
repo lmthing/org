@@ -37,7 +37,7 @@ function TextInputForm({ label, onSubmit }: TextInputFormProps): React.ReactElem
   );
 }
 
-function renderDescriptor(desc: unknown): React.ReactNode {
+export function renderDescriptor(desc: unknown): React.ReactNode {
   if (desc === null || desc === undefined) return null;
 
   if (typeof desc === 'string') return <Text>{desc}</Text>;
@@ -98,8 +98,9 @@ function renderDescriptor(desc: unknown): React.ReactNode {
     }
     case 'markdown':
     case 'text':
-    default:
       return <Text>{children}</Text>;
+    default:
+      return <Box flexDirection="column">{children}</Box>;
   }
 }
 
