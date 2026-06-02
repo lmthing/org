@@ -2,13 +2,16 @@ import type { RenderHost, Clock } from '../session/types.js';
 import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
 import type { DelegateOpts } from '../globals/delegate.js';
 import type { DelegateRegistry } from './registry.js';
-import { resolveDirectDeps } from '../spaces/agent.js';
+import { resolveDirectDeps, getAgentFunctions, getAgentFunctionsBundled } from '../spaces/agent.js';
+import { getAgentComponents } from '../spaces/components.js';
 import { createVM } from '../sandbox/quickjs.js';
 import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { buildSystemBlock } from '../context/system-block.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
+import { buildOverlay } from '../typecheck/overlay.js';
+import { transpileStatement } from '../typecheck/transpile.js';
 
 export interface RunDelegateOpts {
   packageName: string;
@@ -61,11 +64,21 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       `Run action: ${opts.action}`,
       query ? `Query: ${query}` : '',
       context ? `Context: ${JSON.stringify(context)}` : '',
+      `When complete, call \`currentTask.resolve(result)\` with the final result value.`,
     ]
       .filter(Boolean)
       .join('\n');
 
     history.append({ role: 'user', content: userMessage, blockType: 'normal' });
+
+    // Build overlay DTS for this agent's functions and components
+    const agentFunctions = getAgentFunctions(space, agent);
+    const agentFunctionsBundled = getAgentFunctionsBundled(space, agent);
+    const agentComponents = getAgentComponents(space, agent);
+    const overlay = buildOverlay(agentFunctions, agentComponents);
+    // currentTask is injected below; declare it in DTS so typecheck passes
+    const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
+    const ambientDts = LIBRARY_DTS + '\n' + overlay + '\n' + currentTaskDts;
 
     // Inject result capture global
     let capturedResult: unknown = undefined;
@@ -79,6 +92,50 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     });
     vm.ctx.setProp(vm.ctx.global, 'currentTask', captureHandle);
     captureHandle.dispose();
+
+    // Inject space functions into the VM
+    for (const name of Object.keys(agentFunctions)) {
+      const bundled = agentFunctionsBundled[name];
+      let js: string;
+      if (bundled) {
+        js = bundled
+          .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
+          .replace(/^export\s+default\s+/gm, `const ${name} = `)
+          .replace(/^export\s+/gm, '');
+      } else {
+        js = transpileStatement(agentFunctions[name]!)
+          .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
+          .replace(/^export\s+default\s+/gm, `const ${name} = `)
+          .replace(/^export\s+/gm, '');
+      }
+      const fnResult = vm.evalScript(`${js}\nglobalThis['${name}'] = ${name};`);
+      if (!fnResult.ok) {
+        opts.renderHost.log(`[warn] failed to inject function "${name}": ${fnResult.error}`);
+      }
+    }
+
+    // Inject React shim + component stubs for JSX
+    const reactShim = {
+      createElement: (type: unknown, props: unknown, ...children: unknown[]) => {
+        const typeName =
+          typeof type === 'string'
+            ? type
+            : type && typeof type === 'object' && 'displayName' in type
+              ? (type as { displayName: string }).displayName
+              : String(type);
+        return { type: typeName, props: (props as Record<string, unknown>) ?? {}, children: children.flat(Infinity).filter((c) => c !== null && c !== undefined) };
+      },
+      Fragment: 'fragment',
+    };
+    const reactHandle = marshalToQuickJS(vm.ctx, reactShim);
+    vm.ctx.setProp(vm.ctx.global, 'React', reactHandle);
+    reactHandle.dispose();
+    const allComponentNames = [...Object.keys(agentComponents.view), ...Object.keys(agentComponents.form)];
+    for (const name of allComponentNames) {
+      const stub = marshalToQuickJS(vm.ctx, { displayName: name });
+      vm.ctx.setProp(vm.ctx.global, name, stub);
+      stub.dispose();
+    }
 
     // Inject standard globals
     const { createAskGlobal } = await import('../globals/ask.js');
@@ -123,7 +180,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       vm,
       history,
       systemBlock,
-      ambientDts: LIBRARY_DTS,
+      ambientDts,
       renderHost: opts.renderHost,
       streamFn: opts.streamFn,
       processYield: async (req) => {

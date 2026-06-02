@@ -21,7 +21,7 @@ import { runTurnLoop } from '../eval/turn-loop.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
 import { transpileStatement } from '../typecheck/transpile.js';
-import { getAgentFunctions, resolveDirectDeps } from '../spaces/agent.js';
+import { getAgentFunctions, getAgentFunctionsBundled, resolveDirectDeps } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
 import { loadSnapshot } from './snapshot.js';
 import type { Snapshot } from './snapshot.js';
@@ -72,12 +72,13 @@ export class Session {
 
     // 6b. Build ambient DTS overlay from agent's components + functions
     const agentFunctions = getAgentFunctions(this.space, agent);
+    const agentFunctionsBundled = getAgentFunctionsBundled(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
     const overlay = buildOverlay(agentFunctions, agentComponents);
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
 
     // 6c. Inject space functions and JSX runtime into VM
-    this.injectSpaceFunctions(agentFunctions);
+    this.injectSpaceFunctions(agentFunctions, agentFunctionsBundled);
     const allComponentNames = [
       ...Object.keys(agentComponents.view),
       ...Object.keys(agentComponents.form),
@@ -141,10 +142,11 @@ export class Session {
     const directDeps = resolveDirectDeps(this.space, agent.dependencies);
     const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps });
     const agentFunctions = getAgentFunctions(this.space, agent);
+    const agentFunctionsBundled = getAgentFunctionsBundled(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
     const overlay = buildOverlay(agentFunctions, agentComponents);
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
-    this.injectSpaceFunctions(agentFunctions);
+    this.injectSpaceFunctions(agentFunctions, agentFunctionsBundled);
     const allComponentNames = [
       ...Object.keys(agentComponents.view),
       ...Object.keys(agentComponents.form),
@@ -204,15 +206,24 @@ export class Session {
     consoleHandle.dispose();
   }
 
-  private injectSpaceFunctions(functions: Record<string, string>): void {
+  private injectSpaceFunctions(functions: Record<string, string>, functionsBundled: Record<string, string>): void {
     if (!this.vm) throw new Error('VM not initialized');
-    for (const [name, src] of Object.entries(functions)) {
-      // Transpile TypeScript to JS, then strip `export` keyword so the function
-      // lands in script scope (globalThis) rather than as an ESM export
-      const js = transpileStatement(src)
-        .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
-        .replace(/^export\s+default\s+/gm, `const ${name} = `)
-        .replace(/^export\s+/gm, '');
+    for (const name of Object.keys(functions)) {
+      const bundled = functionsBundled[name];
+      let js: string;
+      if (bundled) {
+        // Already bundled JS — strip ESM exports so it lands in script scope
+        js = bundled
+          .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
+          .replace(/^export\s+default\s+/gm, `const ${name} = `)
+          .replace(/^export\s+/gm, '');
+      } else {
+        // Transpile TS source to JS
+        js = transpileStatement(functions[name]!)
+          .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
+          .replace(/^export\s+default\s+/gm, `const ${name} = `)
+          .replace(/^export\s+/gm, '');
+      }
       const result = this.vm.evalScript(`${js}\nglobalThis['${name}'] = ${name};`);
       if (!result.ok) {
         this.opts.renderHost.log(`[warn] failed to inject function "${name}": ${result.error}`);

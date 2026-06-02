@@ -1,5 +1,5 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { join, basename, extname } from 'node:path';
+import { join, basename, extname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parseFrontmatter } from './frontmatter.js';
 
@@ -8,7 +8,8 @@ export interface Space {
   packageName?: string; // npm package name from own package.json
   agents: Record<string, AgentDef>;
   tasklists: Record<string, TasklistDir>; // slug -> sorted md files
-  functions: Record<string, string>; // name -> source (TS) or bundled JS when node_modules present
+  functions: Record<string, string>; // name -> original TS source (always)
+  functionsBundled: Record<string, string>; // name -> bundled JS (only when node_modules present)
   nodeModulesDir?: string; // set when space has package.json with installed deps
   dependentSpaces: Record<string, Space>; // packageName -> loaded Space for npm space deps
   components: {
@@ -91,20 +92,22 @@ async function listDir(dir: string): Promise<string[]> {
 async function loadFunctions(
   dir: string,
   nodeModulesDir?: string,
-): Promise<Record<string, string>> {
+): Promise<{ functions: Record<string, string>; functionsBundled: Record<string, string> }> {
   const functionsDir = join(dir, 'functions');
-  if (!(await dirExists(functionsDir))) return {};
+  if (!(await dirExists(functionsDir))) return { functions: {}, functionsBundled: {} };
 
   const files = await listDir(functionsDir);
-  const result: Record<string, string> = {};
+  const functions: Record<string, string> = {};
+  const functionsBundled: Record<string, string> = {};
 
   for (const file of files) {
     if (file.endsWith('.ts') || file.endsWith('.tsx')) {
       const name = basename(file, extname(file));
+      const src = await readFile(join(functionsDir, file), 'utf8');
+      functions[name] = src;
 
       if (nodeModulesDir) {
         const { build } = await import('esbuild');
-        const src = await readFile(join(functionsDir, file), 'utf8');
         const buildResult = await build({
           stdin: {
             contents: src,
@@ -116,16 +119,14 @@ async function loadFunctions(
           format: 'esm',
           write: false,
           platform: 'browser',
-          absWorkingDir: dir,
+          absWorkingDir: resolve(dir),
         });
-        result[name] = buildResult.outputFiles[0]!.text;
-      } else {
-        result[name] = await readFile(join(functionsDir, file), 'utf8');
+        functionsBundled[name] = buildResult.outputFiles[0]!.text;
       }
     }
   }
 
-  return result;
+  return { functions, functionsBundled };
 }
 
 async function loadComponents(dir: string): Promise<Space['components']> {
@@ -370,8 +371,8 @@ export async function loadSpace(dir: string): Promise<Space> {
     }
   }
 
-  // Load functions (bundled when node_modules available)
-  const functions = await loadFunctions(dir, nodeModulesDir);
+  // Load functions (original TS source always; bundled JS when node_modules available)
+  const { functions, functionsBundled } = await loadFunctions(dir, nodeModulesDir);
 
   // Validate: every config.functions entry has a file
   for (const agent of Object.values(agents)) {
@@ -390,5 +391,5 @@ export async function loadSpace(dir: string): Promise<Space> {
   // Load knowledge
   const knowledge = await loadKnowledge(dir);
 
-  return { dir, packageName, agents, tasklists, functions, nodeModulesDir, dependentSpaces, components, knowledge };
+  return { dir, packageName, agents, tasklists, functions, functionsBundled, nodeModulesDir, dependentSpaces, components, knowledge };
 }

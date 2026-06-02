@@ -31,6 +31,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
 
   while (attempt < maxRetries) {
     attempt++;
+    const contextSnapshot = accumulatedContext; // restore on error so re-tries don't see partial turn
 
     const promptMessages = history.getPromptMessages();
     const stream = await streamFn({ system: systemBlock, messages: promptMessages });
@@ -145,6 +146,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     }
 
     if (turnError && failingStatement) {
+      accumulatedContext = contextSnapshot; // roll back partial-turn context
       renderHost.log(`[error] ${turnError}`);
       history.append({ role: 'user', content: buildErrorBlock(failingStatement, turnError, attempt, maxRetries), blockType: 'error' });
       if (attempt >= maxRetries) return 'error';
@@ -185,10 +187,14 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       // Add the yielding statement to accumulated context for future typecheck
       accumulatedContext += (accumulatedContext ? '\n' : '') + yieldingStatement;
 
+      // Always emit a continuation message so the model knows the yield resolved and
+      // what's already in scope — even for yields with no variable bindings (e.g. sleep).
       if (Object.keys(variables).length > 0) {
         renderHost.log(`[variables] ${Object.keys(variables).join(', ')}`);
-        history.append({ role: 'user', content: emitVariables(variables), blockType: 'variables' });
+      } else {
+        renderHost.log(`[resumed]`);
       }
+      history.append({ role: 'user', content: emitVariables(variables, accumulatedContext), blockType: 'variables' });
 
       attempt = 0;
       continue;

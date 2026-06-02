@@ -7,13 +7,28 @@ export interface ResolvedDep {
 }
 
 /**
- * Return only the functions listed in agent.config.functions.
+ * Return the original TS sources for functions listed in agent.config.functions.
+ * Used for DTS overlay generation and system-block display.
  */
 export function getAgentFunctions(space: Space, agent: AgentDef): Record<string, string> {
   const result: Record<string, string> = {};
   for (const fnName of agent.config.functions) {
     if (fnName in space.functions) {
       result[fnName] = space.functions[fnName]!;
+    }
+  }
+  return result;
+}
+
+/**
+ * Return the bundled JS for functions listed in agent.config.functions.
+ * Only populated when the space has node_modules (esbuild bundling occurred).
+ */
+export function getAgentFunctionsBundled(space: Space, agent: AgentDef): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const fnName of agent.config.functions) {
+    if (fnName in space.functionsBundled) {
+      result[fnName] = space.functionsBundled[fnName]!;
     }
   }
   return result;
