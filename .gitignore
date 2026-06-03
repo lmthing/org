@@ -13,3 +13,4 @@ trace.jsonl
 
 # system-space state stores (memory/todo)
 .lmthing/
+.antigravitycli
