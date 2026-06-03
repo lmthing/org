@@ -6,6 +6,7 @@ import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { injectHostTools } from '../globals/host-tools.js';
+import { rolePreamble, roleProfile } from './roles.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
 import { transpileStatement } from '../typecheck/transpile.js';
@@ -20,6 +21,8 @@ export interface ForkTask {
   timeout?: number;
   taskId?: string;
   upstreamOutputs?: Record<string, unknown>;
+  /** Subagent role controlling capability profile + system-prompt preamble. */
+  role?: 'explore' | 'plan' | 'general';
 }
 
 interface ForkEngineOpts {
@@ -167,10 +170,12 @@ export class ForkEngine {
         }
 
         // Shared synchronous host substrate: console, execShell, process.env, fetch,
-        // readFileRaw, writeFileRaw. Single source of truth (also used by the session VM).
+        // readFileRaw, writeFileRaw. The role's capability profile gates write access
+        // (explore/plan are read-only — write is withheld here, not just discouraged).
         injectHostTools(vm, {
           renderHost: this.opts.renderHost,
           spaceDir: this.opts.parentSpaceDir,
+          profile: roleProfile(task.role),
         });
 
         // Inject standard globals (no fork/delegate/tasklist in child to avoid recursion issues)
@@ -233,6 +238,8 @@ export class ForkEngine {
 
         const systemBlock = [
           'CRITICAL INSTRUCTION: You are a TypeScript code execution agent. You MUST respond with TypeScript code ONLY. Do NOT write any prose, explanations, JSON, markdown, or natural language. Your entire response will be fed directly into a TypeScript evaluator.',
+          '',
+          rolePreamble(task.role),
           '',
           'Respond with valid TypeScript statements only. Use top-level `await` for async operations. Do not wrap code in functions or markdown code blocks.',
           '',

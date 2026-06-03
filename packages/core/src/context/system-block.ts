@@ -69,7 +69,7 @@ const GLOBALS_SUMMARY = `
 - \`loadKnowledge(...path)\` — load a knowledge file by path segments (yields)
 - \`sleep(duration)\` — pause execution for a duration like "1s", "500ms" (yields)
 - \`tasklist(name, seed?)\` — run a named tasklist and return its goal output (yields). Pass seed to share variables with tasks: \`tasklist("my_list", { topic })\`
-- \`fork(opts)\` — spawn a child task and await its result (yields)
+- \`fork(opts)\` — spawn an isolated subagent and await its typed result (yields). The subagent runs in its own context and returns ONLY what it resolves — use it as a context firewall for heavy investigation. Set \`role\`: \`'explore'\` (read-only research), \`'plan'\` (read-only design), or \`'general'\` (full toolkit, default). Launch several at once with \`Promise.all([fork({role:'explore',...}), fork({role:'explore',...})])\`.
 - \`delegate(packageName, agentName, action, opts?)\` — delegate to another agent's action (yields)
 
 Value-yielding globals (ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate) end the current turn.

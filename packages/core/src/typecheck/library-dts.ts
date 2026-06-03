@@ -43,6 +43,8 @@ declare interface ForkOpts<T> {
   output: Record<string, string>;
   seed?: Record<string, unknown>;
   timeout?: number;
+  /** 'explore'/'plan' run read-only (cannot write/edit/mutate); 'general' (default) has the full toolkit. */
+  role?: 'explore' | 'plan' | 'general';
 }
 
 declare interface DelegateOpts {

@@ -7,6 +7,9 @@ export interface ForkGlobalOpts {
   timeout?: number;
   taskId?: string;
   upstreamOutputs?: Record<string, unknown>;
+  /** Subagent role: 'explore'/'plan' are read-only (write capability withheld),
+   *  'general' (default) has the full toolkit. */
+  role?: 'explore' | 'plan' | 'general';
 }
 
 /**
