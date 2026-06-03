@@ -84,6 +84,20 @@ If the global is fire-and-forget (like `display`), it does NOT push a yield. It 
 
 For void globals, just call host methods directly inside the function body — no `pushYield`, no `deferred`.
 
+## Synchronous host primitives (the `host-tools.ts` substrate)
+
+A *third* category exists: synchronous, non-yielding primitives the VM calls and gets an immediate value back (`execShell`, `fetch`, `process.env`, `readFileRaw`, `writeFileRaw`). These are the thin substrate that **system-space functions** build on — prefer adding capability as a system-space function over a new core global (see `@.claude/skills/system-spaces.md`). Add a raw host primitive only when shelling out is fragile (e.g. binary-safe file I/O).
+
+They live in ONE place — `packages/core/src/globals/host-tools.ts` `injectHostTools(vm, opts)` — which both the session VM and every fork VM call (do not duplicate shims in `session.ts`/`fork.ts`). To add one:
+1. Add a `setGlobal('<name>', (args) => { ... return plainObject; })` in `injectHostTools`. Return a plain object (functions on it, like `fetch().json`, are marshalled and callable; no prototypes/classes).
+2. Honor the read-only `profile` if the primitive mutates (see how `writeFileRaw`/`execShell` gate on `allowWrite`) so `fork({ role: 'explore' })` can't use it.
+3. Declare it in `LIBRARY_DTS`.
+4. Test it by injecting into a bare VM and `evalCode`-ing a call (see `globals/host-tools.test.ts`).
+
+## How resolved values bind (yielding globals)
+
+The turn loop does NOT rely on the QuickJS post-`await` continuation. It resolves each pending yield, then maps results onto the statement's binding pattern via `extractBindingPattern` and `vm.setVar`. So `const [a,b] = await Promise.all([g(), g()])` binds positionally and `const {x} = await g()` binds by key. If your global is used in such patterns, ensure `handleYield` returns the right shape.
+
 ## Testing
 
 Add a test in `packages/core/src/globals/<name>.test.ts`:

@@ -24,33 +24,56 @@ Tests boolean expression evaluation against task output maps. Pattern: call `eva
 ### TSC Runner (`tsc.test.ts`)
 Tests that the incremental typechecker catches errors and passes valid code. Pattern: call `runTsc({ ambientDts, sessionContext, statement })` and assert `result.ok`.
 
+### Host tools / system spaces / fork roles
+`globals/host-tools.test.ts` (file I/O round-trip, binary refusal, read-only profile), `spaces/system.test.ts` (loader/merge precedence), `spaces/system-functions.test.ts` (memory/todo through host primitives), `fork/roles.test.ts` (read-only enforcement via a real fork), `eval/turn-loop-yield.test.ts` (parallel/destructured yield binding), `context/summarize.test.ts` (history digest).
+
 ## Testing the Yield Protocol
+
+A yielding global pushes a `YieldRequest`; assert its `kind`/`args` and that resolving the deferred settles the VM promise:
 
 ```typescript
 import { createVM } from '@repl/core';
 import { createAskGlobal } from '../../globals/ask.js';
 import { injectGlobal } from '../../sandbox/host-bridge.js';
 
-it('ask() pushes a yield and resolves when deferred resolves', async () => {
+it('ask() pushes a yield', async () => {
   const vm = await createVM();
   const yields: YieldRequest[] = [];
-  const pushYield = (r: YieldRequest) => yields.push(r);
-  const mockRenderHost = { ask: vi.fn(), display: vi.fn(), log: vi.fn() };
-
-  injectGlobal(vm.ctx, 'ask', createAskGlobal(pushYield, mockRenderHost));
-
+  injectGlobal(vm.ctx, 'ask', createAskGlobal((r) => yields.push(r), { ask: vi.fn(), display: vi.fn(), log: vi.fn() }));
   vm.evalStatement(`const x = ask({ type: 'div', props: {}, children: [] });`);
-
   expect(yields).toHaveLength(1);
   expect(yields[0]!.kind).toBe('ask');
-
-  yields[0]!.deferred.resolve('hello');
-  await Promise.resolve();
-  vm.drivePendingJobs();
-
-  expect(vm.getScope()['x']).toBe('hello');
 });
 ```
+
+**Do NOT assert that `drivePendingJobs()` binds the variable into scope** — the QuickJS post-`await` continuation does not re-run in this sync model. Variable binding from a resolved yield is the **turn loop's** job (`extractBindingPattern` + `vm.setVar`). To test binding end-to-end (incl. `Promise.all` of multiple yields and object destructuring), drive `runTurnLoop` with a scripted stream and assert the emitted VARIABLES block / VM globals — see `eval/turn-loop-yield.test.ts`.
+
+## Testing host primitives (`host-tools.ts`)
+
+Inject into a bare VM, `evalCode` a call, and dump the returned object:
+
+```typescript
+import { createVM } from '../sandbox/quickjs.js';
+import { injectHostTools } from '../globals/host-tools.js';
+
+const vm = await createVM();
+injectHostTools(vm, { renderHost: silentHost, spaceDir: tmpDir });
+const res = vm.ctx.evalCode(`readFileRaw(${JSON.stringify(path)})`);
+const value = vm.ctx.dump(res.value); res.value.dispose();
+expect(value).toMatchObject({ ok: true });
+```
+
+Pass `profile: { allowWrite: false }` to assert read-only enforcement (e.g. `writeFileRaw` returns `{ ok: false }`). See `globals/host-tools.test.ts`.
+
+## Testing system spaces & their functions
+
+```typescript
+import { loadSystemSpaces, mergeSystemInto } from './system.js';
+const [fs] = await loadSystemSpaces([FS_DIR]);          // function-only space, no agents/
+expect(Object.keys(fs.functions)).toContain('readFile');
+```
+
+To exercise a system function's behavior, inject it like `Session` does (transpile + `evalScript`) over a VM with `injectHostTools`, then `evalCode` calls — see `spaces/system-functions.test.ts` (memory/todo round-trips). Read-only fork enforcement: `fork/roles.test.ts`.
 
 ## Testing Space Loading
 

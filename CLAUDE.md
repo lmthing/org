@@ -63,13 +63,19 @@ packages/core/src/
   sandbox/     quickjs.ts host-bridge.ts boundary.ts jsx-runtime.ts trace.ts  ← VM + marshalling + tracing
   eval/        turn-loop.ts yield.ts error-rewind.ts stream-types.ts           ← the execution engine
   typecheck/   tsc.ts library-dts.ts overlay.ts overlay-dts.ts transpile.ts
-  globals/     ask.ts sleep.ts display.ts inspect.ts fork.ts delegate.ts tasklist.ts load-knowledge.ts serialize.ts
-  spaces/      load.ts frontmatter.ts agent.ts components.ts knowledge.ts tasklist-load.ts
+  globals/     ask.ts sleep.ts display.ts inspect.ts fork.ts delegate.ts tasklist.ts load-knowledge.ts serialize.ts host-tools.ts  ← host-tools = shared sync substrate (execShell/fetch/readFileRaw/writeFileRaw…)
+  spaces/      load.ts frontmatter.ts agent.ts components.ts knowledge.ts tasklist-load.ts system.ts  ← system.ts = system-space loader + merge
   tasklist/    dag.ts orchestrator.ts condition-dsl.ts schema.ts
-  fork/        fork.ts
+  fork/        fork.ts roles.ts                                                 ← roles.ts = explore/plan/general capability profiles + preambles
   delegate/    delegate.ts registry.ts
-  context/     history.ts system-block.ts variables.ts summarize.ts
+  context/     history.ts system-block.ts variables.ts summarize.ts             ← summarize wired into session.continue()
   session/     session.ts snapshot.ts types.ts
+
+packages/core/system-spaces/                                                    ← always-loaded baseline spaces (NOT under src/; read at runtime)
+  fs/functions/      readFile writeFile editFile glob grep listDir
+  web/functions/     webSearch webFetch
+  memory/functions/  remember recall recallAll forget
+  todo/functions/    todoWrite todoRead
 
 packages/cli/src/
   providers/   resolve.ts aliases.ts
@@ -87,7 +93,9 @@ packages/ui/src/
 ## Key Invariants
 
 - Each `evalStatement(code)` call is an isolated ES module. Variables do not persist between evals — the turn loop appends `try { globalThis['x'] = x; } catch {}` after each statement so the next module can read them as globals. All declared variables (including `undefined` values) are propagated this way.
+- **Yield-result binding is host-side, not via the module continuation.** A statement that yields (`const x = await ask()`, `const [a,b] = await Promise.all([fork(),fork()])`) does NOT re-run its post-`await` code in this sync eval model. The turn loop resolves each pending yield, then maps the resolved value(s) onto the bound names using `extractBindingPattern` (simple ← the value; array ← positional, so parallel `Promise.all` results land in order; object ← by key) and `vm.setVar`s them. Do not assume the QuickJS continuation binds variables.
 - `accumulatedContext` in the turn loop persists across yield continuations (variables stay in typecheck scope). Only error retries start fresh.
+- **System spaces are always merged into every space.** `Session` calls `mergeSystemInto` (`spaces/system.ts`) after `loadSpace`; system functions are injected universally (bypassing the per-agent `functions:` filter), and the same set flows to forks/delegates. The user space wins on name collisions.
 - JSX in model output is transpiled to `React.createElement(...)` via `transpileStatement()` before VM eval. A React shim and component stubs are injected at session start.
 - Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
 - The QuickJS VM uses sync `evalCode` + manual `executePendingJobs` loop — NOT `evalCodeAsync`, which deadlocks when awaiting user input.
@@ -116,8 +124,10 @@ Provider support: `azure`, `anthropic`, `openai`, `google`, `mistral`. Format: `
 `Session` in `packages/core/src/session/session.ts`:
 
 - `session.start(message)` — loads the space, creates the VM, injects globals, runs the turn loop from a fresh user message.
-- `session.continue(message)` — appends a new user message to the existing history and re-runs the turn loop on the same VM and scope. Throws if called before `start()`. Used by `--repl` mode.
+- `session.continue(message)` — appends a new user message to the existing history and re-runs the turn loop on the same VM and scope. Throws if called before `start()`. Used by `--repl` mode. Auto-summarizes history when it exceeds `maxHistoryTurns*2` messages.
 - `session.dispose()` — tears down the QuickJS VM.
+
+`SessionOpts` additions: `systemSpaceDirs?` (override/disable the always-on spaces) and `maxHistoryTurns?` (history-summarization threshold).
 
 ## Known issues
 
@@ -183,7 +193,9 @@ The runtime is built to keep context small over long sessions:
 
 Tests are co-located: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
 
-Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tsc.test.ts`, `fork.test.ts`.
+Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tsc.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/host-tools.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`.
+
+Live testing: for new runtime features, also drive the built CLI against fixture spaces with a real model and inspect the `--trace` NDJSON — unit tests miss model-behavior and end-to-end integration issues.
 
 No linting or formatting config — TypeScript strict mode is the sole quality gate.
 
@@ -200,6 +212,7 @@ Load these when working on specific areas:
 - Adding a new value-yielding global → `@.claude/skills/new-global.md`
 - Adding a new AI provider → `@.claude/skills/new-provider.md`
 - Creating or modifying a space → `@.claude/skills/new-space.md`
+- Adding a system space, host primitive, or fork role → `@.claude/skills/system-spaces.md`
 - Debugging the eval/yield pipeline → `@.claude/skills/debug-eval.md`
 - Writing tests for core modules → `@.claude/skills/writing-tests.md`
 

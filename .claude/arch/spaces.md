@@ -2,12 +2,13 @@
 
 ## Files
 
-- `packages/core/src/spaces/load.ts` — `loadSpace(dir): Promise<Space>`
+- `packages/core/src/spaces/load.ts` — `loadSpace(dir, { requireAgents? }): Promise<Space>` (`requireAgents:false` allows function-only spaces)
 - `packages/core/src/spaces/frontmatter.ts` — YAML frontmatter parser
 - `packages/core/src/spaces/agent.ts` — `getAgentFunctions`, `getAgentFunctionsBundled`, `resolveDirectDeps`
 - `packages/core/src/spaces/components.ts` — `getAgentComponents`
 - `packages/core/src/spaces/knowledge.ts` — knowledge tree loading
 - `packages/core/src/spaces/tasklist-load.ts` — tasklist directory loading
+- `packages/core/src/spaces/system.ts` — **system spaces**: `loadSystemSpaces` + `mergeSystemInto` merge the always-on baseline spaces (`packages/core/system-spaces/{fs,web,memory,todo}/`) into every user space. System functions are injected universally; the user space wins on collisions. See `@.claude/skills/system-spaces.md`.
 
 ## Space Type
 

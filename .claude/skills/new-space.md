@@ -118,10 +118,18 @@ Boil the water. Confirm when the pot is at a full rolling boil.
 
 ## Validation Errors
 
-`loadSpace` throws on:
+`loadSpace(dir)` throws on:
 - Missing `agents/` directory
 - Zero agents
 - An action's `tasklist` not found in `tasklists/`
 - A `config.functions` entry with no matching file in `functions/`
 
 Fix: check filenames and frontmatter match exactly (case-sensitive).
+
+`loadSpace(dir, { requireAgents: false })` relaxes the first two — used for function-only **system spaces** (see below).
+
+## System spaces (always-on toolkit)
+
+Every user space is automatically merged with the **system spaces** in `packages/core/system-spaces/` (`fs`, `web`, `memory`, `todo`). So every agent already has `readFile`/`writeFile`/`editFile`/`glob`/`grep`/`listDir`, `webSearch`/`webFetch`, `remember`/`recall`/`recallAll`/`forget`, and `todoWrite`/`todoRead` — you do NOT declare them in the agent's `functions:` list, and you should not re-implement them. They appear in the system prompt under `# Built-in Tools`.
+
+The user space **wins on name collisions**, so you can override a system tool by defining a function of the same name. To add/modify a system space or a `fork({ role })`, see `@.claude/skills/system-spaces.md`.

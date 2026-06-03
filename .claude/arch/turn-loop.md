@@ -48,12 +48,19 @@ outer: while (attempt < maxRetries)
     continue  // retry (accumulatedContext unchanged — stale statements NOT removed)
 
   if pendingYield:
-    for each yield in vm.pendingYields:
+    resolvedValues = []
+    for each yield in vm.pendingYields:        // may be >1 (Promise.all of forks)
       resolved = await processYield(yieldReq)
       yieldReq.deferred.resolve(resolved)
-      await Promise.resolve()         // flush microtasks
-      vm.drivePendingJobs()           // run VM continuation
-      vm.setVar(name, resolved)       // ensure globalThis binding
+      resolvedValues.push(resolved)
+      await Promise.resolve()                  // flush microtasks
+    vm.drivePendingJobs()
+    // Map results onto the binding pattern (the post-await continuation does NOT
+    // re-run in sync eval, so the host binds): extractBindingPattern(stmt) →
+    //   simple  → variables[name] = (single value | the array for Promise.all)
+    //   array   → positional from the resolved-values array
+    //   object  → by key from the single resolved object
+    // then vm.setVar(name, value) for each.
     accumulatedContext += yieldingStatement
     history.append(emitVariables(variables))
     attempt = 0
@@ -100,11 +107,11 @@ Each `vm.evalStatement(code)` call uses `ctx.evalCode(code, '_session.tsx', { ty
 
 **Workaround**: after each successful non-yield eval, the code appends:
 ```javascript
-if (typeof x !== 'undefined') globalThis['x'] = x;
+try { globalThis['x'] = x; } catch {}
 ```
-for each name extracted by `extractBindingNames(stmt)`. This makes the variable accessible from any subsequent module.
+for each name extracted by `extractBindingNames(stmt)` (the `try/catch` form propagates even `undefined` values). This makes the variable accessible from any subsequent module.
 
-After a yield resolves, `vm.setVar(name, resolved)` is also called directly as a backup (uses `marshalToQuickJS` to set on `ctx.global`).
+After a yield resolves, the post-`await` continuation does **not** re-run in this sync eval model, so it does NOT bind the variable. Binding is done entirely host-side: the turn loop maps the resolved value(s) onto the statement's binding pattern (`extractBindingPattern`) and calls `vm.setVar(name, value)` (which `marshalToQuickJS`-sets on `ctx.global` and records the host scope). This is what makes parallel `Promise.all([fork(),fork()])` and `const {a,b} = await ask()` bind correctly.
 
 ## Sync eval vs. evalCodeAsync
 
