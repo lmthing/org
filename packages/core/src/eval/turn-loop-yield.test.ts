@@ -64,6 +64,46 @@ describe('turn loop — parallel yields (Promise.all of forks)', () => {
     vm.dispose();
   });
 
+  it('resolves parallel yields concurrently, not sequentially', async () => {
+    const vm = await createVM();
+    const startTimes: Record<string, number> = {};
+    const endTimes: Record<string, number> = {};
+    const y = (tag: string) =>
+      new Promise((resolve, reject) => {
+        vm.pendingYields.push({ kind: 'y', args: [tag], deferred: { resolve, reject }, vmPromiseHandle: undefined } as YieldRequest);
+      });
+    injectGlobal(vm.ctx, 'y', y as (...a: unknown[]) => unknown);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: 'declare function y(tag: string): Promise<any>;',
+      renderHost: silentHost,
+      streamFn: scriptedStream('const [a, b] = await Promise.all([y("X"), y("Y")]);'),
+      processYield: async (req) => {
+        const tag = req.args[0] as string;
+        startTimes[tag] = Date.now();
+        await new Promise((r) => setTimeout(r, 80));
+        endTimes[tag] = Date.now();
+        return { tag };
+      },
+      maxRetries: 2,
+    });
+
+    // Both must have started (both yields were dispatched)
+    expect(startTimes['X']).toBeDefined();
+    expect(startTimes['Y']).toBeDefined();
+    // Y must have started before X finished — proving concurrent execution.
+    expect(startTimes['Y']).toBeLessThan(endTimes['X']!);
+    expect(readGlobal(vm, 'a')).toEqual({ tag: 'X' });
+    expect(readGlobal(vm, 'b')).toEqual({ tag: 'Y' });
+    vm.dispose();
+  });
+
   it('binds a destructured single-yield object result to each name', async () => {
     const vm = await createVM();
     const ask2 = () =>

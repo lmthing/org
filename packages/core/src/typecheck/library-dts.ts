@@ -1,6 +1,6 @@
 export const LIBRARY_DTS = `
 declare function ask<T = unknown>(descriptor: JSXDescriptor | string): Promise<T>;
-declare function display(descriptor: JSXDescriptor | string | number | boolean): void;
+declare function display(descriptor: unknown): void;
 declare function inspect(...args: (unknown | [unknown, InspectQuery])[]): Promise<void>;
 declare function loadKnowledge(...path: string[]): Promise<unknown>;
 declare function sleep(duration: string): Promise<void>;
@@ -55,7 +55,7 @@ declare interface DelegateOpts {
 // Host-injected globals available in space functions and agent code
 declare function execShell(cmd: string): { ok: boolean; stdout: string; stderr: string };
 declare function fetch(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }): { ok: boolean; status: number; text(): string; json(): unknown };
-declare const process: { env: Record<string, string | undefined> };
+declare const process: { env: Record<string, string | undefined>; exit(code?: number): never };
 declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };
 declare function writeFileRaw(path: string, content: string): { ok: boolean; bytes: number; error?: string };
 `;

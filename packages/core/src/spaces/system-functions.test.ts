@@ -88,6 +88,58 @@ describe('system/memory functions (round-trip through host primitives)', () => {
   });
 });
 
+describe('system/fs readFile function', () => {
+  let vm: VM;
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'sysfs-'));
+    vm = await createVM();
+    injectHostTools(vm, { renderHost: host, spaceDir: dir });
+    const [fs] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'fs')]);
+    injectFunctions(vm, fs!.functions);
+  });
+
+  afterEach(() => {
+    vm.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('raw contains unmodified file content (no line numbers)', () => {
+    const path = join(dir, 'data.json');
+    require('node:fs').writeFileSync(path, '{"x":1}');
+    const r = evalDump(vm, `readFile(${JSON.stringify(path)})`) as { ok: boolean; content: string; raw: string };
+    expect(r.ok).toBe(true);
+    expect(r.raw).toBe('{"x":1}');
+    expect(JSON.parse(r.raw)).toEqual({ x: 1 });
+  });
+
+  it('content has 1-based line numbers; raw does not', () => {
+    const path = join(dir, 'multi.txt');
+    require('node:fs').writeFileSync(path, 'alpha\nbeta\ngamma');
+    const r = evalDump(vm, `readFile(${JSON.stringify(path)})`) as { ok: boolean; content: string; raw: string };
+    expect(r.ok).toBe(true);
+    expect(r.raw).toBe('alpha\nbeta\ngamma');
+    expect(r.content).toContain('1\talpha');
+    expect(r.content).toContain('2\tbeta');
+    expect(r.content).toContain('3\tgamma');
+    expect(r.content).not.toContain('{"');
+  });
+
+  it('grep returns matches when path is a single file', () => {
+    const path = join(dir, 'target.ts');
+    require('node:fs').writeFileSync(path, 'export function foo() {}\nexport function bar() {}\n');
+    const r = evalDump(vm, `grep("function", { path: ${JSON.stringify(path)} })`) as {
+      ok: boolean; matches: Array<{ file: string; line: number; text: string }>
+    };
+    expect(r.ok).toBe(true);
+    expect(r.matches.length).toBe(2);
+    expect(r.matches[0]!.file).toBe(path);
+    expect(r.matches[0]!.line).toBe(1);
+    expect(r.matches[1]!.line).toBe(2);
+  });
+});
+
 describe('system/todo functions', () => {
   let vm: VM;
   let dir: string;

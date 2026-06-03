@@ -90,10 +90,10 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
     }
   });
 
-  // process.env — read-only env shim with LMTHING_SPACE_DIR injected for state stores
+  // process.env + process.exit — read-only env shim with LMTHING_SPACE_DIR injected
   const env = Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined));
   env['LMTHING_SPACE_DIR'] = opts.spaceDir;
-  setGlobal('process', { env });
+  setGlobal('process', { env, exit: (code?: number) => { throw new Error(`process.exit(${code ?? 0})`); } });
 
   // fetch — synchronous HTTP via curl; returns a plain object so `await fetch(...)` works
   setGlobal('fetch', (url: string, fetchOpts?: { method?: string; headers?: Record<string, string>; body?: string }) => {

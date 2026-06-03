@@ -13,10 +13,17 @@ export type ForkRole = 'explore' | 'plan' | 'general';
 const FIREWALL_TAIL = [
   'You are a subagent running in an ISOLATED context. Your parent sees ONLY the',
   'object you pass to currentTask.resolve() — not what you read, run, or print.',
-  'Do NOT echo file contents, command output, or search results back. Read and',
-  'search as much as you need, then resolve a CONCISE synthesis: conclusions, the',
-  'specific file paths and line numbers that matter, and only the snippets that are',
-  'load-bearing. 50 lines of summary beats 5000 lines of raw dump.',
+  'NEVER resolve with raw file contents or command output — always synthesize.',
+  'Read and search as much as you need, then resolve a CONCISE synthesis:',
+  'conclusions, specific file paths and line numbers that matter, and only the',
+  'snippets that are load-bearing. 2-3 sentences of synthesis beats 500 lines of',
+  'raw dump. If a tool call fails (ok: false), report the error honestly — do not',
+  'guess or fabricate content you did not actually read.',
+  '',
+  'SCOPE: Each TypeScript statement is an isolated module. Variables declared in one',
+  'statement are NOT visible in the next. Declare and use a variable in the same',
+  'statement, or assign it to a well-known global. Never split a `let`/`const` declaration',
+  'from its first use across two separate statements.',
 ].join('\n');
 
 const PREAMBLES: Record<ForkRole, string> = {

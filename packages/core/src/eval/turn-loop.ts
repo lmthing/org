@@ -60,6 +60,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     let failingStatement: string | null = null;
     let aborted = false;
     let assistantContent = '';
+    const parsedStatements: string[] = [];
 
     renderHost.log(`[turn ${attempt}] streaming...`);
     try {
@@ -106,11 +107,13 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
           if (vm.pendingYields.length > 0) {
             pendingYield = vm.pendingYields[vm.pendingYields.length - 1]!;
             yieldingStatement = stmt;
+            parsedStatements.push(stmt);
             stream.abort();
             aborted = true;
             break;
           }
 
+          parsedStatements.push(stmt);
           accumulatedContext += (accumulatedContext ? '\n' : '') + stmt;
         }
 
@@ -151,7 +154,9 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
             if (vm.pendingYields.length > 0) {
               pendingYield = vm.pendingYields[vm.pendingYields.length - 1]!;
               yieldingStatement = stmt;
+              parsedStatements.push(stmt);
             } else {
+              parsedStatements.push(stmt);
               accumulatedContext += (accumulatedContext ? '\n' : '') + stmt;
             }
           }
@@ -159,10 +164,12 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       }
     }
 
-    if (assistantContent.trim()) {
-      renderHost.log(`[model response]\n${assistantContent.trim().slice(0, 500)}\n[/model response]`);
-      tracer.write({ ts: Date.now(), type: 'llm_response', context: ctx, attempt, text: assistantContent.trim() });
-      history.append({ role: 'assistant', content: assistantContent.trim(), blockType: 'normal' });
+    // Use parsed statements for history so incomplete trailing stream text is excluded.
+    const historyContent = parsedStatements.length > 0 ? parsedStatements.join('\n') : assistantContent.trim();
+    if (historyContent) {
+      renderHost.log(`[model response]\n${historyContent.slice(0, 500)}\n[/model response]`);
+      tracer.write({ ts: Date.now(), type: 'llm_response', context: ctx, attempt, text: historyContent });
+      history.append({ role: 'assistant', content: historyContent, blockType: 'normal' });
     }
 
     if (turnError && failingStatement) {
@@ -184,20 +191,19 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       // when they run concurrently — `await Promise.all([fork(...), fork(...)])`.
       // The QuickJS module continuation after `await` does NOT re-run in this sync
       // eval model, so the host must bind the values itself (see below).
-      const resolvedValues: unknown[] = [];
-      for (const yieldReq of yields) {
+      const resolvedValues: unknown[] = new Array(yields.length);
+      await Promise.all(yields.map(async (yieldReq, i) => {
         tracer.write({ ts: Date.now(), type: 'yield', context: ctx, kind: yieldReq.kind, args: yieldReq.args });
         try {
           const resolved = await processYield(yieldReq);
           tracer.write({ ts: Date.now(), type: 'yield_resolved', context: ctx, kind: yieldReq.kind, value: resolved });
           yieldReq.deferred.resolve(resolved);
-          resolvedValues.push(resolved);
+          resolvedValues[i] = resolved;
         } catch (err) {
           yieldReq.deferred.reject(err);
-          resolvedValues.push(undefined);
+          resolvedValues[i] = undefined;
         }
-        await Promise.resolve();
-      }
+      }));
       vm.drivePendingJobs();
 
       // Map resolved values onto the bound names. Multiple yields ⟹ the statement

@@ -38,7 +38,7 @@ export function grep(
   // Fallback: grep -rn (also handles "rg not installed"). `|| true` keeps a
   // no-match (exit 1) from being logged as an error.
   const grepFlags = opts?.glob ? `--include=${JSON.stringify(opts.glob)} ` : '';
-  const gr = execShell(`grep -rn ${ic}${grepFlags}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)} || true`);
+  const gr = execShell(`grep -rnH ${ic}${grepFlags}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)} || true`);
   if (gr.stdout.trim()) {
     for (const line of gr.stdout.split('\n')) {
       const m = line.match(/^([^:]+):(\d+):(.*)$/);
