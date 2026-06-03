@@ -8,7 +8,7 @@ import { runTurnLoop } from '../eval/turn-loop.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { rolePreamble, roleProfile } from './roles.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
-import { buildOverlay } from '../typecheck/overlay.js';
+import { buildOverlay, extractFunctionSignature } from '../typecheck/overlay.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { validateOutput } from '../tasklist/schema.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
@@ -228,11 +228,15 @@ export class ForkEngine {
           .filter(Boolean)
           .join('\n');
 
-        // Build system prompt: include full function signatures (not just names)
+        // Build system prompt: include FULL function signatures incl. return types
+        // (AST-based, not a truncating regex) so the subagent destructures results
+        // like readFile(...).content / glob(...).paths without a wasted retry.
         const functionList = Object.keys(agentFunctions).length > 0
-          ? `\n# Available Space Functions (already in scope — call directly with correct args, do NOT redefine):\n${Object.entries(agentFunctions).map(([, src]) => {
-              const sig = src.match(/export\s+(?:async\s+)?function\s+\w+\([^)]*\)/)?.[0] ?? '';
-              return sig ? `- ${sig.replace('export ', '')}` : '';
+          ? `\n# Available Space Functions (already in scope — call directly with correct args, do NOT redefine):\n${Object.entries(agentFunctions).map(([name, src]) => {
+              const decl = extractFunctionSignature(name, src)
+                .replace(/^declare\s+(async\s+)?function\s+/, '')
+                .replace(/;$/, '');
+              return `- ${decl}`;
             }).filter(Boolean).join('\n')}`
           : '';
 
