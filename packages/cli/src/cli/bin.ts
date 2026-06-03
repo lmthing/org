@@ -111,6 +111,7 @@ async function main(): Promise<void> {
         renderHost,
         traceFile: args.traceFile,
         systemSpaceDirs,
+        maxHistoryTurns: 20,
       },
       { streamFn },
     );

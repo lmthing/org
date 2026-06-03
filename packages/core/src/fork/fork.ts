@@ -281,7 +281,7 @@ export class ForkEngine {
           },
           maxRetries: 3,
           tracer: this.opts.tracer ?? NULL_TRACER,
-          traceContext: `fork:${task.taskId ?? 'unknown'}`,
+          traceContext: `fork:${task.taskId ?? task.role ?? 'general'}`,
         });
 
         // All QuickJS call frames have exited — safe to dispose.

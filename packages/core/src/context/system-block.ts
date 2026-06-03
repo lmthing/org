@@ -79,6 +79,21 @@ IMPORTANT: ask(), tasklist(), and delegate() all return unknown. Cast results to
   const topic = await ask("...") as string;
   const result = await tasklist("my_list") as { field: string };
   const data = await delegate(...) as { key: string };
+
+fork() spawns an isolated subagent. REQUIRED fields: \`instruction\` (what to do) and
+\`output\` (a schema mapping each result field to its type). Optional \`role\`. The
+subagent returns ONLY what it resolves — investigation it does stays out of your context.
+  const res = await fork({
+    role: 'explore',
+    instruction: "Find every .ts file under fixtures/cooking and summarize what each function does.",
+    output: { files: 'string[]', summary: 'string' },
+  }) as { files: string[]; summary: string };
+  display(res.summary);
+Run several subagents at once:
+  const [a, b] = await Promise.all([
+    fork({ role: 'explore', instruction: "...", output: { found: 'string' } }),
+    fork({ role: 'explore', instruction: "...", output: { found: 'string' } }),
+  ]);
 `.trim();
 
 /**

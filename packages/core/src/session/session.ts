@@ -6,6 +6,7 @@ import { createVM } from '../sandbox/quickjs.js';
 import type { VM } from '../sandbox/quickjs.js';
 import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
+import { summarizeHistory } from '../context/summarize.js';
 import { buildSystemBlock } from '../context/system-block.js';
 import { loadSpace } from '../spaces/load.js';
 import type { Space } from '../spaces/load.js';
@@ -66,6 +67,9 @@ export class Session {
       content: `Write TypeScript code to accomplish the following task. Respond with TypeScript code only.\n\nTask: ${message}`,
       blockType: 'normal',
     });
+    // Context economy: collapse old turns into a summary once history grows large,
+    // keeping the most recent messages (incl. this task) verbatim.
+    await this.maybeSummarizeHistory();
     await runTurnLoop({
       vm: this.vm,
       history: this.history,
@@ -222,6 +226,21 @@ export class Session {
     if (this.vm) {
       this.vm.dispose();
       this.vm = null;
+    }
+  }
+
+  /**
+   * Collapse old history into a summary when it exceeds maxHistoryTurns*2 messages,
+   * keeping the last 6 verbatim. Deterministic digest (no extra LLM call) — preserves
+   * the original task plus resolved variables and errors.
+   */
+  private async maybeSummarizeHistory(): Promise<void> {
+    const maxTurns = this.opts.maxHistoryTurns;
+    if (!maxTurns || this.history.messages.length <= maxTurns * 2) return;
+    const summary = await summarizeHistory({ messages: this.history.messages, keepLast: 6 });
+    if (summary) {
+      this.history.summarize(summary, 6);
+      this.opts.renderHost.log(`[context] history summarized → ${this.history.messages.length} messages`);
     }
   }
 
