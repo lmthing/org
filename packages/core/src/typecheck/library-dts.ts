@@ -1,6 +1,6 @@
 export const LIBRARY_DTS = `
 declare function ask<T = unknown>(descriptor: JSXDescriptor | string): Promise<T>;
-declare function display(descriptor: JSXDescriptor | string): void;
+declare function display(descriptor: JSXDescriptor | string | number | boolean): void;
 declare function inspect(...args: (unknown | [unknown, InspectQuery])[]): Promise<void>;
 declare function loadKnowledge(...path: string[]): Promise<unknown>;
 declare function sleep(duration: string): Promise<void>;

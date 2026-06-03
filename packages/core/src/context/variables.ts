@@ -43,6 +43,27 @@ export function extractScopeNamesFromContext(context: string): string[] {
   return [...new Set(names)];
 }
 
+export type BindingKind = 'simple' | 'array' | 'object' | 'none';
+
+/**
+ * Like extractBindingNames, but also reports the binding pattern kind so callers
+ * can map awaited results correctly:
+ *   - 'simple' → `const x = ...`            (one name)
+ *   - 'array'  → `const [a, b] = ...`        (positional)
+ *   - 'object' → `const { a, b } = ...`      (by key)
+ *   - 'none'   → no const/let/var binding
+ */
+export function extractBindingPattern(statement: string): { kind: BindingKind; names: string[] } {
+  const stripped = statement.replace(/^(\s*\/\/[^\n]*\n)+/g, '').trimStart();
+  const declMatch = stripped.match(/^\s*(?:const|let|var)\s+(.+?)\s*=/);
+  if (!declMatch) return { kind: 'none', names: [] };
+  const lhs = declMatch[1]!.trim();
+  const names = extractBindingNames(statement);
+  if (lhs.startsWith('{')) return { kind: 'object', names };
+  if (lhs.startsWith('[')) return { kind: 'array', names };
+  return { kind: 'simple', names };
+}
+
 /**
  * Extract LHS binding identifier names from a TypeScript statement.
  * Handles: `const x = ...`, `let [a, b] = ...`, `const { x, y } = ...`

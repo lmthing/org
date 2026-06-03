@@ -9,7 +9,7 @@ import { BoundaryDetector } from '../sandbox/boundary.js';
 import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { buildErrorBlock } from './error-rewind.js';
-import { emitVariables, extractBindingNames } from '../context/variables.js';
+import { emitVariables, extractBindingNames, extractBindingPattern } from '../context/variables.js';
 
 export type { StreamOpts, StreamSession };
 
@@ -177,33 +177,46 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       const yields = vm.pendingYields.splice(0);
       const variables: Record<string, unknown> = {};
 
-      // Extract binding names from the statement that caused the yield
-      const boundNames = extractBindingNames(yieldingStatement);
+      // Binding pattern of the yielding statement (kind + names).
+      const pattern = extractBindingPattern(yieldingStatement);
 
+      // Resolve every pending yield. A single statement can produce several yields
+      // when they run concurrently — `await Promise.all([fork(...), fork(...)])`.
+      // The QuickJS module continuation after `await` does NOT re-run in this sync
+      // eval model, so the host must bind the values itself (see below).
+      const resolvedValues: unknown[] = [];
       for (const yieldReq of yields) {
         tracer.write({ ts: Date.now(), type: 'yield', context: ctx, kind: yieldReq.kind, args: yieldReq.args });
-        let resolved: unknown;
         try {
-          // processYield does the actual async work (renders form, sleeps, etc.)
-          resolved = await processYield(yieldReq);
+          const resolved = await processYield(yieldReq);
           tracer.write({ ts: Date.now(), type: 'yield_resolved', context: ctx, kind: yieldReq.kind, value: resolved });
-          // Resolve the JS Promise — triggers VM deferred resolution as a microtask
           yieldReq.deferred.resolve(resolved);
-          // Flush microtasks so the VM deferred resolves and executePendingJobs runs
-          await Promise.resolve();
-          // Drive remaining VM jobs (module continuation binds the variable)
-          vm.drivePendingJobs();
+          resolvedValues.push(resolved);
         } catch (err) {
           yieldReq.deferred.reject(err);
-          await Promise.resolve();
-          resolved = undefined;
+          resolvedValues.push(undefined);
         }
+        await Promise.resolve();
+      }
+      vm.drivePendingJobs();
 
-        for (const name of boundNames) {
-          variables[name] = resolved;
-          // Inject into VM global scope so next-turn modules can access the variable
-          vm.setVar(name, resolved);
-        }
+      // Map resolved values onto the bound names. Multiple yields ⟹ the statement
+      // awaited a combinator (Promise.all), whose result is the array of resolved
+      // values in source order; a single yield ⟹ the result is that one value.
+      const awaited: unknown = yields.length > 1 ? resolvedValues : resolvedValues[0];
+      const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
+      const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+      if (pattern.kind === 'array') {
+        const arr = asArray(awaited);
+        pattern.names.forEach((name, i) => { variables[name] = arr[i]; });
+      } else if (pattern.kind === 'object') {
+        const obj = asRecord(awaited);
+        pattern.names.forEach((name) => { variables[name] = obj[name]; });
+      } else if (pattern.names.length === 1) {
+        variables[pattern.names[0]!] = awaited;
+      }
+      for (const [name, value] of Object.entries(variables)) {
+        vm.setVar(name, value); // inject into VM scope + host scope for the next turn
       }
 
       // Add the yielding statement to accumulated context for future typecheck
