@@ -30,6 +30,8 @@ export type { ForkGlobalOpts } from './globals/fork.js';
 export { createDelegateGlobal } from './globals/delegate.js';
 export type { DelegateOpts } from './globals/delegate.js';
 export { createTasklistGlobal } from './globals/tasklist.js';
+export { createRegisterSpaceGlobal } from './globals/register-space.js';
+export type { RegisterSpaceResult } from './globals/register-space.js';
 
 // Context
 export { emitVariables, extractBindingNames } from './context/variables.js';

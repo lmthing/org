@@ -7,6 +7,7 @@ declare function sleep(duration: string): Promise<void>;
 declare function tasklist(name: string, seed?: Record<string, unknown>): Promise<unknown>;
 declare function fork<T>(opts: ForkOpts<T>): Promise<T>;
 declare function delegate(packageName: string, agentName: string, action: string, opts?: DelegateOpts): Promise<unknown>;
+declare function registerSpace(dir: string): Promise<{ ok: boolean; spaceKey: string; agentSlug: string; error?: string }>;
 
 declare interface JSXDescriptor {
   type: string | ((...args: unknown[]) => unknown);

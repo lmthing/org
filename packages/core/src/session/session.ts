@@ -25,6 +25,7 @@ import { createLoadKnowledgeGlobal } from '../globals/load-knowledge.js';
 import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
+import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
@@ -49,6 +50,12 @@ export class Session {
   private agentFunctions: Record<string, string> = {};
   private agentFunctionsBundled: Record<string, string> = {};
   private systemSpaces: Space[] = [];
+  /**
+   * Spaces loaded at runtime via registerSpace(). Shared mutable reference so
+   * that a registerSpace() call (even inside a fork) is visible to subsequent
+   * delegate() calls in the same session.
+   */
+  private dynamicSpaces: Map<string, Space> = new Map();
 
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
@@ -295,6 +302,7 @@ export class Session {
     injectGlobal(this.vm.ctx, 'fork', createForkGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
+    injectGlobal(this.vm.ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
 
     // Shared synchronous host substrate: console, execShell, process.env, fetch,
     // readFileRaw, writeFileRaw. Single source of truth (also used by fork VMs).
@@ -437,6 +445,10 @@ export class Session {
           spaceMap.set(pkgName, depSpace);
           spaceMap.set(depSpace.dir, depSpace);
         }
+        // Merge spaces registered at runtime via registerSpace()
+        for (const [key, dynSpace] of this.dynamicSpaces) {
+          spaceMap.set(key, dynSpace);
+        }
         const registry = new DelegateRegistry(spaceMap);
         return runDelegate({
           packageName,
@@ -451,7 +463,19 @@ export class Session {
           maxConcurrentForks: this.opts.maxConcurrentForks ?? 4,
           clock: this.opts.clock,
           tracer: this.tracer,
+          systemSpaces: this.systemSpaces,
         });
+      }
+      case 'registerSpace': {
+        const dir = req.args[0] as string;
+        try {
+          const space = await loadSpace(dir);
+          this.dynamicSpaces.set(dir, space);
+          const firstAgentSlug = Object.keys(space.agents)[0] ?? '';
+          return { ok: true, spaceKey: dir, agentSlug: firstAgentSlug };
+        } catch (err: any) {
+          return { ok: false, spaceKey: '', agentSlug: '', error: String(err?.message ?? err) };
+        }
       }
       default:
         return undefined;

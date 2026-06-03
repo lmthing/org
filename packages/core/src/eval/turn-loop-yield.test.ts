@@ -33,7 +33,7 @@ describe('turn loop — parallel yields (Promise.all of forks)', () => {
     // A yielding global `y(tag)` that pushes a yield carrying its tag.
     const y = (tag: string) =>
       new Promise((resolve, reject) => {
-        vm.pendingYields.push({ kind: 'y', args: [tag], deferred: { resolve, reject }, vmPromiseHandle: undefined } as YieldRequest);
+        vm.pendingYields.push({ kind: 'y', args: [tag], deferred: { resolve, reject }, vmPromiseHandle: undefined } as unknown as YieldRequest);
       });
     injectGlobal(vm.ctx, 'y', y as (...a: unknown[]) => unknown);
 
@@ -70,7 +70,7 @@ describe('turn loop — parallel yields (Promise.all of forks)', () => {
     const endTimes: Record<string, number> = {};
     const y = (tag: string) =>
       new Promise((resolve, reject) => {
-        vm.pendingYields.push({ kind: 'y', args: [tag], deferred: { resolve, reject }, vmPromiseHandle: undefined } as YieldRequest);
+        vm.pendingYields.push({ kind: 'y', args: [tag], deferred: { resolve, reject }, vmPromiseHandle: undefined } as unknown as YieldRequest);
       });
     injectGlobal(vm.ctx, 'y', y as (...a: unknown[]) => unknown);
 

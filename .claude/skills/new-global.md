@@ -35,7 +35,7 @@ Key rules:
 
 ```typescript
 export interface YieldRequest {
-  kind: 'ask' | 'sleep' | 'inspect' | 'loadKnowledge' | 'fork' | 'delegate' | 'tasklist' | '<name>';
+  kind: 'ask' | 'sleep' | 'inspect' | 'loadKnowledge' | 'fork' | 'delegate' | 'tasklist' | 'registerSpace' | '<name>';
   args: unknown[];
   deferred: { resolve: (v: unknown) => void; reject: (e: unknown) => void };
   vmPromiseHandle: unknown;

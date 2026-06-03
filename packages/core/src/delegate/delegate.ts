@@ -14,6 +14,9 @@ import { runTurnLoop } from '../eval/turn-loop.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
 import { transpileStatement } from '../typecheck/transpile.js';
+import { injectHostTools } from '../globals/host-tools.js';
+import { systemFunctionSources, systemFunctionsBundled } from '../spaces/system.js';
+import type { Space } from '../spaces/load.js';
 
 export interface RunDelegateOpts {
   packageName: string;
@@ -28,6 +31,7 @@ export interface RunDelegateOpts {
   maxConcurrentForks: number;
   clock?: Clock;
   tracer?: Tracer;
+  systemSpaces?: Space[];
 }
 
 export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
@@ -96,9 +100,13 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     vm.ctx.setProp(vm.ctx.global, 'currentTask', captureHandle);
     captureHandle.dispose();
 
-    // Inject space functions into the VM
-    for (const name of Object.keys(agentFunctions)) {
-      const bundled = agentFunctionsBundled[name];
+    // Inject space functions into the VM (combining system functions and agent functions)
+    const systemSpaces = opts.systemSpaces ?? [];
+    const functions = { ...systemFunctionSources(systemSpaces), ...agentFunctions };
+    const functionsBundled = { ...systemFunctionsBundled(systemSpaces), ...agentFunctionsBundled };
+
+    for (const name of Object.keys(functions)) {
+      const bundled = functionsBundled[name];
       let js: string;
       if (bundled) {
         js = bundled
@@ -106,7 +114,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
           .replace(/^export\s+default\s+/gm, `const ${name} = `)
           .replace(/^export\s+/gm, '');
       } else {
-        js = transpileStatement(agentFunctions[name]!)
+        js = transpileStatement(functions[name]!)
           .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
           .replace(/^export\s+default\s+/gm, `const ${name} = `)
           .replace(/^export\s+/gm, '');
@@ -116,6 +124,10 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
         opts.renderHost.log(`[warn] failed to inject function "${name}": ${fnResult.error}`);
       }
     }
+
+    // Shared synchronous host substrate: console, execShell, process.env, fetch,
+    // readFileRaw, writeFileRaw.
+    injectHostTools(vm, { renderHost: opts.renderHost, spaceDir: space.dir });
 
     // Inject React shim + component stubs for JSX
     const reactShim = {
@@ -174,6 +186,8 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       parentHistory: history.messages,
       parentSpaceDir: space.dir,
       parentAgentSlug: agent.slug,
+      agentFunctions: functions,
+      agentFunctionsBundled: functionsBundled,
       renderHost: opts.renderHost,
       streamFn: opts.streamFn,
       clock: opts.clock,

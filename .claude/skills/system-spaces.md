@@ -5,7 +5,7 @@
 ## Where things live
 
 - `packages/core/system-spaces/{fs,web,memory,todo}/` — the toolkit, as ordinary space functions (NOT under `src/`; read from disk at runtime). No `package.json` (a package.json would trigger `npm install` on load).
-- `packages/core/src/spaces/system.ts` — `loadSystemSpaces`, `mergeSystemInto`, `defaultSystemSpaceDirs`, `systemFunctionSources`/`systemFunctionsBundled`/`systemFunctionNames`.
+- `packages/core/src/spaces/system.ts` — `loadSystemSpaces`, `mergeSystemInto`, `defaultSystemSpaceDirs`, `systemFunctionSources`/`systemFunctionsBundled`/`systemFunctionNames`. The delegate runner (`delegate/delegate.ts`) also calls `systemFunctionSources`/`systemFunctionsBundled` to merge system functions into delegate VMs via `RunDelegateOpts.systemSpaces`.
 - `packages/core/src/globals/host-tools.ts` — the synchronous host substrate the system functions build on.
 - `packages/core/src/fork/roles.ts` — `fork({ role })` capability profiles + preambles.
 

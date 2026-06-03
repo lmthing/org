@@ -183,6 +183,7 @@ export class ForkEngine {
         const { createDisplayGlobal } = await import('../globals/display.js');
         const { createInspectGlobal } = await import('../globals/inspect.js');
         const { createSleepGlobal } = await import('../globals/sleep.js');
+        const { createLoadKnowledgeGlobal } = await import('../globals/load-knowledge.js');
 
         const capturedVm = vm;
         const pushYield = (req: import('../eval/yield.js').YieldRequest) => {
@@ -194,6 +195,11 @@ export class ForkEngine {
         injectGlobal(vm.ctx, 'display', createDisplayGlobal(this.opts.renderHost) as AnyFn);
         injectGlobal(vm.ctx, 'inspect', createInspectGlobal(pushYield) as AnyFn);
         injectGlobal(vm.ctx, 'sleep', createSleepGlobal(pushYield, this.opts.clock) as AnyFn);
+        injectGlobal(
+          vm.ctx,
+          'loadKnowledge',
+          createLoadKnowledgeGlobal(pushYield, this.opts.parentSpaceDir + '/knowledge') as AnyFn,
+        );
 
         // Build user message for the child
         const seedSummary = task.seed && Object.keys(task.seed).length > 0

@@ -1,6 +1,6 @@
 # LMThing — Developer Guide
 
-LLM agent runtime where models drive programs by writing TypeScript. The model streams TS statements; the host evaluates them one at a time in a QuickJS WASM sandbox. Value-yielding calls (`ask`, `sleep`, `tasklist`, `fork`, `delegate`, `inspect`, `loadKnowledge`) abort the stream, hand control to the host, and resume the next turn with resolved values injected as a VARIABLES block.
+LLM agent runtime where models drive programs by writing TypeScript. The model streams TS statements; the host evaluates them one at a time in a QuickJS WASM sandbox. Value-yielding calls (`ask`, `sleep`, `tasklist`, `fork`, `delegate`, `inspect`, `loadKnowledge`, `registerSpace`) abort the stream, hand control to the host, and resume the next turn with resolved values injected as a VARIABLES block.
 
 ## Workspace
 
@@ -63,7 +63,7 @@ packages/core/src/
   sandbox/     quickjs.ts host-bridge.ts boundary.ts jsx-runtime.ts trace.ts  ← VM + marshalling + tracing
   eval/        turn-loop.ts yield.ts error-rewind.ts stream-types.ts           ← the execution engine
   typecheck/   tsc.ts library-dts.ts overlay.ts overlay-dts.ts transpile.ts
-  globals/     ask.ts sleep.ts display.ts inspect.ts fork.ts delegate.ts tasklist.ts load-knowledge.ts serialize.ts host-tools.ts  ← host-tools = shared sync substrate (execShell/fetch/readFileRaw/writeFileRaw…)
+  globals/     ask.ts sleep.ts display.ts inspect.ts fork.ts delegate.ts tasklist.ts load-knowledge.ts register-space.ts serialize.ts host-tools.ts  ← host-tools = shared sync substrate (execShell/fetch/readFileRaw/writeFileRaw…)
   spaces/      load.ts frontmatter.ts agent.ts components.ts knowledge.ts tasklist-load.ts system.ts  ← system.ts = system-space loader + merge
   tasklist/    dag.ts orchestrator.ts condition-dsl.ts schema.ts
   fork/        fork.ts roles.ts                                                 ← roles.ts = explore/plan/general capability profiles + preambles
@@ -95,7 +95,9 @@ packages/ui/src/
 - Each `evalStatement(code)` call is an isolated ES module. Variables do not persist between evals — the turn loop appends `try { globalThis['x'] = x; } catch {}` after each statement so the next module can read them as globals. All declared variables (including `undefined` values) are propagated this way.
 - **Yield-result binding is host-side, not via the module continuation.** A statement that yields (`const x = await ask()`, `const [a,b] = await Promise.all([fork(),fork()])`) does NOT re-run its post-`await` code in this sync eval model. The turn loop resolves each pending yield, then maps the resolved value(s) onto the bound names using `extractBindingPattern` (simple ← the value; array ← positional, so parallel `Promise.all` results land in order; object ← by key) and `vm.setVar`s them. Do not assume the QuickJS continuation binds variables.
 - `accumulatedContext` in the turn loop persists across yield continuations (variables stay in typecheck scope). Only error retries start fresh.
-- **System spaces are always merged into every space.** `Session` calls `mergeSystemInto` (`spaces/system.ts`) after `loadSpace`; system functions are injected universally (bypassing the per-agent `functions:` filter), and the same set flows to forks/delegates. The user space wins on name collisions.
+- **System spaces are always merged into every space.** `Session` calls `mergeSystemInto` (`spaces/system.ts`) after `loadSpace`; system functions are injected universally (bypassing the per-agent `functions:` filter), and the same set flows to forks **and delegates** (via `RunDelegateOpts.systemSpaces`). The user space wins on name collisions.
+- **Fork VMs have `loadKnowledge`** injected alongside `ask`, `inspect`, `sleep`, and `display`. Tasks inside a tasklist fork can call `await loadKnowledge(...)`.
+- **`registerSpace(dir)` loads a space at runtime** into a `dynamicSpaces` map on `Session`. Subsequent `delegate()` calls can reach the newly registered space immediately — no session restart needed. Re-registering the same dir overwrites the prior entry (used for idempotent re-scaffolding).
 - JSX in model output is transpiled to `React.createElement(...)` via `transpileStatement()` before VM eval. A React shim and component stubs are injected at session start.
 - Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
 - The QuickJS VM uses sync `evalCode` + manual `executePendingJobs` loop — NOT `evalCodeAsync`, which deadlocks when awaiting user input.
@@ -129,6 +131,8 @@ Provider support: `azure`, `anthropic`, `openai`, `google`, `mistral`. Format: `
 
 `SessionOpts` additions: `systemSpaceDirs?` (override/disable the always-on spaces) and `maxHistoryTurns?` (history-summarization threshold).
 
+`registerSpace(dir)` is a value-yielding global (`globals/register-space.ts`) that calls `loadSpace(dir)` and inserts the result into `Session.dynamicSpaces`. Returns `{ ok, spaceKey, agentSlug, error? }`. The `spaceKey` is the dir path and is passed as the first arg to `delegate()`. The `dynamicSpaces` map is a shared mutable reference — a `registerSpace` call inside a fork is visible to subsequent `delegate()` calls in the parent session.
+
 ## Known issues
 
 See `.issues/` for open bug reports. When all issues are resolved this section will be empty.
@@ -144,6 +148,7 @@ Reference spaces for end-to-end testing:
 - `fixtures/browser_use/` — browser agent using chromium headless + Google search
 - `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering
 - `fixtures/engineer/` — flagship coding agent: uses the system spaces (fs/web/memory/todo) + fork roles, declares no tools of its own
+- `fixtures/architect/` — meta-agent that synthesizes, scaffolds, registers, and delegates to NEW agents at runtime; functions: `scaffoldSpace`, `validateSpace`, `listScaffoldedSpaces`; demonstrates the `registerSpace` → `delegate` pattern
 
 See `@.claude/arch/spaces.md` for space file layout.
 
@@ -193,7 +198,7 @@ The runtime is built to keep context small over long sessions:
 
 Tests are co-located: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
 
-Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tsc.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/host-tools.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`.
+Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tsc.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/host-tools.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `spaces/architect-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`.
 
 Live testing: for new runtime features, also drive the built CLI against fixture spaces with a real model and inspect the `--trace` NDJSON — unit tests miss model-behavior and end-to-end integration issues.
 
