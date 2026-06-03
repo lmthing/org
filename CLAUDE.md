@@ -84,7 +84,7 @@ packages/ui/src/
 
 ## Key Invariants
 
-- Each `evalStatement(code)` call is an isolated ES module. Variables do not persist between evals — the turn loop appends `globalThis['x'] = x` assignments after each statement so the next module can read them as globals.
+- Each `evalStatement(code)` call is an isolated ES module. Variables do not persist between evals — the turn loop appends `try { globalThis['x'] = x; } catch {}` after each statement so the next module can read them as globals. All declared variables (including `undefined` values) are propagated this way.
 - `accumulatedContext` in the turn loop persists across yield continuations (variables stay in typecheck scope). Only error retries start fresh.
 - JSX in model output is transpiled to `React.createElement(...)` via `transpileStatement()` before VM eval. A React shim and component stubs are injected at session start.
 - Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
@@ -123,12 +123,27 @@ See `.issues/` for open bug reports. When all issues are resolved this section w
 
 ## Fixtures
 
-Two reference spaces for end-to-end testing:
+Reference spaces for end-to-end testing:
 
 - `fixtures/cooking/` — chef agent with form components, view components, space functions, tasklist DAG
 - `fixtures/sommelier/` — pairing agent with delegation target
+- `fixtures/research/` — research analyst with simulated web search functions
+- `fixtures/deep_research/` — deep research with real Tavily API (requires `TAVILY_API_KEY`)
+- `fixtures/browser_use/` — browser agent using chromium headless + Google search
+- `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering
 
 See `@.claude/arch/spaces.md` for space file layout.
+
+## Host-injected VM Globals
+
+Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has these host-injected globals available to space functions:
+
+- `process.env` — Node.js environment variables (read-only shim)
+- `fetch(url, opts?)` — Synchronous HTTP using curl under the hood; returns `{ ok, status, text(), json() }`
+- `execShell(cmd)` — Synchronous shell command execution; returns `{ ok, stdout, stderr }`
+- `console.log/warn/error` — Routes through renderHost.log
+
+Space functions can use these directly. `tasklist(name, seed?)` passes `seed` as context to all fork tasks (injected as `any`-typed variables).
 
 ## Tests
 
