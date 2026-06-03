@@ -72,6 +72,12 @@ async function main(): Promise<void> {
 
   const agentSlug = args.agent ?? process.env['LM_AGENT'] ?? 'default';
 
+  // System spaces: explicit list, env override, disabled, or default (undefined).
+  const envSystemSpaces = process.env['LM_SYSTEM_SPACES']?.split(',').map((s) => s.trim()).filter(Boolean);
+  const systemSpaceDirs: string[] | undefined = args.noSystemSpaces
+    ? []
+    : args.systemSpaces ?? envSystemSpaces;
+
   if (args.webPort) {
     // Web mode: load space, start combined HTTP+WS server, open browser
     const { loadSpace } = await import('@repl/core');
@@ -85,6 +91,7 @@ async function main(): Promise<void> {
         modelAlias: modelSpec,
         renderHost,
         traceFile: args.traceFile,
+        systemSpaceDirs,
       },
       { streamFn },
     );
@@ -103,6 +110,7 @@ async function main(): Promise<void> {
         modelAlias: modelSpec,
         renderHost,
         traceFile: args.traceFile,
+        systemSpaceDirs,
       },
       { streamFn },
     );
@@ -142,6 +150,7 @@ async function main(): Promise<void> {
         modelAlias: modelSpec,
         renderHost,
         traceFile: args.traceFile,
+        systemSpaceDirs,
       },
       { streamFn },
     );

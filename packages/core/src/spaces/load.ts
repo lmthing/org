@@ -294,14 +294,22 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
   return { slug, title, instructBody, actions, dependencies, config };
 }
 
-export async function loadSpace(dir: string): Promise<Space> {
-  const agentsDir = join(dir, 'agents');
+export interface LoadSpaceOpts {
+  /** When false, a space without an agents/ directory is allowed (function-only
+   *  system spaces). Defaults to true. */
+  requireAgents?: boolean;
+}
 
-  if (!(await dirExists(agentsDir))) {
+export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<Space> {
+  const requireAgents = opts.requireAgents ?? true;
+  const agentsDir = join(dir, 'agents');
+  const hasAgentsDir = await dirExists(agentsDir);
+
+  if (!hasAgentsDir && requireAgents) {
     throw new Error(`Space at "${dir}" must have an agents/ directory`);
   }
 
-  const agentSlugs = await listDir(agentsDir);
+  const agentSlugs = hasAgentsDir ? await listDir(agentsDir) : [];
   const agentDirs = [];
   for (const slug of agentSlugs) {
     if (await dirExists(join(agentsDir, slug))) {
@@ -309,7 +317,7 @@ export async function loadSpace(dir: string): Promise<Space> {
     }
   }
 
-  if (agentDirs.length === 0) {
+  if (agentDirs.length === 0 && requireAgents) {
     throw new Error(`Space at "${dir}" must have at least one agent`);
   }
 

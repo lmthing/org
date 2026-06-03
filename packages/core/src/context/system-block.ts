@@ -16,6 +16,22 @@ export interface SystemBlockOpts {
   space: Space;
   agent: AgentDef;
   directDeps: ResolvedDep[];
+  /** System-space functions (fs/web/memory/todo). Rendered concisely as built-in
+   *  tools — signature + one-line doc only, not full source — to keep the prompt lean. */
+  systemFunctions?: Record<string, string>;
+}
+
+/** Extract a concise `name(params): ret` signature + leading doc line from a function source. */
+function extractToolSummary(name: string, src: string): string {
+  const sigMatch = src.match(/export\s+(?:async\s+)?function\s+\w+\s*\(([^)]*)\)\s*(?::\s*([^){\n]+))?/);
+  const params = sigMatch?.[1]?.trim().replace(/\s+/g, ' ') ?? '';
+  const ret = sigMatch?.[2]?.trim();
+  const sig = `${name}(${params})${ret ? `: ${ret}` : ''}`;
+  // Leading /** ... */ or // doc comment (first line only)
+  const jsdoc = src.match(/\/\*\*\s*\n?\s*\*?\s*([^\n*]+)/)?.[1]?.trim();
+  const lineComment = src.match(/^\s*\/\/\s*(.+)$/m)?.[1]?.trim();
+  const doc = jsdoc ?? lineComment;
+  return `- \`${sig}\`${doc ? ` — ${doc}` : ''}`;
 }
 
 const RUNTIME_PREAMBLE = `
@@ -76,6 +92,16 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
 
   // 1. Globals summary
   sections.push(GLOBALS_SUMMARY);
+
+  // 1b. Built-in tools from system spaces (concise — signatures + one-line docs)
+  if (opts.systemFunctions && Object.keys(opts.systemFunctions).length > 0) {
+    const toolLines = Object.entries(opts.systemFunctions).map(([name, src]) =>
+      extractToolSummary(name, src),
+    );
+    sections.push(
+      `# Built-in Tools\n\nAlways available (call directly, already in scope):\n\n${toolLines.join('\n')}`,
+    );
+  }
 
   // 2. Agent instructions
   if (agent.instructBody) {

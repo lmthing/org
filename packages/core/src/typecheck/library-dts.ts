@@ -54,4 +54,6 @@ declare interface DelegateOpts {
 declare function execShell(cmd: string): { ok: boolean; stdout: string; stderr: string };
 declare function fetch(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }): { ok: boolean; status: number; text(): string; json(): unknown };
 declare const process: { env: Record<string, string | undefined> };
+declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };
+declare function writeFileRaw(path: string, content: string): { ok: boolean; bytes: number; error?: string };
 `;

@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import type { RenderHost, Clock } from '../session/types.js';
 import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
 import type { Message } from '../context/history.js';
@@ -6,6 +5,7 @@ import { createVM, type VM } from '../sandbox/quickjs.js';
 import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
+import { injectHostTools } from '../globals/host-tools.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
 import { transpileStatement } from '../typecheck/transpile.js';
@@ -166,59 +166,12 @@ export class ForkEngine {
           }
         }
 
-        // Inject console shim so space functions can use console.log inside forks
-        const consoleShim = {
-          log: (...args: unknown[]) => this.opts.renderHost.log(args.map(String).join(' ')),
-          warn: (...args: unknown[]) => this.opts.renderHost.log('[warn] ' + args.map(String).join(' ')),
-          error: (...args: unknown[]) => this.opts.renderHost.log('[error] ' + args.map(String).join(' ')),
-        };
-        const consoleHandle = marshalToQuickJS(vm.ctx, consoleShim);
-        vm.ctx.setProp(vm.ctx.global, 'console', consoleHandle);
-        consoleHandle.dispose();
-
-        // Inject execShell: synchronous shell execution for space functions
-        const execShellShim = (cmd: string) => {
-          try {
-            const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
-            return { ok: true, stdout: result.toString(), stderr: '' };
-          } catch (e: unknown) {
-            const err = e as { message?: string; stdout?: Buffer; stderr?: Buffer };
-            return { ok: false, stdout: err.stdout?.toString() ?? '', stderr: err.stderr?.toString() ?? String(e) };
-          }
-        };
-        const execShellHandle = marshalToQuickJS(vm.ctx, execShellShim);
-        vm.ctx.setProp(vm.ctx.global, 'execShell', execShellHandle);
-        execShellHandle.dispose();
-
-        // Inject process shim (env vars) and synchronous fetch for space functions
-        const processShim = { env: Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) };
-        const processHandle = marshalToQuickJS(vm.ctx, processShim);
-        vm.ctx.setProp(vm.ctx.global, 'process', processHandle);
-        processHandle.dispose();
-
-        const renderHostRef = this.opts.renderHost;
-        const fetchShim = (url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }) => {
-          try {
-            const method = (opts?.method ?? 'GET').toUpperCase();
-            const headers = Object.entries(opts?.headers ?? {})
-              .map(([k, v]) => `-H ${JSON.stringify(`${k}: ${v}`)}`)
-              .join(' ');
-            const bodyArg = opts?.body ? `--data-binary ${JSON.stringify(opts.body)}` : '';
-            const cmd = `curl -s -w "\\n__STATUS__%{http_code}" -X ${method} ${headers} ${bodyArg} ${JSON.stringify(String(url))}`;
-            const raw = execSync(cmd, { maxBuffer: 8 * 1024 * 1024 }).toString();
-            const statusMatch = raw.match(/\n__STATUS__(\d+)$/);
-            const status = statusMatch ? parseInt(statusMatch[1]!) : 200;
-            const text = statusMatch ? raw.slice(0, raw.lastIndexOf('\n__STATUS__')) : raw;
-            const ok = status >= 200 && status < 300;
-            return { ok, status, text: () => text, json: () => JSON.parse(text) };
-          } catch (e) {
-            renderHostRef.log(`[fetch error] ${e instanceof Error ? e.message : String(e)}`);
-            return { ok: false, status: 0, text: () => '', json: () => ({}) };
-          }
-        };
-        const fetchHandle = marshalToQuickJS(vm.ctx, fetchShim);
-        vm.ctx.setProp(vm.ctx.global, 'fetch', fetchHandle);
-        fetchHandle.dispose();
+        // Shared synchronous host substrate: console, execShell, process.env, fetch,
+        // readFileRaw, writeFileRaw. Single source of truth (also used by the session VM).
+        injectHostTools(vm, {
+          renderHost: this.opts.renderHost,
+          spaceDir: this.opts.parentSpaceDir,
+        });
 
         // Inject standard globals (no fork/delegate/tasklist in child to avoid recursion issues)
         const { createAskGlobal } = await import('../globals/ask.js');

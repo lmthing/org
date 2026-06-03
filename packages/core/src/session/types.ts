@@ -20,6 +20,12 @@ export interface SessionOpts {
   maxConcurrentForks?: number;
   clock?: Clock;
   traceFile?: string;
+  /** Override the always-loaded system space directories. Defaults to the
+   *  bundled fs/web/memory/todo/agents spaces. Pass [] to disable. */
+  systemSpaceDirs?: string[];
+  /** When set, collapse history to a summary once it exceeds maxHistoryTurns*2
+   *  messages (keeping the last few verbatim). Used by long REPL sessions. */
+  maxHistoryTurns?: number;
 }
 
 export interface SessionDeps {

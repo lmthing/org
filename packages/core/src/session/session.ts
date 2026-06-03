@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { execSync } from 'node:child_process';
 import type { SessionOpts, SessionDeps, RenderHost } from './types.js';
 import type { StreamOpts } from '../eval/stream-types.js';
 import type { YieldRequest } from '../eval/yield.js';
@@ -10,6 +9,13 @@ import { MessageHistory } from '../context/history.js';
 import { buildSystemBlock } from '../context/system-block.js';
 import { loadSpace } from '../spaces/load.js';
 import type { Space } from '../spaces/load.js';
+import {
+  loadSystemSpaces,
+  mergeSystemInto,
+  defaultSystemSpaceDirs,
+  systemFunctionSources,
+  systemFunctionsBundled,
+} from '../spaces/system.js';
 import { createAskGlobal } from '../globals/ask.js';
 import { createDisplayGlobal } from '../globals/display.js';
 import { createInspectGlobal } from '../globals/inspect.js';
@@ -18,6 +24,7 @@ import { createLoadKnowledgeGlobal } from '../globals/load-knowledge.js';
 import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
+import { injectHostTools } from '../globals/host-tools.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
@@ -40,6 +47,7 @@ export class Session {
   private ambientDts: string | null = null;
   private agentFunctions: Record<string, string> = {};
   private agentFunctionsBundled: Record<string, string> = {};
+  private systemSpaces: Space[] = [];
 
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
@@ -73,8 +81,8 @@ export class Session {
   }
 
   async start(initialMessage: string): Promise<void> {
-    // 1. Load space
-    this.space = await loadSpace(this.opts.spaceDir);
+    // 1. Load space + merge always-on system spaces
+    this.space = await this.loadMergedSpace(this.opts.spaceDir);
 
     // 2. Get agent — fall back to first agent when slug is 'default'
     const agentKeys = Object.keys(this.space.agents);
@@ -98,12 +106,13 @@ export class Session {
     // 5. Resolve direct dependencies
     const directDeps = resolveDirectDeps(this.space, agent.dependencies);
 
-    // 6. Build system block
-    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps });
+    // 6. Build system block (system functions rendered as a concise Built-in Tools list)
+    const systemFns = systemFunctionSources(this.systemSpaces);
+    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns });
 
-    // 6b. Build ambient DTS overlay from agent's components + functions
-    const agentFunctions = getAgentFunctions(this.space, agent);
-    const agentFunctionsBundled = getAgentFunctionsBundled(this.space, agent);
+    // 6b. Build ambient DTS overlay — system functions are always in scope, then agent functions
+    const { functions: agentFunctions, functionsBundled: agentFunctionsBundled } =
+      this.buildInjectedFunctions(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
     const overlay = buildOverlay(agentFunctions, agentComponents);
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
@@ -150,8 +159,8 @@ export class Session {
       throw new Error(`No snapshot found in "${snapshotDir}"`);
     }
 
-    // Load space
-    this.space = await loadSpace(snapshot.spaceDir);
+    // Load space + merge always-on system spaces
+    this.space = await this.loadMergedSpace(snapshot.spaceDir);
     this.sessionId = snapshot.sessionId;
 
     // Get agent
@@ -179,9 +188,10 @@ export class Session {
 
     // Resolve direct deps and build system block
     const directDeps = resolveDirectDeps(this.space, agent.dependencies);
-    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps });
-    const agentFunctions = getAgentFunctions(this.space, agent);
-    const agentFunctionsBundled = getAgentFunctionsBundled(this.space, agent);
+    const systemFns = systemFunctionSources(this.systemSpaces);
+    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns });
+    const { functions: agentFunctions, functionsBundled: agentFunctionsBundled } =
+      this.buildInjectedFunctions(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
     const overlay = buildOverlay(agentFunctions, agentComponents);
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
@@ -215,6 +225,35 @@ export class Session {
     }
   }
 
+  /**
+   * Load the user space and merge the always-on system spaces (fs, web, memory,
+   * todo, agents) into it. The user space wins on name collisions. Stores the
+   * loaded system spaces on the instance for function/overlay derivation.
+   */
+  private async loadMergedSpace(spaceDir: string): Promise<Space> {
+    const userSpace = await loadSpace(spaceDir);
+    const dirs = this.opts.systemSpaceDirs ?? defaultSystemSpaceDirs();
+    this.systemSpaces = await loadSystemSpaces(dirs);
+    return mergeSystemInto(userSpace, this.systemSpaces);
+  }
+
+  /**
+   * Build the function maps injected into the VM: system functions are always
+   * present (universal capability), agent-declared functions overlay them.
+   */
+  private buildInjectedFunctions(space: Space, agent: import('../spaces/load.js').AgentDef): {
+    functions: Record<string, string>;
+    functionsBundled: Record<string, string>;
+  } {
+    return {
+      functions: { ...systemFunctionSources(this.systemSpaces), ...getAgentFunctions(space, agent) },
+      functionsBundled: {
+        ...systemFunctionsBundled(this.systemSpaces),
+        ...getAgentFunctionsBundled(space, agent),
+      },
+    };
+  }
+
   private injectGlobals(): void {
     if (!this.vm) throw new Error('VM not initialized');
 
@@ -238,64 +277,9 @@ export class Session {
     injectGlobal(this.vm.ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
 
-    // Inject console shim so space functions can use console.log etc.
-    const consoleShim = {
-      log: (...args: unknown[]) => this.opts.renderHost.log(args.map(String).join(' ')),
-      warn: (...args: unknown[]) => this.opts.renderHost.log('[warn] ' + args.map(String).join(' ')),
-      error: (...args: unknown[]) => this.opts.renderHost.log('[error] ' + args.map(String).join(' ')),
-    };
-    const consoleHandle = marshalToQuickJS(this.vm.ctx, consoleShim);
-    this.vm.ctx.setProp(this.vm.ctx.global, 'console', consoleHandle);
-    consoleHandle.dispose();
-
-    // Inject execShell: synchronous shell command execution for space functions
-    const renderHostLocal = this.opts.renderHost;
-    const execShellShim = (cmd: string) => {
-      try {
-        const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
-        return { ok: true, stdout: result.toString(), stderr: '' };
-      } catch (e: unknown) {
-        const err = e as { message?: string; stdout?: Buffer; stderr?: Buffer };
-        renderHostLocal.log(`[execShell error] ${err.message ?? String(e)}`);
-        return { ok: false, stdout: err.stdout?.toString() ?? '', stderr: err.stderr?.toString() ?? String(e) };
-      }
-    };
-    const execShellHandle = marshalToQuickJS(this.vm.ctx, execShellShim);
-    this.vm.ctx.setProp(this.vm.ctx.global, 'execShell', execShellHandle);
-    execShellHandle.dispose();
-
-    // Inject process shim so space functions can read environment variables
-    const processShim = { env: Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) };
-    const processHandle = marshalToQuickJS(this.vm.ctx, processShim);
-    this.vm.ctx.setProp(this.vm.ctx.global, 'process', processHandle);
-    processHandle.dispose();
-
-    // Inject synchronous fetch shim for space functions that make HTTP calls.
-    // Returns a plain object (not a Promise) so `await fetch(...)` works transparently.
-    const fetchShim = (url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }) => {
-      try {
-        const method = (opts?.method ?? 'GET').toUpperCase();
-        const headers = Object.entries(opts?.headers ?? {})
-          .map(([k, v]) => `-H ${JSON.stringify(`${k}: ${v}`)}`)
-          .join(' ');
-        const bodyArg = opts?.body
-          ? `--data-binary ${JSON.stringify(opts.body)}`
-          : '';
-        const cmd = `curl -s -w "\\n__STATUS__%{http_code}" -X ${method} ${headers} ${bodyArg} ${JSON.stringify(String(url))}`;
-        const raw = execSync(cmd, { maxBuffer: 8 * 1024 * 1024 }).toString();
-        const statusMatch = raw.match(/\n__STATUS__(\d+)$/);
-        const status = statusMatch ? parseInt(statusMatch[1]!) : 200;
-        const text = statusMatch ? raw.slice(0, raw.lastIndexOf('\n__STATUS__')) : raw;
-        const ok = status >= 200 && status < 300;
-        return { ok, status, text: () => text, json: () => JSON.parse(text) };
-      } catch (e) {
-        this.opts.renderHost.log(`[fetch error] ${e instanceof Error ? e.message : String(e)}`);
-        return { ok: false, status: 0, text: () => '', json: () => ({}) };
-      }
-    };
-    const fetchHandle = marshalToQuickJS(this.vm.ctx, fetchShim);
-    this.vm.ctx.setProp(this.vm.ctx.global, 'fetch', fetchHandle);
-    fetchHandle.dispose();
+    // Shared synchronous host substrate: console, execShell, process.env, fetch,
+    // readFileRaw, writeFileRaw. Single source of truth (also used by fork VMs).
+    injectHostTools(this.vm, { renderHost: this.opts.renderHost, spaceDir: this.opts.spaceDir });
   }
 
   private injectSpaceFunctions(functions: Record<string, string>, functionsBundled: Record<string, string>): void {

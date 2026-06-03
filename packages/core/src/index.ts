@@ -66,6 +66,15 @@ export type {
 } from './spaces/load.js';
 export { getAgentFunctions, resolveDirectDeps } from './spaces/agent.js';
 export type { ResolvedDep } from './spaces/agent.js';
+export {
+  loadSystemSpaces,
+  mergeSystemInto,
+  defaultSystemSpaceDirs,
+  systemFunctionNames,
+  SYSTEM_SPACE_NAMES,
+} from './spaces/system.js';
+export { injectHostTools } from './globals/host-tools.js';
+export type { HostToolsProfile } from './globals/host-tools.js';
 export { getAgentComponents } from './spaces/components.js';
 export { resolveKnowledge } from './spaces/knowledge.js';
 export { parseFrontmatter } from './spaces/frontmatter.js';

@@ -7,6 +7,8 @@ export interface CliArgs {
   webPort?: number;
   repl?: boolean;
   claude?: boolean;
+  systemSpaces?: string[];
+  noSystemSpaces?: boolean;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -52,6 +54,16 @@ export function parseArgs(argv: string[]): CliArgs {
       }
       case '--claude': {
         result.claude = true;
+        break;
+      }
+      case '--system-spaces': {
+        const val = args.shift();
+        if (!val) throw new Error('--system-spaces requires a comma-separated list of dirs');
+        result.systemSpaces = val.split(',').map((s) => s.trim()).filter(Boolean);
+        break;
+      }
+      case '--no-system-spaces': {
+        result.noSystemSpaces = true;
         break;
       }
       case '--web': {
