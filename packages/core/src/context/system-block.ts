@@ -2,6 +2,7 @@ import type { Space, AgentDef } from '../spaces/load.js';
 import type { ResolvedDep } from '../spaces/agent.js';
 import { getAgentFunctions } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
+import { extractFunctionSignature } from '../typecheck/overlay.js';
 
 /** Extract optional prop names from a component's Props interface for display in system prompt */
 function extractComponentProps(src: string): string {
@@ -21,17 +22,18 @@ export interface SystemBlockOpts {
   systemFunctions?: Record<string, string>;
 }
 
-/** Extract a concise `name(params): ret` signature + leading doc line from a function source. */
+/** Render a tool as its full signature (incl. return type) + leading doc line. */
 function extractToolSummary(name: string, src: string): string {
-  const sigMatch = src.match(/export\s+(?:async\s+)?function\s+\w+\s*\(([^)]*)\)\s*(?::\s*([^){\n]+))?/);
-  const params = sigMatch?.[1]?.trim().replace(/\s+/g, ' ') ?? '';
-  const ret = sigMatch?.[2]?.trim();
-  const sig = `${name}(${params})${ret ? `: ${ret}` : ''}`;
-  // Leading /** ... */ or // doc comment (first line only)
+  // Reuse the overlay's AST-based extractor for an accurate signature including
+  // the full (possibly object) return type — critical so the model knows to
+  // destructure results like `readFile(...).content` instead of using them raw.
+  const decl = extractFunctionSignature(name, src)
+    .replace(/^declare\s+(async\s+)?function\s+/, '')
+    .replace(/;$/, '');
   const jsdoc = src.match(/\/\*\*\s*\n?\s*\*?\s*([^\n*]+)/)?.[1]?.trim();
   const lineComment = src.match(/^\s*\/\/\s*(.+)$/m)?.[1]?.trim();
   const doc = jsdoc ?? lineComment;
-  return `- \`${sig}\`${doc ? ` — ${doc}` : ''}`;
+  return `- \`${decl}\`${doc ? ` — ${doc}` : ''}`;
 }
 
 const RUNTIME_PREAMBLE = `

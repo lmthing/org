@@ -96,7 +96,7 @@ export function buildOverlay(
 /**
  * Extract exported function signature from source as a declare statement.
  */
-function extractFunctionSignature(name: string, src: string): string {
+export function extractFunctionSignature(name: string, src: string): string {
   const sf = ts.createSourceFile('fn.ts', src, ts.ScriptTarget.ESNext, true);
 
   for (const node of sf.statements) {

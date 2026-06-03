@@ -10,3 +10,6 @@ dist/
 # Trace/debug output
 trace.jsonl
 *.trace.jsonl
+
+# system-space state stores (memory/todo)
+.lmthing/

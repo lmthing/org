@@ -9,9 +9,13 @@ export function grep(
   const globArg = opts?.glob ? `-g ${JSON.stringify(opts.glob)} ` : '';
   const matches: { file: string; line: number; text: string }[] = [];
 
-  // Prefer ripgrep (JSON output is unambiguous).
-  const rg = execShell(`rg --json ${ic}${globArg}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)}`);
-  if (rg.ok && rg.stdout.trim()) {
+  // Prefer ripgrep when available. Probe with `|| true` so a missing binary or a
+  // no-match exit code never surfaces as an execShell error in the output.
+  const hasRg = execShell('command -v rg || true').stdout.trim().length > 0;
+  const rg = hasRg
+    ? execShell(`rg --json ${ic}${globArg}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)} || true`)
+    : { ok: false, stdout: '', stderr: '' };
+  if (rg.stdout.trim()) {
     for (const line of rg.stdout.split('\n')) {
       if (!line.trim()) continue;
       try {
@@ -31,9 +35,10 @@ export function grep(
     return { ok: true, matches, truncated: matches.length >= max };
   }
 
-  // Fallback: grep -rn (also handles "rg not installed").
+  // Fallback: grep -rn (also handles "rg not installed"). `|| true` keeps a
+  // no-match (exit 1) from being logged as an error.
   const grepFlags = opts?.glob ? `--include=${JSON.stringify(opts.glob)} ` : '';
-  const gr = execShell(`grep -rn ${ic}${grepFlags}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)}`);
+  const gr = execShell(`grep -rn ${ic}${grepFlags}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)} || true`);
   if (gr.stdout.trim()) {
     for (const line of gr.stdout.split('\n')) {
       const m = line.match(/^([^:]+):(\d+):(.*)$/);
