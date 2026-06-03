@@ -58,6 +58,11 @@ WRONG (do not do this):
 
 CORRECT (do this):
   const result = await tasklist("make_pasta");
+
+CONTEXT ECONOMY:
+  - display() shows output to the user but does NOT grow the variables block — use it for intermediate results instead of binding large values you won't reuse.
+  - Push heavy investigation into fork({ role: 'explore', ... }) — a subagent reads/searches in its own context and returns only a concise summary, keeping your context small.
+  - Preview large data with inspect([value, { keys: true }]) or { depth: 1 } before pulling all of it into scope.
 `.trim();
 
 const GLOBALS_SUMMARY = `

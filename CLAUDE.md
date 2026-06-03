@@ -27,6 +27,8 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000     # br
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --trace /tmp/trace.jsonl "make pasta"
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl         # interactive multi-turn (human)
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # interactive multi-turn (agent/automated)
+node packages/cli/dist/cli/bin.js --space ./fixtures/engineer --claude "grep for TODO and list the files"  # coding agent (system spaces)
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --no-system-spaces "..."  # disable the always-on toolkit
 ```
 
 ### REPL mode (`--repl`)
@@ -131,19 +133,51 @@ Reference spaces for end-to-end testing:
 - `fixtures/deep_research/` — deep research with real Tavily API (requires `TAVILY_API_KEY`)
 - `fixtures/browser_use/` — browser agent using chromium headless + Google search
 - `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering
+- `fixtures/engineer/` — flagship coding agent: uses the system spaces (fs/web/memory/todo) + fork roles, declares no tools of its own
 
 See `@.claude/arch/spaces.md` for space file layout.
 
+## System Spaces
+
+Capabilities are **spaces**, not ad-hoc core globals. A set of baseline "system spaces" is **always loaded and merged into every user space** (and into forks/delegates), so every agent gets a coding toolkit for free. The user space wins on any name collision.
+
+- Located in `packages/core/system-spaces/{fs,web,memory,todo}/` (resolved relative to the built core; `agents/` is reserved).
+- `fs` — `readFile`, `writeFile`, `editFile`, `glob`, `grep`, `listDir`
+- `web` — `webSearch` (Tavily, needs `TAVILY_API_KEY`), `webFetch`
+- `memory` — `remember`, `recall`, `recallAll`, `forget` (durable JSON store at `<spaceDir>/.lmthing/memory.json`)
+- `todo` — `todoWrite`, `todoRead` (renders a checklist via `display()`, persists to `.lmthing/todos.json`)
+
+Loader/merge: `packages/core/src/spaces/system.ts` (`loadSystemSpaces`, `mergeSystemInto`). System functions are injected universally (bypassing the per-agent `functions:` filter). The system prompt lists them under a concise `# Built-in Tools` section (signature + doc, not full source). Configure via `SessionOpts.systemSpaceDirs`, CLI `--system-spaces`/`--no-system-spaces`, or env `LM_SYSTEM_SPACES`.
+
+## Fork roles (subagents)
+
+`fork({ role, instruction, output })` spawns an isolated subagent VM — the parent sees only what it resolves (a context firewall). Roles (`packages/core/src/fork/roles.ts`):
+
+- `explore` / `plan` — **read-only**: `writeFileRaw`/`editFile` and mutating shell commands are withheld at injection (via the host-tools capability profile), not merely discouraged.
+- `general` (default) — full toolkit.
+
+Plan mode is just `fork({ role: 'plan' })` + an `ask()` approval gate. Run subagents in parallel with `Promise.all([...])` (bounded by `maxConcurrentForks`).
+
 ## Host-injected VM Globals
 
-Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has these host-injected globals available to space functions:
+Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has these host-injected globals available to space functions. They are the thin substrate the system spaces build on (single source of truth: `packages/core/src/globals/host-tools.ts`, used by both the session VM and fork VMs):
 
-- `process.env` — Node.js environment variables (read-only shim)
+- `process.env` — Node.js environment variables (read-only shim); includes `LMTHING_SPACE_DIR` for state stores
 - `fetch(url, opts?)` — Synchronous HTTP using curl under the hood; returns `{ ok, status, text(), json() }`
-- `execShell(cmd)` — Synchronous shell command execution; returns `{ ok, stdout, stderr }`
+- `execShell(cmd)` — Synchronous shell command execution; returns `{ ok, stdout, stderr }` (read-only fork roles block mutating commands)
+- `readFileRaw(path, {offset?,limit?})` — Binary-safe file read via Node fs; returns `{ ok, content, lines, truncated, error? }`
+- `writeFileRaw(path, content)` — File write via Node fs (no shell quoting); returns `{ ok, bytes, error? }`. Withheld in read-only fork roles.
 - `console.log/warn/error` — Routes through renderHost.log
 
 Space functions can use these directly. `tasklist(name, seed?)` passes `seed` as context to all fork tasks (injected as `any`-typed variables).
+
+## Context economy
+
+The runtime is built to keep context small over long sessions:
+- `display()` output is shown to the user but does NOT enter the VARIABLES block.
+- `fork({ role: 'explore' })` is a context firewall — a subagent's reading/searching stays in its own VM; only its resolved summary returns.
+- `session.continue()` auto-summarizes history once it exceeds `maxHistoryTurns*2` messages (REPL default 20), keeping the last 6 verbatim (`packages/core/src/context/summarize.ts`).
+- The `RUNTIME_PREAMBLE` instructs the model on all of the above.
 
 ## Tests
 
