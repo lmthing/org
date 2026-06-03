@@ -2,8 +2,9 @@ import { serialize } from '../globals/serialize.js';
 
 /**
  * Format a VARIABLES block from a map of variable names to values.
- * When scopeContext is provided, also lists already-declared names so the model
- * knows not to redeclare them.
+ * When scopeContext is provided, also lists:
+ *   - SCOPE: already-declared variable names (don't redeclare)
+ *   - EXECUTED: full accumulated context block so the model knows what already ran
  */
 export function emitVariables(vars: Record<string, unknown>, scopeContext?: string): string {
   const lines: string[] = ['VARIABLES'];
@@ -17,6 +18,10 @@ export function emitVariables(vars: Record<string, unknown>, scopeContext?: stri
       lines.push('');
       lines.push(`SCOPE (already declared — do not redeclare): ${alreadyDeclared.join(', ')}`);
     }
+
+    lines.push('');
+    lines.push('ALREADY EXECUTED (do not repeat any of these statements — write only what comes NEXT):');
+    lines.push(scopeContext);
   }
 
   return lines.join('\n');
@@ -41,16 +46,20 @@ export function extractScopeNamesFromContext(context: string): string[] {
 /**
  * Extract LHS binding identifier names from a TypeScript statement.
  * Handles: `const x = ...`, `let [a, b] = ...`, `const { x, y } = ...`
+ * Strips leading line-comments (// ...) which the boundary detector may include as trivia.
  */
 export function extractBindingNames(statement: string): string[] {
   const names: string[] = [];
 
+  // Strip leading single-line comments before checking for declarations
+  const stripped = statement.replace(/^(\s*\/\/[^\n]*\n)+/g, '').trimStart();
+
   // const/let/var declarations
-  const declMatch = statement.match(/^\s*(?:const|let|var)\s+(.+?)\s*=/);
+  const declMatch = stripped.match(/^\s*(?:const|let|var)\s+(.+?)\s*=/);
   if (declMatch) {
     const lhs = declMatch[1]!.trim();
-    // Object destructuring: { a, b, c: alias }
-    const objDestructMatch = lhs.match(/^\{([^}]+)\}$/);
+    // Object destructuring: { a, b, c: alias } — strip optional type annotation after }
+    const objDestructMatch = lhs.match(/^\{([^}]+)\}/);
     if (objDestructMatch) {
       const parts = objDestructMatch[1]!.split(',');
       for (const part of parts) {
@@ -62,8 +71,8 @@ export function extractBindingNames(statement: string): string[] {
       }
       return names;
     }
-    // Array destructuring: [a, b, c]
-    const arrDestructMatch = lhs.match(/^\[([^\]]+)\]$/);
+    // Array destructuring: [a, b, c] — strip optional type annotation after ]
+    const arrDestructMatch = lhs.match(/^\[([^\]]+)\]/);
     if (arrDestructMatch) {
       const parts = arrDestructMatch[1]!.split(',');
       for (const part of parts) {
@@ -74,9 +83,11 @@ export function extractBindingNames(statement: string): string[] {
       }
       return names;
     }
-    // Simple identifier
-    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(lhs)) {
-      names.push(lhs);
+    // Simple identifier — strip TypeScript type annotation (: type) before checking
+    // e.g., "deepResults: any[]" → "deepResults", "topic: string" → "topic"
+    const identifierPart = lhs.replace(/\s*:.*$/, '').trim();
+    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(identifierPart)) {
+      names.push(identifierPart);
     }
   }
 

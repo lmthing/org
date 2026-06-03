@@ -3,6 +3,15 @@ import type { ResolvedDep } from '../spaces/agent.js';
 import { getAgentFunctions } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
 
+/** Extract optional prop names from a component's Props interface for display in system prompt */
+function extractComponentProps(src: string): string {
+  const propsMatch = src.match(/interface\s+Props\s*\{([^}]+)\}/);
+  if (!propsMatch) return '';
+  const body = propsMatch[1]!;
+  const propNames = [...body.matchAll(/(\w+)\??\s*:/g)].map((m) => m[1]!);
+  return propNames.map((p) => `${p}={...}`).join(' ');
+}
+
 export interface SystemBlockOpts {
   space: Space;
   agent: AgentDef;
@@ -14,27 +23,44 @@ CRITICAL INSTRUCTION: You are a TypeScript code execution agent. You MUST respon
 
 Respond with valid TypeScript statements only. Use top-level \`await\` for async operations (e.g. \`const x = await ask(...)\`). Do not wrap code in functions or markdown code blocks. Just write the statements directly.
 
+ABSOLUTELY FORBIDDEN — these will cause parse errors or runtime errors:
+  - \`\`\`typescript or \`\`\`ts or \`\`\` (markdown code fences)
+  - Any English text, explanations, or comments
+  - function wrappers, IIFE patterns, or async IIFEs like \`await (async () => { ... })()\`
+  - setTimeout, setInterval, clearTimeout, clearInterval (not available — use sleep() instead)
+
+Use sequential top-level await statements, not IIFEs:
+WRONG: const x = await (async () => { const t = await ask(...); return t; })()
+CORRECT: const x = await ask(...);
+
 WRONG (do not do this):
-  "I'll help you make pasta by first asking your preferences."
+  \`\`\`typescript
+  const result = await tasklist("make_pasta");
+  \`\`\`
 
 CORRECT (do this):
-  const approach = await ask(<ConfirmDish dish="pasta" />);
+  const result = await tasklist("make_pasta");
 `.trim();
 
 const GLOBALS_SUMMARY = `
 # Available Globals
 
 - \`ask(descriptor)\` — render an interactive form and await user input (yields)
-- \`display(descriptor)\` — render content to the surface (void, no yield)
+- \`display(descriptor)\` — render content to the surface (void, no yield). Accepts a string or JSX component: \`display("text")\` or \`display(<Component />)\`
 - \`inspect(...values)\` — inspect variables with optional queries (yields)
 - \`loadKnowledge(...path)\` — load a knowledge file by path segments (yields)
 - \`sleep(duration)\` — pause execution for a duration like "1s", "500ms" (yields)
-- \`tasklist(name)\` — run a named tasklist and return its goal output (yields)
+- \`tasklist(name, seed?)\` — run a named tasklist and return its goal output (yields). Pass seed to share variables with tasks: \`tasklist("my_list", { topic })\`
 - \`fork(opts)\` — spawn a child task and await its result (yields)
 - \`delegate(packageName, agentName, action, opts?)\` — delegate to another agent's action (yields)
 
 Value-yielding globals (ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate) end the current turn.
 display() is void and does not end the turn.
+
+IMPORTANT: ask(), tasklist(), and delegate() all return unknown. Cast results to use them:
+  const topic = await ask("...") as string;
+  const result = await tasklist("my_list") as { field: string };
+  const data = await delegate(...) as { key: string };
 `.trim();
 
 /**
@@ -95,10 +121,16 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
   const viewNames = Object.keys(agentComponents.view);
   const formNames = Object.keys(agentComponents.form);
   if (viewNames.length > 0 || formNames.length > 0) {
-    const compLines: string[] = [];
-    if (viewNames.length > 0) compLines.push(`View: ${viewNames.join(', ')}`);
-    if (formNames.length > 0) compLines.push(`Form: ${formNames.join(', ')}`);
-    sections.push(`# Components\n\n${compLines.join('\n')}`);
+    const compParts: string[] = [];
+    for (const [name, src] of Object.entries(agentComponents.view)) {
+      const props = extractComponentProps(src);
+      compParts.push(`- **${name}** (view): \`<${name}${props ? ` ${props}` : ''} />\``);
+    }
+    for (const [name, { web }] of Object.entries(agentComponents.form)) {
+      const props = extractComponentProps(web);
+      compParts.push(`- **${name}** (form — use with ask()): \`await ask(<${name}${props ? ` ${props}` : ''} />)\``);
+    }
+    sections.push(`# Components\n\n${compParts.join('\n')}`);
   }
 
   // 5. Direct dependency agents

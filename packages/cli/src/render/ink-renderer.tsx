@@ -117,11 +117,13 @@ export class InkRenderHost implements RenderHost {
   }
 
   ask(_id: string, descriptor: unknown): Promise<unknown> {
-    const label = isDescriptor(descriptor)
-      ? typeof descriptor.props['label'] === 'string'
-        ? descriptor.props['label']
-        : String(descriptor.type)
-      : 'Input';
+    const label = typeof descriptor === 'string'
+      ? descriptor
+      : isDescriptor(descriptor)
+        ? typeof descriptor.props['label'] === 'string'
+          ? descriptor.props['label']
+          : String(descriptor.type)
+        : 'Input';
 
     if (this.plain) {
       // Direct stdin reads: works in any PTY regardless of icrnl/raw-mode state.

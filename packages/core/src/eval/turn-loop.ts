@@ -13,6 +13,14 @@ import { emitVariables, extractBindingNames } from '../context/variables.js';
 
 export type { StreamOpts, StreamSession };
 
+/** Strip markdown code fence lines from a chunk before feeding to the boundary detector. */
+function stripMarkdownFences(chunk: string): string {
+  return chunk
+    .split('\n')
+    .filter((line) => !/^\s*```/.test(line))
+    .join('\n');
+}
+
 export interface TurnLoopDeps {
   vm: VM;
   history: MessageHistory;
@@ -57,7 +65,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     try {
       for await (const chunk of stream.textStream) {
         assistantContent += chunk;
-        const statements = detector.feed(chunk);
+        const statements = detector.feed(stripMarkdownFences(chunk));
 
         for (const stmt of statements) {
           hadStatements = true;
@@ -81,7 +89,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
           let jsCode = transpileStatement(stmt);
           if (boundNames.length > 0) {
             const assigns = boundNames
-              .map((n) => `if (typeof ${n} !== 'undefined') globalThis['${n}'] = ${n};`)
+              .map((n) => `try { globalThis['${n}'] = ${n}; } catch {}`)
               .join('\n');
             jsCode += '\n' + assigns;
           }
@@ -117,7 +125,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
 
     // Flush remaining buffer
     if (!aborted) {
-      const trailing = detector.flush();
+      const trailing = stripMarkdownFences(detector.flush());
       if (trailing.trim()) {
         const stmt = trailing.trim();
         hadStatements = true;
@@ -131,7 +139,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
           let jsCodeFlush = transpileStatement(stmt);
           if (boundNamesFlush.length > 0) {
             const assigns = boundNamesFlush
-              .map((n) => `if (typeof ${n} !== 'undefined') globalThis['${n}'] = ${n};`)
+              .map((n) => `try { globalThis['${n}'] = ${n}; } catch {}`)
               .join('\n');
             jsCodeFlush += '\n' + assigns;
           }

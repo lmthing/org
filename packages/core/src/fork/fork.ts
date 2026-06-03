@@ -1,13 +1,15 @@
+import { execSync } from 'node:child_process';
 import type { RenderHost, Clock } from '../session/types.js';
 import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
 import type { Message } from '../context/history.js';
 import { createVM, type VM } from '../sandbox/quickjs.js';
-import { injectGlobal } from '../sandbox/host-bridge.js';
+import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
+import { buildOverlay } from '../typecheck/overlay.js';
+import { transpileStatement } from '../typecheck/transpile.js';
 import { validateOutput } from '../tasklist/schema.js';
-import { marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import type { Tracer } from '../sandbox/trace.js';
 
@@ -29,6 +31,10 @@ interface ForkEngineOpts {
   streamFn: (opts: StreamOpts) => Promise<StreamSession>;
   clock?: Clock;
   tracer?: Tracer;
+  /** Agent functions (TS source) available in the parent session — injected into fork VMs */
+  agentFunctions?: Record<string, string>;
+  /** Bundled JS versions of agent functions (when space has node_modules) */
+  agentFunctionsBundled?: Record<string, string>;
 }
 
 export class ForkEngine {
@@ -108,10 +114,10 @@ export class ForkEngine {
           }
         }
 
-        // Inject upstream outputs as __task_<id> variables
+        // Inject upstream outputs as named variables matching the task id
         if (task.upstreamOutputs) {
           for (const [id, output] of Object.entries(task.upstreamOutputs)) {
-            vm.setVar(`__task_${id}`, output);
+            vm.setVar(id, output);
           }
         }
 
@@ -137,6 +143,83 @@ export class ForkEngine {
         vm.ctx.setProp(vm.ctx.global, 'currentTask', currentTaskHandle);
         currentTaskHandle.dispose();
 
+        // Inject space functions from parent agent into the child VM
+        const agentFunctions = this.opts.agentFunctions ?? {};
+        const agentFunctionsBundled = this.opts.agentFunctionsBundled ?? {};
+        for (const name of Object.keys(agentFunctions)) {
+          const bundled = agentFunctionsBundled[name];
+          let js: string;
+          if (bundled) {
+            js = bundled
+              .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
+              .replace(/^export\s+default\s+/gm, `const ${name} = `)
+              .replace(/^export\s+/gm, '');
+          } else {
+            js = transpileStatement(agentFunctions[name]!)
+              .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
+              .replace(/^export\s+default\s+/gm, `const ${name} = `)
+              .replace(/^export\s+/gm, '');
+          }
+          const fnResult = vm.evalScript(`${js}\nglobalThis['${name}'] = ${name};`);
+          if (!fnResult.ok) {
+            this.opts.renderHost.log(`[warn] failed to inject function "${name}" into fork: ${fnResult.error}`);
+          }
+        }
+
+        // Inject console shim so space functions can use console.log inside forks
+        const consoleShim = {
+          log: (...args: unknown[]) => this.opts.renderHost.log(args.map(String).join(' ')),
+          warn: (...args: unknown[]) => this.opts.renderHost.log('[warn] ' + args.map(String).join(' ')),
+          error: (...args: unknown[]) => this.opts.renderHost.log('[error] ' + args.map(String).join(' ')),
+        };
+        const consoleHandle = marshalToQuickJS(vm.ctx, consoleShim);
+        vm.ctx.setProp(vm.ctx.global, 'console', consoleHandle);
+        consoleHandle.dispose();
+
+        // Inject execShell: synchronous shell execution for space functions
+        const execShellShim = (cmd: string) => {
+          try {
+            const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+            return { ok: true, stdout: result.toString(), stderr: '' };
+          } catch (e: unknown) {
+            const err = e as { message?: string; stdout?: Buffer; stderr?: Buffer };
+            return { ok: false, stdout: err.stdout?.toString() ?? '', stderr: err.stderr?.toString() ?? String(e) };
+          }
+        };
+        const execShellHandle = marshalToQuickJS(vm.ctx, execShellShim);
+        vm.ctx.setProp(vm.ctx.global, 'execShell', execShellHandle);
+        execShellHandle.dispose();
+
+        // Inject process shim (env vars) and synchronous fetch for space functions
+        const processShim = { env: Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) };
+        const processHandle = marshalToQuickJS(vm.ctx, processShim);
+        vm.ctx.setProp(vm.ctx.global, 'process', processHandle);
+        processHandle.dispose();
+
+        const renderHostRef = this.opts.renderHost;
+        const fetchShim = (url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+          try {
+            const method = (opts?.method ?? 'GET').toUpperCase();
+            const headers = Object.entries(opts?.headers ?? {})
+              .map(([k, v]) => `-H ${JSON.stringify(`${k}: ${v}`)}`)
+              .join(' ');
+            const bodyArg = opts?.body ? `--data-binary ${JSON.stringify(opts.body)}` : '';
+            const cmd = `curl -s -w "\\n__STATUS__%{http_code}" -X ${method} ${headers} ${bodyArg} ${JSON.stringify(String(url))}`;
+            const raw = execSync(cmd, { maxBuffer: 8 * 1024 * 1024 }).toString();
+            const statusMatch = raw.match(/\n__STATUS__(\d+)$/);
+            const status = statusMatch ? parseInt(statusMatch[1]!) : 200;
+            const text = statusMatch ? raw.slice(0, raw.lastIndexOf('\n__STATUS__')) : raw;
+            const ok = status >= 200 && status < 300;
+            return { ok, status, text: () => text, json: () => JSON.parse(text) };
+          } catch (e) {
+            renderHostRef.log(`[fetch error] ${e instanceof Error ? e.message : String(e)}`);
+            return { ok: false, status: 0, text: () => '', json: () => ({}) };
+          }
+        };
+        const fetchHandle = marshalToQuickJS(vm.ctx, fetchShim);
+        vm.ctx.setProp(vm.ctx.global, 'fetch', fetchHandle);
+        fetchHandle.dispose();
+
         // Inject standard globals (no fork/delegate/tasklist in child to avoid recursion issues)
         const { createAskGlobal } = await import('../globals/ask.js');
         const { createDisplayGlobal } = await import('../globals/display.js');
@@ -155,28 +238,64 @@ export class ForkEngine {
         injectGlobal(vm.ctx, 'sleep', createSleepGlobal(pushYield, this.opts.clock) as AnyFn);
 
         // Build user message for the child
+        const seedSummary = task.seed && Object.keys(task.seed).length > 0
+          ? `\nContext variables (available in scope):\n${Object.entries(task.seed)
+              .map(([k, v]) => `- ${k}: ${JSON.stringify(v)}`)
+              .join('\n')}`
+          : '';
         const inputSummary = task.upstreamOutputs
-          ? `\nInputs:\n${Object.entries(task.upstreamOutputs)
+          ? `\nInputs from upstream tasks (available as variables):\n${Object.entries(task.upstreamOutputs)
               .map(([k, v]) => `- ${k}: ${JSON.stringify(v)}`)
               .join('\n')}`
           : '';
 
         const outputSchemaStr = JSON.stringify(task.output, null, 2);
-        const userMessage = `${task.instruction}${inputSummary}\n\nOutput schema:\n${outputSchemaStr}\n\nWhen done, call: currentTask.resolve({ ...output })`;
+        const userMessage = `${task.instruction}${seedSummary}${inputSummary}\n\nOutput schema:\n${outputSchemaStr}\n\nWhen done, call: currentTask.resolve({ ...output })`;
 
         const history = new MessageHistory();
         history.append({ role: 'user', content: userMessage, blockType: 'normal' });
 
+        // Build ambient DTS: library + function overlay + currentTask + upstream + seed variables
+        const functionsOverlay = Object.keys(agentFunctions).length > 0
+          ? buildOverlay(agentFunctions, { view: {}, form: {} })
+          : '';
         const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
-        const ambientDts = LIBRARY_DTS + '\n' + currentTaskDts;
+        const upstreamDts = task.upstreamOutputs
+          ? Object.keys(task.upstreamOutputs).map((id) => `declare const ${id}: any;`).join('\n')
+          : '';
+        const seedDts = task.seed
+          ? Object.keys(task.seed).map((k) => `declare const ${k}: any;`).join('\n')
+          : '';
+        const ambientDts = [LIBRARY_DTS, functionsOverlay, currentTaskDts, upstreamDts, seedDts]
+          .filter(Boolean)
+          .join('\n');
+
+        // Build system prompt: include full function signatures (not just names)
+        const functionList = Object.keys(agentFunctions).length > 0
+          ? `\n# Available Space Functions (already in scope — call directly with correct args, do NOT redefine):\n${Object.entries(agentFunctions).map(([, src]) => {
+              const sig = src.match(/export\s+(?:async\s+)?function\s+\w+\([^)]*\)/)?.[0] ?? '';
+              return sig ? `- ${sig.replace('export ', '')}` : '';
+            }).filter(Boolean).join('\n')}`
+          : '';
 
         const systemBlock = [
           'CRITICAL INSTRUCTION: You are a TypeScript code execution agent. You MUST respond with TypeScript code ONLY. Do NOT write any prose, explanations, JSON, markdown, or natural language. Your entire response will be fed directly into a TypeScript evaluator.',
           '',
           'Respond with valid TypeScript statements only. Use top-level `await` for async operations. Do not wrap code in functions or markdown code blocks.',
           '',
+          '# Available Built-in Globals (already provided — do NOT redefine any of these):',
+          '- sleep(duration: string) — pause for a duration, e.g. `await sleep("2s")`',
+          '- display(content: string | JSXDescriptor) — render output',
+          '- ask(descriptor) — prompt user for input',
+          '- inspect(...values) — inspect variables',
+          '',
+          'FORBIDDEN: setTimeout, setInterval, queueMicrotask (not available)',
+          'FORBIDDEN: markdown code fences (```typescript, ```ts, or ``` of any kind)',
+          'FORBIDDEN: async IIFEs like `await (async () => { ... })()` — use sequential top-level await statements instead',
+          '',
           'When your task is complete, call `currentTask.resolve(value)` with an object matching the output schema.',
           'Do not ask for clarification — work with what you have.',
+          functionList,
         ].join('\n');
 
         const result = await runTurnLoop({

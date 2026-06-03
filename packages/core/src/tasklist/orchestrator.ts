@@ -8,8 +8,9 @@ export async function runTasklist(opts: {
   name: string;
   space: Space;
   forkEngine: ForkEngine;
+  seed?: Record<string, unknown>;
 }): Promise<unknown> {
-  const { name, space, forkEngine } = opts;
+  const { name, space, forkEngine, seed } = opts;
 
   const tasklistDir = space.tasklists[name];
   if (!tasklistDir) {
@@ -77,6 +78,7 @@ export async function runTasklist(opts: {
         const output = await forkEngine.fork({
           instruction: task.instruction,
           output: task.output,
+          seed: seed,
           upstreamOutputs: Object.keys(upstreamOutputs).length > 0 ? upstreamOutputs : undefined,
           taskId: task.id,
         });

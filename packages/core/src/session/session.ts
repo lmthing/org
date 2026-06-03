@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { execSync } from 'node:child_process';
 import type { SessionOpts, SessionDeps, RenderHost } from './types.js';
 import type { StreamOpts } from '../eval/stream-types.js';
 import type { YieldRequest } from '../eval/yield.js';
@@ -37,6 +38,8 @@ export class Session {
   private tracer: Tracer;
   private systemBlock: string | null = null;
   private ambientDts: string | null = null;
+  private agentFunctions: Record<string, string> = {};
+  private agentFunctionsBundled: Record<string, string> = {};
 
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
@@ -106,6 +109,8 @@ export class Session {
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
     this.systemBlock = systemBlock;
     this.ambientDts = ambientDts;
+    this.agentFunctions = agentFunctions;
+    this.agentFunctionsBundled = agentFunctionsBundled;
 
     // 6c. Inject space functions and JSX runtime into VM
     this.injectSpaceFunctions(agentFunctions, agentFunctionsBundled);
@@ -180,6 +185,8 @@ export class Session {
     const agentComponents = getAgentComponents(this.space, agent);
     const overlay = buildOverlay(agentFunctions, agentComponents);
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
+    this.agentFunctions = agentFunctions;
+    this.agentFunctionsBundled = agentFunctionsBundled;
     this.injectSpaceFunctions(agentFunctions, agentFunctionsBundled);
     const allComponentNames = [
       ...Object.keys(agentComponents.view),
@@ -240,6 +247,55 @@ export class Session {
     const consoleHandle = marshalToQuickJS(this.vm.ctx, consoleShim);
     this.vm.ctx.setProp(this.vm.ctx.global, 'console', consoleHandle);
     consoleHandle.dispose();
+
+    // Inject execShell: synchronous shell command execution for space functions
+    const renderHostLocal = this.opts.renderHost;
+    const execShellShim = (cmd: string) => {
+      try {
+        const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+        return { ok: true, stdout: result.toString(), stderr: '' };
+      } catch (e: unknown) {
+        const err = e as { message?: string; stdout?: Buffer; stderr?: Buffer };
+        renderHostLocal.log(`[execShell error] ${err.message ?? String(e)}`);
+        return { ok: false, stdout: err.stdout?.toString() ?? '', stderr: err.stderr?.toString() ?? String(e) };
+      }
+    };
+    const execShellHandle = marshalToQuickJS(this.vm.ctx, execShellShim);
+    this.vm.ctx.setProp(this.vm.ctx.global, 'execShell', execShellHandle);
+    execShellHandle.dispose();
+
+    // Inject process shim so space functions can read environment variables
+    const processShim = { env: Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) };
+    const processHandle = marshalToQuickJS(this.vm.ctx, processShim);
+    this.vm.ctx.setProp(this.vm.ctx.global, 'process', processHandle);
+    processHandle.dispose();
+
+    // Inject synchronous fetch shim for space functions that make HTTP calls.
+    // Returns a plain object (not a Promise) so `await fetch(...)` works transparently.
+    const fetchShim = (url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+      try {
+        const method = (opts?.method ?? 'GET').toUpperCase();
+        const headers = Object.entries(opts?.headers ?? {})
+          .map(([k, v]) => `-H ${JSON.stringify(`${k}: ${v}`)}`)
+          .join(' ');
+        const bodyArg = opts?.body
+          ? `--data-binary ${JSON.stringify(opts.body)}`
+          : '';
+        const cmd = `curl -s -w "\\n__STATUS__%{http_code}" -X ${method} ${headers} ${bodyArg} ${JSON.stringify(String(url))}`;
+        const raw = execSync(cmd, { maxBuffer: 8 * 1024 * 1024 }).toString();
+        const statusMatch = raw.match(/\n__STATUS__(\d+)$/);
+        const status = statusMatch ? parseInt(statusMatch[1]!) : 200;
+        const text = statusMatch ? raw.slice(0, raw.lastIndexOf('\n__STATUS__')) : raw;
+        const ok = status >= 200 && status < 300;
+        return { ok, status, text: () => text, json: () => JSON.parse(text) };
+      } catch (e) {
+        this.opts.renderHost.log(`[fetch error] ${e instanceof Error ? e.message : String(e)}`);
+        return { ok: false, status: 0, text: () => '', json: () => ({}) };
+      }
+    };
+    const fetchHandle = marshalToQuickJS(this.vm.ctx, fetchShim);
+    this.vm.ctx.setProp(this.vm.ctx.global, 'fetch', fetchHandle);
+    fetchHandle.dispose();
   }
 
   private injectSpaceFunctions(functions: Record<string, string>, functionsBundled: Record<string, string>): void {
@@ -327,6 +383,7 @@ export class Session {
       }
       case 'tasklist': {
         const name = req.args[0] as string;
+        const seed = req.args[1] as Record<string, unknown> | undefined;
         if (!this.space) throw new Error('Space not loaded');
         const { runTasklist } = await import('../tasklist/orchestrator.js');
         const { ForkEngine } = await import('../fork/fork.js');
@@ -339,8 +396,10 @@ export class Session {
           streamFn: this.deps.streamFn,
           clock: this.opts.clock,
           tracer: this.tracer,
+          agentFunctions: this.agentFunctions,
+          agentFunctionsBundled: this.agentFunctionsBundled,
         });
-        return runTasklist({ name, space: this.space, forkEngine });
+        return runTasklist({ name, space: this.space, forkEngine, seed });
       }
       case 'fork': {
         const forkOpts = req.args[0] as import('../globals/fork.js').ForkGlobalOpts;
@@ -355,6 +414,8 @@ export class Session {
           streamFn: this.deps.streamFn,
           clock: this.opts.clock,
           tracer: this.tracer,
+          agentFunctions: this.agentFunctions,
+          agentFunctionsBundled: this.agentFunctionsBundled,
         });
         return forkEngine.fork(forkOpts);
       }

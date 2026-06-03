@@ -199,7 +199,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
         }
         if (req.kind === 'tasklist') {
           const { runTasklist } = await import('../tasklist/orchestrator.js');
-          return runTasklist({ name: req.args[0] as string, space, forkEngine });
+          return runTasklist({ name: req.args[0] as string, space, forkEngine, seed: req.args[1] as Record<string, unknown> | undefined });
         }
         if (req.kind === 'fork') {
           return forkEngine.fork(req.args[0] as import('../fork/fork.js').ForkTask);
