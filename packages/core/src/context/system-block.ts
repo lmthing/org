@@ -2,6 +2,7 @@ import type { Space, AgentDef } from '../spaces/load.js';
 import type { ResolvedDep } from '../spaces/agent.js';
 import { getAgentFunctions } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
+import ts from 'typescript';
 import { extractFunctionSignature } from '../typecheck/overlay.js';
 
 /** Extract optional prop names from a component's Props interface for display in system prompt */
@@ -22,7 +23,7 @@ export interface SystemBlockOpts {
   systemFunctions?: Record<string, string>;
 }
 
-/** Render a tool as its full signature (incl. return type) + leading doc line. */
+/** Render a tool as its full signature (incl. return type) + full JSDoc. */
 function extractToolSummary(name: string, src: string): string {
   // Reuse the overlay's AST-based extractor for an accurate signature including
   // the full (possibly object) return type — critical so the model knows to
@@ -30,9 +31,34 @@ function extractToolSummary(name: string, src: string): string {
   const decl = extractFunctionSignature(name, src)
     .replace(/^declare\s+(async\s+)?function\s+/, '')
     .replace(/;$/, '');
-  const jsdoc = src.match(/\/\*\*\s*\n?\s*\*?\s*([^\n*]+)/)?.[1]?.trim();
-  const lineComment = src.match(/^\s*\/\/\s*(.+)$/m)?.[1]?.trim();
-  const doc = jsdoc ?? lineComment;
+
+  // Extract full JSDoc text using AST (not regex) so multi-line docs are preserved.
+  const sf = ts.createSourceFile('fn.ts', src, ts.ScriptTarget.ESNext, true);
+  let doc = '';
+  for (const node of sf.statements) {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === name &&
+      node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+    ) {
+      // ts.getJSDocCommentsAndTags returns (JSDoc | JSDocTag)[]
+      const jsDocs = ts.getJSDocCommentsAndTags(node);
+      const commentParts: string[] = [];
+      for (const j of jsDocs) {
+        if (ts.isJSDoc(j)) {
+          commentParts.push((j.comment ?? '').toString().trim());
+        }
+      }
+      doc = commentParts.join(' ');
+      break;
+    }
+  }
+
+  // Fallback: line comment
+  if (!doc) {
+    doc = src.match(/^\s*\/\/\s*(.+)$/m)?.[1]?.trim() ?? '';
+  }
+
   return `- \`${decl}\`${doc ? ` — ${doc}` : ''}`;
 }
 
