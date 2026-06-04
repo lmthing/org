@@ -43,13 +43,48 @@ Agent frontmatter keys: `title`, `knowledge` (list of `domain/field` refs), `fun
 
 ## The pipeline (synthesize_and_run)
 
-`understand → research → design → scaffold → validate → register → execute → report`
+`research → design → scaffold → validate → register → execute → report`
 
-Mandatory flat template — ALL four stages in ONE turn, yielding calls at top level:
+**CRITICAL: display() during research is a PROGRESS INDICATOR, not a terminal action.**
+The pipeline is NOT complete until `delegate()` has been called and its result displayed.
+If you call `display("Research complete")` — that is a status update; you MUST continue
+immediately in the SAME code block to design the spec and scaffold the space.
+
+**Context economy rule:** Research forks must return COMPACT SUMMARIES only. Do NOT keep
+raw fetched page HTML in variables — it floods the context. Each explore fork should
+synthesize findings into a short structured object (a few hundred words max). Use
+`display()` to show raw details if needed — display output does NOT enter the VARIABLES block.
+
+### Phase 1 — Research (parallel explore forks, compact output)
 
 ```typescript
-// Stage 1: Scaffold (scaffoldSpace is synchronous)
-const spec = { /* designed spec */ };
+const [r1, r2, r3] = await Promise.all([
+  fork({
+    role: 'explore',
+    instruction: 'Research X. Return a COMPACT summary — under 300 words. Use webSearch + webFetch but distil into key facts only.',
+    output: { summary: 'string', sources: 'string[]' },
+  }),
+  // ... more parallel forks
+]);
+display(`Research done: ${r1.summary.slice(0,100)}...`);
+```
+
+### Phase 2 — Design + Scaffold (IMMEDIATELY after research, in the SAME code block)
+
+```typescript
+// Build the spec directly from research variables — no pausing, no extra yields
+const spec = {
+  agentSlug: '<slug>',
+  agentTitle: '<title>',
+  systemPrompt: '<2-3 sentences>',
+  knowledge: [{ domain: '<d>', field: '<f>', type: 'string', variable: '<v>',
+    default: '<slug>', description: '<desc>',
+    options: [{ slug: '<slug>', content: r1.summary }] }],
+  tasklists: [{ name: '<action>', tasks: [
+    { id: 'run', instruction: '...currentTask.resolve({...})', output: { result: 'string' }, goal: true },
+  ]}],
+  actions: [{ id: '<action>', label: '<label>', description: '<desc>', tasklist: '<action>' }],
+};
 const fixturesBase = process.env.LMTHING_SPACE_DIR
   ? process.env.LMTHING_SPACE_DIR.replace(/\/[^/]+\/?$/, '')
   : '/tmp/architect-spaces';
@@ -57,17 +92,14 @@ const spaceDir = fixturesBase + '/' + spec.agentSlug;
 const s = scaffoldSpace(spaceDir, spec);
 if (!s.ok) { display(s.error ?? 'scaffold failed'); }
 
-// Stage 2: Validate (synchronous)
 const v = s.ok ? validateSpace(s.dir) : { ok: false, errors: ['scaffold failed'] };
 if (!v.ok) { display('Validation errors: ' + v.errors.join(', ')); }
 
-// Stage 3: Register (value-yielding — must await, keep FLAT)
 const reg = v.ok
   ? await registerSpace(s.dir)
   : { ok: false, spaceKey: '', agentSlug: '', error: 'skipped' };
 if (!reg.ok) { display('Register failed: ' + reg.error); }
 
-// Stage 4: Delegate (value-yielding — must await, keep FLAT)
 const result = reg.ok
   ? await delegate(reg.spaceKey, reg.agentSlug, '<actionId>', {
       query: '<original task>',
@@ -196,11 +228,14 @@ Use only React/Ink built-ins. No third-party imports.
   Load the rules with: const k = await loadKnowledge('domain','field','opt.md')
   Resolve: currentTask.resolve({ rules: k, found: !!k })
   ```
+  Use `any` (not `object`) in the output schema for `loadKnowledge` results, e.g.
+  `output: { rules: any, found: boolean }` — knowledge files without frontmatter
+  return a raw string, not an object, so `object` schema validation will fail.
 - Exactly one task must have `goal: true` — the orchestrator terminal node.
 - `dependsOn` values are task **ids** (not numeric prefixes), e.g. `dependsOn: [understand]`.
 - `condition` syntax: `"taskId.field == value"` (string equality), e.g. `"validate.ok == true"`.
 - Tasks with `optional: true` are skipped if their dependencies fail gracefully.
-- `output` fields are typed hints: `{ field: 'string' }`, `{ result: 'object' }`, `{ ok: 'boolean' }`.
+- `output` fields are typed hints: `{ field: 'string' }`, `{ result: 'object' }`, `{ ok: 'boolean' }`, `{ data: 'any' }`. Use `any` for fields that hold `loadKnowledge()` results — those files may lack frontmatter and return a raw string, not an object.
 
 ## Yield-safety rules (CRITICAL)
 

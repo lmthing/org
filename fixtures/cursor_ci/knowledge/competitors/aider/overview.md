@@ -1,0 +1,1 @@
+Aider is an open-source terminal-based AI pair programming tool that works with any LLM (GPT-4, Claude, etc.). It operates via CLI, edits files directly, and supports multi-file refactors with git integration. Free and self-hosted.
