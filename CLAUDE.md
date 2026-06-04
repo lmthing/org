@@ -96,8 +96,10 @@ packages/ui/src/
 - **Yield-result binding is host-side, not via the module continuation.** A statement that yields (`const x = await ask()`, `const [a,b] = await Promise.all([fork(),fork()])`) does NOT re-run its post-`await` code in this sync eval model. The turn loop resolves each pending yield, then maps the resolved value(s) onto the bound names using `extractBindingPattern` (simple ← the value; array ← positional, so parallel `Promise.all` results land in order; object ← by key) and `vm.setVar`s them. Do not assume the QuickJS continuation binds variables.
 - `accumulatedContext` in the turn loop persists across yield continuations (variables stay in typecheck scope). Only error retries start fresh.
 - **System spaces are always merged into every space.** `Session` calls `mergeSystemInto` (`spaces/system.ts`) after `loadSpace`; system functions are injected universally (bypassing the per-agent `functions:` filter), and the same set flows to forks **and delegates** (via `RunDelegateOpts.systemSpaces`). The user space wins on name collisions.
-- **Fork VMs have `loadKnowledge`** injected alongside `ask`, `inspect`, `sleep`, and `display`. Tasks inside a tasklist fork can call `await loadKnowledge(...)`.
+- **Fork VMs have `loadKnowledge`** injected alongside `ask`, `inspect`, `sleep`, and `display`. Tasks inside a tasklist fork can call `await loadKnowledge(...)`. The fork's `processYield` explicitly handles `loadKnowledge` by calling `loadKnowledgeFile` directly — without this, `undefined` would win the race against the async file read and bind `k = undefined` in the VM.
 - **`registerSpace(dir)` loads a space at runtime** into a `dynamicSpaces` map on `Session`. Subsequent `delegate()` calls can reach the newly registered space immediately — no session restart needed. Re-registering the same dir overwrites the prior entry (used for idempotent re-scaffolding).
+- **Delegate auto-captures tasklist result.** When a delegate agent calls `tasklist(name)` where `name === actionDef.tasklist`, the result is automatically set as `capturedResult` even without an explicit `currentTask.resolve()` call. This prevents silent null returns when the model forgets to call resolve after the tasklist.
+- **Delegate user message guides tasklist use.** When the action has a `tasklist` field, the delegate user message includes an explicit hint: `Implement this action by calling tasklist("name", context)`. This prevents the model from writing direct code that bypasses the orchestration and leaves the result uncaptured.
 - JSX in model output is transpiled to `React.createElement(...)` via `transpileStatement()` before VM eval. A React shim and component stubs are injected at session start.
 - Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
 - The QuickJS VM uses sync `evalCode` + manual `executePendingJobs` loop — NOT `evalCodeAsync`, which deadlocks when awaiting user input.
@@ -149,6 +151,8 @@ Reference spaces for end-to-end testing:
 - `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering
 - `fixtures/engineer/` — flagship coding agent: uses the system spaces (fs/web/memory/todo) + fork roles, declares no tools of its own
 - `fixtures/architect/` — meta-agent that synthesizes, scaffolds, registers, and delegates to NEW agents at runtime; functions: `scaffoldSpace`, `validateSpace`, `listScaffoldedSpaces`; demonstrates the `registerSpace` → `delegate` pattern
+- `fixtures/sauce_master/` — global sauce technique specialist synthesized by the architect; knowledge files for 10 world cuisines; action: `recommend_sauce`
+- `fixtures/cursor_ci/` — competitive intelligence analyst synthesized by the architect; knowledge files for 5 AI code editors (Cursor, Copilot, Windsurf, Aider, Codeium); action: `analyze`
 
 See `@.claude/arch/spaces.md` for space file layout.
 
