@@ -287,6 +287,16 @@ export class ForkEngine {
                 }
               });
             }
+            // loadKnowledge: the global also fires loadKnowledgeFile().then(resolve)
+            // concurrently, but processYield must return the content here to win the
+            // race — otherwise undefined is bound to the variable before the file
+            // read completes.
+            if (req.kind === 'loadKnowledge') {
+              const { loadKnowledgeFile } = await import('../globals/load-knowledge.js');
+              const { join } = await import('node:path');
+              const filePath = join(this.opts.parentSpaceDir, 'knowledge', ...(req.args[0] as string).split('/'));
+              return loadKnowledgeFile(filePath);
+            }
             return undefined;
           },
           maxRetries: 3,

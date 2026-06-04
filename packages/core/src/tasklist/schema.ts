@@ -31,6 +31,10 @@ export function validateOutput(output: Record<string, string>, value: unknown): 
       case 'array':
         if (!Array.isArray(fieldValue)) return false;
         break;
+      case 'any':
+        // Accept any non-undefined value
+        if (fieldValue === undefined) return false;
+        break;
       default:
         // Unknown type — be lenient
         break;

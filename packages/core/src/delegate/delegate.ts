@@ -67,11 +67,14 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
 
     const query = opts.delegateOpts?.query ?? '';
     const context = opts.delegateOpts?.context;
+    const tasklistHint = actionDef.tasklist
+      ? `Implement this action by calling \`const result = await tasklist("${actionDef.tasklist}", context)\` where context is any seed data from above. The tasklist handles the orchestration. After it resolves, call \`currentTask.resolve(result)\`.`
+      : `When complete, call \`currentTask.resolve(result)\` with the final result value.`;
     const userMessage = [
       `Run action: ${opts.action}`,
       query ? `Query: ${query}` : '',
       context ? `Context: ${JSON.stringify(context)}` : '',
-      `When complete, call \`currentTask.resolve(result)\` with the final result value.`,
+      tasklistHint,
     ]
       .filter(Boolean)
       .join('\n');
@@ -191,6 +194,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       renderHost: opts.renderHost,
       streamFn: opts.streamFn,
       clock: opts.clock,
+      tracer: opts.tracer,
     });
 
     await runTurnLoop({
@@ -213,7 +217,14 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
         }
         if (req.kind === 'tasklist') {
           const { runTasklist } = await import('../tasklist/orchestrator.js');
-          return runTasklist({ name: req.args[0] as string, space, forkEngine, seed: req.args[1] as Record<string, unknown> | undefined });
+          const tlResult = await runTasklist({ name: req.args[0] as string, space, forkEngine, seed: req.args[1] as Record<string, unknown> | undefined });
+          // Auto-capture: if this tasklist is the action's primary handler and the
+          // agent has not already called currentTask.resolve(), capture it automatically.
+          if (req.args[0] === actionDef.tasklist && !resultCaptured) {
+            capturedResult = tlResult;
+            resultCaptured = true;
+          }
+          return tlResult;
         }
         if (req.kind === 'fork') {
           return forkEngine.fork(req.args[0] as import('../fork/fork.js').ForkTask);

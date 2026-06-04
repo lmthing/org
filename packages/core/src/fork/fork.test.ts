@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ForkEngine } from './fork.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamSession } from '../eval/stream-types.js';
@@ -57,6 +60,46 @@ describe('ForkEngine', () => {
     await expect(
       engine.fork({ instruction: 'test', output: { x: 'string' } }),
     ).rejects.toThrow(/without calling currentTask\.resolve/);
+  });
+
+  it('loadKnowledge in fork returns file content, not undefined', async () => {
+    // Regression: the fork's processYield returned undefined for loadKnowledge,
+    // which raced against loadKnowledgeFile().then(resolve) and won — binding
+    // k = undefined. validateOutput then failed and the fork rejected silently.
+    const tmpDir = mkdtempSync(join(tmpdir(), 'fork-lk-test-'));
+    try {
+      const knowledgeDir = join(tmpDir, 'knowledge', 'domain', 'field');
+      mkdirSync(knowledgeDir, { recursive: true });
+      writeFileSync(join(knowledgeDir, 'opt.md'), '---\nvariable: x\n---\n\nHello knowledge');
+
+      // Turn 1: call loadKnowledge (yield). Turn 2 (k in scope): call resolve.
+      let callCount = 0;
+      const engine = new ForkEngine({
+        maxConcurrentForks: 4,
+        parentHistory: [],
+        parentSpaceDir: tmpDir,
+        parentAgentSlug: 'test',
+        renderHost: silentHost,
+        streamFn: async () => {
+          callCount++;
+          return makeStream(
+            callCount === 1
+              ? "const k = await loadKnowledge('domain', 'field', 'opt.md');\n"
+              : "currentTask.resolve({ body: (k as any).body, loaded: !!k });\n"
+          );
+        },
+      });
+
+      const result = await engine.fork<{ body: string; loaded: boolean }>({
+        instruction: 'test',
+        output: { body: 'string', loaded: 'boolean' },
+      });
+
+      expect(result.body).toBe('Hello knowledge');
+      expect(result.loaded).toBe(true);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it('rejects on timeout', async () => {
