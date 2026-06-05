@@ -13,7 +13,7 @@ export interface TscResult {
 }
 
 export interface TscOpts {
-  /** Ambient declarations (library-dts + overlay-dts concatenated) */
+  /** Ambient declarations (library-dts + overlay concatenated) */
   ambientDts: string;
   /** Previously accumulated successful session source */
   sessionContext: string;

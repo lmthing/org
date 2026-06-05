@@ -18,7 +18,7 @@ export async function loadTasklist(dir: string, files: string[]): Promise<Record
 
   for (const filePath of files) {
     const raw = await readFile(filePath, 'utf8');
-    const { data, body } = parseFrontmatter(raw);
+    const { data, body } = parseFrontmatter(raw, filePath);
 
     // Derive ID from filename (strip numeric prefix and .md)
     const filename = basename(filePath, '.md');

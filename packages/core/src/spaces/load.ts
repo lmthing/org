@@ -201,7 +201,7 @@ async function loadKnowledge(dir: string): Promise<KnowledgeTree> {
       const metaPath = join(fieldDir, 'index.md');
       if (await fileExists(metaPath)) {
         const raw = await readFile(metaPath, 'utf8');
-        const { data } = parseFrontmatter(raw);
+        const { data } = parseFrontmatter(raw, metaPath);
         if (typeof data['type'] === 'string') type = data['type'];
         if (typeof data['variable'] === 'string') variableName = data['variable'];
         if ('default' in data) defaultValue = data['default'];
@@ -269,7 +269,7 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
 
   if (await fileExists(instructPath)) {
     const raw = await readFile(instructPath, 'utf8');
-    const { data, body } = parseFrontmatter(raw);
+    const { data, body } = parseFrontmatter(raw, instructPath);
     instructBody = body;
     if (typeof data['title'] === 'string') title = data['title'];
     if (Array.isArray(data['knowledge'])) config.knowledge = data['knowledge'].map(String);
@@ -382,7 +382,15 @@ export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<
   // Load functions (original TS source always; bundled JS when node_modules available)
   const { functions, functionsBundled } = await loadFunctions(dir, nodeModulesDir);
 
-  // Validate: every config.functions entry has a file
+  // Load components
+  const components = await loadComponents(dir);
+
+  // Load knowledge
+  const knowledge = await loadKnowledge(dir);
+
+  // Validate: every agent-declared reference resolves to a real file/dir.
+  // (functions, components, and knowledge are all checked — previously only
+  //  functions were validated and bad component/knowledge refs failed silently.)
   for (const agent of Object.values(agents)) {
     for (const fnName of agent.config.functions) {
       if (!(fnName in functions)) {
@@ -391,13 +399,28 @@ export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<
         );
       }
     }
+    for (const compName of agent.config.components) {
+      if (!(compName in components.view) && !(compName in components.form)) {
+        throw new Error(
+          `Agent "${agent.slug}" requires component "${compName}" but it was not found in components/view or components/form`,
+        );
+      }
+    }
+    for (const knowledgeRef of agent.config.knowledge) {
+      const [domainSlug, fieldSlug] = knowledgeRef.split('/');
+      const domain = domainSlug ? knowledge.domains[domainSlug] : undefined;
+      if (!domain) {
+        throw new Error(
+          `Agent "${agent.slug}" references knowledge "${knowledgeRef}" but domain "${domainSlug}" was not found in knowledge/`,
+        );
+      }
+      if (fieldSlug && !(fieldSlug in domain.fields)) {
+        throw new Error(
+          `Agent "${agent.slug}" references knowledge "${knowledgeRef}" but field "${fieldSlug}" was not found in domain "${domainSlug}"`,
+        );
+      }
+    }
   }
-
-  // Load components
-  const components = await loadComponents(dir);
-
-  // Load knowledge
-  const knowledge = await loadKnowledge(dir);
 
   return { dir, packageName, agents, tasklists, functions, functionsBundled, nodeModulesDir, dependentSpaces, components, knowledge };
 }

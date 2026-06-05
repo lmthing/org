@@ -28,9 +28,10 @@ import { createTasklistGlobal } from '../globals/tasklist.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
+import { routeCommonYield, type YieldRouterContext } from '../eval/yield-router.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
-import { transpileStatement } from '../typecheck/transpile.js';
+import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { getAgentFunctions, getAgentFunctionsBundled, resolveDirectDeps } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
 import { loadSnapshot } from './snapshot.js';
@@ -56,6 +57,13 @@ export class Session {
    * delegate() calls in the same session.
    */
   private dynamicSpaces: Map<string, Space> = new Map();
+  /**
+   * One ForkEngine per session, lazily built and reused across fork/tasklist
+   * yields so the maxConcurrentForks semaphore is enforced across ALL top-level
+   * fork() yields — not just within a single Promise.all batch. Reset on
+   * start()/resume() when agent functions change.
+   */
+  private forkEngine: import('../fork/fork.js').ForkEngine | null = null;
 
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
@@ -131,6 +139,7 @@ export class Session {
     this.ambientDts = ambientDts;
     this.agentFunctions = agentFunctions;
     this.agentFunctionsBundled = agentFunctionsBundled;
+    this.forkEngine = null; // agent functions changed — rebuild on next fork yield
 
     // 6c. Inject space functions and JSX runtime into VM
     this.injectSpaceFunctions(agentFunctions, agentFunctionsBundled);
@@ -208,6 +217,7 @@ export class Session {
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
     this.agentFunctions = agentFunctions;
     this.agentFunctionsBundled = agentFunctionsBundled;
+    this.forkEngine = null; // agent functions changed — rebuild on next fork yield
     this.injectSpaceFunctions(agentFunctions, agentFunctionsBundled);
     const allComponentNames = [
       ...Object.keys(agentComponents.view),
@@ -280,6 +290,28 @@ export class Session {
     };
   }
 
+  /**
+   * Lazily construct and cache the session's ForkEngine. Shared across fork and
+   * tasklist yields so concurrency is bounded globally rather than per-yield.
+   */
+  private async getForkEngine(): Promise<import('../fork/fork.js').ForkEngine> {
+    if (this.forkEngine) return this.forkEngine;
+    const { ForkEngine } = await import('../fork/fork.js');
+    this.forkEngine = new ForkEngine({
+      maxConcurrentForks: this.opts.maxConcurrentForks ?? 4,
+      parentHistory: this.history.messages,
+      parentSpaceDir: this.opts.spaceDir,
+      parentAgentSlug: this.opts.agentSlug,
+      renderHost: this.opts.renderHost,
+      streamFn: this.deps.streamFn,
+      clock: this.opts.clock,
+      tracer: this.tracer,
+      agentFunctions: this.agentFunctions,
+      agentFunctionsBundled: this.agentFunctionsBundled,
+    });
+    return this.forkEngine;
+  }
+
   private injectGlobals(): void {
     if (!this.vm) throw new Error('VM not initialized');
 
@@ -311,27 +343,9 @@ export class Session {
 
   private injectSpaceFunctions(functions: Record<string, string>, functionsBundled: Record<string, string>): void {
     if (!this.vm) throw new Error('VM not initialized');
-    for (const name of Object.keys(functions)) {
-      const bundled = functionsBundled[name];
-      let js: string;
-      if (bundled) {
-        // Already bundled JS — strip ESM exports so it lands in script scope
-        js = bundled
-          .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
-          .replace(/^export\s+default\s+/gm, `const ${name} = `)
-          .replace(/^export\s+/gm, '');
-      } else {
-        // Transpile TS source to JS
-        js = transpileStatement(functions[name]!)
-          .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
-          .replace(/^export\s+default\s+/gm, `const ${name} = `)
-          .replace(/^export\s+/gm, '');
-      }
-      const result = this.vm.evalScript(`${js}\nglobalThis['${name}'] = ${name};`);
-      if (!result.ok) {
-        this.opts.renderHost.log(`[warn] failed to inject function "${name}": ${result.error}`);
-      }
-    }
+    injectSpaceFunctions(this.vm, functions, functionsBundled, (name, error) => {
+      this.opts.renderHost.log(`[warn] failed to inject function "${name}": ${error}`);
+    });
   }
 
   private injectJSXRuntime(componentNames: string[]): void {
@@ -382,66 +396,41 @@ export class Session {
         // args: resolved knowledge value
         return req.args[0];
       }
-      case 'sleep': {
-        const ms = req.args[1] as number;
-        return new Promise<void>((resolve) => {
-          if (this.opts.clock) {
-            this.opts.clock.setTimeout(resolve, ms);
-          } else {
-            setTimeout(resolve, ms);
-          }
-        });
+      case 'registerSpace': {
+        const dir = req.args[0] as string;
+        try {
+          const space = await loadSpace(dir);
+          this.dynamicSpaces.set(dir, space);
+          const firstAgentSlug = Object.keys(space.agents)[0] ?? '';
+          return { ok: true, spaceKey: dir, agentSlug: firstAgentSlug };
+        } catch (err: any) {
+          return { ok: false, spaceKey: '', agentSlug: '', error: String(err?.message ?? err) };
+        }
       }
-      case 'tasklist': {
-        const name = req.args[0] as string;
-        const seed = req.args[1] as Record<string, unknown> | undefined;
+      default: {
+        // sleep / fork / tasklist / delegate are resolved by the shared router.
         if (!this.space) throw new Error('Space not loaded');
-        const { runTasklist } = await import('../tasklist/orchestrator.js');
-        const { ForkEngine } = await import('../fork/fork.js');
-        const forkEngine = new ForkEngine({
-          maxConcurrentForks: this.opts.maxConcurrentForks ?? 4,
-          parentHistory: this.history.messages,
-          parentSpaceDir: this.opts.spaceDir,
-          parentAgentSlug: this.opts.agentSlug,
-          renderHost: this.opts.renderHost,
-          streamFn: this.deps.streamFn,
-          clock: this.opts.clock,
-          tracer: this.tracer,
-          agentFunctions: this.agentFunctions,
-          agentFunctionsBundled: this.agentFunctionsBundled,
-        });
-        return runTasklist({ name, space: this.space, forkEngine, seed });
+        const routed = await routeCommonYield(req, this.buildYieldContext(this.space));
+        return routed.handled ? routed.value : undefined;
       }
-      case 'fork': {
-        const forkOpts = req.args[0] as import('../globals/fork.js').ForkGlobalOpts;
-        if (!this.space) throw new Error('Space not loaded');
-        const { ForkEngine } = await import('../fork/fork.js');
-        const forkEngine = new ForkEngine({
-          maxConcurrentForks: this.opts.maxConcurrentForks ?? 4,
-          parentHistory: this.history.messages,
-          parentSpaceDir: this.opts.spaceDir,
-          parentAgentSlug: this.opts.agentSlug,
-          renderHost: this.opts.renderHost,
-          streamFn: this.deps.streamFn,
-          clock: this.opts.clock,
-          tracer: this.tracer,
-          agentFunctions: this.agentFunctions,
-          agentFunctionsBundled: this.agentFunctionsBundled,
-        });
-        return forkEngine.fork(forkOpts);
-      }
-      case 'delegate': {
-        const [packageName, agentName, action, delegateOpts] = req.args as [
-          string,
-          string,
-          string,
-          import('../globals/delegate.js').DelegateOpts | undefined,
-        ];
-        if (!this.space) throw new Error('Space not loaded');
+    }
+  }
+
+  /**
+   * Build the shared-yield-router context for the session VM. The session has no
+   * tasklist auto-capture (that's delegate-only), and resolves delegate() by
+   * constructing a fresh registry from its own + dependent + dynamic spaces.
+   */
+  private buildYieldContext(space: Space): YieldRouterContext {
+    return {
+      space,
+      clock: this.opts.clock,
+      getForkEngine: () => this.getForkEngine(),
+      runDelegate: async (packageName, agentName, action, delegateOpts) => {
         const { runDelegate } = await import('../delegate/delegate.js');
         const { DelegateRegistry } = await import('../delegate/registry.js');
-        const spaceMap = new Map<string, Space>([[this.opts.spaceDir, this.space]]);
-        for (const [pkgName, depSpace] of Object.entries(this.space.dependentSpaces)) {
+        const spaceMap = new Map<string, Space>([[this.opts.spaceDir, space]]);
+        for (const [pkgName, depSpace] of Object.entries(space.dependentSpaces)) {
           spaceMap.set(pkgName, depSpace);
           spaceMap.set(depSpace.dir, depSpace);
         }
@@ -465,20 +454,7 @@ export class Session {
           tracer: this.tracer,
           systemSpaces: this.systemSpaces,
         });
-      }
-      case 'registerSpace': {
-        const dir = req.args[0] as string;
-        try {
-          const space = await loadSpace(dir);
-          this.dynamicSpaces.set(dir, space);
-          const firstAgentSlug = Object.keys(space.agents)[0] ?? '';
-          return { ok: true, spaceKey: dir, agentSlug: firstAgentSlug };
-        } catch (err: any) {
-          return { ok: false, spaceKey: '', agentSlug: '', error: String(err?.message ?? err) };
-        }
-      }
-      default:
-        return undefined;
-    }
+      },
+    };
   }
 }

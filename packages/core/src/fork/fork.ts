@@ -9,7 +9,7 @@ import { injectHostTools } from '../globals/host-tools.js';
 import { rolePreamble, roleProfile } from './roles.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay, extractFunctionSignature } from '../typecheck/overlay.js';
-import { transpileStatement } from '../typecheck/transpile.js';
+import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { validateOutput } from '../tasklist/schema.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import type { Tracer } from '../sandbox/trace.js';
@@ -149,25 +149,9 @@ export class ForkEngine {
         // Inject space functions from parent agent into the child VM
         const agentFunctions = this.opts.agentFunctions ?? {};
         const agentFunctionsBundled = this.opts.agentFunctionsBundled ?? {};
-        for (const name of Object.keys(agentFunctions)) {
-          const bundled = agentFunctionsBundled[name];
-          let js: string;
-          if (bundled) {
-            js = bundled
-              .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
-              .replace(/^export\s+default\s+/gm, `const ${name} = `)
-              .replace(/^export\s+/gm, '');
-          } else {
-            js = transpileStatement(agentFunctions[name]!)
-              .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
-              .replace(/^export\s+default\s+/gm, `const ${name} = `)
-              .replace(/^export\s+/gm, '');
-          }
-          const fnResult = vm.evalScript(`${js}\nglobalThis['${name}'] = ${name};`);
-          if (!fnResult.ok) {
-            this.opts.renderHost.log(`[warn] failed to inject function "${name}" into fork: ${fnResult.error}`);
-          }
-        }
+        injectSpaceFunctions(vm, agentFunctions, agentFunctionsBundled, (name, error) => {
+          this.opts.renderHost.log(`[warn] failed to inject function "${name}" into fork: ${error}`);
+        });
 
         // Shared synchronous host substrate: console, execShell, process.env, fetch,
         // readFileRaw, writeFileRaw. The role's capability profile gates write access

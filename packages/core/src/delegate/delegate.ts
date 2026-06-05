@@ -11,9 +11,10 @@ import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { buildSystemBlock } from '../context/system-block.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
+import { routeCommonYield } from '../eval/yield-router.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
-import { transpileStatement } from '../typecheck/transpile.js';
+import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { systemFunctionSources, systemFunctionsBundled } from '../spaces/system.js';
 import type { Space } from '../spaces/load.js';
@@ -108,25 +109,9 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     const functions = { ...systemFunctionSources(systemSpaces), ...agentFunctions };
     const functionsBundled = { ...systemFunctionsBundled(systemSpaces), ...agentFunctionsBundled };
 
-    for (const name of Object.keys(functions)) {
-      const bundled = functionsBundled[name];
-      let js: string;
-      if (bundled) {
-        js = bundled
-          .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
-          .replace(/^export\s+default\s+/gm, `const ${name} = `)
-          .replace(/^export\s+/gm, '');
-      } else {
-        js = transpileStatement(functions[name]!)
-          .replace(/^export\s+default\s+function\s+/gm, `function ${name} `)
-          .replace(/^export\s+default\s+/gm, `const ${name} = `)
-          .replace(/^export\s+/gm, '');
-      }
-      const fnResult = vm.evalScript(`${js}\nglobalThis['${name}'] = ${name};`);
-      if (!fnResult.ok) {
-        opts.renderHost.log(`[warn] failed to inject function "${name}": ${fnResult.error}`);
-      }
-    }
+    injectSpaceFunctions(vm, functions, functionsBundled, (name, error) => {
+      opts.renderHost.log(`[warn] failed to inject function "${name}": ${error}`);
+    });
 
     // Shared synchronous host substrate: console, execShell, process.env, fetch,
     // readFileRaw, writeFileRaw.
@@ -205,47 +190,30 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       renderHost: opts.renderHost,
       streamFn: opts.streamFn,
       processYield: async (req) => {
-        if (req.kind === 'sleep') {
-          const ms = req.args[1] as number;
-          return new Promise<void>((res) => {
-            if (opts.clock) {
-              opts.clock.setTimeout(res, ms);
-            } else {
-              setTimeout(res, ms);
+        // sleep / fork / tasklist / delegate share the central router. The two
+        // delegate-specific behaviours are passed as hooks: auto-capture of the
+        // action's tasklist result, and depth-incremented recursion.
+        const routed = await routeCommonYield(req, {
+          space,
+          clock: opts.clock,
+          getForkEngine: () => forkEngine,
+          onTasklistResult: (name, result) => {
+            if (name === actionDef.tasklist && !resultCaptured) {
+              capturedResult = result;
+              resultCaptured = true;
             }
-          });
-        }
-        if (req.kind === 'tasklist') {
-          const { runTasklist } = await import('../tasklist/orchestrator.js');
-          const tlResult = await runTasklist({ name: req.args[0] as string, space, forkEngine, seed: req.args[1] as Record<string, unknown> | undefined });
-          // Auto-capture: if this tasklist is the action's primary handler and the
-          // agent has not already called currentTask.resolve(), capture it automatically.
-          if (req.args[0] === actionDef.tasklist && !resultCaptured) {
-            capturedResult = tlResult;
-            resultCaptured = true;
-          }
-          return tlResult;
-        }
-        if (req.kind === 'fork') {
-          return forkEngine.fork(req.args[0] as import('../fork/fork.js').ForkTask);
-        }
-        if (req.kind === 'delegate') {
-          const [packageName, agentName, action, delegateOpts2] = req.args as [
-            string,
-            string,
-            string,
-            DelegateOpts | undefined,
-          ];
-          return runDelegate({
-            ...opts,
-            packageName,
-            agentName,
-            action,
-            delegateOpts: delegateOpts2,
-            depth: opts.depth + 1,
-          });
-        }
-        return undefined;
+          },
+          runDelegate: (packageName, agentName, action, delegateOpts2) =>
+            runDelegate({
+              ...opts,
+              packageName,
+              agentName,
+              action,
+              delegateOpts: delegateOpts2,
+              depth: opts.depth + 1,
+            }),
+        });
+        return routed.handled ? routed.value : undefined;
       },
       maxRetries: 3,
       tracer: opts.tracer ?? NULL_TRACER,

@@ -2,16 +2,10 @@ import type { Space, AgentDef } from '../spaces/load.js';
 import { loadSpace } from '../spaces/load.js';
 
 export class DelegateRegistry {
-  private cycleDetection: Set<string> = new Set();
-
   constructor(private spaces: Map<string, Space>) {}
 
   resolve(target: string): { space: Space; agent: AgentDef } {
     const [spaceName, agentSlug] = this.parseTarget(target);
-
-    if (this.cycleDetection.has(target)) {
-      throw new Error(`Cycle detected in delegation: "${target}"`);
-    }
 
     // Look through spaces by dir or name
     for (const space of this.spaces.values()) {

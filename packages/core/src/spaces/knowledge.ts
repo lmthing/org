@@ -49,7 +49,7 @@ export async function resolveKnowledge(space: Space, path: string[]): Promise<un
   }
 
   const content = await readFile(filePath, 'utf8');
-  const { data, body } = parseFrontmatter(content);
+  const { data, body } = parseFrontmatter(content, filePath);
 
   // If there's frontmatter data, return structured object
   if (Object.keys(data).length > 0) {

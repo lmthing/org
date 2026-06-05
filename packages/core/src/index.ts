@@ -7,6 +7,7 @@ export { createVM } from './sandbox/quickjs.js';
 export type { VM, VMOpts, EvalResult } from './sandbox/quickjs.js';
 export { marshalToQuickJS, marshalToHost, injectGlobal } from './sandbox/host-bridge.js';
 export { JSX_RUNTIME_CODE } from './sandbox/jsx-runtime.js';
+export { injectSpaceFunctions } from './sandbox/inject-functions.js';
 export { Tracer } from './sandbox/trace.js';
 export type { TraceEvent } from './sandbox/trace.js';
 
@@ -14,7 +15,7 @@ export type { TraceEvent } from './sandbox/trace.js';
 export { runTsc } from './typecheck/tsc.js';
 export type { TscResult, TscDiagnostic, TscOpts } from './typecheck/tsc.js';
 export { LIBRARY_DTS } from './typecheck/library-dts.js';
-export { buildOverlay } from './typecheck/overlay-dts.js';
+export { buildOverlay } from './typecheck/overlay.js';
 
 // Globals
 export { serialize } from './globals/serialize.js';
@@ -45,6 +46,8 @@ export type { SummarizeOpts } from './context/summarize.js';
 // Yield protocol
 export type { YieldRequest } from './eval/yield.js';
 export { pendingYields } from './eval/yield.js';
+export { routeCommonYield } from './eval/yield-router.js';
+export type { YieldRouterContext, RouteResult } from './eval/yield-router.js';
 
 // Stream types
 export type { StreamOpts, StreamSession } from './eval/stream-types.js';

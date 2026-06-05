@@ -121,3 +121,19 @@ describe('injectHostTools — process.env and read-only profile', () => {
     vm.dispose();
   });
 });
+
+describe('injectHostTools — fetch', () => {
+  it('returns ok:false (does not hang) when the connection is refused', async () => {
+    const vm = await createVM();
+    injectHostTools(vm, { renderHost: silentHost, spaceDir: '/tmp' });
+    // Port 1 is reserved and refuses fast; with the curl --max-time guard a hung
+    // endpoint can no longer block the thread forever (stopgap until the Wave-2
+    // async client lands). This proves the error path returns a value, not a hang.
+    const started = Date.now();
+    const r = evalDump(vm, `fetch("http://127.0.0.1:1/")`) as { ok: boolean; status: number };
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(0);
+    expect(Date.now() - started).toBeLessThan(31000);
+    vm.dispose();
+  });
+});

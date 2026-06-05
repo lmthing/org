@@ -103,8 +103,10 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
         .map(([k, v]) => `-H ${JSON.stringify(`${k}: ${v}`)}`)
         .join(' ');
       const bodyArg = fetchOpts?.body ? `--data-binary ${JSON.stringify(fetchOpts.body)}` : '';
-      const cmd = `curl -s -w "\\n__STATUS__%{http_code}" -X ${method} ${headers} ${bodyArg} ${JSON.stringify(String(url))}`;
-      const raw = execSync(cmd, { maxBuffer: 8 * 1024 * 1024 }).toString();
+      const cmd = `curl -s --max-time 30 -w "\\n__STATUS__%{http_code}" -X ${method} ${headers} ${bodyArg} ${JSON.stringify(String(url))}`;
+      // timeout is a stopgap until fetch moves to a yield-based async client (Wave 2);
+      // without it a hung endpoint blocks the single Node thread (and all forks) forever.
+      const raw = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout: 31000 }).toString();
       const statusMatch = raw.match(/\n__STATUS__(\d+)$/);
       const status = statusMatch ? parseInt(statusMatch[1]!) : 200;
       const text = statusMatch ? raw.slice(0, raw.lastIndexOf('\n__STATUS__')) : raw;
