@@ -133,8 +133,7 @@ describe('mock-driven Session — budget guardrails (Phase 1)', () => {
     expect((r.error as BudgetExceededError).kind).toBe('wallClock');
   });
 
-  it('fork-depth cap rejects cheaply — no fork VM is created (the fork resolves undefined)', async () => {
-    // fork() yields, so the display must come on the NEXT turn (post-resolve).
+  it('fork-depth cap aborts cleanly and cheaply (no fork VM is created)', async () => {
     let turn = 0;
     const m = mockMatch(
       [{ when: /currentTask/, respond: () => 'currentTask.resolve({ summary: "x" });' }],
@@ -146,9 +145,10 @@ describe('mock-driven Session — budget guardrails (Phase 1)', () => {
       },
     );
     const r = await runMockSession({ streamFn: m, message: 'go', budget: { maxForkDepth: 0 } });
-    expect(r.error).toBeUndefined(); // depth rejection is swallowed; the session completes
+    expect(r.error).toBeInstanceOf(BudgetExceededError); // hard stop, like the other caps
+    expect((r.error as BudgetExceededError).kind).toBe('forkDepth');
     expect(forkRequests(r.trace).length).toBe(0); // cheap rejection: no fork turn ran
-    expect(r.displays).toContain('f=undefined'); // the fork() yield resolved undefined
+    expect(r.displays).not.toContain('f=undefined'); // the run aborted before binding undefined
   });
 
   it('a within-budget run completes normally (cap is a no-op)', async () => {
@@ -283,6 +283,18 @@ describe('mock-driven Session — solve escalation (Phase 3)', () => {
     expect(out.verified).toBe(false);
     expect(out.attempts).toBeGreaterThan(1); // it escalated
     expect(out.attempts).toBeLessThanOrEqual(3); // bounded by maxAttempts
+  });
+
+  it('3F: a budget cap bounds the ladder — fork-depth breach aborts solve cleanly', async () => {
+    // The first attempt fork is rejected by the depth cap, so the ladder cannot run away.
+    const r = await runMockSession({
+      streamFn: makeSolveMock(SOLVE_VERIFIED, () => 5),
+      message: 'go',
+      budget: { maxForkDepth: 0 },
+    });
+    expect(r.error).toBeInstanceOf(BudgetExceededError);
+    expect((r.error as BudgetExceededError).kind).toBe('forkDepth');
+    expect(forkRequests(r.trace).length).toBe(0); // no attempt VM ever ran
   });
 });
 

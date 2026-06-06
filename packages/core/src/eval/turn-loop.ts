@@ -10,7 +10,7 @@ import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { buildErrorBlock } from './error-rewind.js';
 import { emitVariables, extractBindingNames, extractBindingPattern } from '../context/variables.js';
-import type { Budget } from './budget.js';
+import { BudgetExceededError, type Budget } from './budget.js';
 
 export type { StreamOpts, StreamSession };
 
@@ -222,6 +222,13 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
           yieldReq.deferred.resolve(resolved);
           resolvedValues[i] = resolved;
         } catch (err) {
+          // A budget breach inside a yield (e.g. a fork rejected by the fork-depth
+          // cap, or an over-budget fork/solve) is a HARD stop, not a recoverable
+          // tool error. Propagate it so it surfaces exactly like the episode and
+          // tool-call caps (clean non-zero exit + VM disposal by the caller) —
+          // instead of being swallowed into an undefined binding that lets the run
+          // continue past its ceiling.
+          if (err instanceof BudgetExceededError) throw err;
           yieldReq.deferred.reject(err);
           resolvedValues[i] = undefined;
         }

@@ -63,6 +63,14 @@ ERR=$($CLI --space fixtures/engineer --claude --mock fixtures/engineer/mock.mjs 
 [ "$CODE" -ne 0 ] && ok "non-zero exit ($CODE)" || bad "should exit non-zero"
 echo "$ERR" | grep -q "toolCalls limit of 2" && ok "stderr names toolCalls limit" || bad "stderr should name toolCalls limit"
 
+echo "== Phase 1C/3F: fork-depth cap bounds the solve ladder (exit 1, 'forkDepth limit of 0') =="
+rm -rf fixtures/solver/work; T="$TMP/1c.jsonl"
+ERR=$($CLI --space fixtures/solver --claude --mock fixtures/solver/mock.mjs --max-fork-depth 0 --trace "$T" "implement add" 2>&1 >/dev/null); CODE=$?
+[ "$CODE" -ne 0 ] && ok "non-zero exit ($CODE)" || bad "should exit non-zero"
+echo "$ERR" | grep -q "forkDepth limit of 0" && ok "stderr names forkDepth limit" || bad "stderr should name forkDepth limit"
+[ "$(count "$T" "e.type==='llm_request'&&e.context&&e.context.startsWith('fork')")" = "0" ] \
+  && ok "cheap rejection: no fork conversation ran" || bad "no fork VM should have been created"
+
 echo "== Phase 2A: progress() reads live counters =="
 T="$TMP/2a.jsonl"
 OUT=$($CLI --space fixtures/engineer --claude --mock fixtures/engineer/mock.mjs --trace "$T" "call progress and show the counts" 2>/dev/null)

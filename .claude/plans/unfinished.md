@@ -38,19 +38,23 @@ unit-tested. The mock (item 1) now makes the core scenarios runnable **without k
 real-model runs (which catch model-behavior issues the mock cannot) and a few scenarios
 not yet scripted.
 
-- [x] Phase 1 — 1A episode cap & 1B tool-call cap fire with a clean non-zero exit
-      (`fixtures/engineer/mock.mjs`, asserted in `scripts/live-test.sh`)
-- [ ] Phase 1 — 1C fork-depth, 1D wall-clock, 1E within-budget no-op, 1F/1G robustness
-- [x] Phase 2 — `progress()` reads live counters (2A)
-- [ ] Phase 2 — 2B counts climb / 2C read-only / 2D inside-fork
-- [x] Phase 3 — 3A first-try pass (`mock-pass.mjs`) & 3B one-retry → `rung:1` with
-      feedback carried (`mock.mjs`)
-- [ ] Phase 3 — 3C escalate-to-race, 3D no-verify single shot, 3E exhaustion, 3F budget
-      interaction (note: with `--max-fork-depth 0`, a fork-depth `BudgetExceededError`
-      inside `solve` is currently **swallowed** — the yield resolves `undefined` instead
-      of aborting the session. Worth a `.issues/` entry + fix.)
-- [ ] Phase 4 — per-role models visible in the `llm_request` trace (P0.2 records the
-      model; needs a mock/credentialed run that sets `LM_MODEL_ROLE_*` and asserts)
+Most scenarios are now asserted in two places: `scripts/live-test.sh` (CLI level) and
+`testing/mock-session.test.ts` (in-process Session, in unit-test CI).
+
+- [x] Phase 1 — 1A episode cap, 1B tool-call cap, 1C fork-depth, wall-clock cap all
+      fire with a clean non-zero exit; 1E within-budget no-op; budget resets per
+      `continue()` turn
+- [ ] Phase 1 — 1F REPL-specific reset / 1G no-VM-leak edge cases
+- [x] Phase 2 — `progress()` reads live counters (2A), counts climb across a yield (2B),
+      read-only snapshot (2C)
+- [ ] Phase 2 — 2D inside-fork progress
+- [x] Phase 3 — 3A first-try pass, 3B one-retry → `rung:1` with feedback carried,
+      3D no-verify single shot, 3E bounded exhaustion, 3F budget bounds the ladder
+      (the previously-swallowed fork-depth `BudgetExceededError` now propagates — fixed
+      in `turn-loop.ts`)
+- [ ] Phase 3 — 3C escalate-to-race (needs a mock that keeps failing into the race rung)
+- [x] Phase 4 — per-role fork model recorded on the `llm_request` trace; no config →
+      no override
 - [ ] §6.3 — reward-hacking / integrity regression
 - [ ] §7 — fill the results table (or sibling `live-testing-results-<date>.md`);
       keep raw `--trace` NDJSON for any failure

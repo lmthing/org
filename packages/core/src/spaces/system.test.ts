@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
+import { existsSync } from 'node:fs';
 import { loadSpace } from './load.js';
 import {
   loadSystemSpaces,
@@ -64,5 +65,12 @@ describe('system spaces', () => {
     const dirs = defaultSystemSpaceDirs();
     expect(dirs.some((d) => d.endsWith('system-spaces/fs'))).toBe(true);
     expect(dirs.length).toBe(5);
+  });
+
+  it('defaultSystemSpaceDirs resolves to dirs that actually exist (dist + src layouts)', () => {
+    // Probing both layouts means the path is real whether run from dist/ or src/.
+    const dirs = defaultSystemSpaceDirs();
+    expect(existsSync(dirs.find((d) => d.endsWith('system-spaces/fs'))!)).toBe(true);
+    expect(existsSync(dirs.find((d) => d.endsWith('system-spaces/web'))!)).toBe(true);
   });
 });
