@@ -6,13 +6,14 @@ import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { injectHostTools } from '../globals/host-tools.js';
-import { rolePreamble, roleProfile } from './roles.js';
+import { rolePreamble, roleProfile, modelForRole, type RoleModelConfig } from './roles.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay, extractFunctionSignature } from '../typecheck/overlay.js';
 import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { validateOutput } from '../tasklist/schema.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import type { Tracer } from '../sandbox/trace.js';
+import { Budget, type BudgetLimits } from '../eval/budget.js';
 
 export interface ForkTask {
   instruction: string;
@@ -38,6 +39,12 @@ interface ForkEngineOpts {
   agentFunctions?: Record<string, string>;
   /** Bundled JS versions of agent functions (when space has node_modules) */
   agentFunctionsBundled?: Record<string, string>;
+  /** Host budget caps applied to each fork's own turn loop (fresh Budget per fork). */
+  budgetLimits?: BudgetLimits;
+  /** Nesting depth of forks spawned by this engine. A session's top-level forks are depth 1. */
+  forkDepth?: number;
+  /** Optional per-role model assignment (e.g. explore/plan → cheap model). */
+  roleModels?: RoleModelConfig;
 }
 
 export class ForkEngine {
@@ -106,8 +113,14 @@ export class ForkEngine {
         }
       }
 
+      // Per-fork budget. Assert nesting depth before spending anything on a VM —
+      // a depth-exceeded fork rejects cleanly with BudgetExceededError.
+      const budget = new Budget(this.opts.budgetLimits ?? {});
+      const depth = this.opts.forkDepth ?? 1;
+
       let vm: VM | undefined;
       try {
+        budget.assertForkDepth(depth);
         vm = await createVM();
 
         // Inject seed variables
@@ -160,6 +173,7 @@ export class ForkEngine {
           renderHost: this.opts.renderHost,
           spaceDir: this.opts.parentSpaceDir,
           profile: roleProfile(task.role),
+          progress: () => budget.snapshot(),
         });
 
         // Inject standard globals (no fork/delegate/tasklist in child to avoid recursion issues)
@@ -286,6 +300,8 @@ export class ForkEngine {
           maxRetries: 3,
           tracer: this.opts.tracer ?? NULL_TRACER,
           traceContext: `fork:${task.taskId ?? task.role ?? 'general'}`,
+          budget,
+          model: modelForRole(task.role, this.opts.roleModels),
         });
 
         // All QuickJS call frames have exited — safe to dispose.

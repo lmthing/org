@@ -3,7 +3,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ForkEngine } from './fork.js';
-import { normalizeRole, rolePreamble, roleProfile } from './roles.js';
+import { normalizeRole, rolePreamble, roleProfile, modelForRole } from './roles.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamSession } from '../eval/stream-types.js';
 
@@ -64,6 +64,57 @@ describe('fork roles', () => {
     expect(result.wrote).toBe(false);
     expect(result.err).toMatch(/read-only/);
     expect(existsSync(target)).toBe(false);
+  });
+
+  describe('modelForRole', () => {
+    it('returns undefined when no config is given (use session default)', () => {
+      expect(modelForRole('explore')).toBeUndefined();
+      expect(modelForRole('general', undefined)).toBeUndefined();
+    });
+
+    it('maps each role to its configured model', () => {
+      const config = { explore: 'azure:cheap', plan: 'azure:cheap', general: 'azure:pro' };
+      expect(modelForRole('explore', config)).toBe('azure:cheap');
+      expect(modelForRole('plan', config)).toBe('azure:cheap');
+      expect(modelForRole('general', config)).toBe('azure:pro');
+    });
+
+    it('normalizes unknown/undefined roles to general', () => {
+      const config = { general: 'azure:pro' };
+      expect(modelForRole(undefined, config)).toBe('azure:pro');
+      expect(modelForRole('weird', config)).toBe('azure:pro');
+    });
+
+    it('returns undefined for a role absent from a partial config', () => {
+      const config = { explore: 'azure:cheap' };
+      expect(modelForRole('general', config)).toBeUndefined();
+    });
+  });
+
+  it('a fork passes its role model to streamFn', async () => {
+    const seen: Array<string | undefined> = [];
+    let aborted = false;
+    async function* gen() {
+      if (!aborted) yield 'currentTask.resolve({ ok: true });\n';
+    }
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4,
+      parentHistory: [],
+      parentSpaceDir: '/tmp',
+      parentAgentSlug: 'test',
+      renderHost: silentHost,
+      streamFn: async (opts: { model?: string }) => {
+        seen.push(opts.model);
+        return { textStream: gen(), abort() { aborted = true; } } as StreamSession;
+      },
+      roleModels: { explore: 'azure:cheap', general: 'azure:pro' },
+    });
+    await engine.fork<{ ok: boolean }>({
+      instruction: 'investigate',
+      output: { ok: 'boolean' },
+      role: 'explore',
+    });
+    expect(seen).toContain('azure:cheap');
   });
 
   it('a general fork CAN write', async () => {

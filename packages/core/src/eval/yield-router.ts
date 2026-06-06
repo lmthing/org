@@ -29,6 +29,10 @@ export interface YieldRouterContext {
   ) => Promise<unknown>;
   /** Fired after a tasklist resolves (delegate uses it for auto-capture). */
   onTasklistResult?: (name: string, result: unknown) => void;
+  /** Run a shell command host-side (cwd = space dir) for `solve`'s verifyCommand.
+   *  Optional: when absent, verifyCommand-based solve verification is unavailable
+   *  (verifyCondition still works). */
+  execCommand?: (cmd: string) => { ok: boolean; output: string };
 }
 
 export type RouteResult =
@@ -79,6 +83,18 @@ export async function routeCommonYield(
         DelegateOpts | undefined,
       ];
       const value = await ctx.runDelegate(packageName, agentName, action, delegateOpts);
+      return { handled: true, value };
+    }
+    case 'solve': {
+      const engine = await ctx.getForkEngine();
+      const { runSolveYield } = await import('../fork/solve.js');
+      const { evaluateCondition } = await import('../tasklist/condition-dsl.js');
+      const value = await runSolveYield(req.args[0] as import('../fork/solve.js').SolveYieldOpts, {
+        // runSolveYield always populates `output`, so the SolveTask is a valid ForkTask.
+        fork: (task) => engine.fork(task as unknown as ForkTask),
+        execCommand: ctx.execCommand,
+        evaluateCondition,
+      });
       return { handled: true, value };
     }
     default:

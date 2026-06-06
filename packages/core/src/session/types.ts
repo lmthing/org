@@ -1,4 +1,6 @@
 import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
+import type { BudgetLimits } from '../eval/budget.js';
+import type { RoleModelConfig } from '../fork/roles.js';
 
 export interface RenderHost {
   display(descriptor: unknown): void;
@@ -26,6 +28,11 @@ export interface SessionOpts {
   /** When set, collapse history to a summary once it exceeds maxHistoryTurns*2
    *  messages (keeping the last few verbatim). Used by long REPL sessions. */
   maxHistoryTurns?: number;
+  /** Host-enforced budget caps (episodes / tool calls / fork depth / wall clock).
+   *  Reset per start()/continue() invocation. Cannot be disabled from inside the VM. */
+  budget?: BudgetLimits;
+  /** Optional per-role model assignment for forks (e.g. explore/plan → cheap model). */
+  roleModels?: RoleModelConfig;
 }
 
 export interface SessionDeps {

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { execSync } from 'node:child_process';
 import type { SessionOpts, SessionDeps, RenderHost } from './types.js';
 import type { StreamOpts } from '../eval/stream-types.js';
 import type { YieldRequest } from '../eval/yield.js';
@@ -25,9 +26,11 @@ import { createLoadKnowledgeGlobal } from '../globals/load-knowledge.js';
 import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
+import { createSolveGlobal } from '../globals/solve.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
+import { Budget } from '../eval/budget.js';
 import { routeCommonYield, type YieldRouterContext } from '../eval/yield-router.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
@@ -64,6 +67,12 @@ export class Session {
    * start()/resume() when agent functions change.
    */
   private forkEngine: import('../fork/fork.js').ForkEngine | null = null;
+  /**
+   * Host-enforced budget for the current turn-loop run. Reset per
+   * start()/continue() so each task gets a fresh ceiling. The `progress` global
+   * reads this live (the closure dereferences the field, so resetting works).
+   */
+  private budget: Budget = new Budget();
 
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
@@ -85,6 +94,7 @@ export class Session {
     // Context economy: collapse old turns into a summary once history grows large,
     // keeping the most recent messages (incl. this task) verbatim.
     await this.maybeSummarizeHistory();
+    this.budget = new Budget(this.opts.budget ?? {});
     await runTurnLoop({
       vm: this.vm,
       history: this.history,
@@ -96,6 +106,7 @@ export class Session {
       maxRetries: this.opts.maxRetries,
       tracer: this.tracer,
       traceContext: 'session',
+      budget: this.budget,
     });
   }
 
@@ -159,6 +170,7 @@ export class Session {
     this.tracer.write({ ts: Date.now(), type: 'session_start', sessionId: this.sessionId, spaceDir: this.opts.spaceDir, agentSlug: resolvedSlug! });
 
     // 8. Run turn loop until done or error
+    this.budget = new Budget(this.opts.budget ?? {});
     await runTurnLoop({
       vm: this.vm,
       history: this.history,
@@ -170,6 +182,7 @@ export class Session {
       maxRetries: this.opts.maxRetries,
       tracer: this.tracer,
       traceContext: 'session',
+      budget: this.budget,
     });
   }
 
@@ -225,6 +238,7 @@ export class Session {
     ];
     this.injectJSXRuntime(allComponentNames);
 
+    this.budget = new Budget(this.opts.budget ?? {});
     await runTurnLoop({
       vm: this.vm,
       history: this.history,
@@ -236,6 +250,7 @@ export class Session {
       maxRetries: this.opts.maxRetries,
       tracer: this.tracer,
       traceContext: 'session',
+      budget: this.budget,
     });
   }
 
@@ -308,6 +323,8 @@ export class Session {
       tracer: this.tracer,
       agentFunctions: this.agentFunctions,
       agentFunctionsBundled: this.agentFunctionsBundled,
+      budgetLimits: this.opts.budget,
+      roleModels: this.opts.roleModels,
     });
     return this.forkEngine;
   }
@@ -334,11 +351,18 @@ export class Session {
     injectGlobal(this.vm.ctx, 'fork', createForkGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
+    injectGlobal(this.vm.ctx, 'solve', createSolveGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
 
     // Shared synchronous host substrate: console, execShell, process.env, fetch,
     // readFileRaw, writeFileRaw. Single source of truth (also used by fork VMs).
-    injectHostTools(this.vm, { renderHost: this.opts.renderHost, spaceDir: this.opts.spaceDir });
+    // `progress` reads the live per-run budget (the closure dereferences the
+    // field, so resetting this.budget per task is reflected).
+    injectHostTools(this.vm, {
+      renderHost: this.opts.renderHost,
+      spaceDir: this.opts.spaceDir,
+      progress: () => this.budget.snapshot(),
+    });
   }
 
   private injectSpaceFunctions(functions: Record<string, string>, functionsBundled: Record<string, string>): void {
@@ -426,6 +450,18 @@ export class Session {
       space,
       clock: this.opts.clock,
       getForkEngine: () => this.getForkEngine(),
+      // solve()'s verifyCommand runs host-side with the space dir as cwd, so a
+      // checker (tests / tsc) sees files written by the attempt forks.
+      execCommand: (cmd: string) => {
+        try {
+          const out = execSync(cmd, { cwd: this.opts.spaceDir, maxBuffer: 8 * 1024 * 1024, timeout: 60000 });
+          return { ok: true, output: out.toString() };
+        } catch (e: unknown) {
+          const err = e as { stdout?: Buffer; stderr?: Buffer; message?: string };
+          const output = (err.stdout?.toString() ?? '') + (err.stderr?.toString() ?? '') || (err.message ?? String(e));
+          return { ok: false, output };
+        }
+      },
       runDelegate: async (packageName, agentName, action, delegateOpts) => {
         const { runDelegate } = await import('../delegate/delegate.js');
         const { DelegateRegistry } = await import('../delegate/registry.js');

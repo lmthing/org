@@ -102,8 +102,9 @@ const GLOBALS_SUMMARY = `
 - \`tasklist(name, seed?)\` — run a named tasklist and return its goal output (yields). Pass seed to share variables with tasks: \`tasklist("my_list", { topic })\`
 - \`fork(opts)\` — spawn an isolated subagent and await its typed result (yields). The subagent runs in its own context and returns ONLY what it resolves — use it as a context firewall for heavy investigation. Set \`role\`: \`'explore'\` (read-only research), \`'plan'\` (read-only design), or \`'general'\` (full toolkit, default). Launch several at once with \`Promise.all([fork({role:'explore',...}), fork({role:'explore',...})])\`.
 - \`delegate(packageName, agentName, action, opts?)\` — delegate to another agent's action (yields)
+- \`solve(opts)\` — verifier-gated escalation (yields). Runs an attempt, and ONLY while a check keeps failing escalates: single → retry-with-feedback → race-N, bounded by budget. Give \`verifyCommand\` (a shell check — tests/type-check; exit 0 = pass) or \`verifyCondition\` (a condition over the output). With no verify it runs exactly once. Returns \`{ value, rung, attempts, verified }\`. Use it ONLY when you have a real check; otherwise call \`fork\` directly.
 
-Value-yielding globals (ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate) end the current turn.
+Value-yielding globals (ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate, solve) end the current turn.
 display() is void and does not end the turn.
 
 IMPORTANT: ask(), tasklist(), and delegate() all return unknown. Cast results to use them:

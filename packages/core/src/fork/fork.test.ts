@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ForkEngine } from './fork.js';
+import { BudgetExceededError } from '../eval/budget.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamSession } from '../eval/stream-types.js';
 
@@ -122,5 +123,112 @@ describe('ForkEngine', () => {
       engine.fork({ instruction: 'test', output: {}, timeout: 50 }),
     ).rejects.toThrow(/timed out/);
     aborted = true;
+  });
+
+  describe('budget enforcement', () => {
+    // A fork that yields (sleep) every turn but never resolves — it loops until
+    // a budget cap stops it. The fresh generator per call keeps it going.
+    function makeForeverEngine(limits: Record<string, number>): ForkEngine {
+      return new ForkEngine({
+        maxConcurrentForks: 4,
+        parentHistory: [],
+        parentSpaceDir: '/tmp',
+        parentAgentSlug: 'test',
+        renderHost: silentHost,
+        streamFn: async () => {
+          let done = false;
+          async function* gen() { if (!done) yield 'await sleep("1ms");\n'; }
+          return { textStream: gen(), abort() { done = true; } } as StreamSession;
+        },
+        budgetLimits: limits,
+      });
+    }
+
+    it('stops a non-resolving fork at maxEpisodes with BudgetExceededError', async () => {
+      const engine = makeForeverEngine({ maxEpisodes: 3 });
+      await expect(
+        engine.fork({ instruction: 'loop forever', output: { x: 'string' } }),
+      ).rejects.toBeInstanceOf(BudgetExceededError);
+    });
+
+    it('reports the episodes kind and the limit on the thrown error', async () => {
+      const engine = makeForeverEngine({ maxEpisodes: 2 });
+      await engine
+        .fork({ instruction: 'loop', output: { x: 'string' } })
+        .then(() => { throw new Error('should have rejected'); })
+        .catch((err) => {
+          expect(err).toBeInstanceOf(BudgetExceededError);
+          expect((err as BudgetExceededError).kind).toBe('episodes');
+          expect((err as BudgetExceededError).limit).toBe(2);
+        });
+    });
+
+    it('stops at maxToolCalls when episodes are unbounded', async () => {
+      const engine = makeForeverEngine({ maxToolCalls: 2 });
+      await expect(
+        engine.fork({ instruction: 'loop', output: { x: 'string' } }),
+      ).rejects.toBeInstanceOf(BudgetExceededError);
+    });
+
+    it('rejects immediately when fork depth exceeds maxForkDepth (no VM spun up)', async () => {
+      const engine = new ForkEngine({
+        maxConcurrentForks: 4,
+        parentHistory: [],
+        parentSpaceDir: '/tmp',
+        parentAgentSlug: 'test',
+        renderHost: silentHost,
+        streamFn: async () => makeStream('currentTask.resolve({ x: "y" });\n'),
+        budgetLimits: { maxForkDepth: 1 },
+        forkDepth: 2,
+      });
+      await engine
+        .fork({ instruction: 'too deep', output: { x: 'string' } })
+        .then(() => { throw new Error('should have rejected'); })
+        .catch((err) => {
+          expect(err).toBeInstanceOf(BudgetExceededError);
+          expect((err as BudgetExceededError).kind).toBe('forkDepth');
+        });
+    });
+
+    it('does not interfere with a fork that resolves within budget', async () => {
+      const engine = new ForkEngine({
+        maxConcurrentForks: 4,
+        parentHistory: [],
+        parentSpaceDir: '/tmp',
+        parentAgentSlug: 'test',
+        renderHost: silentHost,
+        streamFn: async () => makeStream('currentTask.resolve({ answer: "ok" });\n'),
+        budgetLimits: { maxEpisodes: 10, maxToolCalls: 10, maxForkDepth: 3 },
+      });
+      const result = await engine.fork<{ answer: string }>({
+        instruction: 'quick',
+        output: { answer: 'string' },
+      });
+      expect(result).toEqual({ answer: 'ok' });
+    });
+  });
+
+  describe('progress global', () => {
+    it('exposes a live read-only budget snapshot inside the fork VM', async () => {
+      const engine = new ForkEngine({
+        maxConcurrentForks: 4,
+        parentHistory: [],
+        parentSpaceDir: '/tmp',
+        parentAgentSlug: 'test',
+        renderHost: silentHost,
+        streamFn: async () =>
+          makeStream(
+            'const p = progress();\ncurrentTask.resolve({ episodes: p.episodes, toolCalls: p.toolCalls });\n',
+          ),
+        budgetLimits: { maxEpisodes: 10 },
+      });
+      const result = await engine.fork<{ episodes: number; toolCalls: number }>({
+        instruction: 'read progress',
+        output: { episodes: 'number', toolCalls: 'number' },
+      });
+      // First turn has ticked one episode; no yields resolved before resolve().
+      expect(result.episodes).toBeGreaterThanOrEqual(1);
+      expect(typeof result.toolCalls).toBe('number');
+    });
   });
 });

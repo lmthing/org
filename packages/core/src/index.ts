@@ -31,6 +31,7 @@ export type { ForkGlobalOpts } from './globals/fork.js';
 export { createDelegateGlobal } from './globals/delegate.js';
 export type { DelegateOpts } from './globals/delegate.js';
 export { createTasklistGlobal } from './globals/tasklist.js';
+export { createSolveGlobal } from './globals/solve.js';
 export { createRegisterSpaceGlobal } from './globals/register-space.js';
 export type { RegisterSpaceResult } from './globals/register-space.js';
 
@@ -56,6 +57,10 @@ export type { StreamOpts, StreamSession } from './eval/stream-types.js';
 export { runTurnLoop } from './eval/turn-loop.js';
 export type { TurnLoopDeps } from './eval/turn-loop.js';
 export { buildErrorBlock } from './eval/error-rewind.js';
+
+// Budget guardrails
+export { Budget, BudgetExceededError } from './eval/budget.js';
+export type { BudgetLimits, BudgetKind, BudgetSnapshot } from './eval/budget.js';
 
 // Spaces
 export { loadSpace } from './spaces/load.js';
@@ -100,6 +105,10 @@ export { runTasklist } from './tasklist/orchestrator.js';
 // Fork
 export { ForkEngine } from './fork/fork.js';
 export type { ForkTask } from './fork/fork.js';
+export { normalizeRole, rolePreamble, roleProfile, modelForRole } from './fork/roles.js';
+export type { ForkRole, RoleModelConfig } from './fork/roles.js';
+export { solve, runSolveYield } from './fork/solve.js';
+export type { SolveOpts, SolveResult, SolveTask, SolveRung, VerifyResult, SolveYieldOpts, SolveYieldDeps } from './fork/solve.js';
 
 // Delegate
 export { DelegateRegistry } from './delegate/registry.js';
