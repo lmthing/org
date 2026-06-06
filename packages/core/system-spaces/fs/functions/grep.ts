@@ -9,6 +9,13 @@ export function grep(
   const globArg = opts?.glob ? `-g ${JSON.stringify(opts.glob)} ` : '';
   const matches: { file: string; line: number; text: string }[] = [];
 
+  // Distinguish "path doesn't exist" from "no matches": the `|| true` guards below
+  // swallow rg/grep's "No such file" error, so probe the path up front.
+  const probe = execShell(`test -e ${JSON.stringify(path)} && echo __OK__ || true`);
+  if (!probe.stdout.includes('__OK__')) {
+    return { ok: false, matches: [], truncated: false, error: `path not found: ${path}` };
+  }
+
   // Prefer ripgrep when available. Probe with `|| true` so a missing binary or a
   // no-match exit code never surfaces as an execShell error in the output.
   const hasRg = execShell('command -v rg || true').stdout.trim().length > 0;

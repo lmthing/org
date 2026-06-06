@@ -29,6 +29,9 @@ export interface HostToolsOpts {
 
 const READ_BYTE_CAP = 256 * 1024;
 const BINARY_SCAN_BYTES = 8192;
+// Default execShell timeout. Generous so first-run `npm install` / `npx <pkg>`
+// (which download on first use) are not killed; callers can override per call.
+const DEFAULT_EXEC_TIMEOUT_MS = 120_000;
 
 /** First token of a shell command, used by the read-only execShell guard. */
 function commandHead(cmd: string): string {
@@ -80,17 +83,26 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
   });
 
   // execShell — synchronous shell execution. Read-only profiles block mutating commands.
-  setGlobal('execShell', (cmd: string) => {
+  // `exitCode` lets the model distinguish failure modes (127 not-found, 126 denied,
+  // 1 generic, etc.); `opts.timeout` overrides the default for slow first-run installs.
+  setGlobal('execShell', (cmd: string, execOpts?: { timeout?: number }) => {
     if (!allowWrite && !isReadOnlyCommand(cmd)) {
-      return { ok: false, stdout: '', stderr: `read-only role: command "${commandHead(cmd)}" is blocked` };
+      return { ok: false, stdout: '', stderr: `read-only role: command "${commandHead(cmd)}" is blocked`, exitCode: 126 };
     }
+    const timeout = execOpts?.timeout ?? DEFAULT_EXEC_TIMEOUT_MS;
     try {
-      const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
-      return { ok: true, stdout: result.toString(), stderr: '' };
+      const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout });
+      return { ok: true, stdout: result.toString(), stderr: '', exitCode: 0 };
     } catch (e: unknown) {
-      const err = e as { message?: string; stdout?: Buffer; stderr?: Buffer };
+      const err = e as { message?: string; stdout?: Buffer; stderr?: Buffer; status?: number | null };
       renderHost.log(`[execShell error] ${err.message ?? String(e)}`);
-      return { ok: false, stdout: err.stdout?.toString() ?? '', stderr: err.stderr?.toString() ?? String(e) };
+      return {
+        ok: false,
+        stdout: err.stdout?.toString() ?? '',
+        stderr: err.stderr?.toString() ?? String(e),
+        // execSync sets `status` to the exit code (null on signal/timeout → 1).
+        exitCode: typeof err.status === 'number' ? err.status : 1,
+      };
     }
   });
 

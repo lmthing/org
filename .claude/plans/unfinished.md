@@ -1,11 +1,15 @@
 # Unfinished Work Tracker
 
 Status: living doc — consolidates everything **not yet implemented** across the
-repo's plans and open issues, as of 2026-06-06 on branch
-`claude/agentic-framework-paper-ideas-CGzXp`.
+repo's plans and open issues. Last updated 2026-06-06 on branch
+`claude/unfinished-livetest-mock-plans-r4hu4`.
 
 Update this file as items land: when an item is done + tested, strike it here and
 (for bugs) delete the `.issues/` file per CLAUDE.md.
+
+**Remaining work:** only the credentialed/real-model live-testing runs and the
+not-yet-scripted live-testing scenarios (item 2). The mock mechanism (1), all 7 bugs
+(3), and the doc drift (4) are done.
 
 ---
 
@@ -53,24 +57,24 @@ not yet scripted.
 - [ ] The above against a **real model** with credentials (the mock covers wiring +
       deterministic logic, not model behavior)
 
-## 3. Open bugs (`.issues/`) — 7 UNFIXED
-Each needs a fix **and** a regression test, then delete the issue file + its entry
-in CLAUDE.md "Known issues".
+## 3. Open bugs (`.issues/`) — ✅ ALL 7 FIXED + TESTED
+Each got a fix **and** a regression test; the `.issues/` files are deleted and the
+directory is now empty.
 
-- [ ] `execshell-30s-timeout` — 30s `execShell` timeout kills first-run
-      `npm install` / `npx`; needs a longer/configurable timeout
-- [ ] `execshell-missing-exitcode` — `execShell` returns no `exitCode`; models
-      expect it to distinguish non-zero codes (also a typecheck error on access)
-- [ ] `fork-regex-line-numbers` — `readFile().content` carries `N\t` line-number
-      prefixes that break line-start regexes in fork analysis
-- [ ] `grep-no-error-on-bad-path` — `grep` on a nonexistent path returns
-      `{ ok: true, matches: [] }`; can't distinguish "missing path" from "no match"
-- [ ] `process-exit-retry-loop` — model uses `process.exit(1)` as control flow;
-      the thrown error is retried, causing an infinite retry loop
-- [ ] `variable-scoping-let-across-statements` — `let` declared without assignment
-      isn't propagated to `globalThis`, so later eval statements can't see it
-- [ ] `webfetch-raw-html` — `webFetch` returns raw HTML; needs text extraction for
-      article/doc/summary use cases
+- [x] `execshell-30s-timeout` — default `execShell` timeout raised to 120s + a
+      per-call `{ timeout }` override (`host-tools.ts`; test in `host-tools.test.ts`)
+- [x] `execshell-missing-exitcode` — `execShell` now returns `exitCode`
+      (0/126/127/…); `library-dts.ts` updated so `.exitCode` type-checks
+- [x] `fork-regex-line-numbers` — fork preamble now tells subagents to use
+      `readFile().raw` for regex/parsing (`fork/roles.ts`)
+- [x] `grep-no-error-on-bad-path` — `grep` probes path existence and returns
+      `{ ok:false, error:"path not found: …" }` (test contrasts it with no-match)
+- [x] `process-exit-retry-loop` — the turn loop detects a `process.exit()` error and
+      stops cleanly instead of retrying (`turn-loop.ts`; test in `turn-loop-yield.test.ts`)
+- [x] `variable-scoping-let-across-statements` — `extractBindingNames` now handles
+      no-initializer declarations (`let parsed;`) so they propagate to `globalThis`
+- [x] `webfetch-raw-html` — `webFetch` extracts readable text by default
+      (`format:'html'` opts out); test covers tag/script/style stripping + entities
 
 ## 4. Doc drift (cheap, no code) — ✅ DONE
 - [x] `.claude/plans/verifier-gated-escalation.md` line 3 + §0 updated: Phase 3 marked
@@ -85,4 +89,6 @@ in CLAUDE.md "Known issues".
   (commit `eed51ab`).
 - Verifier-gated-escalation Phases 1, 2, 4 (budgets, `progress()`, per-role models)
   implemented and unit-tested.
-- All 211 core unit tests pass; `pnpm typecheck` clean.
+- Mock LLM provider + `--mock` CLI flag + keyless `scripts/live-test.sh` (this branch).
+- All 7 `.issues/` bugs fixed + regression-tested; `.issues/` is now empty.
+- 234 unit tests pass; the keyless live-test suite is 14/14 green.

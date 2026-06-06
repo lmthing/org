@@ -185,6 +185,13 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     }
 
     if (turnError && failingStatement) {
+      // process.exit() is intentional termination, not a recoverable error. The model
+      // uses it as control flow (e.g. `if (!ok) process.exit(1)`); retrying re-runs the
+      // exact same code and burns LLM calls in a loop. Treat it as a clean stop.
+      if (/\bprocess\.exit\(/.test(turnError)) {
+        renderHost.log(`[process.exit] intentional termination — not retrying`);
+        return 'done';
+      }
       accumulatedContext = contextSnapshot; // roll back partial-turn context
       renderHost.log(`[error] ${turnError}`);
       history.append({ role: 'user', content: buildErrorBlock(failingStatement, turnError, attempt, maxRetries), blockType: 'error' });

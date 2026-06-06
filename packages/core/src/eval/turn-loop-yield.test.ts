@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createVM, type VM } from '../sandbox/quickjs.js';
 import { injectGlobal } from '../sandbox/host-bridge.js';
+import { injectHostTools } from '../globals/host-tools.js';
 import { runTurnLoop } from './turn-loop.js';
 import { MessageHistory } from '../context/history.js';
+import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamSession, StreamOpts } from './stream-types.js';
 import type { YieldRequest } from './yield.js';
@@ -128,6 +130,39 @@ describe('turn loop — parallel yields (Promise.all of forks)', () => {
 
     expect(readGlobal(vm, 'name')).toBe('Ada');
     expect(readGlobal(vm, 'age')).toBe(36);
+    vm.dispose();
+  });
+});
+
+describe('turn loop — process.exit() is not retried', () => {
+  it('treats process.exit() as a clean stop instead of looping retries', async () => {
+    const vm = await createVM();
+    injectHostTools(vm, { renderHost: silentHost, spaceDir: '/tmp' });
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    let calls = 0;
+    const streamFn = async (): Promise<StreamSession> => {
+      calls++;
+      let aborted = false;
+      async function* gen() { if (!aborted) yield 'process.exit(1);'; }
+      return { textStream: gen(), abort() { aborted = true; } };
+    };
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn,
+      processYield: async () => undefined,
+      maxRetries: 3,
+    });
+
+    expect(result).toBe('done'); // intentional termination, not 'error'
+    expect(calls).toBe(1); // NOT retried 3× on the same process.exit() code
     vm.dispose();
   });
 });
