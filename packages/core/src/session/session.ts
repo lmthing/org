@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { execSync } from 'node:child_process';
 import type { SessionOpts, SessionDeps, RenderHost } from './types.js';
 import type { StreamOpts } from '../eval/stream-types.js';
 import type { YieldRequest } from '../eval/yield.js';
@@ -25,6 +26,7 @@ import { createLoadKnowledgeGlobal } from '../globals/load-knowledge.js';
 import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
+import { createSolveGlobal } from '../globals/solve.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
@@ -349,6 +351,7 @@ export class Session {
     injectGlobal(this.vm.ctx, 'fork', createForkGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
+    injectGlobal(this.vm.ctx, 'solve', createSolveGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
 
     // Shared synchronous host substrate: console, execShell, process.env, fetch,
@@ -447,6 +450,18 @@ export class Session {
       space,
       clock: this.opts.clock,
       getForkEngine: () => this.getForkEngine(),
+      // solve()'s verifyCommand runs host-side with the space dir as cwd, so a
+      // checker (tests / tsc) sees files written by the attempt forks.
+      execCommand: (cmd: string) => {
+        try {
+          const out = execSync(cmd, { cwd: this.opts.spaceDir, maxBuffer: 8 * 1024 * 1024, timeout: 60000 });
+          return { ok: true, output: out.toString() };
+        } catch (e: unknown) {
+          const err = e as { stdout?: Buffer; stderr?: Buffer; message?: string };
+          const output = (err.stdout?.toString() ?? '') + (err.stderr?.toString() ?? '') || (err.message ?? String(e));
+          return { ok: false, output };
+        }
+      },
       runDelegate: async (packageName, agentName, action, delegateOpts) => {
         const { runDelegate } = await import('../delegate/delegate.js');
         const { DelegateRegistry } = await import('../delegate/registry.js');

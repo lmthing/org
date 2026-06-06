@@ -6,6 +6,7 @@ declare function loadKnowledge(...path: string[]): Promise<unknown>;
 declare function sleep(duration: string): Promise<void>;
 declare function tasklist(name: string, seed?: Record<string, unknown>): Promise<unknown>;
 declare function fork<T>(opts: ForkOpts<T>): Promise<T>;
+declare function solve(opts: SolveOpts): Promise<SolveResult>;
 declare function delegate(packageName: string, agentName: string, action: string, opts?: DelegateOpts): Promise<unknown>;
 declare function registerSpace(dir: string): Promise<{ ok: boolean; spaceKey: string; agentSlug: string; error?: string }>;
 
@@ -51,6 +52,37 @@ declare interface ForkOpts<T> {
 declare interface DelegateOpts {
   query?: string;
   context?: unknown;
+}
+
+declare interface SolveOpts {
+  /** What each attempt should produce. */
+  instruction: string;
+  /** Output schema for each attempt fork (field -> type). */
+  output?: Record<string, string>;
+  /** Context variables passed to each attempt. */
+  seed?: Record<string, unknown>;
+  /** Subagent role for each attempt (default 'general'). */
+  role?: 'explore' | 'plan' | 'general';
+  /** Shell command run after each attempt (cwd = space dir); exit 0 = pass,
+   *  output fed back on failure. The real oracle — run tests / a type-check. */
+  verifyCommand?: string;
+  /** Condition-DSL string over the attempt's output object (cheap structural check). */
+  verifyCondition?: string;
+  /** Escalation rungs, climbed only while verify keeps failing. Default ['retry','race3']. */
+  ladder?: Array<'retry' | \`race\${number}\`>;
+  /** Hard cap on total attempts (default 6). The run budget is the real ceiling. */
+  maxAttempts?: number;
+}
+
+declare interface SolveResult {
+  /** The accepted output (or the last attempt's output if none passed verify). */
+  value: unknown;
+  /** 0 if solved first try / no verify; else the 1-based ladder rung reached. */
+  rung: number;
+  /** Total attempts (forks) spawned. */
+  attempts: number;
+  /** Whether the returned value passed verification. */
+  verified: boolean;
 }
 
 // Host-injected globals available in space functions and agent code

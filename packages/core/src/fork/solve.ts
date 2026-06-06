@@ -160,3 +160,79 @@ export async function solve<T>(
   // Ladder exhausted (or budget hit) without passing verify.
   return { value, rung: lastRung, attempts, verified: false };
 }
+
+/**
+ * Options the `solve` global accepts from VM code. Unlike `SolveOpts`, the
+ * `verify` is expressed as serializable specs (a shell command or a
+ * condition-DSL string) because a JS closure cannot cross the QuickJS boundary
+ * to the host that orchestrates the forks.
+ */
+export interface SolveYieldOpts {
+  instruction: string;
+  output?: Record<string, string>;
+  seed?: Record<string, unknown>;
+  role?: 'explore' | 'plan' | 'general';
+  /** Shell command run by the host after each attempt (cwd = space dir). Exit 0
+   *  ⇒ pass; non-zero ⇒ fail, with stdout/stderr fed back as feedback. The real
+   *  oracle for the coding/verifier zone (run tests / a type-check). */
+  verifyCommand?: string;
+  /** Condition-DSL string evaluated over the attempt's output object. Cheap
+   *  structural post-condition (no string methods — see condition-dsl). */
+  verifyCondition?: string;
+  ladder?: SolveRung[];
+  maxAttempts?: number;
+}
+
+export interface SolveYieldDeps {
+  /** Spawn one attempt (e.g. `(t) => forkEngine.fork(t)`). */
+  fork: (task: SolveTask) => Promise<unknown>;
+  /** Run a shell command host-side; ok = exit 0, output = combined stdout/stderr. */
+  execCommand?: (cmd: string) => { ok: boolean; output: string };
+  /** Evaluate a condition-DSL string over an output object. */
+  evaluateCondition?: (expr: string, output: Record<string, unknown>) => boolean;
+}
+
+/**
+ * Host-side resolver for a `solve` yield. Builds a host-executable `verify` from
+ * the serializable spec, then runs the escalation engine over the fork engine.
+ * When neither verify spec is given, the ladder is unreachable (single attempt).
+ */
+export async function runSolveYield(
+  opts: SolveYieldOpts,
+  deps: SolveYieldDeps,
+): Promise<SolveResult<unknown>> {
+  const task: SolveTask = {
+    instruction: opts.instruction,
+    output: opts.output ?? {},
+    ...(opts.seed ? { seed: opts.seed } : {}),
+    ...(opts.role ? { role: opts.role } : {}),
+  };
+
+  let verify: ((out: unknown) => VerifyResult) | undefined;
+  if (opts.verifyCommand) {
+    const cmd = opts.verifyCommand;
+    verify = () => {
+      if (!deps.execCommand) {
+        return { ok: false, feedback: 'verifyCommand is not available in this scope' };
+      }
+      const r = deps.execCommand(cmd);
+      return r.ok ? { ok: true } : { ok: false, feedback: r.output };
+    };
+  } else if (opts.verifyCondition) {
+    const expr = opts.verifyCondition;
+    const evalCond = deps.evaluateCondition;
+    verify = (out: unknown) => {
+      if (!evalCond) return { ok: false, feedback: 'verifyCondition evaluator unavailable' };
+      const record = out && typeof out === 'object' ? (out as Record<string, unknown>) : {};
+      const ok = evalCond(expr, record);
+      return ok ? { ok: true } : { ok: false, feedback: `condition not met: ${expr}` };
+    };
+  }
+
+  return solve<unknown>(deps.fork, {
+    task,
+    verify,
+    ...(opts.ladder ? { ladder: opts.ladder } : {}),
+    ...(opts.maxAttempts !== undefined ? { maxAttempts: opts.maxAttempts } : {}),
+  });
+}

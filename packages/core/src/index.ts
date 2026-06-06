@@ -31,6 +31,7 @@ export type { ForkGlobalOpts } from './globals/fork.js';
 export { createDelegateGlobal } from './globals/delegate.js';
 export type { DelegateOpts } from './globals/delegate.js';
 export { createTasklistGlobal } from './globals/tasklist.js';
+export { createSolveGlobal } from './globals/solve.js';
 export { createRegisterSpaceGlobal } from './globals/register-space.js';
 export type { RegisterSpaceResult } from './globals/register-space.js';
 
@@ -106,8 +107,8 @@ export { ForkEngine } from './fork/fork.js';
 export type { ForkTask } from './fork/fork.js';
 export { normalizeRole, rolePreamble, roleProfile, modelForRole } from './fork/roles.js';
 export type { ForkRole, RoleModelConfig } from './fork/roles.js';
-export { solve } from './fork/solve.js';
-export type { SolveOpts, SolveResult, SolveTask, SolveRung, VerifyResult } from './fork/solve.js';
+export { solve, runSolveYield } from './fork/solve.js';
+export type { SolveOpts, SolveResult, SolveTask, SolveRung, VerifyResult, SolveYieldOpts, SolveYieldDeps } from './fork/solve.js';
 
 // Delegate
 export { DelegateRegistry } from './delegate/registry.js';

@@ -5,8 +5,8 @@ Branch: `claude/agentic-framework-paper-ideas-CGzXp`
 Covers: the four features in `.claude/plans/verifier-gated-escalation.md`
 (budget guardrails, `progress()`, the `solve` escalation engine, per-role models).
 
-Prerequisite status: **P0.1 (CLI budget flags) and P0.2 (model in trace) are DONE**;
-P0.3 (userland `solve` / `fixtures/solver`) remains.
+Prerequisite status: **P0.1, P0.2, and P0.3 are all DONE.** Note: P0.3 shipped as a
+host-orchestrated `solve` *global* (not a space function) — see the correction in §0.3.
 
 Per CLAUDE.md: *"for new runtime features, also drive the built CLI against fixture
 spaces with a real model and inspect the `--trace` NDJSON — unit tests miss
@@ -41,14 +41,22 @@ so per-role model selection is invisible in the trace. Add `model: deps.model` t
 that `tracer.write({...})` call. Then a fork's role model is verifiable by reading
 the `llm_request` events under its `fork:<role>` context.
 
-### P0.3 — A userland `solve` surface  *(required for Phase 3)*
+### P0.3 — A userland `solve` surface  *(required for Phase 3)*  ✅ DONE (as a global)
 The `solve` engine (`fork/solve.ts`) is host-side and fully unit-tested, but a
 `verify` *callback* cannot marshal across the QuickJS boundary, so it has no model-
-facing form yet. Live testing needs a userland implementation. Add the
-`fixtures/solver` space (fully specified in §6) — a small coding agent whose
-`solve` space function runs the ladder over the `fork` global with an in-VM
-`verify` that runs a real checker (`tsc` / a test command). This is also the
-"graduate when reused" userland exposure the implementation plan deferred.
+facing form yet. Live testing needs a userland implementation.
+
+**Correction to the original sketch:** a `solve` *space function* that calls `fork`
+repeatedly **cannot work** — each `await fork()` aborts the turn and the post-await
+code never resumes (the yield model rebinds host-side; the VM continuation does not
+re-run). So, exactly like `tasklist`, `solve` shipped as a **host-orchestrated
+value-yielding global**: `globals/solve.ts` pushes a `solve` yield; `routeCommonYield`
+runs the tested engine over the `ForkEngine` (`fork/solve.ts#runSolveYield`). Because a
+closure can't cross the boundary, `verify` is given as serializable specs:
+`verifyCommand` (a shell check run host-side with the space dir as cwd — exit 0 = pass,
+output = feedback) or `verifyCondition` (a condition-DSL string over the attempt
+output). `solve` is declared in `LIBRARY_DTS` and the runtime preamble. The
+`fixtures/solver` space (§6) demonstrates it with a `tsc` `verifyCommand`.
 
 > Estimated effort: P0.1 ~30 min, P0.2 ~5 min, P0.3 ~1–2 h (mostly the fixture).
 
@@ -175,71 +183,40 @@ This is the centerpiece: the verifier-gated ladder must be exercised against a
 **real oracle**. We add a small coding space whose acceptance check runs a real
 checker, so escalation is driven by genuine pass/fail — not a mock.
 
-### 6.1 New space: `fixtures/solver/`
+### 6.1 The `fixtures/solver/` space (shipped)
+
+`solve` is a built-in global, so the space declares no functions of its own — it only
+demonstrates the pattern. Each attempt is a `general`-role fork that writes its
+candidate to `work/candidate.ts`; the host runs `verifyCommand` (a `tsc` check) and
+feeds failures back into the next attempt.
 
 ```
 fixtures/solver/
-  package.json                     # {"name":"@fixtures/solver","type":"module"}
-  agents/solver/instruct.md        # agent: declares the `solve` + `runChecker` functions
-  functions/
-    solve.ts                       # userland ladder over fork() + in-VM verify
-    runChecker.ts                  # runs the real checker via execShell, returns {ok, feedback}
-  tasks/                           # scratch dir the agent writes candidate code into
+  package.json                     # {"name":"solver-space","version":"1.0.0"}
+  agents/solver/instruct.md        # uses the solve() global with a tsc verifyCommand
+  README.md                        # the live scenarios below, with commands
+  .gitignore                       # work/  (scratch dir attempts write into)
 ```
 
-**`agents/solver/instruct.md`** (frontmatter + body):
-```md
----
-title: Solver
-functions: [solve, runChecker]
----
-You implement a TypeScript function so that a checker passes. Write the candidate
-to `tasks/candidate.ts`, then call `solve(...)` with a `verify` that calls
-`runChecker()`. Resolve with the final code and whether it verified.
-```
-
-**`functions/runChecker.ts`** — the real verifier (no mock):
+The agent's core call (from `instruct.md`):
 ```ts
-// Runs `tsc --noEmit` (or a test command) over the candidate and turns the
-// compiler output into structured verify feedback.
-function runChecker(file: string): { ok: boolean; feedback?: string } {
-  const r = execShell(`npx tsc --noEmit --strict ${file} 2>&1`);
-  return r.ok ? { ok: true } : { ok: false, feedback: r.stdout || r.stderr };
-}
+const r = await solve({
+  instruction:
+    "Implement the function described below and WRITE it to work/candidate.ts " +
+    "with writeFile(...). It must type-check under strict mode.\n\nTASK: <name, signature, behavior>",
+  output: { summary: 'string' },
+  role: 'general',                                  // attempts must be able to write
+  verifyCommand: 'npx tsc --noEmit --strict work/candidate.ts',
+  ladder: ['retry', 'race3'],                        // optional; the default
+  maxAttempts: 6,
+}) as { value: { summary: string }; rung: number; attempts: number; verified: boolean };
+display(`verified=${r.verified} rung=${r.rung} attempts=${r.attempts}`);
 ```
 
-**`functions/solve.ts`** — the userland ladder (mirrors `fork/solve.ts`; the core
-engine's unit tests guarantee the logic, this is the in-VM deployment form):
-```ts
-async function solve(opts: {
-  instruction: string;
-  output: Record<string, string>;
-  verify: (out: any) => { ok: boolean; feedback?: string };
-  ladder?: string[];
-  maxAttempts?: number;
-}): Promise<{ value: any; rung: number; attempts: number; verified: boolean }> {
-  const ladder = opts.ladder ?? ['retry', 'race3'];
-  const maxAttempts = opts.maxAttempts ?? 6;
-  let attempts = 1;
-  let value = await fork({ instruction: opts.instruction, output: opts.output });
-  let check = opts.verify(value);
-  if (check.ok) return { value, rung: 0, attempts, verified: true };
-  for (let i = 0; i < ladder.length && attempts < maxAttempts; i++) {
-    const fb = `${opts.instruction}\n\nPrevious attempt FAILED verification:\n${check.feedback ?? ''}`;
-    if (ladder[i] === 'retry') {
-      value = await fork({ instruction: fb, output: opts.output });
-      attempts++; check = opts.verify(value);
-      if (check.ok) return { value, rung: i + 1, attempts, verified: true };
-    } else {
-      const n = Math.min(3, maxAttempts - attempts);
-      const cands = await Promise.all(Array.from({ length: n }, () => fork({ instruction: fb, output: opts.output })));
-      attempts += n;
-      for (const c of cands) { const r = opts.verify(c); if (r.ok) return { value: c, rung: i + 1, attempts, verified: true }; value = c; check = r; }
-    }
-  }
-  return { value, rung: ladder.length, attempts, verified: false };
-}
-```
+The escalation logic itself lives in the tested `fork/solve.ts` engine
+(`runSolveYield`); `verifyCommand` runs host-side with the space dir as cwd. There is
+no per-space `solve`/`runChecker` function — that earlier sketch was dropped because a
+space function calling `fork` repeatedly can't work under the yield model.
 
 ### 6.2 Scenarios
 

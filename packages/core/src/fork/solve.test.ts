@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { solve, type SolveTask, type VerifyResult } from './solve.js';
+import { solve, runSolveYield, type SolveTask, type VerifyResult } from './solve.js';
+import { evaluateCondition } from '../tasklist/condition-dsl.js';
 
 /**
  * A scripted fork stub: returns the i-th value from `outputs` on each call,
@@ -126,5 +127,75 @@ describe('solve — verifier-gated escalation', () => {
     });
     expect(res.attempts).toBe(2); // 1 initial + min(3, 2-1)=1 race
     expect(calls).toHaveLength(2);
+  });
+});
+
+describe('runSolveYield — host handler (serializable verify specs)', () => {
+  function forkStub(outputs: unknown[]) {
+    const calls: SolveTask[] = [];
+    const fork = async (task: SolveTask): Promise<unknown> => {
+      calls.push(task);
+      return outputs[Math.min(calls.length - 1, outputs.length - 1)];
+    };
+    return { fork, calls };
+  }
+
+  it('verifyCommand: passes on the first attempt → no escalation', async () => {
+    const { fork, calls } = forkStub([{ ok: true }]);
+    const execCommand = () => ({ ok: true, output: '' });
+    const res = await runSolveYield(
+      { instruction: 'impl', output: { ok: 'boolean' }, verifyCommand: 'tsc' },
+      { fork, execCommand },
+    );
+    expect(res).toMatchObject({ rung: 0, attempts: 1, verified: true });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('verifyCommand: fails then passes → retry, with command output as feedback', async () => {
+    const { fork, calls } = forkStub([{ n: 1 }, { n: 2 }]);
+    let n = 0;
+    const execCommand = () => (n++ === 0 ? { ok: false, output: 'TS2345: bad' } : { ok: true, output: '' });
+    const res = await runSolveYield(
+      { instruction: 'impl', verifyCommand: 'npm test' },
+      { fork, execCommand },
+    );
+    expect(res).toMatchObject({ rung: 1, attempts: 2, verified: true });
+    expect(calls[1]!.instruction).toContain('TS2345: bad');
+  });
+
+  it('verifyCondition: evaluated over the attempt output via the DSL', async () => {
+    const { fork } = forkStub([{ score: 0.4 }, { score: 0.9 }]);
+    const res = await runSolveYield(
+      { instruction: 'improve', verifyCondition: 'score >= 0.8' },
+      { fork, evaluateCondition },
+    );
+    expect(res).toMatchObject({ verified: true, rung: 1 });
+    expect((res.value as { score: number }).score).toBe(0.9);
+  });
+
+  it('no verify spec → exactly one attempt', async () => {
+    const { fork, calls } = forkStub([{ a: 1 }]);
+    const res = await runSolveYield({ instruction: 'once' }, { fork });
+    expect(res).toMatchObject({ rung: 0, attempts: 1, verified: false });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('verifyCommand but no execCommand wired → never verifies, no crash', async () => {
+    const { fork } = forkStub([{ a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }, { a: 5 }, { a: 6 }]);
+    const res = await runSolveYield(
+      { instruction: 'x', verifyCommand: 'tsc', maxAttempts: 2 },
+      { fork }, // no execCommand
+    );
+    expect(res.verified).toBe(false);
+    expect(res.attempts).toBe(2);
+  });
+
+  it('defaults output to {} and forwards role/seed onto the attempt task', async () => {
+    const { fork, calls } = forkStub([{ ok: true }]);
+    await runSolveYield(
+      { instruction: 'x', role: 'general', seed: { topic: 't' }, verifyCommand: 'true' },
+      { fork, execCommand: () => ({ ok: true, output: '' }) },
+    );
+    expect(calls[0]).toMatchObject({ output: {}, role: 'general', seed: { topic: 't' } });
   });
 });
