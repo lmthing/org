@@ -114,3 +114,7 @@ export type { SolveOpts, SolveResult, SolveTask, SolveRung, VerifyResult, SolveY
 export { DelegateRegistry } from './delegate/registry.js';
 export { runDelegate } from './delegate/delegate.js';
 export type { RunDelegateOpts } from './delegate/delegate.js';
+
+// Testing — scripted mock provider (run end-to-end with no API keys)
+export { createMockStreamFn, mockScript, mockMatch } from './testing/mock-provider.js';
+export type { MockHandler, MockContext, MockRule } from './testing/mock-provider.js';

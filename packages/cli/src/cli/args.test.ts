@@ -54,3 +54,22 @@ describe('parseArgs — budget flags', () => {
     expect(a.message).toBe('go');
   });
 });
+
+describe('parseArgs — --mock flag', () => {
+  const base = ['--space', 'fixtures/solver'];
+
+  it('parses --mock <path>', () => {
+    const a = parseArgs([...base, '--mock', 'fixtures/solver/mock.mjs', 'go']);
+    expect(a.mock).toBe('fixtures/solver/mock.mjs');
+    expect(a.message).toBe('go');
+  });
+
+  it('leaves mock undefined when not given', () => {
+    const a = parseArgs([...base, 'go']);
+    expect(a.mock).toBeUndefined();
+  });
+
+  it('throws when the path is missing', () => {
+    expect(() => parseArgs([...base, '--mock'])).toThrow(/requires a path/);
+  });
+});

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Load .env from the directory where the script is invoked
 function loadEnv() {
@@ -20,7 +20,8 @@ function loadEnv() {
 }
 loadEnv();
 
-import { Session } from '@repl/core';
+import { Session, createMockStreamFn, mockScript } from '@repl/core';
+import type { StreamOpts, StreamSession, MockHandler } from '@repl/core';
 import { parseArgs, type CliArgs } from './args.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
@@ -105,33 +106,59 @@ function readBudget(args: CliArgs): {
   return Object.keys(budget).length > 0 ? budget : undefined;
 }
 
+/**
+ * Build a scripted `streamFn` from a mock module path (no credentials needed).
+ * The module's default export is a `MockHandler`, or a `string[]` (wrapped in
+ * `mockScript`). ESM `.mjs` so it loads with no transpile step. Resolved relative
+ * to the cwd where the CLI runs.
+ */
+async function loadMockStreamFn(mockPath: string): Promise<(opts: StreamOpts) => Promise<StreamSession>> {
+  const url = pathToFileURL(resolve(process.cwd(), mockPath)).href;
+  const mod = await import(url);
+  const def = mod.default ?? mod.handler;
+  if (def === undefined) {
+    throw new Error(`mock module "${mockPath}" has no default export (expected a MockHandler or string[])`);
+  }
+  if (Array.isArray(def)) return mockScript(def as string[]);
+  if (typeof def !== 'function') {
+    throw new Error(`mock module "${mockPath}" default export must be a function (MockHandler) or string[]`);
+  }
+  return createMockStreamFn(def as MockHandler);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
-  const modelSpec = resolveAlias(args.model ?? process.env['LM_MODEL'] ?? 'M');
-  const model = await resolveModel(modelSpec);
+  // Mock mode: skip resolveModel/createStream entirely so no API key is required.
+  const mockPath = args.mock ?? process.env['LM_MOCK'];
+  let modelSpec: string;
+  let streamFn: (opts: StreamOpts) => Promise<StreamSession>;
 
-  // Resolve per-request model overrides (e.g. a fork's role model) lazily, caching
-  // by spec so each distinct model is constructed once. Falls back to the default.
-  const modelCache = new Map<string, Awaited<ReturnType<typeof resolveModel>>>([[modelSpec, model]]);
-  const getModel = async (spec?: string): Promise<typeof model> => {
-    if (!spec) return model;
-    const resolvedSpec = resolveAlias(spec);
-    const cached = modelCache.get(resolvedSpec);
-    if (cached) return cached;
-    const resolved = await resolveModel(resolvedSpec);
-    modelCache.set(resolvedSpec, resolved);
-    return resolved;
-  };
+  if (mockPath) {
+    modelSpec = `mock:${mockPath}`;
+    streamFn = await loadMockStreamFn(mockPath);
+  } else {
+    modelSpec = resolveAlias(args.model ?? process.env['LM_MODEL'] ?? 'M');
+    const model = await resolveModel(modelSpec);
 
-  const streamFn = async (opts: {
-    system: string;
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-    model?: string;
-  }) => {
-    const { model: modelOverride, ...rest } = opts;
-    return createStream({ model: await getModel(modelOverride), ...rest });
-  };
+    // Resolve per-request model overrides (e.g. a fork's role model) lazily, caching
+    // by spec so each distinct model is constructed once. Falls back to the default.
+    const modelCache = new Map<string, Awaited<ReturnType<typeof resolveModel>>>([[modelSpec, model]]);
+    const getModel = async (spec?: string): Promise<typeof model> => {
+      if (!spec) return model;
+      const resolvedSpec = resolveAlias(spec);
+      const cached = modelCache.get(resolvedSpec);
+      if (cached) return cached;
+      const resolved = await resolveModel(resolvedSpec);
+      modelCache.set(resolvedSpec, resolved);
+      return resolved;
+    };
+
+    streamFn = async (opts: StreamOpts) => {
+      const { model: modelOverride, ...rest } = opts;
+      return createStream({ model: await getModel(modelOverride), ...rest });
+    };
+  }
 
   // Per-role fork models from env: LM_MODEL_ROLE_EXPLORE / _PLAN / _GENERAL.
   const roleModels = readRoleModels();

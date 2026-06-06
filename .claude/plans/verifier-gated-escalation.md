@@ -1,6 +1,6 @@
 # Implementation Plan: Verifier-Gated Escalation & Budget Guardrails
 
-Status: implemented (Phases 1, 2, 4 fully; Phase 3 engine landed, userland exposure deferred)
+Status: implemented (Phases 1, 2, 3, 4 — all shipped)
 Branch: `claude/agentic-framework-paper-ideas-CGzXp`
 Source: ideas distilled from *"Advancing Mathematics Research with AI-Driven Formal
 Proof Search"* (AlphaProof Nexus, DeepMind, arXiv:2605.22763), critiqued against
@@ -28,17 +28,18 @@ core/cli tests pass, incl. the new suites):
   `ForkEngine`; `SessionOpts.roleModels`; CLI `streamFn` resolves per-request
   models (cached) from `LM_MODEL_ROLE_{EXPLORE,PLAN,GENERAL}`. Tests:
   `fork/roles.test.ts` (mapping + a fork passing its role model to `streamFn`).
-- **Phase 3 — `solve` engine: ENGINE LANDED, userland exposure DEFERRED.**
-  `fork/solve.ts` is the full verifier-gated ladder, fully unit-tested via
-  dependency injection (`fork/solve.test.ts`, 10 cases: no-verify no-op,
+- **Phase 3 — `solve` escalation: DONE (shipped as a host-orchestrated global,
+  commit `eed51ab`).** `fork/solve.ts` is the full verifier-gated ladder, unit-tested
+  via dependency injection (`fork/solve.test.ts`, 10 cases: no-verify no-op,
   first-try pass, retry rung, feedback injection, race escalation, exhaustion,
   `maxAttempts` ceiling, custom ladder, async verify, race-width capping).
-  **Deviation from the original Phase 3 (userland-first):** a `verify`
-  *callback* cannot marshal across the QuickJS boundary, so a host-exposed
-  `solve` global can't take an in-VM predicate. The correct userland form is a
-  space function that calls `fork` and an in-VM verify — added when a concrete
-  space needs it (per "graduate when reused"). The tested core engine is the
-  reusable substrate that form will build on.
+  **Resolution of the original userland-first sketch:** a `verify` *callback* cannot
+  marshal across the QuickJS boundary, so — exactly like `tasklist` — `solve` shipped
+  as a value-yielding **global** (`globals/solve.ts` → `routeCommonYield` →
+  `runSolveYield`), not a space function. `verify` is given as serializable specs
+  (`verifyCommand` run host-side, or `verifyCondition` over the output). It is declared
+  in `LIBRARY_DTS` and the runtime preamble; `fixtures/solver` demonstrates it with a
+  `tsc` `verifyCommand`, and `fixtures/solver/mock.mjs` exercises the ladder keyless.
 
 Everything below is the original plan, kept for rationale.
 

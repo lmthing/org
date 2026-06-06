@@ -9,39 +9,49 @@ Update this file as items land: when an item is done + tested, strike it here an
 
 ---
 
-## 1. Mock LLM mechanism — NOT STARTED
-Full design in `.claude/plans/mock-llm.md`. Nothing built yet. Unblocks running the
-live-testing plan **without API keys** (a scripted `streamFn` that emits TypeScript
-instead of calling the AI SDK; sits upstream of the tracer so all trace assertions
-keep working).
+## 1. Mock LLM mechanism — ✅ DONE
+Full design in `.claude/plans/mock-llm.md`. Shipped: a scripted `streamFn` that emits
+TypeScript instead of calling the AI SDK; sits upstream of the tracer so all trace
+assertions keep working. Proven keyless end-to-end (see item 2).
 
-- [ ] `packages/core/src/testing/mock-provider.ts` — `createMockStreamFn`,
-      `mockScript`, `mockMatch`; export from `index.ts`
-- [ ] `packages/core/src/testing/mock-provider.test.ts` — multi-turn, fork-routing,
-      abort
-- [ ] CLI `--mock <file>` flag + `LM_MOCK` env (`args.ts` + `bin.ts`); skips
+- [x] `packages/core/src/testing/mock-provider.ts` — `createMockStreamFn`,
+      `mockScript`, `mockMatch`; exported from `index.ts`
+- [x] `packages/core/src/testing/mock-provider.test.ts` — 10 tests: builders +
+      multi-turn `Session` (continue() + sleep yield) + fork-routing + abort
+- [x] CLI `--mock <file>` flag + `LM_MOCK` env (`args.ts` + `bin.ts`); skips
       `resolveModel` so no credentials are needed; + `args.test.ts` coverage
-- [ ] `fixtures/*/mock.mjs` — scripted mocks for the live-testing scenarios
-      (solver retry/race, engineer budget/progress)
-- [ ] `scripts/live-test.sh` — keyless CI smoke suite (also closes live-testing §9)
-- [ ] Docs: CLAUDE.md `--mock`/`LM_MOCK` note + a skills entry
+- [x] `fixtures/solver/mock.mjs` (3B retry → rung 1), `fixtures/solver/mock-pass.mjs`
+      (3A first-try → rung 0), `fixtures/engineer/mock.mjs` (Phase 1 budget + Phase 2
+      progress)
+- [x] `scripts/live-test.sh` — keyless CI smoke suite (closes live-testing §9); 14/14
+      assertions green
+- [x] Docs: CLAUDE.md `--mock`/`LM_MOCK` note + skills entry in `writing-tests.md`
 
-## 2. Live testing execution — NOT RUN
+## 2. Live testing execution — KEYLESS VARIANT GREEN; credentialed runs still pending
 Plan in `.claude/plans/live-testing.md`. The harness (P0.1/P0.2/P0.3) is done and
-unit-tested, but the **actual model-driven runs** — the entire point of the plan —
-have not been executed. Blocked on live credentials *or* on item 1 (mock) for a
-keyless variant.
+unit-tested. The mock (item 1) now makes the core scenarios runnable **without keys** —
+`scripts/live-test.sh` exercises and asserts them. What remains is the credentialed,
+real-model runs (which catch model-behavior issues the mock cannot) and a few scenarios
+not yet scripted.
 
-- [ ] Phase 1 — budget guardrails (1A episode cap, 1B tool-call cap, fork-depth,
-      wallclock) against `fixtures/engineer`
-- [ ] Phase 2 — `progress()` global
-- [ ] Phase 3 — `solve` escalation (3A first-try pass, 3B one-retry → `rung:1`,
-      3C escalate-to-race) against `fixtures/solver`
-- [ ] Phase 4 — per-role models visible in the `llm_request` trace
+- [x] Phase 1 — 1A episode cap & 1B tool-call cap fire with a clean non-zero exit
+      (`fixtures/engineer/mock.mjs`, asserted in `scripts/live-test.sh`)
+- [ ] Phase 1 — 1C fork-depth, 1D wall-clock, 1E within-budget no-op, 1F/1G robustness
+- [x] Phase 2 — `progress()` reads live counters (2A)
+- [ ] Phase 2 — 2B counts climb / 2C read-only / 2D inside-fork
+- [x] Phase 3 — 3A first-try pass (`mock-pass.mjs`) & 3B one-retry → `rung:1` with
+      feedback carried (`mock.mjs`)
+- [ ] Phase 3 — 3C escalate-to-race, 3D no-verify single shot, 3E exhaustion, 3F budget
+      interaction (note: with `--max-fork-depth 0`, a fork-depth `BudgetExceededError`
+      inside `solve` is currently **swallowed** — the yield resolves `undefined` instead
+      of aborting the session. Worth a `.issues/` entry + fix.)
+- [ ] Phase 4 — per-role models visible in the `llm_request` trace (P0.2 records the
+      model; needs a mock/credentialed run that sets `LM_MODEL_ROLE_*` and asserts)
 - [ ] §6.3 — reward-hacking / integrity regression
 - [ ] §7 — fill the results table (or sibling `live-testing-results-<date>.md`);
       keep raw `--trace` NDJSON for any failure
-- [ ] File any divergence as a new `.issues/` entry
+- [ ] The above against a **real model** with credentials (the mock covers wiring +
+      deterministic logic, not model behavior)
 
 ## 3. Open bugs (`.issues/`) — 7 UNFIXED
 Each needs a fix **and** a regression test, then delete the issue file + its entry
@@ -62,10 +72,9 @@ in CLAUDE.md "Known issues".
 - [ ] `webfetch-raw-html` — `webFetch` returns raw HTML; needs text extraction for
       article/doc/summary use cases
 
-## 4. Doc drift (cheap, no code) — TODO
-- [ ] `.claude/plans/verifier-gated-escalation.md` line 3 + §0 still say Phase 3
-      "userland exposure DEFERRED". It shipped in commit `eed51ab` as the `solve`
-      global — update the status to DONE so the plan reflects reality.
+## 4. Doc drift (cheap, no code) — ✅ DONE
+- [x] `.claude/plans/verifier-gated-escalation.md` line 3 + §0 updated: Phase 3 marked
+      DONE (shipped in commit `eed51ab` as the host-orchestrated `solve` global).
 
 ---
 

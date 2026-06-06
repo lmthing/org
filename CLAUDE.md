@@ -29,7 +29,20 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl         # in
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # interactive multi-turn (agent/automated)
 node packages/cli/dist/cli/bin.js --space ./fixtures/engineer --claude "grep for TODO and list the files"  # coding agent (system spaces)
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --no-system-spaces "..."  # disable the always-on toolkit
+node packages/cli/dist/cli/bin.js --space ./fixtures/solver --claude --mock ./fixtures/solver/mock.mjs "implement add"  # keyless run (scripted mock)
 ```
+
+### Testing without API keys (`--mock` / `LM_MOCK`)
+
+`--mock <file>` (or `LM_MOCK=<file>`) replaces the live AI SDK with a scripted
+`streamFn`, so the whole runtime — including forks/delegates/`solve` — runs with **no
+credentials**. The mock file is plain ESM (`.mjs`); its default export is a
+`MockHandler` (or a `string[]`, wrapped in `mockScript`) that returns the TypeScript the
+"model" should emit for each turn. The builders live in
+`packages/core/src/testing/mock-provider.ts` (`createMockStreamFn`, `mockScript`,
+`mockMatch`). Because the mock sits upstream of the tracer, every `--trace` assertion
+works unchanged. See `fixtures/{solver,engineer}/mock.mjs` for worked examples and
+`scripts/live-test.sh` for the keyless smoke suite.
 
 ### REPL mode (`--repl`)
 
