@@ -1,0 +1,11 @@
+# Japanese Sauce Techniques
+
+Japanese sauce techniques center on building umami through layered, fermented, and reduced ingredients. Key sauce families include: (1) Tare — a concentrated dipping or finishing sauce, often soy-based, used for ramen, yakitori, and nabemono; (2) Dashi — a foundational broth made from kombu (kelp) and katsuobushi (dried bonito flakes), serving as the base for miso soup, simmered dishes, and sauces; (3) Ponzu — a citrus-soy sauce combining soy sauce with yuzu or sudachi juice, mirin, and dashi; (4) Tsuyu — a multipurpose soup base and dipping sauce blending dashi, soy sauce, and mirin.
+
+Core technique steps: (1) Cold extraction of kombu in water (30 min to overnight) to release glutamates without bitterness; (2) Gentle heating to just below a boil (around 80°C/176°F), then removing kombu; (3) Adding katsuobushi off heat, steeping 2-3 minutes, then straining through a fine mesh or cheesecloth — never squeezing, which releases bitter compounds; (4) For tare, combining soy sauce, mirin, sake, and sugar, then simmering to reduce and concentrate flavors; (5) Balancing the five tastes: salt (soy), sweet (mirin/sugar), sour (vinegar/citrus), bitter (charred elements), and umami (kombu/bonito).
+
+Essential ingredients: kombu (dried kelp), katsuobushi (dried bonito flakes), usukuchi (light) and koikuchi (dark) soy sauce, mirin (sweet cooking rice wine), sake, rice vinegar, and sometimes niboshi (dried sardines) or shiitake for vegetarian dashi.
+
+Representative recipe — Classic Tare for Ramen (yields ~2 cups): Combine 1 cup soy sauce, 1/2 cup mirin, 1/4 cup sake, 2 tbsp sugar, 2 crushed garlic cloves, 1 slice ginger, and 1 piece kombu (4-inch square). Bring to a gentle simmer, reduce heat to low, and cook 15-20 minutes until slightly thickened. Remove from heat, discard solids, and cool. This concentrated tare is used at roughly 2-3 tablespoons per bowl of ramen, diluted with hot dashi or broth.
+
+Sources: https://japanese-kitchen-brothers.com/ja/blogs/useful-tips/the-complete-guide-dashi-tsuyu-tare-and-kaeshi-whats-the-difference-mastering-the-basics-of-authentic-japanese-cuisine, https://spendingtimeinmykitchen.com/a-great-savory-japanese-tare-sauce-and-stir-fry, https://norecipes.com/how-to-make-dashi

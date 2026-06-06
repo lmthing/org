@@ -1,0 +1,115 @@
+import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { loadSpace } from './load.js';
+import type { Space, AgentDef } from './load.js';
+
+/**
+ * System spaces are always-loaded baseline capability spaces (fs, web, memory,
+ * todo, agents). Their functions/components/knowledge/agents are merged into
+ * every user space so that file editing, search, web, memory, todos and the
+ * explore/plan subagents are universally available — without the user space
+ * having to declare them.
+ *
+ * Capabilities live in spaces, not in ad-hoc core globals (the runtime stays a
+ * thin substrate). The host primitives those functions wrap (readFileRaw,
+ * writeFileRaw, execShell, fetch) are injected separately by host-tools.ts.
+ */
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** The bundled system spaces shipped with @repl/core. */
+export const SYSTEM_SPACE_NAMES = ['fs', 'web', 'memory', 'todo', 'agents'] as const;
+
+/**
+ * Resolve the directory holding the bundled system spaces. At runtime this file
+ * lives in dist/, so we walk up to the package root and into system-spaces/.
+ * Overridable via LM_SYSTEM_SPACES (csv of dirs) handled by the caller.
+ */
+export function defaultSystemSpaceDirs(): string[] {
+  // dist/chunk-*.js or dist/index.js → package root is one level up from dist/.
+  const pkgRoot = resolve(__dirname, '..');
+  const base = join(pkgRoot, 'system-spaces');
+  return SYSTEM_SPACE_NAMES.map((n) => join(base, n));
+}
+
+/** Load each system space directory (tolerating function-only spaces with no agents/). */
+export async function loadSystemSpaces(dirs: string[]): Promise<Space[]> {
+  const spaces: Space[] = [];
+  for (const dir of dirs) {
+    try {
+      spaces.push(await loadSpace(dir, { requireAgents: false }));
+    } catch {
+      // A missing/invalid system space dir should not break the session.
+    }
+  }
+  return spaces;
+}
+
+/** Names of all functions provided by the given system spaces. */
+export function systemFunctionNames(systemSpaces: Space[]): Set<string> {
+  const names = new Set<string>();
+  for (const s of systemSpaces) {
+    for (const n of Object.keys(s.functions)) names.add(n);
+  }
+  return names;
+}
+
+/** The TS source of every system function (used for the typecheck overlay). */
+export function systemFunctionSources(systemSpaces: Space[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const s of systemSpaces) {
+    for (const [name, src] of Object.entries(s.functions)) out[name] = src;
+  }
+  return out;
+}
+
+/** The bundled JS of every system function (when a system space had node_modules). */
+export function systemFunctionsBundled(systemSpaces: Space[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const s of systemSpaces) {
+    for (const [name, src] of Object.entries(s.functionsBundled)) out[name] = src;
+  }
+  return out;
+}
+
+/**
+ * Merge system spaces into a user space. The user space wins on every name
+ * collision (so a space can override a system tool). Returns a NEW Space; the
+ * inputs are not mutated.
+ */
+export function mergeSystemInto(userSpace: Space, systemSpaces: Space[]): Space {
+  const functions: Record<string, string> = {};
+  const functionsBundled: Record<string, string> = {};
+  const view: Record<string, string> = {};
+  const form: Record<string, { web: string; ink: string }> = {};
+  const agents: Record<string, AgentDef> = {};
+  const knowledgeDomains = { ...userSpace.knowledge.domains };
+
+  // System first (lower priority)…
+  for (const s of systemSpaces) {
+    Object.assign(functions, s.functions);
+    Object.assign(functionsBundled, s.functionsBundled);
+    Object.assign(view, s.components.view);
+    Object.assign(form, s.components.form);
+    Object.assign(agents, s.agents);
+    for (const [slug, domain] of Object.entries(s.knowledge.domains)) {
+      if (!(slug in knowledgeDomains)) knowledgeDomains[slug] = domain;
+    }
+  }
+
+  // …user space overlays (higher priority).
+  Object.assign(functions, userSpace.functions);
+  Object.assign(functionsBundled, userSpace.functionsBundled);
+  Object.assign(view, userSpace.components.view);
+  Object.assign(form, userSpace.components.form);
+  Object.assign(agents, userSpace.agents);
+
+  return {
+    ...userSpace,
+    functions,
+    functionsBundled,
+    agents,
+    components: { view, form },
+    knowledge: { domains: knowledgeDomains },
+  };
+}

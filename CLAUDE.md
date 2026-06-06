@@ -1,263 +1,234 @@
-# CLAUDE.md — sdk/org
+# LMThing — Developer Guide
 
-This is a **git submodule** (`lmthing/org`) containing the open-source packages that power the LMThing agent runtime. It is a self-contained pnpm monorepo.
+LLM agent runtime where models drive programs by writing TypeScript. The model streams TS statements; the host evaluates them one at a time in a QuickJS WASM sandbox. Value-yielding calls (`ask`, `sleep`, `tasklist`, `fork`, `delegate`, `inspect`, `loadKnowledge`, `registerSpace`) abort the stream, hand control to the host, and resume the next turn with resolved values injected as a VARIABLES block.
 
----
+## Workspace
+
+```bash
+pnpm install          # install from lockfile
+pnpm build            # build all packages → dist/
+pnpm typecheck        # tsc --noEmit across all packages (strict)
+pnpm test             # vitest run (co-located tests)
+pnpm dev              # watch + rebuild all packages in parallel
+```
+
+Single-package commands (faster during active work):
+```bash
+pnpm --filter @repl/core build
+pnpm --filter @repl/cli build
+pnpm --filter @repl/core test
+```
+
+Run the CLI against a fixture space:
+```bash
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --agent chef "make pasta"
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000     # browser mode
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --trace /tmp/trace.jsonl "make pasta"
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl         # interactive multi-turn (human)
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # interactive multi-turn (agent/automated)
+node packages/cli/dist/cli/bin.js --space ./fixtures/engineer --claude "grep for TODO and list the files"  # coding agent (system spaces)
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --no-system-spaces "..."  # disable the always-on toolkit
+```
+
+### REPL mode (`--repl`)
+
+Starts a persistent session. Each message typed at `>` runs `session.start()` for the first turn, then `session.continue()` for subsequent turns — the VM, scope, and message history are preserved across turns.
+
+Type `exit` or press Ctrl+C to quit.
+
+A first message can be supplied as a positional argument to skip the initial prompt:
+```bash
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl "make pasta"
+```
+
+### `--claude` flag
+
+Switches `InkRenderHost.ask()` from Ink's `TextInput` widget to a plain stdout/stdin approach. Use this when the CLI is driven programmatically (Claude Code, scripts, tmux automation) where raw-mode PTY assumptions don't hold. Without `--claude`, ask() renders an interactive Ink form for human use.
 
 ## Packages
 
-| Package | Name | Purpose |
-|---------|------|---------|
-| `llm-repl/` | `@lmthing/llm-repl` | Core runtime: QuickJS sandbox, 11 capability layers (L0–L10), session assembly, context reconstruction |
-| `llm-repl-cli/` | `@lmthing/llm-repl-cli` | CLI binary (`llm-repl`), orchestration router, providers, Ink/web renderers, RPC server |
-| `repl/` | `@lmthing/repl` | **Legacy** — kept running until parity; deleted in Phase 13 cutover |
-| `cli/` | `lmthing` | **Legacy** — kept running until parity; deleted in Phase 13 cutover |
-| `ui/` | `@lmthing/thing-ui` | React components for the web view render surface (consumed by `cli` via path alias) |
+| Package | Entry | Purpose |
+|---------|-------|---------|
+| `@repl/core` | `packages/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
+| `@repl/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring. |
+| `@repl/ui` | `packages/ui/src/index.ts` | React web surface + `useReplSession` hook. |
 
-`llm-repl` is the standalone core runtime (no CLI, no renderer) — embeddable in a browser app. `llm-repl-cli` bundles it inline at build time along with the Ink terminal renderer and WebSocket server.
+`@repl/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
 
----
-
-## Architecture
-
-The runtime is a **QuickJS WASM sandbox** executing TypeScript. An LLM streams tokens; each statement is type-checked by `tsc` strict before evaluation. Every `inspect()` call commits state to git and reconstructs the LLM context. The host router selects the model/role on each `post_inspect` event.
+## Directory Map
 
 ```
-sdk/org/
-├── llm-repl/                  — Core runtime (no CLI, no renderer)
-│   src/
-│   ├── lib/                   ← One directory per capability layer
-│   │   ├── sandbox/           — L0: QuickJS isolate, boundary detector, capture rule, file blocks, trace.jsonl
-│   │   ├── typecheck/         — L1: tsc strict, type inference, 3-retry loop, speculative execution
-│   │   ├── inspect/           — L2: inspect(), budget tracking, context reconstruction
-│   │   ├── checkpoint/        — L3: checkpoint(), rollback(), auto-settle
-│   │   ├── fork/              — L4: fork(), resolve(), fork-scoped display slots
-│   │   ├── memory/            — L5: pin(), compact(), expand(), auto-compact
-│   │   ├── tasklist/          — L6: tasklist(), DAG enforcement, __tasks section
-│   │   ├── io/                — L7: fetch() allowlist, fs.*, require()
-│   │   ├── render/            — L8: display(), ask(), JSX descriptor tree, submit bridge
-│   │   ├── snapshot/          — L9: base snapshots, scope re-seeding across sessions
-│   │   └── spaces/            — L10: Space class, .d.ts overlay, knowledge preload
-│   ├── session/               — Session assembly: git repo, scope.json, heap.bin, meta.json
-│   ├── context/               — Context reconstruction, scope serializer, knowledge decay
-│   ├── hooks/                 — Hook registry, executor, pattern matcher
-│   ├── knowledge/             — Domain/field/option tree, decay tiers, loadKnowledge()
-│   ├── security/              — JSX sanitizer
-│   └── index.ts               — Assembles lib modules into a Session
-└── llm-repl-cli/              — CLI binary + browser server
-    src/
-    ├── providers/             — Vercel AI SDK v6, provider:modelId resolution, model alias env vars
-    ├── router/                — Orchestration router (ANALYZER + 13 routing rules)
-    ├── cli/                   — Arg parsing, agent loop, TypeScript export classifier
-    ├── rpc/                   — WebSocket server, RPC client, session event stream
-    └── index.ts
+packages/core/src/
+  sandbox/     quickjs.ts host-bridge.ts boundary.ts jsx-runtime.ts trace.ts  ← VM + marshalling + tracing
+  eval/        turn-loop.ts yield.ts error-rewind.ts stream-types.ts           ← the execution engine
+  typecheck/   tsc.ts library-dts.ts overlay.ts overlay-dts.ts transpile.ts
+  globals/     ask.ts sleep.ts display.ts inspect.ts fork.ts delegate.ts tasklist.ts load-knowledge.ts register-space.ts serialize.ts host-tools.ts  ← host-tools = shared sync substrate (execShell/fetch/readFileRaw/writeFileRaw…)
+  spaces/      load.ts frontmatter.ts agent.ts components.ts knowledge.ts tasklist-load.ts system.ts  ← system.ts = system-space loader + merge
+  tasklist/    dag.ts orchestrator.ts condition-dsl.ts schema.ts
+  fork/        fork.ts roles.ts                                                 ← roles.ts = explore/plan/general capability profiles + preambles
+  delegate/    delegate.ts registry.ts
+  context/     history.ts system-block.ts variables.ts summarize.ts             ← summarize wired into session.continue()
+  session/     session.ts snapshot.ts types.ts
+
+packages/core/system-spaces/                                                    ← always-loaded baseline spaces (NOT under src/; read at runtime)
+  fs/functions/      readFile writeFile editFile glob grep listDir
+  web/functions/     webSearch webFetch
+  memory/functions/  remember recall recallAll forget
+  todo/functions/    todoWrite todoRead
+
+packages/cli/src/
+  providers/   resolve.ts aliases.ts
+  stream/      stream.ts
+  render/      ink-renderer.tsx html-to-terminal.ts
+  rpc/         server.ts events.ts
+  web/         serve.ts                                                          ← esbuild bundle + HTTP+WS server
+  cli/         bin.ts args.ts
+
+packages/ui/src/
+  client/      rpc-client.ts useReplSession.ts
+  components/  DisplayBlock.tsx AskBlock.tsx VariablesBlock.tsx
 ```
 
-Each `lib/{name}/` directory is self-contained: implementation, unit tests, and an `eval/` subdirectory with a real LLM interaction dataset (`dataset.jsonl`), a grader (`grade.ts`), and per-alias prompt variants (`xs.md`, `s.md`, `m.md`, `m_r.md`, `l.md`, `l_r.md`).
+## Key Invariants
 
----
+- Each `evalStatement(code)` call is an isolated ES module. Variables do not persist between evals — the turn loop appends `try { globalThis['x'] = x; } catch {}` after each statement so the next module can read them as globals. All declared variables (including `undefined` values) are propagated this way.
+- **Yield-result binding is host-side, not via the module continuation.** A statement that yields (`const x = await ask()`, `const [a,b] = await Promise.all([fork(),fork()])`) does NOT re-run its post-`await` code in this sync eval model. The turn loop resolves each pending yield, then maps the resolved value(s) onto the bound names using `extractBindingPattern` (simple ← the value; array ← positional, so parallel `Promise.all` results land in order; object ← by key) and `vm.setVar`s them. Do not assume the QuickJS continuation binds variables.
+- `accumulatedContext` in the turn loop persists across yield continuations (variables stay in typecheck scope). Only error retries start fresh.
+- **System spaces are always merged into every space.** `Session` calls `mergeSystemInto` (`spaces/system.ts`) after `loadSpace`; system functions are injected universally (bypassing the per-agent `functions:` filter), and the same set flows to forks **and delegates** (via `RunDelegateOpts.systemSpaces`). The user space wins on name collisions.
+- **Fork VMs have `loadKnowledge`** injected alongside `ask`, `inspect`, `sleep`, and `display`. Tasks inside a tasklist fork can call `await loadKnowledge(...)`. The fork's `processYield` explicitly handles `loadKnowledge` by calling `loadKnowledgeFile` directly — without this, `undefined` would win the race against the async file read and bind `k = undefined` in the VM.
+- **`registerSpace(dir)` loads a space at runtime** into a `dynamicSpaces` map on `Session`. Subsequent `delegate()` calls can reach the newly registered space immediately — no session restart needed. Re-registering the same dir overwrites the prior entry (used for idempotent re-scaffolding).
+- **Delegate auto-captures tasklist result.** When a delegate agent calls `tasklist(name)` where `name === actionDef.tasklist`, the result is automatically set as `capturedResult` even without an explicit `currentTask.resolve()` call. This prevents silent null returns when the model forgets to call resolve after the tasklist.
+- **Delegate user message guides tasklist use.** When the action has a `tasklist` field, the delegate user message includes an explicit hint: `Implement this action by calling tasklist("name", context)`. This prevents the model from writing direct code that bypasses the orchestration and leaves the result uncaptured.
+- JSX in model output is transpiled to `React.createElement(...)` via `transpileStatement()` before VM eval. A React shim and component stubs are injected at session start.
+- Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
+- The QuickJS VM uses sync `evalCode` + manual `executePendingJobs` loop — NOT `evalCodeAsync`, which deadlocks when awaiting user input.
+- `.env` is loaded from `process.cwd()` only (where the script is run, not the package dir).
+- `Tracer` writes NDJSON to `--trace <file>` (each event is a JSON line). Pass `NULL_TRACER` to disable. The tracer is threaded through session → fork → delegate.
 
-## Workspace Config
-
-```
-sdk/org/
-├── llm-repl/
-├── llm-repl-cli/
-├── spaces/        (runtime directories, not packages — loaded via --space flag)
-│   └── research/  — deep_research flow (3 steps, 8-node DAG)
-├── cli/           (legacy)
-├── repl/          (legacy)
-├── ui/            (legacy, consumed via path alias)
-└── pnpm-workspace.yaml   # declares: cli, repl, llm-repl, llm-repl-cli
-```
-
----
-
-## Build
-
-Both new packages build with **tsup**.
+## Environment
 
 ```bash
-# From sdk/org/llm-repl/
-pnpm build          # tsup → dist/index.js + .d.ts
-pnpm eval           # run layer eval suite (--lib <layer> --model <ALIAS>)
+# .env at repo root (or wherever you run the CLI from)
+AZURE_API_KEY=...
+AZURE_RESOURCE_NAME=...
 
-# From sdk/org/llm-repl-cli/
-pnpm build          # tsup → dist/index.js + dist/bin.js
-pnpm fetch-prices   # download latest Azure retail prices → prices.json
+# Model aliases — LM_MODEL_<ALIAS>
+LM_MODEL_M=azure:DeepSeek-V4-Flash
+LM_MODEL_L=azure:DeepSeek-V4-Pro
+
+# Default model when --model omitted
+LM_MODEL=M
 ```
 
-**Build outputs:**
+Provider support: `azure`, `anthropic`, `openai`, `google`, `mistral`. Format: `provider:modelId`.
 
-| Package | Entry | Output |
-|---------|-------|--------|
-| `llm-repl` | `src/index.ts` | `dist/index.js` + `.d.ts` |
-| `llm-repl-cli` | `src/index.ts` | `dist/index.js` + `.d.ts` |
-| `llm-repl-cli` | `src/cli/bin.ts` | `dist/bin.js` (executable: `llm-repl`) |
+## Session API
 
-Always build `llm-repl` before `llm-repl-cli` when making changes to both.
+`Session` in `packages/core/src/session/session.ts`:
 
-**Legacy packages** (`repl/`, `cli/`) still build independently — do not modify them until Phase 13 cutover.
+- `session.start(message)` — loads the space, creates the VM, injects globals, runs the turn loop from a fresh user message.
+- `session.continue(message)` — appends a new user message to the existing history and re-runs the turn loop on the same VM and scope. Throws if called before `start()`. Used by `--repl` mode. Auto-summarizes history when it exceeds `maxHistoryTurns*2` messages.
+- `session.dispose()` — tears down the QuickJS VM.
 
----
+`SessionOpts` additions: `systemSpaceDirs?` (override/disable the always-on spaces) and `maxHistoryTurns?` (history-summarization threshold).
 
-## Testing
+`registerSpace(dir)` is a value-yielding global (`globals/register-space.ts`) that calls `loadSpace(dir)` and inserts the result into `Session.dynamicSpaces`. Returns `{ ok, spaceKey, agentSlug, error? }`. The `spaceKey` is the dir path and is passed as the first arg to `delegate()`. The `dynamicSpaces` map is a shared mutable reference — a `registerSpace` call inside a fork is visible to subsequent `delegate()` calls in the parent session.
 
-```bash
-pnpm test           # run all tests across all packages
-pnpm test:watch     # watch mode
-pnpm typecheck      # tsc --noEmit
-```
+## Known issues
 
-Test framework: **Vitest**. Each `lib/<layer>/` has a co-located `<layer>.test.ts`. The eval runner is at `llm-repl/scripts/eval.ts`.
+See `.issues/` for open bug reports. When all issues are resolved this section will be empty.
 
-### Playwright E2E Tests (`llm-repl-cli/tests/playwright/`)
+## Fixtures
 
-```bash
-# From sdk/org/llm-repl-cli/
-pnpm test:e2e             # chromium only, no LLM API required (119 tests)
-pnpm test:e2e:judge       # includes LLM-as-judge visual tests (needs ANTHROPIC_API_KEY)
-```
+Reference spaces for end-to-end testing:
 
-Two Playwright projects (v1.56.1):
-- **`chrome`** — 119 tests, fast, no external dependencies; uses `page.routeWebSocket` for WS interception
-- **`llm-judge`** — 12 visual tests graded by Claude; skipped automatically if `ANTHROPIC_API_KEY` is not set
+- `fixtures/cooking/` — chef agent with form components, view components, space functions, tasklist DAG
+- `fixtures/sommelier/` — pairing agent with delegation target
+- `fixtures/research/` — research analyst with simulated web search functions
+- `fixtures/deep_research/` — deep research with real Tavily API (requires `TAVILY_API_KEY`)
+- `fixtures/browser_use/` — browser agent using chromium headless + Google search
+- `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering
+- `fixtures/engineer/` — flagship coding agent: uses the system spaces (fs/web/memory/todo) + fork roles, declares no tools of its own
+- `fixtures/architect/` — meta-agent that synthesizes, scaffolds, registers, and delegates to NEW agents at runtime; functions: `scaffoldSpace`, `validateSpace`, `listScaffoldedSpaces`; demonstrates the `registerSpace` → `delegate` pattern
+- `fixtures/sauce_master/` — global sauce technique specialist synthesized by the architect; knowledge files for 10 world cuisines; action: `recommend_sauce`
+- `fixtures/cursor_ci/` — competitive intelligence analyst synthesized by the architect; knowledge files for 5 AI code editors (Cursor, Copilot, Windsurf, Aider, Codeium); action: `analyze`
 
-Key fixtures and helpers:
+See `@.claude/arch/spaces.md` for space file layout.
 
-| Path | Export | Purpose |
-|------|--------|---------|
-| `tests/helpers/events.ts` | WS event factories | Build typed WebSocket event objects for mock responses |
-| `tests/fixtures/ws-mock.ts` | `WsMock` | WebSocket mock — intercepts `routeWebSocket`, queues server-push events |
-| `tests/fixtures/chat-page.ts` | `ChatPage` | Page Object Model for the chat UI |
-| `tests/fixtures/llm-judge.ts` | `LLMJudge` | Anthropic-backed judge for visual/content assertions |
-| `tests/fixtures/index.ts` | `test` | Combined Playwright test base with all fixtures merged |
-| `tests/helpers/mock-llm.ts` | `MockLLM` | Unit-test helper — wraps AI SDK `MockLanguageModelV3`; inject via `model` option on `ChatSessionOptions` / `SpaceChatServerOptions` to run `SpaceChatSession` without real API calls |
+## System Spaces
 
-**Eval model aliases** (resolved from env vars `LM_MODEL_<ALIAS>`):
+Capabilities are **spaces**, not ad-hoc core globals. A set of baseline "system spaces" is **always loaded and merged into every user space** (and into forks/delegates), so every agent gets a coding toolkit for free. The user space wins on any name collision.
 
-| Alias | Class |
-|-------|-------|
-| `XS` | Classification / boolean decisions |
-| `S`  | Fast code gen, short sessions |
-| `M`  | Multi-step code, task graphs |
-| `M_R` | M + reasoning |
-| `L`  | Full spec coverage, long sessions |
-| `L_R` | L + reasoning |
+- Located in `packages/core/system-spaces/{fs,web,memory,todo}/` (resolved relative to the built core; `agents/` is reserved).
+- `fs` — `readFile`, `writeFile`, `editFile`, `glob`, `grep`, `listDir`
+- `web` — `webSearch` (Tavily, needs `TAVILY_API_KEY`), `webFetch`
+- `memory` — `remember`, `recall`, `recallAll`, `forget` (durable JSON store at `<spaceDir>/.lmthing/memory.json`)
+- `todo` — `todoWrite`, `todoRead` (renders a checklist via `display()`, persists to `.lmthing/todos.json`)
 
----
+Loader/merge: `packages/core/src/spaces/system.ts` (`loadSystemSpaces`, `mergeSystemInto`). System functions are injected universally (bypassing the per-agent `functions:` filter). The system prompt lists them under a concise `# Built-in Tools` section (signature + doc, not full source). Configure via `SessionOpts.systemSpaceDirs`, CLI `--system-spaces`/`--no-system-spaces`, or env `LM_SYSTEM_SPACES`.
 
-## Key Entry Points
+## Fork roles (subagents)
 
-| Entry | File | Use |
-|-------|------|-----|
-| `createSandboxSession()` | `llm-repl/src/lib/sandbox/quickjs.ts` | Boot a QuickJS isolate for a session |
-| `inspect()` | `llm-repl/src/lib/inspect/index.ts` | Yield primitive: abort stream → git commit → context reconstruct |
-| `Session` (assembly) | `llm-repl/src/session/assembly.ts` | Assembles git repo, scope.json, heap.bin, meta.json |
-| `reconstruction` | `llm-repl/src/context/reconstruction.ts` | Priority-ordered context sections → single `role: "user"` message |
-| `Space` | `llm-repl/src/lib/spaces/index.ts` | L10 — Space class, .d.ts overlay, class deletion cascade |
-| Router | `llm-repl-cli/src/router/router.ts` | ANALYZER + 13 routing rules, fires at `new_message` / `post_inspect` |
-| `BudgetTracker` | `llm-repl/src/lib/inspect/budget.ts` | Token + dollar cost tracking per session; accepts `ModelPricing` |
-| `loadModelPricing()` | `llm-repl-cli/src/session/session.ts` | Loads per-model prices from `prices.json` at session start |
+`fork({ role, instruction, output })` spawns an isolated subagent VM — the parent sees only what it resolves (a context firewall). Roles (`packages/core/src/fork/roles.ts`):
 
----
+- `explore` / `plan` — **read-only**: `writeFileRaw`/`editFile` and mutating shell commands are withheld at injection (via the host-tools capability profile), not merely discouraged.
+- `general` (default) — full toolkit.
 
-## Model Orchestration (Router)
+Plan mode is just `fork({ role: 'plan' })` + an `ask()` approval gate. Run subagents in parallel with `Promise.all([...])` (bounded by `maxConcurrentForks`).
 
-The router in `llm-repl-cli/src/router/` fires at two points:
+## Host-injected VM Globals
 
-1. **`new_message`** — always runs `ANALYZER` (XS, single-turn) to classify difficulty, then selects a planner role
-2. **`post_inspect`** — first-match routing rules select the executor role; may escalate to `RECOVERY`
+Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has these host-injected globals available to space functions. They are the thin substrate the system spaces build on (single source of truth: `packages/core/src/globals/host-tools.ts`, used by both the session VM and fork VMs):
 
-Routing decisions are logged to `trace.jsonl` as `router_decision` events and never injected into the executor context. Context flags (`budget_warning`, `heap_warning`, `recovery_context`) inject specific blocks into context reconstruction.
+- `process.env` — Node.js environment variables (read-only shim); includes `LMTHING_SPACE_DIR` for state stores
+- `fetch(url, opts?)` — Synchronous HTTP using curl under the hood; returns `{ ok, status, text(), json() }`
+- `execShell(cmd)` — Synchronous shell command execution; returns `{ ok, stdout, stderr }` (read-only fork roles block mutating commands)
+- `readFileRaw(path, {offset?,limit?})` — Binary-safe file read via Node fs; returns `{ ok, content, lines, truncated, error? }`
+- `writeFileRaw(path, content)` — File write via Node fs (no shell quoting); returns `{ ok, bytes, error? }`. Withheld in read-only fork roles.
+- `console.log/warn/error` — Routes through renderHost.log
 
-Roles: `ANALYZER` · `PLANNER_SHALLOW` · `PLANNER_STANDARD` · `PLANNER_DEEP` · `EXEC_TRIVIAL` · `EXEC_STANDARD` · `EXEC_COMPLEX` · `RECOVERY`
+Space functions can use these directly. `tasklist(name, seed?)` passes `seed` as context to all fork tasks (injected as `any`-typed variables).
 
----
+## Context economy
 
-## Provider Resolution
+The runtime is built to keep context small over long sessions:
+- `display()` output is shown to the user but does NOT enter the VARIABLES block.
+- `fork({ role: 'explore' })` is a context firewall — a subagent's reading/searching stays in its own VM; only its resolved summary returns.
+- `session.continue()` auto-summarizes history once it exceeds `maxHistoryTurns*2` messages (REPL default 20), keeping the last 6 verbatim (`packages/core/src/context/summarize.ts`).
+- The `RUNTIME_PREAMBLE` instructs the model on all of the above.
 
-Providers are resolved in `llm-repl-cli/src/providers/`. Uses **Vercel AI SDK v6 (`streamText()`)**.
+## Tests
 
-Supported: `openai/*`, `anthropic/*`, `google/*`, `azure/*`, `groq/*`, `mistral/*`, `cohere/*`, `bedrock/*`, or any OpenAI-compatible endpoint.
+Tests are co-located: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
 
-Model aliases resolved from `LM_MODEL_{ALIAS}` env vars. `-R` suffix enables extended thinking via `providerOptions`.
+Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tsc.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/host-tools.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `spaces/architect-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`.
 
-**Active model assignments** (Azure deployments on `lmthing-resource`, swedencentral):
+Live testing: for new runtime features, also drive the built CLI against fixture spaces with a real model and inspect the `--trace` NDJSON — unit tests miss model-behavior and end-to-end integration issues.
 
-| Alias | Model | Role |
-|-------|-------|------|
-| `XS` | `azure:gpt-5.4-mini` | Classification, boolean decisions — cheapest |
-| `S`  | `azure:gpt-4.1-mini` | Fast code gen, short sessions |
-| `M`  | `azure:DeepSeek-V4-Flash` | Multi-step code, task graphs |
-| `L`  | `azure:DeepSeek-V4-Pro` | Full spec coverage, long sessions |
-| `M_R` | `azure:grok-4-1-fast-reasoning` | M + reasoning (recovery, replanning) |
-| `L_R` | `azure:Kimi-K2.6` | L + reasoning (deep planning, forks) |
+No linting or formatting config — TypeScript strict mode is the sole quality gate.
 
-## Pricing
+## Rules
 
-Per-model prices are stored in `llm-repl-cli/prices.json` and loaded at session start by `loadModelPricing()`. The `BudgetTracker` uses them to accumulate `inputTokensUsed`, `outputTokensUsed`, and `costUsd` as API calls are made.
+- **Always test every fix.** After fixing a bug, write or run a test that would have caught it. No fix is done until it is tested.
+- **Issue lifecycle.** When a bug is found, create a file in `.issues/`. When it is fixed and tested, delete the file and remove it from the Known issues list in this file.
+- **No issue file = no known bugs.** Keep `.issues/` empty by fixing things, not by ignoring them.
 
-**Current prices (GlobalStandard, swedencentral, per 1K tokens):**
+## Skills
 
-| Model | Input | Output |
-|-------|-------|--------|
-| `gpt-5.4-mini` | $0.000250 | $0.002000 |
-| `gpt-4.1-mini` | $0.000400 | $0.001600 |
-| `DeepSeek-V4-Flash` | $0.000190 | $0.000510 |
-| `DeepSeek-V4-Pro` | $0.001740 | $0.003480 |
-| `gpt-5.4` | $0.001250 | $0.010000 |
-| `grok-4-1-fast-reasoning` | $0.000200 | $0.000500 |
-| `Kimi-K2.6` | $0.000950 | $0.004000 |
-| `DeepSeek-R1-0528` | $0.001350 | $0.005400 |
+Load these when working on specific areas:
 
-Run `pnpm fetch-prices` from `llm-repl-cli/` to refresh prices from the Azure retail API. To add a new model, append an entry to `MODEL_MAP` in `scripts/fetch-prices.ts` and re-run.
+- Adding a new value-yielding global → `@.claude/skills/new-global.md`
+- Adding a new AI provider → `@.claude/skills/new-provider.md`
+- Creating or modifying a space → `@.claude/skills/new-space.md`
+- Adding a system space, host primitive, or fork role → `@.claude/skills/system-spaces.md`
+- Debugging the eval/yield pipeline → `@.claude/skills/debug-eval.md`
+- Writing tests for core modules → `@.claude/skills/writing-tests.md`
 
-**Session cost logging** — `session.ts` logs to stderr after every cycle:
-```
-  cost: $0.000423 cycle · $0.000814 total
-```
-and at session end:
-```
-── session complete · 3 cycles · $0.001237 total cost ──
-```
+## Architecture References
 
-`budget()` inside the sandbox also exposes `costUsd`, `inputTokensUsed`, and `outputTokensUsed` so the running model can observe its own spend.
-
----
-
-## Capability Layer Summary
-
-| Layer | Global(s) | Key contract |
-|-------|-----------|-------------|
-| L0 `sandbox` | — | QuickJS isolate; boundary detector (TS scanner); Capture Rule; file blocks; `trace.jsonl` |
-| L1 `typecheck` | — | tsc strict; 3-retry on error; speculative buffer for `await`; annotation grace |
-| L2 `inspect` | `inspect()` `budget()` | Aborts stream; awaits passed Promises; git commit; context reconstruction |
-| L3 `checkpoint` | `checkpoint()` `rollback()` | git tag + heap.bin savepoint; auto-settle; count-mode rollback via `trace.jsonl` |
-| L4 `fork` | `fork()` `resolve()` | Fresh QuickJS on git branch; fork-scoped display; `inject()` for parent-routed `ask()` |
-| L5 `memory` | `pin()` `unpin()` `compact()` `expand()` | Dotted-path support; auto-compact under context pressure |
-| L6 `tasklist` | `tasklist()` | DAG enforcement; `condition` grammar; `outputSchema` validation; `__tasklist_nudge` |
-| L7 `io` | `fetch()` `fs.*` `require()` | Domain allowlist; pre-buffered response; FS sandboxed to `/session/{id}/files/` |
-| L8 `render` | `display()` `ask()` | Descriptor tree; stable-id replace; 5-min `ask()` timeout; `SessionEnded` fallback |
-| L9 `snapshot` | — | `baseSnapshot` reuse; skip path when heap > 64MB |
-| L10 `spaces` | `Space` | `new Space()` / `Space.current()` / `Space.load()`; .d.ts overlay; class deletion cascade |
-
----
-
-## Submodule Notes
-
-- This directory is a git submodule. Changes here are committed separately from the parent monorepo.
-- The parent repo references this submodule at `sdk/org/` — update the parent's submodule pointer after committing here.
-- The parent `pnpm-workspace.yaml` picks up `sdk/org/llm-repl` and `sdk/org/llm-repl-cli` directly.
-
----
-
-## Detailed Reference
-
-| Topic | Document |
-|-------|----------|
-| v4.3 spec: full architecture, API, contracts, trace events | [NEW_ARCHITECTURE.md](NEW_ARCHITECTURE.md) |
-| Implementation plan: phases L0–L10 + router + CLI cutover | [PLAN.md](PLAN.md) |
-| Self-growing THING agent plan (repl package) | [repl/PLAN.md](repl/PLAN.md) |
-| Legacy agent system, hooks, session lifecycle, spaces | [cli/CLAUDE.md](cli/CLAUDE.md) |
-| Legacy neural harness model, cognitive loop | [repl/README.md](repl/README.md) |
+- Turn loop + yield protocol (deep) → `@.claude/arch/turn-loop.md`
+- Typecheck + transpile + DTS overlay pipeline → `@.claude/arch/typecheck.md`
+- Spaces: loading, validation, agent config → `@.claude/arch/spaces.md`
+- Fork + tasklist orchestration → `@.claude/arch/fork-tasklist.md`
+- Delegate + registry → `@.claude/arch/delegate.md`

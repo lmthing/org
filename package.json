@@ -1,7 +1,17 @@
 {
-  "name": "lmthing-org",
+  "name": "@repl/root",
   "private": true,
+  "type": "module",
   "scripts": {
-    "space": "llm-repl-cli/node_modules/.bin/tsx llm-repl-cli/src/cli/space-bin.ts"
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "dev": "pnpm -r --parallel dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "tsup": "^8.1.0"
   }
 }

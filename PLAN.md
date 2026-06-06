@@ -1,360 +1,454 @@
-# Implementation Plan — `llm-repl` v4.3
-
-## Status
-
-**All phases (L0–L13) are implemented.** `llm-repl/` and `llm-repl-cli/` are fully built and running. The `repl/` and `cli/` legacy packages remain in the workspace pending consumer migration (Phase 13 cutover). `spaces/` is live at the repo root; `research` (deep_research flow) and `cooking` (all three flows: `recipe_discovery`, `cook_recipe`, `meal_plan`) are both validated end-to-end.
-
-
+# REPL v2 — Implementation Plan (from scratch)
 
 ## Context
 
-`sdk/org/NEW_ARCHITECTURE.md` (spec v4.3 — currently only on `origin/main` at commit `e17d60f`; the submodule HEAD in this repo is `38e26ce` (v4) and must be advanced as the first step) defines a ground-up redesign of the streaming TypeScript REPL agent.
+We are building an **LLM agent runtime** in which a language model drives a program by
+*writing TypeScript*. The model streams TS statements; the host evaluates them one at a
+time inside a sandbox. Certain built-in calls (e.g. asking the user a question, running a
+task graph) suspend execution, hand control to the host, and resume the model on the next
+turn with the resolved values injected back into context.
 
-The current `sdk/org/repl/` + `sdk/org/cli/` implementation uses `vm.Context`, esbuild transpilation, and an in-memory session — it cannot run in the browser, has no per-yield git history, no speculative execution for top-level `await`, no QuickJS isolation, and no orchestration router. The new design replaces the sandbox with **QuickJS WASM**, makes **git central at yield points** (every `inspect()` commits; `heap.bin` is the rollback source), introduces **speculative execution** during top-level `await`, **captures top-level function/class declarations into a per-session space** (never written to `session.ts`), organizes everything into **11 capability layers** (`lib/sandbox` … `lib/spaces`, L0–L10), and adds a **two-point router** (`new_message`, `post_inspect`) that selects role/model/adapter per cycle.
+This is a clean-room rewrite. Implement everything described here in an **empty repo** — do
+not assume any prior code. The goal is a *small, legible* runtime: no git-backed state, no
+model router, no memory-compaction layer beyond a simple rolling summary.
 
-Per user direction:
-
-- **Scope:** Full L0–L10 roadmap, each layer a milestone with deliverables and exit criteria.
-- **Repo strategy:** New packages `sdk/org/llm-repl/` and `sdk/org/llm-repl-cli/` alongside existing `repl/` and `cli/`. Existing packages stay running until the new stack reaches parity; consumers migrate per-PR. Final cutover deletes `repl/` and `cli/`.
-
-The spec's "Reuse" section (NEW_ARCHITECTURE.md L200–234) maps which existing modules carry over as-is (spaces loader, knowledge tree + decay tiers, hook registry, provider resolver, JSX sanitizer, RPC server, CLI args, catalog logic), which adapt (statement detector, stream controller, prompt builder, scope generator, agent loop, snapshot), and which are net-new (QuickJS sandbox, tsc-strict pipeline, central git, trace.jsonl, speculative buffer, capture rule, context reconstruction, Ink renderer). This plan honors that mapping — we port carry-overs early in Phase 0 and only rewrite where v4.3 mandates it.
+The reference behaviour is captured concretely in the **Annotated Walkthrough** (§14). When
+in doubt about a contract, that section is authoritative.
 
 ---
 
-## Repository Layout (target)
+## 1. Tech stack
+
+| Concern | Choice |
+|---|---|
+| Language | TypeScript (strict), ESM, Node ≥ 20 |
+| Sandbox | `quickjs-emscripten` (async WASM module) |
+| Typecheck / parsing | `typescript` compiler API (`ts.createSourceFile`, `ts.createProgram`, `ts.transpileDeclaration`) |
+| LLM streaming | Vercel AI SDK (`ai` package) — `streamText()` |
+| YAML frontmatter | `yaml` (npm) — real parser (frontmatter has nested lists/objects) |
+| Terminal UI | `ink` + `ink-text-input` (React-based) |
+| Web transport | `ws` (WebSocket) |
+| Web UI | `react` |
+| Build | `tsup` per package |
+| Tests | `vitest`; Playwright optional for web |
+
+## 2. Repo layout — three packages
 
 ```
-sdk/org/
-├── repl/              # existing — kept running until parity, deleted in Phase 13
-├── cli/               # existing — kept running until parity, deleted in Phase 13
-├── llm-repl/          # NEW — core runtime (no CLI, no renderer)
-│   src/
-│   ├── lib/{sandbox,typecheck,inspect,checkpoint,fork,memory,
-│   │       tasklist,io,render,snapshot,spaces}/
-│   ├── session/  context/  hooks/  knowledge/  catalog/  security/
-│   └── index.ts
-└── llm-repl-cli/      # NEW — CLI binary + browser server
+packages/
+  core/   (@repl/core)   — runtime; no renderer, no provider, embeddable
     src/
-    └── providers/  router/  cli/  rpc/  ink/  web/
+      sandbox/    quickjs.ts host-bridge.ts boundary.ts jsx-runtime.ts trace.ts
+      eval/       turn-loop.ts yield.ts error-rewind.ts
+      typecheck/  tsc.ts overlay-dts.ts library-dts.ts
+      globals/    ask.ts display.ts inspect.ts serialize.ts load-knowledge.ts sleep.ts
+      spaces/     load.ts frontmatter.ts agent.ts tasklist-load.ts knowledge.ts components.ts
+      tasklist/   dag.ts orchestrator.ts condition-dsl.ts schema.ts
+      fork/       fork.ts
+      delegate/   delegate.ts registry.ts
+      context/    history.ts system-block.ts summarize.ts variables.ts
+      session/    session.ts snapshot.ts types.ts
+      index.ts
+  cli/    (@repl/cli)   — providers, Ink terminal renderer, WS server, bin
+    src/
+      providers/  resolve.ts aliases.ts
+      stream/     stream.ts            (streamText wrapper + abort)
+      render/     ink-renderer.tsx html-to-terminal.ts
+      rpc/        server.ts events.ts
+      cli/        bin.ts args.ts
+      index.ts
+  ui/     (@repl/ui)    — React web component surface + client hook
+    src/
+      components/ (built-in view/form primitives)
+      client/     rpc-client.ts useReplSession.ts
+      index.ts
 ```
 
-Each `lib/<name>/` is self-contained per the spec's discoverability rule (L181–196):
+`core` is renderer/provider-agnostic: it emits **events** and accepts a **RenderHost**
+interface (injected by `cli`). It never imports `ink`, `ws`, or `ai`.
+
+---
+
+## 3. Glossary / mental model
+
+- **Turn**: one LLM generation. The model streams TS; the host evaluates statements as they
+  arrive. A turn ends when a *value-yielding await* fires, an error caps out, or the model
+  stops producing statements.
+- **Value-yielding global**: one of `ask`, `inspect`, `loadKnowledge`, `sleep`, `tasklist`,
+  `fork`, `delegate`. Awaiting one **aborts the LLM stream** and hands control to the host.
+- **Void/host call**: any space function (e.g. `addIngredient`). Runs **inline**, even when
+  `await`-ed — does **not** end the turn.
+- **VARIABLES block**: a synthetic `user` message the host appends after a yield, carrying the
+  resolved values so the next turn sees them.
+- **Space**: a directory bundling `agents/ tasklists/ functions/ components/ knowledge/`.
+- **Session**: a persistent QuickJS VM + message history for one agent. Forks and delegations
+  spawn child sessions with their own VM.
+
+### The turn loop (the heart of the system)
 
 ```
-index.ts · <name>.test.ts · eval/{dataset.jsonl, grade.ts, prompts/{xs,s,m,m_r,l,l_r}.md}
+loop per turn:
+  1. assemble context  -> system prompt + message history (§ context)
+  2. stream tokens from the model
+  3. feed tokens to BoundaryDetector -> complete statements
+  4. for each complete statement:
+       a. typecheck (incremental tsc, cached overlay + accumulated source)
+          - on type error: error-rewind (do NOT append), end turn, retry
+       b. evalCode(statement) in the VM
+          - void/sync host calls resolve inline (executePendingJobs)
+          - if a value-yielding global was invoked -> set pendingYield
+       c. if pendingYield:
+            - abort the LLM stream
+            - process the yield(s) (§ globals): produce resolved value(s)
+            - resolve the VM promise(s), executePendingJobs -> statement binds vars in scope
+            - append VARIABLES block to history
+            - break (turn ends)
+          else: append statement to accumulated source, continue
+       d. on runtime throw: error-rewind, end turn, retry
+  5. if model produced statements but no pendingYield and no error -> agent is done
+     (session/turn loop ends; §13 session end)
 ```
 
 ---
 
-## Dependency Shape
+## 4. Phase 0 — scaffold
 
-```mermaid
-graph TD
-    P0[Phase 0<br/>Scaffolding + carry-overs] --> L0[L0: sandbox<br/>QuickJS · boundary · capture · trace · file-blocks]
-    L0 --> L1[L1: typecheck<br/>tsc strict · retry · speculative · annotation grace]
-    L1 --> L2[L2: inspect<br/>inspect() · session assembly · context reconstruction]
-    L2 --> L3[L3: checkpoint<br/>checkpoint() · rollback() · settle-on-checkpoint]
-    L2 --> L4[L4: fork<br/>fork() · resolve() · parent-routed ask · branch seed]
-    L3 --> L5[L5: memory<br/>pin · compact · expand · auto-compact]
-    L4 --> L5
-    L5 --> L6[L6: tasklist<br/>DAG enforcement · outputSchema · nudge]
-    L6 --> L7[L7: io<br/>fetch allowlist · fs sandbox · require]
-    L7 --> L8[L8: render<br/>display · ask · descriptors + Ink/web]
-    L8 --> L9[L9: snapshot<br/>baseSnapshot reuse · skip path]
-    L9 --> L10[L10: spaces<br/>Space class · .d.ts overlay · loader reload]
-    L10 --> R[Phase 12: router<br/>ANALYZER · routing rules · context flags]
-    R --> CUT[Phase 13: CLI cutover<br/>llm-repl run · WS bridge · consumer migration]
-    L8 -.shares.- INK[llm-repl-cli/ink + web<br/>descriptor renderers]
-```
-
-The branch on L2 → {L3, L4} is real: checkpoint and fork are independent capabilities once inspect+session exist. They serialise back at L5 because pin/compact references state shapes only stable after both land.
+- pnpm workspace, three packages, shared root `tsconfig.base.json` (strict, ES2022,
+  NodeNext, `jsx: react-jsx`).
+- `tsup` build configs; `vitest` config at root.
+- `core` exports a `Session` class and a `RenderHost` interface; `cli` provides a concrete
+  `RenderHost` (Ink) and provider streaming; `ui` is the browser surface.
 
 ---
 
-## Phasing Principles
+## 5. Phase 1 — sandbox (core/sandbox)
 
-1. **Layer-ordered build (L0 → L10).** Each phase compiles + ships its own eval suite before the next starts (spec §"Discoverability").
-2. **Vertical green-bar per phase.** Every phase ends with: unit tests pass · `pnpm eval --lib <name> --model <min-class>` runs end-to-end against a real provider · the `trace.jsonl` events specified for that layer are asserted present · eval prompts embed the static REPL system prompt and layer-relevant API types; grader user turns use context reconstruction format.
-3. **Carry-overs land first, in `llm-repl/src/`** as plain ports (no behavior change). New stage strings (`before-tsc`, `on-function-capture`) are added to the hook phase enum but unwired until L0/L1 land.
-4. **Existing `repl/` and `cli/` are not modified** until Phase 13. Consumers (Studio, Computer, Chat) keep working throughout.
+**`quickjs.ts`** — `createVM(opts)`:
+- `newQuickJSAsyncWASMModule()` (singleton), `module.newRuntime()`, `runtime.newContext()`.
+- Set memory limit + an `interruptHandler` that trips after `maxStatementMs` (per-statement
+  CPU guard). Expose `evalStatement(code): Promise<EvalResult>`, `getScope()`, `setVar()`,
+  `dispose()`.
+- `evalStatement` calls `ctx.evalCode(code)` and drives `runtime.executePendingJobs()` until
+  the resulting promise settles **or** a `pendingYield` is observed.
 
-### Eval prerequisites — env setup
+**`host-bridge.ts`** — marshalling:
+- `marshalToQuickJS(ctx, value)`: primitives, arrays, objects, functions. For functions, wrap
+  with `ctx.newFunction`. When a wrapped function returns a host `Promise`, create
+  `ctx.newPromise()`, return its `.handle`, and on settle call `deferred.resolve/reject` +
+  `ctx.runtime.executePendingJobs()`.
+- `marshalToHost(ctx, handle)`: `ctx.dump(handle)`.
+- `injectGlobal(ctx, name, fn)`: attach wrapped function to `ctx.global`.
 
-The Azure credentials and all model aliases are already configured in `.env` at the repo root. For reference:
+**`boundary.ts`** — `BoundaryDetector`:
+- `feed(chunk): string[]` accumulates a buffer and returns complete top-level statements.
+- Detection: `ts.createSourceFile('_b.tsx', buf, ESNext, false, TSX)`. A leading statement is
+  complete when (a) more than one statement parsed (first is complete), or (b) a single
+  statement that ends in `;`/`}` **and** has no synthetic/missing tokens (walk for
+  `NodeFlags.ThisNodeHasError` and zero-width tokens). Handles template literals, JSX, arrows,
+  destructuring. `flush()` returns trailing partial text; `reset()` clears.
 
-```
-# Provider credentials
-AZURE_API_KEY=<key>
-AZURE_RESOURCE_NAME=<resource>
+**`jsx-runtime.ts`** — inject a virtual JSX factory into the VM so JSX the model writes
+produces plain descriptor objects `{ type, props, children }` (NOT React). Captured to host
+via `marshalToHost`.
 
-# Model aliases — map eval model classes to deployed provider:modelId
-LM_MODEL_XS=azure:gpt-5.4-mini           # fast classification, cheapest
-LM_MODEL_S=azure:gpt-4.1-mini            # fast code gen, short sessions
-LM_MODEL_M=azure:DeepSeek-V4-Flash       # multi-step code, task graphs
-LM_MODEL_M_R=azure:grok-4-1-fast-reasoning  # M + reasoning (recovery, replanning)
-LM_MODEL_L=azure:gpt-5.4                 # frontier class, long sessions
-LM_MODEL_L_R=azure:Kimi-K2.6             # frontier + reasoning (deep planning)
-```
+**`trace.ts`** — append-only JSONL writer `{ ts, type, ... }`; used for debugging/tests
+(`session_start`, `statement`, `yield`, `error`, `turn_end`).
 
-Prices for each alias are loaded from `llm-repl-cli/prices.json` at session start. Run `pnpm fetch-prices` from `llm-repl-cli/` to refresh from the Azure retail API.
-
-The eval runner accepts `--model <ALIAS>` directly — `XS | S | M | M_R | L | L_R` — and resolves to the corresponding `LM_MODEL_<ALIAS>` env var. Any missing alias causes the grader to skip with a warning rather than hard-fail, so partial env setups are safe for iterating on a single layer.
-
----
-
-## Phase 0 — Submodule bump + scaffolding + carry-overs
-
-**Goal:** new packages compile, share-able pure modules are ported at parity, CI runs.
-
-1. **Bump submodule pointer.** `git -C sdk/org checkout main` (= `e17d60f`) and commit the new submodule SHA in the parent repo on `claude/refine-local-plan-XxZ3d`. Required because the draft plan and every subsequent phase reference v4.3 specifics (router, capture rule, annotation grace, `lib/` layout, full trace event list at NEW_ARCHITECTURE.md L2006) that don't exist on the current submodule HEAD.
-2. **Create new workspaces:** `sdk/org/llm-repl/{package.json,tsconfig.json,vitest.config.ts}` and `sdk/org/llm-repl-cli/{package.json,tsconfig.json,vitest.config.ts}`. Add both to `sdk/org/pnpm-workspace.yaml` (currently only lists `cli` and `repl`). Parent `pnpm-workspace.yaml` picks them up automatically via `sdk/org/*`.
-3. **Port as-is** (plain copies, no behavior change — match parity tests one-for-one):
-   - `repl/src/knowledge/` → `llm-repl/src/knowledge/`
-   - `repl/src/context/knowledge-decay.ts`, `stop-decay.ts` → `llm-repl/src/context/`
-   - `repl/src/hooks/` → `llm-repl/src/hooks/` — extend `HookPhase` union with `'before-tsc'` and `'on-function-capture'` per spec L1312 but keep them unwired
-   - `repl/src/security/jsx-sanitizer.ts` → `llm-repl/src/security/`
-   - `cli/src/providers/` → `llm-repl-cli/src/providers/` (Vercel AI SDK v6 stays, env-var alias resolution stays — spec L209)
-   - `cli/src/rpc/` + `cli/src/cli/server.ts` → `llm-repl-cli/src/rpc/` (skeleton — message types may extend in Phase 13)
-   - `cli/src/cli/args.ts` → `llm-repl-cli/src/cli/args.ts`
-   - `cli/src/cli/agent-loader.ts` + `repl/src/spaces/dynamic-loader.ts` → `llm-repl/src/lib/spaces/loader.ts` (skeleton only — full `Space` class lands in L10)
-4. **Eval runner stub:** `llm-repl/scripts/eval.ts` — invokes per-lib `grade.ts` based on `--lib <name>` and `--model <ALIAS>` args (`XS | S | M | M_R | L | L_R`). No-op when no `grade.ts` exists yet. Resolves alias to `LM_MODEL_<ALIAS>` env var.
-5. **`llm-repl.d.ts` canonical surface** — drop in the API block from spec L375–999 as the authoritative `.d.ts`. Each layer fills in the runtime behind these declarations.
-
-**Exit:** `pnpm -F llm-repl build` and `pnpm -F llm-repl-cli build` succeed; ported module tests pass without modification.
+Tests: feed partial chunks → assert statement boundaries; await of a host promise resolves
+inline; interrupt handler trips on infinite sync loop.
 
 ---
 
-## Phase 1 — L0: `lib/sandbox`
+## 6. Phase 2 — typecheck + DTS (core/typecheck)
 
-**Goal:** QuickJS isolate executing one statement at a time, TypeScript scanner-based boundary detection, the capture rule, four-backtick file blocks, `trace.jsonl`. No tsc yet, no `inspect()`.
+**`tsc.ts`** — `runTsc({ sessionContext, statement, ambientDts })`:
+- Build a virtual `CompilerHost` over an in-memory `session.tsx` = `ambientDts` + accumulated
+  `sessionContext` + the new `statement`, and a `lib.d.ts`. `ts.createProgram` with
+  `strict, module: ESNext, jsx: ReactJSX, skipLibCheck: true`.
+- Collect syntactic + semantic diagnostics; filter to the statement's line range; format with
+  `ts.flattenDiagnosticMessageText`. Return `{ ok, diagnostics: [{line, col, code, message}] }`.
+- "Incremental": cache the ambient+context program; only the trailing statement changes.
 
-Deliverables under `llm-repl/src/lib/sandbox/`:
+**`overlay-dts.ts`** — `buildOverlay(space, agent)`:
+- For each `functions/*.ts` and `components/{view,form}/*.tsx` **in scope for the agent**,
+  `ts.transpileDeclaration(source, {declaration:true, emitDeclarationOnly:true, jsx})`.
+- `rewriteToAmbient`: strip imports; `export declare function` → `declare function`;
+  `export interface` → `declare interface`; drop bare `export { ... }`.
 
-- `quickjs.ts` — `getQuickJS()` singleton; one `newAsyncContext()` per session with `runtime.setMemoryLimit(SessionConfig.maxHeapMB * 1024 * 1024)`, `setMaxStackSize(maxStackSizeMb)`, interrupt-handler-driven CPU timeouts. `executePendingJobs()` after each statement.
-- `boundary.ts` — `ts.createScanner()`-based incremental tokenizer; depth-0 semicolon detection; correct handling of JSX, generics, type assertions, regex, comment-in-string. Adapts `repl/src/parser/statement-detector.ts` + `repl/src/stream/bracket-tracker.ts` from heuristic bracket-matching to scanner-API.
-- `capture.ts` — implements the **Capture Rule** exactly as spec §"Capture rule" (L1238–1275):
-  - `FunctionDeclaration` / `ClassDeclaration` with identifier name → capture
-  - `VariableStatement` requires `NodeFlags.Const` + single declarator + `Identifier` name + initializer kind ∈ {`ArrowFunction`, `FunctionExpression`, `ClassExpression`} → capture
-  - **Component classification:** return-type structural assignment to `JSX.Element` → component; props with callable `submit` → form, else view; untyped props default to view
-  - **Source fidelity:** verbatim original source written to target file, no AST re-emission
-  - **Re-declaration block:** `kind: "contract"` error if name exists in session space
-  - Negative cases (each gets a unit test): `let f = () => {}` with hint comment, multi-declarator, destructuring, `CallExpression` init (incl. HOC `memo(...)`), `ObjectLiteralExpression` method shorthand, IIFE
-- `file-blocks.ts` — four-backtick fence intercept ahead of the scanner. Adapts existing `repl/src/stream/file-block-applier.ts` and read-ledger from `repl/src/sandbox/read-ledger.ts`. Diff blocks fail with `kind: "contract"` if the target path was not read via `fs.readFile()` in the current cycle (spec contract L1866).
-- `trace.ts` — `trace.jsonl` writer with `O_APPEND + fsync` per event (spec L1377, L2004). Replay logic for uncommitted suffix on host restart: find last committed git ref, read suffix, replay events into in-memory state. Event schema is the canonical list at spec L2006.
-- `host-bridge.ts` — handle-marshaling pattern for host functions injected as globals. JSX descriptor marshaling (numeric handle IDs for callbacks). Virtual `react/jsx-runtime` module returning host functions that build descriptor trees — React itself never loaded inside QuickJS.
-- `require.ts` — host module registry. tsc transformer that rewrites `import x from 'pkg'` → `const x = require('pkg')` pre-emit. Ambient `.d.ts` declarations auto-generated for every entry in `SessionConfig.availableModules`.
-- **Eval** `eval/dataset.jsonl` ~30 traces covering capture-rule edges (all positive + negative cases above), file-block writes/diffs (with and without prior read), JSX inside template literals; `eval/grade.ts` LLM-judge scoring **error rate**. Prompts for all six model aliases (`xs.md`, `s.md`, `m.md`, `m_r.md`, `l.md`, `l_r.md`). Each prompt embeds the verbatim static REPL system prompt, layer-0 API declarations, and sandbox-layer contracts (Capture Rule, No-redeclaration, File-block read-before-diff). `grade.ts` formats user turns as context reconstruction (`__budget`, `__scope`, `// User:` task comment).
-
-**Exit:** unit tests cover every Capture Rule clause (positive + negative). `pnpm eval --lib sandbox --model XS` emits a baseline error-rate score. `trace.jsonl` contains `session_start`, `statement_received`, `function_captured`, `function_redeclare_blocked`, `execute`, `file_write`, `file_diff`, `file_diff_no_read`, `runtime_error`, `timeout`, `oom`.
+**`library-dts.ts`** — a constant `.d.ts` declaring the always-injected globals with exact
+signatures: `ask`, `display`, `inspect`, `loadKnowledge`, `sleep`, `tasklist`, `fork`,
+`delegate`, and (inside tasklist forks only) `currentTask`. The full ambient overlay =
+`LIBRARY_DTS + overlay`.
 
 ---
 
-## Phase 2 — L1: `lib/typecheck`
+## 7. Phase 3 — value-yielding globals + serialization (core/globals, core/eval)
 
-**Goal:** tsc strict on every statement, type-inference feedback, 3-retry-on-error loop, speculative execution scaffolding.
+**`eval/yield.ts`** — the yield protocol:
+- A module-level `pendingYields: YieldRequest[]` on the VM session. Each value-yielding global,
+  when invoked in the VM, pushes a `YieldRequest { kind, args, deferred }` and returns
+  `deferred.handle` (an unresolved VM promise). It does **not** resolve during the statement.
+- After `evalStatement`, the turn loop checks `pendingYields`. If non-empty → abort stream,
+  process each request, resolve its VM promise, `executePendingJobs`, then read back the
+  statement's bound variables and emit VARIABLES.
+- Void host functions never push a YieldRequest → they resolve inline.
 
-Deliverables under `llm-repl/src/lib/typecheck/`:
+**`globals/serialize.ts`** — capped JSON serializer (shared by inspect + VARIABLES):
+- Depth cap + byte cap. Over-cap values → placeholder string
+  `"[… N items|chars, truncated — inspect([var, { ... }]) to expand]"`.
+- Renders strings (head + length), arrays (head slice + count), objects (key-limited), bytes.
 
-- `tsc-runner.ts` — tsc strict, in-memory program per statement; target `ES2022`, module `ESNext`, `jsx: "react-jsx"`, top-level await preserved. Returns diagnostics + transpiled JS + inferred types of new bindings.
-- `retry.ts` — 3-retry loop. Errors injected as `// tsc: <msg>` comments. Append to `session.ts` only after success (spec contract "Append timing" L1850).
-- `speculative.ts` — buffer for statements emitted while a top-level `await` is in flight. Per-statement structural type-check against the annotated awaited type; structural assignability check on `Promise.resolve`. Mismatch path: discard buffer, auto-inject `inspect(__resolved)`, build `__speculative_nudge` with derived shape (spec L1500–1514). Overflow path: `speculative.maxTokens` hit → abort LLM stream, hold buffer, build `__speculative_pending`. Nested buffer stacking for nested `await` (each await opens its own buffer; mismatch only discards the innermost).
-- `annotation-grace.ts` — **first-omission grace per session** (spec contract L1861). On the first non-inferable await without `as Type`, disable speculative checking for that buffer; derive a JSON-Schema-ish shape on resolve; inject hint; flip `meta.json.annotation_grace_used = true`. Subsequent omissions are `kind: "type"` errors.
-- Trace events added: `type_check_pass/fail`, `type_inferred`, `speculative_buffer_start`, `speculative_type_check_pass/fail`, `speculative_buffer_overflow`, `speculative_execute`, `speculative_type_mismatch`, `speculative_aborted`, `annotation_missing_grace`, `annotation_missing_error`.
-- **Eval focus:** self-correction rate. Dataset includes type-error→retry→fix traces and annotation-mismatch traces. Prompts embed the verbatim static REPL system prompt, layer-0/1 API declarations, and typecheck-layer contracts (Speculative annotation, Annotation grace, Mismatch escalation, Append timing). `grade.ts` formats user turns as context reconstruction with `__errors: SessionError[]` for self-correction cases.
+**`globals/inspect.ts`** — `inspect(...vars | [var, query])`:
+- Plain arg `inspect(v)`: serialize `v`. Query form `inspect([v, query])` where `query` is an
+  object: `{ path?, slice?, depth?, filter?, sample?, keys?, count?, search? }`.
+  - `path`: dotted path with array indices (`"contents.0"`, `"a.b"`).
+  - `slice [start,end]`, `sample n`, `keys` (object keys only), `count` (length), `search term`
+    (filter array of objects/strings), `filter "expr"` (small predicate over array items),
+    `depth n`.
+- Emits a VARIABLES block keyed by the arg's source text / path.
 
-**Exit:** type-error retry closes within 3 attempts on the eval set; speculative tests cover correct annotation, wrong annotation (mismatch yield), buffer overflow, nested await.
+**`globals/load-knowledge.ts`** — `loadKnowledge(...path): Promise<unknown>`:
+- Resolve `knowledge/<domain>/<field>/<option>.md` (or a field/domain node). Return parsed
+  body (frontmatter + markdown, or structured value). Result injected as VARIABLES.
 
----
+**`globals/sleep.ts`** — `sleep(duration)`:
+- Parse a duration string (`"2min"`, `"500ms"`, `"1s"`). End the turn; schedule resume after
+  the delay (configurable: real wall-clock, or a simulated clock injected for tests). Inject
+  `VARIABLES(slept: "<duration>")`.
 
-## Phase 3 — L2: `lib/inspect` + Session Assembly
+**`globals/display.ts`** — `display(descriptor)`:
+- Fire-and-forget: push descriptor to the render surface via `RenderHost.display(desc)`.
+  **Not** a yield (returns void). The statement continues.
 
-**Goal:** the central yield primitive — `inspect()` aborts the LLM stream, awaits only the Promises passed as args (soft `timeout`), commits to git, derives `scope.json` / `heap.bin` / `meta.json`, and reconstructs context.
+**`globals/ask.ts`** — `ask(descriptor): Promise<T>`:
+- A yield. Validate the descriptor with the JSX sanitizer (block `script/iframe/...`,
+  `dangerouslySetInnerHTML`, `javascript:` URLs; only registered form components allowed in
+  `ask`). Call `RenderHost.ask(id, desc)`; resolve when the surface submits
+  `submitForm(id, value)`. Timeout (default 300s) → reject. Resolved value injected as
+  VARIABLES under the bound variable name.
 
-Deliverables:
-
-- `llm-repl/src/lib/inspect/index.ts` — `inspect(...args).options({ timeout })`; argument shape `unknown | [unknown, InspectQuery]`; argument names recovered via source AST (port logic from `repl/src/parser/ast-utils.ts`); restricted `filter` grammar parser host-side, walked inside QuickJS via handle API (no marshaling of arbitrary functions).
-- `llm-repl/src/lib/inspect/budget.ts` — `Budget` interface, sync `budget()` (no yield), `wastedOnAbort` tracking.
-- `llm-repl/src/session/` — assembles git repo at `session-{id}/`; writes `session.ts` (value-producing statements **only** — captured declarations skip), `scope.json` (lossy JSON view), `heap.bin` (QuickJS scope snapshot — primitives, plain objects, arrays, Sets, Maps; **orphan placeholders** for custom class instances per spec L1409), `meta.json` (budget, tasks, pins, errors, `annotation_grace_used`). All four files committed atomically per the "Commit atomicity" contract.
-- `llm-repl/src/context/reconstruction.ts` — priority-ordered sections per spec §"Context Reconstruction" (L1421–1547):
-  - **Hard-pinned** (L1437): `__budget`, `__tasklist_nudge`, `__currentStep`, `__speculative_nudge`, `__speculative_pending`, `__fork_asks`
-  - **Priority-ordered** (L1446): `__scope` → `__errors` (last 3) → expanded vars → source tail → `__tasks` → `__forks` → `__display` → `__git` → type feedback
-  - Auto-compact under pressure: largest non-pinned vars, depth-1, omit-3-cycles-unused
-  - Output is a single `role: "user"` message replacing the prior reconstruction; no assistant history retained (spec L1428–1433)
-  - Scope generator adapts `repl/src/context/scope-generator.ts` — same serialization logic, now writes both `scope.json` (disk) and `__scope` (context section)
-- Trace events added: `inspect`, `inspect_settle`, `context_reconstruct`, `budget_check`, plus the full list under "Eval focus" below.
-
-**Exit:** end-to-end smoke — LLM streams TS → boundary detector → tsc → QuickJS → `inspect()` → git commit → reconstruction → new completion. `pnpm eval --lib inspect --model S` measures **inspect frequency** and **dead-code-after-inspect rate** (must be 0). Snapshot round-trips via `heap.bin`.
-
----
-
-## Phase 4 — L3: `lib/checkpoint`
-
-**Goal:** named savepoints and rewinds.
-
-Deliverables under `llm-repl/src/lib/checkpoint/`:
-
-- `checkpoint(label)` — `cp-{label}` git tag + heap.bin snapshot. Does **not** yield. **Auto-settles every pending Promise in scope** before committing (each respects its own logical timeout — `ask` = 5min, fetch via AbortSignal); timeouts recorded as `kind: "timeout"` rejection. Emits `checkpoint_settle_wait` trace event.
-- `rollback(target)` — by label OR by N statements. Spec §"Rollback" (L1573–1582): `git reset --hard` on the session repo; **all artifacts** revert (session.ts, scope.json, heap.bin, meta.json, entire `space/` tree). Fresh QuickJS context deserialized from restored heap.bin; session-space functions/classes re-bridged. Pins after target ref dropped. `RollbackBlockedError` if past the last valid snapshot (when a prior commit skipped `heap.bin` due to >64MB size). Returns count of statements rewound.
-- Count-mode `rollback(N)` walks `trace.jsonl` back N `execute` events (skipping `function_captured` events, per spec "Statement/trace alignment" contract L1854).
-
-**Exit:** rollback tests cover orphan placeholders (class instances become `OrphanedInstance` on method call after rollback restore — spec L1409); checkpoint auto-settle covers ask + fetch + fork-timeout cases. `pnpm eval --lib checkpoint --model S` measures **checkpoint quality / rollback success rate**.
-
----
-
-## Phase 5 — L4: `lib/fork`
-
-**Goal:** parallel completions in fresh QuickJS contexts.
-
-- Wire child execution loop in `session.ts`: for each pending fork, spawn an LLM completion with the fork instruction + seeded scope, stream into a fresh QuickJS context, call `forkEngine.resolve(forkId, value)` when `resolve()` is called inside the child.
-- Child context seeded from parent `heap.bin` minus `exclude`. Session-space functions re-injected as host-bridged globals in the child. (No git branching required).
-- `resolve<T>(value)` global available **in forks only** — absent from main session `.d.ts`.
-- **Fork token budget** counts against parent `tokensRemaining` in real time (spec contract L1856). `Budget.nearingLimit = true` and `// ⚠ Budget warning: ...` injected at `warnAt` (default 20% of `tokenBudget`, min 500). Fork kills with `BudgetExceeded` if cap exhausted before `resolve()`.
-- **Fork-scoped display slot** keyed by fork id (spec L1567), separate from parent surface.
-- **Fork `ask()` routes to parent surface** (spec L1561): fork's `.d.ts` replaces generic `ask<T>` with `Promise<string>`-returning form; UI renders in parent slot labelled by fork id; resolves on `forkHandle.inject(answer)` or 5-minute timeout (uses fallback if provided, else rejects with `TimeoutError`). `__fork_asks` hard-pinned section injected in parent reconstruction while any such ask is pending.
-- Trace events: `fork_spawn/resolve/reject`, `fork_budget_warning`, `fork_ask`, `fork_ask_inject`, `fork_ask_timeout`.
-
-**Exit:** parent + 2 concurrent forks complete; budget warning injected at threshold; nested `fork()` rejected (absent from fork `.d.ts` — tsc compile-time enforcement, spec L1555). `pnpm eval --lib fork --model S` measures fork success rate and budget overrun rate.
+**VARIABLES emission** (`context/variables.ts`):
+- After resuming, determine names to show: for `inspect`, the inspected args/paths; for
+  `sleep`, `slept`; for the others, parse the statement's LHS binding identifiers (from the
+  BoundaryDetector AST) and read them back from VM scope. Serialize via `serialize.ts`.
 
 ---
 
-## Phase 6 — L5: `lib/memory`
+## 8. Phase 4 — spaces (core/spaces)
 
-`pin/unpin`, `compact/expand` (orchestrator-chosen strategy from `'schema' | 'sample' | 'summary' | 'hash'`), dotted-path support (`__knowledge.grading.level`), auto-compact under context pressure (spec L1458). **Eval focus:** proactive-vs-auto compact ratio. Min alias: M (`pnpm eval --lib memory --model M`).
+**`frontmatter.ts`** — split `---\n...\n---\nbody`; parse the YAML block with `yaml`.
 
----
-
-## Phase 7 — L6: `lib/tasklist`
-
-`tasklist(id, dag)` returning `TasklistHandle`. DAG enforcement at host bridge (`start(id)` on un-`done` deps → `kind: "contract"` error; scope clean — spec L1287). `condition` expression parsed by the same restricted grammar as `InspectQuery.filter`, evaluated inside QuickJS via handle walk; falsy → `"skipped"` and dependents unblocked. `optional: true` failures unblock dependents (spec contract L1864). `outputSchema` JSON-Schema validated on `finish(id)` against the runtime variable named after the step id. `__tasklist_nudge` injected on every `inspect()` when any tasklist has unfinished nodes. **Eval focus:** DAG scheduling correctness. Min alias: M (`pnpm eval --lib tasklist --model M`).
-
----
-
-## Phase 8 — L7: `lib/io`
-
-`fetch(url, init)` with domain allowlist (`PermissionError` outside list), pre-buffered response body up to `maxFetchResponseBytes`, `.text/.json/.bytes` sync getters from buffer, AbortSignal timeouts. `fs.*` sandboxed to `/session/{id}/files/` (side effects **not** undone by rollback — spec L1581). `require(module)` whitelisted npm packages with auto-generated ambient `.d.ts` (mechanism from L0's `require.ts`, list-driven from `SessionConfig.availableModules`). **Eval focus:** end-to-end task completion. Min alias: S (`pnpm eval --lib io --model S`).
-
----
-
-## Phase 9 — L8: `lib/render` + Ink + Web
-
-**Goal:** `display()` and `ask()` plus the two renderer adapters.
-
-Under `llm-repl/src/lib/render/`:
-
-- `display(ui, { id, mode })` — non-blocking; descriptor tree marshaled out via host bridge; stable-id replace; `__display` bounded by `display.maxEntries` / `display.maxTokens`. On `rollback()`, emits `display_invalidate(cutoffIndex)`; stable-id elements before cutoff retain last pre-cutoff state (spec L1589).
-- `ask<T>(ui, { timeout, fallback })` — returns `Promise<T>` resolved when the renderer calls the bridged `submit` callback handle; 5-min logical timeout independent of `inspect()` soft cap (spec L1593); session-end policy resolves with `fallback` or rejects `SessionEnded`.
-- Built-in components registered as descriptor types resolved by host renderer: `TextInput`, `Select`, `Confirm`, `Table`, `ProgressBar`, `Markdown`, `CodeBlock`.
-- Virtual `react/jsx-runtime` host module returning descriptor builders. tsc emits `jsx` calls; require transformer rewires them to the host module.
-
-Under `llm-repl-cli/src/ink/` and `llm-repl-cli/src/web/`: descriptor → Ink (terminal) and descriptor → React (browser). Both share built-ins plus space-provided components from L10. Components from `cli/src/components/{display,form}/` port over unchanged; the form-extractor pattern (`cli/src/components/shared/form-extractor.ts`) drives the descriptor→`submit` bridge.
-
-**Eval focus:** clarification quality (ask) and render correctness (display).
+**`load.ts`** — `loadSpace(dir): Space`:
+- `agents/<slug>/instruct.md` (frontmatter: `title`, `actions[] {id,label,description,tasklist}`,
+  `dependencies[] "space/agent"`) + `config.json` (`knowledge`, `functions[]`, `components[]`).
+- `tasklists/<slug>/` → sorted numbered `.md` files → task nodes (§9).
+- `functions/*.ts` → source strings; transpiled + imported on demand into the VM (rewrite ESM
+  `import` → host `require` registry; eval in VM to bind the global). Only functions listed in
+  the active agent's `config.json.functions` are injected.
+- `components/view/*.tsx` (web-only) and `components/form/*.tsx` (must export a web variant and
+  an `*.ink.tsx` terminal variant).
+- `knowledge/<domain>/config.json`, `<field>/config.json` (`type`, `variableName`, `default`),
+  `<option>.md`. Build the tree; values loaded lazily by `loadKnowledge`.
+- Validate: ≥1 agent; every `action.tasklist` resolves to a tasklist dir; every
+  `config.functions` entry has a file; dependency strings are `space/agent`.
 
 ---
 
-## Phase 10 — L9: `lib/snapshot`
+## 9. Phase 5 — provider streaming + system block + turn loop wiring
 
-Base snapshots — cross-session scope reuse via `SessionConfig.baseSnapshot`. Re-seed `heap.bin` into a fresh QuickJS context with session-space functions re-bridged. Skip-snapshot path when heap > 64MB (`snapshot_skipped` event; rollback blocked past that point). Min alias: L (`pnpm eval --lib snapshot --model L`).
+**cli/providers** — `resolveModel("provider:modelId")` (lazy-load `@ai-sdk/*`); aliases via
+`process.env["LM_MODEL_" + ALIAS]`. One model alias per session (no router); forks/delegates
+inherit unless overridden.
 
----
+**cli/stream/stream.ts** — wrap `streamText({ model, system, prompt })`; iterate
+`stream.textStream`; expose an `abort()` (AbortController) the turn loop calls on yield/error.
 
-## Phase 11 — L10: `lib/spaces`
+**core/context/system-block.ts** — generate the `system` content at session start:
+- Always-injected globals summary; the active agent's `instruct.md` **body**; its actions
+  (`id → tasklist — description`); scoped functions/knowledge-tree/components; **direct**
+  dependency agents with their action summaries (deeper deps lazy).
 
-**Goal:** the `Space` class and the `.d.ts` overlay generator — the headline runtime API.
+**core/context/history.ts** — message log of `{role, content}` blocks: the system block, user
+turns, assistant turns (the accumulated TS source per turn), and synthetic `user` VARIABLES /
+ERROR blocks. The per-turn prompt = system + serialized history.
 
-- Wire `createDynamicSpaceLoader` in `loader.ts` so `Space.load(name)` → `SpaceHandle`. Space name resolution should be config-driven.
-- `SpaceHandle` with lazy `loadAgent/loadFunction/loadComponent/loadKnowledge` and populated `.agents`, `.functions`, `.components` records returning proper typed interfaces.
-- **Two-step class load** (spec contract "Class stub in .functions" L1871): `loadFunction(name)` populates `.functions.{name}` with a collapsed stub + `.d.ts` hint comment; method use produces a tsc error pointing to `loadFunction(name, { expand: true })` + `inspect()` to replace stub with full interface.
-- `.d.ts` overlay generator — branded `SpaceHandle` types per visible space, agent action signatures from tasklist config (with knowledge field type unions per spec L1754), function/component signatures from captured source, ambient module declarations for `availableModules`. Dynamically refreshed after `Space` mutations.
-- `loadSpace()` failure path: keep prior `SessionConfig`, inject `space_reload_failed` error (kind: "contract") naming the offending file (spec L1699).
-- **Class deletion cascade** (spec L1275, L1874): on `remove('functions/MyClass.ts')`, walk live QuickJS scope at next yield and nullify any variable whose value is an instance; `class_instance_nullified` traced per variable.
+**core/eval/turn-loop.ts** — implement §3 exactly. Wire BoundaryDetector → tsc → evalStatement
+→ yield handling → VARIABLES. Abort the provider stream when a yield fires.
 
-**Eval focus:** action success rate, tasklist completion, knowledge expansion accuracy, space authoring. Min alias: L (`pnpm eval --lib spaces --model L`).
-
----
-
-## Phase 12 — Orchestration Router (`llm-repl-cli/src/router/`)
-
-**Goal:** the host-side router that fires at `new_message` and `post_inspect` (spec §"Model Orchestration" L237–372).
-
-Deliverables:
-
-- `router.ts` — implements every routing rule from spec §"Routing Rules" in order (L302–323): annotation-escalation (rule 1), re-analyze (rule 2), recovery escalation M-R/L-R (rules 3–6), no-tasklist-yet, in-progress-task-difficulty tier selection, finish-up, budget warning, heap warning.
-- `analyzer.ts` — single-turn XS call. JSON output schema per spec §"ANALYZER Sub-Prompt" L327–342 (`difficulty`, `skip_planner`, `estimated_tasks`, `needs_fork`, `needs_ask`, `rationale`).
-- LoRA adapter selection via AI SDK `providerOptions` (spec L289–298). Model aliases via existing env-var resolver (`LM_MODEL_{ALIAS}`, `-R` suffix toggles reasoning).
-- Router state: `error_streak`, `annotation_mismatch_streak`, `analyzer_refires`, cached difficulty. Reset rules per spec.
-- Router emits **only** `router_decision` events to `trace.jsonl` (spec L246) — routing JSON never injected into executor context. Effects are visible only through context flags (`budget_warning`, `heap_warning`, `recovery_context`) which expand specific reconstruction blocks per spec L344–352.
-- `router/eval/` with router dataset + grader and prompts (`router.md`, `analyzer.md`).
-- Per-role evals callable as `pnpm eval --role <ROLE> --model <ALIAS>` (spec L1994–1997).
-
-**Exit:** router decisions on the eval dataset match expected role+model+flags; annotation-escalation triggers at streak 2; re-analyze fires at most once per user instruction.
+**core/eval/error-rewind.ts** — on type error or runtime throw:
+- Do **not** append the failing statement to accumulated source (rewind to last successful
+  line). Append an `ERROR (attempt k of 3)` user block: the failing line commented out + the
+  diagnostic/throw message. Abort stream; the next turn regenerates from there. After 3
+  attempts on the same line, end the turn and surface the error to the user (top-level) or
+  reject to the caller (fork/delegate).
 
 ---
 
-## Phase 13 — CLI Surface & Cutover
+## 10. Phase 6 — context summarization + persistence (core/context, core/session)
 
-- `llm-repl-cli/src/cli/` — `lmthing run` equivalent (binary name `llm-repl`) wiring providers → router → session → Ink/web renderer. WebSocket server for browser renderer (reuses ported `rpc/`).
-- **TypeScript export classifier** reused from `cli/src/cli/run-agent.ts` to drive Capture Rule decisions where the CLI sees streamed completions before the runtime sees them (parity check).
-- Catalog modules re-registered as QuickJS host bridges — port logic from `repl/src/catalog/{fs,fetch,shell,db,csv,json,path,env,date,crypto,mcp,web-search,image}.ts`, change registration form only.
-- **Migration**: existing `repl/` and `cli/` consumers (Studio, Computer, Chat — see `studio/`, `computer/`, `chat/` in the parent monorepo) switch import sites in a single PR per consumer, after the new package passes all eval gates.
-- Delete `repl/` and `cli/` once all consumers migrate; update `sdk/org/pnpm-workspace.yaml` and `sdk/org/CLAUDE.md`.
+**`summarize.ts`** — when the assembled prompt nears the model's context window, collapse the
+oldest assistant/VARIABLES blocks into one compact summary block (an LLM call with a fixed
+"summarize prior state" prompt, or a deterministic digest of variable names + outcomes). Keep
+recent turns verbatim.
 
----
-
-## Flow Step Design Rule
-
-The step-to-cycle mapping is `flow.steps[Math.min(cycle - 1, flow.steps.length - 1)]`. For an N-step flow, cycle K shows step `min(K-1, N-1)`. **Each step must complete all its tasks in one cycle** — multiple `await inspect()` calls within a step advance the step index on the second call, showing the next step's instructions to an LLM that hasn't finished the current step.
-
-The correct pattern: do all task work (including sequential `await fork(...)` calls), call `__flow.finish()` for each task, then end with a **single** terminal call — either `await inspect(result)` or the flow sink.
-
-For flows requiring more cycles than steps (user interaction, long processing), set `maxCycles` in the flow's `index.md` frontmatter.
+**`session/snapshot.ts`** — every N turns, serialize JSON-serializable VM scope + message
+history to disk (`<sessionDir>/snapshot.json`). `resume(dir)`: recreate the VM, re-inject saved
+scope vars, restore history. (Closures/functions in scope are not preserved — acceptable; scope
+holds data.) This is the only persistence; **no git**.
 
 ---
 
-## Critical Files (new)
+## 11. Phase 7 — tasklist + fork (core/tasklist, core/fork)
 
-- `sdk/org/llm-repl/src/lib/sandbox/{quickjs,boundary,capture,file-blocks,trace,host-bridge,require}.ts`
-- `sdk/org/llm-repl/src/lib/typecheck/{tsc-runner,retry,speculative,annotation-grace}.ts`
-- `sdk/org/llm-repl/src/lib/inspect/{index,budget}.ts` + `src/session/` + `src/context/reconstruction.ts`
-- `sdk/org/llm-repl/src/lib/{checkpoint,fork,memory,tasklist,io,render,snapshot,spaces}/index.ts` (+ supporting files per phase)
-- `sdk/org/llm-repl-cli/src/{router,cli,ink,web}/`
-- `sdk/org/llm-repl-cli/src/session/session.ts` — contains fork() and Space shim overrides; update when completing L4 / L10 spec work
-- Each `lib/<name>/eval/` directory: `dataset.jsonl`, `grade.ts`, prompts for all six model aliases (`xs.md`, `s.md`, `m.md`, `m_r.md`, `l.md`, `l_r.md`).
-- `sdk/org/llm-repl/llm-repl.d.ts` — canonical surface API (matches spec §"API" L375–999).
+**`tasklist/dag.ts`** — load a tasklist dir into `{ [id]: TaskNode }` where
+`TaskNode { id, instruction(body), output(schema), dependsOn?, condition?, optional?, goal? }`.
+Sort files by numeric prefix for display. Validate DAG (no cycles; exactly one `goal: true`).
 
-## Spaces (runtime directories, not packages)
+**`tasklist/schema.ts`** — tiny JSON-schema-ish validator for task `output` objects
+(`{ field: "string"|"number"|"boolean"|"object"|"array" }`). Reject resolve() with wrong shape.
 
-| Space | Path | Flows | Notes |
-|-------|------|-------|-------|
-| `research` | `spaces/research/` | `deep_research` | Validated end-to-end |
-| `cooking` | `spaces/cooking/` | `recipe_discovery`, `cook_recipe`, `meal_plan` | All 3 flows validated end-to-end |
+**`tasklist/condition-dsl.ts`** — parse + evaluate the restricted DSL:
+`<dotted.path> <op> <literal>` joined by `AND`/`OR`; ops `== != > < >= <=`. Evaluate against
+the accumulated outputs object `{ taskId: output }`. No raw JS eval.
 
-Add new spaces under `spaces/<name>/`. No `package.json` needed — the CLI loads them via `--space <path>`. Register new space names in the `knownSpaceDirs` map in `session.ts` for `Space.load()` cross-space delegation to work.
+**`fork/fork.ts`** — `ForkEngine.fork<T>({ instruction, output, seed, timeout }): Promise<T>`:
+- Create a **fresh VM** seeded with JSON-serializable copies of the given parent scope vars.
+- Run a child turn loop with: history up to the fork point + a task `user` message
+  (instruction + output schema + any upstream inputs). Inject a VM global
+  `currentTask.resolve(value)` that validates against `output`, ends the child stream, and
+  settles the fork promise. Only JSON-serializable values cross back; **no scope merge**.
+- Timeout → reject. Concurrency capped (`maxConcurrentForks`, default 8).
 
-## Critical Files (ported, no behavior change)
+**`tasklist/orchestrator.ts`** — `tasklist(name)` (a yield):
+- Load DAG; enter tasklist mode. Repeatedly: find tasks whose deps are all `done` and whose
+  `condition` (if any) passes; spawn each as a `fork` (parallel, within the cap). For a
+  dependent task, pass upstream outputs **both** as namespaced `__task_<id>` seed vars **and**
+  as an "Inputs:" summary in its task message. `optional` task failure → mark skipped, don't
+  block; required failure → abort the tasklist, reject. When the `goal` task resolves, settle
+  the `tasklist()` promise with its output → VARIABLES in the parent → parent resumes.
 
-- `sdk/org/llm-repl/src/knowledge/` ← `repl/src/knowledge/`
-- `sdk/org/llm-repl/src/context/{knowledge-decay,stop-decay}.ts` ← `repl/src/context/`
-- `sdk/org/llm-repl/src/hooks/` ← `repl/src/hooks/` + extended phase enum
-- `sdk/org/llm-repl/src/security/jsx-sanitizer.ts` ← `repl/src/security/`
-- `sdk/org/llm-repl/src/lib/spaces/loader.ts` ← `cli/src/cli/agent-loader.ts` + `repl/src/spaces/dynamic-loader.ts` (skeleton, full Space class in L10)
-- `sdk/org/llm-repl-cli/src/providers/` ← `cli/src/providers/`
-- `sdk/org/llm-repl-cli/src/rpc/` ← `cli/src/rpc/` + `cli/src/cli/server.ts`
-- `sdk/org/llm-repl-cli/src/cli/args.ts` ← `cli/src/cli/args.ts`
+The LLM never writes fork orchestration — the host does it (the model only sees individual
+fork task turns and, in the parent, the final goal VARIABLES).
 
 ---
 
-## Verification
+## 12. Phase 8 — delegate (core/delegate)
 
-Each phase exits when **all three** hold:
+**`registry.ts`** — resolve `"space/agent"` to a loaded space+agent. **Eager-load direct
+dependencies** of the session's agent at startup; resolve deeper levels lazily on first
+`delegate`. Detect dependency **cycles** and reject.
 
-1. **Unit tests** — `pnpm -F llm-repl test --filter lib/<layer>` green; specific assertions for every spec subsection in that layer.
-2. **Eval grader** — `pnpm eval --lib <layer> --model <ALIAS>` runs end-to-end against the real model configured in `LM_MODEL_<ALIAS>` and emits scores ≥ baseline threshold for the layer's primary metric: L0 = error rate; L1 = self-correction rate; L2 = dead-code-after-inspect rate (must be 0); L3 = rollback success rate; L4 = fork success + budget overrun rate; L5 = proactive-vs-auto compact ratio; L6 = DAG scheduling correctness; L7 = E2E completion; L8 = render correctness + clarification quality; L9 = cross-session scope reuse rate; L10 = action success rate.
-3. **Trace assertions** — `trace.jsonl` from the eval run contains every event the layer is supposed to emit (matched against the canonical list at spec L2006).
+**`delegate.ts`** — `delegate(target, queryOrAction, opts?)` (a yield), two forms:
+- Mode 1: `delegate("space/agent", { query, context, output })` — child picks one of its
+  actions, runs that action's tasklist, and its goal output is **coerced to `output`**.
+- Mode 2: `delegate("space/agent", "action_id", { query, context })` — run that action's
+  tasklist; result = its goal output.
+- The child is a fresh session (own VM + system block for *its* space/agent). It receives
+  **only** the passed `context` (no parent history). Runs to completion (its goal). Result
+  injected into the parent as VARIABLES.
+- Enforce **caps across the whole tree**: max delegation depth (default 5), shared
+  `maxConcurrentForks`, optional total token budget. Exceeding any → reject with an error the
+  parent LLM sees.
 
-**End-to-end verification at the close of Phase 13:**
+`fork` and `delegate` are **separate implementations** (do not unify into one engine).
 
-- Run `llm-repl run` with a frontier model on a multi-layer scenario: build a small space, fork two parallel research tasks, use `ask()` for clarification, `checkpoint()` before a risky op, `rollback()` after an injected error. Verify trace event ordering matches the spec's pipeline diagram (spec §"Pipeline" L1154).
-- Run the browser renderer against the same session via the WS bridge to confirm parity.
-- Run `pnpm eval --role EXEC_STANDARD --model M`, `--role RECOVERY --model M_R`, `--role PLANNER_DEEP --model L_R` and confirm all role gates clear.
-- Run all three existing consumer apps (Studio, Computer, Chat) against the new package and confirm no regression in their primary flows before deleting `repl/` and `cli/`.
+---
+
+## 13. Phase 9 — Ink terminal renderer (cli/render) + session end
+
+**`ink-renderer.tsx`** — a `RenderHost` implementation:
+- `display(desc)`: render the descriptor tree to Ink components (`p/span/Markdown` → `<Text>`,
+  `h1..3` → bold, `Card/Alert` → bordered `<Box>`, `Code` → gray, `Button/Badge` → colored).
+- `ask(id, desc)`: render an interactive form (`ink-text-input`, selects) for `form`
+  components; resolve via the submitted value.
+- `html-to-terminal.ts`: for `view` components (web-only), convert their HTML/descriptor output
+  to terminal text.
+
+**Session end (§ no sink)**: the turn loop ends a session when a turn produces statements but
+**no pending yield and no error** — nothing to resume, so the agent is done. Top-level: print
+final `display` output. Delegated/fork: the result is the invoked action's tasklist goal output
+(mode 1: coerced to the requested schema).
+
+---
+
+## 14. Phase 10 — web surface (cli/rpc + ui)
+
+**cli/rpc/server.ts** — `ws` server exposing the session: client → `sendMessage`,
+`submitForm(id, value)`, `cancelAsk(id)`; server → events `snapshot`, `display`, `ask_start`,
+`ask_end`, `variables`, `error`, `done`. The `RenderHost` for web emits these events instead of
+drawing to a terminal; `submitForm` resolves the same `ask` promise.
+
+**ui** — React `useReplSession(url)` hook (WebSocket); a blocks reducer renders the event stream;
+built-in `view`/`form` web components mirror the terminal primitives. Form submit posts back
+`submitForm`. Shares the **same descriptor + event contract** as the terminal so both surfaces
+are interchangeable.
+
+---
+
+## 15. The annotated walkthrough (authoritative behaviour)
+
+Build two fixture spaces and make this transcript work end-to-end in the terminal:
+
+- Space `cooking`, agent `chef`: functions `addIngredient/putPotOnHeat/getPotTemperature/
+  checkPot`; form components `SaltinessSlider/ConfirmDish`; view `PotStatus`; tasklist
+  `make_pasta` = `boil_water`,`make_sauce` (no deps) → `cook_pasta`(deps boil_water) →
+  `drain_pasta` → `combine`(goal, deps cook_pasta+make_sauce) → `garnish`(optional, condition).
+  Agent action `cook_pasta → make_pasta`. Dependency `sommelier/pairing`.
+- Space `sommelier`, agent `pairing`: actions `suggest_pairing`, `check_cellar`.
+
+Behaviours to reproduce exactly:
+1. System block lists globals + chef `instruct.md` body + actions + scoped fns/knowledge +
+   direct dep `sommelier/pairing` actions.
+2. `const approach = await ask(<ConfirmDish/>)` → stream aborts → `VARIABLES(approach: {...})`.
+3. `const dish = await tasklist("make_pasta")` → host forks `boil_water` + `make_sauce` in
+   parallel; LLM never writes the fork code.
+4. In a fork: `Promise.all([loadKnowledge(...), loadKnowledge(...), ask(...)])` → one abort →
+   one VARIABLES block with all three.
+5. `addIngredient(...); putPotOnHeat(...); await sleep("2min")` → void calls inline; `sleep`
+   ends the turn; `VARIABLES(slept)`.
+6. Poll: `getPotTemperature` + `await inspect(temp)` → turn ends; `await sleep("1min")`;
+   re-check; `currentTask.resolve({...})`.
+7. Dependent `cook_pasta` fork sees `__task_boil_water` in scope **and** an "Inputs:" summary.
+8. A typo statement → ERROR block (failing line commented + tsc message), prior successful
+   statement retained; regenerate; 3-strike cap.
+9. `inspect(log)` truncates a big array → re-query with `inspect([log, { path, slice }])`.
+10. Goal resolves → `VARIABLES(dish: {...})` in the parent.
+11. `delegate("sommelier/pairing", { query, context, output })` (mode 1) and
+    `delegate("sommelier/pairing", "check_cellar", {...})` (mode 2) → child runs with only the
+    passed context; result injected as VARIABLES.
+12. Final `display(<PotStatus/>)` with no yield → session ends.
+
+---
+
+## 16. Critical files to implement first (dependency order)
+
+1. `core/sandbox/{quickjs,host-bridge,boundary}.ts` — without these nothing runs.
+2. `core/eval/yield.ts` + `core/eval/turn-loop.ts` — the loop and yield protocol.
+3. `core/typecheck/{tsc,library-dts,overlay-dts}.ts`.
+4. `core/globals/*` + `core/context/variables.ts`.
+5. `core/spaces/*`.
+6. `cli/providers/*` + `cli/stream/stream.ts` + `core/context/system-block.ts` → first
+   end-to-end ask loop in the terminal.
+7. `core/tasklist/*` + `core/fork/fork.ts`.
+8. `core/delegate/*`.
+9. `cli/render/*` (Ink) → finish terminal surface.
+10. `cli/rpc/*` + `ui/*` → web surface.
+
+---
+
+## 17. Verification
+
+- **Unit (vitest)** co-located per module: BoundaryDetector statement splitting; host-bridge
+  async marshalling; tsc diagnostics + 3-strike rewind; serialize truncation + each `inspect`
+  query op; condition-DSL evaluator; DAG validation + ordering; fork JSON boundary + timeout;
+  delegate cap + cycle detection.
+- **Yield protocol** test: a statement with a void `await` runs inline (no turn end); a
+  statement with `await ask(...)` ends the turn and emits VARIABLES.
+- **End-to-end (terminal)**: run the `cooking` space with a `MockLanguageModel` that emits the
+  §15 statements; assert the full transcript (VARIABLES, ERROR rewind, tasklist forks, delegate,
+  session end). Provide a mock clock so `sleep` is instant in tests.
+- **Web**: a WS integration test (or Playwright) that drives the same mock session: `ask_start`
+  → `submitForm` → `ask_end`; `display` events render.
+- **Build/typecheck**: `pnpm -r build` and `pnpm -r typecheck` clean; `pnpm -r test` green.
+- **Manual smoke**: `repl --space ./fixtures/cooking "make pasta and suggest a wine"` against a
+  real model alias; confirm the agent confirms, runs the tasklist, delegates, and ends.
