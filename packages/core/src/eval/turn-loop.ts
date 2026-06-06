@@ -61,7 +61,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     const contextSnapshot = accumulatedContext; // restore on error so re-tries don't see partial turn
 
     const promptMessages = history.getPromptMessages();
-    tracer.write({ ts: Date.now(), type: 'llm_request', context: ctx, system: systemBlock, messages: promptMessages });
+    tracer.write({ ts: Date.now(), type: 'llm_request', context: ctx, system: systemBlock, messages: promptMessages, model: deps.model });
     const stream = await streamFn({ system: systemBlock, messages: promptMessages, model: deps.model });
 
     const detector = new BoundaryDetector();

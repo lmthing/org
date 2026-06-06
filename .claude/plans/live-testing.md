@@ -5,6 +5,9 @@ Branch: `claude/agentic-framework-paper-ideas-CGzXp`
 Covers: the four features in `.claude/plans/verifier-gated-escalation.md`
 (budget guardrails, `progress()`, the `solve` escalation engine, per-role models).
 
+Prerequisite status: **P0.1 (CLI budget flags) and P0.2 (model in trace) are DONE**;
+P0.3 (userland `solve` / `fixtures/solver`) remains.
+
 Per CLAUDE.md: *"for new runtime features, also drive the built CLI against fixture
 spaces with a real model and inspect the `--trace` NDJSON — unit tests miss
 model-behavior and end-to-end integration issues."* The unit tests already cover
@@ -19,7 +22,7 @@ Three features are implemented in `@repl/core` but are not yet observable or
 controllable from the CLI. Each is a small, additive change; live testing is
 blocked on them, so they are step 0.
 
-### P0.1 — Expose budget from the CLI  *(required for Phase 1)*
+### P0.1 — Expose budget from the CLI  *(required for Phase 1)*  ✅ DONE
 `SessionOpts.budget` exists but `packages/cli/src/cli/args.ts` + `bin.ts` do not
 set it, so there is no way to cap a real run. Add:
 - `args.ts`: `--max-episodes <n>`, `--max-tool-calls <n>`, `--max-fork-depth <n>`,
@@ -32,7 +35,7 @@ set it, so there is no way to cap a real run. Add:
   confirm a `BudgetExceededError` surfaces there (it propagates out of
   `session.start`). That non-zero exit + message is the Phase 1 pass signal.
 
-### P0.2 — Record the model on the `llm_request` trace event  *(required for Phase 4)*
+### P0.2 — Record the model on the `llm_request` trace event  *(required for Phase 4)*  ✅ DONE
 `turn-loop.ts` writes `llm_request` with `system` + `messages` but not the model,
 so per-role model selection is invisible in the trace. Add `model: deps.model` to
 that `tracer.write({...})` call. Then a fork's role model is verifiable by reading

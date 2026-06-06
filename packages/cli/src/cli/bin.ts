@@ -21,7 +21,7 @@ function loadEnv() {
 loadEnv();
 
 import { Session } from '@repl/core';
-import { parseArgs } from './args.js';
+import { parseArgs, type CliArgs } from './args.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
 import { createStream } from '../stream/stream.js';
@@ -76,6 +76,35 @@ function readRoleModels(): { explore?: string; plan?: string; general?: string }
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
+/**
+ * Assemble host budget caps from CLI flags, falling back to env
+ * (LM_BUDGET_EPISODES / _TOOL_CALLS / _FORK_DEPTH / _WALLCLOCK_MS). Returns
+ * undefined when nothing is set, so the session runs unbounded by default.
+ */
+function readBudget(args: CliArgs): {
+  maxEpisodes?: number;
+  maxToolCalls?: number;
+  maxForkDepth?: number;
+  maxWallClockMs?: number;
+} | undefined {
+  const envNum = (key: string): number | undefined => {
+    const raw = process.env[key];
+    if (raw === undefined) return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
+  const budget: { maxEpisodes?: number; maxToolCalls?: number; maxForkDepth?: number; maxWallClockMs?: number } = {};
+  const maxEpisodes = args.maxEpisodes ?? envNum('LM_BUDGET_EPISODES');
+  const maxToolCalls = args.maxToolCalls ?? envNum('LM_BUDGET_TOOL_CALLS');
+  const maxForkDepth = args.maxForkDepth ?? envNum('LM_BUDGET_FORK_DEPTH');
+  const maxWallClockMs = args.maxWallClockMs ?? envNum('LM_BUDGET_WALLCLOCK_MS');
+  if (maxEpisodes !== undefined) budget.maxEpisodes = maxEpisodes;
+  if (maxToolCalls !== undefined) budget.maxToolCalls = maxToolCalls;
+  if (maxForkDepth !== undefined) budget.maxForkDepth = maxForkDepth;
+  if (maxWallClockMs !== undefined) budget.maxWallClockMs = maxWallClockMs;
+  return Object.keys(budget).length > 0 ? budget : undefined;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
@@ -107,6 +136,9 @@ async function main(): Promise<void> {
   // Per-role fork models from env: LM_MODEL_ROLE_EXPLORE / _PLAN / _GENERAL.
   const roleModels = readRoleModels();
 
+  // Host budget caps from --max-* flags or LM_BUDGET_* env (undefined = unbounded).
+  const budget = readBudget(args);
+
   const agentSlug = args.agent ?? process.env['LM_AGENT'] ?? 'default';
 
   // System spaces: explicit list, env override, disabled, or default (undefined).
@@ -130,6 +162,7 @@ async function main(): Promise<void> {
         traceFile: args.traceFile,
         systemSpaceDirs,
         roleModels,
+        budget,
       },
       { streamFn },
     );
@@ -150,6 +183,7 @@ async function main(): Promise<void> {
         traceFile: args.traceFile,
         systemSpaceDirs,
         roleModels,
+        budget,
         maxHistoryTurns: 20,
       },
       { streamFn },
@@ -192,6 +226,7 @@ async function main(): Promise<void> {
         traceFile: args.traceFile,
         systemSpaceDirs,
         roleModels,
+        budget,
       },
       { streamFn },
     );

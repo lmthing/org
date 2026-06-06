@@ -9,6 +9,18 @@ export interface CliArgs {
   claude?: boolean;
   systemSpaces?: string[];
   noSystemSpaces?: boolean;
+  maxEpisodes?: number;
+  maxToolCalls?: number;
+  maxForkDepth?: number;
+  maxWallClockMs?: number;
+}
+
+/** Parse a CLI numeric flag value; throws a clear error on a non-number. */
+function parseNumericFlag(flag: string, val: string | undefined): number {
+  if (val === undefined) throw new Error(`${flag} requires a value`);
+  const n = Number(val);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`${flag} requires a non-negative number, got "${val}"`);
+  return n;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -64,6 +76,22 @@ export function parseArgs(argv: string[]): CliArgs {
       }
       case '--no-system-spaces': {
         result.noSystemSpaces = true;
+        break;
+      }
+      case '--max-episodes': {
+        result.maxEpisodes = parseNumericFlag('--max-episodes', args.shift());
+        break;
+      }
+      case '--max-tool-calls': {
+        result.maxToolCalls = parseNumericFlag('--max-tool-calls', args.shift());
+        break;
+      }
+      case '--max-fork-depth': {
+        result.maxForkDepth = parseNumericFlag('--max-fork-depth', args.shift());
+        break;
+      }
+      case '--max-wallclock-ms': {
+        result.maxWallClockMs = parseNumericFlag('--max-wallclock-ms', args.shift());
         break;
       }
       case '--web': {
