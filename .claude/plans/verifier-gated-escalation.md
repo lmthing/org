@@ -1,10 +1,46 @@
 # Implementation Plan: Verifier-Gated Escalation & Budget Guardrails
 
-Status: proposed
+Status: implemented (Phases 1, 2, 4 fully; Phase 3 engine landed, userland exposure deferred)
 Branch: `claude/agentic-framework-paper-ideas-CGzXp`
 Source: ideas distilled from *"Advancing Mathematics Research with AI-Driven Formal
 Proof Search"* (AlphaProof Nexus, DeepMind, arXiv:2605.22763), critiqued against
 lmthing's design thesis.
+
+---
+
+## 0. Implementation status
+
+Landed on this branch (full `pnpm typecheck` clean across all packages; all 195
+core/cli tests pass, incl. the new suites):
+
+- **Phase 1 — Budget guardrails: DONE.** `eval/budget.ts` (`Budget`,
+  `BudgetExceededError`, `BudgetLimits`). Wired into `runTurnLoop`
+  (`tickEpisode` per turn, `tickToolCalls` per resolved yield),
+  `Session` (fresh budget per `start()`/`continue()`, from `SessionOpts.budget`),
+  and `ForkEngine` (per-fork budget + `assertForkDepth` before VM creation).
+  Tests: `eval/budget.test.ts` (12) + budget integration in `fork/fork.test.ts`
+  (episodes/toolCalls/forkDepth caps, clean rejection, within-budget no-op).
+- **Phase 2 — Progress global: DONE.** Read-only `progress()` injected via
+  `host-tools.ts`, declared in `LIBRARY_DTS`, backed by the live per-run budget
+  snapshot. Test: progress read inside a real fork VM (`fork/fork.test.ts`).
+- **Phase 4 — Per-role models: DONE.** `modelForRole` + `RoleModelConfig` in
+  `fork/roles.ts`; `model?` threaded through `StreamOpts` → `TurnLoopDeps` →
+  `ForkEngine`; `SessionOpts.roleModels`; CLI `streamFn` resolves per-request
+  models (cached) from `LM_MODEL_ROLE_{EXPLORE,PLAN,GENERAL}`. Tests:
+  `fork/roles.test.ts` (mapping + a fork passing its role model to `streamFn`).
+- **Phase 3 — `solve` engine: ENGINE LANDED, userland exposure DEFERRED.**
+  `fork/solve.ts` is the full verifier-gated ladder, fully unit-tested via
+  dependency injection (`fork/solve.test.ts`, 10 cases: no-verify no-op,
+  first-try pass, retry rung, feedback injection, race escalation, exhaustion,
+  `maxAttempts` ceiling, custom ladder, async verify, race-width capping).
+  **Deviation from the original Phase 3 (userland-first):** a `verify`
+  *callback* cannot marshal across the QuickJS boundary, so a host-exposed
+  `solve` global can't take an in-VM predicate. The correct userland form is a
+  space function that calls `fork` and an in-VM verify — added when a concrete
+  space needs it (per "graduate when reused"). The tested core engine is the
+  reusable substrate that form will build on.
+
+Everything below is the original plan, kept for rationale.
 
 ---
 

@@ -59,4 +59,5 @@ declare function fetch(url: string, opts?: { method?: string; headers?: Record<s
 declare const process: { env: Record<string, string | undefined>; exit(code?: number): never };
 declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };
 declare function writeFileRaw(path: string, content: string): { ok: boolean; bytes: number; error?: string };
+declare function progress(): { episodes: number; toolCalls: number; elapsedMs: number };
 `;

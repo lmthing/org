@@ -55,6 +55,19 @@ export function normalizeRole(role: string | undefined): ForkRole {
   return role === 'explore' || role === 'plan' ? role : 'general';
 }
 
+/**
+ * Per-role model assignment. Lets cheap roles (explore/plan — read-only,
+ * high-throughput) run on a cheaper model while general forks use the capable
+ * default. Values are model specs or aliases resolved by the provider layer.
+ */
+export type RoleModelConfig = Partial<Record<ForkRole, string>>;
+
+/** The model spec/alias for a role, or undefined to use the session default. */
+export function modelForRole(role: string | undefined, config?: RoleModelConfig): string | undefined {
+  if (!config) return undefined;
+  return config[normalizeRole(role)];
+}
+
 /** The system-prompt preamble for a role. */
 export function rolePreamble(role: string | undefined): string {
   return PREAMBLES[normalizeRole(role)];

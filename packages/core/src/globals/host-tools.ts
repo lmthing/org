@@ -21,6 +21,10 @@ export interface HostToolsOpts {
   /** Directory used to root per-space state (memory/todo stores) via LMTHING_SPACE_DIR. */
   spaceDir: string;
   profile?: HostToolsProfile;
+  /** Live read-only progress accessor, surfaced to the VM as `progress()`. The
+   *  worker can observe the "complexity factor" (turns/tool-calls/elapsed) but
+   *  cannot mutate host state through it. */
+  progress?: () => { episodes: number; toolCalls: number; elapsedMs: number };
 }
 
 const READ_BYTE_CAP = 256 * 1024;
@@ -146,6 +150,13 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
       return { ok: false, content: '', lines: 0, truncated: false, error: e instanceof Error ? e.message : String(e) };
     }
   });
+
+  // progress — read-only view of the run's budget counters ("complexity factor").
+  // Returns a fresh snapshot each call; the VM cannot write back through it.
+  const progressFn = opts.progress;
+  if (progressFn) {
+    setGlobal('progress', () => progressFn());
+  }
 
   // writeFileRaw — file write via Node fs. Withheld for read-only profiles.
   setGlobal('writeFileRaw', (path: string, content: string) => {

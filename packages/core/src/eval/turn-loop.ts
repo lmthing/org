@@ -10,6 +10,7 @@ import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { buildErrorBlock } from './error-rewind.js';
 import { emitVariables, extractBindingNames, extractBindingPattern } from '../context/variables.js';
+import type { Budget } from './budget.js';
 
 export type { StreamOpts, StreamSession };
 
@@ -33,6 +34,12 @@ export interface TurnLoopDeps {
   tracer?: Tracer;
   /** Label for trace events — e.g. 'session', 'fork:analyze_dish', 'delegate:pairing' */
   traceContext?: string;
+  /** Host-set budget. tickEpisode() per turn, tickToolCalls() per resolved yield.
+   *  Exceeding a limit throws BudgetExceededError, which the caller disposes the VM on. */
+  budget?: Budget;
+  /** Optional model spec/alias for every request in this loop (e.g. a fork's
+   *  role model). Passed through to streamFn; the provider resolves it. */
+  model?: string;
 }
 
 export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'> {
@@ -46,11 +53,16 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
 
   while (attempt < maxRetries) {
     attempt++;
+    // Budget: count this LLM turn before issuing the request. Throws
+    // BudgetExceededError (propagates out of runTurnLoop) if over the episode
+    // or wall-clock cap — the caller disposes the VM. Counted outside the
+    // stream try/catch so it cannot be swallowed as an abort.
+    deps.budget?.tickEpisode();
     const contextSnapshot = accumulatedContext; // restore on error so re-tries don't see partial turn
 
     const promptMessages = history.getPromptMessages();
     tracer.write({ ts: Date.now(), type: 'llm_request', context: ctx, system: systemBlock, messages: promptMessages });
-    const stream = await streamFn({ system: systemBlock, messages: promptMessages });
+    const stream = await streamFn({ system: systemBlock, messages: promptMessages, model: deps.model });
 
     const detector = new BoundaryDetector();
     let pendingYield: YieldRequest | null = null;
@@ -182,6 +194,9 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
 
     if (pendingYield && yieldingStatement) {
       const yields = vm.pendingYields.splice(0);
+      // Budget: count each resolved yield as a tool call. Throws (and the caller
+      // disposes the VM) if over the tool-call or wall-clock cap.
+      deps.budget?.tickToolCalls(yields.length);
       const variables: Record<string, unknown> = {};
 
       // Binding pattern of the yielding statement (kind + names).

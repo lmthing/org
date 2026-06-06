@@ -57,6 +57,10 @@ export { runTurnLoop } from './eval/turn-loop.js';
 export type { TurnLoopDeps } from './eval/turn-loop.js';
 export { buildErrorBlock } from './eval/error-rewind.js';
 
+// Budget guardrails
+export { Budget, BudgetExceededError } from './eval/budget.js';
+export type { BudgetLimits, BudgetKind, BudgetSnapshot } from './eval/budget.js';
+
 // Spaces
 export { loadSpace } from './spaces/load.js';
 export type {
@@ -100,6 +104,10 @@ export { runTasklist } from './tasklist/orchestrator.js';
 // Fork
 export { ForkEngine } from './fork/fork.js';
 export type { ForkTask } from './fork/fork.js';
+export { normalizeRole, rolePreamble, roleProfile, modelForRole } from './fork/roles.js';
+export type { ForkRole, RoleModelConfig } from './fork/roles.js';
+export { solve } from './fork/solve.js';
+export type { SolveOpts, SolveResult, SolveTask, SolveRung, VerifyResult } from './fork/solve.js';
 
 // Delegate
 export { DelegateRegistry } from './delegate/registry.js';

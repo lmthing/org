@@ -28,6 +28,7 @@ import { createTasklistGlobal } from '../globals/tasklist.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
+import { Budget } from '../eval/budget.js';
 import { routeCommonYield, type YieldRouterContext } from '../eval/yield-router.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
@@ -64,6 +65,12 @@ export class Session {
    * start()/resume() when agent functions change.
    */
   private forkEngine: import('../fork/fork.js').ForkEngine | null = null;
+  /**
+   * Host-enforced budget for the current turn-loop run. Reset per
+   * start()/continue() so each task gets a fresh ceiling. The `progress` global
+   * reads this live (the closure dereferences the field, so resetting works).
+   */
+  private budget: Budget = new Budget();
 
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
@@ -85,6 +92,7 @@ export class Session {
     // Context economy: collapse old turns into a summary once history grows large,
     // keeping the most recent messages (incl. this task) verbatim.
     await this.maybeSummarizeHistory();
+    this.budget = new Budget(this.opts.budget ?? {});
     await runTurnLoop({
       vm: this.vm,
       history: this.history,
@@ -96,6 +104,7 @@ export class Session {
       maxRetries: this.opts.maxRetries,
       tracer: this.tracer,
       traceContext: 'session',
+      budget: this.budget,
     });
   }
 
@@ -159,6 +168,7 @@ export class Session {
     this.tracer.write({ ts: Date.now(), type: 'session_start', sessionId: this.sessionId, spaceDir: this.opts.spaceDir, agentSlug: resolvedSlug! });
 
     // 8. Run turn loop until done or error
+    this.budget = new Budget(this.opts.budget ?? {});
     await runTurnLoop({
       vm: this.vm,
       history: this.history,
@@ -170,6 +180,7 @@ export class Session {
       maxRetries: this.opts.maxRetries,
       tracer: this.tracer,
       traceContext: 'session',
+      budget: this.budget,
     });
   }
 
@@ -225,6 +236,7 @@ export class Session {
     ];
     this.injectJSXRuntime(allComponentNames);
 
+    this.budget = new Budget(this.opts.budget ?? {});
     await runTurnLoop({
       vm: this.vm,
       history: this.history,
@@ -236,6 +248,7 @@ export class Session {
       maxRetries: this.opts.maxRetries,
       tracer: this.tracer,
       traceContext: 'session',
+      budget: this.budget,
     });
   }
 
@@ -308,6 +321,8 @@ export class Session {
       tracer: this.tracer,
       agentFunctions: this.agentFunctions,
       agentFunctionsBundled: this.agentFunctionsBundled,
+      budgetLimits: this.opts.budget,
+      roleModels: this.opts.roleModels,
     });
     return this.forkEngine;
   }
@@ -338,7 +353,13 @@ export class Session {
 
     // Shared synchronous host substrate: console, execShell, process.env, fetch,
     // readFileRaw, writeFileRaw. Single source of truth (also used by fork VMs).
-    injectHostTools(this.vm, { renderHost: this.opts.renderHost, spaceDir: this.opts.spaceDir });
+    // `progress` reads the live per-run budget (the closure dereferences the
+    // field, so resetting this.budget per task is reflected).
+    injectHostTools(this.vm, {
+      renderHost: this.opts.renderHost,
+      spaceDir: this.opts.spaceDir,
+      progress: () => this.budget.snapshot(),
+    });
   }
 
   private injectSpaceFunctions(functions: Record<string, string>, functionsBundled: Record<string, string>): void {
