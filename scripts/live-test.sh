@@ -71,6 +71,15 @@ echo "$ERR" | grep -q "forkDepth limit of 0" && ok "stderr names forkDepth limit
 [ "$(count "$T" "e.type==='llm_request'&&e.context&&e.context.startsWith('fork')")" = "0" ] \
   && ok "cheap rejection: no fork conversation ran" || bad "no fork VM should have been created"
 
+echo "== Phase 3C: solve escalates through retry to race (rung 2, attempts 5) =="
+rm -rf fixtures/solver/work; T="$TMP/3c.jsonl"
+$CLI --space fixtures/solver --claude --mock fixtures/solver/mock-race.mjs --trace "$T" "implement add" >/dev/null 2>&1
+[ "$(solve_field "$T" verified)" = "true" ] && ok "verified=true" || bad "verified should be true"
+[ "$(solve_field "$T" rung)" = "2" ]        && ok "rung=2"       || bad "rung should be 2"
+[ "$(solve_field "$T" attempts)" = "5" ]    && ok "attempts=5"   || bad "attempts should be 5"
+[ "$(count "$T" "e.type==='llm_request'&&e.context&&e.context.startsWith('fork')")" = "5" ] \
+  && ok "exactly 5 fork conversations" || bad "should be exactly 5 fork conversations"
+
 echo "== Phase 2A: progress() reads live counters =="
 T="$TMP/2a.jsonl"
 OUT=$($CLI --space fixtures/engineer --claude --mock fixtures/engineer/mock.mjs --trace "$T" "call progress and show the counts" 2>/dev/null)

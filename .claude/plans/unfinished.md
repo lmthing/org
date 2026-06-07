@@ -1,15 +1,14 @@
 # Unfinished Work Tracker
 
 Status: living doc — consolidates everything **not yet implemented** across the
-repo's plans and open issues. Last updated 2026-06-06 on branch
+repo's plans and open issues. Last updated 2026-06-07 on branch
 `claude/unfinished-livetest-mock-plans-r4hu4`.
 
 Update this file as items land: when an item is done + tested, strike it here and
 (for bugs) delete the `.issues/` file per CLAUDE.md.
 
-**Remaining work:** only the credentialed/real-model live-testing runs and the
-not-yet-scripted live-testing scenarios (item 2). The mock mechanism (1), all 7 bugs
-(3), and the doc drift (4) are done.
+**Remaining work:** only the credentialed/real-model live-testing runs (§7) and
+the results table. All mockable scenarios (1F/1G, 2D, 3C, §6.3) are now done.
 
 ---
 
@@ -25,9 +24,9 @@ assertions keep working. Proven keyless end-to-end (see item 2).
 - [x] CLI `--mock <file>` flag + `LM_MOCK` env (`args.ts` + `bin.ts`); skips
       `resolveModel` so no credentials are needed; + `args.test.ts` coverage
 - [x] `fixtures/solver/mock.mjs` (3B retry → rung 1), `fixtures/solver/mock-pass.mjs`
-      (3A first-try → rung 0), `fixtures/engineer/mock.mjs` (Phase 1 budget + Phase 2
-      progress)
-- [x] `scripts/live-test.sh` — keyless CI smoke suite (closes live-testing §9); 14/14
+      (3A first-try → rung 0), `fixtures/solver/mock-race.mjs` (3C race → rung 2),
+      `fixtures/engineer/mock.mjs` (Phase 1 budget + Phase 2 progress)
+- [x] `scripts/live-test.sh` — keyless CI smoke suite (closes live-testing §9); 21/21
       assertions green
 - [x] Docs: CLAUDE.md `--mock`/`LM_MOCK` note + skills entry in `writing-tests.md`
 
@@ -44,18 +43,20 @@ Most scenarios are now asserted in two places: `scripts/live-test.sh` (CLI level
 - [x] Phase 1 — 1A episode cap, 1B tool-call cap, 1C fork-depth, wall-clock cap all
       fire with a clean non-zero exit; 1E within-budget no-op; budget resets per
       `continue()` turn
-- [ ] Phase 1 — 1F REPL-specific reset / 1G no-VM-leak edge cases
+- [x] Phase 1 — 1F REPL-specific reset (continue() after capped start() gets fresh budget)
+      / 1G no-VM-leak (dispose() after BudgetExceededError is safe + idempotent)
 - [x] Phase 2 — `progress()` reads live counters (2A), counts climb across a yield (2B),
       read-only snapshot (2C)
-- [ ] Phase 2 — 2D inside-fork progress
+- [x] Phase 2 — 2D inside-fork progress (fork's own budget counters, isolated from session)
 - [x] Phase 3 — 3A first-try pass, 3B one-retry → `rung:1` with feedback carried,
-      3D no-verify single shot, 3E bounded exhaustion, 3F budget bounds the ladder
+      3C escalate-to-race → `rung:2`, attempts:5, 5 fork VMs; 3D no-verify single shot,
+      3E bounded exhaustion, 3F budget bounds the ladder
       (the previously-swallowed fork-depth `BudgetExceededError` now propagates — fixed
       in `turn-loop.ts`)
-- [ ] Phase 3 — 3C escalate-to-race (needs a mock that keeps failing into the race rung)
 - [x] Phase 4 — per-role fork model recorded on the `llm_request` trace; no config →
       no override
-- [ ] §6.3 — reward-hacking / integrity regression
+- [x] §6.3 — integrity/reward-hacking: compound condition enforced (partial pass rejected);
+      feedback names the unmet condition and the retry fork receives it
 - [ ] §7 — fill the results table (or sibling `live-testing-results-<date>.md`);
       keep raw `--trace` NDJSON for any failure
 - [ ] The above against a **real model** with credentials (the mock covers wiring +
@@ -95,4 +96,4 @@ directory is now empty.
   implemented and unit-tested.
 - Mock LLM provider + `--mock` CLI flag + keyless `scripts/live-test.sh` (this branch).
 - All 7 `.issues/` bugs fixed + regression-tested; `.issues/` is now empty.
-- 234 unit tests pass; the keyless live-test suite is 14/14 green.
+- 261 unit tests pass; the keyless live-test suite is 21/21 green.

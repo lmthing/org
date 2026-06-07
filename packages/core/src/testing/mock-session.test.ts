@@ -170,6 +170,59 @@ describe('mock-driven Session — budget guardrails (Phase 1)', () => {
     expect(r.error).toBeUndefined();
     expect(r.displays).toEqual(['turn', 'turn']);
   });
+
+  it('1F: continue() after a capped start() gets a fresh budget and completes normally', async () => {
+    // start() exhausts maxEpisodes=2: two sleeps consume 2 episodes, and the tick
+    // for the 3rd turn fires BudgetExceededError before the streamFn is called.
+    // continue() immediately resets the budget, so callIndex=2 runs fine.
+    const spaceDir = await makeSpace();
+    const traceFile = join(spaceDir, 'trace.jsonl');
+    const displayed: unknown[] = [];
+    const host: RenderHost = {
+      display: (d) => { displayed.push(d); },
+      ask: async () => undefined,
+      log: () => {},
+    };
+    const m = createMockStreamFn((_o, { callIndex }) => {
+      if (callIndex === 0) return 'await sleep("1ms");';
+      if (callIndex === 1) return 'await sleep("1ms");';
+      // callIndex 2: tickEpisode throws for start() on episode 3, so this is reached
+      // only from continue() (which created a fresh budget).
+      return 'display("recovered");';
+    });
+    const session = new Session(
+      { spaceDir, agentSlug: 'default', modelAlias: 'mock', renderHost: host, traceFile, systemSpaceDirs: [], budget: { maxEpisodes: 2 } },
+      { streamFn: m },
+    );
+    let startErr: Error | undefined;
+    try { await session.start('exhaust me'); } catch (e) { startErr = e as Error; }
+    expect(startErr).toBeInstanceOf(BudgetExceededError);
+
+    let continueErr: Error | undefined;
+    try { await session.continue('try again'); } catch (e) { continueErr = e as Error; }
+    session.dispose();
+
+    expect(continueErr).toBeUndefined();
+    expect(displayed).toContain('recovered');
+  });
+
+  it('1G: session.dispose() after a BudgetExceededError is safe and idempotent', async () => {
+    const spaceDir = await makeSpace();
+    const traceFile = join(spaceDir, 'trace.jsonl');
+    const host: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
+    const m = createMockStreamFn(() => 'await sleep("1ms");');
+    const session = new Session(
+      { spaceDir, agentSlug: 'default', modelAlias: 'mock', renderHost: host, traceFile, systemSpaceDirs: [], budget: { maxEpisodes: 1 } },
+      { streamFn: m },
+    );
+    let budgetErr: Error | undefined;
+    try { await session.start('go'); } catch (e) { budgetErr = e as Error; }
+    expect(budgetErr).toBeInstanceOf(BudgetExceededError);
+    // First dispose — releases the VM that was created before runTurnLoop threw.
+    expect(() => session.dispose()).not.toThrow();
+    // Second dispose — must be a safe no-op (vm is null after the first call).
+    expect(() => session.dispose()).not.toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -213,6 +266,36 @@ describe('mock-driven Session — progress() (Phase 2)', () => {
     const snap = JSON.parse(r.displays[0] as string) as { a: number; b: number };
     expect(snap.a).toBe(999); // local mutation on the returned object
     expect(snap.b).toBeLessThan(999); // a fresh snapshot reflects the real (small) count
+  });
+
+  it('2D: progress() inside a fork returns the fork\'s own live counters', async () => {
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        {
+          when: /currentTask/,
+          respond: () =>
+            `const p = progress();\n` +
+            `currentTask.resolve({ episodes: p.episodes, toolCalls: p.toolCalls, elapsedMs: p.elapsedMs });`,
+        },
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const f = await fork({ role: 'general', instruction: 'measure progress', output: { episodes: 'number', toolCalls: 'number', elapsedMs: 'number' } });`;
+        if (sessionStep === 2) return `display(JSON.stringify(f));`;
+        return '';
+      },
+    );
+    const r = await runMockSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    const counters = JSON.parse(r.displays[0] as string) as { episodes: number; toolCalls: number; elapsedMs: number };
+    // The fork had at least one LLM turn (to produce the resolve code).
+    expect(counters.episodes).toBeGreaterThanOrEqual(1);
+    expect(counters.toolCalls).toBeGreaterThanOrEqual(0);
+    expect(counters.elapsedMs).toBeGreaterThanOrEqual(0);
+    // The fork's counters are isolated: not the session's large accumulated count.
+    expect(counters.episodes).toBeLessThan(100);
   });
 });
 
@@ -295,6 +378,37 @@ describe('mock-driven Session — solve escalation (Phase 3)', () => {
     expect(r.error).toBeInstanceOf(BudgetExceededError);
     expect((r.error as BudgetExceededError).kind).toBe('forkDepth');
     expect(forkRequests(r.trace).length).toBe(0); // no attempt VM ever ran
+  });
+
+  it('3C: both sequential rungs fail → race rung spawns 3 parallel forks, first winner accepted', async () => {
+    // Default ladder: ['retry', 'race3']. rung0 fails (score=5), retry fails (score=5),
+    // then race3 spawns 3 forks that all return score=20 → first winner accepted.
+    let forkCallCount = 0;
+    let orchestratorStep = 0;
+    const m = createMockStreamFn((o) => {
+      const hay = o.system + '\n' + o.messages.map((msg) => msg.content).join('\n');
+      if (hay.includes('currentTask')) {
+        const score = forkCallCount++ >= 2 ? 20 : 5; // calls 0,1 fail; 2,3,4 pass
+        return `currentTask.resolve({ score: ${score} });`;
+      }
+      orchestratorStep++;
+      if (orchestratorStep === 1) return SOLVE_VERIFIED;
+      if (orchestratorStep === 2)
+        return `display(JSON.stringify({ rung: r.rung, attempts: r.attempts, verified: r.verified }));`;
+      return '';
+    });
+    const r = await runMockSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    const out = JSON.parse(r.displays[0] as string) as { rung: number; attempts: number; verified: boolean };
+    expect(out.verified).toBe(true);
+    expect(out.rung).toBe(2);     // race is ladder[1] → lastRung = 2
+    expect(out.attempts).toBe(5); // 1 (rung0) + 1 (retry) + 3 (race3)
+    expect(forkRequests(r.trace).length).toBe(5);
+    // retry + all 3 race forks carry feedback from the failed prior attempt
+    const withFeedback = forkRequests(r.trace).filter((e) =>
+      e.messages.some((msg) => msg.content.includes('Feedback from the previous attempt')),
+    );
+    expect(withFeedback.length).toBe(4); // 1 retry + 3 race
   });
 });
 
@@ -380,5 +494,77 @@ describe('mock-driven Session — bug fixes', () => {
     expect(r.trace.some((e) => e.type === 'typecheck_error')).toBe(false);
     expect(String(r.displays[0])).toContain('ok=false');
     expect(String(r.displays[0])).toContain('path not found');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §6.3 — integrity / reward-hacking regression
+// ---------------------------------------------------------------------------
+
+describe('mock-driven Session — integrity (§6.3)', () => {
+  it('verifier correctly enforces compound conditions — partial pass is rejected', async () => {
+    // Condition: "score >= 10 AND quality != 'fake'"
+    // Attempt 1: { score: 15, quality: 'fake' } → score passes, quality fails → REJECTED
+    // Attempt 2 (retry): { score: 15, quality: 'real' } → both pass → ACCEPTED
+    let orchestratorStep = 0;
+    const SOLVE_COMPOUND =
+      `const r = await solve({ instruction: "produce a quality score", output: { score: "number", quality: "string" }, ` +
+      `verifyCondition: "score >= 10 AND quality != 'fake'" }) as ` +
+      `{ value: { score: number; quality: string }; rung: number; attempts: number; verified: boolean };`;
+
+    const m = createMockStreamFn((o) => {
+      const hay = o.system + '\n' + o.messages.map((msg) => msg.content).join('\n');
+      if (hay.includes('currentTask')) {
+        const isRetry = hay.includes('Feedback from the previous attempt');
+        // First attempt: score passes but quality fails. Retry: both pass.
+        return isRetry
+          ? `currentTask.resolve({ score: 15, quality: 'real' });`
+          : `currentTask.resolve({ score: 15, quality: 'fake' });`;
+      }
+      orchestratorStep++;
+      if (orchestratorStep === 1) return SOLVE_COMPOUND;
+      if (orchestratorStep === 2)
+        return `display(JSON.stringify({ rung: r.rung, attempts: r.attempts, verified: r.verified, quality: r.value.quality }));`;
+      return '';
+    });
+
+    const r = await runMockSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    const out = JSON.parse(r.displays[0] as string) as { rung: number; attempts: number; verified: boolean; quality: string };
+    expect(out.verified).toBe(true);
+    expect(out.quality).toBe('real');  // the winning attempt's value was used, not the loser's
+    expect(out.rung).toBe(1);          // escalated to the retry rung
+    expect(out.attempts).toBe(2);      // initial + 1 retry
+  });
+
+  it('verifier feedback names the unmet condition and the retry fork receives it', async () => {
+    // The condition string itself must appear in the retry fork's messages so the
+    // agent can address it. This is the information-carrying guarantee.
+    let retryMessages: string[] = [];
+    let orchestratorStep = 0;
+    const SOLVE_HIGH_BAR =
+      `const r = await solve({ instruction: "produce a score", output: { score: "number" }, ` +
+      `verifyCondition: "score >= 100" }) as ` +
+      `{ value: { score: number }; rung: number; attempts: number; verified: boolean };`;
+
+    const m = createMockStreamFn((o) => {
+      const hay = o.system + '\n' + o.messages.map((msg) => msg.content).join('\n');
+      if (hay.includes('currentTask')) {
+        const isRetry = hay.includes('Feedback from the previous attempt');
+        if (isRetry) retryMessages = o.messages.map((msg) => msg.content);
+        return isRetry ? `currentTask.resolve({ score: 100 });` : `currentTask.resolve({ score: 50 });`;
+      }
+      orchestratorStep++;
+      if (orchestratorStep === 1) return SOLVE_HIGH_BAR;
+      if (orchestratorStep === 2) return `display(JSON.stringify({ verified: r.verified }));`;
+      return '';
+    });
+
+    const r = await runMockSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(JSON.parse(r.displays[0] as string)).toMatchObject({ verified: true });
+    const allRetryText = retryMessages.join('\n');
+    expect(allRetryText).toContain('Feedback from the previous attempt');
+    expect(allRetryText).toContain('score >= 100'); // the unmet condition is named
   });
 });
