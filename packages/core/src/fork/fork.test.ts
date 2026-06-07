@@ -242,6 +242,47 @@ describe('ForkEngine', () => {
     });
   });
 
+  describe('concurrency (maxConcurrentForks)', () => {
+    // streamFn holds the slot for a beat and records how many forks are in flight,
+    // so `peak` reveals whether the cap actually serialized them.
+    function trackingEngine(max: number, track: { active: number; peak: number }): ForkEngine {
+      return new ForkEngine({
+        maxConcurrentForks: max,
+        parentHistory: [],
+        parentSpaceDir: '/tmp',
+        parentAgentSlug: 'test',
+        renderHost: silentHost,
+        streamFn: async () => {
+          track.active++;
+          track.peak = Math.max(track.peak, track.active);
+          await new Promise((r) => setTimeout(r, 15));
+          track.active--;
+          return makeStream('currentTask.resolve({ ok: true });\n');
+        },
+      });
+    }
+
+    it('runs forks in parallel up to the cap', async () => {
+      const track = { active: 0, peak: 0 };
+      const engine = trackingEngine(4, track);
+      await Promise.all([
+        engine.fork({ instruction: 'a', output: { ok: 'boolean' } }),
+        engine.fork({ instruction: 'b', output: { ok: 'boolean' } }),
+      ]);
+      expect(track.peak).toBe(2); // both in flight at once
+    });
+
+    it('serializes forks when the cap is 1 (the second waits for a slot)', async () => {
+      const track = { active: 0, peak: 0 };
+      const engine = trackingEngine(1, track);
+      await Promise.all([
+        engine.fork({ instruction: 'a', output: { ok: 'boolean' } }),
+        engine.fork({ instruction: 'b', output: { ok: 'boolean' } }),
+      ]);
+      expect(track.peak).toBe(1); // never more than one concurrently
+    });
+  });
+
   describe('registerSpace in a fork', () => {
     /** Write a minimal, loadable one-agent space under `dir`. */
     function writeSpace(dir: string): void {

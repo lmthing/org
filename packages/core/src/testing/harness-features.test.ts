@@ -4,6 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { Session } from '../session/session.js';
+import { saveSnapshot } from '../session/snapshot.js';
 import { createMockStreamFn, mockMatch } from './mock-provider.js';
 import type { RenderHost, SessionDeps, SessionOpts } from '../session/types.js';
 import type { TraceEvent } from '../sandbox/trace.js';
@@ -1054,5 +1055,139 @@ describe('harness — JSX components', () => {
     expect(r.error).toBeUndefined();
     expect(askedType).toBe('NameForm'); // the component descriptor reached the host
     expect(r.displays).toContain('got Ada');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// session.resume() from a snapshot
+// ---------------------------------------------------------------------------
+
+describe('harness — session.resume()', () => {
+  it('restores VM scope + history from a snapshot, then continues the turn loop', async () => {
+    const spaceDir = await makeSpace(); // agent slug "main"
+    const snapDir = await mkdtemp(join(tmpdir(), 'lmthing-snap-'));
+    tmpDirs.push(snapDir);
+    await saveSnapshot(snapDir, {
+      sessionId: 'sess-resume-1',
+      agentSlug: 'main',
+      spaceDir,
+      history: [
+        {
+          role: 'user',
+          content: 'Write TypeScript code to accomplish the following task.\n\nTask: the original task',
+          blockType: 'normal',
+        },
+        { role: 'assistant', content: 'const greeting = "hi";\ndisplay(greeting);', blockType: 'normal' },
+      ],
+      scope: { savedVar: 42, who: 'Ada' },
+      createdAt: Date.now(),
+    });
+
+    const displays: unknown[] = [];
+    const prompts: StreamOpts[] = [];
+    const host: RenderHost = { display: (d) => displays.push(d), ask: async () => undefined, log: () => {} };
+    const m = createMockStreamFn((o, { callIndex }) => {
+      prompts.push(o);
+      // Read the restored scope through globalThis (set via vm.setVar on resume).
+      if (callIndex === 0)
+        return `display("restored=" + (globalThis as any).savedVar + ":" + (globalThis as any).who);`;
+      return '';
+    });
+    const session = new Session(
+      { spaceDir, agentSlug: 'main', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [] },
+      { streamFn: m },
+    );
+    await session.resume(snapDir, 'now continue');
+    session.dispose();
+
+    // Scope restored — the resumed turn read the snapshot's vars from VM globals.
+    expect(displays).toContain('restored=42:Ada');
+    // History restored, and the new message appended verbatim (resume does not wrap it
+    // in the "Write TypeScript… Task:" framing that start()/continue() use).
+    const msgs = prompts[0]!.messages;
+    expect(msgs.some((mm) => mm.content.includes('the original task'))).toBe(true);
+    expect(msgs.some((mm) => mm.content.includes('const greeting'))).toBe(true);
+    expect(msgs.at(-1)!.content).toBe('now continue');
+  });
+
+  it('throws when the directory holds no snapshot', async () => {
+    const empty = await mkdtemp(join(tmpdir(), 'lmthing-nosnap-'));
+    tmpDirs.push(empty);
+    const session = new Session(
+      {
+        spaceDir: await makeSpace(),
+        agentSlug: 'main',
+        modelAlias: 'mock',
+        renderHost: { display: () => {}, ask: async () => undefined, log: () => {} },
+        systemSpaceDirs: [],
+      },
+      { streamFn: createMockStreamFn(() => '') },
+    );
+    await expect(session.resume(empty, 'go')).rejects.toThrow(/No snapshot/);
+    session.dispose();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Nested delegate chain (A → B), depth increments under the cap
+// ---------------------------------------------------------------------------
+
+/** A standalone space with one agent + one no-tasklist action. */
+async function makeActionSpace(actionId: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'lmthing-chain-'));
+  tmpDirs.push(dir);
+  const agent = join(dir, 'agents', 'main', 'instruct.md');
+  await mkdir(dirname(agent), { recursive: true });
+  await writeFile(
+    agent,
+    `---\ntitle: Chain\nactions:\n  - id: ${actionId}\n    label: ${actionId}\n    description: ${actionId}\n---\n\nAgent.`,
+    'utf8',
+  );
+  return dir;
+}
+
+describe('harness — nested delegate()', () => {
+  it('a delegate can itself delegate (A → B), and the parent gets the chained result', async () => {
+    const workerB = await makeActionSpace('leaf');
+    const workerA = await makeActionSpace('mid');
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        // A's child, turn 2: the inner delegate resolved (VARIABLES present) → resolve up.
+        {
+          when: (o: StreamOpts) =>
+            o.messages.some((mm) => mm.content.includes('Run action: mid')) &&
+            o.messages.some((mm) => mm.content.includes('VARIABLES')),
+          respond: () => `currentTask.resolve({ chain: "A>" + (inner as any).v });`,
+        },
+        // A's child, turn 1: delegate down to B (this is the NESTED delegate).
+        {
+          when: (o: StreamOpts) => o.messages.some((mm) => mm.content.includes('Run action: mid')),
+          respond: () =>
+            `const inner = await delegate(${JSON.stringify(workerB)}, "main", "leaf", {}) as { v: string };`,
+        },
+        // B's child (the leaf): resolve a value.
+        {
+          when: (o: StreamOpts) => o.messages.some((mm) => mm.content.includes('Run action: leaf')),
+          respond: () => `currentTask.resolve({ v: "B" });`,
+        },
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const d = await delegate(${JSON.stringify(workerA)}, "main", "mid", {}) as { chain: string };`;
+        if (sessionStep === 2) return `display("chain=" + (d as any).chain);`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('chain=A>B'); // the two-level chain resolved end to end
+    // Both delegate levels ran under their own trace contexts.
+    const delContexts = r.trace
+      .filter((e): e is LlmReq => e.type === 'llm_request' && e.context.startsWith('delegate:'))
+      .map((e) => e.context);
+    expect(delContexts.some((c) => c.includes('/mid'))).toBe(true);
+    expect(delContexts.some((c) => c.includes('/leaf'))).toBe(true);
   });
 });
