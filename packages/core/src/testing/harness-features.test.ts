@@ -111,17 +111,61 @@ async function runSession(args: {
   return { displays, logs, trace, error };
 }
 
-/** Combined system+messages haystack — the same text mockMatch routes on. */
-function haystack(o: StreamOpts): string {
-  return o.system + '\n' + o.messages.map((m) => m.content).join('\n');
-}
-
 type ForkReq = Extract<TraceEvent, { type: 'llm_request' }>;
 const forkRequests = (t: TraceEvent[]): ForkReq[] =>
   t.filter((e): e is ForkReq => e.type === 'llm_request' && e.context.startsWith('fork'));
 
 /** Flatten a traced llm_request (system + messages) into one searchable string. */
 const reqText = (e: ForkReq): string => e.system + '\n' + e.messages.map((m) => m.content).join('\n');
+
+type LlmReq = Extract<TraceEvent, { type: 'llm_request' }>;
+/** All llm_request events, optionally filtered to a trace context (session, fork, delegate). */
+const requests = (t: TraceEvent[], ctx?: string): LlmReq[] =>
+  t.filter((e): e is LlmReq => e.type === 'llm_request' && (ctx === undefined || e.context === ctx));
+const sessionRequests = (t: TraceEvent[]): LlmReq[] => requests(t, 'session');
+/** The content of the last user message in a request — i.e. what the model is responding to. */
+const lastUserMessage = (r: LlmReq): string =>
+  [...r.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+
+/**
+ * Structural invariants that must hold for the prompt of EVERY turn in a context:
+ *   - the conversation opens by framing the task,
+ *   - each request ends on a user message (the thing to respond to),
+ *   - the runtime never sends two assistant messages back-to-back (a user block —
+ *     VARIABLES / error / task — always separates model turns),
+ *   - the system block is byte-for-byte stable across the turns of one VM, and
+ *   - history grows monotonically (no turn's prompt is shorter than the previous).
+ * Pass expectInSystem to assert the system prompt actually carries the runtime
+ * contract + agent instructions the model needs.
+ */
+function assertConversationInvariants(
+  reqs: LlmReq[],
+  opts: { task: string; expectInSystem?: string[]; monotonic?: boolean },
+): void {
+  expect(reqs.length).toBeGreaterThan(0);
+
+  // The opening user message frames the task as an instruction to emit TS only.
+  const firstUser = reqs[0]!.messages.find((m) => m.role === 'user');
+  expect(firstUser?.content).toContain(`Task: ${opts.task}`);
+  expect(firstUser?.content).toContain('Respond with TypeScript code only');
+
+  const system0 = reqs[0]!.system;
+  for (const need of opts.expectInSystem ?? []) expect(system0).toContain(need);
+
+  for (let i = 0; i < reqs.length; i++) {
+    const r = reqs[i]!;
+    expect(r.system).toBe(system0); // stable system block across the VM's turns
+    expect(r.messages.length).toBeGreaterThan(0);
+    expect(r.messages.at(-1)!.role).toBe('user'); // always responding to a user turn
+    for (let j = 1; j < r.messages.length; j++) {
+      // no two assistant turns in a row — a user block always separates them
+      expect(r.messages[j]!.role === 'assistant' && r.messages[j - 1]!.role === 'assistant').toBe(false);
+    }
+    if (opts.monotonic && i > 0) {
+      expect(r.messages.length).toBeGreaterThan(reqs[i - 1]!.messages.length);
+    }
+  }
+}
 
 /**
  * A mockMatch rule that fires only inside a FORK/tasklist-task turn whose
@@ -169,6 +213,25 @@ describe('harness — ask()', () => {
     expect(
       r.trace.some((e) => e.type === 'yield_resolved' && e.kind === 'ask' && e.value === 'Ada'),
     ).toBe(true);
+
+    // Per-turn context: two session turns, well-formed, with the runtime contract
+    // + agent instructions in the (stable) system block.
+    const reqs = sessionRequests(r.trace);
+    expect(reqs.length).toBe(2);
+    assertConversationInvariants(reqs, {
+      task: 'go',
+      monotonic: true,
+      expectInSystem: ['TypeScript code execution agent', '# Available Globals', 'You are a test agent.'],
+    });
+    // Turn 0: exactly the task, nothing resolved yet.
+    expect(reqs[0]!.messages).toHaveLength(1);
+    // Turn 1: the continuation carries the resolved answer as a VARIABLES block,
+    // plus the assistant's ask() statement that produced it.
+    const cont = lastUserMessage(reqs[1]!);
+    expect(cont).toContain('VARIABLES');
+    expect(cont).toContain('name: "Ada"');
+    expect(cont).toContain('ALREADY EXECUTED');
+    expect(reqs[1]!.messages.some((m) => m.role === 'assistant' && m.content.includes('await ask('))).toBe(true);
   });
 });
 
@@ -178,10 +241,8 @@ describe('harness — ask()', () => {
 
 describe('harness — inspect()', () => {
   it('yields and the inspected value reaches the model on the continuation turn', async () => {
-    const promptsAfterInspect: string[] = [];
     let step = 0;
-    const m = createMockStreamFn((o, { callIndex }) => {
-      if (callIndex > 0) promptsAfterInspect.push(haystack(o));
+    const m = createMockStreamFn((_o, { callIndex }) => {
       step++;
       if (step === 1)
         return `const data = { items: [1, 2, 3], label: "widget" };\nawait inspect(data);`;
@@ -193,8 +254,10 @@ describe('harness — inspect()', () => {
     expect(r.displays).toContain('inspected');
     // inspect was traced as a yield.
     expect(r.trace.some((e) => e.type === 'yield' && e.kind === 'inspect')).toBe(true);
-    // The continuation prompt carried the inspected content forward.
-    expect(promptsAfterInspect.join('\n')).toContain('widget');
+    // The continuation prompt (turn 1) carried the inspected content forward to the model.
+    const reqs = sessionRequests(r.trace);
+    assertConversationInvariants(reqs, { task: 'go', monotonic: true });
+    expect(lastUserMessage(reqs[1]!)).toContain('widget');
   });
 
   it('applies an inspect query (count) before surfacing the value', async () => {
@@ -252,6 +315,16 @@ describe('harness — sleep()', () => {
     expect(r.error).toBeUndefined();
     expect(r.displays).toEqual(['before', 'after']);
     expect(r.trace.some((e) => e.type === 'yield' && e.kind === 'sleep')).toBe(true);
+
+    // sleep binds no variables, so the continuation is a bare VARIABLES block that
+    // still tells the model what already ran (so it doesn't repeat the sleep).
+    const reqs = sessionRequests(r.trace);
+    expect(reqs.length).toBe(2);
+    assertConversationInvariants(reqs, { task: 'go', monotonic: true });
+    const cont = lastUserMessage(reqs[1]!);
+    expect(cont).toContain('VARIABLES');
+    expect(cont).toContain('ALREADY EXECUTED');
+    expect(cont).toContain('await sleep');
   });
 });
 
@@ -286,6 +359,24 @@ describe('harness — fork()', () => {
     const out = JSON.parse(r.displays[0] as string) as { x: string; y: string };
     expect(out).toEqual({ x: 'a', y: 'b' }); // positional, not swapped
     expect(forkRequests(r.trace).length).toBe(2);
+
+    // Each subagent gets an isolated, well-formed prompt: the fork preamble in the
+    // system block and its own instruction + output schema + resolve hint as the task.
+    for (const fr of forkRequests(r.trace)) {
+      expect(fr.system).toContain('code execution agent');
+      const u = lastUserMessage(fr);
+      expect(u).toContain('Output schema:');
+      expect(u).toContain('currentTask.resolve');
+    }
+    expect(forkRequests(r.trace).some((fr) => lastUserMessage(fr).includes('ALPHA_TASK'))).toBe(true);
+    expect(forkRequests(r.trace).some((fr) => lastUserMessage(fr).includes('BETA_TASK'))).toBe(true);
+
+    // The parent's continuation turn carries BOTH resolved results, positionally bound.
+    const reqs = sessionRequests(r.trace);
+    const cont = lastUserMessage(reqs[reqs.length - 1]!);
+    expect(cont).toContain('VARIABLES');
+    expect(cont).toContain('"tag": "a"');
+    expect(cont).toContain('"tag": "b"');
   });
 
   it('an explore (read-only) fork cannot write — writeFileRaw is withheld', async () => {
@@ -396,8 +487,16 @@ describe('harness — tasklist()', () => {
     const firstIdx = forks.findIndex((e) => reqText(e).includes('FIRST_TASK'));
     const secondIdx = forks.findIndex((e) => reqText(e).includes('SECOND_TASK'));
     expect(firstIdx).toBeLessThan(secondIdx);
-    // The downstream fork actually received the upstream output.
-    expect(reqText(forks[secondIdx]!)).toContain('first');
+
+    // Both task prompts carry the shared seed; only the downstream task is handed
+    // the upstream output, under the producing task's id ("first").
+    const firstPrompt = lastUserMessage(forks[firstIdx]!);
+    const secondPrompt = lastUserMessage(forks[secondIdx]!);
+    expect(firstPrompt).toContain('Context variables'); // seed summary
+    expect(firstPrompt).toContain('seedVal');
+    expect(firstPrompt).not.toContain('Inputs from upstream tasks'); // no deps → no upstream block
+    expect(secondPrompt).toContain('Inputs from upstream tasks');
+    expect(secondPrompt).toContain('first'); // upstream output injected under its task id
   });
 });
 
@@ -440,7 +539,16 @@ describe('harness — delegate()', () => {
     expect(r.error).toBeUndefined();
     expect(r.displays).toContain('result=42');
     // The child ran under a delegate trace context.
-    expect(r.trace.some((e) => e.type === 'llm_request' && e.context.startsWith('delegate:'))).toBe(true);
+    const delReqs = r.trace.filter(
+      (e): e is LlmReq => e.type === 'llm_request' && e.context === 'delegate:' + workerDir + '/worker/compute',
+    );
+    expect(delReqs.length).toBeGreaterThanOrEqual(1);
+    // The child's prompt names the action + query and carries the worker's own
+    // instructions in its (separate) system block — not the parent's.
+    const childPrompt = lastUserMessage(delReqs[0]!);
+    expect(childPrompt).toContain('Run action: compute');
+    expect(childPrompt).toContain('Query: go');
+    expect(delReqs[0]!.system).toContain('worker'); // worker agent instructions, distinct from the parent session system
   });
 });
 
@@ -620,6 +728,18 @@ describe('harness — history summarization', () => {
     expect(r.displays).toEqual(Array(7).fill('tick'));
     // The deterministic summarizer logs when it collapses history.
     expect(r.logs.some((l) => l.includes('history summarized'))).toBe(true);
+
+    // Context check: after the collapse, the prompt opens with a [CONTEXT SUMMARY]
+    // block (old turns folded into one message) instead of the original task, and
+    // — the whole point — the prompt stays BOUNDED even though 7 turns ran. Without
+    // summarization the final prompt would be ~13 messages (7 user + 6 assistant).
+    const reqs = sessionRequests(r.trace);
+    expect(reqs.length).toBe(7);
+    const summarized = reqs.find((req) => req.messages[0]?.content.includes('[CONTEXT SUMMARY]'));
+    expect(summarized).toBeDefined();
+    expect(summarized!.messages[0]!.content).not.toContain('Task: t0'); // original task folded away
+    const peak = Math.max(...reqs.map((req) => req.messages.length));
+    expect(peak).toBeLessThanOrEqual(8); // capped near keepLast(6)+summary, not growing with turns
   });
 
   it('does not summarize when maxHistoryTurns is unset (default off)', async () => {
@@ -631,5 +751,65 @@ describe('harness — history summarization', () => {
     });
     expect(r.error).toBeUndefined();
     expect(r.logs.some((l) => l.includes('history summarized'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-turn context & messages — the prompt the model sees on EVERY turn
+// ---------------------------------------------------------------------------
+
+describe('harness — per-turn context & messages', () => {
+  it('builds a correct, growing prompt across a multi-yield run (ask → sleep → display)', async () => {
+    const m = createMockStreamFn((_o, { callIndex }) => {
+      if (callIndex === 0)
+        return `const who = await ask({ type: "input", props: { q: "who" }, children: [] });`;
+      if (callIndex === 1) return `await sleep("1ms");`;
+      if (callIndex === 2) return `display("done for " + who);`;
+      return '';
+    });
+    const r = await runSession({ streamFn: m, message: 'plan', ask: async () => 'Grace' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('done for Grace');
+
+    const reqs = sessionRequests(r.trace);
+    expect(reqs.length).toBe(3); // ask turn, sleep turn, final display turn
+    assertConversationInvariants(reqs, {
+      task: 'plan',
+      monotonic: true,
+      expectInSystem: ['TypeScript code execution agent', '# Available Globals'],
+    });
+
+    // Turn 0: just the task.
+    expect(reqs[0]!.messages.map((mm) => mm.role)).toEqual(['user']);
+    // Turn 1 (after ask): task, assistant(ask), VARIABLES(who="Grace").
+    expect(reqs[1]!.messages.map((mm) => mm.role)).toEqual(['user', 'assistant', 'user']);
+    expect(lastUserMessage(reqs[1]!)).toContain('who: "Grace"');
+    // Turn 2 (after sleep): the who binding is still in scope, and the sleep ran.
+    const t2 = lastUserMessage(reqs[2]!);
+    expect(t2).toContain('VARIABLES');
+    expect(t2).toContain('await sleep');
+    // who was declared earlier, so it's listed as already-in-scope (don't redeclare).
+    expect(t2).toContain('who');
+  });
+
+  it('injects an ERROR block into the next prompt and recovers on retry (same turn loop)', async () => {
+    // Turn 0 fails typecheck; the runtime feeds back an ERROR block and retries —
+    // the recovery prompt must name the failing statement so the model can fix it.
+    const m = createMockStreamFn((_o, { callIndex }) => {
+      if (callIndex === 0) return `const n: number = "not a number";`;
+      return `display("recovered");`;
+    });
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('recovered');
+
+    const reqs = sessionRequests(r.trace);
+    expect(reqs.length).toBe(2); // initial attempt + one retry
+    // The retry prompt carries the ERROR block (attempt 1) and the failing source.
+    const retry = lastUserMessage(reqs[1]!);
+    expect(retry).toContain('ERROR (attempt 1');
+    expect(retry).toContain('not a number');
+    // A typecheck_error was traced for the bad statement.
+    expect(r.trace.some((e) => e.type === 'typecheck_error')).toBe(true);
   });
 });
