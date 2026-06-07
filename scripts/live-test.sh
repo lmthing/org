@@ -86,6 +86,23 @@ OUT=$($CLI --space fixtures/engineer --claude --mock fixtures/engineer/mock.mjs 
 echo "$OUT" | grep -qE "^episodes=[0-9]+ toolCalls=[0-9]+ elapsedMs=[0-9]+" \
   && ok "rendered numeric counters" || bad "should render numeric episodes/toolCalls/elapsedMs"
 
+echo "== Phase 2D: progress() inside a fork returns fork-isolated counters =="
+T="$TMP/2d.jsonl"
+OUT=$($CLI --space fixtures/solver --claude --mock fixtures/solver/mock-fork-progress.mjs --trace "$T" "measure progress" 2>/dev/null)
+echo "$OUT" | grep -qE "episodes=[0-9]+ toolCalls=[0-9]+ elapsedMs=[0-9]+" \
+  && ok "fork rendered its own progress counters" || bad "fork should render episodes/toolCalls/elapsedMs"
+[ "$(count "$T" "e.type==='llm_request'&&e.context&&e.context.startsWith('fork')")" = "1" ] \
+  && ok "exactly one fork conversation" || bad "should be exactly one fork conversation"
+
+echo "== §6.3: compound verifyCondition rejects partial pass; retry accepted =="
+T="$TMP/integrity.jsonl"
+OUT=$($CLI --space fixtures/solver --claude --mock fixtures/solver/mock-integrity.mjs --trace "$T" "produce quality score" 2>/dev/null); CODE=$?
+[ "$CODE" -eq 0 ] && ok "clean exit" || bad "should exit cleanly (got $CODE)"
+[ "$(solve_field "$T" verified)" = "true" ] && ok "verified=true" || bad "verified should be true"
+[ "$(solve_field "$T" rung)" = "1" ]        && ok "rung=1"       || bad "rung should be 1 (retry rung)"
+[ "$(solve_field "$T" attempts)" = "2" ]    && ok "attempts=2"   || bad "attempts should be 2"
+echo "$OUT" | grep -q "quality=real" && ok "winning attempt has quality=real (not fake)" || bad "quality should be real"
+
 echo
 echo "==== live-test summary: $PASS passed, $FAIL failed ===="
 [ "$FAIL" -eq 0 ]
