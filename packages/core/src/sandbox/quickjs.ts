@@ -4,6 +4,7 @@ import {
   type QuickJSAsyncContext,
   type QuickJSAsyncRuntime,
   type QuickJSAsyncWASMModule,
+  type QuickJSHandle,
 } from 'quickjs-emscripten';
 import type { YieldRequest } from '../eval/yield.js';
 
@@ -48,6 +49,14 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
   const scope: Record<string, unknown> = {};
   const pendingYields: YieldRequest[] = [];
 
+  /** Dump a QuickJS error handle to a host string (message field when present). */
+  function dumpError(handle: QuickJSHandle): string {
+    const errMsg = ctx.dump(handle);
+    return errMsg && typeof errMsg === 'object'
+      ? ((errMsg as Record<string, unknown>)['message'] as string | undefined) ?? JSON.stringify(errMsg)
+      : String(errMsg);
+  }
+
   /**
    * Evaluate a statement synchronously using evalCode (not evalCodeAsync).
    * Drives executePendingJobs until a yield is detected or all jobs exhaust.
@@ -72,18 +81,45 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
     }
 
     if (result.error) {
-      const errMsg = ctx.dump(result.error);
+      const msg = dumpError(result.error);
       result.error.dispose();
-      const msg =
-        errMsg && typeof errMsg === 'object'
-          ? ((errMsg as Record<string, unknown>)['message'] as string | undefined) ??
-            JSON.stringify(errMsg)
-          : String(errMsg);
       return { ok: false, error: msg };
     }
-    result.value.dispose();
 
-    return drivePendingJobs();
+    // For a module with top-level await, result.value is the module's evaluation
+    // promise. Keep it alive across job-driving so we can inspect its final state.
+    const moduleHandle = result.value;
+    const driven = drivePendingJobs();
+    if (!driven.ok || pendingYields.length > 0) {
+      // Either a job-level error, or the module is legitimately suspended on a yield
+      // (its promise is pending while the host resolves the yield) — not a failure.
+      moduleHandle.dispose();
+      return driven;
+    }
+
+    // Jobs drained with no pending yield. A top-level `await` that threw — e.g.
+    // calling a global that wasn't injected (`await missingGlobal()`) — rejects the
+    // module promise, which executePendingJobs swallows as an unhandled rejection.
+    // Inspect the promise and surface the rejection as a turn error instead of
+    // silently continuing (which would mask the model's mistake).
+    let outcome: EvalResult = driven;
+    try {
+      const state = ctx.getPromiseState(moduleHandle);
+      if (state.type === 'rejected') {
+        const msg = dumpError(state.error);
+        state.error.dispose();
+        outcome = { ok: false, error: msg };
+      } else if (state.type === 'fulfilled' && !state.notAPromise) {
+        // A real resolved promise hands back a distinct value handle to free; for a
+        // non-promise (module without top-level await) state.value IS moduleHandle,
+        // so leave it for the single dispose below to avoid a double-free.
+        state.value.dispose();
+      }
+    } catch {
+      /* getPromiseState unavailable for this value — nothing to inspect */
+    }
+    moduleHandle.dispose();
+    return outcome;
   }
 
   /**
@@ -98,13 +134,8 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
         return { ok: true, value: undefined };
       }
       if ('error' in jobsResult && jobsResult.error !== undefined) {
-        const errMsg = ctx.dump(jobsResult.error);
+        const msg = dumpError(jobsResult.error);
         jobsResult.error.dispose();
-        const msg =
-          errMsg && typeof errMsg === 'object'
-            ? ((errMsg as Record<string, unknown>)['message'] as string | undefined) ??
-              JSON.stringify(errMsg)
-            : String(errMsg);
         return { ok: false, error: msg };
       }
       if (jobsResult.value === 0) {
@@ -139,13 +170,8 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
     if (result.error) {
-      const errMsg = ctx.dump(result.error);
+      const msg = dumpError(result.error);
       result.error.dispose();
-      const msg =
-        errMsg && typeof errMsg === 'object'
-          ? ((errMsg as Record<string, unknown>)['message'] as string | undefined) ??
-            JSON.stringify(errMsg)
-          : String(errMsg);
       return { ok: false, error: msg };
     }
     result.value.dispose();

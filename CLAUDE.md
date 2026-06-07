@@ -115,7 +115,7 @@ packages/ui/src/
 - **Delegate user message guides tasklist use.** When the action has a `tasklist` field, the delegate user message includes an explicit hint: `Implement this action by calling tasklist("name", context)`. This prevents the model from writing direct code that bypasses the orchestration and leaves the result uncaptured.
 - JSX in model output is transpiled to `React.createElement(...)` via `transpileStatement()` before VM eval. A React shim and component stubs are injected at session start.
 - Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
-- The QuickJS VM uses sync `evalCode` + manual `executePendingJobs` loop — NOT `evalCodeAsync`, which deadlocks when awaiting user input.
+- The QuickJS VM uses sync `evalCode` + manual `executePendingJobs` loop — NOT `evalCodeAsync`, which deadlocks when awaiting user input. After draining jobs (and only when no yield is pending), `evalStatement` inspects the module's evaluation promise via `getPromiseState`: a top-level `await` that throws (e.g. `await missingGlobal()`) rejects that promise, which `executePendingJobs` would otherwise swallow as an unhandled rejection — so it is surfaced as a turn error instead of silently continuing.
 - `.env` is loaded from `process.cwd()` only (where the script is run, not the package dir).
 - `Tracer` writes NDJSON to `--trace <file>` (each event is a JSON line). Pass `NULL_TRACER` to disable. The tracer is threaded through session → fork → delegate.
 
