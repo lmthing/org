@@ -417,8 +417,14 @@ export class Session {
         return req.args[0];
       }
       case 'loadKnowledge': {
-        // args: resolved knowledge value
-        return req.args[0];
+        // args[0] is the normalized relative path; load and return the parsed file
+        // CONTENT here so it is the value bound into scope. (Returning args[0] would
+        // bind the path string — the fork path correctly loads content the same way.)
+        const { loadKnowledgeFile } = await import('../globals/load-knowledge.js');
+        const { join } = await import('node:path');
+        const rel = req.args[0] as string;
+        const filePath = join(this.opts.spaceDir, 'knowledge', ...rel.split('/'));
+        return loadKnowledgeFile(filePath);
       }
       case 'registerSpace': {
         const dir = req.args[0] as string;
