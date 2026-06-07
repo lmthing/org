@@ -45,6 +45,10 @@ interface ForkEngineOpts {
   forkDepth?: number;
   /** Optional per-role model assignment (e.g. explore/plan → cheap model). */
   roleModels?: RoleModelConfig;
+  /** Spaces registered at runtime via registerSpace(). Shared (same Map reference) with
+   *  the parent Session so a fork's registerSpace() is visible to later parent delegate()
+   *  calls — the documented dynamicSpaces invariant. */
+  dynamicSpaces?: Map<string, import('../spaces/load.js').Space>;
 }
 
 export class ForkEngine {
@@ -198,6 +202,14 @@ export class ForkEngine {
           'loadKnowledge',
           createLoadKnowledgeGlobal(pushYield, this.opts.parentSpaceDir + '/knowledge') as AnyFn,
         );
+        // registerSpace mutates the parent's shared dynamicSpaces map, so it's a
+        // session-state mutation — withhold it from read-only roles (explore/plan),
+        // matching how writeFileRaw/execShell are gated. A registered space becomes
+        // visible to subsequent parent delegate() calls.
+        if (task.role !== 'explore' && task.role !== 'plan') {
+          const { createRegisterSpaceGlobal } = await import('../globals/register-space.js');
+          injectGlobal(vm.ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
+        }
 
         // Build user message for the child
         const seedSummary = task.seed && Object.keys(task.seed).length > 0
@@ -294,6 +306,20 @@ export class ForkEngine {
               const { join } = await import('node:path');
               const filePath = join(this.opts.parentSpaceDir, 'knowledge', ...(req.args[0] as string).split('/'));
               return loadKnowledgeFile(filePath);
+            }
+            // registerSpace: load the space and insert it into the SHARED dynamicSpaces
+            // map (same reference the parent Session hands to delegate()), so a space
+            // registered inside a fork is reachable by the parent's later delegate().
+            if (req.kind === 'registerSpace') {
+              const { loadSpace } = await import('../spaces/load.js');
+              const dir = req.args[0] as string;
+              try {
+                const space = await loadSpace(dir);
+                this.opts.dynamicSpaces?.set(dir, space);
+                return { ok: true, spaceKey: dir, agentSlug: Object.keys(space.agents)[0] ?? '' };
+              } catch (err) {
+                return { ok: false, spaceKey: '', agentSlug: '', error: String((err as Error)?.message ?? err) };
+              }
             }
             return undefined;
           },

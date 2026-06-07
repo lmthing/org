@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { summarizeHistory } from './summarize.js';
 import { MessageHistory, type Message } from './history.js';
+import { createMockStreamFn } from '../testing/mock-provider.js';
 
 function mkHistory(): Message[] {
   return [
@@ -41,6 +42,33 @@ describe('summarizeHistory (deterministic digest)', () => {
   it('returns empty when nothing to summarize', async () => {
     const s = await summarizeHistory({ messages: mkHistory(), keepLast: 100 });
     expect(s).toBe('');
+  });
+});
+
+describe('summarizeHistory (LLM path)', () => {
+  it('streams the summary from the LLM and feeds it the to-summarize history only', async () => {
+    let seen: { system: string; user: string } | undefined;
+    const streamFn = createMockStreamFn((o) => {
+      seen = { system: o.system, user: o.messages.map((m) => m.content).join('\n') };
+      return ['  SUMMARY: ', 'pasta built, ', 'x=1  ']; // chunked → exercises streaming
+    });
+    const s = await summarizeHistory({ messages: mkHistory(), keepLast: 2, streamFn });
+    expect(s).toBe('SUMMARY: pasta built, x=1'); // chunks joined and trimmed
+
+    // The summarizer saw the collapsed history (task + resolved vars + error)…
+    expect(seen!.system).toMatch(/summar/i);
+    expect(seen!.user).toContain('build a pasta recipe');
+    expect(seen!.user).toContain('x: 1');
+    // …but NOT the last `keepLast` messages, which stay verbatim.
+    expect(seen!.user).not.toContain('recent 1');
+  });
+
+  it('does not call the LLM when there is nothing to summarize', async () => {
+    let called = false;
+    const streamFn = createMockStreamFn(() => { called = true; return 'unused'; });
+    const s = await summarizeHistory({ messages: mkHistory(), keepLast: 100, streamFn });
+    expect(s).toBe('');
+    expect(called).toBe(false);
   });
 });
 
