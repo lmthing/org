@@ -110,6 +110,18 @@ export function extractBindingNames(statement: string): string[] {
     if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(identifierPart)) {
       names.push(identifierPart);
     }
+    return names;
+  }
+
+  // Declaration with NO initializer: `let parsed;`, `let a, b;`, `let x: string;`.
+  // Without this, such names are never propagated to globalThis, so a later eval
+  // statement that references them throws ReferenceError (each eval is its own module).
+  const noInitMatch = stripped.match(/^\s*(?:const|let|var)\s+([^=;]+?)\s*;?\s*$/);
+  if (noInitMatch) {
+    for (const part of noInitMatch[1]!.split(',')) {
+      const name = part.replace(/\s*:.*$/, '').trim(); // strip type annotation
+      if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) names.push(name);
+    }
   }
 
   return names;

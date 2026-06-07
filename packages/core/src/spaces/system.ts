@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { loadSpace } from './load.js';
 import type { Space, AgentDef } from './load.js';
 
@@ -22,13 +23,17 @@ export const SYSTEM_SPACE_NAMES = ['fs', 'web', 'memory', 'todo', 'agents'] as c
 
 /**
  * Resolve the directory holding the bundled system spaces. At runtime this file
- * lives in dist/, so we walk up to the package root and into system-spaces/.
+ * lives in dist/ (so system-spaces/ is one level up); under vitest it runs from
+ * src/spaces/ (two levels up). Probe both so the path resolves in either layout
+ * rather than silently yielding a nonexistent dir.
  * Overridable via LM_SYSTEM_SPACES (csv of dirs) handled by the caller.
  */
 export function defaultSystemSpaceDirs(): string[] {
-  // dist/chunk-*.js or dist/index.js → package root is one level up from dist/.
-  const pkgRoot = resolve(__dirname, '..');
-  const base = join(pkgRoot, 'system-spaces');
+  const candidates = [
+    resolve(__dirname, '..', 'system-spaces'), // dist/ layout: dist → core/system-spaces
+    resolve(__dirname, '..', '..', 'system-spaces'), // src/ layout: src/spaces → core/system-spaces
+  ];
+  const base = candidates.find((c) => existsSync(c)) ?? candidates[0]!;
   return SYSTEM_SPACE_NAMES.map((n) => join(base, n));
 }
 

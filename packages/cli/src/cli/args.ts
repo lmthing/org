@@ -13,6 +13,9 @@ export interface CliArgs {
   maxToolCalls?: number;
   maxForkDepth?: number;
   maxWallClockMs?: number;
+  /** Path to a scripted mock provider module (ESM). When set, the CLI skips
+   *  resolveModel/createStream entirely so no API key is required. */
+  mock?: string;
 }
 
 /** Parse a CLI numeric flag value; throws a clear error on a non-number. */
@@ -92,6 +95,12 @@ export function parseArgs(argv: string[]): CliArgs {
       }
       case '--max-wallclock-ms': {
         result.maxWallClockMs = parseNumericFlag('--max-wallclock-ms', args.shift());
+        break;
+      }
+      case '--mock': {
+        const val = args.shift();
+        if (!val) throw new Error('--mock requires a path to a mock module');
+        result.mock = val;
         break;
       }
       case '--web': {

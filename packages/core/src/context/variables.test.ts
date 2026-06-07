@@ -39,6 +39,14 @@ describe('extractBindingNames', () => {
     expect(extractBindingNames('const data: { key: string; val: number } = { key: "a", val: 1 }')).toEqual(['data']);
     expect(extractBindingNames('const fn: (x: number) => string = x => String(x)')).toEqual(['fn']);
   });
+
+  it('handles declarations with no initializer (so they propagate to globalThis)', () => {
+    expect(extractBindingNames('let parsed;')).toEqual(['parsed']);
+    expect(extractBindingNames('let parsed')).toEqual(['parsed']);
+    expect(extractBindingNames('let a, b;')).toEqual(['a', 'b']);
+    expect(extractBindingNames('let x: string;')).toEqual(['x']);
+    expect(extractBindingNames('var result;')).toEqual(['result']);
+  });
 });
 
 describe('emitVariables', () => {

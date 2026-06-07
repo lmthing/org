@@ -86,7 +86,7 @@ declare interface SolveResult {
 }
 
 // Host-injected globals available in space functions and agent code
-declare function execShell(cmd: string): { ok: boolean; stdout: string; stderr: string };
+declare function execShell(cmd: string, opts?: { timeout?: number }): { ok: boolean; stdout: string; stderr: string; exitCode: number };
 declare function fetch(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }): { ok: boolean; status: number; text(): string; json(): unknown };
 declare const process: { env: Record<string, string | undefined>; exit(code?: number): never };
 declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };

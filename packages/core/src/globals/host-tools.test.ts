@@ -122,6 +122,46 @@ describe('injectHostTools — process.env and read-only profile', () => {
   });
 });
 
+describe('injectHostTools — execShell exitCode', () => {
+  let vm: VM;
+  beforeEach(async () => {
+    vm = await createVM();
+    injectHostTools(vm, { renderHost: silentHost, spaceDir: '/tmp' });
+  });
+  afterEach(() => vm.dispose());
+
+  it('returns exitCode 0 on success', () => {
+    const r = evalDump(vm, `execShell("true")`) as { ok: boolean; exitCode: number };
+    expect(r.ok).toBe(true);
+    expect(r.exitCode).toBe(0);
+  });
+
+  it('surfaces a non-zero exit code (distinguishes failure modes)', () => {
+    const r = evalDump(vm, `execShell("exit 3")`) as { ok: boolean; exitCode: number };
+    expect(r.ok).toBe(false);
+    expect(r.exitCode).toBe(3);
+  });
+
+  it('reports 127 for command-not-found', () => {
+    const r = evalDump(vm, `execShell("this_command_does_not_exist_xyz")`) as { exitCode: number };
+    expect(r.exitCode).toBe(127);
+  });
+
+  it('honors a per-call timeout override (slow command is killed)', () => {
+    const r = evalDump(vm, `execShell("sleep 2", { timeout: 100 })`) as { ok: boolean; exitCode: number };
+    expect(r.ok).toBe(false); // killed by the 100ms timeout, not run to completion
+  });
+
+  it('read-only block reports exitCode 126', async () => {
+    const ro = await createVM();
+    injectHostTools(ro, { renderHost: silentHost, spaceDir: '/tmp', profile: { allowWrite: false } });
+    const r = evalDump(ro, `execShell("rm -rf /tmp/x")`) as { ok: boolean; exitCode: number };
+    expect(r.ok).toBe(false);
+    expect(r.exitCode).toBe(126);
+    ro.dispose();
+  });
+});
+
 describe('injectHostTools — fetch', () => {
   it('returns ok:false (does not hang) when the connection is refused', async () => {
     const vm = await createVM();

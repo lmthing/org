@@ -29,7 +29,20 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl         # in
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # interactive multi-turn (agent/automated)
 node packages/cli/dist/cli/bin.js --space ./fixtures/engineer --claude "grep for TODO and list the files"  # coding agent (system spaces)
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --no-system-spaces "..."  # disable the always-on toolkit
+node packages/cli/dist/cli/bin.js --space ./fixtures/solver --claude --mock ./fixtures/solver/mock.mjs "implement add"  # keyless run (scripted mock)
 ```
+
+### Testing without API keys (`--mock` / `LM_MOCK`)
+
+`--mock <file>` (or `LM_MOCK=<file>`) replaces the live AI SDK with a scripted
+`streamFn`, so the whole runtime — including forks/delegates/`solve` — runs with **no
+credentials**. The mock file is plain ESM (`.mjs`); its default export is a
+`MockHandler` (or a `string[]`, wrapped in `mockScript`) that returns the TypeScript the
+"model" should emit for each turn. The builders live in
+`packages/core/src/testing/mock-provider.ts` (`createMockStreamFn`, `mockScript`,
+`mockMatch`). Because the mock sits upstream of the tracer, every `--trace` assertion
+works unchanged. See `fixtures/{solver,engineer}/mock.mjs` for worked examples and
+`scripts/live-test.sh` for the keyless smoke suite.
 
 ### REPL mode (`--repl`)
 
@@ -202,9 +215,9 @@ The runtime is built to keep context small over long sessions:
 
 Tests are co-located: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
 
-Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tsc.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/host-tools.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `spaces/architect-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`.
+Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tsc.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/host-tools.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `spaces/architect-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`, `testing/mock-provider.test.ts`, `testing/mock-session.test.ts`.
 
-Live testing: for new runtime features, also drive the built CLI against fixture spaces with a real model and inspect the `--trace` NDJSON — unit tests miss model-behavior and end-to-end integration issues.
+Live testing: for new runtime features, also drive the built CLI against fixture spaces with a real model and inspect the `--trace` NDJSON — unit tests miss model-behavior and end-to-end integration issues. For a **keyless** deterministic variant, drive a real `Session` (or the CLI via `--mock`) with the scripted mock provider: `testing/mock-session.test.ts` covers budget caps, `progress()`, `solve` escalation, per-role models, and the bug-fix scenarios end-to-end through the turn loop, and `scripts/live-test.sh` does the same at the CLI level.
 
 No linting or formatting config — TypeScript strict mode is the sole quality gate.
 

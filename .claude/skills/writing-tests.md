@@ -130,3 +130,27 @@ const mockStreamFn = (stmts: string[]): StreamFn => async () => {
 ```
 
 Then run `new Session(opts, { streamFn }).start(message)` and assert on render host calls.
+
+### Reusable mock provider (`@repl/core` `testing/`)
+
+Prefer the shipped builders over a hand-rolled `mockStreamFn` — they are multi-turn,
+fork/delegate-aware, and honor `abort()`:
+
+```typescript
+import { mockScript, mockMatch, createMockStreamFn } from '@repl/core';
+
+// Sequential queue — turn N emits turns[N]; '' ends the loop.
+const streamFn = mockScript(['display("a");', 'display("b");']);
+
+// First-matching-rule-wins — route forks vs. the orchestrator. A fork's prompt
+// instructs it to call currentTask.resolve(...) — a reliable fork-only marker.
+const streamFn2 = mockMatch(
+  [{ when: /currentTask/, respond: () => 'currentTask.resolve({ ok: true });' }],
+  () => 'const r = await solve({ /* ... */ });', // fallback = the session/orchestrator
+);
+```
+
+The same builders drive the CLI via `--mock <file>` (a `.mjs` whose default export is a
+`MockHandler` or `string[]`), so a full keyless run is just
+`bin.js --space … --mock fixtures/<space>/mock.mjs`. See
+`packages/core/src/testing/mock-provider.ts` and `scripts/live-test.sh`.
