@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import type { Space } from '../spaces/load.js';
 import { ForkEngine } from './fork.js';
 import { BudgetExceededError } from '../eval/budget.js';
 import type { RenderHost } from '../session/types.js';
@@ -238,6 +239,108 @@ describe('ForkEngine', () => {
       // First turn has ticked one episode; no yields resolved before resolve().
       expect(result.episodes).toBeGreaterThanOrEqual(1);
       expect(typeof result.toolCalls).toBe('number');
+    });
+  });
+
+  describe('registerSpace in a fork', () => {
+    /** Write a minimal, loadable one-agent space under `dir`. */
+    function writeSpace(dir: string): void {
+      const agent = join(dir, 'agents', 'main', 'instruct.md');
+      mkdirSync(dirname(agent), { recursive: true });
+      writeFileSync(agent, 'You are a worker.\n');
+    }
+
+    it('populates the shared dynamicSpaces map — visible to the parent delegate path', async () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'fork-regspace-'));
+      try {
+        const workerDir = join(tmpDir, 'worker');
+        writeSpace(workerDir);
+
+        // The SAME Map reference the parent Session hands to delegate().
+        const dynamicSpaces = new Map<string, Space>();
+        let call = 0;
+        const engine = new ForkEngine({
+          maxConcurrentForks: 4,
+          parentHistory: [],
+          parentSpaceDir: tmpDir,
+          parentAgentSlug: 'test',
+          renderHost: silentHost,
+          // Turn 1: register the space (yields). Turn 2 (r in scope): resolve.
+          streamFn: async () => {
+            call++;
+            return makeStream(
+              call === 1
+                ? `const r = await registerSpace(${JSON.stringify(workerDir)});\n`
+                : `currentTask.resolve({ ok: (r as any).ok, slug: (r as any).agentSlug });\n`,
+            );
+          },
+          dynamicSpaces,
+        });
+
+        const result = await engine.fork<{ ok: boolean; slug: string }>({
+          instruction: 'register the worker space',
+          output: { ok: 'boolean', slug: 'string' },
+        });
+        expect(result).toEqual({ ok: true, slug: 'main' });
+        // The fork mutated the shared map → a later parent delegate() can resolve it.
+        expect(dynamicSpaces.has(workerDir)).toBe(true);
+        expect(dynamicSpaces.get(workerDir)!.agents['main']).toBeDefined();
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('withholds registerSpace from read-only roles (explore) — it is not in scope', async () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'fork-regspace-ro-'));
+      try {
+        const dynamicSpaces = new Map<string, Space>();
+        const engine = new ForkEngine({
+          maxConcurrentForks: 4,
+          parentHistory: [],
+          parentSpaceDir: tmpDir,
+          parentAgentSlug: 'test',
+          renderHost: silentHost,
+          // Probe whether the global exists rather than calling it (an undefined-global
+          // await surfaces as an unhandled rejection, not an eval error, so calling it
+          // wouldn't reliably fail the fork).
+          streamFn: async () =>
+            makeStream(`currentTask.resolve({ available: typeof registerSpace === "function" });\n`),
+          dynamicSpaces,
+        });
+        const result = await engine.fork<{ available: boolean }>({
+          instruction: 'probe',
+          output: { available: 'boolean' },
+          role: 'explore',
+        });
+        expect(result.available).toBe(false); // not injected for read-only roles
+        expect(dynamicSpaces.size).toBe(0);
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('makes registerSpace available to write-capable (general) roles', async () => {
+      const tmpDir = mkdtempSync(join(tmpdir(), 'fork-regspace-gen-'));
+      try {
+        const engine = new ForkEngine({
+          maxConcurrentForks: 4,
+          parentHistory: [],
+          parentSpaceDir: tmpDir,
+          parentAgentSlug: 'test',
+          renderHost: silentHost,
+          streamFn: async () =>
+            makeStream(`currentTask.resolve({ available: typeof registerSpace === "function" });\n`),
+          dynamicSpaces: new Map<string, Space>(),
+        });
+        const result = await engine.fork<{ available: boolean }>({
+          instruction: 'probe',
+          output: { available: 'boolean' },
+          role: 'general',
+        });
+        expect(result.available).toBe(true);
+      } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+      }
     });
   });
 });

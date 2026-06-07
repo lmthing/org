@@ -593,6 +593,54 @@ describe('harness — registerSpace()', () => {
     expect(r.error).toBeUndefined();
     expect(r.displays).toContain('ok=false');
   });
+
+  it('a space registered INSIDE a fork is reachable by a later parent delegate()', async () => {
+    // Documented dynamicSpaces invariant: the fork's registerSpace() mutates the
+    // same map the parent's delegate() reads. Without the wiring the fork would
+    // bind reg=undefined and reject — so this end-to-end path guards the feature.
+    const workerDir = await makeWorkerSpace();
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        // Fork turn 2: registerSpace resolved → the continuation carries a VARIABLES
+        // block. (Gated on the fork-only "Output schema:" marker so it can't fire on
+        // the parent's continuation, where REGISTER_TASK + VARIABLES also co-occur.)
+        {
+          when: (o: StreamOpts) =>
+            o.messages.some((mm) => mm.content.includes('Output schema:') && mm.content.includes('REGISTER_TASK')) &&
+            o.messages.some((mm) => mm.content.includes('VARIABLES')),
+          respond: () =>
+            `currentTask.resolve({ spaceKey: (r as any).spaceKey, agentSlug: (r as any).agentSlug });`,
+        },
+        // Fork turn 1: register the worker space from inside the subagent.
+        {
+          when: (o: StreamOpts) =>
+            o.messages.some((mm) => mm.content.includes('Output schema:') && mm.content.includes('REGISTER_TASK')),
+          respond: () => `const r = await registerSpace(${JSON.stringify(workerDir)});`,
+        },
+        // The delegate child resolves the action.
+        {
+          when: (o: StreamOpts) => o.messages.some((mm) => mm.content.includes('Run action: compute')),
+          respond: () => `currentTask.resolve({ result: 7 });`,
+        },
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const reg = await fork({ role: 'general', instruction: 'REGISTER_TASK', output: { spaceKey: 'string', agentSlug: 'string' } }) as { spaceKey: string; agentSlug: string };`;
+        if (sessionStep === 2)
+          return `const d = await delegate((reg as any).spaceKey, (reg as any).agentSlug, "compute", { query: "go" }) as { result: number };`;
+        if (sessionStep === 3) return `display("end=" + (d as any).result);`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('end=7'); // delegate reached the fork-registered space
+    // The registration happened inside the fork, and the delegate ran afterwards.
+    expect(forkRequests(r.trace).some((e) => reqText(e).includes('REGISTER_TASK'))).toBe(true);
+    expect(r.trace.some((e) => e.type === 'llm_request' && e.context.startsWith('delegate:'))).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -325,6 +325,8 @@ export class Session {
       agentFunctionsBundled: this.agentFunctionsBundled,
       budgetLimits: this.opts.budget,
       roleModels: this.opts.roleModels,
+      // Same Map reference the delegate path reads — a fork's registerSpace() lands here.
+      dynamicSpaces: this.dynamicSpaces,
     });
     return this.forkEngine;
   }
