@@ -63,6 +63,15 @@ describe('ForkEngine', () => {
     ).rejects.toThrow(/without calling currentTask\.resolve/);
   });
 
+  it('rejects when the resolved value does not match the output schema', async () => {
+    // Schema wants a number; the fork resolves a string → validateOutput fails and
+    // the fork rejects rather than handing back an off-schema value.
+    const engine = makeEngine('currentTask.resolve({ count: "not a number" });\n');
+    await expect(
+      engine.fork({ instruction: 'count things', output: { count: 'number' } }),
+    ).rejects.toThrow(/does not match schema/);
+  });
+
   it('loadKnowledge in fork returns file content, not undefined', async () => {
     // Regression: the fork's processYield returned undefined for loadKnowledge,
     // which raced against loadKnowledgeFile().then(resolve) and won — binding

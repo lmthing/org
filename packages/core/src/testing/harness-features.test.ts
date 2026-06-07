@@ -813,3 +813,198 @@ describe('harness — per-turn context & messages', () => {
     expect(r.trace.some((e) => e.type === 'typecheck_error')).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// delegate() to a TASKLIST-backed action — auto-capture + guidance hint
+// ---------------------------------------------------------------------------
+
+/** A target space whose `build` action is implemented by an `assemble` tasklist. */
+async function makeTasklistWorkerSpace(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'lmthing-tlworker-'));
+  tmpDirs.push(dir);
+  const agent = join(dir, 'agents', 'worker', 'instruct.md');
+  await mkdir(dirname(agent), { recursive: true });
+  await writeFile(
+    agent,
+    `---\ntitle: Worker\nactions:\n  - id: build\n    label: Build\n    description: Build something\n    tasklist: assemble\n---\n\nYou are a worker.`,
+    'utf8',
+  );
+  const tl = join(dir, 'tasklists', 'assemble');
+  await mkdir(tl, { recursive: true });
+  await writeFile(
+    join(tl, '01-make.md'),
+    `---\nid: make\ngoal: true\noutput:\n  value: number\n---\n\nMAKE_T: produce a value from the seed.`,
+    'utf8',
+  );
+  return dir;
+}
+
+describe('harness — delegate() to a tasklist-backed action', () => {
+  it('auto-captures the tasklist result even when the child never calls resolve', async () => {
+    const workerDir = await makeTasklistWorkerSpace();
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        // The tasklist's goal task — seeded with the delegate context { n: 3 }.
+        forkRule('MAKE_T', `currentTask.resolve({ value: n + 1 });`),
+        // The delegate child: run the tasklist and DELIBERATELY do not call
+        // currentTask.resolve — the runtime must auto-capture the goal output.
+        {
+          when: (o: StreamOpts) => o.messages.some((mm) => mm.content.includes('Run action: build')),
+          respond: () => `const result = await tasklist("assemble", { n: 3 });`,
+        },
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const d = await delegate(${JSON.stringify(workerDir)}, "worker", "build", { query: "go", context: { n: 3 } }) as { value: number };`;
+        if (sessionStep === 2) return `display("value=" + (d as any).value);`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    // Auto-capture returned the goal output ({ value: 4 }) despite no explicit resolve.
+    expect(r.displays).toContain('value=4');
+
+    // The child's prompt carried the tasklist-guidance hint + the delegate context.
+    const delReqs = r.trace.filter(
+      (e): e is LlmReq => e.type === 'llm_request' && e.context.startsWith('delegate:'),
+    );
+    const childPrompt = lastUserMessage(delReqs[0]!);
+    expect(childPrompt).toContain('Implement this action by calling');
+    expect(childPrompt).toContain('tasklist("assemble"');
+    expect(childPrompt).toContain('Context: {"n":3}');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// inspect() query variants (path / keys)
+// ---------------------------------------------------------------------------
+
+describe('harness — inspect() query variants', () => {
+  it('path narrows to a nested value; keys lists object keys', async () => {
+    // One yielding inspect per turn (a yield ends the turn); obj declared in turn 0
+    // stays in scope for turn 1.
+    const m = createMockStreamFn((_o, { callIndex }) => {
+      if (callIndex === 0)
+        return `const obj = { a: { b: 42 }, label: "x" };\nconst deep = await inspect([obj, { path: "a.b" }]);`;
+      if (callIndex === 1) return `const ks = await inspect([obj, { keys: true }]);`;
+      if (callIndex === 2)
+        return `display("deep=" + JSON.stringify((deep as any).value));\ndisplay("keys=" + JSON.stringify((ks as any).value));`;
+      return '';
+    });
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('deep=42'); // path "a.b" resolved
+    expect(r.displays).toContain('keys=["a","label"]'); // keys listed
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fork() edge cases — object binding + graceful failure
+// ---------------------------------------------------------------------------
+
+describe('harness — fork() edge cases', () => {
+  it('binds an object-destructured fork result by key', async () => {
+    let sessionStep = 0;
+    const m = mockMatch(
+      [forkRule('OBJ_TASK', `currentTask.resolve({ title: "spaghetti", steps: 3 });`)],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const { title, steps } = await fork({ role: 'general', instruction: 'OBJ_TASK', output: { title: 'string', steps: 'number' } }) as { title: string; steps: number };`;
+        if (sessionStep === 2) return `display("t=" + title + " s=" + steps);`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('t=spaghetti s=3'); // bound by key, not position
+  });
+
+  it('a fork that never resolves binds undefined and the run continues (no crash)', async () => {
+    let sessionStep = 0;
+    const m = mockMatch(
+      // The fork only displays and never calls currentTask.resolve → it rejects.
+      [forkRule('NORESOLVE_TASK', `display("subagent did nothing useful");`)],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const f = await fork({ role: 'general', instruction: 'NORESOLVE_TASK', output: { v: 'string' } });`;
+        if (sessionStep === 2) return `display("f is " + (f === undefined ? "undefined" : "set"));`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined(); // a rejected fork is NOT a hard stop for the session
+    expect(r.displays).toContain('f is undefined');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JSX — display(<View/>) and ask(<Form/>) through a real session
+// ---------------------------------------------------------------------------
+
+/** A space with one view component (Banner) and one form component (NameForm). */
+async function makeComponentSpace(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'lmthing-jsx-'));
+  tmpDirs.push(dir);
+  const agent = join(dir, 'agents', 'main', 'instruct.md');
+  await mkdir(dirname(agent), { recursive: true });
+  await writeFile(
+    agent,
+    `---\ntitle: UI\ncomponents:\n  - Banner\n  - NameForm\n---\n\nYou render UI.`,
+    'utf8',
+  );
+  const view = join(dir, 'components', 'view', 'Banner.tsx');
+  await mkdir(dirname(view), { recursive: true });
+  await writeFile(
+    view,
+    `import React from 'react';\ninterface Props { text: string }\nexport default function Banner({ text }: Props) { return <div>{text}</div>; }`,
+    'utf8',
+  );
+  const form = join(dir, 'components', 'form', 'NameForm');
+  await mkdir(form, { recursive: true });
+  const formSrc = `import React from 'react';\nexport default function NameForm() { return <input />; }`;
+  await writeFile(join(form, 'web.tsx'), formSrc, 'utf8');
+  await writeFile(join(form, 'ink.tsx'), formSrc, 'utf8');
+  return dir;
+}
+
+describe('harness — JSX components', () => {
+  it('display(<Banner/>) forwards a JSXDescriptor to the render host', async () => {
+    const dir = await makeComponentSpace();
+    const m = createMockStreamFn((_o, { callIndex }) =>
+      callIndex === 0 ? `display(<Banner text="hello" />);` : '',
+    );
+    const r = await runSession({ streamFn: m, message: 'go', spaceDir: dir });
+    expect(r.error).toBeUndefined();
+    // The JSX transpiled to a descriptor: { type: 'Banner', props: { text: 'hello' }, ... }.
+    const d = r.displays[0] as { type: string; props: Record<string, unknown> };
+    expect(d.type).toBe('Banner');
+    expect(d.props.text).toBe('hello');
+  });
+
+  it('ask(<NameForm/>) yields a descriptor for the form component to the host', async () => {
+    const dir = await makeComponentSpace();
+    let askedType = '';
+    const m = createMockStreamFn((_o, { callIndex }) => {
+      if (callIndex === 0) return `const name = await ask(<NameForm />) as string;`;
+      if (callIndex === 1) return `display("got " + name);`;
+      return '';
+    });
+    const r = await runSession({
+      streamFn: m,
+      message: 'go',
+      spaceDir: dir,
+      ask: async (_id, descriptor) => {
+        askedType = (descriptor as { type: string }).type;
+        return 'Ada';
+      },
+    });
+    expect(r.error).toBeUndefined();
+    expect(askedType).toBe('NameForm'); // the component descriptor reached the host
+    expect(r.displays).toContain('got Ada');
+  });
+});
