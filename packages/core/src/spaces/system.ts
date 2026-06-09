@@ -19,7 +19,7 @@ import type { Space, AgentDef } from './load.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** The bundled system spaces shipped with @repl/core. */
-export const SYSTEM_SPACE_NAMES = ['fs', 'web', 'memory', 'todo', 'agents'] as const;
+export const SYSTEM_SPACE_NAMES = ['fs', 'web', 'memory', 'todo', 'engineer', 'architect'] as const;
 
 /**
  * Resolve the directory holding the bundled system spaces. At runtime this file

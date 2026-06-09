@@ -27,7 +27,7 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000     # br
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --trace /tmp/trace.jsonl "make pasta"
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl         # interactive multi-turn (human)
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # interactive multi-turn (agent/automated)
-node packages/cli/dist/cli/bin.js --space ./fixtures/engineer --claude "grep for TODO and list the files"  # coding agent (system spaces)
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude "grep for TODO and list the files"  # coding agent (system spaces always loaded)
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --no-system-spaces "..."  # disable the always-on toolkit
 node packages/cli/dist/cli/bin.js --space ./fixtures/solver --claude --mock ./fixtures/solver/mock.mjs "implement add"  # keyless run (scripted mock)
 ```
@@ -162,8 +162,8 @@ Reference spaces for end-to-end testing:
 - `fixtures/deep_research/` — deep research with real Tavily API (requires `TAVILY_API_KEY`)
 - `fixtures/browser_use/` — browser agent using chromium headless + Google search
 - `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering
-- `fixtures/engineer/` — flagship coding agent: uses the system spaces (fs/web/memory/todo) + fork roles, declares no tools of its own
-- `fixtures/architect/` — meta-agent that synthesizes, scaffolds, registers, and delegates to NEW agents at runtime; functions: `scaffoldSpace`, `validateSpace`, `listScaffoldedSpaces`; demonstrates the `registerSpace` → `delegate` pattern
+- `fixtures/engineer/` — mock harness for engineer agent CLI tests (agent content lives in `system-spaces/engineer`)
+- `fixtures/architect/` — placeholder for architect agent CLI tests (agent content lives in `system-spaces/architect`)
 - `fixtures/sauce_master/` — global sauce technique specialist synthesized by the architect; knowledge files for 10 world cuisines; action: `recommend_sauce`
 - `fixtures/cursor_ci/` — competitive intelligence analyst synthesized by the architect; knowledge files for 5 AI code editors (Cursor, Copilot, Windsurf, Aider, Codeium); action: `analyze`
 
@@ -173,11 +173,13 @@ See `@.claude/arch/spaces.md` for space file layout.
 
 Capabilities are **spaces**, not ad-hoc core globals. A set of baseline "system spaces" is **always loaded and merged into every user space** (and into forks/delegates), so every agent gets a coding toolkit for free. The user space wins on any name collision.
 
-- Located in `packages/core/system-spaces/{fs,web,memory,todo}/` (resolved relative to the built core; `agents/` is reserved).
+- Located in `packages/core/system-spaces/{fs,web,memory,todo,engineer,architect}/` (resolved relative to the built core).
 - `fs` — `readFile`, `writeFile`, `editFile`, `glob`, `grep`, `listDir`
 - `web` — `webSearch` (Tavily, needs `TAVILY_API_KEY`), `webFetch`
 - `memory` — `remember`, `recall`, `recallAll`, `forget` (durable JSON store at `<spaceDir>/.lmthing/memory.json`)
 - `todo` — `todoWrite`, `todoRead` (renders a checklist via `display()`, persists to `.lmthing/todos.json`)
+- `engineer` — coding agent (agent def + `TaskInput` component); `delegate` to it from any space
+- `architect` — meta-agent (`scaffoldSpace`, `validateSpace`, `listScaffoldedSpaces` functions + full `synthesize_and_run` / `iterate_space` tasklists); `delegate` to it to synthesize new agents at runtime
 
 Loader/merge: `packages/core/src/spaces/system.ts` (`loadSystemSpaces`, `mergeSystemInto`). System functions are injected universally (bypassing the per-agent `functions:` filter). The system prompt lists them under a concise `# Built-in Tools` section (signature + doc, not full source). Configure via `SessionOpts.systemSpaceDirs`, CLI `--system-spaces`/`--no-system-spaces`, or env `LM_SYSTEM_SPACES`.
 
