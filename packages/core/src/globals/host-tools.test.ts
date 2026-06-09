@@ -89,6 +89,44 @@ describe('injectHostTools — readFileRaw / writeFileRaw', () => {
   });
 });
 
+describe('injectHostTools — relative paths resolve against the space dir', () => {
+  // Regression: solve()'s fork writes a RELATIVE work/candidate.ts while the
+  // verifier runs with cwd = spaceDir. Relative paths must resolve against the
+  // space dir (not process.cwd()) so the file written is the file verified.
+  let vm: VM;
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'host-tools-space-'));
+    vm = await createVM();
+    injectHostTools(vm, { renderHost: silentHost, spaceDir: dir });
+  });
+  afterEach(() => {
+    vm.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('writeFileRaw resolves a relative path under the space dir', () => {
+    const w = evalDump(vm, `writeFileRaw("work/candidate.ts", "export const x = 1;")`) as { ok: boolean };
+    expect(w.ok).toBe(true);
+    expect(readFileSync(join(dir, 'work', 'candidate.ts'), 'utf8')).toBe('export const x = 1;');
+  });
+
+  it('readFileRaw reads back a relative path written relative — round-trip under the space dir', () => {
+    evalDump(vm, `writeFileRaw("nested/file.txt", "hello")`);
+    const r = evalDump(vm, `readFileRaw("nested/file.txt")`) as { ok: boolean; content: string };
+    expect(r.ok).toBe(true);
+    expect(r.content).toBe('hello');
+  });
+
+  it('absolute paths are left untouched (not re-rooted under the space dir)', () => {
+    const abs = join(dir, 'abs.txt');
+    const w = evalDump(vm, `writeFileRaw(${JSON.stringify(abs)}, "abs")`) as { ok: boolean };
+    expect(w.ok).toBe(true);
+    expect(readFileSync(abs, 'utf8')).toBe('abs');
+  });
+});
+
 describe('injectHostTools — process.env and read-only profile', () => {
   it('exposes LMTHING_SPACE_DIR in process.env', async () => {
     const vm = await createVM();

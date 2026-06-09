@@ -11,6 +11,13 @@ dist/
 trace.jsonl
 *.trace.jsonl
 
+# Live/keyless CLI integration test traces
+packages/cli/.live-traces/
+
+# solve() candidate scratch dirs (written by the solver fixture)
+work/
+fixtures/*/work/
+
 # system-space state stores (memory/todo)
 .lmthing/
 .antigravitycli

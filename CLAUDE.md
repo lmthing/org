@@ -29,7 +29,7 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl         # in
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # interactive multi-turn (agent/automated)
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude "grep for TODO and list the files"  # coding agent (system spaces always loaded)
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --no-system-spaces "..."  # disable the always-on toolkit
-node packages/cli/dist/cli/bin.js --space ./fixtures/solver --claude --mock ./fixtures/solver/mock.mjs "implement add"  # keyless run (scripted mock)
+node packages/cli/dist/cli/bin.js --space ./packages/core/system-spaces/solver --claude --mock ./fixtures/solver/mock.mjs "implement add"  # keyless run (scripted mock)
 ```
 
 ### Testing without API keys (`--mock` / `LM_MOCK`)
@@ -42,7 +42,8 @@ credentials**. The mock file is plain ESM (`.mjs`); its default export is a
 `packages/core/src/testing/mock-provider.ts` (`createMockStreamFn`, `mockScript`,
 `mockMatch`). Because the mock sits upstream of the tracer, every `--trace` assertion
 works unchanged. See `fixtures/{solver,engineer}/mock.mjs` for worked examples and
-`scripts/live-test.sh` for the keyless smoke suite.
+`packages/cli/src/testing/keyless-cli.test.ts` for the keyless CLI smoke suite (run
+after `pnpm build`).
 
 ### REPL mode (`--repl`)
 
@@ -164,6 +165,7 @@ Reference spaces for end-to-end testing:
 - `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering
 - `fixtures/engineer/` — mock harness for engineer agent CLI tests (agent content lives in `system-spaces/engineer`)
 - `fixtures/architect/` — placeholder for architect agent CLI tests (agent content lives in `system-spaces/architect`)
+- `fixtures/solver/` — scripted mock providers (`mock*.mjs`) for keyless solve-ladder CLI tests (agent content lives in `system-spaces/solver`)
 - `fixtures/sauce_master/` — global sauce technique specialist synthesized by the architect; knowledge files for 10 world cuisines; action: `recommend_sauce`
 - `fixtures/cursor_ci/` — competitive intelligence analyst synthesized by the architect; knowledge files for 5 AI code editors (Cursor, Copilot, Windsurf, Aider, Codeium); action: `analyze`
 
@@ -173,13 +175,14 @@ See `@.claude/arch/spaces.md` for space file layout.
 
 Capabilities are **spaces**, not ad-hoc core globals. A set of baseline "system spaces" is **always loaded and merged into every user space** (and into forks/delegates), so every agent gets a coding toolkit for free. The user space wins on any name collision.
 
-- Located in `packages/core/system-spaces/{fs,web,memory,todo,engineer,architect}/` (resolved relative to the built core).
+- Located in `packages/core/system-spaces/{fs,web,memory,todo,engineer,architect,solver}/` (resolved relative to the built core).
 - `fs` — `readFile`, `writeFile`, `editFile`, `glob`, `grep`, `listDir`
 - `web` — `webSearch` (Tavily, needs `TAVILY_API_KEY`), `webFetch`
 - `memory` — `remember`, `recall`, `recallAll`, `forget` (durable JSON store at `<spaceDir>/.lmthing/memory.json`)
 - `todo` — `todoWrite`, `todoRead` (renders a checklist via `display()`, persists to `.lmthing/todos.json`)
 - `engineer` — coding agent (agent def + `TaskInput` component); `delegate` to it from any space
 - `architect` — meta-agent (`scaffoldSpace`, `validateSpace`, `listScaffoldedSpaces` functions + full `synthesize_and_run` / `iterate_space` tasklists); `delegate` to it to synthesize new agents at runtime
+- `solver` — verifier-gated coding agent (no functions; drives the `solve` built-in). `--agent solver` or `delegate` to it; writes its candidate under the space dir. Mock providers for keyless runs live in `fixtures/solver/`.
 
 Loader/merge: `packages/core/src/spaces/system.ts` (`loadSystemSpaces`, `mergeSystemInto`). System functions are injected universally (bypassing the per-agent `functions:` filter). The system prompt lists them under a concise `# Built-in Tools` section (signature + doc, not full source). Configure via `SessionOpts.systemSpaceDirs`, CLI `--system-spaces`/`--no-system-spaces`, or env `LM_SYSTEM_SPACES`.
 
@@ -196,11 +199,13 @@ Plan mode is just `fork({ role: 'plan' })` + an `ask()` approval gate. Run subag
 
 Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has these host-injected globals available to space functions. They are the thin substrate the system spaces build on (single source of truth: `packages/core/src/globals/host-tools.ts`, used by both the session VM and fork VMs):
 
-- `process.env` — Node.js environment variables (read-only shim); includes `LMTHING_SPACE_DIR` for state stores
+- `process.env` — Node.js environment variables (read-only shim); includes `LMTHING_SPACE_DIR` (an **absolute** path) for state stores
 - `fetch(url, opts?)` — Synchronous HTTP using curl under the hood; returns `{ ok, status, text(), json() }`
 - `execShell(cmd)` — Synchronous shell command execution; returns `{ ok, stdout, stderr }` (read-only fork roles block mutating commands)
 - `readFileRaw(path, {offset?,limit?})` — Binary-safe file read via Node fs; returns `{ ok, content, lines, truncated, error? }`
 - `writeFileRaw(path, content)` — File write via Node fs (no shell quoting); returns `{ ok, bytes, error? }`. Withheld in read-only fork roles.
+
+**Path rooting:** `readFileRaw`/`writeFileRaw` resolve **relative** paths against the space dir (`LMTHING_SPACE_DIR`), not `process.cwd()` — the same root `solve()`'s `verifyCommand` runs in (`session.ts` `execCommand` uses `cwd: spaceDir`). So a fork that writes `work/candidate.ts` and a verifier that reads `work/candidate.ts` agree regardless of where the CLI was launched. Absolute paths pass through untouched.
 - `console.log/warn/error` — Routes through renderHost.log
 
 Space functions can use these directly. `tasklist(name, seed?)` passes `seed` as context to all fork tasks (injected as `any`-typed variables).
@@ -219,7 +224,11 @@ Tests are co-located: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
 
 Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tasklist/orchestrator.test.ts`, `tsc.test.ts`, `sandbox/quickjs.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/ask.test.ts`, `globals/inspect.test.ts`, `globals/host-tools.test.ts`, `delegate/delegate.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `spaces/architect-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`, `testing/mock-provider.test.ts`, `testing/mock-session.test.ts`, `testing/harness-features.test.ts`.
 
-Live testing: for new runtime features, also drive the built CLI against fixture spaces with a real model and inspect the `--trace` NDJSON — unit tests miss model-behavior and end-to-end integration issues. For a **keyless** deterministic variant, drive a real `Session` (or the CLI via `--mock`) with the scripted mock provider: `testing/mock-session.test.ts` covers budget caps, `progress()`, `solve` escalation, per-role models, and the bug-fix scenarios end-to-end through the turn loop; `testing/harness-features.test.ts` covers the value-yielding globals and orchestration end-to-end (`ask`/`inspect`/`loadKnowledge`/`sleep`/`fork` roles + parallel binding/`tasklist` DAG/`delegate`/`registerSpace`/system spaces/history summarization); and `scripts/live-test.sh` does the same at the CLI level.
+Live testing: for new runtime features, also drive the built CLI against fixture spaces with a real model and inspect the `--trace` NDJSON — unit tests miss model-behavior and end-to-end integration issues. For a **keyless** deterministic variant, drive a real `Session` (or the CLI via `--mock`) with the scripted mock provider: `testing/mock-session.test.ts` covers budget caps, `progress()`, `solve` escalation, per-role models, and the bug-fix scenarios end-to-end through the turn loop; `testing/harness-features.test.ts` covers the value-yielding globals and orchestration end-to-end (`ask`/`inspect`/`loadKnowledge`/`sleep`/`fork` roles + parallel binding/`tasklist` DAG/`delegate`/`registerSpace`/system spaces/history summarization); and `packages/cli/src/testing/keyless-cli.test.ts` does the same at the CLI level (subprocess + `--mock`).
+
+CLI integration suites (`packages/cli/src/testing/`) spawn the **built** CLI and assert on the `--trace` NDJSON; they self-skip when `dist/` is absent (run `pnpm build` first) and stream the subprocess output live. Saved traces land in `packages/cli/.live-traces/` (gitignored).
+- `keyless-cli.test.ts` — mock provider, no API keys, deterministic.
+- `live-llm.test.ts` — the **real model** (`M` = DeepSeek-V4-Pro for every scenario), gated behind `LM_LIVE=1`. Run: `LM_LIVE=1 pnpm vitest run packages/cli/src/testing/live-llm.test.ts`. Shared harness: `packages/cli/src/testing/live-harness.ts`.
 
 No linting or formatting config — TypeScript strict mode is the sole quality gate.
 
