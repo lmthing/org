@@ -18,6 +18,10 @@ its candidate to `work/candidate.ts` with `writeFile`, then resolve a short summ
 `verifyCommand` type-checks that file; on failure its output is fed back to the next
 attempt automatically. You do not loop yourself — `solve` does the escalation.
 
+Relative paths (e.g. `work/candidate.ts`) resolve against the space directory — the
+same root `verifyCommand` runs in — so the file you write is the file the checker
+reads, regardless of where the CLI was launched from.
+
 ```ts
 const r = await solve({
   instruction:
@@ -43,5 +47,3 @@ display(`verified=${r.verified} rung=${r.rung} attempts=${r.attempts}`);
 - Do NOT weaken the check (no `// @ts-ignore`, no `any` to dodge errors, do not edit the
   verify command). The point is to make the real code type-check.
 - If no concrete task was given, ask once for the function to implement.
-
-See `README.md` for the live-test scenarios this space is built to exercise.

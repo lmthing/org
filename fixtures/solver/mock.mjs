@@ -24,11 +24,12 @@ const BROKEN = `export function add(a: number, b: number): number {
 `;
 
 // The TypeScript an attempt fork emits: write the candidate to the space's work/
-// dir (absolute path via LMTHING_SPACE_DIR so it lands where verifyCommand looks,
-// regardless of the CLI's cwd), then resolve the required output.
+// dir. A relative path resolves against the space dir (host-tools inSpace()) — the
+// same root verifyCommand runs in — so it lands where the verifier looks regardless
+// of the CLI's cwd. Then resolve the required output.
 function emitCandidate(source, summary) {
   return (
-    `writeFile(process.env.LMTHING_SPACE_DIR + "/work/candidate.ts", ${JSON.stringify(source)});\n` +
+    `writeFile("work/candidate.ts", ${JSON.stringify(source)});\n` +
     `currentTask.resolve({ summary: ${JSON.stringify(summary)} });`
   );
 }

@@ -84,6 +84,8 @@ describe('fixture spaces still load (regression audit for fail-loud changes)', (
   // and fail-loud YAML did not break any real space.
   const names = [
     'cooking',
+    'engineer',
+    'architect',
     'sommelier',
     'research',
     'data_analyst',

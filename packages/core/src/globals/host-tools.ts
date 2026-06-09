@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import type { VM } from '../sandbox/quickjs.js';
 import { marshalToQuickJS } from '../sandbox/host-bridge.js';
 import type { RenderHost } from '../session/types.js';
@@ -75,6 +75,18 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
     handle.dispose();
   };
 
+  // The space dir is the working root for an agent's file operations. Relative
+  // paths resolve against it — the SAME root that solve()'s verifyCommand runs in
+  // (session.ts execCommand uses cwd: spaceDir). Without this, a fork that does
+  // writeFile("work/x.ts") would write relative to process.cwd() while the verifier
+  // looks under spaceDir, so they only agree when the CLI is launched from inside
+  // the space. Absolute paths pass through untouched.
+  // Absolute so that paths already built from LMTHING_SPACE_DIR (memory/todo's
+  // `LMTHING_SPACE_DIR + '/.lmthing/...'`) stay absolute and pass through inSpace
+  // untouched rather than being re-resolved (doubled) against the space root.
+  const spaceRoot = resolve(opts.spaceDir);
+  const inSpace = (path: string): string => (isAbsolute(path) ? path : resolve(spaceRoot, path));
+
   // console — routes through renderHost.log
   setGlobal('console', {
     log: (...args: unknown[]) => renderHost.log(args.map(String).join(' ')),
@@ -108,7 +120,7 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
 
   // process.env + process.exit — read-only env shim with LMTHING_SPACE_DIR injected
   const env = Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined));
-  env['LMTHING_SPACE_DIR'] = opts.spaceDir;
+  env['LMTHING_SPACE_DIR'] = spaceRoot;
   setGlobal('process', { env, exit: (code?: number) => { throw new Error(`process.exit(${code ?? 0})`); } });
 
   // fetch — synchronous HTTP via curl; returns a plain object so `await fetch(...)` works
@@ -137,7 +149,7 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
   // readFileRaw — binary-safe file read via Node fs (no shell quoting hazards)
   setGlobal('readFileRaw', (path: string, readOpts?: { offset?: number; limit?: number }) => {
     try {
-      const buf = readFileSync(path);
+      const buf = readFileSync(inSpace(path));
       const scan = buf.subarray(0, BINARY_SCAN_BYTES);
       for (let i = 0; i < scan.length; i++) {
         if (scan[i] === 0) {
@@ -176,8 +188,9 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
       return { ok: false, bytes: 0, error: 'read-only role: writeFileRaw is blocked' };
     }
     try {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, String(content), 'utf8');
+      const target = inSpace(path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, String(content), 'utf8');
       return { ok: true, bytes: Buffer.byteLength(String(content), 'utf8') };
     } catch (e) {
       return { ok: false, bytes: 0, error: e instanceof Error ? e.message : String(e) };

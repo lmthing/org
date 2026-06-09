@@ -64,7 +64,8 @@ describe('system spaces', () => {
   it('defaultSystemSpaceDirs points under packages/core/system-spaces', () => {
     const dirs = defaultSystemSpaceDirs();
     expect(dirs.some((d) => d.endsWith('system-spaces/fs'))).toBe(true);
-    expect(dirs.length).toBe(5);
+    expect(dirs.some((d) => d.endsWith('system-spaces/solver'))).toBe(true);
+    expect(dirs.length).toBe(7);
   });
 
   it('defaultSystemSpaceDirs resolves to dirs that actually exist (dist + src layouts)', () => {

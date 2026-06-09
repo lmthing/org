@@ -27,7 +27,7 @@ export default function handler(opts) {
   if (hay.includes('currentTask')) {
     // Every attempt is correct → verify passes on the first try (rung 0).
     return (
-      `writeFile(process.env.LMTHING_SPACE_DIR + "/work/candidate.ts", ${JSON.stringify(CORRECT)});\n` +
+      `writeFile("work/candidate.ts", ${JSON.stringify(CORRECT)});\n` +
       `currentTask.resolve({ summary: "implemented add(a,b)" });`
     );
   }

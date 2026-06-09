@@ -1,11 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { stripMarkdownFences } from './turn-loop.js';
 
-// Test the stripMarkdownFences function by importing module internals
-// We test the behavior through the regex directly since it's a module-private function
-
-describe('stripMarkdownFences (via regex behavior)', () => {
-  const stripFences = (chunk: string) =>
-    chunk.split('\n').filter(line => !/^\s*```/.test(line)).join('\n');
+describe('stripMarkdownFences', () => {
+  const stripFences = stripMarkdownFences;
 
   it('strips opening code fences', () => {
     const result = stripFences('```typescript\nconst x = 1;');
@@ -28,6 +25,19 @@ describe('stripMarkdownFences (via regex behavior)', () => {
     expect(stripFences('```ts\n')).not.toContain('```');
     expect(stripFences('```json\n')).not.toContain('```');
     expect(stripFences('  ```\n')).not.toContain('```');
+  });
+
+  it('drops a stray fence language tag left behind when the stream splits ``` from its tag', () => {
+    // The boundary that broke a live solve attempt: '```' arrived in one chunk
+    // (stripped) and 'typescript' alone in the next, leaking a bogus statement.
+    expect(stripFences('typescript\nconst source = 1;')).toBe('const source = 1;');
+    expect(stripFences('ts')).toBe('');
+    expect(stripFences('  json  ')).toBe('');
+  });
+
+  it('does not drop those words inside real statements', () => {
+    expect(stripFences('const ts = 1;')).toBe('const ts = 1;');
+    expect(stripFences('return typescript.length;')).toBe('return typescript.length;');
   });
 });
 

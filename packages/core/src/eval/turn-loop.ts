@@ -14,11 +14,18 @@ import { BudgetExceededError, type Budget } from './budget.js';
 
 export type { StreamOpts, StreamSession };
 
-/** Strip markdown code fence lines from a chunk before feeding to the boundary detector. */
-function stripMarkdownFences(chunk: string): string {
+/** A line that is nothing but a code-fence language tag — left behind when the
+ *  stream splits the opening ``` from its language (```\n + `typescript`) across
+ *  chunks, so the per-chunk fence filter strips the ``` but not the tag. A bare
+ *  `typescript`/`ts`/… statement is never valid TS, so dropping it is safe. */
+const BARE_FENCE_LANG = /^\s*(?:typescript|ts|tsx|javascript|js|jsx|json)\s*$/i;
+
+/** Strip markdown code fence lines (and stray fence language tags) from a chunk
+ *  before feeding to the boundary detector. Exported for direct testing. */
+export function stripMarkdownFences(chunk: string): string {
   return chunk
     .split('\n')
-    .filter((line) => !/^\s*```/.test(line))
+    .filter((line) => !/^\s*```/.test(line) && !BARE_FENCE_LANG.test(line))
     .join('\n');
 }
 
