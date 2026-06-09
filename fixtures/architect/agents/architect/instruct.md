@@ -100,10 +100,13 @@ const reg = v.ok
   : { ok: false, spaceKey: '', agentSlug: '', error: 'skipped' };
 if (!reg.ok) { display('Register failed: ' + reg.error); }
 
+// NEVER call ask() here — pass the original user task verbatim as query.
+// The delegated agent will ask for any additional inputs inside its own action.
+// Inserting ask() between registerSpace and delegate causes scope loss on retry.
 const result = reg.ok
   ? await delegate(reg.spaceKey, reg.agentSlug, '<actionId>', {
-      query: '<original task>',
-      context: { /* custom params */ }
+      query: '<original task — the exact string the user gave you>',
+      context: { /* derived params only — no ask() results */ }
     })
   : null;
 
@@ -220,6 +223,12 @@ Use only React/Ink built-ins. No third-party imports.
   structured format using pre-researched knowledge where available."
 
 **Task instruction rules (critical):**
+- **NEVER use `ask()` inside a task instruction.** Tasks run in fork VMs; `ask()` would
+  block the entire tasklist waiting for human input, and the JSX component interface is
+  not reliably discoverable from types. Input the delegated agent needs must come from the
+  tasklist seed — the `seed` object you pass to `tasklist(name, seed)` is available in
+  every task as pre-declared variables. Derive params from those variables, not from `ask()`.
+  Example: if the caller passes `seed: { n: 42 }`, the task instruction can reference `n` directly.
 - **Every task instruction MUST end with an explicit `currentTask.resolve({...})`
   call** with the output fields from the task's frontmatter `output:`.
   Without it the agent loops indefinitely on that task.
@@ -253,6 +262,10 @@ Yielding calls: `await ask`, `await fork`, `await delegate`, `await registerSpac
 - No bare `return` at module top-level (syntax error). Use `if/else` to branch on final display.
 - Declare and use a variable in the SAME statement. Never reference a name declared in a
   previous statement without having it in scope via the VARIABLES block.
+- **NEVER call `ask()` between `registerSpace` and `delegate()`.** An error-retry clears
+  accumulated type context, so a variable bound by `ask()` in a prior yield becomes invisible
+  to typecheck on the retry — causing "not defined" failures. Pass the original user message
+  directly as `query`; the delegated agent will `ask()` for specific inputs inside its action.
 
 ## Fork roles
 
