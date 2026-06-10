@@ -137,6 +137,20 @@ LM_MODEL=M
 
 Provider support: `azure`, `anthropic`, `openai`, `google`, `mistral`. Format: `provider:modelId`.
 
+Custom OpenAI-compatible providers (no code change needed):
+```bash
+# Set per-provider env vars where <NAME> is the provider portion of provider:modelId (uppercased)
+<NAME>_API_TYPE=openai       # required — marks this as an OpenAI-compatible provider
+<NAME>_BASE_URL=https://...  # required — base URL of the API
+<NAME>_API_KEY=...           # optional — omit for no-auth endpoints (e.g. local Ollama)
+
+# Example: Groq
+GROQ_API_TYPE=openai
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_API_KEY=gsk_xxx
+LM_MODEL_G=groq:llama3-8b-8192
+```
+
 ## Secrets (Claude Code web)
 
 API keys are stored encrypted in `.env.encrypted` (AES-256-CBC) and decrypted automatically by `.claude/hooks/session-start.sh` on every web session.
