@@ -137,6 +137,22 @@ LM_MODEL=M
 
 Provider support: `azure`, `anthropic`, `openai`, `google`, `mistral`. Format: `provider:modelId`.
 
+## Secrets (Claude Code web)
+
+API keys are stored encrypted in `.env.encrypted` (AES-256-CBC) and decrypted automatically by `.claude/hooks/session-start.sh` on every web session.
+
+**If you are running in Claude Code web and `TAVILY_API_KEY` or other secrets appear to be missing, ask the user for the decryption password (`ENV_DECRYPT_KEY`) before proceeding.** Then decrypt manually:
+
+```bash
+ENV_DECRYPT_KEY=<password> openssl enc -d -aes-256-cbc -pbkdf2 -base64 \
+  -pass env:ENV_DECRYPT_KEY -in .env.encrypted
+```
+
+To add or update secrets locally:
+1. Edit `.env` (gitignored — never commit it)
+2. Run `ENV_DECRYPT_KEY=<password> ./scripts/encrypt-env.sh`
+3. Commit `.env.encrypted`
+
 ## Session API
 
 `Session` in `packages/core/src/session/session.ts`:
