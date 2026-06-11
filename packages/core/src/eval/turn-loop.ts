@@ -89,7 +89,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
 
         for (const stmt of statements) {
           hadStatements = true;
-          renderHost.log(`[stmt] ${stmt.slice(0, 120)}`);
+          renderHost.log(`[stmt] ${stmt}`);
           tracer.write({ ts: Date.now(), type: 'statement', context: ctx, code: stmt });
 
           const tscResult = runTsc({ ambientDts, sessionContext: accumulatedContext, statement: stmt });
@@ -186,7 +186,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     // Use parsed statements for history so incomplete trailing stream text is excluded.
     const historyContent = parsedStatements.length > 0 ? parsedStatements.join('\n') : assistantContent.trim();
     if (historyContent) {
-      renderHost.log(`[model response]\n${historyContent.slice(0, 500)}\n[/model response]`);
+      renderHost.log(`[model response]\n${historyContent}\n[/model response]`);
       tracer.write({ ts: Date.now(), type: 'llm_response', context: ctx, attempt, text: historyContent });
       history.append({ role: 'assistant', content: historyContent, blockType: 'normal' });
     }

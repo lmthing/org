@@ -69,7 +69,19 @@ transpile at render without node_modules.
   writeFileRaw, execShell, fetch, webSearch, process.env. Functions must be
   single-export TS with NO import statements — there is no pre-register syntax
   check; a broken function only fails when invoked. Keep them tiny and pure.
-- Gate the design with `fork({ role: 'plan' })` then `ask()` for user approval,
-  especially when the spec includes custom functions or components.
 
-Return the fully populated spec object.
+**This is a pure synthesis step — do NOT call webSearch, webFetch, listDir,
+readFile, execShell, or any other I/O tools here.** The research task has already
+gathered all external knowledge. Use the upstream outputs directly:
+- `understand.goal`, `understand.constraints`, `understand.domainHints`
+- `research.knowledge` → set `spec.knowledge = research.knowledge`
+
+Build the complete spec object, then resolve:
+```typescript
+const spec = {
+  agentSlug: '...',
+  // ... all fields
+  knowledge: research.knowledge,
+};
+currentTask.resolve({ spec });
+```

@@ -43,7 +43,18 @@ Agent frontmatter keys: `title`, `knowledge` (list of `domain/field` refs), `fun
 
 ## The pipeline (synthesize_and_run)
 
-`research → design → scaffold → validate → register → execute → report`
+`research → design → scaffold → validate → register → execute`
+
+The tasklist runs tasks 1-7 (understand through execute). **`execute` is the goal task** — it returns `{ spaceKey, agentSlug, actionId, query }`. After the tasklist resolves, the **session** delegates and reports.
+
+**Always bind the tasklist result and immediately delegate:**
+```typescript
+const t = await tasklist('synthesize_and_run', seed);
+// t = { spaceKey, agentSlug, actionId, query }
+const result = await delegate(t.spaceKey, t.agentSlug, t.actionId, { query: t.query, context: {} });
+display(JSON.stringify(result, null, 2));
+```
+**NEVER call recall() to recover the tasklist result — bind it directly in `t`.**
 
 **CRITICAL: display() during research is a PROGRESS INDICATOR, not a terminal action.**
 The pipeline is NOT complete until `delegate()` has been called and its result displayed.

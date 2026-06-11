@@ -13,7 +13,7 @@ Register the validated space into the live runtime so `delegate()` can reach it.
 
 Call:
 ```typescript
-const reg = await registerSpace(dir);
+const reg = await registerSpace(validate.dir);
 ```
 
 If `reg.ok` is false, display the error and resolve with `{ spaceKey: '', agentSlug: '' }`.

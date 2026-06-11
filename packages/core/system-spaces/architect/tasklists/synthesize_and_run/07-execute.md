@@ -1,23 +1,26 @@
 ---
 id: execute
 output:
-  result: object
-dependsOn: [register]
+  spaceKey: string
+  agentSlug: string
+  actionId: string
+  query: string
+dependsOn: [register, design]
 optional: false
-goal: false
+goal: true
+condition: "register.spaceKey != ''"
 ---
 
-Delegate to the registered agent and collect its result.
+Package the execution parameters so the calling session can delegate.
 
-Use the `spaceKey` and `agentSlug` from the register step, and the `goal` and `constraints` from the understand step as context. Pass the original goal as both the query AND as seed context — this lets the generated agent's tasklist tasks read the input directly as a variable without calling ask().
+**DO NOT call delegate() here — it is not available in fork context.** The session that called `tasklist()` will delegate using the returned params.
 
+Resolve immediately with:
 ```typescript
-const result = await delegate(register.spaceKey, register.agentSlug, '<actionId>', {
-  query: understand.goal,
-  context: { goal: understand.goal, constraints: understand.constraints }
-}) as Record<string, unknown>;
+currentTask.resolve({
+  spaceKey: register.spaceKey,
+  agentSlug: register.agentSlug,
+  actionId: design.spec.actions[0].id,
+  query: goal,
+});
 ```
-
-If the delegate rejects (throws), catch the error and resolve with `{ result: { error: errorMessage } }`.
-
-On success, resolve with `{ result }`.

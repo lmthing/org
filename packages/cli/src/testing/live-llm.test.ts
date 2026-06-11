@@ -367,7 +367,7 @@ describe.skipIf(!hasBin() || !LIVE)('live-llm suite (real models)', () => {
       scenario: 'L15-architect-synth',
       space: archDir,
       agent: 'architect',
-      message: 'Run your full synthesize_and_run pipeline by calling, as your FIRST statement, `await tasklist(\'synthesize_and_run\', { goal: "an agent that recommends a board game given a group size and desired play time", constraints: ["keep research brief", "after building it, run it for a group of 4 wanting a 60-minute game and show the recommendation"] });`. Do NOT perform the steps inline yourself — the tasklist orchestrates research→design→scaffold→validate→register→execute→report. Do not ask any questions.',
+      message: 'Run your full synthesize_and_run pipeline. Your FIRST statement must be: `const t = await tasklist(\'synthesize_and_run\', { goal: "an agent that recommends a board game given a group size and desired play time", constraints: ["keep research brief", "after building it, run it for a group of 4 wanting a 60-minute game and show the recommendation"] });`. After the tasklist resolves, immediately delegate: `const result = await delegate(t.spaceKey, t.agentSlug, t.actionId, { query: t.query, context: {} }); display(JSON.stringify(result, null, 2));`. Do NOT perform the steps inline yourself. Do not ask any questions.',
       timeoutMs: ARCH_TIMEOUT,
       stdin: 'board game recommender for group size and play time',
     });
@@ -378,14 +378,12 @@ describe.skipIf(!hasBin() || !LIVE)('live-llm suite (real models)', () => {
     const fullyCompleted = reg?.ok === true && delegated.length >= 1;
     record('L15-architect-synth', `ranTasklist=${ranTasklist} register.ok=${reg?.ok} inFork=${registeredInFork} delegates=${delegated.length} fullE2E=${fullyCompleted} exit=${r.code}`);
     // BEST-EFFORT probe. The architect's end-to-end synthesis is genuinely
-    // model-dependent (DeepSeek-V4-Pro sometimes drives its synthesize_and_run
-    // tasklist, sometimes improvises the steps inline; the full
-    // research→scaffold→validate→register→execute→report pipeline does not reliably
-    // complete in one shot). So the only hard assertion is that the run executed and
-    // produced trace; how far it got (tasklist / registerSpace / delegate) is recorded
-    // above for inspection. The orchestration primitives themselves —
-    // tasklist/registerSpace/delegate and the shared-dynamicSpaces reach (L17) — are
-    // covered deterministically by the keyless harness-features tests.
+    // model-dependent. The tasklist runs understand→research→design→scaffold→validate→
+    // register→execute (goal task, returns spaceKey/agentSlug/actionId/query), then the
+    // session delegates. The only hard assertion is that the run executed and produced
+    // trace; how far it got is recorded above for inspection. The orchestration
+    // primitives — tasklist/registerSpace/delegate — are covered deterministically by
+    // the keyless harness-features tests.
     expect(r.trace.length).toBeGreaterThan(0);
     if (fullyCompleted) {
       synthesizedSpaceKey = reg!.spaceKey; // enable L16 only on a clean full run
