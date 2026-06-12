@@ -4,13 +4,14 @@ import type { RenderHost } from '../session/types.js';
 import type { YieldRequest } from './yield.js';
 import type { StreamOpts, StreamSession } from './stream-types.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
-import type { Tracer } from '../sandbox/trace.js';
+import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { BoundaryDetector } from '../sandbox/boundary.js';
 import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { buildErrorBlock } from './error-rewind.js';
 import { emitVariables, extractBindingNames, extractBindingPattern } from '../context/variables.js';
 import { formatInspectResult, type InspectQuery } from '../globals/inspect.js';
+import { serialize } from '../globals/serialize.js';
 import { BudgetExceededError, type Budget } from './budget.js';
 
 export type { StreamOpts, StreamSession };
@@ -42,6 +43,9 @@ export interface TurnLoopDeps {
   tracer?: Tracer;
   /** Label for trace events — e.g. 'session', 'fork:analyze_dish', 'delegate:pairing' */
   traceContext?: string;
+  /** Structured execution scope (superset of traceContext). When present, every
+   *  trace event carries nodeId for full observability. */
+  scope?: TraceScope;
   /** Host-set budget. tickEpisode() per turn, tickToolCalls() per resolved yield.
    *  Exceeding a limit throws BudgetExceededError, which the caller disposes the VM on. */
   budget?: Budget;
@@ -54,7 +58,11 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
   const { vm, history, systemBlock, ambientDts, renderHost, streamFn, processYield } = deps;
   const maxRetries = deps.maxRetries ?? 3;
   const tracer = deps.tracer ?? NULL_TRACER;
-  const ctx = deps.traceContext ?? 'session';
+  const scope = deps.scope;
+  const ctx = scope?.label ?? deps.traceContext ?? 'session';
+  const nodeId = scope?.nodeId;
+  // Mint a per-turn yieldId counter (cheap monotonic suffix)
+  let yieldCounter = 0;
 
   let attempt = 0;
   let accumulatedContext = ''; // persists across yield-continuations; only resets on a fresh start
@@ -68,7 +76,8 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     deps.budget?.tickEpisode();
 
     const promptMessages = history.getPromptMessages();
-    tracer.write({ ts: Date.now(), type: 'llm_request', context: ctx, system: systemBlock, messages: promptMessages, model: deps.model });
+    tracer.write({ ts: Date.now(), type: 'llm_request', context: ctx, ...(nodeId ? { nodeId } : {}), system: systemBlock, messages: promptMessages, model: deps.model });
+    let lastProgressTs = 0;
     const stream = await streamFn({ system: systemBlock, messages: promptMessages, model: deps.model });
 
     const detector = new BoundaryDetector();
@@ -90,7 +99,14 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         for (const stmt of statements) {
           hadStatements = true;
           renderHost.log(`[stmt] ${stmt}`);
-          tracer.write({ ts: Date.now(), type: 'statement', context: ctx, code: stmt });
+          tracer.write({ ts: Date.now(), type: 'statement', context: ctx, ...(nodeId ? { nodeId } : {}), code: stmt });
+
+          // Throttled streaming progress (≥250ms between emissions, subscriber-only)
+          const now = Date.now();
+          if (now - lastProgressTs >= 250) {
+            lastProgressTs = now;
+            tracer.write({ ts: now, type: 'llm_progress', context: ctx, ...(nodeId ? { nodeId } : {}), chars: assistantContent.length, statements: parsedStatements.length });
+          }
 
           const tscResult = runTsc({ ambientDts, sessionContext: accumulatedContext, statement: stmt });
           if (!tscResult.ok) {
@@ -99,7 +115,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
             aborted = true;
             turnError = errMsg;
             failingStatement = stmt;
-            tracer.write({ ts: Date.now(), type: 'typecheck_error', context: ctx, statement: stmt, message: errMsg, attempt });
+            tracer.write({ ts: Date.now(), type: 'typecheck_error', context: ctx, ...(nodeId ? { nodeId } : {}), statement: stmt, message: errMsg, attempt });
             break;
           }
 
@@ -119,7 +135,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
             aborted = true;
             turnError = evalResult.error;
             failingStatement = stmt;
-            tracer.write({ ts: Date.now(), type: 'eval_error', context: ctx, statement: stmt, message: evalResult.error });
+            tracer.write({ ts: Date.now(), type: 'eval_error', context: ctx, ...(nodeId ? { nodeId } : {}), statement: stmt, message: evalResult.error });
             break;
           }
 
@@ -187,7 +203,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     const historyContent = parsedStatements.length > 0 ? parsedStatements.join('\n') : assistantContent.trim();
     if (historyContent) {
       renderHost.log(`[model response]\n${historyContent}\n[/model response]`);
-      tracer.write({ ts: Date.now(), type: 'llm_response', context: ctx, attempt, text: historyContent });
+      tracer.write({ ts: Date.now(), type: 'llm_response', context: ctx, ...(nodeId ? { nodeId } : {}), attempt, text: historyContent });
       history.append({ role: 'assistant', content: historyContent, blockType: 'normal' });
     }
 
@@ -227,10 +243,11 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       // eval model, so the host must bind the values itself (see below).
       const resolvedValues: unknown[] = new Array(yields.length);
       await Promise.all(yields.map(async (yieldReq, i) => {
-        tracer.write({ ts: Date.now(), type: 'yield', context: ctx, kind: yieldReq.kind, args: yieldReq.args });
+        const yieldId = `${nodeId ?? ctx}_y${++yieldCounter}`;
+        tracer.write({ ts: Date.now(), type: 'yield', context: ctx, ...(nodeId ? { nodeId } : {}), kind: yieldReq.kind, args: yieldReq.args, yieldId });
         try {
           const resolved = await processYield(yieldReq);
-          tracer.write({ ts: Date.now(), type: 'yield_resolved', context: ctx, kind: yieldReq.kind, value: resolved });
+          tracer.write({ ts: Date.now(), type: 'yield_resolved', context: ctx, ...(nodeId ? { nodeId } : {}), kind: yieldReq.kind, value: resolved, yieldId });
           yieldReq.deferred.resolve(resolved);
           resolvedValues[i] = resolved;
         } catch (err) {
@@ -264,6 +281,15 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       }
       for (const [name, value] of Object.entries(variables)) {
         vm.setVar(name, value); // inject into VM scope + host scope for the next turn
+      }
+
+      // Emit a serialized variables snapshot for the observability tree
+      if (Object.keys(variables).length > 0) {
+        const serialized: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(variables)) {
+          serialized[k] = serialize(v);
+        }
+        tracer.write({ ts: Date.now(), type: 'variables', context: ctx, ...(nodeId ? { nodeId } : {}), vars: serialized });
       }
 
       // Add the yielding statement to accumulated context for future typecheck
@@ -307,12 +333,15 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
 
     if (!hadStatements) {
       renderHost.log(`[turn ${attempt}] model produced no statements — done`);
+      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_statements' });
       return 'done';
     }
 
     renderHost.log(`[turn ${attempt}] done`);
+    tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'done' });
     return 'done';
   }
 
+  tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'max_retries' });
   return 'error';
 }

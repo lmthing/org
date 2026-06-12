@@ -8,8 +8,10 @@ export type { VM, VMOpts, EvalResult } from './sandbox/quickjs.js';
 export { marshalToQuickJS, marshalToHost, injectGlobal } from './sandbox/host-bridge.js';
 export { JSX_RUNTIME_CODE } from './sandbox/jsx-runtime.js';
 export { injectSpaceFunctions } from './sandbox/inject-functions.js';
-export { Tracer } from './sandbox/trace.js';
-export type { TraceEvent } from './sandbox/trace.js';
+export { Tracer, NULL_TRACER } from './sandbox/trace.js';
+export type { TraceEvent, TraceScope, NodeKind, NodeStatus, NodeDetail } from './sandbox/trace.js';
+export { buildTraceTree, applyEvent } from './sandbox/trace-tree.js';
+export type { TraceTree, TreeNode, LlmCall, StatementEntry, YieldEntry, DisplayEntry } from './sandbox/trace-tree.js';
 
 // Typecheck
 export { runTsc } from './typecheck/tsc.js';

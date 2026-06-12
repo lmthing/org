@@ -12,7 +12,7 @@ import { buildOverlay, extractFunctionSignature } from '../typecheck/overlay.js'
 import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { validateOutput } from '../tasklist/schema.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
-import type { Tracer } from '../sandbox/trace.js';
+import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { Budget, type BudgetLimits } from '../eval/budget.js';
 
 export interface ForkTask {
@@ -24,6 +24,9 @@ export interface ForkTask {
   upstreamOutputs?: Record<string, unknown>;
   /** Subagent role controlling capability profile + system-prompt preamble. */
   role?: 'explore' | 'plan' | 'general';
+  /** Parent execution scope for hierarchical observability. Set by the yield router
+   *  before each fork() call so each invocation carries the right parentId. */
+  parentScope?: TraceScope;
 }
 
 interface ForkEngineOpts {
@@ -58,37 +61,55 @@ export class ForkEngine {
   constructor(private opts: ForkEngineOpts) {}
 
   async fork<T>(task: ForkTask): Promise<T> {
-    // Wait for concurrency slot
+    const tracer = this.opts.tracer ?? NULL_TRACER;
+    const label = `fork:${task.taskId ?? task.role ?? 'general'}`;
+    // Mint scope as 'queued' before acquiring the slot so wait time is visible
+    const forkScope = tracer.child(task.parentScope, 'fork', label, {
+      role: task.role,
+      taskId: task.taskId,
+      instruction: task.instruction.slice(0, 120),
+      timeout: task.timeout,
+    }, 'queued');
+
+    // Wait for concurrency slot, then activate
     await this.acquireSlot();
+    tracer.activate(forkScope);
 
     try {
-      return await this.runFork<T>(task);
+      return await this.runFork<T>(task, forkScope);
     } finally {
       this.releaseSlot();
     }
   }
 
   private acquireSlot(): Promise<void> {
+    const tracer = this.opts.tracer ?? NULL_TRACER;
     if (this.activeForks < this.opts.maxConcurrentForks) {
       this.activeForks++;
+      tracer.write({ ts: Date.now(), type: 'fork_queue', active: this.activeForks, queued: this.queue.length, max: this.opts.maxConcurrentForks });
       return Promise.resolve();
     }
 
     return new Promise((resolve) => {
       this.queue.push(() => {
         this.activeForks++;
+        tracer.write({ ts: Date.now(), type: 'fork_queue', active: this.activeForks, queued: this.queue.length, max: this.opts.maxConcurrentForks });
         resolve();
       });
     });
   }
 
   private releaseSlot(): void {
+    const tracer = this.opts.tracer ?? NULL_TRACER;
     this.activeForks--;
     const next = this.queue.shift();
     if (next) next();
+    else tracer.write({ ts: Date.now(), type: 'fork_queue', active: this.activeForks, queued: this.queue.length, max: this.opts.maxConcurrentForks });
   }
 
-  private async runFork<T>(task: ForkTask): Promise<T> {
+  private async runFork<T>(task: ForkTask, forkScope: TraceScope): Promise<T> {
+    const tracer = this.opts.tracer ?? NULL_TRACER;
+
     return new Promise<T>(async (resolve, reject) => {
       let settled = false;
       let didResolve = false;
@@ -96,23 +117,26 @@ export class ForkEngine {
       let resolvedError: Error | undefined;
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-      function settle(fn: () => void): void {
+      const settle = (fn: () => void, endStatus: 'done' | 'error' = 'done', errMsg?: string): void => {
         if (settled) return;
         settled = true;
         if (timeoutId) clearTimeout(timeoutId);
+        tracer.end(forkScope, endStatus, errMsg ? { error: errMsg } : undefined);
         fn();
-      }
+      };
 
       // Set up timeout
       if (task.timeout && task.timeout > 0) {
         const clock = this.opts.clock;
         if (clock) {
           clock.setTimeout(() => {
-            settle(() => reject(new Error(`Fork timed out after ${task.timeout}ms`)));
+            const msg = `Fork timed out after ${task.timeout}ms`;
+            settle(() => reject(new Error(msg)), 'error', msg);
           }, task.timeout);
         } else {
           timeoutId = setTimeout(() => {
-            settle(() => reject(new Error(`Fork timed out after ${task.timeout}ms`)));
+            const msg = `Fork timed out after ${task.timeout}ms`;
+            settle(() => reject(new Error(msg)), 'error', msg);
           }, task.timeout);
         }
       }
@@ -193,8 +217,11 @@ export class ForkEngine {
         };
 
         type AnyFn = (...args: unknown[]) => unknown;
+        const forkTracer = this.opts.tracer ?? NULL_TRACER;
         injectGlobal(vm.ctx, 'ask', createAskGlobal(pushYield, this.opts.renderHost) as AnyFn);
-        injectGlobal(vm.ctx, 'display', createDisplayGlobal(this.opts.renderHost) as AnyFn);
+        injectGlobal(vm.ctx, 'display', createDisplayGlobal(this.opts.renderHost, (value) => {
+          forkTracer.write({ ts: Date.now(), type: 'display', context: forkScope.label, nodeId: forkScope.nodeId, descriptor: value });
+        }) as AnyFn);
         injectGlobal(vm.ctx, 'inspect', createInspectGlobal(pushYield) as AnyFn);
         injectGlobal(vm.ctx, 'sleep', createSleepGlobal(pushYield, this.opts.clock) as AnyFn);
         injectGlobal(
@@ -326,6 +353,7 @@ export class ForkEngine {
           maxRetries: 3,
           tracer: this.opts.tracer ?? NULL_TRACER,
           traceContext: `fork:${task.taskId ?? task.role ?? 'general'}`,
+          scope: forkScope,
           budget,
           model: modelForRole(task.role, this.opts.roleModels),
         });
@@ -338,15 +366,18 @@ export class ForkEngine {
           if (didResolve) {
             resolvedError ? reject(resolvedError) : resolve(resolvedValue as T);
           } else {
-            reject(new Error(`Fork completed without calling currentTask.resolve() (result: ${result})`));
+            const msg = `Fork completed without calling currentTask.resolve() (result: ${result})`;
+            reject(new Error(msg));
           }
-        });
+        }, didResolve && !resolvedError ? 'done' : 'error',
+          (!didResolve || resolvedError) ? (resolvedError?.message ?? 'no resolve called') : undefined);
       } catch (err) {
         if (vm) {
           try { vm.dispose(); } catch { /* ignore dispose errors in error path */ }
           vm = undefined;
         }
-        settle(() => reject(err));
+        const errMsg = err instanceof Error ? err.message : String(err);
+        settle(() => reject(err), 'error', errMsg);
       }
     });
   }

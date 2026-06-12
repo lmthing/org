@@ -344,6 +344,19 @@ describe('mock-driven Session — solve escalation (Phase 3)', () => {
       e.messages.some((m) => m.content.includes('Feedback from the previous attempt')),
     );
     expect(withFeedback.length).toBeGreaterThanOrEqual(1);
+
+    // Observability: the solve ladder emits a solve_verify per attempt (fail → pass),
+    // nested under a `solve` node whose result carries the rung/attempts/verified.
+    const verifies = r.trace.filter((e): e is Extract<TraceEvent, { type: 'solve_verify' }> => e.type === 'solve_verify');
+    expect(verifies.length).toBe(2);
+    expect(verifies[0]!.ok).toBe(false); // first attempt failed verification
+    expect(verifies[1]!.ok).toBe(true);  // retry passed
+    const solveNode = r.trace.find((e): e is Extract<TraceEvent, { type: 'node_start' }> => e.type === 'node_start' && e.kind === 'solve');
+    expect(solveNode).toBeDefined();
+    // every solve_verify is attributed to the solve node
+    expect(verifies.every((v) => v.nodeId === solveNode!.nodeId)).toBe(true);
+    const solveEnd = r.trace.find((e): e is Extract<TraceEvent, { type: 'node_end' }> => e.type === 'node_end' && e.nodeId === solveNode!.nodeId);
+    expect((solveEnd!.result as { rung: number }).rung).toBe(1);
   });
 
   it('3D: no verify spec → single shot, verified:false, rung 0', async () => {

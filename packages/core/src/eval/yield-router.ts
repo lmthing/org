@@ -3,6 +3,7 @@ import type { Clock } from '../session/types.js';
 import type { Space } from '../spaces/load.js';
 import type { ForkEngine, ForkTask } from '../fork/fork.js';
 import type { DelegateOpts } from '../globals/delegate.js';
+import type { Tracer, TraceScope } from '../sandbox/trace.js';
 
 /**
  * Dependencies the shared yield router needs to resolve the yield kinds common
@@ -33,6 +34,10 @@ export interface YieldRouterContext {
    *  Optional: when absent, verifyCommand-based solve verification is unavailable
    *  (verifyCondition still works). */
   execCommand?: (cmd: string) => { ok: boolean; output: string };
+  /** Tracer for minting child scopes in tasklist/solve. */
+  tracer?: Tracer;
+  /** Current execution scope — becomes parentScope on spawned forks/delegates. */
+  scope?: TraceScope;
 }
 
 export type RouteResult =
@@ -63,7 +68,10 @@ export async function routeCommonYield(
     }
     case 'fork': {
       const engine = await ctx.getForkEngine();
-      const value = await engine.fork(req.args[0] as ForkTask);
+      const task = req.args[0] as ForkTask;
+      // Attach the current scope as parent so the fork's node is correctly nested
+      if (ctx.scope && !task.parentScope) task.parentScope = ctx.scope;
+      const value = await engine.fork(task);
       return { handled: true, value };
     }
     case 'tasklist': {
@@ -71,7 +79,7 @@ export async function routeCommonYield(
       const seed = req.args[1] as Record<string, unknown> | undefined;
       const engine = await ctx.getForkEngine();
       const { runTasklist } = await import('../tasklist/orchestrator.js');
-      const result = await runTasklist({ name, space: ctx.space, forkEngine: engine, seed });
+      const result = await runTasklist({ name, space: ctx.space, forkEngine: engine, seed, tracer: ctx.tracer, parentScope: ctx.scope });
       ctx.onTasklistResult?.(name, result);
       return { handled: true, value: result };
     }
@@ -89,12 +97,29 @@ export async function routeCommonYield(
       const engine = await ctx.getForkEngine();
       const { runSolveYield } = await import('../fork/solve.js');
       const { evaluateCondition } = await import('../tasklist/condition-dsl.js');
-      const value = await runSolveYield(req.args[0] as import('../fork/solve.js').SolveYieldOpts, {
-        // runSolveYield always populates `output`, so the SolveTask is a valid ForkTask.
-        fork: (task) => engine.fork(task as unknown as ForkTask),
+      const solveOpts = req.args[0] as import('../fork/solve.js').SolveYieldOpts;
+      const tracer = ctx.tracer;
+      const parentScope = ctx.scope;
+      let solveScope: TraceScope | undefined;
+      if (tracer && parentScope) {
+        solveScope = tracer.child(parentScope, 'solve', 'solve', {
+          maxAttempts: solveOpts.maxAttempts,
+        });
+      }
+      const value = await runSolveYield(solveOpts, {
+        fork: (task) => {
+          if (solveScope) (task as unknown as ForkTask).parentScope = solveScope;
+          return engine.fork(task as unknown as ForkTask);
+        },
         execCommand: ctx.execCommand,
         evaluateCondition,
+        onVerify: solveScope && tracer ? (attempt, rung, ok, feedback) => {
+          tracer!.write({ ts: Date.now(), type: 'solve_verify', context: solveScope!.label, nodeId: solveScope!.nodeId, attempt, rung, ok, feedback });
+        } : undefined,
       });
+      if (solveScope && tracer) {
+        tracer.end(solveScope, 'done', { result: value });
+      }
       return { handled: true, value };
     }
     default:

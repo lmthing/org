@@ -6,6 +6,8 @@ import { runTasklist } from './orchestrator.js';
 import { ForkEngine } from '../fork/fork.js';
 import { loadSpace } from '../spaces/load.js';
 import { createMockStreamFn } from '../testing/mock-provider.js';
+import { Tracer } from '../sandbox/trace.js';
+import type { TraceEvent } from '../sandbox/trace.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamOpts } from '../eval/stream-types.js';
 
@@ -124,6 +126,53 @@ describe('runTasklist orchestrator', () => {
     expect(seen).toContain('GATE_T');
     expect(seen).toContain('FINAL_T');
     expect(seen).not.toContain('BRANCH_T');
+  });
+
+  it('emits a tasklist node with per-task children (done + skipped) when given a tracer', async () => {
+    const dir = await makeTasklistSpace({
+      '01-gate.md': `---\nid: gate\noutput:\n  go: boolean\n---\n\nGATE_T: decide the gate.`,
+      '02-branch.md': `---\nid: branch\ndependsOn:\n  - gate\ncondition: "gate.go == true"\noutput:\n  v: number\n---\n\nBRANCH_T: only when gate is open.`,
+      '03-final.md': `---\nid: final\ndependsOn:\n  - gate\ngoal: true\noutput:\n  v: number\n---\n\nFINAL_T: always the goal.`,
+    });
+    const space = await loadSpace(dir);
+    const seen: string[] = [];
+    const events: TraceEvent[] = [];
+    const tracer = new Tracer(null);
+    tracer.subscribe((e) => events.push(e));
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
+      renderHost: silentHost, tracer,
+      streamFn: createMockStreamFn((o: StreamOpts) => {
+        const user = o.messages.map((m) => m.content).join('\n');
+        for (const a of [
+          { token: 'GATE_T', code: `currentTask.resolve({ go: false });` },
+          { token: 'FINAL_T', code: `currentTask.resolve({ v: 9 });` },
+        ]) {
+          if (user.includes('Output schema:') && user.includes(a.token)) { seen.push(a.token); return a.code; }
+        }
+        return '';
+      }),
+    });
+    const parentScope = tracer.child(undefined, 'run', 'session');
+    await runTasklist({ name: 'flow', space, forkEngine: engine, tracer, parentScope });
+
+    const starts = events.filter((e): e is Extract<TraceEvent, { type: 'node_start' }> => e.type === 'node_start');
+    const ends = events.filter((e): e is Extract<TraceEvent, { type: 'node_end' }> => e.type === 'node_end');
+
+    // One tasklist node, parented under the run scope.
+    const tasklistNode = starts.find((s) => s.kind === 'tasklist');
+    expect(tasklistNode).toBeDefined();
+    expect(tasklistNode!.parentId).toBe(parentScope.nodeId);
+
+    // Task nodes nest under the tasklist node; gate/final done, branch skipped.
+    const taskNodes = starts.filter((s) => s.kind === 'task');
+    expect(taskNodes.every((t) => t.parentId === tasklistNode!.nodeId)).toBe(true);
+    const branch = taskNodes.find((t) => t.label.includes('branch'));
+    expect(branch!.detail?.dependsOn).toContain('gate');
+    const branchEnd = ends.find((e) => e.nodeId === branch!.nodeId);
+    expect(branchEnd!.status).toBe('skipped');
+    // The tasklist node itself completed.
+    expect(ends.find((e) => e.nodeId === tasklistNode!.nodeId)!.status).toBe('done');
   });
 
   it('throws when a required (non-optional) task fails', async () => {

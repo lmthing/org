@@ -2,7 +2,7 @@ import type { RenderHost, Clock } from '../session/types.js';
 import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
 import type { DelegateOpts } from '../globals/delegate.js';
 import type { DelegateRegistry } from './registry.js';
-import type { Tracer } from '../sandbox/trace.js';
+import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import { resolveDirectDeps, getAgentFunctions, getAgentFunctionsBundled } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
@@ -32,6 +32,8 @@ export interface RunDelegateOpts {
   maxConcurrentForks: number;
   clock?: Clock;
   tracer?: Tracer;
+  /** Parent execution scope for hierarchical observability. */
+  scope?: TraceScope;
   systemSpaces?: Space[];
 }
 
@@ -51,6 +53,16 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     opts.registry.addSpace(pkgName, depSpace);
     opts.registry.addSpace(depSpace.dir, depSpace);
   }
+
+  const tracer = opts.tracer ?? NULL_TRACER;
+  const delegateLabel = `delegate:${opts.packageName}/${opts.agentName}/${opts.action}`;
+  // Mint a delegate scope for full observability; end() in finally below
+  const delegateScope = tracer.child(opts.scope, 'delegate', delegateLabel, {
+    pkg: opts.packageName,
+    agent: opts.agentName,
+    action: opts.action,
+    depth: opts.depth,
+  });
 
   const directDeps = resolveDirectDeps(space, agent.dependencies);
 
@@ -156,7 +168,9 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
 
     type AnyFn = (...args: unknown[]) => unknown;
     injectGlobal(vm.ctx, 'ask', createAskGlobal(pushYield, opts.renderHost) as AnyFn);
-    injectGlobal(vm.ctx, 'display', createDisplayGlobal(opts.renderHost) as AnyFn);
+    injectGlobal(vm.ctx, 'display', createDisplayGlobal(opts.renderHost, (value) => {
+      tracer.write({ ts: Date.now(), type: 'display', context: delegateScope.label, nodeId: delegateScope.nodeId, descriptor: value });
+    }) as AnyFn);
     injectGlobal(vm.ctx, 'inspect', createInspectGlobal(pushYield) as AnyFn);
     injectGlobal(vm.ctx, 'sleep', createSleepGlobal(pushYield, opts.clock) as AnyFn);
     injectGlobal(
@@ -182,43 +196,53 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       tracer: opts.tracer,
     });
 
-    await runTurnLoop({
-      vm,
-      history,
-      systemBlock,
-      ambientDts,
-      renderHost: opts.renderHost,
-      streamFn: opts.streamFn,
-      processYield: async (req) => {
-        // sleep / fork / tasklist / delegate share the central router. The two
-        // delegate-specific behaviours are passed as hooks: auto-capture of the
-        // action's tasklist result, and depth-incremented recursion.
-        const routed = await routeCommonYield(req, {
-          space,
-          clock: opts.clock,
-          getForkEngine: () => forkEngine,
-          onTasklistResult: (name, result) => {
-            if (name === actionDef.tasklist && !resultCaptured) {
-              capturedResult = result;
-              resultCaptured = true;
-            }
-          },
-          runDelegate: (packageName, agentName, action, delegateOpts2) =>
-            runDelegate({
-              ...opts,
-              packageName,
-              agentName,
-              action,
-              delegateOpts: delegateOpts2,
-              depth: opts.depth + 1,
-            }),
-        });
-        return routed.handled ? routed.value : undefined;
-      },
-      maxRetries: 3,
-      tracer: opts.tracer ?? NULL_TRACER,
-      traceContext: `delegate:${opts.packageName}/${opts.agentName}/${opts.action}`,
-    });
+    try {
+      await runTurnLoop({
+        vm,
+        history,
+        systemBlock,
+        ambientDts,
+        renderHost: opts.renderHost,
+        streamFn: opts.streamFn,
+        processYield: async (req) => {
+          // sleep / fork / tasklist / delegate share the central router. The two
+          // delegate-specific behaviours are passed as hooks: auto-capture of the
+          // action's tasklist result, and depth-incremented recursion.
+          const routed = await routeCommonYield(req, {
+            space,
+            clock: opts.clock,
+            tracer: opts.tracer,
+            scope: delegateScope,
+            getForkEngine: () => forkEngine,
+            onTasklistResult: (name, result) => {
+              if (name === actionDef.tasklist && !resultCaptured) {
+                capturedResult = result;
+                resultCaptured = true;
+              }
+            },
+            runDelegate: (packageName, agentName, action, delegateOpts2) =>
+              runDelegate({
+                ...opts,
+                packageName,
+                agentName,
+                action,
+                delegateOpts: delegateOpts2,
+                scope: delegateScope,
+                depth: opts.depth + 1,
+              }),
+          });
+          return routed.handled ? routed.value : undefined;
+        },
+        maxRetries: 3,
+        tracer: tracer,
+        traceContext: delegateLabel,
+        scope: delegateScope,
+      });
+      tracer.end(delegateScope, 'done', resultCaptured ? { result: capturedResult } : undefined);
+    } catch (err) {
+      tracer.end(delegateScope, 'error', { error: err instanceof Error ? err.message : String(err) });
+      throw err;
+    }
 
     return resultCaptured ? capturedResult : undefined;
   } finally {

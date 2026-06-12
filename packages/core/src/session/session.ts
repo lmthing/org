@@ -40,6 +40,7 @@ import { getAgentComponents } from '../spaces/components.js';
 import { loadSnapshot } from './snapshot.js';
 import type { Snapshot } from './snapshot.js';
 import { Tracer } from '../sandbox/trace.js';
+import type { TraceScope } from '../sandbox/trace.js';
 
 export class Session {
   private opts: SessionOpts;
@@ -60,6 +61,12 @@ export class Session {
    * delegate() calls in the same session.
    */
   private dynamicSpaces: Map<string, Space> = new Map();
+  /** Root scope for the entire session (nodeId === sessionId). */
+  private rootScope: TraceScope | null = null;
+  /** Scope of the currently-running turn (run node). Reset per start/continue/resume. */
+  private currentScope: TraceScope | null = null;
+  /** Counter for run nodes (start/continue/resume calls). */
+  private runCount = 0;
   /**
    * One ForkEngine per session, lazily built and reused across fork/tasklist
    * yields so the maxConcurrentForks semaphore is enforced across ALL top-level
@@ -82,6 +89,9 @@ export class Session {
     this.tracer = new Tracer(opts.traceFile ?? null);
   }
 
+  /** Expose the tracer so the CLI can subscribe the TraceHub to it. */
+  getTracer(): Tracer { return this.tracer; }
+
   async continue(message: string): Promise<void> {
     if (!this.vm || !this.systemBlock || !this.ambientDts) {
       throw new Error('Session not started — call start() first');
@@ -95,19 +105,27 @@ export class Session {
     // keeping the most recent messages (incl. this task) verbatim.
     await this.maybeSummarizeHistory();
     this.budget = new Budget(this.opts.budget ?? {});
-    await runTurnLoop({
-      vm: this.vm,
-      history: this.history,
-      systemBlock: this.systemBlock,
-      ambientDts: this.ambientDts,
-      renderHost: this.opts.renderHost,
-      streamFn: this.deps.streamFn,
-      processYield: (req) => this.handleYield(req),
-      maxRetries: this.opts.maxRetries,
-      tracer: this.tracer,
-      traceContext: 'session',
-      budget: this.budget,
-    });
+    const runScope = this.mintRunScope();
+    try {
+      await runTurnLoop({
+        vm: this.vm,
+        history: this.history,
+        systemBlock: this.systemBlock,
+        ambientDts: this.ambientDts,
+        renderHost: this.opts.renderHost,
+        streamFn: this.deps.streamFn,
+        processYield: (req) => this.handleYield(req),
+        maxRetries: this.opts.maxRetries,
+        tracer: this.tracer,
+        traceContext: 'session',
+        scope: runScope,
+        budget: this.budget,
+      });
+      this.tracer.end(runScope, 'done');
+    } catch (err) {
+      this.tracer.end(runScope, 'error', { error: err instanceof Error ? err.message : String(err) });
+      throw err;
+    }
   }
 
   async start(initialMessage: string): Promise<void> {
@@ -167,23 +185,32 @@ export class Session {
       blockType: 'normal',
     });
 
-    this.tracer.write({ ts: Date.now(), type: 'session_start', sessionId: this.sessionId, spaceDir: this.opts.spaceDir, agentSlug: resolvedSlug! });
+    this.rootScope = this.tracer.root(this.sessionId);
+    this.tracer.write({ ts: Date.now(), type: 'session_start', sessionId: this.sessionId, spaceDir: this.opts.spaceDir, agentSlug: resolvedSlug!, nodeId: this.sessionId });
 
     // 8. Run turn loop until done or error
     this.budget = new Budget(this.opts.budget ?? {});
-    await runTurnLoop({
-      vm: this.vm,
-      history: this.history,
-      systemBlock,
-      ambientDts,
-      renderHost: this.opts.renderHost,
-      streamFn: this.deps.streamFn,
-      processYield: (req) => this.handleYield(req),
-      maxRetries: this.opts.maxRetries,
-      tracer: this.tracer,
-      traceContext: 'session',
-      budget: this.budget,
-    });
+    const runScope = this.mintRunScope();
+    try {
+      await runTurnLoop({
+        vm: this.vm,
+        history: this.history,
+        systemBlock,
+        ambientDts,
+        renderHost: this.opts.renderHost,
+        streamFn: this.deps.streamFn,
+        processYield: (req) => this.handleYield(req),
+        maxRetries: this.opts.maxRetries,
+        tracer: this.tracer,
+        traceContext: 'session',
+        scope: runScope,
+        budget: this.budget,
+      });
+      this.tracer.end(runScope, 'done');
+    } catch (err) {
+      this.tracer.end(runScope, 'error', { error: err instanceof Error ? err.message : String(err) });
+      throw err;
+    }
   }
 
   async resume(snapshotDir: string, message: string): Promise<void> {
@@ -238,20 +265,29 @@ export class Session {
     ];
     this.injectJSXRuntime(allComponentNames);
 
+    this.rootScope = this.tracer.root(this.sessionId);
     this.budget = new Budget(this.opts.budget ?? {});
-    await runTurnLoop({
-      vm: this.vm,
-      history: this.history,
-      systemBlock,
-      ambientDts,
-      renderHost: this.opts.renderHost,
-      streamFn: this.deps.streamFn,
-      processYield: (req) => this.handleYield(req),
-      maxRetries: this.opts.maxRetries,
-      tracer: this.tracer,
-      traceContext: 'session',
-      budget: this.budget,
-    });
+    const runScope = this.mintRunScope();
+    try {
+      await runTurnLoop({
+        vm: this.vm,
+        history: this.history,
+        systemBlock,
+        ambientDts,
+        renderHost: this.opts.renderHost,
+        streamFn: this.deps.streamFn,
+        processYield: (req) => this.handleYield(req),
+        maxRetries: this.opts.maxRetries,
+        tracer: this.tracer,
+        traceContext: 'session',
+        scope: runScope,
+        budget: this.budget,
+      });
+      this.tracer.end(runScope, 'done');
+    } catch (err) {
+      this.tracer.end(runScope, 'error', { error: err instanceof Error ? err.message : String(err) });
+      throw err;
+    }
   }
 
   dispose(): void {
@@ -342,7 +378,10 @@ export class Session {
 
     type AnyFn = (...args: unknown[]) => unknown;
     injectGlobal(this.vm.ctx, 'ask', createAskGlobal(pushYield, renderHost) as AnyFn);
-    injectGlobal(this.vm.ctx, 'display', createDisplayGlobal(renderHost) as AnyFn);
+    injectGlobal(this.vm.ctx, 'display', createDisplayGlobal(renderHost, (value) => {
+      const scope = this.currentScope;
+      this.tracer.write({ ts: Date.now(), type: 'display', context: scope?.label ?? 'session', ...(scope ? { nodeId: scope.nodeId } : {}), descriptor: value });
+    }) as AnyFn);
     injectGlobal(this.vm.ctx, 'inspect', createInspectGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'sleep', createSleepGlobal(pushYield, this.opts.clock) as AnyFn);
     injectGlobal(
@@ -453,10 +492,22 @@ export class Session {
    * tasklist auto-capture (that's delegate-only), and resolves delegate() by
    * constructing a fresh registry from its own + dependent + dynamic spaces.
    */
+  private mintRunScope(): TraceScope {
+    this.runCount++;
+    // Label stays 'session' so the `context` field on all turn-loop trace events
+    // remains backward-compatible (existing jq recipes + tests filter by it). The
+    // unique nodeId distinguishes runs in the execution tree.
+    const scope = this.tracer.child(this.rootScope ?? undefined, 'run', 'session');
+    this.currentScope = scope;
+    return scope;
+  }
+
   private buildYieldContext(space: Space): YieldRouterContext {
     return {
       space,
       clock: this.opts.clock,
+      tracer: this.tracer,
+      scope: this.currentScope ?? undefined,
       getForkEngine: () => this.getForkEngine(),
       // solve()'s verifyCommand runs host-side with the space dir as cwd, so a
       // checker (tests / tsc) sees files written by the attempt forks.
@@ -496,6 +547,7 @@ export class Session {
           maxConcurrentForks: this.opts.maxConcurrentForks ?? 4,
           clock: this.opts.clock,
           tracer: this.tracer,
+          scope: this.currentScope ?? undefined,
           systemSpaces: this.systemSpaces,
         });
       },

@@ -1191,3 +1191,210 @@ describe('harness — nested delegate()', () => {
     expect(delContexts.some((c) => c.includes('/leaf'))).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hierarchical observability — node_start/node_end execution tree (Phase 2)
+// ---------------------------------------------------------------------------
+
+import { buildTraceTree } from '../sandbox/trace-tree.js';
+
+type NodeStartEv = Extract<TraceEvent, { type: 'node_start' }>;
+type NodeEndEv = Extract<TraceEvent, { type: 'node_end' }>;
+const nodeStarts = (t: TraceEvent[]): NodeStartEv[] => t.filter((e): e is NodeStartEv => e.type === 'node_start');
+const nodeEnds = (t: TraceEvent[]): NodeEndEv[] => t.filter((e): e is NodeEndEv => e.type === 'node_end');
+
+describe('harness — execution-tree observability', () => {
+  it('every node_start.parentId resolves to a known node, and forks nest under the session run', async () => {
+    let sessionStep = 0;
+    const m = mockMatch(
+      [forkRule('SOLO_TASK', `currentTask.resolve({ ok: true });`)],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const f = await fork({ role: 'general', instruction: 'SOLO_TASK', output: { ok: 'boolean' } });`;
+        if (sessionStep === 2) return `display("done");`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+
+    const starts = nodeStarts(r.trace);
+    // session_start carries the root node id; node_start events carry the rest.
+    const knownIds = new Set<string>(starts.map((s) => s.nodeId));
+    const sessionStartEv = r.trace.find((e) => e.type === 'session_start') as Extract<TraceEvent, { type: 'session_start' }> | undefined;
+    if (sessionStartEv?.nodeId) knownIds.add(sessionStartEv.nodeId);
+
+    // Every non-null parentId must reference a node we've seen.
+    for (const s of starts) {
+      if (s.parentId !== null) expect(knownIds.has(s.parentId)).toBe(true);
+    }
+
+    // There is a fork node, and its parent chain leads to the session root.
+    const forkNode = starts.find((s) => s.kind === 'fork');
+    expect(forkNode).toBeDefined();
+
+    // Build the tree and assert the fork is reachable from the root.
+    const tree = buildTraceTree(r.trace);
+    expect(tree.rootId).toBeTruthy();
+    const allDescendants = (id: string): string[] => {
+      const node = tree.nodes[id];
+      if (!node) return [];
+      return [id, ...node.childIds.flatMap(allDescendants)];
+    };
+    const reachable = new Set(allDescendants(tree.rootId!));
+    expect(reachable.has(forkNode!.nodeId)).toBe(true);
+  });
+
+  it('parallel Promise.all forks produce two DISTINCT node ids (the previously-indistinguishable case)', async () => {
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        forkRule('PAR_A', `currentTask.resolve({ tag: "a" });`),
+        forkRule('PAR_B', `currentTask.resolve({ tag: "b" });`),
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return (
+            `const [x, y] = await Promise.all([\n` +
+            `  fork({ role: 'general', instruction: 'PAR_A', output: { tag: 'string' } }),\n` +
+            `  fork({ role: 'general', instruction: 'PAR_B', output: { tag: 'string' } }),\n` +
+            `]);`
+          );
+        if (sessionStep === 2) return `display("ok");`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    const forkNodes = nodeStarts(r.trace).filter((s) => s.kind === 'fork');
+    expect(forkNodes.length).toBe(2);
+    expect(forkNodes[0]!.nodeId).not.toBe(forkNodes[1]!.nodeId); // distinct, even with same role
+    // Both ended.
+    const ends = nodeEnds(r.trace).filter((e) => forkNodes.some((f) => f.nodeId === e.nodeId));
+    expect(ends.length).toBe(2);
+  });
+
+  it('tasklist tasks nest under the tasklist node, and forks nest under tasks', async () => {
+    const dir = await makePipelineSpace();
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        forkRule('FIRST_TASK', `currentTask.resolve({ a: seedVal });`),
+        forkRule('SECOND_TASK', `currentTask.resolve({ b: (first as any).a + 1 });`),
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1) return `const out = await tasklist("pipeline", { seedVal: 7 });`;
+        if (sessionStep === 2) return `display(JSON.stringify(out));`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go', spaceDir: dir });
+    expect(r.error).toBeUndefined();
+
+    const tree = buildTraceTree(r.trace);
+    const tasklistNode = Object.values(tree.nodes).find((n) => n.kind === 'tasklist');
+    expect(tasklistNode).toBeDefined();
+    const taskNodes = Object.values(tree.nodes).filter((n) => n.kind === 'task');
+    expect(taskNodes.length).toBe(2);
+    // Both task nodes are children of the tasklist node.
+    for (const t of taskNodes) expect(t.parentId).toBe(tasklistNode!.id);
+    // Each task has a fork child.
+    for (const t of taskNodes) {
+      const forkChildren = t.childIds.map((id) => tree.nodes[id]).filter((c) => c?.kind === 'fork');
+      expect(forkChildren.length).toBe(1);
+    }
+    // The downstream task carries its dependsOn in detail.
+    const second = taskNodes.find((t) => t.detail?.dependsOn && t.detail.dependsOn.length > 0);
+    expect(second?.detail?.dependsOn).toContain('first');
+  });
+
+  it('a delegate gets its own node with pkg/agent/action detail, nested under the session run', async () => {
+    const worker = await makeActionSpace('compute');
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        {
+          when: (o: StreamOpts) => o.messages.some((mm) => mm.content.includes('Run action: compute')),
+          respond: () => `currentTask.resolve({ v: 42 });`,
+        },
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const d = await delegate(${JSON.stringify(worker)}, "main", "compute", {}) as { v: number };`;
+        if (sessionStep === 2) return `display("v=" + (d as any).v);`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+
+    const delegateNode = nodeStarts(r.trace).find((s) => s.kind === 'delegate');
+    expect(delegateNode).toBeDefined();
+    expect(delegateNode!.detail?.action).toBe('compute');
+    expect(delegateNode!.detail?.depth).toBe(0);
+
+    const tree = buildTraceTree(r.trace);
+    const node = tree.nodes[delegateNode!.nodeId]!;
+    expect(node.status).toBe('done');
+    expect(node.result).toBeDefined();
+  });
+
+  it('a timed-out fork emits exactly one node_end with status error', async () => {
+    let sessionStep = 0;
+    const m = mockMatch(
+      // The fork never resolves; the timeout fires.
+      [forkRule('HANG', `display("working...");`)],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const f = await fork({ role: 'general', instruction: 'HANG', output: { ok: 'boolean' }, timeout: 50 }).catch((e) => ({ err: String(e) }));`;
+        if (sessionStep === 2) return `display("after");`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    // The run itself should not crash (the fork rejection is caught).
+    const forkNode = nodeStarts(r.trace).find((s) => s.kind === 'fork');
+    expect(forkNode).toBeDefined();
+    const ends = nodeEnds(r.trace).filter((e) => e.nodeId === forkNode!.nodeId);
+    expect(ends.length).toBe(1); // exactly one node_end despite the timeout race
+    expect(ends[0]!.status).toBe('error');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Subscriber-only trace events: llm_progress (NOT written to file) + variables
+// ---------------------------------------------------------------------------
+
+describe('harness — tracer subscription', () => {
+  it('emits throttled llm_progress (subscriber-only) and a variables snapshot after a yield', async () => {
+    const spaceDir = await makeSpace();
+    const collected: TraceEvent[] = [];
+    const host: RenderHost = { display: () => {}, ask: async () => 'blue', log: () => {} };
+    const session = new Session(
+      { spaceDir, agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [] },
+      { streamFn: createMockStreamFn((_o, { callIndex }) => {
+        if (callIndex === 0) return `const color = await ask({ type: "input", props: { label: "color?" }, children: [] });`;
+        if (callIndex === 1) return `display("you picked " + color);`;
+        return '';
+      }) },
+    );
+    // Subscribe BEFORE start so we capture everything, incl. file-excluded llm_progress.
+    session.getTracer().subscribe((e) => collected.push(e));
+    await session.start('go');
+    session.dispose();
+
+    // llm_progress is subscriber-only (never written to the --trace file).
+    const progress = collected.filter((e) => e.type === 'llm_progress');
+    expect(progress.length).toBeGreaterThan(0);
+
+    // A variables snapshot is emitted after the ask() yield binds `color`.
+    const vars = collected.filter((e): e is Extract<TraceEvent, { type: 'variables' }> => e.type === 'variables');
+    expect(vars.length).toBeGreaterThan(0);
+    expect(vars.some((v) => 'color' in v.vars)).toBe(true);
+  });
+});

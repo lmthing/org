@@ -190,6 +190,8 @@ export interface SolveYieldDeps {
   execCommand?: (cmd: string) => { ok: boolean; output: string };
   /** Evaluate a condition-DSL string over an output object. */
   evaluateCondition?: (expr: string, output: Record<string, unknown>) => boolean;
+  /** Called after each verify result for observability (trace solve_verify events). */
+  onVerify?: (attempt: number, rung: number, ok: boolean, feedback?: string) => void;
 }
 
 /**
@@ -229,9 +231,26 @@ export async function runSolveYield(
     };
   }
 
-  return solve<unknown>(deps.fork, {
+  const onVerify = deps.onVerify;
+  let attemptCount = 0;
+  const wrappedFork = async (t: SolveTask) => {
+    attemptCount++;
+    return deps.fork(t);
+  };
+  const wrappedVerify = verify && onVerify
+    ? async (out: unknown): Promise<VerifyResult> => {
+        const r = await verify!(out);
+        const currentLadder = opts.ladder ?? DEFAULT_LADDER;
+        // rung is approximated from attempt count; best-effort for observability
+        const rung = Math.min(attemptCount - 1, currentLadder.length);
+        onVerify(attemptCount, rung, r.ok, r.feedback);
+        return r;
+      }
+    : verify;
+
+  return solve<unknown>(wrappedFork, {
     task,
-    verify,
+    verify: wrappedVerify,
     ...(opts.ladder ? { ladder: opts.ladder } : {}),
     ...(opts.maxAttempts !== undefined ? { maxAttempts: opts.maxAttempts } : {}),
   });
