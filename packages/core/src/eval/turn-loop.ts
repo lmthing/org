@@ -52,7 +52,30 @@ export interface TurnLoopDeps {
   /** Optional model spec/alias for every request in this loop (e.g. a fork's
    *  role model). Passed through to streamFn; the provider resolves it. */
   model?: string;
+  /** Seed for accumulatedContext: prior-turn statements so the typechecker knows
+   *  variables bound in earlier turns (the VM still holds their values across
+   *  continue()/resume()). Empty on a fresh start(); the Session carries it
+   *  forward between turns via onContextSnapshot. */
+  initialContext?: string;
+  /** Called whenever accumulatedContext grows, with its latest value, so the
+   *  Session can persist typecheck scope into the next turn. */
+  onContextSnapshot?: (ctx: string) => void;
+  /** Max times a single turn loop will re-prompt a model that stopped generating
+   *  right after a non-yielding `await`-binding (a space-function result that the
+   *  runtime does not auto-surface) — see CONTINUATION_NUDGE. Default 4. */
+  maxContinueNudges?: number;
 }
+
+/** Re-prompt sent when the model ends its response immediately after awaiting a
+ *  non-yielding space function (e.g. `const r = await scaffoldSpace(...)`) and
+ *  binding the result. Those results are NOT surfaced to the model (only yields
+ *  are), so a model that stops to "see" one would strand the run mid-program.
+ *  This tells it the runtime truth and asks it to continue. */
+const CONTINUATION_NUDGE =
+  'Your statements ran successfully, but the task is not finished. Your last statement bound a value from a NON-yielding call (a space function such as scaffoldSpace/validateSpace/listScaffoldedSpaces) — and those results are NOT shown to you automatically (only yielding calls like ask/inspect/delegate/registerSpace surface their value). Continue the program now:\n' +
+  '- If you must SEE that result before the next step, call inspect(<var>) — it surfaces the value and resumes you.\n' +
+  '- Otherwise keep emitting the remaining statements (validate, register, delegate, display the final result, …).\n' +
+  'Only stop (reply with no code) once the whole task is complete and the final result has been displayed.';
 
 export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'> {
   const { vm, history, systemBlock, ambientDts, renderHost, streamFn, processYield } = deps;
@@ -65,7 +88,17 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
   let yieldCounter = 0;
 
   let attempt = 0;
-  let accumulatedContext = ''; // persists across yield-continuations; only resets on a fresh start
+  // Persists across yield-continuations within a turn AND across turns: seeded from
+  // deps.initialContext (prior-turn scope kept by the Session, since the VM still
+  // holds those variables) and reported back via onContextSnapshot as it grows.
+  // Only a fresh start() resets it (Session passes no initialContext there).
+  let accumulatedContext = deps.initialContext ?? '';
+  const appendContext = (stmt: string) => {
+    accumulatedContext += (accumulatedContext ? '\n' : '') + stmt;
+    deps.onContextSnapshot?.(accumulatedContext);
+  };
+  let continueNudges = 0;
+  const maxContinueNudges = deps.maxContinueNudges ?? 4;
 
   while (attempt < maxRetries) {
     attempt++;
@@ -87,6 +120,11 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     let turnError: string | null = null;
     let failingStatement: string | null = null;
     let aborted = false;
+    // True when the last statement that evaluated cleanly this turn was a
+    // non-yielding `await`-binding (a space-function result the runtime won't
+    // surface). If the model then stops, that's the "stranded mid-program"
+    // signature CONTINUATION_NUDGE recovers from.
+    let lastStmtAwaitBinding = false;
     let assistantContent = '';
     const parsedStatements: string[] = [];
 
@@ -149,7 +187,8 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
           }
 
           parsedStatements.push(stmt);
-          accumulatedContext += (accumulatedContext ? '\n' : '') + stmt;
+          appendContext(stmt);
+          lastStmtAwaitBinding = boundNames.length > 0 && /\bawait\b/.test(stmt);
         }
 
         if (aborted) break;
@@ -192,7 +231,8 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
               parsedStatements.push(stmt);
             } else {
               parsedStatements.push(stmt);
-              accumulatedContext += (accumulatedContext ? '\n' : '') + stmt;
+              appendContext(stmt);
+              lastStmtAwaitBinding = boundNamesFlush.length > 0 && /\bawait\b/.test(stmt);
             }
           }
         }
@@ -293,7 +333,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       }
 
       // Add the yielding statement to accumulated context for future typecheck
-      accumulatedContext += (accumulatedContext ? '\n' : '') + yieldingStatement;
+      appendContext(yieldingStatement);
 
       // inspect() is a read-only probe: its whole purpose is to surface a value
       // (or a queried slice/path/keys view of it) to the MODEL. Unlike other yields
@@ -335,6 +375,21 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       renderHost.log(`[turn ${attempt}] model produced no statements — done`);
       tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_statements' });
       return 'done';
+    }
+
+    // The model ended its response with no pending yield. If its last clean
+    // statement was a non-yielding `await`-binding, it most likely stopped to
+    // "see" a result the runtime never surfaces (e.g. scaffoldSpace) — which
+    // would strand a multi-step program. Re-prompt it to continue, bounded so a
+    // genuinely-finished model (which emits no further statements → no_statements
+    // → done) and a model that keeps binding without progressing both terminate.
+    if (lastStmtAwaitBinding && continueNudges < maxContinueNudges) {
+      continueNudges++;
+      renderHost.log(`[turn ${attempt}] ended on a non-yielding await-binding — nudging to continue (${continueNudges}/${maxContinueNudges})`);
+      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'continue' });
+      history.append({ role: 'user', content: CONTINUATION_NUDGE, blockType: 'normal' });
+      attempt = 0;
+      continue;
     }
 
     renderHost.log(`[turn ${attempt}] done`);

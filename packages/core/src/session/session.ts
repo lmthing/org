@@ -80,6 +80,15 @@ export class Session {
    * reads this live (the closure dereferences the field, so resetting works).
    */
   private budget: Budget = new Budget();
+  /**
+   * Accumulated statement context (typecheck scope) carried ACROSS turns. The VM
+   * keeps every variable a turn binds, but each runTurnLoop starts with an empty
+   * typecheck scope — so without this, a continue()/resume() turn that references
+   * a variable bound in an earlier turn fails tsc with "Cannot find name". Seeded
+   * into runTurnLoop as initialContext and updated via onContextSnapshot. Reset to
+   * '' by start() (a fresh program); preserved by continue()/resume().
+   */
+  private turnContext = '';
 
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
@@ -120,6 +129,8 @@ export class Session {
         traceContext: 'session',
         scope: runScope,
         budget: this.budget,
+        initialContext: this.turnContext,
+        onContextSnapshot: (c) => { this.turnContext = c; },
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -190,6 +201,7 @@ export class Session {
 
     // 8. Run turn loop until done or error
     this.budget = new Budget(this.opts.budget ?? {});
+    this.turnContext = ''; // fresh program — start() resets cross-turn typecheck scope
     const runScope = this.mintRunScope();
     try {
       await runTurnLoop({
@@ -205,6 +217,8 @@ export class Session {
         traceContext: 'session',
         scope: runScope,
         budget: this.budget,
+        initialContext: this.turnContext,
+        onContextSnapshot: (c) => { this.turnContext = c; },
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -282,6 +296,8 @@ export class Session {
         traceContext: 'session',
         scope: runScope,
         budget: this.budget,
+        initialContext: this.turnContext,
+        onContextSnapshot: (c) => { this.turnContext = c; },
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {

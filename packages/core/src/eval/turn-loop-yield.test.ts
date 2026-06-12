@@ -209,3 +209,131 @@ describe('turn loop — process.exit() is not retried', () => {
     vm.dispose();
   });
 });
+
+/** Helper: a streamFn that emits one entry of `turns` per call, then '' forever. */
+function turnsStream(turns: string[]): { fn: (o: StreamOpts) => Promise<StreamSession>; calls: () => number } {
+  let i = 0;
+  const fn = async () => {
+    const text = turns[i++] ?? '';
+    let aborted = false;
+    async function* gen() { if (!aborted && text) yield text; }
+    return { textStream: gen(), abort() { aborted = true; } } as StreamSession;
+  };
+  return { fn, calls: () => i };
+}
+
+describe('turn loop — continuation nudge (stalled mid-program after a non-yielding await-binding)', () => {
+  it('re-prompts the model when it stops right after `const x = await <space fn>()`, so the run continues', async () => {
+    const vm = await createVM();
+    // prep(): a non-yielding host fn (returns a value, pushes no yield) — like a space fn.
+    injectGlobal(vm.ctx, 'prep', (() => 42) as (...a: unknown[]) => unknown);
+    // fin(): a yielding global, proves the run advanced past the stall.
+    const fin = () => new Promise((resolve, reject) => {
+      vm.pendingYields.push({ kind: 'fin', args: [], deferred: { resolve, reject }, vmPromiseHandle: undefined } as unknown as YieldRequest);
+    });
+    injectGlobal(vm.ctx, 'fin', fin as (...a: unknown[]) => unknown);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+    // Turn 1 stops right after a non-yielding await-binding (the bug signature).
+    // After the nudge, turn 2 does a real yielding call; turn 3 is empty → done.
+    const s = turnsStream(['const r = await prep();', 'const finRes = await fin();', '']);
+
+    const result = await runTurnLoop({
+      vm, history, systemBlock: 'test',
+      ambientDts: 'declare function prep(): Promise<number>;\ndeclare function fin(): Promise<any>;',
+      renderHost: silentHost, streamFn: s.fn,
+      processYield: async () => ({ ok: true }),
+      maxRetries: 2,
+    });
+
+    expect(result).toBe('done');
+    expect(s.calls()).toBeGreaterThanOrEqual(3); // turn1 stall + NUDGE→turn2 + turn3 empty
+    expect(readGlobal(vm, 'finRes')).toEqual({ ok: true }); // continued past the stall
+    vm.dispose();
+  });
+
+  it('does NOT nudge when the last statement is not an await-binding (no spurious extra turn)', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+    // Plain binding, no await → not the stall signature → loop ends immediately.
+    const s = turnsStream(['const x = 5;', '']);
+
+    const result = await runTurnLoop({
+      vm, history, systemBlock: 'test', ambientDts: LIBRARY_DTS,
+      renderHost: silentHost, streamFn: s.fn,
+      processYield: async () => undefined, maxRetries: 2,
+    });
+
+    expect(result).toBe('done');
+    expect(s.calls()).toBe(1); // no nudge → streamFn called exactly once
+    vm.dispose();
+  });
+
+  it('bounds the nudge so a model that keeps binding without yielding still terminates', async () => {
+    const vm = await createVM();
+    injectGlobal(vm.ctx, 'prep', (() => 1) as (...a: unknown[]) => unknown);
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+    // Every turn is a fresh non-yielding await-binding — would loop forever unbounded.
+    const turns = Array.from({ length: 20 }, (_, i) => `const r${i} = await prep();`);
+    const s = turnsStream(turns);
+
+    const result = await runTurnLoop({
+      vm, history, systemBlock: 'test',
+      ambientDts: 'declare function prep(): Promise<number>;',
+      renderHost: silentHost, streamFn: s.fn,
+      processYield: async () => undefined, maxRetries: 2,
+      maxContinueNudges: 3,
+    });
+
+    expect(result).toBe('done');
+    // initial turn + at most 3 nudge re-prompts → never the full 20
+    expect(s.calls()).toBeLessThanOrEqual(4);
+    vm.dispose();
+  });
+});
+
+describe('turn loop — cross-turn typecheck scope (initialContext)', () => {
+  it('seeds tsc scope from initialContext so a variable bound in a PRIOR turn resolves', async () => {
+    const vm = await createVM();
+    // Simulate a prior turn having bound q1 in the VM (as the host does via globalThis).
+    vm.evalStatement("globalThis['q1'] = { sources: ['http://example.com/a'] };");
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'use q1', blockType: 'normal' });
+    const s = turnsStream(['const u = q1.sources[0];', '']);
+
+    const result = await runTurnLoop({
+      vm, history, systemBlock: 'test', ambientDts: LIBRARY_DTS,
+      renderHost: silentHost, streamFn: s.fn,
+      processYield: async () => undefined, maxRetries: 2,
+      // Prior-turn yielding statement carried forward by the Session.
+      initialContext: "const q1 = { sources: ['http://example.com/a'] };",
+    });
+
+    expect(result).toBe('done');
+    expect(readGlobal(vm, 'u')).toBe('http://example.com/a');
+    vm.dispose();
+  });
+
+  it("WITHOUT initialContext, referencing a prior-turn variable fails tsc ('Cannot find name') — the bug", async () => {
+    const vm = await createVM();
+    vm.evalStatement("globalThis['q1'] = { sources: ['http://example.com/a'] };");
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'use q1', blockType: 'normal' });
+    // Same statement, but no initialContext → tsc has never seen q1.
+    const s = turnsStream(['const u = q1.sources[0];', 'const u = q1.sources[0];', 'const u = q1.sources[0];']);
+
+    const result = await runTurnLoop({
+      vm, history, systemBlock: 'test', ambientDts: LIBRARY_DTS,
+      renderHost: silentHost, streamFn: s.fn,
+      processYield: async () => undefined, maxRetries: 2,
+    });
+
+    expect(result).toBe('error'); // typecheck rejects q1 on every retry
+    vm.dispose();
+  });
+});
