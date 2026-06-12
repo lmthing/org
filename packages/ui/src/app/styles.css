@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/* Scan the app + component sources for class names at build time. */
+@source "./";
+@source "../components/";
+
+/* ─── Dark "devtools" theme tokens ─── */
+@theme {
+  --color-lm-bg: #0d1117;
+  --color-lm-panel: #161b22;
+  --color-lm-panel2: #1c2128;
+  --color-lm-border: #30363d;
+  --color-lm-text: #e6edf3;
+  --color-lm-muted: #8b949e;
+  --color-lm-accent: #58a6ff;
+  --color-lm-green: #3fb950;
+  --color-lm-red: #f85149;
+  --color-lm-amber: #d29922;
+  --color-lm-purple: #bc8cff;
+  --color-lm-cyan: #39c5cf;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Expose theme as plain CSS vars so space components (which can't use Tailwind
+   classes — the prebuilt CSS can't know them) can opt into the palette. */
+:root {
+  --lm-bg: #0d1117;
+  --lm-panel: #161b22;
+  --lm-border: #30363d;
+  --lm-text: #e6edf3;
+  --lm-muted: #8b949e;
+  --lm-accent: #58a6ff;
+}
+
+html, body, #root { height: 100%; }
+body {
+  background: var(--color-lm-bg);
+  color: var(--color-lm-text);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
+/* Thin dark scrollbars to match the devtools aesthetic. */
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: #30363d; border-radius: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes lm-spin { to { transform: rotate(360deg); } }
+.lm-spin { display: inline-block; animation: lm-spin 1.2s linear infinite; }

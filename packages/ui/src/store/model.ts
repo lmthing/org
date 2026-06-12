@@ -1,0 +1,265 @@
+import type { TraceEvent } from '@repl/core';
+
+// ─── Wire event (what the WS / trace file delivers) ─────────────────────────
+
+export interface WireEvent {
+  seq: number;
+  event: TraceEvent;
+}
+
+// ─── Model types ─────────────────────────────────────────────────────────────
+
+export type NodeStatus = 'queued' | 'running' | 'done' | 'error' | 'skipped';
+export type NodeKind = 'session' | 'run' | 'fork' | 'delegate' | 'tasklist' | 'task' | 'solve';
+
+export interface LlmCall {
+  ts: number;
+  model?: string;
+  system: string;
+  messages: Array<{ role: string; content: string }>;
+  responses: Array<{ attempt: number; ts: number; text: string }>;
+}
+
+export interface StatementEntry {
+  ts: number;
+  code: string;
+  errors: Array<{ phase: 'typecheck' | 'eval'; message: string; attempt?: number }>;
+}
+
+export interface YieldEntry {
+  ts: number;
+  yieldId?: string;
+  kind: string;
+  args: unknown;
+  resolved: boolean;
+  value?: unknown;
+}
+
+export interface ExecNode {
+  id: string;
+  parentId: string | null;
+  kind: NodeKind;
+  label: string;
+  status: NodeStatus;
+  startTs?: number;
+  endTs?: number;
+  durationMs?: number;
+  detail?: Record<string, unknown>;
+  childIds: string[];
+  depTaskIds: string[];
+  queue?: { active: number; queued: number; max: number };
+  llmCalls: LlmCall[];
+  statements: StatementEntry[];
+  yields: YieldEntry[];
+  variables: Record<string, unknown>;
+  result?: unknown;
+  error?: string;
+  eventSeqs: number[];
+}
+
+export type ConvoBlock =
+  | { id: string; ts: number; nodeId: string; type: 'user'; content: string }
+  | { id: string; ts: number; nodeId: string; type: 'display'; descriptor: unknown }
+  | { id: string; ts: number; nodeId: string; type: 'error'; message: string }
+  | { id: string; ts: number; nodeId: string; type: 'ask'; askId: string; descriptor: unknown; state: 'open' | 'answered' | 'cancelled'; answer?: unknown };
+
+export interface SessionModel {
+  nodes: Record<string, ExecNode>;
+  rootId: string | null;
+  blocks: ConvoBlock[];
+  rawEvents: WireEvent[];
+  lastSeq: number;
+}
+
+export function emptyModel(): SessionModel {
+  return { nodes: {}, rootId: null, blocks: [], rawEvents: [], lastSeq: 0 };
+}
+
+// ─── Reducer ─────────────────────────────────────────────────────────────────
+
+function isTerminal(s: NodeStatus): boolean {
+  return s === 'done' || s === 'error' || s === 'skipped';
+}
+
+function ensureNode(m: SessionModel, id: string): ExecNode {
+  let n = m.nodes[id];
+  if (!n) {
+    n = {
+      id, parentId: null, kind: 'fork', label: id, status: 'running',
+      childIds: [], depTaskIds: [], llmCalls: [], statements: [], yields: [],
+      variables: {}, eventSeqs: [],
+    };
+    m.nodes[id] = n;
+  }
+  return n;
+}
+
+// Legacy context → synthetic nodeId (for old traces without nodeId)
+function legacyId(m: SessionModel, ctx: string): string {
+  const id = `legacy_${ctx.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+  if (!m.nodes[id]) {
+    const n = ensureNode(m, id);
+    n.label = ctx;
+    if (ctx === 'session') { n.kind = 'session'; if (!m.rootId) m.rootId = id; }
+    else if (ctx.startsWith('fork:')) { n.kind = 'fork'; linkLegacyParent(m, n); }
+    else if (ctx.startsWith('delegate:')) { n.kind = 'delegate'; linkLegacyParent(m, n); }
+  }
+  return id;
+}
+
+function linkLegacyParent(m: SessionModel, n: ExecNode): void {
+  const sessionId = m.nodes['legacy_session'] ? 'legacy_session' : m.rootId;
+  if (sessionId && sessionId !== n.id) {
+    n.parentId = sessionId;
+    const parent = ensureNode(m, sessionId);
+    if (!parent.childIds.includes(n.id)) parent.childIds.push(n.id);
+  }
+}
+
+function nodeIdFor(m: SessionModel, ev: TraceEvent): string {
+  const explicit = (ev as { nodeId?: string }).nodeId;
+  if (explicit) return explicit;
+  const ctx = (ev as { context?: string }).context ?? 'session';
+  return legacyId(m, ctx);
+}
+
+let blockCounter = 0;
+
+/** Apply one wire event to the model (mutates in place). */
+export function applyWireEvent(m: SessionModel, we: WireEvent): void {
+  m.rawEvents.push(we);
+  if (we.seq > m.lastSeq) m.lastSeq = we.seq;
+  const ev = we.event;
+
+  // Events that don't belong to a specific node — handle without minting one
+  // (otherwise a node-less event defaults to context 'session' and spawns a
+  // phantom node that never ends).
+  if (ev.type === 'fork_queue') {
+    if (m.rootId) ensureNode(m, m.rootId).queue = { active: ev.active, queued: ev.queued, max: ev.max };
+    return;
+  }
+  if (ev.type === 'llm_progress' || ev.type === 'solve_verify') {
+    // Ephemeral / attach-only; record under its node if it has one, else ignore.
+    const id = (ev as { nodeId?: string }).nodeId;
+    if (id) ensureNode(m, id).eventSeqs.push(we.seq);
+    return;
+  }
+
+  const nid = nodeIdFor(m, ev);
+  const node = ensureNode(m, nid);
+  node.eventSeqs.push(we.seq);
+
+  switch (ev.type) {
+    case 'session_start': {
+      node.kind = 'session';
+      node.label = 'session';
+      if (!isTerminal(node.status)) node.status = 'running';
+      node.startTs = ev.ts;
+      if (!m.rootId) m.rootId = nid;
+      break;
+    }
+    case 'node_start': {
+      node.parentId = ev.parentId;
+      node.kind = ev.kind;
+      node.label = ev.label;
+      if (!isTerminal(node.status)) node.status = ev.status;
+      node.startTs = ev.ts;
+      node.detail = ev.detail as Record<string, unknown> | undefined;
+      if (ev.detail && Array.isArray((ev.detail as { dependsOn?: string[] }).dependsOn)) {
+        node.depTaskIds = (ev.detail as { dependsOn?: string[] }).dependsOn ?? [];
+      }
+      if (ev.parentId) {
+        const parent = ensureNode(m, ev.parentId);
+        if (!parent.childIds.includes(nid)) parent.childIds.push(nid);
+      } else if (!m.rootId) {
+        m.rootId = nid;
+      }
+      break;
+    }
+    case 'node_update': {
+      if (!isTerminal(node.status)) node.status = ev.status;
+      break;
+    }
+    case 'node_end': {
+      node.status = ev.status;
+      node.endTs = ev.ts;
+      node.durationMs = ev.durationMs;
+      if (ev.error !== undefined) node.error = ev.error;
+      if (ev.result !== undefined) node.result = ev.result;
+      break;
+    }
+    case 'llm_request': {
+      node.llmCalls.push({ ts: ev.ts, model: ev.model, system: ev.system, messages: ev.messages, responses: [] });
+      break;
+    }
+    case 'llm_response': {
+      const call = node.llmCalls[node.llmCalls.length - 1];
+      if (call) call.responses.push({ attempt: ev.attempt, ts: ev.ts, text: ev.text });
+      else node.llmCalls.push({ ts: ev.ts, system: '', messages: [], responses: [{ attempt: ev.attempt, ts: ev.ts, text: ev.text }] });
+      break;
+    }
+    case 'statement': {
+      node.statements.push({ ts: ev.ts, code: ev.code, errors: [] });
+      break;
+    }
+    case 'typecheck_error': {
+      const last = node.statements[node.statements.length - 1];
+      if (last && last.code === ev.statement) last.errors.push({ phase: 'typecheck', message: ev.message, attempt: ev.attempt });
+      else node.statements.push({ ts: ev.ts, code: ev.statement, errors: [{ phase: 'typecheck', message: ev.message, attempt: ev.attempt }] });
+      break;
+    }
+    case 'eval_error': {
+      const last = node.statements[node.statements.length - 1];
+      if (last && last.code === ev.statement) last.errors.push({ phase: 'eval', message: ev.message });
+      else node.statements.push({ ts: ev.ts, code: ev.statement, errors: [{ phase: 'eval', message: ev.message }] });
+      break;
+    }
+    case 'yield': {
+      node.yields.push({ ts: ev.ts, yieldId: ev.yieldId, kind: ev.kind, args: ev.args, resolved: false });
+      break;
+    }
+    case 'yield_resolved': {
+      const entry = ev.yieldId
+        ? [...node.yields].reverse().find((y) => y.yieldId === ev.yieldId && !y.resolved)
+        : [...node.yields].reverse().find((y) => y.kind === ev.kind && !y.resolved);
+      if (entry) { entry.resolved = true; entry.value = ev.value; }
+      break;
+    }
+    case 'variables': {
+      node.variables = ev.vars;
+      break;
+    }
+    case 'display': {
+      m.blocks.push({ id: `b${++blockCounter}`, ts: ev.ts, nodeId: nid, type: 'display', descriptor: ev.descriptor });
+      break;
+    }
+  }
+}
+
+export function buildModel(events: WireEvent[]): SessionModel {
+  const m = emptyModel();
+  for (const we of events) applyWireEvent(m, we);
+  return m;
+}
+
+// ─── Conversation-block helpers (driven by interaction events, not trace) ────
+
+export function pushUserBlock(m: SessionModel, content: string): void {
+  const nid = m.rootId ?? 'session';
+  m.blocks.push({ id: `b${++blockCounter}`, ts: Date.now(), nodeId: nid, type: 'user', content });
+}
+
+export function pushErrorBlock(m: SessionModel, message: string): void {
+  const nid = m.rootId ?? 'session';
+  m.blocks.push({ id: `b${++blockCounter}`, ts: Date.now(), nodeId: nid, type: 'error', message });
+}
+
+export function pushAskBlock(m: SessionModel, askId: string, descriptor: unknown): void {
+  const nid = m.rootId ?? 'session';
+  m.blocks.push({ id: `b${++blockCounter}`, ts: Date.now(), nodeId: nid, type: 'ask', askId, descriptor, state: 'open' });
+}
+
+export function resolveAskBlock(m: SessionModel, askId: string, answer: unknown, cancelled = false): void {
+  const block = [...m.blocks].reverse().find((b): b is Extract<ConvoBlock, { type: 'ask' }> => b.type === 'ask' && b.askId === askId && b.state === 'open');
+  if (block) { block.state = cancelled ? 'cancelled' : 'answered'; block.answer = answer; }
+}
