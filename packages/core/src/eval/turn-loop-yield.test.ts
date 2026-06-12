@@ -134,6 +134,49 @@ describe('turn loop — parallel yields (Promise.all of forks)', () => {
   });
 });
 
+describe('turn loop — inspect() surfaces values to the model', () => {
+  // Regression: a BARE (unbound) inspect(x) must still surface x into the
+  // VARIABLES block the model reads. Before this was wired, bare inspect
+  // resolved to an empty VARIABLES block, so the model saw nothing and would
+  // re-type values from memory (hallucinating the truncated tail).
+  it('emits the inspected value even when the call is unbound', async () => {
+    const vm = await createVM();
+    // inspect(v) pushes a yield whose args mirror globals/inspect.ts: [{ value, query }].
+    const inspect = (v: unknown) =>
+      new Promise((resolve, reject) => {
+        vm.pendingYields.push({
+          kind: 'inspect',
+          args: [{ value: v, query: undefined }],
+          deferred: { resolve, reject },
+          vmPromiseHandle: undefined,
+        } as unknown as YieldRequest);
+      });
+    injectGlobal(vm.ctx, 'inspect', inspect as (...a: unknown[]) => unknown);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: 'declare function inspect(...v: any[]): Promise<void>;',
+      renderHost: silentHost,
+      // No binding — the model just probes the value.
+      streamFn: scriptedStream('inspect({ marketSize: "$0.9B", units: 12000 });'),
+      // Mirrors session.ts: the inspect resolved value is args[0].
+      processYield: async (req) => (req.args[0] as { value: unknown }).value,
+      maxRetries: 2,
+    });
+
+    const varsMsg = history.messages.find((m) => m.blockType === 'variables');
+    expect(varsMsg?.content).toContain('inspected[0]');
+    expect(varsMsg?.content).toContain('$0.9B');
+    expect(varsMsg?.content).toContain('12000');
+    vm.dispose();
+  });
+});
+
 describe('turn loop — process.exit() is not retried', () => {
   it('treats process.exit() as a clean stop instead of looping retries', async () => {
     const vm = await createVM();

@@ -89,6 +89,12 @@ CONTEXT ECONOMY:
   - display() shows output to the user but does NOT grow the variables block — use it for intermediate results instead of binding large values you won't reuse.
   - Push heavy investigation into fork({ role: 'explore', ... }) — a subagent reads/searches in its own context and returns only a concise summary, keeping your context small.
   - Preview large data with inspect([value, { keys: true }]) or { depth: 1 } before pulling all of it into scope.
+
+GROUND TRUTH — never re-type a value you only saw in the VARIABLES block:
+  - The VARIABLES block is a LOSSY PREVIEW. Long strings/arrays/objects are TRUNCATED there (you'll see markers like \`… (802 chars total)\` or \`[… 12 items, truncated]\`). You are seeing the opening only — NOT the full value.
+  - The VM holds the REAL, full value under the variable name. So ALWAYS pass data forward by REFERENCING the bound variable (e.g. \`report.executive_summary\`, \`results[0].url\`) — the runtime substitutes the real value at eval time.
+  - NEVER copy a truncated value into a new string/array literal (\`const summary = "…"\`). Re-typing what you saw means inventing the truncated tail — that is hallucination, and it silently corrupts data that arrived correct.
+  - When you genuinely need to READ the full content of a truncated field (e.g. to split it across files, or to quote it), pull it back into scope FIRST with inspect — and BIND the result: \`const full = await inspect([report, { path: 'executive_summary' }]);\` or \`const head = await inspect([items, { slice: [0, 10] }]);\`. Only after inspecting should you use the value.
 `.trim();
 
 const GLOBALS_SUMMARY = `

@@ -10,6 +10,7 @@ import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { buildErrorBlock } from './error-rewind.js';
 import { emitVariables, extractBindingNames, extractBindingPattern } from '../context/variables.js';
+import { formatInspectResult, type InspectQuery } from '../globals/inspect.js';
 import { BudgetExceededError, type Budget } from './budget.js';
 
 export type { StreamOpts, StreamSession };
@@ -268,14 +269,37 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       // Add the yielding statement to accumulated context for future typecheck
       accumulatedContext += (accumulatedContext ? '\n' : '') + yieldingStatement;
 
+      // inspect() is a read-only probe: its whole purpose is to surface a value
+      // (or a queried slice/path/keys view of it) to the MODEL. Unlike other yields
+      // it is normally called WITHOUT a binding (`inspect(x)` / `inspect([x, q])`),
+      // so the generic name-binding above captures nothing. Surface the inspected
+      // values explicitly via formatInspectResult, independent of any binding —
+      // otherwise a bare inspect() resolves to an empty VARIABLES block and the
+      // model sees nothing (the exact failure that lets it re-type/​hallucinate
+      // values instead of reading them).
+      const inspectArgs = yields
+        .filter((y) => y.kind === 'inspect')
+        .flatMap((y) => (y.args as Array<{ value: unknown; query?: InspectQuery }>));
+
       // Always emit a continuation message so the model knows the yield resolved and
       // what's already in scope — even for yields with no variable bindings (e.g. sleep).
       if (Object.keys(variables).length > 0) {
         renderHost.log(`[variables] ${Object.keys(variables).join(', ')}`);
+      } else if (inspectArgs.length > 0) {
+        renderHost.log(`[inspect] ${inspectArgs.length} value(s)`);
       } else {
         renderHost.log(`[resumed]`);
       }
-      history.append({ role: 'user', content: emitVariables(variables, accumulatedContext), blockType: 'variables' });
+
+      let varContent = emitVariables(variables, accumulatedContext);
+      if (inspectArgs.length > 0) {
+        // Fold the inspected lines into the VARIABLES section the model already reads.
+        // formatInspectResult returns "VARIABLES\ninspected[i]: …" — drop its header
+        // and splice its lines in right after the existing VARIABLES header.
+        const inspectLines = formatInspectResult(inspectArgs).split('\n').slice(1);
+        varContent = varContent.replace(/^VARIABLES\n?/, (m) => m + inspectLines.join('\n') + '\n');
+      }
+      history.append({ role: 'user', content: varContent, blockType: 'variables' });
 
       attempt = 0;
       continue;

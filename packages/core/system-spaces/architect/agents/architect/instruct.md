@@ -82,6 +82,19 @@ display(`Research done: ${r1.summary.slice(0,100)}...`);
 
 ### Phase 2 — Design + Scaffold (IMMEDIATELY after research, in the SAME code block)
 
+**The spec MUST be FLAT — this is the #1 scaffold failure.** Top-level keys are
+`agentSlug`, `agentTitle`, `systemPrompt`, and the ARRAYS `knowledge` / `functions` /
+`tasklists` / `actions` (plus optional `components: { view: [...], form: [...] }`).
+NEVER nest under an `agents` key, NEVER use `instruct` (it is `systemPrompt`), and
+NEVER express knowledge/actions/functions as keyed objects — they are arrays.
+WRONG: `{ agents: { mySlug: { instruct, actions: { a: {...} } } }, knowledge: { dom: { field: {...} } } }`
+RIGHT: the flat shape below. If `scaffoldSpace` returns an error naming a field, fix that field and call it again — do NOT give up.
+
+**Build knowledge `content` by REFERENCING your research variables (e.g. `r1.summary`),
+never by re-typing the research text as a literal** — the VARIABLES block you saw was
+truncated, so re-typing it fabricates the missing tail. If you need the full text of a
+truncated research field, `inspect` it first: `const full = await inspect([r1, { path: 'summary' }]);`.
+
 ```typescript
 // Build the spec directly from research variables — no pausing, no extra yields
 const spec = {
