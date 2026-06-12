@@ -9,6 +9,8 @@ import type { ServerEvent, ClientMessage } from './events.js';
 export class WebRenderHost implements RenderHost {
   private clients: Set<WebSocket> = new Set();
   private askResolvers: Map<string, (value: unknown) => void> = new Map();
+  /** Open ask forms (id → descriptor) so a (re)connecting client can re-render them. */
+  private openAsks: Map<string, unknown> = new Map();
 
   addClient(ws: WebSocket): void {
     this.clients.add(ws);
@@ -29,11 +31,13 @@ export class WebRenderHost implements RenderHost {
   }
 
   ask(id: string, descriptor: unknown): Promise<unknown> {
+    this.openAsks.set(id, descriptor);
     this.emit({ type: 'ask_start', id, descriptor });
 
     return new Promise((resolve) => {
       this.askResolvers.set(id, (value) => {
-        this.emit({ type: 'ask_end', id });
+        this.openAsks.delete(id);
+        this.emit({ type: 'ask_end', id, value });
         resolve(value);
       });
     });
@@ -55,8 +59,16 @@ export class WebRenderHost implements RenderHost {
     }
   }
 
+  /** Snapshot of currently-open ask forms — for connect-time catch-up. */
+  pendingAsks(): Array<{ id: string; descriptor: unknown }> {
+    return [...this.openAsks.entries()].map(([id, descriptor]) => ({ id, descriptor }));
+  }
+
   log(message: string): void {
-    this.emit({ type: 'error', message });
+    // Turn-loop debug chatter — goes to the server console, NOT the browser
+    // conversation. Real progress reaches the UI via the trace stream (statements,
+    // llm_*, yields); genuine failures are emitted as 'error' by the run wrapper.
+    process.stdout.write(message + '\n');
   }
 }
 

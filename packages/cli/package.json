@@ -14,7 +14,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && mkdir -p dist/web && cp src/web/app.tsx dist/web/app.tsx",
+    "build": "tsup",
     "typecheck": "tsc --noEmit",
     "dev": "tsup --watch"
   },

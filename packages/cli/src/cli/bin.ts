@@ -196,7 +196,7 @@ async function main(): Promise<void> {
 
     // __dirname is dist/cli/ at runtime; app.tsx is at dist/web/app.tsx
     const appTsxPath = join(__dirname, '..', 'web', 'app.tsx');
-    await startWebServer({ port: args.webPort, session, renderHost, space, agentSlug, appTsxPath });
+    await startWebServer({ port: args.webPort, session, renderHost, space, agentSlug, appTsxPath, traceFile: args.traceFile });
     // Keep process alive
   } else if (args.repl) {
     // Interactive REPL mode: persistent session, multi-turn conversation
