@@ -65,7 +65,6 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     // or wall-clock cap — the caller disposes the VM. Counted outside the
     // stream try/catch so it cannot be swallowed as an abort.
     deps.budget?.tickEpisode();
-    const contextSnapshot = accumulatedContext; // restore on error so re-tries don't see partial turn
 
     const promptMessages = history.getPromptMessages();
     tracer.write({ ts: Date.now(), type: 'llm_request', context: ctx, system: systemBlock, messages: promptMessages, model: deps.model });
@@ -199,9 +198,14 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         renderHost.log(`[process.exit] intentional termination — not retrying`);
         return 'done';
       }
-      accumulatedContext = contextSnapshot; // roll back partial-turn context
+      // Do NOT roll back accumulatedContext: statements that succeeded earlier in
+      // this turn already bound their variables in the VM (globalThis) and persist
+      // into the retry. Keeping them in the typecheck context matches VM reality —
+      // rolling back would make tsc reject valid references with "Cannot find name".
+      // The failing statement was never appended (it errors before accumulation), so
+      // there is nothing partial to discard.
       renderHost.log(`[error] ${turnError}`);
-      history.append({ role: 'user', content: buildErrorBlock(failingStatement, turnError, attempt, maxRetries), blockType: 'error' });
+      history.append({ role: 'user', content: buildErrorBlock(failingStatement, turnError, attempt, maxRetries, accumulatedContext), blockType: 'error' });
       if (attempt >= maxRetries) return 'error';
       continue;
     }

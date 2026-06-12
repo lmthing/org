@@ -495,6 +495,33 @@ describe('mock-driven Session — bug fixes', () => {
     expect(String(r.displays[0])).toContain('ok=false');
     expect(String(r.displays[0])).toContain('path not found');
   });
+
+  it('a variable bound before a mid-turn error survives into the retry', async () => {
+    // Repro of the architect death-spiral: turn 1 binds `phase1` (success → globalThis),
+    // then a later statement in the SAME turn errors. The retry references `phase1`.
+    // Before the fix, the error rollback wiped `phase1` from the typecheck context
+    // (while it still lived in the VM), so the retry failed with "Cannot find name
+    // 'phase1'" and burned all 3 attempts. The retry must now typecheck and run.
+    let attempt = 0;
+    const m = createMockStreamFn(() => {
+      attempt += 1;
+      // Turn 1: a successful binding followed by a statement that type-checks but
+      // throws at eval time (the real architect failure was an "interrupted" eval
+      // error). JSON.parse on malformed input is a clean stand-in.
+      if (attempt === 1) return `const phase1 = 42;\nconst bad = JSON.parse("{ broken");`;
+      // Retry: reference the variable bound in turn 1 — must still be in scope.
+      if (attempt === 2) return `display("phase1=" + phase1);`;
+      return '';
+    });
+    const r = await runMockSession({ streamFn: m, message: 'go' });
+    expect(r.trace.some((e) => e.type === 'eval_error')).toBe(true); // the original failure happened
+    expect(r.trace.some((e) => e.type === 'typecheck_error')).toBe(false); // but the retry did NOT lose scope
+    expect(r.displays).toContain('phase1=42');
+    // The error block must advertise what's still in scope so the model won't redeclare.
+    const errReq = llmRequests(r.trace, 'session')[1];
+    const lastMsg = errReq!.messages[errReq!.messages.length - 1];
+    expect(String(lastMsg?.content)).toContain('phase1');
+  });
 });
 
 // ---------------------------------------------------------------------------
