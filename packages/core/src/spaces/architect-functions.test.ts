@@ -56,6 +56,67 @@ describe('architect scaffoldSpace + validateSpace', () => {
     rmSync(baseDir, { recursive: true, force: true });
   });
 
+  // Regression: a wrong-shape spec must fail fast with an actionable error and
+  // write NOTHING — not crash with a cryptic "cannot read property 'replace' of
+  // undefined" from deep inside joinPath (the bug that killed a live architect run).
+  describe('spec-shape validation', () => {
+    const run = (spec: unknown) => {
+      const spaceDir = join(baseDir, 'bad-space');
+      return evalDump(vm, `scaffoldSpace(${JSON.stringify(spaceDir)}, ${JSON.stringify(spec)})`) as any;
+    };
+
+    it('rejects the nested {agents:{slug:{instruct}}} shape and writes nothing', () => {
+      const r = run({
+        agents: { foo: { instruct: 'hi', actions: { a: { tasklist: 'a', description: 'x' } } } },
+        knowledge: { dom: { field: { options: { o: 'content' } } } },
+      });
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/agents/);
+      expect(r.error).toMatch(/FLAT/);
+      expect(existsSync(join(baseDir, 'bad-space'))).toBe(false);
+    });
+
+    it('rejects a missing agentSlug with a named error', () => {
+      const r = run({ agentTitle: 'X', systemPrompt: 'do things' });
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/agentSlug/);
+      expect(existsSync(join(baseDir, 'bad-space'))).toBe(false);
+    });
+
+    it('rejects `instruct` used in place of `systemPrompt`', () => {
+      const r = run({ agentSlug: 'x', agentTitle: 'X', instruct: 'do things' });
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/systemPrompt/);
+    });
+
+    it('rejects knowledge passed as an object instead of an array', () => {
+      const r = run({
+        agentSlug: 'x', agentTitle: 'X', systemPrompt: 'p',
+        knowledge: { dom: { field: {} } },
+      });
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/knowledge must be an ARRAY/);
+    });
+
+    it('rejects a knowledge entry whose options is not an array', () => {
+      const r = run({
+        agentSlug: 'x', agentTitle: 'X', systemPrompt: 'p',
+        knowledge: [{ domain: 'd', field: 'f', variable: 'v', description: 'desc', options: { a: 'b' } }],
+      });
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/options must be an ARRAY/);
+    });
+
+    it('accepts a correct flat spec (sanity)', () => {
+      const r = run({
+        agentSlug: 'good', agentTitle: 'Good', systemPrompt: 'p',
+        actions: [{ id: 'a', label: 'A', description: 'd', tasklist: 'a' }],
+        tasklists: [{ name: 'a', tasks: [{ id: 'a', instruction: 'i', output: { r: 'string' }, goal: true }] }],
+      });
+      expect(r.ok).toBe(true);
+    });
+  });
+
   it('scaffolds a minimal space and validates successfully', () => {
     const spaceDir = join(baseDir, 'word-counter');
     const spec = JSON.stringify({
