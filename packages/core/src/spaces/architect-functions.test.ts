@@ -65,14 +65,15 @@ describe('architect scaffoldSpace + validateSpace', () => {
       return evalDump(vm, `scaffoldSpace(${JSON.stringify(spaceDir)}, ${JSON.stringify(spec)})`) as any;
     };
 
-    it('rejects the nested {agents:{slug:{instruct}}} shape and writes nothing', () => {
+    it('still rejects a nested spec that is invalid AFTER normalization (agent has no prompt)', () => {
+      // The nested shape is normalized (see the dedicated normalize test), but an
+      // agent with neither `instruct` nor `systemPrompt` has nothing to lift into
+      // systemPrompt — validation must catch that with a named error, write nothing.
       const r = run({
-        agents: { foo: { instruct: 'hi', actions: { a: { tasklist: 'a', description: 'x' } } } },
-        knowledge: { dom: { field: { options: { o: 'content' } } } },
+        agents: { foo: { actions: { a: { tasklist: 'a', description: 'x' } } } },
       });
       expect(r.ok).toBe(false);
-      expect(r.error).toMatch(/agents/);
-      expect(r.error).toMatch(/FLAT/);
+      expect(r.error).toMatch(/systemPrompt/);
       expect(existsSync(join(baseDir, 'bad-space'))).toBe(false);
     });
 
@@ -105,6 +106,138 @@ describe('architect scaffoldSpace + validateSpace', () => {
       });
       expect(r.ok).toBe(false);
       expect(r.error).toMatch(/options must be an ARRAY/);
+    });
+
+    // The model reliably emits this nested shape instead of the flat one.
+    // scaffoldSpace must normalize it and produce a real, valid space — the
+    // exact scenario that failed two live architect runs.
+    it('normalizes the nested {agents/knowledge/functions/components/tasklists} shape into a valid space', () => {
+      const spaceDir = join(baseDir, 'humanoid');
+      const nested = {
+        agents: {
+          humanoid_robotics_analyst: {
+            instruct: 'You are the Humanoid Robotics Analyst. Call loadKnowledge() then answer.',
+            actions: {
+              analyze_platform_fit: { tasklist: 'analyze_platform_fit', description: 'Recommend a platform for a use case' },
+            },
+          },
+        },
+        knowledge: {
+          humanoid_robotics: {
+            platforms: {
+              index: 'Leading humanoid platforms as of 2026.',
+              options: {
+                leading_platforms: { title: 'Leading Platforms', content: '## Figure 03\nSource: https://x' },
+                platform_comparison: 'A bare-string option body is also accepted.',
+              },
+            },
+            market: {
+              index: 'Commercial deployments and market dynamics.',
+              options: { market_overview: { content: '## Market\n$0.9B in 2025. Source: https://y' } },
+            },
+          },
+        },
+        functions: {
+          comparePlatforms: { code: 'export function comparePlatforms(a: string[]) { return a.length; }' },
+        },
+        components: {
+          PlatformCard: { type: 'view', code: 'export default function PlatformCard() { return null; }' },
+          PlatformQueryForm: { type: 'form', code: 'export default function PlatformQueryForm() { return null; }' },
+        },
+        tasklists: {
+          analyze_platform_fit: {
+            tasks: [
+              { id: '1-load', content: 'Load knowledge from humanoid_robotics/platforms.', output: { loaded: 'boolean' } },
+              { id: '2-recommend', content: 'Recommend a platform and resolve.', output: { recommendation: 'string' } },
+            ],
+          },
+        },
+      };
+
+      const r = evalDump(vm, `scaffoldSpace(${JSON.stringify(spaceDir)}, ${JSON.stringify(nested)})`) as any;
+      expect(r.ok).toBe(true);
+      // (run-3 shape variations covered by the dedicated test below)
+      // agent (instruct → systemPrompt, slug → title) was written
+      expect(existsSync(join(spaceDir, 'agents', 'humanoid_robotics_analyst', 'instruct.md'))).toBe(true);
+      const instruct = readFileSync(join(spaceDir, 'agents', 'humanoid_robotics_analyst', 'instruct.md'), 'utf8');
+      expect(instruct).toMatch(/title: Humanoid Robotics Analyst/);
+      expect(instruct).toMatch(/loadKnowledge/);
+      // knowledge tree (object-map options, incl. a bare-string option) written
+      expect(existsSync(join(spaceDir, 'knowledge', 'humanoid_robotics', 'platforms', 'index.md'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'knowledge', 'humanoid_robotics', 'platforms', 'leading_platforms.md'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'knowledge', 'humanoid_robotics', 'platforms', 'platform_comparison.md'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'knowledge', 'humanoid_robotics', 'market', 'market_overview.md'))).toBe(true);
+      // function (code → source), components split by type, tasklist (content → instruction)
+      expect(existsSync(join(spaceDir, 'functions', 'comparePlatforms.ts'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'components', 'view', 'PlatformCard.tsx'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'components', 'form', 'PlatformQueryForm', 'web.tsx'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'components', 'form', 'PlatformQueryForm', 'ink.tsx'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'tasklists', 'analyze_platform_fit', '01-load.md'))).toBe(true);
+      // last task became the goal
+      const goalTask = readFileSync(join(spaceDir, 'tasklists', 'analyze_platform_fit', '02-recommend.md'), 'utf8');
+      expect(goalTask).toMatch(/goal: true/);
+
+      const v = evalDump(vm, `validateSpace(${JSON.stringify(spaceDir)})`) as any;
+      expect(v.ok).toBe(true);
+      expect(v.errors).toHaveLength(0);
+    });
+
+    // Run-3 shape: bare-string values, extensions baked into keys, knowledge under
+    // `files` (not `options`), and tasklist tasks as a map of "N-id.md" → markdown.
+    it('normalizes bare-string values, extension-keys, `files`, and map-of-task-files', () => {
+      const spaceDir = join(baseDir, 'humanoid3');
+      const nested = {
+        agents: {
+          humanoid_robotics_analyst: {
+            instruct: 'Analyst. loadKnowledge then answer.',
+            actions: { analyze_platform: { tasklist: 'analyze_platform', description: 'Analyze platforms' } },
+          },
+        },
+        knowledge: {
+          humanoid_robotics: {
+            platforms: {
+              index: 'Overview of platforms.',
+              files: {
+                'leading_platforms.md': '# Leading Platforms\nFigure 03. Source: https://x',
+                'comparison.md': '# Comparison\nTable. Source: https://y',
+              },
+            },
+          },
+        },
+        functions: {
+          'compare_platforms.ts': 'export function compare_platforms(a: string[]) { return a.length; }',
+        },
+        components: {
+          'PlatformComparisonView.tsx': 'export default function PlatformComparisonView() { return null; }',
+          'MarketAnalysisForm.tsx': 'export default function MarketAnalysisForm() { return null; }',
+        },
+        tasklists: {
+          analyze_platform: {
+            '1-analyze.md': '# Analyze\nLoad knowledge, compare, and resolve the recommendation.',
+          },
+        },
+      };
+
+      const r = evalDump(vm, `scaffoldSpace(${JSON.stringify(spaceDir)}, ${JSON.stringify(nested)})`) as any;
+      expect(r.ok).toBe(true);
+      // No double extensions
+      expect(existsSync(join(spaceDir, 'functions', 'compare_platforms.ts'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'functions', 'compare_platforms.ts.ts'))).toBe(false);
+      expect(existsSync(join(spaceDir, 'components', 'view', 'PlatformComparisonView.tsx'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'components', 'view', 'PlatformComparisonView.tsx.tsx'))).toBe(false);
+      // Form inferred from the name → form/, with web + ink
+      expect(existsSync(join(spaceDir, 'components', 'form', 'MarketAnalysisForm', 'web.tsx'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'components', 'form', 'MarketAnalysisForm', 'ink.tsx'))).toBe(true);
+      // `files` options written, .md stripped from slug, content non-empty
+      const opt = join(spaceDir, 'knowledge', 'humanoid_robotics', 'platforms', 'leading_platforms.md');
+      expect(existsSync(opt)).toBe(true);
+      expect(readFileSync(opt, 'utf8')).toMatch(/Figure 03/);
+      // map-of-task-files → a goal task file
+      expect(existsSync(join(spaceDir, 'tasklists', 'analyze_platform', '01-analyze.md'))).toBe(true);
+      expect(readFileSync(join(spaceDir, 'tasklists', 'analyze_platform', '01-analyze.md'), 'utf8')).toMatch(/goal: true/);
+
+      const v = evalDump(vm, `validateSpace(${JSON.stringify(spaceDir)})`) as any;
+      expect(v.ok).toBe(true);
     });
 
     it('accepts a correct flat spec (sanity)', () => {

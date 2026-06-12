@@ -84,6 +84,186 @@ interface ScaffoldSpec {
   dependencies?: string[];
 }
 
+/** Turn a slug like "humanoid_robotics_analyst" into "Humanoid Robotics Analyst". */
+function titleizeSlug(slug: string): string {
+  return slug
+    .split(/[_\-\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/** Strip a trailing file extension models often bake into a name/key (.md/.ts/.tsx/.js/.jsx). */
+function stripExt(name: string): string {
+  return name.replace(/\.(md|tsx?|jsx?)$/i, '');
+}
+
+/** Build a camelCase variable name from parts, e.g. ['platforms'] → "platformsKnowledge". */
+function camelVar(...parts: string[]): string {
+  const words = parts.flatMap((p) => p.split(/[^a-zA-Z0-9]+/)).filter(Boolean);
+  return words
+    .map((w, i) => (i === 0 ? w.charAt(0).toLowerCase() + w.slice(1) : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join('');
+}
+
+/**
+ * Models reliably emit an "intuitive" NESTED spec shape instead of the flat
+ * ScaffoldSpec — keyed maps everywhere, and `instruct`/`code`/`content` instead
+ * of `systemPrompt`/`source`. Rather than fight that prior with prompting (which
+ * fails), accept it: detect the nested shape and lift it into the flat shape.
+ * An already-flat spec (top-level `agentSlug`) passes through unchanged, so the
+ * documented API and existing callers are unaffected.
+ *
+ * Recognized nested shape:
+ *   { agents: { <slug>: { instruct|systemPrompt, title?, actions?: { <id>: { tasklist, description, label? } } } },
+ *     knowledge?: { <domain>: { <field>: { index?|description?, variable?, default?, type?, options: { <slug>: { content }|string } } } },
+ *     functions?: { <name>: { code|source }|string },
+ *     components?: { <Name>: { type: 'view'|'form', code|source|web|ink } },
+ *     tasklists?: { <name>: { tasks: [ { id, content|instruction, output?, goal?, dependsOn?, optional?, condition? } ] } },
+ *     actions?: { <id>: {...} }   // also accepted at top level
+ *   }
+ */
+function normalizeSpec(spec: any): any {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return spec;
+  if (typeof spec.agentSlug === 'string') return spec; // already flat — no-op
+  if (!spec.agents || typeof spec.agents !== 'object' || Array.isArray(spec.agents)) return spec;
+
+  const isArr = Array.isArray;
+  const agentSlug = Object.keys(spec.agents)[0];
+  const agent = (agentSlug ? spec.agents[agentSlug] : {}) ?? {};
+
+  // actions: { <id>: { tasklist, description, label? } } → [{ id, label, description, tasklist }]
+  const normActions = (src: any): any[] | undefined => {
+    if (src === undefined) return undefined;
+    if (isArr(src)) return src;
+    if (typeof src !== 'object') return undefined;
+    return Object.entries(src).map(([id, v]: [string, any]) => ({
+      id,
+      label: v?.label ?? titleizeSlug(id),
+      description: v?.description ?? '',
+      tasklist: v?.tasklist ?? id,
+    }));
+  };
+
+  // Pull a text body out of a value that may be a bare string or an object using
+  // any of the field names models reach for.
+  const bodyOf = (v: any): string =>
+    typeof v === 'string' ? v : (v?.content ?? v?.source ?? v?.code ?? v?.body ?? v?.text ?? v?.markdown ?? v?.instruction ?? '');
+
+  // knowledge: { <domain>: { <field>: { index?, options|files|contents|pages: {...} } } } → flat array.
+  // Option values may be bare strings OR objects; option keys may carry a .md extension.
+  const normKnowledge = (src: any): any[] | undefined => {
+    if (src === undefined) return undefined;
+    if (isArr(src)) return src;
+    if (typeof src !== 'object') return undefined;
+    const out: any[] = [];
+    for (const [domain, fields] of Object.entries(src)) {
+      if (!fields || typeof fields !== 'object') continue;
+      for (const [field, f] of Object.entries(fields as any)) {
+        const fv: any = f ?? {};
+        const optsRaw = fv.options ?? fv.files ?? fv.contents ?? fv.pages ?? fv.docs ?? fv.option ?? {};
+        const optEntries: Array<[string, any]> = isArr(optsRaw)
+          ? optsRaw.map((o: any, i: number): [string, any] => [o?.slug ?? o?.name ?? String(i + 1), o])
+          : (Object.entries(optsRaw) as Array<[string, any]>);
+        const options = optEntries
+          .filter((e) => stripExt(e[0]) !== 'index')
+          .map((e) => ({ slug: stripExt(e[0]), content: bodyOf(e[1]) }));
+        out.push({
+          domain,
+          field,
+          type: fv.type ?? 'string',
+          variable: fv.variable ?? camelVar(field, 'knowledge'),
+          default: fv.default ?? options[0]?.slug,
+          description: fv.description ?? fv.index ?? `${domain} ${field}`,
+          options,
+        });
+      }
+    }
+    return out;
+  };
+
+  // functions: { <name>: { code|source }|string } → [{ name, source }]. Name may carry .ts.
+  const normFunctions = (src: any): any[] | undefined => {
+    if (src === undefined) return undefined;
+    if (isArr(src)) return src.map((v: any) => ({ name: stripExt(v?.name ?? ''), source: bodyOf(v) }));
+    if (typeof src !== 'object') return undefined;
+    return Object.entries(src).map(([name, v]: [string, any]) => ({ name: stripExt(name), source: bodyOf(v) }));
+  };
+
+  // components: { <Name>: { type, code|source|web|ink }|string } → { view: [...], form: [...] }.
+  // Values may be bare source strings; names may carry .tsx; type is inferred from a
+  // form-ish name when absent.
+  const normComponents = (src: any): any => {
+    if (src === undefined) return undefined;
+    if (!isArr(src) && typeof src === 'object' && ('view' in src || 'form' in src)) return src; // already split
+    if (typeof src !== 'object') return undefined;
+    const view: any[] = [];
+    const form: any[] = [];
+    const entries = isArr(src) ? src.map((c: any) => [c?.name ?? '', c]) : Object.entries(src as any);
+    for (const [rawName, c] of entries) {
+      const name = stripExt(rawName);
+      const cv: any = typeof c === 'object' && c !== null ? c : {};
+      const body = bodyOf(c);
+      const isForm = cv.type === 'form' || !!cv.web || !!cv.ink || /form$/i.test(name);
+      if (isForm) {
+        form.push({ name, web: cv.web ?? body, ink: cv.ink ?? body });
+      } else {
+        view.push({ name, source: body });
+      }
+    }
+    return { view, form };
+  };
+
+  // tasklists: accepts { <name>: { tasks: [...] } }, { <name>: { tasks: { "N-id": body } } },
+  // or { <name>: { "N-id.md": body } } (a bare map of task files). → [{ name, tasks: [...] }].
+  const META_KEYS = ['description', 'label', 'goal', 'name', 'output', 'title', 'tasks'];
+  const normTasklists = (src: any): any[] | undefined => {
+    if (src === undefined) return undefined;
+    if (isArr(src)) return src;
+    if (typeof src !== 'object') return undefined;
+    return Object.entries(src).map(([name, tl]: [string, any]) => {
+      // Build a list of [key, taskValue] pairs from whatever shape was used.
+      let entries: Array<[string, any]>;
+      if (isArr(tl)) entries = tl.map((t: any, i: number) => [t?.id ?? String(i + 1), t]);
+      else if (isArr(tl?.tasks)) entries = tl.tasks.map((t: any, i: number) => [t?.id ?? String(i + 1), t]);
+      else if (tl?.tasks && typeof tl.tasks === 'object') entries = Object.entries(tl.tasks);
+      else if (tl && typeof tl === 'object') entries = Object.entries(tl).filter(([k]) => !META_KEYS.includes(k));
+      else entries = [];
+
+      const tasks = entries.map(([key, t]: [string, any]) => {
+        const idSrc = t && typeof t === 'object' && t.id ? t.id : key;
+        // strip a baked extension and any leading "N-"/"N_" ordinal
+        const id = stripExt(String(idSrc)).replace(/^\d+[-_]?/, '') || 'task';
+        const out = t && typeof t === 'object' && t.output && typeof t.output === 'object' ? t.output : { result: 'string' };
+        return {
+          id,
+          instruction: bodyOf(t),
+          output: out,
+          dependsOn: t?.dependsOn,
+          goal: t?.goal === true,
+          optional: t?.optional,
+          condition: t?.condition,
+        };
+      });
+      // Guarantee a goal task: if none is flagged, the last task is the goal.
+      if (tasks.length > 0 && !tasks.some((t: any) => t.goal)) tasks[tasks.length - 1].goal = true;
+      return { name, tasks };
+    });
+  };
+
+  return {
+    agentSlug,
+    agentTitle: agent.agentTitle ?? agent.title ?? (agentSlug ? titleizeSlug(agentSlug) : undefined),
+    systemPrompt: agent.systemPrompt ?? agent.instruct ?? agent.prompt,
+    actions: normActions(agent.actions ?? spec.actions),
+    knowledge: normKnowledge(spec.knowledge),
+    functions: normFunctions(spec.functions),
+    components: normComponents(spec.components),
+    tasklists: normTasklists(spec.tasklists),
+    dependencies: spec.dependencies,
+  };
+}
+
 /**
  * Validate that `spec` is a flat ScaffoldSpec. Returns an error string describing
  * the first problem (with a concrete fix), or null if the shape is usable.
@@ -183,12 +363,12 @@ function validateSpecShape(spec: any): string | null {
  */
 export function scaffoldSpace(dir: string, spec: ScaffoldSpec): { ok: boolean; dir: string; error?: string } {
   try {
-    // --- Validate the spec shape FIRST, with actionable errors. ---
-    // The #1 failure mode is the model inventing a nested shape
-    // ({ agents: { <slug>: { instruct } }, knowledge: { <domain>: {...} } })
-    // instead of the required FLAT ScaffoldSpec. Catch that explicitly so the
-    // model gets a precise, self-correcting message instead of a cryptic
-    // "cannot read property 'replace' of undefined" from deep inside joinPath.
+    // --- Accept the nested shape models naturally emit, then validate. ---
+    // Models reliably produce { agents: { <slug>: { instruct } }, ... } instead
+    // of the flat ScaffoldSpec. normalizeSpec lifts that into the flat shape
+    // (no-op when already flat); validateSpecShape then catches anything still
+    // malformed with an actionable message instead of a cryptic crash.
+    spec = normalizeSpec(spec);
     const specErr = validateSpecShape(spec);
     if (specErr) return { ok: false, dir, error: specErr };
 
@@ -200,7 +380,7 @@ export function scaffoldSpace(dir: string, spec: ScaffoldSpec): { ok: boolean; d
 
     // --- Build instruct.md frontmatter ---
     const actions = spec.actions ?? [];
-    const functionNames = (spec.functions ?? []).map((f: FunctionSpec) => f.name);
+    const functionNames = (spec.functions ?? []).map((f: FunctionSpec) => stripExt(f.name));
 
     const fnBlock = functionNames.length > 0
       ? 'functions:\n' + functionNames.map((n: string) => `  - ${n}`).join('\n')
@@ -214,8 +394,8 @@ export function scaffoldSpace(dir: string, spec: ScaffoldSpec): { ok: boolean; d
 
     // component names = all view names + all form names
     const componentNames = [
-      ...((spec.components?.view ?? []).map((c: ViewComponentSpec) => c.name)),
-      ...((spec.components?.form ?? []).map((c: FormComponentSpec) => c.name)),
+      ...((spec.components?.view ?? []).map((c: ViewComponentSpec) => stripExt(c.name))),
+      ...((spec.components?.form ?? []).map((c: FormComponentSpec) => stripExt(c.name))),
     ];
     const componentsBlock = componentNames.length > 0
       ? 'components:\n' + componentNames.map((n: string) => `  - ${n}`).join('\n')
@@ -255,9 +435,10 @@ export function scaffoldSpace(dir: string, spec: ScaffoldSpec): { ok: boolean; d
 
     // --- Write function files ---
     for (const fn of (spec.functions ?? [])) {
-      const fnWrite = writeFileRaw(joinPath(functionsDir, `${fn.name}.ts`), fn.source);
+      const fnName = stripExt(fn.name);
+      const fnWrite = writeFileRaw(joinPath(functionsDir, `${fnName}.ts`), fn.source);
       if (!fnWrite.ok) {
-        return { ok: false, dir, error: `Failed to write function ${fn.name}: ${fnWrite.error}` };
+        return { ok: false, dir, error: `Failed to write function ${fnName}: ${fnWrite.error}` };
       }
     }
 
@@ -294,11 +475,11 @@ export function scaffoldSpace(dir: string, spec: ScaffoldSpec): { ok: boolean; d
     for (const c of (spec.components?.view ?? [])) {
       const viewDir = joinPath(dir, 'components', 'view');
       execShell(`mkdir -p "${viewDir}"`);
-      const w = writeFileRaw(joinPath(viewDir, `${c.name}.tsx`), c.source);
+      const w = writeFileRaw(joinPath(viewDir, `${stripExt(c.name)}.tsx`), c.source);
       if (!w.ok) return { ok: false, dir, error: `Failed to write view component ${c.name}: ${w.error}` };
     }
     for (const c of (spec.components?.form ?? [])) {
-      const formDir = joinPath(dir, 'components', 'form', c.name);
+      const formDir = joinPath(dir, 'components', 'form', stripExt(c.name));
       execShell(`mkdir -p "${formDir}"`);
       const wWeb = writeFileRaw(joinPath(formDir, 'web.tsx'), c.web);
       if (!wWeb.ok) return { ok: false, dir, error: `Failed to write form component ${c.name}/web.tsx: ${wWeb.error}` };
