@@ -8,4 +8,17 @@ output:
   citations: array
 ---
 
-From all search results (search_broad.results and search_deep.deep_results), use extractKeyFacts() on each result's content and title. Collect all facts (up to 15). For each source used, create a citation with formatCitation(). Return key_facts array and citations array.
+`extractKeyFacts(content, title)` and `formatCitation(title, url)` are ALREADY
+provided as in-scope functions — call them directly. Do NOT redefine them, and do
+NOT write any `function` declarations (multi-line definitions break statement
+parsing). Use only the single-statement code below, adapting nothing:
+
+```typescript
+const all = [...((search_broad as any).results ?? []), ...((search_deep as any).deep_results ?? [])];
+const key_facts = all.flatMap((r: any) => extractKeyFacts(String(r.content ?? ""), String(r.title ?? ""))).slice(0, 15);
+const citations = all.slice(0, 15).map((r: any) => formatCitation(String(r.title ?? ""), String(r.url ?? "")));
+currentTask.resolve({ key_facts, citations });
+```
+
+`extractKeyFacts` returns `Array<{ fact, source }>`; `formatCitation` returns a
+string. Emit those four statements and nothing else.
