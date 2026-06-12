@@ -23,7 +23,7 @@ Run the CLI against a fixture space:
 ```bash
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --agent chef "make pasta"
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000     # browser mode
+node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000     # DevTools web UI (see "Web observability UI")
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --trace /tmp/trace.jsonl "make pasta"
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl         # interactive multi-turn (human)
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # interactive multi-turn (agent/automated)
@@ -60,13 +60,22 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl "make pasta"
 
 Switches `InkRenderHost.ask()` from Ink's `TextInput` widget to a plain stdout/stdin approach. Use this when the CLI is driven programmatically (Claude Code, scripts, tmux automation) where raw-mode PTY assumptions don't hold. Without `--claude`, ask() renders an interactive Ink form for human use.
 
+### Web observability UI (`--web <port>`)
+
+A DevTools-style 3-pane browser UI with **full observability of the execution hierarchy** (session → run → delegate → fork → tasklist task → solve) and an **agent-friendly HTTP API** on the same port.
+
+- **Layout:** left = live execution tree (status glyphs, durations, retry counts, fork-queue stats); center = conversation (user messages, `display()` output, interactive `ask()` forms incl. space components); right = per-node inspector (LLM requests/responses with retry attempts, evaluated statements + typecheck/eval errors, yields, variables snapshot, raw trace events).
+- **Live + replay:** live over WebSocket; `?trace=/trace.jsonl` (when `--trace` is set) or the "Load trace" file picker replays a `.jsonl` with a timeline scrubber. Same reducer powers both.
+- **Agent control (minimum context):** the UI is driveable headless via `GET /api/help` → `/api/state` (ASCII tree) → `/api/node/<id>?tab=…` → `/api/events?since=<seq>` (poll), plus `POST /api/message` / `/api/ask/<id>` / `/api/ui`. Full guide: `packages/cli/src/web/AGENT.md` (also served at `/api/help`). Every UI view is a deep-link URL (`?node=…&tab=…`); tree rows carry `data-node-id`; panes use ARIA landmarks.
+- **Build:** the React app lives in `@repl/ui` (`src/app/`, `src/store/`), styled with **Tailwind v4** (prebuilt to `dist-web/app.css` at `pnpm build`). `serve.ts` runtime-bundles the app entry + the space's `web.tsx` form components together via esbuild so a **single React instance** is shared (no hooks-breaking second copy). Only the CSS is prebuilt.
+
 ## Packages
 
 | Package | Entry | Purpose |
 |---------|-------|---------|
 | `@repl/core` | `packages/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
 | `@repl/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring. |
-| `@repl/ui` | `packages/ui/src/index.ts` | React web surface + `useReplSession` hook. |
+| `@repl/ui` | `packages/ui/src/index.ts` | React web surface — the DevTools observability app (`src/app/`, `src/store/`, Tailwind v4 → `dist-web/app.css`). Also exports legacy block components + `useReplSession`. |
 
 `@repl/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
 
@@ -74,7 +83,7 @@ Switches `InkRenderHost.ask()` from Ink's `TextInput` widget to a plain stdout/s
 
 ```
 packages/core/src/
-  sandbox/     quickjs.ts host-bridge.ts boundary.ts jsx-runtime.ts trace.ts  ← VM + marshalling + tracing
+  sandbox/     quickjs.ts host-bridge.ts boundary.ts jsx-runtime.ts trace.ts trace-tree.ts  ← VM + marshalling + tracing (trace.ts = event spine; trace-tree.ts = pure tree builder)
   eval/        turn-loop.ts yield.ts error-rewind.ts stream-types.ts           ← the execution engine
   typecheck/   tsc.ts library-dts.ts overlay.ts overlay-dts.ts transpile.ts
   globals/     ask.ts sleep.ts display.ts inspect.ts fork.ts delegate.ts tasklist.ts load-knowledge.ts register-space.ts serialize.ts host-tools.ts  ← host-tools = shared sync substrate (execShell/fetch/readFileRaw/writeFileRaw…)
@@ -95,13 +104,15 @@ packages/cli/src/
   providers/   resolve.ts aliases.ts
   stream/      stream.ts
   render/      ink-renderer.tsx html-to-terminal.ts
-  rpc/         server.ts events.ts
-  web/         serve.ts                                                          ← esbuild bundle + HTTP+WS server
+  rpc/         server.ts events.ts trace-hub.ts                                  ← trace-hub.ts = seq-buffered WS broadcast + snapshot/compaction
+  web/         serve.ts agent-api.ts AGENT.md                                    ← serve.ts = HTTP+WS+static; agent-api.ts = headless /api/* control surface
   cli/         bin.ts args.ts
 
 packages/ui/src/
-  client/      rpc-client.ts useReplSession.ts
-  components/  DisplayBlock.tsx AskBlock.tsx VariablesBlock.tsx
+  app/         main.tsx App.tsx tree.tsx conversation.tsx inspector.tsx replay.tsx common.tsx styles.css  ← DevTools 3-pane web app (Tailwind v4)
+  store/       model.ts store.ts                                                 ← pure reducer (model.ts) + zustand store (live + replay)
+  client/      rpc-client.ts useReplSession.ts                                   ← legacy chat hook (superseded by store/)
+  components/  DisplayBlock.tsx AskBlock.tsx VariablesBlock.tsx                   ← legacy block renderers
 ```
 
 ## Key Invariants
@@ -119,7 +130,7 @@ packages/ui/src/
 - Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
 - The QuickJS VM uses sync `evalCode` + manual `executePendingJobs` loop — NOT `evalCodeAsync`, which deadlocks when awaiting user input. After draining jobs (and only when no yield is pending), `evalStatement` inspects the module's evaluation promise via `getPromiseState`: a top-level `await` that throws (e.g. `await missingGlobal()`) rejects that promise, which `executePendingJobs` would otherwise swallow as an unhandled rejection — so it is surfaced as a turn error instead of silently continuing.
 - `.env` is loaded from `process.cwd()` only (where the script is run, not the package dir).
-- `Tracer` writes NDJSON to `--trace <file>` (each event is a JSON line). Pass `NULL_TRACER` to disable. The tracer is threaded through session → fork → delegate.
+- `Tracer` (`sandbox/trace.ts`) is the **single event spine**: it writes NDJSON to `--trace <file>` (each event a JSON line) **and** fans out to in-process `subscribe()`rs (sync, error-isolated; the CLI's `TraceHub` subscribes for the web UI). Pass `NULL_TRACER` to disable. Threaded through session → run → fork → delegate → tasklist task → solve, where each scope mints a unique `nodeId`+`parentId` via `tracer.child()/end()` (a structured `TraceScope` generalizing the old flat `context` string — the `context`/label is preserved verbatim so existing jq recipes keep working; all new fields are additive). New event types: `node_start/node_update/node_end`, `fork_queue`, `display` (attributed), `variables`, `llm_progress` (subscriber-only, not written to file), `solve_verify`; `yield`/`yield_resolved` gained an optional `yieldId`. `buildTraceTree(events)` (`sandbox/trace-tree.ts`, pure/dependency-free, browser-safe) reconstructs the execution tree from any event array (live or a replayed file; falls back to context-label grouping for legacy no-`nodeId` traces).
 
 ## Environment
 
@@ -174,7 +185,7 @@ See `.issues/` for open bug reports. When all issues are resolved this section w
 
 Reference spaces for end-to-end testing:
 
-- `fixtures/cooking/` — chef agent with form components, view components, space functions, tasklist DAG
+- `fixtures/cooking/` — chef agent with form components, view components, space functions, tasklist DAG. `mock-ask.mjs` = keyless mock that fires an `ask(<ConfirmDish/>)`, used by `web-api.test.ts` to verify space-form rendering + submit in the web UI.
 - `fixtures/sommelier/` — pairing agent with delegation target
 - `fixtures/research/` — research analyst with simulated web search functions
 - `fixtures/deep_research/` — deep research with real Tavily API (requires `TAVILY_API_KEY`)
@@ -241,13 +252,16 @@ The runtime is built to keep context small over long sessions:
 
 Tests are co-located: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
 
-Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tasklist/orchestrator.test.ts`, `tsc.test.ts`, `sandbox/quickjs.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/ask.test.ts`, `globals/inspect.test.ts`, `globals/host-tools.test.ts`, `delegate/delegate.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `spaces/architect-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`, `testing/mock-provider.test.ts`, `testing/mock-session.test.ts`, `testing/harness-features.test.ts`.
+Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tasklist/orchestrator.test.ts`, `tsc.test.ts`, `sandbox/quickjs.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/ask.test.ts`, `globals/inspect.test.ts`, `globals/host-tools.test.ts`, `delegate/delegate.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `spaces/architect-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`, `testing/mock-provider.test.ts`, `testing/mock-session.test.ts`, `testing/harness-features.test.ts` (incl. the execution-tree observability block), `sandbox/trace.test.ts`, `sandbox/trace-tree.test.ts`. CLI/UI: `rpc/trace-hub.test.ts`, `web/agent-api.test.ts`, `testing/web-api.test.ts` (spawns the built CLI with `--web --mock`), `packages/ui/src/store/model.test.ts`.
 
 Live testing: for new runtime features, also drive the built CLI against fixture spaces with a real model and inspect the `--trace` NDJSON — unit tests miss model-behavior and end-to-end integration issues. For a **keyless** deterministic variant, drive a real `Session` (or the CLI via `--mock`) with the scripted mock provider: `testing/mock-session.test.ts` covers budget caps, `progress()`, `solve` escalation, per-role models, and the bug-fix scenarios end-to-end through the turn loop; `testing/harness-features.test.ts` covers the value-yielding globals and orchestration end-to-end (`ask`/`inspect`/`loadKnowledge`/`sleep`/`fork` roles + parallel binding/`tasklist` DAG/`delegate`/`registerSpace`/system spaces/history summarization); and `packages/cli/src/testing/keyless-cli.test.ts` does the same at the CLI level (subprocess + `--mock`).
 
 CLI integration suites (`packages/cli/src/testing/`) spawn the **built** CLI and assert on the `--trace` NDJSON; they self-skip when `dist/` is absent (run `pnpm build` first) and stream the subprocess output live. Saved traces land in `packages/cli/.live-traces/` (gitignored).
 - `keyless-cli.test.ts` — mock provider, no API keys, deterministic.
+- `web-api.test.ts` — spawns the CLI with `--web --mock`, drives the agent HTTP API + WS trace stream (tree, node detail, space-form ask round-trip). No keys.
 - `live-llm.test.ts` — the **real model** (`M` = DeepSeek-V4-Pro for every scenario), gated behind `LM_LIVE=1`. Run: `LM_LIVE=1 pnpm vitest run packages/cli/src/testing/live-llm.test.ts`. Shared harness: `packages/cli/src/testing/live-harness.ts`.
+
+Several suites spin up real QuickJS VMs (forks/delegates/solve) or spawn the CLI as a subprocess, so the global `testTimeout` is raised to 20s (`vitest.config.ts`). Under memory/CPU pressure the cross-file parallelism can still starve these — run `pnpm vitest run --no-file-parallelism` for a clean serial pass.
 
 No linting or formatting config — TypeScript strict mode is the sole quality gate.
 

@@ -91,6 +91,36 @@ console.log(transpileStatement('const x = await ask(<ConfirmDish dish="pasta" />
 **Inspect VM state after an eval:**
 Add temporary `console.log(vm.getScope())` calls in `turn-loop.ts` after `evalStatement`.
 
+## Live observability (the fastest way to debug a real run)
+
+Every run emits a hierarchical trace spine (`sandbox/trace.ts`): each scope
+(session→run→fork→delegate→tasklist→task→solve) is a node with `nodeId`/`parentId`,
+and per-node statements / LLM requests+responses (with retry `attempt`) / yields /
+variables / errors. Two ways to read it:
+
+**Headless via the web agent API** — `--web <port>` then `curl` (no browser):
+```bash
+node packages/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect \
+  --model M --claude --web 3480 --trace /tmp/run.jsonl &
+curl -s -X POST localhost:3480/api/message -d '{"content":"…"}' -H 'content-type: application/json'
+curl -s localhost:3480/api/state                              # ASCII tree: status/duration/retries
+curl -s "localhost:3480/api/node/<forkId>?tab=statements"     # the exact code a failing fork emitted
+curl -s "localhost:3480/api/node/<forkId>?tab=llm"            # its raw model responses per attempt
+curl -s "localhost:3480/api/events?since=<seq>"               # incremental tail
+```
+This is the quickest way to see WHY a fork failed (e.g. "no resolve called" → open its
+`statements`/`llm` tab to find the model wrote prose, or a multi-line `function` decl that
+the boundary detector split into "Function implementation is missing"). Full API: `packages/cli/src/web/AGENT.md`.
+
+**From a `--trace` file with jq** (or replay it in the browser at `?trace=/trace.jsonl`):
+```bash
+jq -r '.type' /tmp/run.jsonl | sort | uniq -c                                  # event histogram
+jq -rc 'select(.type=="llm_response" and (.context|test("fork:"))) | {attempt, text: .text[0:200]}' /tmp/run.jsonl
+jq -c 'select(.type=="node_end" and .status=="error") | {nodeId, error}' /tmp/run.jsonl
+```
+Note: `llm_progress` is subscriber-only (never written to the file). `buildTraceTree(events)`
+(`@repl/core`) rebuilds the whole tree from a parsed trace array for programmatic inspection.
+
 ## The Yield Protocol Step-by-Step
 
 1. Model outputs: `const x = await ask(<Foo />);`
