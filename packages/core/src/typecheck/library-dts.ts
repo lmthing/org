@@ -1,3 +1,5 @@
+import { catalogDts } from '../ui/catalog.js';
+
 export const LIBRARY_DTS = `
 declare function ask<T = unknown>(descriptor: JSXDescriptor | string): Promise<T>;
 declare function display(descriptor: unknown): void;
@@ -92,4 +94,4 @@ declare const process: { env: Record<string, string | undefined>; exit(code?: nu
 declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };
 declare function writeFileRaw(path: string, content: string): { ok: boolean; bytes: number; error?: string };
 declare function progress(): { episodes: number; toolCalls: number; elapsedMs: number };
-`;
+` + '\n' + catalogDts();

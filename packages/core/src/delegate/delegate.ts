@@ -6,6 +6,7 @@ import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import { resolveDirectDeps, getAgentFunctions, getAgentFunctionsBundled } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
+import { CATALOG_NAMES } from '../ui/catalog.js';
 import { createVM } from '../sandbox/quickjs.js';
 import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
@@ -145,7 +146,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     const reactHandle = marshalToQuickJS(vm.ctx, reactShim);
     vm.ctx.setProp(vm.ctx.global, 'React', reactHandle);
     reactHandle.dispose();
-    const allComponentNames = [...Object.keys(agentComponents.view), ...Object.keys(agentComponents.form)];
+    const allComponentNames = [...CATALOG_NAMES, ...Object.keys(agentComponents.view), ...Object.keys(agentComponents.form)];
     for (const name of allComponentNames) {
       const stub = marshalToQuickJS(vm.ctx, { displayName: name });
       vm.ctx.setProp(vm.ctx.global, name, stub);

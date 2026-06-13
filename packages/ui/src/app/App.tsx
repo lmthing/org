@@ -4,6 +4,16 @@ import { ExecutionTree } from './tree.js';
 import { ConversationStream } from './conversation.js';
 import { Inspector } from './inspector.js';
 import { TraceLoader, PlaybackBar } from './replay.js';
+import { useTheme } from '../theme/theme.js';
+
+function ThemeToggle(): React.ReactElement {
+  const [theme, , toggle] = useTheme();
+  return (
+    <button onClick={toggle} className="text-[11px] text-lm-muted hover:text-lm-text" data-testid="theme-toggle" title="Toggle light / dark">
+      {theme === 'light' ? '☀ light' : '☾ dark'}
+    </button>
+  );
+}
 
 function ConnectionDot(): React.ReactElement {
   const c = useStore((s) => s.connection);
@@ -38,6 +48,7 @@ function TopBar(): React.ReactElement {
             {follow ? '⊙ following' : '○ follow'}
           </button>
         )}
+        <ThemeToggle />
         <TraceLoader />
         <ConnectionDot />
       </div>

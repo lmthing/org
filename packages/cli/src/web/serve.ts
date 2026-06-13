@@ -38,7 +38,28 @@ function resolveUiAssets(appTsxPath: string): { aliases: Record<string, string>;
   const uiRoot = dirname(uiPkgJson);
   const appEntry = join(uiRoot, 'src', 'app', 'main.tsx');
   const cssPath = join(uiRoot, 'dist-web', 'app.css');
+  // Map Ink imports onto the web compat layer so single-source (Ink-flavored)
+  // space components render in the browser unchanged.
+  aliases['ink'] = join(uiRoot, 'src', 'compat', 'ink.tsx');
+  aliases['ink-text-input'] = join(uiRoot, 'src', 'compat', 'inputs.tsx');
+  aliases['ink-select-input'] = join(uiRoot, 'src', 'compat', 'inputs.tsx');
   return { aliases, appEntry, cssPath, resolveDir: cliRoot };
+}
+
+/** Optional per-space theming: `<spaceDir>/theme.json` → `:root { --lm-*: … }`. */
+function readThemeCss(spaceDir: string): string {
+  try {
+    const raw = JSON.parse(readFileSync(join(spaceDir, 'theme.json'), 'utf8')) as Record<string, string>;
+    const vars = Object.entries(raw)
+      .map(([k, v]) => {
+        const name = k.startsWith('--') ? k : `--lm-${k}`;
+        return `${name}:${v};${name.replace('--lm-', '--color-lm-')}:${v};`;
+      })
+      .join('');
+    return `:root{${vars}}`;
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -110,15 +131,16 @@ function readCss(appTsxPath: string): string {
   }
 }
 
-function buildHtml(js: string, css: string): string {
+function buildHtml(js: string, css: string, themeCss = ''): string {
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LMThing</title>
   <style>*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }</style>
   <style>${css}</style>
+  ${themeCss ? `<style>${themeCss}</style>` : ''}
 </head>
 <body>
   <div id="root"></div>
@@ -133,7 +155,7 @@ export async function startWebServer(opts: WebServerOpts): Promise<void> {
   console.log('Bundling web app…');
   const js = await buildBundle(opts.space, opts.agentSlug, wsUrl, opts.appTsxPath);
   const css = readCss(opts.appTsxPath);
-  const html = buildHtml(js, css);
+  const html = buildHtml(js, css, readThemeCss(opts.space.dir));
 
   const renderHost = opts.renderHost;
 

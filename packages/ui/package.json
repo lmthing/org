@@ -10,6 +10,8 @@
       "types": "./dist/index.d.ts"
     },
     "./app-entry": "./src/app/main.tsx",
+    "./compat": "./src/compat/index.ts",
+    "./theme": "./src/theme/theme.ts",
     "./web-css": "./dist-web/app.css",
     "./package.json": "./package.json"
   },

@@ -34,6 +34,7 @@ import { Budget } from '../eval/budget.js';
 import { routeCommonYield, type YieldRouterContext } from '../eval/yield-router.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
+import { CATALOG_NAMES } from '../ui/catalog.js';
 import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { getAgentFunctions, getAgentFunctionsBundled, resolveDirectDeps } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
@@ -454,8 +455,9 @@ export class Session {
     ctx.setProp(ctx.global, 'React', reactHandle);
     reactHandle.dispose();
 
-    // Inject each component as a stub object with displayName so createElement resolves to the name
-    for (const name of componentNames) {
+    // Inject each component as a stub object with displayName so createElement resolves to the name.
+    // Design-system catalog components are injected universally (space components override on collision).
+    for (const name of [...CATALOG_NAMES, ...componentNames]) {
       const stub = marshalToQuickJS(ctx, { displayName: name });
       ctx.setProp(ctx.global, name, stub);
       stub.dispose();

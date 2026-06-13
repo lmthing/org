@@ -1,51 +1,17 @@
 import React from 'react';
+import { isFormDescriptor } from '@repl/core/ui';
 import { useStore } from '../store/store.js';
 import type { ConvoBlock } from '../store/model.js';
 import { preview } from './common.js';
+import { CatalogForm } from '../components/forms/CatalogForm.js';
+import { renderDescriptor, isDescriptor } from '../components/render-descriptor.js';
+import type { Descriptor } from '../components/render-descriptor.js';
+export type { Descriptor };
 
 declare const __SPACE_COMPONENTS__: Record<string, React.ComponentType<Record<string, unknown>>> | undefined;
 function spaceComponents(): Record<string, React.ComponentType<Record<string, unknown>>> {
   const w = window as unknown as { __SPACE_COMPONENTS__?: Record<string, React.ComponentType<Record<string, unknown>>> };
   return w.__SPACE_COMPONENTS__ ?? (typeof __SPACE_COMPONENTS__ !== 'undefined' ? __SPACE_COMPONENTS__ : {}) ?? {};
-}
-
-// ─── JSX-descriptor renderer (adapted from the old DisplayBlock) ─────────────
-
-interface Descriptor { type: string; props?: Record<string, unknown>; children?: unknown[] }
-function isDescriptor(v: unknown): v is Descriptor {
-  return !!v && typeof v === 'object' && 'type' in (v as object);
-}
-
-function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
-  if (d === null || d === undefined) return null;
-  if (typeof d === 'string' || typeof d === 'number') return d;
-  if (Array.isArray(d)) return d.map((c, i) => renderDescriptor(c, i));
-  if (!isDescriptor(d)) return <span className="font-mono text-lm-muted">{preview(d, 400)}</span>;
-
-  const props = d.props ?? {};
-  const kids = (d.children ?? []).map((c, i) => renderDescriptor(c, i));
-  const text = props['text'] as string | undefined;
-  const body = text !== undefined ? text : kids;
-
-  switch (d.type) {
-    case 'h1': return <h1 key={key} className="text-lg font-semibold text-lm-text my-1">{body}</h1>;
-    case 'h2': return <h2 key={key} className="text-base font-semibold text-lm-text my-1">{body}</h2>;
-    case 'h3': return <h3 key={key} className="text-sm font-semibold text-lm-text my-1">{body}</h3>;
-    case 'p': return <p key={key} className="my-1 text-lm-text">{body}</p>;
-    case 'code': return <code key={key} className="font-mono text-lm-cyan bg-lm-bg px-1 rounded">{body}</code>;
-    case 'badge': return <span key={key} className="inline-block rounded px-1.5 py-0.5 text-[10px] bg-lm-accent/20 text-lm-accent">{body}</span>;
-    case 'alert': {
-      const variant = props['variant'] as string | undefined;
-      const c = variant === 'error' ? 'border-lm-red text-lm-red' : variant === 'success' ? 'border-lm-green text-lm-green' : 'border-lm-accent text-lm-accent';
-      return <div key={key} className={`border-l-2 ${c} bg-lm-panel2 px-2 py-1 my-1 rounded`}>{body}</div>;
-    }
-    case 'card': return <div key={key} className="border border-lm-border rounded p-2 my-1 bg-lm-panel2">{body}</div>;
-    case 'markdown':
-    case 'text':
-    case 'span': return <span key={key}>{body}</span>;
-    case 'fragment': return <React.Fragment key={key}>{body}</React.Fragment>;
-    default: return <div key={key} className="font-mono text-[11px] text-lm-muted">{d.type}: {preview(props, 200)}</div>;
-  }
 }
 
 // ─── Ask form ────────────────────────────────────────────────────────────────
@@ -67,6 +33,8 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }): Re
       <div style={inert ? { pointerEvents: 'none' } : undefined}>
         {Comp ? (
           <Comp {...(d!.props ?? {})} onSubmit={onSubmit} />
+        ) : d && isFormDescriptor(d) ? (
+          <CatalogForm descriptor={d} onSubmit={onSubmit} />
         ) : (
           <div className="flex gap-2">
             <input

@@ -4,7 +4,10 @@
 @source "./";
 @source "../components/";
 
-/* ─── Dark "devtools" theme tokens ─── */
+/* ─── Design-system theme tokens (dark default) ───
+   Tailwind v4 utilities reference these custom properties, so overriding the
+   same `--color-lm-*` / `--lm-*` names under `[data-theme="…"]` re-themes both
+   the DevTools UI and any space/compat component at runtime. */
 @theme {
   --color-lm-bg: #0d1117;
   --color-lm-panel: #161b22;
@@ -19,17 +22,58 @@
   --color-lm-purple: #bc8cff;
   --color-lm-cyan: #39c5cf;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* spacing + radius scale (design-system primitives consume these) */
+  --radius-lm-sm: 4px;
+  --radius-lm-md: 6px;
+  --radius-lm-lg: 10px;
 }
 
-/* Expose theme as plain CSS vars so space components (which can't use Tailwind
-   classes — the prebuilt CSS can't know them) can opt into the palette. */
-:root {
+/* Plain `--lm-*` mirror so space components and the Ink-compat layer (which
+   emit inline styles, not Tailwind classes) opt into the same palette. The
+   full set is (re)declared per theme below. */
+:root, [data-theme="dark"] {
   --lm-bg: #0d1117;
   --lm-panel: #161b22;
+  --lm-panel2: #1c2128;
   --lm-border: #30363d;
   --lm-text: #e6edf3;
   --lm-muted: #8b949e;
   --lm-accent: #58a6ff;
+  --lm-green: #3fb950;
+  --lm-red: #f85149;
+  --lm-amber: #d29922;
+  --lm-purple: #bc8cff;
+  --lm-cyan: #39c5cf;
+}
+
+/* Light theme: override both the Tailwind-backing and plain mirrors. */
+[data-theme="light"] {
+  --color-lm-bg: #ffffff;
+  --color-lm-panel: #f6f8fa;
+  --color-lm-panel2: #eef1f4;
+  --color-lm-border: #d0d7de;
+  --color-lm-text: #1f2328;
+  --color-lm-muted: #656d76;
+  --color-lm-accent: #0969da;
+  --color-lm-green: #1a7f37;
+  --color-lm-red: #cf222e;
+  --color-lm-amber: #9a6700;
+  --color-lm-purple: #8250df;
+  --color-lm-cyan: #1b7c83;
+
+  --lm-bg: #ffffff;
+  --lm-panel: #f6f8fa;
+  --lm-panel2: #eef1f4;
+  --lm-border: #d0d7de;
+  --lm-text: #1f2328;
+  --lm-muted: #656d76;
+  --lm-accent: #0969da;
+  --lm-green: #1a7f37;
+  --lm-red: #cf222e;
+  --lm-amber: #9a6700;
+  --lm-purple: #8250df;
+  --lm-cyan: #1b7c83;
 }
 
 html, body, #root { height: 100%; }

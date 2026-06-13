@@ -19,6 +19,17 @@ export type { TscResult, TscDiagnostic, TscOpts } from './typecheck/tsc.js';
 export { LIBRARY_DTS } from './typecheck/library-dts.js';
 export { buildOverlay } from './typecheck/overlay.js';
 
+// Design-system UI catalog + cross-platform form normalization
+export {
+  CATALOG, DISPLAY_CATALOG, FORM_CATALOG, CATALOG_BY_NAME, CATALOG_NAMES,
+  isFormComponent, catalogDts, catalogSummary,
+} from './ui/catalog.js';
+export type { CatalogEntry, CatalogProp } from './ui/catalog.js';
+export {
+  flattenForm, normalizeOptions, coerceValue, defaultFor, isFormDescriptor, isCatalogForm,
+} from './ui/form.js';
+export type { FieldSpec, FieldKind, FormSpec, Option } from './ui/form.js';
+
 // Globals
 export { serialize } from './globals/serialize.js';
 export type { SerializeOpts } from './globals/serialize.js';
