@@ -248,6 +248,18 @@ describe('architect scaffoldSpace + validateSpace', () => {
       });
       expect(r.ok).toBe(true);
     });
+
+    it('strips a spurious top-level agents key when agentSlug is already present', () => {
+      // Model sometimes emits both agentSlug at top level AND a nested agents object.
+      // normalizeSpec should strip the agents key and pass the flat spec through.
+      const r = run({
+        agentSlug: 'good', agentTitle: 'Good', systemPrompt: 'p',
+        agents: { good: { instruct: 'should be ignored' } },
+        actions: [{ id: 'a', label: 'A', description: 'd', tasklist: 'a' }],
+        tasklists: [{ name: 'a', tasks: [{ id: 'a', instruction: 'i', output: { r: 'string' }, goal: true }] }],
+      });
+      expect(r.ok).toBe(true);
+    });
   });
 
   it('scaffolds a minimal space and validates successfully', () => {

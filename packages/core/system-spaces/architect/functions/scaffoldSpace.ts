@@ -125,7 +125,11 @@ function camelVar(...parts: string[]): string {
  */
 function normalizeSpec(spec: any): any {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return spec;
-  if (typeof spec.agentSlug === 'string') return spec; // already flat — no-op
+  if (typeof spec.agentSlug === 'string') {
+    // Already flat — strip any spurious `agents` key the model may have left alongside agentSlug.
+    if ('agents' in spec) { const { agents: _a, ...rest } = spec; return rest; }
+    return spec;
+  }
   if (!spec.agents || typeof spec.agents !== 'object' || Array.isArray(spec.agents)) return spec;
 
   const isArr = Array.isArray;
