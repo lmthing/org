@@ -40,6 +40,19 @@ describe('extractBindingNames', () => {
     expect(extractBindingNames('const fn: (x: number) => string = x => String(x)')).toEqual(['fn']);
   });
 
+  it('extracts all names from multi-variable declarations (regression: const a=x, b=y, c=z)', () => {
+    // Bug: non-greedy regex only captured the first declarator; b/c/d/e were never set in globalThis
+    expect(extractBindingNames('const qAr=qA as any, qBr=qB as any, qCr=qC as any, qDr=qD as any, qEr=qE as any')).toEqual(['qAr', 'qBr', 'qCr', 'qDr', 'qEr']);
+    expect(extractBindingNames('const a=1, b=2, c=3')).toEqual(['a', 'b', 'c']);
+    expect(extractBindingNames('let x=foo(), y=bar()')).toEqual(['x', 'y']);
+    // Single-var still works
+    expect(extractBindingNames('const x = obj.y = z')).toEqual(['x']);
+    // Nested commas inside value (e.g. arrow fn) — only top-level names extracted
+    expect(extractBindingNames('const fn = (a, b=2) => a+b')).toEqual(['fn']);
+    // Object literal value with commas — only top-level name extracted
+    expect(extractBindingNames('const data = { a: 1, b: 2 }')).toEqual(['data']);
+  });
+
   it('handles declarations with no initializer (so they propagate to globalThis)', () => {
     expect(extractBindingNames('let parsed;')).toEqual(['parsed']);
     expect(extractBindingNames('let parsed')).toEqual(['parsed']);

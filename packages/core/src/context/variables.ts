@@ -104,11 +104,17 @@ export function extractBindingNames(statement: string): string[] {
       }
       return names;
     }
-    // Simple identifier — strip TypeScript type annotation (: type) before checking
-    // e.g., "deepResults: any[]" → "deepResults", "topic: string" → "topic"
-    const identifierPart = lhs.replace(/\s*:.*$/, '').trim();
-    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(identifierPart)) {
-      names.push(identifierPart);
+    // Simple identifier or multi-variable declaration: const a=x, b=y, c=z
+    // Split by top-level commas to extract ALL declarators (not just the first one,
+    // which was the pre-fix bug: const a=x, b=y only propagated `a` to globalThis).
+    const afterKeyword = stripped.replace(/^\s*(?:const|let|var)\s+/, '');
+    for (const part of splitByTopLevelCommas(afterKeyword)) {
+      const eqIdx = part.indexOf('=');
+      if (eqIdx === -1) continue;
+      const namePart = part.slice(0, eqIdx).replace(/\s*:.*$/, '').trim();
+      if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(namePart)) {
+        names.push(namePart);
+      }
     }
     return names;
   }
@@ -125,4 +131,25 @@ export function extractBindingNames(statement: string): string[] {
   }
 
   return names;
+}
+
+/**
+ * Split a string by commas that are not inside brackets, braces, or parentheses.
+ * Used to separate declarators in multi-variable const/let/var statements.
+ */
+function splitByTopLevelCommas(str: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (c === '{' || c === '[' || c === '(') depth++;
+    else if (c === '}' || c === ']' || c === ')') depth--;
+    else if (c === ',' && depth === 0) {
+      parts.push(str.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(str.slice(start));
+  return parts;
 }

@@ -161,20 +161,30 @@ function normalizeSpec(spec: any): any {
       if (!fields || typeof fields !== 'object') continue;
       for (const [field, f] of Object.entries(fields as any)) {
         const fv: any = f ?? {};
-        const optsRaw = fv.options ?? fv.files ?? fv.contents ?? fv.pages ?? fv.docs ?? fv.option ?? {};
+        let optsRaw = fv.options ?? fv.files ?? fv.contents ?? fv.pages ?? fv.docs ?? fv.option ?? {};
+        // Model often emits the field as a flat { 'index.md': ..., 'file.md': ... } map with no
+        // nested 'options' property. Detect by .md-keyed entries directly on fv and use them.
+        if (Object.keys(optsRaw as object).length === 0) {
+          const mdKeys = Object.keys(fv).filter((k) => k.endsWith('.md') || k === 'index');
+          if (mdKeys.length > 0) {
+            optsRaw = Object.fromEntries(mdKeys.map((k) => [k, fv[k]]));
+          }
+        }
         const optEntries: Array<[string, any]> = isArr(optsRaw)
           ? optsRaw.map((o: any, i: number): [string, any] => [o?.slug ?? o?.name ?? String(i + 1), o])
           : (Object.entries(optsRaw) as Array<[string, any]>);
         const options = optEntries
           .filter((e) => stripExt(e[0]) !== 'index')
           .map((e) => ({ slug: stripExt(e[0]), content: bodyOf(e[1]) }));
+        // 'index.md' key (with extension) is a common model pattern — also accept it for the description
+        const indexContent = fv.description ?? fv.index ?? (fv as any)['index.md'] ?? `${domain} ${field}`;
         out.push({
           domain,
           field,
           type: fv.type ?? 'string',
           variable: fv.variable ?? camelVar(field, 'knowledge'),
           default: fv.default ?? options[0]?.slug,
-          description: fv.description ?? fv.index ?? `${domain} ${field}`,
+          description: indexContent,
           options,
         });
       }
@@ -204,7 +214,9 @@ function normalizeSpec(spec: any): any {
       const name = stripExt(rawName);
       const cv: any = typeof c === 'object' && c !== null ? c : {};
       const body = bodyOf(c);
-      const isForm = cv.type === 'form' || !!cv.web || !!cv.ink || /form$/i.test(name);
+      // Also detect form components by source content — models often pass bare source strings
+      // with <Form> at the root without adding type:'form' or naming them *Form.
+      const isForm = cv.type === 'form' || !!cv.web || !!cv.ink || /form$/i.test(name) || /<Form[\s>]/.test(body);
       if (isForm) {
         form.push({ name, web: cv.web ?? body, ink: cv.ink ?? body });
       } else {

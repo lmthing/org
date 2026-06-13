@@ -413,6 +413,109 @@ describe('architect scaffoldSpace + validateSpace', () => {
     expect((validateResult as any).errors.some((e: string) => e.includes('import'))).toBe(true);
   });
 
+  // Regression: model emits knowledge as a flat { 'index.md': ..., 'file.md': ... } map
+  // directly on the field object (no nested 'options' property). normalizeSpec must detect
+  // the .md-keyed entries and use them as option files, and 'index.md' as the description.
+  it('normalizes flat md-keyed knowledge file maps (run-ficus regression)', () => {
+    const spaceDir = join(baseDir, 'ficus-knowledge');
+    const nested = {
+      agents: {
+        ficus_expert: {
+          instruct: 'Ficus elastica specialist. Call loadKnowledge then answer.',
+          actions: { get_care_plan: { tasklist: 'care_plan', description: 'Get a care plan' } },
+        },
+      },
+      knowledge: {
+        botany: {
+          taxonomy: {
+            'index.md': '# Taxonomy\nFicus elastica is in family Moraceae.\n\n## Sources\n- https://en.wikipedia.org/wiki/Ficus_elastica',
+            'native_regions.md': '# Native Regions\nNative to South and Southeast Asia.\n\n## Sources\n- https://borneoficus.info',
+            'morphology.md': '# Morphology\nLeaves 9–30 cm long, dark green.\n\n## Sources\n- https://plants.ces.ncsu.edu',
+          },
+        },
+      },
+      tasklists: {
+        care_plan: {
+          tasks: [
+            { id: '01-assess', content: 'Assess plant condition.' },
+            { id: '02-plan', content: 'Create care plan and resolve.', goal: true },
+          ],
+        },
+      },
+    };
+
+    const r = evalDump(vm, `scaffoldSpace(${JSON.stringify(spaceDir)}, ${JSON.stringify(nested)})`) as any;
+    expect(r.ok).toBe(true);
+
+    // index.md content (the taxonomy description) must be written, not the placeholder
+    const idxPath = join(spaceDir, 'knowledge', 'botany', 'taxonomy', 'index.md');
+    expect(existsSync(idxPath)).toBe(true);
+    const idxContent = readFileSync(idxPath, 'utf8');
+    expect(idxContent).toMatch(/Moraceae/);
+    expect(idxContent).not.toBe('botany taxonomy');
+
+    // option files must be written with their content
+    const nativePath = join(spaceDir, 'knowledge', 'botany', 'taxonomy', 'native_regions.md');
+    expect(existsSync(nativePath)).toBe(true);
+    expect(readFileSync(nativePath, 'utf8')).toMatch(/Southeast Asia/);
+
+    const morphPath = join(spaceDir, 'knowledge', 'botany', 'taxonomy', 'morphology.md');
+    expect(existsSync(morphPath)).toBe(true);
+    expect(readFileSync(morphPath, 'utf8')).toMatch(/dark green/);
+
+    const v = evalDump(vm, `validateSpace(${JSON.stringify(spaceDir)})`) as any;
+    expect(v.ok).toBe(true);
+  });
+
+  // Regression: form components passed as bare source strings (no type:'form') where the
+  // name doesn't end in 'form' were classified as view components. normalizeSpec must also
+  // detect <Form in the source body to correctly route to components/form/.
+  it('detects form components by <Form> in source when name does not end in Form', () => {
+    const spaceDir = join(baseDir, 'form-detect');
+    const nested = {
+      agents: {
+        test_agent: {
+          instruct: 'Test agent.',
+          actions: { run: { tasklist: 'run', description: 'Run' } },
+        },
+      },
+      components: {
+        // Name does NOT end in 'form/Form' — detection must rely on source content
+        'LeafSymptomChecker.tsx': `import { Form, Field, Select, TextField } from './catalog';
+export default function LeafSymptomChecker() {
+  return (
+    <Form>
+      <Field name="symptom"><Select name="symptom" options={[]} /></Field>
+      <Field name="desc"><TextField name="desc" /></Field>
+    </Form>
+  );
+}`,
+        // Ends in 'Form' — detected by name
+        'PropagationPlannerForm.tsx': 'export default function PropagationPlannerForm() { return <Form><Field name="x"><Select name="x" options={[]} /></Field></Form>; }',
+        // View component — no <Form, name doesn't end in Form
+        'PlantHealthDashboard.tsx': 'export default function PlantHealthDashboard({ score }: any) { return <div>{score}</div>; }',
+      },
+      tasklists: {
+        run: { tasks: [{ id: 'run', content: 'Run and resolve.', goal: true }] },
+      },
+    };
+
+    const r = evalDump(vm, `scaffoldSpace(${JSON.stringify(spaceDir)}, ${JSON.stringify(nested)})`) as any;
+    expect(r.ok).toBe(true);
+
+    // LeafSymptomChecker detected as form via <Form in source
+    expect(existsSync(join(spaceDir, 'components', 'form', 'LeafSymptomChecker', 'web.tsx'))).toBe(true);
+    expect(existsSync(join(spaceDir, 'components', 'form', 'LeafSymptomChecker', 'ink.tsx'))).toBe(true);
+    expect(existsSync(join(spaceDir, 'components', 'view', 'LeafSymptomChecker.tsx'))).toBe(false);
+
+    // PropagationPlannerForm detected as form via name suffix
+    expect(existsSync(join(spaceDir, 'components', 'form', 'PropagationPlannerForm', 'web.tsx'))).toBe(true);
+
+    // PlantHealthDashboard stays as view
+    expect(existsSync(join(spaceDir, 'components', 'view', 'PlantHealthDashboard.tsx'))).toBe(true);
+    expect(existsSync(join(spaceDir, 'components', 'form', 'PlantHealthDashboard'))).toBe(false);
+  });
+
   it('rescaffold is idempotent — running twice overwrites cleanly', () => {
     const spaceDir = join(baseDir, 'idempotent');
     const spec1 = JSON.stringify({
