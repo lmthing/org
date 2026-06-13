@@ -83,19 +83,31 @@ raw fetched page HTML in variables — it floods the context. Each explore fork 
 synthesize findings into a short structured object (a few hundred words max). Use
 `display()` to show raw details if needed — display output does NOT enter the VARIABLES block.
 
-### Phase 1 — Research (parallel explore forks, compact output)
+### Phase 1 — Research (ALWAYS use the deep researcher)
+
+**RULE: whenever research is needed, you MUST delegate to `deep-research-space`.
+Never use `fork({ role: 'explore' })` for research — not even for a single lookup.**
+
+The Deep Research Analyst is always available as a built-in system space — no
+`registerSpace` call needed. Send multiple angles in parallel:
 
 ```typescript
-const [r1, r2, r3] = await Promise.all([
-  fork({
-    role: 'explore',
-    instruction: 'Research X. Return a COMPACT summary — under 300 words. Use webSearch + webFetch but distil into key facts only.',
-    output: { summary: 'string', sources: 'string[]' },
-  }),
-  // ... more parallel forks
-]);
-display(`Research done: ${r1.summary.slice(0,100)}...`);
+const [q1, q2, q3] = await Promise.all([
+  delegate('deep-research-space', 'researcher', 'research_report',
+    { query: 'first angle on the subject', context: { topic: 'first angle on the subject' } }),
+  delegate('deep-research-space', 'researcher', 'research_report',
+    { query: 'second angle', context: { topic: 'second angle' } }),
+  delegate('deep-research-space', 'researcher', 'research_report',
+    { query: 'third angle', context: { topic: 'third angle' } }),
+]) as [any, any, any];
+display(`Research done: ${(q1 as any).executive_summary?.slice(0, 100)}...`);
 ```
+
+Each result has `{ executive_summary, main_findings, conclusion, sources_used }`.
+
+`fork({ role: 'explore' })` is for **code/file inspection only** (reading local files,
+grepping the repo, summarising existing artefacts). It has no web search and must
+never be used in place of the deep researcher.
 
 ### Phase 2 — Design + Scaffold (IMMEDIATELY after research, in the SAME code block)
 

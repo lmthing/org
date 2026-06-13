@@ -99,6 +99,37 @@ export class Budget {
     }
   }
 
+  /**
+   * Returns a human-readable warning string when any limit is within 2 steps
+   * (episodes/toolCalls) or 80% consumed (wallClock). Returns null when well
+   * within budget. Injected into the VARIABLES block so the model knows to wrap
+   * up and call resolve() before the hard stop hits.
+   */
+  nearLimitWarning(): string | null {
+    const warnings: string[] = [];
+    if (this.limits.maxEpisodes !== undefined) {
+      const remaining = this.limits.maxEpisodes - this._episodes;
+      if (remaining <= 2) {
+        warnings.push(`LLM turns: ${this._episodes}/${this.limits.maxEpisodes} used (${remaining} remaining)`);
+      }
+    }
+    if (this.limits.maxToolCalls !== undefined) {
+      const remaining = this.limits.maxToolCalls - this._toolCalls;
+      if (this._toolCalls / this.limits.maxToolCalls >= 0.8) {
+        warnings.push(`tool calls: ${this._toolCalls}/${this.limits.maxToolCalls} used (${remaining} remaining)`);
+      }
+    }
+    if (this.limits.maxWallClockMs !== undefined) {
+      const elapsed = this.elapsedMs();
+      if (elapsed / this.limits.maxWallClockMs >= 0.8) {
+        const remainingSec = Math.round((this.limits.maxWallClockMs - elapsed) / 1000);
+        warnings.push(`wall clock: ${Math.round(elapsed / 1000)}s/${Math.round(this.limits.maxWallClockMs / 1000)}s (${remainingSec}s remaining)`);
+      }
+    }
+    if (warnings.length === 0) return null;
+    return `BUDGET WARNING — approaching limit(s): ${warnings.join('; ')}. Wrap up immediately and call currentTask.resolve() now.`;
+  }
+
   /** Read-only progress snapshot, surfaced to the VM via the `progress` global. */
   snapshot(): BudgetSnapshot {
     return { episodes: this._episodes, toolCalls: this._toolCalls, elapsedMs: this.elapsedMs() };

@@ -305,14 +305,7 @@ export class ForkEngine {
           functionList,
         ].join('\n');
 
-        const result = await runTurnLoop({
-          vm,
-          history,
-          systemBlock,
-          ambientDts,
-          renderHost: this.opts.renderHost,
-          streamFn: this.opts.streamFn,
-          processYield: async (req) => {
+        const forkProcessYield = async (req: import('../eval/yield.js').YieldRequest): Promise<unknown> => {
             // Handle sleep in child
             if (req.kind === 'sleep') {
               const ms = req.args[1] as number;
@@ -349,14 +342,37 @@ export class ForkEngine {
               }
             }
             return undefined;
-          },
+          };
+
+        const forkLoopOpts = {
+          vm,
+          history,
+          systemBlock,
+          ambientDts,
+          renderHost: this.opts.renderHost,
+          streamFn: this.opts.streamFn,
+          processYield: forkProcessYield,
           maxRetries: 3,
           tracer: this.opts.tracer ?? NULL_TRACER,
           traceContext: `fork:${task.taskId ?? task.role ?? 'general'}`,
           scope: forkScope,
           budget,
           model: modelForRole(task.role, this.opts.roleModels),
-        });
+        };
+
+        await runTurnLoop(forkLoopOpts);
+
+        // If the model finished without calling resolve(), give it one final nudge
+        // so it can emit currentTask.resolve() before we declare the fork failed.
+        if (!didResolve) {
+          this.opts.renderHost.log(`[fork] ended without resolve — nudging`);
+          history.append({
+            role: 'user',
+            content: `You completed your work but did not call currentTask.resolve(). You MUST call it now to return your result.\n\nOutput schema:\n${outputSchemaStr}\n\nCall: currentTask.resolve({ /* your gathered result */ })`,
+            blockType: 'normal',
+          });
+          await runTurnLoop({ ...forkLoopOpts, maxRetries: 2, traceContext: `fork:${task.taskId ?? task.role ?? 'general'}:resolve_nudge` });
+        }
 
         // All QuickJS call frames have exited — safe to dispose.
         vm.dispose();
@@ -366,7 +382,7 @@ export class ForkEngine {
           if (didResolve) {
             resolvedError ? reject(resolvedError) : resolve(resolvedValue as T);
           } else {
-            const msg = `Fork completed without calling currentTask.resolve() (result: ${result})`;
+            const msg = `Fork completed without calling currentTask.resolve()`;
             reject(new Error(msg));
           }
         }, didResolve && !resolvedError ? 'done' : 'error',

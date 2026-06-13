@@ -365,6 +365,8 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         const inspectLines = formatInspectResult(inspectArgs).split('\n').slice(1);
         varContent = varContent.replace(/^VARIABLES\n?/, (m) => m + inspectLines.join('\n') + '\n');
       }
+      const budgetWarning = deps.budget?.nearLimitWarning();
+      if (budgetWarning) varContent += `\n\n${budgetWarning}`;
       history.append({ role: 'user', content: varContent, blockType: 'variables' });
 
       attempt = 0;

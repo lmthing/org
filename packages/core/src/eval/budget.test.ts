@@ -97,6 +97,47 @@ describe('Budget', () => {
     });
   });
 
+  describe('nearLimitWarning', () => {
+    it('returns null when well within all limits', () => {
+      const b = new Budget({ maxEpisodes: 10, maxToolCalls: 20 });
+      b.tickEpisode();
+      b.tickToolCalls(2);
+      expect(b.nearLimitWarning()).toBeNull();
+    });
+
+    it('warns when within 2 episodes of the limit', () => {
+      const b = new Budget({ maxEpisodes: 5 });
+      b.tickEpisode(); b.tickEpisode(); b.tickEpisode(); // 3 used, 2 remaining
+      const warn = b.nearLimitWarning();
+      expect(warn).not.toBeNull();
+      expect(warn).toContain('LLM turns');
+      expect(warn).toContain('2 remaining');
+    });
+
+    it('warns when tool calls reach 80% of the limit', () => {
+      const b = new Budget({ maxToolCalls: 10 });
+      b.tickToolCalls(8); // exactly 80%
+      const warn = b.nearLimitWarning();
+      expect(warn).not.toBeNull();
+      expect(warn).toContain('tool calls');
+    });
+
+    it('warns on wall clock at 80% (injected clock)', () => {
+      let now = 0;
+      const b = new Budget({ maxWallClockMs: 1000 }, () => now);
+      now = 850; // 85%
+      const warn = b.nearLimitWarning();
+      expect(warn).not.toBeNull();
+      expect(warn).toContain('wall clock');
+    });
+
+    it('returns null when no limits are set', () => {
+      const b = new Budget({});
+      for (let i = 0; i < 100; i++) { b.tickEpisode(); b.tickToolCalls(1); }
+      expect(b.nearLimitWarning()).toBeNull();
+    });
+  });
+
   describe('snapshot', () => {
     it('reflects live counters and elapsed time', () => {
       let now = 500;

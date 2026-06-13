@@ -547,6 +547,11 @@ export class Session {
           spaceMap.set(pkgName, depSpace);
           spaceMap.set(depSpace.dir, depSpace);
         }
+        // System spaces are always delegatable (e.g. deep_research/researcher)
+        for (const sysSpace of this.systemSpaces) {
+          spaceMap.set(sysSpace.dir, sysSpace);
+          if (sysSpace.packageName) spaceMap.set(sysSpace.packageName, sysSpace);
+        }
         // Merge spaces registered at runtime via registerSpace()
         for (const [key, dynSpace] of this.dynamicSpaces) {
           spaceMap.set(key, dynSpace);
