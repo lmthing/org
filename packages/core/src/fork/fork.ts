@@ -13,7 +13,26 @@ import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { validateOutput } from '../tasklist/schema.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
-import { Budget, type BudgetLimits } from '../eval/budget.js';
+import { Budget, BudgetExceededError, type BudgetLimits } from '../eval/budget.js';
+
+/**
+ * Build a schema-valid placeholder object for a fork that never resolved. Each field
+ * is filled with a type-appropriate empty/marker value so downstream consumers and the
+ * orchestrator can proceed instead of hard-failing. Strings carry an honest note.
+ */
+export function salvageOutput(schema: Record<string, string>): Record<string, unknown> {
+  const note = '(unavailable — the subagent could not produce a synthesis before exhausting its budget)';
+  const out: Record<string, unknown> = {};
+  for (const [key, rawType] of Object.entries(schema ?? {})) {
+    const t = String(rawType).toLowerCase();
+    if (t.includes('[]') || t.includes('array')) out[key] = [];
+    else if (t.includes('number') || t.includes('int') || t.includes('float')) out[key] = 0;
+    else if (t.includes('bool')) out[key] = false;
+    else if (t.includes('object') || t.includes('record') || t.startsWith('{')) out[key] = {};
+    else out[key] = note;
+  }
+  return out;
+}
 
 export interface ForkTask {
   instruction: string;
@@ -295,6 +314,11 @@ export class ForkEngine {
           '- display(content: string | JSXDescriptor) — render output',
           '- ask(descriptor) — prompt user for input',
           '- inspect(...values) — inspect variables',
+          '- execShell(cmd: string) → { ok, stdout, stderr } — run a shell command / subprocess. This is the ONLY way to run a program (e.g. tests): `const { ok, stdout } = execShell("npx tsx test.ts");`',
+          '- fetch(url, opts?) → { ok, status, text(), json() } — synchronous HTTP (curl-backed)',
+          '- readFileRaw(path) → { ok, content } / writeFileRaw(path, content) → { ok } — binary-safe file I/O (relative paths resolve against the space dir)',
+          '',
+          'There is NO Node/Bun/Deno runtime: `require`, `import("child_process")`, `Bun`, `Deno`, `process.cwd()`, `TextDecoder`, and `Buffer` are NOT available. Use `execShell` to run anything and `fetch`/`readFileRaw`/`writeFileRaw` for I/O.',
           '',
           'FORBIDDEN: setTimeout, setInterval, queueMicrotask (not available)',
           'FORBIDDEN: markdown code fences (```typescript, ```ts, or ``` of any kind)',
@@ -360,18 +384,59 @@ export class ForkEngine {
           model: modelForRole(task.role, this.opts.roleModels),
         };
 
+        // A BudgetExceededError here propagates to the outer catch and rejects: the
+        // budget is a HARD cost ceiling, so we honor it rather than spending more turns.
         await runTurnLoop(forkLoopOpts);
 
-        // If the model finished without calling resolve(), give it one final nudge
-        // so it can emit currentTask.resolve() before we declare the fork failed.
-        if (!didResolve) {
-          this.opts.renderHost.log(`[fork] ended without resolve — nudging`);
+        // GUARANTEE: a fork that returned WITHOUT exceeding budget must still produce a
+        // usable result. If the model finished (or exhausted its retries) without calling
+        // resolve(), force resolve-only turns with a FRESH small budget (separate from the
+        // session cap) and tools forbidden — hammered with an impossible-to-misread
+        // single instruction. (Skip entirely once a timeout has already settled the fork.)
+        for (let nudge = 0; nudge < 2 && !didResolve && !settled; nudge++) {
+          this.opts.renderHost.log(`[fork] no resolve — forcing resolve (attempt ${nudge + 1})`);
           history.append({
             role: 'user',
-            content: `You completed your work but did not call currentTask.resolve(). You MUST call it now to return your result.\n\nOutput schema:\n${outputSchemaStr}\n\nCall: currentTask.resolve({ /* your gathered result */ })`,
+            content: [
+              'STOP. Do NOT search, fetch, read files, run shell, or call ANY tool now.',
+              'You must return your result THIS TURN by calling currentTask.resolve().',
+              'Emit EXACTLY ONE statement: a single currentTask.resolve({...}) call that',
+              'synthesizes everything already gathered above. Do not gather more — use only',
+              'what is already in context. Any other code (searches, fetches, prose) is rejected.',
+              '',
+              `Output schema — fill EVERY field with a real value:\n${outputSchemaStr}`,
+              '',
+              'If you genuinely found nothing usable, still resolve with your best summary of',
+              'what was attempted. Returning a partial result is REQUIRED; returning nothing fails the task.',
+            ].join('\n'),
             blockType: 'normal',
           });
-          await runTurnLoop({ ...forkLoopOpts, maxRetries: 2, traceContext: `fork:${task.taskId ?? task.role ?? 'general'}:resolve_nudge` });
+          try {
+            await runTurnLoop({
+              ...forkLoopOpts,
+              maxRetries: 3,
+              budget: new Budget({ maxEpisodes: 4 }),
+              traceContext: `fork:${task.taskId ?? task.role ?? 'general'}:resolve_nudge`,
+            });
+          } catch (err) {
+            if (!(err instanceof BudgetExceededError)) throw err;
+          }
+        }
+
+        // Last resort: the model refused to resolve across every forced turn. Rather
+        // than fail the parent (which would abort the whole tasklist/run), salvage a
+        // schema-valid placeholder so orchestration can proceed. The content is honest
+        // about being incomplete so downstream consumers can react.
+        //
+        // EXCEPTION: a fork given an explicit `timeout` opted into a hard time bound —
+        // the caller wants failure on non-completion, not a salvaged guess. So we skip
+        // salvage there and let the no-resolve rejection (or the timeout) stand. Tasklist
+        // tasks, delegates and role forks set no timeout, so they always salvage.
+        if (!didResolve && !task.timeout && !settled) {
+          this.opts.renderHost.log(`[fork] model never resolved — salvaging a schema-valid placeholder`);
+          resolvedValue = salvageOutput(task.output);
+          resolvedError = undefined;
+          didResolve = true;
         }
 
         // All QuickJS call frames have exited — safe to dispose.
@@ -379,11 +444,10 @@ export class ForkEngine {
         vm = undefined;
 
         settle(() => {
-          if (didResolve) {
-            resolvedError ? reject(resolvedError) : resolve(resolvedValue as T);
+          if (didResolve && !resolvedError) {
+            resolve(resolvedValue as T);
           } else {
-            const msg = `Fork completed without calling currentTask.resolve()`;
-            reject(new Error(msg));
+            reject(resolvedError ?? new Error('Fork completed without calling currentTask.resolve()'));
           }
         }, didResolve && !resolvedError ? 'done' : 'error',
           (!didResolve || resolvedError) ? (resolvedError?.message ?? 'no resolve called') : undefined);

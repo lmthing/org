@@ -97,13 +97,16 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
   // execShell — synchronous shell execution. Read-only profiles block mutating commands.
   // `exitCode` lets the model distinguish failure modes (127 not-found, 126 denied,
   // 1 generic, etc.); `opts.timeout` overrides the default for slow first-run installs.
+  // Runs with `cwd: spaceRoot` so relative paths agree with readFileRaw/writeFileRaw and
+  // solve()'s verifier — a fork that writeFile("work/x.ts") can then run it with
+  // execShell("npx tsx work/x.ts") regardless of where the CLI was launched.
   setGlobal('execShell', (cmd: string, execOpts?: { timeout?: number }) => {
     if (!allowWrite && !isReadOnlyCommand(cmd)) {
       return { ok: false, stdout: '', stderr: `read-only role: command "${commandHead(cmd)}" is blocked`, exitCode: 126 };
     }
     const timeout = execOpts?.timeout ?? DEFAULT_EXEC_TIMEOUT_MS;
     try {
-      const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout });
+      const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout, cwd: spaceRoot });
       return { ok: true, stdout: result.toString(), stderr: '', exitCode: 0 };
     } catch (e: unknown) {
       const err = e as { message?: string; stdout?: Buffer; stderr?: Buffer; status?: number | null };

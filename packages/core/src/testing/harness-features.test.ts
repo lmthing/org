@@ -972,22 +972,25 @@ describe('harness — fork() edge cases', () => {
     expect(r.displays).toContain('t=spaghetti s=3'); // bound by key, not position
   });
 
-  it('a fork that never resolves binds undefined and the run continues (no crash)', async () => {
+  it('a fork that never resolves salvages a schema-valid result and the run continues (no crash)', async () => {
     let sessionStep = 0;
     const m = mockMatch(
-      // The fork only displays and never calls currentTask.resolve → it rejects.
+      // The fork only displays and never calls currentTask.resolve → instead of failing
+      // the parent, the harness salvages a schema-valid placeholder so the run proceeds.
       [forkRule('NORESOLVE_TASK', `display("subagent did nothing useful");`)],
       () => {
         sessionStep++;
         if (sessionStep === 1)
           return `const f = await fork({ role: 'general', instruction: 'NORESOLVE_TASK', output: { v: 'string' } });`;
-        if (sessionStep === 2) return `display("f is " + (f === undefined ? "undefined" : "set"));`;
+        // fork() returns unknown — cast before reading the salvaged field.
+        if (sessionStep === 2) return `const fv = (f as { v: string }).v; display("f.v is " + (typeof fv === "string" ? "string" : "missing"));`;
         return '';
       },
     );
     const r = await runSession({ streamFn: m, message: 'go' });
-    expect(r.error).toBeUndefined(); // a rejected fork is NOT a hard stop for the session
-    expect(r.displays).toContain('f is undefined');
+    expect(r.error).toBeUndefined(); // a non-resolving fork is NOT a hard stop for the session
+    // The fork now binds a salvaged object (every schema field present), not undefined.
+    expect(r.displays).toContain('f.v is string');
   });
 });
 

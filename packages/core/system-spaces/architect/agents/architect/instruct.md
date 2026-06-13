@@ -105,9 +105,11 @@ display(`Research done: ${(q1 as any).executive_summary?.slice(0, 100)}...`);
 
 Each result has `{ executive_summary, main_findings, conclusion, sources_used }`.
 
-`fork({ role: 'explore' })` is for **code/file inspection only** (reading local files,
-grepping the repo, summarising existing artefacts). It has no web search and must
-never be used in place of the deep researcher.
+`fork({ role: 'explore' })` is for **local code/file inspection** (reading local files,
+grepping the repo, summarising existing artefacts). Even though an explore fork *can*
+call `webSearch`/`webFetch`, you MUST NOT use it for research: the deep researcher runs a
+structured broad→deep→extract→synthesize tasklist that returns a far higher-quality,
+cited report. Always `delegate('deep-research-space', …)` for anything that needs the web.
 
 ### Phase 2 — Design + Scaffold (IMMEDIATELY after research, in the SAME code block)
 
@@ -124,12 +126,14 @@ never by re-typing the research text as a literal** — the VARIABLES block you 
 truncated, so re-typing it fabricates the missing tail. If you need the full text of a
 truncated research field, `inspect` it first: `const full = await inspect([r1, { path: 'summary' }]);`.
 
+**CRITICAL — `systemPrompt` in the spec MUST be ≤ 5 sentences (a brief persona/role description).** Do NOT embed a full system prompt: the TypeScript parser chokes on large template literals and the eval fails. Write the brief description in the spec; if you need richer agent instructions, use `writeFile` or `editFile` to overwrite `agents/<slug>/instruct.md` **after** `scaffoldSpace` returns.
+
 ```typescript
 // Build the spec directly from research variables — no pausing, no extra yields
 const spec = {
   agentSlug: '<slug>',
   agentTitle: '<title>',
-  systemPrompt: '<2-3 sentences>',
+  systemPrompt: '<2-3 sentences — BRIEF persona/role only, NOT a full system prompt>',
   knowledge: [{ domain: '<d>', field: '<f>', type: 'string', variable: '<v>',
     default: '<slug>', description: '<desc>',
     options: [{ slug: '<slug>', content: r1.summary }] }],
@@ -164,6 +168,13 @@ const result = reg.ok
   : null;
 
 display(JSON.stringify(result, null, 2));
+```
+
+**Extending the agent system prompt after scaffolding (if you want richer instructions):**
+```typescript
+// After scaffoldSpace succeeds and s.dir is set — write full instruct.md:
+writeFile(s.dir + '/agents/' + spec.agentSlug + '/instruct.md',
+  `---\ntitle: ${spec.agentTitle}\nactions:\n  - id: <action>\n    label: <label>\n    description: <desc>\n    tasklist: <action>\n---\n\nYour full multi-paragraph system prompt here...`);
 ```
 
 ## Capability 1 — Web research → knowledge

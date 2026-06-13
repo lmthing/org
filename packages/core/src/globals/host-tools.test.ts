@@ -125,6 +125,18 @@ describe('injectHostTools — relative paths resolve against the space dir', () 
     expect(w.ok).toBe(true);
     expect(readFileSync(abs, 'utf8')).toBe('abs');
   });
+
+  it('execShell runs with cwd = space dir, so a written relative file is runnable', () => {
+    // Regression: execShell used to run at process.cwd(), so writeFile("x") then
+    // execShell("cat x") disagreed on the path. Both must root at the space dir.
+    evalDump(vm, `writeFileRaw("hello.txt", "world")`);
+    const r = evalDump(vm, `execShell("cat hello.txt")`) as { ok: boolean; stdout: string };
+    expect(r.ok).toBe(true);
+    expect(r.stdout.trim()).toBe('world');
+    // pwd should report the space dir itself.
+    const pwd = evalDump(vm, `execShell("pwd")`) as { stdout: string };
+    expect(pwd.stdout.trim()).toBe(dir);
+  });
 });
 
 describe('injectHostTools — process.env and read-only profile', () => {

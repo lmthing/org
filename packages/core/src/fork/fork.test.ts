@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import type { Space } from '../spaces/load.js';
-import { ForkEngine } from './fork.js';
+import { ForkEngine, salvageOutput } from './fork.js';
 import { BudgetExceededError } from '../eval/budget.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamSession } from '../eval/stream-types.js';
@@ -36,6 +36,22 @@ function makeEngine(streamText: string): ForkEngine {
   });
 }
 
+describe('salvageOutput', () => {
+  it('produces type-appropriate placeholders for every schema field', () => {
+    const out = salvageOutput({ summary: 'string', findings: 'array', count: 'number', ok: 'boolean', meta: 'object' });
+    expect(typeof out.summary).toBe('string');
+    expect(out.findings).toEqual([]);
+    expect(out.count).toBe(0);
+    expect(out.ok).toBe(false);
+    expect(out.meta).toEqual({});
+  });
+
+  it('handles array shorthand and empty schema', () => {
+    expect(salvageOutput({ items: 'string[]' }).items).toEqual([]);
+    expect(salvageOutput({})).toEqual({});
+  });
+});
+
 describe('ForkEngine', () => {
   it('resolves when currentTask.resolve() is called with a valid value', async () => {
     const engine = makeEngine('currentTask.resolve({ answer: "pasta" });\n');
@@ -57,11 +73,14 @@ describe('ForkEngine', () => {
     expect(result).toMatchObject({ title: 'spaghetti', steps: 3, ready: true });
   });
 
-  it('rejects when currentTask.resolve() is never called', async () => {
+  it('salvages a schema-valid placeholder when currentTask.resolve() is never called', async () => {
+    // Robustness contract: rather than hard-failing the parent when the model wanders
+    // without resolving (model stupidity), the fork forces resolve-only turns and, as a
+    // last resort, returns a type-appropriate placeholder so orchestration can proceed.
     const engine = makeEngine('const x = 1;\n');
-    await expect(
-      engine.fork({ instruction: 'test', output: { x: 'string' } }),
-    ).rejects.toThrow(/without calling currentTask\.resolve/);
+    const result = await engine.fork<{ x: string }>({ instruction: 'test', output: { x: 'string' } });
+    expect(typeof result.x).toBe('string');
+    expect(result.x).toMatch(/unavailable/i);
   });
 
   it('rejects when the resolved value does not match the output schema', async () => {

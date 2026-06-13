@@ -31,6 +31,44 @@ export function stripMarkdownFences(chunk: string): string {
     .join('\n');
 }
 
+/** Statements that begin with one of these never parse as the start of a prose
+ *  sentence — they are real TS, so they are never treated as droppable prose. */
+const TS_KEYWORD_START =
+  /^(const|let|var|await|async|return|if|else|for|while|do|switch|case|break|continue|function|class|import|export|default|throw|new|typeof|delete|void|yield|try|catch|finally|this|super|null|true|false|undefined|debugger)\b/;
+
+/** Lowercase English function words. A bare one of these as a standalone token is a
+ *  strong signal the "statement" is natural-language prose, not code. */
+const ENGLISH_FUNCTION_WORDS = new Set([
+  'the', 'on', 'a', 'an', 'to', 'from', 'with', 'and', 'or', 'but', 'here', 'this',
+  'that', 'these', 'those', 'we', 'now', 'then', 'of', 'for', 'in', 'as', 'it', 'its',
+  'your', 'you', 'based', 'will', 'because', 'since', 'so', 'about', 'into', 'after',
+]);
+
+/** Detect when a model "statement" is actually a natural-language sentence (e.g. the
+ *  model narrated "Based on the query, I will search…" instead of emitting code). Such
+ *  text never parses as TS, so — like a stray fence tag — dropping it is safe and avoids
+ *  burning a retry on a guaranteed typecheck error. Conservative by design: requires a
+ *  sentence shape AND an English function word, and bails on anything with code syntax.
+ *  Exported for direct testing. */
+export function looksLikeProse(stmt: string): boolean {
+  const s = stmt.trim();
+  if (!s) return false;
+  // Any code punctuation → treat as code, keep it.
+  if (/[=(){}\[\];`<>]/.test(s)) return false;
+  if (/=>|\.\w|\bawait\b/.test(s)) return false;
+  // Real statement keywords are never prose.
+  if (TS_KEYWORD_START.test(s)) return false;
+  const words = s.split(/\s+/);
+  if (words.length < 3) return false; // single identifiers are valid probes (e.g. `inspect`)
+  if (!/^[A-Za-z]/.test(s)) return false;
+  // Every token must be word-like (letters/digits/underscore + sentence punctuation) — prose
+  // can reference identifiers like `search_broad`. The code-punctuation guard above plus the
+  // required English function word below keep this from matching real statements.
+  const allWordLike = words.every((w) => /^[A-Za-z][\w,'".:!?-]*$/.test(w));
+  if (!allWordLike) return false;
+  return words.some((w) => ENGLISH_FUNCTION_WORDS.has(w.toLowerCase().replace(/[,'".:!?_-]+$/, '')));
+}
+
 export interface TurnLoopDeps {
   vm: VM;
   history: MessageHistory;
@@ -135,6 +173,14 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         const statements = detector.feed(stripMarkdownFences(chunk));
 
         for (const stmt of statements) {
+          // Drop narrated prose the model emitted instead of code (e.g. "Based on the
+          // query, I will…"). It never parses as TS, so skipping it avoids burning a
+          // retry on a guaranteed typecheck error. Same rationale as stray fence tags.
+          if (looksLikeProse(stmt)) {
+            renderHost.log(`[stmt] (dropped prose) ${stmt}`);
+            tracer.write({ ts: Date.now(), type: 'statement', context: ctx, ...(nodeId ? { nodeId } : {}), code: `/* dropped non-code prose: ${stmt.slice(0, 80)} */` });
+            continue;
+          }
           hadStatements = true;
           renderHost.log(`[stmt] ${stmt}`);
           tracer.write({ ts: Date.now(), type: 'statement', context: ctx, ...(nodeId ? { nodeId } : {}), code: stmt });
@@ -203,7 +249,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     // Flush remaining buffer
     if (!aborted) {
       const trailing = stripMarkdownFences(detector.flush());
-      if (trailing.trim()) {
+      if (trailing.trim() && !looksLikeProse(trailing.trim())) {
         const stmt = trailing.trim();
         hadStatements = true;
 

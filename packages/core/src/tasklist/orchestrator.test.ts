@@ -45,6 +45,7 @@ function engineFor(
   dir: string,
   answers: Array<{ token: string; code: string }>,
   seen: string[],
+  budgetLimits?: Record<string, number>,
 ): ForkEngine {
   const streamFn = createMockStreamFn((o: StreamOpts) => {
     const user = o.messages.map((m) => m.content).join('\n');
@@ -54,7 +55,9 @@ function engineFor(
         return a.code;
       }
     }
-    return ''; // a task with no scripted answer never resolves → its fork rejects
+    // A task with no scripted answer never resolves. The fork salvages a schema-valid
+    // placeholder (graceful degradation) UNLESS a hard budget cap forces a real failure.
+    return budgetLimits ? `await sleep("1ms");` : '';
   });
   return new ForkEngine({
     maxConcurrentForks: 4,
@@ -63,6 +66,7 @@ function engineFor(
     parentAgentSlug: 'main',
     renderHost: silentHost,
     streamFn,
+    ...(budgetLimits ? { budgetLimits } : {}),
   });
 }
 
@@ -175,12 +179,26 @@ describe('runTasklist orchestrator', () => {
     expect(ends.find((e) => e.nodeId === tasklistNode!.nodeId)!.status).toBe('done');
   });
 
-  it('throws when a required (non-optional) task fails', async () => {
+  it('salvages a never-resolving required task so the tasklist still completes', async () => {
+    // Robustness contract: a required task whose fork never calls resolve() is salvaged
+    // (schema-valid placeholder) rather than aborting the whole tasklist. This is the
+    // graceful-degradation path — a partial/empty result beats total failure.
     const dir = await makeTasklistSpace({
       '01-boom.md': `---\nid: boom\ngoal: true\noutput:\n  v: number\n---\n\nBOOM_T: this required task never resolves.`,
     });
     const space = await loadSpace(dir);
-    const engine = engineFor(dir, [], []); // no answer → boom's fork rejects
+    const engine = engineFor(dir, [], []); // no answer → boom's fork salvages
+    const result = await runTasklist({ name: 'flow', space, forkEngine: engine });
+    expect(result).toMatchObject({ v: 0 }); // salvaged number placeholder
+  });
+
+  it('throws when a required task hits a hard budget cap (genuine failure)', async () => {
+    // A hard limit (budget) is NOT salvaged — it propagates so a runaway task fails loudly.
+    const dir = await makeTasklistSpace({
+      '01-boom.md': `---\nid: boom\ngoal: true\noutput:\n  v: number\n---\n\nBOOM_T: this required task loops forever.`,
+    });
+    const space = await loadSpace(dir);
+    const engine = engineFor(dir, [], [], { maxEpisodes: 3 }); // loops on sleep → budget cap fires
     await expect(runTasklist({ name: 'flow', space, forkEngine: engine })).rejects.toThrow(
       /Required task "boom" failed/,
     );

@@ -1,5 +1,35 @@
 import { describe, it, expect } from 'vitest';
-import { stripMarkdownFences } from './turn-loop.js';
+import { stripMarkdownFences, looksLikeProse } from './turn-loop.js';
+
+describe('looksLikeProse', () => {
+  it('flags narrated sentences the model emits instead of code', () => {
+    expect(looksLikeProse('Based on the query from search_broad, I will search')).toBe(true);
+    expect(looksLikeProse('Now we synthesize the findings into a report')).toBe(true);
+    expect(looksLikeProse('Here is the plan for the next step')).toBe(true);
+    expect(looksLikeProse('This function merges the overlapping intervals')).toBe(true);
+  });
+
+  it('does NOT flag real TypeScript statements', () => {
+    expect(looksLikeProse('const x = 1;')).toBe(false);
+    expect(looksLikeProse('await tavilySearch(query, "advanced", 10)')).toBe(false);
+    expect(looksLikeProse('currentTask.resolve({ summary: "x" })')).toBe(false);
+    expect(looksLikeProse('display(report)')).toBe(false);
+    expect(looksLikeProse('return results.map((r) => r.title)')).toBe(false);
+    expect(looksLikeProse('for (const r of results) { }')).toBe(false);
+    expect(looksLikeProse('const based = onQuery;')).toBe(false); // has '=' → code
+  });
+
+  it('keeps single identifiers (valid inspect probes) and short fragments', () => {
+    expect(looksLikeProse('results')).toBe(false);
+    expect(looksLikeProse('inspect')).toBe(false);
+    expect(looksLikeProse('x')).toBe(false);
+  });
+
+  it('does not flag word sequences without an English function word (avoids false drops)', () => {
+    // No recognizable English connective → keep it (it will typecheck-error as before, no worse).
+    expect(looksLikeProse('foo bar baz')).toBe(false);
+  });
+});
 
 describe('stripMarkdownFences', () => {
   const stripFences = stripMarkdownFences;

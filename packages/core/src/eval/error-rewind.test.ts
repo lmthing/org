@@ -1,5 +1,38 @@
 import { describe, it, expect } from 'vitest';
-import { buildErrorBlock } from './error-rewind.js';
+import { buildErrorBlock, sandboxApiHint } from './error-rewind.js';
+
+describe('sandboxApiHint', () => {
+  it('redirects subprocess attempts to execShell', () => {
+    expect(sandboxApiHint("Cannot find module 'child_process'")).toContain('execShell');
+    expect(sandboxApiHint("Cannot find module 'node:child_process'")).toContain('execShell');
+    expect(sandboxApiHint("Cannot find name 'Bun'")).toContain('execShell');
+    expect(sandboxApiHint("Cannot find name 'Deno'")).toContain('execShell');
+    expect(sandboxApiHint('execSync is not defined')).toContain('execShell');
+  });
+
+  it('redirects fs attempts to the file primitives', () => {
+    expect(sandboxApiHint("Cannot find module 'fs'")).toMatch(/readFile|writeFileRaw/);
+    expect(sandboxApiHint('readFileSync is not a function')).toMatch(/readFile|writeFileRaw/);
+  });
+
+  it('redirects TextDecoder/Buffer use', () => {
+    expect(sandboxApiHint("Cannot find name 'TextDecoder'")).toMatch(/execShell|fetch/);
+  });
+
+  it('explains the process shim for process.cwd', () => {
+    expect(sandboxApiHint("Property 'cwd' does not exist")).toContain('process.env');
+  });
+
+  it('returns empty string for unrelated errors', () => {
+    expect(sandboxApiHint('Cannot find name foo')).toBe('');
+    expect(sandboxApiHint("',' expected.")).toBe('');
+  });
+
+  it('is wired into buildErrorBlock', () => {
+    const block = buildErrorBlock("const cp = await import('child_process');", "Cannot find module 'child_process'", 1, 3);
+    expect(block).toContain('execShell');
+  });
+});
 
 describe('buildErrorBlock', () => {
   it('includes the attempt count, failing statement, and message', () => {
