@@ -4,6 +4,7 @@ import { getAgentFunctions } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
 import ts from 'typescript';
 import { extractFunctionSignature } from '../typecheck/overlay.js';
+import { catalogSummary } from '../ui/catalog.js';
 
 /** Extract optional prop names from a component's Props interface for display in system prompt */
 function extractComponentProps(src: string): string {
@@ -100,8 +101,8 @@ GROUND TRUTH — never re-type a value you only saw in the VARIABLES block:
 const GLOBALS_SUMMARY = `
 # Available Globals
 
-- \`ask(descriptor)\` — render an interactive form and await user input (yields)
-- \`display(descriptor)\` — render content to the surface (void, no yield). Accepts a string or JSX component: \`display("text")\` or \`display(<Component />)\`
+- \`ask(descriptor)\` — render an interactive form and await user input (yields). Compose built-in UI components — see # UI Components.
+- \`display(descriptor)\` — render content to the surface (void, no yield). Accepts a string or JSX: \`display("text")\` or \`display(<Stack>…</Stack>)\`. Compose built-in UI components — see # UI Components.
 - \`inspect(...values)\` — inspect variables with optional queries (yields)
 - \`loadKnowledge(...path)\` — load a knowledge file by path segments (yields)
 - \`sleep(duration)\` — pause execution for a duration like "1s", "500ms" (yields)
@@ -147,6 +148,9 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
 
   // 1. Globals summary
   sections.push(GLOBALS_SUMMARY);
+
+  // 1a. UI component catalog — tell the model what display/form components exist
+  sections.push(catalogSummary());
 
   // 1b. Built-in tools from system spaces (concise — signatures + one-line docs)
   if (opts.systemFunctions && Object.keys(opts.systemFunctions).length > 0) {

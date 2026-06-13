@@ -217,8 +217,18 @@ export function parseScore(text: string): { score: number; label: string } {
 
 ## Capability 3 — Components
 
-View components render information; form components collect user input. Neither needs
-`node_modules` — they transpile from raw source at render.
+**Prefer the built-in design system before scaffolding any component.** A cross-platform
+catalog (~30 display + ~33 form components) is always available as typed JSX globals and
+renders on both terminal and web with no files: display with
+`display(<Stack><Heading>…</Heading><Table columns={…} rows={…}/></Stack>)`, collect input
+with `await ask(<Form><TextField name="x"/><Select name="env" options={["dev","prod"]}/></Form>)`
+(a `<Form>` resolves to an object keyed by field `name`; a bare control resolves to the single
+value). Only emit a custom component when the catalog can't express the UI.
+
+When you do scaffold one: view components render information; form components collect user
+input. Neither needs `node_modules` — they transpile from raw source at render. Custom
+components may use the catalog primitives or Ink imports (`import { Box, Text } from 'ink'`),
+which the web bundler maps to the themed compat layer.
 
 **View component (components/view/ScoreCard.tsx):**
 ```typescript

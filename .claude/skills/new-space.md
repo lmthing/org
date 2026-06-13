@@ -95,6 +95,23 @@ The overlay DTS generator (`overlay.ts`) automatically makes function-typed prop
 
 The `ink.tsx` sibling uses Ink + `ink-text-input` instead of React DOM.
 
+### Prefer the design system before authoring components
+
+A cross-platform **design-system catalog** (`packages/core/src/ui/catalog.ts`) ships ~30 display + ~33 form components that render on **both** terminal and web with **no per-space files**. Reach for these first:
+
+- **Display** — `display(<Stack><Heading>…</Heading><Table columns={…} rows={…}/><Callout variant="success">…</Callout></Stack>)`. Both renderers (`ink-renderer.tsx`, `conversation.tsx`) interpret the catalog; type names are case-insensitive.
+- **Forms** — `const v = await ask(<Form><TextField name="title"/><Select name="env" options={["dev","prod"]}/></Form>)`. A `<Form>` resolves to an object keyed by field `name`; a bare control (`ask(<Select .../>)`) resolves to the single value. Terminal renders an interactive Ink form (`ink-form.tsx`, sequential field stepping); web renders themed controls (`CatalogForm.tsx`). Flattening/coercion is shared via `flattenForm`/`coerceValue` (`packages/core/src/ui/form.ts`).
+
+Only write `components/form/<Name>` when you need custom UI beyond the catalog.
+
+### Single-source custom components (Ink-compat)
+
+When you do author a custom component, you can write **one** file against Ink primitives and have it run on web too: `import { Box, Text, TextInput } from 'ink'` / `'ink-text-input'`. The web bundler (`serve.ts`) aliases those imports to the web compat layer (`@repl/ui/compat`, in `packages/ui/src/compat/`), which maps Ink props to themed CSS. (The split `web.tsx` + `ink.tsx` form remains supported.)
+
+### Theming (web)
+
+Web output is themeable. Components consume `--lm-*` CSS variables (palette + `--radius-lm-*`); the DevTools header toggles light/dark (`packages/ui/src/theme/theme.ts`). A space may ship a `theme.json` (`{ "accent": "#ff8800", "bg": "#101418", … }`) at its root — `serve.ts` injects it as `:root` var overrides.
+
 ## Tasklist Files (`tasklists/<name>/<N>-<id>.md`)
 
 ```markdown
