@@ -551,6 +551,35 @@ describe('harness — delegate()', () => {
     expect(childPrompt).toContain('Query: go');
     expect(delReqs[0]!.system).toContain('worker'); // worker agent instructions, distinct from the parent session system
   });
+
+  it('surfaces a delegate-to-unknown-space error to the model so it self-corrects', async () => {
+    // Regression: delegating to a hallucinated space key used to bind `undefined`
+    // silently. Now the actionable error (listing real keys) is injected as a turn
+    // error, the model retries with the right key, and the run succeeds.
+    const workerDir = await makeWorkerSpace();
+    let sessionStep = 0;
+    const m = mockMatch(
+      [{ when: /Run action: compute/, respond: () => `currentTask.resolve({ result: 7 });` }],
+      (o) => {
+        sessionStep++;
+        // First attempt: wrong space key (a hallucinated name).
+        if (sessionStep === 1)
+          return `const d = await delegate("totally-wrong-key", "worker", "compute", { query: "go" }) as { result: number };`;
+        // The retry carries an ERROR block — confirm it names the real key, then use it.
+        if (sessionStep === 2) {
+          const lastErr = o.messages[o.messages.length - 1]?.content ?? '';
+          if (!lastErr.includes('Cannot resolve delegate target')) return `display("NO_ERROR_SURFACED");`;
+          return `const d = await delegate(${JSON.stringify(workerDir)}, "worker", "compute", { query: "go" }) as { result: number };`;
+        }
+        if (sessionStep === 3) return `display("result=" + (d as any).result);`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).not.toContain('NO_ERROR_SURFACED');
+    expect(r.displays).toContain('result=7');
+  });
 });
 
 describe('harness — registerSpace()', () => {

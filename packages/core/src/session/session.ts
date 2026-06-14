@@ -204,6 +204,36 @@ export class Session {
     this.budget = new Budget(this.opts.budget ?? {});
     this.turnContext = ''; // fresh program — start() resets cross-turn typecheck scope
     const runScope = this.mintRunScope();
+
+    // Structural routing for less-capable models: if the agent declares a
+    // `defaultAction` with a tasklist, run it via the reliable delegate path
+    // (which auto-captures the tasklist result) instead of the model-driven turn
+    // loop. The weak model only handles small, salvage-backed sub-tasks inside the
+    // tasklist DAG; the multi-step orchestration is deterministic and can't be
+    // truncated. If the action builds a NEW space (returns {spaceKey,agentSlug,…}),
+    // chain a second delegate to it so the final answer — not just coordinates — shows.
+    const defAction = agent.defaultAction
+      ? agent.actions.find((a) => a.id === agent.defaultAction && a.tasklist)
+      : undefined;
+    if (defAction) {
+      this.currentScope = runScope;
+      const ctx = this.buildYieldContext(this.space);
+      try {
+        const built = await ctx.runDelegate(this.opts.spaceDir, resolvedSlug!, defAction.id, { query: initialMessage, context: {} });
+        let finalResult: unknown = built;
+        const b = built as { spaceKey?: unknown; agentSlug?: unknown; actionId?: unknown; query?: unknown } | null;
+        if (b && typeof b === 'object' && typeof b.spaceKey === 'string' && typeof b.agentSlug === 'string') {
+          finalResult = await ctx.runDelegate(b.spaceKey, b.agentSlug, typeof b.actionId === 'string' ? b.actionId : 'run', { query: typeof b.query === 'string' ? b.query : initialMessage, context: {} });
+        }
+        this.opts.renderHost.display(typeof finalResult === 'string' ? finalResult : JSON.stringify(finalResult, null, 2));
+        this.tracer.end(runScope, 'done');
+      } catch (err) {
+        this.tracer.end(runScope, 'error', { error: err instanceof Error ? err.message : String(err) });
+        throw err;
+      }
+      return;
+    }
+
     try {
       await runTurnLoop({
         vm: this.vm,

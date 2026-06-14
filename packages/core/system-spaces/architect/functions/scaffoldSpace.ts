@@ -431,12 +431,25 @@ export function scaffoldSpace(dir: string, spec: ScaffoldSpec): { ok: boolean; d
         ].join('\n')).join('\n')
       : 'actions: []';
 
+    // Structural robustness for less-capable models: if the agent has exactly one
+    // action (or the spec names one explicitly), declare it as defaultAction so a
+    // freeform session runs that action's tasklist deterministically instead of
+    // relying on the model to write orchestration code. Only set it for actions that
+    // actually have a tasklist.
+    const explicitDefault = typeof spec.defaultAction === 'string' ? spec.defaultAction : undefined;
+    const soleAction = actions.length === 1 ? actions[0]!.id : undefined;
+    const defaultActionId = (explicitDefault && actions.some((a: ActionSpec) => a.id === explicitDefault))
+      ? explicitDefault
+      : soleAction;
+    const defaultActionBlock = defaultActionId ? `defaultAction: ${defaultActionId}` : '';
+
     const frontmatter = [
       '---',
       `title: ${spec.agentTitle}`,
       knowledgeBlock,
       fnBlock,
       componentsBlock,
+      ...(defaultActionBlock ? [defaultActionBlock] : []),
       actionBlock,
       depsBlock,
       '---',

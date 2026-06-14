@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -557,5 +557,84 @@ export default function LeafSymptomChecker() {
 
     const validateResult = evalDump(vm, `validateSpace(${JSON.stringify(spaceDir)})`);
     expect((validateResult as any).ok).toBe(true);
+  });
+});
+
+describe('architect parseSkill + skillToSpec (Claude Code skill → space)', () => {
+  let vm: VM;
+  let baseDir: string;
+
+  beforeEach(async () => {
+    baseDir = mkdtempSync(join(tmpdir(), 'architect-skill-'));
+    vm = await createVM();
+    injectHostTools(vm, { renderHost: host, spaceDir: baseDir });
+    injectFn(vm, 'parseSkill');
+    injectFn(vm, 'skillToSpec');
+    injectFn(vm, 'scaffoldSpace');
+    injectFn(vm, 'validateSpace');
+  });
+  afterEach(() => {
+    vm.dispose();
+    rmSync(baseDir, { recursive: true, force: true });
+  });
+
+  function writeSkill(rel: string, frontmatter: string, body: string): string {
+    const p = join(baseDir, rel);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, `---\n${frontmatter}\n---\n\n${body}\n`, 'utf8');
+    return p;
+  }
+
+  it('parses a SKILL.md (frontmatter name/description + instruction body)', () => {
+    const p = writeSkill(
+      'skills/pdf-filler/SKILL.md',
+      'name: pdf-filler\ndescription: Fill PDF forms from a data map.',
+      '# PDF Filler\n\nStep 1: read the PDF. Step 2: map fields. Step 3: write output.',
+    );
+    const parsed = evalDump(vm, `parseSkill(${JSON.stringify(p)})`) as any;
+    expect(parsed.ok).toBe(true);
+    expect(parsed.kind).toBe('skill');
+    expect(parsed.name).toBe('pdf-filler');
+    expect(parsed.description).toContain('Fill PDF forms');
+    expect(parsed.instructions).toContain('Step 1: read the PDF');
+    expect(parsed.skills.length).toBe(1);
+  });
+
+  it('also accepts the directory containing a SKILL.md', () => {
+    writeSkill('skills/greeter/SKILL.md', 'name: greeter\ndescription: Greets users warmly.', 'Say hello kindly.');
+    const parsed = evalDump(vm, `parseSkill(${JSON.stringify(join(baseDir, 'skills', 'greeter'))})`) as any;
+    expect(parsed.ok).toBe(true);
+    expect(parsed.name).toBe('greeter');
+  });
+
+  it('skillToSpec produces a FLAT spec that scaffolds + validates into a real space', () => {
+    const p = writeSkill(
+      'skills/summarizer/SKILL.md',
+      'name: Doc Summarizer\ndescription: Summarize long documents into bullet points.',
+      '# Summarizer\n\nRead the document, extract the 5 most important points, output as bullets.',
+    );
+    // parse → spec → scaffold → validate, all through the deterministic functions.
+    const dir = join(baseDir, 'imported');
+    const ok = evalDump(
+      vm,
+      `(() => { const p = parseSkill(${JSON.stringify(p)}); const spec = skillToSpec(p); ` +
+        `const s = scaffoldSpace(${JSON.stringify(dir)}, spec); return s.ok && validateSpace(${JSON.stringify(dir)}).ok; })()`,
+    );
+    expect(ok).toBe(true);
+    // The full skill instructions landed in a loadable knowledge option, not the systemPrompt.
+    const optionFile = readFileSync(join(dir, 'knowledge', 'skill', 'playbook', 'doc_summarizer.md'), 'utf8');
+    expect(optionFile).toContain('5 most important points');
+    // The agent instruct exists with a brief systemPrompt + a run action.
+    const instruct = readFileSync(join(dir, 'agents', 'doc_summarizer', 'instruct.md'), 'utf8');
+    expect(instruct).toContain('Doc Summarizer');
+    // A single-action agent gets defaultAction so a freeform session runs the tasklist
+    // deterministically (weak-model robustness).
+    expect(instruct).toContain('defaultAction: run');
+  });
+
+  it('returns a graceful error for a path that is neither skill nor plugin', () => {
+    const parsed = evalDump(vm, `parseSkill(${JSON.stringify(join(baseDir, 'nope'))})`) as any;
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toBeTruthy();
   });
 });

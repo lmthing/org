@@ -14,6 +14,7 @@ import { validateOutput } from '../tasklist/schema.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { Budget, BudgetExceededError, type BudgetLimits } from '../eval/budget.js';
+import { CATALOG_NAMES } from '../ui/catalog.js';
 
 /**
  * Build a schema-valid placeholder object for a fork that never resolved. Each field
@@ -255,6 +256,30 @@ export class ForkEngine {
         if (task.role !== 'explore' && task.role !== 'plan') {
           const { createRegisterSpaceGlobal } = await import('../globals/register-space.js');
           injectGlobal(vm.ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
+        }
+
+        // Inject the JSX runtime (React shim + design-system catalog stubs) so a fork
+        // task can `display(<Stack>…</Stack>)` exactly like the session — transpileStatement
+        // turns JSX into React.createElement, which would otherwise throw "React is not
+        // defined" inside the fork VM (the bug that made research forks fail ×3).
+        const reactShim = {
+          createElement: (type: unknown, props: unknown, ...children: unknown[]) => {
+            const typeName = typeof type === 'string'
+              ? type
+              : (type && typeof type === 'object' && 'displayName' in type)
+                ? (type as { displayName: string }).displayName
+                : String(type);
+            return { type: typeName, props: (props as Record<string, unknown>) ?? {}, children: children.flat(Infinity).filter((c) => c !== null && c !== undefined) };
+          },
+          Fragment: 'fragment',
+        };
+        const reactHandle = marshalToQuickJS(vm.ctx, reactShim);
+        vm.ctx.setProp(vm.ctx.global, 'React', reactHandle);
+        reactHandle.dispose();
+        for (const name of CATALOG_NAMES) {
+          const stub = marshalToQuickJS(vm.ctx, { displayName: name });
+          vm.ctx.setProp(vm.ctx.global, name, stub);
+          stub.dispose();
         }
 
         // Build user message for the child

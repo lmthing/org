@@ -61,6 +61,31 @@ describe('system spaces', () => {
     expect(merged.functions['readFile']).toContain('custom');
   });
 
+  it('an EMPTY placeholder user agent does NOT shadow a real system agent of the same slug', async () => {
+    // Regression: an `agents/architect/` dir with no instruct.md loaded as an empty
+    // AgentDef and overrode the real system architect, stripping its instructions,
+    // actions, and defaultAction — so the architect ran with a generic, empty prompt.
+    const systemSpaces = await loadSystemSpaces([FS_DIR]); // fs has no agents
+    const sysAgent = { slug: 'architect', title: 'Architect', instructBody: 'Real architect prompt.', actions: [{ id: 'synthesize_and_run', label: 'S', description: 'd', tasklist: 'synthesize_and_run' }], dependencies: [], config: { knowledge: [], functions: [], components: [] }, defaultAction: 'synthesize_and_run' };
+    const sysWithAgent = { ...systemSpaces[0]!, agents: { architect: sysAgent } };
+    const emptyPlaceholder = { slug: 'architect', title: 'architect', instructBody: '', actions: [], dependencies: [], config: { knowledge: [], functions: [], components: [] } };
+    const userSpace = { ...(await loadSpace(join(FIXTURES, 'cooking'))), agents: { architect: emptyPlaceholder } };
+
+    const merged = mergeSystemInto(userSpace as never, [sysWithAgent] as never);
+    expect(merged.agents['architect']!.instructBody).toBe('Real architect prompt.');
+    expect(merged.agents['architect']!.defaultAction).toBe('synthesize_and_run');
+    expect(merged.agents['architect']!.actions.length).toBe(1);
+  });
+
+  it('a non-empty user agent still wins over a system agent of the same slug', async () => {
+    const sysAgent = { slug: 'architect', title: 'Architect', instructBody: 'system', actions: [], dependencies: [], config: { knowledge: [], functions: [], components: [] } };
+    const sysWithAgent = { ...(await loadSystemSpaces([FS_DIR]))[0]!, agents: { architect: sysAgent } };
+    const userAgent = { slug: 'architect', title: 'Mine', instructBody: 'custom user architect', actions: [], dependencies: [], config: { knowledge: [], functions: [], components: [] } };
+    const userSpace = { ...(await loadSpace(join(FIXTURES, 'cooking'))), agents: { architect: userAgent } };
+    const merged = mergeSystemInto(userSpace as never, [sysWithAgent] as never);
+    expect(merged.agents['architect']!.instructBody).toBe('custom user architect');
+  });
+
   it('defaultSystemSpaceDirs points under packages/core/system-spaces', () => {
     const dirs = defaultSystemSpaceDirs();
     expect(dirs.some((d) => d.endsWith('system-spaces/fs'))).toBe(true);

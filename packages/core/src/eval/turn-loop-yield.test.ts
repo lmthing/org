@@ -253,11 +253,11 @@ describe('turn loop — continuation nudge (stalled mid-program after a non-yiel
     vm.dispose();
   });
 
-  it('does NOT nudge when the last statement is not an await-binding (no spurious extra turn)', async () => {
+  it('does NOT nudge when the last statement is a literal binding (no call → no spurious extra turn)', async () => {
     const vm = await createVM();
     const history = new MessageHistory();
     history.append({ role: 'user', content: 'go', blockType: 'normal' });
-    // Plain binding, no await → not the stall signature → loop ends immediately.
+    // Plain literal binding, no call → not the stranded-mid-program signature → loop ends.
     const s = turnsStream(['const x = 5;', '']);
 
     const result = await runTurnLoop({
@@ -268,6 +268,29 @@ describe('turn loop — continuation nudge (stalled mid-program after a non-yiel
 
     expect(result).toBe('done');
     expect(s.calls()).toBe(1); // no nudge → streamFn called exactly once
+    vm.dispose();
+  });
+
+  it('DOES nudge when the last statement binds from a SYNC non-yielding call (e.g. scaffoldSpace)', async () => {
+    const vm = await createVM();
+    // scaffoldSpace(): a SYNC non-yielding host fn (returns a value, pushes no yield).
+    injectGlobal(vm.ctx, 'scaffoldSpace', (() => ({ ok: true })) as (...a: unknown[]) => unknown);
+    injectGlobal(vm.ctx, 'finish', (() => true) as (...a: unknown[]) => unknown);
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+    // Sync space-function call bound to a var, then the model stops — the runtime never
+    // surfaces the result, so the model is stranded mid-program. Must be nudged to continue.
+    const s = turnsStream(['const r = scaffoldSpace("d", {});', 'const done = finish();', '']);
+
+    const result = await runTurnLoop({
+      vm, history, systemBlock: 'test',
+      ambientDts: 'declare function scaffoldSpace(d: string, s: any): { ok: boolean };\ndeclare function finish(): boolean;',
+      renderHost: silentHost, streamFn: s.fn,
+      processYield: async () => undefined, maxRetries: 2,
+    });
+
+    expect(result).toBe('done');
+    expect(s.calls()).toBeGreaterThanOrEqual(2); // stall after scaffoldSpace → NUDGE → continued
     vm.dispose();
   });
 

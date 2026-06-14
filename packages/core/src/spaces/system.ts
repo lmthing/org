@@ -88,6 +88,7 @@ export function mergeSystemInto(userSpace: Space, systemSpaces: Space[]): Space 
   const view: Record<string, string> = {};
   const form: Record<string, { web: string; ink: string }> = {};
   const agents: Record<string, AgentDef> = {};
+  const tasklists: Record<string, import('./load.js').TasklistDir> = {};
   const knowledgeDomains = { ...userSpace.knowledge.domains };
 
   // System first (lower priority)…
@@ -97,6 +98,7 @@ export function mergeSystemInto(userSpace: Space, systemSpaces: Space[]): Space 
     Object.assign(view, s.components.view);
     Object.assign(form, s.components.form);
     Object.assign(agents, s.agents);
+    Object.assign(tasklists, s.tasklists);
     for (const [slug, domain] of Object.entries(s.knowledge.domains)) {
       if (!(slug in knowledgeDomains)) knowledgeDomains[slug] = domain;
     }
@@ -107,13 +109,30 @@ export function mergeSystemInto(userSpace: Space, systemSpaces: Space[]): Space 
   Object.assign(functionsBundled, userSpace.functionsBundled);
   Object.assign(view, userSpace.components.view);
   Object.assign(form, userSpace.components.form);
-  Object.assign(agents, userSpace.agents);
+  // Agents: a user agent normally wins on a slug collision — BUT an EMPTY placeholder
+  // agent (an `agents/<slug>/` dir with no instruct.md → no instructBody and no actions)
+  // must NOT shadow a real system agent of the same slug. That silent shadowing is what
+  // stripped the system `architect` (its instructions, actions, and defaultAction) when a
+  // space happened to contain an empty `agents/architect/` dir.
+  for (const [slug, agent] of Object.entries(userSpace.agents)) {
+    const isEmptyPlaceholder = !agent.instructBody?.trim() && agent.actions.length === 0;
+    if (isEmptyPlaceholder && agents[slug]) continue; // keep the system agent
+    agents[slug] = agent;
+  }
+  // Tasklists: user wins, except an EMPTY user tasklist dir (no .md files) must not
+  // shadow a system tasklist of the same slug — same placeholder-shadowing trap as agents
+  // (an empty `tasklists/synthesize_and_run/` would otherwise hide the architect's real DAG).
+  for (const [slug, tl] of Object.entries(userSpace.tasklists)) {
+    if (tl.files.length === 0 && tasklists[slug]) continue; // keep the system tasklist
+    tasklists[slug] = tl;
+  }
 
   return {
     ...userSpace,
     functions,
     functionsBundled,
     agents,
+    tasklists,
     components: { view, form },
     knowledge: { domains: knowledgeDomains },
   };

@@ -8,8 +8,10 @@ export class DelegateRegistry {
     const [spaceName, agentSlug] = this.parseTarget(target);
 
     // Look through spaces by dir or name
+    let matchedSpace: Space | undefined;
     for (const space of this.spaces.values()) {
       if (this.matchesSpace(space, spaceName)) {
+        matchedSpace = space;
         const agent = space.agents[agentSlug];
         if (agent) {
           return { space, agent };
@@ -17,7 +19,27 @@ export class DelegateRegistry {
       }
     }
 
-    throw new Error(`Cannot resolve delegate target "${target}": agent not found`);
+    // Space matched but the agent slug was wrong → name the real agents in THAT space.
+    if (matchedSpace) {
+      const slugs = Object.keys(matchedSpace.agents);
+      throw new Error(`Cannot resolve delegate target "${target}": space "${spaceName}" has no agent "${agentSlug}" (available agents: ${slugs.join(', ') || 'none'})`);
+    }
+    throw new Error(`Cannot resolve delegate target "${target}": ${this.availabilityHint(spaceName)}`);
+  }
+
+  /** Actionable error tail listing the real space keys + agent slugs the model can use,
+   *  so a hallucinated key (e.g. using the agent's TITLE) self-corrects on retry. */
+  private availabilityHint(triedSpace: string): string {
+    const seen = new Set<string>();
+    const entries: string[] = [];
+    for (const space of this.spaces.values()) {
+      const key = space.packageName ?? space.dir;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const agents = Object.keys(space.agents);
+      entries.push(`"${key}" (agents: ${agents.length ? agents.join(', ') : 'none'})`);
+    }
+    return `no space matched "${triedSpace}". Use the EXACT space key — available: ${entries.join('; ') || '(none registered)'}`;
   }
 
   addSpace(key: string, space: Space): void {
@@ -36,28 +58,36 @@ export class DelegateRegistry {
 
   async resolveLazy(target: string): Promise<{ space: Space; agent: AgentDef }> {
     // Try direct resolution first
+    let directError: Error;
     try {
       return this.resolve(target);
-    } catch {
-      // Lazy load: target may be "path/to/space/agentSlug"
-      const parts = target.split('/');
-      if (parts.length < 2) {
-        throw new Error(`Cannot resolve "${target}"`);
-      }
-
-      const agentSlug = parts[parts.length - 1]!;
-      const spaceDir = parts.slice(0, -1).join('/');
-
-      const space = await loadSpace(spaceDir);
-      this.spaces.set(spaceDir, space);
-
-      const agent = space.agents[agentSlug];
-      if (!agent) {
-        throw new Error(`Agent "${agentSlug}" not found in space at "${spaceDir}"`);
-      }
-
-      return { space, agent };
+    } catch (err) {
+      directError = err as Error;
     }
+    // Lazy load: target may be "path/to/space/agentSlug" on disk.
+    const parts = target.split('/');
+    if (parts.length < 2) throw directError;
+
+    const agentSlug = parts[parts.length - 1]!;
+    const spaceDir = parts.slice(0, -1).join('/');
+
+    let space: Space;
+    try {
+      space = await loadSpace(spaceDir);
+    } catch {
+      // Not a real path either — surface the actionable registry error, not a cryptic
+      // filesystem error, so the model learns the real keys and retries correctly.
+      throw directError;
+    }
+    this.spaces.set(spaceDir, space);
+
+    const agent = space.agents[agentSlug];
+    if (!agent) {
+      const slugs = Object.keys(space.agents);
+      throw new Error(`Agent "${agentSlug}" not found in space at "${spaceDir}" (available agents: ${slugs.join(', ') || 'none'})`);
+    }
+
+    return { space, agent };
   }
 
   private parseTarget(target: string): [string, string] {

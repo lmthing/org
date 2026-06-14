@@ -83,6 +83,14 @@ describe('ForkEngine', () => {
     expect(result.x).toMatch(/unavailable/i);
   });
 
+  it('injects the JSX runtime so a fork can display(<JSX>) without "React is not defined"', async () => {
+    // Regression: research forks crashed ×3 because React/catalog stubs were not
+    // injected into the fork VM, so transpiled `display(<Stack>…)` threw.
+    const engine = makeEngine('display(<Stack><Heading>Hi</Heading></Stack>);\ncurrentTask.resolve({ ok: true });\n');
+    const result = await engine.fork<{ ok: boolean }>({ instruction: 'render', output: { ok: 'boolean' } });
+    expect(result).toEqual({ ok: true });
+  });
+
   it('rejects when the resolved value does not match the output schema', async () => {
     // Schema wants a number; the fork resolves a string → validateOutput fails and
     // the fork rejects rather than handing back an off-schema value.

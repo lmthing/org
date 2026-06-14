@@ -26,6 +26,10 @@ export interface AgentDef {
   actions: ActionDef[];
   dependencies: string[]; // "space/agent" strings
   config: AgentConfig;
+  /** When set, a freeform session for this agent runs this action's tasklist
+   *  deterministically (host-driven) instead of the model-driven turn loop — a
+   *  structural guarantee for less-capable models that won't follow routing prose. */
+  defaultAction?: string;
 }
 
 export interface ActionDef {
@@ -266,12 +270,14 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
   const actions: ActionDef[] = [];
   const config: AgentConfig = { knowledge: [], functions: [], components: [] };
   const dependencies: string[] = [];
+  let defaultAction: string | undefined;
 
   if (await fileExists(instructPath)) {
     const raw = await readFile(instructPath, 'utf8');
     const { data, body } = parseFrontmatter(raw, instructPath);
     instructBody = body;
     if (typeof data['title'] === 'string') title = data['title'];
+    if (typeof data['defaultAction'] === 'string') defaultAction = data['defaultAction'];
     if (Array.isArray(data['knowledge'])) config.knowledge = data['knowledge'].map(String);
     if (Array.isArray(data['functions'])) config.functions = data['functions'].map(String);
     if (Array.isArray(data['components'])) config.components = data['components'].map(String);
@@ -291,7 +297,7 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
     }
   }
 
-  return { slug, title, instructBody, actions, dependencies, config };
+  return { slug, title, instructBody, actions, dependencies, config, defaultAction };
 }
 
 export interface LoadSpaceOpts {

@@ -158,11 +158,12 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     let turnError: string | null = null;
     let failingStatement: string | null = null;
     let aborted = false;
-    // True when the last statement that evaluated cleanly this turn was a
-    // non-yielding `await`-binding (a space-function result the runtime won't
-    // surface). If the model then stops, that's the "stranded mid-program"
-    // signature CONTINUATION_NUDGE recovers from.
-    let lastStmtAwaitBinding = false;
+    // True when the last statement that evaluated cleanly this turn bound a value
+    // from a NON-yielding call (a space-function result the runtime won't surface) —
+    // whether or not it used `await`. Sync space functions like scaffoldSpace/
+    // validateSpace bind without `await`, and a model that stops right after one is
+    // stranded mid-program (the exact failure CONTINUATION_NUDGE recovers from).
+    let lastStmtNonYieldBinding = false;
     let assistantContent = '';
     const parsedStatements: string[] = [];
 
@@ -234,7 +235,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
 
           parsedStatements.push(stmt);
           appendContext(stmt);
-          lastStmtAwaitBinding = boundNames.length > 0 && /\bawait\b/.test(stmt);
+          lastStmtNonYieldBinding = boundNames.length > 0 && /[A-Za-z_$][\w.$]*\s*\(/.test(stmt);
         }
 
         if (aborted) break;
@@ -278,7 +279,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
             } else {
               parsedStatements.push(stmt);
               appendContext(stmt);
-              lastStmtAwaitBinding = boundNamesFlush.length > 0 && /\bawait\b/.test(stmt);
+              lastStmtNonYieldBinding = boundNamesFlush.length > 0 && /[A-Za-z_$][\w.$]*\s*\(/.test(stmt);
             }
           }
         }
@@ -328,6 +329,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       // The QuickJS module continuation after `await` does NOT re-run in this sync
       // eval model, so the host must bind the values itself (see below).
       const resolvedValues: unknown[] = new Array(yields.length);
+      const yieldErrors: Array<{ kind: string; message: string }> = [];
       await Promise.all(yields.map(async (yieldReq, i) => {
         const yieldId = `${nodeId ?? ctx}_y${++yieldCounter}`;
         tracer.write({ ts: Date.now(), type: 'yield', context: ctx, ...(nodeId ? { nodeId } : {}), kind: yieldReq.kind, args: yieldReq.args, yieldId });
@@ -346,9 +348,25 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
           if (err instanceof BudgetExceededError) throw err;
           yieldReq.deferred.reject(err);
           resolvedValues[i] = undefined;
+          yieldErrors.push({ kind: yieldReq.kind, message: err instanceof Error ? err.message : String(err) });
         }
       }));
       vm.drivePendingJobs();
+
+      // A yield that threw (e.g. delegate() to a hallucinated space key, a function
+      // that errored) used to bind `undefined` silently — the model never learned why
+      // and could not self-correct. Surface it as a normal turn error so the actionable
+      // message (e.g. the list of real space keys) reaches the model and it retries.
+      // Hard caps already short-circuited above; forks/tasklists salvage rather than
+      // throw, so this primarily catches recoverable model mistakes. On the final attempt
+      // we fall through and bind the undefined values so the run can still limp forward.
+      if (yieldErrors.length > 0 && attempt < maxRetries) {
+        turnError = yieldErrors.map((e) => `${e.kind}() failed: ${e.message}`).join('; ');
+        failingStatement = yieldingStatement;
+        renderHost.log(`[yield error] ${turnError}`);
+        history.append({ role: 'user', content: buildErrorBlock(failingStatement, turnError, attempt, maxRetries, accumulatedContext), blockType: 'error' });
+        continue;
+      }
 
       // Map resolved values onto the bound names. Multiple yields ⟹ the statement
       // awaited a combinator (Promise.all), whose result is the array of resolved
@@ -431,9 +449,9 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     // would strand a multi-step program. Re-prompt it to continue, bounded so a
     // genuinely-finished model (which emits no further statements → no_statements
     // → done) and a model that keeps binding without progressing both terminate.
-    if (lastStmtAwaitBinding && continueNudges < maxContinueNudges) {
+    if (lastStmtNonYieldBinding && continueNudges < maxContinueNudges) {
       continueNudges++;
-      renderHost.log(`[turn ${attempt}] ended on a non-yielding await-binding — nudging to continue (${continueNudges}/${maxContinueNudges})`);
+      renderHost.log(`[turn ${attempt}] ended on a non-yielding binding — nudging to continue (${continueNudges}/${maxContinueNudges})`);
       tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'continue' });
       history.append({ role: 'user', content: CONTINUATION_NUDGE, blockType: 'normal' });
       attempt = 0;

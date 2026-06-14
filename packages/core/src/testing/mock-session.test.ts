@@ -608,3 +608,58 @@ describe('mock-driven Session — integrity (§6.3)', () => {
     expect(allRetryText).toContain('score >= 100'); // the unmet condition is named
   });
 });
+
+describe('defaultAction — structural routing for weak models', () => {
+  // Build a space whose agent declares `defaultAction: build` → a freeform session
+  // must run the `build` tasklist deterministically (via the delegate path) instead
+  // of the model-driven turn loop. This is the structural guarantee that a model
+  // which ignores routing prose still completes the multi-step pipeline.
+  async function makeDefaultActionSpace(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'lmthing-defaction-'));
+    tmpDirs.push(dir);
+    const agentFile = join(dir, 'agents', 'builder', 'instruct.md');
+    await mkdir(dirname(agentFile), { recursive: true });
+    await writeFile(
+      agentFile,
+      `---\ntitle: Builder\ndefaultAction: build\nactions:\n  - id: build\n    label: Build\n    description: Build the thing\n    tasklist: build\n---\n\nYou are a builder.\n`,
+      'utf8',
+    );
+    const taskFile = join(dir, 'tasklists', 'build', '01-make.md');
+    await mkdir(dirname(taskFile), { recursive: true });
+    await writeFile(
+      taskFile,
+      `---\nid: make\ngoal: true\noutput:\n  answer: string\n---\n\nMAKE_TASK: produce the answer and resolve.`,
+      'utf8',
+    );
+    return dir;
+  }
+
+  it('runs the action tasklist deterministically and never invokes the freeform session model', async () => {
+    const spaceDir = await makeDefaultActionSpace();
+    const traceFile = join(spaceDir, 'trace.jsonl');
+    const displays: unknown[] = [];
+    const host: RenderHost = { display: (d) => { displays.push(d); }, ask: async () => undefined, log: () => {} };
+
+    const m = mockMatch(
+      [
+        // The build-tasklist task fork resolves the goal output.
+        { when: (o) => o.messages.some((msg) => msg.content.includes('MAKE_TASK') && msg.content.includes('Output schema')), respond: () => `currentTask.resolve({ answer: "BUILT_OK" });` },
+        // The delegate agent turn: run the action's tasklist (auto-captured).
+        { when: (o) => o.messages.some((msg) => msg.content.includes('Run action: build')), respond: () => `const r = await tasklist("build", {});` },
+      ],
+      // Fallback = the freeform SESSION model. If defaultAction routing works, this is NEVER called.
+      () => `display("SESSION_MODEL_RAN");`,
+    );
+
+    const session = new Session(
+      { spaceDir, agentSlug: 'builder', modelAlias: 'mock', renderHost: host, traceFile, systemSpaceDirs: [] },
+      { streamFn: m },
+    );
+    await session.start('build me something');
+    session.dispose();
+
+    const flat = JSON.stringify(displays);
+    expect(flat).toContain('BUILT_OK');          // the deterministic tasklist result was shown
+    expect(flat).not.toContain('SESSION_MODEL_RAN'); // the unreliable freeform model never ran
+  });
+});
