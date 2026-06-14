@@ -30,6 +30,7 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # 
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude "grep for TODO and list the files"  # coding agent (system spaces always loaded)
 node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --no-system-spaces "..."  # disable the always-on toolkit
 node packages/cli/dist/cli/bin.js --space ./packages/core/system-spaces/solver --claude --mock ./fixtures/solver/mock.mjs "implement add"  # keyless run (scripted mock)
+node packages/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect --dump-system-prompt /tmp/prompt.txt  # write the exact system prompt + ambient DTS to a file, then exit (keyless, no model call)
 ```
 
 ### Testing without API keys (`--mock` / `LM_MOCK`)

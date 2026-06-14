@@ -126,8 +126,55 @@ async function loadMockStreamFn(mockPath: string): Promise<(opts: StreamOpts) =>
   return createMockStreamFn(def as MockHandler);
 }
 
+/**
+ * Resolve the system spaces selection (explicit flag, env, disabled, or default)
+ * and the agent slug — shared by the normal run path and --dump-system-prompt.
+ */
+function resolveAgentAndSpaces(args: CliArgs): { agentSlug: string; systemSpaceDirs: string[] | undefined } {
+  const agentSlug = args.agent ?? process.env['LM_AGENT'] ?? 'default';
+  const envSystemSpaces = process.env['LM_SYSTEM_SPACES']?.split(',').map((s) => s.trim()).filter(Boolean);
+  const systemSpaceDirs: string[] | undefined = args.noSystemSpaces
+    ? []
+    : args.systemSpaces ?? envSystemSpaces;
+  return { agentSlug, systemSpaceDirs };
+}
+
+/**
+ * Build the resolved system prompt for the chosen agent and write it to a file.
+ * Keyless: uses a stub streamFn + no-op render host, never calls the model.
+ */
+async function dumpSystemPromptToFile(args: CliArgs): Promise<void> {
+  const { writeFileSync } = await import('node:fs');
+  const { agentSlug, systemSpaceDirs } = resolveAgentAndSpaces(args);
+  const noopHost = { display() {}, ask: async () => undefined, log() {} };
+  const stubStreamFn = async () => { throw new Error('stub streamFn — dump mode does not run the model'); };
+  const session = new Session(
+    { spaceDir: args.space, agentSlug, modelAlias: 'dump', renderHost: noopHost, systemSpaceDirs },
+    { streamFn: stubStreamFn as unknown as (opts: StreamOpts) => Promise<StreamSession> },
+  );
+  const { agentSlug: resolved, systemBlock, ambientDts } = await session.buildSystemPrompt();
+  session.dispose();
+  const out =
+    `# System prompt — space: ${args.space}  agent: ${resolved}\n` +
+    `# This is the exact \`system\` message sent to the model.\n\n` +
+    systemBlock +
+    `\n\n${'='.repeat(80)}\n` +
+    `# Ambient DTS (typecheck context — NOT sent as prose; the model's code is validated against it)\n` +
+    `${'='.repeat(80)}\n\n` +
+    ambientDts +
+    '\n';
+  writeFileSync(resolve(process.cwd(), args.dumpSystemPrompt!), out, 'utf8');
+  process.stdout.write(`System prompt for agent "${resolved}" written to ${args.dumpSystemPrompt}\n`);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  // --dump-system-prompt: write the resolved system prompt and exit (keyless).
+  if (args.dumpSystemPrompt) {
+    await dumpSystemPromptToFile(args);
+    return;
+  }
 
   // Mock mode: skip resolveModel/createStream entirely so no API key is required.
   const mockPath = args.mock ?? process.env['LM_MOCK'];
@@ -166,13 +213,8 @@ async function main(): Promise<void> {
   // Host budget caps from --max-* flags or LM_BUDGET_* env (undefined = unbounded).
   const budget = readBudget(args);
 
-  const agentSlug = args.agent ?? process.env['LM_AGENT'] ?? 'default';
-
-  // System spaces: explicit list, env override, disabled, or default (undefined).
-  const envSystemSpaces = process.env['LM_SYSTEM_SPACES']?.split(',').map((s) => s.trim()).filter(Boolean);
-  const systemSpaceDirs: string[] | undefined = args.noSystemSpaces
-    ? []
-    : args.systemSpaces ?? envSystemSpaces;
+  // Agent slug + system spaces (explicit list, env override, disabled, or default).
+  const { agentSlug, systemSpaceDirs } = resolveAgentAndSpaces(args);
 
   if (args.webPort) {
     // Web mode: load space, start combined HTTP+WS server, open browser

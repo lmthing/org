@@ -258,6 +258,37 @@ export class Session {
     }
   }
 
+  /**
+   * Build the system prompt (the exact `system` message sent to the model) for
+   * the resolved agent WITHOUT creating a VM, hitting the model, or running the
+   * turn loop — so it works keyless. Mirrors the system-block construction in
+   * start(): merges system spaces, resolves the agent, and renders the block.
+   * Also returns the ambient DTS overlay (the typecheck context the model's code
+   * is validated against). Used by the CLI's --dump-system-prompt flag.
+   */
+  async buildSystemPrompt(): Promise<{ agentSlug: string; systemBlock: string; ambientDts: string }> {
+    const space = await this.loadMergedSpace(this.opts.spaceDir);
+    const agentKeys = Object.keys(space.agents);
+    const resolvedSlug = this.opts.agentSlug === 'default' && !space.agents['default']
+      ? agentKeys[0]
+      : this.opts.agentSlug;
+    if (!resolvedSlug) {
+      throw new Error(`No agents found in space at "${this.opts.spaceDir}"`);
+    }
+    const agent = space.agents[resolvedSlug];
+    if (!agent) {
+      throw new Error(`Agent "${this.opts.agentSlug}" not found in space at "${this.opts.spaceDir}"`);
+    }
+    const directDeps = resolveDirectDeps(space, agent.dependencies);
+    const systemFns = systemFunctionSources(this.systemSpaces);
+    const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFns });
+    const { functions: agentFunctions } = this.buildInjectedFunctions(space, agent);
+    const agentComponents = getAgentComponents(space, agent);
+    const overlay = buildOverlay(agentFunctions, agentComponents);
+    const ambientDts = LIBRARY_DTS + '\n' + overlay;
+    return { agentSlug: resolvedSlug, systemBlock, ambientDts };
+  }
+
   async resume(snapshotDir: string, message: string): Promise<void> {
     const snapshot = await loadSnapshot(snapshotDir);
     if (!snapshot) {

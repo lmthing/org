@@ -16,6 +16,9 @@ export interface CliArgs {
   /** Path to a scripted mock provider module (ESM). When set, the CLI skips
    *  resolveModel/createStream entirely so no API key is required. */
   mock?: string;
+  /** Path to write the resolved system prompt to, then exit. Keyless — does not
+   *  run the model. Captures exactly the `system` message the model would see. */
+  dumpSystemPrompt?: string;
 }
 
 /** Parse a CLI numeric flag value; throws a clear error on a non-number. */
@@ -103,6 +106,12 @@ export function parseArgs(argv: string[]): CliArgs {
         result.mock = val;
         break;
       }
+      case '--dump-system-prompt': {
+        const val = args.shift();
+        if (!val) throw new Error('--dump-system-prompt requires an output file path');
+        result.dumpSystemPrompt = val;
+        break;
+      }
       case '--web': {
         // Optional port argument: --web [port]  (defaults to 3000)
         const next = args[0];
@@ -130,7 +139,7 @@ export function parseArgs(argv: string[]): CliArgs {
     throw new Error('--space <dir> is required');
   }
   // message is only required in terminal (non-interactive, non-web) mode
-  if (!result.webPort && !result.repl && !result.message) {
+  if (!result.webPort && !result.repl && !result.dumpSystemPrompt && !result.message) {
     throw new Error('A message argument is required (or use --web for browser mode, --repl for interactive mode)');
   }
 

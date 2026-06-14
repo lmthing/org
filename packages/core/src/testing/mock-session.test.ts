@@ -97,6 +97,42 @@ async function runMockSession(args: {
   return { displays, trace, error };
 }
 
+// ---------------------------------------------------------------------------
+// Phase 0 — buildSystemPrompt() (keyless; backs the CLI --dump-system-prompt flag)
+// ---------------------------------------------------------------------------
+
+describe('Session.buildSystemPrompt (keyless prompt dump)', () => {
+  const neverCalled = createMockStreamFn(() => { throw new Error('streamFn must not be called by buildSystemPrompt'); });
+  const host: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
+
+  it('builds the system block + ambient DTS without creating a VM or calling the model', async () => {
+    const spaceDir = await makeSpace();
+    const session = new Session(
+      { spaceDir, agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [join(SYSTEM_SPACES_ROOT, 'fs')] },
+      { streamFn: neverCalled },
+    );
+    const { agentSlug, systemBlock, ambientDts } = await session.buildSystemPrompt();
+    session.dispose();
+    expect(agentSlug).toBe('main'); // 'default' resolves to the sole agent
+    expect(systemBlock).toContain('# Available Globals');
+    // System functions present as signatures-only "Built-in Tools" when system spaces are loaded.
+    expect(systemBlock).toContain('# Built-in Tools');
+    expect(systemBlock).toContain('readFile');
+    expect(ambientDts).toContain('declare function ask');
+  });
+
+  it('omits the Built-in Tools section when system spaces are disabled', async () => {
+    const spaceDir = await makeSpace();
+    const session = new Session(
+      { spaceDir, agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [] },
+      { streamFn: neverCalled },
+    );
+    const { systemBlock } = await session.buildSystemPrompt();
+    session.dispose();
+    expect(systemBlock).not.toContain('# Built-in Tools');
+  });
+});
+
 type LlmRequest = Extract<TraceEvent, { type: 'llm_request' }>;
 const llmRequests = (t: TraceEvent[], ctx?: string): LlmRequest[] =>
   t.filter((e): e is LlmRequest => e.type === 'llm_request' && (ctx === undefined || e.context === ctx));
