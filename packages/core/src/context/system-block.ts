@@ -175,13 +175,19 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
     sections.push(`# Actions\n\n${actionLines.join('\n')}`);
   }
 
-  // 4. Scoped functions
+  // 4. Scoped functions — signature + one-line doc only, NOT full source. The
+  // full implementation is injected into the VM as a callable global; the model
+  // only needs the exported signature (and JSDoc) to call it correctly. Dumping
+  // entire function bodies into every prompt is pure token waste.
+  // Dedupe against the Built-in Tools list above: when the running space IS a
+  // system space (e.g. the architect), its functions are also in systemFunctions,
+  // and would otherwise be listed twice.
+  const systemFnNames = new Set(Object.keys(opts.systemFunctions ?? {}));
   const agentFunctions = getAgentFunctions(space, agent);
-  if (Object.keys(agentFunctions).length > 0) {
-    const fnParts = Object.entries(agentFunctions).map(
-      ([name, src]) => `## ${name}\n\`\`\`ts\n${src}\n\`\`\``,
-    );
-    sections.push(`# Available Functions\n\n${fnParts.join('\n\n')}`);
+  const scopedFunctions = Object.entries(agentFunctions).filter(([name]) => !systemFnNames.has(name));
+  if (scopedFunctions.length > 0) {
+    const fnParts = scopedFunctions.map(([name, src]) => extractToolSummary(name, src));
+    sections.push(`# Available Functions\n\nCall directly (already in scope):\n\n${fnParts.join('\n')}`);
   }
 
   // 4b. Knowledge tree
