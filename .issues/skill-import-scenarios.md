@@ -3,7 +3,7 @@
 **Status:** open
 **Severity:** enhancement
 **Context:** `parseSkill` + `skillToSpec` (in `system-spaces/architect/functions/`) + the
-architect's "Importing skills & plugins" workflow land single-`SKILL.md` import. EXP-D
+`skill-to-space-transformer` agent's import workflow land single-`SKILL.md` import. EXP-D
 (2026-06-14) confirmed end-to-end: imported the real `claude-md-improver` skill →
 scaffolded/validated/registered → the imported agent produced a live CLAUDE.md audit.
 This issue covers the scenarios NOT yet built or tested.
@@ -61,6 +61,6 @@ This issue covers the scenarios NOT yet built or tested.
 ## Key files
 - `packages/core/system-spaces/architect/functions/parseSkill.ts`
 - `packages/core/system-spaces/architect/functions/skillToSpec.ts`
-- `packages/core/system-spaces/architect/agents/architect/instruct.md` ("Importing skills & plugins")
+- `packages/core/system-spaces/architect/agents/skill-to-space-transformer/instruct.md` (the import workflow)
 - `packages/core/src/spaces/architect-functions.test.ts`
 - Real samples: `~/.claude/plugins/marketplaces/*/plugins/*/{skills/*/SKILL.md,.claude-plugin/plugin.json,commands/*.md,agents/*.md}`
