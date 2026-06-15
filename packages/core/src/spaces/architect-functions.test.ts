@@ -182,6 +182,124 @@ describe('architect scaffoldSpace + validateSpace', () => {
       expect(v.errors).toHaveLength(0);
     });
 
+    // Live-run shape (architect stress test 2026-06-15): components given as
+    // { view: { <Name>: { description, code } }, form: { <Name>: {...} } } — the
+    // view/form keys ARE present but their values are keyed object-maps, not arrays.
+    // The old normComponents returned this as-is → validateSpecShape rejected
+    // "components.view must be an ARRAY". It must normalize each sub-collection.
+    it('normalizes split components whose view/form are keyed object-maps (not arrays)', () => {
+      const spaceDir = join(baseDir, 'edge_slm');
+      const nested = {
+        agents: {
+          edge_slm_advisor: {
+            instruct: 'You are the Edge SLM Advisor. Call loadKnowledge() then recommend.',
+            actions: { recommend_stack: { tasklist: 'recommend_stack', description: 'Recommend a stack' } },
+          },
+        },
+        knowledge: {
+          models: {
+            families: {
+              index: 'SLM families.',
+              options: { gemma: { content: '## Gemma\nSource: https://x' } },
+            },
+          },
+        },
+        functions: {
+          estimateMemory: { code: 'export function estimateMemory(p: number) { return p * 0.5; }' },
+        },
+        components: {
+          view: {
+            ModelComparisonTable: { description: 'Compare SLMs', code: 'export function ModelComparisonTable() { return null; }' },
+          },
+          form: {
+            DeploymentScenarioForm: { description: 'Capture scenario', code: 'export function DeploymentScenarioForm() { return null; }' },
+          },
+        },
+        tasklists: {
+          recommend_stack: {
+            tasks: [
+              { id: '1-load', content: 'Load knowledge.', output: { loaded: 'boolean' } },
+              { id: '2-recommend', content: 'Recommend and resolve.', output: { recommendation: 'string' } },
+            ],
+          },
+        },
+      };
+
+      const r = evalDump(vm, `scaffoldSpace(${JSON.stringify(spaceDir)}, ${JSON.stringify(nested)})`) as any;
+      expect(r.ok).toBe(true);
+      // view → components/view/<Name>.tsx ; form → components/form/<Name>/{web,ink}.tsx
+      expect(existsSync(join(spaceDir, 'components', 'view', 'ModelComparisonTable.tsx'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'components', 'form', 'DeploymentScenarioForm', 'web.tsx'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'components', 'form', 'DeploymentScenarioForm', 'ink.tsx'))).toBe(true);
+      const v = evalDump(vm, `validateSpace(${JSON.stringify(spaceDir)})`) as any;
+      expect(v.ok).toBe(true);
+      expect(v.errors).toHaveLength(0);
+    });
+
+    // Live-run "space manifest" shape (architect stress test run2, 2026-06-15):
+    // agents is an ARRAY of {slug,title,systemPrompt,...}; knowledge is an array of
+    // {domain, fields:[{name, options:[{value,label,content}]}]}; functions/components
+    // are arrays with `code`. normalizeSpec must lift all of these.
+    it('normalizes the agents-array + knowledge-fields-array "space manifest" shape', () => {
+      const spaceDir = join(baseDir, 'edge_slm2');
+      const nested = {
+        spaceName: 'Edge SLM Advisor',
+        spaceKey: 'edge_slm_advisor',
+        agents: [{
+          slug: 'advisor',
+          title: 'Edge SLM Advisor',
+          systemPrompt: 'You are the Edge SLM Advisor. Call loadKnowledge() then recommend.',
+          knowledge: ['models'],
+          functions: ['estimate_memory'],
+          components: { view: ['ModelComparisonTable'], form: ['ModelSelector'] },
+          actions: [{ id: 'recommend', description: 'Recommend a stack', tasklist: 'recommend_slm' }],
+        }],
+        knowledge: [{
+          domain: 'models',
+          fields: [{
+            name: 'architectures',
+            type: 'select',
+            variable: 'architecture',
+            default: 'phi',
+            description: 'Leading SLM architectures',
+            options: [
+              { value: 'phi', label: 'Microsoft Phi', content: '## Phi\nSource: https://x' },
+              { value: 'gemma', label: 'Google Gemma', content: '## Gemma\nSource: https://y' },
+            ],
+          }],
+        }],
+        functions: [{ name: 'estimate_memory', description: 'Estimate RAM', code: 'export function estimate_memory(p: number) { return p * 0.5; }' }],
+        components: {
+          view: [{ name: 'ModelComparisonTable', code: 'export function ModelComparisonTable() { return null; }' }],
+          form: [{ name: 'ModelSelector', code: 'export function ModelSelector() { return null; }' }],
+        },
+        tasklists: [{
+          name: 'recommend_slm',
+          tasks: [
+            { id: 'load', instruction: 'Load knowledge.', output: { loaded: 'boolean' } },
+            { id: 'recommend', instruction: 'Recommend and resolve.', output: { recommendation: 'string' }, goal: true },
+          ],
+        }],
+      };
+
+      const r = evalDump(vm, `scaffoldSpace(${JSON.stringify(spaceDir)}, ${JSON.stringify(nested)})`) as any;
+      expect(r.ok).toBe(true);
+      // agent (slug from array element; title preserved)
+      expect(existsSync(join(spaceDir, 'agents', 'advisor', 'instruct.md'))).toBe(true);
+      expect(readFileSync(join(spaceDir, 'agents', 'advisor', 'instruct.md'), 'utf8')).toMatch(/title: Edge SLM Advisor/);
+      // knowledge: domain/field expanded from the fields-array; {value,label} options → slug files
+      expect(existsSync(join(spaceDir, 'knowledge', 'models', 'architectures', 'phi.md'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'knowledge', 'models', 'architectures', 'gemma.md'))).toBe(true);
+      expect(readFileSync(join(spaceDir, 'knowledge', 'models', 'architectures', 'phi.md'), 'utf8')).toMatch(/Source: https:\/\/x/);
+      // function + split-array components
+      expect(existsSync(join(spaceDir, 'functions', 'estimate_memory.ts'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'components', 'view', 'ModelComparisonTable.tsx'))).toBe(true);
+      expect(existsSync(join(spaceDir, 'components', 'form', 'ModelSelector', 'web.tsx'))).toBe(true);
+      const v = evalDump(vm, `validateSpace(${JSON.stringify(spaceDir)})`) as any;
+      expect(v.ok).toBe(true);
+      expect(v.errors).toHaveLength(0);
+    });
+
     // Run-3 shape: bare-string values, extensions baked into keys, knowledge under
     // `files` (not `options`), and tasklist tasks as a map of "N-id.md" → markdown.
     it('normalizes bare-string values, extension-keys, `files`, and map-of-task-files', () => {

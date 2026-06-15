@@ -84,6 +84,11 @@ interface ScaffoldSpec {
   dependencies?: string[];
 }
 
+/** Turn a title like "Edge SLM Advisor" into a slug "edge_slm_advisor". */
+function slugify(s: string): string {
+  return String(s).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'agent';
+}
+
 /** Turn a slug like "humanoid_robotics_analyst" into "Humanoid Robotics Analyst". */
 function titleizeSlug(slug: string): string {
   return slug
@@ -130,11 +135,19 @@ function normalizeSpec(spec: any): any {
     if ('agents' in spec) { const { agents: _a, ...rest } = spec; return rest; }
     return spec;
   }
-  if (!spec.agents || typeof spec.agents !== 'object' || Array.isArray(spec.agents)) return spec;
+  if (!spec.agents || typeof spec.agents !== 'object') return spec;
 
   const isArr = Array.isArray;
-  const agentSlug = Object.keys(spec.agents)[0];
-  const agent = (agentSlug ? spec.agents[agentSlug] : {}) ?? {};
+  // `agents` may be a keyed map { <slug>: {...} } OR an array [{ slug, title, ... }].
+  let agentSlug: string | undefined;
+  let agent: any;
+  if (isArr(spec.agents)) {
+    agent = spec.agents[0] ?? {};
+    agentSlug = agent.slug ?? agent.agentSlug ?? spec.spaceKey ?? slugify(agent.title ?? spec.spaceName ?? '');
+  } else {
+    agentSlug = Object.keys(spec.agents)[0];
+    agent = (agentSlug ? spec.agents[agentSlug] : {}) ?? {};
+  }
 
   // actions: { <id>: { tasklist, description, label? } } → [{ id, label, description, tasklist }]
   const normActions = (src: any): any[] | undefined => {
@@ -154,44 +167,58 @@ function normalizeSpec(spec: any): any {
   const bodyOf = (v: any): string =>
     typeof v === 'string' ? v : (v?.content ?? v?.source ?? v?.code ?? v?.body ?? v?.text ?? v?.markdown ?? v?.instruction ?? '');
 
-  // knowledge: { <domain>: { <field>: { index?, options|files|contents|pages: {...} } } } → flat array.
-  // Option values may be bare strings OR objects; option keys may carry a .md extension.
+  // One field → a flat knowledge entry. Options may be a keyed map, an array of
+  // { slug|value|name, content } objects, or bare strings; option keys may carry .md.
+  const fieldToEntry = (domain: string, fieldName: string, fv: any): any => {
+    fv = fv ?? {};
+    let optsRaw = fv.options ?? fv.files ?? fv.contents ?? fv.pages ?? fv.docs ?? fv.option ?? {};
+    // Field emitted as a flat { 'index.md': ..., 'file.md': ... } map with no `options`.
+    if (!isArr(optsRaw) && typeof optsRaw === 'object' && Object.keys(optsRaw).length === 0) {
+      const mdKeys = Object.keys(fv).filter((k) => k.endsWith('.md') || k === 'index');
+      if (mdKeys.length > 0) optsRaw = Object.fromEntries(mdKeys.map((k) => [k, fv[k]]));
+    }
+    const optEntries: Array<[string, any]> = isArr(optsRaw)
+      ? optsRaw.map((o: any, i: number): [string, any] => [String(o?.slug ?? o?.value ?? o?.name ?? (i + 1)), o])
+      : (Object.entries(optsRaw ?? {}) as Array<[string, any]>);
+    const options = optEntries
+      .filter((e) => stripExt(e[0]) !== 'index')
+      .map((e) => ({ slug: stripExt(e[0]), content: bodyOf(e[1]) }));
+    const indexContent = fv.description ?? fv.index ?? fv['index.md'] ?? `${domain} ${fieldName}`;
+    return {
+      domain,
+      field: stripExt(fieldName),
+      type: fv.type ?? 'string',
+      variable: fv.variable ?? camelVar(fieldName, 'knowledge'),
+      default: fv.default ?? options[0]?.slug,
+      description: indexContent,
+      options,
+    };
+  };
+
+  // knowledge accepts: { <domain>: { <field>: {...} } } (map), [{ domain, field, options }]
+  // (flat array), or [{ domain, fields: [{ name, options }] | { <field>: {...} } }] (array of
+  // domains each carrying multiple fields — the shape models emit alongside agents:[...]).
   const normKnowledge = (src: any): any[] | undefined => {
     if (src === undefined) return undefined;
-    if (isArr(src)) return src;
-    if (typeof src !== 'object') return undefined;
     const out: any[] = [];
+    if (isArr(src)) {
+      for (const entry of src) {
+        if (!entry || typeof entry !== 'object') continue;
+        const domain = entry.domain ?? entry.name ?? '';
+        if (isArr(entry.fields)) {
+          for (const f of entry.fields) out.push(fieldToEntry(domain, f?.name ?? f?.field ?? '', f));
+        } else if (entry.fields && typeof entry.fields === 'object') {
+          for (const [fname, f] of Object.entries(entry.fields)) out.push(fieldToEntry(domain, fname, f));
+        } else if (entry.field !== undefined) {
+          out.push(fieldToEntry(domain, entry.field, entry)); // already-flat entry
+        }
+      }
+      return out;
+    }
+    if (typeof src !== 'object') return undefined;
     for (const [domain, fields] of Object.entries(src)) {
       if (!fields || typeof fields !== 'object') continue;
-      for (const [field, f] of Object.entries(fields as any)) {
-        const fv: any = f ?? {};
-        let optsRaw = fv.options ?? fv.files ?? fv.contents ?? fv.pages ?? fv.docs ?? fv.option ?? {};
-        // Model often emits the field as a flat { 'index.md': ..., 'file.md': ... } map with no
-        // nested 'options' property. Detect by .md-keyed entries directly on fv and use them.
-        if (Object.keys(optsRaw as object).length === 0) {
-          const mdKeys = Object.keys(fv).filter((k) => k.endsWith('.md') || k === 'index');
-          if (mdKeys.length > 0) {
-            optsRaw = Object.fromEntries(mdKeys.map((k) => [k, fv[k]]));
-          }
-        }
-        const optEntries: Array<[string, any]> = isArr(optsRaw)
-          ? optsRaw.map((o: any, i: number): [string, any] => [o?.slug ?? o?.name ?? String(i + 1), o])
-          : (Object.entries(optsRaw) as Array<[string, any]>);
-        const options = optEntries
-          .filter((e) => stripExt(e[0]) !== 'index')
-          .map((e) => ({ slug: stripExt(e[0]), content: bodyOf(e[1]) }));
-        // 'index.md' key (with extension) is a common model pattern — also accept it for the description
-        const indexContent = fv.description ?? fv.index ?? (fv as any)['index.md'] ?? `${domain} ${field}`;
-        out.push({
-          domain,
-          field,
-          type: fv.type ?? 'string',
-          variable: fv.variable ?? camelVar(field, 'knowledge'),
-          default: fv.default ?? options[0]?.slug,
-          description: indexContent,
-          options,
-        });
-      }
+      for (const [field, f] of Object.entries(fields as any)) out.push(fieldToEntry(domain, field, f));
     }
     return out;
   };
@@ -207,14 +234,34 @@ function normalizeSpec(spec: any): any {
   // components: { <Name>: { type, code|source|web|ink }|string } → { view: [...], form: [...] }.
   // Values may be bare source strings; names may carry .tsx; type is inferred from a
   // form-ish name when absent.
+  // A collection is either an ARRAY of {name,...} or a keyed object-map { <Name>: {...} }.
+  const compEntries = (coll: any): Array<[string, any]> => {
+    if (coll == null) return [];
+    if (isArr(coll)) return coll.map((c: any, i: number): [string, any] => [c?.name ?? String(i), c]);
+    if (typeof coll === 'object') return Object.entries(coll);
+    return [];
+  };
+  const toViewArr = (coll: any): any[] =>
+    compEntries(coll).map(([rawName, c]) => ({ name: stripExt(rawName), source: bodyOf(c) }));
+  const toFormArr = (coll: any): any[] =>
+    compEntries(coll).map(([rawName, c]) => {
+      const cv: any = typeof c === 'object' && c !== null ? c : {};
+      const body = bodyOf(c);
+      return { name: stripExt(rawName), web: cv.web ?? body, ink: cv.ink ?? body };
+    });
   const normComponents = (src: any): any => {
     if (src === undefined) return undefined;
-    if (!isArr(src) && typeof src === 'object' && ('view' in src || 'form' in src)) return src; // already split
     if (typeof src !== 'object') return undefined;
+    // Split shape { view, form } — normalize EACH sub-collection. The model reliably
+    // emits view/form as keyed object-maps (not arrays); the old code returned them
+    // as-is, so validateSpecShape rejected them. Normalize array OR map alike.
+    if (!isArr(src) && ('view' in src || 'form' in src)) {
+      return { view: toViewArr((src as any).view), form: toFormArr((src as any).form) };
+    }
+    // Flat shape { <Name>: {...}|string } or [ {name,...} ] — split by form detection.
     const view: any[] = [];
     const form: any[] = [];
-    const entries = isArr(src) ? src.map((c: any) => [c?.name ?? '', c]) : Object.entries(src as any);
-    for (const [rawName, c] of entries) {
+    for (const [rawName, c] of compEntries(src)) {
       const name = stripExt(rawName);
       const cv: any = typeof c === 'object' && c !== null ? c : {};
       const body = bodyOf(c);
@@ -269,8 +316,8 @@ function normalizeSpec(spec: any): any {
 
   return {
     agentSlug,
-    agentTitle: agent.agentTitle ?? agent.title ?? (agentSlug ? titleizeSlug(agentSlug) : undefined),
-    systemPrompt: agent.systemPrompt ?? agent.instruct ?? agent.prompt,
+    agentTitle: agent.agentTitle ?? agent.title ?? spec.spaceName ?? (agentSlug ? titleizeSlug(agentSlug) : undefined),
+    systemPrompt: agent.systemPrompt ?? agent.instruct ?? agent.prompt ?? agent.description,
     actions: normActions(agent.actions ?? spec.actions),
     knowledge: normKnowledge(spec.knowledge),
     functions: normFunctions(spec.functions),
