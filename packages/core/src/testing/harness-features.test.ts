@@ -34,9 +34,10 @@ import type { StreamOpts } from '../eval/stream-types.js';
 // dist/ layout and would point at a nonexistent dir when run from src.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_SPACES_ROOT = join(__dirname, '..', '..', 'system-spaces');
-const fsSpace = join(SYSTEM_SPACES_ROOT, 'fs');
-const memorySpace = join(SYSTEM_SPACES_ROOT, 'memory');
-const todoSpace = join(SYSTEM_SPACES_ROOT, 'todo');
+// fs/web/memory/todo functions now all live in the single `global` toolkit space.
+const fsSpace = join(SYSTEM_SPACES_ROOT, 'global');
+const memorySpace = fsSpace;
+const todoSpace = fsSpace;
 
 const tmpDirs: string[] = [];
 
@@ -580,6 +581,36 @@ describe('harness — delegate()', () => {
     expect(r.displays).not.toContain('NO_ERROR_SURFACED');
     expect(r.displays).toContain('result=7');
   });
+
+  it('delegates with NO action — the child runs model-driven and resolves directly', async () => {
+    const workerDir = await makeWorkerSpace();
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        // No action specified → the child gets the model-driven invitation, not "Run action".
+        { when: /delegated this request/, respond: () => `currentTask.resolve({ result: 5 });` },
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const d = await delegate(${JSON.stringify(workerDir)}, "worker", { query: "go" }) as { result: number };`;
+        if (sessionStep === 2) return `display("result=" + (d as any).result);`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('result=5');
+    // The child ran model-driven (no specific action in the trace label) and saw its
+    // own actions listed in the prompt rather than a "Run action: …" directive.
+    const delReqs = r.trace.filter(
+      (e): e is LlmReq => e.type === 'llm_request' && e.context === 'delegate:' + workerDir + '/worker/(model-driven)',
+    );
+    expect(delReqs.length).toBeGreaterThanOrEqual(1);
+    const childPrompt = lastUserMessage(delReqs[0]!);
+    expect(childPrompt).not.toContain('Run action:');
+    expect(childPrompt).toContain('Query: go');
+  });
 });
 
 describe('harness — registerSpace()', () => {
@@ -953,6 +984,33 @@ describe('harness — delegate() to a tasklist-backed action', () => {
     expect(childPrompt).toContain('Implement this action by calling');
     expect(childPrompt).toContain('tasklist("assemble"');
     expect(childPrompt).toContain('Context: {"n":3}');
+  });
+
+  it('no-action delegation: the child initiates one of its own tasklists, auto-captured', async () => {
+    const workerDir = await makeTasklistWorkerSpace();
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        forkRule('MAKE_T', `currentTask.resolve({ value: n + 1 });`),
+        // No action given → the child is invited to run a fitting action's tasklist.
+        // It runs "assemble" and never calls resolve — auto-capture (over the agent's
+        // action tasklists) must still return the goal output.
+        {
+          when: (o: StreamOpts) => o.messages.some((mm) => mm.content.includes('delegated this request')),
+          respond: () => `const result = await tasklist("assemble", { n: 9 });`,
+        },
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const d = await delegate(${JSON.stringify(workerDir)}, "worker", { context: { n: 9 } }) as { value: number };`;
+        if (sessionStep === 2) return `display("value=" + (d as any).value);`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('value=10');
   });
 });
 

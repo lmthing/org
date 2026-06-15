@@ -212,7 +212,7 @@ export class Session {
     // tasklist DAG; the multi-step orchestration is deterministic and can't be
     // truncated. If the action builds a NEW space (returns {spaceKey,agentSlug,…}),
     // chain a second delegate to it so the final answer — not just coordinates — shows.
-    const defAction = agent.defaultAction
+    const defAction = (!this.opts.noDefaultAction && agent.defaultAction)
       ? agent.actions.find((a) => a.id === agent.defaultAction && a.tasklist)
       : undefined;
     if (defAction) {

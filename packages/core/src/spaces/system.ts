@@ -1,15 +1,20 @@
 import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, basename } from 'node:path';
 import { existsSync } from 'node:fs';
 import { loadSpace } from './load.js';
 import type { Space, AgentDef } from './load.js';
 
 /**
- * System spaces are always-loaded baseline capability spaces (fs, web, memory,
- * todo, agents). Their functions/components/knowledge/agents are merged into
- * every user space so that file editing, search, web, memory, todos and the
- * explore/plan subagents are universally available — without the user space
- * having to declare them.
+ * System spaces are always-loaded baseline capability spaces. Their
+ * components/knowledge/agents/tasklists are merged into every user space, and
+ * their AGENTS are universally delegatable.
+ *
+ * FUNCTIONS, however, are universal ONLY when they live in the `global` system
+ * space (the always-on toolkit: file editing, search, web, memory, todos). Every
+ * other system space's functions are SCOPED to its own agent(s) — they reach an
+ * agent solely through the per-agent path (getAgentFunctions), so a system space
+ * that ships an agent (architect, deep_research) keeps its specialist functions
+ * out of every other space's prompt and VM. See systemFunctionSources below.
  *
  * Capabilities live in spaces, not in ad-hoc core globals (the runtime stays a
  * thin substrate). The host primitives those functions wrap (readFileRaw,
@@ -18,8 +23,11 @@ import type { Space, AgentDef } from './load.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/** The single function-only system space whose functions are injected universally. */
+export const GLOBAL_SPACE_NAME = 'global';
+
 /** The bundled system spaces shipped with @repl/core. */
-export const SYSTEM_SPACE_NAMES = ['fs', 'web', 'memory', 'todo', 'engineer', 'architect', 'solver', 'deep_research'] as const;
+export const SYSTEM_SPACE_NAMES = ['global', 'engineer', 'architect', 'solver', 'deep_research'] as const;
 
 /**
  * Resolve the directory holding the bundled system spaces. At runtime this file
@@ -50,28 +58,36 @@ export async function loadSystemSpaces(dirs: string[]): Promise<Space[]> {
   return spaces;
 }
 
-/** Names of all functions provided by the given system spaces. */
+/** True for the always-on toolkit space whose functions are injected universally. */
+function isGlobalSpace(s: Space): boolean {
+  return basename(s.dir) === GLOBAL_SPACE_NAME;
+}
+
+/** Names of the UNIVERSAL functions (the `global` toolkit only). */
 export function systemFunctionNames(systemSpaces: Space[]): Set<string> {
   const names = new Set<string>();
   for (const s of systemSpaces) {
+    if (!isGlobalSpace(s)) continue;
     for (const n of Object.keys(s.functions)) names.add(n);
   }
   return names;
 }
 
-/** The TS source of every system function (used for the typecheck overlay). */
+/** The TS source of every UNIVERSAL function (the `global` toolkit; used for the typecheck overlay). */
 export function systemFunctionSources(systemSpaces: Space[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const s of systemSpaces) {
+    if (!isGlobalSpace(s)) continue;
     for (const [name, src] of Object.entries(s.functions)) out[name] = src;
   }
   return out;
 }
 
-/** The bundled JS of every system function (when a system space had node_modules). */
+/** The bundled JS of every UNIVERSAL function (when the `global` space had node_modules). */
 export function systemFunctionsBundled(systemSpaces: Space[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const s of systemSpaces) {
+    if (!isGlobalSpace(s)) continue;
     for (const [name, src] of Object.entries(s.functionsBundled)) out[name] = src;
   }
   return out;

@@ -108,7 +108,7 @@ describe('Session.buildSystemPrompt (keyless prompt dump)', () => {
   it('builds the system block + ambient DTS without creating a VM or calling the model', async () => {
     const spaceDir = await makeSpace();
     const session = new Session(
-      { spaceDir, agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [join(SYSTEM_SPACES_ROOT, 'fs')] },
+      { spaceDir, agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [join(SYSTEM_SPACES_ROOT, 'global')] },
       { streamFn: neverCalled },
     );
     const { agentSlug, systemBlock, ambientDts } = await session.buildSystemPrompt();
@@ -539,7 +539,7 @@ describe('mock-driven Session — bug fixes', () => {
         : '',
     );
     // grep is a system function — enable the fs system space for this run.
-    const r = await runMockSession({ streamFn: m, message: 'go', systemSpaceDirs: [join(SYSTEM_SPACES_ROOT, 'fs')] });
+    const r = await runMockSession({ streamFn: m, message: 'go', systemSpaceDirs: [join(SYSTEM_SPACES_ROOT, 'global')] });
     expect(r.trace.some((e) => e.type === 'typecheck_error')).toBe(false);
     expect(String(r.displays[0])).toContain('ok=false');
     expect(String(r.displays[0])).toContain('path not found');

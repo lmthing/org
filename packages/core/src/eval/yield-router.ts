@@ -25,7 +25,7 @@ export interface YieldRouterContext {
   runDelegate: (
     packageName: string,
     agentName: string,
-    action: string,
+    action: string | undefined,
     delegateOpts: DelegateOpts | undefined,
   ) => Promise<unknown>;
   /** Fired after a tasklist resolves (delegate uses it for auto-capture). */
@@ -87,7 +87,7 @@ export async function routeCommonYield(
       const [packageName, agentName, action, delegateOpts] = req.args as [
         string,
         string,
-        string,
+        string | undefined,
         DelegateOpts | undefined,
       ];
       const value = await ctx.runDelegate(packageName, agentName, action, delegateOpts);

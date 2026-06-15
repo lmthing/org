@@ -23,7 +23,8 @@ import type { Space } from '../spaces/load.js';
 export interface RunDelegateOpts {
   packageName: string;
   agentName: string;
-  action: string;
+  /** Optional: omit to run the agent model-driven (it sees its own actions/tasklists). */
+  action?: string;
   delegateOpts?: DelegateOpts;
   registry: DelegateRegistry;
   renderHost: RenderHost;
@@ -56,7 +57,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   }
 
   const tracer = opts.tracer ?? NULL_TRACER;
-  const delegateLabel = `delegate:${opts.packageName}/${opts.agentName}/${opts.action}`;
+  const delegateLabel = `delegate:${opts.packageName}/${opts.agentName}/${opts.action ?? '(model-driven)'}`;
   // Mint a delegate scope for full observability; end() in finally below
   const delegateScope = tracer.child(opts.scope, 'delegate', delegateLabel, {
     pkg: opts.packageName,
@@ -74,18 +75,23 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   try {
     const history = new MessageHistory();
 
-    const actionDef = agent.actions.find((a) => a.id === opts.action);
-    if (!actionDef) {
+    // action is optional. When provided it must exist; when omitted the agent runs
+    // model-driven and may initiate one of its own actions' tasklists (its # Actions
+    // section is rendered into the system prompt by buildSystemBlock).
+    const actionDef = opts.action ? agent.actions.find((a) => a.id === opts.action) : undefined;
+    if (opts.action && !actionDef) {
       throw new Error(`Action "${opts.action}" not found on agent "${agent.slug}"`);
     }
 
     const query = opts.delegateOpts?.query ?? '';
     const context = opts.delegateOpts?.context;
-    const tasklistHint = actionDef.tasklist
+    const tasklistHint = actionDef?.tasklist
       ? `Implement this action by calling \`const result = await tasklist("${actionDef.tasklist}", context)\` where context is any seed data from above. The tasklist handles the orchestration. After it resolves, call \`currentTask.resolve(result)\`.`
-      : `When complete, call \`currentTask.resolve(result)\` with the final result value.`;
+      : actionDef
+        ? `When complete, call \`currentTask.resolve(result)\` with the final result value.`
+        : `Handle this request directly. If one of your actions fits (see "# Actions"), run its tasklist with \`const result = await tasklist("<name>", context)\`. When done, call \`currentTask.resolve(result)\` with the final result value.`;
     const userMessage = [
-      `Run action: ${opts.action}`,
+      opts.action ? `Run action: ${opts.action}` : `You have been delegated this request — handle it using your available actions/tasklists or directly.`,
       query ? `Query: ${query}` : '',
       context ? `Context: ${JSON.stringify(context)}` : '',
       tasklistHint,
@@ -107,6 +113,13 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     // Inject result capture global
     let capturedResult: unknown = undefined;
     let resultCaptured = false;
+
+    // Tasklists whose result should be auto-captured if the model forgets to call
+    // currentTask.resolve(): the action's own tasklist when an action was given, or
+    // ANY of the agent's action tasklists when delegated model-driven (no action).
+    const capturableTasklists = actionDef?.tasklist
+      ? new Set<string>([actionDef.tasklist])
+      : new Set<string>(agent.actions.map((a) => a.tasklist).filter(Boolean));
 
     const captureHandle = marshalToQuickJS(vm.ctx, {
       resolve: (value: unknown) => {
@@ -216,7 +229,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             scope: delegateScope,
             getForkEngine: () => forkEngine,
             onTasklistResult: (name, result) => {
-              if (name === actionDef.tasklist && !resultCaptured) {
+              if (capturableTasklists.has(name) && !resultCaptured) {
                 capturedResult = result;
                 resultCaptured = true;
               }
