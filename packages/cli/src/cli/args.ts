@@ -19,6 +19,9 @@ export interface CliArgs {
   /** Path to write the resolved system prompt to, then exit. Keyless — does not
    *  run the model. Captures exactly the `system` message the model would see. */
   dumpSystemPrompt?: string;
+  /** Bypass an agent's `defaultAction` routing so the first turn runs the
+   *  model-driven turn loop (follows the freeform message verbatim). */
+  noDefaultAction?: boolean;
 }
 
 /** Parse a CLI numeric flag value; throws a clear error on a non-number. */
@@ -82,6 +85,10 @@ export function parseArgs(argv: string[]): CliArgs {
       }
       case '--no-system-spaces': {
         result.noSystemSpaces = true;
+        break;
+      }
+      case '--no-default-action': {
+        result.noDefaultAction = true;
         break;
       }
       case '--max-episodes': {
