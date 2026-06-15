@@ -3,6 +3,7 @@ import { buildTraceTree } from '@lmthing/core';
 import type { TraceTree, TreeNode, TraceEvent } from '@lmthing/core';
 import type { TraceHub, SeqEvent } from '../rpc/trace-hub.js';
 import type { UiControlAction } from '../rpc/events.js';
+import type { SessionEntry } from '../server/session-manager.js';
 
 /** Everything the agent API needs to read state and drive the session. */
 export interface AgentApiContext {
@@ -19,6 +20,31 @@ export interface AgentApiContext {
   pendingAsks: () => Array<{ id: string; nodeId?: string; descriptor: unknown }>;
   /** Broadcast a UI control action to connected browsers. */
   broadcastUiControl: (action: UiControlAction) => void;
+}
+
+/**
+ * Build an AgentApiContext from a multi-session SessionEntry — reads/writes go
+ * through THAT entry's own hub + renderHost, so the existing single-session
+ * handlers work unchanged per-session. `sendMessage` routes through the manager
+ * so start/continue + lastActivity/status bookkeeping stays centralized.
+ */
+export function agentApiContextFromEntry(
+  entry: SessionEntry,
+  deps: {
+    sendMessage: (content: string) => void;
+    broadcastUiControl: (action: UiControlAction) => void;
+  },
+): AgentApiContext {
+  return {
+    hub: entry.hub,
+    spaceName: entry.spaceDir,
+    agentSlug: entry.agentSlug,
+    sendMessage: deps.sendMessage,
+    submitForm: (id, value) => entry.renderHost.submitForm(id, value),
+    cancelAsk: (id) => entry.renderHost.cancelAsk(id),
+    pendingAsks: () => entry.renderHost.pendingAsks(),
+    broadcastUiControl: deps.broadcastUiControl,
+  };
 }
 
 const STATUS_GLYPH: Record<string, string> = {
@@ -203,9 +229,15 @@ export async function handleAgentApi(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: AgentApiContext,
+  opts: {
+    /** When set, route matching uses this path instead of req.url's pathname.
+     *  The multi-session server maps /api/sessions/:id/state → /api/state so all
+     *  the existing per-route handlers below are reused unchanged. */
+    pathOverride?: string;
+  } = {},
 ): Promise<boolean> {
   const url = new URL(req.url ?? '/', 'http://localhost');
-  const path = url.pathname;
+  const path = opts.pathOverride ?? url.pathname;
   if (!path.startsWith('/api/')) return false;
 
   const method = req.method ?? 'GET';

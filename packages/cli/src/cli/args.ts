@@ -22,6 +22,15 @@ export interface CliArgs {
   /** Bypass an agent's `defaultAction` routing so the first turn runs the
    *  model-driven turn loop (follows the freeform message verbatim). */
   noDefaultAction?: boolean;
+  /** Multi-session server mode (`repl serve --port 8080 …`). One HTTP+WS server
+   *  hosting many independent agent sessions. */
+  serve?: boolean;
+  /** Port for `serve` mode. */
+  servePort?: number;
+  /** Max concurrent sessions for `serve` mode. */
+  maxSessions?: number;
+  /** Snapshot output dir for `serve` mode. */
+  snapshotsDir?: string;
 }
 
 /** Parse a CLI numeric flag value; throws a clear error on a non-number. */
@@ -37,10 +46,32 @@ export function parseArgs(argv: string[]): CliArgs {
   const args = [...argv];
   const result: Partial<CliArgs> = {};
 
+  // `serve` is a leading subcommand: `repl serve --port 8080 [--space <dir>] …`.
+  if (args[0] === 'serve') {
+    args.shift();
+    result.serve = true;
+  }
+
   while (args.length > 0) {
     const arg = args.shift()!;
 
     switch (arg) {
+      case '--port': {
+        const val = args.shift();
+        if (!val || !/^\d+$/.test(val)) throw new Error('--port requires a numeric value');
+        result.servePort = parseInt(val, 10);
+        break;
+      }
+      case '--max-sessions': {
+        result.maxSessions = parseNumericFlag('--max-sessions', args.shift());
+        break;
+      }
+      case '--snapshots-dir': {
+        const val = args.shift();
+        if (!val) throw new Error('--snapshots-dir requires a value');
+        result.snapshotsDir = val;
+        break;
+      }
       case '--space':
       case '-s': {
         const val = args.shift();
@@ -140,6 +171,12 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       }
     }
+  }
+
+  // Serve mode: --space is optional (it becomes the default spaceDir), and no
+  // message is required (sessions are created via POST /api/sessions).
+  if (result.serve) {
+    return result as CliArgs;
   }
 
   if (!result.space) {

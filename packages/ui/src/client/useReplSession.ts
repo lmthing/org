@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ReplRpcClient } from './rpc-client.js';
+import { ReplRpcClient, type ReplClientConfig } from './rpc-client.js';
 
 export interface ReplBlock {
   id: string;
@@ -33,7 +33,7 @@ interface ErrorEvent {
   message: string;
 }
 
-export function useReplSession(url: string): {
+export function useReplSession(target: string | ReplClientConfig): {
   blocks: ReplBlock[];
   sendMessage: (content: string) => void;
   submitForm: (id: string, value: unknown) => void;
@@ -52,8 +52,10 @@ export function useReplSession(url: string): {
     return String(blockIdCounter.current);
   };
 
+  const depKey = typeof target === 'string' ? target : `${target.baseUrl}#${target.sessionId}`;
+
   useEffect(() => {
-    const client = new ReplRpcClient(url);
+    const client = new ReplRpcClient(target);
     clientRef.current = client;
 
     client.on('connect', () => setIsConnected(true));
@@ -106,7 +108,8 @@ export function useReplSession(url: string): {
       client.disconnect();
       clientRef.current = null;
     };
-  }, [url]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depKey]);
 
   const sendMessage = useCallback((content: string) => {
     setIsDone(false);

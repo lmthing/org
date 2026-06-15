@@ -207,6 +207,27 @@ async function main(): Promise<void> {
     };
   }
 
+  // Serve mode: one HTTP+WS server hosting many independent agent sessions.
+  // Builds streamFn exactly like the web branch above (live or --mock), then a
+  // SessionManager + reaper. Sessions are created via POST /api/sessions.
+  if (args.serve) {
+    const { SessionManager } = await import('../server/session-manager.js');
+    const { startSessionServer } = await import('../server/serve.js');
+    const port = args.servePort ?? 8080;
+    const manager = new SessionManager({
+      streamFn,
+      defaultSpaceDir: args.space,
+      ...(args.maxSessions !== undefined ? { maxSessions: args.maxSessions } : {}),
+      ...(args.snapshotsDir !== undefined ? { snapshotsDir: args.snapshotsDir } : {}),
+    });
+    manager.startReaper();
+    process.on('SIGINT', () => { manager.stopReaper(); process.exit(0); });
+    // __dirname is dist/cli/ at runtime; app.tsx is at dist/web/app.tsx
+    const appTsxPath = join(__dirname, '..', 'web', 'app.tsx');
+    await startSessionServer({ port, manager, appTsxPath, defaultSpaceDir: args.space });
+    return; // keep process alive via the listening server
+  }
+
   // Per-role fork models from env: LM_MODEL_ROLE_EXPLORE / _PLAN / _GENERAL.
   const roleModels = readRoleModels();
 
