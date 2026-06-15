@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { useReplSession, DisplayBlock, VariablesBlock } from '@repl/ui';
-import type { ReplBlock } from '@repl/ui';
+import { useReplSession, DisplayBlock, VariablesBlock } from '@lmthing/agent-ui';
+import type { ReplBlock } from '@lmthing/agent-ui';
 
 // Space-specific form components registered by serve.ts at bundle time
 declare const __SPACE_COMPONENTS__: Record<string, React.ComponentType<Record<string, unknown>>>;

@@ -26,7 +26,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /** The single function-only system space whose functions are injected universally. */
 export const GLOBAL_SPACE_NAME = 'global';
 
-/** The bundled system spaces shipped with @repl/core. */
+/** The bundled system spaces shipped with @lmthing/core. */
 export const SYSTEM_SPACE_NAMES = ['global', 'engineer', 'architect', 'solver', 'deep_research'] as const;
 
 /**

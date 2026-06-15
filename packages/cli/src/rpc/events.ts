@@ -1,4 +1,4 @@
-import type { TraceEvent } from '@repl/core';
+import type { TraceEvent } from '@lmthing/core';
 
 /** Agent/UI control action — lets the HTTP API drive the browser UI. */
 export type UiControlAction =

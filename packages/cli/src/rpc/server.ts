@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Session } from '@repl/core';
-import type { RenderHost } from '@repl/core';
+import type { Session } from '@lmthing/core';
+import type { RenderHost } from '@lmthing/core';
 import type { ServerEvent, ClientMessage } from './events.js';
 
 /**

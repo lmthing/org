@@ -1,4 +1,4 @@
-import type { TraceEvent } from '@repl/core';
+import type { TraceEvent } from '@lmthing/core';
 
 export interface SeqEvent {
   seq: number;

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Text, Box, render } from 'ink';
 import TextInput from 'ink-text-input';
-import type { RenderHost } from '@repl/core';
-import { isFormDescriptor } from '@repl/core';
+import type { RenderHost } from '@lmthing/core';
+import { isFormDescriptor } from '@lmthing/core';
 import { InkForm } from './ink-form.js';
 
 interface JSXDescriptor {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildTraceTree } from '@repl/core';
-import type { TraceEvent } from '@repl/core';
+import { buildTraceTree } from '@lmthing/core';
+import type { TraceEvent } from '@lmthing/core';
 import { renderState, renderNodeDetail, HELP_TEXT } from './agent-api.js';
 
 /** A small but representative session: session → run → fork (with an LLM retry). */

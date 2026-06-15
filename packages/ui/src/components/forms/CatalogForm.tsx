@@ -6,8 +6,8 @@
  * terminal `InkForm` so `ask(<Form>…</Form>)` behaves identically on both.
  */
 import React from 'react';
-import { flattenForm, coerceValue, defaultFor } from '@repl/core/ui';
-import type { FieldSpec } from '@repl/core/ui';
+import { flattenForm, coerceValue, defaultFor } from '@lmthing/core/ui';
+import type { FieldSpec } from '@lmthing/core/ui';
 
 const inputStyle: React.CSSProperties = {
   background: 'var(--lm-bg, #0d1117)',

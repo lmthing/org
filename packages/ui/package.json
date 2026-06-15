@@ -1,5 +1,5 @@
 {
-  "name": "@repl/ui",
+  "name": "@lmthing/agent-ui",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,7 +23,7 @@
     "dev:css": "tailwindcss -i src/app/styles.css -o dist-web/app.css --watch"
   },
   "dependencies": {
-    "@repl/core": "workspace:*",
+    "@lmthing/core": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^4.5.7"

@@ -14,9 +14,9 @@ pnpm dev              # watch + rebuild all packages in parallel
 
 Single-package commands (faster during active work):
 ```bash
-pnpm --filter @repl/core build
-pnpm --filter @repl/cli build
-pnpm --filter @repl/core test
+pnpm --filter @lmthing/core build
+pnpm --filter @lmthing/cli build
+pnpm --filter @lmthing/core test
 ```
 
 Run the CLI against a fixture space:
@@ -68,29 +68,29 @@ A DevTools-style 3-pane browser UI with **full observability of the execution hi
 - **Layout:** left = live execution tree (status glyphs, durations, retry counts, fork-queue stats); center = conversation (user messages, `display()` output, interactive `ask()` forms incl. space components); right = per-node inspector (LLM requests/responses with retry attempts, evaluated statements + typecheck/eval errors, yields, variables snapshot, raw trace events).
 - **Live + replay:** live over WebSocket; `?trace=/trace.jsonl` (when `--trace` is set) or the "Load trace" file picker replays a `.jsonl` with a timeline scrubber. Same reducer powers both.
 - **Agent control (minimum context):** the UI is driveable headless via `GET /api/help` → `/api/state` (ASCII tree) → `/api/node/<id>?tab=…` → `/api/events?since=<seq>` (poll), plus `POST /api/message` / `/api/ask/<id>` / `/api/ui`. Full guide: `packages/cli/src/web/AGENT.md` (also served at `/api/help`). Every UI view is a deep-link URL (`?node=…&tab=…`); tree rows carry `data-node-id`; panes use ARIA landmarks.
-- **Build:** the React app lives in `@repl/ui` (`src/app/`, `src/store/`), styled with **Tailwind v4** (prebuilt to `dist-web/app.css` at `pnpm build`). `serve.ts` runtime-bundles the app entry + the space's `web.tsx` form components together via esbuild so a **single React instance** is shared (no hooks-breaking second copy). Only the CSS is prebuilt.
+- **Build:** the React app lives in `@lmthing/agent-ui` (`src/app/`, `src/store/`), styled with **Tailwind v4** (prebuilt to `dist-web/app.css` at `pnpm build`). `serve.ts` runtime-bundles the app entry + the space's `web.tsx` form components together via esbuild so a **single React instance** is shared (no hooks-breaking second copy). Only the CSS is prebuilt.
 
 ## UI Design System (terminal + web)
 
 A single cross-platform component vocabulary so spaces render identically in the terminal and the browser:
 
-- **Catalog** (`packages/core/src/ui/catalog.ts`, browser-safe, exported as `@repl/core/ui`): ~30 **display** components (Heading, Stack, Row, Columns, Card, Callout, Table, KeyValue, List, ProgressBar, Spinner, StatCard, Timeline, Badge, Divider, CodeBlock…) and ~33 **form** components (Form, Field, TextField, NumberField, Select, MultiSelect, RadioGroup, Checkbox, Switch, Slider, DatePicker, Rating, OtpInput, ConfirmButtons…). Each entry documents its prop contract; `catalogDts()` turns the catalog into ambient typed JSX globals appended to `LIBRARY_DTS`, and `CATALOG_NAMES` are injected as VM stubs (in `session.injectJSXRuntime`, `delegate.ts`, and `fork.ts`) so the model can write `<Stack/>`/`<Select/>` directly in sessions, delegates, AND forks. Type names are matched **case-insensitively** by the renderers.
+- **Catalog** (`packages/core/src/ui/catalog.ts`, browser-safe, exported as `@lmthing/core/ui`): ~30 **display** components (Heading, Stack, Row, Columns, Card, Callout, Table, KeyValue, List, ProgressBar, Spinner, StatCard, Timeline, Badge, Divider, CodeBlock…) and ~33 **form** components (Form, Field, TextField, NumberField, Select, MultiSelect, RadioGroup, Checkbox, Switch, Slider, DatePicker, Rating, OtpInput, ConfirmButtons…). Each entry documents its prop contract; `catalogDts()` turns the catalog into ambient typed JSX globals appended to `LIBRARY_DTS`, and `CATALOG_NAMES` are injected as VM stubs (in `session.injectJSXRuntime`, `delegate.ts`, and `fork.ts`) so the model can write `<Stack/>`/`<Select/>` directly in sessions, delegates, AND forks. Type names are matched **case-insensitively** by the renderers.
 - **Two display renderers, one vocabulary:** `packages/cli/src/render/ink-renderer.tsx` `renderDescriptor` (→ Ink) and `packages/ui/src/app/conversation.tsx` `renderDescriptor` (→ themed HTML) both implement the display catalog. `display(<Stack>…)` works in both.
 - **Forms, one model:** `ask(<Form>…fields…</Form>)` resolves to an object keyed by field `name`; a bare control (`ask(<Select .../>)`) resolves to the single value. Web → `components/forms/CatalogForm.tsx`; terminal → `packages/cli/src/render/ink-form.tsx` (interactive, sequential field stepping via `useInput`, wired into `InkRenderHost.ask` in human mode). Both share flatten/coerce logic in `packages/core/src/ui/form.ts` (`flattenForm`/`coerceValue`/`defaultFor`/`isFormDescriptor`).
-- **Ink-compatibility layer for web** (`packages/ui/src/compat/`, `@repl/ui/compat`): web React mirrors of `ink`/`ink-text-input`/`ink-select-input` (Box, Text, Spacer, Newline, Static, Transform, useInput, TextInput, SelectInput, MultiSelect, ConfirmInput) that map Ink props to themed CSS. `serve.ts` aliases bare `ink*` imports here, so a single Ink-flavored component source runs in the browser unchanged.
+- **Ink-compatibility layer for web** (`packages/ui/src/compat/`, `@lmthing/agent-ui/compat`): web React mirrors of `ink`/`ink-text-input`/`ink-select-input` (Box, Text, Spacer, Newline, Static, Transform, useInput, TextInput, SelectInput, MultiSelect, ConfirmInput) that map Ink props to themed CSS. `serve.ts` aliases bare `ink*` imports here, so a single Ink-flavored component source runs in the browser unchanged.
 - **Theming** (`packages/ui/src/theme/theme.ts` + `app/styles.css`): tokens defined per `[data-theme]` (dark default + light), exposed as both Tailwind `--color-lm-*` and plain `--lm-*` vars; runtime-switchable (DevTools header toggle, persisted). A space's optional `theme.json` is injected by `serve.ts` as `:root` overrides.
 
-> **Note:** `display()` output and the VARIABLES preview are unaffected — only the rendered component set grew. The catalog is browser-safe (`@repl/core/ui`); never import the full `@repl/core` barrel from web code (it pulls Node built-ins into the esbuild browser bundle).
+> **Note:** `display()` output and the VARIABLES preview are unaffected — only the rendered component set grew. The catalog is browser-safe (`@lmthing/core/ui`); never import the full `@lmthing/core` barrel from web code (it pulls Node built-ins into the esbuild browser bundle).
 
 ## Packages
 
 | Package | Entry | Purpose |
 |---------|-------|---------|
-| `@repl/core` | `packages/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
-| `@repl/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring. |
-| `@repl/ui` | `packages/ui/src/index.ts` | React web surface — the DevTools observability app (`src/app/`, `src/store/`, Tailwind v4 → `dist-web/app.css`). Also exports legacy block components + `useReplSession`. |
+| `@lmthing/core` | `packages/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
+| `@lmthing/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring. |
+| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React web surface — the DevTools observability app (`src/app/`, `src/store/`, Tailwind v4 → `dist-web/app.css`). Also exports legacy block components + `useReplSession`. |
 
-`@repl/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
+`@lmthing/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
 
 ## Directory Map
 
@@ -123,10 +123,10 @@ packages/ui/src/
   store/       model.ts store.ts                                                 ← pure reducer (model.ts) + zustand store (live + replay)
   client/      rpc-client.ts useReplSession.ts                                   ← legacy chat hook (superseded by store/)
   components/  DisplayBlock.tsx AskBlock.tsx VariablesBlock.tsx forms/CatalogForm.tsx  ← block renderers + web design-system form renderer
-  compat/      ink.tsx inputs.tsx index.ts                                       ← Ink-compatibility layer for web (Box/Text/TextInput/SelectInput… → themed CSS); `@repl/ui/compat`
+  compat/      ink.tsx inputs.tsx index.ts                                       ← Ink-compatibility layer for web (Box/Text/TextInput/SelectInput… → themed CSS); `@lmthing/agent-ui/compat`
   theme/       theme.ts                                                          ← runtime light/dark + per-space token overrides
 
-packages/core/src/ui/                                                            ← browser-safe design-system module (`@repl/core/ui`)
+packages/core/src/ui/                                                            ← browser-safe design-system module (`@lmthing/core/ui`)
   catalog.ts   ← single source of truth: display + form component names, prop contracts, docs; catalogDts() → ambient JSX globals
   form.ts      ← flattenForm/coerceValue/defaultFor — shared form normalization for both renderers
 ```

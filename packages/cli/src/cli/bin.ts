@@ -20,8 +20,8 @@ function loadEnv() {
 }
 loadEnv();
 
-import { Session, createMockStreamFn, mockScript } from '@repl/core';
-import type { StreamOpts, StreamSession, MockHandler } from '@repl/core';
+import { Session, createMockStreamFn, mockScript } from '@lmthing/core';
+import type { StreamOpts, StreamSession, MockHandler } from '@lmthing/core';
 import { parseArgs, type CliArgs } from './args.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
@@ -218,7 +218,7 @@ async function main(): Promise<void> {
 
   if (args.webPort) {
     // Web mode: load space, start combined HTTP+WS server, open browser
-    const { loadSpace } = await import('@repl/core');
+    const { loadSpace } = await import('@lmthing/core');
     const space = await loadSpace(args.space);
 
     const renderHost = new WebRenderHost();

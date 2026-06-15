@@ -3,7 +3,7 @@ import {
   type SessionModel, type WireEvent, emptyModel, buildModel, applyWireEvent,
   pushUserBlock, pushErrorBlock, pushAskBlock, resolveAskBlock,
 } from './model.js';
-import type { TraceEvent } from '@repl/core';
+import type { TraceEvent } from '@lmthing/core';
 
 export type InspectorTab = 'llm' | 'statements' | 'yields' | 'variables' | 'raw';
 export type Mode = 'live' | 'replay';

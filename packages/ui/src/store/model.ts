@@ -1,4 +1,4 @@
-import type { TraceEvent } from '@repl/core';
+import type { TraceEvent } from '@lmthing/core';
 
 // ─── Wire event (what the WS / trace file delivers) ─────────────────────────
 

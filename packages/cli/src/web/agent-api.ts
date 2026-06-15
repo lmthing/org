@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { buildTraceTree } from '@repl/core';
-import type { TraceTree, TreeNode, TraceEvent } from '@repl/core';
+import { buildTraceTree } from '@lmthing/core';
+import type { TraceTree, TreeNode, TraceEvent } from '@lmthing/core';
 import type { TraceHub, SeqEvent } from '../rpc/trace-hub.js';
 import type { UiControlAction } from '../rpc/events.js';
 

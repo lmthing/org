@@ -9,7 +9,7 @@ import { WebRenderHost } from '../rpc/server.js';
 import { TraceHub } from '../rpc/trace-hub.js';
 import { handleAgentApi } from './agent-api.js';
 import type { ServerEvent, ClientMessage, UiControlAction } from '../rpc/events.js';
-import type { Session, Space } from '@repl/core';
+import type { Session, Space } from '@lmthing/core';
 
 export interface WebServerOpts {
   port: number;
@@ -17,13 +17,13 @@ export interface WebServerOpts {
   renderHost: WebRenderHost;
   space: Space;
   agentSlug: string;
-  /** Path anchor used to resolve the CLI package root (and from it, @repl/ui). */
+  /** Path anchor used to resolve the CLI package root (and from it, @lmthing/agent-ui). */
   appTsxPath: string;
   /** Optional --trace file path; when set, served at /trace.jsonl for ?trace= replay. */
   traceFile?: string;
 }
 
-/** Resolve react/react-dom + the @repl/ui app entry & prebuilt CSS, all from the
+/** Resolve react/react-dom + the @lmthing/agent-ui app entry & prebuilt CSS, all from the
  *  CLI package root so a single React instance is shared across the app and the
  *  runtime-bundled space components (no second copy → hooks work). */
 function resolveUiAssets(appTsxPath: string): { aliases: Record<string, string>; appEntry: string; cssPath: string; resolveDir: string } {
@@ -33,8 +33,8 @@ function resolveUiAssets(appTsxPath: string): { aliases: Record<string, string>;
   for (const pkg of ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/client']) {
     try { aliases[pkg] = req.resolve(pkg); } catch { /* skip */ }
   }
-  // @repl/ui app entry (TSX source — bundled fresh) + prebuilt CSS.
-  const uiPkgJson = req.resolve('@repl/ui/package.json');
+  // @lmthing/agent-ui app entry (TSX source — bundled fresh) + prebuilt CSS.
+  const uiPkgJson = req.resolve('@lmthing/agent-ui/package.json');
   const uiRoot = dirname(uiPkgJson);
   const appEntry = join(uiRoot, 'src', 'app', 'main.tsx');
   const cssPath = join(uiRoot, 'dist-web', 'app.css');
@@ -63,7 +63,7 @@ function readThemeCss(spaceDir: string): string {
 }
 
 /**
- * Build a browser bundle: the @repl/ui app (main.tsx) plus all of the agent's
+ * Build a browser bundle: the @lmthing/agent-ui app (main.tsx) plus all of the agent's
  * form components (web.tsx), so custom components like <ConfirmDish /> render
  * with their real implementations. Everything resolves to ONE React instance.
  */

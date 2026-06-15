@@ -1,6 +1,6 @@
 /**
  * Browser-safe UI entry: the design-system catalog + cross-platform form
- * normalization, with NO Node dependencies. Exposed as `@repl/core/ui` so the
+ * normalization, with NO Node dependencies. Exposed as `@lmthing/core/ui` so the
  * web bundle can import these helpers without dragging in the Node-only runtime
  * (sandbox, session, child_process, …) from the main barrel.
  */

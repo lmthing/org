@@ -1,5 +1,5 @@
 import React from 'react';
-import { isFormDescriptor } from '@repl/core/ui';
+import { isFormDescriptor } from '@lmthing/core/ui';
 import { useStore } from '../store/store.js';
 import type { ConvoBlock } from '../store/model.js';
 import { preview } from './common.js';

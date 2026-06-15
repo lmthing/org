@@ -19,14 +19,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Session } from '@repl/core';
+import { Session } from '@lmthing/core';
 import type {
   RenderHost,
   SessionOpts,
   StreamOpts,
   StreamSession,
   TraceEvent,
-} from '@repl/core';
+} from '@lmthing/core';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
 import { createStream } from '../stream/stream.js';

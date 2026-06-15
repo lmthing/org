@@ -7,7 +7,7 @@
  * (`--lm-*`), so everything here is themeable for free.
  *
  * `serve.ts` aliases `ink` / `ink-text-input` / `ink-select-input` to this
- * module, and `@repl/ui/compat` re-exports it for direct authoring.
+ * module, and `@lmthing/agent-ui/compat` re-exports it for direct authoring.
  */
 import React from 'react';
 

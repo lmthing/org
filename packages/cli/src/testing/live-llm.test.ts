@@ -36,7 +36,7 @@ import {
   emittedCode,
   loadRepoEnv,
 } from './live-harness.js';
-import type { TraceEvent } from '@repl/core';
+import type { TraceEvent } from '@lmthing/core';
 
 const LIVE = !!process.env['LM_LIVE'];
 

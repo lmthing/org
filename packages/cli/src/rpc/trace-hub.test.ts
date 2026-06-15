@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TraceHub, type TraceSink } from './trace-hub.js';
-import type { TraceEvent } from '@repl/core';
+import type { TraceEvent } from '@lmthing/core';
 
 function makeSink(): TraceSink & { messages: string[]; open: boolean; buffered: number } {
   const s = {

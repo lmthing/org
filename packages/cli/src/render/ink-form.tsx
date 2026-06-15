@@ -8,8 +8,8 @@
 import React, { useState } from 'react';
 import { Text, Box, useInput } from 'ink';
 import TextInput from 'ink-text-input';
-import { flattenForm, coerceValue, defaultFor } from '@repl/core';
-import type { FieldSpec } from '@repl/core';
+import { flattenForm, coerceValue, defaultFor } from '@lmthing/core';
+import type { FieldSpec } from '@lmthing/core';
 
 // ─── single-choice list (select / radio / combobox / buttongroup) ─────────────
 
