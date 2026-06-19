@@ -54,7 +54,17 @@ export function useReplSession(target: string | ReplClientConfig): {
 
   const depKey = typeof target === 'string' ? target : `${target.baseUrl}#${target.sessionId}`;
 
+  // A multi-session config with no sessionId yet (the caller is still creating
+  // the session) must NOT open a WebSocket — `?sessionId=` is rejected by the
+  // server and the doomed socket's close races with the real one, wedging the
+  // hook at "connecting". Only connect once we have a real target.
+  const connectable = typeof target === 'string' ? target.length > 0 : target.sessionId.length > 0;
+
   useEffect(() => {
+    if (!connectable) {
+      setIsConnected(false);
+      return;
+    }
     const client = new ReplRpcClient(target);
     clientRef.current = client;
 

@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { join, resolve, dirname, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { WebSocketServer, WebSocket } from 'ws';
 import { build } from 'esbuild';
@@ -19,6 +20,24 @@ export interface SessionServerOpts {
   appTsxPath: string;
   /** Default space dir used when POST /api/sessions omits one (also for bundling the app). */
   defaultSpaceDir?: string;
+  /** Root dir under which POST /api/spaces writes synced spaces (default $SPACES_DIR or /data/spaces). */
+  spacesRoot?: string;
+}
+
+// ─── Space sync (POST /api/spaces) ────────────────────────────────────────────
+
+/** A space name must be a single safe path segment (no separators, no traversal). */
+function safeSpaceName(name: unknown): string | null {
+  if (typeof name !== 'string' || name.length === 0 || name.length > 200) return null;
+  if (name.includes('/') || name.includes('\\') || name.includes('\0')) return null;
+  if (name === '.' || name === '..') return null;
+  return name;
+}
+
+/** A file path must be relative and free of empty / `.` / `..` segments. */
+function isSafeRelPath(p: string): boolean {
+  if (typeof p !== 'string' || p.length === 0 || p.startsWith('/') || p.includes('\0')) return false;
+  return p.split('/').every((s) => s !== '' && s !== '.' && s !== '..');
 }
 
 // ─── esbuild app bundling (mirrors web/serve.ts) ──────────────────────────────
@@ -156,9 +175,17 @@ const SESSION_RE = /^\/api\/sessions\/([^/]+)(\/.*)?$/;
  * sessions; each has its OWN renderHost + hub (in the SessionManager), so events
  * never cross sessions. The served app reads sessionId from the query string.
  */
-export async function startSessionServer(opts: SessionServerOpts): Promise<void> {
+export interface SessionServerHandle {
+  /** The port the HTTP+WS server is actually listening on. */
+  port: number;
+  /** Shut down the WS + HTTP server (used by tests; bin.ts keeps it running). */
+  close: () => Promise<void>;
+}
+
+export async function startSessionServer(opts: SessionServerOpts): Promise<SessionServerHandle> {
   const { manager, port } = opts;
   const wsBase = `ws://localhost:${port}`;
+  const spacesRoot = resolve(opts.spacesRoot ?? process.env['SPACES_DIR'] ?? '/data/spaces');
 
   // Bundle the app against the default space (for its form components + CSS).
   const defaultSpaceDir = opts.defaultSpaceDir;
@@ -208,6 +235,41 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<void>
     }
     if (path === '/api/sessions' && method === 'GET') {
       sendJson(res, 200, { sessions: manager.listSessions() });
+      return;
+    }
+
+    // ─── Space sync: write an edited space to disk so a session can load it ───
+    // Body: { name: string, files: Record<relativePath, content> }. The target
+    // dir is wiped first so deletions in the editor are reflected. Returns the
+    // absolute spaceDir to pass as POST /api/sessions { spaceDir }.
+    if (path === '/api/spaces' && method === 'POST') {
+      let parsed: { name?: unknown; files?: unknown };
+      try {
+        parsed = JSON.parse((await readBody(req)) || '{}') as { name?: unknown; files?: unknown };
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' });
+        return;
+      }
+      const name = safeSpaceName(parsed.name);
+      if (!name) { sendJson(res, 400, { error: 'invalid or missing space name' }); return; }
+      const files = (parsed.files ?? {}) as Record<string, unknown>;
+      if (typeof files !== 'object' || files === null) { sendJson(res, 400, { error: 'files must be an object' }); return; }
+      for (const rel of Object.keys(files)) {
+        if (!isSafeRelPath(rel)) { sendJson(res, 400, { error: `unsafe file path: ${rel}` }); return; }
+      }
+
+      const target = resolve(spacesRoot, name);
+      if (target !== join(spacesRoot, name)) { sendJson(res, 400, { error: 'invalid space name' }); return; }
+
+      await rm(target, { recursive: true, force: true });
+      await mkdir(target, { recursive: true });
+      for (const [rel, content] of Object.entries(files)) {
+        const dest = resolve(target, rel);
+        if (dest !== target && !dest.startsWith(target + sep)) { sendJson(res, 400, { error: `unsafe file path: ${rel}` }); return; }
+        await mkdir(dirname(dest), { recursive: true });
+        await writeFile(dest, typeof content === 'string' ? content : String(content ?? ''), 'utf8');
+      }
+      sendJson(res, 201, { spaceDir: target });
       return;
     }
 
@@ -322,7 +384,17 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<void>
   }
 
   await new Promise<void>((res) => httpServer.listen(port, res));
-  const httpBase = `http://localhost:${port}`;
+  const addr = httpServer.address();
+  const actualPort = typeof addr === 'object' && addr ? addr.port : port;
+  const httpBase = `http://localhost:${actualPort}`;
   console.log(`Multi-session server ready: ${httpBase}`);
   console.log(`Create a session:  POST ${httpBase}/api/sessions`);
+
+  return {
+    port: actualPort,
+    close: async () => {
+      wss.close();
+      await new Promise<void>((res) => httpServer.close(() => res()));
+    },
+  };
 }

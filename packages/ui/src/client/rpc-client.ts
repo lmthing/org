@@ -38,6 +38,31 @@ export class ReplRpcClient {
     }
   }
 
+  /**
+   * Push an edited space to the server's filesystem so a session can load it.
+   * `files` maps relative paths (e.g. `agents/chef/instruct.md`) to content,
+   * matching the on-disk space layout. Returns the absolute `spaceDir` to pass
+   * to `createSession({ spaceDir })`. The target dir is replaced wholesale, so
+   * files removed in the editor disappear on the server too.
+   */
+  static async syncSpace(
+    baseUrl: string,
+    name: string,
+    files: Record<string, string>,
+    accessToken?: string,
+  ): Promise<{ spaceDir: string }> {
+    const res = await fetch(`${baseUrl}/api/spaces`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({ name, files }),
+    });
+    if (!res.ok) throw new Error(`syncSpace failed: ${res.status} ${await res.text()}`);
+    return (await res.json()) as { spaceDir: string };
+  }
+
   /** Create a new server-side session and return a client bound to it. */
   static async createSession(
     baseUrl: string,

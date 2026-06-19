@@ -338,7 +338,16 @@ export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<
     const pkgData = JSON.parse(await readFile(pkgJsonPath, 'utf8')) as Record<string, unknown>;
     if (typeof pkgData['name'] === 'string') packageName = pkgData['name'];
 
-    if (!(await dirExists(nodeModulesPath))) {
+    // Only install when the space actually declares dependencies. A package.json
+    // with no deps (common for self-contained demo/preview spaces) must NOT
+    // trigger `npm install` — that needlessly fails on offline/egress-less pods.
+    const declaredDeps = {
+      ...((pkgData['dependencies'] as Record<string, string> | undefined) ?? {}),
+      ...((pkgData['devDependencies'] as Record<string, string> | undefined) ?? {}),
+    };
+    const hasDeps = Object.keys(declaredDeps).length > 0;
+
+    if (hasDeps && !(await dirExists(nodeModulesPath))) {
       const result = spawnSync('npm', ['install'], { cwd: dir, stdio: 'inherit' });
       if (result.status !== 0) {
         throw new Error(`Failed to install dependencies for space at "${dir}"`);
