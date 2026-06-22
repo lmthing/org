@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { Session, saveSnapshot } from '@lmthing/core';
+import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
 import type { StreamOpts, StreamSession } from '@lmthing/core';
 import { WebRenderHost } from '../rpc/server.js';
 import { TraceHub } from '../rpc/trace-hub.js';
@@ -28,6 +28,21 @@ import {
 import type { ProjectMeta, PersistedSessionMeta } from './projects.js';
 
 export type SessionStatus = 'idle' | 'running' | 'error';
+
+/** Lightweight descriptor for a space created under a project, surfaced in the
+ *  web UI. Derived from the space's package.json + agent instruct frontmatter. */
+export interface SpaceMeta {
+  /** Dir basename — the stable id within the project's spaces/ tree. */
+  id: string;
+  /** Display name: first agent's title, else package name, else id. */
+  name: string;
+  /** One-line description (first non-heading line of the first agent's instruct body). */
+  description: string;
+  agents: { slug: string; title: string; actions: { id: string; label: string }[] }[];
+  functionCount: number;
+  componentCount: number;
+  hasKnowledge: boolean;
+}
 
 /** One live multi-session entry: the Session plus its OWN renderHost + hub so
  *  events never cross sessions. */
@@ -689,7 +704,43 @@ export class SessionManager {
     return result.sort((a, b) => b.lastActivity - a.lastActivity);
   }
 
-  /** Begin periodically reaping idle sessions. */
+  /**
+   * List the spaces created under a project (`<root>/<projectId>/spaces/*`),
+   * each summarized into a SpaceMeta. Spaces that fail to load are skipped
+   * rather than aborting the whole listing. Returns id-sorted.
+   */
+  async listProjectSpaces(projectId: string): Promise<SpaceMeta[]> {
+    const root = this.requireRoot();
+    const safe = safeProjectId(projectId);
+    if (!safe) throw new Error(`invalid project id: ${projectId}`);
+    const dirs = await listProjectSpaceDirs(root, safe);
+    const results: SpaceMeta[] = [];
+    for (const dir of dirs) {
+      try {
+        const space = await loadSpace(dir, { requireAgents: false });
+        const agents = Object.values(space.agents);
+        const lead = agents[0];
+        const name = lead?.title || space.packageName || basename(dir);
+        const description = describeSpace(lead?.instructBody);
+        results.push({
+          id: basename(dir),
+          name,
+          description,
+          agents: agents.map((a) => ({
+            slug: a.slug,
+            title: a.title,
+            actions: a.actions.map((act) => ({ id: act.id, label: act.label })),
+          })),
+          functionCount: Object.keys(space.functions).length,
+          componentCount: Object.keys(space.components.view).length + Object.keys(space.components.form).length,
+          hasKnowledge: Object.keys(space.knowledge.domains).length > 0,
+        });
+      } catch {
+        // Unreadable / invalid space dir — skip it.
+      }
+    }
+    return results.sort((a, b) => a.id.localeCompare(b.id));
+  }
   startReaper(intervalMs = 60000): void {
     if (this.reaper) return;
     this.reaper = setInterval(() => {
@@ -711,4 +762,19 @@ export class SessionManager {
       this.reaper = null;
     }
   }
+}
+
+/**
+ * Extract a one-line description from an agent's instruct body: the first
+ * non-empty line that isn't a markdown heading. Truncated to ~140 chars.
+ */
+function describeSpace(instructBody: string | undefined): string {
+  if (!instructBody) return '';
+  for (const raw of instructBody.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#')) continue;
+    return line.length > 140 ? `${line.slice(0, 137)}...` : line;
+  }
+  return '';
 }

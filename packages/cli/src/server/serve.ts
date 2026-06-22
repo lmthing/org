@@ -392,6 +392,17 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
         }
         return;
       }
+
+      // GET /api/projects/:id/spaces — spaces created under this project
+      if (subPath === '/spaces' && method === 'GET') {
+        try {
+          const spaces = await manager.listProjectSpaces(rawId);
+          sendJson(res, 200, { spaces });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
     }
 
     // ─── Space sync: write an edited space to disk so a session can load it ───

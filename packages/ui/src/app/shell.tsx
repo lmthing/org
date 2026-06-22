@@ -158,9 +158,81 @@ function DocumentsPanel({ projectId }: { projectId: string }): React.ReactElemen
 
 // ─── Project detail (collapsible) ────────────────────────────────────────────
 
+interface SpaceAction {
+  id: string;
+  label: string;
+}
+
+interface SpaceMeta {
+  id: string;
+  name: string;
+  description: string;
+  agents: { slug: string; title: string; actions: SpaceAction[] }[];
+  functionCount: number;
+  componentCount: number;
+  hasKnowledge: boolean;
+}
+
+function SpacesPanel({ projectId }: { projectId: string }): React.ReactElement {
+  const [spaces, setSpaces] = React.useState<SpaceMeta[] | null>(null);
+
+  const reload = () => {
+    apiGet<{ spaces: SpaceMeta[] }>(`/api/projects/${projectId}/spaces`)
+      .then((r) => setSpaces(r.spaces))
+      .catch(() => setSpaces([]));
+  };
+
+  React.useEffect(() => { reload(); }, [projectId]);
+
+  if (spaces === null) return <div className="text-lm-muted text-[11px] px-1 py-2">Loading…</div>;
+
+  if (spaces.length === 0) {
+    return <div className="text-lm-muted text-[11px]">No spaces yet. Ask THING to build a specialist.</div>;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {spaces.map((s) => {
+        const actions = s.agents.flatMap((a) => a.actions);
+        return (
+          <div key={s.id} className="border border-lm-border rounded px-2 py-1.5 bg-lm-bg/50">
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] font-semibold text-lm-text truncate flex-1" title={s.name}>{s.name}</span>
+              <span className="text-[9px] text-lm-muted font-mono shrink-0">{s.id}</span>
+            </div>
+            {s.description && (
+              <div className="text-[10px] text-lm-muted mt-0.5 line-clamp-2">{s.description}</div>
+            )}
+            <div className="flex flex-wrap gap-1 mt-1">
+              <span className="text-[9px] text-lm-muted bg-lm-panel2 rounded px-1 py-px">
+                {s.agents.length} agent{s.agents.length === 1 ? '' : 's'}
+              </span>
+              {s.functionCount > 0 && (
+                <span className="text-[9px] text-lm-muted bg-lm-panel2 rounded px-1 py-px">{s.functionCount} fn</span>
+              )}
+              {s.componentCount > 0 && (
+                <span className="text-[9px] text-lm-muted bg-lm-panel2 rounded px-1 py-px">{s.componentCount} comp</span>
+              )}
+              {s.hasKnowledge && (
+                <span className="text-[9px] text-lm-muted bg-lm-panel2 rounded px-1 py-px">knowledge</span>
+              )}
+              {actions.map((a) => (
+                <span key={a.id} className="text-[9px] text-lm-accent bg-lm-accent/10 rounded px-1 py-px" title={a.label}>
+                  /{a.id}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ProjectDetail({ projectId }: { projectId: string }): React.ReactElement {
   const [instrOpen, setInstrOpen] = React.useState(true);
   const [docsOpen, setDocsOpen] = React.useState(false);
+  const [spacesOpen, setSpacesOpen] = React.useState(true);
 
   return (
     <div className="border-t border-lm-border pt-2 mt-2 flex flex-col gap-2">
@@ -192,6 +264,22 @@ function ProjectDetail({ projectId }: { projectId: string }): React.ReactElement
         {docsOpen && (
           <div className="mt-1">
             <DocumentsPanel projectId={projectId} />
+          </div>
+        )}
+      </div>
+
+      {/* Spaces section */}
+      <div>
+        <button
+          onClick={() => setSpacesOpen((o) => !o)}
+          className="flex items-center gap-1 text-[11px] text-lm-muted hover:text-lm-text w-full text-left"
+        >
+          <span>{spacesOpen ? '▾' : '▸'}</span>
+          <span className="font-semibold">Spaces</span>
+        </button>
+        {spacesOpen && (
+          <div className="mt-1">
+            <SpacesPanel projectId={projectId} />
           </div>
         )}
       </div>
