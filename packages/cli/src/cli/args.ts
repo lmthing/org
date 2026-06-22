@@ -22,7 +22,7 @@ export interface CliArgs {
   /** Bypass an agent's `defaultAction` routing so the first turn runs the
    *  model-driven turn loop (follows the freeform message verbatim). */
   noDefaultAction?: boolean;
-  /** Multi-session server mode (`repl serve --port 8080 …`). One HTTP+WS server
+  /** Multi-session server mode (`lmthing serve --port 8080 …`). One HTTP+WS server
    *  hosting many independent agent sessions. */
   serve?: boolean;
   /** Port for `serve` mode. */
@@ -31,6 +31,10 @@ export interface CliArgs {
   maxSessions?: number;
   /** Snapshot output dir for `serve` mode. */
   snapshotsDir?: string;
+  /** Materialize the runtime into `<cwd>/.lmthing` (`lmthing init`). Keyless. */
+  init?: boolean;
+  /** Active project name for multi-session server mode (default: "user"). */
+  project?: string;
 }
 
 /** Parse a CLI numeric flag value; throws a clear error on a non-number. */
@@ -46,10 +50,13 @@ export function parseArgs(argv: string[]): CliArgs {
   const args = [...argv];
   const result: Partial<CliArgs> = {};
 
-  // `serve` is a leading subcommand: `repl serve --port 8080 [--space <dir>] …`.
+  // Leading subcommands: `lmthing serve` / `lmthing init`.
   if (args[0] === 'serve') {
     args.shift();
     result.serve = true;
+  } else if (args[0] === 'init') {
+    args.shift();
+    result.init = true;
   }
 
   while (args.length > 0) {
@@ -70,6 +77,13 @@ export function parseArgs(argv: string[]): CliArgs {
         const val = args.shift();
         if (!val) throw new Error('--snapshots-dir requires a value');
         result.snapshotsDir = val;
+        break;
+      }
+      case '--project':
+      case '-p': {
+        const val = args.shift();
+        if (!val) throw new Error('--project requires a value');
+        result.project = val;
         break;
       }
       case '--space':
@@ -173,9 +187,28 @@ export function parseArgs(argv: string[]): CliArgs {
     }
   }
 
+  // init: keyless subcommand — no space or message required.
+  if (result.init) {
+    return result as CliArgs;
+  }
+
   // Serve mode: --space is optional (it becomes the default spaceDir), and no
   // message is required (sessions are created via POST /api/sessions).
   if (result.serve) {
+    return result as CliArgs;
+  }
+
+  // Bare invocation (no positional message, no --space, none of the interactive
+  // or single-run flags set): treat as the default "launch server" path. The
+  // bin.ts entry-point handles it; no validation needed here.
+  const isBareDefault =
+    !result.space &&
+    !result.message &&
+    !result.repl &&
+    !result.webPort &&
+    !result.dumpSystemPrompt &&
+    !result.mock;
+  if (isBareDefault) {
     return result as CliArgs;
   }
 

@@ -22,6 +22,11 @@ export interface SessionServerOpts {
   defaultSpaceDir?: string;
   /** Root dir under which POST /api/spaces writes synced spaces (default $SPACES_DIR or /data/spaces). */
   spacesRoot?: string;
+  /** Absolute path to `<cwd>/.lmthing`. When provided, project-aware routes are
+   *  enabled and the default 'user' project is scaffolded at startup. Takes
+   *  precedence over any `lmthingRoot` already set on the manager (they should
+   *  match in practice; the manager's value is used for actual operations). */
+  lmthingRoot?: string;
 }
 
 // ─── Space sync (POST /api/spaces) ────────────────────────────────────────────
@@ -74,18 +79,20 @@ function readThemeCss(spaceDir: string): string {
   }
 }
 
-async function buildBundle(space: Space, wsBase: string, appTsxPath: string): Promise<string> {
+async function buildBundle(space: Space | null, wsBase: string, appTsxPath: string): Promise<string> {
   // Bundle every form component across the default space's agents so the served
-  // app can render space components for whatever session is attached.
+  // app can render space components for whatever session is attached. In project
+  // mode (no default space) we bundle the app with no space components — the shell
+  // drives project/session selection and catalog forms still render.
   const { aliases, appEntry, resolveDir } = resolveUiAssets(appTsxPath);
 
   const importLines: string[] = [];
   const compEntries: string[] = [];
   const seen = new Set<string>();
-  for (const name of Object.keys(space.components.form)) {
+  for (const name of Object.keys(space?.components.form ?? {})) {
     if (seen.has(name)) continue;
     seen.add(name);
-    const webPath = resolve(space.dir, 'components', 'form', name, 'web.tsx');
+    const webPath = resolve(space!.dir, 'components', 'form', name, 'web.tsx');
     importLines.push(`import __Comp_${name}__ from ${JSON.stringify(webPath)};`);
     compEntries.push(`  ${JSON.stringify(name)}: __Comp_${name}__,`);
   }
@@ -127,14 +134,18 @@ function readCss(appTsxPath: string): string {
   }
 }
 
-function buildHtml(js: string, css: string, port: number, themeCss = ''): string {
+function buildHtml(js: string, css: string, port: number, themeCss = '', projectMode = false): string {
   // Bootstrap reads sessionId from the page query string and points the app's WS
-  // at /api/ws?sessionId=<id> for that session before the app bundle mounts.
+  // at /api/ws?sessionId=<id> for that session before the app bundle mounts. In
+  // project mode it flags the app to mount the project/session shell when no
+  // specific session is selected (rather than the legacy single-session view).
   const bootstrap = `(function(){
     var p = new URLSearchParams(location.search);
     var sid = p.get('sessionId') || '';
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    window.__WS_URL__ = proto + '//' + location.host + '/api/ws' + (sid ? '?sessionId=' + encodeURIComponent(sid) : '');
+    window.__LM_PROJECT_MODE__ = ${projectMode ? 'true' : 'false'};
+    if (sid) window.__WS_URL__ = proto + '//' + location.host + '/api/ws?sessionId=' + encodeURIComponent(sid);
+    else if (!${projectMode ? 'true' : 'false'}) window.__WS_URL__ = proto + '//' + location.host + '/api/ws';
   })();`;
   return `<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -187,7 +198,22 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   const wsBase = `ws://localhost:${port}`;
   const spacesRoot = resolve(opts.spacesRoot ?? process.env['SPACES_DIR'] ?? '/data/spaces');
 
-  // Bundle the app against the default space (for its form components + CSS).
+  // Ensure the default project exists when running in project mode.
+  // The manager's lmthingRoot takes precedence; opts.lmthingRoot is accepted for
+  // symmetry (both should match in practice — the manager is already constructed
+  // with it by the CLI).
+  const effectiveLmthingRoot = manager.lmthingRoot ?? opts.lmthingRoot;
+  if (effectiveLmthingRoot) {
+    try {
+      await manager.ensureDefaultProject();
+    } catch (err) {
+      console.warn('[serve] could not scaffold default project:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Bundle the app. With a default space we also bundle its form components; in
+  // project mode (lmthingRoot, no default space) we bundle the shell with no space
+  // components — it selects projects/sessions and renders catalog forms.
   const defaultSpaceDir = opts.defaultSpaceDir;
   let html = '';
   if (defaultSpaceDir) {
@@ -196,6 +222,11 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     const js = await buildBundle(space, wsBase, opts.appTsxPath);
     const css = readCss(opts.appTsxPath);
     html = buildHtml(js, css, port, readThemeCss(space.dir));
+  } else if (opts.lmthingRoot) {
+    console.log('Bundling web app (project mode)…');
+    const js = await buildBundle(null, wsBase, opts.appTsxPath);
+    const css = readCss(opts.appTsxPath);
+    html = buildHtml(js, css, port, '', true);
   }
 
   const broadcastUiControl = (entry: SessionEntry): ((action: UiControlAction) => void) =>
@@ -217,7 +248,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     if (path === '/api/sessions' && method === 'POST') {
       const body = await readBody(req);
       const parsed = JSON.parse(body || '{}') as {
-        spaceDir?: string; agentSlug?: string; model?: string;
+        spaceDir?: string; agentSlug?: string; model?: string; projectId?: string;
         budget?: { maxEpisodes?: number; maxToolCalls?: number; maxForkDepth?: number; maxWallClockMs?: number };
       };
       try {
@@ -226,6 +257,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
           agentSlug: parsed.agentSlug,
           model: parsed.model,
           budget: parsed.budget,
+          projectId: parsed.projectId,
         });
         sendJson(res, 201, { sessionId });
       } catch (err) {
@@ -236,6 +268,117 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     if (path === '/api/sessions' && method === 'GET') {
       sendJson(res, 200, { sessions: manager.listSessions() });
       return;
+    }
+
+    // ─── Project routes (only when lmthingRoot is configured) ───────────────
+    if (path === '/api/projects' && method === 'GET') {
+      try {
+        const projects = await manager.listProjects();
+        sendJson(res, 200, { projects });
+      } catch (err) {
+        sendJson(res, 503, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+    if (path === '/api/projects' && method === 'POST') {
+      let parsed: { name?: unknown };
+      try {
+        parsed = JSON.parse((await readBody(req)) || '{}') as { name?: unknown };
+      } catch {
+        sendJson(res, 400, { error: 'invalid JSON body' }); return;
+      }
+      if (typeof parsed.name !== 'string' || parsed.name.trim().length === 0) {
+        sendJson(res, 400, { error: 'name must be a non-empty string' }); return;
+      }
+      try {
+        const meta = await manager.createProject(parsed.name.trim());
+        sendJson(res, 201, { id: meta.id });
+      } catch (err) {
+        sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+
+    // /api/projects/:id  and  /api/projects/:id/...
+    const projectMatch = /^\/api\/projects\/([^/]+)(\/.*)?$/.exec(path);
+    if (projectMatch) {
+      const rawId = decodeURIComponent(projectMatch[1]!);
+      const subPath = projectMatch[2] ?? ''; // '' | '/instructions' | '/documents'
+
+      // DELETE /api/projects/:id
+      if (subPath === '' && method === 'DELETE') {
+        if (rawId === 'user') {
+          sendJson(res, 400, { error: 'cannot delete the default project' }); return;
+        }
+        try {
+          await manager.deleteProject(rawId);
+          res.writeHead(204); res.end();
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
+
+      // GET /api/projects/:id/instructions
+      if (subPath === '/instructions' && method === 'GET') {
+        try {
+          const content = await manager.getInstructions(rawId);
+          sendJson(res, 200, { content });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
+
+      // PUT /api/projects/:id/instructions
+      if (subPath === '/instructions' && method === 'PUT') {
+        let parsed: { content?: unknown };
+        try {
+          parsed = JSON.parse((await readBody(req)) || '{}') as { content?: unknown };
+        } catch {
+          sendJson(res, 400, { error: 'invalid JSON body' }); return;
+        }
+        const content = typeof parsed.content === 'string' ? parsed.content : '';
+        try {
+          await manager.setInstructions(rawId, content);
+          sendJson(res, 200, { ok: true });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
+
+      // GET /api/projects/:id/documents
+      if (subPath === '/documents' && method === 'GET') {
+        try {
+          const documents = await manager.listDocuments(rawId);
+          sendJson(res, 200, { documents });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
+
+      // POST /api/projects/:id/documents
+      if (subPath === '/documents' && method === 'POST') {
+        let parsed: { name?: unknown; content?: unknown };
+        try {
+          parsed = JSON.parse((await readBody(req)) || '{}') as { name?: unknown; content?: unknown };
+        } catch {
+          sendJson(res, 400, { error: 'invalid JSON body' }); return;
+        }
+        if (typeof parsed.name !== 'string' || parsed.name.trim().length === 0) {
+          sendJson(res, 400, { error: 'name must be a non-empty string' }); return;
+        }
+        const content = typeof parsed.content === 'string' ? parsed.content : '';
+        try {
+          await manager.addDocument(rawId, parsed.name.trim(), content);
+          sendJson(res, 201, { ok: true });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
     }
 
     // ─── Space sync: write an edited space to disk so a session can load it ───

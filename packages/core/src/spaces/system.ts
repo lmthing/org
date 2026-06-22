@@ -27,7 +27,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const GLOBAL_SPACE_NAME = 'global';
 
 /** The bundled system spaces shipped with @lmthing/core. */
-export const SYSTEM_SPACE_NAMES = ['global', 'engineer', 'architect', 'solver', 'deep_research'] as const;
+export const SYSTEM_SPACE_NAMES = ['global', 'engineer', 'architect', 'solver', 'deep_research', 'memory', 'thing'] as const;
 
 /**
  * Resolve the directory holding the bundled system spaces. At runtime this file

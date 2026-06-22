@@ -72,6 +72,9 @@ interface ForkEngineOpts {
    *  the parent Session so a fork's registerSpace() is visible to later parent delegate()
    *  calls — the documented dynamicSpaces invariant. */
   dynamicSpaces?: Map<string, import('../spaces/load.js').Space>;
+  /** Absolute path to the project's spaces/ dir. Propagated into each fork VM as
+   *  LMTHING_PROJECT_SPACES_DIR so the architect can target it when scaffolding. */
+  projectSpacesDir?: string;
 }
 
 export class ForkEngine {
@@ -222,6 +225,7 @@ export class ForkEngine {
           spaceDir: this.opts.parentSpaceDir,
           profile: roleProfile(task.role),
           progress: () => budget.snapshot(),
+          projectSpacesDir: this.opts.projectSpacesDir,
         });
 
         // Inject standard globals (no fork/delegate/tasklist in child to avoid recursion issues)

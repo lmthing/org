@@ -9,6 +9,25 @@ export type InspectorTab = 'llm' | 'statements' | 'yields' | 'variables' | 'raw'
 export type Mode = 'live' | 'replay';
 export type Connection = 'connecting' | 'open' | 'closed';
 
+// ─── Multi-session / project types ───────────────────────────────────────────
+
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface SessionMeta {
+  sessionId: string;
+  spaceDir: string;
+  agentSlug: string;
+  lastActivity: string;
+  started: string;
+  status: string;
+}
+
+// ─── Replay state ─────────────────────────────────────────────────────────────
+
 interface ReplayState {
   events: WireEvent[];
   cursor: number;       // index into events (exclusive upper bound applied)
@@ -31,6 +50,12 @@ interface AppState {
   agentSlug: string;
   replay: ReplayState | null;
 
+  // ─── Multi-session / project state ─────────────────────────────────────────
+  projects: Project[];
+  activeProjectId: string | null;
+  sessions: SessionMeta[];
+  activeSessionId: string | null;
+
   // actions
   feedLive: (events: WireEvent[]) => void;
   setConnection: (c: Connection) => void;
@@ -52,6 +77,12 @@ interface AppState {
   pause: () => void;
   setSpeed: (s: number) => void;
   exitReplay: () => void;
+  // multi-session / project actions
+  setProjects: (projects: Project[]) => void;
+  setActiveProjectId: (id: string | null) => void;
+  setSessions: (sessions: SessionMeta[]) => void;
+  setActiveSessionId: (id: string | null) => void;
+  resetSession: () => void;
 }
 
 function recomputeReplayModel(events: WireEvent[], cursor: number): SessionModel {
@@ -73,6 +104,11 @@ export const useStore = create<AppState>((set, get) => ({
   spaceName: '',
   agentSlug: '',
   replay: null,
+  // multi-session / project initial state
+  projects: [],
+  activeProjectId: null,
+  sessions: [],
+  activeSessionId: null,
 
   feedLive: (events) => {
     const s = get();
@@ -126,6 +162,26 @@ export const useStore = create<AppState>((set, get) => ({
   noteError: (message) => set((s) => { pushErrorBlock(s.model, message); return { version: s.version + 1 }; }),
   noteAskStart: (askId, descriptor) => set((s) => { pushAskBlock(s.model, askId, descriptor); return { version: s.version + 1 }; }),
   noteAskEnd: (askId, value, cancelled) => set((s) => { resolveAskBlock(s.model, askId, value, cancelled); return { version: s.version + 1 }; }),
+
+  // ─── Multi-session / project actions ──────────────────────────────────────
+  setProjects: (projects) => set({ projects }),
+  setActiveProjectId: (id) => set({ activeProjectId: id }),
+  setSessions: (sessions) => set({ sessions }),
+  setActiveSessionId: (id) => set({ activeSessionId: id }),
+  resetSession: () => set({
+    model: emptyModel(),
+    version: 0,
+    selectedNodeId: null,
+    userSelected: false,
+    follow: true,
+    expanded: new Set<string>(),
+    done: false,
+    spaceName: '',
+    agentSlug: '',
+    replay: null,
+    mode: 'live',
+    connection: 'connecting',
+  }),
 
   // ─── Replay ───
   loadReplay: (events) => {

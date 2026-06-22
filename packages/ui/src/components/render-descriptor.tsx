@@ -1,4 +1,5 @@
 import React from 'react';
+import { marked } from 'marked';
 import { preview } from '../app/common.js';
 
 export interface Descriptor { type: string; props?: Record<string, unknown>; children?: unknown[] }
@@ -36,7 +37,15 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'kbd': return <kbd key={key} className="font-mono text-[11px] border border-lm-border rounded px-1 bg-lm-panel">{body}</kbd>;
     case 'code': return <code key={key} className="font-mono text-lm-cyan bg-lm-bg px-1 rounded">{body}</code>;
     case 'codeblock': return <pre key={key} className="font-mono text-[12px] text-lm-text bg-lm-bg border border-lm-border rounded p-2 my-1 overflow-x-auto"><code>{body}</code></pre>;
-    case 'markdown':
+    case 'markdown': {
+      let markdown = text;
+      if (!markdown && d.children && d.children.length > 0) {
+        markdown = d.children.map(c => typeof c === 'string' ? c : '').join('');
+      }
+      markdown = markdown || '';
+      const html = marked.parse(markdown) as string;
+      return <div key={key} className="prose prose-sm max-w-none text-lm-text prose-headings:text-lm-text prose-a:text-lm-accent prose-code:text-lm-cyan prose-code:bg-lm-bg prose-pre:bg-lm-bg prose-pre:border prose-pre:border-lm-border" dangerouslySetInnerHTML={{ __html: html }} />;
+    }
     case 'span': return <span key={key}>{body}</span>;
     case 'quote': return <blockquote key={key} className="border-l-2 border-lm-border pl-2 my-1 text-lm-muted italic">{body}</blockquote>;
     case 'link': return <a key={key} href={String(props['href'] ?? '#')} target="_blank" rel="noreferrer" className="text-lm-accent underline">{body}</a>;

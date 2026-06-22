@@ -37,6 +37,9 @@ export interface RunDelegateOpts {
   /** Parent execution scope for hierarchical observability. */
   scope?: TraceScope;
   systemSpaces?: Space[];
+  /** Absolute path to the project's spaces/ dir. Propagated into the delegate VM as
+   *  LMTHING_PROJECT_SPACES_DIR and forwarded to nested delegate/fork VMs. */
+  projectSpacesDir?: string;
 }
 
 export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
@@ -68,7 +71,12 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
 
   const directDeps = resolveDirectDeps(space, agent.dependencies);
 
-  const systemBlock = buildSystemBlock({ space, agent, directDeps });
+  // The universal `global` toolkit (readFile, grep, remember, …) is injected into every
+  // delegate VM below. Surface it in the system prompt AND the typecheck overlay too —
+  // otherwise an agent that calls a bare global tool (e.g. the memory agent's remember())
+  // fails typecheck with "Cannot find name", since it declares no functions of its own.
+  const systemFnSources = systemFunctionSources(opts.systemSpaces ?? []);
+  const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFnSources });
 
   const vm = await createVM();
 
@@ -105,7 +113,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     const agentFunctions = getAgentFunctions(space, agent);
     const agentFunctionsBundled = getAgentFunctionsBundled(space, agent);
     const agentComponents = getAgentComponents(space, agent);
-    const overlay = buildOverlay(agentFunctions, agentComponents);
+    const overlay = buildOverlay({ ...systemFnSources, ...agentFunctions }, agentComponents);
     // currentTask is injected below; declare it in DTS so typecheck passes
     const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
     const ambientDts = LIBRARY_DTS + '\n' + overlay + '\n' + currentTaskDts;
@@ -132,7 +140,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
 
     // Inject space functions into the VM (combining system functions and agent functions)
     const systemSpaces = opts.systemSpaces ?? [];
-    const functions = { ...systemFunctionSources(systemSpaces), ...agentFunctions };
+    const functions = { ...systemFnSources, ...agentFunctions };
     const functionsBundled = { ...systemFunctionsBundled(systemSpaces), ...agentFunctionsBundled };
 
     injectSpaceFunctions(vm, functions, functionsBundled, (name, error) => {
@@ -141,7 +149,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
 
     // Shared synchronous host substrate: console, execShell, process.env, fetch,
     // readFileRaw, writeFileRaw.
-    injectHostTools(vm, { renderHost: opts.renderHost, spaceDir: space.dir });
+    injectHostTools(vm, { renderHost: opts.renderHost, spaceDir: space.dir, projectSpacesDir: opts.projectSpacesDir });
 
     // Inject React shim + component stubs for JSX
     const reactShim = {
@@ -208,6 +216,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       streamFn: opts.streamFn,
       clock: opts.clock,
       tracer: opts.tracer,
+      projectSpacesDir: opts.projectSpacesDir,
     });
 
     try {

@@ -25,6 +25,9 @@ export interface HostToolsOpts {
    *  worker can observe the "complexity factor" (turns/tool-calls/elapsed) but
    *  cannot mutate host state through it. */
   progress?: () => { episodes: number; toolCalls: number; elapsedMs: number };
+  /** Absolute path to the project's spaces/ dir. Exposed as LMTHING_PROJECT_SPACES_DIR
+   *  so the architect can target it when scaffolding new spaces. */
+  projectSpacesDir?: string;
 }
 
 const READ_BYTE_CAP = 256 * 1024;
@@ -124,6 +127,9 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
   // process.env + process.exit — read-only env shim with LMTHING_SPACE_DIR injected
   const env = Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined));
   env['LMTHING_SPACE_DIR'] = spaceRoot;
+  if (opts.projectSpacesDir) {
+    env['LMTHING_PROJECT_SPACES_DIR'] = opts.projectSpacesDir;
+  }
   setGlobal('process', { env, exit: (code?: number) => { throw new Error(`process.exit(${code ?? 0})`); } });
 
   // fetch — synchronous HTTP via curl; returns a plain object so `await fetch(...)` works

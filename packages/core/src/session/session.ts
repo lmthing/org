@@ -144,6 +144,17 @@ export class Session {
     // 1. Load space + merge always-on system spaces
     this.space = await this.loadMergedSpace(this.opts.spaceDir);
 
+    // 1b. Preload any project spaces into dynamicSpaces so they are delegatable immediately.
+    // Failures are isolated — one bad dir must not abort startup.
+    for (const dir of this.opts.preloadSpaceDirs ?? []) {
+      try {
+        const preloadedSpace = await loadSpace(dir);
+        this.dynamicSpaces.set(dir, preloadedSpace);
+      } catch (err) {
+        this.opts.renderHost.log(`[warn] preloadSpaceDirs: failed to load space at "${dir}": ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
     // 2. Get agent — fall back to first agent when slug is 'default'
     const agentKeys = Object.keys(this.space.agents);
     const resolvedSlug = this.opts.agentSlug === 'default' && !this.space.agents['default']
@@ -396,7 +407,9 @@ export class Session {
    * loaded system spaces on the instance for function/overlay derivation.
    */
   private async loadMergedSpace(spaceDir: string): Promise<Space> {
-    const userSpace = await loadSpace(spaceDir);
+    // requireAgents: false — a project dir has no agents/ of its own; the `thing`
+    // agent is supplied by the merged system spaces (mergeSystemInto below).
+    const userSpace = await loadSpace(spaceDir, { requireAgents: false });
     const dirs = this.opts.systemSpaceDirs ?? defaultSystemSpaceDirs();
     this.systemSpaces = await loadSystemSpaces(dirs);
     return mergeSystemInto(userSpace, this.systemSpaces);
@@ -441,6 +454,7 @@ export class Session {
       roleModels: this.opts.roleModels,
       // Same Map reference the delegate path reads — a fork's registerSpace() lands here.
       dynamicSpaces: this.dynamicSpaces,
+      projectSpacesDir: this.opts.projectSpacesDir,
     });
     return this.forkEngine;
   }
@@ -481,6 +495,7 @@ export class Session {
       renderHost: this.opts.renderHost,
       spaceDir: this.opts.spaceDir,
       progress: () => this.budget.snapshot(),
+      projectSpacesDir: this.opts.projectSpacesDir,
     });
   }
 
@@ -633,6 +648,7 @@ export class Session {
           tracer: this.tracer,
           scope: this.currentScope ?? undefined,
           systemSpaces: this.systemSpaces,
+          projectSpacesDir: this.opts.projectSpacesDir,
         });
       },
     };

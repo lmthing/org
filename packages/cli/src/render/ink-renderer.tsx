@@ -5,6 +5,23 @@ import type { RenderHost } from '@lmthing/core';
 import { isFormDescriptor } from '@lmthing/core';
 import { InkForm } from './ink-form.js';
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#+\s+/gm, '') // Remove headings
+    .replace(/\*\*(.+?)\*\*/g, '$1') // Bold
+    .replace(/\*(.+?)\*/g, '$1') // Italic
+    .replace(/\*(.+?)\*\*/g, '$1') // Bold italic
+    .replace(/__(.+?)__/g, '$1') // Bold (alt)
+    .replace(/_(.+?)_/g, '$1') // Italic (alt)
+    .replace(/~~(.+?)~~/g, '$1') // Strikethrough
+    .replace(/\[(.+?)\]\(.+?\)/g, '$1') // Links
+    .replace(/`(.+?)`/g, '$1') // Inline code
+    .replace(/^- /gm, '• ') // Bullet points
+    .replace(/^\* /gm, '• ') // Alt bullet points
+    .replace(/^\d+\.\s/gm, '◦ ') // Ordered lists
+    .trim();
+}
+
 interface JSXDescriptor {
   type: string | ((...args: unknown[]) => unknown);
   props: Record<string, unknown>;
@@ -241,8 +258,12 @@ export function renderDescriptor(desc: unknown): React.ReactNode {
         </Box>
       );
 
-    case 'markdown':
-      return <Text>{children}</Text>;
+    case 'markdown': {
+      const text = desc.props['text'] as string | undefined;
+      const markdown = text || (typeof desc.children[0] === 'string' ? desc.children[0] : '');
+      const plainText = stripMarkdown(String(markdown));
+      return <Box flexDirection="column" marginY={1}><Text>{plainText}</Text></Box>;
+    }
     default:
       return <Box flexDirection="column">{children}</Box>;
   }

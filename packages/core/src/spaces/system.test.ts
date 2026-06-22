@@ -140,8 +140,10 @@ describe('system spaces', () => {
     const dirs = defaultSystemSpaceDirs();
     expect(dirs.some((d) => d.endsWith('system-spaces/global'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/solver'))).toBe(true);
-    expect(dirs.length).toBe(5);
+    expect(dirs.length).toBe(7);
     expect(dirs.some((d) => d.endsWith('system-spaces/deep_research'))).toBe(true);
+    expect(dirs.some((d) => d.endsWith('system-spaces/memory'))).toBe(true);
+    expect(dirs.some((d) => d.endsWith('system-spaces/thing'))).toBe(true);
   });
 
   it('defaultSystemSpaceDirs resolves to dirs that actually exist (dist + src layouts)', () => {

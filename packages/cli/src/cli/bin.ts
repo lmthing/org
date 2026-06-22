@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Load .env from the directory where the script is invoked
@@ -20,7 +20,7 @@ function loadEnv() {
 }
 loadEnv();
 
-import { Session, createMockStreamFn, mockScript } from '@lmthing/core';
+import { Session, createMockStreamFn, mockScript, defaultSystemSpaceDirs } from '@lmthing/core';
 import type { StreamOpts, StreamSession, MockHandler } from '@lmthing/core';
 import { parseArgs, type CliArgs } from './args.js';
 import { resolveAlias } from '../providers/aliases.js';
@@ -127,6 +127,43 @@ async function loadMockStreamFn(mockPath: string): Promise<(opts: StreamOpts) =>
 }
 
 /**
+ * Materialize the lmthing runtime into `root` (`<cwd>/.lmthing`).
+ *
+ * - Copies every system space shipped with @lmthing/core into `<root>/system/<name>/`.
+ * - Creates the default 'user' project skeleton under `<root>/user/`.
+ * Idempotent: existing files are not overwritten (instructions.md, project.json).
+ * System-space dirs are always refreshed via cpSync (force = true).
+ */
+function materializeRuntime(root: string): void {
+  // Copy system spaces from the installed core package.
+  const systemDest = join(root, 'system');
+  mkdirSync(systemDest, { recursive: true });
+  for (const srcDir of defaultSystemSpaceDirs()) {
+    const dest = join(systemDest, basename(srcDir));
+    cpSync(srcDir, dest, { recursive: true });
+  }
+
+  // Default 'user' project skeleton.
+  const userRoot = join(root, 'user');
+  mkdirSync(join(userRoot, 'spaces'), { recursive: true });
+  mkdirSync(join(userRoot, 'documents'), { recursive: true });
+
+  const instructionsPath = join(userRoot, 'instructions.md');
+  if (!existsSync(instructionsPath)) {
+    writeFileSync(instructionsPath, '', 'utf8');
+  }
+
+  const projectJsonPath = join(userRoot, 'project.json');
+  if (!existsSync(projectJsonPath)) {
+    writeFileSync(
+      projectJsonPath,
+      JSON.stringify({ id: 'user', name: 'user', createdAt: new Date().toISOString() }, null, 2),
+      'utf8',
+    );
+  }
+}
+
+/**
  * Resolve the system spaces selection (explicit flag, env, disabled, or default)
  * and the agent slug — shared by the normal run path and --dump-system-prompt.
  */
@@ -144,7 +181,6 @@ function resolveAgentAndSpaces(args: CliArgs): { agentSlug: string; systemSpaceD
  * Keyless: uses a stub streamFn + no-op render host, never calls the model.
  */
 async function dumpSystemPromptToFile(args: CliArgs): Promise<void> {
-  const { writeFileSync } = await import('node:fs');
   const { agentSlug, systemSpaceDirs } = resolveAgentAndSpaces(args);
   const noopHost = { display() {}, ask: async () => undefined, log() {} };
   const stubStreamFn = async () => { throw new Error('stub streamFn — dump mode does not run the model'); };
@@ -173,6 +209,18 @@ async function main(): Promise<void> {
   // --dump-system-prompt: write the resolved system prompt and exit (keyless).
   if (args.dumpSystemPrompt) {
     await dumpSystemPromptToFile(args);
+    return;
+  }
+
+  // `lmthing init`: materialize the runtime into <cwd>/.lmthing (keyless).
+  if (args.init) {
+    const root = join(process.cwd(), '.lmthing');
+    materializeRuntime(root);
+    process.stdout.write(
+      `lmthing runtime initialized at ${root}\n` +
+      `  system spaces → ${join(root, 'system')}\n` +
+      `  default project → ${join(root, 'user')}\n`,
+    );
     return;
   }
 
@@ -214,9 +262,11 @@ async function main(): Promise<void> {
     const { SessionManager } = await import('../server/session-manager.js');
     const { startSessionServer } = await import('../server/serve.js');
     const port = args.servePort ?? 8080;
+    const lmthingRoot = join(process.cwd(), '.lmthing');
     const manager = new SessionManager({
       streamFn,
       defaultSpaceDir: args.space,
+      lmthingRoot,
       ...(args.maxSessions !== undefined ? { maxSessions: args.maxSessions } : {}),
       ...(args.snapshotsDir !== undefined ? { snapshotsDir: args.snapshotsDir } : {}),
     });
@@ -224,7 +274,37 @@ async function main(): Promise<void> {
     process.on('SIGINT', () => { manager.stopReaper(); process.exit(0); });
     // __dirname is dist/cli/ at runtime; app.tsx is at dist/web/app.tsx
     const appTsxPath = join(__dirname, '..', 'web', 'app.tsx');
-    await startSessionServer({ port, manager, appTsxPath, defaultSpaceDir: args.space });
+    await startSessionServer({ port, manager, appTsxPath, defaultSpaceDir: args.space, lmthingRoot });
+    return; // keep process alive via the listening server
+  }
+
+  // Bare `lmthing` invocation (no --space, no message, no single-run / repl / web
+  // flags): launch the multi-session server just like `lmthing serve`.
+  const isBareDefault =
+    !args.space &&
+    !args.message &&
+    !args.repl &&
+    !args.webPort;
+  if (isBareDefault) {
+    const { SessionManager } = await import('../server/session-manager.js');
+    const { startSessionServer } = await import('../server/serve.js');
+    const port = args.servePort ?? 8080;
+    const lmthingRoot = join(process.cwd(), '.lmthing');
+    // Auto-initialize if this is the first run (no system dir yet).
+    if (!existsSync(join(lmthingRoot, 'system'))) {
+      materializeRuntime(lmthingRoot);
+      process.stdout.write(`lmthing runtime auto-initialized at ${lmthingRoot}\n`);
+    }
+    const manager = new SessionManager({
+      streamFn,
+      lmthingRoot,
+      ...(args.maxSessions !== undefined ? { maxSessions: args.maxSessions } : {}),
+      ...(args.snapshotsDir !== undefined ? { snapshotsDir: args.snapshotsDir } : {}),
+    });
+    manager.startReaper();
+    process.on('SIGINT', () => { manager.stopReaper(); process.exit(0); });
+    const appTsxPath = join(__dirname, '..', 'web', 'app.tsx');
+    await startSessionServer({ port, manager, appTsxPath, lmthingRoot });
     return; // keep process alive via the listening server
   }
 

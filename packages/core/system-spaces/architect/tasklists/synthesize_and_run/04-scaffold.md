@@ -10,12 +10,11 @@ goal: false
 
 Write the space files to disk using `scaffoldSpace()`.
 
-Derive the base directory from the parent of the architect's own space dir:
+Derive the base directory — prefer the project spaces dir if set, otherwise fall back to
+stripping the last segment of the architect's own space dir:
 ```typescript
-const fixturesBase = process.env.LMTHING_SPACE_DIR
-  ? process.env.LMTHING_SPACE_DIR.replace(/\/[^/]+\/?$/, '')
-  : '/tmp/architect-spaces';
-const spaceDir = fixturesBase + '/' + spec.agentSlug;
+const base = process.env.LMTHING_PROJECT_SPACES_DIR ?? (process.env.LMTHING_SPACE_DIR ? process.env.LMTHING_SPACE_DIR.replace(/\/[^/]+\/?$/, '') : '/tmp/architect-spaces');
+const spaceDir = base + '/' + spec.agentSlug;
 ```
 
 Then scaffold:

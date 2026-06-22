@@ -198,7 +198,7 @@ To add or update secrets locally:
 - `session.continue(message)` — appends a new user message to the existing history and re-runs the turn loop on the same VM and scope. Throws if called before `start()`. Used by `--repl` mode. Auto-summarizes history when it exceeds `maxHistoryTurns*2` messages.
 - `session.dispose()` — tears down the QuickJS VM.
 
-`SessionOpts` additions: `systemSpaceDirs?` (override/disable the always-on spaces) and `maxHistoryTurns?` (history-summarization threshold).
+`SessionOpts` additions: `systemSpaceDirs?` (override/disable the always-on spaces), `maxHistoryTurns?` (history-summarization threshold), `preloadSpaceDirs?` (absolute space dirs loaded into `dynamicSpaces` at `start()` so they are delegatable immediately — the project server seeds this with the project's existing `spaces/*`), and `projectSpacesDir?` (exposed to every VM — session, forks, delegates — as `process.env.LMTHING_PROJECT_SPACES_DIR`; the architect's `scaffoldSpace` writes new spaces there, so synthesized agents land under the active project).
 
 `registerSpace(dir)` is a value-yielding global (`globals/register-space.ts`) that calls `loadSpace(dir)` and inserts the result into `Session.dynamicSpaces`. Returns `{ ok, spaceKey, agentSlug, error? }`. The `spaceKey` is the dir path and is passed as the first arg to `delegate()`. The `dynamicSpaces` map is a shared mutable reference — a `registerSpace` call inside a fork is visible to subsequent `delegate()` calls in the parent session.
 
@@ -231,15 +231,36 @@ See `@.claude/arch/spaces.md` for space file layout.
 
 Capabilities are **spaces**, not ad-hoc core globals. A set of baseline "system spaces" is **always loaded and merged into every user space** (and into forks/delegates). Two things are universal: (1) every system space's **agents** are merged in and **universally delegatable**; (2) only the **`global`** space's **functions** are universally injected — every agent gets that coding toolkit for free. All OTHER system-space functions (the architect's, deep_research's, …) are **scoped to their owning agent**: they reach an agent solely via that agent's `functions:` frontmatter (`getAgentFunctions`), so they never leak into unrelated agents' prompts/VMs. The user space wins on any name collision.
 
-- Located in `packages/core/system-spaces/{global,engineer,architect,solver,deep_research}/` (resolved relative to the built core).
+- Located in `packages/core/system-spaces/{global,engineer,architect,solver,deep_research,memory,thing}/` (resolved relative to the built core; materialized into `.lmthing/system/` by `lmthing init` — see "Projects & the `lmthing` server").
 - `global` — the always-injected toolkit (function-only, no agent): `readFile`, `writeFile`, `editFile`, `glob`, `grep`, `listDir`, `webSearch` (Tavily, needs `TAVILY_API_KEY`), `webFetch`, `remember`/`recall`/`recallAll`/`forget` (durable JSON at `<spaceDir>/.lmthing/memory.json`), `todoWrite`/`todoRead` (checklist persisted to `.lmthing/todos.json`). **These are the only universally-injected functions.**
 - `engineer` — coding agent (agent def + `TaskInput` component); `delegate` to it from any space
 - `architect` — meta-agent (`scaffoldSpace`, `validateSpace`, `listScaffoldedSpaces` functions + full `synthesize_and_run` / `iterate_space` tasklists); `delegate` to it to synthesize new agents at runtime. **Synthesis routes through the `synthesize_and_run` tasklist** (the instruct's PRIMARY WORKFLOW makes the model emit just `tasklist('synthesize_and_run', {topic})` then `delegate()` — the DAG deterministically runs research→design→scaffold→validate→register so a weak model can't truncate the 5-step program). Skill/plugin **import is a separate agent in this space** — see `skill-to-space-transformer` below; the architect delegates import requests to it.
 - `architect` / `skill-to-space-transformer` — a second agent in the architect space that imports an existing Claude Code/cowork skill or plugin. It declares the scoped `parseSkill`/`skillToSpec` (+ shared `scaffoldSpace`/`validateSpace`) functions — these are NOT universal, so only this agent (and the architect, which declares the scaffold pair) sees them. `parseSkill(path)` reads a `SKILL.md` or plugin (`.claude-plugin/plugin.json`) into a normalized descriptor; `skillToSpec(parsed)` deterministically converts it to a flat ScaffoldSpec (full instructions → a loadable `skill/playbook` knowledge option). Model-driven with one `import` action; delegate to it as `delegate('<architect dir or LMTHING_SPACE_DIR>', 'skill-to-space-transformer', 'import', { query })`.
 - `solver` — verifier-gated coding agent (no functions; drives the `solve` built-in). `--agent solver` or `delegate` to it; writes its candidate under the space dir. Mock providers for keyless runs live in `fixtures/solver/`.
 - `deep_research` — Deep Research Analyst (`tavilySearch`, `extractKeyFacts`, `formatCitation` + `research_report` tasklist: broad→deep→extract→synthesize). Always delegatable as `delegate('deep-research-space', 'researcher', 'research_report', { query, context })` — the architect uses it for all web research. `tavilySearch` never throws: on failure (incl. HTTP 432 quota) it returns `{ results: [], error }` and the tasks resolve gracefully with empty results, so a dead/over-quota key degrades to a vacuous report instead of a hard failure.
+- `thing` — **THE main user-facing orchestrator** (single agent, model-driven, no forced tasklist). It triages each request: answer from its own knowledge, `delegate('deep_research', …)` for research, `delegate('architect', 'architect', 'synthesize_and_run', …)` to build a new specialist, `delegate('engineer'|'solver', …)` to code, or `delegate('memory', …)` to save/recall user facts. It is the default agent in the `lmthing` project server. Reads per-project `instructions.md` + `documents/` (rooted at the project dir).
+- `memory` — thin agent that wraps the universal `remember`/`recall`/`recallAll`/`forget`. THING delegates to it to persist facts about the user. Because a delegate runs with the **target** space's dir as `LMTHING_SPACE_DIR`, the store lives at `<memory space>/.lmthing/memory.json` — i.e. **global** across projects (memories are about the user, not the project). NOTE: an agent that calls a bare `global` tool it doesn't declare (like memory's `remember()`) needs the universal toolkit in the delegate VM's typecheck overlay too — `runDelegate` folds `systemFunctionSources` into both the overlay and the system block for exactly this reason.
 
 Loader/merge: `packages/core/src/spaces/system.ts` (`loadSystemSpaces`, `mergeSystemInto`). `systemFunctionNames`/`systemFunctionSources`/`systemFunctionsBundled` return ONLY the `global` space's functions (`GLOBAL_SPACE_NAME`); those are injected universally (bypassing the per-agent `functions:` filter) and listed in the system prompt's concise `# Built-in Tools` section (signature + doc, not full source). `mergeSystemInto` still pools every system space's functions so an agent that DECLARES one (e.g. the architect declaring `scaffoldSpace`) resolves it via `getAgentFunctions`. Configure via `SessionOpts.systemSpaceDirs`, CLI `--system-spaces`/`--no-system-spaces`, or env `LM_SYSTEM_SPACES`.
+
+## Projects & the `lmthing` server
+
+`lmthing` is the user-facing entry point: a project-aware multi-session web server where users chat with **THING**, create projects, and upload documents/instructions. State lives in a cwd-rooted `.lmthing/` tree:
+
+```
+<cwd>/.lmthing/
+  system/{global,engineer,architect,solver,deep_research,memory,thing}/   ← materialized by `lmthing init`
+  user/                       ← default project
+    spaces/                   ← architect-synthesized spaces for this project
+    documents/  instructions.md  project.json
+  <project>/                  ← additional projects (same shape)
+```
+
+- **`lmthing init`** (keyless) copies the bundled system spaces into `.lmthing/system/` and scaffolds the default `user` project. Code: `materializeRuntime` in `packages/cli/src/cli/bin.ts` (uses `cpSync` + `defaultSystemSpaceDirs()`).
+- **`lmthing`** (no args) launches the multi-session server (`packages/cli/src/server/{serve.ts,session-manager.ts,projects.ts}`). A provider/API key is required. A project session sets `spaceDir = .lmthing/<project>/` (loaded permissively — `requireAgents:false` — since the `thing` agent comes from the merged system spaces), `agentSlug = 'thing'`, `systemSpaceDirs = .lmthing/system/*`, `preloadSpaceDirs = .lmthing/<project>/spaces/*`, and `projectSpacesDir = .lmthing/<project>/spaces`.
+- **HTTP API** (beyond the existing session/ws routes): `GET/POST /api/projects`, `DELETE /api/projects/:id`, `GET/PUT /api/projects/:id/instructions`, `GET/POST /api/projects/:id/documents`; `POST /api/sessions` accepts `{ projectId }` (default `user`).
+- The web UI shell (project/session sidebar, chat, doc upload, instructions editor) lives in `packages/ui/src/app/shell.tsx`.
+- **Discovery caveat (follow-up):** preloaded project spaces are *delegatable* (in the registry) but THING has no built-in way to *enumerate* them across sessions — it only knows a synthesized space's key within the session that built it. A discovery function/knowledge catalog is a planned addition.
 
 ## Fork roles (subagents)
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { marked } from 'marked';
 
 interface JSXDescriptor {
   type: string;
@@ -74,7 +75,12 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
           {renderedChildren}
         </button>
       );
-    case 'markdown':
+    case 'markdown': {
+      const text = props['text'] as string | undefined;
+      const markdown = text || (renderedChildren.length > 0 ? renderedChildren.join('') : '');
+      const html = marked.parse(String(markdown)) as string;
+      return <div key={key} className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: html }} />;
+    }
     case 'text':
     default:
       return <span key={key}>{renderedChildren}</span>;

@@ -36,6 +36,14 @@ export interface SessionOpts {
   budget?: BudgetLimits;
   /** Optional per-role model assignment for forks (e.g. explore/plan → cheap model). */
   roleModels?: RoleModelConfig;
+  /** Absolute space dirs to load into dynamicSpaces at session.start(), making them
+   *  delegatable immediately (e.g. existing project spaces). Each dir is loaded via
+   *  loadSpace and keyed by its dir path. Failures are logged but do not block startup. */
+  preloadSpaceDirs?: string[];
+  /** Absolute path to the project's spaces/ dir. Exposed to ALL VMs (session, forks,
+   *  delegates) as process.env.LMTHING_PROJECT_SPACES_DIR so the architect can write
+   *  synthesized spaces there instead of stripping LMTHING_SPACE_DIR. */
+  projectSpacesDir?: string;
 }
 
 export interface SessionDeps {

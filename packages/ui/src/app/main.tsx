@@ -1,13 +1,15 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
-import { useStore, connectLive, type InspectorTab } from '../store/store.js';
+import { Shell } from './shell.js';
+import { useStore, connectLive, type InspectorTab, type Project } from '../store/store.js';
 import { parseTrace } from './replay.js';
 
 // Expose React for runtime-bundled space components that reference it (defensive;
 // the runtime bundle shares this React instance directly).
 const w = window as unknown as {
   __WS_URL__?: string;
+  __LM_PROJECT_MODE__?: boolean;
   __LM_SEND__?: (m: unknown) => void;
   __LMTHING_REACT__?: unknown;
   React?: unknown;
@@ -15,7 +17,7 @@ const w = window as unknown as {
 w.__LMTHING_REACT__ = React;
 
 // ─── URL ↔ state sync (deep-linkable; LLM-friendly) ─────────────────────────
-// ?node=<id>&tab=<tab>&follow=0&trace=<url>
+// ?node=<id>&tab=<tab>&follow=0&trace=<url>&sessionId=<id>
 
 function applyUrlToState(): void {
   const params = new URLSearchParams(window.location.search);
@@ -48,11 +50,52 @@ export function mountApp(): void {
 }
 
 async function boot(): Promise<void> {
-  const root = createRoot(document.getElementById('root')!);
-  root.render(<App />);
-
   const params = new URLSearchParams(window.location.search);
   const traceUrl = params.get('trace');
+  const sessionIdParam = params.get('sessionId');
+
+  // ── Detect operating mode ────────────────────────────────────────────────
+  //
+  // 1. Legacy / direct: __WS_URL__ injected by the server (old single-session path)
+  // 2. Direct ?sessionId=: opened with a specific session (single session)
+  // 3. Shell / multi-session: the project server flags __LM_PROJECT_MODE__ (and
+  //    injects __WS_URL__ only for a specific ?sessionId=), so with no session and
+  //    no trace we mount the project/session Shell. Also falls back to shell when
+  //    no WS URL was injected at all.
+  const projectMode = Boolean(w.__LM_PROJECT_MODE__);
+  const hasLegacyWs = Boolean(w.__WS_URL__);
+  const isShellMode = (projectMode || !hasLegacyWs) && !sessionIdParam && !traceUrl;
+
+  if (isShellMode) {
+    // ── Shell mode: project + session management ────────────────────────────
+    const root = createRoot(document.getElementById('root')!);
+    root.render(<Shell />);
+
+    // Pre-load projects and pick a default.
+    try {
+      const res = await fetch('/api/projects');
+      if (res.ok) {
+        const { projects } = (await res.json()) as { projects: Project[] };
+        useStore.getState().setProjects(projects);
+        // Default-select 'user' project if it exists, else first project.
+        const defaultProject =
+          projects.find((p) => p.name === 'user') ?? projects[0];
+        if (defaultProject) {
+          useStore.getState().setActiveProjectId(defaultProject.id);
+        }
+      }
+    } catch {
+      // No project API available yet — shell renders with empty sidebar.
+    }
+
+    applyUrlToState();
+    syncStateToUrl();
+    return;
+  }
+
+  // ── Single-session mode (legacy or ?sessionId=) ─────────────────────────
+  const root = createRoot(document.getElementById('root')!);
+  root.render(<App />);
 
   if (traceUrl) {
     // Replay mode — fetch and load the trace, no WS.
@@ -63,8 +106,15 @@ async function boot(): Promise<void> {
     } catch (err) {
       useStore.getState().noteError(`failed to load trace ${traceUrl}: ${String(err)}`);
     }
+  } else if (sessionIdParam) {
+    // ?sessionId= direct link — connect to that specific session's WS.
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${proto}//${window.location.host}/api/ws?sessionId=${encodeURIComponent(sessionIdParam)}`;
+    const conn = connectLive(wsUrl);
+    w.__LM_SEND__ = conn.send;
+    useStore.getState().setActiveSessionId(sessionIdParam);
   } else {
-    // Live mode.
+    // Legacy: __WS_URL__ injected by the server.
     const wsUrl = w.__WS_URL__ ?? `ws://${window.location.host}`;
     const conn = connectLive(wsUrl);
     w.__LM_SEND__ = conn.send;
