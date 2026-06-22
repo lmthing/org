@@ -12,8 +12,8 @@ export type ThemeName = 'dark' | 'light' | (string & {});
 const STORAGE_KEY = 'lm-theme';
 
 export function currentTheme(): ThemeName {
-  if (typeof document === 'undefined') return 'dark';
-  return (document.documentElement.getAttribute('data-theme') as ThemeName) ?? 'dark';
+  if (typeof document === 'undefined') return 'light';
+  return (document.documentElement.getAttribute('data-theme') as ThemeName) ?? 'light';
 }
 
 export function applyTheme(theme: ThemeName): void {
@@ -26,7 +26,7 @@ export function applyTheme(theme: ThemeName): void {
   }
 }
 
-export function initTheme(fallback: ThemeName = 'dark'): ThemeName {
+export function initTheme(fallback: ThemeName = 'light'): ThemeName {
   let theme = fallback;
   try {
     theme = (localStorage.getItem(STORAGE_KEY) as ThemeName) ?? fallback;

@@ -1,93 +1,270 @@
 @import "tailwindcss";
 
-/* Scan the app + component sources for class names at build time. */
+/* Scan sources for Tailwind class names */
 @source "./";
 @source "../components/";
 
-/* ─── Design-system theme tokens (dark default) ───
-   Tailwind v4 utilities reference these custom properties, so overriding the
-   same `--color-lm-*` / `--lm-*` names under `[data-theme="…"]` re-themes both
-   the DevTools UI and any space/compat component at runtime. */
+/* ── Non-color theme tokens ───────────────────────────────────── */
 @theme {
-  --color-lm-bg: #0d1117;
-  --color-lm-panel: #161b22;
-  --color-lm-panel2: #1c2128;
-  --color-lm-border: #30363d;
-  --color-lm-text: #e6edf3;
-  --color-lm-muted: #8b949e;
-  --color-lm-accent: #58a6ff;
-  --color-lm-green: #3fb950;
-  --color-lm-red: #f85149;
-  --color-lm-amber: #d29922;
-  --color-lm-purple: #bc8cff;
-  --color-lm-cyan: #39c5cf;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-
-  /* spacing + radius scale (design-system primitives consume these) */
-  --radius-lm-sm: 4px;
-  --radius-lm-md: 6px;
-  --radius-lm-lg: 10px;
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+  --font-sans: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-display: "Cera Round Pro", "TypeMates Cera Round Pro Bold", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
-/* Plain `--lm-*` mirror so space components and the Ink-compat layer (which
-   emit inline styles, not Tailwind classes) opt into the same palette. The
-   full set is (re)declared per theme below. */
-:root, [data-theme="dark"] {
-  --lm-bg: #0d1117;
-  --lm-panel: #161b22;
-  --lm-panel2: #1c2128;
-  --lm-border: #30363d;
-  --lm-text: #e6edf3;
-  --lm-muted: #8b949e;
-  --lm-accent: #58a6ff;
-  --lm-green: #3fb950;
-  --lm-red: #f85149;
-  --lm-amber: #d29922;
-  --lm-purple: #bc8cff;
-  --lm-cyan: #39c5cf;
-}
+/* ── Light theme (DEFAULT) ────────────────────────────────────── */
+:root, [data-theme="light"] {
+  --brand-1: #f5c815;
+  --brand-2: #f9a94a;
+  --brand-3: #f38358;
+  --brand-4: #ed92a1;
+  --brand-5: #d59ec8;
 
-/* Light theme: override both the Tailwind-backing and plain mirrors. */
-[data-theme="light"] {
-  --color-lm-bg: #ffffff;
-  --color-lm-panel: #f6f8fa;
-  --color-lm-panel2: #eef1f4;
-  --color-lm-border: #d0d7de;
-  --color-lm-text: #1f2328;
-  --color-lm-muted: #656d76;
-  --color-lm-accent: #0969da;
-  --color-lm-green: #1a7f37;
-  --color-lm-red: #cf222e;
-  --color-lm-amber: #9a6700;
-  --color-lm-purple: #8250df;
-  --color-lm-cyan: #1b7c83;
+  --background: #ffffff;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --sidebar: #fafaf9;
+  --sidebar-foreground: #1c1917;
+  --sidebar-border: #e7e5e4;
+  --sidebar-accent: #f5f5f4;
+  --sidebar-accent-foreground: #1c1917;
+  --muted: #f5f5f4;
+  --muted-foreground: #57534e;
+  --accent: #f5f5f4;
+  --accent-foreground: #1c1917;
+  --border: #e7e5e4;
+  --input: #e7e5e4;
+  --ring: #a8a29e;
+  --primary: #1c1917;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f4;
+  --secondary-foreground: #1c1917;
+  --destructive: #e11d48;
+  --destructive-foreground: #ffffff;
+  --knowledge: #10b981;
+  --knowledge-foreground: #ffffff;
+  --agent: #7c3aed;
+  --agent-foreground: #ffffff;
 
+  /* ── Legacy --lm-* bridge (used by tree.tsx, inspector.tsx, replay.tsx) ── */
   --lm-bg: #ffffff;
-  --lm-panel: #f6f8fa;
-  --lm-panel2: #eef1f4;
-  --lm-border: #d0d7de;
-  --lm-text: #1f2328;
-  --lm-muted: #656d76;
-  --lm-accent: #0969da;
-  --lm-green: #1a7f37;
-  --lm-red: #cf222e;
-  --lm-amber: #9a6700;
-  --lm-purple: #8250df;
-  --lm-cyan: #1b7c83;
+  --lm-panel: #f5f5f4;
+  --lm-panel2: #ece9e6;
+  --lm-border: #e7e5e4;
+  --lm-text: #1c1917;
+  --lm-muted: #57534e;
+  --lm-accent: #7c3aed;
+  --lm-green: #059669;
+  --lm-red: #e11d48;
+  --lm-amber: #d97706;
+  --lm-purple: #7c3aed;
+  --lm-cyan: #0891b2;
 }
 
-html, body, #root { height: 100%; }
+/* ── Dark theme ───────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --brand-1: #f5c815;
+  --brand-2: #f9a94a;
+  --brand-3: #f38358;
+  --brand-4: #ed92a1;
+  --brand-5: #d59ec8;
+
+  --background: #1a1816;
+  --foreground: #ece8e3;
+  --card: #211e1b;
+  --card-foreground: #ece8e3;
+  --popover: #211e1b;
+  --popover-foreground: #ece8e3;
+  --sidebar: #141210;
+  --sidebar-foreground: #ece8e3;
+  --sidebar-border: #2e2a26;
+  --sidebar-accent: #2e2a26;
+  --sidebar-accent-foreground: #ece8e3;
+  --muted: #2e2a26;
+  --muted-foreground: #a8a29e;
+  --accent: #2e2a26;
+  --accent-foreground: #ece8e3;
+  --border: #2e2a26;
+  --input: #2e2a26;
+  --ring: #57534e;
+  --primary: #ece8e3;
+  --primary-foreground: #1a1816;
+  --secondary: #2e2a26;
+  --secondary-foreground: #ece8e3;
+  --destructive: #e11d48;
+  --destructive-foreground: #ffffff;
+  --knowledge: #34d399;
+  --knowledge-foreground: #064e3b;
+  --agent: #a78bfa;
+  --agent-foreground: #1a1816;
+
+  --lm-bg: #1a1816;
+  --lm-panel: #211e1b;
+  --lm-panel2: #2a2520;
+  --lm-border: #2e2a26;
+  --lm-text: #ece8e3;
+  --lm-muted: #a8a29e;
+  --lm-accent: #bc8cff;
+  --lm-green: #34d399;
+  --lm-red: #f87171;
+  --lm-amber: #fbbf24;
+  --lm-purple: #bc8cff;
+  --lm-cyan: #22d3ee;
+}
+
+/* ── Tailwind color utilities (@theme inline binds classes to vars) ── */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-knowledge: var(--knowledge);
+  --color-knowledge-foreground: var(--knowledge-foreground);
+  --color-agent: var(--agent);
+  --color-agent-foreground: var(--agent-foreground);
+  --color-brand-1: var(--brand-1);
+  --color-brand-2: var(--brand-2);
+  --color-brand-3: var(--brand-3);
+  --color-brand-4: var(--brand-4);
+  --color-brand-5: var(--brand-5);
+  /* Legacy lm-* color utilities (used by existing tree/inspector/replay) */
+  --color-lm-bg: var(--lm-bg);
+  --color-lm-panel: var(--lm-panel);
+  --color-lm-panel2: var(--lm-panel2);
+  --color-lm-border: var(--lm-border);
+  --color-lm-text: var(--lm-text);
+  --color-lm-muted: var(--lm-muted);
+  --color-lm-accent: var(--lm-accent);
+  --color-lm-green: var(--lm-green);
+  --color-lm-red: var(--lm-red);
+  --color-lm-amber: var(--lm-amber);
+  --color-lm-purple: var(--lm-purple);
+  --color-lm-cyan: var(--lm-cyan);
+}
+
+/* ── Base styles ────────────────────────────────────────────────── */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
 body {
-  background: var(--color-lm-bg);
-  color: var(--color-lm-text);
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 13px;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Thin dark scrollbars to match the devtools aesthetic. */
-*::-webkit-scrollbar { width: 9px; height: 9px; }
-*::-webkit-scrollbar-thumb { background: #30363d; border-radius: 5px; }
+/* ── Scrollbars ─────────────────────────────────────────────────── */
+*::-webkit-scrollbar { width: 6px; height: 6px; }
 *::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+[data-theme="dark"] *::-webkit-scrollbar-thumb { background: #3d3530; }
 
+/* ── Focus ring ─────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ── Animations ─────────────────────────────────────────────────── */
 @keyframes lm-spin { to { transform: rotate(360deg); } }
-.lm-spin { display: inline-block; animation: lm-spin 1.2s linear infinite; }
+@keyframes lm-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes lm-slide-in-right { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes lm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes lm-stream-cursor { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+.lm-spin { animation: lm-spin 1.2s linear infinite; }
+.lm-fade-in { animation: lm-fade-in 150ms ease-out; }
+.lm-slide-in-right { animation: lm-slide-in-right 200ms ease-out; }
+.lm-pulse { animation: lm-pulse 2s ease-in-out infinite; }
+.streaming-cursor::after {
+  content: '▋';
+  animation: lm-stream-cursor 0.8s step-end infinite;
+  color: var(--muted-foreground);
+  font-size: 0.85em;
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .lm-fade-in, .lm-slide-in-right, .lm-pulse, .lm-spin { animation: none; }
+  .streaming-cursor::after { animation: none; }
+  * { transition-duration: 0.01ms !important; }
+}
+
+/* ── Prose / markdown output ─────────────────────────────────────── */
+.lm-prose { line-height: 1.7; }
+.lm-prose p { margin: 0 0 0.75em; }
+.lm-prose p:last-child { margin-bottom: 0; }
+.lm-prose ul, .lm-prose ol { padding-left: 1.5em; margin: 0 0 0.75em; }
+.lm-prose li { margin-bottom: 0.25em; }
+.lm-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.lm-prose pre {
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  margin: 0 0 0.75em;
+}
+.lm-prose pre code { background: none; padding: 0; }
+.lm-prose h1, .lm-prose h2, .lm-prose h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 1em 0 0.4em;
+}
+.lm-prose h1 { font-size: 1.4em; }
+.lm-prose h2 { font-size: 1.2em; }
+.lm-prose h3 { font-size: 1.05em; }
+.lm-prose blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1em;
+  color: var(--muted-foreground);
+  margin: 0 0 0.75em;
+}
+.lm-prose a { color: var(--agent); text-decoration: underline; }
+.lm-prose strong { font-weight: 600; }
+.lm-prose hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+
+/* ── Safe area insets (mobile) ───────────────────────────────────── */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-top { padding-top: env(safe-area-inset-top); }

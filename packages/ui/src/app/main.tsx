@@ -2,8 +2,10 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { Shell } from './shell.js';
+import { AppShell } from './AppShell.js';
 import { useStore, connectLive, type InspectorTab, type Project } from '../store/store.js';
 import { parseTrace } from './replay.js';
+import { initTheme } from '../theme/theme.js';
 
 // Expose React for runtime-bundled space components that reference it (defensive;
 // the runtime bundle shares this React instance directly).
@@ -50,6 +52,8 @@ export function mountApp(): void {
 }
 
 async function boot(): Promise<void> {
+  initTheme();
+
   const params = new URLSearchParams(window.location.search);
   const traceUrl = params.get('trace');
   const sessionIdParam = params.get('sessionId');
@@ -69,7 +73,7 @@ async function boot(): Promise<void> {
   if (isShellMode) {
     // ── Shell mode: project + session management ────────────────────────────
     const root = createRoot(document.getElementById('root')!);
-    root.render(<Shell />);
+    root.render(<AppShell />);
 
     // Pre-load projects and pick a default.
     try {
@@ -95,7 +99,7 @@ async function boot(): Promise<void> {
 
   // ── Single-session mode (legacy or ?sessionId=) ─────────────────────────
   const root = createRoot(document.getElementById('root')!);
-  root.render(<App />);
+  root.render(<AppShell singleSession />);
 
   if (traceUrl) {
     // Replay mode — fetch and load the trace, no WS.

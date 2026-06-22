@@ -57,6 +57,10 @@ interface AppState {
   sessions: SessionMeta[];
   activeSessionId: string | null;
 
+  // ─── UI panel state ───────────────────────────────────────────────────────────
+  devPanelOpen: boolean;
+  sidebarOpen: boolean;
+
   // actions
   feedLive: (events: WireEvent[]) => void;
   setConnection: (c: Connection) => void;
@@ -84,6 +88,9 @@ interface AppState {
   setSessions: (sessions: SessionMeta[]) => void;
   setActiveSessionId: (id: string | null) => void;
   resetSession: () => void;
+  // UI panel actions
+  setDevPanelOpen: (v: boolean) => void;
+  setSidebarOpen: (v: boolean) => void;
 }
 
 function recomputeReplayModel(events: WireEvent[], cursor: number): SessionModel {
@@ -110,6 +117,9 @@ export const useStore = create<AppState>((set, get) => ({
   activeProjectId: null,
   sessions: [],
   activeSessionId: null,
+  // UI panel initial state
+  devPanelOpen: false,
+  sidebarOpen: true,
 
   feedLive: (events) => {
     const s = get();
@@ -169,6 +179,9 @@ export const useStore = create<AppState>((set, get) => ({
   setActiveProjectId: (id) => set({ activeProjectId: id }),
   setSessions: (sessions) => set({ sessions }),
   setActiveSessionId: (id) => set({ activeSessionId: id }),
+  // ─── UI panel actions ─────────────────────────────────────────────────────
+  setDevPanelOpen: (devPanelOpen) => set({ devPanelOpen }),
+  setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   resetSession: () => set({
     model: emptyModel(),
     version: 0,
