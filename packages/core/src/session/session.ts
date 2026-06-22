@@ -102,6 +102,11 @@ export class Session {
   /** Expose the tracer so the CLI can subscribe the TraceHub to it. */
   getTracer(): Tracer { return this.tracer; }
 
+  /** The root execution-node id for this session (the `session_start` nodeId).
+   *  Used by hosts to attribute node-less events (e.g. an injected user_message)
+   *  to the session root instead of falling back to a phantom node. */
+  getRootNodeId(): string { return this.sessionId; }
+
   /** The full message history (for persisting a resumable session snapshot). */
   getHistory(): import('../context/history.js').Message[] { return this.history.messages; }
 

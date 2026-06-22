@@ -518,8 +518,11 @@ export class SessionManager {
     entry.messageCount++;
 
     // Write user message as a trace event so it appears in the conversation.
+    // Attribute it to the session root node so the reducer never falls back to a
+    // phantom/legacy node (which would hijack rootId and hide the real tree).
     if (typeof entry.session.getTracer === 'function') {
-      entry.session.getTracer().write({ ts: Date.now(), type: 'user_message', content });
+      const nodeId = typeof entry.session.getRootNodeId === 'function' ? entry.session.getRootNodeId() : undefined;
+      entry.session.getTracer().write({ ts: Date.now(), type: 'user_message', nodeId, content });
     }
 
     let run: Promise<void>;

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   type SessionModel, type WireEvent, emptyModel, buildModel, applyWireEvent,
+  parentNodeIds,
   pushUserBlock, pushErrorBlock, pushAskBlock, resolveAskBlock,
 } from './model.js';
 import type { TraceEvent } from '@lmthing/core';
@@ -261,10 +262,23 @@ export function connectLive(wsUrl: string): {
           store.setHello({ spaceName: String(msg.spaceName ?? ''), agentSlug: String(msg.agentSlug ?? '') });
           break;
         case 'trace_snapshot': {
-          // Rebuild the model wholesale from the snapshot (handles reconnect).
+          // Rebuild the model wholesale from the snapshot (handles connect /
+          // resume / reconnect). Unlike live `trace` events (which auto-expand
+          // in feedLive as node_start arrives), a snapshot rebuild would otherwise
+          // leave `expanded` empty and the tree would render as a single collapsed
+          // root row — so auto-expand every node that has children.
           const events = (msg.events as WireEvent[]) ?? [];
           const rebuilt = buildModel(events.map((x) => ({ seq: x.seq, event: x.event })));
-          useStore.setState((s) => ({ model: rebuilt, version: s.version + 1, selectedNodeId: s.selectedNodeId ?? rebuilt.rootId }));
+          useStore.setState((s) => {
+            const expanded = new Set(s.expanded);
+            for (const id of parentNodeIds(rebuilt)) expanded.add(id);
+            return {
+              model: rebuilt,
+              version: s.version + 1,
+              expanded,
+              selectedNodeId: s.selectedNodeId ?? rebuilt.rootId,
+            };
+          });
           break;
         }
         case 'trace':

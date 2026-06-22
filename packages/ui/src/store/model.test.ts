@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildModel, type WireEvent } from './model.js';
+import { buildModel, parentNodeIds, type WireEvent } from './model.js';
 import type { TraceEvent } from '@lmthing/core';
 
 let seq = 0;
@@ -22,6 +22,18 @@ describe('store model reducer', () => {
     expect(m.nodes['fork1']!.status).toBe('done');
     expect(m.nodes['fork1']!.result).toEqual({ ok: true });
   });
+
+  it('parentNodeIds lists every node that must be expanded to show the full tree', () => {
+    reset();
+    const m = buildModel([
+      ev({ ts: 1, type: 'session_start', sessionId: 'sid', spaceDir: '/s', agentSlug: 'a', nodeId: 'sid' }),
+      ev({ ts: 2, type: 'node_start', nodeId: 'run1', parentId: 'sid', kind: 'run', label: 'session', context: 'session', status: 'running' }),
+      ev({ ts: 3, type: 'node_start', nodeId: 'fork1', parentId: 'run1', kind: 'fork', label: 'fork:x', context: 'fork:x', status: 'running' }),
+    ]);
+    // sid + run1 have children; fork1 (a leaf) does not.
+    expect(parentNodeIds(m).sort()).toEqual(['run1', 'sid']);
+  });
+
 
   it('does NOT create a phantom node for a node-less fork_queue event', () => {
     reset();
@@ -66,19 +78,24 @@ describe('store model reducer', () => {
     expect(m.blocks[0]!.nodeId).toBe('fork1');
   });
 
-  it('legacy traces (no nodeId) still build a flat tree from context labels', () => {
+  it('a node-less event never spawns a phantom node or hijacks rootId', () => {
     reset();
+    // user_message arrives FIRST without historically carrying a nodeId; it must
+    // not create a 'session' phantom that steals rootId ahead of session_start.
     const m = buildModel([
-      ev({ ts: 1, type: 'session_start', sessionId: 'sid', spaceDir: '/s', agentSlug: 'a' }),
-      ev({ ts: 2, type: 'statement', context: 'session', code: 'const a = 1' }),
-      ev({ ts: 3, type: 'statement', context: 'fork:plan', code: 'const b = 2' }),
+      ev({ ts: 1, type: 'user_message', content: 'go' }),
+      ev({ ts: 2, type: 'session_start', sessionId: 'sid', spaceDir: '/s', agentSlug: 'a', nodeId: 'sid' }),
+      ev({ ts: 3, type: 'node_start', nodeId: 'run1', parentId: 'sid', kind: 'run', label: 'session', context: 'session', status: 'running' }),
+      ev({ ts: 4, type: 'node_start', nodeId: 'fork1', parentId: 'run1', kind: 'fork', label: 'fork:x', context: 'fork:x', status: 'running' }),
     ]);
-    const session = Object.values(m.nodes).find((n) => n.label === 'session');
-    const fork = Object.values(m.nodes).find((n) => n.label === 'fork:plan');
-    expect(session).toBeDefined();
-    expect(fork).toBeDefined();
-    expect(fork!.parentId).toBe(session!.id);
+    expect(m.rootId).toBe('sid');
+    expect(Object.keys(m.nodes).sort()).toEqual(['fork1', 'run1', 'sid']);
+    expect(m.nodes['sid']!.childIds).toContain('run1');
+    expect(m.nodes['run1']!.childIds).toContain('fork1');
+    // The user message still renders as a conversation block.
+    expect(m.blocks.find((b) => b.type === 'user')).toBeDefined();
   });
+
 
   it('replay reconstruction: buildModel over a prefix equals the live state at that point', () => {
     reset();

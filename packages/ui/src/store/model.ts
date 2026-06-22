@@ -94,33 +94,13 @@ function ensureNode(m: SessionModel, id: string): ExecNode {
   return n;
 }
 
-// Legacy context → synthetic nodeId (for old traces without nodeId)
-function legacyId(m: SessionModel, ctx: string): string {
-  const id = `legacy_${ctx.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-  if (!m.nodes[id]) {
-    const n = ensureNode(m, id);
-    n.label = ctx;
-    if (ctx === 'session') { n.kind = 'session'; if (!m.rootId) m.rootId = id; }
-    else if (ctx.startsWith('fork:')) { n.kind = 'fork'; linkLegacyParent(m, n); }
-    else if (ctx.startsWith('delegate:')) { n.kind = 'delegate'; linkLegacyParent(m, n); }
-  }
-  return id;
-}
-
-function linkLegacyParent(m: SessionModel, n: ExecNode): void {
-  const sessionId = m.nodes['legacy_session'] ? 'legacy_session' : m.rootId;
-  if (sessionId && sessionId !== n.id) {
-    n.parentId = sessionId;
-    const parent = ensureNode(m, sessionId);
-    if (!parent.childIds.includes(n.id)) parent.childIds.push(n.id);
-  }
-}
-
-function nodeIdFor(m: SessionModel, ev: TraceEvent): string {
-  const explicit = (ev as { nodeId?: string }).nodeId;
-  if (explicit) return explicit;
-  const ctx = (ev as { context?: string }).context ?? 'session';
-  return legacyId(m, ctx);
+/** The explicit nodeId an event carries, or null. Every trace event is now
+ *  emitted with a real nodeId (session_start/node_start carry it, and hosts
+ *  attribute node-less injected events — e.g. user_message — to the root).
+ *  Events without a nodeId are conversation/ephemeral only and must NOT spawn
+ *  a phantom node (doing so used to hijack rootId and hide the real tree). */
+function nodeIdFor(ev: TraceEvent): string | null {
+  return (ev as { nodeId?: string }).nodeId ?? null;
 }
 
 let blockCounter = 0;
@@ -132,8 +112,7 @@ export function applyWireEvent(m: SessionModel, we: WireEvent): void {
   const ev = we.event;
 
   // Events that don't belong to a specific node — handle without minting one
-  // (otherwise a node-less event defaults to context 'session' and spawns a
-  // phantom node that never ends).
+  // (otherwise a node-less event spawns a phantom node that hijacks rootId).
   if (ev.type === 'fork_queue') {
     if (m.rootId) ensureNode(m, m.rootId).queue = { active: ev.active, queued: ev.queued, max: ev.max };
     return;
@@ -144,8 +123,18 @@ export function applyWireEvent(m: SessionModel, we: WireEvent): void {
     if (id) ensureNode(m, id).eventSeqs.push(we.seq);
     return;
   }
+  if (ev.type === 'user_message') {
+    // A conversation block, not an execution node. Attribute to its node (root)
+    // if known; never mint a phantom node for it.
+    const last = m.blocks[m.blocks.length - 1];
+    if (!(last && last.type === 'user' && last.content === ev.content)) {
+      m.blocks.push({ id: `b${++blockCounter}`, ts: ev.ts, nodeId: (ev as { nodeId?: string }).nodeId ?? m.rootId ?? '', type: 'user', content: ev.content });
+    }
+    return;
+  }
 
-  const nid = nodeIdFor(m, ev);
+  const nid = nodeIdFor(ev);
+  if (!nid) return; // node-less event with no attribution — ignore, never phantom.
   const node = ensureNode(m, nid);
   node.eventSeqs.push(we.seq);
 
@@ -233,16 +222,6 @@ export function applyWireEvent(m: SessionModel, we: WireEvent): void {
       m.blocks.push({ id: `b${++blockCounter}`, ts: ev.ts, nodeId: nid, type: 'display', descriptor: ev.descriptor });
       break;
     }
-    case 'user_message': {
-      // The user's prompt, captured in the trace so it reconstructs on reconnect/replay
-      // (display() output alone would lose the question it answered). On a LIVE send the
-      // client already pushed an optimistic user block — dedup against it so we don't
-      // double it; on a full replay there is no prior block so this renders the prompt.
-      const last = m.blocks[m.blocks.length - 1];
-      if (last && last.type === 'user' && last.content === ev.content) break;
-      m.blocks.push({ id: `b${++blockCounter}`, ts: ev.ts, nodeId: nid, type: 'user', content: ev.content });
-      break;
-    }
   }
 }
 
@@ -250,6 +229,17 @@ export function buildModel(events: WireEvent[]): SessionModel {
   const m = emptyModel();
   for (const we of events) applyWireEvent(m, we);
   return m;
+}
+
+/** The ids of every node that has children — i.e. the nodes that must be in
+ *  `expanded` for the tree to render its full hierarchy. Used after a wholesale
+ *  model rebuild (snapshot / replay) so the tree doesn't collapse to one row. */
+export function parentNodeIds(m: SessionModel): string[] {
+  const ids: string[] = [];
+  for (const id in m.nodes) {
+    if (m.nodes[id]!.childIds.length > 0) ids.push(id);
+  }
+  return ids;
 }
 
 // ─── Conversation-block helpers (driven by interaction events, not trace) ────
