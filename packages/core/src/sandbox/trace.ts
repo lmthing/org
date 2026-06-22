@@ -65,7 +65,10 @@ export type TraceEvent =
   // New: throttled streaming progress — NOT written to file (kept in-memory only)
   | { ts: number; type: 'llm_progress'; context: string; nodeId?: string; chars: number; statements: number }
   // New: solve-ladder verification result
-  | { ts: number; type: 'solve_verify'; context: string; nodeId: string; attempt: number; rung: number; ok: boolean; feedback?: string };
+  | { ts: number; type: 'solve_verify'; context: string; nodeId: string; attempt: number; rung: number; ok: boolean; feedback?: string }
+  // New: a user-sent chat message — captured in the trace so the conversation
+  // (the user's prompts, not just display() output) reconstructs on reconnect/replay.
+  | { ts: number; type: 'user_message'; nodeId?: string; content: string };
 
 /** Event types excluded from the NDJSON file (ephemeral, high-frequency). */
 const FILE_EXCLUDED = new Set<TraceEvent['type']>(['llm_progress']);

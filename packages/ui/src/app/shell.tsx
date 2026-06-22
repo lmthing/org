@@ -11,7 +11,7 @@
  */
 import React from 'react';
 import { App } from './App.js';
-import { useStore, connectLive, type Project, type SessionMeta } from '../store/store.js';
+import { useStore, connectLive, type Project } from '../store/store.js';
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
 
@@ -199,6 +199,28 @@ function ProjectDetail({ projectId }: { projectId: string }): React.ReactElement
   );
 }
 
+// ─── Persisted session meta (superset of SessionMeta for project sessions) ────
+
+interface PersistedSessionMeta {
+  sessionId: string;
+  projectId?: string;
+  agentSlug: string;
+  spaceDir: string;
+  title?: string;
+  createdAt?: number;
+  lastActivity: number;
+  messageCount?: number;
+  status: string;
+}
+
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
 // ─── Session list item ────────────────────────────────────────────────────────
 
 function SessionItem({
@@ -207,15 +229,13 @@ function SessionItem({
   onSelect,
   onDelete,
 }: {
-  session: SessionMeta;
+  session: PersistedSessionMeta;
   active: boolean;
   onSelect: () => void;
   onDelete: () => void;
 }): React.ReactElement {
-  const label = session.agentSlug || session.sessionId.slice(0, 8);
-  const ts = session.lastActivity
-    ? new Date(session.lastActivity).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : '';
+  const label = session.title || session.agentSlug || session.sessionId.slice(0, 8);
+  const ts = session.lastActivity ? relativeTime(session.lastActivity) : '';
 
   return (
     <div
@@ -224,8 +244,8 @@ function SessionItem({
       }`}
       onClick={onSelect}
     >
-      <span className="flex-1 truncate font-mono" title={session.sessionId}>{label}</span>
-      {ts && <span className="text-lm-muted shrink-0">{ts}</span>}
+      <span className="flex-1 truncate" title={session.title || session.sessionId}>{label}</span>
+      {ts && <span className="text-lm-muted shrink-0 text-[10px]">{ts}</span>}
       <button
         onClick={(e) => { e.stopPropagation(); onDelete(); }}
         className="hidden group-hover:block text-lm-muted hover:text-lm-red ml-1 shrink-0"
@@ -240,28 +260,22 @@ function SessionItem({
 function Sidebar(): React.ReactElement {
   const projects = useStore((s) => s.projects);
   const activeProjectId = useStore((s) => s.activeProjectId);
-  const sessions = useStore((s) => s.sessions);
   const activeSessionId = useStore((s) => s.activeSessionId);
   const setProjects = useStore((s) => s.setProjects);
   const setActiveProjectId = useStore((s) => s.setActiveProjectId);
-  const setSessions = useStore((s) => s.setSessions);
 
+  const [projectSessions, setProjectSessions] = React.useState<PersistedSessionMeta[]>([]);
   const [newProjectName, setNewProjectName] = React.useState('');
   const [creatingProject, setCreatingProject] = React.useState(false);
   const [creatingSession, setCreatingSession] = React.useState(false);
   const [projectDetailOpen, setProjectDetailOpen] = React.useState(false);
 
-  // Load sessions whenever the active project changes.
+  // Load sessions from per-project endpoint.
   const loadSessions = React.useCallback((projectId: string) => {
-    apiGet<{ sessions: SessionMeta[] }>('/api/sessions')
-      .then((r) => {
-        // The server may return all sessions; we don't filter by projectId
-        // because the contract says GET /api/sessions returns all. If the server
-        // scopes by project in the future, this still works.
-        setSessions(r.sessions);
-      })
-      .catch(() => setSessions([]));
-  }, [setSessions]);
+    apiGet<{ sessions: PersistedSessionMeta[] }>(`/api/projects/${projectId}/sessions`)
+      .then((r) => setProjectSessions(r.sessions))
+      .catch(() => setProjectSessions([]));
+  }, []);
 
   // Reload projects on mount.
   React.useEffect(() => {
@@ -273,8 +287,8 @@ function Sidebar(): React.ReactElement {
   // When active project changes, reload sessions.
   React.useEffect(() => {
     if (activeProjectId) loadSessions(activeProjectId);
-    else setSessions([]);
-  }, [activeProjectId, loadSessions, setSessions]);
+    else setProjectSessions([]);
+  }, [activeProjectId, loadSessions]);
 
   const selectProject = (id: string) => {
     setActiveProjectId(id);
@@ -316,6 +330,17 @@ function Sidebar(): React.ReactElement {
     } finally {
       setCreatingSession(false);
     }
+  };
+
+  const resumeSession = async (sessionId: string) => {
+    if (!activeProjectId) return;
+    // POST /api/sessions with resumeSessionId — server returns same id if already live.
+    const { sessionId: sid } = await apiPost<{ sessionId: string }>('/api/sessions', {
+      projectId: activeProjectId,
+      resumeSessionId: sessionId,
+    });
+    switchSession(sid);
+    loadSessions(activeProjectId);
   };
 
   const deleteSession = async (sessionId: string) => {
@@ -396,15 +421,15 @@ function Sidebar(): React.ReactElement {
 
           {/* Session list */}
           <div className="flex flex-col gap-0.5 px-1">
-            {sessions.length === 0 && (
+            {projectSessions.length === 0 && (
               <div className="px-2 py-1 text-[11px] text-lm-muted">No chats yet.</div>
             )}
-            {sessions.map((s) => (
+            {projectSessions.map((s) => (
               <SessionItem
                 key={s.sessionId}
                 session={s}
                 active={s.sessionId === activeSessionId}
-                onSelect={() => switchSession(s.sessionId)}
+                onSelect={() => void resumeSession(s.sessionId)}
                 onDelete={() => void deleteSession(s.sessionId)}
               />
             ))}

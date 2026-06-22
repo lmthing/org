@@ -222,6 +222,50 @@ export async function ensureDefaultProject(root: string): Promise<void> {
   }
 }
 
+// ─── Session persistence ──────────────────────────────────────────────────────
+
+/** Metadata stored in each session's meta.json. */
+export interface PersistedSessionMeta {
+  sessionId: string;
+  projectId: string;
+  agentSlug: string;
+  spaceDir: string;
+  title: string;
+  createdAt: number;
+  lastActivity: number;
+  messageCount: number;
+  status: string;
+}
+
+/** `<root>/<projectId>/sessions/` */
+export function sessionsDir(root: string, projectId: string): string {
+  return join(root, projectId, 'sessions');
+}
+
+/**
+ * List persisted session metas for a project, sorted by lastActivity desc.
+ * Tolerates a missing sessions dir — returns [].
+ */
+export async function listProjectSessions(
+  root: string,
+  projectId: string,
+): Promise<PersistedSessionMeta[]> {
+  const dir = sessionsDir(root, projectId);
+  const entries = await safeDirEntries(dir);
+  const results: PersistedSessionMeta[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const metaPath = join(dir, entry.name, 'meta.json');
+      const raw = await readFile(metaPath, 'utf8');
+      results.push(JSON.parse(raw) as PersistedSessionMeta);
+    } catch {
+      // Corrupt or incomplete — skip.
+    }
+  }
+  return results.sort((a, b) => b.lastActivity - a.lastActivity);
+}
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 async function listSubdirs(dir: string): Promise<string[]> {

@@ -233,6 +233,16 @@ export function applyWireEvent(m: SessionModel, we: WireEvent): void {
       m.blocks.push({ id: `b${++blockCounter}`, ts: ev.ts, nodeId: nid, type: 'display', descriptor: ev.descriptor });
       break;
     }
+    case 'user_message': {
+      // The user's prompt, captured in the trace so it reconstructs on reconnect/replay
+      // (display() output alone would lose the question it answered). On a LIVE send the
+      // client already pushed an optimistic user block — dedup against it so we don't
+      // double it; on a full replay there is no prior block so this renders the prompt.
+      const last = m.blocks[m.blocks.length - 1];
+      if (last && last.type === 'user' && last.content === ev.content) break;
+      m.blocks.push({ id: `b${++blockCounter}`, ts: ev.ts, nodeId: nid, type: 'user', content: ev.content });
+      break;
+    }
   }
 }
 

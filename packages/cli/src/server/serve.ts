@@ -249,6 +249,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       const body = await readBody(req);
       const parsed = JSON.parse(body || '{}') as {
         spaceDir?: string; agentSlug?: string; model?: string; projectId?: string;
+        resumeSessionId?: string;
         budget?: { maxEpisodes?: number; maxToolCalls?: number; maxForkDepth?: number; maxWallClockMs?: number };
       };
       try {
@@ -258,6 +259,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
           model: parsed.model,
           budget: parsed.budget,
           projectId: parsed.projectId,
+          resumeSessionId: parsed.resumeSessionId,
         });
         sendJson(res, 201, { sessionId });
       } catch (err) {
@@ -374,6 +376,17 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
         try {
           await manager.addDocument(rawId, parsed.name.trim(), content);
           sendJson(res, 201, { ok: true });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
+
+      // GET /api/projects/:id/sessions
+      if (subPath === '/sessions' && method === 'GET') {
+        try {
+          const sessions = await manager.listProjectSessions(rawId);
+          sendJson(res, 200, { sessions });
         } catch (err) {
           sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
         }

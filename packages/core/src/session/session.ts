@@ -102,6 +102,9 @@ export class Session {
   /** Expose the tracer so the CLI can subscribe the TraceHub to it. */
   getTracer(): Tracer { return this.tracer; }
 
+  /** The full message history (for persisting a resumable session snapshot). */
+  getHistory(): import('../context/history.js').Message[] { return this.history.messages; }
+
   async continue(message: string): Promise<void> {
     if (!this.vm || !this.systemBlock || !this.ambientDts) {
       throw new Error('Session not started — call start() first');

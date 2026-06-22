@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { Session, saveSnapshot } from '@lmthing/core';
 import type { StreamOpts, StreamSession } from '@lmthing/core';
 import { WebRenderHost } from '../rpc/server.js';
@@ -20,8 +22,10 @@ import {
   listProjectSpaceDirs,
   ensureDefaultProject,
   safeDocumentName,
+  sessionsDir,
+  listProjectSessions,
 } from './projects.js';
-import type { ProjectMeta } from './projects.js';
+import type { ProjectMeta, PersistedSessionMeta } from './projects.js';
 
 export type SessionStatus = 'idle' | 'running' | 'error';
 
@@ -37,6 +41,18 @@ export interface SessionEntry {
   lastActivity: number;
   started: boolean;
   status: SessionStatus;
+  /** Project id (project-mode only). */
+  projectId?: string;
+  /** Human-readable title set from the first user message. */
+  title?: string;
+  /** Epoch ms when this entry was created. */
+  createdAt: number;
+  /** Number of user messages sent so far. */
+  messageCount: number;
+  /** When true, the next sendMessage should call resume() instead of start(). */
+  needsResume?: boolean;
+  /** Absolute path to the session's persistence dir (project-mode only). */
+  snapshotDir?: string;
 }
 
 /** Lightweight metadata for listSessions() — never exposes the Session object. */
@@ -149,7 +165,72 @@ export class SessionManager {
     budget?: BuildSessionArgs['budget'];
     /** Project id to use when running in project mode. Defaults to 'user'. */
     projectId?: string;
+    /** Resume a previously saved session by id (project mode only). */
+    resumeSessionId?: string;
   }): { sessionId: string } {
+    // ── Resume path (project mode + resumeSessionId) ──────────────────────────
+    if (this.lmthingRoot && opts.resumeSessionId) {
+      const root = this.lmthingRoot;
+      const projectId = opts.projectId ?? DEFAULT_PROJECT_ID;
+      const resumeId = opts.resumeSessionId;
+
+      // Validate id format.
+      if (!safeProjectId(resumeId) && !/^[0-9a-f-]{36}$/.test(resumeId)) {
+        throw new Error(`invalid resumeSessionId: ${resumeId}`);
+      }
+
+      // If already live, return it immediately.
+      if (this.sessions.has(resumeId)) {
+        return { sessionId: resumeId };
+      }
+
+      const snapshotDir = join(root, projectId, 'sessions', resumeId);
+      const snapshotFile = join(snapshotDir, 'snapshot.json');
+
+      if (!existsSync(snapshotFile)) {
+        throw new Error(`no saved session found: ${resumeId}`);
+      }
+
+      if (this.sessions.size >= this.maxSessions) {
+        const msg = `max sessions reached (${this.maxSessions})`;
+        console.warn(`[session-manager] ${msg}`);
+        throw new Error(msg);
+      }
+
+      const renderHost = new WebRenderHost();
+      const hub = new TraceHub();
+      const now = Date.now();
+
+      const placeholderEntry: SessionEntry = {
+        sessionId: resumeId,
+        session: null as unknown as Session,
+        renderHost,
+        hub,
+        spaceDir: join(root, projectId),
+        agentSlug: opts.agentSlug ?? 'thing',
+        lastActivity: now,
+        started: false,
+        status: 'idle',
+        projectId,
+        createdAt: now,
+        messageCount: 0,
+        needsResume: true,
+        snapshotDir,
+      };
+      this.sessions.set(resumeId, placeholderEntry);
+
+      // Async init: load meta + trace, then build session.
+      void this._initResumedSession(placeholderEntry, root, projectId, opts, resumeId, snapshotDir).catch((err: unknown) => {
+        placeholderEntry.status = 'error';
+        renderHost.emit({
+          type: 'error',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+
+      return { sessionId: resumeId };
+    }
+
     if (this.sessions.size >= this.maxSessions) {
       const msg = `max sessions reached (${this.maxSessions})`;
       console.warn(`[session-manager] ${msg}`);
@@ -168,6 +249,7 @@ export class SessionManager {
     if (this.lmthingRoot) {
       const root = this.lmthingRoot;
       const projectId = opts.projectId ?? DEFAULT_PROJECT_ID;
+      const snapshotDir = join(root, projectId, 'sessions', sessionId);
 
       // Placeholder entry so callers can look up the session immediately.
       const placeholderEntry: SessionEntry = {
@@ -180,6 +262,10 @@ export class SessionManager {
         lastActivity: Date.now(),
         started: false,
         status: 'idle',
+        projectId,
+        createdAt: Date.now(),
+        messageCount: 0,
+        snapshotDir,
       };
       this.sessions.set(sessionId, placeholderEntry);
 
@@ -225,6 +311,8 @@ export class SessionManager {
       lastActivity: Date.now(),
       started: false,
       status: 'idle',
+      createdAt: Date.now(),
+      messageCount: 0,
     };
     this.sessions.set(sessionId, entry);
     return { sessionId };
@@ -276,6 +364,118 @@ export class SessionManager {
     entry.agentSlug = agentSlug;
   }
 
+  /** Async init for resumed sessions. Loads meta + trace from disk, builds
+   *  the session (same wiring as _initProjectSession), seeds the hub with
+   *  persisted trace events, and marks entry.needsResume=true so sendMessage
+   *  uses session.resume() on the first call. */
+  private async _initResumedSession(
+    entry: SessionEntry,
+    root: string,
+    projectId: string,
+    opts: {
+      agentSlug?: string;
+      model?: string;
+      budget?: BuildSessionArgs['budget'];
+    },
+    sessionId: string,
+    snapshotDir: string,
+  ): Promise<void> {
+    const spaceDir = join(root, projectId);
+    const projectSpacesDir = join(root, projectId, 'spaces');
+
+    // Load persisted meta to restore title/createdAt/messageCount.
+    const metaPath = join(snapshotDir, 'meta.json');
+    try {
+      const raw = await readFile(metaPath, 'utf8');
+      const meta = JSON.parse(raw) as PersistedSessionMeta;
+      entry.title = meta.title || undefined;
+      entry.createdAt = meta.createdAt;
+      entry.messageCount = meta.messageCount;
+      entry.agentSlug = meta.agentSlug || entry.agentSlug;
+    } catch {
+      // No meta — keep defaults set at placeholder creation.
+    }
+
+    const agentSlug = entry.agentSlug;
+
+    const [systemSpaceDirs, preloadSpaceDirs] = await Promise.all([
+      listSystemSpaceDirs(root),
+      listProjectSpaceDirs(root, projectId),
+    ]);
+
+    const session = this.buildSessionFn({
+      spaceDir,
+      agentSlug,
+      model: opts.model,
+      budget: opts.budget,
+      renderHost: entry.renderHost,
+      systemSpaceDirs,
+      preloadSpaceDirs,
+      projectSpacesDir,
+    });
+
+    // Wire up the tracer to this session's hub.
+    if (typeof session.getTracer === 'function') {
+      session.getTracer().subscribe((e) => entry.hub.push(e));
+    }
+
+    // Seed the hub with persisted trace events so the WS trace_snapshot shows
+    // the prior conversation immediately when a client connects.
+    const tracePath = join(snapshotDir, 'trace.json');
+    try {
+      const raw = await readFile(tracePath, 'utf8');
+      const events = JSON.parse(raw) as Array<{ seq: number; event: import('@lmthing/core').TraceEvent }>;
+      for (const ev of events) {
+        entry.hub.push(ev.event);
+      }
+    } catch {
+      // No persisted trace — that's fine.
+    }
+
+    // Fill in the placeholder.
+    entry.session = session;
+    entry.spaceDir = spaceDir;
+    entry.needsResume = true;
+    entry.snapshotDir = snapshotDir;
+
+    void sessionId; // used in parent scope for routing
+  }
+
+  /** Persist a session's snapshot, meta, and trace to disk. Best-effort. */
+  private async persistSession(entry: SessionEntry): Promise<void> {
+    if (!this.lmthingRoot || !entry.projectId || !entry.session || !entry.snapshotDir) return;
+    const snapshotDir = entry.snapshotDir;
+    try {
+      await saveSnapshot(snapshotDir, {
+        sessionId: entry.sessionId,
+        agentSlug: entry.agentSlug,
+        spaceDir: entry.spaceDir,
+        history: entry.session.getHistory(),
+        scope: {},
+        createdAt: entry.createdAt,
+      });
+
+      const meta: PersistedSessionMeta = {
+        sessionId: entry.sessionId,
+        projectId: entry.projectId,
+        agentSlug: entry.agentSlug,
+        spaceDir: entry.spaceDir,
+        title: entry.title ?? '',
+        createdAt: entry.createdAt,
+        lastActivity: entry.lastActivity,
+        messageCount: entry.messageCount,
+        status: entry.status,
+      };
+      await mkdir(snapshotDir, { recursive: true });
+      await writeFile(join(snapshotDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');
+
+      const snap = entry.hub.snapshot();
+      await writeFile(join(snapshotDir, 'trace.json'), JSON.stringify(snap.events), 'utf8');
+    } catch (err) {
+      console.warn(`[session-manager] persistSession ${entry.sessionId} failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+
   getSession(id: string): SessionEntry | undefined {
     return this.sessions.get(id);
   }
@@ -298,10 +498,29 @@ export class SessionManager {
     if (!entry) throw new Error(`unknown session "${id}"`);
     if (!entry.session) throw new Error(`session "${id}" is still initializing — retry in a moment`);
 
-    const run = entry.started
-      ? entry.session.continue(content)
-      : entry.session.start(content);
-    entry.started = true;
+    // Set title from first message.
+    if (!entry.title) entry.title = content.trim().slice(0, 80);
+    entry.messageCount++;
+
+    // Write user message as a trace event so it appears in the conversation.
+    if (typeof entry.session.getTracer === 'function') {
+      entry.session.getTracer().write({ ts: Date.now(), type: 'user_message', content });
+    }
+
+    let run: Promise<void>;
+    if (entry.needsResume && entry.snapshotDir) {
+      // Resume from saved snapshot.
+      const snapshotDir = entry.snapshotDir;
+      run = entry.session.resume(snapshotDir, content);
+      entry.needsResume = false;
+      entry.started = true;
+    } else {
+      run = entry.started
+        ? entry.session.continue(content)
+        : entry.session.start(content);
+      entry.started = true;
+    }
+
     entry.status = 'running';
     entry.lastActivity = Date.now();
     run
@@ -309,11 +528,13 @@ export class SessionManager {
         entry.status = 'idle';
         entry.lastActivity = Date.now();
         entry.renderHost.emit({ type: 'done' });
+        void this.persistSession(entry);
       })
       .catch((err: unknown) => {
         entry.status = 'error';
         entry.lastActivity = Date.now();
         entry.renderHost.emit({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+        void this.persistSession(entry);
       });
   }
 
@@ -321,18 +542,7 @@ export class SessionManager {
   async disposeSession(id: string): Promise<boolean> {
     const entry = this.sessions.get(id);
     if (!entry) return false;
-    try {
-      await saveSnapshot(join(this.snapshotsDir, id), {
-        sessionId: id,
-        agentSlug: entry.agentSlug,
-        spaceDir: entry.spaceDir,
-        history: [],
-        scope: {},
-        createdAt: Date.now(),
-      });
-    } catch {
-      /* best-effort */
-    }
+    await this.persistSession(entry);
     try {
       entry.session?.dispose();
     } catch {
@@ -433,6 +643,50 @@ export class SessionManager {
     const safeName = safeDocumentName(name);
     if (!safeName) throw new Error(`invalid document name: ${name}`);
     await addDocument(root, safeId, safeName, content);
+  }
+
+  /**
+   * List persisted sessions for a project (from disk), overlaid with live
+   * session status where applicable. Returns newest-first.
+   */
+  async listProjectSessions(projectId: string): Promise<PersistedSessionMeta[]> {
+    const root = this.requireRoot();
+    const safe = safeProjectId(projectId);
+    if (!safe) throw new Error(`invalid project id: ${projectId}`);
+    const persisted = await listProjectSessions(root, safe);
+
+    // Overlay live status for any session currently in memory.
+    const result = persisted.map((meta) => {
+      const live = this.sessions.get(meta.sessionId);
+      if (!live) return meta;
+      return {
+        ...meta,
+        status: live.status,
+        lastActivity: live.lastActivity,
+        title: live.title ?? meta.title,
+        messageCount: live.messageCount,
+      };
+    });
+
+    // Add live sessions that aren't persisted yet (new sessions not yet sent a message).
+    for (const [, entry] of this.sessions) {
+      if (entry.projectId !== safe) continue;
+      if (result.some((m) => m.sessionId === entry.sessionId)) continue;
+      result.unshift({
+        sessionId: entry.sessionId,
+        projectId: safe,
+        agentSlug: entry.agentSlug,
+        spaceDir: entry.spaceDir,
+        title: entry.title ?? '',
+        createdAt: entry.createdAt,
+        lastActivity: entry.lastActivity,
+        messageCount: entry.messageCount,
+        status: entry.status,
+      });
+    }
+
+    // Sort newest-first.
+    return result.sort((a, b) => b.lastActivity - a.lastActivity);
   }
 
   /** Begin periodically reaping idle sessions. */
