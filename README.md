@@ -2,7 +2,7 @@
 
 An LLM agent runtime where the model drives programs by writing TypeScript, executed one statement at a time in a QuickJS WASM sandbox. The user-facing surface is **THING** — an orchestrator agent that talks to you and routes each request to the right specialist (research, coding, or a brand-new agent it builds on demand).
 
-For the runtime internals (turn loop, spaces, forks, delegation, system spaces) see [CLAUDE.md](./CLAUDE.md).
+For the runtime internals (turn loop, spaces, forks, delegation, system spaces) see [CLAUDE.md](./CLAUDE.md). For authoring Spaces and the `@lmthing/core`/`@lmthing/cli` APIs see [SPACE_DEVELOPMENT.md](./SPACE_DEVELOPMENT.md).
 
 ## Prerequisites
 

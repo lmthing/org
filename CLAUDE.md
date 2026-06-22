@@ -75,7 +75,7 @@ A DevTools-style 3-pane browser UI with **full observability of the execution hi
 A single cross-platform component vocabulary so spaces render identically in the terminal and the browser:
 
 - **Catalog** (`packages/core/src/ui/catalog.ts`, browser-safe, exported as `@lmthing/core/ui`): ~30 **display** components (Heading, Stack, Row, Columns, Card, Callout, Table, KeyValue, List, ProgressBar, Spinner, StatCard, Timeline, Badge, Divider, CodeBlock…) and ~33 **form** components (Form, Field, TextField, NumberField, Select, MultiSelect, RadioGroup, Checkbox, Switch, Slider, DatePicker, Rating, OtpInput, ConfirmButtons…). Each entry documents its prop contract; `catalogDts()` turns the catalog into ambient typed JSX globals appended to `LIBRARY_DTS`, and `CATALOG_NAMES` are injected as VM stubs (in `session.injectJSXRuntime`, `delegate.ts`, and `fork.ts`) so the model can write `<Stack/>`/`<Select/>` directly in sessions, delegates, AND forks. Type names are matched **case-insensitively** by the renderers.
-- **Two display renderers, one vocabulary:** `packages/cli/src/render/ink-renderer.tsx` `renderDescriptor` (→ Ink) and `packages/ui/src/app/conversation.tsx` `renderDescriptor` (→ themed HTML) both implement the display catalog. `display(<Stack>…)` works in both.
+- **Two display renderers, one vocabulary:** `packages/cli/src/render/ink-renderer.tsx` `renderDescriptor` (→ Ink) and `packages/ui/src/components/render-descriptor.tsx` `renderDescriptor` (→ themed HTML) both implement the display catalog. `display(<Stack>…)` works in both.
 - **Forms, one model:** `ask(<Form>…fields…</Form>)` resolves to an object keyed by field `name`; a bare control (`ask(<Select .../>)`) resolves to the single value. Web → `components/forms/CatalogForm.tsx`; terminal → `packages/cli/src/render/ink-form.tsx` (interactive, sequential field stepping via `useInput`, wired into `InkRenderHost.ask` in human mode). Both share flatten/coerce logic in `packages/core/src/ui/form.ts` (`flattenForm`/`coerceValue`/`defaultFor`/`isFormDescriptor`).
 - **Ink-compatibility layer for web** (`packages/ui/src/compat/`, `@lmthing/agent-ui/compat`): web React mirrors of `ink`/`ink-text-input`/`ink-select-input` (Box, Text, Spacer, Newline, Static, Transform, useInput, TextInput, SelectInput, MultiSelect, ConfirmInput) that map Ink props to themed CSS. `serve.ts` aliases bare `ink*` imports here, so a single Ink-flavored component source runs in the browser unchanged.
 - **Theming** (`packages/ui/src/theme/theme.ts` + `app/styles.css`): tokens defined per `[data-theme]` (dark default + light), exposed as both Tailwind `--color-lm-*` and plain `--lm-*` vars; runtime-switchable (DevTools header toggle, persisted). A space's optional `theme.json` is injected by `serve.ts` as `:root` overrides.
@@ -88,7 +88,7 @@ A single cross-platform component vocabulary so spaces render identically in the
 |---------|-------|---------|
 | `@lmthing/core` | `packages/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
 | `@lmthing/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring. |
-| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React web surface — the DevTools observability app (`src/app/`, `src/store/`, Tailwind v4 → `dist-web/app.css`). Also exports legacy block components + `useReplSession`. |
+| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React web surface — the THING chat shell (`AppShell`: projects/sessions sidebar, chat, documents+instructions) with a toggleable DevTools observability panel (`src/app/`, `src/store/`, Tailwind v4 → `dist-web/app.css`). Also exports legacy block components + `useReplSession`. |
 
 `@lmthing/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
 
@@ -119,11 +119,15 @@ packages/cli/src/
   cli/         bin.ts args.ts
 
 packages/ui/src/
-  app/         main.tsx App.tsx tree.tsx conversation.tsx inspector.tsx replay.tsx common.tsx styles.css  ← DevTools 3-pane web app (Tailwind v4); conversation.tsx renderDescriptor = web display catalog
-  store/       model.ts store.ts                                                 ← pure reducer (model.ts) + zustand store (live + replay)
+  app/         main.tsx AppShell.tsx Sidebar.tsx ChatView.tsx Composer.tsx Message.tsx DevPanel.tsx ProjectSettings.tsx ActivityStrip.tsx EmptyState.tsx styles.css  ← THING chat shell (Tailwind v4)
+                 main.tsx = entry + mode detection (shell / single-session / replay); AppShell = responsive layout (Sidebar + ChatView + DevPanel, drawers on mobile/tablet)
+                 Sidebar = projects+sessions nav; ChatView/Composer/Message = conversation; DevPanel = toggleable DevTools (Alt+I / ?inspect=1); ProjectSettings = instructions+documents drawer
+               App.tsx tree.tsx inspector.tsx replay.tsx conversation.tsx common.tsx  ← legacy 3-pane DevTools; tree/inspector/replay reused by DevPanel; App.tsx + conversation.tsx (old renderDescriptor) no longer mounted
+  store/       model.ts store.ts                                                 ← pure reducer (model.ts) + zustand store (live + replay + projects/sessions/UI state)
   client/      rpc-client.ts useReplSession.ts                                   ← legacy chat hook (superseded by store/)
-  components/  DisplayBlock.tsx AskBlock.tsx VariablesBlock.tsx forms/CatalogForm.tsx  ← block renderers + web design-system form renderer
+  components/  render-descriptor.tsx DisplayBlock.tsx AskBlock.tsx VariablesBlock.tsx forms/CatalogForm.tsx ui/  ← render-descriptor.tsx = web display catalog renderer; block renderers + web form renderer; ui/ = primitive component library (Button/Dialog/Drawer/Tabs/Toast…)
   compat/      ink.tsx inputs.tsx index.ts                                       ← Ink-compatibility layer for web (Box/Text/TextInput/SelectInput… → themed CSS); `@lmthing/agent-ui/compat`
+  lib/         cn.ts                                                             ← class-name merge helper
   theme/       theme.ts                                                          ← runtime light/dark + per-space token overrides
 
 packages/core/src/ui/                                                            ← browser-safe design-system module (`@lmthing/core/ui`)
@@ -196,6 +200,7 @@ To add or update secrets locally:
 
 - `session.start(message)` — loads the space, creates the VM, injects globals, runs the turn loop from a fresh user message.
 - `session.continue(message)` — appends a new user message to the existing history and re-runs the turn loop on the same VM and scope. Throws if called before `start()`. Used by `--repl` mode. Auto-summarizes history when it exceeds `maxHistoryTurns*2` messages.
+- `session.resume(snapshotDir, message)` — rehydrates a previously-persisted session from disk on a **fresh** VM, then runs the turn loop on `message`. Loads `snapshot.json` (via `loadSnapshot`), reloads+merges the space, restores the agent, replays the JSON-serializable VM `scope` (each var `vm.setVar`'d) and the message `history`. This powers server-side session persistence: when a user reopens an old chat, the manager calls `resume` instead of `start`. See `packages/core/src/session/snapshot.ts` (`Snapshot` = `{ sessionId, agentSlug, spaceDir, history, scope, createdAt }`; `saveSnapshot`/`loadSnapshot` read/write `<dir>/snapshot.json`).
 - `session.dispose()` — tears down the QuickJS VM.
 
 `SessionOpts` additions: `systemSpaceDirs?` (override/disable the always-on spaces), `maxHistoryTurns?` (history-summarization threshold), `preloadSpaceDirs?` (absolute space dirs loaded into `dynamicSpaces` at `start()` so they are delegatable immediately — the project server seeds this with the project's existing `spaces/*`), and `projectSpacesDir?` (exposed to every VM — session, forks, delegates — as `process.env.LMTHING_PROJECT_SPACES_DIR`; the architect's `scaffoldSpace` writes new spaces there, so synthesized agents land under the active project).
@@ -258,9 +263,10 @@ Loader/merge: `packages/core/src/spaces/system.ts` (`loadSystemSpaces`, `mergeSy
 
 - **`lmthing init`** (keyless) copies the bundled system spaces into `.lmthing/system/` and scaffolds the default `user` project. Code: `materializeRuntime` in `packages/cli/src/cli/bin.ts` (uses `cpSync` + `defaultSystemSpaceDirs()`).
 - **`lmthing`** (no args) launches the multi-session server (`packages/cli/src/server/{serve.ts,session-manager.ts,projects.ts}`). A provider/API key is required. A project session sets `spaceDir = .lmthing/<project>/` (loaded permissively — `requireAgents:false` — since the `thing` agent comes from the merged system spaces), `agentSlug = 'thing'`, `systemSpaceDirs = .lmthing/system/*`, `preloadSpaceDirs = .lmthing/<project>/spaces/*`, and `projectSpacesDir = .lmthing/<project>/spaces`.
-- **HTTP API** (beyond the existing session/ws routes): `GET/POST /api/projects`, `DELETE /api/projects/:id`, `GET/PUT /api/projects/:id/instructions`, `GET/POST /api/projects/:id/documents`; `POST /api/sessions` accepts `{ projectId }` (default `user`).
-- The web UI shell (project/session sidebar, chat, doc upload, instructions editor) lives in `packages/ui/src/app/shell.tsx`.
-- **Discovery caveat (follow-up):** preloaded project spaces are *delegatable* (in the registry) but THING has no built-in way to *enumerate* them across sessions — it only knows a synthesized space's key within the session that built it. A discovery function/knowledge catalog is a planned addition.
+- **HTTP API** (beyond the existing session/ws routes): `GET/POST /api/projects`, `DELETE /api/projects/:id`, `GET/PUT /api/projects/:id/instructions`, `GET/POST /api/projects/:id/documents`, `GET /api/projects/:id/sessions` (list persisted sessions), `GET /api/projects/:id/spaces` (list spaces created under the project — `listProjectSpaces`); `POST /api/sessions` accepts `{ projectId }` (default `user`) and an optional `resumeId` to rehydrate a persisted session. `POST /api/spaces { name, files }` writes an edited space to disk and returns its `spaceDir`.
+- **Session persistence.** `SessionManager` (`packages/cli/src/server/session-manager.ts`) snapshots each project session to `<root>/<project>/sessions/<sessionId>/`: `snapshot.json` (VM scope + history, via `Session`'s `saveSnapshot`), `meta.json` (title/createdAt/messageCount), and `trace.json` (the hub's buffered trace events). `persistSession` runs (best-effort) after each message and on dispose. Creating a session with `resumeId` loads the snapshot dir, marks `needsResume`, and the next `sendMessage` calls `session.resume(...)`; the persisted trace is replayed into the hub so the WS `trace_snapshot` rebuilds the full execution tree (fixes the "tree collapsed to one row after restore" bug).
+- The web UI shell (project/session sidebar, chat, doc upload + instructions editor, toggleable DevTools panel) is `packages/ui/src/app/AppShell.tsx` and its components (`Sidebar`, `ChatView`, `Composer`, `Message`, `DevPanel`, `ProjectSettings`). `main.tsx` detects the mode (shell vs single-session `?sessionId=` vs `?trace=` replay) and mounts `AppShell`. (The older single-file `shell.tsx` + 3-pane `App.tsx` are superseded and no longer mounted.)
+- **Space discovery.** Preloaded project spaces are delegatable (in the registry); the server also enumerates them via `GET /api/projects/:id/spaces` (`listProjectSpaceDirs`), so the UI can list a project's synthesized spaces across sessions.
 
 ## Fork roles (subagents)
 
@@ -337,3 +343,4 @@ Load these when working on specific areas:
 - Spaces: loading, validation, agent config → `@.claude/arch/spaces.md`
 - Fork + tasklist orchestration → `@.claude/arch/fork-tasklist.md`
 - Delegate + registry → `@.claude/arch/delegate.md`
+- Space authoring + `@lmthing/core`/`@lmthing/cli` API guide → `@SPACE_DEVELOPMENT.md`
