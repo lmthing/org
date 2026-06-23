@@ -246,14 +246,14 @@ async function main(): Promise<void> {
     streamFn = await loadMockStreamFn(mockPath);
   } else {
     modelSpec = resolveAlias(args.model ?? process.env['LM_MODEL'] ?? 'M');
-    const model = await resolveModel(modelSpec);
 
-    // Resolve per-request model overrides (e.g. a fork's role model) lazily, caching
-    // by spec so each distinct model is constructed once. Falls back to the default.
-    const modelCache = new Map<string, Awaited<ReturnType<typeof resolveModel>>>([[modelSpec, model]]);
-    const getModel = async (spec?: string): Promise<typeof model> => {
-      if (!spec) return model;
-      const resolvedSpec = resolveAlias(spec);
+    // Resolve models LAZILY — never at startup — so the server boots even when no
+    // valid model is configured yet (the custom-env endpoint PUT /api/env can then
+    // supply credentials). Each call re-reads the current env / alias, so env
+    // changes take effect for newly-constructed models without a process restart.
+    const modelCache = new Map<string, Awaited<ReturnType<typeof resolveModel>>>();
+    const getModel = async (spec?: string): Promise<Awaited<ReturnType<typeof resolveModel>>> => {
+      const resolvedSpec = resolveAlias(spec ?? args.model ?? process.env['LM_MODEL'] ?? 'M');
       const cached = modelCache.get(resolvedSpec);
       if (cached) return cached;
       const resolved = await resolveModel(resolvedSpec);
