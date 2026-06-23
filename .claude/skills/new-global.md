@@ -1,3 +1,8 @@
+---
+name: new-global
+description: Load when adding a new value-yielding global (ask, sleep, inspect, fork, delegate, tasklist, loadKnowledge, registerSpace).
+---
+
 # Skill: Adding a New Value-Yielding Global
 
 Value-yielding globals abort the LLM stream, hand control to the host, and resume the next turn with the resolved value as a VARIABLES block. Examples: `ask`, `sleep`, `inspect`, `fork`, `delegate`.

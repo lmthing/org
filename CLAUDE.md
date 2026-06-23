@@ -1,346 +1,106 @@
-# LMThing — Developer Guide
+# LMThing — Core Runtime Developer Guide
 
 LLM agent runtime where models drive programs by writing TypeScript. The model streams TS statements; the host evaluates them one at a time in a QuickJS WASM sandbox. Value-yielding calls (`ask`, `sleep`, `tasklist`, `fork`, `delegate`, `inspect`, `loadKnowledge`, `registerSpace`) abort the stream, hand control to the host, and resume the next turn with resolved values injected as a VARIABLES block.
+
+This file is an **orientation index** — load detail from the **Task Index** below only when a task needs it.
 
 ## Workspace
 
 ```bash
-pnpm install          # install from lockfile
+pnpm install          # from lockfile
 pnpm build            # build all packages → dist/
 pnpm typecheck        # tsc --noEmit across all packages (strict)
 pnpm test             # vitest run (co-located tests)
-pnpm dev              # watch + rebuild all packages in parallel
+pnpm dev              # watch + rebuild all packages
+# Single package: pnpm --filter @lmthing/core {build|test}
+# CLI: node packages/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
 ```
 
-Single-package commands (faster during active work):
-```bash
-pnpm --filter @lmthing/core build
-pnpm --filter @lmthing/cli build
-pnpm --filter @lmthing/core test
-```
-
-Run the CLI against a fixture space:
-```bash
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --agent chef "make pasta"
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000     # DevTools web UI (see "Web observability UI")
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --trace /tmp/trace.jsonl "make pasta"
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl         # interactive multi-turn (human)
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --repl  # interactive multi-turn (agent/automated)
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude "grep for TODO and list the files"  # coding agent (system spaces always loaded)
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --claude --no-system-spaces "..."  # disable the always-on toolkit
-node packages/cli/dist/cli/bin.js --space ./packages/core/system-spaces/solver --claude --mock ./fixtures/solver/mock.mjs "implement add"  # keyless run (scripted mock)
-node packages/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect --dump-system-prompt /tmp/prompt.txt  # write the exact system prompt + ambient DTS to a file, then exit (keyless, no model call)
-```
-
-### Testing without API keys (`--mock` / `LM_MOCK`)
-
-`--mock <file>` (or `LM_MOCK=<file>`) replaces the live AI SDK with a scripted
-`streamFn`, so the whole runtime — including forks/delegates/`solve` — runs with **no
-credentials**. The mock file is plain ESM (`.mjs`); its default export is a
-`MockHandler` (or a `string[]`, wrapped in `mockScript`) that returns the TypeScript the
-"model" should emit for each turn. The builders live in
-`packages/core/src/testing/mock-provider.ts` (`createMockStreamFn`, `mockScript`,
-`mockMatch`). Because the mock sits upstream of the tracer, every `--trace` assertion
-works unchanged. See `fixtures/{solver,engineer}/mock.mjs` for worked examples and
-`packages/cli/src/testing/keyless-cli.test.ts` for the keyless CLI smoke suite (run
-after `pnpm build`).
-
-### REPL mode (`--repl`)
-
-Starts a persistent session. Each message typed at `>` runs `session.start()` for the first turn, then `session.continue()` for subsequent turns — the VM, scope, and message history are preserved across turns.
-
-Type `exit` or press Ctrl+C to quit.
-
-A first message can be supplied as a positional argument to skip the initial prompt:
-```bash
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl "make pasta"
-```
-
-### `--claude` flag
-
-Switches `InkRenderHost.ask()` from Ink's `TextInput` widget to a plain stdout/stdin approach. Use this when the CLI is driven programmatically (Claude Code, scripts, tmux automation) where raw-mode PTY assumptions don't hold. Without `--claude`, ask() renders an interactive Ink form for human use.
-
-### Web observability UI (`--web <port>`)
-
-A DevTools-style 3-pane browser UI with **full observability of the execution hierarchy** (session → run → delegate → fork → tasklist task → solve) and an **agent-friendly HTTP API** on the same port.
-
-- **Layout:** left = live execution tree (status glyphs, durations, retry counts, fork-queue stats); center = conversation (user messages, `display()` output, interactive `ask()` forms incl. space components); right = per-node inspector (LLM requests/responses with retry attempts, evaluated statements + typecheck/eval errors, yields, variables snapshot, raw trace events).
-- **Live + replay:** live over WebSocket; `?trace=/trace.jsonl` (when `--trace` is set) or the "Load trace" file picker replays a `.jsonl` with a timeline scrubber. Same reducer powers both.
-- **Agent control (minimum context):** the UI is driveable headless via `GET /api/help` → `/api/state` (ASCII tree) → `/api/node/<id>?tab=…` → `/api/events?since=<seq>` (poll), plus `POST /api/message` / `/api/ask/<id>` / `/api/ui`. Full guide: `packages/cli/src/web/AGENT.md` (also served at `/api/help`). Every UI view is a deep-link URL (`?node=…&tab=…`); tree rows carry `data-node-id`; panes use ARIA landmarks.
-- **Build:** the React app lives in `@lmthing/agent-ui` (`src/app/`, `src/store/`), styled with **Tailwind v4** (prebuilt to `dist-web/app.css` at `pnpm build`). `serve.ts` runtime-bundles the app entry + the space's `web.tsx` form components together via esbuild so a **single React instance** is shared (no hooks-breaking second copy). Only the CSS is prebuilt.
-
-## UI Design System (terminal + web)
-
-A single cross-platform component vocabulary so spaces render identically in the terminal and the browser:
-
-- **Catalog** (`packages/core/src/ui/catalog.ts`, browser-safe, exported as `@lmthing/core/ui`): ~30 **display** components (Heading, Stack, Row, Columns, Card, Callout, Table, KeyValue, List, ProgressBar, Spinner, StatCard, Timeline, Badge, Divider, CodeBlock…) and ~33 **form** components (Form, Field, TextField, NumberField, Select, MultiSelect, RadioGroup, Checkbox, Switch, Slider, DatePicker, Rating, OtpInput, ConfirmButtons…). Each entry documents its prop contract; `catalogDts()` turns the catalog into ambient typed JSX globals appended to `LIBRARY_DTS`, and `CATALOG_NAMES` are injected as VM stubs (in `session.injectJSXRuntime`, `delegate.ts`, and `fork.ts`) so the model can write `<Stack/>`/`<Select/>` directly in sessions, delegates, AND forks. Type names are matched **case-insensitively** by the renderers.
-- **Two display renderers, one vocabulary:** `packages/cli/src/render/ink-renderer.tsx` `renderDescriptor` (→ Ink) and `packages/ui/src/components/render-descriptor.tsx` `renderDescriptor` (→ themed HTML) both implement the display catalog. `display(<Stack>…)` works in both.
-- **Forms, one model:** `ask(<Form>…fields…</Form>)` resolves to an object keyed by field `name`; a bare control (`ask(<Select .../>)`) resolves to the single value. Web → `components/forms/CatalogForm.tsx`; terminal → `packages/cli/src/render/ink-form.tsx` (interactive, sequential field stepping via `useInput`, wired into `InkRenderHost.ask` in human mode). Both share flatten/coerce logic in `packages/core/src/ui/form.ts` (`flattenForm`/`coerceValue`/`defaultFor`/`isFormDescriptor`).
-- **Ink-compatibility layer for web** (`packages/ui/src/compat/`, `@lmthing/agent-ui/compat`): web React mirrors of `ink`/`ink-text-input`/`ink-select-input` (Box, Text, Spacer, Newline, Static, Transform, useInput, TextInput, SelectInput, MultiSelect, ConfirmInput) that map Ink props to themed CSS. `serve.ts` aliases bare `ink*` imports here, so a single Ink-flavored component source runs in the browser unchanged.
-- **Theming** (`packages/ui/src/theme/theme.ts` + `app/styles.css`): tokens defined per `[data-theme]` (dark default + light), exposed as both Tailwind `--color-lm-*` and plain `--lm-*` vars; runtime-switchable (DevTools header toggle, persisted). A space's optional `theme.json` is injected by `serve.ts` as `:root` overrides.
-
-> **Note:** `display()` output and the VARIABLES preview are unaffected — only the rendered component set grew. The catalog is browser-safe (`@lmthing/core/ui`); never import the full `@lmthing/core` barrel from web code (it pulls Node built-ins into the esbuild browser bundle).
+Testing without keys: `--mock <file>` / `LM_MOCK=<file>` (scripted streamFn, no credentials). REPL: `--repl`. Programmatic/automated: `--claude`. Web DevTools UI: `--web <port>`. Full testing guide → `@.claude/skills/writing-tests.md`.
 
 ## Packages
 
 | Package | Entry | Purpose |
 |---------|-------|---------|
 | `@lmthing/core` | `packages/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
-| `@lmthing/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring. |
-| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React web surface — the THING chat shell (`AppShell`: projects/sessions sidebar, chat, documents+instructions) with a toggleable DevTools observability panel (`src/app/`, `src/store/`, Tailwind v4 → `dist-web/app.css`). Also exports legacy block components + `useReplSession`. |
+| `@lmthing/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring, `lmthing run`. |
+| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React web surface — THING chat shell + DevTools panel. |
 
 `@lmthing/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
 
-## Directory Map
+## Directory map (top level)
 
-```
-packages/core/src/
-  sandbox/     quickjs.ts host-bridge.ts boundary.ts jsx-runtime.ts trace.ts trace-tree.ts  ← VM + marshalling + tracing (trace.ts = event spine; trace-tree.ts = pure tree builder)
-  eval/        turn-loop.ts yield.ts error-rewind.ts stream-types.ts           ← the execution engine
-  typecheck/   tsc.ts library-dts.ts overlay.ts overlay-dts.ts transpile.ts
-  globals/     ask.ts sleep.ts display.ts inspect.ts fork.ts delegate.ts tasklist.ts load-knowledge.ts register-space.ts serialize.ts host-tools.ts  ← host-tools = shared sync substrate (execShell/fetch/readFileRaw/writeFileRaw…)
-  spaces/      load.ts frontmatter.ts agent.ts components.ts knowledge.ts tasklist-load.ts system.ts  ← system.ts = system-space loader + merge
-  tasklist/    dag.ts orchestrator.ts condition-dsl.ts schema.ts
-  fork/        fork.ts roles.ts                                                 ← roles.ts = explore/plan/general capability profiles + preambles
-  delegate/    delegate.ts registry.ts
-  context/     history.ts system-block.ts variables.ts summarize.ts             ← summarize wired into session.continue()
-  session/     session.ts snapshot.ts types.ts
+`packages/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{global,engineer,architect,solver,deep_research,memory,thing}` · `packages/cli/src/{providers,stream,render,rpc,web,cli}` · `packages/ui/src/{app,store,client,components,compat,lib,theme}`. Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
 
-packages/core/system-spaces/                                                    ← always-loaded baseline spaces (NOT under src/; read at runtime)
-  global/functions/  readFile writeFile editFile glob grep listDir webSearch webFetch remember recall recallAll forget todoWrite todoRead  ← the ONLY universally-injected functions
+## Top gotchas
 
-packages/cli/src/
-  providers/   resolve.ts aliases.ts
-  stream/      stream.ts
-  render/      ink-renderer.tsx html-to-terminal.ts
-  rpc/         server.ts events.ts trace-hub.ts                                  ← trace-hub.ts = seq-buffered WS broadcast + snapshot/compaction
-  web/         serve.ts agent-api.ts AGENT.md                                    ← serve.ts = HTTP+WS+static; agent-api.ts = headless /api/* control surface
-  cli/         bin.ts args.ts
+One-liners — full explanations are in the linked file.
 
-packages/ui/src/
-  app/         main.tsx AppShell.tsx Sidebar.tsx ChatView.tsx Composer.tsx Message.tsx DevPanel.tsx ProjectSettings.tsx ActivityStrip.tsx EmptyState.tsx styles.css  ← THING chat shell (Tailwind v4)
-                 main.tsx = entry + mode detection (shell / single-session / replay); AppShell = responsive layout (Sidebar + ChatView + DevPanel, drawers on mobile/tablet)
-                 Sidebar = projects+sessions nav; ChatView/Composer/Message = conversation; DevPanel = toggleable DevTools (Alt+I / ?inspect=1); ProjectSettings = instructions+documents drawer
-               App.tsx tree.tsx inspector.tsx replay.tsx conversation.tsx common.tsx  ← legacy 3-pane DevTools; tree/inspector/replay reused by DevPanel; App.tsx + conversation.tsx (old renderDescriptor) no longer mounted
-  store/       model.ts store.ts                                                 ← pure reducer (model.ts) + zustand store (live + replay + projects/sessions/UI state)
-  client/      rpc-client.ts useReplSession.ts                                   ← legacy chat hook (superseded by store/)
-  components/  render-descriptor.tsx DisplayBlock.tsx AskBlock.tsx VariablesBlock.tsx forms/CatalogForm.tsx ui/  ← render-descriptor.tsx = web display catalog renderer; block renderers + web form renderer; ui/ = primitive component library (Button/Dialog/Drawer/Tabs/Toast…)
-  compat/      ink.tsx inputs.tsx index.ts                                       ← Ink-compatibility layer for web (Box/Text/TextInput/SelectInput… → themed CSS); `@lmthing/agent-ui/compat`
-  lib/         cn.ts                                                             ← class-name merge helper
-  theme/       theme.ts                                                          ← runtime light/dark + per-space token overrides
+- **Variables don't persist between evals** — propagated via `globalThis['x'] = x` appended after each statement. → `@.claude/arch/turn-loop.md`
+- **System spaces always merged; only `global` functions are universal** — all system agents are universally delegatable; user space wins on collisions (except empty placeholders). → `@.claude/arch/spaces.md` · `@.claude/skills/system-spaces.md`
+- **Yield-result binding is host-side**, not the QuickJS post-`await` continuation — `Promise.all` / destructured binds work via `extractBindingPattern` + `vm.setVar`. → `@.claude/arch/turn-loop.md`
+- **Forks always salvage a value unless hard-capped** — `BudgetExceededError` propagates; an explicit `timeout` rejects; orchestrator/delegate forks (no timeout) always salvage. → `@.claude/arch/fork-tasklist.md`
+- **Yield errors surface to the model** (retryable), not silent `undefined`; hard caps still short-circuit. → `@.claude/arch/turn-loop.md`
+- **`delegate()`'s `action` is optional** — omit for model-driven delegation; auto-captures tasklist results. → `@.claude/arch/delegate.md`
+- **`execShell` / `readFileRaw` / `writeFileRaw` rooted at `LMTHING_SPACE_DIR`**, not `process.cwd()`. → `@.claude/skills/system-spaces.md`
+- **JSX in model output** is transpiled to `React.createElement`; the JSX runtime is injected into every VM (sessions, forks, delegates). → `@.claude/arch/typecheck.md`
 
-packages/core/src/ui/                                                            ← browser-safe design-system module (`@lmthing/core/ui`)
-  catalog.ts   ← single source of truth: display + form component names, prop contracts, docs; catalogDts() → ambient JSX globals
-  form.ts      ← flattenForm/coerceValue/defaultFor — shared form normalization for both renderers
-```
+## Session API (`packages/core/src/session/session.ts`)
 
-## Key Invariants
+- `start(message)` — load space, create VM, inject globals, run the turn loop from a fresh user message.
+- `continue(message)` — append a user message to existing history + VM/scope; re-run the turn loop. Auto-summarizes past `maxHistoryTurns*2` messages.
+- `resume(snapshotDir, message)` — rehydrate a persisted session on a fresh VM (powers server-side session persistence; see `@.claude/skills/project-server.md`).
+- `dispose()` — tear down the VM.
 
-- Each `evalStatement(code)` call is an isolated ES module. Variables do not persist between evals — the turn loop appends `try { globalThis['x'] = x; } catch {}` after each statement so the next module can read them as globals. All declared variables (including `undefined` values) are propagated this way.
-- **Yield-result binding is host-side, not via the module continuation.** A statement that yields (`const x = await ask()`, `const [a,b] = await Promise.all([fork(),fork()])`) does NOT re-run its post-`await` code in this sync eval model. The turn loop resolves each pending yield, then maps the resolved value(s) onto the bound names using `extractBindingPattern` (simple ← the value; array ← positional, so parallel `Promise.all` results land in order; object ← by key) and `vm.setVar`s them. Do not assume the QuickJS continuation binds variables.
-- `accumulatedContext` in the turn loop persists across yield continuations (variables stay in typecheck scope). Only error retries start fresh.
-- **System spaces are always merged into every space.** `Session` calls `mergeSystemInto` (`spaces/system.ts`) after `loadSpace`; only the **`global`** space's functions are injected universally (bypassing the per-agent `functions:` filter), and that universal set flows to forks **and delegates** (via `RunDelegateOpts.systemSpaces`). Every other system space's functions are scoped to the agent that declares them (resolved from the merged pool by `getAgentFunctions`). `mergeSystemInto` merges functions (the full pool, for per-agent resolution), components, agents, **and tasklists** — and all system **agents** stay universally delegatable. The user space wins on name collisions — EXCEPT an empty-placeholder user agent (an `agents/<slug>/` dir with no instruct.md → no instructBody + no actions) or an empty user tasklist dir (no `.md` files) does NOT shadow a real system one. (An empty `fixtures/architect/agents/architect/` dir silently shadowing the system architect — stripping its instructions/actions/`defaultAction` — was the root cause of repeated architect failures.)
-- **Fork VMs have `loadKnowledge`** injected alongside `ask`, `inspect`, `sleep`, and `display` (plus `registerSpace` for write-capable roles). Tasks inside a tasklist fork can call `await loadKnowledge(...)`. The fork's `processYield` explicitly handles `loadKnowledge` by calling `loadKnowledgeFile` directly — without this, `undefined` would win the race against the async file read and bind `k = undefined` in the VM.
-- **Forks are guaranteed to return a usable value (anti-"model stupidity").** If the model finishes a fork without calling `currentTask.resolve()`, `fork.ts` runs up to 2 *forced* resolve-only turns (tools forbidden, a FRESH `maxEpisodes:4` budget so a prior breach can't block them); if it still won't resolve, `salvageOutput(schema)` returns a schema-valid placeholder (`[]`/`0`/`false`/`{}`/a `(unavailable…)` string) so the parent/tasklist proceeds instead of hard-failing. **Hard limits stay hard:** a `BudgetExceededError` propagates (the budget is a cost ceiling), and a fork given an explicit `timeout` rejects on non-completion (no salvage). Orchestrator/delegate forks set no timeout, so they always salvage.
-- **The fork system prompt advertises the host primitives** `execShell`, `fetch`, `readFileRaw`, `writeFileRaw` (not just sleep/display/ask/inspect) and states there is no Node/Bun/Deno runtime — without this, coding forks burned every retry trying `child_process`/`Bun`/`Deno`. Complementary safety net: `sandboxApiHint()` (`eval/error-rewind.ts`) detects a failure that reached for an unavailable API and injects a one-line redirect (e.g. → `execShell(cmd)`) into the error block.
-- **The turn loop drops narrated prose.** `looksLikeProse(stmt)` (`eval/turn-loop.ts`) detects a natural-language sentence the model emitted instead of code (e.g. "Based on the query, I will…") and skips it — it never parses as TS, so dropping it (like a stray fence tag) avoids burning a retry on a guaranteed typecheck error. Conservative: bails on any code punctuation and requires an English function word.
-- **Budget near-limit nudge.** `Budget.nearLimitWarning()` (`eval/budget.ts`) returns a "wrap up and resolve now" message when within ~2 episodes / ≥80% of the tool-call or wall-clock cap (null otherwise); the turn loop appends it to the VARIABLES block after each yield resolves, so a model approaching a limit is told to finish before the hard `BudgetExceededError` fires.
-- **Yield errors surface to the model instead of binding `undefined`.** When a `processYield` throws a non-budget error (e.g. `delegate()` to a hallucinated space key, a space function that errored), the turn loop injects it as a normal retryable turn error (with the actionable message) so the model self-corrects — rather than silently binding `undefined` and leaving the model to guess. Hard caps (`BudgetExceededError`) still short-circuit; on the final attempt it falls through to bind `undefined` so the run can still limp forward. The `DelegateRegistry` error lists the real space keys + agent slugs (a hallucinated key — e.g. using the agent TITLE `deep-research-analyst` instead of the package `deep-research-space` — self-corrects on the next attempt).
-- **The continuation nudge fires after ANY non-yielding *call* binding, not just `await` ones.** Sync space functions (`scaffoldSpace`/`validateSpace`/`listScaffoldedSpaces`) bind a result without `await`; a model that stops right after one is stranded mid-program. `lastStmtNonYieldBinding` = bound a value AND the statement contains a call — so the runtime re-prompts (bounded by `maxContinueNudges`, default 4) to finish validate→register→delegate. Literal bindings (`const x = 5`) don't nudge.
-- **`execShell` runs with `cwd = space dir`** (`globals/host-tools.ts`), matching `readFileRaw`/`writeFileRaw`/`solve`'s verifier — so a fork that `writeFile("work/x.ts")` can run it with `execShell("npx tsx work/x.ts")` regardless of where the CLI was launched.
-- **`defaultAction` agent frontmatter → deterministic session routing (weak-model robustness).** An `AgentDef.defaultAction` (a string action id with a tasklist) makes `Session.start` run that action's tasklist via the reliable delegate path (which auto-captures the tasklist result) **instead of the model-driven turn loop** — then, if the action returns `{spaceKey, agentSlug, actionId}` (a builder action), it chains a second delegate to that new space so the final answer shows. The weak model only handles small salvage-backed sub-tasks inside the DAG; the multi-step orchestration can't be truncated. The architect declares `defaultAction: synthesize_and_run`; `scaffoldSpace` auto-sets `defaultAction` for any synthesized/imported agent that has exactly one action. `session.continue()` is unaffected (only the first freeform turn routes). Proven keyless in `testing/mock-session.test.ts`.
-- **`registerSpace(dir)` loads a space at runtime** into a `dynamicSpaces` map on `Session`. Subsequent `delegate()` calls can reach the newly registered space immediately — no session restart needed. Re-registering the same dir overwrites the prior entry (used for idempotent re-scaffolding). The `Session` shares this same `Map` reference with its `ForkEngine`, so a `registerSpace()` call **inside a (write-capable) fork** is visible to subsequent parent `delegate()` calls. Read-only fork roles (`explore`/`plan`) do **not** get `registerSpace` injected — it mutates shared session state, so it is withheld like the other write capabilities.
-- **Delegate auto-captures tasklist result.** When a delegate agent calls `tasklist(name)` whose `name` is one of the agent's action tasklists, the result is automatically set as `capturedResult` even without an explicit `currentTask.resolve()` call. With a specific `action` the capturable set is just that action's tasklist; with **no action** (model-driven delegation) it is ALL of the agent's action tasklists. This prevents silent null returns when the model forgets to call resolve after the tasklist.
-- **`delegate()`'s `action` is optional.** `delegate(pkg, agent)` (or `delegate(pkg, agent, opts)`) runs the child **model-driven**: no `actionDef` is required, the child sees its own `# Actions` in its system prompt, and may run one of their tasklists or just `currentTask.resolve()`. Passing an `action` keeps the original behavior. `runDelegate` only throws on a *specified-but-missing* action.
-- **`scaffoldSpace` normalizes the nested spec shape models emit.** Models reliably produce a nested spec (`{ agents: { <slug>: { instruct } }, knowledge: { <domain>: { <field>: { index, options|files: {...} } } }, functions: { "<name>.ts": "<source>" }, components: { "<Name>.tsx": "<source>" }, tasklists: { <name>: { "1-id.md": "<markdown>" } } }`) instead of the flat `ScaffoldSpec` — and prompting does not reliably override that prior. `scaffoldSpace` (`system-spaces/architect/functions/scaffoldSpace.ts`) therefore runs `normalizeSpec` first: it lifts the nested shape to flat (no-op when already flat), accepts bare-string or `{code}`/`{source}`/`{content}` bodies, strips baked `.md`/`.ts`/`.tsx` extensions from names/slugs, infers form-vs-view, and flattens tasklists from arrays / `{tasks}` / bare `{ "N-id.md": body }` maps. `validateSpecShape` then returns actionable errors instead of a cryptic crash. Already-flat specs (those with top-level `agentSlug`) pass through unchanged.
-- **Delegate user message guides tasklist use.** When the action has a `tasklist` field, the delegate user message includes an explicit hint: `Implement this action by calling tasklist("name", context)`. This prevents the model from writing direct code that bypasses the orchestration and leaves the result uncaptured.
-- JSX in model output is transpiled to `React.createElement(...)` via `transpileStatement()` before VM eval. A React shim and component stubs are injected at session start **and into every fork/delegate VM** (`fork.ts` mirrors `session.injectJSXRuntime`), so `display(<Stack>…)` works inside forks too — without it, a fork that emits JSX throws "React is not defined".
-- Space functions are transpiled and evaled as scripts (not modules) in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
-- The QuickJS VM uses sync `evalCode` + manual `executePendingJobs` loop — NOT `evalCodeAsync`, which deadlocks when awaiting user input. After draining jobs (and only when no yield is pending), `evalStatement` inspects the module's evaluation promise via `getPromiseState`: a top-level `await` that throws (e.g. `await missingGlobal()`) rejects that promise, which `executePendingJobs` would otherwise swallow as an unhandled rejection — so it is surfaced as a turn error instead of silently continuing.
-- `.env` is loaded from `process.cwd()` only (where the script is run, not the package dir).
-- `Tracer` (`sandbox/trace.ts`) is the **single event spine**: it writes NDJSON to `--trace <file>` (each event a JSON line) **and** fans out to in-process `subscribe()`rs (sync, error-isolated; the CLI's `TraceHub` subscribes for the web UI). Pass `NULL_TRACER` to disable. Threaded through session → run → fork → delegate → tasklist task → solve, where each scope mints a unique `nodeId`+`parentId` via `tracer.child()/end()` (a structured `TraceScope` generalizing the old flat `context` string — the `context`/label is preserved verbatim so existing jq recipes keep working; all new fields are additive). New event types: `node_start/node_update/node_end`, `fork_queue`, `display` (attributed), `variables`, `llm_progress` (subscriber-only, not written to file), `solve_verify`; `yield`/`yield_resolved` gained an optional `yieldId`. `buildTraceTree(events)` (`sandbox/trace-tree.ts`, pure/dependency-free, browser-safe) reconstructs the execution tree from any event array (live or a replayed file; falls back to context-label grouping for legacy no-`nodeId` traces).
+Notable `SessionOpts`: `systemSpaceDirs`, `maxHistoryTurns`, `preloadSpaceDirs`, `projectSpacesDir`. `registerSpace(dir)` is a value-yielding global that loads a space into `Session.dynamicSpaces` (a shared `Map` reference, visible to subsequent `delegate()` calls and to forks).
 
-## Environment
+## Tracing
+
+`Tracer` (`sandbox/trace.ts`) is the single event spine: writes NDJSON to `--trace <file>` **and** fans out to in-process `subscribe()`rs. Threaded through session→run→fork→delegate→tasklist→solve, each scope minting a `nodeId`/`parentId` via `tracer.child()/end()` (the `context` label is preserved verbatim so existing jq recipes keep working). `buildTraceTree(events)` (`sandbox/trace-tree.ts`, browser-safe) reconstructs the tree. Pass `NULL_TRACER` to disable.
+
+## Environment & Secrets
 
 ```bash
-# .env at repo root (or wherever you run the CLI from)
-AZURE_API_KEY=...
-AZURE_RESOURCE_NAME=...
-
-# Model aliases — LM_MODEL_<ALIAS>
-LM_MODEL_M=azure:DeepSeek-V4-Flash
-LM_MODEL_L=azure:DeepSeek-V4-Pro
-
-# Default model when --model omitted
-LM_MODEL=M
+# .env at repo root (or wherever you run the CLI)
+AZURE_API_KEY=... · AZURE_RESOURCE_NAME=...
+LM_MODEL_M=azure:DeepSeek-V4-Flash   # model alias (LM_MODEL_<ALIAS>)
+LM_MODEL=M                           # default model when --model omitted
 ```
 
-Provider support: `azure`, `anthropic`, `openai`, `google`, `mistral`. Format: `provider:modelId`.
+Providers: `azure`, `anthropic`, `openai`, `google`, `mistral` (format `provider:modelId`). `.env` loads from `process.cwd()` only.
 
-## Secrets (Claude Code web)
-
-API keys are stored encrypted in `.env.encrypted` (AES-256-CBC) and decrypted automatically by `.claude/hooks/session-start.sh` on every web session.
-
-**If you are running in Claude Code web and `TAVILY_API_KEY` or other secrets appear to be missing, ask the user for the decryption password (`ENV_DECRYPT_KEY`) before proceeding.** Then decrypt manually:
-
-```bash
-ENV_DECRYPT_KEY=<password> openssl enc -d -aes-256-cbc -pbkdf2 -base64 \
-  -pass env:ENV_DECRYPT_KEY -in .env.encrypted
-```
-
-To add or update secrets locally:
-1. Edit `.env` (gitignored — never commit it)
-2. Run `ENV_DECRYPT_KEY=<password> ./scripts/encrypt-env.sh`
-3. Commit `.env.encrypted`
-
-## Session API
-
-`Session` in `packages/core/src/session/session.ts`:
-
-- `session.start(message)` — loads the space, creates the VM, injects globals, runs the turn loop from a fresh user message.
-- `session.continue(message)` — appends a new user message to the existing history and re-runs the turn loop on the same VM and scope. Throws if called before `start()`. Used by `--repl` mode. Auto-summarizes history when it exceeds `maxHistoryTurns*2` messages.
-- `session.resume(snapshotDir, message)` — rehydrates a previously-persisted session from disk on a **fresh** VM, then runs the turn loop on `message`. Loads `snapshot.json` (via `loadSnapshot`), reloads+merges the space, restores the agent, replays the JSON-serializable VM `scope` (each var `vm.setVar`'d) and the message `history`. This powers server-side session persistence: when a user reopens an old chat, the manager calls `resume` instead of `start`. See `packages/core/src/session/snapshot.ts` (`Snapshot` = `{ sessionId, agentSlug, spaceDir, history, scope, createdAt }`; `saveSnapshot`/`loadSnapshot` read/write `<dir>/snapshot.json`).
-- `session.dispose()` — tears down the QuickJS VM.
-
-`SessionOpts` additions: `systemSpaceDirs?` (override/disable the always-on spaces), `maxHistoryTurns?` (history-summarization threshold), `preloadSpaceDirs?` (absolute space dirs loaded into `dynamicSpaces` at `start()` so they are delegatable immediately — the project server seeds this with the project's existing `spaces/*`), and `projectSpacesDir?` (exposed to every VM — session, forks, delegates — as `process.env.LMTHING_PROJECT_SPACES_DIR`; the architect's `scaffoldSpace` writes new spaces there, so synthesized agents land under the active project).
-
-`registerSpace(dir)` is a value-yielding global (`globals/register-space.ts`) that calls `loadSpace(dir)` and inserts the result into `Session.dynamicSpaces`. Returns `{ ok, spaceKey, agentSlug, error? }`. The `spaceKey` is the dir path and is passed as the first arg to `delegate()`. The `dynamicSpaces` map is a shared mutable reference — a `registerSpace` call inside a fork is visible to subsequent `delegate()` calls in the parent session.
+Secrets (Claude Code web): API keys stored encrypted in `.env.encrypted` (AES-256-CBC), decrypted by `.claude/hooks/session-start.sh`. **If `TAVILY_API_KEY` (or other secrets) are missing in a web session, ask for `ENV_DECRYPT_KEY` before proceeding.**
 
 ## Known issues
 
-See `.issues/` for open bug reports. When all issues are resolved this section will be empty.
+See `.issues/`. When all are resolved this section is empty.
 
-- `research-fork-scope-loss.md` — `fork:research` in `synthesize_and_run` loses variable scope across statements (typecheck "Cannot find name"); DAG skips it gracefully so the synthesized space ships without web knowledge.
-- `skill-import-scenarios.md` — enhancement: whole-plugin / marketplace-wide / commands+agents import (single-`SKILL.md` import already works); has open questions for the user.
-
-## Fixtures
-
-Reference spaces for end-to-end testing:
-
-- `fixtures/cooking/` — chef agent with form components, view components, space functions, tasklist DAG. `mock-ask.mjs` = keyless mock that fires an `ask(<ConfirmDish/>)`, used by `web-api.test.ts` to verify space-form rendering + submit in the web UI.
-- `fixtures/sommelier/` — pairing agent with delegation target
-- `fixtures/research/` — research analyst with simulated web search functions
-- `fixtures/deep_research/` — deep research with real Tavily API (requires `TAVILY_API_KEY`)
-- `fixtures/browser_use/` — browser agent using chromium headless + Google search
-- `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering
-- `fixtures/engineer/` — mock harness for engineer agent CLI tests (agent content lives in `system-spaces/engineer`)
-- `fixtures/architect/` — placeholder for architect agent CLI tests (agent content lives in `system-spaces/architect`)
-- `fixtures/solver/` — scripted mock providers (`mock*.mjs`) for keyless solve-ladder CLI tests (agent content lives in `system-spaces/solver`)
-- `fixtures/sauce_master/` — global sauce technique specialist synthesized by the architect; knowledge files for 10 world cuisines; action: `recommend_sauce`
-- `fixtures/cursor_ci/` — competitive intelligence analyst synthesized by the architect; knowledge files for 5 AI code editors (Cursor, Copilot, Windsurf, Aider, Codeium); action: `analyze`
-
-See `@.claude/arch/spaces.md` for space file layout.
-
-## System Spaces
-
-Capabilities are **spaces**, not ad-hoc core globals. A set of baseline "system spaces" is **always loaded and merged into every user space** (and into forks/delegates). Two things are universal: (1) every system space's **agents** are merged in and **universally delegatable**; (2) only the **`global`** space's **functions** are universally injected — every agent gets that coding toolkit for free. All OTHER system-space functions (the architect's, deep_research's, …) are **scoped to their owning agent**: they reach an agent solely via that agent's `functions:` frontmatter (`getAgentFunctions`), so they never leak into unrelated agents' prompts/VMs. The user space wins on any name collision.
-
-- Located in `packages/core/system-spaces/{global,engineer,architect,solver,deep_research,memory,thing}/` (resolved relative to the built core; materialized into `.lmthing/system/` by `lmthing init` — see "Projects & the `lmthing` server").
-- `global` — the always-injected toolkit (function-only, no agent): `readFile`, `writeFile`, `editFile`, `glob`, `grep`, `listDir`, `webSearch` (Tavily, needs `TAVILY_API_KEY`), `webFetch`, `remember`/`recall`/`recallAll`/`forget` (durable JSON at `<spaceDir>/.lmthing/memory.json`), `todoWrite`/`todoRead` (checklist persisted to `.lmthing/todos.json`). **These are the only universally-injected functions.**
-- `engineer` — coding agent (agent def + `TaskInput` component); `delegate` to it from any space
-- `architect` — meta-agent (`scaffoldSpace`, `validateSpace`, `listScaffoldedSpaces` functions + full `synthesize_and_run` / `iterate_space` tasklists); `delegate` to it to synthesize new agents at runtime. **Synthesis routes through the `synthesize_and_run` tasklist** (the instruct's PRIMARY WORKFLOW makes the model emit just `tasklist('synthesize_and_run', {topic})` then `delegate()` — the DAG deterministically runs research→design→scaffold→validate→register so a weak model can't truncate the 5-step program). Skill/plugin **import is a separate agent in this space** — see `skill-to-space-transformer` below; the architect delegates import requests to it.
-- `architect` / `skill-to-space-transformer` — a second agent in the architect space that imports an existing Claude Code/cowork skill or plugin. It declares the scoped `parseSkill`/`skillToSpec` (+ shared `scaffoldSpace`/`validateSpace`) functions — these are NOT universal, so only this agent (and the architect, which declares the scaffold pair) sees them. `parseSkill(path)` reads a `SKILL.md` or plugin (`.claude-plugin/plugin.json`) into a normalized descriptor; `skillToSpec(parsed)` deterministically converts it to a flat ScaffoldSpec (full instructions → a loadable `skill/playbook` knowledge option). Model-driven with one `import` action; delegate to it as `delegate('<architect dir or LMTHING_SPACE_DIR>', 'skill-to-space-transformer', 'import', { query })`.
-- `solver` — verifier-gated coding agent (no functions; drives the `solve` built-in). `--agent solver` or `delegate` to it; writes its candidate under the space dir. Mock providers for keyless runs live in `fixtures/solver/`.
-- `deep_research` — Deep Research Analyst (`tavilySearch`, `extractKeyFacts`, `formatCitation` + `research_report` tasklist: broad→deep→extract→synthesize). Always delegatable as `delegate('deep-research-space', 'researcher', 'research_report', { query, context })` — the architect uses it for all web research. `tavilySearch` never throws: on failure (incl. HTTP 432 quota) it returns `{ results: [], error }` and the tasks resolve gracefully with empty results, so a dead/over-quota key degrades to a vacuous report instead of a hard failure.
-- `thing` — **THE main user-facing orchestrator** (single agent, model-driven, no forced tasklist). It triages each request: answer from its own knowledge, `delegate('deep_research', …)` for research, `delegate('architect', 'architect', 'synthesize_and_run', …)` to build a new specialist, `delegate('engineer'|'solver', …)` to code, or `delegate('memory', …)` to save/recall user facts. It is the default agent in the `lmthing` project server. Reads per-project `instructions.md` + `documents/` (rooted at the project dir).
-- `memory` — thin agent that wraps the universal `remember`/`recall`/`recallAll`/`forget`. THING delegates to it to persist facts about the user. Because a delegate runs with the **target** space's dir as `LMTHING_SPACE_DIR`, the store lives at `<memory space>/.lmthing/memory.json` — i.e. **global** across projects (memories are about the user, not the project). NOTE: an agent that calls a bare `global` tool it doesn't declare (like memory's `remember()`) needs the universal toolkit in the delegate VM's typecheck overlay too — `runDelegate` folds `systemFunctionSources` into both the overlay and the system block for exactly this reason.
-
-Loader/merge: `packages/core/src/spaces/system.ts` (`loadSystemSpaces`, `mergeSystemInto`). `systemFunctionNames`/`systemFunctionSources`/`systemFunctionsBundled` return ONLY the `global` space's functions (`GLOBAL_SPACE_NAME`); those are injected universally (bypassing the per-agent `functions:` filter) and listed in the system prompt's concise `# Built-in Tools` section (signature + doc, not full source). `mergeSystemInto` still pools every system space's functions so an agent that DECLARES one (e.g. the architect declaring `scaffoldSpace`) resolves it via `getAgentFunctions`. Configure via `SessionOpts.systemSpaceDirs`, CLI `--system-spaces`/`--no-system-spaces`, or env `LM_SYSTEM_SPACES`.
-
-## Projects & the `lmthing` server
-
-`lmthing` is the user-facing entry point: a project-aware multi-session web server where users chat with **THING**, create projects, and upload documents/instructions. State lives in a cwd-rooted `.lmthing/` tree:
-
-```
-<cwd>/.lmthing/
-  system/{global,engineer,architect,solver,deep_research,memory,thing}/   ← materialized by `lmthing init`
-  user/                       ← default project
-    spaces/                   ← architect-synthesized spaces for this project
-    documents/  instructions.md  project.json
-  <project>/                  ← additional projects (same shape)
-```
-
-- **`lmthing init`** (keyless) copies the bundled system spaces into `.lmthing/system/` and scaffolds the default `user` project. Code: `materializeRuntime` in `packages/cli/src/cli/bin.ts` (uses `cpSync` + `defaultSystemSpaceDirs()`).
-- **`lmthing`** (no args) launches the multi-session server (`packages/cli/src/server/{serve.ts,session-manager.ts,projects.ts}`). A provider/API key is required. A project session sets `spaceDir = .lmthing/<project>/` (loaded permissively — `requireAgents:false` — since the `thing` agent comes from the merged system spaces), `agentSlug = 'thing'`, `systemSpaceDirs = .lmthing/system/*`, `preloadSpaceDirs = .lmthing/<project>/spaces/*`, and `projectSpacesDir = .lmthing/<project>/spaces`.
-- **HTTP API** (beyond the existing session/ws routes): `GET/POST /api/projects`, `DELETE /api/projects/:id`, `GET/PUT /api/projects/:id/instructions`, `GET/POST /api/projects/:id/documents`, `GET /api/projects/:id/sessions` (list persisted sessions), `GET /api/projects/:id/spaces` (list spaces created under the project — `listProjectSpaces`); `POST /api/sessions` accepts `{ projectId }` (default `user`) and an optional `resumeId` to rehydrate a persisted session. `POST /api/spaces { name, files }` writes an edited space to disk and returns its `spaceDir`.
-- **Session persistence.** `SessionManager` (`packages/cli/src/server/session-manager.ts`) snapshots each project session to `<root>/<project>/sessions/<sessionId>/`: `snapshot.json` (VM scope + history, via `Session`'s `saveSnapshot`), `meta.json` (title/createdAt/messageCount), and `trace.json` (the hub's buffered trace events). `persistSession` runs (best-effort) after each message and on dispose. Creating a session with `resumeId` loads the snapshot dir, marks `needsResume`, and the next `sendMessage` calls `session.resume(...)`; the persisted trace is replayed into the hub so the WS `trace_snapshot` rebuilds the full execution tree (fixes the "tree collapsed to one row after restore" bug).
-- The web UI shell (project/session sidebar, chat, doc upload + instructions editor, toggleable DevTools panel) is `packages/ui/src/app/AppShell.tsx` and its components (`Sidebar`, `ChatView`, `Composer`, `Message`, `DevPanel`, `ProjectSettings`). `main.tsx` detects the mode (shell vs single-session `?sessionId=` vs `?trace=` replay) and mounts `AppShell`. (The older single-file `shell.tsx` + 3-pane `App.tsx` are superseded and no longer mounted.)
-- **Space discovery.** Preloaded project spaces are delegatable (in the registry); the server also enumerates them via `GET /api/projects/:id/spaces` (`listProjectSpaceDirs`), so the UI can list a project's synthesized spaces across sessions.
-
-## Fork roles (subagents)
-
-`fork({ role, instruction, output })` spawns an isolated subagent VM — the parent sees only what it resolves (a context firewall). Roles (`packages/core/src/fork/roles.ts`):
-
-- `explore` / `plan` — **read-only**: `writeFileRaw`/`editFile`, mutating shell commands, and `registerSpace` are withheld at injection (via the host-tools capability profile), not merely discouraged.
-- `general` (default) — full toolkit.
-
-Plan mode is just `fork({ role: 'plan' })` + an `ask()` approval gate. Run subagents in parallel with `Promise.all([...])` (bounded by `maxConcurrentForks`).
-
-## Host-injected VM Globals
-
-Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has these host-injected globals available to space functions. They are the thin substrate the system spaces build on (single source of truth: `packages/core/src/globals/host-tools.ts`, used by both the session VM and fork VMs):
-
-- `process.env` — Node.js environment variables (read-only shim); includes `LMTHING_SPACE_DIR` (an **absolute** path) for state stores
-- `fetch(url, opts?)` — Synchronous HTTP using curl under the hood; returns `{ ok, status, text(), json() }`
-- `execShell(cmd)` — Synchronous shell command execution; returns `{ ok, stdout, stderr }` (read-only fork roles block mutating commands)
-- `readFileRaw(path, {offset?,limit?})` — Binary-safe file read via Node fs; returns `{ ok, content, lines, truncated, error? }`
-- `writeFileRaw(path, content)` — File write via Node fs (no shell quoting); returns `{ ok, bytes, error? }`. Withheld in read-only fork roles.
-
-**Path rooting:** `readFileRaw`/`writeFileRaw` resolve **relative** paths against the space dir (`LMTHING_SPACE_DIR`), not `process.cwd()` — the same root `solve()`'s `verifyCommand` runs in (`session.ts` `execCommand` uses `cwd: spaceDir`). So a fork that writes `work/candidate.ts` and a verifier that reads `work/candidate.ts` agree regardless of where the CLI was launched. Absolute paths pass through untouched.
-- `console.log/warn/error` — Routes through renderHost.log
-
-Space functions can use these directly. `tasklist(name, seed?)` passes `seed` as context to all fork tasks (injected as `any`-typed variables).
-
-## Context economy
-
-The runtime is built to keep context small over long sessions:
-- `display()` output is shown to the user but does NOT enter the VARIABLES block.
-- `fork({ role: 'explore' })` is a context firewall — a subagent's reading/searching stays in its own VM; only its resolved summary returns.
-- `session.continue()` auto-summarizes history once it exceeds `maxHistoryTurns*2` messages (REPL default 20), keeping the last 6 verbatim (`packages/core/src/context/summarize.ts`).
-- **The VARIABLES block is a LOSSY preview.** `serialize()` (`globals/serialize.ts`) truncates long strings/arrays/objects with markers like `… (N chars total)`. The VM holds the real full value under the variable name; the model only sees the truncated head. The `GROUND TRUTH` preamble rule tells the model to *reference the bound variable* (the runtime substitutes the real value at eval time) rather than re-type a truncated value as a literal (which fabricates the tail), and to `inspect([var, { path/slice }])` to pull full content back into scope before consuming it.
-- **`inspect(...)` surfaces values to the model even when unbound.** The turn loop folds inspected values into the VARIABLES block via `formatInspectResult` regardless of whether the call is bound — so a bare `inspect(x)` is a valid probe (`eval/turn-loop.ts`).
-- The `RUNTIME_PREAMBLE` instructs the model on all of the above.
-
-## Tests
-
-Tests are co-located: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
-
-Current coverage: `boundary.test.ts`, `serialize.test.ts`, `condition-dsl.test.ts`, `tasklist/orchestrator.test.ts`, `tsc.test.ts`, `sandbox/quickjs.test.ts`, `fork.test.ts`, `fork/roles.test.ts`, `globals/ask.test.ts`, `globals/inspect.test.ts`, `globals/host-tools.test.ts`, `delegate/delegate.test.ts`, `delegate/registry.test.ts`, `eval/budget.test.ts`, `eval/error-rewind.test.ts`, `spaces/system.test.ts`, `spaces/system-functions.test.ts`, `spaces/architect-functions.test.ts`, `context/variables.test.ts`, `context/summarize.test.ts`, `eval/turn-loop.test.ts`, `eval/turn-loop-yield.test.ts`, `testing/mock-provider.test.ts`, `testing/mock-session.test.ts`, `testing/harness-features.test.ts` (incl. the execution-tree observability block), `sandbox/trace.test.ts`, `sandbox/trace-tree.test.ts`. CLI/UI: `rpc/trace-hub.test.ts`, `web/agent-api.test.ts`, `testing/web-api.test.ts` (spawns the built CLI with `--web --mock`), `packages/ui/src/store/model.test.ts`.
-
-Live testing: for new runtime features, also drive the built CLI against fixture spaces with a real model and inspect the `--trace` NDJSON — unit tests miss model-behavior and end-to-end integration issues. For a **keyless** deterministic variant, drive a real `Session` (or the CLI via `--mock`) with the scripted mock provider: `testing/mock-session.test.ts` covers budget caps, `progress()`, `solve` escalation, per-role models, and the bug-fix scenarios end-to-end through the turn loop; `testing/harness-features.test.ts` covers the value-yielding globals and orchestration end-to-end (`ask`/`inspect`/`loadKnowledge`/`sleep`/`fork` roles + parallel binding/`tasklist` DAG/`delegate`/`registerSpace`/system spaces/history summarization); and `packages/cli/src/testing/keyless-cli.test.ts` does the same at the CLI level (subprocess + `--mock`).
-
-CLI integration suites (`packages/cli/src/testing/`) spawn the **built** CLI and assert on the `--trace` NDJSON; they self-skip when `dist/` is absent (run `pnpm build` first) and stream the subprocess output live. Saved traces land in `packages/cli/.live-traces/` (gitignored).
-- `keyless-cli.test.ts` — mock provider, no API keys, deterministic.
-- `web-api.test.ts` — spawns the CLI with `--web --mock`, drives the agent HTTP API + WS trace stream (tree, node detail, space-form ask round-trip). No keys.
-- `live-llm.test.ts` — the **real model** (`M` = DeepSeek-V4-Pro for every scenario), gated behind `LM_LIVE=1`. Run: `LM_LIVE=1 pnpm vitest run packages/cli/src/testing/live-llm.test.ts`. Shared harness: `packages/cli/src/testing/live-harness.ts`.
-
-Several suites spin up real QuickJS VMs (forks/delegates/solve) or spawn the CLI as a subprocess, so the global `testTimeout` is raised to 20s (`vitest.config.ts`). Under memory/CPU pressure the cross-file parallelism can still starve these — run `pnpm vitest run --no-file-parallelism` for a clean serial pass.
-
-No linting or formatting config — TypeScript strict mode is the sole quality gate.
+- `research-fork-scope-loss.md` — `fork:research` in `synthesize_and_run` loses variable scope across statements (typecheck "Cannot find name"); the DAG skips it gracefully so the synthesized space ships without web knowledge.
+- `skill-import-scenarios.md` — enhancement: whole-plugin / marketplace-wide / commands+agents import (single-`SKILL.md` import already works); has open questions.
 
 ## Rules
 
-- **Always test every fix.** After fixing a bug, write or run a test that would have caught it. No fix is done until it is tested.
-- **Issue lifecycle.** When a bug is found, create a file in `.issues/`. When it is fixed and tested, delete the file and remove it from the Known issues list in this file.
-- **No issue file = no known bugs.** Keep `.issues/` empty by fixing things, not by ignoring them.
+- **Always test every fix.** No fix is done until a test would have caught it.
+- **Issue lifecycle.** File a `.issues/` entry when a bug is found; delete it (and its Known issues entry) when fixed and tested.
+- **No issue file = no known bugs.** Keep `.issues/` empty by fixing things, not ignoring them.
 
-## Skills
+## Task Index
 
-Load these when working on specific areas:
+Load the matching file when working on:
 
-- Adding a new value-yielding global → `@.claude/skills/new-global.md`
-- Adding a new AI provider → `@.claude/skills/new-provider.md`
-- Creating or modifying a space → `@.claude/skills/new-space.md`
-- Adding a system space, host primitive, or fork role → `@.claude/skills/system-spaces.md`
-- Debugging the eval/yield pipeline → `@.claude/skills/debug-eval.md`
-- Writing tests for core modules → `@.claude/skills/writing-tests.md`
-
-## Architecture References
-
-- Turn loop + yield protocol (deep) → `@.claude/arch/turn-loop.md`
-- Typecheck + transpile + DTS overlay pipeline → `@.claude/arch/typecheck.md`
-- Spaces: loading, validation, agent config → `@.claude/arch/spaces.md`
-- Fork + tasklist orchestration → `@.claude/arch/fork-tasklist.md`
-- Delegate + registry → `@.claude/arch/delegate.md`
-- Space authoring + `@lmthing/core`/`@lmthing/cli` API guide → `@SPACE_DEVELOPMENT.md`
+| Working on… | Load |
+|---|---|
+| the `lmthing` project server / session persistence / `.lmthing/` layout | `@.claude/skills/project-server.md` |
+| terminal+web UI design system (catalog, renderers, theming) | `@.claude/skills/ui-design-system.md` |
+| system spaces / host primitives / fork roles | `@.claude/skills/system-spaces.md` |
+| creating or modifying a space | `@.claude/skills/new-space.md` |
+| adding a value-yielding global | `@.claude/skills/new-global.md` |
+| adding an AI provider | `@.claude/skills/new-provider.md` |
+| debugging the eval/yield pipeline | `@.claude/skills/debug-eval.md` |
+| writing/running core tests | `@.claude/skills/writing-tests.md` |
+| turn-loop / yield protocol / budget / prose-drop | `@.claude/arch/turn-loop.md` |
+| typecheck / DTS overlay / transpile / JSX runtime | `@.claude/arch/typecheck.md` |
+| fork + tasklist orchestration / salvage | `@.claude/arch/fork-tasklist.md` |
+| delegate + registry / auto-capture / `defaultAction` | `@.claude/arch/delegate.md` |
+| space loading / merge rules / `normalizeSpec` | `@.claude/arch/spaces.md` |
+| space authoring + package API guide | [./SPACE_DEVELOPMENT.md](./SPACE_DEVELOPMENT.md) |

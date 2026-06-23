@@ -1,3 +1,8 @@
+---
+name: writing-tests
+description: Load when writing or running core tests (vitest patterns, mock providers, fixtures, the testing harness).
+---
+
 # Skill: Writing Tests
 
 Tests are co-located with source files: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
@@ -154,3 +159,19 @@ The same builders drive the CLI via `--mock <file>` (a `.mjs` whose default expo
 `MockHandler` or `string[]`), so a full keyless run is just
 `bin.js --space … --mock fixtures/<space>/mock.mjs`. See
 `packages/core/src/testing/mock-provider.ts` and `scripts/live-test.sh`.
+
+## Fixtures (reference spaces)
+
+`fixtures/` holds reference spaces for end-to-end testing:
+
+- `fixtures/cooking/` — chef agent with form components, view components, space functions, tasklist DAG. `mock-ask.mjs` = keyless mock that fires an `ask(<ConfirmDish/>)`, used by `web-api.test.ts` to verify space-form rendering + submit in the web UI.
+- `fixtures/sommelier/` — pairing agent with delegation target.
+- `fixtures/research/` — research analyst with simulated web search functions.
+- `fixtures/deep_research/` — deep research with real Tavily API (requires `TAVILY_API_KEY`).
+- `fixtures/browser_use/` — browser agent using chromium headless + Google search.
+- `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering.
+- `fixtures/engineer/` — mock harness for engineer agent CLI tests (agent content lives in `system-spaces/engineer`).
+- `fixtures/architect/` — placeholder for architect agent CLI tests (agent content lives in `system-spaces/architect`).
+- `fixtures/solver/` — scripted mock providers (`mock*.mjs`) for keyless solve-ladder CLI tests (agent content lives in `system-spaces/solver`).
+- `fixtures/sauce_master/` — global sauce technique specialist synthesized by the architect; knowledge files for 10 world cuisines; action: `recommend_sauce`.
+- `fixtures/cursor_ci/` — competitive intelligence analyst synthesized by the architect; knowledge files for 5 AI code editors (Cursor, Copilot, Windsurf, Aider, Codeium); action: `analyze`.

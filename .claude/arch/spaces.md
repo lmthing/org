@@ -8,7 +8,7 @@
 - `packages/core/src/spaces/components.ts` — `getAgentComponents`
 - `packages/core/src/spaces/knowledge.ts` — knowledge tree loading
 - `packages/core/src/spaces/tasklist-load.ts` — tasklist directory loading
-- `packages/core/src/spaces/system.ts` — **system spaces**: `loadSystemSpaces` + `mergeSystemInto` merge the always-on baseline spaces (`packages/core/system-spaces/{fs,web,memory,todo}/`) into every user space. System functions are injected universally; the user space wins on collisions. See `@.claude/skills/system-spaces.md`.
+- `packages/core/src/spaces/system.ts` — **system spaces**: `loadSystemSpaces` + `mergeSystemInto` merge the always-on baseline spaces (`packages/core/system-spaces/{global,engineer,architect,solver,deep_research,memory,thing}/`) into every user space. See `@.claude/skills/system-spaces.md`.
 
 ## Space Type
 
@@ -117,3 +117,8 @@ dependencies:
 ### Delegation
 
 The `DelegateRegistry` is seeded with dependent spaces (keyed by package name and dir) so `delegate("@my-org/space", "agent", "action_id", ...)` resolves correctly at runtime. The system block's **Delegatable Agents** section shows the exact `delegate()` call for each resolved dep.
+
+## Invariants / gotchas
+
+- **System spaces are always merged into every space.** `Session` calls `mergeSystemInto` (`spaces/system.ts`) after `loadSpace`; only the **`global`** space's functions are injected universally (bypassing the per-agent `functions:` filter), and that universal set flows to forks **and delegates** (via `RunDelegateOpts.systemSpaces`). Every other system space's functions are scoped to the agent that declares them (resolved from the merged pool by `getAgentFunctions`). `mergeSystemInto` merges functions (the full pool, for per-agent resolution), components, agents, **and tasklists** — and all system **agents** stay universally delegatable. The user space wins on name collisions — EXCEPT an empty-placeholder user agent (an `agents/<slug>/` dir with no instruct.md → no instructBody + no actions) or an empty user tasklist dir (no `.md` files) does NOT shadow a real system one. (An empty `fixtures/architect/agents/architect/` dir silently shadowing the system architect — stripping its instructions/actions/`defaultAction` — was the root cause of repeated architect failures.)
+- **`scaffoldSpace` normalizes the nested spec shape models emit.** Models reliably produce a nested spec (`{ agents: { <slug>: { instruct } }, knowledge: {...}, functions: { "<name>.ts": "<source>" }, components: { "<Name>.tsx": "<source>" }, tasklists: { <name>: { "1-id.md": "<markdown>" } } }`) instead of the flat `ScaffoldSpec` — and prompting does not reliably override that prior. `scaffoldSpace` (`system-spaces/architect/functions/scaffoldSpace.ts`) therefore runs `normalizeSpec` first: it lifts the nested shape to flat (no-op when already flat), accepts bare-string or `{code}`/`{source}`/`{content}` bodies, strips baked `.md`/`.ts`/`.tsx` extensions from names/slugs, infers form-vs-view, and flattens tasklists from arrays / `{tasks}` / bare `{ "N-id.md": body }` maps. `validateSpecShape` then returns actionable errors instead of a cryptic crash. Already-flat specs (those with top-level `agentSlug`) pass through unchanged.

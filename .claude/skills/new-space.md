@@ -1,3 +1,8 @@
+---
+name: new-space
+description: Load when creating or modifying a space (agents, functions, components, tasklists, knowledge).
+---
+
 # Skill: Creating or Modifying a Space
 
 A **space** is a directory that bundles agents, tasklists, functions, components, and knowledge. Loaded by `loadSpace(dir)` in `packages/core/src/spaces/load.ts`.

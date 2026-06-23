@@ -1,3 +1,8 @@
+---
+name: new-provider
+description: Load when adding a new AI provider (azure/anthropic/openai/google/mistral) via a Vercel AI SDK adapter.
+---
+
 # Skill: Adding a New AI Provider
 
 Providers are resolved in `packages/cli/src/providers/resolve.ts`. Each provider maps to a Vercel AI SDK adapter.

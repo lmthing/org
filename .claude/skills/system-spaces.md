@@ -1,11 +1,16 @@
+---
+name: system-spaces
+description: Load when adding a system space, host primitive, or fork role, or when referencing the system-spaces catalog / host-injected VM globals.
+---
+
 # Skill: System spaces, host primitives, and fork roles
 
 **Capabilities are spaces, not ad-hoc globals.** A small set of **system spaces** is always loaded and merged into every user space (and into forks/delegates), so every agent gets a coding toolkit for free. There is no separate "skills" concept — to extend agents, add a system space.
 
 ## Where things live
 
-- `packages/core/system-spaces/{fs,web,memory,todo}/` — the toolkit, as ordinary space functions (NOT under `src/`; read from disk at runtime). No `package.json` (a package.json would trigger `npm install` on load).
-- `packages/core/src/spaces/system.ts` — `loadSystemSpaces`, `mergeSystemInto`, `defaultSystemSpaceDirs`, `systemFunctionSources`/`systemFunctionsBundled`/`systemFunctionNames`. The delegate runner (`delegate/delegate.ts`) also calls `systemFunctionSources`/`systemFunctionsBundled` to merge system functions into delegate VMs via `RunDelegateOpts.systemSpaces`.
+- `packages/core/system-spaces/{global,engineer,architect,solver,deep_research,memory,thing}/` — the always-loaded baseline spaces (NOT under `src/`; read from disk at runtime). Function-only spaces need no `package.json` (a package.json would trigger `npm install` on load).
+- `packages/core/src/spaces/system.ts` — `loadSystemSpaces`, `mergeSystemInto`, `defaultSystemSpaceDirs`, `systemFunctionSources`/`systemFunctionsBundled`/`systemFunctionNames` (these return ONLY the `global` space's functions — `GLOBAL_SPACE_NAME`). The delegate runner (`delegate/delegate.ts`) also calls `systemFunctionSources`/`systemFunctionsBundled` to merge system functions into delegate VMs via `RunDelegateOpts.systemSpaces`.
 - `packages/core/src/globals/host-tools.ts` — the synchronous host substrate the system functions build on.
 - `packages/core/src/fork/roles.ts` — `fork({ role })` capability profiles + preambles.
 
@@ -19,7 +24,7 @@
      return r.ok ? { ok: true, data: r.content } : { ok: false, data: '', error: r.error };
    }
    ```
-2. Build (`pnpm --filter @repl/core build`) — system spaces are loaded by the running CLI from `packages/core/system-spaces/`, resolved relative to `dist/` via `defaultSystemSpaceDirs()`.
+2. Build (`pnpm --filter @lmthing/core build`) — system spaces are loaded by the running CLI from `packages/core/system-spaces/`, resolved relative to `dist/` via `defaultSystemSpaceDirs()`.
 3. It is now available in EVERY space with no agent-config change.
 
 Rules for system functions:
@@ -53,3 +58,34 @@ System tools and roles exist to keep context small: `display()` output stays out
 - System functions: load the space, inject like `Session` does (transpile + `evalScript`), exercise round-trips (`spaces/system-functions.test.ts`).
 - Loader/merge: `spaces/system.test.ts`.
 - **Always also live-test** new features by running the built CLI against a fixture space with a real model and inspecting the `--trace` NDJSON.
+
+## Reference: the system spaces
+
+Capabilities are **spaces**, not ad-hoc core globals. A set of baseline "system spaces" is **always loaded and merged into every user space** (and into forks/delegates). Two things are universal: (1) every system space's **agents** are merged in and **universally delegatable**; (2) only the **`global`** space's **functions** are universally injected — every agent gets that coding toolkit for free. All OTHER system-space functions (the architect's, deep_research's, …) are **scoped to their owning agent**: they reach an agent solely via that agent's `functions:` frontmatter (`getAgentFunctions`), so they never leak into unrelated agents' prompts/VMs. The user space wins on any name collision.
+
+Located in `packages/core/system-spaces/{global,engineer,architect,solver,deep_research,memory,thing}/` (resolved relative to the built core; materialized into `.lmthing/system/` by `lmthing init`). Configure via `SessionOpts.systemSpaceDirs`, CLI `--system-spaces`/`--no-system-spaces`, or env `LM_SYSTEM_SPACES`.
+
+- `global` — the always-injected toolkit (function-only, no agent): `readFile`, `writeFile`, `editFile`, `glob`, `grep`, `listDir`, `webSearch` (Tavily, needs `TAVILY_API_KEY`), `webFetch`, `remember`/`recall`/`recallAll`/`forget` (durable JSON at `<spaceDir>/.lmthing/memory.json`), `todoWrite`/`todoRead` (checklist persisted to `.lmthing/todos.json`). **These are the only universally-injected functions.**
+- `engineer` — coding agent (agent def + `TaskInput` component); `delegate` to it from any space.
+- `architect` — meta-agent (`scaffoldSpace`, `validateSpace`, `listScaffoldedSpaces` functions + full `synthesize_and_run` / `iterate_space` tasklists); `delegate` to it to synthesize new agents at runtime. **Synthesis routes through the `synthesize_and_run` tasklist** (the instruct's PRIMARY WORKFLOW makes the model emit just `tasklist('synthesize_and_run', {topic})` then `delegate()` — the DAG deterministically runs research→design→scaffold→validate→register so a weak model can't truncate the 5-step program).
+- `architect` / `skill-to-space-transformer` — a second agent in the architect space that imports an existing Claude Code/cowork skill or plugin. It declares the scoped `parseSkill`/`skillToSpec` (+ shared `scaffoldSpace`/`validateSpace`) functions — these are NOT universal, so only this agent (and the architect, which declares the scaffold pair) sees them. Model-driven with one `import` action; delegate to it as `delegate('<architect dir or LMTHING_SPACE_DIR>', 'skill-to-space-transformer', 'import', { query })`.
+- `solver` — verifier-gated coding agent (no functions; drives the `solve` built-in). `--agent solver` or `delegate` to it; writes its candidate under the space dir.
+- `deep_research` — Deep Research Analyst (`tavilySearch`, `extractKeyFacts`, `formatCitation` + `research_report` tasklist: broad→deep→extract→synthesize). Always delegatable as `delegate('deep-research-space', 'researcher', 'research_report', { query, context })` — the architect uses it for all web research. `tavilySearch` never throws: on failure (incl. HTTP 432 quota) it returns `{ results: [], error }` and tasks resolve gracefully with empty results.
+- `thing` — **THE main user-facing orchestrator** (single agent, model-driven, no forced tasklist). Triage per request: answer directly, `delegate('deep_research', …)` for research, `delegate('architect', 'architect', 'synthesize_and_run', …)` to build a specialist, `delegate('engineer'|'solver', …)` to code, or `delegate('memory', …)` to save/recall user facts. Default agent in the `lmthing` project server. Reads per-project `instructions.md` + `documents/` (rooted at the project dir).
+- `memory` — thin agent wrapping the universal `remember`/`recall`/`recallAll`/`forget`. THING delegates to it to persist facts about the user. Because a delegate runs with the **target** space's dir as `LMTHING_SPACE_DIR`, the store lives at `<memory space>/.lmthing/memory.json` — i.e. **global** across projects. NOTE: an agent that calls a bare `global` tool it doesn't declare (like memory's `remember()`) needs the universal toolkit in the delegate VM's typecheck overlay too — `runDelegate` folds `systemFunctionSources` into both the overlay and the system block.
+
+**Empty-placeholder rule:** an empty user agent (an `agents/<slug>/` dir with no instruct.md → no instructBody + no actions) or an empty user tasklist dir (no `.md` files) does NOT shadow a real system one. (An empty `fixtures/architect/agents/architect/` dir silently shadowing the system architect — stripping its instructions/actions/`defaultAction` — was the root cause of repeated architect failures.)
+
+## Reference: host-injected VM globals
+
+Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has host-injected globals available to space functions — the thin substrate the system spaces build on (single source of truth: `packages/core/src/globals/host-tools.ts`, used by both the session VM and fork VMs):
+
+- `process.env` — Node.js environment variables (read-only shim); includes `LMTHING_SPACE_DIR` (an **absolute** path) for state stores.
+- `fetch(url, opts?)` — Synchronous HTTP using curl under the hood; returns `{ ok, status, text(), json() }`.
+- `execShell(cmd)` — Synchronous shell command execution; returns `{ ok, stdout, stderr }` (read-only fork roles block mutating commands). Runs with `cwd = space dir`.
+- `readFileRaw(path, {offset?,limit?})` — Binary-safe file read via Node fs; returns `{ ok, content, lines, truncated, error? }`.
+- `writeFileRaw(path, content)` — File write via Node fs (no shell quoting); returns `{ ok, bytes, error? }`. Withheld in read-only fork roles.
+- `console.log/warn/error` — Routes through renderHost.log.
+
+**Path rooting:** `readFileRaw`/`writeFileRaw` resolve **relative** paths against the space dir (`LMTHING_SPACE_DIR`), not `process.cwd()` — the same root `solve()`'s `verifyCommand` runs in (`session.ts` `execCommand` uses `cwd: spaceDir`). So a fork that writes `work/candidate.ts` and a verifier that reads `work/candidate.ts` agree regardless of where the CLI was launched. Absolute paths pass through untouched.
+

@@ -1,3 +1,8 @@
+---
+name: debug-eval
+description: Load when debugging the eval/yield pipeline, the turn loop, statement splitting, yield binding, or trace output.
+---
+
 # Skill: Debugging the Eval / Yield Pipeline
 
 ## Reading the Log Output

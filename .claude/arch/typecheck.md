@@ -100,3 +100,9 @@ Model writes: `const x = await ask(<ConfirmDish dish="pasta" />);`
 3. **Append globalThis**: → `+ if (typeof x !== 'undefined') globalThis['x'] = x;`
 4. **VM eval**: `React.createElement(ConfirmDish, { dish: 'pasta' })` → `{ type: 'ConfirmDish', props: { dish: 'pasta' }, children: [] }` (via the React shim injected at session start)
 5. **ask()**: validates descriptor, pushes yield with the descriptor
+
+## Invariants / gotchas
+
+- **The catalog becomes ambient typed JSX.** `catalogDts()` (`packages/core/src/ui/catalog.ts`) turns the display+form catalog into typed JSX globals appended to `LIBRARY_DTS`, and `CATALOG_NAMES` are injected as VM stubs so the model can write `<Stack/>`/`<Select/>` directly. Component type names are matched **case-insensitively** by the renderers.
+- **JSX runtime is injected into every VM, including forks/delegates.** A React shim and component stubs are injected at session start **and into every fork/delegate VM** (`fork.ts` mirrors `session.injectJSXRuntime`), so `display(<Stack>…)` works inside forks too — without it, a fork that emits JSX throws "React is not defined".
+- **Space functions are transpiled and evaled as *scripts* (not modules)** in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.
