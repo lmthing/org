@@ -10,4 +10,7 @@ export interface StreamOpts {
 export interface StreamSession {
   textStream: AsyncIterable<string>;
   abort(): void;
+  /** Resolves with token usage after the stream finishes. Optional — providers
+   *  that don't support it simply omit this field. */
+  usage?: Promise<{ promptTokens: number; completionTokens: number }>;
 }

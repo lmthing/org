@@ -68,6 +68,9 @@ interface ForkEngineOpts {
   forkDepth?: number;
   /** Optional per-role model assignment (e.g. explore/plan → cheap model). */
   roleModels?: RoleModelConfig;
+  /** Default model alias used for any fork role that has no explicit roleModels entry.
+   *  Propagated from the parent session so llm_request events carry a model field. */
+  defaultModel?: string;
   /** Spaces registered at runtime via registerSpace(). Shared (same Map reference) with
    *  the parent Session so a fork's registerSpace() is visible to later parent delegate()
    *  calls — the documented dynamicSpaces invariant. */
@@ -410,7 +413,7 @@ export class ForkEngine {
           traceContext: `fork:${task.taskId ?? task.role ?? 'general'}`,
           scope: forkScope,
           budget,
-          model: modelForRole(task.role, this.opts.roleModels),
+          model: modelForRole(task.role, this.opts.roleModels) ?? this.opts.defaultModel,
         };
 
         // A BudgetExceededError here propagates to the outer catch and rejects: the

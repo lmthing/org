@@ -36,6 +36,25 @@ interface ReplayState {
   speed: number;
 }
 
+export interface ModelPricing { inputPer1K: number; outputPer1K: number }
+
+function computeEventCost(ev: TraceEvent, prices: Record<string, ModelPricing> | null): number {
+  if (!prices || ev.type !== 'llm_response') return 0;
+  const e = ev as { type: 'llm_response'; model?: string; inputTokens?: number; outputTokens?: number };
+  if (!e.model || typeof e.inputTokens !== 'number' || typeof e.outputTokens !== 'number') return 0;
+  const modelId = e.model.includes(':') ? e.model.split(':').slice(1).join(':') : e.model;
+  const p = prices[modelId];
+  if (!p) return 0;
+  return (e.inputTokens / 1000) * p.inputPer1K + (e.outputTokens / 1000) * p.outputPer1K;
+}
+
+function computeTotalCostFromEvents(events: WireEvent[], prices: Record<string, ModelPricing> | null): number {
+  if (!prices) return 0;
+  let total = 0;
+  for (const { event } of events) total += computeEventCost(event, prices);
+  return total;
+}
+
 interface AppState {
   mode: Mode;
   connection: Connection;
@@ -50,6 +69,12 @@ interface AppState {
   spaceName: string;
   agentSlug: string;
   replay: ReplayState | null;
+  /** Running token cost for the current live session (resets on session switch). */
+  sessionCostUsd: number;
+  /** Real-time cost estimate for in-flight LLM turns (updates every llm_progress ~250ms). */
+  sessionCostInflight: number;
+  /** Per-model pricing loaded from /api/prices/azure. */
+  prices: Record<string, ModelPricing> | null;
 
   // ─── Multi-session / project state ─────────────────────────────────────────
   projects: Project[];
@@ -87,6 +112,7 @@ interface AppState {
   setActiveProjectId: (id: string | null) => void;
   setSessions: (sessions: SessionMeta[]) => void;
   setActiveSessionId: (id: string | null) => void;
+  setPrices: (p: Record<string, ModelPricing>) => void;
   resetSession: () => void;
   // UI panel actions
   setDevPanelOpen: (v: boolean) => void;
@@ -96,6 +122,23 @@ interface AppState {
 function recomputeReplayModel(events: WireEvent[], cursor: number): SessionModel {
   const slice = events.slice(0, cursor);
   return buildModel(slice);
+}
+
+// Module-level ephemeral tracker for in-flight LLM turns (not persisted in state).
+// Keyed by nodeId ?? context — unique per concurrent turn.
+const _inflightTurns = new Map<string, { model: string; inputChars: number; outputChars: number }>();
+
+function computeInflightCost(prices: Record<string, ModelPricing> | null): number {
+  if (!prices || _inflightTurns.size === 0) return 0;
+  let total = 0;
+  for (const [, turn] of _inflightTurns) {
+    if (!turn.model) continue;
+    const modelId = turn.model.includes(':') ? turn.model.split(':').slice(1).join(':') : turn.model;
+    const p = prices[modelId];
+    if (!p) continue;
+    total += (turn.inputChars / 4 / 1000) * p.inputPer1K + (turn.outputChars / 4 / 1000) * p.outputPer1K;
+  }
+  return total;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -112,6 +155,9 @@ export const useStore = create<AppState>((set, get) => ({
   spaceName: '',
   agentSlug: '',
   replay: null,
+  sessionCostUsd: 0,
+  sessionCostInflight: 0,
+  prices: null,
   // multi-session / project initial state
   projects: [],
   activeProjectId: null,
@@ -127,14 +173,33 @@ export const useStore = create<AppState>((set, get) => ({
     const m = s.model;
     let autoExpand = s.expanded;
     let mutatedExpand = false;
+    let costDelta = 0;
+    let inflightChanged = false;
     for (const we of events) {
       applyWireEvent(m, we);
+      const ev = we.event;
+      costDelta += computeEventCost(ev, s.prices);
+      // Track in-flight turns for real-time cost estimate
+      if (ev.type === 'llm_request') {
+        const key = ev.nodeId ?? ev.context;
+        const inputChars = ev.system.length + ev.messages.reduce((acc: number, msg: { content: string }) => acc + msg.content.length, 0);
+        _inflightTurns.set(key, { model: ev.model ?? '', inputChars, outputChars: 0 });
+        inflightChanged = true;
+      } else if (ev.type === 'llm_progress') {
+        const key = ev.nodeId ?? ev.context;
+        const turn = _inflightTurns.get(key);
+        if (turn) { turn.outputChars = ev.chars; inflightChanged = true; }
+      } else if (ev.type === 'llm_response') {
+        const key = ev.nodeId ?? ev.context;
+        _inflightTurns.delete(key);
+        inflightChanged = true;
+      }
       // Auto-expand running nodes while following
-      if (s.follow && we.event.type === 'node_start') {
-        if (!autoExpand.has(we.event.nodeId)) {
+      if (s.follow && ev.type === 'node_start') {
+        if (!autoExpand.has(ev.nodeId)) {
           if (!mutatedExpand) { autoExpand = new Set(autoExpand); mutatedExpand = true; }
-          autoExpand.add(we.event.nodeId);
-          if (we.event.parentId) autoExpand.add(we.event.parentId);
+          autoExpand.add(ev.nodeId);
+          if (ev.parentId) autoExpand.add(ev.parentId);
         }
       }
     }
@@ -145,10 +210,13 @@ export const useStore = create<AppState>((set, get) => ({
       if (lastStart) nextSel = (lastStart.event as { nodeId: string }).nodeId;
       else if (!nextSel && m.rootId) nextSel = m.rootId;
     }
+    const newInflight = inflightChanged ? computeInflightCost(s.prices) : s.sessionCostInflight;
     set({
       version: s.version + 1,
       ...(mutatedExpand ? { expanded: autoExpand } : {}),
       ...(nextSel !== s.selectedNodeId ? { selectedNodeId: nextSel } : {}),
+      ...(costDelta > 0 ? { sessionCostUsd: s.sessionCostUsd + costDelta } : {}),
+      ...(inflightChanged ? { sessionCostInflight: newInflight } : {}),
     });
   },
 
@@ -179,23 +247,29 @@ export const useStore = create<AppState>((set, get) => ({
   setActiveProjectId: (id) => set({ activeProjectId: id }),
   setSessions: (sessions) => set({ sessions }),
   setActiveSessionId: (id) => set({ activeSessionId: id }),
+  setPrices: (prices) => set({ prices }),
   // ─── UI panel actions ─────────────────────────────────────────────────────
   setDevPanelOpen: (devPanelOpen) => set({ devPanelOpen }),
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
-  resetSession: () => set({
-    model: emptyModel(),
-    version: 0,
-    selectedNodeId: null,
-    userSelected: false,
-    follow: true,
-    expanded: new Set<string>(),
-    done: false,
-    spaceName: '',
-    agentSlug: '',
-    replay: null,
-    mode: 'live',
-    connection: 'connecting',
-  }),
+  resetSession: () => {
+    _inflightTurns.clear();
+    set({
+      model: emptyModel(),
+      version: 0,
+      selectedNodeId: null,
+      userSelected: false,
+      follow: true,
+      expanded: new Set<string>(),
+      done: false,
+      spaceName: '',
+      agentSlug: '',
+      replay: null,
+      mode: 'live',
+      connection: 'connecting',
+      sessionCostUsd: 0,
+      sessionCostInflight: 0,
+    });
+  },
 
   // ─── Replay ───
   loadReplay: (events) => {
@@ -281,7 +355,9 @@ export function connectLive(wsUrl: string): {
           // leave `expanded` empty and the tree would render as a single collapsed
           // root row — so auto-expand every node that has children.
           const events = (msg.events as WireEvent[]) ?? [];
-          const rebuilt = buildModel(events.map((x) => ({ seq: x.seq, event: x.event })));
+          const wireEvents = events.map((x) => ({ seq: x.seq, event: x.event }));
+          const rebuilt = buildModel(wireEvents);
+          _inflightTurns.clear();
           useStore.setState((s) => {
             const expanded = new Set(s.expanded);
             for (const id of parentNodeIds(rebuilt)) expanded.add(id);
@@ -290,6 +366,8 @@ export function connectLive(wsUrl: string): {
               version: s.version + 1,
               expanded,
               selectedNodeId: s.selectedNodeId ?? rebuilt.rootId,
+              sessionCostUsd: computeTotalCostFromEvents(wireEvents, s.prices),
+              sessionCostInflight: 0,
             };
           });
           break;

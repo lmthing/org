@@ -45,7 +45,7 @@ export type TraceEvent =
   // Existing nine events — shape-preserved; each gains optional nodeId (additive)
   | { ts: number; type: 'session_start'; sessionId: string; spaceDir: string; agentSlug: string; nodeId?: string }
   | { ts: number; type: 'llm_request'; context: string; nodeId?: string; system: string; messages: Array<{ role: string; content: string }>; model?: string }
-  | { ts: number; type: 'llm_response'; context: string; nodeId?: string; attempt: number; text: string }
+  | { ts: number; type: 'llm_response'; context: string; nodeId?: string; attempt: number; text: string; model?: string; inputTokens?: number; outputTokens?: number }
   | { ts: number; type: 'statement'; context: string; nodeId?: string; code: string }
   | { ts: number; type: 'typecheck_error'; context: string; nodeId?: string; statement: string; message: string; attempt: number }
   | { ts: number; type: 'eval_error'; context: string; nodeId?: string; statement: string; message: string }

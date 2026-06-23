@@ -235,6 +235,7 @@ export interface PersistedSessionMeta {
   lastActivity: number;
   messageCount: number;
   status: string;
+  totalCostUsd?: number;
 }
 
 /** `<root>/<projectId>/sessions/` */

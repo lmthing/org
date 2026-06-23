@@ -267,6 +267,7 @@ async function main(): Promise<void> {
       streamFn,
       defaultSpaceDir: args.space,
       lmthingRoot,
+      defaultModelAlias: modelSpec,
       ...(args.maxSessions !== undefined ? { maxSessions: args.maxSessions } : {}),
       ...(args.snapshotsDir !== undefined ? { snapshotsDir: args.snapshotsDir } : {}),
     });
@@ -298,6 +299,7 @@ async function main(): Promise<void> {
     const manager = new SessionManager({
       streamFn,
       lmthingRoot,
+      defaultModelAlias: modelSpec,
       ...(args.maxSessions !== undefined ? { maxSessions: args.maxSessions } : {}),
       ...(args.snapshotsDir !== undefined ? { snapshotsDir: args.snapshotsDir } : {}),
     });

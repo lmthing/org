@@ -16,7 +16,8 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "dev": "tsup --watch"
+    "dev": "tsup --watch",
+    "fetch-azure-prices": "npx tsx scripts/fetch-azure-prices.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",

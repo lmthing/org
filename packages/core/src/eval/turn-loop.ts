@@ -286,11 +286,33 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       }
     }
 
+    // Await token usage from the stream (best-effort; available after stream is consumed).
+    // Skip when the stream was aborted mid-way (yield/error): the usage event arrives
+    // only in the final API chunk, which never comes after abort, so the promise hangs.
+    let inputTokens: number | undefined;
+    let outputTokens: number | undefined;
+    if (stream.usage && !aborted) {
+      try {
+        const u = await stream.usage;
+        if (u.promptTokens > 0 || u.completionTokens > 0) {
+          inputTokens = u.promptTokens;
+          outputTokens = u.completionTokens;
+        }
+      } catch { /* usage unavailable */ }
+    }
+
     // Use parsed statements for history so incomplete trailing stream text is excluded.
     const historyContent = parsedStatements.length > 0 ? parsedStatements.join('\n') : assistantContent.trim();
     if (historyContent) {
       renderHost.log(`[model response]\n${historyContent}\n[/model response]`);
-      tracer.write({ ts: Date.now(), type: 'llm_response', context: ctx, ...(nodeId ? { nodeId } : {}), attempt, text: historyContent });
+      tracer.write({
+        ts: Date.now(), type: 'llm_response', context: ctx,
+        ...(nodeId ? { nodeId } : {}),
+        attempt, text: historyContent,
+        ...(deps.model ? { model: deps.model } : {}),
+        ...(inputTokens !== undefined ? { inputTokens } : {}),
+        ...(outputTokens !== undefined ? { outputTokens } : {}),
+      });
       history.append({ role: 'assistant', content: historyContent, blockType: 'normal' });
     }
 

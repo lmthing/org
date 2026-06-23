@@ -1,11 +1,18 @@
 import React from 'react';
 import { cn } from '../lib/cn.js';
 import { useStore, connectLive } from '../store/store.js';
-import type { Project } from '../store/store.js';
+import type { Project, ModelPricing } from '../store/store.js';
 
 interface PersistedSessionMeta {
   sessionId: string; projectId?: string; agentSlug: string; spaceDir: string;
   title?: string; createdAt?: number; lastActivity: number; messageCount?: number; status: string;
+  totalCostUsd?: number;
+}
+
+function formatCost(usd: number): string {
+  if (usd < 0.000001) return '';
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(3)}`;
 }
 
 async function apiGet<T>(path: string): Promise<T> {
@@ -69,6 +76,8 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
   const activeSessionId = useStore(s => s.activeSessionId);
   const setProjects = useStore(s => s.setProjects);
   const setActiveProjectId = useStore(s => s.setActiveProjectId);
+  const sessionCostUsd = useStore(s => s.sessionCostUsd);
+  const setPrices = useStore(s => s.setPrices);
 
   const [sessions, setSessions] = React.useState<PersistedSessionMeta[]>([]);
   const [newProjectName, setNewProjectName] = React.useState('');
@@ -85,6 +94,11 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
     apiGet<{ projects: Project[] }>('/api/projects')
       .then(r => setProjects(r.projects)).catch(() => {});
   }, [setProjects]);
+
+  React.useEffect(() => {
+    apiGet<Record<string, ModelPricing>>('/api/prices/azure')
+      .then(setPrices).catch(() => {});
+  }, [setPrices]);
 
   React.useEffect(() => {
     if (activeProjectId) loadSessions(activeProjectId); else setSessions([]);
@@ -224,20 +238,26 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
             <p className="px-2 py-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</p>
             {group.sessions.map(s => {
               const label = s.title || 'New chat';
+              const isActive = s.sessionId === activeSessionId;
+              const cost = isActive ? sessionCostUsd : s.totalCostUsd;
+              const costLabel = cost !== undefined && cost > 0 ? formatCost(cost) : '';
               return (
                 <div key={s.sessionId} className="group flex items-center gap-1">
                   <button
                     onClick={() => void resumeSession(s.sessionId)}
                     className={cn(
                       'flex-1 text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors',
-                      s.sessionId === activeSessionId
+                      isActive
                         ? 'bg-muted text-foreground font-medium'
                         : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                     )}
                     title={s.title || s.sessionId}
                   >
                     <span className="block truncate">{label}</span>
-                    <span className="block text-xs text-muted-foreground/70 font-normal">{relativeTime(s.lastActivity)}</span>
+                    <span className="block text-xs text-muted-foreground/70 font-normal">
+                      {relativeTime(s.lastActivity)}
+                      {costLabel && <span className="ml-1.5 text-muted-foreground/50">{costLabel}</span>}
+                    </span>
                   </button>
                   <button
                     onClick={() => void deleteSession(s.sessionId)}

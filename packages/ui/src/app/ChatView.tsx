@@ -8,6 +8,12 @@ import { useTheme } from '../theme/theme.js';
 import { TraceLoader } from './replay.js';
 import { cn } from '../lib/cn.js';
 
+function formatCost(usd: number): string {
+  if (usd < 0.000001) return '';
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(3)}`;
+}
+
 function ConnectionDot() {
   const c = useStore(s => s.connection);
   const mode = useStore(s => s.mode);
@@ -76,6 +82,7 @@ export function ChatView({
 }: ChatViewProps) {
   const spaceName = useStore(s => s.spaceName);
   const agentSlug = useStore(s => s.agentSlug);
+  const sessionCostUsd = useStore(s => s.sessionCostUsd + s.sessionCostInflight);
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
   const model = useStore(s => s.model);
@@ -134,6 +141,11 @@ export function ChatView({
         aria-label="chat header"
       >
         <span className="text-sm font-medium text-foreground truncate flex-1">{title}</span>
+        {sessionCostUsd > 0 && (
+          <span className="text-xs text-muted-foreground shrink-0" title="Session cost">
+            {formatCost(sessionCostUsd)}
+          </span>
+        )}
         <div className="flex items-center gap-2 shrink-0">
           {mode === 'live' && (
             <button

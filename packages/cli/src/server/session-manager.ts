@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { join, basename } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
 import type { StreamOpts, StreamSession } from '@lmthing/core';
 import { WebRenderHost } from '../rpc/server.js';
@@ -68,6 +70,8 @@ export interface SessionEntry {
   needsResume?: boolean;
   /** Absolute path to the session's persistence dir (project-mode only). */
   snapshotDir?: string;
+  /** Accumulated LLM cost in USD across all turns in this session. */
+  totalCostUsd: number;
 }
 
 /** Lightweight metadata for listSessions() — never exposes the Session object. */
@@ -118,6 +122,35 @@ export interface SessionManagerOpts {
   /** Absolute path to `<cwd>/.lmthing`. When set, the manager resolves project
    *  directories from this root and exposes project CRUD methods. */
   lmthingRoot?: string;
+  /** Resolved default model spec (e.g. "azure:DeepSeek-V4-Flash") used when a
+   *  session is created without an explicit model override. Forwarded as
+   *  `modelAlias` so llm_request/llm_response events carry a model field for
+   *  cost tracking. */
+  defaultModelAlias?: string;
+}
+
+interface ModelPricing { inputPer1K: number; outputPer1K: number }
+
+function loadAzurePrices(): Record<string, ModelPricing> {
+  try {
+    const pricesPath = join(dirname(fileURLToPath(import.meta.url)), '../prices/azure.json');
+    return JSON.parse(readFileSync(pricesPath, 'utf8')) as Record<string, ModelPricing>;
+  } catch {
+    return {};
+  }
+}
+
+function computeTurnCost(
+  prices: Record<string, ModelPricing>,
+  model: string | undefined,
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  if (!model) return 0;
+  const modelId = model.includes(':') ? model.split(':').slice(1).join(':') : model;
+  const p = prices[modelId];
+  if (!p) return 0;
+  return (inputTokens / 1000) * p.inputPer1K + (outputTokens / 1000) * p.outputPer1K;
 }
 
 /**
@@ -128,6 +161,7 @@ export class SessionManager {
   private sessions: Map<string, SessionEntry> = new Map();
   private streamFn: (opts: StreamOpts) => Promise<StreamSession>;
   private defaultSpaceDir?: string;
+  private defaultModelAlias?: string;
   readonly maxSessions: number;
   readonly snapshotsDir: string;
   readonly idleTtlMs: number;
@@ -135,15 +169,33 @@ export class SessionManager {
   private reaper: ReturnType<typeof setInterval> | null = null;
   /** Absolute path to `<cwd>/.lmthing` — set when running in project mode. */
   readonly lmthingRoot?: string;
+  /** Per-model pricing loaded from prices/azure.json at startup. */
+  private prices: Record<string, ModelPricing> = loadAzurePrices();
 
   constructor(opts: SessionManagerOpts) {
     this.streamFn = opts.streamFn;
     this.defaultSpaceDir = opts.defaultSpaceDir;
+    this.defaultModelAlias = opts.defaultModelAlias;
     this.maxSessions = opts.maxSessions ?? (Number(process.env['MAX_SESSIONS']) || 8);
     this.snapshotsDir = opts.snapshotsDir ?? process.env['SNAPSHOTS_DIR'] ?? '/data/snapshots';
     this.idleTtlMs = opts.idleTtlMs ?? Number(process.env['IDLE_TTL_MINUTES'] ?? 15) * 60000;
     this.buildSessionFn = opts.buildSession ?? this.defaultBuildSession.bind(this);
     this.lmthingRoot = opts.lmthingRoot;
+  }
+
+  /** Subscribe a session's tracer to its hub AND cost accumulation. */
+  private wireTracer(session: Session, entry: SessionEntry): void {
+    if (typeof session.getTracer !== 'function') return;
+    session.getTracer().subscribe((e) => {
+      entry.hub.push(e);
+      if (
+        e.type === 'llm_response' &&
+        typeof e.inputTokens === 'number' &&
+        typeof e.outputTokens === 'number'
+      ) {
+        entry.totalCostUsd += computeTurnCost(this.prices, e.model, e.inputTokens, e.outputTokens);
+      }
+    });
   }
 
   /** Default session builder — constructs a Session bound to `streamFn`. */
@@ -152,7 +204,7 @@ export class SessionManager {
       {
         spaceDir: args.spaceDir,
         agentSlug: args.agentSlug,
-        modelAlias: args.model ?? 'default',
+        modelAlias: args.model ?? this.defaultModelAlias ?? 'default',
         renderHost: args.renderHost,
         budget: args.budget,
         maxHistoryTurns: 20,
@@ -229,6 +281,7 @@ export class SessionManager {
         projectId,
         createdAt: now,
         messageCount: 0,
+        totalCostUsd: 0,
         needsResume: true,
         snapshotDir,
       };
@@ -280,6 +333,7 @@ export class SessionManager {
         projectId,
         createdAt: Date.now(),
         messageCount: 0,
+        totalCostUsd: 0,
         snapshotDir,
       };
       this.sessions.set(sessionId, placeholderEntry);
@@ -311,11 +365,6 @@ export class SessionManager {
       renderHost,
     });
 
-    // Subscribe this session's tracer to its OWN hub so trace events stay scoped.
-    if (typeof session.getTracer === 'function') {
-      session.getTracer().subscribe((e) => hub.push(e));
-    }
-
     const entry: SessionEntry = {
       sessionId,
       session,
@@ -328,7 +377,11 @@ export class SessionManager {
       status: 'idle',
       createdAt: Date.now(),
       messageCount: 0,
+      totalCostUsd: 0,
     };
+
+    // Subscribe this session's tracer to its OWN hub so trace events stay scoped.
+    this.wireTracer(session, entry);
     this.sessions.set(sessionId, entry);
     return { sessionId };
   }
@@ -367,10 +420,8 @@ export class SessionManager {
       projectSpacesDir,
     });
 
-    // Wire up the tracer to this session's hub.
-    if (typeof session.getTracer === 'function') {
-      session.getTracer().subscribe((e) => entry.hub.push(e));
-    }
+    // Wire up the tracer to this session's hub + cost tracking.
+    this.wireTracer(session, entry);
 
     // Fill in the placeholder — update mutable fields in-place so the Map entry
     // already visible to getSession() callers stays valid.
@@ -407,6 +458,7 @@ export class SessionManager {
       entry.createdAt = meta.createdAt;
       entry.messageCount = meta.messageCount;
       entry.agentSlug = meta.agentSlug || entry.agentSlug;
+      if (meta.totalCostUsd !== undefined) entry.totalCostUsd = meta.totalCostUsd;
     } catch {
       // No meta — keep defaults set at placeholder creation.
     }
@@ -429,10 +481,8 @@ export class SessionManager {
       projectSpacesDir,
     });
 
-    // Wire up the tracer to this session's hub.
-    if (typeof session.getTracer === 'function') {
-      session.getTracer().subscribe((e) => entry.hub.push(e));
-    }
+    // Wire up the tracer to this session's hub + cost tracking.
+    this.wireTracer(session, entry);
 
     // Seed the hub with persisted trace events so the WS trace_snapshot shows
     // the prior conversation immediately when a client connects.
@@ -480,6 +530,7 @@ export class SessionManager {
         lastActivity: entry.lastActivity,
         messageCount: entry.messageCount,
         status: entry.status,
+        totalCostUsd: entry.totalCostUsd > 0 ? entry.totalCostUsd : undefined,
       };
       await mkdir(snapshotDir, { recursive: true });
       await writeFile(join(snapshotDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');
@@ -683,6 +734,7 @@ export class SessionManager {
         lastActivity: live.lastActivity,
         title: live.title ?? meta.title,
         messageCount: live.messageCount,
+        totalCostUsd: live.totalCostUsd > 0 ? live.totalCostUsd : meta.totalCostUsd,
       };
     });
 
@@ -700,6 +752,7 @@ export class SessionManager {
         lastActivity: entry.lastActivity,
         messageCount: entry.messageCount,
         status: entry.status,
+        totalCostUsd: entry.totalCostUsd > 0 ? entry.totalCostUsd : undefined,
       });
     }
 

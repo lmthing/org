@@ -40,6 +40,9 @@ export interface RunDelegateOpts {
   /** Absolute path to the project's spaces/ dir. Propagated into the delegate VM as
    *  LMTHING_PROJECT_SPACES_DIR and forwarded to nested delegate/fork VMs. */
   projectSpacesDir?: string;
+  /** Model spec/alias used by streamFn — forwarded to runTurnLoop so llm_request events
+   *  carry a model field and cost tracking works across delegate chains. */
+  model?: string;
 }
 
 export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
@@ -217,6 +220,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       clock: opts.clock,
       tracer: opts.tracer,
       projectSpacesDir: opts.projectSpacesDir,
+      defaultModel: opts.model,
     });
 
     try {
@@ -260,6 +264,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
         tracer: tracer,
         traceContext: delegateLabel,
         scope: delegateScope,
+        model: opts.model,
       });
       tracer.end(delegateScope, 'done', resultCaptured ? { result: capturedResult } : undefined);
     } catch (err) {

@@ -1,9 +1,7 @@
 import { streamText, type LanguageModel } from 'ai';
+import type { StreamSession } from '@lmthing/core';
 
-export interface StreamSession {
-  textStream: AsyncIterable<string>;
-  abort(): void;
-}
+export type { StreamSession };
 
 export interface StreamOpts {
   model: LanguageModel;
@@ -26,5 +24,9 @@ export async function createStream(opts: StreamOpts): Promise<StreamSession> {
     abort() {
       abortController.abort();
     },
+    usage: result.usage.then((u) => ({
+      promptTokens: u.promptTokens,
+      completionTokens: u.completionTokens,
+    })).catch(() => ({ promptTokens: 0, completionTokens: 0 })),
   };
 }

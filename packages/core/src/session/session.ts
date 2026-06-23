@@ -140,6 +140,7 @@ export class Session {
         budget: this.budget,
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
+        model: this.opts.modelAlias,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -269,6 +270,7 @@ export class Session {
         budget: this.budget,
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
+        model: this.opts.modelAlias,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -379,6 +381,7 @@ export class Session {
         budget: this.budget,
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
+        model: this.opts.modelAlias,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -460,6 +463,7 @@ export class Session {
       agentFunctionsBundled: this.agentFunctionsBundled,
       budgetLimits: this.opts.budget,
       roleModels: this.opts.roleModels,
+      defaultModel: this.opts.modelAlias,
       // Same Map reference the delegate path reads — a fork's registerSpace() lands here.
       dynamicSpaces: this.dynamicSpaces,
       projectSpacesDir: this.opts.projectSpacesDir,
@@ -657,6 +661,7 @@ export class Session {
           scope: this.currentScope ?? undefined,
           systemSpaces: this.systemSpaces,
           projectSpacesDir: this.opts.projectSpacesDir,
+          model: this.opts.modelAlias,
         });
       },
     };

@@ -243,6 +243,20 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     const path = url.pathname;
     const method = req.method ?? 'GET';
 
+    // ─── Prices ───
+    if (path === '/api/prices/azure' && method === 'GET') {
+      try {
+        const { fileURLToPath } = await import('node:url');
+        const pricesPath = join(dirname(fileURLToPath(import.meta.url)), '../prices/azure.json');
+        const raw = readFileSync(pricesPath, 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(raw);
+      } catch {
+        sendJson(res, 404, { error: 'prices not available' });
+      }
+      return;
+    }
+
     // ─── Session lifecycle (collection-level) ───
     if (path === '/api/sessions' && method === 'POST') {
       const body = await readBody(req);
