@@ -83,9 +83,10 @@ async function boot(): Promise<void> {
       if (res.ok) {
         const { projects } = (await res.json()) as { projects: Project[] };
         useStore.getState().setProjects(projects);
-        // Default-select 'user' project if it exists, else first project.
+        // Default-select 'user' project if it exists (id='user' is the
+        // personal project), else first project.
         const defaultProject =
-          projects.find((p) => p.name === 'user') ?? projects[0];
+          projects.find((p) => p.id === 'user') ?? projects[0];
         if (defaultProject) {
           useStore.getState().setActiveProjectId(defaultProject.id);
         }

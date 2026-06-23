@@ -27,7 +27,10 @@ export async function resolveModel(modelSpec: string): Promise<LanguageModelV1> 
   switch (provider) {
     case 'openai': {
       const { createOpenAI } = await import('@ai-sdk/openai');
-      return createOpenAI()(modelId) as unknown as LanguageModelV1;
+      const baseURL = process.env['OPENAI_BASE_URL'];
+      const apiKey = process.env['OPENAI_API_KEY'];
+      const opts = baseURL ? { baseURL, apiKey } : {};
+      return createOpenAI(opts)(modelId) as unknown as LanguageModelV1;
     }
     case 'anthropic': {
       const { createAnthropic } = await import('@ai-sdk/anthropic');

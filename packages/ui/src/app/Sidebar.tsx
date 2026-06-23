@@ -93,8 +93,17 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
 
   React.useEffect(() => {
     apiGet<{ projects: Project[] }>('/api/projects')
-      .then(r => setProjects(r.projects)).catch(() => {});
-  }, [setProjects]);
+      .then(r => {
+        setProjects(r.projects);
+        // Auto-select a default project if none is active yet (fallback for when
+        // the main.tsx boot fetch fails or runs before the store is ready).
+        if (!useStore.getState().activeProjectId && r.projects.length > 0) {
+          const defaultProject = r.projects.find(p => p.id === 'user') ?? r.projects[0];
+          setActiveProjectId(defaultProject.id);
+        }
+      })
+      .catch(() => {});
+  }, [setProjects, setActiveProjectId]);
 
   React.useEffect(() => {
     apiGet<Record<string, ModelPricing>>('/api/prices/azure')
