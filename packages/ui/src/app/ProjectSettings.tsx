@@ -19,6 +19,57 @@ async function apiPut(path: string, body: unknown): Promise<void> {
   if (!r.ok) throw new Error(`PUT ${path} → ${r.status}`);
 }
 
+function EnvTab() {
+  const [content, setContent] = React.useState('');
+  const [loaded, setLoaded] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [status, setStatus] = React.useState<'idle' | 'saved' | 'error'>('idle');
+
+  React.useEffect(() => {
+    setLoaded(false);
+    setStatus('idle');
+    apiGet<{ content: string }>('/api/env')
+      .then(r => { setContent(r.content); setLoaded(true); })
+      .catch(() => { setContent(''); setLoaded(true); });
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setStatus('idle');
+    try {
+      await apiPut('/api/env', { content });
+      setStatus('saved');
+    } catch {
+      setStatus('error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!loaded) return <div className="flex items-center justify-center p-6"><Spinner /></div>;
+
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <p className="text-xs text-muted-foreground">Environment variables loaded by the pod at startup.</p>
+      <textarea
+        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+        rows={14}
+        value={content}
+        onChange={(e) => { setContent(e.target.value); setStatus('idle'); }}
+        placeholder="KEY=value"
+        spellCheck={false}
+      />
+      <div className="flex items-center gap-3 self-end">
+        {status === 'saved' && <span className="text-xs text-green-600">Saved</span>}
+        {status === 'error' && <span className="text-xs text-destructive">Error saving</span>}
+        <Button variant="default" size="sm" loading={saving} onClick={() => void save()}>
+          Save env
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function InstructionsTab({ projectId }: { projectId: string }) {
   const [content, setContent] = React.useState('');
   const [saving, setSaving] = React.useState(false);
@@ -146,6 +197,7 @@ export function ProjectSettings({ open, onClose, projectId, projectName }: Proje
     { id: 'instructions', label: 'Instructions' },
     { id: 'documents', label: 'Documents' },
     { id: 'spaces', label: 'Spaces' },
+    { id: 'env', label: 'Env' },
   ];
 
   return (
@@ -154,6 +206,7 @@ export function ProjectSettings({ open, onClose, projectId, projectName }: Proje
       {tab === 'instructions' && <InstructionsTab projectId={projectId} />}
       {tab === 'documents' && <DocumentsTab projectId={projectId} />}
       {tab === 'spaces' && <SpacesTab projectId={projectId} />}
+      {tab === 'env' && <EnvTab />}
     </Drawer>
   );
 }
