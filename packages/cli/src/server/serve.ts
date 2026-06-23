@@ -12,6 +12,7 @@ import { TraceHub } from '../rpc/trace-hub.js';
 import { handleAgentApi, agentApiContextFromEntry } from '../web/agent-api.js';
 import type { ServerEvent, ClientMessage, UiControlAction } from '../rpc/events.js';
 import type { SessionManager, SessionEntry } from './session-manager.js';
+import { isSafeRelPath, safeProjectId } from './projects.js';
 
 export interface SessionServerOpts {
   port: number;
@@ -39,11 +40,6 @@ function safeSpaceName(name: unknown): string | null {
   return name;
 }
 
-/** A file path must be relative and free of empty / `.` / `..` segments. */
-function isSafeRelPath(p: string): boolean {
-  if (typeof p !== 'string' || p.length === 0 || p.startsWith('/') || p.includes('\0')) return false;
-  return p.split('/').every((s) => s !== '' && s !== '.' && s !== '..');
-}
 
 // ─── esbuild app bundling (mirrors web/serve.ts) ──────────────────────────────
 
@@ -142,10 +138,26 @@ function buildHtml(js: string, css: string, port: number, themeCss = '', project
   const bootstrap = `(function(){
     var p = new URLSearchParams(location.search);
     var sid = p.get('sessionId') || '';
+    var tok = p.get('access_token') || '';
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     window.__LM_PROJECT_MODE__ = ${projectMode ? 'true' : 'false'};
-    if (sid) window.__WS_URL__ = proto + '//' + location.host + '/api/ws?sessionId=' + encodeURIComponent(sid);
-    else if (!${projectMode ? 'true' : 'false'}) window.__WS_URL__ = proto + '//' + location.host + '/api/ws';
+    // Gateway JWT (behind Envoy): stash for the agent-ui fetch/WS layer, then
+    // strip it from the address bar so it isn't bookmarked/leaked (mirrors how
+    // @lmthing/auth clears ?code=).
+    window.__LM_ACCESS_TOKEN__ = tok;
+    if (tok) {
+      p.delete('access_token');
+      var qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    }
+    function wsUrl(extra) {
+      var qp = [];
+      if (extra) qp.push(extra);
+      if (tok) qp.push('access_token=' + encodeURIComponent(tok));
+      return proto + '//' + location.host + '/api/ws' + (qp.length ? '?' + qp.join('&') : '');
+    }
+    if (sid) window.__WS_URL__ = wsUrl('sessionId=' + encodeURIComponent(sid));
+    else if (!${projectMode ? 'true' : 'false'}) window.__WS_URL__ = wsUrl('');
   })();`;
   return `<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -195,13 +207,20 @@ export interface SessionServerHandle {
 export async function startSessionServer(opts: SessionServerOpts): Promise<SessionServerHandle> {
   const { manager, port } = opts;
   const wsBase = `ws://localhost:${port}`;
-  const spacesRoot = resolve(opts.spacesRoot ?? process.env['SPACES_DIR'] ?? '/data/spaces');
 
   // Ensure the default project exists when running in project mode.
   // The manager's lmthingRoot takes precedence; opts.lmthingRoot is accepted for
   // symmetry (both should match in practice — the manager is already constructed
   // with it by the CLI).
   const effectiveLmthingRoot = manager.lmthingRoot ?? opts.lmthingRoot;
+
+  // Where POST /api/spaces writes synced spaces. In project mode they land under
+  // the default 'user' project's spaces/ tree (the single source of truth, same
+  // place generated spaces live), so studio reads/writes the real project spaces.
+  // Otherwise fall back to the legacy flat dir ($SPACES_DIR or /data/spaces).
+  const spacesRoot = effectiveLmthingRoot
+    ? join(effectiveLmthingRoot, 'user', 'spaces')
+    : resolve(opts.spacesRoot ?? process.env['SPACES_DIR'] ?? '/data/spaces');
   if (effectiveLmthingRoot) {
     try {
       await manager.ensureDefaultProject();
@@ -406,6 +425,51 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
         return;
       }
 
+      // GET /api/projects/:id/spaces/:spaceId/files — read a space's files
+      // PUT /api/projects/:id/spaces/:spaceId/files — wipe-and-rewrite them
+      const spaceFilesMatch = /^\/spaces\/([^/]+)\/files$/.exec(subPath);
+      if (spaceFilesMatch) {
+        const spaceId = decodeURIComponent(spaceFilesMatch[1]!);
+        if (!safeProjectId(spaceId)) {
+          sendJson(res, 400, { error: `invalid space id: ${spaceId}` }); return;
+        }
+        if (method === 'GET') {
+          try {
+            const files = await manager.readProjectSpaceFiles(rawId, spaceId);
+            sendJson(res, 200, { files });
+          } catch (err) {
+            sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          }
+          return;
+        }
+        if (method === 'PUT') {
+          let parsed: { files?: unknown };
+          try {
+            parsed = JSON.parse((await readBody(req)) || '{}') as { files?: unknown };
+          } catch {
+            sendJson(res, 400, { error: 'invalid JSON body' }); return;
+          }
+          const files = (parsed.files ?? {}) as Record<string, unknown>;
+          if (typeof files !== 'object' || files === null || Array.isArray(files)) {
+            sendJson(res, 400, { error: 'files must be an object' }); return;
+          }
+          for (const rel of Object.keys(files)) {
+            if (!isSafeRelPath(rel)) { sendJson(res, 400, { error: `unsafe file path: ${rel}` }); return; }
+          }
+          const normalized: Record<string, string> = {};
+          for (const [rel, content] of Object.entries(files)) {
+            normalized[rel] = typeof content === 'string' ? content : String(content ?? '');
+          }
+          try {
+            await manager.writeProjectSpaceFiles(rawId, spaceId, normalized);
+            sendJson(res, 200, { ok: true });
+          } catch (err) {
+            sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          }
+          return;
+        }
+      }
+
       // GET /api/projects/:id/spaces — spaces created under this project
       if (subPath === '/spaces' && method === 'GET') {
         try {
@@ -497,12 +561,23 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     res.end(html);
   }
 
-  // ─── WebSocket: /api/ws?sessionId=<id> ───
+  // ─── WebSocket: /api/ws?sessionId=<id> (agent) or /api/ws (control/terminal) ───
+  // The PTY cwd for terminal sessions: the runtime root (so the shell lands in
+  // the same tree the agent runs in), falling back to the process cwd.
+  const terminalCwd = effectiveLmthingRoot ?? process.cwd();
   const wss = new WebSocketServer({ noServer: true });
   httpServer.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname !== '/api/ws') { socket.destroy(); return; }
     const id = url.searchParams.get('sessionId') ?? '';
+    // No sessionId → control socket (terminal multiplexing), not bound to an
+    // agent SessionEntry. computer/ connects this way for its terminal.
+    if (!id) {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        registerControlSocket(ws);
+      });
+      return;
+    }
     const entry = manager.getSession(id);
     if (!entry) {
       // Unknown session — refuse the upgrade with 404.
@@ -514,6 +589,51 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       registerSocket(ws, entry);
     });
   });
+
+  /**
+   * A control socket multiplexes PTY terminals (no agent session). Each socket
+   * owns its own TerminalManager so terminals die with the connection. node-pty
+   * is loaded lazily inside terminal.ts — if unavailable (e.g. under Bun), the
+   * open attempt surfaces an `error` event and the socket stays usable.
+   */
+  function registerControlSocket(ws: WebSocket): void {
+    let terminals: import('./terminal.js').TerminalManager | null = null;
+    const send = (e: ServerEvent) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(e)); };
+    const fail = (message: string) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'error', message } satisfies ServerEvent)); };
+
+    const ensureTerminals = async (): Promise<import('./terminal.js').TerminalManager> => {
+      if (terminals) return terminals;
+      const { TerminalManager } = await import('./terminal.js');
+      terminals = new TerminalManager();
+      return terminals;
+    };
+
+    ws.on('message', (data: Buffer) => {
+      let msg: ClientMessage;
+      try { msg = JSON.parse(data.toString()) as ClientMessage; } catch { return; }
+      switch (msg.type) {
+        case 'terminal.open': {
+          const termId = msg.sessionId;
+          void ensureTerminals()
+            .then((mgr) => mgr.open(termId, terminalCwd, (out) => send({ type: 'terminal.data', sessionId: termId, data: out })))
+            .then(() => send({ type: 'terminal.opened', sessionId: termId }))
+            .catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
+          break;
+        }
+        case 'terminal.input':
+          terminals?.input(msg.sessionId, msg.data);
+          break;
+        case 'terminal.resize':
+          terminals?.resize(msg.sessionId, msg.cols, msg.rows);
+          break;
+        case 'terminal.close':
+          terminals?.close(msg.sessionId);
+          break;
+      }
+    });
+
+    ws.on('close', () => { terminals?.closeAll(); });
+  }
 
   function registerSocket(ws: WebSocket, entry: SessionEntry): void {
     entry.renderHost.addClient(ws);

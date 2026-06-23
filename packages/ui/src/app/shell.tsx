@@ -12,13 +12,14 @@
 import React from 'react';
 import { App } from './App.js';
 import { useStore, connectLive, type Project } from '../store/store.js';
+import { authHeaders, wsTokenSuffix } from './auth.js';
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
 
 const BASE = '';  // same-origin
 
 async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, { headers: authHeaders() });
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -26,7 +27,7 @@ async function apiGet<T>(path: string): Promise<T> {
 async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`POST ${path} → ${res.status}`);
@@ -36,14 +37,14 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
 async function apiPut(path: string, body: unknown): Promise<void> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`PUT ${path} → ${res.status}`);
 }
 
 async function apiDelete(path: string): Promise<void> {
-  const res = await fetch(`${BASE}${path}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE}${path}`, { method: 'DELETE', headers: authHeaders() });
   if (!res.ok) throw new Error(`DELETE ${path} → ${res.status}`);
 }
 
@@ -61,7 +62,7 @@ function switchSession(sessionId: string): void {
 
   // Build the WS URL — same origin, per-session endpoint.
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${proto}//${window.location.host}/api/ws?sessionId=${encodeURIComponent(sessionId)}`;
+  const wsUrl = `${proto}//${window.location.host}/api/ws?sessionId=${encodeURIComponent(sessionId)}${wsTokenSuffix()}`;
   activeConn = connectLive(wsUrl);
 
   // Expose send handle for MessageInput (conversation.tsx reads __LM_SEND__).

@@ -4,17 +4,18 @@ import { Drawer } from '../components/ui/Drawer.js';
 import { Button } from '../components/ui/Button.js';
 import { Spinner } from '../components/ui/Spinner.js';
 import { Tabs } from '../components/ui/Tabs.js';
+import { authHeaders } from './auth.js';
 
 async function apiGet<T>(path: string): Promise<T> {
-  const r = await fetch(path); if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
+  const r = await fetch(path, { headers: authHeaders() }); if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
   return r.json() as Promise<T>;
 }
 async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const r = await fetch(path, { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify(body) });
+  const r = await fetch(path, { method: 'POST', headers: {'content-type':'application/json', ...authHeaders()}, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`POST ${path} → ${r.status}`); return r.json() as Promise<T>;
 }
 async function apiPut(path: string, body: unknown): Promise<void> {
-  const r = await fetch(path, { method: 'PUT', headers: {'content-type':'application/json'}, body: JSON.stringify(body) });
+  const r = await fetch(path, { method: 'PUT', headers: {'content-type':'application/json', ...authHeaders()}, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`PUT ${path} → ${r.status}`);
 }
 

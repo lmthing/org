@@ -6,12 +6,14 @@ import { AppShell } from './AppShell.js';
 import { useStore, connectLive, type InspectorTab, type Project } from '../store/store.js';
 import { parseTrace } from './replay.js';
 import { initTheme } from '../theme/theme.js';
+import { authHeaders, wsTokenSuffix } from './auth.js';
 
 // Expose React for runtime-bundled space components that reference it (defensive;
 // the runtime bundle shares this React instance directly).
 const w = window as unknown as {
   __WS_URL__?: string;
   __LM_PROJECT_MODE__?: boolean;
+  __LM_ACCESS_TOKEN__?: string;
   __LM_SEND__?: (m: unknown) => void;
   __LMTHING_REACT__?: unknown;
   React?: unknown;
@@ -77,7 +79,7 @@ async function boot(): Promise<void> {
 
     // Pre-load projects and pick a default.
     try {
-      const res = await fetch('/api/projects');
+      const res = await fetch('/api/projects', { headers: authHeaders() });
       if (res.ok) {
         const { projects } = (await res.json()) as { projects: Project[] };
         useStore.getState().setProjects(projects);
@@ -113,7 +115,7 @@ async function boot(): Promise<void> {
   } else if (sessionIdParam) {
     // ?sessionId= direct link — connect to that specific session's WS.
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${window.location.host}/api/ws?sessionId=${encodeURIComponent(sessionIdParam)}`;
+    const wsUrl = `${proto}//${window.location.host}/api/ws?sessionId=${encodeURIComponent(sessionIdParam)}${wsTokenSuffix()}`;
     const conn = connectLive(wsUrl);
     w.__LM_SEND__ = conn.send;
     useStore.getState().setActiveSessionId(sessionIdParam);

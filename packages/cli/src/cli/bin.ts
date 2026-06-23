@@ -127,6 +127,18 @@ async function loadMockStreamFn(mockPath: string): Promise<(opts: StreamOpts) =>
 }
 
 /**
+ * Resolve the persistent runtime root. The single source of truth for project
+ * spaces, synced spaces, and session snapshots. `LMTHING_ROOT` overrides the
+ * default `<cwd>/.lmthing` so the compute pod can persist onto its data volume
+ * (e.g. `LMTHING_ROOT=/data/.lmthing`).
+ */
+function resolveLmthingRoot(): string {
+  const override = process.env['LMTHING_ROOT'];
+  if (override && override.trim().length > 0) return resolve(override.trim());
+  return join(process.cwd(), '.lmthing');
+}
+
+/**
  * Materialize the lmthing runtime into `root` (`<cwd>/.lmthing`).
  *
  * - Copies every system space shipped with @lmthing/core into `<root>/system/<name>/`.
@@ -262,7 +274,9 @@ async function main(): Promise<void> {
     const { SessionManager } = await import('../server/session-manager.js');
     const { startSessionServer } = await import('../server/serve.js');
     const port = args.servePort ?? 8080;
-    const lmthingRoot = join(process.cwd(), '.lmthing');
+    // Persistent runtime root. Honors LMTHING_ROOT so the pod can point this at
+    // its data volume (e.g. /data/.lmthing); defaults to <cwd>/.lmthing locally.
+    const lmthingRoot = resolveLmthingRoot();
     const manager = new SessionManager({
       streamFn,
       defaultSpaceDir: args.space,
@@ -290,7 +304,7 @@ async function main(): Promise<void> {
     const { SessionManager } = await import('../server/session-manager.js');
     const { startSessionServer } = await import('../server/serve.js');
     const port = args.servePort ?? 8080;
-    const lmthingRoot = join(process.cwd(), '.lmthing');
+    const lmthingRoot = resolveLmthingRoot();
     // Auto-initialize if this is the first run (no system dir yet).
     if (!existsSync(join(lmthingRoot, 'system'))) {
       materializeRuntime(lmthingRoot);

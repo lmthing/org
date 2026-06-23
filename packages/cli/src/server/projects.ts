@@ -37,6 +37,15 @@ export function safeProjectId(id: unknown): string | null {
 }
 
 /**
+ * Validate that a file path is relative and free of empty / `.` / `..`
+ * segments. Used by the space-file write endpoint to vet each key.
+ */
+export function isSafeRelPath(p: string): boolean {
+  if (typeof p !== 'string' || p.length === 0 || p.startsWith('/') || p.includes('\0')) return false;
+  return p.split('/').every((s) => s !== '' && s !== '.' && s !== '..');
+}
+
+/**
  * Validate that `name` is a non-empty document/file name (single segment, no
  * separators, max 200 chars). Returns the name or null on failure.
  */
@@ -114,6 +123,63 @@ export async function listSystemSpaceDirs(root: string): Promise<string[]> {
  */
 export async function listProjectSpaceDirs(root: string, projectId: string): Promise<string[]> {
   return listSubdirs(spacesDir(root, projectId));
+}
+
+/** Resolve the absolute dir for a single space within a project. */
+export function projectSpaceDir(root: string, projectId: string, spaceId: string): string {
+  return join(root, projectId, 'spaces', spaceId);
+}
+
+/**
+ * Read every file under a space dir into a flat `{ relPath: content }` map,
+ * excluding runtime junk: a top-level `sessions/` dir, any `conversations/`
+ * dir at any depth, and any `.env` file. `relPath` uses forward slashes.
+ * Returns {} if the dir doesn't exist.
+ */
+export async function readSpaceFiles(spaceDir: string): Promise<Record<string, string>> {
+  const files: Record<string, string> = {};
+
+  async function walk(dir: string, rel: string): Promise<void> {
+    const entries = await safeDirEntries(dir);
+    for (const entry of entries) {
+      const name = entry.name;
+      const childRel = rel ? `${rel}/${name}` : name;
+      if (entry.isDirectory()) {
+        // Exclude runtime junk dirs.
+        if (rel === '' && name === 'sessions') continue;
+        if (name === 'conversations') continue;
+        await walk(join(dir, name), childRel);
+      } else if (entry.isFile()) {
+        if (name === '.env') continue;
+        try {
+          files[childRel] = await readFile(join(dir, name), 'utf8');
+        } catch {
+          // Unreadable file — skip.
+        }
+      }
+    }
+  }
+
+  await walk(spaceDir, '');
+  return files;
+}
+
+/**
+ * Wipe-and-rewrite a space dir with the supplied `{ relPath: content }` map.
+ * Each key must pass `isSafeRelPath` and resolve under `spaceDir`. The dir is
+ * removed first so deletions in the editor are reflected on disk.
+ */
+export async function writeSpaceFiles(spaceDir: string, files: Record<string, string>): Promise<void> {
+  for (const rel of Object.keys(files)) {
+    if (!isSafeRelPath(rel)) throw new Error(`unsafe file path: ${rel}`);
+  }
+  await rm(spaceDir, { recursive: true, force: true });
+  await mkdir(spaceDir, { recursive: true });
+  for (const [rel, content] of Object.entries(files)) {
+    const dest = assertUnder(spaceDir, rel);
+    await mkdir(resolve(dest, '..'), { recursive: true });
+    await writeFile(dest, typeof content === 'string' ? content : String(content ?? ''), 'utf8');
+  }
 }
 
 // ─── Projects CRUD ────────────────────────────────────────────────────────────

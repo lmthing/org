@@ -6,6 +6,8 @@ import type { LanguageModelV1 } from 'ai';
  *
  * Azure requires AZURE_API_KEY and AZURE_RESOURCE_NAME env vars.
  * azure:modelId maps to the deployment name on the configured Azure resource.
+ * azure:claude* models are routed to the Foundry Anthropic endpoint instead of
+ * the Azure OpenAI path.
  */
 export async function resolveModel(modelSpec: string): Promise<LanguageModelV1> {
   const colonIdx = modelSpec.indexOf(':');
@@ -40,11 +42,28 @@ export async function resolveModel(modelSpec: string): Promise<LanguageModelV1> 
       return createMistral()(modelId) as unknown as LanguageModelV1;
     }
     case 'azure': {
-      const { createAzure } = await import('@ai-sdk/azure');
       const resourceName = process.env['AZURE_RESOURCE_NAME'];
       const apiKey = process.env['AZURE_API_KEY'];
       if (!resourceName) throw new Error('AZURE_RESOURCE_NAME env var is required for azure: provider');
       if (!apiKey) throw new Error('AZURE_API_KEY env var is required for azure: provider');
+
+      // Claude (Anthropic) models on Azure AI Foundry are exposed via the
+      // Foundry /anthropic endpoint (Anthropic-native messages API), not the
+      // OpenAI-style deployments route. Route them there via @ai-sdk/anthropic;
+      // everything else uses the standard Azure OpenAI path.
+      if (/^claude/i.test(modelId)) {
+        const { createAnthropic } = await import('@ai-sdk/anthropic');
+        return createAnthropic({
+          // @ai-sdk/anthropic appends `/messages` to baseURL, so baseURL must
+          // include the `/v1` segment. Foundry's Anthropic route is
+          // /anthropic/v1/messages.
+          baseURL: `https://${resourceName}.services.ai.azure.com/anthropic/v1`,
+          apiKey,                             // → x-api-key
+          headers: { 'api-key': apiKey },     // Foundry also accepts the Azure-standard api-key header
+        })(modelId) as unknown as LanguageModelV1;
+      }
+
+      const { createAzure } = await import('@ai-sdk/azure');
       const azure = createAzure({ resourceName, apiKey });
       return azure(modelId) as unknown as LanguageModelV1;
     }

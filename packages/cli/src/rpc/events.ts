@@ -21,10 +21,20 @@ export type ServerEvent =
   | { type: 'trace'; seq: number; event: TraceEvent }
   | { type: 'trace_snapshot'; events: Array<{ seq: number; event: TraceEvent }>; lastSeq: number; truncatedBefore?: number }
   | { type: 'ask_pending'; asks: Array<{ id: string; nodeId?: string; descriptor: unknown }> }
-  | { type: 'ui_control'; action: UiControlAction };
+  | { type: 'ui_control'; action: UiControlAction }
+  // ─── terminal (PTY control socket) — kept identical to
+  //     computer/src/lib/runtime/ws-protocol.ts ───
+  | { type: 'terminal.opened'; sessionId: string }
+  | { type: 'terminal.data'; sessionId: string; data: string };
 
 export type ClientMessage =
   | { type: 'sendMessage'; content: string }
   | { type: 'submitForm'; id: string; value: unknown }
   | { type: 'cancelAsk'; id: string }
-  | { type: 'subscribeTrace'; sinceSeq?: number };
+  | { type: 'subscribeTrace'; sinceSeq?: number }
+  // ─── terminal (PTY control socket) — kept identical to
+  //     computer/src/lib/runtime/ws-protocol.ts ───
+  | { type: 'terminal.open'; sessionId: string }
+  | { type: 'terminal.input'; sessionId: string; data: string }
+  | { type: 'terminal.resize'; sessionId: string; cols: number; rows: number }
+  | { type: 'terminal.close'; sessionId: string };

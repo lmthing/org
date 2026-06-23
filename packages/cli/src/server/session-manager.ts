@@ -26,6 +26,9 @@ import {
   safeDocumentName,
   sessionsDir,
   listProjectSessions,
+  projectSpaceDir,
+  readSpaceFiles,
+  writeSpaceFiles,
 } from './projects.js';
 import type { ProjectMeta, PersistedSessionMeta } from './projects.js';
 
@@ -797,6 +800,39 @@ export class SessionManager {
     }
     return results.sort((a, b) => a.id.localeCompare(b.id));
   }
+
+  /**
+   * Read all files of a project's space (`<root>/<projectId>/spaces/<spaceId>`)
+   * into a flat `{ relPath: content }` map, excluding runtime junk (sessions/,
+   * **\/conversations/, .env).
+   */
+  async readProjectSpaceFiles(projectId: string, spaceId: string): Promise<Record<string, string>> {
+    const root = this.requireRoot();
+    const safeProj = safeProjectId(projectId);
+    if (!safeProj) throw new Error(`invalid project id: ${projectId}`);
+    const safeSpace = safeProjectId(spaceId);
+    if (!safeSpace) throw new Error(`invalid space id: ${spaceId}`);
+    return readSpaceFiles(projectSpaceDir(root, safeProj, safeSpace));
+  }
+
+  /**
+   * Wipe-and-rewrite a project's space dir with the supplied file map. Each
+   * relative path is validated; the dir is removed first so deletions in the
+   * editor are reflected on disk.
+   */
+  async writeProjectSpaceFiles(
+    projectId: string,
+    spaceId: string,
+    files: Record<string, string>,
+  ): Promise<void> {
+    const root = this.requireRoot();
+    const safeProj = safeProjectId(projectId);
+    if (!safeProj) throw new Error(`invalid project id: ${projectId}`);
+    const safeSpace = safeProjectId(spaceId);
+    if (!safeSpace) throw new Error(`invalid space id: ${spaceId}`);
+    await writeSpaceFiles(projectSpaceDir(root, safeProj, safeSpace), files);
+  }
+
   startReaper(intervalMs = 60000): void {
     if (this.reaper) return;
     this.reaper = setInterval(() => {
