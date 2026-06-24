@@ -14,6 +14,23 @@ import type { ServerEvent, ClientMessage, UiControlAction } from '../rpc/events.
 import type { SessionManager, SessionEntry } from './session-manager.js';
 import { isSafeRelPath, safeProjectId } from './projects.js';
 
+/**
+ * Parse KEY=VALUE lines from a .env-style string and apply them to process.env.
+ * Used both at server startup (so a persisted /data/.env survives pod restarts)
+ * and by the PUT /api/env handler (so edits apply without a restart).
+ */
+function applyEnvContent(content: string): void {
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const value = trimmed.slice(eq + 1);
+    if (key) process.env[key] = value;
+  }
+}
+
 export interface SessionServerOpts {
   port: number;
   manager: SessionManager;
@@ -208,6 +225,21 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   const { manager, port } = opts;
   const wsBase = `ws://localhost:${port}`;
 
+  // Apply a persisted custom env file (written via PUT /api/env) at startup so
+  // user-provided credentials (e.g. AZURE_API_KEY) survive pod restarts. The
+  // file lives at <cwd>/.env (i.e. /data/.env on the pod). Existing process.env
+  // values take precedence is NOT desired here — the custom file is the user's
+  // explicit override, so it wins (mirrors PUT semantics).
+  try {
+    const startupEnv = readFileSync(resolve(process.cwd(), '.env'), 'utf8');
+    applyEnvContent(startupEnv);
+    console.log('[serve] applied persisted .env');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('[serve] could not read .env:', e instanceof Error ? e.message : e);
+    }
+  }
+
   // Ensure the default project exists when running in project mode.
   // The manager's lmthingRoot takes precedence; opts.lmthingRoot is accepted for
   // symmetry (both should match in practice — the manager is already constructed
@@ -295,16 +327,8 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       }
       const content = typeof parsed.content === 'string' ? parsed.content : '';
       writeFileSync(envFilePath, content, 'utf8');
-      // Parse KEY=VALUE lines and apply to process.env immediately.
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eq = trimmed.indexOf('=');
-        if (eq === -1) continue;
-        const key = trimmed.slice(0, eq).trim();
-        const value = trimmed.slice(eq + 1);
-        if (key) process.env[key] = value;
-      }
+      // Apply to process.env immediately so edits take effect without a restart.
+      applyEnvContent(content);
       sendJson(res, 200, { ok: true });
       return;
     }
