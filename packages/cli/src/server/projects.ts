@@ -1,7 +1,7 @@
 /**
  * Project helpers — on-disk layout under `lmthingRoot` (<cwd>/.lmthing):
  *
- *   <root>/system/{global,engineer,architect,solver,deep_research,memory,thing}/
+ *   <root>/system/spaces/{global,engineer,architect,solver,deep_research,memory,thing}/
  *   <root>/<projectId>/spaces/
  *   <root>/<projectId>/documents/
  *   <root>/<projectId>/instructions.md
@@ -111,7 +111,7 @@ function assertUnder(base: string, subPath: string): string {
  * Returns [] if the directory doesn't exist.
  */
 export async function listSystemSpaceDirs(root: string): Promise<string[]> {
-  const sysDir = join(root, 'system');
+  const sysDir = join(root, 'system', 'spaces');
   return listSubdirs(sysDir);
 }
 
@@ -274,11 +274,11 @@ export async function addDocument(root: string, id: string, name: string, conten
 /**
  * Ensure the default "user" project exists under `root`. Creates it (with an
  * empty instructions.md and project.json) if it does not already have a
- * project.json. Also ensures `<root>/system/` exists for system spaces.
+ * project.json. Also ensures `<root>/system/spaces/` exists for system spaces.
  */
 export async function ensureDefaultProject(root: string): Promise<void> {
-  // Create root itself and the system dir if absent.
-  await mkdir(join(root, 'system'), { recursive: true });
+  // Create root itself and the system spaces dir if absent.
+  await mkdir(join(root, 'system', 'spaces'), { recursive: true });
 
   try {
     await stat(projectJsonPath(root, DEFAULT_PROJECT_ID));

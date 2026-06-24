@@ -13,32 +13,32 @@ describe('runtime-init', () => {
     expect(runtimeNeedsInit(root)).toBe(true);
   });
 
-  it('runtimeNeedsInit stays true for an EMPTY system/ dir (the repair regression)', () => {
-    // A persistent volume can carry an empty system/ from a prior broken
+  it('runtimeNeedsInit stays true for an EMPTY system/spaces/ dir (the repair regression)', () => {
+    // A persistent volume can carry an empty system/spaces/ from a prior broken
     // materialization. The guard must NOT treat the bare dir as "initialized" —
     // otherwise the system spaces are never (re)populated and every session
     // fails with `Agent "thing" not found`.
-    mkdirSync(join(root, 'system'), { recursive: true });
+    mkdirSync(join(root, 'system', 'spaces'), { recursive: true });
     expect(runtimeNeedsInit(root)).toBe(true);
   });
 
   it('materializeRuntime copies system spaces (incl. thing) and the user skeleton', () => {
     const copied = materializeRuntime(root);
     expect(copied).toBeGreaterThan(0);
-    expect(existsSync(join(root, 'system', 'thing'))).toBe(true);
-    expect(existsSync(join(root, 'system', 'thing', 'agents'))).toBe(true);
+    expect(existsSync(join(root, 'system', 'spaces', 'thing'))).toBe(true);
+    expect(existsSync(join(root, 'system', 'spaces', 'thing', 'agents'))).toBe(true);
     expect(existsSync(join(root, 'user', 'spaces'))).toBe(true);
     expect(existsSync(join(root, 'user', 'project.json'))).toBe(true);
     // After materialization the guard reports satisfied.
     expect(runtimeNeedsInit(root)).toBe(false);
   });
 
-  it('materializeRuntime repairs an empty system/ dir', () => {
-    mkdirSync(join(root, 'system'), { recursive: true });
+  it('materializeRuntime repairs an empty system/spaces/ dir', () => {
+    mkdirSync(join(root, 'system', 'spaces'), { recursive: true });
     expect(runtimeNeedsInit(root)).toBe(true);
     materializeRuntime(root);
     expect(runtimeNeedsInit(root)).toBe(false);
-    expect(existsSync(join(root, 'system', 'thing'))).toBe(true);
+    expect(existsSync(join(root, 'system', 'spaces', 'thing'))).toBe(true);
   });
 
   it('materializeRuntime does not overwrite existing user files', () => {

@@ -17,12 +17,12 @@ const SENTINEL_SYSTEM_SPACE = 'thing';
  * skip the needed repair.
  */
 export function runtimeNeedsInit(root: string): boolean {
-  return !existsSync(join(root, 'system', SENTINEL_SYSTEM_SPACE));
+  return !existsSync(join(root, 'system', 'spaces', SENTINEL_SYSTEM_SPACE));
 }
 
 /**
  * Materialize a runtime into `<root>`:
- * - Copies every system space shipped with @lmthing/core into `<root>/system/<name>/`.
+ * - Copies every system space shipped with @lmthing/core into `<root>/system/spaces/<name>/`.
  * - Creates the default 'user' project skeleton under `<root>/user/`.
  *
  * When called, this OVERWRITES the system-space dirs via cpSync and leaves
@@ -41,7 +41,7 @@ export function runtimeNeedsInit(root: string): boolean {
  * `thing` agent.
  */
 export function materializeRuntime(root: string): number {
-  const systemDest = join(root, 'system');
+  const systemDest = join(root, 'system', 'spaces');
   mkdirSync(systemDest, { recursive: true });
   let copied = 0;
   for (const srcDir of defaultSystemSpaceDirs()) {
