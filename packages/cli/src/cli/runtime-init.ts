@@ -25,8 +25,14 @@ export function runtimeNeedsInit(root: string): boolean {
  * - Copies every system space shipped with @lmthing/core into `<root>/system/<name>/`.
  * - Creates the default 'user' project skeleton under `<root>/user/`.
  *
- * Idempotent: existing user files (instructions.md, project.json) are not
- * overwritten; system-space dirs are always refreshed via cpSync.
+ * When called, this OVERWRITES the system-space dirs via cpSync and leaves
+ * existing user files (instructions.md, project.json) intact. It is *not* an
+ * auto-update mechanism, though: callers gate it behind `runtimeNeedsInit()`,
+ * which only fires when the runtime is uninitialized/half-initialized. An
+ * already-populated `<root>/system/` is therefore preserved across image
+ * upgrades (the user's copy wins); adopting newer shipped system spaces is an
+ * explicit, opt-in action — see `.issues/system-spaces-opt-in-update.md`. The
+ * `lmthing init` command calls this directly, which does refresh on demand.
  *
  * Returns the number of system spaces copied. Zero means the bundled assets
  * could not be resolved (e.g. @lmthing/core is bundled into the cli and its
