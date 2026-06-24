@@ -118,6 +118,23 @@ export function ChatView({
 
   const handleSuggestion = (text: string) => handleSend(text);
 
+  const [restarting, setRestarting] = React.useState(false);
+  const handleRestart = async () => {
+    setRestarting(true);
+    try {
+      await fetch('/api/restart', { method: 'POST' });
+    } catch { /* expected — server exits */ }
+    // Poll until the server is back up, then reload.
+    const poll = async () => {
+      try {
+        const r = await fetch('/api/env');
+        if (r.ok) { window.location.reload(); return; }
+      } catch { /* still down */ }
+      setTimeout(poll, 800);
+    };
+    setTimeout(poll, 1000);
+  };
+
   // Friendly title — never the raw filesystem path.
   const prettyAgent = agentSlug
     ? agentSlug.toLowerCase() === 'thing'
@@ -179,6 +196,16 @@ export function ChatView({
           >
             {theme === 'light' ? '☾' : '☀'}
           </button>
+          {mode === 'live' && (
+            <button
+              onClick={() => { void handleRestart(); }}
+              disabled={restarting}
+              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
+              title="Restart CLI process (reloads .env)"
+            >
+              {restarting ? '↻' : '⏻'}
+            </button>
+          )}
         </div>
       </header>
 

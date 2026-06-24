@@ -321,6 +321,13 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       return;
     }
 
+    // ─── Restart: reply 200 then exit so the supervisor restarts the process ─
+    if (path === '/api/restart' && method === 'POST') {
+      sendJson(res, 200, { ok: true });
+      setTimeout(() => process.exit(0), 100);
+      return;
+    }
+
     // ─── Custom env (GET /api/env, PUT /api/env) ─────────────────────────────
     const envFilePath = resolve(process.cwd(), '.env');
     if (path === '/api/env' && method === 'GET') {
