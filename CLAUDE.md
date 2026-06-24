@@ -77,6 +77,7 @@ See `.issues/`. When all are resolved this section is empty.
 
 - `research-fork-scope-loss.md` — `fork:research` in `synthesize_and_run` loses variable scope across statements (typecheck "Cannot find name"); the DAG skips it gracefully so the synthesized space ships without web knowledge.
 - `skill-import-scenarios.md` — enhancement: whole-plugin / marketplace-wide / commands+agents import (single-`SKILL.md` import already works); has open questions.
+- `system-spaces-bundle-resolution.md` — `defaultSystemSpaceDirs()` resolves relative to the cli bundle; only the Docker image co-locates the assets, so a non-Docker built `serve` gets an empty `system/` and sessions fail with `Agent "thing" not found`. `materializeRuntime` now warns + `runtimeNeedsInit` repairs an empty dir.
 
 ## Rules
 
