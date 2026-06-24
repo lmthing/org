@@ -28,6 +28,31 @@ function ConnectionDot(): React.ReactElement {
   );
 }
 
+function RestartButton(): React.ReactElement | null {
+  const mode = useStore((s) => s.mode);
+  const [restarting, setRestarting] = React.useState(false);
+  if (mode !== 'live') return null;
+  const handleRestart = async () => {
+    setRestarting(true);
+    try { await fetch('/api/restart', { method: 'POST' }); } catch { /* expected */ }
+    const poll = async () => {
+      try { const r = await fetch('/api/env'); if (r.ok) { window.location.reload(); return; } } catch { /* still down */ }
+      setTimeout(poll, 800);
+    };
+    setTimeout(poll, 1000);
+  };
+  return (
+    <button
+      onClick={() => { void handleRestart(); }}
+      disabled={restarting}
+      className="text-[11px] text-lm-muted hover:text-lm-text disabled:opacity-40"
+      title="Restart CLI process (reloads .env)"
+    >
+      {restarting ? '↻' : '⏻'}
+    </button>
+  );
+}
+
 function TopBar(): React.ReactElement {
   const spaceName = useStore((s) => s.spaceName);
   const agentSlug = useStore((s) => s.agentSlug);
@@ -49,6 +74,7 @@ function TopBar(): React.ReactElement {
           </button>
         )}
         <ThemeToggle />
+        <RestartButton />
         <TraceLoader />
         <ConnectionDot />
       </div>
