@@ -59,17 +59,25 @@ export class TerminalManager {
    * Spawn a shell PTY for `termId`, cwd = `cwd`. Pipes PTY output to `onData`.
    * Throws if node-pty is unavailable or `termId` is already open.
    */
-  async open(termId: string, cwd: string, onData: (data: string) => void): Promise<void> {
+  async open(termId: string, cwd: string, onData: (data: string) => void, command?: string): Promise<void> {
     if (this.ptys.has(termId)) return; // already open — idempotent
     const pty = await loadPty();
     const shell = process.env['SHELL'] ?? 'bash';
-    const proc = pty.spawn(shell, [], {
-      name: 'xterm-color',
-      cols: 80,
-      rows: 24,
-      cwd,
-      env: process.env,
-    });
+    const proc = command
+      ? pty.spawn('sh', ['-c', command], {
+          name: 'xterm-color',
+          cols: 80,
+          rows: 24,
+          cwd,
+          env: process.env,
+        })
+      : pty.spawn(shell, [], {
+          name: 'xterm-color',
+          cols: 80,
+          rows: 24,
+          cwd,
+          env: process.env,
+        });
     proc.onData((data) => onData(data));
     this.ptys.set(termId, proc);
   }

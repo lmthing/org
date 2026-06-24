@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { createWriteStream, readFileSync, writeFileSync } from 'node:fs';
+import { mkdir, writeFile, readFile, readdir, stat, rm } from 'node:fs/promises';
 import { join, resolve, dirname, sep } from 'node:path';
 import { createRequire } from 'node:module';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -224,6 +224,19 @@ export interface SessionServerHandle {
 export async function startSessionServer(opts: SessionServerOpts): Promise<SessionServerHandle> {
   const { manager, port } = opts;
   const wsBase = `ws://localhost:${port}`;
+
+  // Redirect all console output to /tmp/lmthing-server.log so the computer app
+  // can tail it in the read-only "process" terminal tab.
+  try {
+    const _logStream = createWriteStream('/tmp/lmthing-server.log', { flags: 'a' });
+    for (const level of ['log', 'warn', 'error'] as const) {
+      const orig = console[level].bind(console) as (...args: unknown[]) => void;
+      console[level] = (...args: unknown[]) => {
+        try { _logStream.write(args.map(String).join(' ') + '\n'); } catch { /* ignore write errors */ }
+        orig(...args);
+      };
+    }
+  } catch { /* if we can't create the log file, continue without it */ }
 
   // Apply a persisted custom env file (written via PUT /api/env) at startup so
   // user-provided credentials (e.g. AZURE_API_KEY) survive pod restarts. The
@@ -602,6 +615,65 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       return;
     }
 
+    // ─── Raw filesystem API (/api/fs/*) ──────────────────────────────────────
+    const fsRoot = resolve(effectiveLmthingRoot ?? process.cwd());
+
+    if (path === '/api/fs/tree' && method === 'GET') {
+      const files: string[] = [];
+      const EXCLUDED_DIRS = new Set(['.git', 'node_modules', '.cache']);
+
+      async function walkFs(dir: string, rel: string): Promise<void> {
+        let entries;
+        try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+        for (const entry of entries) {
+          const name = entry.name;
+          if (entry.isDirectory()) {
+            if (EXCLUDED_DIRS.has(name)) continue;
+            await walkFs(join(dir, name), rel ? `${rel}/${name}` : name);
+          } else if (entry.isFile()) {
+            files.push(rel ? `${rel}/${name}` : name);
+          }
+        }
+      }
+
+      await walkFs(fsRoot, '');
+      sendJson(res, 200, { files });
+      return;
+    }
+
+    if (path === '/api/fs/read' && method === 'GET') {
+      const filePath = url.searchParams.get('path') ?? '';
+      if (!isSafeRelPath(filePath)) { sendJson(res, 400, { error: 'invalid path' }); return; }
+      const abs = resolve(fsRoot, filePath);
+      if (abs !== fsRoot && !abs.startsWith(fsRoot + sep)) { sendJson(res, 400, { error: 'path traversal' }); return; }
+      let content = '';
+      try { content = await readFile(abs, 'utf8'); } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') { sendJson(res, 404, { error: 'file not found' }); return; }
+        sendJson(res, 400, { error: 'cannot read file (binary or unreadable)' }); return;
+      }
+      sendJson(res, 200, { content });
+      return;
+    }
+
+    if (path === '/api/fs/write' && method === 'PUT') {
+      let parsed: { path?: unknown; content?: unknown };
+      try { parsed = JSON.parse((await readBody(req)) || '{}') as { path?: unknown; content?: unknown }; }
+      catch { sendJson(res, 400, { error: 'invalid JSON body' }); return; }
+      const filePath = typeof parsed.path === 'string' ? parsed.path : '';
+      const content = typeof parsed.content === 'string' ? parsed.content : '';
+      if (!isSafeRelPath(filePath)) { sendJson(res, 400, { error: 'invalid path' }); return; }
+      const abs = resolve(fsRoot, filePath);
+      if (abs !== fsRoot && !abs.startsWith(fsRoot + sep)) { sendJson(res, 400, { error: 'path traversal' }); return; }
+      try {
+        await mkdir(dirname(abs), { recursive: true });
+        await writeFile(abs, content, 'utf8');
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) }); return;
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     // ─── Unknown /api/* ───
     if (path.startsWith('/api/')) {
       sendJson(res, 404, { error: `unknown API route ${method} ${path}` });
@@ -658,6 +730,10 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     const send = (e: ServerEvent) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(e)); };
     const fail = (message: string) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'error', message } satisfies ServerEvent)); };
 
+    // Envoy Gateway already validated the JWT before forwarding the connection;
+    // confirm to the client so PodRuntime transitions to 'running'.
+    send({ type: 'auth.ok' });
+
     const ensureTerminals = async (): Promise<import('./terminal.js').TerminalManager> => {
       if (terminals) return terminals;
       const { TerminalManager } = await import('./terminal.js');
@@ -671,8 +747,9 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       switch (msg.type) {
         case 'terminal.open': {
           const termId = msg.sessionId;
+          const command = (msg as { command?: string }).command;
           void ensureTerminals()
-            .then((mgr) => mgr.open(termId, terminalCwd, (out) => send({ type: 'terminal.data', sessionId: termId, data: out })))
+            .then((mgr) => mgr.open(termId, terminalCwd, (out) => send({ type: 'terminal.data', sessionId: termId, data: out }), command))
             .then(() => send({ type: 'terminal.opened', sessionId: termId }))
             .catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
           break;

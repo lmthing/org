@@ -25,7 +25,9 @@ export type ServerEvent =
   // ─── terminal (PTY control socket) — kept identical to
   //     computer/src/lib/runtime/ws-protocol.ts ───
   | { type: 'terminal.opened'; sessionId: string }
-  | { type: 'terminal.data'; sessionId: string; data: string };
+  | { type: 'terminal.data'; sessionId: string; data: string }
+  // ─── control socket auth (Envoy already validated JWT; confirms to client) ───
+  | { type: 'auth.ok' };
 
 export type ClientMessage =
   | { type: 'sendMessage'; content: string }
