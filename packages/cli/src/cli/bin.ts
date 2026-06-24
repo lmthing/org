@@ -241,6 +241,14 @@ async function main(): Promise<void> {
     // Persistent runtime root. Honors LMTHING_ROOT so the pod can point this at
     // its data volume (e.g. /data/.lmthing); defaults to <cwd>/.lmthing locally.
     const lmthingRoot = resolveLmthingRoot();
+    // Initialize (or repair) the runtime before serving: materialize the system
+    // spaces if the `thing` agent isn't present. Without this the pod serves
+    // from an empty system/ dir and every session fails with
+    // `Agent "thing" not found`. (The bare-`lmthing` path below does the same.)
+    if (runtimeNeedsInit(lmthingRoot)) {
+      materializeRuntime(lmthingRoot);
+      process.stdout.write(`lmthing runtime initialized/repaired at ${lmthingRoot}\n`);
+    }
     const manager = new SessionManager({
       streamFn,
       defaultSpaceDir: args.space,
