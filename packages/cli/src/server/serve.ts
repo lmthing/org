@@ -697,6 +697,14 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   const wss = new WebSocketServer({ noServer: true });
   httpServer.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
+    const termMatch = url.pathname.match(/^\/api\/terminals\/([^/]+)$/);
+    if (termMatch) {
+      const command = url.searchParams.get('command') ?? undefined;
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        registerTerminalSocket(ws, command);
+      });
+      return;
+    }
     if (url.pathname !== '/api/ws') { socket.destroy(); return; }
     const id = url.searchParams.get('sessionId') ?? '';
     // No sessionId → control socket (terminal multiplexing), not bound to an
@@ -767,6 +775,32 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     });
 
     ws.on('close', () => { terminals?.closeAll(); });
+  }
+
+  function registerTerminalSocket(ws: WebSocket, command?: string): void {
+    void (async () => {
+      let mgr: import('./terminal.js').TerminalManager | null = null;
+      try {
+        const { TerminalManager } = await import('./terminal.js');
+        mgr = new TerminalManager();
+        await mgr.open('sole', terminalCwd, (data) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(data);
+        }, command);
+      } catch (err) {
+        ws.close(1011, err instanceof Error ? err.message : String(err));
+        return;
+      }
+      ws.on('message', (data: Buffer) => {
+        if (!mgr) return;
+        const str = data.toString();
+        try {
+          const msg = JSON.parse(str) as { type: string; data?: string; cols?: number; rows?: number };
+          if (msg.type === 'input' && msg.data != null) mgr.input('sole', msg.data);
+          else if (msg.type === 'resize' && typeof msg.cols === 'number' && typeof msg.rows === 'number') mgr.resize('sole', msg.cols, msg.rows);
+        } catch { /* ignore parse errors */ }
+      });
+      ws.on('close', () => { mgr?.closeAll(); mgr = null; });
+    })();
   }
 
   function registerSocket(ws: WebSocket, entry: SessionEntry): void {
