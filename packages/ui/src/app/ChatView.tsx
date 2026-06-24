@@ -128,7 +128,7 @@ export function ChatView({
     const poll = async () => {
       try {
         const r = await fetch('/api/env');
-        if (r.ok) { window.location.reload(); return; }
+        if (r.ok) { setTimeout(() => window.location.reload(), 1500); return; }
       } catch { /* still down */ }
       setTimeout(poll, 800);
     };
