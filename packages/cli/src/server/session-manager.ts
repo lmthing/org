@@ -220,6 +220,40 @@ export class SessionManager {
   }
 
   /**
+   * Ensure there is room for one more live session, evicting if necessary.
+   *
+   * `maxSessions` bounds how many sessions can be resident in memory (each is a
+   * QuickJS VM). Rather than refuse a new/resumed session when full — which made
+   * "+ New chat" silently fail once a user had a few chats open — evict the
+   * least-recently-active session that isn't currently running. Evicted sessions
+   * are persisted to disk first, so they resume transparently when reopened.
+   *
+   * Returns true if there is now room; false only when every resident session is
+   * actively running (nothing safe to evict).
+   */
+  private ensureCapacity(): boolean {
+    if (this.sessions.size < this.maxSessions) return true;
+
+    let victim: SessionEntry | undefined;
+    for (const e of this.sessions.values()) {
+      if (e.status === 'running') continue; // never evict an in-flight turn
+      if (!victim || e.lastActivity < victim.lastActivity) victim = e;
+    }
+    if (!victim) return false;
+
+    // Free the slot synchronously (so the immediate size check passes), then
+    // persist + dispose in the background.
+    const evicted = victim;
+    this.sessions.delete(evicted.sessionId);
+    console.warn(`[session-manager] evicted idle session ${evicted.sessionId} to free a slot (cap ${this.maxSessions})`);
+    void (async () => {
+      try { await this.persistSession(evicted); } catch { /* best-effort */ }
+      try { evicted.session?.dispose(); } catch { /* best-effort */ }
+    })();
+    return true;
+  }
+
+  /**
    * Create a new session. When `lmthingRoot` is set, project-mode resolution is
    * used: `spaceDir` is derived from the project directory, `agentSlug` defaults
    * to `'thing'`, system spaces are read from `<root>/system/`, and synthesized
@@ -261,8 +295,8 @@ export class SessionManager {
         throw new Error(`no saved session found: ${resumeId}`);
       }
 
-      if (this.sessions.size >= this.maxSessions) {
-        const msg = `max sessions reached (${this.maxSessions})`;
+      if (!this.ensureCapacity()) {
+        const msg = `max sessions reached (${this.maxSessions}) — all active sessions are busy`;
         console.warn(`[session-manager] ${msg}`);
         throw new Error(msg);
       }
@@ -302,8 +336,8 @@ export class SessionManager {
       return { sessionId: resumeId };
     }
 
-    if (this.sessions.size >= this.maxSessions) {
-      const msg = `max sessions reached (${this.maxSessions})`;
+    if (!this.ensureCapacity()) {
+      const msg = `max sessions reached (${this.maxSessions}) — all active sessions are busy`;
       console.warn(`[session-manager] ${msg}`);
       throw new Error(msg);
     }

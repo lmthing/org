@@ -141,17 +141,23 @@ describe('SessionManager (keyless, mock provider)', () => {
     await manager.disposeSession(b);
   });
 
-  it('(c) maxSessions cap throws a clear error', async () => {
+  it('(c) at the maxSessions cap, creating a new session evicts the oldest idle one', async () => {
     const manager = makeManager(2);
     const spaceDir = await makeSpace();
     const { sessionId: a } = manager.createSession({ spaceDir, agentSlug: 'default' });
+    // Make `b` more recently active than `a` so `a` is the eviction victim.
+    await new Promise((r) => setTimeout(r, 5));
     const { sessionId: b } = manager.createSession({ spaceDir, agentSlug: 'default' });
-    expect(() => manager.createSession({ spaceDir, agentSlug: 'default' })).toThrow(/max sessions reached \(2\)/);
 
-    // After disposing one, a new session can be created again.
-    await manager.disposeSession(a);
+    // At cap (2). A third create must succeed by evicting the LRU idle session (a).
     const { sessionId: c } = manager.createSession({ spaceDir, agentSlug: 'default' });
     expect(c).toBeTruthy();
+
+    // Still capped at 2 live sessions; `a` was evicted, `b` and `c` remain.
+    expect(manager.listSessions().length).toBe(2);
+    expect(manager.getSession(a)).toBeUndefined();
+    expect(manager.getSession(b)).toBeDefined();
+    expect(manager.getSession(c)).toBeDefined();
 
     await manager.disposeSession(b);
     await manager.disposeSession(c);
