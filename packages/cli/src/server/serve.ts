@@ -721,21 +721,28 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     ws.on('message', (data: Buffer) => {
       let msg: ClientMessage;
       try { msg = JSON.parse(data.toString()) as ClientMessage; } catch { return; }
-      switch (msg.type) {
-        case 'sendMessage':
-          manager.sendMessage(entry.sessionId, msg.content ?? '');
-          break;
-        case 'submitForm':
-          entry.renderHost.submitForm(msg.id, msg.value);
-          break;
-        case 'cancelAsk':
-          entry.renderHost.cancelAsk(msg.id);
-          break;
-        case 'subscribeTrace': {
-          const since = entry.hub.snapshotSince(msg.sinceSeq ?? 0);
-          send({ type: 'trace_snapshot', events: since.events, lastSeq: since.lastSeq, truncatedBefore: since.truncatedBefore });
-          break;
+      try {
+        switch (msg.type) {
+          case 'sendMessage':
+            manager.sendMessage(entry.sessionId, msg.content ?? '');
+            break;
+          case 'submitForm':
+            entry.renderHost.submitForm(msg.id, msg.value);
+            break;
+          case 'cancelAsk':
+            entry.renderHost.cancelAsk(msg.id);
+            break;
+          case 'subscribeTrace': {
+            const since = entry.hub.snapshotSince(msg.sinceSeq ?? 0);
+            send({ type: 'trace_snapshot', events: since.events, lastSeq: since.lastSeq, truncatedBefore: since.truncatedBefore });
+            break;
+          }
         }
+      } catch (err) {
+        // A synchronous throw (e.g. sendMessage before the session finished
+        // initializing) would otherwise be swallowed by the ws listener and the
+        // client would just hang. Surface it as an error event instead.
+        send({ type: 'error', message: err instanceof Error ? err.message : String(err) });
       }
     });
   }

@@ -23,6 +23,7 @@ loadEnv();
 import { Session, createMockStreamFn, mockScript, defaultSystemSpaceDirs } from '@lmthing/core';
 import type { StreamOpts, StreamSession, MockHandler } from '@lmthing/core';
 import { parseArgs, type CliArgs } from './args.js';
+import { materializeRuntime, runtimeNeedsInit } from './runtime-init.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
 import { createStream } from '../stream/stream.js';
@@ -136,43 +137,6 @@ function resolveLmthingRoot(): string {
   const override = process.env['LMTHING_ROOT'];
   if (override && override.trim().length > 0) return resolve(override.trim());
   return join(process.cwd(), '.lmthing');
-}
-
-/**
- * Materialize the lmthing runtime into `root` (`<cwd>/.lmthing`).
- *
- * - Copies every system space shipped with @lmthing/core into `<root>/system/<name>/`.
- * - Creates the default 'user' project skeleton under `<root>/user/`.
- * Idempotent: existing files are not overwritten (instructions.md, project.json).
- * System-space dirs are always refreshed via cpSync (force = true).
- */
-function materializeRuntime(root: string): void {
-  // Copy system spaces from the installed core package.
-  const systemDest = join(root, 'system');
-  mkdirSync(systemDest, { recursive: true });
-  for (const srcDir of defaultSystemSpaceDirs()) {
-    const dest = join(systemDest, basename(srcDir));
-    cpSync(srcDir, dest, { recursive: true });
-  }
-
-  // Default 'user' project skeleton.
-  const userRoot = join(root, 'user');
-  mkdirSync(join(userRoot, 'spaces'), { recursive: true });
-  mkdirSync(join(userRoot, 'documents'), { recursive: true });
-
-  const instructionsPath = join(userRoot, 'instructions.md');
-  if (!existsSync(instructionsPath)) {
-    writeFileSync(instructionsPath, '', 'utf8');
-  }
-
-  const projectJsonPath = join(userRoot, 'project.json');
-  if (!existsSync(projectJsonPath)) {
-    writeFileSync(
-      projectJsonPath,
-      JSON.stringify({ id: 'user', name: 'user', createdAt: new Date().toISOString() }, null, 2),
-      'utf8',
-    );
-  }
 }
 
 /**
@@ -305,10 +269,15 @@ async function main(): Promise<void> {
     const { startSessionServer } = await import('../server/serve.js');
     const port = args.servePort ?? 8080;
     const lmthingRoot = resolveLmthingRoot();
-    // Auto-initialize if this is the first run (no system dir yet).
-    if (!existsSync(join(lmthingRoot, 'system'))) {
+    // Auto-initialize if this is the first run, OR repair a half-initialized
+    // runtime. runtimeNeedsInit() checks for the materialized `thing` system
+    // space rather than just the `system/` dir: a persistent volume may carry an
+    // empty `system/` from an earlier broken materialization (e.g. unresolved
+    // bundle assets), and that must be re-populated or every session fails to
+    // find the agent.
+    if (runtimeNeedsInit(lmthingRoot)) {
       materializeRuntime(lmthingRoot);
-      process.stdout.write(`lmthing runtime auto-initialized at ${lmthingRoot}\n`);
+      process.stdout.write(`lmthing runtime initialized/repaired at ${lmthingRoot}\n`);
     }
     const manager = new SessionManager({
       streamFn,
