@@ -9,7 +9,7 @@ import { transpileStatement } from '../typecheck/transpile.js';
 import type { RenderHost } from '../session/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ARCHITECT_FUNCTIONS = join(__dirname, '..', '..', 'system-spaces', 'architect', 'functions');
+const ARCHITECT_FUNCTIONS = join(__dirname, '..', '..', 'system-spaces', 'system-architect', 'functions');
 
 const host: RenderHost = {
   display: () => {},

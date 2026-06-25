@@ -16,12 +16,12 @@ import { getAgentFunctions } from './agent.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // src/spaces → packages/core/system-spaces
 const SYSTEM_SPACES_ROOT = join(__dirname, '..', '..', 'system-spaces');
-const GLOBAL_DIR = join(SYSTEM_SPACES_ROOT, 'global');
-const ARCHITECT_DIR = join(SYSTEM_SPACES_ROOT, 'architect');
+const GLOBAL_DIR = join(SYSTEM_SPACES_ROOT, 'system-global');
+const ARCHITECT_DIR = join(SYSTEM_SPACES_ROOT, 'system-architect');
 const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
 
 describe('system spaces', () => {
-  it('loads the global system space (no agents/ required)', async () => {
+  it('loads the system-global system space (no agents/ required)', async () => {
     const spaces = await loadSystemSpaces([GLOBAL_DIR]);
     expect(spaces.length).toBe(1);
     const global = spaces[0]!;
@@ -31,7 +31,7 @@ describe('system spaces', () => {
     ]);
   });
 
-  it('exposes global function names universally', async () => {
+  it('exposes system-global function names universally', async () => {
     const spaces = await loadSystemSpaces([GLOBAL_DIR]);
     const names = systemFunctionNames(spaces);
     expect(names.has('readFile')).toBe(true);
@@ -39,9 +39,9 @@ describe('system spaces', () => {
     expect(names.has('webSearch')).toBe(true);
   });
 
-  it('ONLY global functions are universal — agent-bearing spaces stay scoped', async () => {
-    // global + architect loaded together: the toolkit is universal, but the
-    // architect's own functions are NOT (they reach the architect via its frontmatter).
+  it('ONLY system-global functions are universal — agent-bearing spaces stay scoped', async () => {
+    // system-global + system-architect loaded together: the toolkit is universal, but
+    // the architect's own functions are NOT (they reach the architect via its frontmatter).
     const spaces = await loadSystemSpaces([GLOBAL_DIR, ARCHITECT_DIR]);
     const universal = systemFunctionSources(spaces);
     expect('readFile' in universal).toBe(true);
@@ -80,7 +80,7 @@ describe('system spaces', () => {
     expect('parseSkill' in fns).toBe(true);
     expect('skillToSpec' in fns).toBe(true);
     expect('scaffoldSpace' in fns).toBe(true); // shared scaffolding helper
-    // Not universal: never in the global toolkit set.
+    // Not universal: never in the system-global toolkit set.
     expect('parseSkill' in systemFunctionSources(spaces)).toBe(false);
   });
 
@@ -138,18 +138,18 @@ describe('system spaces', () => {
 
   it('defaultSystemSpaceDirs points under packages/core/system-spaces', () => {
     const dirs = defaultSystemSpaceDirs();
-    expect(dirs.some((d) => d.endsWith('system-spaces/global'))).toBe(true);
-    expect(dirs.some((d) => d.endsWith('system-spaces/solver'))).toBe(true);
-    expect(dirs.length).toBe(7);
-    expect(dirs.some((d) => d.endsWith('system-spaces/deep_research'))).toBe(true);
-    expect(dirs.some((d) => d.endsWith('system-spaces/memory'))).toBe(true);
-    expect(dirs.some((d) => d.endsWith('system-spaces/thing'))).toBe(true);
+    expect(dirs.some((d) => d.endsWith('system-spaces/system-global'))).toBe(true);
+    expect(dirs.length).toBe(6);
+    expect(dirs.some((d) => d.endsWith('system-spaces/solver'))).toBe(false);
+    expect(dirs.some((d) => d.endsWith('system-spaces/system-deep-research'))).toBe(true);
+    expect(dirs.some((d) => d.endsWith('system-spaces/user-memory'))).toBe(true);
+    expect(dirs.some((d) => d.endsWith('system-spaces/user-thing'))).toBe(true);
   });
 
   it('defaultSystemSpaceDirs resolves to dirs that actually exist (dist + src layouts)', () => {
     // Probing both layouts means the path is real whether run from dist/ or src/.
     const dirs = defaultSystemSpaceDirs();
-    expect(existsSync(dirs.find((d) => d.endsWith('system-spaces/global'))!)).toBe(true);
-    expect(existsSync(dirs.find((d) => d.endsWith('system-spaces/architect'))!)).toBe(true);
+    expect(existsSync(dirs.find((d) => d.endsWith('system-spaces/system-global'))!)).toBe(true);
+    expect(existsSync(dirs.find((d) => d.endsWith('system-spaces/system-architect'))!)).toBe(true);
   });
 });

@@ -31,7 +31,7 @@ function makeAgent(functionNames: string[]): AgentDef {
     title: 'Main',
     instructBody: 'Do the thing.',
     actions: [],
-    dependencies: [],
+    canDelegateTo: [],
     config: { knowledge: [], functions: functionNames, components: [] },
   };
 }

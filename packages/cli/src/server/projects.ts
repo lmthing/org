@@ -182,6 +182,47 @@ export async function writeSpaceFiles(spaceDir: string, files: Record<string, st
   }
 }
 
+/**
+ * Reject relative paths that target runtime junk excluded from sync: any
+ * `conversations/` dir at any depth, a top-level `sessions/` dir, or a
+ * `.env`-prefixed file. Mirrors the exclusions baked into {@link readSpaceFiles}
+ * and the client-side `isRunnableSpaceFile` filter in `@lmthing/state`.
+ */
+export function isExcludedSpaceRelPath(rel: string): boolean {
+  const segments = rel.split('/');
+  if (segments[0] === 'sessions') return true;
+  if (segments.includes('conversations')) return true;
+  const base = segments[segments.length - 1] ?? '';
+  if (base.startsWith('.env')) return true;
+  return false;
+}
+
+/**
+ * Create or overwrite a single file within a space dir (mkdir -p the parent).
+ * `rel` must pass `isSafeRelPath` and must not target excluded runtime junk
+ * (see {@link isExcludedSpaceRelPath}); throws otherwise.
+ */
+export async function writeProjectSpaceFile(spaceDir: string, rel: string, content: string): Promise<void> {
+  if (!isSafeRelPath(rel)) throw new Error(`unsafe file path: ${rel}`);
+  if (isExcludedSpaceRelPath(rel)) throw new Error(`excluded file path: ${rel}`);
+  const dest = assertUnder(spaceDir, rel);
+  await mkdir(resolve(dest, '..'), { recursive: true });
+  await writeFile(dest, typeof content === 'string' ? content : String(content ?? ''), 'utf8');
+}
+
+/**
+ * Delete a single file within a space dir. `rel` must pass `isSafeRelPath`
+ * and must not target excluded runtime junk; throws on unsafe/excluded paths.
+ * Throws an `ENOENT`-style error (via fs) if the file does not exist — callers
+ * map that to a 404.
+ */
+export async function deleteProjectSpaceFile(spaceDir: string, rel: string): Promise<void> {
+  if (!isSafeRelPath(rel)) throw new Error(`unsafe file path: ${rel}`);
+  if (isExcludedSpaceRelPath(rel)) throw new Error(`excluded file path: ${rel}`);
+  const dest = assertUnder(spaceDir, rel);
+  await rm(dest, { force: false });
+}
+
 // ─── Projects CRUD ────────────────────────────────────────────────────────────
 
 /** Scaffold a new project directory, writing project.json + empty files. */

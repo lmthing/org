@@ -30,14 +30,14 @@ Testing without keys: `--mock <file>` / `LM_MOCK=<file>` (scripted streamFn, no 
 
 ## Directory map (top level)
 
-`packages/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{global,engineer,architect,solver,deep_research,memory,thing}` · `packages/cli/src/{providers,stream,render,rpc,web,cli}` · `packages/ui/src/{app,store,client,components,compat,lib,theme}`. Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
+`packages/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}` · `packages/cli/src/{providers,stream,render,rpc,web,cli}` · `packages/ui/src/{app,store,client,components,compat,lib,theme}`. Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
 
 ## Top gotchas
 
 One-liners — full explanations are in the linked file.
 
 - **Variables don't persist between evals** — propagated via `globalThis['x'] = x` appended after each statement. → `@.claude/arch/turn-loop.md`
-- **System spaces always merged; only `global` functions are universal** — all system agents are universally delegatable; user space wins on collisions (except empty placeholders). → `@.claude/arch/spaces.md` · `@.claude/skills/system-spaces.md`
+- **System spaces always merged; only `system-global` functions are universal** — all system agents are universally delegatable; user space wins on collisions (except empty placeholders). → `@.claude/arch/spaces.md` · `@.claude/skills/system-spaces.md`
 - **Yield-result binding is host-side**, not the QuickJS post-`await` continuation — `Promise.all` / destructured binds work via `extractBindingPattern` + `vm.setVar`. → `@.claude/arch/turn-loop.md`
 - **Forks always salvage a value unless hard-capped** — `BudgetExceededError` propagates; an explicit `timeout` rejects; orchestrator/delegate forks (no timeout) always salvage. → `@.claude/arch/fork-tasklist.md`
 - **Yield errors surface to the model** (retryable), not silent `undefined`; hard caps still short-circuit. → `@.claude/arch/turn-loop.md`
@@ -77,7 +77,7 @@ See `.issues/`. When all are resolved this section is empty.
 
 - `research-fork-scope-loss.md` — `fork:research` in `synthesize_and_run` loses variable scope across statements (typecheck "Cannot find name"); the DAG skips it gracefully so the synthesized space ships without web knowledge.
 - `skill-import-scenarios.md` — enhancement: whole-plugin / marketplace-wide / commands+agents import (single-`SKILL.md` import already works); has open questions.
-- `system-spaces-bundle-resolution.md` — `defaultSystemSpaceDirs()` resolves relative to the cli bundle; only the Docker image co-locates the assets, so a non-Docker built `serve` gets an empty `system/` and sessions fail with `Agent "thing" not found`. `materializeRuntime` now warns + `runtimeNeedsInit` repairs an empty dir.
+- `system-spaces-bundle-resolution.md` — `defaultSystemSpaceDirs()` resolves relative to the cli bundle; only the Docker image co-locates the assets, so a non-Docker built `serve` gets an empty `system/` and sessions fail with `Agent "thing" not found` (agent slug `thing`, in the `user-thing` space). `materializeRuntime` now warns + `runtimeNeedsInit` repairs an empty dir.
 - `system-spaces-opt-in-update.md` — system spaces are materialized into the PVC on first boot and intentionally NOT auto-overwritten by a newer image (the user's copy is preserved). Missing: change detection + a user-facing opt-in to adopt updated shipped system spaces.
 
 ## Rules

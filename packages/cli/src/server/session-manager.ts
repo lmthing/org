@@ -29,6 +29,8 @@ import {
   projectSpaceDir,
   readSpaceFiles,
   writeSpaceFiles,
+  writeProjectSpaceFile as writeSpaceFile,
+  deleteProjectSpaceFile as deleteSpaceFile,
 } from './projects.js';
 import type { ProjectMeta, PersistedSessionMeta } from './projects.js';
 
@@ -865,6 +867,40 @@ export class SessionManager {
     const safeSpace = safeProjectId(spaceId);
     if (!safeSpace) throw new Error(`invalid space id: ${spaceId}`);
     await writeSpaceFiles(projectSpaceDir(root, safeProj, safeSpace), files);
+  }
+
+  /**
+   * Create or overwrite a single file within a project's space dir
+   * (`<root>/<projectId>/spaces/<spaceId>/<relPath>`), creating parent dirs as
+   * needed. Throws on an invalid project/space id, an unsafe `relPath`, or a
+   * path targeting excluded runtime junk (`sessions/`, `conversations/`, `.env*`).
+   */
+  async writeProjectSpaceFile(
+    projectId: string,
+    spaceId: string,
+    relPath: string,
+    content: string,
+  ): Promise<void> {
+    const root = this.requireRoot();
+    const safeProj = safeProjectId(projectId);
+    if (!safeProj) throw new Error(`invalid project id: ${projectId}`);
+    const safeSpace = safeProjectId(spaceId);
+    if (!safeSpace) throw new Error(`invalid space id: ${spaceId}`);
+    await writeSpaceFile(projectSpaceDir(root, safeProj, safeSpace), relPath, content);
+  }
+
+  /**
+   * Delete a single file within a project's space dir. Throws on an invalid
+   * project/space id, an unsafe/excluded `relPath`, or if the file does not
+   * exist (callers map that to a 404).
+   */
+  async deleteProjectSpaceFile(projectId: string, spaceId: string, relPath: string): Promise<void> {
+    const root = this.requireRoot();
+    const safeProj = safeProjectId(projectId);
+    if (!safeProj) throw new Error(`invalid project id: ${projectId}`);
+    const safeSpace = safeProjectId(spaceId);
+    if (!safeSpace) throw new Error(`invalid space id: ${spaceId}`);
+    await deleteSpaceFile(projectSpaceDir(root, safeProj, safeSpace), relPath);
   }
 
   startReaper(intervalMs = 60000): void {

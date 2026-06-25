@@ -362,7 +362,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
           resolvedValues[i] = resolved;
         } catch (err) {
           // A budget breach inside a yield (e.g. a fork rejected by the fork-depth
-          // cap, or an over-budget fork/solve) is a HARD stop, not a recoverable
+          // cap, or an over-budget fork) is a HARD stop, not a recoverable
           // tool error. Propagate it so it surfaces exactly like the episode and
           // tool-call caps (clean non-zero exit + VM disposal by the caller) —
           // instead of being swallowed into an undefined binding that lets the run

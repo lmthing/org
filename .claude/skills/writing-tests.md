@@ -170,8 +170,8 @@ The same builders drive the CLI via `--mock <file>` (a `.mjs` whose default expo
 - `fixtures/deep_research/` — deep research with real Tavily API (requires `TAVILY_API_KEY`).
 - `fixtures/browser_use/` — browser agent using chromium headless + Google search.
 - `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering.
-- `fixtures/engineer/` — mock harness for engineer agent CLI tests (agent content lives in `system-spaces/engineer`).
-- `fixtures/architect/` — placeholder for architect agent CLI tests (agent content lives in `system-spaces/architect`).
-- `fixtures/solver/` — scripted mock providers (`mock*.mjs`) for keyless solve-ladder CLI tests (agent content lives in `system-spaces/solver`).
+- `fixtures/engineer/` — mock harness for engineer agent CLI tests (agent content lives in `system-spaces/system-engineer`).
+- `fixtures/architect/` — placeholder for architect agent CLI tests (agent content lives in `system-spaces/system-architect`).
+- `fixtures/solver/` — scripted mock providers (`mock*.mjs`) for keyless solve-ladder CLI tests. NOTE: the `solver` system space has been removed (WP-5); this fixture/test set is pending removal by the solve()-removal work (WP-5b).
 - `fixtures/sauce_master/` — global sauce technique specialist synthesized by the architect; knowledge files for 10 world cuisines; action: `recommend_sauce`.
 - `fixtures/cursor_ci/` — competitive intelligence analyst synthesized by the architect; knowledge files for 5 AI code editors (Cursor, Copilot, Windsurf, Aider, Codeium); action: `analyze`.

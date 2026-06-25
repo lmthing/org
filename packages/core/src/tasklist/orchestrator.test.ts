@@ -203,4 +203,74 @@ describe('runTasklist orchestrator', () => {
       /Required task "boom" failed/,
     );
   });
+
+  it('with no goal: true task, resolves the effective goal to the LAST task (file order)', async () => {
+    // Neither task declares goal: true — the effective goal falls back to the
+    // last task in file order (02-second), not the first.
+    const dir = await makeTasklistSpace({
+      '01-first.md': `---\nid: first\noutput:\n  v: number\n---\n\nFIRST_T: runs first, not the goal.`,
+      '02-second.md': `---\nid: second\ndependsOn:\n  - first\noutput:\n  v: number\n---\n\nSECOND_T: runs last, is the effective goal.`,
+    });
+    const space = await loadSpace(dir);
+    const seen: string[] = [];
+    const engine = engineFor(
+      dir,
+      [
+        { token: 'FIRST_T', code: `currentTask.resolve({ v: 1 });` },
+        { token: 'SECOND_T', code: `currentTask.resolve({ v: 2 });` },
+      ],
+      seen,
+    );
+    const result = await runTasklist({ name: 'flow', space, forkEngine: engine });
+    expect(result).toEqual({ v: 2 });
+    expect(seen).toEqual(['FIRST_T', 'SECOND_T']);
+  });
+
+  it('throws when two tasks declare goal: true', async () => {
+    const dir = await makeTasklistSpace({
+      '01-a.md': `---\nid: a\ngoal: true\noutput:\n  v: number\n---\n\nA_T: first goal.`,
+      '02-b.md': `---\nid: b\ngoal: true\noutput:\n  v: number\n---\n\nB_T: second goal.`,
+    });
+    const space = await loadSpace(dir);
+    const engine = engineFor(dir, [], []);
+    await expect(runTasklist({ name: 'flow', space, forkEngine: engine })).rejects.toThrow(
+      /multiple goal tasks/,
+    );
+  });
+
+  it('validates the seed against the tasklist index.md input schema', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lmthing-orch-'));
+    tmpDirs.push(dir);
+    await mkdir(join(dir, 'agents', 'main'), { recursive: true });
+    await writeFile(join(dir, 'agents', 'main', 'instruct.md'), 'You are a runner.\n', 'utf8');
+    const tl = join(dir, 'tasklists', 'flow');
+    await mkdir(tl, { recursive: true });
+    await writeFile(
+      join(tl, 'index.md'),
+      `---\ninput:\n  topic: string\n---\n\nDescribes the flow tasklist.`,
+      'utf8',
+    );
+    await writeFile(
+      join(tl, '01-main.md'),
+      `---\nid: main\ngoal: true\noutput:\n  v: number\n---\n\nMAIN_T: the real work.`,
+      'utf8',
+    );
+    const space = await loadSpace(dir);
+    const seen: string[] = [];
+    const engine = engineFor(dir, [{ token: 'MAIN_T', code: `currentTask.resolve({ v: 5 });` }], seen);
+
+    // Missing the required "topic" field — should throw a clear, actionable error.
+    await expect(
+      runTasklist({ name: 'flow', space, forkEngine: engine, seed: { other: 1 } }),
+    ).rejects.toThrow(/topic/);
+
+    // Wrong type for "topic" — should also throw.
+    await expect(
+      runTasklist({ name: 'flow', space, forkEngine: engine, seed: { topic: 42 } }),
+    ).rejects.toThrow(/topic/);
+
+    // A valid seed is accepted and the tasklist runs to completion.
+    const result = await runTasklist({ name: 'flow', space, forkEngine: engine, seed: { topic: 'pasta' } });
+    expect(result).toEqual({ v: 5 });
+  });
 });

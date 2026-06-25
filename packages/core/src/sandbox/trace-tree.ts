@@ -301,7 +301,6 @@ export function applyEvent(tree: TraceTree, event: TraceEvent, seq = 0): void {
     }
 
     case 'llm_progress':
-    case 'solve_verify':
       // Attach to node if present; otherwise ignore
       if ('nodeId' in event && event.nodeId) {
         const node = ensureNode(tree, event.nodeId);

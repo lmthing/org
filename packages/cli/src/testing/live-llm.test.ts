@@ -3,7 +3,7 @@
  * spaces with the REAL model (Azure DeepSeek-V4-Pro from .env) and asserts on the
  * --trace NDJSON. This is the counterpart to keyless-cli.test.ts: the mock can
  * only replay canned TypeScript, so it cannot validate real model behavior —
- * whether the model writes valid solve specs, follows the readFile().raw
+ * whether the model follows the readFile().raw
  * direction, retains scope across tasklist tasks, recovers from a fed-back
  * error, or honors per-role model routing.
  *
@@ -17,7 +17,6 @@
  */
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -26,7 +25,6 @@ import {
   hasBin,
   REPO_ROOT,
   TRACE_DIR,
-  solveResult,
   forkRequests,
   sessionRequests,
   reqText,
@@ -40,13 +38,9 @@ import type { TraceEvent } from '@lmthing/core';
 
 const LIVE = !!process.env['LM_LIVE'];
 
-// Spaces (committed system-space paths for reliability). The solver is now a
-// system space; solve() resolves its relative candidate path against the space
-// dir (host-tools inSpace()), the same root verifyCommand runs in, so this works
-// from the repo root with no cwd workaround.
-const ENGINEER = 'packages/core/system-spaces/engineer';
-const ARCHITECT_SRC = resolve(REPO_ROOT, 'packages/core/system-spaces/architect');
-const SOLVER_DIR = resolve(REPO_ROOT, 'packages/core/system-spaces/solver');
+// Spaces (committed system-space paths for reliability).
+const ENGINEER = 'packages/core/system-spaces/system-engineer';
+const ARCHITECT_SRC = resolve(REPO_ROOT, 'packages/core/system-spaces/system-architect');
 const SOMMELIER = 'fixtures/sommelier';
 const SAUCE = 'fixtures/sauce_master';
 
@@ -54,20 +48,6 @@ const SAUCE = 'fixtures/sauce_master';
 // model test routes explore forks to an explicit Pro spec to prove the config is
 // threaded to the trace without introducing a second model family.
 const ROLE_MODEL_SPEC = 'azure:DeepSeek-V4-Pro';
-
-const SOLVER_WORK = join(SOLVER_DIR, 'work');
-const cleanSolverWork = () => rmSync(SOLVER_WORK, { recursive: true, force: true });
-
-// Pin the exact solve() signature. DeepSeek-V4-Pro otherwise tends to hallucinate
-// a callback API (`solve({ attempt: async () => ... })`), which fails typecheck and
-// never produces a solve yield. solve() takes an `instruction` STRING.
-const solveMsg = (task: string): string =>
-  `${task} Use the solve() built-in EXACTLY as your instructions describe. solve takes an ` +
-  '`instruction` STRING — it does NOT take an `attempt`, `run`, or any callback function. ' +
-  'Call it precisely like this (one statement), then display the result:\n' +
-  'const r = await solve({ instruction: "<describe the function fully; the attempt must writeFile(\\"work/candidate.ts\\", source)>", ' +
-  "output: { summary: 'string' }, role: 'general', verifyCommand: 'npx tsc --noEmit --strict work/candidate.ts' });\n" +
-  'Do NOT write the function inline yourself — drive it entirely through solve().';
 
 const tmpDirs: string[] = [];
 const mkTmp = (slug: string): string => {
@@ -160,69 +140,7 @@ describe.skipIf(!hasBin() || !LIVE)('live-llm suite (real models)', () => {
     if (delegated.length) expect(nonNull.length).toBe(delegated.length);
   }, TIMEOUT);
 
-  // ── Tier 2: solve ladder & budget ─────────────────────────────────────────
-
-  it('L4 solve happy path writes a verified candidate', async () => {
-    cleanSolverWork();
-    const r = await runCli({
-      scenario: 'L4-solve-happy',
-      space: SOLVER_DIR,
-      message: solveMsg('Implement a function `add(a: number, b: number): number` that returns their sum.'),
-      timeoutMs: ARCH_TIMEOUT,
-    });
-    const solve = solveResult(r.trace);
-    const candidateExists = existsSync(join(SOLVER_WORK, 'candidate.ts'));
-    record('L4-solve-happy', solve ? `verified=${solve.verified} rung=${solve.rung} attempts=${solve.attempts} candidate=${candidateExists}` : 'no solve result (review trace)');
-    expect(solve).toBeDefined();
-    // HARD: the ladder converged on a verified solution and wrote the file.
-    expect(solve!.verified).toBe(true);
-    expect(solve!.attempts).toBeGreaterThanOrEqual(1);
-    expect(candidateExists).toBe(true);
-  }, ARCH_TIMEOUT);
-
-  it('L5 solve carries verifier feedback on retry (soft/conditional)', async () => {
-    cleanSolverWork();
-    const r = await runCli({
-      scenario: 'L5-solve-retry',
-      space: SOLVER_DIR,
-      message: solveMsg('Implement `titleCase(s: string): string` that upper-cases the first letter of each whitespace-separated word and lower-cases the rest.'),
-      timeoutMs: ARCH_TIMEOUT,
-    });
-    const solve = solveResult(r.trace);
-    const feedbackCarried = forkRequests(r.trace).some((e) => reqText(e).includes('Feedback from the previous attempt'));
-    record('L5-solve-retry', solve ? `attempts=${solve.attempts} rung=${solve.rung} feedbackCarried=${feedbackCarried}` : 'no solve result');
-    expect(solve).toBeDefined();
-    // HARD only when escalation actually happened: a retry must carry feedback.
-    if (solve!.attempts > 1) expect(feedbackCarried).toBe(true);
-  }, ARCH_TIMEOUT);
-
-  it('L6 solve verifier truly gates (verified ⟹ candidate independently typechecks)', async () => {
-    cleanSolverWork();
-    const r = await runCli({
-      scenario: 'L6-verifier-gates',
-      space: SOLVER_DIR,
-      message: solveMsg('Implement `clamp(x: number, lo: number, hi: number): number` returning x bounded to [lo, hi].'),
-      timeoutMs: ARCH_TIMEOUT,
-    });
-    const solve = solveResult(r.trace);
-    let independentlyTypechecks: boolean | 'n/a' = 'n/a';
-    if (solve?.verified && existsSync(join(SOLVER_WORK, 'candidate.ts'))) {
-      try {
-        execFileSync('npx', ['tsc', '--noEmit', '--strict', 'work/candidate.ts'], {
-          cwd: SOLVER_DIR,
-          stdio: 'pipe',
-        });
-        independentlyTypechecks = true;
-      } catch {
-        independentlyTypechecks = false;
-      }
-    }
-    record('L6-verifier-gates', `verified=${solve?.verified} independentTsc=${independentlyTypechecks}`);
-    expect(solve).toBeDefined();
-    // HARD: the verifier cannot be reward-hacked — a verified=true result must
-    // really pass tsc when we run it ourselves.
-    if (solve!.verified) expect(independentlyTypechecks).toBe(true);
-  }, ARCH_TIMEOUT);
+  // ── Tier 2: budget ─────────────────────────────────────────────────────────
 
   it('L7 progress() is invoked and reports counters (soft on format)', async () => {
     const r = await runCli({
@@ -239,24 +157,6 @@ describe.skipIf(!hasBin() || !LIVE)('live-llm suite (real models)', () => {
     expect(called).toBe(true);
   }, TIMEOUT);
 
-  it('L8 budget episode cap fires cleanly', async () => {
-    const r = await runCli({
-      scenario: 'L8-episode-cap',
-      // The solver reliably yields once (solve()) on turn 1, then continues to
-      // display the result on turn 2. With maxEpisodes=1, the episode tick at the
-      // start of turn 2 (episodes=2 > 1) trips the cap deterministically — no
-      // dependence on the model choosing to loop.
-      space: SOLVER_DIR,
-      message: solveMsg('Implement a function `add(a: number, b: number): number` returning a + b.'),
-      budget: { maxEpisodes: 1 },
-      stdin: 'implement add via solve',
-    });
-    record('L8-episode-cap', `exit=${r.code} sessionReqs=${sessionRequests(r.trace).length} stderrHit=${r.stderr.includes('episodes limit of 1')}`);
-    expect(r.code).not.toBe(0);
-    expect(r.stderr).toContain('episodes limit of 1');
-    expect(sessionRequests(r.trace).length).toBe(1);
-  }, TIMEOUT);
-
   it('L9 budget tool-call cap fires cleanly', async () => {
     const r = await runCli({
       scenario: 'L9-toolcall-cap',
@@ -269,20 +169,6 @@ describe.skipIf(!hasBin() || !LIVE)('live-llm suite (real models)', () => {
     record('L9-toolcall-cap', `exit=${r.code} stderrHit=${r.stderr.includes('toolCalls limit of 2')}`);
     expect(r.code).not.toBe(0);
     expect(r.stderr).toContain('toolCalls limit of 2');
-  }, TIMEOUT);
-
-  it('L10 fork-depth cap bounds the solve ladder (cheap rejection)', async () => {
-    cleanSolverWork();
-    const r = await runCli({
-      scenario: 'L10-forkdepth-cap',
-      space: SOLVER_DIR,
-      message: solveMsg('Implement a function `add(a: number, b: number): number`.'),
-      budget: { maxForkDepth: 0 },
-    });
-    record('L10-forkdepth-cap', `exit=${r.code} forkReqs=${forkRequests(r.trace).length} stderrHit=${r.stderr.includes('forkDepth limit of 0')}`);
-    expect(r.code).not.toBe(0);
-    expect(r.stderr).toContain('forkDepth limit of 0');
-    expect(forkRequests(r.trace).length).toBe(0);
   }, TIMEOUT);
 
   it('L11 wall-clock cap fires', async () => {

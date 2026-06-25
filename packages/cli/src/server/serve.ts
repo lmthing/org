@@ -545,6 +545,74 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
           }
           return;
         }
+        // POST /api/projects/:id/spaces/:spaceId/files — create a single file.
+        // Body: { path: string, content: string }. 201 on success.
+        if (method === 'POST') {
+          let parsed: { path?: unknown; content?: unknown };
+          try {
+            parsed = JSON.parse((await readBody(req)) || '{}') as { path?: unknown; content?: unknown };
+          } catch {
+            sendJson(res, 400, { error: 'invalid JSON body' }); return;
+          }
+          if (typeof parsed.path !== 'string' || parsed.path.length === 0) {
+            sendJson(res, 400, { error: 'path must be a non-empty string' }); return;
+          }
+          const content = typeof parsed.content === 'string' ? parsed.content : String(parsed.content ?? '');
+          try {
+            await manager.writeProjectSpaceFile(rawId, spaceId, parsed.path, content);
+            sendJson(res, 201, { ok: true });
+          } catch (err) {
+            sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          }
+          return;
+        }
+      }
+
+      // PUT    /api/projects/:id/spaces/:spaceId/files/<relPath> — update a single file.
+      //        Body: { content: string } (or a raw string body).
+      // DELETE /api/projects/:id/spaces/:spaceId/files/<relPath> — delete a single file.
+      const spaceFileMatch = /^\/spaces\/([^/]+)\/files\/(.+)$/.exec(subPath);
+      if (spaceFileMatch && (method === 'PUT' || method === 'DELETE')) {
+        const spaceId = decodeURIComponent(spaceFileMatch[1]!);
+        if (!safeProjectId(spaceId)) {
+          sendJson(res, 400, { error: `invalid space id: ${spaceId}` }); return;
+        }
+        const relPath = spaceFileMatch[2]!.split('/').map(decodeURIComponent).join('/');
+
+        if (method === 'PUT') {
+          const raw = await readBody(req);
+          let content: string;
+          try {
+            const parsed = JSON.parse(raw || '{}') as { content?: unknown };
+            content = typeof parsed.content === 'string' ? parsed.content : raw;
+          } catch {
+            // Not JSON — treat the body itself as the raw file content.
+            content = raw;
+          }
+          try {
+            await manager.writeProjectSpaceFile(rawId, spaceId, relPath, content);
+            sendJson(res, 200, { ok: true });
+          } catch (err) {
+            sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          }
+          return;
+        }
+
+        if (method === 'DELETE') {
+          try {
+            await manager.deleteProjectSpaceFile(rawId, spaceId, relPath);
+            res.writeHead(204); res.end();
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const code = (err as { code?: string } | undefined)?.code;
+            if (code === 'ENOENT') {
+              sendJson(res, 404, { error: `file not found: ${relPath}` });
+            } else {
+              sendJson(res, 400, { error: message });
+            }
+          }
+          return;
+        }
       }
 
       // GET /api/projects/:id/spaces — spaces created under this project

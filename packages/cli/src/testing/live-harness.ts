@@ -228,7 +228,7 @@ export const responsesText = (trace: TraceEvent[]): string =>
 export const emittedCode = (trace: TraceEvent[]): string =>
   ofType(trace, 'statement').map((e) => e.code).join('\n') + '\n' + responsesText(trace);
 
-/** The first resolved value for a given yield kind (e.g. 'solve', 'delegate'). */
+/** The first resolved value for a given yield kind (e.g. 'delegate'). */
 export const yieldResolved = (trace: TraceEvent[], kind: string): unknown => {
   const e = trace.find((ev) => ev.type === 'yield_resolved' && ev.kind === kind) as
     | Extract<TraceEvent, { type: 'yield_resolved' }>
@@ -240,17 +240,6 @@ export const allYieldResolved = (trace: TraceEvent[], kind: string): unknown[] =
   trace
     .filter((e): e is Extract<TraceEvent, { type: 'yield_resolved' }> => e.type === 'yield_resolved' && e.kind === kind)
     .map((e) => e.value);
-
-export interface SolveResult {
-  value: unknown;
-  rung: number;
-  attempts: number;
-  verified: boolean;
-}
-
-/** The resolved solve() result, if any. */
-export const solveResult = (trace: TraceEvent[]): SolveResult | undefined =>
-  yieldResolved(trace, 'solve') as SolveResult | undefined;
 
 export const count = (trace: TraceEvent[], predicate: (e: TraceEvent) => boolean): number =>
   trace.filter(predicate).length;

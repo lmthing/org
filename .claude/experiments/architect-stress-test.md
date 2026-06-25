@@ -98,7 +98,7 @@ The harness is domain-agnostic.
 > 5. **When you hit a real, fixable failure** (a crash, a `{ok:false}` the model can't
 >    recover from, hallucinated/garbled data, a wrong-shape spec, a prompting gap): STOP the
 >    run, diagnose it from the trace, and fix it at the right layer —
->    - **prompting** → `system-spaces/architect/agents/architect/instruct.md`,
+>    - **prompting** → `system-spaces/system-architect/agents/architect/instruct.md`,
 >      `fixtures/deep_research/...`, or the universal preamble `context/system-block.ts`;
 >    - **core/globals** → `eval/turn-loop.ts`, `globals/*.ts`, `spaces/*.ts`,
 >      `system-spaces/.../functions/*.ts`.

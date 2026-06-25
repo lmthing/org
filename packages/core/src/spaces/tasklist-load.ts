@@ -7,6 +7,7 @@ export interface TaskNode {
   id: string;
   instruction: string; // body of the .md file
   output: Record<string, string>; // JSON-schema-ish: field -> type
+  input?: Record<string, string>; // JSON-schema-ish: field -> type
   dependsOn?: string[];
   condition?: string; // DSL expression
   optional?: boolean;
@@ -39,6 +40,14 @@ export async function loadTasklist(dir: string, files: string[]): Promise<Record
       instruction: body.trim(),
       output,
     };
+
+    if (data['input'] && typeof data['input'] === 'object' && !Array.isArray(data['input'])) {
+      const input: Record<string, string> = {};
+      for (const [k, v] of Object.entries(data['input'] as Record<string, unknown>)) {
+        input[k] = String(v);
+      }
+      task.input = input;
+    }
 
     if (Array.isArray(data['dependsOn'])) {
       task.dependsOn = data['dependsOn'].map(String);

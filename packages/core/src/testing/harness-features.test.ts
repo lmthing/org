@@ -15,7 +15,7 @@ import type { StreamOpts } from '../eval/stream-types.js';
  * global and orchestration feature driven through a REAL Session with the
  * scripted mock provider (no API keys). This is the deterministic counterpart
  * to scripts/live-test.sh and the companion to mock-session.test.ts (which
- * owns budget/progress/solve); here we exercise the features those tests don't:
+ * owns budget/progress); here we exercise the features those tests don't:
  *
  *   - ask()              host round-trip + result binding
  *   - inspect()          yields, returns the value, and lands in the next VARIABLES block
@@ -34,8 +34,8 @@ import type { StreamOpts } from '../eval/stream-types.js';
 // dist/ layout and would point at a nonexistent dir when run from src.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_SPACES_ROOT = join(__dirname, '..', '..', 'system-spaces');
-// fs/web/memory/todo functions now all live in the single `global` toolkit space.
-const fsSpace = join(SYSTEM_SPACES_ROOT, 'global');
+// fs/web/memory/todo functions now all live in the single `system-global` toolkit space.
+const fsSpace = join(SYSTEM_SPACES_ROOT, 'system-global');
 const memorySpace = fsSpace;
 const todoSpace = fsSpace;
 

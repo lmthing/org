@@ -10,7 +10,7 @@ import { CATALOG_NAMES } from '../ui/catalog.js';
 import { createVM } from '../sandbox/quickjs.js';
 import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
-import { buildSystemBlock } from '../context/system-block.js';
+import { buildSystemBlock, resolvePreloadedKnowledge } from '../context/system-block.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { routeCommonYield } from '../eval/yield-router.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
@@ -25,6 +25,12 @@ export interface RunDelegateOpts {
   agentName: string;
   /** Optional: omit to run the agent model-driven (it sees its own actions/tasklists). */
   action?: string;
+  /** Subset of action ids the calling agent's `canDelegateTo` permits on this target.
+   *  `undefined` = unrestricted (all actions, including the no-action model-driven
+   *  form, are allowed) — e.g. the session's top-level entry point, which has no
+   *  delegator-side restriction to enforce. Populated by the yield-router/session
+   *  layer from the delegator's resolved `ResolvedDep.allowedActions`. */
+  allowedActions?: string[];
   delegateOpts?: DelegateOpts;
   registry: DelegateRegistry;
   renderHost: RenderHost;
@@ -62,6 +68,17 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     opts.registry.addSpace(depSpace.dir, depSpace);
   }
 
+  // Enforce the delegator's canDelegateTo action restriction, when known. The caller
+  // (globals/delegate.ts's yield handler, via the yield-router) passes the resolved
+  // dependency's `allowedActions` for the target agent; `undefined` means "not
+  // restricted at the caller layer" (e.g. the top-level session entry point, or a
+  // dependency-less call) and `[]`/populated arrays gate which actions may run.
+  if (opts.action && opts.allowedActions && !opts.allowedActions.includes(opts.action)) {
+    throw new Error(
+      `Delegate target "${target}" does not allow action "${opts.action}" — allowed actions: ${opts.allowedActions.length ? opts.allowedActions.join(', ') : '(none)'}`,
+    );
+  }
+
   const tracer = opts.tracer ?? NULL_TRACER;
   const delegateLabel = `delegate:${opts.packageName}/${opts.agentName}/${opts.action ?? '(model-driven)'}`;
   // Mint a delegate scope for full observability; end() in finally below
@@ -72,14 +89,15 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     depth: opts.depth,
   });
 
-  const directDeps = resolveDirectDeps(space, agent.dependencies);
+  const directDeps = resolveDirectDeps(space, agent.canDelegateTo);
 
   // The universal `global` toolkit (readFile, grep, remember, …) is injected into every
   // delegate VM below. Surface it in the system prompt AND the typecheck overlay too —
   // otherwise an agent that calls a bare global tool (e.g. the memory agent's remember())
   // fails typecheck with "Cannot find name", since it declares no functions of its own.
   const systemFnSources = systemFunctionSources(opts.systemSpaces ?? []);
-  const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFnSources });
+  const knowledgePreloads = await resolvePreloadedKnowledge(space, agent);
+  const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFnSources, knowledgePreloads });
 
   const vm = await createVM();
 
@@ -247,16 +265,26 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
                 resultCaptured = true;
               }
             },
-            runDelegate: (packageName, agentName, action, delegateOpts2) =>
-              runDelegate({
+            runDelegate: (packageName, agentName, action, delegateOpts2) => {
+              // Look up this agent's allowed actions on the target, from its own
+              // canDelegateTo (directDeps), matched by agent slug + target string —
+              // the same matching the model used to reach this packageName/agentName
+              // pair via the `delegate()` global (target strings come straight from
+              // canDelegateTo entries resolved above).
+              const matchedDep = directDeps.find(
+                (d) => d.agent.slug === agentName && (d.target === packageName || d.target.endsWith(`/${packageName}`) || packageName.endsWith(`/${d.target}`)),
+              );
+              return runDelegate({
                 ...opts,
                 packageName,
                 agentName,
                 action,
+                allowedActions: matchedDep?.allowedActions,
                 delegateOpts: delegateOpts2,
                 scope: delegateScope,
                 depth: opts.depth + 1,
-              }),
+              });
+            },
           });
           return routed.handled ? routed.value : undefined;
         },

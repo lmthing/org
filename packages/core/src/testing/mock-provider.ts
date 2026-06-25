@@ -98,7 +98,7 @@ function matchHaystack(opts: StreamOpts): string {
 /**
  * First-matching-rule-wins router. Robust when forks/delegates interleave with the
  * main loop: forks carry their role preamble in `system` and their `instruction` in
- * the user `messages`; `solve` retries carry the verifier feedback. Match on those to
+ * the user `messages`. Match on those to
  * return a fork's answer vs. the orchestrator's next step.
  *
  * If no rule matches and no `fallback` is given, throws — a loud failure beats a

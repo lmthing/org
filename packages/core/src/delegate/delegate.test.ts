@@ -3,6 +3,7 @@ import { runDelegate } from './delegate.js';
 import { DelegateRegistry } from './registry.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamSession } from '../eval/stream-types.js';
+import type { Space, AgentDef } from '../spaces/load.js';
 import { loadSystemSpaces, defaultSystemSpaceDirs } from '../spaces/system.js';
 import { createMockStreamFn } from '../testing/mock-provider.js';
 
@@ -66,7 +67,7 @@ describe('runDelegate depth cap', () => {
 describe('runDelegate exposes the global toolkit to declared-functionless agents', () => {
   it('the memory agent can call recallAll() (typechecks + injects)', async () => {
     const systemSpaces = await loadSystemSpaces(defaultSystemSpaceDirs());
-    const memory = systemSpaces.find((s) => s.dir.endsWith('/memory'));
+    const memory = systemSpaces.find((s) => s.dir.endsWith('/user-memory'));
     expect(memory, 'memory system space should load').toBeTruthy();
 
     const registry = new DelegateRegistry(new Map([[memory!.dir, memory!]]));
@@ -90,5 +91,103 @@ describe('runDelegate exposes the global toolkit to declared-functionless agents
     })) as { ok: boolean; isObject: boolean } | undefined;
 
     expect(result).toEqual({ ok: true, isObject: true });
+  });
+});
+
+/**
+ * Action-restriction enforcement (WP-3 / SPACE-SPEC). A `canDelegateTo` entry with
+ * a `#action` suffix (e.g. "helper#greet") resolves to a `ResolvedDep` whose
+ * `allowedActions` gates which action ids may be delegated. `runDelegate` is the
+ * enforcement point: it rejects a disallowed action up front (before loading the
+ * target's VM) and lets an allowed one proceed normally.
+ */
+describe('runDelegate action-restriction (allowedActions)', () => {
+  function fakeAgent(slug: string, actions: { id: string }[]): AgentDef {
+    return {
+      slug,
+      title: slug,
+      instructBody: '',
+      actions: actions.map((a) => ({ id: a.id, label: a.id, description: '', tasklist: '' })),
+      canDelegateTo: [],
+      config: { knowledge: [], functions: [], components: [] },
+    };
+  }
+
+  function fakeSpace(dir: string, agents: Record<string, AgentDef>): Space {
+    return {
+      dir,
+      packageName: undefined,
+      agents,
+      tasklists: {},
+      functions: {},
+      functionsBundled: {},
+      dependentSpaces: {},
+      components: { view: {}, form: {} },
+      knowledge: { domains: {} },
+    } as Space;
+  }
+
+  it('throws naming the allowed actions when the requested action is disallowed', async () => {
+    const helper = fakeAgent('helper', [{ id: 'greet' }, { id: 'farewell' }]);
+    const space = fakeSpace('/fake/space', { helper });
+    const registry = new DelegateRegistry(new Map([['/fake/space', space]]));
+
+    await expect(
+      runDelegate({
+        packageName: '/fake/space',
+        agentName: 'helper',
+        action: 'farewell',
+        allowedActions: ['greet'],
+        registry,
+        renderHost: silentHost,
+        streamFn: emptyStream,
+        depth: 0,
+        maxDepth: 5,
+        maxConcurrentForks: 4,
+      }),
+    ).rejects.toThrow(/does not allow action "farewell".*allowed actions: greet/);
+  });
+
+  it('allows a permitted action through to the model-driven run', async () => {
+    const helper = fakeAgent('helper', [{ id: 'greet' }, { id: 'farewell' }]);
+    const space = fakeSpace('/fake/space2', { helper });
+    const registry = new DelegateRegistry(new Map([['/fake/space2', space]]));
+    const streamFn = createMockStreamFn(() => `currentTask.resolve("hi");`);
+
+    const result = await runDelegate({
+      packageName: '/fake/space2',
+      agentName: 'helper',
+      action: 'greet',
+      allowedActions: ['greet'],
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+    });
+
+    expect(result).toBe('hi');
+  });
+
+  it('undefined allowedActions means unrestricted (no-action model-driven call passes)', async () => {
+    const helper = fakeAgent('helper', [{ id: 'greet' }]);
+    const space = fakeSpace('/fake/space3', { helper });
+    const registry = new DelegateRegistry(new Map([['/fake/space3', space]]));
+    const streamFn = createMockStreamFn(() => `currentTask.resolve("ok");`);
+
+    const result = await runDelegate({
+      packageName: '/fake/space3',
+      agentName: 'helper',
+      // no action — model-driven; no allowedActions — unrestricted.
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+    });
+
+    expect(result).toBe('ok');
   });
 });

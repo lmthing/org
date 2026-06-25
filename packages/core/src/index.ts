@@ -44,7 +44,6 @@ export type { ForkGlobalOpts } from './globals/fork.js';
 export { createDelegateGlobal } from './globals/delegate.js';
 export type { DelegateOpts } from './globals/delegate.js';
 export { createTasklistGlobal } from './globals/tasklist.js';
-export { createSolveGlobal } from './globals/solve.js';
 export { createRegisterSpaceGlobal } from './globals/register-space.js';
 export type { RegisterSpaceResult } from './globals/register-space.js';
 
@@ -110,8 +109,8 @@ export { saveSnapshot, loadSnapshot } from './session/snapshot.js';
 export type { Snapshot } from './session/snapshot.js';
 
 // Tasklist
-export { validateDag, topoSort, findReadyTasks } from './tasklist/dag.js';
-export { validateOutput } from './tasklist/schema.js';
+export { validateDag, topoSort, findReadyTasks, resolveGoalTask } from './tasklist/dag.js';
+export { validateOutput, validateInput } from './tasklist/schema.js';
 export { evaluateCondition } from './tasklist/condition-dsl.js';
 export { runTasklist } from './tasklist/orchestrator.js';
 
@@ -120,8 +119,6 @@ export { ForkEngine } from './fork/fork.js';
 export type { ForkTask } from './fork/fork.js';
 export { normalizeRole, rolePreamble, roleProfile, modelForRole } from './fork/roles.js';
 export type { ForkRole, RoleModelConfig } from './fork/roles.js';
-export { solve, runSolveYield } from './fork/solve.js';
-export type { SolveOpts, SolveResult, SolveTask, SolveRung, VerifyResult, SolveYieldOpts, SolveYieldDeps } from './fork/solve.js';
 
 // Delegate
 export { DelegateRegistry } from './delegate/registry.js';

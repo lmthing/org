@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 
 // ─── Node hierarchy types ──────────────────────────────────────────────────
 
-export type NodeKind = 'session' | 'run' | 'fork' | 'delegate' | 'tasklist' | 'task' | 'solve';
+export type NodeKind = 'session' | 'run' | 'fork' | 'delegate' | 'tasklist' | 'task';
 export type NodeStatus = 'queued' | 'running' | 'done' | 'error' | 'skipped';
 
 /** Per-call execution scope — generalizes today's flat traceContext string.
@@ -34,9 +34,6 @@ export interface NodeDetail {
   optional?: boolean;
   condition?: string;
   goal?: boolean;
-  // solve
-  ladder?: string[];
-  maxAttempts?: number;
 }
 
 // ─── Trace event union ─────────────────────────────────────────────────────
@@ -64,8 +61,6 @@ export type TraceEvent =
   | { ts: number; type: 'variables'; context: string; nodeId?: string; vars: Record<string, unknown> }
   // New: throttled streaming progress — NOT written to file (kept in-memory only)
   | { ts: number; type: 'llm_progress'; context: string; nodeId?: string; chars: number; statements: number }
-  // New: solve-ladder verification result
-  | { ts: number; type: 'solve_verify'; context: string; nodeId: string; attempt: number; rung: number; ok: boolean; feedback?: string }
   // New: a user-sent chat message — captured in the trace so the conversation
   // (the user's prompts, not just display() output) reconstructs on reconnect/replay.
   | { ts: number; type: 'user_message'; nodeId?: string; content: string };

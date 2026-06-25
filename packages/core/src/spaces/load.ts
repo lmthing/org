@@ -24,7 +24,11 @@ export interface AgentDef {
   title: string;
   instructBody: string; // body of instruct.md
   actions: ActionDef[];
-  dependencies: string[]; // "space/agent" strings
+  /** Other agents this agent can delegate to. Entries may carry an `#action`
+   *  suffix or `npm:` prefix — raw strings only, parsing happens downstream
+   *  (WP-3 resolveDirectDeps). Read from the `canDelegateTo:` frontmatter key,
+   *  falling back to the deprecated `dependencies:` key when absent. */
+  canDelegateTo: string[];
   config: AgentConfig;
   /** When set, a freeform session for this agent runs this action's tasklist
    *  deterministically (host-driven) instead of the model-driven turn loop — a
@@ -47,7 +51,11 @@ export interface AgentConfig {
 
 export interface TasklistDir {
   slug: string;
-  files: string[]; // sorted absolute paths to .md files
+  files: string[]; // sorted absolute paths to .md files (NN-<id>.md only — index.md excluded)
+  /** Body of tasklists/<name>/index.md, when present. */
+  description?: string;
+  /** Input schema declared in tasklists/<name>/index.md frontmatter (field name -> type string). */
+  input?: Record<string, string>;
 }
 
 export interface KnowledgeTree {
@@ -57,6 +65,8 @@ export interface KnowledgeTree {
 export interface KnowledgeDomain {
   slug: string;
   fields: Record<string, KnowledgeField>;
+  /** Body of knowledge/<domain>/index.md, when present. */
+  description?: string;
 }
 
 export interface KnowledgeField {
@@ -217,7 +227,9 @@ async function loadKnowledge(dir: string): Promise<KnowledgeTree> {
       for (const optFile of optionFiles) {
         if (!optFile.endsWith('.md') || optFile === 'index.md') continue;
         const optionSlug = basename(optFile, '.md');
-        options[optionSlug] = join(fieldDir, optFile);
+        const optionPath = join(fieldDir, optFile);
+        validateKnowledgeOptionFrontmatter(await readFile(optionPath, 'utf8'), optionPath);
+        options[optionSlug] = optionPath;
       }
 
       const field: KnowledgeField = {
@@ -232,10 +244,43 @@ async function loadKnowledge(dir: string): Promise<KnowledgeTree> {
       fields[fieldSlug] = field;
     }
 
-    domains[domainSlug] = { slug: domainSlug, fields };
+    const domain: KnowledgeDomain = { slug: domainSlug, fields };
+    const domainIndexPath = join(domainDir, 'index.md');
+    if (await fileExists(domainIndexPath)) {
+      const raw = await readFile(domainIndexPath, 'utf8');
+      const { body } = parseFrontmatter(raw, domainIndexPath);
+      if (body) domain.description = body;
+    }
+
+    domains[domainSlug] = domain;
   }
 
   return { domains };
+}
+
+/** Allowed frontmatter keys for a knowledge option file (knowledge/<domain>/<field>/<slug>.md). */
+const KNOWLEDGE_OPTION_ALLOWED_KEYS = new Set(['description', 'icon', 'color', 'label']);
+
+/**
+ * Validate a knowledge option file's frontmatter against the spec allow-list:
+ * `description` is required when frontmatter is present; `icon`/`color`/`label`
+ * are optional; no other keys are allowed. Plain markdown (no frontmatter) is
+ * always valid. Throws (fail-loud, matching parseFrontmatter's YAML errors).
+ */
+export function validateKnowledgeOptionFrontmatter(raw: string, source: string): void {
+  const { data } = parseFrontmatter(raw, source);
+  if (Object.keys(data).length === 0) return; // plain markdown option, no frontmatter
+
+  if (typeof data['description'] !== 'string' || data['description'].length === 0) {
+    throw new Error(`Knowledge option "${source}" has frontmatter but is missing required key "description"`);
+  }
+
+  const unknownKeys = Object.keys(data).filter((k) => !KNOWLEDGE_OPTION_ALLOWED_KEYS.has(k));
+  if (unknownKeys.length > 0) {
+    throw new Error(
+      `Knowledge option "${source}" has disallowed frontmatter key(s): ${unknownKeys.join(', ')}. Allowed keys: description (required), icon, color, label`,
+    );
+  }
 }
 
 async function loadTasklists(dir: string): Promise<Record<string, TasklistDir>> {
@@ -251,11 +296,27 @@ async function loadTasklists(dir: string): Promise<Record<string, TasklistDir>> 
 
     const files = await listDir(tlDir);
     const mdFiles = files
-      .filter((f) => f.endsWith('.md'))
+      .filter((f) => f.endsWith('.md') && f !== 'index.md')
       .sort()
       .map((f) => join(tlDir, f));
 
-    result[slug] = { slug, files: mdFiles };
+    const tasklist: TasklistDir = { slug, files: mdFiles };
+
+    const indexPath = join(tlDir, 'index.md');
+    if (await fileExists(indexPath)) {
+      const raw = await readFile(indexPath, 'utf8');
+      const { data, body } = parseFrontmatter(raw, indexPath);
+      if (body) tasklist.description = body;
+      if (data['input'] && typeof data['input'] === 'object' && !Array.isArray(data['input'])) {
+        const input: Record<string, string> = {};
+        for (const [k, v] of Object.entries(data['input'] as Record<string, unknown>)) {
+          input[k] = String(v);
+        }
+        tasklist.input = input;
+      }
+    }
+
+    result[slug] = tasklist;
   }
 
   return result;
@@ -269,7 +330,7 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
   let title = slug;
   const actions: ActionDef[] = [];
   const config: AgentConfig = { knowledge: [], functions: [], components: [] };
-  const dependencies: string[] = [];
+  const canDelegateTo: string[] = [];
   let defaultAction: string | undefined;
 
   if (await fileExists(instructPath)) {
@@ -281,7 +342,12 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
     if (Array.isArray(data['knowledge'])) config.knowledge = data['knowledge'].map(String);
     if (Array.isArray(data['functions'])) config.functions = data['functions'].map(String);
     if (Array.isArray(data['components'])) config.components = data['components'].map(String);
-    if (Array.isArray(data['dependencies'])) dependencies.push(...data['dependencies'].map(String));
+    // `canDelegateTo` is the current key; `dependencies` is deprecated (one-release compat).
+    if (Array.isArray(data['canDelegateTo'])) {
+      canDelegateTo.push(...data['canDelegateTo'].map(String));
+    } else if (Array.isArray(data['dependencies'])) {
+      canDelegateTo.push(...data['dependencies'].map(String));
+    }
     if (Array.isArray(data['actions'])) {
       for (const action of data['actions'] as unknown[]) {
         if (typeof action === 'object' && action !== null) {
@@ -297,7 +363,7 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
     }
   }
 
-  return { slug, title, instructBody, actions, dependencies, config, defaultAction };
+  return { slug, title, instructBody, actions, canDelegateTo, config, defaultAction };
 }
 
 export interface LoadSpaceOpts {
@@ -422,16 +488,22 @@ export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<
       }
     }
     for (const knowledgeRef of agent.config.knowledge) {
-      const [domainSlug, fieldSlug] = knowledgeRef.split('/');
+      const [domainSlug, fieldSlug, optionSlug] = knowledgeRef.split('/');
       const domain = domainSlug ? knowledge.domains[domainSlug] : undefined;
       if (!domain) {
         throw new Error(
           `Agent "${agent.slug}" references knowledge "${knowledgeRef}" but domain "${domainSlug}" was not found in knowledge/`,
         );
       }
-      if (fieldSlug && !(fieldSlug in domain.fields)) {
+      const field = fieldSlug ? domain.fields[fieldSlug] : undefined;
+      if (fieldSlug && !field) {
         throw new Error(
           `Agent "${agent.slug}" references knowledge "${knowledgeRef}" but field "${fieldSlug}" was not found in domain "${domainSlug}"`,
+        );
+      }
+      if (optionSlug && field && !(optionSlug in field.options)) {
+        throw new Error(
+          `Agent "${agent.slug}" references knowledge "${knowledgeRef}" but option "${optionSlug}" was not found in field "${fieldSlug}" of domain "${domainSlug}"`,
         );
       }
     }

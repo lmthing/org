@@ -53,7 +53,7 @@ describe('system/memory functions (round-trip through host primitives)', () => {
     dir = mkdtempSync(join(tmpdir(), 'sysfn-'));
     vm = await createVM();
     injectHostTools(vm, { renderHost: host, spaceDir: dir });
-    const [mem] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'global')]);
+    const [mem] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'system-global')]);
     injectFunctions(vm, mem!.functions);
   });
 
@@ -96,7 +96,7 @@ describe('system/fs readFile function', () => {
     dir = mkdtempSync(join(tmpdir(), 'sysfs-'));
     vm = await createVM();
     injectHostTools(vm, { renderHost: host, spaceDir: dir });
-    const [fs] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'global')]);
+    const [fs] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'system-global')]);
     injectFunctions(vm, fs!.functions);
   });
 
@@ -163,7 +163,7 @@ describe('system/web webFetch function (HTML → text)', () => {
     dir = mkdtempSync(join(tmpdir(), 'sysweb-'));
     vm = await createVM();
     injectHostTools(vm, { renderHost: host, spaceDir: dir });
-    const [web] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'global')]);
+    const [web] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'system-global')]);
     injectFunctions(vm, web!.functions);
   });
 
@@ -216,7 +216,7 @@ describe('system/todo functions', () => {
     vm = await createVM();
     injectHostTools(vm, { renderHost: host, spaceDir: dir });
     injectGlobal(vm.ctx, 'display', ((d: unknown) => host.display(d)) as (...a: unknown[]) => unknown);
-    const [todo] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'global')]);
+    const [todo] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'system-global')]);
     injectFunctions(vm, todo!.functions);
   });
 

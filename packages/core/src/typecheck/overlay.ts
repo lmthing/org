@@ -20,7 +20,7 @@ function isFunctionType(typeNode: ts.TypeNode | undefined): boolean {
  * renamed to `${componentName}Props`, with all function-typed members made optional.
  * Returns null if not found.
  */
-function extractPropsDeclaration(componentName: string, src: string): string | null {
+export function extractPropsDeclaration(componentName: string, src: string): string | null {
   const sf = ts.createSourceFile('comp.tsx', src, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TSX);
   const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
 
@@ -64,8 +64,9 @@ export function buildOverlay(
   functions: Record<string, string>,
   components: {
     view: Record<string, string>;
-    form: Record<string, { web: string; ink: string }>;
+    form: Record<string, { web: string; ink: string } | string>;
   },
+  onWarn?: (name: string, message: string) => void,
 ): string {
   const lines: string[] = [];
 
@@ -73,12 +74,17 @@ export function buildOverlay(
   for (const [name, src] of Object.entries(functions)) {
     const sig = extractFunctionSignature(name, src);
     lines.push(sig);
+    if (onWarn) warnIfMissingAnnotations('function', name, src, onWarn);
   }
 
-  // Components
+  // Components — form components are single-file (`source: string`); a few
+  // call sites may still hand us the legacy `{web, ink}` shape (pending core
+  // loader migration) — read `.web` defensively in that case.
   const allComponents: Record<string, string> = {};
   for (const [n, s] of Object.entries(components.view)) allComponents[n] = s;
-  for (const [n, { web }] of Object.entries(components.form)) allComponents[n] = web;
+  for (const [n, formSrc] of Object.entries(components.form)) {
+    allComponents[n] = typeof formSrc === 'string' ? formSrc : formSrc.web;
+  }
 
   for (const [name, src] of Object.entries(allComponents)) {
     const propsDecl = extractPropsDeclaration(name, src);
@@ -88,9 +94,97 @@ export function buildOverlay(
     } else {
       lines.push(`declare function ${name}(props?: Record<string, unknown>): JSXDescriptor;`);
     }
+    if (onWarn) warnIfMissingAnnotations('component', name, src, onWarn);
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Best-effort check: warn (do not throw) when a space function or component
+ * lacks a JSDoc comment or any type annotations on its parameters. Mirrors the
+ * existing best-effort injection behavior (one bad/under-annotated item logs a
+ * warning, the rest still proceed).
+ */
+function warnIfMissingAnnotations(
+  kind: 'function' | 'component',
+  name: string,
+  src: string,
+  onWarn: (name: string, message: string) => void,
+): void {
+  const sf = ts.createSourceFile(kind === 'component' ? 'comp.tsx' : 'fn.ts', src, ts.ScriptTarget.ESNext, true, kind === 'component' ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+
+  let node: ts.FunctionDeclaration | undefined;
+  for (const stmt of sf.statements) {
+    if (ts.isFunctionDeclaration(stmt) && (stmt.name?.text === name || (kind === 'component' && stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)))) {
+      node = stmt;
+      break;
+    }
+  }
+  if (!node) {
+    onWarn(name, `could not locate a function declaration for "${name}" to verify JSDoc/type annotations`);
+    return;
+  }
+
+  const jsDocs = ts.getJSDocCommentsAndTags(node).filter(ts.isJSDoc);
+  const hasDoc = jsDocs.some((j) => (j.comment ?? '').toString().trim().length > 0);
+  if (!hasDoc) {
+    onWarn(name, `${kind} "${name}" has no JSDoc description — the model won't see what it does`);
+  }
+
+  const untypedParams = node.parameters.filter((p) => !p.type && !(kind === 'component' && ts.isObjectBindingPattern(p.name)));
+  if (untypedParams.length > 0) {
+    onWarn(name, `${kind} "${name}" has untyped parameter(s) — add explicit TypeScript type annotations`);
+  }
+}
+
+/**
+ * Extract a component's JSDoc description from its default (or named, matching
+ * `name`) export function declaration. Mirrors how function tools surface their
+ * JSDoc in the system block (see `extractToolSummary` in context/system-block.ts).
+ * Returns '' when no JSDoc comment is present.
+ */
+export function extractComponentDoc(name: string, src: string): string {
+  const sf = ts.createSourceFile('comp.tsx', src, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TSX);
+
+  for (const node of sf.statements) {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      (node.name?.text === name || node.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword))
+    ) {
+      const jsDocs = ts.getJSDocCommentsAndTags(node).filter(ts.isJSDoc);
+      const commentParts = jsDocs.map((j) => (j.comment ?? '').toString().trim()).filter(Boolean);
+      if (commentParts.length > 0) return commentParts.join(' ');
+      break;
+    }
+  }
+
+  // Fallback: a leading line comment directly above the export.
+  return src.match(/^\s*\/\/\s*(.+)$/m)?.[1]?.trim() ?? '';
+}
+
+/**
+ * Strip `import { X, Y } from '@lmthing/...'` lines that reference catalog
+ * component names before eval/transpile — mirrors the export-stripping in
+ * `sandbox/inject-functions.ts`. Authored space components now import catalog
+ * components (`import { Stack } from '@lmthing/ui'`) for editor ergonomics, but
+ * at runtime the catalog names are plain globals injected on the VM, so the
+ * import line must be removed rather than resolved as a real module.
+ *
+ * NOTE: core never evaluates component *source* directly (component files are
+ * only read for AST extraction — Props/JSDoc — here and in system-block.ts;
+ * rendering happens host-side in the CLI/UI renderers from JSXDescriptor data).
+ * This helper exists for callers (e.g. a future bundler/renderer) that DO eval
+ * component source, so the stripping logic has one canonical home.
+ */
+export function stripCatalogImports(src: string, catalogNames: ReadonlySet<string>): string {
+  return src.replace(/^import\s*\{([^}]+)\}\s*from\s*['"]@lmthing\/[^'"]+['"]\s*;?\s*$/gm, (full, names: string) => {
+    const kept = names
+      .split(',')
+      .map((n) => n.trim())
+      .filter((n) => n.length > 0 && !catalogNames.has(n.replace(/\s+as\s+\S+$/, '').trim()));
+    return kept.length > 0 ? `import { ${kept.join(', ')} } from '@lmthing/stripped';` : '';
+  });
 }
 
 /**

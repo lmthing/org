@@ -2,17 +2,36 @@ import type { Space, AgentDef } from '../spaces/load.js';
 import type { ResolvedDep } from '../spaces/agent.js';
 import { getAgentFunctions } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
+import { resolveKnowledge } from '../spaces/knowledge.js';
 import ts from 'typescript';
-import { extractFunctionSignature } from '../typecheck/overlay.js';
+import { extractFunctionSignature, extractPropsDeclaration, extractComponentDoc } from '../typecheck/overlay.js';
 import { catalogSummary } from '../ui/catalog.js';
 
-/** Extract optional prop names from a component's Props interface for display in system prompt */
-function extractComponentProps(src: string): string {
-  const propsMatch = src.match(/interface\s+Props\s*\{([^}]+)\}/);
-  if (!propsMatch) return '';
-  const body = propsMatch[1]!;
+/**
+ * Render the prop list for a component's `<Name .../>` example tag using the
+ * AST-based Props extraction (replaces the old `interface Props` regex scan).
+ * Falls back to no props shown when the component declares no `Props` interface.
+ */
+function renderComponentPropsExample(componentName: string, src: string): string {
+  const decl = extractPropsDeclaration(componentName, src);
+  if (!decl) return '';
+  const body = decl.match(/\{([^]*)\}/)?.[1] ?? '';
   const propNames = [...body.matchAll(/(\w+)\??\s*:/g)].map((m) => m[1]!);
   return propNames.map((p) => `${p}={...}`).join(' ');
+}
+
+/**
+ * Resolve a 3-part knowledge ref (`domain/field/option`) to its preloaded body
+ * for direct system-block injection. Returns undefined for 2-part refs
+ * (`domain/field`) — those stay on-demand via `loadKnowledge()`.
+ */
+export interface KnowledgePreload {
+  domainSlug: string;
+  fieldSlug: string;
+  optionSlug: string;
+  /** Resolved value from `resolveKnowledge` — either the raw body string or a
+   *  frontmatter object with a `body` field. */
+  value: unknown;
 }
 
 export interface SystemBlockOpts {
@@ -22,6 +41,33 @@ export interface SystemBlockOpts {
   /** System-space functions (fs/web/memory/todo). Rendered concisely as built-in
    *  tools — signature + one-line doc only, not full source — to keep the prompt lean. */
   systemFunctions?: Record<string, string>;
+  /** Pre-resolved option-level knowledge preloads (3-part `domain/field/option`
+   *  refs in `agent.config.knowledge`). `resolveKnowledge` is async, so callers
+   *  resolve these up front (see `resolvePreloadedKnowledge`) and pass the
+   *  results in here — keeps `buildSystemBlock` itself synchronous. */
+  knowledgePreloads?: KnowledgePreload[];
+}
+
+/**
+ * Pre-resolve every 3-part (option-level) knowledge ref in an agent's
+ * `config.knowledge` list. Called by session/delegate/fork boot code before
+ * `buildSystemBlock` — `resolveKnowledge` hits the filesystem, so this is async.
+ */
+export async function resolvePreloadedKnowledge(space: Space, agent: AgentDef): Promise<KnowledgePreload[]> {
+  const preloads: KnowledgePreload[] = [];
+  for (const ref of agent.config.knowledge) {
+    const parts = ref.split('/');
+    if (parts.length !== 3) continue;
+    const [domainSlug, fieldSlug, optionSlug] = parts as [string, string, string];
+    try {
+      const value = await resolveKnowledge(space, [domainSlug, fieldSlug, optionSlug]);
+      preloads.push({ domainSlug, fieldSlug, optionSlug, value });
+    } catch {
+      // Ref validated at load time; a resolution failure here is unexpected —
+      // skip rather than abort system-block construction.
+    }
+  }
+  return preloads;
 }
 
 /** Render a tool as its full signature (incl. return type) + full JSDoc. */
@@ -109,9 +155,8 @@ const GLOBALS_SUMMARY = `
 - \`tasklist(name, seed?)\` — run a named tasklist and return its goal output (yields). Pass seed to share variables with tasks: \`tasklist("my_list", { topic })\`
 - \`fork(opts)\` — spawn an isolated subagent and await its typed result (yields). The subagent runs in its own context and returns ONLY what it resolves — use it as a context firewall for heavy investigation. Set \`role\`: \`'explore'\` (read-only research), \`'plan'\` (read-only design), or \`'general'\` (full toolkit, default). Launch several at once with \`Promise.all([fork({role:'explore',...}), fork({role:'explore',...})])\`.
 - \`delegate(packageName, agentName, action?, opts?)\` — delegate to another agent (yields). With an \`action\` id it runs that action; omit \`action\` to let the agent run model-driven and pick one of its own actions/tasklists.
-- \`solve(opts)\` — verifier-gated escalation (yields). Runs an attempt, and ONLY while a check keeps failing escalates: single → retry-with-feedback → race-N, bounded by budget. Give \`verifyCommand\` (a shell check — tests/type-check; exit 0 = pass) or \`verifyCondition\` (a condition over the output). With no verify it runs exactly once. Returns \`{ value, rung, attempts, verified }\`. Use it ONLY when you have a real check; otherwise call \`fork\` directly.
 
-Value-yielding globals (ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate, solve) end the current turn.
+Value-yielding globals (ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate) end the current turn.
 display() is void and does not end the turn.
 
 IMPORTANT: ask(), tasklist(), and delegate() all return unknown. Cast results to use them:
@@ -190,53 +235,101 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
     sections.push(`# Available Functions\n\nCall directly (already in scope):\n\n${fnParts.join('\n')}`);
   }
 
-  // 4b. Knowledge tree
-  const knowledgeDomains = Object.keys(space.knowledge.domains);
-  if (knowledgeDomains.length > 0 && agent.config.knowledge.length > 0) {
-    const relevantDomains = agent.config.knowledge.filter((k) => knowledgeDomains.includes(k));
-    if (relevantDomains.length > 0) {
-      const domainLines = relevantDomains.map((slug) => {
-        const domain = space.knowledge.domains[slug]!;
-        const fields = Object.entries(domain.fields).map(([fSlug, f]) => {
-          const options = Object.keys(f.options).join(', ');
-          return `  - \`${fSlug}\` (${f.type}): ${options ? `options: ${options}` : 'no options'}`;
-        });
-        return `- **${slug}**:\n${fields.join('\n')}`;
-      });
-      sections.push(`# Knowledge\n\nAccess with \`loadKnowledge(domain, field, option)\`:\n\n${domainLines.join('\n')}`);
+  // 4b. Knowledge — refs are "domain/field" (on-demand: list the field + its
+  // options, agent loads via loadKnowledge()) or "domain/field/option" (PRELOAD:
+  // inject the option's body directly, and do NOT list its sibling options —
+  // the agent only has access to the one it was bound to).
+  if (agent.config.knowledge.length > 0) {
+    const preloadByKey = new Map((opts.knowledgePreloads ?? []).map((p) => [`${p.domainSlug}/${p.fieldSlug}`, p]));
+    const onDemandLines: string[] = [];
+    const preloadParts: string[] = [];
+    const describedDomains = new Set<string>();
+    const domainDescLines: string[] = [];
+
+    for (const ref of agent.config.knowledge) {
+      const parts = ref.split('/');
+      const domainSlug = parts[0];
+      const fieldSlug = parts[1];
+      if (!domainSlug || !fieldSlug) continue;
+      const domain = space.knowledge.domains[domainSlug];
+      if (!domain) continue;
+      const field = domain.fields[fieldSlug];
+      if (!field) continue;
+
+      // Prepend each referenced domain's description once.
+      if (domain.description && !describedDomains.has(domainSlug)) {
+        describedDomains.add(domainSlug);
+        domainDescLines.push(`**${domainSlug}**: ${domain.description}`);
+      }
+
+      const preload = parts.length === 3 ? preloadByKey.get(`${domainSlug}/${fieldSlug}`) : undefined;
+      if (preload) {
+        const body =
+          typeof preload.value === 'object' && preload.value !== null && 'body' in preload.value
+            ? String((preload.value as { body?: unknown }).body ?? '')
+            : String(preload.value);
+        preloadParts.push(
+          `- **${domainSlug}/${fieldSlug}** is preloaded with option \`${preload.optionSlug}\` — you do NOT have access to its other options:\n\n${body}`,
+        );
+      } else {
+        const options = Object.keys(field.options).join(', ');
+        onDemandLines.push(`  - \`${domainSlug}/${fieldSlug}\` (${field.type}): ${options ? `options: ${options}` : 'no options'}`);
+      }
+    }
+
+    const knowledgeParts: string[] = [];
+    if (domainDescLines.length > 0) knowledgeParts.push(domainDescLines.join('\n'));
+    if (preloadParts.length > 0) knowledgeParts.push(preloadParts.join('\n\n'));
+    if (onDemandLines.length > 0) {
+      knowledgeParts.push(`Access with \`loadKnowledge(domain, field, option)\`:\n\n${onDemandLines.join('\n')}`);
+    }
+    if (knowledgeParts.length > 0) {
+      sections.push(`# Knowledge\n\n${knowledgeParts.join('\n\n')}`);
     }
   }
 
-  // 4c. Components
+  // 4c. Components — AST-based props + JSDoc (replaces the old regex prop scan).
+  // Form components are authored as a single source file; a few callers may
+  // still hand us the legacy `{web, ink}` shape pending the core loader
+  // migration to single-file form components — read `.web` defensively then.
   const agentComponents = getAgentComponents(space, agent);
   const viewNames = Object.keys(agentComponents.view);
   const formNames = Object.keys(agentComponents.form);
   if (viewNames.length > 0 || formNames.length > 0) {
     const compParts: string[] = [];
     for (const [name, src] of Object.entries(agentComponents.view)) {
-      const props = extractComponentProps(src);
-      compParts.push(`- **${name}** (view): \`<${name}${props ? ` ${props}` : ''} />\``);
+      const props = renderComponentPropsExample(name, src);
+      const doc = extractComponentDoc(name, src);
+      compParts.push(`- **${name}** (view)${doc ? ` — ${doc}` : ''}: \`<${name}${props ? ` ${props}` : ''} />\``);
     }
-    for (const [name, { web }] of Object.entries(agentComponents.form)) {
-      const props = extractComponentProps(web);
-      compParts.push(`- **${name}** (form — use with ask()): \`await ask(<${name}${props ? ` ${props}` : ''} />)\``);
+    for (const [name, formSrc] of Object.entries(agentComponents.form)) {
+      const src = typeof formSrc === 'string' ? formSrc : formSrc.web;
+      const props = renderComponentPropsExample(name, src);
+      const doc = extractComponentDoc(name, src);
+      compParts.push(`- **${name}** (form — use with ask())${doc ? ` — ${doc}` : ''}: \`await ask(<${name}${props ? ` ${props}` : ''} />)\``);
     }
     sections.push(`# Components\n\n${compParts.join('\n')}`);
   }
 
-  // 5. Direct dependency agents
+  // 5. Direct dependency agents — metadata + description + ONLY the allowed
+  // actions (allowedActions undefined ⇒ all actions are allowed).
   if (directDeps.length > 0) {
-    const depParts = directDeps.map(({ agent: depAgent, target }) => {
+    const depParts = directDeps.map(({ agent: depAgent, target, allowedActions }) => {
       const slash = target.lastIndexOf('/');
-      const pkgName = target.slice(0, slash);
-      const agentName = target.slice(slash + 1);
-      const actionLines = depAgent.actions
-        .map((a) => `  - \`${a.id}\`: ${a.description}`)
-        .join('\n');
-      const callExample = depAgent.actions[0]
-        ? `delegate("${pkgName}", "${agentName}", "${depAgent.actions[0].id}", { query, context })`
+      const pkgName = slash >= 0 ? target.slice(0, slash) : target;
+      const agentName = slash >= 0 ? target.slice(slash + 1) : target;
+      const visibleActions = allowedActions
+        ? depAgent.actions.filter((a) => allowedActions.includes(a.id))
+        : depAgent.actions;
+      const actionLines = visibleActions.map((a) => `  - \`${a.id}\`: ${a.description}`).join('\n');
+      const restrictionNote = allowedActions
+        ? `\n  (restricted to: ${allowedActions.join(', ')})`
+        : '';
+      const callExample = visibleActions[0]
+        ? `delegate("${pkgName}", "${agentName}", "${visibleActions[0].id}", { query, context })`
         : `delegate("${pkgName}", "${agentName}", actionId)`;
-      return `## ${target} — ${depAgent.title}\n${actionLines}\n\n  Example: \`${callExample}\``;
+      const refForm = slash >= 0 ? target : agentName;
+      return `## \`${refForm}\` — ${depAgent.title}${restrictionNote}\n${depAgent.instructBody ? `${depAgent.instructBody}\n\n` : ''}${actionLines}\n\n  Example: \`${callExample}\``;
     });
     sections.push(`# Delegatable Agents\n\n${depParts.join('\n\n')}`);
   }

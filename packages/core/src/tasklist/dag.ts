@@ -4,11 +4,9 @@ import { evaluateCondition } from './condition-dsl.js';
 export function validateDag(tasks: Record<string, TaskNode>): void {
   const ids = Object.keys(tasks);
 
-  // Check exactly one goal
+  // At most one explicit goal. 0 is valid — the effective goal then falls
+  // back to the last task in file order (see resolveGoalTask below).
   const goalTasks = ids.filter((id) => tasks[id]!.goal);
-  if (goalTasks.length === 0) {
-    throw new Error('Tasklist must have exactly one task with goal: true');
-  }
   if (goalTasks.length > 1) {
     throw new Error(`Tasklist has multiple goal tasks: ${goalTasks.join(', ')}`);
   }
@@ -47,6 +45,19 @@ export function validateDag(tasks: Record<string, TaskNode>): void {
   for (const id of ids) {
     if (color[id] === WHITE) dfs(id);
   }
+}
+
+/**
+ * Resolve the tasklist's effective goal task: the explicit `goal: true` task
+ * when present, else the last task in file order (tasks are inserted into
+ * `tasks` in file/NN-prefix order by `loadTasklist`, which JS object
+ * insertion order preserves for string keys).
+ */
+export function resolveGoalTask(tasks: Record<string, TaskNode>): TaskNode | undefined {
+  const values = Object.values(tasks);
+  const explicit = values.find((t) => t.goal);
+  if (explicit) return explicit;
+  return values[values.length - 1];
 }
 
 export function topoSort(tasks: Record<string, TaskNode>): TaskNode[] {

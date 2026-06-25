@@ -8,7 +8,7 @@ function fmtDuration(ms: number): string {
 }
 
 const KIND_ICON: Record<string, string> = {
-  run: '⟳', fork: '⑂', delegate: '⤷', tasklist: '☰', solve: '✦', session: '◉',
+  run: '⟳', fork: '⑂', delegate: '⤷', tasklist: '☰', session: '◉',
 };
 
 const STATUS_COLOR: Record<string, string> = {

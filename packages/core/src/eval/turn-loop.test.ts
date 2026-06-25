@@ -58,7 +58,7 @@ describe('stripMarkdownFences', () => {
   });
 
   it('drops a stray fence language tag left behind when the stream splits ``` from its tag', () => {
-    // The boundary that broke a live solve attempt: '```' arrived in one chunk
+    // The boundary that broke a live run: '```' arrived in one chunk
     // (stripped) and 'typescript' alone in the next, leaking a bogus statement.
     expect(stripFences('typescript\nconst source = 1;')).toBe('const source = 1;');
     expect(stripFences('ts')).toBe('');

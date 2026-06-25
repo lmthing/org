@@ -35,7 +35,7 @@ These relative paths resolve against the project directory.
 2. **Research the web** — when the request needs current/external facts, sources, or deep
    investigation:
    ```typescript
-   const report = await delegate('deep_research', 'researcher', 'research_report', { query: '<the question>' });
+   const report = await delegate('system-deep-research', 'researcher', 'research_report', { query: '<the question>' });
    display(JSON.stringify(report, null, 2));
    ```
 
@@ -45,7 +45,7 @@ These relative paths resolve against the project directory.
    it back ready to run:
    ```typescript
    // Turn 1 — synthesize (the architect runs the whole pipeline for you):
-   const t = await delegate('architect', 'architect', 'synthesize_and_run', { topic: '<the user request, verbatim>', goal: '<what the new agent should do>' }) as { spaceKey: string; agentSlug: string; actionId: string; query: string };
+   const t = await delegate('system-architect', 'architect', 'synthesize_and_run', { topic: '<the user request, verbatim>', goal: '<what the new agent should do>' }) as { spaceKey: string; agentSlug: string; actionId: string; query: string };
    ```
    ```typescript
    // Turn 2 — run the freshly-built agent and show its answer:
@@ -57,7 +57,7 @@ These relative paths resolve against the project directory.
 4. **Write or fix code** — delegate to the engineer (general coding) or the solver
    (verifier-gated, when there is a clear pass/fail check):
    ```typescript
-   const out = await delegate('engineer', 'engineer', { query: '<the coding task>' });
+   const out = await delegate('system-engineer', 'engineer', { query: '<the coding task>' });
    display(JSON.stringify(out, null, 2));
    ```
 
@@ -65,10 +65,10 @@ These relative paths resolve against the project directory.
    fact, or instruction about themselves ("call me X", "I prefer Y", "I work on Z"), save
    it via the memory agent so it persists across projects and sessions:
    ```typescript
-   const m = await delegate('memory', 'memory', { query: 'Remember: <the fact to store>' });
+   const m = await delegate('user-memory', 'memory', { query: 'Remember: <the fact to store>' });
    ```
    Recall earlier memories the same way when relevant:
-   `await delegate('memory', 'memory', { query: 'What do you know about the user?' })`.
+   `await delegate('user-memory', 'memory', { query: 'What do you know about the user?' })`.
 
 ## Rules
 

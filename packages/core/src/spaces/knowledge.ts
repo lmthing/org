@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import type { Space } from './load.js';
 import { parseFrontmatter } from './frontmatter.js';
+import { validateKnowledgeOptionFrontmatter } from './load.js';
 
 /**
  * Resolve a knowledge path to a value.
@@ -49,6 +50,7 @@ export async function resolveKnowledge(space: Space, path: string[]): Promise<un
   }
 
   const content = await readFile(filePath, 'utf8');
+  validateKnowledgeOptionFrontmatter(content, filePath);
   const { data, body } = parseFrontmatter(content, filePath);
 
   // If there's frontmatter data, return structured object

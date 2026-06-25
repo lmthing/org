@@ -90,9 +90,9 @@ describe('injectHostTools — readFileRaw / writeFileRaw', () => {
 });
 
 describe('injectHostTools — relative paths resolve against the space dir', () => {
-  // Regression: solve()'s fork writes a RELATIVE work/candidate.ts while the
-  // verifier runs with cwd = spaceDir. Relative paths must resolve against the
-  // space dir (not process.cwd()) so the file written is the file verified.
+  // Regression: a fork that writes a RELATIVE work/candidate.ts while execShell
+  // runs with cwd = spaceDir. Relative paths must resolve against the
+  // space dir (not process.cwd()) so the file written is the file run.
   let vm: VM;
   let dir: string;
 

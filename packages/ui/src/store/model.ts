@@ -10,7 +10,7 @@ export interface WireEvent {
 // ─── Model types ─────────────────────────────────────────────────────────────
 
 export type NodeStatus = 'queued' | 'running' | 'done' | 'error' | 'skipped';
-export type NodeKind = 'session' | 'run' | 'fork' | 'delegate' | 'tasklist' | 'task' | 'solve';
+export type NodeKind = 'session' | 'run' | 'fork' | 'delegate' | 'tasklist' | 'task';
 
 export interface LlmCall {
   ts: number;
@@ -117,7 +117,7 @@ export function applyWireEvent(m: SessionModel, we: WireEvent): void {
     if (m.rootId) ensureNode(m, m.rootId).queue = { active: ev.active, queued: ev.queued, max: ev.max };
     return;
   }
-  if (ev.type === 'llm_progress' || ev.type === 'solve_verify') {
+  if (ev.type === 'llm_progress') {
     // Ephemeral / attach-only; record under its node if it has one, else ignore.
     const id = (ev as { nodeId?: string }).nodeId;
     if (id) ensureNode(m, id).eventSeqs.push(we.seq);

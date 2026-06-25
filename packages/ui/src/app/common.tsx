@@ -24,7 +24,6 @@ const KIND_COLOR: Record<NodeKind, string> = {
   delegate: 'text-lm-purple',
   tasklist: 'text-lm-amber',
   task: 'text-lm-amber',
-  solve: 'text-lm-green',
 };
 
 export function StatusIcon({ status }: { status: NodeStatus }): React.ReactElement {

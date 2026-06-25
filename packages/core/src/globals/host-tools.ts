@@ -79,9 +79,9 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
   };
 
   // The space dir is the working root for an agent's file operations. Relative
-  // paths resolve against it — the SAME root that solve()'s verifyCommand runs in
-  // (session.ts execCommand uses cwd: spaceDir). Without this, a fork that does
-  // writeFile("work/x.ts") would write relative to process.cwd() while the verifier
+  // paths resolve against it — the SAME root that execShell runs in
+  // (cwd: spaceDir). Without this, a fork that does
+  // writeFile("work/x.ts") would write relative to process.cwd() while execShell
   // looks under spaceDir, so they only agree when the CLI is launched from inside
   // the space. Absolute paths pass through untouched.
   // Absolute so that paths already built from LMTHING_SPACE_DIR (memory/todo's
@@ -100,8 +100,8 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
   // execShell — synchronous shell execution. Read-only profiles block mutating commands.
   // `exitCode` lets the model distinguish failure modes (127 not-found, 126 denied,
   // 1 generic, etc.); `opts.timeout` overrides the default for slow first-run installs.
-  // Runs with `cwd: spaceRoot` so relative paths agree with readFileRaw/writeFileRaw and
-  // solve()'s verifier — a fork that writeFile("work/x.ts") can then run it with
+  // Runs with `cwd: spaceRoot` so relative paths agree with readFileRaw/writeFileRaw —
+  // a fork that writeFile("work/x.ts") can then run it with
   // execShell("npx tsx work/x.ts") regardless of where the CLI was launched.
   setGlobal('execShell', (cmd: string, execOpts?: { timeout?: number }) => {
     if (!allowWrite && !isReadOnlyCommand(cmd)) {

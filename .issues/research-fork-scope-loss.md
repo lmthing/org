@@ -71,7 +71,7 @@ A statement is appended to `accumulatedContext` ONLY after it evaluates cleanly
      but is a `declare`/`const` line added to `accumulatedContext` so tsc sees them?). If
      not, synthesize `declare const <name>: any;` lines for yield-bound names and append
      them. This is the likely real fix.
-   - If H2: strengthen the research task instruction (`system-spaces/architect/tasklists/synthesize_and_run/02-research.md`)
+   - If H2: strengthen the research task instruction (`system-spaces/system-architect/tasklists/synthesize_and_run/02-research.md`)
      AND make the harness resilient regardless (don't rely on prompt).
    - If H3: extend `extractBindingNames` / `extractBindingPattern` to cover the missed form;
      add a regression test.
@@ -101,5 +101,5 @@ A statement is appended to `accumulatedContext` ONLY after it evaluates cleanly
 - `packages/core/src/eval/error-rewind.ts` — buildErrorBlock in-scope-names hint
 - `packages/core/src/fork/fork.ts` — fork VM setup + salvageOutput
 - `packages/core/src/fork/roles.ts` — FIREWALL_TAIL SCOPE rule
-- `packages/core/system-spaces/architect/tasklists/synthesize_and_run/02-research.md`
+- `packages/core/system-spaces/system-architect/tasklists/synthesize_and_run/02-research.md`
 - `packages/core/src/tasklist/schema.ts` — validateOutput

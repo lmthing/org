@@ -1,11 +1,23 @@
 import type { Space, AgentDef } from '../spaces/load.js';
 import { loadSpace } from '../spaces/load.js';
+import { parseDelegateRef } from './ref.js';
 
 export class DelegateRegistry {
   constructor(private spaces: Map<string, Space>) {}
 
   resolve(target: string): { space: Space; agent: AgentDef } {
     const [spaceName, agentSlug] = this.parseTarget(target);
+
+    // Bare slug (no space component, e.g. self-scoped "agent" refs that reach
+    // this registry without being pre-resolved against the caller's own space):
+    // search every registered space for that agent slug.
+    if (spaceName === undefined) {
+      for (const space of this.spaces.values()) {
+        const agent = space.agents[agentSlug];
+        if (agent) return { space, agent };
+      }
+      throw new Error(`Cannot resolve delegate target "${target}": no registered space has an agent "${agentSlug}"`);
+    }
 
     // Look through spaces by dir or name
     let matchedSpace: Space | undefined;
@@ -47,7 +59,7 @@ export class DelegateRegistry {
   }
 
   async preloadDirect(space: Space, agent: AgentDef): Promise<void> {
-    for (const dep of agent.dependencies) {
+    for (const dep of agent.canDelegateTo) {
       const [_spaceName, depAgentSlug] = this.parseTarget(dep);
       const depAgent = space.agents[depAgentSlug];
       if (depAgent && !this.spaces.has(dep)) {
@@ -90,16 +102,27 @@ export class DelegateRegistry {
     return { space, agent };
   }
 
-  private parseTarget(target: string): [string, string] {
-    const idx = target.lastIndexOf('/');
-    if (idx === -1) {
-      throw new Error(`Invalid delegate target "${target}": expected "space/agent" format`);
+  /**
+   * Parse a delegate target into [spaceRef, agentSlug]. Accepts the full ref
+   * grammar (see delegate/ref.ts): a bare slug ("agent", self scope) yields
+   * `spaceRef === undefined` — `resolve()` then searches every registered
+   * space for that agent slug instead of requiring an exact space match. A
+   * trailing "#action" is stripped — action enforcement happens at the
+   * delegate-call layer (globals/delegate.ts + delegate.ts), not here.
+   */
+  private parseTarget(target: string): [string | undefined, string] {
+    const parsed = parseDelegateRef(target);
+    if (parsed.scope === 'self') {
+      return [undefined, parsed.agent];
     }
-    return [target.slice(0, idx), target.slice(idx + 1)];
+    return [parsed.space!, parsed.agent];
   }
 
   private matchesSpace(space: Space, name: string): boolean {
-    if (space.packageName === name) return true;
-    return space.dir === name || space.dir.endsWith('/' + name);
+    // Tolerate an "npm:" prefix in the name being matched against (the dep
+    // string form), since package-name/dir matching is prefix-agnostic.
+    const bare = name.startsWith('npm:') ? name.slice('npm:'.length) : name;
+    if (space.packageName === bare) return true;
+    return space.dir === bare || space.dir.endsWith('/' + bare);
   }
 }

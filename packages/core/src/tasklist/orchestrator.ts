@@ -1,9 +1,10 @@
 import type { Space } from '../spaces/load.js';
 import type { ForkEngine } from '../fork/fork.js';
 import { loadTasklist } from '../spaces/tasklist-load.js';
-import { validateDag, findReadyTasks } from './dag.js';
+import { validateDag, findReadyTasks, resolveGoalTask } from './dag.js';
 import type { TaskNode } from '../spaces/tasklist-load.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
+import { validateInput } from './schema.js';
 
 export async function runTasklist(opts: {
   name: string;
@@ -20,8 +21,20 @@ export async function runTasklist(opts: {
     throw new Error(`Tasklist "${name}" not found in space`);
   }
 
+  // Validate the runtime seed against the tasklist's declared input schema
+  // (tasklists/<name>/index.md frontmatter). No declared schema → accept any seed.
+  if (tasklistDir.input && Object.keys(tasklistDir.input).length > 0) {
+    const errors = validateInput(tasklistDir.input, seed ?? {});
+    if (errors.length > 0) {
+      throw new Error(
+        `Tasklist "${name}" received an invalid seed:\n  - ${errors.join('\n  - ')}`,
+      );
+    }
+  }
+
   const tasks = await loadTasklist(tasklistDir.slug, tasklistDir.files);
   validateDag(tasks);
+  const goalTask = resolveGoalTask(tasks);
 
   // Mint a tasklist node so the tree shows this orchestration scope
   const tasklistScope = tracer && parentScope
@@ -119,7 +132,7 @@ export async function runTasklist(opts: {
           done.add(task.id);
           allOutputs[task.id] = output;
           if (tracer) { const ts = taskScopes.get(task.id); if (ts) tracer.end(ts, 'done', { result: output }); }
-          if (task.goal) goalOutput = output;
+          if (goalTask && task.id === goalTask.id) goalOutput = output;
         } else {
           // Fork failed
           const failedTask = ready[results.indexOf(result)]!;

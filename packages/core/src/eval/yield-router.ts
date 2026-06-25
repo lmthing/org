@@ -30,11 +30,9 @@ export interface YieldRouterContext {
   ) => Promise<unknown>;
   /** Fired after a tasklist resolves (delegate uses it for auto-capture). */
   onTasklistResult?: (name: string, result: unknown) => void;
-  /** Run a shell command host-side (cwd = space dir) for `solve`'s verifyCommand.
-   *  Optional: when absent, verifyCommand-based solve verification is unavailable
-   *  (verifyCondition still works). */
+  /** Run a shell command host-side (cwd = space dir). */
   execCommand?: (cmd: string) => { ok: boolean; output: string };
-  /** Tracer for minting child scopes in tasklist/solve. */
+  /** Tracer for minting child scopes in tasklist. */
   tracer?: Tracer;
   /** Current execution scope — becomes parentScope on spawned forks/delegates. */
   scope?: TraceScope;
@@ -91,35 +89,6 @@ export async function routeCommonYield(
         DelegateOpts | undefined,
       ];
       const value = await ctx.runDelegate(packageName, agentName, action, delegateOpts);
-      return { handled: true, value };
-    }
-    case 'solve': {
-      const engine = await ctx.getForkEngine();
-      const { runSolveYield } = await import('../fork/solve.js');
-      const { evaluateCondition } = await import('../tasklist/condition-dsl.js');
-      const solveOpts = req.args[0] as import('../fork/solve.js').SolveYieldOpts;
-      const tracer = ctx.tracer;
-      const parentScope = ctx.scope;
-      let solveScope: TraceScope | undefined;
-      if (tracer && parentScope) {
-        solveScope = tracer.child(parentScope, 'solve', 'solve', {
-          maxAttempts: solveOpts.maxAttempts,
-        });
-      }
-      const value = await runSolveYield(solveOpts, {
-        fork: (task) => {
-          if (solveScope) (task as unknown as ForkTask).parentScope = solveScope;
-          return engine.fork(task as unknown as ForkTask);
-        },
-        execCommand: ctx.execCommand,
-        evaluateCondition,
-        onVerify: solveScope && tracer ? (attempt, rung, ok, feedback) => {
-          tracer!.write({ ts: Date.now(), type: 'solve_verify', context: solveScope!.label, nodeId: solveScope!.nodeId, attempt, rung, ok, feedback });
-        } : undefined,
-      });
-      if (solveScope && tracer) {
-        tracer.end(solveScope, 'done', { result: value });
-      }
       return { handled: true, value };
     }
     default:

@@ -8,7 +8,7 @@ import type { VM } from '../sandbox/quickjs.js';
 import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { summarizeHistory } from '../context/summarize.js';
-import { buildSystemBlock } from '../context/system-block.js';
+import { buildSystemBlock, resolvePreloadedKnowledge } from '../context/system-block.js';
 import { loadSpace } from '../spaces/load.js';
 import type { Space } from '../spaces/load.js';
 import {
@@ -26,7 +26,6 @@ import { createLoadKnowledgeGlobal } from '../globals/load-knowledge.js';
 import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
-import { createSolveGlobal } from '../globals/solve.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
@@ -184,17 +183,20 @@ export class Session {
     this.injectGlobals();
 
     // 5. Resolve direct dependencies
-    const directDeps = resolveDirectDeps(this.space, agent.dependencies);
+    const directDeps = resolveDirectDeps(this.space, agent.canDelegateTo);
 
     // 6. Build system block (system functions rendered as a concise Built-in Tools list)
     const systemFns = systemFunctionSources(this.systemSpaces);
-    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns });
+    const knowledgePreloads = await resolvePreloadedKnowledge(this.space, agent);
+    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads });
 
     // 6b. Build ambient DTS overlay — system functions are always in scope, then agent functions
     const { functions: agentFunctions, functionsBundled: agentFunctionsBundled } =
       this.buildInjectedFunctions(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
-    const overlay = buildOverlay(agentFunctions, agentComponents);
+    const overlay = buildOverlay(agentFunctions, agentComponents, (name, message) => {
+      this.opts.renderHost.log(`[warn] ${name}: ${message}`);
+    });
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
     this.systemBlock = systemBlock;
     this.ambientDts = ambientDts;
@@ -300,12 +302,15 @@ export class Session {
     if (!agent) {
       throw new Error(`Agent "${this.opts.agentSlug}" not found in space at "${this.opts.spaceDir}"`);
     }
-    const directDeps = resolveDirectDeps(space, agent.dependencies);
+    const directDeps = resolveDirectDeps(space, agent.canDelegateTo);
     const systemFns = systemFunctionSources(this.systemSpaces);
-    const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFns });
+    const knowledgePreloads = await resolvePreloadedKnowledge(space, agent);
+    const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads });
     const { functions: agentFunctions } = this.buildInjectedFunctions(space, agent);
     const agentComponents = getAgentComponents(space, agent);
-    const overlay = buildOverlay(agentFunctions, agentComponents);
+    const overlay = buildOverlay(agentFunctions, agentComponents, (name, message) => {
+      this.opts.renderHost.log(`[warn] ${name}: ${message}`);
+    });
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
     return { agentSlug: resolvedSlug, systemBlock, ambientDts };
   }
@@ -344,13 +349,16 @@ export class Session {
     this.history.append({ role: 'user', content: message, blockType: 'normal' });
 
     // Resolve direct deps and build system block
-    const directDeps = resolveDirectDeps(this.space, agent.dependencies);
+    const directDeps = resolveDirectDeps(this.space, agent.canDelegateTo);
     const systemFns = systemFunctionSources(this.systemSpaces);
-    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns });
+    const knowledgePreloads = await resolvePreloadedKnowledge(this.space, agent);
+    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads });
     const { functions: agentFunctions, functionsBundled: agentFunctionsBundled } =
       this.buildInjectedFunctions(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
-    const overlay = buildOverlay(agentFunctions, agentComponents);
+    const overlay = buildOverlay(agentFunctions, agentComponents, (name, message) => {
+      this.opts.renderHost.log(`[warn] ${name}: ${message}`);
+    });
     const ambientDts = LIBRARY_DTS + '\n' + overlay;
     this.agentFunctions = agentFunctions;
     this.agentFunctionsBundled = agentFunctionsBundled;
@@ -496,7 +504,6 @@ export class Session {
     injectGlobal(this.vm.ctx, 'fork', createForkGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
-    injectGlobal(this.vm.ctx, 'solve', createSolveGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
 
     // Shared synchronous host substrate: console, execShell, process.env, fetch,
@@ -615,8 +622,8 @@ export class Session {
       tracer: this.tracer,
       scope: this.currentScope ?? undefined,
       getForkEngine: () => this.getForkEngine(),
-      // solve()'s verifyCommand runs host-side with the space dir as cwd, so a
-      // checker (tests / tsc) sees files written by the attempt forks.
+      // Runs host-side with the space dir as cwd, so a checker (tests / tsc) sees
+      // files written by attempt forks.
       execCommand: (cmd: string) => {
         try {
           const out = execSync(cmd, { cwd: this.opts.spaceDir, maxBuffer: 8 * 1024 * 1024, timeout: 60000 });

@@ -4,11 +4,11 @@ import { defaultSystemSpaceDirs } from '@lmthing/core';
 
 /**
  * The system space whose presence proves a runtime root is fully materialized.
- * `thing` is the default agent every session loads, so if it's missing the
+ * `user-thing` is the default agent every session loads, so if it's missing the
  * runtime is broken (or only half-initialized) regardless of whether `system/`
  * exists as an empty directory.
  */
-const SENTINEL_SYSTEM_SPACE = 'thing';
+const SENTINEL_SYSTEM_SPACE = 'user-thing';
 
 /**
  * True when `<root>/system/<sentinel>` is absent. Used to decide whether to
