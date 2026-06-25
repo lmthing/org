@@ -99,7 +99,7 @@ Add temporary `console.log(vm.getScope())` calls in `turn-loop.ts` after `evalSt
 ## Live observability (the fastest way to debug a real run)
 
 Every run emits a hierarchical trace spine (`sandbox/trace.ts`): each scope
-(session→run→fork→delegate→tasklist→task→solve) is a node with `nodeId`/`parentId`,
+(session→run→fork→delegate→tasklist→task) is a node with `nodeId`/`parentId`,
 and per-node statements / LLM requests+responses (with retry `attempt`) / yields /
 variables / errors. Two ways to read it:
 

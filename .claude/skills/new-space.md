@@ -18,9 +18,7 @@ my-space/
     myFn.ts             ← TypeScript, export function myFn(...)
   components/
     form/
-      MyForm/
-        web.tsx         ← React form component with Props interface
-        ink.tsx         ← Ink terminal version
+      MyForm.tsx        ← Single TSX form component (catalog components only)
     view/
       MyView.tsx        ← React view component (web only; terminal gets plain text)
   tasklists/
@@ -54,7 +52,7 @@ actions:
     label: Do Thing
     description: Runs the thing tasklist
     tasklist: my-tasklist
-dependencies:
+canDelegateTo:
   - other-space/other-agent
 ---
 
@@ -64,7 +62,7 @@ You are a helpful assistant that...
 ```
 
 - `functions` and `components` scope what is injected into the VM and DTS overlay.
-- `dependencies` are eager-loaded; their action summaries appear in the system block under "Delegatable Agents".
+- `canDelegateTo` entries are eager-loaded; their action summaries appear in the system block under "Delegatable Agents".
 
 ## Functions (`functions/*.ts`)
 
@@ -80,15 +78,19 @@ The function is transpiled (TypeScript → JS) and eval'd as a script in the VM,
 
 For async functions that return values, they can `await` normally inside the VM context. They cannot call value-yielding globals (`ask`, `sleep`, etc.) — those belong in model-generated code only.
 
-## Form Components (`components/form/<Name>/web.tsx`)
+## Form Components (`components/form/<Name>.tsx`)
 
-Must define a `Props` interface and export a default React component:
+A **single** TSX file (default export) built from catalog components only, exactly like a view component. The former `web.tsx`/`ink.tsx` two-file split has been removed.
+
+Must define a `Props` interface (or inline type) and export a default React component:
 
 ```tsx
+import { Slider } from '@lmthing/ui';
+
 interface Props {
   label?: string;
-  onSubmit?: (value: T) => void;   // ← mark callbacks optional; runtime injects them
-  requiredProp: string;            // ← data props stay required
+  onSubmit?: (value: number) => void;  // ← mark callbacks optional; runtime injects them
+  requiredProp: string;                // ← data props stay required
 }
 
 export default function MyForm({ label, requiredProp }: Props) { ... }
@@ -98,8 +100,6 @@ export default function MyForm({ label, requiredProp }: Props) { ... }
 
 The overlay DTS generator (`overlay.ts`) automatically makes function-typed props optional in the ambient declaration so the model can write `<MyForm requiredProp="x" />` without providing `onSubmit`.
 
-The `ink.tsx` sibling uses Ink + `ink-text-input` instead of React DOM.
-
 ### Prefer the design system before authoring components
 
 A cross-platform **design-system catalog** (`packages/core/src/ui/catalog.ts`) ships ~30 display + ~33 form components that render on **both** terminal and web with **no per-space files**. Reach for these first:
@@ -108,10 +108,6 @@ A cross-platform **design-system catalog** (`packages/core/src/ui/catalog.ts`) s
 - **Forms** — `const v = await ask(<Form><TextField name="title"/><Select name="env" options={["dev","prod"]}/></Form>)`. A `<Form>` resolves to an object keyed by field `name`; a bare control (`ask(<Select .../>)`) resolves to the single value. Terminal renders an interactive Ink form (`ink-form.tsx`, sequential field stepping); web renders themed controls (`CatalogForm.tsx`). Flattening/coercion is shared via `flattenForm`/`coerceValue` (`packages/core/src/ui/form.ts`).
 
 Only write `components/form/<Name>` when you need custom UI beyond the catalog.
-
-### Single-source custom components (Ink-compat)
-
-When you do author a custom component, you can write **one** file against Ink primitives and have it run on web too: `import { Box, Text, TextInput } from 'ink'` / `'ink-text-input'`. The web bundler (`serve.ts`) aliases those imports to the web compat layer (`@repl/ui/compat`, in `packages/ui/src/compat/`), which maps Ink props to themed CSS. (The split `web.tsx` + `ink.tsx` form remains supported.)
 
 ### Theming (web)
 
@@ -133,7 +129,7 @@ Boil the water. Confirm when the pot is at a full rolling boil.
 ```
 
 - Files are sorted by numeric prefix (`01-`, `02-`, ...).
-- Exactly one task must have `goal: true` — this is the tasklist's return value.
+- At most one task may have `goal: true` — this is the tasklist's return value. If none is set, the last task (by file order) is the goal.
 - `dependsOn` references other task IDs in the same tasklist.
 - `condition` (optional): a condition-DSL expression evaluated against upstream outputs, e.g. `garnish.done == true`.
 - `optional: true` means failure is non-blocking.
@@ -152,6 +148,6 @@ Fix: check filenames and frontmatter match exactly (case-sensitive).
 
 ## System spaces (always-on toolkit)
 
-Every user space is automatically merged with the **system spaces** in `packages/core/system-spaces/` (`fs`, `web`, `memory`, `todo`). So every agent already has `readFile`/`writeFile`/`editFile`/`glob`/`grep`/`listDir`, `webSearch`/`webFetch`, `remember`/`recall`/`recallAll`/`forget`, and `todoWrite`/`todoRead` — you do NOT declare them in the agent's `functions:` list, and you should not re-implement them. They appear in the system prompt under `# Built-in Tools`.
+Every user space is automatically merged with the **system spaces** in `packages/core/system-spaces/` (`system-global`, `system-engineer`, `system-architect`, `system-deep-research`, `user-memory`, `user-thing`). The `system-global` space's functions are universally injected into every agent — `readFile`/`writeFile`/`editFile`/`glob`/`grep`/`listDir`, `webSearch`/`webFetch`, `remember`/`recall`/`recallAll`/`forget`, and `todoWrite`/`todoRead` — you do NOT declare them in the agent's `functions:` list, and you should not re-implement them. They appear in the system prompt under `# Built-in Tools`.
 
 The user space **wins on name collisions**, so you can override a system tool by defining a function of the same name. To add/modify a system space or a `fork({ role })`, see `@.claude/skills/system-spaces.md`.

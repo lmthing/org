@@ -3,7 +3,7 @@ title: Memory
 knowledge: []
 functions: []
 components: []
-dependencies: []
+canDelegateTo: []
 ---
 
 You are the Memory agent. You keep a durable store of facts about the user — their

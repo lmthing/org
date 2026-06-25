@@ -31,9 +31,7 @@ A "Space" is defined by a standard file system architecture. It encapsulates the
 │   ├── view/                 # display components
 │   │   └── <ComponentName>.tsx
 │   └── form/                 # interactive inputs
-│       └── <ComponentName>/
-│           ├── web.tsx
-│           └── ink.tsx
+│       └── <Name>.tsx
 ├── tasklists/                # optional: DAG workflows
 │   └── <tasklist-slug>/
 │       └── NN-<task-id>.md   # numbered, sorted lexically execution steps
@@ -52,7 +50,7 @@ title: <Agent Display Name>
 knowledge: [<domain>/<field>, ...]             # refs to knowledge/ tree
 functions: [<functionName>, ...]               # refs to functions/ files
 components: [<ComponentName>, ...]             # refs to components/ (view or form)
-dependencies: [<space-ref>/<agent-slug>, ...]  # delegate access
+canDelegateTo: [<space-ref>/<agent-slug>, ...]  # delegate access
 defaultAction: <action-id>                     # optional: robust freeform fallback
 actions:
   - id: <action-id>
@@ -96,7 +94,7 @@ currentTask.resolve({ resultFlag: true })
 ### Components (`components/`)
 Components give agents rich interactive capabilities.
 - **View components (`components/view/*.tsx`)**: Simple React elements for displaying data visually using `display()`.
-- **Form components (`components/form/<ComponentName>/`)**: Used with `ask()`. Requires **both** an `ink.tsx` (for CLI/terminal) and `web.tsx` (for browser application) implementation using standard UI libraries.
+- **Form components (`components/form/<Name>.tsx`)**: Used with `ask()`. A single TSX file built from catalog components, exactly like a view component. The former `web.tsx`/`ink.tsx` two-file split has been removed.
 
 ### Knowledge (`knowledge/`)
 A hierarchical context base injected into an agent.
@@ -136,7 +134,7 @@ Available inside TS `functions/`:
 
 - **Sync Eval Loop:** Statements are evaluated synchronously. The result is yielded to the host, and once resolved, injected as global variables for the subsequent turns.
 - **Host-side Yield Binding:** A bound value (e.g. `const x = await ask()`) does not continue execution via standard Javascript Promise continuations. The turn loop resolves the yield and binds `x` host-side upon resuming.
-- **System Merging:** LMThing always merges a `global` system space into all user spaces, making features like `readFile`, `execShell`, and `grep` universally accessible without specific configuration.
+- **System Merging:** LMThing always merges the system spaces into all user spaces. The `system-global` space's functions (e.g. `readFile`, `execShell`, `grep`) are universally accessible without specific configuration.
 
 ---
 

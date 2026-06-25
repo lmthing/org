@@ -45,7 +45,7 @@ This creates `.lmthing/` in the current directory:
 
 ```
 .lmthing/
-  system/     # the runtime: global, engineer, architect, solver, deep_research, memory, thing
+  system/     # the runtime: system-global, system-engineer, system-architect, system-deep-research, user-memory, user-thing
   user/       # the default project — spaces/, documents/, instructions.md, project.json
 ```
 

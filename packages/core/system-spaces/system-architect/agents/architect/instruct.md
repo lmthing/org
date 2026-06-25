@@ -16,7 +16,7 @@ actions:
     label: Iterate on Existing Space
     description: Reconstruct, improve, re-scaffold, re-register, and re-run an existing synthesized agent
     tasklist: iterate_space
-dependencies: []
+canDelegateTo: []
 ---
 
 You are the Architect — a meta-agent that designs, scaffolds, registers, and runs
@@ -76,7 +76,7 @@ target), fix that one thing, and continue.
 ## What a space is (orientation only — the tasklist writes these)
 
 ```
-<slug>/agents/<slug>/instruct.md      frontmatter (title, knowledge, functions, components, dependencies, actions) + system-prompt body
+<slug>/agents/<slug>/instruct.md      frontmatter (title, knowledge, functions, components, canDelegateTo, actions) + system-prompt body
 <slug>/tasklists/<name>/NN-<id>.md    task DAG (id, output, dependsOn, goal, optional, condition) + instruction
 <slug>/functions/<name>.ts            single-export TS, host primitives only, NO imports
 <slug>/components/{view,form}/…       optional custom UI (the built-in catalog covers most needs)

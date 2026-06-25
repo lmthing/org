@@ -50,7 +50,7 @@ Read the target space exhaustively so the spec can be mutated and re-scaffolded:
    description body), then list and read each option file. Build KnowledgeSpec[].
 
 5. **Components**: for each component name, try reading `components/view/<name>.tsx`
-   (view), `components/form/<name>/web.tsx` and `ink.tsx` (form). Build ComponentsSpec.
+   (view) or `components/form/<name>.tsx` (form — single file). Build ComponentsSpec.
 
 Resolve with:
 - `currentSpec`: the complete ScaffoldSpec object (agentSlug, agentTitle, systemPrompt,

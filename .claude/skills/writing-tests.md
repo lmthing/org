@@ -151,7 +151,7 @@ const streamFn = mockScript(['display("a");', 'display("b");']);
 // instructs it to call currentTask.resolve(...) — a reliable fork-only marker.
 const streamFn2 = mockMatch(
   [{ when: /currentTask/, respond: () => 'currentTask.resolve({ ok: true });' }],
-  () => 'const r = await solve({ /* ... */ });', // fallback = the session/orchestrator
+  () => 'const r = await delegate(/* ... */);', // fallback = the session/orchestrator
 );
 ```
 
@@ -172,6 +172,6 @@ The same builders drive the CLI via `--mock <file>` (a `.mjs` whose default expo
 - `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering.
 - `fixtures/engineer/` — mock harness for engineer agent CLI tests (agent content lives in `system-spaces/system-engineer`).
 - `fixtures/architect/` — placeholder for architect agent CLI tests (agent content lives in `system-spaces/system-architect`).
-- `fixtures/solver/` — scripted mock providers (`mock*.mjs`) for keyless solve-ladder CLI tests. NOTE: the `solver` system space has been removed (WP-5); this fixture/test set is pending removal by the solve()-removal work (WP-5b).
+- `fixtures/solver/` — scripted mock providers (`mock*.mjs`). NOTE: the `solver` system space and `solve()` global have been removed; this fixture/test set is pending removal.
 - `fixtures/sauce_master/` — global sauce technique specialist synthesized by the architect; knowledge files for 10 world cuisines; action: `recommend_sauce`.
 - `fixtures/cursor_ci/` — competitive intelligence analyst synthesized by the architect; knowledge files for 5 AI code editors (Cursor, Copilot, Windsurf, Aider, Codeium); action: `analyze`.

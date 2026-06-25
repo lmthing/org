@@ -86,5 +86,5 @@ Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has host-injecte
 - `writeFileRaw(path, content)` — File write via Node fs (no shell quoting); returns `{ ok, bytes, error? }`. Withheld in read-only fork roles.
 - `console.log/warn/error` — Routes through renderHost.log.
 
-**Path rooting:** `readFileRaw`/`writeFileRaw` resolve **relative** paths against the space dir (`LMTHING_SPACE_DIR`), not `process.cwd()` — the same root `solve()`'s `verifyCommand` runs in (`session.ts` `execCommand` uses `cwd: spaceDir`). So a fork that writes `work/candidate.ts` and a verifier that reads `work/candidate.ts` agree regardless of where the CLI was launched. Absolute paths pass through untouched.
+**Path rooting:** `readFileRaw`/`writeFileRaw` resolve **relative** paths against the space dir (`LMTHING_SPACE_DIR`), not `process.cwd()` (`session.ts` `execCommand` uses `cwd: spaceDir`). So a fork that writes `work/candidate.ts` and another that reads `work/candidate.ts` agree regardless of where the CLI was launched. Absolute paths pass through untouched.
 

@@ -8,7 +8,7 @@
 - `packages/core/src/spaces/components.ts` — `getAgentComponents`
 - `packages/core/src/spaces/knowledge.ts` — knowledge tree loading
 - `packages/core/src/spaces/tasklist-load.ts` — tasklist directory loading
-- `packages/core/src/spaces/system.ts` — **system spaces**: `loadSystemSpaces` + `mergeSystemInto` merge the always-on baseline spaces (`packages/core/system-spaces/{global,engineer,architect,solver,deep_research,memory,thing}/`) into every user space. See `@.claude/skills/system-spaces.md`.
+- `packages/core/src/spaces/system.ts` — **system spaces**: `loadSystemSpaces` + `mergeSystemInto` merge the always-on baseline spaces (`packages/core/system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/`) into every user space. See `@.claude/skills/system-spaces.md`.
 
 ## Space Type
 
@@ -23,8 +23,8 @@ interface Space {
   nodeModulesDir?: string;                   // set when space has package.json with installed deps
   dependentSpaces: Record<string, Space>;    // packageName → loaded Space for npm space deps
   components: {
-    view: Record<string, string>;            // name → source
-    form: Record<string, { web: string; ink: string }>;  // name → {web, ink}
+    view: Record<string, string>;  // name → source
+    form: Record<string, string>;  // name → source (single file)
   };
   knowledge: KnowledgeTree;
 }
@@ -34,7 +34,7 @@ interface AgentDef {
   title: string;
   instructBody: string;
   actions: ActionDef[];
-  dependencies: string[];    // "space/agent" strings
+  canDelegateTo: string[];   // delegation target strings
   config: AgentConfig;       // { knowledge, functions, components }
 }
 ```
@@ -45,7 +45,7 @@ interface AgentDef {
 1. `agents/` — each subdirectory → `loadAgent`
 2. `tasklists/` → sorted `.md` files per tasklist
 3. `functions/` → TypeScript source strings
-4. `components/form/<Name>/{web,ink}.tsx` + `components/view/<Name>.tsx`
+4. `components/form/<Name>.tsx` + `components/view/<Name>.tsx`
 5. `knowledge/<domain>/<field>/` tree
 
 ## Agent Loading
@@ -56,7 +56,7 @@ All agent configuration lives in its YAML frontmatter:
 - `title` — display name (defaults to slug)
 - `knowledge`, `functions`, `components` — string arrays for scoping
 - `actions[]` — `{id, label, description, tasklist}` entries
-- `dependencies[]` — `"space/agent"` strings
+- `canDelegateTo[]` — delegation target strings (see SPACE-SPEC.md for formats; legacy `dependencies[]` is still accepted on read)
 
 The body of `instruct.md` (after the frontmatter) is the system prompt (`instructBody`).
 
@@ -88,8 +88,7 @@ No validation for component names — missing components silently produce fallba
 | `agents/<slug>/instruct.md` | yes | frontmatter with all agent config + body = system prompt |
 | `package.json` | no | npm dependencies for space functions; triggers `npm install` on `loadSpace` |
 | `functions/<name>.ts` | no | `export function <name>(...) { ... }`; bundled with esbuild when `node_modules` present |
-| `components/form/<Name>/web.tsx` | no | React component with `interface Props` |
-| `components/form/<Name>/ink.tsx` | no | Ink component |
+| `components/form/<Name>.tsx` | no | Single TSX form component (catalog components only) |
 | `components/view/<Name>.tsx` | no | React view component |
 | `tasklists/<slug>/<N>-<id>.md` | no | `---\nid: X\noutput: {...}\n---\ninstruction` |
 | `knowledge/<domain>/<field>/index.md` | no | frontmatter: `type`, `variable`, `default`; body = field description |
@@ -103,16 +102,16 @@ If a space has a `package.json`, `loadSpace` runs `npm install` automatically wh
 
 A space can declare other spaces as npm dependencies. Any `package.json` dependency whose installed directory contains an `agents/` folder is treated as a **dependent space** and loaded eagerly into `Space.dependentSpaces` (keyed by npm package name).
 
-### Agent `dependencies` in `instruct.md`
+### Agent `canDelegateTo` in `instruct.md`
 
 ```yaml
-dependencies:
-  - "@my-org/cooking-space/chef"   # specific agent from an npm space
-  - "@my-org/cooking-space/*"      # all agents from an npm space
-  - "sommelier/pairing"            # legacy: match by last dir component
+canDelegateTo:
+  - "@my-org/cooking-space/chef"      # specific agent from an npm space
+  - "@my-org/cooking-space/*"         # all agents from an npm space
+  - "sommelier/pairing#recommend"     # restrict to a single action
 ```
 
-`resolveDirectDeps(space, dependencies)` (in `spaces/agent.ts`) expands these to `ResolvedDep[]` — each with `{ space, agent, target }` where `target` is the exact string for `delegate()`.
+`resolveDirectDeps(space, canDelegateTo)` (in `spaces/agent.ts`) expands these to `ResolvedDep[]` — each with `{ space, agent, target, allowedActions? }` where `target` is the exact string for `delegate()`. The legacy `dependencies:` key is still accepted on read.
 
 ### Delegation
 

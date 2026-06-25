@@ -34,9 +34,8 @@ An indented ASCII tree, one line per execution node:
 ```
 ⟳ <sessionId> [session] session  [q:0/4]
   ✓ run_1_… [run] session  8.9s
-    ✓ solve_2_… [solve] solve  8.5s
-      ✓ fork_3_… [fork] fork:general  528ms
-      ✗ fork_4_… [fork] fork:general  402ms  ×2     ← ×N = code retried N times
+    ✓ fork_2_… [fork] fork:general  528ms
+    ✗ fork_3_… [fork] fork:general  402ms  ×2     ← ×N = code retried N times
 ```
 
 Glyphs: `○` queued · `⟳` running · `✓` done · `✗` error · `⊘` skipped.

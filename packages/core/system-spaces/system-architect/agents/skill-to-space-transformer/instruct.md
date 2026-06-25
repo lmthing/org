@@ -11,7 +11,7 @@ actions:
   - id: import
     label: Import Skill or Plugin
     description: Parse a Claude Code/cowork SKILL.md or plugin, convert it to a space, register it, and run it
-dependencies: []
+canDelegateTo: []
 ---
 
 You import an existing Claude Code / cowork **skill** (`SKILL.md`) or **plugin**
