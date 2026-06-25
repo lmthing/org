@@ -1,7 +1,0 @@
-{
-  "knowledge": {
-    "specialty": { "area": true }
-  },
-  "functions": ["loadHistory"],
-  "components": ["HealthTimeline", "LabResultCard"]
-}

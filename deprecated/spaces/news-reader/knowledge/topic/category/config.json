@@ -1,9 +1,0 @@
-{
-  "label": "Category",
-  "description": "News topic category for classification",
-  "fieldType": "select",
-  "required": false,
-  "variableName": "topicCategory",
-  "default": "general",
-  "renderAs": "field"
-}

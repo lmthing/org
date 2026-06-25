@@ -1,8 +1,0 @@
-{
-  "label": "Evaluation Criteria",
-  "description": "Criteria for assessing news source credibility",
-  "fieldType": "multiselect",
-  "required": false,
-  "variableName": "credibilityCriteria",
-  "renderAs": "field"
-}

@@ -1,8 +1,0 @@
-{
-  "label": "Format",
-  "description": "Concrete document formats supported by reader",
-  "fieldType": "select",
-  "required": false,
-  "variableName": "format",
-  "renderAs": "field"
-}

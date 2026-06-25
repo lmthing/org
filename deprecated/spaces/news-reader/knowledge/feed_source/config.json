@@ -1,7 +1,0 @@
-{
-  "label": "Feed Sources",
-  "description": "RSS feed types and formats supported by the news reader",
-  "icon": "rss",
-  "color": "#e67e22",
-  "renderAs": "section"
-}

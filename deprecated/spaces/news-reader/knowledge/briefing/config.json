@@ -1,7 +1,0 @@
-{
-  "label": "Briefing Formats",
-  "description": "Output formats for news briefings",
-  "icon": "newspaper",
-  "color": "#2980b9",
-  "renderAs": "section"
-}

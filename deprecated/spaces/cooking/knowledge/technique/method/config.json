@@ -1,5 +1,0 @@
-{
-  "type": "select",
-  "variableName": "cookingMethod",
-  "default": "sauteing"
-}

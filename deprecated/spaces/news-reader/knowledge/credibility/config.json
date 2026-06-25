@@ -1,7 +1,0 @@
-{
-  "label": "Source Credibility",
-  "description": "Criteria for evaluating news source reliability and trustworthiness",
-  "icon": "shield",
-  "color": "#27ae60",
-  "renderAs": "section"
-}

@@ -1,8 +1,0 @@
-{
-  "label": "Provider API",
-  "description": "Which search API to use",
-  "fieldType": "multiselect",
-  "required": false,
-  "variableName": "providers",
-  "renderAs": "field"
-}

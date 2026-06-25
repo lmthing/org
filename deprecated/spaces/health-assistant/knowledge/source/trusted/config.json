@@ -1,1 +1,0 @@
-{ "type": "multiSelect", "variableName": "trustedSources", "default": ["pubmed", "nih", "mayo_clinic"] }
