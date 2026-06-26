@@ -65,9 +65,33 @@ describe('stripMarkdownFences', () => {
     expect(stripFences('  json  ')).toBe('');
   });
 
+  it('drops a PARTIAL fence tag left when the stream splits ``` mid-language-word', () => {
+    // The live failure: '```types' arrived in one chunk (line starts with ```, stripped)
+    // and 'cript' alone in the next, leaking 'cript' as a statement → "Cannot find name 'cript'".
+    expect(stripFences('cript\nconst source = 1;')).toBe('const source = 1;');
+    expect(stripFences('escript')).toBe('');
+    expect(stripFences('script')).toBe('');
+    expect(stripFences('  ript  ')).toBe('');
+    expect(stripFences('pt')).toBe('');         // suffix of typescript/javascript
+    expect(stripFences('son')).toBe('');        // suffix of json
+    expect(stripFences('sx')).toBe('');         // suffix of tsx/jsx
+  });
+
   it('does not drop those words inside real statements', () => {
     expect(stripFences('const ts = 1;')).toBe('const ts = 1;');
     expect(stripFences('return typescript.length;')).toBe('return typescript.length;');
+  });
+
+  it('keeps single-character lines (legitimate one-letter probes survive)', () => {
+    // Single-char suffixes (t, s, x, n) are intentionally NOT dropped.
+    expect(stripFences('x')).toBe('x');
+    expect(stripFences('t')).toBe('t');
+  });
+
+  it('keeps real identifiers that are not fence-tag suffixes', () => {
+    expect(stripFences('result')).toBe('result');
+    expect(stripFences('topic')).toBe('topic');
+    expect(stripFences('questions')).toBe('questions');
   });
 });
 

@@ -16,18 +16,31 @@ import { BudgetExceededError, type Budget } from './budget.js';
 
 export type { StreamOpts, StreamSession };
 
-/** A line that is nothing but a code-fence language tag — left behind when the
- *  stream splits the opening ``` from its language (```\n + `typescript`) across
- *  chunks, so the per-chunk fence filter strips the ``` but not the tag. A bare
- *  `typescript`/`ts`/… statement is never valid TS, so dropping it is safe. */
-const BARE_FENCE_LANG = /^\s*(?:typescript|ts|tsx|javascript|js|jsx|json)\s*$/i;
+/** Known markdown fence language tags. */
+const FENCE_LANGS = ['typescript', 'javascript', 'tsx', 'jsx', 'json', 'ts', 'js'];
 
-/** Strip markdown code fence lines (and stray fence language tags) from a chunk
- *  before feeding to the boundary detector. Exported for direct testing. */
+/** Every suffix (length ≥ 2) of a fence language tag. A bare fence tag is left
+ *  behind when the stream splits the opening ``` from its language across chunks,
+ *  so the per-chunk fence filter strips the ``` but not the tag. The split can land
+ *  ANYWHERE in the word — `` ```typ `` in one chunk (stripped) + `escript` in the
+ *  next, or `` ```types `` + `cript` — leaking a partial-tag fragment as a bogus
+ *  statement (the "Cannot find name 'cript'" failure). A standalone line that is any
+ *  suffix of a fence tag is never valid TS, so dropping it is safe. Single-character
+ *  suffixes are excluded so a legitimate one-letter probe (e.g. a bare `x`) survives. */
+const FENCE_LANG_SUFFIXES: ReadonlySet<string> = new Set(
+  FENCE_LANGS.flatMap((lang) => {
+    const suffixes: string[] = [];
+    for (let i = 0; i <= lang.length - 2; i++) suffixes.push(lang.slice(i));
+    return suffixes;
+  }),
+);
+
+/** Strip markdown code fence lines (and stray/partial fence language tags) from a
+ *  chunk before feeding to the boundary detector. Exported for direct testing. */
 export function stripMarkdownFences(chunk: string): string {
   return chunk
     .split('\n')
-    .filter((line) => !/^\s*```/.test(line) && !BARE_FENCE_LANG.test(line))
+    .filter((line) => !/^\s*```/.test(line) && !FENCE_LANG_SUFFIXES.has(line.trim().toLowerCase()))
     .join('\n');
 }
 
