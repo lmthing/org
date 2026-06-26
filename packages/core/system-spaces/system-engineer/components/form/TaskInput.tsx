@@ -5,6 +5,7 @@ interface Props {
   onSubmit: (value: string) => void;
 }
 
+/** Asks the user to describe the coding task to work on. Resolves the task text. */
 export default function TaskInput({ placeholder = 'Describe the coding task…', onSubmit }: Props) {
   const [value, setValue] = React.useState('');
   return (

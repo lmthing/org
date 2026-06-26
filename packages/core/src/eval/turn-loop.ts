@@ -105,12 +105,12 @@ export interface TurnLoopDeps {
 }
 
 /** Re-prompt sent when the model ends its response immediately after awaiting a
- *  non-yielding space function (e.g. `const r = await scaffoldSpace(...)`) and
+ *  non-yielding space function (e.g. `const r = await writeTaskFile(...)`) and
  *  binding the result. Those results are NOT surfaced to the model (only yields
  *  are), so a model that stops to "see" one would strand the run mid-program.
  *  This tells it the runtime truth and asks it to continue. */
 const CONTINUATION_NUDGE =
-  'Your statements ran successfully, but the task is not finished. Your last statement bound a value from a NON-yielding call (a space function such as scaffoldSpace/validateSpace/listScaffoldedSpaces) — and those results are NOT shown to you automatically (only yielding calls like ask/inspect/delegate/registerSpace surface their value). Continue the program now:\n' +
+  'Your statements ran successfully, but the task is not finished. Your last statement bound a value from a NON-yielding call (a space function such as writeTaskFile/validateSpace/listScaffoldedSpaces) — and those results are NOT shown to you automatically (only yielding calls like ask/inspect/delegate/registerSpace surface their value). Continue the program now:\n' +
   '- If you must SEE that result before the next step, call inspect(<var>) — it surfaces the value and resumes you.\n' +
   '- Otherwise keep emitting the remaining statements (validate, register, delegate, display the final result, …).\n' +
   'Only stop (reply with no code) once the whole task is complete and the final result has been displayed.';
@@ -135,6 +135,18 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     accumulatedContext += (accumulatedContext ? '\n' : '') + stmt;
     deps.onContextSnapshot?.(accumulatedContext);
   };
+
+  // Names bound by a yielding statement whose yield ERRORED on a retryable attempt.
+  // That statement is never committed to accumulatedContext (it gets re-tried), so
+  // without help a retry that references the name fails typecheck ("Cannot find name
+  // 'top'" — the research-fork-scope-loss bug). We declare these as ambient `any`
+  // globals (NOT in session context): a forward reference resolves against them, and
+  // a re-emitted `const <name> = …` simply shadows them — no redeclare conflict.
+  const yieldErrorNames = new Set<string>();
+  const fullAmbient = (): string =>
+    yieldErrorNames.size > 0
+      ? ambientDts + '\n' + [...yieldErrorNames].map((n) => `declare const ${n}: any;`).join('\n')
+      : ambientDts;
   let continueNudges = 0;
   const maxContinueNudges = deps.maxContinueNudges ?? 4;
 
@@ -160,7 +172,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     let aborted = false;
     // True when the last statement that evaluated cleanly this turn bound a value
     // from a NON-yielding call (a space-function result the runtime won't surface) —
-    // whether or not it used `await`. Sync space functions like scaffoldSpace/
+    // whether or not it used `await`. Sync space functions like writeTaskFile/
     // validateSpace bind without `await`, and a model that stops right after one is
     // stranded mid-program (the exact failure CONTINUATION_NUDGE recovers from).
     let lastStmtNonYieldBinding = false;
@@ -193,7 +205,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
             tracer.write({ ts: now, type: 'llm_progress', context: ctx, ...(nodeId ? { nodeId } : {}), chars: assistantContent.length, statements: parsedStatements.length });
           }
 
-          const tscResult = runTsc({ ambientDts, sessionContext: accumulatedContext, statement: stmt });
+          const tscResult = runTsc({ ambientDts: fullAmbient(), sessionContext: accumulatedContext, statement: stmt });
           if (!tscResult.ok) {
             const errMsg = tscResult.diagnostics.map((d) => d.message).join('; ');
             stream.abort();
@@ -254,7 +266,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         const stmt = trailing.trim();
         hadStatements = true;
 
-        const tscResult = runTsc({ ambientDts, sessionContext: accumulatedContext, statement: stmt });
+        const tscResult = runTsc({ ambientDts: fullAmbient(), sessionContext: accumulatedContext, statement: stmt });
         if (!tscResult.ok) {
           turnError = tscResult.diagnostics.map((d) => d.message).join('; ');
           failingStatement = stmt;
@@ -386,6 +398,13 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         turnError = yieldErrors.map((e) => `${e.kind}() failed: ${e.message}`).join('; ');
         failingStatement = yieldingStatement;
         renderHost.log(`[yield error] ${turnError}`);
+        // Preserve the failed statement's bound names so a retry that references them
+        // (or re-emits the binding) typechecks instead of dying with "Cannot find name".
+        // Declared ambient (any) + seeded undefined in the VM so eval can't ReferenceError.
+        for (const name of pattern.names) {
+          yieldErrorNames.add(name);
+          vm.setVar(name, undefined);
+        }
         history.append({ role: 'user', content: buildErrorBlock(failingStatement, turnError, attempt, maxRetries, accumulatedContext), blockType: 'error' });
         continue;
       }
@@ -467,7 +486,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
 
     // The model ended its response with no pending yield. If its last clean
     // statement was a non-yielding `await`-binding, it most likely stopped to
-    // "see" a result the runtime never surfaces (e.g. scaffoldSpace) — which
+    // "see" a result the runtime never surfaces (e.g. writeTaskFile) — which
     // would strand a multi-step program. Re-prompt it to continue, bounded so a
     // genuinely-finished model (which emits no further statements → no_statements
     // → done) and a model that keeps binding without progressing both terminate.

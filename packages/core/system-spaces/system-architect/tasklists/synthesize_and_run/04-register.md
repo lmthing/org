@@ -3,17 +3,17 @@ id: register
 output:
   spaceKey: string
   agentSlug: string
-dependsOn: [validate]
+dependsOn: [build]
 optional: false
 goal: false
-condition: "validate.ok == true"
+condition: "build.ok == true"
 ---
 
 Register the validated space into the live runtime so `delegate()` can reach it.
 
 Call:
 ```typescript
-const reg = await registerSpace(validate.dir);
+const reg = await registerSpace(build.spaceDir);
 ```
 
 If `reg.ok` is false, display the error and resolve with `{ spaceKey: '', agentSlug: '' }`.

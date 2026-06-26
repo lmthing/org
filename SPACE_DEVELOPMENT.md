@@ -70,7 +70,7 @@ Functions are synchronous TypeScript exports that utilize the core host primitiv
  * Executes a calculation
  */
 export function calculateThing(input: string): string {
-    // Only host primitives available: fetch, execShell, readFileRaw, writeFileRaw
+    // Only host primitives available: fetch, execShell, readFileRaw, writeFileRaw, typecheckSource
     return "Calculated: " + input;
 }
 ```
@@ -127,6 +127,7 @@ Available inside TS `functions/`:
 - `execShell(cmd)`: Execute shell commands locally. Returns `{ ok, stdout, stderr }`.
 - `readFileRaw(path, opts)`: Read file data. Returns `{ ok, content, lines, truncated }`.
 - `writeFileRaw(path, content)`: Replaces a file's contents. Returns `{ ok, bytes }`.
+- `typecheckSource(src)`: Typecheck a standalone TS source string against the library DTS. Returns `{ ok, errors }` ("Cannot find name" diagnostics are ignored; syntax + real type errors surface).
 
 ---
 

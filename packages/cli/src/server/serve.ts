@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createWriteStream, readFileSync, writeFileSync } from 'node:fs';
+import { createWriteStream, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { mkdir, writeFile, readFile, readdir, stat, rm } from 'node:fs/promises';
 import { join, resolve, dirname, sep } from 'node:path';
 import { createRequire } from 'node:module';
@@ -105,8 +105,10 @@ async function buildBundle(space: Space | null, wsBase: string, appTsxPath: stri
   for (const name of Object.keys(space?.components.form ?? {})) {
     if (seen.has(name)) continue;
     seen.add(name);
-    const webPath = resolve(space!.dir, 'components', 'form', name, 'web.tsx');
-    importLines.push(`import __Comp_${name}__ from ${JSON.stringify(webPath)};`);
+    // Single-file `<Name>.tsx` (SPACE-SPEC); fall back to legacy `<Name>/web.tsx`.
+    const single = resolve(space!.dir, 'components', 'form', `${name}.tsx`);
+    const formPath = existsSync(single) ? single : resolve(space!.dir, 'components', 'form', name, 'web.tsx');
+    importLines.push(`import __Comp_${name}__ from ${JSON.stringify(formPath)};`);
     compEntries.push(`  ${JSON.stringify(name)}: __Comp_${name}__,`);
   }
 

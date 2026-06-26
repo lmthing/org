@@ -5,7 +5,7 @@ output:
   agentSlug: string
   actionId: string
   query: string
-dependsOn: [register, design]
+dependsOn: [register, build]
 optional: false
 goal: true
 condition: "register.spaceKey != ''"
@@ -20,7 +20,7 @@ Resolve immediately with:
 currentTask.resolve({
   spaceKey: register.spaceKey,
   agentSlug: register.agentSlug,
-  actionId: design.spec.actions[0].id,
+  actionId: build.actionId,
   query: goal,
 });
 ```

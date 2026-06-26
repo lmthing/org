@@ -105,10 +105,9 @@ export function validateSpace(dir: string): { ok: boolean; errors: string[] } {
 
     for (const comp of componentNames) {
       const viewFile = readFileRaw(joinPath(dir, 'components', 'view', `${comp}.tsx`), { limit: 1 });
-      const formWeb = readFileRaw(joinPath(dir, 'components', 'form', comp, 'web.tsx'), { limit: 1 });
-      const formInk = readFileRaw(joinPath(dir, 'components', 'form', comp, 'ink.tsx'), { limit: 1 });
-      if (!viewFile.ok && !formWeb.ok && !formInk.ok) {
-        errors.push(`Agent "${slug}": component "${comp}" declared but no components/view/${comp}.tsx or components/form/${comp}/{web,ink}.tsx found`);
+      const formFile = readFileRaw(joinPath(dir, 'components', 'form', `${comp}.tsx`), { limit: 1 });
+      if (!viewFile.ok && !formFile.ok) {
+        errors.push(`Agent "${slug}": component "${comp}" declared but no components/view/${comp}.tsx or components/form/${comp}.tsx found`);
       }
     }
 

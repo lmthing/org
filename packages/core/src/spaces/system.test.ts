@@ -46,8 +46,8 @@ describe('system spaces', () => {
     const universal = systemFunctionSources(spaces);
     expect('readFile' in universal).toBe(true);
     expect('webSearch' in universal).toBe(true);
-    expect('scaffoldSpace' in universal).toBe(false);
-    expect('parseSkill' in universal).toBe(false);
+    expect('writeTaskFile' in universal).toBe(false);
+    expect('writeAgentFile' in universal).toBe(false);
     expect('validateSpace' in universal).toBe(false);
   });
 
@@ -58,30 +58,15 @@ describe('system spaces', () => {
     const architect = merged.agents['architect']!;
     expect(architect).toBeTruthy();
     const fns = getAgentFunctions(merged, architect);
-    expect('scaffoldSpace' in fns).toBe(true);
-    // Skill import is a SEPARATE agent — the architect no longer declares these.
-    expect('parseSkill' in fns).toBe(false);
-    expect('skillToSpec' in fns).toBe(false);
+    // The architect builds spaces one file at a time via the per-file builders.
+    expect('writeAgentFile' in fns).toBe(true);
+    expect('writeTaskFile' in fns).toBe(true);
+    expect('validateSpace' in fns).toBe(true);
     // The cooking chef declares none of the architect functions → does not get them.
     const chef = merged.agents['chef']!;
     const chefFns = getAgentFunctions(merged, chef);
-    expect('scaffoldSpace' in chefFns).toBe(false);
-    expect('parseSkill' in chefFns).toBe(false);
-  });
-
-  it('parseSkill/skillToSpec are scoped to the skill-to-space-transformer agent', async () => {
-    const spaces = await loadSystemSpaces([GLOBAL_DIR, ARCHITECT_DIR]);
-    const userSpace = await loadSpace(join(FIXTURES, 'cooking'));
-    const merged = mergeSystemInto(userSpace, spaces);
-    const skillAgent = merged.agents['skill-to-space-transformer']!;
-    expect(skillAgent).toBeTruthy();
-    expect(skillAgent.actions.some((a) => a.id === 'import')).toBe(true);
-    const fns = getAgentFunctions(merged, skillAgent);
-    expect('parseSkill' in fns).toBe(true);
-    expect('skillToSpec' in fns).toBe(true);
-    expect('scaffoldSpace' in fns).toBe(true); // shared scaffolding helper
-    // Not universal: never in the system-global toolkit set.
-    expect('parseSkill' in systemFunctionSources(spaces)).toBe(false);
+    expect('writeAgentFile' in chefFns).toBe(false);
+    expect('writeTaskFile' in chefFns).toBe(false);
   });
 
   it('merges system functions into a user space (user wins on collision)', async () => {

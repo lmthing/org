@@ -109,7 +109,7 @@ export function mergeSystemInto(userSpace: Space, systemSpaces: Space[]): Space 
   const functions: Record<string, string> = {};
   const functionsBundled: Record<string, string> = {};
   const view: Record<string, string> = {};
-  const form: Record<string, { web: string; ink: string }> = {};
+  const form: Record<string, string> = {};
   const agents: Record<string, AgentDef> = {};
   const tasklists: Record<string, import('./load.js').TasklistDir> = {};
   const knowledgeDomains = { ...userSpace.knowledge.domains };

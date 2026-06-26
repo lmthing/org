@@ -8,10 +8,10 @@ export function getAgentComponents(
   agent: AgentDef,
 ): {
   view: Record<string, string>;
-  form: Record<string, { web: string; ink: string }>;
+  form: Record<string, string>;
 } {
   const view: Record<string, string> = {};
-  const form: Record<string, { web: string; ink: string }> = {};
+  const form: Record<string, string> = {};
 
   for (const name of agent.config.components) {
     if (name in space.components.view) {

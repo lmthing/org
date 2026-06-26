@@ -3,20 +3,20 @@ id: reregister
 output:
   spaceKey: string
   agentSlug: string
-dependsOn: [revalidate]
+dependsOn: [edit]
 optional: false
 goal: false
-condition: "revalidate.ok == true"
+condition: "edit.ok == true"
 ---
 
-Re-register the re-scaffolded space into the live runtime.
+Re-register the edited space into the live runtime.
 
 `registerSpace(dir)` calls `loadSpace(dir)` fresh every time and OVERWRITES the
 prior registration — functions, components, and knowledge are all reloaded
 immediately. **No session restart is required.**
 
 ```typescript
-const reg = await registerSpace(rescaffold.dir);
+const reg = await registerSpace(edit.dir);
 ```
 
 If `reg.ok` is false, display the error and resolve with

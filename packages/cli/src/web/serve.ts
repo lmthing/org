@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -64,8 +64,8 @@ function readThemeCss(spaceDir: string): string {
 
 /**
  * Build a browser bundle: the @lmthing/agent-ui app (main.tsx) plus all of the agent's
- * form components (web.tsx), so custom components like <ConfirmDish /> render
- * with their real implementations. Everything resolves to ONE React instance.
+ * form components (single-file `components/form/<Name>.tsx`), so custom components like
+ * <ConfirmDish /> render with their real implementations. Everything resolves to ONE React instance.
  */
 async function buildBundle(space: Space, agentSlug: string, wsUrl: string, appTsxPath: string): Promise<string> {
   const agentKeys = Object.keys(space.agents);
@@ -81,8 +81,11 @@ async function buildBundle(space: Space, agentSlug: string, wsUrl: string, appTs
   const compEntries: string[] = [];
   for (const name of componentNames) {
     if (space.components.form[name]) {
-      const webPath = resolve(space.dir, 'components', 'form', name, 'web.tsx');
-      importLines.push(`import __Comp_${name}__ from ${JSON.stringify(webPath)};`);
+      // Single-file `<Name>.tsx` (SPACE-SPEC); fall back to the legacy
+      // `<Name>/web.tsx` for not-yet-migrated on-disk spaces.
+      const single = resolve(space.dir, 'components', 'form', `${name}.tsx`);
+      const formPath = existsSync(single) ? single : resolve(space.dir, 'components', 'form', name, 'web.tsx');
+      importLines.push(`import __Comp_${name}__ from ${JSON.stringify(formPath)};`);
       compEntries.push(`  ${JSON.stringify(name)}: __Comp_${name}__,`);
     }
   }

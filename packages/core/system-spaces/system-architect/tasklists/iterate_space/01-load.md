@@ -1,59 +1,38 @@
 ---
 id: load
 output:
-  currentSpec: object
   dir: string
   agentSlug: string
+  actionId: string
+  summary: string
 dependsOn: []
 optional: false
 goal: false
 ---
 
-Load the current state of an existing scaffolded space and reconstruct its
-COMPLETE ScaffoldSpec — the same shape that `scaffoldSpace` accepts. This is
-needed so iteration can mutate the spec and re-scaffold idempotently.
+Locate the existing scaffolded space to iterate on and read enough of it to summarize
+its current state. You do NOT need to reconstruct a full spec — iteration re-writes only
+the affected files with the per-file builders.
 
 **Step 1 — Find the target space**
 
-Check memory for a previously remembered space dir:
+The seed provides `spaceKey` (a dir or key). If it's empty, check memory, then list spaces:
 ```typescript
 const remembered = recall('architect.lastSpaceDir');
+const base = process.env.LMTHING_PROJECT_SPACES_DIR ?? (process.env.LMTHING_SPACE_DIR ? process.env.LMTHING_SPACE_DIR.replace(/\/[^/]+\/?$/, '') : '/tmp/architect-spaces');
+const spaces = listScaffoldedSpaces(base);
 ```
+Resolve the target dir from `spaceKey` (verbatim if set), else `remembered`, else ask the user
+which of `spaces` to iterate on.
 
-If nothing is remembered, list available spaces under the fixtures directory:
-```typescript
-const fixturesBase = process.env.LMTHING_SPACE_DIR
-  ? process.env.LMTHING_SPACE_DIR.replace(/\/[^/]+\/?$/, '')
-  : '/tmp/architect-spaces';
-const spaces = listScaffoldedSpaces(fixturesBase);
-```
+**Step 2 — Read the agent header**
 
-Ask the user which space to iterate on (or use the one from memory if obvious).
-
-**Step 2 — Reconstruct the full spec from disk**
-
-Read the target space exhaustively so the spec can be mutated and re-scaffolded:
-
-1. **Agent**: read `agents/<slug>/instruct.md` — extract YAML frontmatter (title,
-   knowledge refs, function names, component names, dependencies, actions) and
-   the body (systemPrompt). Derive `agentSlug` from the directory name.
-
-2. **Functions**: for each function name in the frontmatter, read
-   `functions/<name>.ts` and store `{ name, source }`.
-
-3. **Tasklists**: for each action's `tasklist` reference, read each numbered task
-   file `tasklists/<name>/NN-<id>.md` — extract frontmatter (id, output, dependsOn,
-   goal, optional, condition) and the body (instruction). Build `{ name, tasks: [...] }`.
-
-4. **Knowledge**: for each `knowledge` frontmatter ref (`domain/field`), read
-   `knowledge/<domain>/<field>/index.md` (extract type, variable, default,
-   description body), then list and read each option file. Build KnowledgeSpec[].
-
-5. **Components**: for each component name, try reading `components/view/<name>.tsx`
-   (view) or `components/form/<name>.tsx` (form — single file). Build ComponentsSpec.
+Read `agents/<slug>/instruct.md` (use `listDir`/`readFileRaw` to find the agent slug from the
+`agents/` dir). Extract the agent slug, its first action id (the `- id:` under `actions:`), and a
+one-line summary of the current systemPrompt + actions for the diagnose step.
 
 Resolve with:
-- `currentSpec`: the complete ScaffoldSpec object (agentSlug, agentTitle, systemPrompt,
-  functions, tasklists, actions, knowledge, components, dependencies)
 - `dir`: the space directory path
-- `agentSlug`: the agent slug
+- `agentSlug`: the agent slug (from the `agents/<slug>` dir name)
+- `actionId`: the first action's id (used later to re-run the agent)
+- `summary`: a short human-readable description of the current agent

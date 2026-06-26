@@ -1103,11 +1103,10 @@ async function makeComponentSpace(): Promise<string> {
     `import React from 'react';\ninterface Props { text: string }\nexport default function Banner({ text }: Props) { return <div>{text}</div>; }`,
     'utf8',
   );
-  const form = join(dir, 'components', 'form', 'NameForm');
-  await mkdir(form, { recursive: true });
+  const form = join(dir, 'components', 'form', 'NameForm.tsx');
+  await mkdir(dirname(form), { recursive: true });
   const formSrc = `import React from 'react';\nexport default function NameForm() { return <input />; }`;
-  await writeFile(join(form, 'web.tsx'), formSrc, 'utf8');
-  await writeFile(join(form, 'ink.tsx'), formSrc, 'utf8');
+  await writeFile(form, formSrc, 'utf8');
   return dir;
 }
 

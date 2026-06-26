@@ -60,7 +60,7 @@ The harness is domain-agnostic.
 >   - ≥1 custom FUNCTION (single export, no imports)
 >   - ≥1 VIEW component and ≥1 FORM component (web + ink)
 >   - a TASKLIST with a goal task that resolves a structured result, wired to an action
->   Use scaffoldSpace → validateSpace → registerSpace; display any errors.
+>   Build the space one file at a time (writeAgentFile / writeTaskFile / writeKnowledgeIndex / writeKnowledgeOption / writeFunctionFile / writeComponentFile) → validateSpace → registerSpace; display any errors.
 >   Build knowledge content by REFERENCING your research variables, never by re-typing them.
 >
 > STEP 4 — delegate() to the new space to answer a concrete sample question, and
@@ -114,7 +114,7 @@ The harness is domain-agnostic.
 >
 > **Success criteria:**
 > - The architect delegated to the deep researcher ≥3 times, each returning a real cited report.
-> - `scaffoldSpace` → `ok:true`; `validateSpace` → `ok:true, errors:[]`.
+> - each per-file builder (writeAgentFile/writeTaskFile/…) → `ok:true`; `validateSpace` → `ok:true, errors:[]`.
 > - The generated space on disk has agent + multi-option knowledge **with source URLs** +
 >   function + view & form components + a goal tasklist + a wired action — no empty shells,
 >   no double extensions.
@@ -169,7 +169,7 @@ The harness is domain-agnostic.
     inspector's Statements tab pinpoints this immediately. Fix at the deep_research
     prompt (don't redefine provided functions) before expecting a clean end-to-end.
 
-  **Cleanup gotcha:** if the architect calls `scaffoldSpace` on an *existing* fixture
+  **Cleanup gotcha:** if the architect runs the per-file builders against an *existing* fixture
   (e.g. it tries to "create" `fixtures/deep_research` instead of `registerSpace`-ing it),
   it overwrites that fixture's files. `git status fixtures/` after a run and
   `git checkout` / `rm` any stray changes.

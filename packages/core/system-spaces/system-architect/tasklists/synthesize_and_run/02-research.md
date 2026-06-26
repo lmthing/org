@@ -1,7 +1,7 @@
 ---
 id: research
 output:
-  knowledge: object
+  knowledge: array
   sources: string
 dependsOn: [understand]
 optional: true
@@ -37,7 +37,7 @@ const page2 = url2 ? await webFetch(url2) : '';
 ```
 
 Distill the fetched content into a `knowledge` array matching the KnowledgeSpec
-shape (the same shape accepted by scaffoldSpace). Each entry is one domain/field
+shape (consumed by the build step's writeKnowledgeIndex/writeKnowledgeOption). Each entry is one domain/field
 with 1–N focused option files. Keep options short and attributed.
 
 Example output shape:

@@ -1,40 +1,40 @@
 ---
-id: rescaffold
+id: edit
 output:
   dir: string
   agentSlug: string
-  changed: boolean
-dependsOn: [diagnose]
+  ok: boolean
+  errors: string
+dependsOn: [load, diagnose]
 optional: false
 goal: false
 condition: "diagnose.plan != 'no changes'"
 ---
 
-Apply the approved improvement plan by **mutating the reconstructed spec** and
-re-scaffolding idempotently — `scaffoldSpace` overwrites existing files, so the
-space stays canonical and consistent with what a fresh synthesis would produce.
+Apply the approved plan by **re-writing only the affected files** with the same per-file
+builders used to synthesize a space. The builders overwrite by path, so the space stays
+canonical and consistent with what a fresh synthesis would produce.
 
-**DO NOT use `editFile` or `writeFileRaw` to hand-patch individual files.** Route
-every change through the spec so scaffold and iterate always stay in sync.
+Available builders (all SYNC; each writes ONE file; see the synthesize_and_run build task for
+full signatures): `writeAgentFile`, `writeTaskFile`, `writeKnowledgeIndex`, `writeKnowledgeOption`,
+`writeFunctionFile` (typechecks on write), `writeComponentFile`.
 
 Steps:
 
-1. Start with `load.currentSpec` as the base.
-2. Apply the approved mutations from `diagnose.plan`:
-   - Update `systemPrompt`, `agentTitle`, `agentSlug` if instructed.
-   - Add, replace, or remove entries in `functions`, `knowledge`, `components`,
-     `dependencies`, `actions`, `tasklists`.
-   - For knowledge improvements: if the plan calls for fresh web research, run
-     `await webSearch(...)` and `await webFetch(...)` (FLAT, ternary-guarded) to
-     gather updated content, then build new/updated KnowledgeSpec entries.
-3. Re-scaffold with the mutated spec:
+1. Use `load.dir` as the space directory.
+2. Apply each change from `diagnose.plan` by calling the matching builder — e.g. rewrite the agent
+   header with `writeAgentFile(load.dir, {...})`, add/replace a task with `writeTaskFile`, add a
+   knowledge option with `writeKnowledgeOption`, fix a function with `writeFunctionFile` (read its
+   `errors` and rewrite if not ok). If the plan needs fresh web research, run `await webSearch(...)`
+   / `await webFetch(...)` FLAT at top level, ternary-guarded — never inside if/else/try/loops.
+3. Re-validate (the gate):
    ```typescript
-   const res = scaffoldSpace(load.dir, newSpec);
+   const v = validateSpace(load.dir);
    ```
-4. If `res.ok` is false, display `res.error` and resolve with
-   `{ dir: load.dir, agentSlug: load.agentSlug, changed: false }`.
-5. On success, resolve with
-   `{ dir: load.dir, agentSlug: newSpec.agentSlug, changed: true }`.
+4. If `v.ok` is false, read `v.errors`, fix the offending file with the matching builder, and re-run
+   `validateSpace`.
 
-Yield-safety: any `await webSearch` / `await webFetch` in step 2 must be FLAT
-at the top level, guarded with ternaries — never inside if/else/try/loop blocks.
+Resolve with:
+```typescript
+currentTask.resolve({ dir: load.dir, agentSlug: load.agentSlug, ok: v.ok, errors: v.ok ? '' : v.errors.join('; ') });
+```

@@ -14,7 +14,7 @@ export interface Space {
   dependentSpaces: Record<string, Space>; // packageName -> loaded Space for npm space deps
   components: {
     view: Record<string, string>; // name -> source
-    form: Record<string, { web: string; ink: string }>; // name -> {web, ink} sources
+    form: Record<string, string>; // name -> single-file source (components/form/<Name>.tsx)
   };
   knowledge: KnowledgeTree;
 }
@@ -146,13 +146,13 @@ async function loadFunctions(
 async function loadComponents(dir: string): Promise<Space['components']> {
   const componentsDir = join(dir, 'components');
   const view: Record<string, string> = {};
-  const form: Record<string, { web: string; ink: string }> = {};
+  const form: Record<string, string> = {};
 
   if (!(await dirExists(componentsDir))) {
     return { view, form };
   }
 
-  // View components
+  // View components — one `<Name>.tsx` file each.
   const viewDir = join(componentsDir, 'view');
   if (await dirExists(viewDir)) {
     const files = await listDir(viewDir);
@@ -165,22 +165,24 @@ async function loadComponents(dir: string): Promise<Space['components']> {
     }
   }
 
-  // Form components
+  // Form components — one `<Name>.tsx` file each (SPACE-SPEC: the legacy
+  // `<Name>/{web,ink}.tsx` split is removed). A directory entry that still holds
+  // the old layout is read defensively (prefer web.tsx) so not-yet-migrated
+  // on-disk spaces keep loading.
   const formDir = join(componentsDir, 'form');
   if (await dirExists(formDir)) {
-    const formNames = await listDir(formDir);
-    for (const name of formNames) {
-      const nameDir = join(formDir, name);
-      if (await dirExists(nameDir)) {
-        const webPath = join(nameDir, 'web.tsx');
-        const inkPath = join(nameDir, 'ink.tsx');
-        const webExists = await fileExists(webPath);
-        const inkExists = await fileExists(inkPath);
-        if (webExists || inkExists) {
-          const web = webExists ? await readFile(webPath, 'utf8') : '';
-          const ink = inkExists ? await readFile(inkPath, 'utf8') : '';
-          form[name] = { web, ink };
-        }
+    const entries = await listDir(formDir);
+    for (const entry of entries) {
+      const entryPath = join(formDir, entry);
+      if (entry.endsWith('.tsx') || entry.endsWith('.ts')) {
+        const name = basename(entry, extname(entry));
+        form[name] = await readFile(entryPath, 'utf8');
+      } else if (await dirExists(entryPath)) {
+        // Legacy web/ink split — read web.tsx (or ink.tsx) as the single source.
+        const webPath = join(entryPath, 'web.tsx');
+        const inkPath = join(entryPath, 'ink.tsx');
+        if (await fileExists(webPath)) form[entry] = await readFile(webPath, 'utf8');
+        else if (await fileExists(inkPath)) form[entry] = await readFile(inkPath, 'utf8');
       }
     }
   }

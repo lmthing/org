@@ -271,26 +271,26 @@ describe('turn loop — continuation nudge (stalled mid-program after a non-yiel
     vm.dispose();
   });
 
-  it('DOES nudge when the last statement binds from a SYNC non-yielding call (e.g. scaffoldSpace)', async () => {
+  it('DOES nudge when the last statement binds from a SYNC non-yielding call (e.g. writeTaskFile)', async () => {
     const vm = await createVM();
-    // scaffoldSpace(): a SYNC non-yielding host fn (returns a value, pushes no yield).
-    injectGlobal(vm.ctx, 'scaffoldSpace', (() => ({ ok: true })) as (...a: unknown[]) => unknown);
+    // writeTaskFile(): a SYNC non-yielding host fn (returns a value, pushes no yield).
+    injectGlobal(vm.ctx, 'writeTaskFile', (() => ({ ok: true })) as (...a: unknown[]) => unknown);
     injectGlobal(vm.ctx, 'finish', (() => true) as (...a: unknown[]) => unknown);
     const history = new MessageHistory();
     history.append({ role: 'user', content: 'go', blockType: 'normal' });
     // Sync space-function call bound to a var, then the model stops — the runtime never
     // surfaces the result, so the model is stranded mid-program. Must be nudged to continue.
-    const s = turnsStream(['const r = scaffoldSpace("d", {});', 'const done = finish();', '']);
+    const s = turnsStream(['const r = writeTaskFile("d", "tl", {});', 'const done = finish();', '']);
 
     const result = await runTurnLoop({
       vm, history, systemBlock: 'test',
-      ambientDts: 'declare function scaffoldSpace(d: string, s: any): { ok: boolean };\ndeclare function finish(): boolean;',
+      ambientDts: 'declare function writeTaskFile(d: string, tl: string, s: any): { ok: boolean };\ndeclare function finish(): boolean;',
       renderHost: silentHost, streamFn: s.fn,
       processYield: async () => undefined, maxRetries: 2,
     });
 
     expect(result).toBe('done');
-    expect(s.calls()).toBeGreaterThanOrEqual(2); // stall after scaffoldSpace → NUDGE → continued
+    expect(s.calls()).toBeGreaterThanOrEqual(2); // stall after writeTaskFile → NUDGE → continued
     vm.dispose();
   });
 
@@ -357,6 +357,47 @@ describe('turn loop — cross-turn typecheck scope (initialContext)', () => {
     });
 
     expect(result).toBe('error'); // typecheck rejects q1 on every retry
+    vm.dispose();
+  });
+
+  // Regression for research-fork-scope-loss: a yielding statement whose yield ERRORS is
+  // never committed to accumulatedContext, so a retry that references its bound name used
+  // to fail typecheck with "Cannot find name". The fix declares the bound names ambient
+  // (any) + seeds them undefined so both forward-references and re-emits resolve.
+  it('a yield that ERRORS does not strand a later statement referencing its binding', async () => {
+    const vm = await createVM();
+    injectHostTools(vm, { renderHost: silentHost, spaceDir: '/tmp' });
+    let yCalls = 0;
+    const y = (q: string) =>
+      new Promise((resolve, reject) => {
+        vm.pendingYields.push({ kind: 'y', args: [q], deferred: { resolve, reject }, vmPromiseHandle: undefined } as unknown as YieldRequest);
+      });
+    injectGlobal(vm.ctx, 'y', y as (...a: unknown[]) => unknown);
+    injectGlobal(vm.ctx, 'finish', (() => true) as (...a: unknown[]) => unknown);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const s = turnsStream([
+      'const top = await y("q");',                  // yields; the yield throws → retry
+      'const got = top; const done = finish();',    // references `top` — must typecheck (the fix)
+      '',
+    ]);
+
+    const result = await runTurnLoop({
+      vm, history, systemBlock: 'test',
+      ambientDts: 'declare function y(q: string): Promise<{ results: string[] }>;\ndeclare function finish(): boolean;',
+      renderHost: silentHost, streamFn: s.fn,
+      processYield: async () => { yCalls++; throw new Error('y failed (no key)'); }, // the only yield is y()
+      maxRetries: 3,
+    });
+
+    expect(result).toBe('done');
+    expect(yCalls).toBe(1);
+    expect(readGlobal(vm, 'got')).toBeUndefined(); // top was seeded undefined after the failed yield
+    // The whole point: no "Cannot find name 'top'" typecheck error on the retry.
+    const errs = history.messages.filter((m) => m.blockType === 'error').map((m) => m.content).join('\n');
+    expect(errs).not.toContain("Cannot find name 'top'");
     vm.dispose();
   });
 });

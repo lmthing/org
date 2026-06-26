@@ -64,7 +64,7 @@ export function buildOverlay(
   functions: Record<string, string>,
   components: {
     view: Record<string, string>;
-    form: Record<string, { web: string; ink: string } | string>;
+    form: Record<string, string>;
   },
   onWarn?: (name: string, message: string) => void,
 ): string {
@@ -77,14 +77,8 @@ export function buildOverlay(
     if (onWarn) warnIfMissingAnnotations('function', name, src, onWarn);
   }
 
-  // Components — form components are single-file (`source: string`); a few
-  // call sites may still hand us the legacy `{web, ink}` shape (pending core
-  // loader migration) — read `.web` defensively in that case.
-  const allComponents: Record<string, string> = {};
-  for (const [n, s] of Object.entries(components.view)) allComponents[n] = s;
-  for (const [n, formSrc] of Object.entries(components.form)) {
-    allComponents[n] = typeof formSrc === 'string' ? formSrc : formSrc.web;
-  }
+  // Components — view and form are both single-file sources now.
+  const allComponents: Record<string, string> = { ...components.view, ...components.form };
 
   for (const [name, src] of Object.entries(allComponents)) {
     const propsDecl = extractPropsDeclaration(name, src);

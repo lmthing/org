@@ -4,6 +4,8 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import type { VM } from '../sandbox/quickjs.js';
 import { marshalToQuickJS } from '../sandbox/host-bridge.js';
 import type { RenderHost } from '../session/types.js';
+import { runTsc } from '../typecheck/tsc.js';
+import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 
 /**
  * Capability profile controlling which host primitives a VM receives.
@@ -203,6 +205,25 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
       return { ok: true, bytes: Buffer.byteLength(String(content), 'utf8') };
     } catch (e) {
       return { ok: false, bytes: 0, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+  // typecheckSource — run tsc over a standalone TS source string (e.g. a space
+  // function the architect just wrote) against the library DTS, returning a
+  // self-correctable error list. Pure/read-only, so available regardless of profile.
+  // "Cannot find name" diagnostics (2304/2552) are DROPPED: a single function may
+  // legitimately reference sibling space functions not present in this isolated
+  // check, so flagging them would be a false rejection. Syntax and real type
+  // errors still surface.
+  setGlobal('typecheckSource', (src: string) => {
+    try {
+      const result = runTsc({ ambientDts: LIBRARY_DTS, sessionContext: '', statement: String(src) });
+      const errors = result.diagnostics
+        .filter((d) => d.code !== 2304 && d.code !== 2552)
+        .map((d) => `line ${d.line + 1}:${d.col} TS${d.code}: ${d.message}`);
+      return { ok: errors.length === 0, errors };
+    } catch (e) {
+      return { ok: false, errors: [e instanceof Error ? e.message : String(e)] };
     }
   });
 }

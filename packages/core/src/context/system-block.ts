@@ -289,9 +289,7 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
   }
 
   // 4c. Components — AST-based props + JSDoc (replaces the old regex prop scan).
-  // Form components are authored as a single source file; a few callers may
-  // still hand us the legacy `{web, ink}` shape pending the core loader
-  // migration to single-file form components — read `.web` defensively then.
+  // View and form components are both authored as a single source file.
   const agentComponents = getAgentComponents(space, agent);
   const viewNames = Object.keys(agentComponents.view);
   const formNames = Object.keys(agentComponents.form);
@@ -302,8 +300,7 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
       const doc = extractComponentDoc(name, src);
       compParts.push(`- **${name}** (view)${doc ? ` — ${doc}` : ''}: \`<${name}${props ? ` ${props}` : ''} />\``);
     }
-    for (const [name, formSrc] of Object.entries(agentComponents.form)) {
-      const src = typeof formSrc === 'string' ? formSrc : formSrc.web;
+    for (const [name, src] of Object.entries(agentComponents.form)) {
       const props = renderComponentPropsExample(name, src);
       const doc = extractComponentDoc(name, src);
       compParts.push(`- **${name}** (form — use with ask())${doc ? ` — ${doc}` : ''}: \`await ask(<${name}${props ? ` ${props}` : ''} />)\``);
