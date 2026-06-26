@@ -1,1 +1,0 @@
-Windsurf (formerly Codeium) is an AI-native IDE with Cascade agentic flows, deep codebase understanding, and a generous free tier. It competes directly with Cursor on AI-native editing experience.

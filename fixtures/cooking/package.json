@@ -1,7 +1,0 @@
-{
-  "name": "cooking-space",
-  "version": "1.0.0",
-  "dependencies": {
-    "sommelier-space": "file:../sommelier"
-  }
-}

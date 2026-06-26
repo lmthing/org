@@ -1,2 +1,0 @@
-# Placeholder. The real architect agent lives in packages/core/system-spaces/architect
-# and is merged in at runtime. An empty agent here must NOT shadow it (see mergeSystemInto).
