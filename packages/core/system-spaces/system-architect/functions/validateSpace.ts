@@ -6,26 +6,65 @@ function joinPath(...parts: string[]): string {
     .join('/');
 }
 
+/** Resolve a space arg to its absolute directory. The model passes only a bare slug
+ *  and NEVER needs to know where spaces are stored — this resolves it under the
+ *  host-injected project spaces dir (process.env.LMTHING_PROJECT_SPACES_DIR =
+ *  .lmthing/<project>/spaces, default .lmthing/user/spaces). A value already containing
+ *  "/" is used verbatim (the iterate flow passes a discovered dir). */
+function resolveSpaceDir(space: string): string {
+  const s = String(space ?? '').replace(/\/+$/, '');
+  if (s.includes('/')) return s;
+  const base = (process.env.LMTHING_PROJECT_SPACES_DIR || '.lmthing/user/spaces').replace(/\/+$/, '');
+  return joinPath(base, s);
+}
+
 /**
- * Validate that a scaffolded space directory is structurally correct before
- * passing it to registerSpace(). Uses readFileRaw and execShell ls only.
+ * Validate that a scaffolded space is structurally correct before passing it to
+ * registerSpace(). Uses readFileRaw and execShell ls only.
  *
- * @param dir Absolute path to the space directory.
- * @returns   { ok, errors: string[] }
+ * @param space Bare space slug (resolved under LMTHING_PROJECT_SPACES_DIR) or an
+ *              already-absolute dir. The model passes the slug it built with.
+ * @returns   { ok, errors, dir } — `dir` is the resolved absolute path, handed to
+ *            registerSpace by the register step so the model never builds a path.
  */
-export function validateSpace(dir: string): { ok: boolean; errors: string[] } {
+export function validateSpace(space: string): { ok: boolean; errors: string[]; dir: string } {
+  const dir = resolveSpaceDir(space);
   const errors: string[] = [];
+
+  // Scan a body of text for loadKnowledge('<domain>','<field>','<option>.md') calls and
+  // verify each referenced option file actually exists on disk. This catches the silent
+  // mismatch where a systemPrompt / task instruction names knowledge options that the
+  // build step never wrote (e.g. hardcoded 'calypso.md' when research produced different
+  // slugs) — at runtime loadKnowledge would fail, but validation would otherwise pass.
+  const checkLoadKnowledge = (text: string, where: string): void => {
+    const re = /loadKnowledge\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/g;
+    const seen = new Set<string>();
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const domain = m[1]!;
+      const field = m[2]!;
+      const option = m[3]!;
+      const key = `${domain}/${field}/${option}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const optPath = joinPath(dir, 'knowledge', domain, field, option);
+      const r = readFileRaw(optPath, { limit: 1 });
+      if (!r.ok) {
+        errors.push(`${where}: loadKnowledge('${domain}', '${field}', '${option}') references knowledge/${key} which does not exist`);
+      }
+    }
+  };
 
   const agentsDirCheck = execShell(`ls "${joinPath(dir, 'agents')}" 2>&1`);
   if (!agentsDirCheck.ok || agentsDirCheck.stderr.includes('No such')) {
     errors.push(`Missing agents/ directory`);
-    return { ok: false, errors };
+    return { ok: false, errors, dir };
   }
 
   const agentSlugs = agentsDirCheck.stdout.trim().split('\n').filter(Boolean);
   if (agentSlugs.length === 0) {
     errors.push('agents/ directory is empty — at least one agent required');
-    return { ok: false, errors };
+    return { ok: false, errors, dir };
   }
 
   for (const slug of agentSlugs) {
@@ -44,6 +83,9 @@ export function validateSpace(dir: string): { ok: boolean; errors: string[] } {
     }
 
     const fm = fmMatch[1] ?? '';
+
+    // The system-prompt body must only reference knowledge options that exist.
+    checkLoadKnowledge(content, `Agent "${slug}" instruct.md`);
 
     // Extract functions list
     const fnLines = (fm.match(/^functions:\s*\n((?:  - .+\n?)*)/m) ?? [])[1] ?? '';
@@ -126,6 +168,12 @@ export function validateSpace(dir: string): { ok: boolean; errors: string[] } {
         continue;
       }
 
+      // Task instructions also call loadKnowledge — validate their option refs too.
+      for (const f of tlFiles) {
+        const r = readFileRaw(joinPath(dir, 'tasklists', tl, f), { limit: 2000 });
+        if (r.ok) checkLoadKnowledge(r.content, `Tasklist "${tl}" task ${f}`);
+      }
+
       const goalCount = tlFiles.filter((f: string) => {
         const r = readFileRaw(joinPath(dir, 'tasklists', tl, f), { limit: 500 });
         return r.ok && /^goal:\s*true/m.test(r.content);
@@ -160,5 +208,5 @@ export function validateSpace(dir: string): { ok: boolean; errors: string[] } {
     }
   }
 
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, dir };
 }

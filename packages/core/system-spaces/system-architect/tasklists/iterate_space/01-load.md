@@ -19,8 +19,9 @@ the affected files with the per-file builders.
 The seed provides `spaceKey` (a dir or key). If it's empty, check memory, then list spaces:
 ```typescript
 const remembered = recall('architect.lastSpaceDir');
-const base = process.env.LMTHING_PROJECT_SPACES_DIR ?? (process.env.LMTHING_SPACE_DIR ? process.env.LMTHING_SPACE_DIR.replace(/\/[^/]+\/?$/, '') : '/tmp/architect-spaces');
-const spaces = listScaffoldedSpaces(base);
+// listScaffoldedSpaces() resolves the project spaces dir itself — you never compute a
+// path or touch process.env. Each result has { name (slug), dir (absolute), agents }.
+const spaces = listScaffoldedSpaces();
 ```
 Resolve the target dir from `spaceKey` (verbatim if set), else `remembered`, else ask the user
 which of `spaces` to iterate on.

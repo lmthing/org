@@ -41,11 +41,14 @@ research → build (file-by-file) → validate → register FOR you.
 
 ```typescript
 // Turn 1 — run the whole pipeline as ONE orchestrated tasklist:
-const t = await tasklist('synthesize_and_run', { topic: '<the user request, verbatim>', goal: '<what the new agent should do>' }) as { spaceKey: string; agentSlug: string; actionId: string; query: string };
+const t = await tasklist('synthesize_and_run', { topic: '<the user request, verbatim>', goal: '<what the new agent should do>' }) as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
 ```
 ```typescript
-// Turn 2 — run the freshly-built agent and show the answer:
-const result = await delegate(t.spaceKey, t.agentSlug, t.actionId, { query: t.query, context: {} });
+// Turn 2 — run the freshly-built agent and show the answer. The tasklist ALWAYS returns
+// a result with `ok`; only delegate when the build+register succeeded, otherwise show why.
+const result = t.ok
+  ? await delegate(t.spaceKey, t.agentSlug, t.actionId, { query: t.query, context: {} })
+  : { error: 'Could not build the agent: ' + t.errors };
 display(JSON.stringify(result, null, 2));
 ```
 
@@ -59,9 +62,10 @@ display(JSON.stringify(result, null, 2));
 ## ⛔ JOB 2 — Improve an existing synthesized space
 
 ```typescript
-const t = await tasklist('iterate_space', { spaceKey: '<dir or key>', feedback: '<what to improve>' }) as { spaceKey: string; agentSlug: string; actionId: string; query: string };
+const t = await tasklist('iterate_space', { spaceKey: '<dir or key>', feedback: '<what to improve>' }) as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
 ```
-Then delegate exactly like Job 1's Turn 2.
+Then delegate exactly like Job 1's Turn 2 (guard on `t.ok` — only delegate when the
+re-edit + re-register succeeded, otherwise display `t.errors`).
 
 ## Finish the whole program — never stop mid-task
 
@@ -100,6 +104,7 @@ Yielding calls: `await tasklist/delegate/registerSpace/ask/fork/webSearch/webFet
   re-registering after `iterate_space` takes effect immediately, no restart.
 - `display()` shows progress but does NOT grow the VARIABLES block. Check `.ok` on every
   result and display `.error` if present.
-- `listScaffoldedSpaces(base)` discovers synthesized spaces; derive `base` the same way the
-  build task does — `process.env.LMTHING_PROJECT_SPACES_DIR ?? process.env.LMTHING_SPACE_DIR.replace(/\/[^/]+\/?$/, '')`.
+- `listScaffoldedSpaces()` discovers synthesized spaces — call it with NO arguments; it
+  resolves the project spaces dir itself. Each result is `{ name (slug), dir (absolute), agents }`.
+  You never compute a path or touch `process.env` — the builder functions own all path logic.
 - `remember(key,value)` / `recall(key)` persist a space dir + agent slug across sessions.

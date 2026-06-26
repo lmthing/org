@@ -24,11 +24,24 @@ function stripExt(name: string): string {
  * @returns { ok, path, errors } — when `ok` is false, `errors` holds the typecheck
  *          (or write) diagnostics for the model to fix and re-call.
  */
+/** Resolve a space arg to its absolute directory. The model passes only a bare slug
+ *  and NEVER needs to know where spaces are stored — this resolves it under the
+ *  host-injected project spaces dir (process.env.LMTHING_PROJECT_SPACES_DIR =
+ *  .lmthing/<project>/spaces, default .lmthing/user/spaces). A value already containing
+ *  "/" is used verbatim (the iterate flow passes a discovered dir). */
+function resolveSpaceDir(space: string): string {
+  const s = String(space ?? '').replace(/\/+$/, '');
+  if (s.includes('/')) return s;
+  const base = (process.env.LMTHING_PROJECT_SPACES_DIR || '.lmthing/user/spaces').replace(/\/+$/, '');
+  return joinPath(base, s);
+}
+
 export function writeFunctionFile(
-  dir: string,
+  space: string,
   name: string,
   source: string,
 ): { ok: boolean; path: string; errors: string[] } {
+  const dir = resolveSpaceDir(space);
   const fnName = stripExt(name ?? '');
   if (!fnName) return { ok: false, path: '', errors: ['writeFunctionFile: name is required'] };
   if (typeof source !== 'string' || source.trim() === '') {

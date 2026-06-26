@@ -132,6 +132,34 @@ describe('runTasklist orchestrator', () => {
     expect(seen).not.toContain('BRANCH_T');
   });
 
+  it('throws (not silent undefined) when the goal task is skipped, folding in upstream errors', async () => {
+    // Regression for the architect "returned null" failure: build fails validation →
+    // register's `build.ok == true` condition skips it → the goal task (execute), which
+    // depends on register, is skipped too. Previously runTasklist returned `undefined`,
+    // surfacing to the caller as a silent `null`. Now it throws with the upstream reason.
+    const dir = await makeTasklistSpace({
+      '01-build.md': `---\nid: build\noutput:\n  ok: boolean\n  errors: string\n---\n\nBUILD_T: build + validate.`,
+      '02-register.md': `---\nid: register\ndependsOn:\n  - build\ncondition: "build.ok == true"\noutput:\n  spaceKey: string\n---\n\nREG_T: register the space.`,
+      '03-execute.md': `---\nid: execute\ndependsOn:\n  - register\ngoal: true\ncondition: "register.spaceKey != ''"\noutput:\n  v: number\n---\n\nEXEC_T: the goal.`,
+    });
+    const space = await loadSpace(dir);
+    const seen: string[] = [];
+    const engine = engineFor(
+      dir,
+      [
+        { token: 'BUILD_T', code: `currentTask.resolve({ ok: false, errors: 'validation failed: knowledge missing' });` },
+        { token: 'REG_T', code: `currentTask.resolve({ spaceKey: 'k' });` },
+        { token: 'EXEC_T', code: `currentTask.resolve({ v: 1 });` },
+      ],
+      seen,
+    );
+    await expect(runTasklist({ name: 'flow', space, forkEngine: engine })).rejects.toThrow(
+      /goal task "execute" was skipped.*validation failed: knowledge missing/s,
+    );
+    // The downstream tasks never ran — only build was dispatched.
+    expect(seen).toEqual(['BUILD_T']);
+  });
+
   it('emits a tasklist node with per-task children (done + skipped) when given a tracer', async () => {
     const dir = await makeTasklistSpace({
       '01-gate.md': `---\nid: gate\noutput:\n  go: boolean\n---\n\nGATE_T: decide the gate.`,

@@ -150,6 +150,29 @@ export async function runTasklist(opts: {
       }
     }
 
+    // A skipped goal task means the pipeline short-circuited — an upstream
+    // condition was not met — and produced NO result. Returning `undefined`
+    // here would surface to the caller as a silent `null` delegate result with
+    // no explanation (the exact failure that left the architect returning null).
+    // Fail loudly instead, folding in any upstream `errors`/`error` fields so the
+    // model sees WHY (e.g. a validation failure) and can react.
+    if (goalTask && skipped.has(goalTask.id)) {
+      const diagnostics = Object.entries(allOutputs)
+        .map(([id, out]) => {
+          if (out && typeof out === 'object') {
+            const err = (out as Record<string, unknown>).errors ?? (out as Record<string, unknown>).error;
+            if (typeof err === 'string' && err.trim()) return `${id}: ${err.trim()}`;
+          }
+          return null;
+        })
+        .filter((d): d is string => d !== null);
+      const detail = diagnostics.length > 0 ? ` Upstream errors — ${diagnostics.join('; ')}` : '';
+      throw new Error(
+        `Tasklist "${name}" produced no result: its goal task "${goalTask.id}" was skipped ` +
+          `because an upstream condition was not met.${detail}`,
+      );
+    }
+
     if (tracer && tasklistScope) tracer.end(tasklistScope, 'done', { result: goalOutput });
     return goalOutput;
   } catch (err) {

@@ -23,12 +23,25 @@ function stripExt(name: string): string {
  *
  * @returns { ok, path, error? }
  */
+/** Resolve a space arg to its absolute directory. The model passes only a bare slug
+ *  and NEVER needs to know where spaces are stored — this resolves it under the
+ *  host-injected project spaces dir (process.env.LMTHING_PROJECT_SPACES_DIR =
+ *  .lmthing/<project>/spaces, default .lmthing/user/spaces). A value already containing
+ *  "/" is used verbatim (the iterate flow passes a discovered dir). */
+function resolveSpaceDir(space: string): string {
+  const s = String(space ?? '').replace(/\/+$/, '');
+  if (s.includes('/')) return s;
+  const base = (process.env.LMTHING_PROJECT_SPACES_DIR || '.lmthing/user/spaces').replace(/\/+$/, '');
+  return joinPath(base, s);
+}
+
 export function writeComponentFile(
-  dir: string,
+  space: string,
   kind: 'view' | 'form',
   name: string,
   source: string,
 ): { ok: boolean; path: string; error?: string } {
+  const dir = resolveSpaceDir(space);
   const compName = stripExt(name ?? '');
   if (!compName) return { ok: false, path: '', error: 'writeComponentFile: name is required' };
   if (kind !== 'view' && kind !== 'form') {
