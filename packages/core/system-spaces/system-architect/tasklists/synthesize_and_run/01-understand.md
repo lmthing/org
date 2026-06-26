@@ -11,10 +11,10 @@ goal: false
 
 Analyze the seed variables and produce a structured summary of what needs to be built.
 
-The seed provides `goal` (string) and `constraints` (string array). Read them and output:
-- `goal`: a refined one-sentence goal describing the specialist agent's purpose
-- `constraints`: a comma-separated summary of the key constraints
-- `domainHints`: the key domain knowledge or APIs the synthesized agent will need (e.g. "BGG XML API v2, player count + playtime filters")
+The seed provides `topic` (string) and `goal` (string). Read them and output:
+- `goal`: a refined one-sentence goal describing the specialist agent's purpose based on the topic and initial goal.
+- `constraints`: a comma-separated summary of the key constraints.
+- `domainHints`: the key domain knowledge or APIs the synthesized agent will need (e.g. "BGG XML API v2, player count + playtime filters").
 
 **DO NOT implement the agent. DO NOT write application logic, arrays, functions, or any code that solves the domain problem.** This is a pure analysis step — read the seed, summarize, resolve.
 

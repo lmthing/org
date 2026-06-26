@@ -392,6 +392,15 @@ async function main(): Promise<void> {
     }
     const spaceDir = args.space ?? process.cwd();
     const renderHost = new InkRenderHost(/* plain= */ true);
+    // The default 'user' project's spaces/ tree — the single source of truth for
+    // synthesized spaces (same convention as serve mode and the session-manager).
+    // Passing it as an ABSOLUTE path is REQUIRED: it propagates into delegate/fork
+    // VMs as LMTHING_PROJECT_SPACES_DIR so the architect's builder functions
+    // (writeAgentFile/writeTaskFile/…) resolve a new space's path absolutely. Without
+    // it they fall back to a relative path resolved against the architect's OWN space
+    // dir, writing files where registerSpace can't find them (the build "succeeds" but
+    // registration fails with "must have an agents/ directory").
+    const projectSpacesDir = join(lmthingRoot, 'user', 'spaces');
     const session = new Session(
       {
         spaceDir,
@@ -403,6 +412,7 @@ async function main(): Promise<void> {
         noDefaultAction: args.noDefaultAction,
         roleModels,
         budget,
+        projectSpacesDir,
       },
       { streamFn },
     );

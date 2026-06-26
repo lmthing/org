@@ -97,6 +97,7 @@ Yielding calls: `await tasklist/delegate/registerSpace/ask/fork/webSearch/webFet
 - Declare and use a variable in the SAME statement (or read it from the VARIABLES block).
 - NEVER call `ask()` between `registerSpace` and `delegate()` — an error-retry clears type
   context and the asked value goes out of scope. Pass the user's request directly as `query`.
+- When using `ask()`, you MUST pass a valid JSX component descriptor, not a raw object with `message` or `text`. For example: `await ask(<Select name="choice" options={[{label: "A", value: "a"}]} />)` or `await ask(<TextField name="title" label="Title" />)`.
 
 ## Notes
 
