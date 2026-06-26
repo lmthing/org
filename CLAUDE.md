@@ -16,7 +16,7 @@ pnpm dev              # watch + rebuild all packages
 # CLI: node packages/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
 ```
 
-Testing without keys: `--mock <file>` / `LM_MOCK=<file>` (scripted streamFn, no credentials). REPL: `--repl`. Programmatic/automated: `--claude`. Web DevTools UI: `--web <port>`. Full testing guide → `@.claude/skills/writing-tests.md`.
+Testing without keys: `--mock <file>` / `LM_MOCK=<file>` (scripted streamFn, no credentials). REPL: `--repl`. Programmatic/automated: `--claude`. Web DevTools UI: `--web <port>`. Headless single-shot: `--request "<msg>"` (runs THING agent, streams to stdout, exits — no TUI, no server). Full testing guide → `@.claude/skills/writing-tests.md`.
 
 ## Packages
 

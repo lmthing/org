@@ -271,7 +271,8 @@ async function main(): Promise<void> {
     !args.space &&
     !args.message &&
     !args.repl &&
-    !args.webPort;
+    !args.webPort &&
+    !args.request;
   if (isBareDefault) {
     const { SessionManager } = await import('../server/session-manager.js');
     const { startSessionServer } = await import('../server/serve.js');
@@ -378,6 +379,35 @@ async function main(): Promise<void> {
       await session.continue(trimmed);
     }
 
+    session.dispose();
+  } else if (args.request) {
+    // Headless single-shot mode: --request "..."
+    // Materializes the runtime (same as bare/serve), then runs one turn of the
+    // THING agent and exits. --space defaults to cwd so project-local agents
+    // are picked up automatically.
+    const lmthingRoot = resolveLmthingRoot();
+    if (runtimeNeedsInit(lmthingRoot)) {
+      materializeRuntime(lmthingRoot);
+      process.stdout.write(`lmthing runtime initialized/repaired at ${lmthingRoot}\n`);
+    }
+    const spaceDir = args.space ?? process.cwd();
+    const renderHost = new InkRenderHost(/* plain= */ true);
+    const session = new Session(
+      {
+        spaceDir,
+        agentSlug: args.agent ?? 'thing',
+        modelAlias: modelSpec,
+        renderHost,
+        traceFile: args.traceFile,
+        systemSpaceDirs,
+        noDefaultAction: args.noDefaultAction,
+        roleModels,
+        budget,
+      },
+      { streamFn },
+    );
+
+    await session.start(args.request);
     session.dispose();
   } else {
     // Terminal mode: single message, run to completion

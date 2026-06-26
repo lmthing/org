@@ -35,6 +35,9 @@ export interface CliArgs {
   init?: boolean;
   /** Active project name for multi-session server mode (default: "user"). */
   project?: string;
+  /** Headless single-shot mode: send one request to the THING agent, stream
+   *  output to stdout, then exit. `--space` defaults to `process.cwd()`. */
+  request?: string;
 }
 
 /** Parse a CLI numeric flag value; throws a clear error on a non-number. */
@@ -158,6 +161,12 @@ export function parseArgs(argv: string[]): CliArgs {
         result.mock = val;
         break;
       }
+      case '--request': {
+        const val = args.shift();
+        if (!val) throw new Error('--request requires a message value');
+        result.request = val;
+        break;
+      }
       case '--dump-system-prompt': {
         const val = args.shift();
         if (!val) throw new Error('--dump-system-prompt requires an output file path');
@@ -201,6 +210,11 @@ export function parseArgs(argv: string[]): CliArgs {
   // Bare invocation (no positional message, no --space, none of the interactive
   // or single-run flags set): treat as the default "launch server" path. The
   // bin.ts entry-point handles it; no validation needed here.
+  // --request: headless single-shot mode — space and message both optional.
+  if (result.request) {
+    return result as CliArgs;
+  }
+
   const isBareDefault =
     !result.space &&
     !result.message &&
