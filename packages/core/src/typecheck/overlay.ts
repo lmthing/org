@@ -182,10 +182,25 @@ export function stripCatalogImports(src: string, catalogNames: ReadonlySet<strin
 }
 
 /**
- * Extract exported function signature from source as a declare statement.
+ * Extract exported function signature from source as a declare statement,
+ * prepending any local interface/type-alias declarations so that parameter
+ * types referencing them resolve correctly in the ambient DTS overlay.
  */
 export function extractFunctionSignature(name: string, src: string): string {
   const sf = ts.createSourceFile('fn.ts', src, ts.ScriptTarget.ESNext, true);
+  const parts: string[] = [];
+
+  // Collect local interface and type-alias declarations. They may be referenced
+  // by the function's parameter types (e.g. `spec: TaskFileSpec`) and must
+  // appear in the ambient DTS for the TypeScript checker to resolve them.
+  for (const node of sf.statements) {
+    if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
+      // Slice the raw source text (getStart skips leading trivia/comments)
+      const text = src.slice(node.getStart(sf), node.end).trim();
+      // Strip any leading export/declare keywords — in ambient context they're implicit
+      parts.push(text.replace(/^(?:export\s+)?(?:declare\s+)?/, ''));
+    }
+  }
 
   for (const node of sf.statements) {
     if (
@@ -203,10 +218,12 @@ export function extractFunctionSignature(name: string, src: string): string {
         .join(', ');
       const retType = node.type ? src.slice(node.type.pos, node.type.end).trim() : 'unknown';
       const asyncKw = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword) ? 'async ' : '';
-      return `declare ${asyncKw}function ${name}(${params}): ${retType};`;
+      parts.push(`declare ${asyncKw}function ${name}(${params}): ${retType};`);
+      return parts.join('\n');
     }
   }
 
   // Fallback: declare as unknown return
-  return `declare function ${name}(...args: unknown[]): unknown;`;
+  parts.push(`declare function ${name}(...args: unknown[]): unknown;`);
+  return parts.join('\n');
 }

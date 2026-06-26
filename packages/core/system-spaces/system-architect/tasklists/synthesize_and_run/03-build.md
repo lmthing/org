@@ -31,6 +31,13 @@ shown back to you, so there is nothing to wait for. Keep emitting statements thr
 
 ## Step 2 — Write the files (each call writes exactly ONE file; all are SYNC, no await)
 
+**HARD LIMIT: maximum 3 knowledge fields total.** If research produced 6–8 fields, merge
+related topics under broader headings (e.g. merge "history"+"mythology"+"archaeology" →
+"history_and_lore"; merge "demographics"+"economy"+"infrastructure" → "practical"). Writing
+more than 3 fields risks hitting output limits mid-build and corrupting the program.
+
+**CRITICAL: You MUST write ALL files (knowledge, agent, task) AND run `validateSpace` AND call `currentTask.resolve(...)` in the EXACT SAME TURN. Never resolve early with an incomplete build.**
+
 Every builder takes the **space slug** (`space`) as its first arg — never a path. Write in any
 order; `validateSpace` at the end checks the whole thing. Each builder returns `{ ok, ... }` —
 check `.ok` and fix before continuing. Available builders:
@@ -43,12 +50,22 @@ check `.ok` and fix before continuing. Available builders:
   **systemPrompt: 2-3 imperative sentences** describing what the agent IS and its domain — NEVER a
   numbered "## Process". If you include knowledge, the systemPrompt must tell the agent to call
   `await loadKnowledge('<domain>', '<field>', '<option>.md')` (note the `.md` suffix).
-- `writeTaskFile(space, tasklist, { id, instruction, output, dependsOn?, goal?, optional?, condition? })`
+- `writeTaskFile(space, tasklist, { id: string, instruction: string, output: Record<string, string>, dependsOn?: string[], goal?: boolean, optional?: boolean, condition?: string })`
   — one task file. Mark exactly ONE task per tasklist `goal: true` (its output is the final answer).
+  **`output` MUST be a JS object — NEVER a string:**
+  ```typescript
+  // ✗ WRONG — these will fail at runtime:
+  //   output: 'answer'
+  //   output: 'answer: string'
+  //   output: 'answer: string, sources: string[]'
+  // ✓ RIGHT — an object mapping field names to type strings:
+  //   output: { answer: 'string' }
+  //   output: { answer: 'string', sources: 'string[]' }
+  ```
   **Every task instruction MUST end with an explicit `currentTask.resolve({...})`** filling the
   fields named in its `output`. One task is enough for most agents.
 - `writeKnowledgeIndex(space, domain, field, { variable, default?, type?, description })` — the field manifest.
-- `writeKnowledgeOption(space, domain, field, slug, content)` — one option `.md` (markdown body, no frontmatter).
+- `writeKnowledgeOption(space, domain, field, slug, content)` — one option `.md` (markdown body, no frontmatter). Keep content extremely brief (max 1–2 paragraphs).
 - `writeFunctionFile(space, name, source)` — one space function. Single-export TS, NO imports, host
   primitives only. Returns `{ ok, errors }`; if `ok` is false, read `errors` and rewrite. Only add a
   function if domain logic genuinely can't use readFileRaw/writeFileRaw/execShell/fetch/process.env.
