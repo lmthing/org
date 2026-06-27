@@ -29,11 +29,15 @@ const r1 = await webSearch(q1);
 const top = r1 && r1.results ? r1.results.slice(0, 2) : [];
 display(<p>Found {top.length} sources for "{understand.domainHints}"</p>);
 
+// IMPORTANT: give webFetch a CONSISTENT fallback OBJECT (never `: ''`). Falling back to a
+// string makes `page1` a `string | {…}` union, so every later `page1.ok`/`page1.content`
+// access fails typecheck. Keep the shape uniform:
 const url1 = top[0] ? top[0].url : '';
-const page1 = url1 ? await webFetch(url1) : '';
+const page1 = url1 ? await webFetch(url1) : { ok: false, content: '' };
 
 const url2 = top[1] ? top[1].url : '';
-const page2 = url2 ? await webFetch(url2) : '';
+const page2 = url2 ? await webFetch(url2) : { ok: false, content: '' };
+// Now `page1.content` / `page1.ok` are always safe to read.
 ```
 
 Distill the fetched content into a `knowledge` array matching the KnowledgeSpec shape
