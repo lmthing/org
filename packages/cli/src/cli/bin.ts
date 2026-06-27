@@ -2,6 +2,10 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readdir } from 'node:fs/promises';
+import React, { useState } from 'react';
+import { render, Box, Text, useInput } from 'ink';
+import TextInput from 'ink-text-input';
 
 // Load .env from the directory where the script is invoked
 function loadEnv() {
@@ -33,31 +37,91 @@ import { startWebServer } from '../web/serve.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Read one line using the same 'readable' + read() paused-mode pattern Ink uses.
-// Avoids 'data' listeners (which force flowing mode) and readline (which leaves
-// permanent emitKeypressEvents listeners) — both break Ink's raw-mode stdin.read().
-function readLine(question: string): Promise<string> {
-  process.stdout.write(question);
-  process.stdin.setEncoding('utf8');
-  return new Promise((resolve) => {
-    let buf = '';
-    const onReadable = () => {
-      let chunk: string | null;
-      while ((chunk = process.stdin.read() as string | null) !== null) {
-        buf += chunk;
-        const rIdx = buf.indexOf('\r');
-        const nIdx = buf.indexOf('\n');
-        const idx = rIdx === -1 ? nIdx : nIdx === -1 ? rIdx : Math.min(rIdx, nIdx);
-        if (idx !== -1) {
-          process.stdin.off('readable', onReadable);
-          // Do NOT pause() — pause() sets kPaused=true which prevents Ink's
-          // later read(0) from calling _read(), so the TTY never starts reading.
-          resolve(buf.slice(0, idx).trim());
-          return;
+async function getAutocompleteWords(args: CliArgs, lmthingRoot: string): Promise<string[]> {
+  const { loadSpace, loadSystemSpaces } = await import('@lmthing/core');
+  const words = new Set<string>();
+
+  const addSpace = (space: any) => {
+    const spaceId = space.dir ? basename(space.dir) : 'user';
+    words.add(`@${spaceId}`);
+    for (const [agentSlug, agent] of Object.entries(space.agents || {})) {
+      words.add(`@${spaceId}.${agentSlug}`);
+      if ((agent as any).actions) {
+        for (const action of (agent as any).actions) {
+          words.add(`@${spaceId}.${agentSlug}.${action.id}`);
         }
       }
-    };
-    process.stdin.on('readable', onReadable);
+    }
+  };
+
+  try {
+    const { systemSpaceDirs } = resolveAgentAndSpaces(args);
+    const sysSpaces = await loadSystemSpaces(systemSpaceDirs ?? defaultSystemSpaceDirs());
+    for (const s of sysSpaces) addSpace(s);
+  } catch {}
+
+  if (args.space) {
+    try {
+      const userSpace = await loadSpace(args.space);
+      addSpace(userSpace);
+    } catch {}
+  }
+
+  try {
+    const projectSpacesDir = join(lmthingRoot, 'user', 'spaces');
+    const dirs = await readdir(projectSpacesDir);
+    for (const d of dirs) {
+      try {
+        const space = await loadSpace(join(projectSpacesDir, d));
+        addSpace(space);
+      } catch {}
+    }
+  } catch {}
+
+  return Array.from(words);
+}
+
+function ReplPrompt({ question, completions, onDone }: { question: string, completions: string[], onDone: (val: string) => void }) {
+  const [value, setValue] = useState('');
+  
+  useInput((input, key) => {
+    if (key.tab) {
+      const parts = value.split(/\s+/);
+      const currentWord = parts[parts.length - 1] ?? '';
+      if (currentWord) {
+        const hits = completions.filter(c => c.startsWith(currentWord));
+        if (hits.length === 1) {
+          parts[parts.length - 1] = hits[0]!;
+          setValue(parts.join(' ') + ' ');
+        } else if (hits.length > 1) {
+          const idx = hits.indexOf(currentWord);
+          const next = idx === -1 ? hits[0]! : hits[(idx + 1) % hits.length]!;
+          parts[parts.length - 1] = next;
+          setValue(parts.join(' '));
+        }
+      }
+    }
+  }, { isActive: true });
+
+  return React.createElement(Box, null,
+    React.createElement(Text, { color: "cyan" }, question),
+    React.createElement(TextInput, { value, onChange: setValue, onSubmit: onDone })
+  );
+}
+
+function readLine(question: string, completions: string[] = []): Promise<string> {
+  return new Promise((resolve) => {
+    const { unmount } = render(
+      React.createElement(ReplPrompt, {
+        question,
+        completions,
+        onDone: (val: string) => {
+          unmount();
+          process.stdout.write(`\\x1b[2K\\x1b[G\\x1b[36m${question}\\x1b[39m${val}\\n`);
+          resolve(val.trim());
+        }
+      })
+    );
   });
 }
 
@@ -377,10 +441,12 @@ async function main(): Promise<void> {
 
     process.stdout.write(`REPL — space: ${args.space}  agent: ${agentSlug}\nType a message, or "exit" to quit.\n\n`);
 
+    const completions = await getAutocompleteWords(args, resolveLmthingRoot());
+
     // First message — may have been passed as a positional arg or prompted
     let firstMessage = args.message;
     if (!firstMessage) {
-      firstMessage = await readLine('> ');
+      firstMessage = await readLine('> ', completions);
       if (!firstMessage.trim() || firstMessage.trim() === 'exit') {
         session.dispose();
         return;
@@ -391,7 +457,7 @@ async function main(): Promise<void> {
 
     // Subsequent messages continue the same session
     while (true) {
-      const input = await readLine('\n> ');
+      const input = await readLine('\n> ', completions);
       const trimmed = input.trim();
       if (!trimmed || trimmed === 'exit' || trimmed === 'quit') break;
       await session.continue(trimmed);

@@ -13,9 +13,31 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   const mode = useStore((s) => s.mode);
   const [text, setText] = React.useState('');
   const [uploading, setUploading] = React.useState(false);
+  const [completions, setCompletions] = React.useState<string[]>([]);
+  const [dropdownOpen, setDropdownOpen] = React.useState(false);
+  const [selectedIndex, setSelectedIndex] = React.useState(0);
+  const [filteredCompletions, setFilteredCompletions] = React.useState<string[]>([]);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const dropdownRef = React.useRef<HTMLUListElement>(null);
   const isDisabled = disabled || mode === 'replay';
+
+  React.useEffect(() => {
+    if (dropdownOpen && dropdownRef.current) {
+      const activeEl = dropdownRef.current.children[selectedIndex] as HTMLElement | undefined;
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [dropdownOpen, selectedIndex]);
+
+  React.useEffect(() => {
+    if (!projectId) return;
+    fetch(`/api/projects/${projectId}/completions`)
+      .then((r) => r.json())
+      .then((d: { completions?: string[] }) => { if (d.completions) setCompletions(d.completions); })
+      .catch(() => {});
+  }, [projectId]);
 
   const adjustHeight = () => {
     const el = textareaRef.current;
@@ -29,10 +51,73 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     if (!t || isDisabled) return;
     onSend(t);
     setText('');
+    setDropdownOpen(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const applyCompletion = (completion: string) => {
+    const cursor = textareaRef.current?.selectionStart ?? text.length;
+    const textBefore = text.slice(0, cursor);
+    const match = textBefore.match(/(?:^|\s)(@[^\s]*)$/);
+    if (match) {
+      const prefixLength = match[1]!.length;
+      const startIdx = cursor - prefixLength;
+      const newText = text.slice(0, startIdx) + completion + ' ' + text.slice(cursor);
+      setText(newText);
+      setDropdownOpen(false);
+      setTimeout(() => {
+        const newCursor = startIdx + completion.length + 1;
+        textareaRef.current?.setSelectionRange(newCursor, newCursor);
+        textareaRef.current?.focus();
+      }, 0);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setText(val);
+    adjustHeight();
+
+    const cursor = e.target.selectionStart;
+    const textBefore = val.slice(0, cursor);
+    const match = textBefore.match(/(?:^|\s)(@[^\s]*)$/);
+    
+    if (match) {
+      const prefix = match[1]!;
+      const hits = completions.filter(c => c.startsWith(prefix));
+      if (hits.length > 0) {
+        setFilteredCompletions(hits);
+        setSelectedIndex(0);
+        setDropdownOpen(true);
+      } else {
+        setDropdownOpen(false);
+      }
+    } else {
+      setDropdownOpen(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (dropdownOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex((i) => (i + 1) % filteredCompletions.length);
+        return;
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex((i) => (i - 1 + filteredCompletions.length) % filteredCompletions.length);
+        return;
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        applyCompletion(filteredCompletions[selectedIndex]!);
+        return;
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setDropdownOpen(false);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -67,6 +152,28 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   return (
     <div className={cn('px-4 pb-4 pt-2', className)}>
       <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-ring transition-shadow">
+        {/* Dropdown */}
+        {dropdownOpen && (
+          <ul ref={dropdownRef} className="absolute bottom-full left-4 mb-2 max-h-60 overflow-auto bg-popover text-popover-foreground border border-border rounded-md shadow-lg z-50 min-w-[200px] text-sm py-1">
+            {filteredCompletions.map((c, i) => (
+              <li
+                key={c}
+                className={cn(
+                  "px-3 py-1.5 cursor-pointer",
+                  i === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  applyCompletion(c);
+                }}
+                onMouseEnter={() => setSelectedIndex(i)}
+              >
+                {c}
+              </li>
+            ))}
+          </ul>
+        )}
+
         {/* Attach */}
         {projectId && (
           <label className={cn('shrink-0 mb-0.5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors', uploading && 'opacity-50 pointer-events-none')} title="Attach document">
@@ -79,7 +186,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => { setText(e.target.value); adjustHeight(); }}
+          onChange={handleChange}
           onKeyDown={handleKeyDown}
           disabled={isDisabled}
           rows={1}

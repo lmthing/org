@@ -627,6 +627,17 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
         }
         return;
       }
+
+      // GET /api/projects/:id/completions — autocomplete words (spaces, agents, actions)
+      if (subPath === '/completions' && method === 'GET') {
+        try {
+          const completions = await manager.getAutocompleteWords(rawId);
+          sendJson(res, 200, { completions });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+        return;
+      }
     }
 
     // ─── Space sync: write an edited space to disk so a session can load it ───

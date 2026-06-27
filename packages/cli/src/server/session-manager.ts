@@ -837,6 +837,50 @@ export class SessionManager {
     return results.sort((a, b) => a.id.localeCompare(b.id));
   }
 
+  async getAutocompleteWords(projectId: string): Promise<string[]> {
+    const root = this.requireRoot();
+    const safe = safeProjectId(projectId);
+    if (!safe) throw new Error(`invalid project id: ${projectId}`);
+    
+    const words = new Set<string>();
+    
+    const addSpace = (spaceId: string, agents: any) => {
+      words.add(`@${spaceId}`);
+      for (const [slug, agent] of Object.entries(agents || {})) {
+        words.add(`@${spaceId}.${slug}`);
+        for (const action of (agent as any).actions ?? []) {
+          words.add(`@${spaceId}.${slug}.${action.id}`);
+        }
+      }
+    };
+
+    try {
+      const projectSpaces = await this.listProjectSpaces(safe);
+      for (const s of projectSpaces) {
+        const agentsMap: Record<string, any> = {};
+        for (const a of s.agents) agentsMap[a.slug] = a;
+        addSpace(s.id, agentsMap);
+      }
+    } catch {}
+
+    try {
+      const sysDirs = await listSystemSpaceDirs(root);
+      for (const dir of sysDirs) {
+        try {
+          const space = await loadSpace(dir, { requireAgents: false });
+          addSpace(basename(dir), space.agents);
+        } catch {}
+      }
+    } catch {}
+
+    try {
+      const rootSpace = await loadSpace(join(root, safe), { requireAgents: false });
+      addSpace(safe, rootSpace.agents);
+    } catch {}
+
+    return Array.from(words);
+  }
+
   /**
    * Read all files of a project's space (`<root>/<projectId>/spaces/<spaceId>`)
    * into a flat `{ relPath: content }` map, excluding runtime junk (sessions/,
