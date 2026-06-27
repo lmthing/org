@@ -58,4 +58,10 @@ export function writeTaskFile(
     const sig = extractFunctionSignature('add', src);
     expect(sig).toBe('declare function add(a: number, b: number): number;');
   });
+
+  it('defaults a MISSING return type to any (so result.field does not fail typecheck)', () => {
+    const src = `export function reco(input: { x: number }) { return { ok: true, val: input.x }; }`;
+    const sig = extractFunctionSignature('reco', src);
+    expect(sig).toBe('declare function reco(input: { x: number }): any;');
+  });
 });

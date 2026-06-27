@@ -216,14 +216,17 @@ export function extractFunctionSignature(name: string, src: string): string {
           return `${paramName}${optional}: ${typeStr}`;
         })
         .join(', ');
-      const retType = node.type ? src.slice(node.type.pos, node.type.end).trim() : 'unknown';
+      // A missing return type defaults to `any` (not `unknown`): the model often omits
+      // the annotation, and `unknown` would force every `result.field` access to fail
+      // typecheck and burn a retry. `any` lets callers read the result directly.
+      const retType = node.type ? src.slice(node.type.pos, node.type.end).trim() : 'any';
       const asyncKw = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword) ? 'async ' : '';
       parts.push(`declare ${asyncKw}function ${name}(${params}): ${retType};`);
       return parts.join('\n');
     }
   }
 
-  // Fallback: declare as unknown return
-  parts.push(`declare function ${name}(...args: unknown[]): unknown;`);
+  // Fallback: declare with a permissive any return so callers can use the result.
+  parts.push(`declare function ${name}(...args: unknown[]): any;`);
   return parts.join('\n');
 }

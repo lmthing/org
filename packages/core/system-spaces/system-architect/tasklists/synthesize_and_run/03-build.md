@@ -116,7 +116,9 @@ check `.ok` and fix before continuing. Available builders:
   generators). **If the user explicitly asks for a "function"/"tool"/"calculator" that computes
   something, you MUST create it with writeFunctionFile and declare it on the agent — do NOT inline that
   logic in the task.** A small model is far more reliable calling a tested function than re-deriving
-  math each turn. (Skip a function only for pure look-up/text agents.)
+  math each turn. (Skip a function only for pure look-up/text agents.) Give every function an EXPLICIT
+  return type annotation (e.g. `): { diagnosis: string; targetRecipe: { dose: number } }`) so callers can
+  read its result fields directly.
 - `writeComponentFile(space, 'view'|'form', name, source)` — ONLY when the built-in catalog (~30 display
   + ~33 form components: Stack, Table, Callout, Form, Select…) can't express the UI. Usually skip this.
 
