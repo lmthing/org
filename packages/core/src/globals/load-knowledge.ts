@@ -4,8 +4,16 @@ import { parse as parseYaml } from 'yaml';
 import type { YieldRequest } from '../eval/yield.js';
 
 /**
- * Parse a knowledge file: strip YAML frontmatter, return structured value or
- * { frontmatter, body } object.
+ * Parse a knowledge file. A knowledge OPTION file is plain markdown (that is what
+ * `writeKnowledgeOption` writes), so:
+ *   - With YAML frontmatter (`---` … `---`) → `{ frontmatter, body }`.
+ *   - Otherwise → the raw markdown text.
+ *
+ * It deliberately does NOT run a body-less file through a YAML parser. Markdown such
+ * as `- **MMLU-Pro**: 75.9` is *almost*-valid YAML: the parser does not throw, it
+ * emits noisy `[BAD_ALIAS]` warnings (the `**…**` reads as an alias) and returns a
+ * mangled structure instead of the text — silently corrupting the agent's knowledge.
+ * `logLevel: 'silent'` keeps even legitimate frontmatter parsing quiet.
  */
 export async function loadKnowledgeFile(filePath: string): Promise<unknown> {
   let content: string;
@@ -21,20 +29,15 @@ export async function loadKnowledgeFile(filePath: string): Promise<unknown> {
     const body = frontmatterMatch[2]!.trim();
     let frontmatter: unknown;
     try {
-      frontmatter = parseYaml(frontmatterText);
+      frontmatter = parseYaml(frontmatterText, { logLevel: 'silent' });
     } catch {
       frontmatter = frontmatterText;
     }
     return { frontmatter, body };
   }
 
-  // Try to parse as pure YAML
-  try {
-    return parseYaml(content);
-  } catch {
-    // Return raw text
-    return content.trim();
-  }
+  // No frontmatter → plain markdown body. Return it verbatim (never YAML-parse it).
+  return content.trim();
 }
 
 /**
