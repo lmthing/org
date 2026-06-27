@@ -126,3 +126,49 @@ describe('SessionManager.listProjectSpaces (keyless, on-disk)', () => {
     await expect(manager.listProjectSpaces('../escape')).rejects.toThrow(/invalid project id/);
   });
 });
+
+describe('SessionManager.listProjects — synthetic system project', () => {
+  it('surfaces system/user spaces under a synthetic "system" project, browsable + listable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'lmthing-sysproj-'));
+    tmpDirs.push(root);
+
+    // A real user project.
+    await writeAgent(join(root, 'user', 'spaces', 'mine'), 'mine', '---\ntitle: Mine\n---\nUser space.\n');
+    await writeFile(join(root, 'user', 'project.json'), JSON.stringify({ id: 'user', name: 'Personal', createdAt: 5 }), 'utf8');
+
+    // System spaces live under <root>/system/spaces/ (as materialized on init).
+    await writeAgent(join(root, 'system', 'spaces', 'user-thing'), 'thing', '---\ntitle: THING\n---\nThe main agent.\n');
+    await writeAgent(join(root, 'system', 'spaces', 'system-global'), 'g', '---\ntitle: Global\n---\nPlatform toolkit.\n');
+
+    const manager = makeManager(root);
+
+    // listProjects prepends the synthetic system project.
+    const projects = await manager.listProjects();
+    const ids = projects.map((p) => p.id);
+    expect(ids).toContain('system');
+    expect(ids).toContain('user');
+    expect(ids[0]).toBe('system'); // prepended
+
+    // Its spaces resolve from <root>/system/spaces/.
+    const sysSpaces = await manager.listProjectSpaces('system');
+    expect(sysSpaces.map((s) => s.id).sort()).toEqual(['system-global', 'user-thing']);
+  });
+
+  it('omits the synthetic system project when there are no system spaces', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'lmthing-sysproj-empty-'));
+    tmpDirs.push(root);
+    await mkdir(join(root, 'user'), { recursive: true });
+    await writeFile(join(root, 'user', 'project.json'), JSON.stringify({ id: 'user', name: 'Personal', createdAt: 5 }), 'utf8');
+    const manager = makeManager(root);
+    const ids = (await manager.listProjects()).map((p) => p.id);
+    expect(ids).not.toContain('system');
+  });
+
+  it('refuses to delete the synthetic system project', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'lmthing-sysproj-del-'));
+    tmpDirs.push(root);
+    await writeAgent(join(root, 'system', 'spaces', 'user-thing'), 'thing', '---\ntitle: THING\n---\nMain.\n');
+    const manager = makeManager(root);
+    await expect(manager.deleteProject('system')).rejects.toThrow(/system project cannot be deleted/);
+  });
+});

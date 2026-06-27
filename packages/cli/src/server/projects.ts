@@ -1,19 +1,34 @@
 /**
  * Project helpers — on-disk layout under `lmthingRoot` (<cwd>/.lmthing):
  *
- *   <root>/system/spaces/{global,engineer,architect,solver,deep_research,memory,thing}/
+ *   <root>/system/spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/
  *   <root>/<projectId>/spaces/
  *   <root>/<projectId>/documents/
  *   <root>/<projectId>/instructions.md
  *   <root>/<projectId>/project.json  ← { id, name, createdAt }
  *
- * The default project id is "user".
+ * The default project id is "user". The system spaces live under
+ * `<root>/system/spaces/` and are surfaced as a synthetic, read-only-ish
+ * "system" project (id {@link SYSTEM_PROJECT_ID}) so Studio can browse and edit
+ * them through the same `/api/projects/:id/spaces/...` endpoints as any other
+ * project — `<root>/system/spaces/<id>` matches the generic
+ * `<root>/<projectId>/spaces/<id>` shape, so no special-casing is needed in the
+ * space/files routes, only in {@link listProjects}.
  */
 
 import { mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 
 export const DEFAULT_PROJECT_ID = 'user';
+
+/**
+ * Synthetic project id under which the system spaces (`system-*`) and the
+ * per-user materialized spaces (`user-thing`, `user-memory`) are exposed. It
+ * is not a real on-disk project directory — it maps to `<root>/system/` (whose
+ * `spaces/` subdir holds the system spaces). Reserved: cannot be created or
+ * deleted as a normal project.
+ */
+export const SYSTEM_PROJECT_ID = 'system';
 
 export interface ProjectMeta {
   id: string;
@@ -247,12 +262,18 @@ export async function readProjectMeta(root: string, id: string): Promise<Project
   return JSON.parse(raw) as ProjectMeta;
 }
 
-/** List all projects under `root` (any sub-dir that has a project.json). */
+/**
+ * List all projects under `root` (any sub-dir that has a project.json), plus a
+ * synthetic {@link SYSTEM_PROJECT_ID} project (prepended) whenever the system
+ * spaces dir exists and is non-empty. The system entry lets Studio list, view,
+ * and edit the system/user spaces through the standard project/space routes.
+ */
 export async function listProjects(root: string): Promise<ProjectMeta[]> {
   const entries = await safeDirEntries(root);
   const results: ProjectMeta[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    if (entry.name === SYSTEM_PROJECT_ID) continue; // surfaced synthetically below
     try {
       const meta = await readProjectMeta(root, entry.name);
       results.push(meta);
@@ -260,11 +281,26 @@ export async function listProjects(root: string): Promise<ProjectMeta[]> {
       // No project.json — skip (e.g. the system dir).
     }
   }
-  return results.sort((a, b) => a.createdAt - b.createdAt);
+  results.sort((a, b) => a.createdAt - b.createdAt);
+
+  // Prepend the synthetic "system" project when system spaces are present.
+  const systemSpaces = await listSubdirs(join(root, SYSTEM_PROJECT_ID, 'spaces'));
+  if (systemSpaces.length > 0) {
+    results.unshift({ id: SYSTEM_PROJECT_ID, name: 'System', createdAt: 0 });
+  }
+  return results;
 }
 
-/** Delete a project directory (refuses to delete 'user' — caller may override guard). */
+/**
+ * Delete a project directory. Refuses to delete the synthetic
+ * {@link SYSTEM_PROJECT_ID} project (it would wipe the system spaces). The
+ * default 'user' project can be deleted (the caller layer in serve.ts may
+ * choose to guard against it).
+ */
 export async function deleteProject(root: string, id: string): Promise<void> {
+  if (id === SYSTEM_PROJECT_ID) {
+    throw new Error('the system project cannot be deleted');
+  }
   assertUnder(root, id);
   const dir = projectDir(root, id);
   await rm(dir, { recursive: true, force: true });

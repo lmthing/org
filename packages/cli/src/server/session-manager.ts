@@ -10,6 +10,7 @@ import { WebRenderHost } from '../rpc/server.js';
 import { TraceHub } from '../rpc/trace-hub.js';
 import {
   DEFAULT_PROJECT_ID,
+  SYSTEM_PROJECT_ID,
   safeProjectId,
   slugify,
   scaffoldProject,
@@ -692,6 +693,11 @@ export class SessionManager {
     let suffix = 1;
     let candidate = id;
     while (true) {
+      // 'system' is reserved for the synthetic system project — never clobber it.
+      if (candidate === SYSTEM_PROJECT_ID) {
+        candidate = `${id}-${suffix++}`;
+        continue;
+      }
       try {
         await readProjectMeta(root, candidate);
         // Exists — try a numbered variant.
