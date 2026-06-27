@@ -48,8 +48,11 @@ check `.ok` and fix before continuing. Available builders:
   component names you WILL add; declare your `actions` (each `{ id, label, description, tasklist }`).
   `canDelegateTo` is optional (delegation targets like `"space/agent"` or `"agent#action"`).
   **systemPrompt: 2-3 imperative sentences** describing what the agent IS and its domain — NEVER a
-  numbered "## Process". If you include knowledge, the systemPrompt must tell the agent to call
-  `await loadKnowledge('<domain>', '<field>', '<option>.md')` (note the `.md` suffix).
+  numbered "## Process". If you include knowledge, tell the agent it can load a specific aspect with
+  `loadKnowledge(domain, field, 'aspect.md')` — but ONLY using REAL slugs from `kn` (see the threading
+  step below). ⚠️ NEVER write angle-bracket placeholders like `<field>`/`<aspect>` into the prompt:
+  the agent will copy them verbatim and validation will reject the nonexistent file. Always substitute
+  concrete slugs you actually wrote.
   The agent runs AUTONOMOUSLY: it receives the user's request as `query` and answers it directly.
   Write the prompt to work from `query` — e.g. "Answer the user's `query` directly; if details are
   missing, assume sensible defaults and state them." Never write interactive, "ask the user…" steps.
@@ -135,20 +138,24 @@ const kn = Array.isArray(research?.knowledge) ? research.knowledge : [];
 //    entry.options (the ≥2 aspect files). Loop over kn + entry.options.
 // 2. Build the agent's knowledge refs from what you wrote, NOT from a hand-written list:
 const knowledgeRefs = kn.map((e) => e.domain + '/' + e.field);   // ["chess_rules/pieces", ...]
-// 3. Pass knowledgeRefs as writeAgentFile's `knowledge`. If kn is empty, pass `knowledge: []`.
+// 3. Build a few CONCRETE example load lines from REAL slugs (never placeholders), to embed
+//    in the systemPrompt so the agent copies real refs:
+const exampleLoads = kn.slice(0, 3)
+  .map((e) => "loadKnowledge('" + e.domain + "', '" + e.field + "', '" + e.options[0].slug + ".md')")
+  .join('  ·  ');
+// 4. Pass knowledgeRefs as writeAgentFile's `knowledge`. If kn is empty, pass `knowledge: []`.
 ```
 
 **Do NOT make the agent bulk-load every field.** The agent's prompt ALREADY shows every field's
-overview, so it must NOT pre-load or `inspect` all fields (with many fields that thrashes). Instead,
-the systemPrompt (and the goal task instruction) should tell it to call
-`await loadKnowledge('<domain>', '<field>', '<aspect>.md')` for ONLY the 1–3 specific aspects relevant
-to the current `query`, on demand. Reference real aspect slugs from `kn` (`e.options[i].slug`), never
-`overview`. Example line to embed: "Consult the field overviews above; for detail, load the specific
-aspect you need, e.g. `await loadKnowledge('espresso','grind_size','dialing_in.md')`."
+overview, so it must NOT pre-load or `inspect` all fields (with many fields that thrashes). In the
+systemPrompt, embed `exampleLoads` VERBATIM (it contains real slugs) and tell the agent: "for detail,
+load only the 1–3 aspects relevant to the query, e.g. " + exampleLoads. 
 
-NEVER write a `loadKnowledge('x','y','z.md')` for a `z` slug that isn't in `kn` — it will
-fail validation (and would fail at runtime). The overview is in index.md (auto-surfaced); the
-`z` you load must be a real ASPECT slug from `e.options`, never `overview`.
+⚠️ **NEVER put a literal `<field>` / `<aspect>` / `<domain>` / `<option>` placeholder in the agent
+prompt or any task instruction.** A small model copies it verbatim and `validateSpace` rejects the
+nonexistent `knowledge/.../<field>/<aspect>.md`. Every `loadKnowledge(...)` you write — in the prompt
+AND in task instructions — must use a REAL `e.domain`/`e.field`/`e.options[i].slug` (with the `.md`
+suffix), never `overview`, never a placeholder.
 
 ## Step 3 — Validate (the gate)
 
