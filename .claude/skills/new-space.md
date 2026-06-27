@@ -28,10 +28,14 @@ my-space/
   knowledge/
     domain/
       field/
-        index.md        ← frontmatter: type, variable, default; body = description
-        option-a.md
-        option-b.md
+        index.md        ← frontmatter: type, variable, default; body = OVERVIEW (covers all aspects, surfaced to the agent)
+        aspect-a.md     ← one aspect, loaded on demand via loadKnowledge(domain, field, 'aspect-a.md')
+        aspect-b.md     ← ≥2 aspects per field; do NOT use a single "overview.md"
 ```
+
+The field's `index.md` body is captured as `KnowledgeField.description` (`load.ts`) and
+rendered in the agent's system prompt, so the overview is always available without a
+`loadKnowledge` call; option files hold the per-aspect detail.
 
 ## `agents/<slug>/instruct.md`
 

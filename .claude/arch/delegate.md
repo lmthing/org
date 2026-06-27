@@ -48,6 +48,7 @@ const registry = new DelegateRegistry(spaceMap);
 - Receives a system block built from its own space/agent + its own `directDeps`
 - Is seeded with `context` passed by the caller (and `query` as a free-text instruction)
 - Has a `currentTask` global injected with `{ resolve(value) }` — the child must call `currentTask.resolve(result)` to return a value
+- Does NOT get `ask` — a delegated agent is a programmatic sub-agent (the top-level orchestrator owns the user conversation), so it runs autonomously from its `query`/`context`. `ask` is not injected and not in the child DTS (`buildSystemBlock({ omitAsk: true })` + `LIBRARY_DTS_NO_ASK`), so a stray `ask(...)` fails typecheck rather than hanging.
 - Runs `runTurnLoop` until the model calls `currentTask.resolve(...)`, then returns `capturedResult` to the parent
 
 ## Caps

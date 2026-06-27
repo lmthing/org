@@ -42,6 +42,11 @@ One-liners — full explanations are in the linked file.
 - **Forks always salvage a value unless hard-capped** — `BudgetExceededError` propagates; an explicit `timeout` rejects; orchestrator/delegate forks (no timeout) always salvage. → `@.claude/arch/fork-tasklist.md`
 - **Yield errors surface to the model** (retryable), not silent `undefined`; hard caps still short-circuit. → `@.claude/arch/turn-loop.md`
 - **`delegate()`'s `action` is optional** — omit for model-driven delegation; auto-captures tasklist results. → `@.claude/arch/delegate.md`
+- **`ask` is top-level-session-only** — NOT injected in forks/delegates (they're autonomous/headless) and absent from their DTS (`LIBRARY_DTS_NO_ASK`); a stray `ask()` there fails typecheck. → `@.claude/arch/delegate.md` · `@.claude/arch/fork-tasklist.md`
+- **`tasklist`/`delegate`/`loadKnowledge` return `any`**, and a space function with no explicit return type is declared `any` — so `result.field` reads without a cast. Narrate via `// comments`, never bare prose. → `@.claude/arch/typecheck.md`
+- **Transient stream errors retry** (a dropped/"terminated" connection isn't mistaken for "done"). → `@.claude/arch/turn-loop.md`
+- **Knowledge: overview in `index.md`, multiple aspect options** — the field `index.md` body is the overview (surfaced to the agent); each field has ≥2 `<aspect>.md` files (no single `overview.md`), loaded on demand. → `@.claude/skills/new-space.md`
+- **System spaces auto-adopt source/image updates** — a pristine materialized copy re-syncs from `defaultSystemSpaceDirs()` on boot; locally-edited ones hold back (adopt with `--adopt-system-spaces`). → `packages/cli/src/cli/runtime-init.ts`
 - **`execShell` / `readFileRaw` / `writeFileRaw` rooted at `LMTHING_SPACE_DIR`**, not `process.cwd()`. → `@.claude/skills/system-spaces.md`
 - **JSX in model output** is transpiled to `React.createElement`; the JSX runtime is injected into every VM (sessions, forks, delegates). → `@.claude/arch/typecheck.md`
 

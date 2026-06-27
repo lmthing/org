@@ -18,7 +18,8 @@ description: Load when working on the lmthing project server, session persistenc
 
 ## Commands
 
-- **`lmthing init`** (keyless) copies the bundled system spaces into `.lmthing/system/` and scaffolds the default `user` project. Code: `materializeRuntime` in `packages/cli/src/cli/bin.ts` (uses `cpSync` + `defaultSystemSpaceDirs()`).
+- **`lmthing init`** (keyless) copies the bundled system spaces into `.lmthing/system/` and scaffolds the default `user` project. Code: `materializeRuntime` in `packages/cli/src/cli/runtime-init.ts` (uses `cpSync` + `defaultSystemSpaceDirs()`), which also writes a per-space shipped-hash manifest (`.lmthing/system/.shipped.json`).
+- **On every boot** `ensureRuntime` → `syncSystemSpaces` reconciles materialized system spaces against the shipped source: a PRISTINE copy (matching the recorded hash) auto-adopts a source/image update; a locally-modified copy is held back (adopt with `--adopt-system-spaces` / `LM_ADOPT_SYSTEM_SPACES=1`, which backs it up first). So source edits and image upgrades flow in without a stale-copy surprise.
 - **`lmthing`** (no args) launches the multi-session server (`packages/cli/src/server/{serve.ts,session-manager.ts,projects.ts}`). A provider/API key is required. A project session sets `spaceDir = .lmthing/<project>/` (loaded permissively — `requireAgents:false` — since the `thing` agent comes from the merged system spaces), `agentSlug = 'thing'`, `systemSpaceDirs = .lmthing/system/*`, `preloadSpaceDirs = .lmthing/<project>/spaces/*`, and `projectSpacesDir = .lmthing/<project>/spaces`.
 - **`lmthing --request "<message>"`** — headless single-shot mode. Materializes the runtime if needed, runs the THING agent against `--space` (or `process.cwd()` by default), streams output to stdout with no TUI, then exits. Pipe-safe (`InkRenderHost` plain mode). Combine with `--agent`, `--model`, `--mock`, `--trace`, and other single-run flags.
 

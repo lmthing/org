@@ -31,14 +31,14 @@ The `statementStartLine` calculation accounts for both the header lines and the 
 `LIBRARY_DTS` is a compile-time string constant declaring all built-in globals:
 
 ```typescript
-declare function ask(descriptor: JSXDescriptor): Promise<unknown>;
+declare function ask(descriptor: JSXDescriptor): Promise<unknown>;   // session-only; omitted from fork/delegate DTS (LIBRARY_DTS_NO_ASK)
 declare function display(descriptor: JSXDescriptor): void;
 declare function inspect(...values: unknown[]): Promise<unknown>;
 declare function sleep(duration: string): Promise<void>;
-declare function loadKnowledge(...path: string[]): Promise<unknown>;
+declare function loadKnowledge(...path: string[]): Promise<any>;     // `any` (not unknown): read result fields without a cast
 declare function fork(opts: ForkOpts): Promise<unknown>;
-declare function delegate(packageName: string, agentName: string, action: string, opts?: DelegateOpts): Promise<unknown>;
-declare function tasklist(name: string): Promise<unknown>;
+declare function delegate(packageName: string, agentName: string, action: string, opts?: DelegateOpts): Promise<any>;
+declare function tasklist(name: string): Promise<any>;
 
 interface JSXDescriptor {
   type: string;
@@ -65,7 +65,7 @@ declare namespace JSX {
 declare function addIngredient(name: string, amount: string): void;
 declare async function getPotTemperature(): Promise<number>;
 ```
-Extracted by parsing the TypeScript source with `ts.createSourceFile`, finding the exported function declaration, and re-emitting its parameter types and return type.
+Extracted by parsing the TypeScript source with `ts.createSourceFile`, finding the exported function declaration, and re-emitting its parameter types and return type. A function with **no explicit return type** is declared `: any` (not `unknown`) so `const r = fn(...); r.field` doesn't fail typecheck and burn a retry (`overlay.ts`).
 
 **For components:**
 ```typescript

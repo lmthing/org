@@ -38,9 +38,15 @@ A "Space" is defined by a standard file system architecture. It encapsulates the
 └── knowledge/                # optional: structured domain data
     └── <domain-slug>/
         └── <field-slug>/
-            ├── index.md      # field metadata
-            └── <option>.md   # selectable option
+            ├── index.md      # field metadata (frontmatter) + OVERVIEW body covering all aspects
+            ├── <aspect-a>.md # one aspect of the field (loaded on demand)
+            └── <aspect-b>.md # …several aspects, not a single "overview.md"
 ```
+
+A field's `index.md` body is its **overview** (a short summary of every aspect) and is
+surfaced into the agent's prompt automatically; the agent loads a specific `<aspect>.md`
+with `loadKnowledge(domain, field, 'aspect.md')` only when it needs the detail. Put the
+overview in `index.md` — do NOT create a single `overview.md` option.
 
 ### Agents (`agents/<slug>/`)
 Every agent requires an `instruct.md` file detailing its configuration via YAML frontmatter and its system prompt via markdown body.
