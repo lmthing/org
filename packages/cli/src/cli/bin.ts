@@ -23,7 +23,7 @@ loadEnv();
 import { Session, createMockStreamFn, mockScript, defaultSystemSpaceDirs } from '@lmthing/core';
 import type { StreamOpts, StreamSession, MockHandler } from '@lmthing/core';
 import { parseArgs, type CliArgs } from './args.js';
-import { materializeRuntime, runtimeNeedsInit } from './runtime-init.js';
+import { materializeRuntime, runtimeNeedsInit, syncSystemSpaces } from './runtime-init.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
 import { createStream } from '../stream/stream.js';
@@ -140,6 +140,30 @@ function resolveLmthingRoot(): string {
 }
 
 /**
+ * Initialize the runtime if needed, then reconcile materialized system spaces with the
+ * shipped source: pristine copies auto-adopt updates; locally-modified ones are held
+ * back (adopt with `--adopt-system-spaces`). Keeps a dev's source edits — and image
+ * upgrades — flowing into `<root>/system/` without a stale-copy surprise.
+ */
+function ensureRuntime(root: string, args: CliArgs): void {
+  if (runtimeNeedsInit(root)) {
+    materializeRuntime(root);
+    process.stdout.write(`lmthing runtime initialized/repaired at ${root}\n`);
+    return;
+  }
+  const sync = syncSystemSpaces(root, { adopt: args.adoptSystemSpaces });
+  if (sync.updated.length > 0) {
+    process.stdout.write(`lmthing: adopted updated system space(s): ${sync.updated.join(', ')}\n`);
+  }
+  if (sync.heldBack.length > 0) {
+    process.stderr.write(
+      `lmthing: system space update(s) available but held back (local edits preserved): ` +
+      `${sync.heldBack.join(', ')} — re-run with --adopt-system-spaces to overwrite (a backup is kept)\n`,
+    );
+  }
+}
+
+/**
  * Resolve the system spaces selection (explicit flag, env, disabled, or default)
  * and the agent slug — shared by the normal run path and --dump-system-prompt.
  */
@@ -245,10 +269,7 @@ async function main(): Promise<void> {
     // spaces if the `thing` agent isn't present. Without this the pod serves
     // from an empty system/ dir and every session fails with
     // `Agent "thing" not found`. (The bare-`lmthing` path below does the same.)
-    if (runtimeNeedsInit(lmthingRoot)) {
-      materializeRuntime(lmthingRoot);
-      process.stdout.write(`lmthing runtime initialized/repaired at ${lmthingRoot}\n`);
-    }
+    ensureRuntime(lmthingRoot, args);
     const manager = new SessionManager({
       streamFn,
       defaultSpaceDir: args.space,
@@ -284,10 +305,7 @@ async function main(): Promise<void> {
     // empty `system/` from an earlier broken materialization (e.g. unresolved
     // bundle assets), and that must be re-populated or every session fails to
     // find the agent.
-    if (runtimeNeedsInit(lmthingRoot)) {
-      materializeRuntime(lmthingRoot);
-      process.stdout.write(`lmthing runtime initialized/repaired at ${lmthingRoot}\n`);
-    }
+    ensureRuntime(lmthingRoot, args);
     const manager = new SessionManager({
       streamFn,
       lmthingRoot,
@@ -386,10 +404,7 @@ async function main(): Promise<void> {
     // THING agent and exits. --space defaults to cwd so project-local agents
     // are picked up automatically.
     const lmthingRoot = resolveLmthingRoot();
-    if (runtimeNeedsInit(lmthingRoot)) {
-      materializeRuntime(lmthingRoot);
-      process.stdout.write(`lmthing runtime initialized/repaired at ${lmthingRoot}\n`);
-    }
+    ensureRuntime(lmthingRoot, args);
     const spaceDir = args.space ?? process.cwd();
     const renderHost = new InkRenderHost(/* plain= */ true);
     // The default 'user' project's spaces/ tree — the single source of truth for

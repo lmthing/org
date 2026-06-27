@@ -9,6 +9,8 @@ export interface CliArgs {
   claude?: boolean;
   systemSpaces?: string[];
   noSystemSpaces?: boolean;
+  /** Overwrite locally-modified system spaces with the shipped versions. */
+  adoptSystemSpaces?: boolean;
   maxEpisodes?: number;
   maxToolCalls?: number;
   maxForkDepth?: number;
@@ -133,6 +135,10 @@ export function parseArgs(argv: string[]): CliArgs {
       }
       case '--no-system-spaces': {
         result.noSystemSpaces = true;
+        break;
+      }
+      case '--adopt-system-spaces': {
+        result.adoptSystemSpaces = true;
         break;
       }
       case '--no-default-action': {

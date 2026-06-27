@@ -76,7 +76,6 @@ Secrets (Claude Code web): API keys stored encrypted in `.env.encrypted` (AES-25
 See `.issues/`. When all are resolved this section is empty.
 
 - `system-spaces-bundle-resolution.md` — `defaultSystemSpaceDirs()` resolves relative to the cli bundle; only the Docker image co-locates the assets, so a non-Docker built `serve` gets an empty `system/` and sessions fail with `Agent "thing" not found` (agent slug `thing`, in the `user-thing` space). `materializeRuntime` now warns + `runtimeNeedsInit` repairs an empty dir.
-- `system-spaces-opt-in-update.md` — system spaces are materialized into the PVC on first boot and intentionally NOT auto-overwritten by a newer image (the user's copy is preserved). Missing: change detection + a user-facing opt-in to adopt updated shipped system spaces.
 
 ## Rules
 
