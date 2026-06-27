@@ -13,7 +13,7 @@ import { MessageHistory } from '../context/history.js';
 import { buildSystemBlock, resolvePreloadedKnowledge } from '../context/system-block.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { routeCommonYield } from '../eval/yield-router.js';
-import { LIBRARY_DTS } from '../typecheck/library-dts.js';
+import { LIBRARY_DTS_NO_ASK } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
 import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { injectHostTools } from '../globals/host-tools.js';
@@ -97,7 +97,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   // fails typecheck with "Cannot find name", since it declares no functions of its own.
   const systemFnSources = systemFunctionSources(opts.systemSpaces ?? []);
   const knowledgePreloads = await resolvePreloadedKnowledge(space, agent);
-  const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFnSources, knowledgePreloads });
+  const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFnSources, knowledgePreloads, omitAsk: true });
 
   const vm = await createVM();
 
@@ -137,7 +137,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     const overlay = buildOverlay({ ...systemFnSources, ...agentFunctions }, agentComponents);
     // currentTask is injected below; declare it in DTS so typecheck passes
     const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
-    const ambientDts = LIBRARY_DTS + '\n' + overlay + '\n' + currentTaskDts;
+    const ambientDts = LIBRARY_DTS_NO_ASK + '\n' + overlay + '\n' + currentTaskDts;
 
     // Inject result capture global
     let capturedResult: unknown = undefined;
@@ -195,8 +195,10 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       stub.dispose();
     }
 
-    // Inject standard globals
-    const { createAskGlobal } = await import('../globals/ask.js');
+    // Inject standard globals. NOTE: `ask` is deliberately NOT injected — a delegated
+    // agent is a programmatic sub-agent (the top-level orchestrator owns the user
+    // conversation), so it must run autonomously from its `query`/`context` rather than
+    // prompt a user it cannot reach.
     const { createDisplayGlobal } = await import('../globals/display.js');
     const { createInspectGlobal } = await import('../globals/inspect.js');
     const { createSleepGlobal } = await import('../globals/sleep.js');
@@ -210,7 +212,6 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     };
 
     type AnyFn = (...args: unknown[]) => unknown;
-    injectGlobal(vm.ctx, 'ask', createAskGlobal(pushYield, opts.renderHost) as AnyFn);
     injectGlobal(vm.ctx, 'display', createDisplayGlobal(opts.renderHost, (value) => {
       tracer.write({ ts: Date.now(), type: 'display', context: delegateScope.label, nodeId: delegateScope.nodeId, descriptor: value });
     }) as AnyFn);

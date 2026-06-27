@@ -65,3 +65,12 @@ declare function writeFileRaw(path: string, content: string): { ok: boolean; byt
 declare function typecheckSource(src: string): { ok: boolean; errors: string[] };
 declare function progress(): { episodes: number; toolCalls: number; elapsedMs: number };
 ` + '\n' + catalogDts();
+
+/**
+ * Library DTS WITHOUT `ask`. Fork and delegate VMs run headless/autonomous — there is
+ * no interactive user to prompt — so `ask` is not injected there. Removing its
+ * declaration makes a stray `await ask(...)` fail typecheck immediately ("Cannot find
+ * name 'ask'") and steers the model back to working from its seed/inputs, instead of
+ * binding `undefined` (or, in a real PTY, blocking forever on stdin).
+ */
+export const LIBRARY_DTS_NO_ASK = LIBRARY_DTS.replace(/^declare function ask\b.*\r?\n/m, '');

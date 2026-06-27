@@ -55,6 +55,19 @@ export class BoundaryDetector {
     // If more than one statement parsed, the first one is complete
     if (sf.statements.length > 1) {
       const first = sf.statements[0]!;
+      const firstText = buf.slice(0, first.end).trim();
+      // Prose guard: a natural-language line with an apostrophe contraction (e.g.
+      // "I'll start by") parses as a bare identifier ("I") followed by an unterminated
+      // string ("'ll start by"). Emitting just "I" hides the prose from the turn loop's
+      // looksLikeProse() drop, so it burns a retry on "Cannot find name 'I'". When the
+      // first statement is a bare identifier carved out of a longer line, surface the
+      // WHOLE physical line instead so the prose-drop can discard it; if the line hasn't
+      // finished streaming yet, wait (it'll be handled here or by flush()).
+      if (/^[A-Za-z_$][\w$]*$/.test(firstText)) {
+        const nl = buf.indexOf('\n');
+        if (nl === -1) return null;
+        return buf.slice(0, nl);
+      }
       return buf.slice(0, first.end);
     }
 

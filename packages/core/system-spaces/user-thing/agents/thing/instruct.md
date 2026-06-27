@@ -33,8 +33,11 @@ These relative paths resolve against the project directory.
    most messages — don't over-delegate.
 
 2. **Research the web** — when the request needs current/external facts, sources, or deep
-   investigation. The researcher ALWAYS resolves this exact shape — cast it precisely so
-   you can read its fields without a type error:
+   investigation **as the final answer**. Do NOT use this when the request is "research X
+   AND build a space/agent" — that is path 3; the architect does its own research, so a
+   separate research pass here just doubles the work (and can time the whole run out). Use
+   path 2 only for standalone research questions. The researcher ALWAYS resolves this exact
+   shape — cast it precisely so you can read its fields without a type error:
    ```typescript
    const report = await delegate('system-deep-research', 'researcher', 'research_report', { query: '<the question>' }) as {
      topic: string; executive_summary: string;
@@ -47,13 +50,15 @@ These relative paths resolve against the project directory.
    string in the `query` — do NOT invent a different shape for it.
 
 3. **Build a new specialist** — when the user wants a REUSABLE agent/tool/workflow, or the
-   job is a recurring specialized task no existing agent covers. The architect researches,
-   designs, scaffolds, validates, and registers a new agent under this project, then hands
-   it back ready to run:
+   job is a recurring specialized task no existing agent covers. **This includes any
+   "research X and build a space/agent that …" request — route it straight here; do NOT run
+   path 2 first.** The architect researches, designs, scaffolds, validates, and registers a
+   new agent under this project (doing its own web research), then hands it back ready to run:
    ```typescript
-   // Turn 1 — synthesize (the architect runs the whole pipeline for you):
-   // If you ran deep research first, include it in the query string to ground the space.
-   const t = await delegate('system-architect', 'architect', 'synthesize_and_run', { query: '<the user request, verbatim>\nGoal: <what the new agent should do, possibly including research>' }) as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
+   // Turn 1 — synthesize. The architect runs the WHOLE pipeline for you, INCLUDING its own web
+   // research. For a "research X and build a space" request, do NOT run deep-research first —
+   // that doubles the work; hand the request straight to the architect and let it research.
+   const t = await delegate('system-architect', 'architect', 'synthesize_and_run', { query: '<the user request, verbatim>\nGoal: <what the new agent should do>' }) as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
    ```
    ```typescript
    // Turn 2 — run the freshly-built agent and show its answer. Only delegate when the

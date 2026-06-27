@@ -50,6 +50,15 @@ check `.ok` and fix before continuing. Available builders:
   **systemPrompt: 2-3 imperative sentences** describing what the agent IS and its domain — NEVER a
   numbered "## Process". If you include knowledge, the systemPrompt must tell the agent to call
   `await loadKnowledge('<domain>', '<field>', '<option>.md')` (note the `.md` suffix).
+  The agent runs AUTONOMOUSLY: it receives the user's request as `query` and answers it directly.
+  Write the prompt to work from `query` — e.g. "Answer the user's `query` directly; if details are
+  missing, assume sensible defaults and state them." Never write interactive, "ask the user…" steps.
+  For the "useful UI" part: tell the agent to run its action's tasklist, then `display(...)` the
+  structured result using built-in catalog components (e.g. `<Stack>` with `<Callout>` / `<Table>`),
+  and finally `currentTask.resolve(result)`. Keep it to one display call — don't over-engineer.
+  `tasklist()` returns `unknown`, so the agent prompt must show CASTING the result to its field shape,
+  e.g. `const result = await tasklist('diagnose', {}) as { diagnosis: string; recommendation: string };`
+  — without the cast, `result.x` fails typecheck ("'result' is of type 'unknown'") and wastes a turn.
 - `writeTaskFile(space, tasklist, { id: string, instruction: string, output: Record<string, string>, dependsOn?: string[], goal?: boolean, optional?: boolean, condition?: string })`
   — one task file. Mark exactly ONE task per tasklist `goal: true` (its output is the final answer).
   **`output` MUST be a JS object — NEVER a string:**
@@ -62,13 +71,46 @@ check `.ok` and fix before continuing. Available builders:
   //   output: { answer: 'string' }
   //   output: { answer: 'string', sources: 'string[]' }
   ```
+  **Prefer `string` / `string[]` field types** (markdown or JSON-stringified content). Avoid bare
+  `object` / `array` field types: the runtime validates the resolved value against the schema, and a
+  small model frequently resolves an `object` field with a slightly-off shape → "Fork output does not
+  match schema" and a wasted retry. Put structured data in a stringified field instead (e.g.
+  `output: { itinerary: 'string', summary: 'string' }`, resolving `JSON.stringify(...)` or markdown).
   **Every task instruction MUST end with an explicit `currentTask.resolve({...})`** filling the
   fields named in its `output`. One task is enough for most agents.
+
+  **🔑 TASK INSTRUCTIONS MUST BE AUTONOMOUS AND CODE-FIRST (the #1 cause of a synthesized agent
+  failing at runtime).** The task runs in a fork driven by a SMALL model that has the user's request
+  injected as `query` (a seed variable) plus any upstream task outputs. Write the instruction so the
+  model emits CODE immediately — short, imperative, no conversational framing. Each instruction MUST:
+  - **Use the injected `query`** as the full user input. NEVER write interactive "ask the user…" or
+    "prompt for…" steps. If parameters are missing, instruct it to assume sensible defaults and note them.
+  - **Open with the concrete code steps**, e.g. load knowledge → compute → resolve. Do NOT write a
+    long prose paragraph first; a small model will mirror prose back (e.g. "I'll start by…") and burn
+    the whole turn on typecheck errors.
+  - **End with `currentTask.resolve({...})`** populating every `output` field.
+  Template for a typical single goal task (adapt fields to the domain):
+  ```typescript
+  // instruction body for the goal task — note: starts with code, uses `query`, never asks:
+  // "You answer the user's espresso question. The user's request is in `query`.
+  //  Load knowledge, then produce a structured answer. Code:
+  //  const k = await loadKnowledge('espresso','fundamentals','overview.md');
+  //  Using `query` and `k`, decide the diagnosis and recommendation. If the user gave no
+  //  parameters, assume a typical 18g→36g/30s shot and say so.
+  //  currentTask.resolve({ diagnosis: '<your structured markdown answer>', recommendation: '<next-shot params>' });"
+  ```
+  Prefer a **structured `output`** (e.g. `{ summary: 'string', recommendation: 'string', sources: 'string' }`)
+  over a single opaque string so the agent can render it as real UI (see below) — this satisfies the
+  "useful UI" part of most requests without a custom component.
 - `writeKnowledgeIndex(space, domain, field, { variable, default?, type?, description })` — the field manifest.
 - `writeKnowledgeOption(space, domain, field, slug, content)` — one option `.md` (markdown body, no frontmatter). Keep content extremely brief (max 1–2 paragraphs).
 - `writeFunctionFile(space, name, source)` — one space function. Single-export TS, NO imports, host
-  primitives only. Returns `{ ok, errors }`; if `ok` is false, read `errors` and rewrite. Only add a
-  function if domain logic genuinely can't use readFileRaw/writeFileRaw/execShell/fetch/process.env.
+  primitives only. Returns `{ ok, errors }`; if `ok` is false, read `errors` and rewrite. Add a
+  function when the domain needs deterministic computation (math, schedules, scoring, conversions,
+  generators). **If the user explicitly asks for a "function"/"tool"/"calculator" that computes
+  something, you MUST create it with writeFunctionFile and declare it on the agent — do NOT inline that
+  logic in the task.** A small model is far more reliable calling a tested function than re-deriving
+  math each turn. (Skip a function only for pure look-up/text agents.)
 - `writeComponentFile(space, 'view'|'form', name, source)` — ONLY when the built-in catalog (~30 display
   + ~33 form components: Stack, Table, Callout, Form, Select…) can't express the UI. Usually skip this.
 

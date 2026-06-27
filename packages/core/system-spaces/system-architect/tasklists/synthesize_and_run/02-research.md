@@ -66,6 +66,19 @@ At runtime the synthesized agent loads it with:
   `await loadKnowledge('chess_rules', 'pieces', 'overview.md')`
 Note the `.md` suffix in the option arg.
 
+**Build `knowledge` as ONE array literal and resolve in the SAME statement.** Do NOT declare an
+empty `const knowledge = []` and then `.push()` to it across later statements — variables do not
+persist between evals unless re-bound, and a `.push()` inside an `if`/`for` block is lost when the
+turn resumes (you'll hit `'knowledge' is not defined`). Assemble everything inline:
+
+```typescript
+const knowledge = top.length === 0 ? [] : [
+  { domain: '...', field: '...', type: 'string', variable: '...', default: 'overview',
+    description: '...', options: [{ slug: 'overview', content: '...Source: ' + url1 }] },
+];
+currentTask.resolve({ knowledge, sources: knowledge.length ? allSources.join(', ') : 'none' });
+```
+
 Resolve with:
 - `knowledge`: the KnowledgeSpec[] array (empty array if no useful results)
 - `sources`: comma-separated source URLs, or 'none'

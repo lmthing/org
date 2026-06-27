@@ -19,6 +19,19 @@ describe('looksLikeProse', () => {
     expect(looksLikeProse('const based = onQuery;')).toBe(false); // has '=' → code
   });
 
+  it('flags apostrophe-contraction prose openers (the "I\'ll start by" loop)', () => {
+    expect(looksLikeProse("I'll start by loading the knowledge")).toBe(true);
+    expect(looksLikeProse("Let's diagnose the espresso shot")).toBe(true);
+    expect(looksLikeProse("I'm going to compute the recommendation")).toBe(true);
+    expect(looksLikeProse("We'll resolve once the data is ready")).toBe(true);
+    expect(looksLikeProse('First load knowledge then resolve')).toBe(true);
+  });
+
+  it('does NOT flag code that legitimately contains an apostrophe', () => {
+    expect(looksLikeProse("'it is fine'")).toBe(false); // leading quote → not prose
+    expect(looksLikeProse('display("message")')).toBe(false); // has ( ) → code
+  });
+
   it('keeps single identifiers (valid inspect probes) and short fragments', () => {
     expect(looksLikeProse('results')).toBe(false);
     expect(looksLikeProse('inspect')).toBe(false);

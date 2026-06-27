@@ -27,11 +27,9 @@ list and plan as a structured per-file change list.`,
 }) as { issues: string; plan: string };
 ```
 
-Show the diagnosis to the user and ask for approval:
+Show the diagnosis, then resolve with it so the downstream tasks apply the plan:
 ```typescript
 display(<div><h3>Diagnosis</h3><pre>{diagnosis.issues}</pre><h3>Plan</h3><pre>{diagnosis.plan}</pre></div>);
-const ok = await ask(`Apply this improvement plan?`) as boolean;
 ```
 
-If the user declines, resolve with `{ issues: 'user declined', plan: 'no changes' }`.
-Otherwise, resolve with the diagnosis.
+Resolve with the diagnosis (`{ issues, plan }`).

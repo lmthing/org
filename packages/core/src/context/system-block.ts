@@ -46,6 +46,9 @@ export interface SystemBlockOpts {
    *  resolve these up front (see `resolvePreloadedKnowledge`) and pass the
    *  results in here — keeps `buildSystemBlock` itself synchronous. */
   knowledgePreloads?: KnowledgePreload[];
+  /** Omit `ask` from the prompt — set for delegated/headless agents that have no
+   *  interactive user (the global is not injected there either). Default false. */
+  omitAsk?: boolean;
 }
 
 /**
@@ -110,19 +113,23 @@ function extractToolSummary(name: string, src: string): string {
 }
 
 const RUNTIME_PREAMBLE = `
-CRITICAL INSTRUCTION: You are a TypeScript code execution agent. You MUST respond with TypeScript code ONLY. Do NOT write any prose, explanations, markdown, or natural language. Your entire response will be fed directly into a TypeScript evaluator. Even a single word of prose will cause an error.
+CRITICAL INSTRUCTION: You are a TypeScript code execution agent. Your entire response is fed directly into a TypeScript evaluator, so it MUST be valid TypeScript. Do NOT emit bare prose or natural language — a single word of non-code, non-comment text is a typecheck error that wastes a turn.
 
-Respond with valid TypeScript statements only. Use top-level \`await\` for async operations (e.g. \`const x = await ask(...)\`). Do not wrap code in functions or markdown code blocks. Just write the statements directly.
+If you want to think out loud, explain your reasoning, or narrate a plan, write it INSIDE a \`// comment\`. Comments are valid TypeScript and are encouraged for narration — bare sentences are not. Example:
+  // First load the knowledge, then diagnose from the user's query.
+  const k = await loadKnowledge("espresso", "fundamentals", "overview.md");
+
+Respond with valid TypeScript statements only. Use top-level \`await\` for async operations (e.g. \`const x = await tasklist(...)\`). Do not wrap code in functions or markdown code blocks. Just write the statements directly.
 
 ABSOLUTELY FORBIDDEN — these will cause parse errors or runtime errors:
   - \`\`\`typescript or \`\`\`ts or \`\`\` (markdown code fences)
-  - Any English text, explanations, or comments
+  - Bare English text or explanations OUTSIDE of a \`//\` comment
   - function wrappers, IIFE patterns, or async IIFEs like \`await (async () => { ... })()\`
   - setTimeout, setInterval, clearTimeout, clearInterval (not available — use sleep() instead)
 
 Use sequential top-level await statements, not IIFEs:
-WRONG: const x = await (async () => { const t = await ask(...); return t; })()
-CORRECT: const x = await ask(...);
+WRONG: const x = await (async () => { const t = await tasklist("x"); return t; })()
+CORRECT: const x = await tasklist("x");
 
 WRONG (do not do this):
   \`\`\`typescript
@@ -144,11 +151,23 @@ GROUND TRUTH — never re-type a value you only saw in the VARIABLES block:
   - When you genuinely need to READ the full content of a truncated field (e.g. to split it across files, or to quote it), pull it back into scope FIRST with inspect — and BIND the result: \`const full = await inspect([report, { path: 'executive_summary' }]);\` or \`const head = await inspect([items, { slice: [0, 10] }]);\`. Only after inspecting should you use the value.
 `.trim();
 
-const GLOBALS_SUMMARY = `
+function globalsSummary(omitAsk: boolean): string {
+  const askBullet = omitAsk
+    ? ''
+    : '- `ask(descriptor)` — render an interactive form and await user input (yields). Compose built-in UI components — see # UI Components.\n';
+  const yieldList = omitAsk
+    ? 'inspect, loadKnowledge, sleep, tasklist, fork, delegate'
+    : 'ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate';
+  const autonomyNote = omitAsk
+    ? '\nThis agent runs AUTONOMOUSLY: work entirely from the request/seed you were given. If a detail is missing, assume a sensible default and state it — never wait for input.\n'
+    : '';
+  const castExamples = omitAsk
+    ? '  const result = await tasklist("my_list") as { field: string };\n  const data = await delegate(...) as { key: string };'
+    : '  const topic = await ask("...") as string;\n  const result = await tasklist("my_list") as { field: string };\n  const data = await delegate(...) as { key: string };';
+  return `
 # Available Globals
 
-- \`ask(descriptor)\` — render an interactive form and await user input (yields). Compose built-in UI components — see # UI Components.
-- \`display(descriptor)\` — render content to the surface (void, no yield). Accepts a string or JSX: \`display("text")\` or \`display(<Stack>…</Stack>)\`. Compose built-in UI components — see # UI Components.
+${askBullet}- \`display(descriptor)\` — render content to the surface (void, no yield). Accepts a string or JSX: \`display("text")\` or \`display(<Stack>…</Stack>)\`. Compose built-in UI components — see # UI Components.
 - \`inspect(...values)\` — inspect variables with optional queries (yields)
 - \`loadKnowledge(...path)\` — load a knowledge file by path segments (yields)
 - \`sleep(duration)\` — pause execution for a duration like "1s", "500ms" (yields)
@@ -156,13 +175,11 @@ const GLOBALS_SUMMARY = `
 - \`fork(opts)\` — spawn an isolated subagent and await its typed result (yields). The subagent runs in its own context and returns ONLY what it resolves — use it as a context firewall for heavy investigation. Set \`role\`: \`'explore'\` (read-only research), \`'plan'\` (read-only design), or \`'general'\` (full toolkit, default). Launch several at once with \`Promise.all([fork({role:'explore',...}), fork({role:'explore',...})])\`.
 - \`delegate(packageName, agentName, action?, opts?)\` — delegate to another agent (yields). With an \`action\` id it runs that action; omit \`action\` to let the agent run model-driven and pick one of its own actions/tasklists.
 
-Value-yielding globals (ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate) end the current turn.
+Value-yielding globals (${yieldList}) end the current turn.
 display() is void and does not end the turn.
-
-IMPORTANT: ask(), tasklist(), and delegate() all return unknown. Cast results to use them:
-  const topic = await ask("...") as string;
-  const result = await tasklist("my_list") as { field: string };
-  const data = await delegate(...) as { key: string };
+${autonomyNote}
+IMPORTANT: tasklist() and delegate() return unknown. Cast results to use them:
+${castExamples}
 
 fork() spawns an isolated subagent. REQUIRED fields: \`instruction\` (what to do) and
 \`output\` (a schema mapping each result field to its type). Optional \`role\`. The
@@ -179,6 +196,7 @@ Run several subagents at once:
     fork({ role: 'explore', instruction: "...", output: { found: 'string' } }),
   ]);
 `.trim();
+}
 
 /**
  * Build the system prompt for an agent.
@@ -192,7 +210,7 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
   sections.push(RUNTIME_PREAMBLE);
 
   // 1. Globals summary
-  sections.push(GLOBALS_SUMMARY);
+  sections.push(globalsSummary(opts.omitAsk === true));
 
   // 1a. UI component catalog — tell the model what display/form components exist
   sections.push(catalogSummary());
@@ -300,10 +318,14 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
       const doc = extractComponentDoc(name, src);
       compParts.push(`- **${name}** (view)${doc ? ` — ${doc}` : ''}: \`<${name}${props ? ` ${props}` : ''} />\``);
     }
-    for (const [name, src] of Object.entries(agentComponents.form)) {
-      const props = renderComponentPropsExample(name, src);
-      const doc = extractComponentDoc(name, src);
-      compParts.push(`- **${name}** (form — use with ask())${doc ? ` — ${doc}` : ''}: \`await ask(<${name}${props ? ` ${props}` : ''} />)\``);
+    // Form components are only usable via ask(); omit them entirely for autonomous
+    // (delegated/headless) agents that have no ask().
+    if (!opts.omitAsk) {
+      for (const [name, src] of Object.entries(agentComponents.form)) {
+        const props = renderComponentPropsExample(name, src);
+        const doc = extractComponentDoc(name, src);
+        compParts.push(`- **${name}** (form — use with ask())${doc ? ` — ${doc}` : ''}: \`await ask(<${name}${props ? ` ${props}` : ''} />)\``);
+      }
     }
     sections.push(`# Components\n\n${compParts.join('\n')}`);
   }

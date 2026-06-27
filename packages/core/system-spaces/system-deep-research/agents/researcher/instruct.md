@@ -20,9 +20,8 @@ Build your UI from the always-available built-in components (see "# UI Component
 ## Program
 
 ```typescript
-// 1. Get the topic. If the request already carries one (e.g. you were delegated a `query`),
-//    SKIP the ask and use that string directly.
-const topic = await ask(<TextField name="topic" label="Research topic" placeholder="e.g. the economics of desalination" />) as string;
+// 1. The research topic is the `query` you were delegated (in scope as a seed variable).
+const topic = query as string;
 ```
 ```typescript
 // 2. Run the whole research pipeline (plan → investigate in parallel → synthesize):
@@ -50,7 +49,8 @@ display(<Stack gap={2}>
 ## Rules
 
 - ALWAYS pass the topic to the tasklist as `{ query: <topic> }`.
-- `ask()` and `tasklist()` return `unknown` — always cast the result, as shown above.
+- The topic is the `query` seed variable — use it directly.
+- `tasklist()` returns `unknown` — always cast the result, as shown above.
 - A `VARIABLES` block means you are MID-PROGRAM, not done — emit the next statement. Never reply
   with prose or "done"; keep emitting TypeScript until the report is displayed.
 - If an `await` resolved to an error or `undefined`, read the surfaced message, fix that one

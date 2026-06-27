@@ -29,6 +29,66 @@ function readGlobal(vm: VM, name: string): unknown {
   try { return vm.ctx.dump(h); } finally { h.dispose(); }
 }
 
+/** A streamFn whose first N turns throw a transient stream error, then emits `statements`. */
+function flakyThenStream(failTurns: number, statements: string): (opts: StreamOpts) => Promise<StreamSession> {
+  let calls = 0;
+  return async () => {
+    const turn = calls++;
+    const fail = turn < failTurns;
+    const emitted = turn === failTurns; // emit code exactly once, after the failures
+    let aborted = false;
+    async function* gen() {
+      if (fail) throw new Error('terminated');
+      if (!aborted && emitted) yield statements;
+    }
+    return { textStream: gen(), abort() { aborted = true; } } as StreamSession;
+  };
+}
+
+describe('turn loop — transient stream error recovery', () => {
+  it('retries a dropped/terminated stream instead of finishing as done', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      // First turn's stream throws "terminated"; the retry succeeds and binds x.
+      streamFn: flakyThenStream(1, 'const x = 7;'),
+      processYield: async () => undefined,
+      maxRetries: 3,
+    });
+
+    expect(result).toBe('done');
+    expect(readGlobal(vm, 'x')).toBe(7);
+    vm.dispose();
+  });
+
+  it('gives up with error (not a false done) when every attempt drops', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: flakyThenStream(5, 'const x = 7;'), // always fails within maxRetries
+      processYield: async () => undefined,
+      maxRetries: 3,
+    });
+
+    expect(result).toBe('error');
+    vm.dispose();
+  });
+});
+
 describe('turn loop — parallel yields (Promise.all of forks)', () => {
   it('binds each parallel yield to its OWN result (no collision)', async () => {
     const vm = await createVM();

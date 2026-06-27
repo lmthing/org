@@ -137,23 +137,41 @@ export const CATALOG_NAMES: string[] = CATALOG.map((e) => e.name);
  * Compact human-readable summary of the catalog for inclusion in the LLM system
  * prompt. Derived from CATALOG data so it stays in sync automatically.
  */
+/** Compact one-line prop signature, e.g. `Callout {variant?: 'info'|'success'|'warning'|'error', title?: string}`.
+ *  Showing EXACT prop names + types in the prompt (not just the component name) stops the
+ *  model guessing wrong props from training priors — the recurring `Callout type=` (should be
+ *  `variant`), `KeyValue data=` (should be `pairs`), `Table title=` (no such prop) churn that
+ *  otherwise burns several typecheck-retry turns per render. */
+function componentSignature(e: CatalogEntry): string {
+  const props = e.props
+    .filter((p) => p.name !== 'onSubmit')
+    .map((p) => `${p.name}${p.optional ? '?' : ''}: ${p.type}`);
+  const propStr = props.length > 0 ? ` {${props.join(', ')}}` : '';
+  const childStr = e.children ? ' +children' : '';
+  return `${e.name}${propStr}${childStr}`;
+}
+
 export function catalogSummary(): string {
-  const displayNames = DISPLAY_CATALOG.map((e) => e.name);
-  const formNames = FORM_CATALOG.map((e) => e.name);
+  const displayLines = DISPLAY_CATALOG.map((e) => `- ${componentSignature(e)}`);
+  const formLines = FORM_CATALOG.map((e) => `- ${componentSignature(e)}`);
   return [
     `# UI Components (built-in — render on terminal AND web)`,
     ``,
     `Always in scope, no import needed. Use with display() for output and ask() for input.`,
+    `Use the EXACT prop names and types shown — these are type-checked, and guessing (e.g.`,
+    `\`<Callout type=…>\` instead of \`variant\`, or \`<KeyValue data=…>\` instead of \`pairs\`) fails.`,
+    `\`+children\` means the component takes nested JSX/text children.`,
     ``,
-    `**Layout / display:** ${displayNames.join(' ')}`,
+    `**Layout / display:**`,
+    ...displayLines,
     ``,
-    `**Forms (use with ask()):** ${formNames.join(' ')}`,
+    `**Forms (use with ask()):**`,
+    ...formLines,
     ``,
     `A \`<Form>\` resolves to an object keyed by field \`name\`; a bare control resolves to the single value.`,
-    `Prop types are enforced by the type-checker.`,
     ``,
     `Examples:`,
-    `  display(<Stack><Heading>Report</Heading><Table columns={["Name","Score"]} rows={[["Alice",95]]}/></Stack>)`,
+    `  display(<Stack gap={2}><Heading level={1}>Report</Heading><Callout variant="success" title="Done">All good</Callout><Table columns={["Name","Score"]} rows={[["Alice",95]]}/><KeyValue pairs={{ Total: 42 }}/></Stack>)`,
     `  const ans = await ask(<Form><TextField name="title" label="Title"/><Select name="env" options={["dev","prod"]}/></Form>) as { title: string; env: string }`,
     `  const confirmed = await ask(<ConfirmButtons/>) as boolean`,
   ].join('\n');

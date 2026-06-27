@@ -7,7 +7,7 @@ import { MessageHistory } from '../context/history.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { rolePreamble, roleProfile, modelForRole, type RoleModelConfig } from './roles.js';
-import { LIBRARY_DTS } from '../typecheck/library-dts.js';
+import { LIBRARY_DTS_NO_ASK } from '../typecheck/library-dts.js';
 import { buildOverlay, extractFunctionSignature } from '../typecheck/overlay.js';
 import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { validateOutput } from '../tasklist/schema.js';
@@ -231,8 +231,9 @@ export class ForkEngine {
           projectSpacesDir: this.opts.projectSpacesDir,
         });
 
-        // Inject standard globals (no fork/delegate/tasklist in child to avoid recursion issues)
-        const { createAskGlobal } = await import('../globals/ask.js');
+        // Inject standard globals (no fork/delegate/tasklist in child to avoid recursion issues).
+        // NOTE: `ask` is deliberately NOT injected — a fork runs headless/autonomous with no
+        // interactive user, so prompting is impossible (it would bind undefined or block on stdin).
         const { createDisplayGlobal } = await import('../globals/display.js');
         const { createInspectGlobal } = await import('../globals/inspect.js');
         const { createSleepGlobal } = await import('../globals/sleep.js');
@@ -245,7 +246,6 @@ export class ForkEngine {
 
         type AnyFn = (...args: unknown[]) => unknown;
         const forkTracer = this.opts.tracer ?? NULL_TRACER;
-        injectGlobal(vm.ctx, 'ask', createAskGlobal(pushYield, this.opts.renderHost) as AnyFn);
         injectGlobal(vm.ctx, 'display', createDisplayGlobal(this.opts.renderHost, (value) => {
           forkTracer.write({ ts: Date.now(), type: 'display', context: forkScope.label, nodeId: forkScope.nodeId, descriptor: value });
         }) as AnyFn);
@@ -318,7 +318,7 @@ export class ForkEngine {
         const seedDts = task.seed
           ? Object.keys(task.seed).map((k) => `declare const ${k}: any;`).join('\n')
           : '';
-        const ambientDts = [LIBRARY_DTS, functionsOverlay, currentTaskDts, upstreamDts, seedDts]
+        const ambientDts = [LIBRARY_DTS_NO_ASK, functionsOverlay, currentTaskDts, upstreamDts, seedDts]
           .filter(Boolean)
           .join('\n');
 
@@ -340,11 +340,12 @@ export class ForkEngine {
           rolePreamble(task.role),
           '',
           'Respond with valid TypeScript statements only. Use top-level `await` for async operations. Do not wrap code in functions or markdown code blocks.',
+          'If you want to explain your reasoning or narrate a plan, write it as a `// comment` — NEVER as bare prose. Any non-comment text that is not valid TypeScript is a typecheck error and wastes a turn.',
           '',
           '# Available Built-in Globals (already provided — do NOT redefine any of these):',
           '- sleep(duration: string) — pause for a duration, e.g. `await sleep("2s")`',
           '- display(content: string | JSXDescriptor) — render output',
-          '- ask(descriptor) — prompt user for input',
+          '- loadKnowledge(domain: string, field: string, option: string) → Promise<string> — load a knowledge file shipped with this space, e.g. `const k = await loadKnowledge("espresso", "fundamentals", "overview.md");`',
           '- inspect(...values) — inspect variables',
           '- execShell(cmd: string) → { ok, stdout, stderr } — run a shell command / subprocess. This is the ONLY way to run a program (e.g. tests): `const { ok, stdout } = execShell("npx tsx test.ts");`',
           '- fetch(url, opts?) → { ok, status, text(), json() } — synchronous HTTP (curl-backed)',
@@ -357,7 +358,7 @@ export class ForkEngine {
           'FORBIDDEN: async IIFEs like `await (async () => { ... })()` — use sequential top-level await statements instead',
           '',
           'When your task is complete, call `currentTask.resolve(value)` with an object matching the output schema.',
-          'Do not ask for clarification — work with what you have.',
+          'The request and every input you need are in the seed variables / Inputs above — work with what you have, assume sensible defaults where details are missing, and resolve. Do not wait for input.',
           functionList,
         ].join('\n');
 

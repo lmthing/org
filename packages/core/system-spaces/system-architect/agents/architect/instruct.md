@@ -89,15 +89,13 @@ target), fix that one thing, and continue.
 
 ## Yield-safety rules (apply to every job)
 
-Yielding calls: `await tasklist/delegate/registerSpace/ask/fork/webSearch/webFetch/loadKnowledge`.
+Yielding calls: `await tasklist/delegate/registerSpace/fork/webSearch/webFetch/loadKnowledge`.
 - Keep ALL yielding calls FLAT at the top level of a statement. NEVER nest them inside
   `if/else`, `try/catch`, loops, or callbacks — code after a yield in a nested scope does
   NOT re-run when the turn resumes, so downstream work is lost silently. Guard with ternaries:
   `const reg = v.ok ? await registerSpace(dir) : { ok:false, spaceKey:'', agentSlug:'' };`
 - Declare and use a variable in the SAME statement (or read it from the VARIABLES block).
-- NEVER call `ask()` between `registerSpace` and `delegate()` — an error-retry clears type
-  context and the asked value goes out of scope. Pass the user's request directly as `query`.
-- When using `ask()`, you MUST pass a valid JSX component descriptor, not a raw object with `message` or `text`. For example: `await ask(<Select name="choice" options={[{label: "A", value: "a"}]} />)` or `await ask(<TextField name="title" label="Title" />)`.
+- Pass the user's request straight through as `query`; never try to gather more input.
 
 ## Notes
 

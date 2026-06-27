@@ -16,7 +16,8 @@ directly.
 
 ## Workflow
 
-1. If no concrete task was given, ask once with `await ask(<TaskInput />) as string`.
+1. Your task is the `query` you were delegated. Work from it directly; if it is unspecific,
+   make a reasonable interpretation and state your assumptions.
 2. **Investigate before acting.** Use `grep` to locate relevant lines, then `readFile`
    only the files/ranges that matter. For broad investigation, spawn read-only explore
    subagents in parallel — they return a summary, not a file dump:
@@ -29,11 +30,10 @@ directly.
    ```
 3. **Track multi-step work** with `todoWrite([{ content, status }])` (status: 'pending' |
    'in_progress' | 'completed'). Update it as you go. Keep exactly one item in_progress.
-4. **Gate risky changes.** For anything that writes/deletes, first design with a plan
-   subagent and confirm with the user before editing:
+4. **Design before risky changes.** For anything that writes/deletes, first design with a
+   plan subagent, then proceed to implement it:
    ```
    const plan = await fork({ role: 'plan', instruction: "...", output: { plan: 'string', files: 'string[]' } }) as { plan: string; files: string[] };
-   const ok = await ask(`Apply this plan?\n${plan.plan}`) as boolean;
    ```
 5. **Edit precisely.** Prefer `editFile(path, oldString, newString)` with enough context
    to be unique. Use `writeFile` for new files. Always check the returned `.ok`.

@@ -55,6 +55,7 @@ const ENGLISH_FUNCTION_WORDS = new Set([
   'the', 'on', 'a', 'an', 'to', 'from', 'with', 'and', 'or', 'but', 'here', 'this',
   'that', 'these', 'those', 'we', 'now', 'then', 'of', 'for', 'in', 'as', 'it', 'its',
   'your', 'you', 'based', 'will', 'because', 'since', 'so', 'about', 'into', 'after',
+  'by', 'at', 'let', 'sure', 'first', 'next', 'please', 'using', 'i', 'my', 'me',
 ]);
 
 /** Detect when a model "statement" is actually a natural-language sentence (e.g. the
@@ -74,6 +75,10 @@ export function looksLikeProse(stmt: string): boolean {
   const words = s.split(/\s+/);
   if (words.length < 3) return false; // single identifiers are valid probes (e.g. `inspect`)
   if (!/^[A-Za-z]/.test(s)) return false;
+  // An apostrophe contraction (I'll, don't, let's, we're, it's) in text that already
+  // cleared the code-punctuation guards above is unambiguously prose — real code with an
+  // apostrophe is a string literal, which carries a quote and a code operator and is gone.
+  if (/^[A-Za-z][\w]*'[A-Za-z]/.test(s) || /\b[A-Za-z]+'[a-z]{1,3}\b/.test(s)) return true;
   // Every token must be word-like (letters/digits/underscore + sentence punctuation) — prose
   // can reference identifiers like `search_broad`. The code-punctuation guard above plus the
   // required English function word below keep this from matching real statements.
@@ -183,6 +188,11 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     let turnError: string | null = null;
     let failingStatement: string | null = null;
     let aborted = false;
+    // Set when the provider stream throws a NON-abort error (e.g. a dropped/terminated
+    // connection). Distinct from `aborted` (our own intentional stream.abort() on a
+    // statement boundary). A transient drop must be RETRIED, not mistaken for the model
+    // finishing — otherwise the turn silently returns 'done' and strands the program.
+    let streamErrored = false;
     // True when the last statement that evaluated cleanly this turn bound a value
     // from a NON-yielding call (a space-function result the runtime won't surface) —
     // whether or not it used `await`. Sync space functions like writeTaskFile/
@@ -269,7 +279,24 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       const isAbort = err instanceof Error && (err.name === 'AbortError' || err.message.includes('abort'));
       if (!isAbort) {
         renderHost.log(`Stream error: ${err instanceof Error ? err.message : String(err)}`);
+        streamErrored = true;
       }
+    }
+
+    // A transient provider failure (dropped/terminated connection) that produced NO
+    // usable output must be RETRIED — not silently treated as "the model finished".
+    // Without this, one flaky stream ends the turn with 'done' and strands the whole
+    // run (the exact failure that killed an optional research fork mid-pipeline).
+    if (streamErrored && !hadStatements && !aborted) {
+      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'stream_error' });
+      if (attempt >= maxRetries) {
+        renderHost.log(`[turn ${attempt}] stream error exhausted retries — giving up this turn`);
+        return 'error';
+      }
+      renderHost.log(`[turn ${attempt}] stream error with no output — retrying request`);
+      // Brief backoff so we don't hammer a provider that just dropped us.
+      await new Promise((r) => setTimeout(r, Math.min(2000, 300 * attempt)));
+      continue;
     }
 
     // Flush remaining buffer

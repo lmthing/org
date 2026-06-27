@@ -27,6 +27,23 @@ describe('BoundaryDetector', () => {
     expect(stmts).toHaveLength(2);
   });
 
+  it('does not carve a bare identifier out of an apostrophe prose line', () => {
+    // "I'll start by" parses as `I` + an unterminated string. The detector must NOT
+    // emit just "I" (which would escape the prose-drop and fail typecheck). With no
+    // newline yet, it waits; flush() then surfaces the whole prose line.
+    const stmts = bd.feed("I'll start by loading the knowledge");
+    expect(stmts).toHaveLength(0);
+    expect(bd.flush()).toBe("I'll start by loading the knowledge");
+  });
+
+  it('surfaces a whole prose line (not a fragment) when code follows on the next line', () => {
+    const stmts = bd.feed("I'll do this\nconst x = 1;\n");
+    // First chunk returned is the entire prose line (for the turn loop to prose-drop),
+    // followed by the real statement.
+    expect(stmts[0]).toBe("I'll do this");
+    expect(stmts.some((s) => s.includes('const x = 1'))).toBe(true);
+  });
+
   it('handles block statements with closing brace', () => {
     const code = 'function hello() {\n  return 42;\n}\n';
     const stmts = bd.feed(code);
