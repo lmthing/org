@@ -4,12 +4,12 @@ export const LIBRARY_DTS = `
 declare function ask<T = unknown>(descriptor: JSXDescriptor | string): Promise<T>;
 declare function display(descriptor: unknown): void;
 declare function inspect(...args: (unknown | [unknown, InspectQuery])[]): Promise<void>;
-declare function loadKnowledge(...path: string[]): Promise<unknown>;
+declare function loadKnowledge(...path: string[]): Promise<any>;
 declare function sleep(duration: string): Promise<void>;
-declare function tasklist(name: string, seed?: Record<string, unknown>): Promise<unknown>;
+declare function tasklist(name: string, seed?: Record<string, unknown>): Promise<any>;
 declare function fork<T>(opts: ForkOpts<T>): Promise<T>;
-declare function delegate(packageName: string, agentName: string, opts?: DelegateOpts): Promise<unknown>;
-declare function delegate(packageName: string, agentName: string, action?: string, opts?: DelegateOpts): Promise<unknown>;
+declare function delegate(packageName: string, agentName: string, opts?: DelegateOpts): Promise<any>;
+declare function delegate(packageName: string, agentName: string, action?: string, opts?: DelegateOpts): Promise<any>;
 declare function registerSpace(dir: string): Promise<{ ok: boolean; spaceKey: string; agentSlug: string; error?: string }>;
 
 declare interface JSXDescriptor {

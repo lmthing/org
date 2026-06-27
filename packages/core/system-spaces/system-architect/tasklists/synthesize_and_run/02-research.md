@@ -36,9 +36,13 @@ const url2 = top[1] ? top[1].url : '';
 const page2 = url2 ? await webFetch(url2) : '';
 ```
 
-Distill the fetched content into a `knowledge` array matching the KnowledgeSpec
-shape (consumed by the build step's writeKnowledgeIndex/writeKnowledgeOption). Each entry is one domain/field
-with 1–N focused option files. Keep options short and attributed.
+Distill the fetched content into a `knowledge` array matching the KnowledgeSpec shape
+(consumed by the build step's writeKnowledgeIndex/writeKnowledgeOption). Each entry is one
+domain/field. **Structure each field as: an OVERVIEW (goes in the field's `index.md`) PLUS
+2–4 option files, each covering a DIFFERENT ASPECT of the field.** Do NOT put the overview
+in an option file and do NOT create a single `overview.md` option — the overview is the
+`description`, and the options are distinct aspects (e.g. for "pieces": `movement`, `value`,
+`special_moves` — never `overview`). Keep each option short and attributed.
 
 Example output shape:
 ```typescript
@@ -47,24 +51,22 @@ const knowledge = top.length === 0 ? [] : [{
   field: '<field_slug>',              // e.g. "pieces"
   type: 'string',
   variable: 'piecesKnowledge',
-  default: 'overview',
-  description: 'Movement rules for each chess piece.',
-  options: [
-    {
-      slug: 'overview',
-      content: '# Piece Overview\n\n<distilled facts>\n\nSource: ' + url1,
-    },
-    {
-      slug: 'special_moves',
-      content: '# Special Moves\n\n<castling, en passant, promotion>\n\nSource: ' + url2,
-    },
+  default: 'movement',               // a real aspect slug (NOT "overview")
+  // `description` is the field OVERVIEW (becomes index.md body). It must SUMMARIZE ALL the
+  // options below — a short paragraph that introduces each aspect so the agent knows what
+  // each option covers and which to load. The agent always sees this; it loads aspects on demand.
+  description: 'Chess pieces are defined by three things: how each one MOVES (movement), how much each is worth (value), and the SPECIAL MOVES some can make (castling, en passant, promotion). Load the matching option for detail.',
+  options: [   // 2–4 DISTINCT aspects — NOT an "overview" option
+    { slug: 'movement', content: '# Movement\n\n<how each piece moves>\n\nSource: ' + url1 },
+    { slug: 'value', content: '# Relative Value\n\n<pawn=1, knight/bishop=3…>\n\nSource: ' + url1 },
+    { slug: 'special_moves', content: '# Special Moves\n\n<castling, en passant, promotion>\n\nSource: ' + url2 },
   ],
 }];
 ```
 
-At runtime the synthesized agent loads it with:
-  `await loadKnowledge('chess_rules', 'pieces', 'overview.md')`
-Note the `.md` suffix in the option arg.
+At runtime the synthesized agent sees the overview (index body) in its prompt and loads a
+specific aspect with `await loadKnowledge('chess_rules', 'pieces', 'movement.md')` (note the
+`.md` suffix, and the slug is a real aspect — never `overview`).
 
 **Build `knowledge` as ONE array literal and resolve in the SAME statement.** Do NOT declare an
 empty `const knowledge = []` and then `.push()` to it across later statements — variables do not

@@ -75,6 +75,10 @@ export interface KnowledgeField {
   variableName: string;
   default?: unknown;
   options: Record<string, string>; // option slug -> file path
+  /** Body of knowledge/<domain>/<field>/index.md — the field's OVERVIEW. Surfaced in
+   *  the system prompt so the agent always has the field summary; the option files
+   *  (aspects) are loaded on demand. */
+  description?: string;
 }
 
 async function dirExists(path: string): Promise<boolean> {
@@ -213,14 +217,16 @@ async function loadKnowledge(dir: string): Promise<KnowledgeTree> {
       let type = 'string';
       let variableName = fieldSlug;
       let defaultValue: unknown;
+      let fieldDescription: string | undefined;
 
       const metaPath = join(fieldDir, 'index.md');
       if (await fileExists(metaPath)) {
         const raw = await readFile(metaPath, 'utf8');
-        const { data } = parseFrontmatter(raw, metaPath);
+        const { data, body } = parseFrontmatter(raw, metaPath);
         if (typeof data['type'] === 'string') type = data['type'];
         if (typeof data['variable'] === 'string') variableName = data['variable'];
         if ('default' in data) defaultValue = data['default'];
+        if (body && body.trim()) fieldDescription = body.trim();
       }
 
       // Collect options (all .md files except index.md)
@@ -242,6 +248,9 @@ async function loadKnowledge(dir: string): Promise<KnowledgeTree> {
       };
       if (defaultValue !== undefined) {
         field.default = defaultValue;
+      }
+      if (fieldDescription) {
+        field.description = fieldDescription;
       }
       fields[fieldSlug] = field;
     }

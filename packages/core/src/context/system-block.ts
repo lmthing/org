@@ -162,8 +162,8 @@ function globalsSummary(omitAsk: boolean): string {
     ? '\nThis agent runs AUTONOMOUSLY: work entirely from the request/seed you were given. If a detail is missing, assume a sensible default and state it — never wait for input.\n'
     : '';
   const castExamples = omitAsk
-    ? '  const result = await tasklist("my_list") as { field: string };\n  const data = await delegate(...) as { key: string };'
-    : '  const topic = await ask("...") as string;\n  const result = await tasklist("my_list") as { field: string };\n  const data = await delegate(...) as { key: string };';
+    ? '  const result = await tasklist("my_list");   // result.field is usable directly\n  const data = await delegate(...);            // data.key is usable directly'
+    : '  const topic = await ask("...") as string;\n  const result = await tasklist("my_list");   // result.field is usable directly\n  const data = await delegate(...);            // data.key is usable directly';
   return `
 # Available Globals
 
@@ -178,7 +178,7 @@ ${askBullet}- \`display(descriptor)\` — render content to the surface (void, n
 Value-yielding globals (${yieldList}) end the current turn.
 display() is void and does not end the turn.
 ${autonomyNote}
-IMPORTANT: tasklist() and delegate() return unknown. Cast results to use them:
+tasklist(), delegate() and loadKnowledge() return loosely-typed values — read their fields directly:
 ${castExamples}
 
 fork() spawns an isolated subagent. REQUIRED fields: \`instruction\` (what to do) and
@@ -291,7 +291,11 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
         );
       } else {
         const options = Object.keys(field.options).join(', ');
-        onDemandLines.push(`  - \`${domainSlug}/${fieldSlug}\` (${field.type}): ${options ? `options: ${options}` : 'no options'}`);
+        // The field's index.md body is its OVERVIEW — surface it inline so the agent
+        // always has the summary, then list the option files (specific aspects) to
+        // load on demand for detail.
+        const overview = field.description ? `\n    overview: ${field.description.replace(/\s+/g, ' ').trim()}` : '';
+        onDemandLines.push(`  - \`${domainSlug}/${fieldSlug}\` (${field.type})${overview}\n    aspects (load on demand): ${options || '(none)'}`);
       }
     }
 

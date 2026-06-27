@@ -31,10 +31,10 @@ shown back to you, so there is nothing to wait for. Keep emitting statements thr
 
 ## Step 2 — Write the files (each call writes exactly ONE file; all are SYNC, no await)
 
-**HARD LIMIT: maximum 3 knowledge fields total.** If research produced 6–8 fields, merge
-related topics under broader headings (e.g. merge "history"+"mythology"+"archaeology" →
-"history_and_lore"; merge "demographics"+"economy"+"infrastructure" → "practical"). Writing
-more than 3 fields risks hitting output limits mid-build and corrupting the program.
+**Create as many knowledge fields as the domain genuinely needs to be covered well** — a rich
+domain may warrant many fields. Each field = an `index.md` OVERVIEW + 2+ aspect option files.
+The agent SEES every field's overview in its prompt automatically, so adding fields costs the
+agent little at runtime (it loads only the specific aspects it needs).
 
 **CRITICAL: You MUST write ALL files (knowledge, agent, task) AND run `validateSpace` AND call `currentTask.resolve(...)` in the EXACT SAME TURN. Never resolve early with an incomplete build.**
 
@@ -56,9 +56,9 @@ check `.ok` and fix before continuing. Available builders:
   For the "useful UI" part: tell the agent to run its action's tasklist, then `display(...)` the
   structured result using built-in catalog components (e.g. `<Stack>` with `<Callout>` / `<Table>`),
   and finally `currentTask.resolve(result)`. Keep it to one display call — don't over-engineer.
-  `tasklist()` returns `unknown`, so the agent prompt must show CASTING the result to its field shape,
-  e.g. `const result = await tasklist('diagnose', {}) as { diagnosis: string; recommendation: string };`
-  — without the cast, `result.x` fails typecheck ("'result' is of type 'unknown'") and wastes a turn.
+  `tasklist()`/`delegate()` return loosely-typed values, so the agent can read result fields directly
+  (e.g. `const result = await tasklist('diagnose', {}); display(<Callout>{result.diagnosis}</Callout>);`)
+  — no cast needed.
 - `writeTaskFile(space, tasklist, { id: string, instruction: string, output: Record<string, string>, dependsOn?: string[], goal?: boolean, optional?: boolean, condition?: string })`
   — one task file. Mark exactly ONE task per tasklist `goal: true` (its output is the final answer).
   **`output` MUST be a JS object — NEVER a string:**
@@ -103,7 +103,13 @@ check `.ok` and fix before continuing. Available builders:
   over a single opaque string so the agent can render it as real UI (see below) — this satisfies the
   "useful UI" part of most requests without a custom component.
 - `writeKnowledgeIndex(space, domain, field, { variable, default?, type?, description })` — the field manifest.
-- `writeKnowledgeOption(space, domain, field, slug, content)` — one option `.md` (markdown body, no frontmatter). Keep content extremely brief (max 1–2 paragraphs).
+  **`description` is the field's OVERVIEW and becomes the index.md body** — a short paragraph that
+  SUMMARIZES ALL the option files: introduce each aspect so the agent knows what each option covers and
+  which to load. The agent always sees this overview in its prompt — make it substantive, not a label.
+- `writeKnowledgeOption(space, domain, field, slug, content)` — one option `.md` (markdown body, no
+  frontmatter) covering ONE specific ASPECT of the field. Write **at least 2 aspect options per field**,
+  each a distinct sub-topic. Do NOT create a single `overview.md` — the overview goes in index.md (above).
+  Keep each option brief (max 1–2 paragraphs).
 - `writeFunctionFile(space, name, source)` — one space function. Single-export TS, NO imports, host
   primitives only. Returns `{ ok, errors }`; if `ok` is false, read `errors` and rewrite. Add a
   function when the domain needs deterministic computation (math, schedules, scoring, conversions,
@@ -122,21 +128,25 @@ that points at a file you didn't write. So the agent's knowledge list and the sy
 
 ```typescript
 const kn = Array.isArray(research?.knowledge) ? research.knowledge : [];
-// 1. Write every option file the research produced (writeKnowledgeIndex once per field,
-//    writeKnowledgeOption once per option) — do this in a loop over kn + entry.options.
+// 1. For each field: writeKnowledgeIndex ONCE with `description` = the field OVERVIEW
+//    (entry.description — becomes index.md body), then writeKnowledgeOption for EACH of
+//    entry.options (the ≥2 aspect files). Loop over kn + entry.options.
 // 2. Build the agent's knowledge refs from what you wrote, NOT from a hand-written list:
-const knowledgeRefs = kn.map((e) => e.domain + '/' + e.field);   // ["gavdos/overview", ...]
-// 3. Build the loadKnowledge lines for the systemPrompt from the SAME data, using the real
-//    option slugs (slug + '.md'), e.g. for the first option of each field:
-const loadLines = kn
-  .map((e) => "await loadKnowledge('" + e.domain + "', '" + e.field + "', '" + e.options[0].slug + ".md')")
-  .join('; ');
-// 4. Pass knowledgeRefs as writeAgentFile's `knowledge`, and embed `loadLines` verbatim in
-//    the systemPrompt. If kn is empty, pass `knowledge: []` and write NO loadKnowledge calls.
+const knowledgeRefs = kn.map((e) => e.domain + '/' + e.field);   // ["chess_rules/pieces", ...]
+// 3. Pass knowledgeRefs as writeAgentFile's `knowledge`. If kn is empty, pass `knowledge: []`.
 ```
 
+**Do NOT make the agent bulk-load every field.** The agent's prompt ALREADY shows every field's
+overview, so it must NOT pre-load or `inspect` all fields (with many fields that thrashes). Instead,
+the systemPrompt (and the goal task instruction) should tell it to call
+`await loadKnowledge('<domain>', '<field>', '<aspect>.md')` for ONLY the 1–3 specific aspects relevant
+to the current `query`, on demand. Reference real aspect slugs from `kn` (`e.options[i].slug`), never
+`overview`. Example line to embed: "Consult the field overviews above; for detail, load the specific
+aspect you need, e.g. `await loadKnowledge('espresso','grind_size','dialing_in.md')`."
+
 NEVER write a `loadKnowledge('x','y','z.md')` for a `z` slug that isn't in `kn` — it will
-fail validation (and would fail at runtime). When in doubt, reference only `e.options[0].slug`.
+fail validation (and would fail at runtime). The overview is in index.md (auto-surfaced); the
+`z` you load must be a real ASPECT slug from `e.options`, never `overview`.
 
 ## Step 3 — Validate (the gate)
 

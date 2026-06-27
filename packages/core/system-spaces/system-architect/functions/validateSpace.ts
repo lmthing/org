@@ -130,12 +130,20 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
       if (!/^variable:\s*\S+/m.test(idx.content)) {
         errors.push(`Agent "${slug}": knowledge "${ref}" index.md missing required "variable:" frontmatter`);
       }
+      // index.md must carry the field OVERVIEW in its body (after the frontmatter) —
+      // the overview belongs here, NOT in a separate option file.
+      const idxBody = idx.content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
+      if (idxBody.length < 40) {
+        errors.push(`Agent "${slug}": knowledge "${ref}" index.md has no overview body — put the field's overview (a short paragraph) in index.md, below the frontmatter`);
+      }
       const optLs = execShell(`ls -1 "${fieldDir}" 2>&1`);
       const optFiles = optLs.ok
         ? optLs.stdout.trim().split('\n').filter((f: string) => f.endsWith('.md') && f !== 'index.md')
         : [];
-      if (optFiles.length === 0) {
-        errors.push(`Agent "${slug}": knowledge "${ref}" has no option .md files (besides index.md)`);
+      // Require MULTIPLE aspect options (not a single "overview.md"): each field should
+      // cover several distinct aspects in separate option files, with the overview in index.md.
+      if (optFiles.length < 2) {
+        errors.push(`Agent "${slug}": knowledge "${ref}" must have at least 2 aspect option .md files covering different aspects of the field (found ${optFiles.length}). Put the overview in index.md and split detail across multiple options — do NOT use a single "overview.md".`);
       }
     }
 
