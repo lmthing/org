@@ -72,6 +72,13 @@ export function writeAgentFile(
   if (!spec.agentTitle) return { ok: false, path: '', error: 'writeAgentFile: spec.agentTitle is required' };
   if (!spec.systemPrompt) return { ok: false, path: '', error: 'writeAgentFile: spec.systemPrompt is required' };
 
+  // Reject placeholder loadKnowledge calls immediately (fast, localized feedback). A
+  // small model sometimes copies a template like loadKnowledge('<domain>','<field>','<aspect>.md')
+  // verbatim into the prompt — that points at a nonexistent file and fails validation.
+  if (/loadKnowledge\([^)]*<[A-Za-z]/.test(spec.systemPrompt)) {
+    return { ok: false, path: '', error: "writeAgentFile: systemPrompt contains a placeholder loadKnowledge(...) call with <…> angle-brackets. Replace every <domain>/<field>/<aspect> with the REAL slugs you wrote (e.g. loadKnowledge('chania_guide','beaches','elafonissi.md')), or remove the call." };
+  }
+
   const listBlock = (key: string, items: string[]): string =>
     items.length > 0 ? `${key}:\n` + items.map((n) => `  - ${n}`).join('\n') : `${key}: []`;
 

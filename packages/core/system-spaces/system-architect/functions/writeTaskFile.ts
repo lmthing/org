@@ -58,6 +58,11 @@ export function writeTaskFile(
   if (!spec.output || typeof spec.output !== 'object' || Array.isArray(spec.output) || Object.keys(spec.output).length === 0) {
     return { ok: false, path: '', error: 'writeTaskFile: spec.output must be a non-empty object of field:type' };
   }
+  // Reject placeholder loadKnowledge calls (e.g. loadKnowledge('<domain>','<field>','<aspect>.md'))
+  // — they point at nonexistent files and fail validation. Use the REAL slugs you wrote.
+  if (/loadKnowledge\([^)]*<[A-Za-z]/.test(spec.instruction)) {
+    return { ok: false, path: '', error: "writeTaskFile: instruction contains a placeholder loadKnowledge(...) call with <…> angle-brackets. Replace every <domain>/<field>/<aspect> with the REAL slugs (e.g. loadKnowledge('chania_guide','beaches','elafonissi.md'))." };
+  }
 
   const id = String(spec.id).replace(/^\d+[-_]?/, '').replace(/\.md$/i, '') || 'task';
   const tlDir = joinPath(dir, 'tasklists', tasklist);

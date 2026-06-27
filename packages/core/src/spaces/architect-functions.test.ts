@@ -52,10 +52,14 @@ describe('per-file builders smoke', () => {
     })})`);
     expect(agent.ok).toBe(true);
 
-    const ki = evalDump(vm, `writeKnowledgeIndex(${D}, "dogs", "breeds", ${JSON.stringify({ variable: 'breeds', default: 'overview', description: 'Dog breed reference.' })})`);
+    // New knowledge contract: index.md body is the OVERVIEW (covers all options); the
+    // field has >=2 aspect option files (never a single "overview" option).
+    const ki = evalDump(vm, `writeKnowledgeIndex(${D}, "dogs", "breeds", ${JSON.stringify({ variable: 'breeds', default: 'retrievers', description: 'Dog breeds grouped by purpose: retrievers (work/family), toy breeds (companions), and herding dogs each have distinct temperaments and care needs.' })})`);
     expect(ki.ok).toBe(true);
-    const ko = evalDump(vm, `writeKnowledgeOption(${D}, "dogs", "breeds", "overview", ${JSON.stringify('# Breeds\\nLabrador, Poodle.')})`);
-    expect(ko.ok).toBe(true);
+    const ko1 = evalDump(vm, `writeKnowledgeOption(${D}, "dogs", "breeds", "retrievers", ${JSON.stringify('# Retrievers\\nLabrador and Golden Retrievers: friendly, energetic family dogs.')})`);
+    expect(ko1.ok).toBe(true);
+    const ko2 = evalDump(vm, `writeKnowledgeOption(${D}, "dogs", "breeds", "toy_breeds", ${JSON.stringify('# Toy Breeds\\nPoodle and Chihuahua: small companion dogs for apartments.')})`);
+    expect(ko2.ok).toBe(true);
 
     const fn = evalDump(vm, `writeFunctionFile(${D}, "scoreBreed", ${JSON.stringify('export function scoreBreed(name: string): number { return name.length; }')})`);
     expect(fn.ok).toBe(true);
@@ -68,6 +72,20 @@ describe('per-file builders smoke', () => {
     expect(v.ok).toBe(true);
     expect(v.errors).toEqual([]);
     expect(existsSync(join(dir, 'agents', 'dog-expert', 'instruct.md'))).toBe(true);
+  });
+
+  it('rejects placeholder loadKnowledge in agent prompt and task instruction', () => {
+    const dir = join(baseDir, 'sP'); const D = JSON.stringify(dir);
+    const a = evalDump(vm, `writeAgentFile(${D}, ${JSON.stringify({
+      agentSlug: 'p', agentTitle: 'P',
+      systemPrompt: "Load it: await loadKnowledge('<domain>', '<field>', '<aspect>.md')",
+      actions: [{ id: 'go', label: 'Go', description: 'd', tasklist: 'go' }],
+    })})`);
+    expect(a.ok).toBe(false);
+    expect(a.error).toMatch(/placeholder/i);
+    const t = evalDump(vm, `writeTaskFile(${D}, "go", ${JSON.stringify({ id: 'x', instruction: "await loadKnowledge('<domain>', '<field>', '<aspect>.md')", output: { r: 'string' }, goal: true })})`);
+    expect(t.ok).toBe(false);
+    expect(t.error).toMatch(/placeholder/i);
   });
 
   it('rejects a function with a syntax error (typecheck on write)', () => {
