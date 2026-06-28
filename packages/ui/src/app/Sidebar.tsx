@@ -40,6 +40,23 @@ function switchSession(sessionId: string): void {
   if (window.innerWidth < 768) useStore.getState().setSidebarOpen(false);
 }
 
+/**
+ * Sibling lmthing-app origin for cross-app navigation. The pod UI is served at
+ * lmthing.chat (prod) / chat.test (dev), so we derive the sibling app's origin
+ * from the current host rather than build-time env (this bundle has none).
+ */
+function siblingAppUrl(app: 'studio' | 'computer'): string {
+  if (typeof window === 'undefined') return `https://lmthing.${app}`;
+  const { protocol, hostname } = window.location;
+  if (hostname.endsWith('.test')) return `${protocol}//${app}.test`;
+  return `https://lmthing.${app}`;
+}
+
+const CROSS_APP_LINKS: { app: 'studio' | 'computer'; label: string; emoji: string }[] = [
+  { app: 'studio', label: 'Studio', emoji: '🎛️' },
+  { app: 'computer', label: 'Computer', emoji: '🖥️' },
+];
+
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
   if (diff < 60_000) return 'just now';
@@ -278,6 +295,21 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
               );
             })}
           </div>
+        ))}
+      </div>
+
+      {/* Cross-app links */}
+      <div className="shrink-0 border-t border-sidebar-border px-3 py-2 flex items-center gap-1">
+        {CROSS_APP_LINKS.map(link => (
+          <a
+            key={link.app}
+            href={siblingAppUrl(link.app)}
+            title={`Open lmthing.${link.app}`}
+            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+          >
+            <span aria-hidden="true">{link.emoji}</span>
+            {link.label}
+          </a>
         ))}
       </div>
 
