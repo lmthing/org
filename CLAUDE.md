@@ -24,7 +24,8 @@ Testing without keys: `--mock <file>` / `LM_MOCK=<file>` (scripted streamFn, no 
 |---------|-------|---------|
 | `@lmthing/core` | `packages/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
 | `@lmthing/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring, `lmthing run`. |
-| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React web surface — THING chat shell + DevTools panel. |
+| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React web surface — THING chat shell + DevTools panel. Exports `<AgentChatPanel>` (embeddable, pod-backed chat: ensure→createSession→`useReplSession`; modes `agentOnly`/`spaceDir`/`sync`). |
+| | | The served `--web` UI (`app/main.tsx`) renders the **chat-only `<AgentChatPanel>` only when embedded** (iframe / `?embed=1`); a standalone visit keeps the project/session shell + DevPanel. DevTools shell also reachable via `?sessionId=`/`?trace=`. |
 
 `@lmthing/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
 
@@ -47,6 +48,7 @@ One-liners — full explanations are in the linked file.
 - **Transient stream errors retry** (a dropped/"terminated" connection isn't mistaken for "done"). → `@.claude/arch/turn-loop.md`
 - **Knowledge: overview in `index.md`, multiple aspect options** — the field `index.md` body is the overview (surfaced to the agent); each field has ≥2 `<aspect>.md` files (no single `overview.md`), loaded on demand. → `@.claude/skills/new-space.md`
 - **System spaces auto-adopt source/image updates** — a pristine materialized copy re-syncs from `defaultSystemSpaceDirs()` on boot; locally-edited ones hold back (adopt with `--adopt-system-spaces`). → `packages/cli/src/cli/runtime-init.ts`
+- **The server exposes system/user spaces as a synthetic `system` project** — `listProjects` (`packages/cli/src/server/projects.ts`) prepends `{id:'system'}` when `<root>/system/spaces/` is non-empty, so Studio can list/view/edit them through the normal `/api/projects/system/spaces/...` routes (`<root>/system/spaces/<id>` matches the generic `<root>/<projectId>/spaces/<id>` shape). `system` is reserved (can't be created/deleted as a project).
 - **`execShell` / `readFileRaw` / `writeFileRaw` rooted at `LMTHING_SPACE_DIR`**, not `process.cwd()`. → `@.claude/skills/system-spaces.md`
 - **JSX in model output** is transpiled to `React.createElement`; the JSX runtime is injected into every VM (sessions, forks, delegates). → `@.claude/arch/typecheck.md`
 
@@ -81,6 +83,7 @@ Secrets (Claude Code web): API keys stored encrypted in `.env.encrypted` (AES-25
 See `.issues/`. When all are resolved this section is empty.
 
 - `system-spaces-bundle-resolution.md` — `defaultSystemSpaceDirs()` resolves relative to the cli bundle; only the Docker image co-locates the assets, so a non-Docker built `serve` gets an empty `system/` and sessions fail with `Agent "thing" not found` (agent slug `thing`, in the `user-thing` space). `materializeRuntime` now warns + `runtimeNeedsInit` repairs an empty dir.
+- `architect-synthesize-stall.md` — the `system-architect` `synthesize_and_run` pipeline can hang mid-turn on a silent no-token model stream (observed on the prod free-tier pod): the turn loop retries dropped/"terminated" streams but has no inactivity watchdog for a stream that stops emitting tokens, so the orchestrator waits on the fork forever and no space is scaffolded. Needs a per-stream idle timeout.
 
 ## Rules
 
