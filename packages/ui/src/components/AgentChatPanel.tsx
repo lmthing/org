@@ -65,6 +65,10 @@ export function AgentChatPanel({
   const [phase, setPhase] = useState<RunPhase>('idle');
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
+  // The resolved bearer token, captured when the session is created so the
+  // WebSocket (opened synchronously by useReplSession) can carry it as
+  // ?access_token=… — required when the pod sits behind a JWT-checking gateway.
+  const [wsToken, setWsToken] = useState<string>('');
   const runningRef = useRef(false);
   const startedOnceRef = useRef(false);
   const blocksEndRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +105,7 @@ export function AgentChatPanel({
 
       setPhase('starting');
       const token = await resolveToken();
+      setWsToken(token);
       const client = await ReplRpcClient.createSession(
         computeBaseUrl,
         { spaceDir, agentSlug },
@@ -136,7 +141,7 @@ export function AgentChatPanel({
 
   const { blocks, sendMessage, submitForm, cancelAsk, isConnected, isDone } = useReplSession(
     sessionId
-      ? { baseUrl: computeBaseUrl, sessionId }
+      ? { baseUrl: computeBaseUrl, sessionId, accessToken: wsToken || undefined }
       : { baseUrl: computeBaseUrl, sessionId: '' },
   );
 
