@@ -73,11 +73,22 @@ async function boot(): Promise<void> {
   const hasLegacyWs = Boolean(w.__WS_URL__);
   const isShellMode = (projectMode || !hasLegacyWs) && !sessionIdParam && !traceUrl;
 
-  if (isShellMode) {
-    // ── Chat-only mode (default served UI) ───────────────────────────────────
-    // The pod serves a single, self-contained chat panel for its `thing`
-    // agent — no project/session shell, no DevPanel. The DevTools shell is
-    // still reachable via ?sessionId=… or ?trace=… (handled below).
+  // Embedded = rendered inside an iframe, or explicitly requested with ?embed=1.
+  // A direct (standalone) visit to lmthing.chat is NOT embedded.
+  const isEmbedded =
+    params.get('embed') === '1' ||
+    (() => {
+      try {
+        return window.self !== window.top;
+      } catch {
+        return true; // cross-origin frame access throws → we're embedded
+      }
+    })();
+
+  if (isShellMode && isEmbedded) {
+    // ── Embedded chat-only mode ──────────────────────────────────────────────
+    // When embedded, the pod serves a single, self-contained chat panel for its
+    // `thing` agent — no project/session shell, no DevPanel.
     const root = createRoot(document.getElementById('root')!);
     root.render(
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -89,6 +100,35 @@ async function boot(): Promise<void> {
         />
       </div>,
     );
+    return;
+  }
+
+  if (isShellMode) {
+    // ── Shell mode: standalone (e.g. lmthing.chat) — project + session
+    // management with the sidebar and the DevPanel ("inspect").
+    const root = createRoot(document.getElementById('root')!);
+    root.render(<AppShell />);
+
+    // Pre-load projects and pick a default.
+    try {
+      const res = await fetch('/api/projects', { headers: authHeaders() });
+      if (res.ok) {
+        const { projects } = (await res.json()) as { projects: Project[] };
+        useStore.getState().setProjects(projects);
+        // Default-select 'user' project if it exists (id='user' is the
+        // personal project), else first project.
+        const defaultProject =
+          projects.find((p) => p.id === 'user') ?? projects[0];
+        if (defaultProject) {
+          useStore.getState().setActiveProjectId(defaultProject.id);
+        }
+      }
+    } catch {
+      // No project API available yet — shell renders with empty sidebar.
+    }
+
+    applyUrlToState();
+    syncStateToUrl();
     return;
   }
 
