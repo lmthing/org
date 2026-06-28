@@ -69,6 +69,11 @@ export function AgentChatPanel({
   // WebSocket (opened synchronously by useReplSession) can carry it as
   // ?access_token=… — required when the pod sits behind a JWT-checking gateway.
   const [wsToken, setWsToken] = useState<string>('');
+  // Locally-echoed user messages. The agent stream (`blocks`) only carries the
+  // agent's display/ask/variables output, never the user's own turns — so we
+  // track them here and interleave them into the transcript by recording how
+  // many agent blocks existed when each was sent.
+  const [userMsgs, setUserMsgs] = useState<{ id: string; text: string; afterBlock: number }[]>([]);
   const runningRef = useRef(false);
   const startedOnceRef = useRef(false);
   const blocksEndRef = useRef<HTMLDivElement | null>(null);
@@ -83,6 +88,7 @@ export function AgentChatPanel({
     runningRef.current = true;
     setSessionError(null);
     setSessionId(null);
+    setUserMsgs([]);
 
     try {
       let spaceDir: string | undefined;
@@ -145,17 +151,21 @@ export function AgentChatPanel({
       : { baseUrl: computeBaseUrl, sessionId: '' },
   );
 
-  // Scroll to bottom whenever blocks update.
+  // Scroll to bottom whenever the transcript grows.
   useEffect(() => {
     blocksEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [blocks]);
+  }, [blocks, userMsgs.length]);
 
   const handleSend = useCallback(() => {
     const text = inputValue.trim();
     if (!text || !isConnected) return;
+    setUserMsgs((prev) => [
+      ...prev,
+      { id: `u-${Date.now()}-${prev.length}`, text, afterBlock: blocks.length },
+    ]);
     sendMessage(text);
     setInputValue('');
-  }, [inputValue, isConnected, sendMessage]);
+  }, [inputValue, isConnected, sendMessage, blocks.length]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -220,37 +230,42 @@ export function AgentChatPanel({
         </button>
       </div>
 
-      {/* Block stream */}
+      {/* Transcript: user messages interleaved with agent blocks */}
       <div style={styles.blocks}>
-        {blocks.map((block) => {
-          if (block.type === 'display') {
-            return <DisplayBlock key={block.id} descriptor={block.data} />;
+        {(() => {
+          const renderAgentBlock = (block: (typeof blocks)[number]) => {
+            if (block.type === 'display') return <DisplayBlock key={block.id} descriptor={block.data} />;
+            if (block.type === 'ask')
+              return (
+                <AskBlock key={block.id} id={block.id} descriptor={block.data} onSubmit={submitForm} onCancel={cancelAsk} />
+              );
+            if (block.type === 'variables')
+              return <VariablesBlock key={block.id} vars={block.data as Record<string, unknown>} />;
+            if (block.type === 'error')
+              return (
+                <div key={block.id} style={styles.errorBlock}>
+                  {String(block.data)}
+                </div>
+              );
+            return null;
+          };
+          const userBubble = (m: { id: string; text: string }) => (
+            <div key={m.id} style={styles.userMsg}>
+              {m.text}
+            </div>
+          );
+
+          const out: React.ReactNode[] = [];
+          let u = 0;
+          for (let i = 0; i < blocks.length; i++) {
+            while (u < userMsgs.length && userMsgs[u]!.afterBlock <= i) out.push(userBubble(userMsgs[u++]!));
+            out.push(renderAgentBlock(blocks[i]!));
           }
-          if (block.type === 'ask') {
-            return (
-              <AskBlock
-                key={block.id}
-                id={block.id}
-                descriptor={block.data}
-                onSubmit={submitForm}
-                onCancel={cancelAsk}
-              />
-            );
-          }
-          if (block.type === 'variables') {
-            return (
-              <VariablesBlock key={block.id} vars={block.data as Record<string, unknown>} />
-            );
-          }
-          if (block.type === 'error') {
-            return (
-              <div key={block.id} style={styles.errorBlock}>
-                {String(block.data)}
-              </div>
-            );
-          }
-          return null;
-        })}
+          // Trailing user messages (sent after the last agent block, incl. the
+          // newest turn that hasn't produced output yet).
+          while (u < userMsgs.length) out.push(userBubble(userMsgs[u++]!));
+          return out;
+        })()}
         <div ref={blocksEndRef} />
       </div>
 
@@ -315,6 +330,17 @@ const styles = {
     flexDirection: 'column' as const,
     gap: '8px',
   },
+  userMsg: {
+    alignSelf: 'flex-end',
+    maxWidth: '85%',
+    background: '#3b82f6',
+    color: '#fff',
+    borderRadius: '12px 12px 2px 12px',
+    padding: '6px 12px',
+    fontSize: 14,
+    whiteSpace: 'pre-wrap' as const,
+    wordBreak: 'break-word' as const,
+  } as React.CSSProperties,
   errorBlock: {
     background: '#fee2e2',
     border: '1px solid #fca5a5',
