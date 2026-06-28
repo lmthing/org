@@ -6,7 +6,8 @@ import { AppShell } from './AppShell.js';
 import { useStore, connectLive, type InspectorTab, type Project } from '../store/store.js';
 import { parseTrace } from './replay.js';
 import { initTheme } from '../theme/theme.js';
-import { authHeaders, wsTokenSuffix } from './auth.js';
+import { authHeaders, wsTokenSuffix, getAccessToken } from './auth.js';
+import { AgentChatPanel } from '../components/AgentChatPanel.js';
 
 // Expose React for runtime-bundled space components that reference it (defensive;
 // the runtime bundle shares this React instance directly).
@@ -73,30 +74,21 @@ async function boot(): Promise<void> {
   const isShellMode = (projectMode || !hasLegacyWs) && !sessionIdParam && !traceUrl;
 
   if (isShellMode) {
-    // ── Shell mode: project + session management ────────────────────────────
+    // ── Chat-only mode (default served UI) ───────────────────────────────────
+    // The pod serves a single, self-contained chat panel for its `thing`
+    // agent — no project/session shell, no DevPanel. The DevTools shell is
+    // still reachable via ?sessionId=… or ?trace=… (handled below).
     const root = createRoot(document.getElementById('root')!);
-    root.render(<AppShell />);
-
-    // Pre-load projects and pick a default.
-    try {
-      const res = await fetch('/api/projects', { headers: authHeaders() });
-      if (res.ok) {
-        const { projects } = (await res.json()) as { projects: Project[] };
-        useStore.getState().setProjects(projects);
-        // Default-select 'user' project if it exists (id='user' is the
-        // personal project), else first project.
-        const defaultProject =
-          projects.find((p) => p.id === 'user') ?? projects[0];
-        if (defaultProject) {
-          useStore.getState().setActiveProjectId(defaultProject.id);
-        }
-      }
-    } catch {
-      // No project API available yet — shell renders with empty sidebar.
-    }
-
-    applyUrlToState();
-    syncStateToUrl();
+    root.render(
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <AgentChatPanel
+          computeBaseUrl={window.location.origin}
+          getAccessToken={() => getAccessToken() ?? ''}
+          target={{ mode: 'agentOnly', agentSlug: 'thing' }}
+          style={{ flex: 1, minHeight: 0 }}
+        />
+      </div>,
+    );
     return;
   }
 
