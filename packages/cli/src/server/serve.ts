@@ -1,18 +1,15 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createWriteStream, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { createWriteStream, readFileSync, writeFileSync } from 'node:fs';
 import { mkdir, writeFile, readFile, readdir, stat, rm } from 'node:fs/promises';
 import { join, resolve, dirname, sep } from 'node:path';
-import { createRequire } from 'node:module';
 import { WebSocketServer, WebSocket } from 'ws';
-import { build } from 'esbuild';
-import { loadSpace } from '@lmthing/core';
-import type { Space } from '@lmthing/core';
 import { TraceHub } from '../rpc/trace-hub.js';
 import { handleAgentApi, agentApiContextFromEntry } from '../web/agent-api.js';
 import type { ServerEvent, ClientMessage, UiControlAction } from '../rpc/events.js';
 import type { SessionManager, SessionEntry } from './session-manager.js';
 import { isSafeRelPath, safeProjectId } from './projects.js';
+import { createStaticApps, resolveAppDist } from './static-apps.js';
 
 /**
  * Parse KEY=VALUE lines from a .env-style string and apply them to process.env.
@@ -35,7 +32,7 @@ export interface SessionServerOpts {
   port: number;
   manager: SessionManager;
   /** dist/web/app.tsx anchor — used to resolve react/@lmthing/agent-ui from the CLI root. */
-  appTsxPath: string;
+  appTsxPath?: string;
   /** Default space dir used when POST /api/sessions omits one (also for bundling the app). */
   defaultSpaceDir?: string;
   /** Root dir under which POST /api/spaces writes synced spaces (default $SPACES_DIR or /data/spaces). */
@@ -57,143 +54,6 @@ function safeSpaceName(name: unknown): string | null {
   return name;
 }
 
-
-// ─── esbuild app bundling (mirrors web/serve.ts) ──────────────────────────────
-
-function resolveUiAssets(appTsxPath: string): { aliases: Record<string, string>; appEntry: string; cssPath: string; resolveDir: string } {
-  const cliRoot = join(appTsxPath, '..', '..', '..'); // packages/cli/
-  const req = createRequire(join(cliRoot, 'package.json'));
-  const aliases: Record<string, string> = {};
-  for (const pkg of ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/client']) {
-    try { aliases[pkg] = req.resolve(pkg); } catch { /* skip */ }
-  }
-  const uiPkgJson = req.resolve('@lmthing/agent-ui/package.json');
-  const uiRoot = dirname(uiPkgJson);
-  const appEntry = join(uiRoot, 'src', 'app', 'main.tsx');
-  const cssPath = join(uiRoot, 'dist-web', 'app.css');
-  aliases['ink'] = join(uiRoot, 'src', 'compat', 'ink.tsx');
-  aliases['ink-text-input'] = join(uiRoot, 'src', 'compat', 'inputs.tsx');
-  aliases['ink-select-input'] = join(uiRoot, 'src', 'compat', 'inputs.tsx');
-  return { aliases, appEntry, cssPath, resolveDir: cliRoot };
-}
-
-function readThemeCss(spaceDir: string): string {
-  try {
-    const raw = JSON.parse(readFileSync(join(spaceDir, 'theme.json'), 'utf8')) as Record<string, string>;
-    const vars = Object.entries(raw)
-      .map(([k, v]) => {
-        const name = k.startsWith('--') ? k : `--lm-${k}`;
-        return `${name}:${v};${name.replace('--lm-', '--color-lm-')}:${v};`;
-      })
-      .join('');
-    return `:root{${vars}}`;
-  } catch {
-    return '';
-  }
-}
-
-async function buildBundle(space: Space | null, wsBase: string, appTsxPath: string): Promise<string> {
-  // Bundle every form component across the default space's agents so the served
-  // app can render space components for whatever session is attached. In project
-  // mode (no default space) we bundle the app with no space components — the shell
-  // drives project/session selection and catalog forms still render.
-  const { aliases, appEntry, resolveDir } = resolveUiAssets(appTsxPath);
-
-  const importLines: string[] = [];
-  const compEntries: string[] = [];
-  const seen = new Set<string>();
-  for (const name of Object.keys(space?.components.form ?? {})) {
-    if (seen.has(name)) continue;
-    seen.add(name);
-    // Single-file `<Name>.tsx` (SPACE-SPEC); fall back to legacy `<Name>/web.tsx`.
-    const single = resolve(space!.dir, 'components', 'form', `${name}.tsx`);
-    const formPath = existsSync(single) ? single : resolve(space!.dir, 'components', 'form', name, 'web.tsx');
-    importLines.push(`import __Comp_${name}__ from ${JSON.stringify(formPath)};`);
-    compEntries.push(`  ${JSON.stringify(name)}: __Comp_${name}__,`);
-  }
-
-  // The bundle does NOT hardcode the WS URL — the inline bootstrap in the HTML
-  // reads sessionId from the query string and sets window.__WS_URL__ first.
-  const entry = [
-    `import React from 'react';`,
-    `import { mountApp } from ${JSON.stringify(appEntry)};`,
-    ...importLines,
-    `window.__SPACE_COMPONENTS__ = {`,
-    ...compEntries,
-    `};`,
-    `window.__LMTHING_REACT__ = React;`,
-    `mountApp();`,
-  ].join('\n');
-
-  const result = await build({
-    stdin: { contents: entry, loader: 'tsx', resolveDir, sourcefile: 'virtual-entry.tsx' },
-    bundle: true,
-    write: false,
-    format: 'iife',
-    jsx: 'automatic',
-    define: { 'process.env.NODE_ENV': '"production"' },
-    platform: 'browser',
-    logLevel: 'error',
-    alias: aliases,
-  });
-  void wsBase;
-  return result.outputFiles[0]!.text;
-}
-
-function readCss(appTsxPath: string): string {
-  try {
-    const { cssPath } = resolveUiAssets(appTsxPath);
-    return readFileSync(cssPath, 'utf8');
-  } catch {
-    return '';
-  }
-}
-
-function buildHtml(js: string, css: string, port: number, themeCss = '', projectMode = false): string {
-  // Bootstrap reads sessionId from the page query string and points the app's WS
-  // at /api/ws?sessionId=<id> for that session before the app bundle mounts. In
-  // project mode it flags the app to mount the project/session shell when no
-  // specific session is selected (rather than the legacy single-session view).
-  const bootstrap = `(function(){
-    var p = new URLSearchParams(location.search);
-    var sid = p.get('sessionId') || '';
-    var tok = p.get('access_token') || '';
-    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    window.__LM_PROJECT_MODE__ = ${projectMode ? 'true' : 'false'};
-    // Gateway JWT (behind Envoy): stash for the agent-ui fetch/WS layer, then
-    // strip it from the address bar so it isn't bookmarked/leaked (mirrors how
-    // @lmthing/auth clears ?code=).
-    window.__LM_ACCESS_TOKEN__ = tok;
-    if (tok) {
-      p.delete('access_token');
-      var qs = p.toString();
-      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
-    }
-    function wsUrl(extra) {
-      var qp = [];
-      if (extra) qp.push(extra);
-      if (tok) qp.push('access_token=' + encodeURIComponent(tok));
-      return proto + '//' + location.host + '/api/ws' + (qp.length ? '?' + qp.join('&') : '');
-    }
-    if (sid) window.__WS_URL__ = wsUrl('sessionId=' + encodeURIComponent(sid));
-    else if (!${projectMode ? 'true' : 'false'}) window.__WS_URL__ = wsUrl('');
-  })();`;
-  return `<!DOCTYPE html>
-<html lang="en" data-theme="dark">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LMThing</title>
-  <style>${css}</style>
-  ${themeCss ? `<style>${themeCss}</style>` : ''}
-</head>
-<body>
-  <div id="root"></div>
-  <script>${bootstrap}</script>
-  <script>${js}</script>
-</body>
-</html>`;
-}
 
 // ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
@@ -225,7 +85,6 @@ export interface SessionServerHandle {
 
 export async function startSessionServer(opts: SessionServerOpts): Promise<SessionServerHandle> {
   const { manager, port } = opts;
-  const wsBase = `ws://localhost:${port}`;
 
   // Redirect all console output to /tmp/lmthing-server.log so the computer app
   // can tail it in the read-only "process" terminal tab.
@@ -276,23 +135,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     }
   }
 
-  // Bundle the app. With a default space we also bundle its form components; in
-  // project mode (lmthingRoot, no default space) we bundle the shell with no space
-  // components — it selects projects/sessions and renders catalog forms.
-  const defaultSpaceDir = opts.defaultSpaceDir;
-  let html = '';
-  if (defaultSpaceDir) {
-    console.log('Bundling web app…');
-    const space = await loadSpace(defaultSpaceDir);
-    const js = await buildBundle(space, wsBase, opts.appTsxPath);
-    const css = readCss(opts.appTsxPath);
-    html = buildHtml(js, css, port, readThemeCss(space.dir));
-  } else if (opts.lmthingRoot) {
-    console.log('Bundling web app (project mode)…');
-    const js = await buildBundle(null, wsBase, opts.appTsxPath);
-    const css = readCss(opts.appTsxPath);
-    html = buildHtml(js, css, port, '', true);
-  }
+  const staticApps = createStaticApps(resolveAppDist());
 
   const broadcastUiControl = (entry: SessionEntry): ((action: UiControlAction) => void) =>
     (action) => entry.renderHost.emit({ type: 'ui_control', action });
@@ -769,13 +612,8 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     }
 
     // ─── Static app ───
-    if (!html) {
-      res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('no default space configured — pass --space to serve the UI');
-      return;
-    }
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(html);
+    await staticApps.handle(req, res);
+    return;
   }
 
   // ─── WebSocket: /api/ws?sessionId=<id> (agent) or /api/ws (control/terminal) ───

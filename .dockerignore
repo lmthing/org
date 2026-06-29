@@ -1,0 +1,9 @@
+# Keep the Docker build context lean and reproducible: the compute image builds
+# everything from source (bun install + tsup + vite), so local node_modules/dist
+# must not leak in from a developer checkout.
+**/node_modules
+**/dist
+**/dist-web
+**/.turbo
+**/.vite
+.git
