@@ -1,0 +1,24 @@
+
+> @lmthing/agent-ui@0.1.0 build /home/vasilis/LMTHING/lmthing/sdk/org/packages/ui
+> tsup && pnpm build:css
+
+CLI Building entry: src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /home/vasilis/LMTHING/lmthing/sdk/org/packages/ui/tsup.config.ts
+CLI Target: node20
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.js     36.78 KB
+ESM dist/index.js.map 76.61 KB
+ESM ⚡️ Build success in 23ms
+DTS Build start
+DTS ⚡️ Build success in 868ms
+DTS dist/index.d.ts 13.12 KB
+
+> @lmthing/agent-ui@0.1.0 build:css /home/vasilis/LMTHING/lmthing/sdk/org/packages/ui
+> tailwindcss -i src/app/styles.css -o dist-web/app.css --minify
+
+≈ tailwindcss v4.3.0
+
+Done in 85ms

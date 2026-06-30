@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useAuth } from '@/lib/auth'
+import { useAuth } from '@lmthing/auth'
 
 import '@lmthing/css/components/auth/index.css'
 import '@lmthing/css/elements/forms/button/index.css'

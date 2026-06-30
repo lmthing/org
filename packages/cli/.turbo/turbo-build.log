@@ -1,0 +1,36 @@
+
+> @lmthing/cli@0.1.0 build /home/vasilis/LMTHING/lmthing/sdk/org/packages/cli
+> tsup
+
+CLI Building entry: src/index.ts, src/cli/bin.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /home/vasilis/LMTHING/lmthing/sdk/org/packages/cli/tsup.config.ts
+CLI Target: node20
+CLI Cleaning output folder
+ESM Build start
+ESM dist/chunk-CJDK775K.js               20.72 KB
+ESM dist/chunk-RMX6SX2W.js               2.33 KB
+ESM dist/terminal-2UIX5HW5.js            2.01 KB
+ESM dist/session-manager-XKD3P2Z7.js     25.81 KB
+ESM dist/chunk-SIERERUG.js               2.87 KB
+ESM dist/serve-77OTYJKP.js               29.19 KB
+ESM dist/chunk-R5RCFHZ2.js               11.43 KB
+ESM dist/chunk-3DU3QJRE.js               8.14 KB
+ESM dist/index.js                        399.00 B
+ESM dist/cli/bin.js                      31.62 KB
+ESM dist/chunk-CJDK775K.js.map           37.37 KB
+ESM dist/session-manager-XKD3P2Z7.js.map 51.00 KB
+ESM dist/terminal-2UIX5HW5.js.map        5.19 KB
+ESM dist/chunk-SIERERUG.js.map           6.19 KB
+ESM dist/chunk-R5RCFHZ2.js.map           23.07 KB
+ESM dist/chunk-3DU3QJRE.js.map           22.23 KB
+ESM dist/chunk-RMX6SX2W.js.map           5.46 KB
+ESM dist/serve-77OTYJKP.js.map           61.34 KB
+ESM dist/index.js.map                    713.00 B
+ESM dist/cli/bin.js.map                  71.71 KB
+ESM ⚡️ Build success in 43ms
+DTS Build start
+DTS ⚡️ Build success in 2743ms
+DTS dist/cli/bin.d.ts 20.00 B
+DTS dist/index.d.ts   4.36 KB

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { useAuth } from '@/lib/auth/AuthContext'
+import { useAuth } from '@lmthing/auth'
 import { useComputer } from '@/lib/runtime/ComputerContext'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
 import { Card, CardHeader, CardBody } from '@lmthing/ui/elements/content/card'

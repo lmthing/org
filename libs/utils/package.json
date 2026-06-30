@@ -12,7 +12,8 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
-    "@lmthing/config": "workspace:*"
+    "@lmthing/config": "workspace:*",
+    "eslint": "^9.0.0"
   },
   "peerDependencies": {
     "@tailwindcss/vite": "*",

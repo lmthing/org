@@ -1,0 +1,4 @@
+
+> @lmthing/cli@0.1.0 typecheck /home/vasilis/LMTHING/lmthing/sdk/org/packages/cli
+> tsc --noEmit
+

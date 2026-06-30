@@ -1,5 +1,5 @@
 import { createFileRoute, Navigate } from '@tanstack/react-router'
-import { useAuth } from '@/lib/auth/AuthContext'
+import { useAuth } from '@lmthing/auth'
 
 export const Route = createFileRoute('/computer/login')({
   component: Login,

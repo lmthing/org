@@ -20,7 +20,8 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
-    "@lmthing/config": "workspace:*"
+    "@lmthing/config": "workspace:*",
+    "eslint": "^9.0.0"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",

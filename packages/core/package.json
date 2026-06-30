@@ -30,6 +30,7 @@
   "devDependencies": {
     "@lmthing/config": "workspace:*",
     "@types/node": "^20.0.0",
+    "eslint": "^9.0.0",
     "tsup": "^8.1.0"
   }
 }
