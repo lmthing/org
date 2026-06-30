@@ -5,7 +5,7 @@ import { Shell } from './shell.js';
 import { AppShell } from './AppShell.js';
 import { useStore, connectLive, type Project } from '../store/store.js';
 import { parseTrace } from './replay.js';
-import { initTheme } from '../theme/theme.js';
+import { initTheme } from '../../theme/theme.js';
 import { authHeaders, wsTokenSuffix, getAccessToken } from './auth.js';
 import { AgentChatPanel } from '../components/AgentChatPanel.js';
 import { applyUrlToState, syncStateToUrl } from './url-state.js';

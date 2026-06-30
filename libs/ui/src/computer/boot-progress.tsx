@@ -1,5 +1,5 @@
 import '@lmthing/css/components/computer/boot-progress.css'
-import { cn } from '../../lib/utils'
+import { cn } from '../lib/utils'
 
 export type BootStage = 'booting' | 'connecting' | 'authenticating' | 'running' | 'error'
 

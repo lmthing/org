@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Dialog from '@radix-ui/react-dialog'
-import { cn } from '../../lib/utils'
+import { cn } from '../lib/utils'
 
 export interface FileTreeNode {
   name: string

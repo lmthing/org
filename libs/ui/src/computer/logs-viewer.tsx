@@ -1,9 +1,9 @@
 import '@lmthing/css/components/computer/logs-viewer.css'
 import { useRef, useEffect, useState } from 'react'
-import { Panel, PanelHeader } from '../../elements/content/panel'
-import { Button } from '../../elements/forms/button'
-import { Heading } from '../../elements/typography/heading'
-import { cn } from '../../lib/utils'
+import { Panel, PanelHeader } from '../elements/content/panel'
+import { Button } from '../elements/forms/button'
+import { Heading } from '../elements/typography/heading'
+import { cn } from '../lib/utils'
 
 export interface LogEntry {
   timestamp: number

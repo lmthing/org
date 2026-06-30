@@ -1,6 +1,6 @@
 import '@lmthing/css/components/computer/ide-terminal.css'
-import { Terminal } from '../../elements/content/terminal'
-import type { TerminalSession } from '../../elements/content/terminal'
+import { Terminal } from '../elements/content/terminal'
+import type { TerminalSession } from '../elements/content/terminal'
 import { X, Plus } from 'lucide-react'
 
 export interface TerminalTab {

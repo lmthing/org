@@ -4,7 +4,7 @@ import type { ConvoBlock } from '../store/model.js';
 import { Message, AssistantTurn } from './Message.js';
 import { Composer } from './Composer.js';
 import { EmptyState } from './EmptyState.js';
-import { useTheme } from '../theme/theme.js';
+import { useTheme } from '../../theme/theme.js';
 import { TraceLoader } from './replay.js';
 import { cn } from '../lib/cn.js';
 

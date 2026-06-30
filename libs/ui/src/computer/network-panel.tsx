@@ -1,9 +1,9 @@
 import '@lmthing/css/components/computer/network-panel.css'
-import { Panel, PanelHeader, PanelBody } from '../../elements/content/panel'
-import { Badge } from '../../elements/content/badge'
-import { Caption } from '../../elements/typography/caption'
-import { Heading } from '../../elements/typography/heading'
-import { cn } from '../../lib/utils'
+import { Panel, PanelHeader, PanelBody } from '../elements/content/panel'
+import { Badge } from '../elements/content/badge'
+import { Caption } from '../elements/typography/caption'
+import { Heading } from '../elements/typography/heading'
+import { cn } from '../lib/utils'
 
 export interface NetworkEntry {
   id: string

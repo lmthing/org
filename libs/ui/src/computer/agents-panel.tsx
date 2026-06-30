@@ -1,9 +1,9 @@
 import '@lmthing/css/components/computer/agents-panel.css'
-import { Panel, PanelHeader, PanelBody } from '../../elements/content/panel'
-import { ListItem } from '../../elements/content/list-item'
-import { Badge } from '../../elements/content/badge'
-import { Heading } from '../../elements/typography/heading'
-import { Caption } from '../../elements/typography/caption'
+import { Panel, PanelHeader, PanelBody } from '../elements/content/panel'
+import { ListItem } from '../elements/content/list-item'
+import { Badge } from '../elements/content/badge'
+import { Heading } from '../elements/typography/heading'
+import { Caption } from '../elements/typography/caption'
 
 export interface RuntimeAgent {
   id: string

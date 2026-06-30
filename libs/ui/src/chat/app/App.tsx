@@ -4,7 +4,7 @@ import { ExecutionTree } from './tree.js';
 import { ConversationStream } from './conversation.js';
 import { Inspector } from './inspector.js';
 import { TraceLoader, PlaybackBar } from './replay.js';
-import { useTheme } from '../theme/theme.js';
+import { useTheme } from '../../theme/theme.js';
 
 function ThemeToggle(): React.ReactElement {
   const [theme, , toggle] = useTheme();

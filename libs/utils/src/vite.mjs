@@ -26,10 +26,10 @@ const __utilsDir = path.dirname(fileURLToPath(import.meta.url))
 function findOrgRoot(startDir) {
   let dir = path.resolve(startDir)
   while (true) {
-    if (existsSync(path.join(dir, 'libs', 'ui')) && existsSync(path.join(dir, 'packages', 'ui'))) return dir
+    if (existsSync(path.join(dir, 'libs', 'ui')) && existsSync(path.join(dir, 'apps'))) return dir
     if (existsSync(path.join(dir, 'sdk', 'org', 'libs', 'ui'))) return path.join(dir, 'sdk', 'org')
     const parent = path.dirname(dir)
-    if (parent === dir) throw new Error(`Could not locate sdk/org root (libs/ + packages/ui) starting from ${startDir}`)
+    if (parent === dir) throw new Error(`Could not locate sdk/org root (libs/ + apps/) starting from ${startDir}`)
     dir = parent
   }
 }
@@ -122,18 +122,20 @@ export function createViteConfig(dirname, overrides) {
     ],
     resolve: {
       // Collapse every React import to a single copy. Workspace libs aliased to
-      // source (notably @lmthing/agent-ui, which lives in the sdk/org submodule
-      // with its OWN node_modules/react@18) would otherwise pull a second React
+      // source (e.g. @lmthing/ui/chat) would otherwise pull a second React
+      // instance from their own node_modules, breaking hooks ("Cannot read
+      // properties of null (reading 'useState')") when their components render
+      // inside the app's React
       // instance, breaking hooks ("Cannot read properties of null (reading
       // 'useState')") when their components render inside the app's React tree.
       dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
       alias: {
         '@': path.resolve(dirname, './src'),
+        // Specific subpath must come BEFORE the generic prefix alias.
+        '@lmthing/ui/chat/css': path.resolve(orgRoot, 'libs/ui/src/chat/app/styles.css'),
         '@lmthing/ui': path.resolve(orgRoot, 'libs/ui/src'),
-        // @lmthing/agent-ui ships no committed dist; alias to source so SPA
-        // builds resolve it without a prior package build (e.g. studio's
-        // agent test-chat route).
-        '@lmthing/agent-ui': path.resolve(orgRoot, 'packages/ui/src'),
+        // @lmthing/agent-ui is now a shim for @lmthing/ui/chat; alias to chat source.
+        '@lmthing/agent-ui': path.resolve(orgRoot, 'libs/ui/src/chat'),
         '@lmthing/css': path.resolve(orgRoot, 'libs/css/src'),
         '@lmthing/state': path.resolve(orgRoot, 'libs/state/src'),
         '@lmthing/auth': path.resolve(orgRoot, 'libs/auth/src'),

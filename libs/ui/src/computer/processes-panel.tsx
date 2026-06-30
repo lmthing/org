@@ -1,8 +1,8 @@
 import '@lmthing/css/components/computer/processes-panel.css'
-import { Panel, PanelHeader, PanelBody } from '../../elements/content/panel'
-import { ListItem } from '../../elements/content/list-item'
-import { Caption } from '../../elements/typography/caption'
-import { Heading } from '../../elements/typography/heading'
+import { Panel, PanelHeader, PanelBody } from '../elements/content/panel'
+import { ListItem } from '../elements/content/list-item'
+import { Caption } from '../elements/typography/caption'
+import { Heading } from '../elements/typography/heading'
 
 export interface RuntimeProcess {
   pid: number

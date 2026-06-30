@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect } from 'react'
 import { useParams, useLocation, useNavigate } from '@tanstack/react-router'
-import { StudioShell } from '@lmthing/ui/components/shell/studio-shell'
+import { StudioShell } from '../studio-shell'
 import { useAgentList } from '@lmthing/ui/hooks/useAgentList'
 import { useTasklistList } from '@lmthing/ui/hooks/useWorkflowList'
 import { useUIState, useSpaceFS } from '@lmthing/state'

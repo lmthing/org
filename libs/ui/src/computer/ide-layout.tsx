@@ -1,7 +1,7 @@
 import '@lmthing/css/components/computer/ide-layout.css'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
-import { Badge } from '../../elements/content/badge'
+import { Badge } from '../elements/content/badge'
 import { Loader2 } from 'lucide-react'
 import { IdeFileTree, type FileTreeNode } from './ide-file-tree'
 import { IdeEditor } from './ide-editor'

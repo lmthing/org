@@ -1,6 +1,6 @@
 import '@lmthing/css/components/computer/connection-banner.css'
-import { Button } from '../../elements/forms/button'
-import { cn } from '../../lib/utils'
+import { Button } from '../elements/forms/button'
+import { cn } from '../lib/utils'
 
 export type ConnectionState = 'connected' | 'error' | 'booting'
 

@@ -1,7 +1,7 @@
 import '@lmthing/css/components/computer/metrics-card.css'
-import { Card, CardHeader, CardBody } from '../../elements/content/card'
-import { Caption } from '../../elements/typography/caption'
-import { Heading } from '../../elements/typography/heading'
+import { Card, CardHeader, CardBody } from '../elements/content/card'
+import { Caption } from '../elements/typography/caption'
+import { Heading } from '../elements/typography/heading'
 
 export interface MetricsCardProps {
   cpuPercent: number | null

@@ -1,7 +1,7 @@
 import '@lmthing/css/components/computer/ide-editor.css'
 import MonacoEditor from '@monaco-editor/react'
 import { X } from 'lucide-react'
-import { cn } from '../../lib/utils'
+import { cn } from '../lib/utils'
 
 export interface IdeEditorProps {
   openFiles: string[]
