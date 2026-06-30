@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 RUN npm install -g corepack && corepack enable && corepack prepare pnpm@10.17.1 --activate
 
 # Workspace manifests — all package.json files must be present for frozen-lockfile.
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 
 COPY blog/package.json           blog/
 COPY casa/package.json           casa/
