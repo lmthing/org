@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
 import { useAgentList } from '@lmthing/state'
-import { AgentCard } from '@lmthing/ui/components/agent/agent-card'
+import { AgentCard } from '@lmthing/ui/studio'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Heading } from '@lmthing/ui/elements/typography/heading'

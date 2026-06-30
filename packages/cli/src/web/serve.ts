@@ -17,13 +17,13 @@ export interface WebServerOpts {
   renderHost: WebRenderHost;
   space: Space;
   agentSlug: string;
-  /** Path anchor used to resolve the CLI package root (and from it, @lmthing/agent-ui). */
+  /** Path anchor used to resolve the CLI package root (and from it, @lmthing/ui). */
   appTsxPath: string;
   /** Optional --trace file path; when set, served at /trace.jsonl for ?trace= replay. */
   traceFile?: string;
 }
 
-/** Resolve react/react-dom + the @lmthing/agent-ui app entry & prebuilt CSS, all from the
+/** Resolve react/react-dom + the @lmthing/ui chat app entry & CSS, all from the
  *  CLI package root so a single React instance is shared across the app and the
  *  runtime-bundled space components (no second copy → hooks work). */
 function resolveUiAssets(appTsxPath: string): { aliases: Record<string, string>; appEntry: string; cssPath: string; resolveDir: string } {
@@ -33,16 +33,16 @@ function resolveUiAssets(appTsxPath: string): { aliases: Record<string, string>;
   for (const pkg of ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/client']) {
     try { aliases[pkg] = req.resolve(pkg); } catch { /* skip */ }
   }
-  // @lmthing/agent-ui app entry (TSX source — bundled fresh) + prebuilt CSS.
-  const uiPkgJson = req.resolve('@lmthing/agent-ui/package.json');
+  // @lmthing/ui chat-surface app entry (TSX source — bundled fresh) + CSS.
+  const uiPkgJson = req.resolve('@lmthing/ui/package.json');
   const uiRoot = dirname(uiPkgJson);
-  const appEntry = join(uiRoot, 'src', 'app', 'main.tsx');
-  const cssPath = join(uiRoot, 'dist-web', 'app.css');
+  const appEntry = join(uiRoot, 'src', 'chat', 'app', 'main.tsx');
+  const cssPath = join(uiRoot, 'src', 'chat', 'app', 'styles.css');
   // Map Ink imports onto the web compat layer so single-source (Ink-flavored)
   // space components render in the browser unchanged.
-  aliases['ink'] = join(uiRoot, 'src', 'compat', 'ink.tsx');
-  aliases['ink-text-input'] = join(uiRoot, 'src', 'compat', 'inputs.tsx');
-  aliases['ink-select-input'] = join(uiRoot, 'src', 'compat', 'inputs.tsx');
+  aliases['ink'] = join(uiRoot, 'src', 'chat', 'compat', 'ink.tsx');
+  aliases['ink-text-input'] = join(uiRoot, 'src', 'chat', 'compat', 'inputs.tsx');
+  aliases['ink-select-input'] = join(uiRoot, 'src', 'chat', 'compat', 'inputs.tsx');
   return { aliases, appEntry, cssPath, resolveDir: cliRoot };
 }
 
@@ -63,7 +63,7 @@ function readThemeCss(spaceDir: string): string {
 }
 
 /**
- * Build a browser bundle: the @lmthing/agent-ui app (main.tsx) plus all of the agent's
+ * Build a browser bundle: the @lmthing/ui chat app (main.tsx) plus all of the agent's
  * form components (single-file `components/form/<Name>.tsx`), so custom components like
  * <ConfirmDish /> render with their real implementations. Everything resolves to ONE React instance.
  */

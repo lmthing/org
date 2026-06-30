@@ -8,7 +8,7 @@ import {
   DisplayBlock,
   AskBlock,
   VariablesBlock,
-} from '@lmthing/agent-ui'
+} from '@lmthing/ui/chat'
 import { COMPUTER_BASE_URL, CLOUD_BASE_URL } from '@/lib/config'
 
 /** Ensure the user's compute pod is running before opening a session. */

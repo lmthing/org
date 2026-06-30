@@ -6,11 +6,8 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
-import { TopicEditor } from '@lmthing/ui/components/knowledge/topic-detail/topic-editor'
-import type { TopicEditorHandle } from '@lmthing/ui/components/knowledge/topic-detail/topic-editor'
-import { FieldIndexPanel } from '@lmthing/ui/components/knowledge/field/directory-metadata-panel'
-import { DeleteModal } from '@lmthing/ui/components/knowledge/field/delete-modal'
-import { RenameModal } from '@lmthing/ui/components/knowledge/field/rename-modal'
+import { TopicEditor, FieldIndexPanel, DeleteModal, RenameModal } from '@lmthing/ui/studio'
+import type { TopicEditorHandle } from '@lmthing/ui/studio'
 import {
   ArrowLeft,
   FilePlus,

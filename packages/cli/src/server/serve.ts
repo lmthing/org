@@ -31,7 +31,7 @@ function applyEnvContent(content: string): void {
 export interface SessionServerOpts {
   port: number;
   manager: SessionManager;
-  /** dist/web/app.tsx anchor — used to resolve react/@lmthing/agent-ui from the CLI root. */
+  /** dist/web/app.tsx anchor — used to resolve react/@lmthing/ui from the CLI root. */
   appTsxPath?: string;
   /** Default space dir used when POST /api/sessions omits one (also for bundling the app). */
   defaultSpaceDir?: string;

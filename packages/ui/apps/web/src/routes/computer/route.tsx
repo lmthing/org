@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, useRouter, useRouterState } from '@tanstack/re
 import { AppProvider, ProjectProvider, SpaceProvider } from '@lmthing/state'
 import { useAuth, useRepoSync } from '@lmthing/auth'
 import { ComputerProvider, useComputer } from '@/lib/runtime/ComputerContext'
-import { ComputerLayout } from '@lmthing/ui/components/computer/computer-layout'
+import { ComputerLayout } from '@lmthing/ui/computer'
 import { PodEnsureGate } from '@/lib/gates'
 import { useCallback, useEffect, useState } from 'react'
 import { COMPUTER_BASE_URL } from '@/lib/config'

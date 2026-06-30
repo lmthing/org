@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ComponentEditor } from '@lmthing/ui/components/component-editor'
+import { ComponentEditor } from '@lmthing/ui/studio'
 
 function ComponentEditorPage() {
   return <ComponentEditor />

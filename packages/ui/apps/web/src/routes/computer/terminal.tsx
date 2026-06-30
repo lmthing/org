@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { useComputer } from '@/lib/runtime/ComputerContext'
 import { Terminal } from '@lmthing/ui/elements/content/terminal'
-import { BootProgress } from '@lmthing/ui/components/computer/boot-progress'
+import { BootProgress } from '@lmthing/ui/computer'
 import type { TerminalSession } from '@/lib/runtime/types'
 
 export const Route = createFileRoute('/computer/terminal')({

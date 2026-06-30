@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { DomainMetadataPanel } from '@lmthing/ui/components/knowledge/domain/domain-metadata-panel'
+import { DomainMetadataPanel } from '@lmthing/ui/studio'
 
 function DomainMetadataPage() {
   const { domainId } = Route.useParams()

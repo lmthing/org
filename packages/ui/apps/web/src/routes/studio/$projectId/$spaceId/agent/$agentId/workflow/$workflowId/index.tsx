@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
-import { TasklistEditor } from '@lmthing/ui/components/workflow'
+import { TasklistEditor } from '@lmthing/ui/studio'
 
 function AgentTasklistPage() {
   const params = useParams({ strict: false }) as {

@@ -2,7 +2,7 @@
  * New Tasklist route — shows the create modal then navigates to the editor.
  */
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
-import { SaveTasklistModal } from '@lmthing/ui/components/workflow'
+import { SaveTasklistModal } from '@lmthing/ui/studio'
 
 function NewTasklistPage() {
   const params = useParams({ strict: false }) as {

@@ -1,9 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useComputer } from '@/lib/runtime/ComputerContext'
-import { ComputerDashboard } from '@lmthing/ui/components/computer/computer-dashboard'
-import { BootProgress } from '@lmthing/ui/components/computer/boot-progress'
+import { ComputerDashboard, BootProgress } from '@lmthing/ui/computer'
 import { useRef } from 'react'
-import type { BootStage } from '@lmthing/ui/components/computer/boot-progress'
+import type { BootStage } from '@lmthing/ui/computer'
 
 export const Route = createFileRoute('/computer/dashboard')({
   component: DashboardRoute,

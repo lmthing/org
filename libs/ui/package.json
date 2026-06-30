@@ -1,15 +1,20 @@
 {
   "name": "@lmthing/ui",
   "version": "1.0.0",
-  "description": "LMThing shared UI - elements and components",
+  "description": "LMThing shared UI - elements, components, and product surfaces (chat/studio/computer)",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./chat": "./src/chat/index.ts",
+    "./chat/css": "./src/chat/app/styles.css",
+    "./studio": "./src/studio/index.ts",
+    "./computer": "./src/computer/index.ts",
+    "./components/*": "./src/components/*/index.ts",
     "./elements/*": "./src/elements/*",
-    "./components/*": "./src/components/*",
-    "./lib/*": "./src/lib/*"
+    "./lib/*": "./src/lib/*",
+    "./theme": "./src/theme/index.ts"
   },
   "files": [
     "src"
@@ -19,12 +24,21 @@
     "lint": "eslint .",
     "format": "prettier --write ."
   },
+  "dependencies": {
+    "@lmthing/auth": "workspace:*",
+    "@lmthing/core": "workspace:*",
+    "marked": "^14.0.0",
+    "zustand": "^4.5.7"
+  },
   "devDependencies": {
     "@lmthing/config": "workspace:*",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.7",
     "eslint": "^9.0.0"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
     "@radix-ui/react-avatar": "*",
     "@radix-ui/react-dialog": "*",
     "@radix-ui/react-dropdown-menu": "*",

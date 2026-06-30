@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback } from 'react'
 import { useAuth } from '@lmthing/auth'
-import { AgentChatPanel } from '@lmthing/agent-ui'
+import { AgentChatPanel } from '@lmthing/ui/chat'
 import { COMPUTER_BASE_URL, CLOUD_BASE_URL } from '@/lib/config'
 
 /**

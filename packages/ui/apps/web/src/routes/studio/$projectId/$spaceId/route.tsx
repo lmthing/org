@@ -2,8 +2,8 @@ import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { useCallback } from 'react'
 import { SpaceProvider } from '@lmthing/state'
 import { useAuth } from '@lmthing/auth'
-import { StudioLayout } from '@lmthing/ui/components/shell/studio-layout'
-import { AgentChatPanel } from '@lmthing/agent-ui'
+import { StudioLayout } from '@lmthing/ui/studio'
+import { AgentChatPanel } from '@lmthing/ui/chat'
 import { COMPUTER_BASE_URL, CLOUD_BASE_URL } from '@/lib/config'
 
 /** The always-on right-side THING chat (pod-backed `thing` agent). */
