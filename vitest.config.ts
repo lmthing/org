@@ -7,6 +7,15 @@ export default defineConfig({
       'packages/*/src/**/*.test.tsx',
       'packages/*/apps/*/src/**/*.test.ts',
       'packages/*/apps/*/src/**/*.test.tsx',
+      'libs/*/src/**/*.test.ts',
+      'libs/*/src/**/*.test.tsx',
+    ],
+    // libs/state has its own vitest config with jsdom environment; exclude it
+    // from the root runner to avoid environment conflicts.
+    exclude: [
+      'libs/state/**',
+      'node_modules/**',
+      '**/dist/**',
     ],
     environment: 'node',
     // Many suites spin up real QuickJS VMs (forks/delegates/solve) and a few spawn
