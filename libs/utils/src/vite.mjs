@@ -139,6 +139,9 @@ export function createViteConfig(dirname, overrides) {
         '@lmthing/css': path.resolve(orgRoot, 'libs/css/src'),
         '@lmthing/state': path.resolve(orgRoot, 'libs/state/src'),
         '@lmthing/auth': path.resolve(orgRoot, 'libs/auth/src'),
+        // Subpath alias must come BEFORE the generic @lmthing/core alias.
+        '@lmthing/core/ui': path.resolve(orgRoot, 'libs/core/src/ui/index.ts'),
+        '@lmthing/core': path.resolve(orgRoot, 'libs/core/src'),
 
         'vm2': emptyStub,
         'coffee-script': emptyStub,
