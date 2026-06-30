@@ -2,6 +2,7 @@
   "name": "@lmthing/root",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.13.1",
   "scripts": {
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
@@ -19,9 +20,11 @@
     "turbo": "latest"
   },
   "pnpm": {
-    "overrides": {
-      "react": "^19.0.0",
-      "react-dom": "^19.0.0"
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "react": "^18 || ^19",
+        "react-dom": "^18 || ^19"
+      }
     }
   }
 }

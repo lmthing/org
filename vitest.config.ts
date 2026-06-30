@@ -10,12 +10,14 @@ export default defineConfig({
       'libs/*/src/**/*.test.ts',
       'libs/*/src/**/*.test.tsx',
     ],
-    // libs/state has its own vitest config with jsdom environment; exclude it
-    // from the root runner to avoid environment conflicts.
+    // libs/state and libs/ui have their own vitest configs (jsdom + React
+    // transforms); exclude them from the root node runner to avoid conflicts.
     exclude: [
-      'libs/state/**',
-      'node_modules/**',
+      '**/node_modules/**',
       '**/dist/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      'libs/state/**',
+      'libs/ui/**',
     ],
     environment: 'node',
     // Many suites spin up real QuickJS VMs (forks/delegates/solve) and a few spawn

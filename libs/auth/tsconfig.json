@@ -2,7 +2,8 @@
   "extends": "@lmthing/config/tsconfig/react-lib",
   "compilerOptions": {
     "isolatedModules": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["vite/client"]
   },
   "include": ["src"]
 }

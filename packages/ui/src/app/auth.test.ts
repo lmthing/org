@@ -19,7 +19,7 @@ function mockLocalStorage(store: Record<string, string>): void {
 
 describe('app/auth (token from @lmthing/auth session)', () => {
   beforeEach(() => mockLocalStorage({}))
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => { vi.unstubAllGlobals() })
 
   it('reads the access token from the lmthing_session and builds auth headers/WS suffix', () => {
     mockLocalStorage({ lmthing_session: JSON.stringify({ accessToken: 'tok-123' }) })
