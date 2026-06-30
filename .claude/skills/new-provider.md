@@ -5,7 +5,7 @@ description: Load when adding a new AI provider (azure/anthropic/openai/google/m
 
 # Skill: Adding a New AI Provider
 
-Providers are resolved in `packages/cli/src/providers/resolve.ts`. Each provider maps to a Vercel AI SDK adapter.
+Providers are resolved in `libs/cli/src/providers/resolve.ts`. Each provider maps to a Vercel AI SDK adapter.
 
 ## Steps
 
@@ -15,7 +15,7 @@ Providers are resolved in `packages/cli/src/providers/resolve.ts`. Each provider
 pnpm --filter @repl/cli add @ai-sdk/<provider>
 ```
 
-### 2. Add a `case` in `packages/cli/src/providers/resolve.ts`
+### 2. Add a `case` in `libs/cli/src/providers/resolve.ts`
 
 ```typescript
 case '<provider>': {
@@ -40,7 +40,7 @@ LM_MODEL_M=<provider>:<modelId>
 ### 4. Test it
 
 ```bash
-node packages/cli/dist/cli/bin.js --model <provider>:<modelId> --space ./fixtures/cooking "hello"
+node libs/cli/dist/cli/bin.js --model <provider>:<modelId> --space ./fixtures/cooking "hello"
 ```
 
 ## Azure specifics
@@ -49,7 +49,7 @@ Azure requires `AZURE_RESOURCE_NAME` and `AZURE_API_KEY`. The model ID is the de
 
 ## Alias resolution
 
-Aliases live in `packages/cli/src/providers/aliases.ts`. The `resolveAlias(str)` function:
+Aliases live in `libs/cli/src/providers/aliases.ts`. The `resolveAlias(str)` function:
 1. Checks if `str` matches a known single-letter alias (XS, S, M, L, L_R, M_R)
 2. Reads `process.env['LM_MODEL_' + alias]` for the full provider:modelId
 3. Falls through to return `str` as-is if not an alias

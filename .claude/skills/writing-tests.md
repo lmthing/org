@@ -5,7 +5,7 @@ description: Load when writing or running core tests (vitest patterns, mock prov
 
 # Skill: Writing Tests
 
-Tests are co-located with source files: `packages/core/src/**/*.test.ts`. Run with `pnpm test`.
+Tests are co-located with source files: `libs/core/src/**/*.test.ts`. Run with `pnpm test`.
 
 ## Test Setup
 
@@ -158,7 +158,7 @@ const streamFn2 = mockMatch(
 The same builders drive the CLI via `--mock <file>` (a `.mjs` whose default export is a
 `MockHandler` or `string[]`), so a full keyless run is just
 `bin.js --space … --mock fixtures/<space>/mock.mjs`. See
-`packages/core/src/testing/mock-provider.ts` and `scripts/live-test.sh`.
+`libs/core/src/testing/mock-provider.ts` and `scripts/live-test.sh`.
 
 ## Fixtures (reference spaces)
 

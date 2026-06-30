@@ -2,10 +2,10 @@
 
 ## Files
 
-- `packages/core/src/typecheck/tsc.ts` — incremental TypeScript typechecker
-- `packages/core/src/typecheck/library-dts.ts` — ambient declarations for built-in globals
-- `packages/core/src/typecheck/overlay.ts` — DTS generation from space functions/components
-- `packages/core/src/typecheck/transpile.ts` — TypeScript/JSX → JavaScript
+- `libs/core/src/typecheck/tsc.ts` — incremental TypeScript typechecker
+- `libs/core/src/typecheck/library-dts.ts` — ambient declarations for built-in globals
+- `libs/core/src/typecheck/overlay.ts` — DTS generation from space functions/components
+- `libs/core/src/typecheck/transpile.ts` — TypeScript/JSX → JavaScript
 
 ## Typecheck Pipeline (`tsc.ts`)
 
@@ -103,6 +103,6 @@ Model writes: `const x = await ask(<ConfirmDish dish="pasta" />);`
 
 ## Invariants / gotchas
 
-- **The catalog becomes ambient typed JSX.** `catalogDts()` (`packages/core/src/ui/catalog.ts`) turns the display+form catalog into typed JSX globals appended to `LIBRARY_DTS`, and `CATALOG_NAMES` are injected as VM stubs so the model can write `<Stack/>`/`<Select/>` directly. Component type names are matched **case-insensitively** by the renderers.
+- **The catalog becomes ambient typed JSX.** `catalogDts()` (`libs/core/src/ui/catalog.ts`) turns the display+form catalog into typed JSX globals appended to `LIBRARY_DTS`, and `CATALOG_NAMES` are injected as VM stubs so the model can write `<Stack/>`/`<Select/>` directly. Component type names are matched **case-insensitively** by the renderers.
 - **JSX runtime is injected into every VM, including forks/delegates.** A React shim and component stubs are injected at session start **and into every fork/delegate VM** (`fork.ts` mirrors `session.injectJSXRuntime`), so `display(<Stack>…)` works inside forks too — without it, a fork that emits JSX throws "React is not defined".
 - **Space functions are transpiled and evaled as *scripts* (not modules)** in the VM via `evalScript()`, binding to `globalThis`. When the space has `node_modules` (esbuild bundling ran), the bundled JS is used instead of transpiling from TS source.

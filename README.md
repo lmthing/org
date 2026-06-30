@@ -23,13 +23,13 @@ For the runtime internals (turn loop, spaces, forks, delegation, system spaces) 
 
 ```bash
 pnpm install
-pnpm build           # builds @lmthing/core, @lmthing/agent-ui, @lmthing/cli
+pnpm build           # builds @lmthing/core, @lmthing/cli
 ```
 
-This installs the `lmthing` CLI (`packages/cli`). The examples below call the built binary directly; once linked you can just type `lmthing`.
+This installs the `lmthing` CLI (`libs/cli`). The examples below call the built binary directly; once linked you can just type `lmthing`.
 
 ```bash
-LM=node\ packages/cli/dist/cli/bin.js   # or: alias lmthing after `pnpm -C packages/cli link --global`
+LM=node\ libs/cli/dist/cli/bin.js   # or: alias lmthing after `pnpm -C libs/cli link --global`
 ```
 
 ## Run
@@ -38,7 +38,7 @@ LM=node\ packages/cli/dist/cli/bin.js   # or: alias lmthing after `pnpm -C packa
 
 ```bash
 cd ~/my-workspace
-node /path/to/lmthing/sdk/org/packages/cli/dist/cli/bin.js init
+node /path/to/lmthing/sdk/org/libs/cli/dist/cli/bin.js init
 ```
 
 This creates `.lmthing/` in the current directory:
@@ -54,7 +54,7 @@ This creates `.lmthing/` in the current directory:
 ### 2. Start the server and chat with THING
 
 ```bash
-node /path/to/lmthing/sdk/org/packages/cli/dist/cli/bin.js          # bare = launch the server
+node /path/to/lmthing/sdk/org/libs/cli/dist/cli/bin.js          # bare = launch the server
 # or explicitly:  ... serve --port 8080 --model M
 ```
 
@@ -92,14 +92,14 @@ Per-project document/instructions routes: `GET/PUT /api/projects/:id/instruction
 
 ```bash
 # One-shot against a specific space (no project model):
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
+node libs/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
 
 # Interactive REPL, or the single-session DevTools web UI:
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --repl
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000
+node libs/cli/dist/cli/bin.js --space ./fixtures/cooking --repl
+node libs/cli/dist/cli/bin.js --space ./fixtures/cooking --web 3000
 
 # Keyless, deterministic (scripted mock provider — no API key):
-node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --mock ./fixtures/cooking/mock-ask.mjs "..."
+node libs/cli/dist/cli/bin.js --space ./fixtures/cooking --mock ./fixtures/cooking/mock-ask.mjs "..."
 ```
 
 ## Test
@@ -107,5 +107,5 @@ node packages/cli/dist/cli/bin.js --space ./fixtures/cooking --mock ./fixtures/c
 ```bash
 pnpm test            # vitest (co-located unit + keyless CLI/server suites)
 pnpm typecheck       # tsc --noEmit, strict — the sole quality gate
-LM_LIVE=1 pnpm vitest run packages/cli/src/testing/live-llm.test.ts   # real model
+LM_LIVE=1 pnpm vitest run libs/cli/src/testing/live-llm.test.ts   # real model
 ```

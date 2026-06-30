@@ -9,14 +9,14 @@ description: Load when adding a system space, host primitive, or fork role, or w
 
 ## Where things live
 
-- `packages/core/system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/` — the always-loaded baseline spaces (NOT under `src/`; read from disk at runtime). Function-only spaces need no `package.json` (a package.json would trigger `npm install` on load).
-- `packages/core/src/spaces/system.ts` — `loadSystemSpaces`, `mergeSystemInto`, `defaultSystemSpaceDirs`, `systemFunctionSources`/`systemFunctionsBundled`/`systemFunctionNames` (these return ONLY the `system-global` space's functions — `GLOBAL_SPACE_NAME`). The delegate runner (`delegate/delegate.ts`) also calls `systemFunctionSources`/`systemFunctionsBundled` to merge system functions into delegate VMs via `RunDelegateOpts.systemSpaces`.
-- `packages/core/src/globals/host-tools.ts` — the synchronous host substrate the system functions build on.
-- `packages/core/src/fork/roles.ts` — `fork({ role })` capability profiles + preambles.
+- `libs/core/system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/` — the always-loaded baseline spaces (NOT under `src/`; read from disk at runtime). Function-only spaces need no `package.json` (a package.json would trigger `npm install` on load).
+- `libs/core/src/spaces/system.ts` — `loadSystemSpaces`, `mergeSystemInto`, `defaultSystemSpaceDirs`, `systemFunctionSources`/`systemFunctionsBundled`/`systemFunctionNames` (these return ONLY the `system-global` space's functions — `GLOBAL_SPACE_NAME`). The delegate runner (`delegate/delegate.ts`) also calls `systemFunctionSources`/`systemFunctionsBundled` to merge system functions into delegate VMs via `RunDelegateOpts.systemSpaces`.
+- `libs/core/src/globals/host-tools.ts` — the synchronous host substrate the system functions build on.
+- `libs/core/src/fork/roles.ts` — `fork({ role })` capability profiles + preambles.
 
 ## Adding a function to an existing system space
 
-1. Add `packages/core/system-spaces/<space>/functions/<name>.ts` exporting a function **named exactly like the file**, with an explicit return type and a leading doc comment (both are surfaced to the model — the return type lets it destructure results; the `# Built-in Tools` section renders the AST signature + first doc line).
+1. Add `libs/core/system-spaces/<space>/functions/<name>.ts` exporting a function **named exactly like the file**, with an explicit return type and a leading doc comment (both are surfaced to the model — the return type lets it destructure results; the `# Built-in Tools` section renders the AST signature + first doc line).
    ```typescript
    /** One-line description shown in the system prompt. */
    export function myTool(path: string): { ok: boolean; data: string; error?: string } {
@@ -24,7 +24,7 @@ description: Load when adding a system space, host primitive, or fork role, or w
      return r.ok ? { ok: true, data: r.content } : { ok: false, data: '', error: r.error };
    }
    ```
-2. Build (`pnpm --filter @lmthing/core build`) — system spaces are loaded by the running CLI from `packages/core/system-spaces/`, resolved relative to `dist/` via `defaultSystemSpaceDirs()`.
+2. Build (`pnpm --filter @lmthing/core build`) — system spaces are loaded by the running CLI from `libs/core/system-spaces/`, resolved relative to `dist/` via `defaultSystemSpaceDirs()`.
 3. It is now available in EVERY space with no agent-config change.
 
 Rules for system functions:
@@ -34,7 +34,7 @@ Rules for system functions:
 
 ## Adding a new system space
 
-Create `packages/core/system-spaces/<name>/functions/*.ts`, then add `<name>` to `SYSTEM_SPACE_NAMES` in `spaces/system.ts`. Function-only spaces load fine — `loadSystemSpaces` uses `loadSpace(dir, { requireAgents: false })`. A space can also ship `components/` and `knowledge/`, which merge too.
+Create `libs/core/system-spaces/<name>/functions/*.ts`, then add `<name>` to `SYSTEM_SPACE_NAMES` in `spaces/system.ts`. Function-only spaces load fine — `loadSystemSpaces` uses `loadSpace(dir, { requireAgents: false })`. A space can also ship `components/` and `knowledge/`, which merge too.
 
 ## Adding a host primitive
 
@@ -42,7 +42,7 @@ Only when a system-space function can't be built cleanly on the existing primiti
 
 ## Adding / changing a fork role
 
-`fork({ role: 'explore' | 'plan' | 'general' })` — `packages/core/src/fork/roles.ts`:
+`fork({ role: 'explore' | 'plan' | 'general' })` — `libs/core/src/fork/roles.ts`:
 - `rolePreamble(role)` — the system-prompt preamble (shared context-firewall tail + role specifics).
 - `roleProfile(role)` — the `HostToolsProfile` (read-only roles return `{ allowWrite: false }`, which withholds `writeFileRaw` and blocks mutating shell commands **at injection** — enforcement, not just instruction).
 
@@ -63,7 +63,7 @@ System tools and roles exist to keep context small: `display()` output stays out
 
 Capabilities are **spaces**, not ad-hoc core globals. A set of baseline "system spaces" is **always loaded and merged into every user space** (and into forks/delegates). Two things are universal: (1) every system space's **agents** are merged in and **universally delegatable**; (2) only the **`system-global`** space's **functions** are universally injected — every agent gets that coding toolkit for free. All OTHER system-space functions (the architect's, the deep-research analyst's, …) are **scoped to their owning agent**: they reach an agent solely via that agent's `functions:` frontmatter (`getAgentFunctions`), so they never leak into unrelated agents' prompts/VMs. The user space wins on any name collision.
 
-Located in `packages/core/system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/` (resolved relative to the built core; materialized into `.lmthing/system/` by `lmthing init`). Configure via `SessionOpts.systemSpaceDirs`, CLI `--system-spaces`/`--no-system-spaces`, or env `LM_SYSTEM_SPACES`.
+Located in `libs/core/system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/` (resolved relative to the built core; materialized into `.lmthing/system/` by `lmthing init`). Configure via `SessionOpts.systemSpaceDirs`, CLI `--system-spaces`/`--no-system-spaces`, or env `LM_SYSTEM_SPACES`.
 
 - `system-global` — the always-injected toolkit (function-only, no agent): `readFile`, `writeFile`, `editFile`, `glob`, `grep`, `listDir`, `webSearch` (Tavily, needs `TAVILY_API_KEY`), `webFetch`, `remember`/`recall`/`recallAll`/`forget` (durable JSON at `<spaceDir>/.lmthing/memory.json`), `todoWrite`/`todoRead` (checklist persisted to `.lmthing/todos.json`). **These are the only universally-injected functions.**
 - `system-engineer` — coding agent (agent def + `TaskInput` component); `delegate` to it from any space.
@@ -76,7 +76,7 @@ Located in `packages/core/system-spaces/{system-global,system-engineer,system-ar
 
 ## Reference: host-injected VM globals
 
-Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has host-injected globals available to space functions — the thin substrate the system spaces build on (single source of truth: `packages/core/src/globals/host-tools.ts`, used by both the session VM and fork VMs):
+Beyond library globals (ask, sleep, fork, etc.), the QuickJS VM has host-injected globals available to space functions — the thin substrate the system spaces build on (single source of truth: `libs/core/src/globals/host-tools.ts`, used by both the session VM and fork VMs):
 
 - `process.env` — Node.js environment variables (read-only shim); includes `LMTHING_SPACE_DIR` (an **absolute** path) for state stores.
 - `fetch(url, opts?)` — Synchronous HTTP using curl under the hood; returns `{ ok, status, text(), json() }`.

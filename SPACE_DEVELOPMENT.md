@@ -151,19 +151,19 @@ To run and debug agents from the command line, use `@lmthing/cli`:
 
 - **Run an agent (REPL mode)**
   ```bash
-  node packages/cli/dist/cli/bin.js --space ./fixtures/<space-slug> --agent <agent-slug> --repl
+  node libs/cli/dist/cli/bin.js --space ./fixtures/<space-slug> --agent <agent-slug> --repl
   ```
 
 - **Observability Interface (Web UI)**
   Boot a web-based inspector to trace agent thought processes, executions, forks, and variable states:
   ```bash
-  node packages/cli/dist/cli/bin.js --space ./fixtures/<space-slug> --web 3000
+  node libs/cli/dist/cli/bin.js --space ./fixtures/<space-slug> --web 3000
   ```
 
 - **Mock Mode (Testing without LLM Keys)**
   Use `--mock` to use a hardcoded TypeScript output instead of hitting the live OpenAI / Claude APIs:
   ```bash
-  node packages/cli/dist/cli/bin.js --space ./fixtures/<space-slug> --mock ./fixtures/mock.mjs
+  node libs/cli/dist/cli/bin.js --space ./fixtures/<space-slug> --mock ./fixtures/mock.mjs
   ```
 
 ---
@@ -248,5 +248,5 @@ Resolve: currentTask.resolve({ success: true })
 
 Run this Hello World space with:
 ```bash
-node packages/cli/dist/cli/bin.js --space ./hello-world --agent greeter --repl
+node libs/cli/dist/cli/bin.js --space ./hello-world --agent greeter --repl
 ```

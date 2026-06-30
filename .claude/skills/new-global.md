@@ -9,7 +9,7 @@ Value-yielding globals abort the LLM stream, hand control to the host, and resum
 
 ## Checklist
 
-### 1. Create `packages/core/src/globals/<name>.ts`
+### 1. Create `libs/core/src/globals/<name>.ts`
 
 ```typescript
 import type { YieldRequest } from '../eval/yield.js';
@@ -36,7 +36,7 @@ Key rules:
 - Only put serializable values in `args` (strings, numbers, plain objects). The host reads them in `handleYield`.
 - The function must return a `Promise` — the VM awaits it, which triggers the yield detection.
 
-### 2. Add the kind to `packages/core/src/eval/yield.ts`
+### 2. Add the kind to `libs/core/src/eval/yield.ts`
 
 ```typescript
 export interface YieldRequest {
@@ -47,7 +47,7 @@ export interface YieldRequest {
 }
 ```
 
-### 3. Register in `packages/core/src/session/session.ts` — `injectGlobals()`
+### 3. Register in `libs/core/src/session/session.ts` — `injectGlobals()`
 
 ```typescript
 import { create<Name>Global } from '../globals/<name>.js';
@@ -67,7 +67,7 @@ case '<name>': {
 
 The return value from `handleYield` is passed to `yieldReq.deferred.resolve(resolved)` in the turn loop, which resumes the VM promise.
 
-### 5. Declare in `packages/core/src/typecheck/library-dts.ts`
+### 5. Declare in `libs/core/src/typecheck/library-dts.ts`
 
 Add a `declare function <name>(...)` line to `LIBRARY_DTS` so the typechecker accepts it in model-generated code.
 
@@ -75,7 +75,7 @@ Add a `declare function <name>(...)` line to `LIBRARY_DTS` so the typechecker ac
 declare function name(arg: InputType): Promise<OutputType>;
 ```
 
-### 6. Mention in `packages/core/src/context/system-block.ts` — `GLOBALS_SUMMARY`
+### 6. Mention in `libs/core/src/context/system-block.ts` — `GLOBALS_SUMMARY`
 
 Add a bullet to the `GLOBALS_SUMMARY` constant so the model knows the global exists:
 
@@ -93,7 +93,7 @@ For void globals, just call host methods directly inside the function body — n
 
 A *third* category exists: synchronous, non-yielding primitives the VM calls and gets an immediate value back (`execShell`, `fetch`, `process.env`, `readFileRaw`, `writeFileRaw`). These are the thin substrate that **system-space functions** build on — prefer adding capability as a system-space function over a new core global (see `@.claude/skills/system-spaces.md`). Add a raw host primitive only when shelling out is fragile (e.g. binary-safe file I/O).
 
-They live in ONE place — `packages/core/src/globals/host-tools.ts` `injectHostTools(vm, opts)` — which both the session VM and every fork VM call (do not duplicate shims in `session.ts`/`fork.ts`). To add one:
+They live in ONE place — `libs/core/src/globals/host-tools.ts` `injectHostTools(vm, opts)` — which both the session VM and every fork VM call (do not duplicate shims in `session.ts`/`fork.ts`). To add one:
 1. Add a `setGlobal('<name>', (args) => { ... return plainObject; })` in `injectHostTools`. Return a plain object (functions on it, like `fetch().json`, are marshalled and callable; no prototypes/classes).
 2. Honor the read-only `profile` if the primitive mutates (see how `writeFileRaw`/`execShell` gate on `allowWrite`) so `fork({ role: 'explore' })` can't use it.
 3. Declare it in `LIBRARY_DTS`.
@@ -105,7 +105,7 @@ The turn loop does NOT rely on the QuickJS post-`await` continuation. It resolve
 
 ## Testing
 
-Add a test in `packages/core/src/globals/<name>.test.ts`:
+Add a test in `libs/core/src/globals/<name>.test.ts`:
 - Create a mock `pushYield` that captures the `YieldRequest`
 - Call the global
 - Assert `kind`, `args`, and that the promise resolves when `deferred.resolve` is called

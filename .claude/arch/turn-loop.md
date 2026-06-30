@@ -2,11 +2,11 @@
 
 ## Files
 
-- `packages/core/src/eval/turn-loop.ts` — main loop
-- `packages/core/src/eval/yield.ts` — `YieldRequest` type
-- `packages/core/src/eval/error-rewind.ts` — error block formatting
-- `packages/core/src/sandbox/boundary.ts` — statement splitter
-- `packages/core/src/typecheck/transpile.ts` — JSX/TS → JS
+- `libs/core/src/eval/turn-loop.ts` — main loop
+- `libs/core/src/eval/yield.ts` — `YieldRequest` type
+- `libs/core/src/eval/error-rewind.ts` — error block formatting
+- `libs/core/src/sandbox/boundary.ts` — statement splitter
+- `libs/core/src/typecheck/transpile.ts` — JSX/TS → JS
 
 ## The Loop
 

@@ -2,13 +2,13 @@
 
 ## Files
 
-- `packages/core/src/spaces/load.ts` — `loadSpace(dir, { requireAgents? }): Promise<Space>` (`requireAgents:false` allows function-only spaces)
-- `packages/core/src/spaces/frontmatter.ts` — YAML frontmatter parser
-- `packages/core/src/spaces/agent.ts` — `getAgentFunctions`, `getAgentFunctionsBundled`, `resolveDirectDeps`
-- `packages/core/src/spaces/components.ts` — `getAgentComponents`
-- `packages/core/src/spaces/knowledge.ts` — knowledge tree loading
-- `packages/core/src/spaces/tasklist-load.ts` — tasklist directory loading
-- `packages/core/src/spaces/system.ts` — **system spaces**: `loadSystemSpaces` + `mergeSystemInto` merge the always-on baseline spaces (`packages/core/system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/`) into every user space. See `@.claude/skills/system-spaces.md`.
+- `libs/core/src/spaces/load.ts` — `loadSpace(dir, { requireAgents? }): Promise<Space>` (`requireAgents:false` allows function-only spaces)
+- `libs/core/src/spaces/frontmatter.ts` — YAML frontmatter parser
+- `libs/core/src/spaces/agent.ts` — `getAgentFunctions`, `getAgentFunctionsBundled`, `resolveDirectDeps`
+- `libs/core/src/spaces/components.ts` — `getAgentComponents`
+- `libs/core/src/spaces/knowledge.ts` — knowledge tree loading
+- `libs/core/src/spaces/tasklist-load.ts` — tasklist directory loading
+- `libs/core/src/spaces/system.ts` — **system spaces**: `loadSystemSpaces` + `mergeSystemInto` merge the always-on baseline spaces (`libs/core/system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/`) into every user space. See `@.claude/skills/system-spaces.md`.
 
 ## Space Type
 

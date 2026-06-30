@@ -2,11 +2,11 @@
 
 ## Files
 
-- `packages/core/src/fork/fork.ts` — `ForkEngine`, isolated child session execution
-- `packages/core/src/tasklist/dag.ts` — DAG loading and validation
-- `packages/core/src/tasklist/orchestrator.ts` — parallel fork scheduling
-- `packages/core/src/tasklist/condition-dsl.ts` — condition expression evaluator
-- `packages/core/src/tasklist/schema.ts` — output shape validator
+- `libs/core/src/fork/fork.ts` — `ForkEngine`, isolated child session execution
+- `libs/core/src/tasklist/dag.ts` — DAG loading and validation
+- `libs/core/src/tasklist/orchestrator.ts` — parallel fork scheduling
+- `libs/core/src/tasklist/condition-dsl.ts` — condition expression evaluator
+- `libs/core/src/tasklist/schema.ts` — output shape validator
 
 ## Fork Protocol
 

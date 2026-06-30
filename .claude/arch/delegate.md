@@ -2,8 +2,8 @@
 
 ## Files
 
-- `packages/core/src/delegate/registry.ts` — `DelegateRegistry` (resolves package/agent strings to loaded Space + AgentDef)
-- `packages/core/src/delegate/delegate.ts` — `runDelegate` (executes the delegation)
+- `libs/core/src/delegate/registry.ts` — `DelegateRegistry` (resolves package/agent strings to loaded Space + AgentDef)
+- `libs/core/src/delegate/delegate.ts` — `runDelegate` (executes the delegation)
 
 ## Signature
 

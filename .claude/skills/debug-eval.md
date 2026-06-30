@@ -105,7 +105,7 @@ variables / errors. Two ways to read it:
 
 **Headless via the web agent API** — `--web <port>` then `curl` (no browser):
 ```bash
-node packages/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect \
+node libs/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect \
   --model M --claude --web 3480 --trace /tmp/run.jsonl &
 curl -s -X POST localhost:3480/api/message -d '{"content":"…"}' -H 'content-type: application/json'
 curl -s localhost:3480/api/state                              # ASCII tree: status/duration/retries
@@ -115,7 +115,7 @@ curl -s "localhost:3480/api/events?since=<seq>"               # incremental tail
 ```
 This is the quickest way to see WHY a fork failed (e.g. "no resolve called" → open its
 `statements`/`llm` tab to find the model wrote prose, or a multi-line `function` decl that
-the boundary detector split into "Function implementation is missing"). Full API: `packages/cli/src/web/AGENT.md`.
+the boundary detector split into "Function implementation is missing"). Full API: `libs/cli/src/web/AGENT.md`.
 
 **From a `--trace` file with jq** (or replay it in the browser at `?trace=/trace.jsonl`):
 ```bash

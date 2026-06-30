@@ -5,7 +5,7 @@ description: Load when creating or modifying a space (agents, functions, compone
 
 # Skill: Creating or Modifying a Space
 
-A **space** is a directory that bundles agents, tasklists, functions, components, and knowledge. Loaded by `loadSpace(dir)` in `packages/core/src/spaces/load.ts`.
+A **space** is a directory that bundles agents, tasklists, functions, components, and knowledge. Loaded by `loadSpace(dir)` in `libs/core/src/spaces/load.ts`.
 
 ## Minimal Space Layout
 
@@ -106,16 +106,16 @@ The overlay DTS generator (`overlay.ts`) automatically makes function-typed prop
 
 ### Prefer the design system before authoring components
 
-A cross-platform **design-system catalog** (`packages/core/src/ui/catalog.ts`) ships ~30 display + ~33 form components that render on **both** terminal and web with **no per-space files**. Reach for these first:
+A cross-platform **design-system catalog** (`libs/core/src/ui/catalog.ts`) ships ~30 display + ~33 form components that render on **both** terminal and web with **no per-space files**. Reach for these first:
 
 - **Display** — `display(<Stack><Heading>…</Heading><Table columns={…} rows={…}/><Callout variant="success">…</Callout></Stack>)`. Both renderers (`ink-renderer.tsx`, `conversation.tsx`) interpret the catalog; type names are case-insensitive.
-- **Forms** — `const v = await ask(<Form><TextField name="title"/><Select name="env" options={["dev","prod"]}/></Form>)`. A `<Form>` resolves to an object keyed by field `name`; a bare control (`ask(<Select .../>)`) resolves to the single value. Terminal renders an interactive Ink form (`ink-form.tsx`, sequential field stepping); web renders themed controls (`CatalogForm.tsx`). Flattening/coercion is shared via `flattenForm`/`coerceValue` (`packages/core/src/ui/form.ts`).
+- **Forms** — `const v = await ask(<Form><TextField name="title"/><Select name="env" options={["dev","prod"]}/></Form>)`. A `<Form>` resolves to an object keyed by field `name`; a bare control (`ask(<Select .../>)`) resolves to the single value. Terminal renders an interactive Ink form (`ink-form.tsx`, sequential field stepping); web renders themed controls (`CatalogForm.tsx`). Flattening/coercion is shared via `flattenForm`/`coerceValue` (`libs/core/src/ui/form.ts`).
 
 Only write `components/form/<Name>` when you need custom UI beyond the catalog.
 
 ### Theming (web)
 
-Web output is themeable. Components consume `--lm-*` CSS variables (palette + `--radius-lm-*`); the DevTools header toggles light/dark (`packages/ui/src/theme/theme.ts`). A space may ship a `theme.json` (`{ "accent": "#ff8800", "bg": "#101418", … }`) at its root — `serve.ts` injects it as `:root` var overrides.
+Web output is themeable. Components consume `--lm-*` CSS variables (palette + `--radius-lm-*`); the DevTools header toggles light/dark (`libs/ui/src/theme/theme.ts`). A space may ship a `theme.json` (`{ "accent": "#ff8800", "bg": "#101418", … }`) at its root — `serve.ts` injects it as `:root` var overrides.
 
 ## Tasklist Files (`tasklists/<name>/<N>-<id>.md`)
 
@@ -152,6 +152,6 @@ Fix: check filenames and frontmatter match exactly (case-sensitive).
 
 ## System spaces (always-on toolkit)
 
-Every user space is automatically merged with the **system spaces** in `packages/core/system-spaces/` (`system-global`, `system-engineer`, `system-architect`, `system-deep-research`, `user-memory`, `user-thing`). The `system-global` space's functions are universally injected into every agent — `readFile`/`writeFile`/`editFile`/`glob`/`grep`/`listDir`, `webSearch`/`webFetch`, `remember`/`recall`/`recallAll`/`forget`, and `todoWrite`/`todoRead` — you do NOT declare them in the agent's `functions:` list, and you should not re-implement them. They appear in the system prompt under `# Built-in Tools`.
+Every user space is automatically merged with the **system spaces** in `libs/core/system-spaces/` (`system-global`, `system-engineer`, `system-architect`, `system-deep-research`, `user-memory`, `user-thing`). The `system-global` space's functions are universally injected into every agent — `readFile`/`writeFile`/`editFile`/`glob`/`grep`/`listDir`, `webSearch`/`webFetch`, `remember`/`recall`/`recallAll`/`forget`, and `todoWrite`/`todoRead` — you do NOT declare them in the agent's `functions:` list, and you should not re-implement them. They appear in the system prompt under `# Built-in Tools`.
 
 The user space **wins on name collisions**, so you can override a system tool by defining a function of the same name. To add/modify a system space or a `fork({ role })`, see `@.claude/skills/system-spaces.md`.
