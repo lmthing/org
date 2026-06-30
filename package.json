@@ -6,13 +6,15 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
-    "dev": "turbo run dev --parallel"
+    "dev": "turbo run dev --parallel",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "devDependencies": {
+    "@lmthing/config": "workspace:*",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0",
     "@vitest/coverage-v8": "^1.6.0",
-<<<<<<< HEAD
     "tsup": "^8.1.0",
     "turbo": "latest"
   },

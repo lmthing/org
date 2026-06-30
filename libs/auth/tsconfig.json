@@ -1,16 +1,8 @@
 {
+  "extends": "@lmthing/config/tsconfig/react-lib",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "noEmit": true,
     "isolatedModules": true,
-    "resolveJsonModule": true,
-    "lib": ["dom", "dom.iterable", "ES2022"]
+    "resolveJsonModule": true
   },
   "include": ["src"]
 }

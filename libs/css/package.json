@@ -14,6 +14,13 @@
   "sideEffects": [
     "**/*.css"
   ],
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@lmthing/config": "workspace:*"
+  },
   "peerDependencies": {
     "tailwindcss": "^4.0.0",
     "tw-animate-css": "*"

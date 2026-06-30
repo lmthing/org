@@ -17,7 +17,9 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "dev": "tsup --watch"
+    "dev": "tsup --watch",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "esbuild": "^0.28.0",
@@ -26,6 +28,7 @@
     "yaml": "^2.4.1"
   },
   "devDependencies": {
+    "@lmthing/config": "workspace:*",
     "@types/node": "^20.0.0",
     "tsup": "^8.1.0"
   }

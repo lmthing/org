@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@lmthing/config/tsconfig/node-lib",
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",

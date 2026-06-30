@@ -1,4 +1,5 @@
 {
+  "extends": "@lmthing/config/tsconfig/react-lib",
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },
@@ -18,18 +19,10 @@
       "@lmthing/agent-ui": ["../../src/index.ts"],
       "@lmthing/agent-ui/*": ["../../src/*"]
     },
-    "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "ES2022"],
     "allowJs": true,
-    "skipLibCheck": true,
     "strict": false,
-    "noEmit": true,
-    "module": "ESNext",
-    "esModuleInterop": true,
-    "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx"
+    "isolatedModules": true
   },
   "include": ["src"],
   "exclude": ["node_modules"]
