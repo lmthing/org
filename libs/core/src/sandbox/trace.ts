@@ -34,6 +34,8 @@ export interface NodeDetail {
   optional?: boolean;
   condition?: string;
   goal?: boolean;
+  forEach?: string;
+  forEachIndex?: number;
 }
 
 // ─── Trace event union ─────────────────────────────────────────────────────

@@ -46,10 +46,11 @@ export type RouteResult =
  * Single resolver for the yield kinds shared by the session and delegate VMs.
  * Returns `{ handled: false }` for kinds the caller must handle itself
  * (ask/inspect/loadKnowledge/registerSpace are session-only; the fork leaf VM
- * handles its own sleep/loadKnowledge).
+ * handles its own sleep/loadKnowledge/fetch — see `fork.ts`'s `forkProcessYield`).
  *
- * This is the one place future async I/O yield kinds (fetch/execShell/tool) get
- * added — see the architecture roadmap, Wave 2/3.
+ * `fetch` (Wave 2 of the roadmap this comment used to describe) is real,
+ * non-blocking Node I/O — see `eval/fetch-yield.ts`. A future `execShell`/`tool`
+ * yield kind would follow the same shape.
  */
 export async function routeCommonYield(
   req: YieldRequest,
@@ -89,6 +90,12 @@ export async function routeCommonYield(
         DelegateOpts | undefined,
       ];
       const value = await ctx.runDelegate(packageName, agentName, action, delegateOpts);
+      return { handled: true, value };
+    }
+    case 'fetch': {
+      const [url, fetchOpts] = req.args as [string, import('../globals/fetch.js').FetchOpts | undefined];
+      const { resolveFetchYield } = await import('./fetch-yield.js');
+      const value = await resolveFetchYield(url, fetchOpts);
       return { handled: true, value };
     }
     default:

@@ -120,6 +120,14 @@ export interface TurnLoopDeps {
    *  right after a non-yielding `await`-binding (a space-function result that the
    *  runtime does not auto-surface) — see CONTINUATION_NUDGE. Default 4. */
   maxContinueNudges?: number;
+  /** Optional per-turn reminder hook (top-level session only). Returns a transient
+   *  user message appended to THIS request only (never persisted) — used to re-surface
+   *  open todos each turn so they are "not forgotten". Forks/delegates don't set it. */
+  beforeTurn?: () => string | undefined;
+  /** Inactivity watchdog: if the model stream emits no token for this many ms, the
+   *  read is treated as a transient failure and retried (a silent no-token stall would
+   *  otherwise hang the turn forever). Default 60000. */
+  streamIdleMs?: number;
 }
 
 /** Re-prompt sent when the model ends its response immediately after awaiting a
@@ -176,7 +184,13 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     // stream try/catch so it cannot be swallowed as an abort.
     deps.budget?.tickEpisode();
 
-    const promptMessages = history.getPromptMessages();
+    const basePromptMessages = history.getPromptMessages();
+    // Soft per-turn reminder (e.g. open todos). Transient: appended to THIS request only,
+    // never written to history, so it is re-evaluated fresh every turn and never duplicates.
+    const reminder = deps.beforeTurn?.();
+    const promptMessages = reminder
+      ? [...basePromptMessages, { role: 'user' as const, content: reminder }]
+      : basePromptMessages;
     tracer.write({ ts: Date.now(), type: 'llm_request', context: ctx, ...(nodeId ? { nodeId } : {}), system: systemBlock, messages: promptMessages, model: deps.model });
     let lastProgressTs = 0;
     const stream = await streamFn({ system: systemBlock, messages: promptMessages, model: deps.model });
@@ -203,8 +217,30 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     const parsedStatements: string[] = [];
 
     renderHost.log(`[turn ${attempt}] streaming...`);
+    const idleMs = deps.streamIdleMs ?? 60_000;
     try {
-      for await (const chunk of stream.textStream) {
+      // Manual iteration so each token read can race an inactivity timeout. A silent
+      // no-token stall (the architect-stall bug) is otherwise indistinguishable from a
+      // slow model and hangs the turn forever; on idle we abort + mark a transient stream
+      // error so the existing retry path re-issues the request.
+      const iterator = stream.textStream[Symbol.asyncIterator]();
+      while (true) {
+        let idleTimer: ReturnType<typeof setTimeout> | undefined;
+        const idle = new Promise<'idle'>((res) => { idleTimer = setTimeout(() => res('idle'), idleMs); });
+        let step: IteratorResult<string> | 'idle';
+        try {
+          step = await Promise.race([iterator.next(), idle]);
+        } finally {
+          if (idleTimer) clearTimeout(idleTimer);
+        }
+        if (step === 'idle') {
+          renderHost.log(`[turn ${attempt}] stream idle >${idleMs}ms — treating as transient error, will retry`);
+          streamErrored = true;
+          try { stream.abort(); } catch { /* ignore */ }
+          break;
+        }
+        if (step.done) break;
+        const chunk = step.value;
         assistantContent += chunk;
         const statements = detector.feed(stripMarkdownFences(chunk));
 
@@ -463,6 +499,19 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         pattern.names.forEach((name) => { variables[name] = obj[name]; });
       } else if (pattern.names.length === 1) {
         variables[pattern.names[0]!] = awaited;
+      }
+      // Prefer the value the VM itself computed for each bound name over the raw
+      // resolved-yield value above. They agree whenever the yielding call IS the
+      // directly-awaited expression (every yield kind today). They diverge when a
+      // yield is nested inside another async function the model awaited instead
+      // (e.g. `webSearch()` awaiting `fetch()` internally) — there, `awaited` is the
+      // INNER yield's raw value, not the outer call's real return value, while the VM's
+      // own bytecode (continued via drivePendingJobs() above, including the per-statement
+      // `globalThis[name] = name` propagation) has already computed the correct one.
+      // Falls back to the value above when the VM reports the global as unset.
+      for (const name of pattern.names) {
+        const vmValue = vm.getVar(name);
+        if (vmValue !== undefined) variables[name] = vmValue;
       }
       for (const [name, value] of Object.entries(variables)) {
         vm.setVar(name, value); // inject into VM scope + host scope for the next turn

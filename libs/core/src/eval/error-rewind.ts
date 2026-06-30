@@ -14,9 +14,9 @@ export function sandboxApiHint(message: string): string {
   ) {
     return 'HINT: Node/Bun/Deno modules are NOT available in this sandbox. To run a shell command or subprocess use the host global `execShell(cmd)` → returns `{ ok, stdout, stderr }`. Example: `const { ok, stdout } = execShell("npx tsx path/to/test.ts");`';
   }
-  // HTTP — point at the synchronous fetch shim.
+  // HTTP — point at the fetch global.
   if (/cannot find name 'fetch'|cannot find name "fetch"|\baxios\b|node-fetch|\bgot\b\b/.test(m)) {
-    return 'HINT: Use the host global `fetch(url, opts?)` (synchronous, curl-backed) → `{ ok, status, text(), json() }`. Do not import http libraries.';
+    return 'HINT: Use the host global `await fetch(url, opts?)` → `Promise<{ ok, status, text(), json() }>`. Do not import http libraries.';
   }
   // File system — point at readFileRaw/writeFileRaw / fs space functions.
   if (/node:fs|'fs'|"fs"|readfilesync|writefilesync|\bfs\.|mkdirsync/.test(m)) {

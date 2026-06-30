@@ -23,6 +23,9 @@ export interface AgentDef {
   slug: string;
   title: string;
   instructBody: string; // body of instruct.md
+  /** Body of charter.md — short, fork-safe identity/guardrails. Injected into the top-level
+   *  prompt AND every fork (unlike instructBody, which is top-level only). Empty when absent. */
+  charterBody: string;
   actions: ActionDef[];
   /** Other agents this agent can delegate to. Entries may carry an `#action`
    *  suffix or `npm:` prefix — raw strings only, parsing happens downstream
@@ -338,6 +341,7 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
 
   const instructPath = join(agentDir, 'instruct.md');
   let instructBody = '';
+  let charterBody = '';
   let title = slug;
   const actions: ActionDef[] = [];
   const config: AgentConfig = { knowledge: [], functions: [], components: [] };
@@ -374,7 +378,15 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
     }
   }
 
-  return { slug, title, instructBody, actions, canDelegateTo, config, defaultAction };
+  // charter.md (optional): fork-safe identity/guardrails, no frontmatter required.
+  const charterPath = join(agentDir, 'charter.md');
+  if (await fileExists(charterPath)) {
+    const raw = await readFile(charterPath, 'utf8');
+    const { body } = parseFrontmatter(raw, charterPath);
+    charterBody = body.trim();
+  }
+
+  return { slug, title, instructBody, charterBody, actions, canDelegateTo, config, defaultAction };
 }
 
 export interface LoadSpaceOpts {

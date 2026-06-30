@@ -107,6 +107,7 @@ describe('runDelegate action-restriction (allowedActions)', () => {
       slug,
       title: slug,
       instructBody: '',
+      charterBody: '',
       actions: actions.map((a) => ({ id: a.id, label: a.id, description: '', tasklist: '' })),
       canDelegateTo: [],
       config: { knowledge: [], functions: [], components: [] },

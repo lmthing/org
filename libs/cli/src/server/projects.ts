@@ -1,7 +1,7 @@
 /**
  * Project helpers — on-disk layout under `lmthingRoot` (<cwd>/.lmthing):
  *
- *   <root>/system/spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/
+ *   <root>/system/spaces/{system-global,system-engineer,system-architect,system-research,user-memory,user-thing}/
  *   <root>/<projectId>/spaces/
  *   <root>/<projectId>/documents/
  *   <root>/<projectId>/instructions.md

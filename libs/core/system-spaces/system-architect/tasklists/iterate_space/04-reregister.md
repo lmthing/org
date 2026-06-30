@@ -8,6 +8,7 @@ output:
 dependsOn: [edit]
 optional: false
 goal: false
+role: general
 ---
 
 Re-register the edited space into the live runtime.

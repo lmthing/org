@@ -10,6 +10,7 @@ output:
 dependsOn: [reregister, load]
 optional: false
 goal: true
+role: general
 ---
 
 Package the execution parameters so the calling session can re-run the updated agent and
@@ -17,8 +18,8 @@ verify the improvements took effect. This is the GOAL task — it ALWAYS runs an
 resolves a uniform result (success OR a structured failure). It carries no `condition:` so
 it can never be skipped (a skipped goal collapses the whole tasklist to a silent `null`).
 
-**DO NOT call delegate() here — it is not available in fork context.** The session that called
-`tasklist()` will delegate using the returned params, but only when `ok` is true.
+This task just PACKAGES the execution params; the session that called `tasklist()` will run the
+updated agent using them, but only when `ok` is true.
 
 On success, update memory so future iteration sessions can find this space (guard so a failed
 re-register doesn't poison memory):

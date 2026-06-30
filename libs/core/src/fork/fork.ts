@@ -35,6 +35,32 @@ export function salvageOutput(schema: Record<string, string>): Record<string, un
   return out;
 }
 
+/**
+ * Decide whether a `delegate(packageName, agentName, action)` call is permitted by a task's
+ * `canDelegateTo` allowlist. Entries are `"space/agent"` (any action) or `"space/agent#action"`.
+ * Returns the allowed actions for the matched target (`undefined` = any action), or `null` when the
+ * target is not in the allowlist at all.
+ */
+export function resolveTaskDelegate(
+  canDelegateTo: string[],
+  packageName: string,
+  agentName: string,
+): { allowedActions: string[] | undefined } | null {
+  const matches = canDelegateTo
+    .map((e) => {
+      const [target, action] = e.split('#');
+      const slash = (target ?? '').lastIndexOf('/');
+      const pkg = slash >= 0 ? target!.slice(0, slash) : (target ?? '');
+      const agent = slash >= 0 ? target!.slice(slash + 1) : (target ?? '');
+      return { pkg, agent, action: action || undefined };
+    })
+    .filter((m) => m.agent === agentName && (m.pkg === packageName || packageName.endsWith('/' + m.pkg) || m.pkg.endsWith('/' + packageName)));
+  if (matches.length === 0) return null;
+  // A match with no `#action` allows every action; otherwise only the listed actions.
+  if (matches.some((m) => !m.action)) return { allowedActions: undefined };
+  return { allowedActions: matches.map((m) => m.action!).filter(Boolean) };
+}
+
 export interface ForkTask {
   instruction: string;
   output: Record<string, string>;
@@ -44,6 +70,16 @@ export interface ForkTask {
   upstreamOutputs?: Record<string, unknown>;
   /** Subagent role controlling capability profile + system-prompt preamble. */
   role?: 'explore' | 'plan' | 'general';
+  /** Allowlist of space-function names to inject + advertise (least privilege). When set,
+   *  only these of the engine's agentFunctions are injected and listed; omit for all. */
+  functions?: string[];
+  /** Overall tasklist goal (tasklists/<name>/index.md body), injected as standing context
+   *  so an isolated task knows the pipeline it serves. */
+  tasklistDescription?: string;
+  /** Per-task delegation allowlist: entries `"space/agent"` (any action) or `"space/agent#action"`.
+   *  When non-empty AND the engine has a `delegateRunner`, `delegate()` is injected into the fork
+   *  and restricted to these targets. Empty/omitted → no delegation (the default). */
+  canDelegateTo?: string[];
   /** Parent execution scope for hierarchical observability. Set by the yield router
    *  before each fork() call so each invocation carries the right parentId. */
   parentScope?: TraceScope;
@@ -71,6 +107,19 @@ interface ForkEngineOpts {
   /** Default model alias used for any fork role that has no explicit roleModels entry.
    *  Propagated from the parent session so llm_request events carry a model field. */
   defaultModel?: string;
+  /** Body of the parent agent's charter.md — short, fork-safe identity/guardrails injected
+   *  into every fork's system prompt. Unlike instruct.md it carries no ask/delegate/UI prose. */
+  parentAgentCharter?: string;
+  /** Runs a delegate on behalf of a task that declares `canDelegateTo`. Provided by the
+   *  Session / delegate runtime (which own the registry + recursion-depth bound). When absent,
+   *  a task's delegate() yield fails with a clear "delegation not available" error. */
+  delegateRunner?: (
+    packageName: string,
+    agentName: string,
+    action: string | undefined,
+    delegateOpts: unknown,
+    allowedActions: string[] | undefined,
+  ) => Promise<unknown>;
   /** Spaces registered at runtime via registerSpace(). Shared (same Map reference) with
    *  the parent Session so a fork's registerSpace() is visible to later parent delegate()
    *  calls — the documented dynamicSpaces invariant. */
@@ -213,14 +262,25 @@ export class ForkEngine {
         vm.ctx.setProp(vm.ctx.global, 'currentTask', currentTaskHandle);
         currentTaskHandle.dispose();
 
-        // Inject space functions from parent agent into the child VM
-        const agentFunctions = this.opts.agentFunctions ?? {};
-        const agentFunctionsBundled = this.opts.agentFunctionsBundled ?? {};
+        // Inject space functions from parent agent into the child VM. When the task declares
+        // a `functions` allowlist, scope to exactly those (least privilege — fewer tools to
+        // misuse, shorter prompt). An empty array means "no space functions".
+        const allFns = this.opts.agentFunctions ?? {};
+        const allFnsBundled = this.opts.agentFunctionsBundled ?? {};
+        const fnAllow = task.functions;
+        const pickAllowed = <T,>(rec: Record<string, T>): Record<string, T> => {
+          if (!fnAllow) return rec;
+          const out: Record<string, T> = {};
+          for (const name of fnAllow) if (name in rec) out[name] = rec[name]!;
+          return out;
+        };
+        const agentFunctions = pickAllowed(allFns);
+        const agentFunctionsBundled = pickAllowed(allFnsBundled);
         injectSpaceFunctions(vm, agentFunctions, agentFunctionsBundled, (name, error) => {
           this.opts.renderHost.log(`[warn] failed to inject function "${name}" into fork: ${error}`);
         });
 
-        // Shared synchronous host substrate: console, execShell, process.env, fetch,
+        // Shared synchronous host substrate: console, execShell, process.env,
         // readFileRaw, writeFileRaw. The role's capability profile gates write access
         // (explore/plan are read-only — write is withheld here, not just discouraged).
         injectHostTools(vm, {
@@ -238,6 +298,7 @@ export class ForkEngine {
         const { createInspectGlobal } = await import('../globals/inspect.js');
         const { createSleepGlobal } = await import('../globals/sleep.js');
         const { createLoadKnowledgeGlobal } = await import('../globals/load-knowledge.js');
+        const { createFetchGlobal } = await import('../globals/fetch.js');
 
         const capturedVm = vm;
         const pushYield = (req: import('../eval/yield.js').YieldRequest) => {
@@ -251,6 +312,7 @@ export class ForkEngine {
         }) as AnyFn);
         injectGlobal(vm.ctx, 'inspect', createInspectGlobal(pushYield) as AnyFn);
         injectGlobal(vm.ctx, 'sleep', createSleepGlobal(pushYield, this.opts.clock) as AnyFn);
+        injectGlobal(vm.ctx, 'fetch', createFetchGlobal(pushYield) as AnyFn);
         injectGlobal(
           vm.ctx,
           'loadKnowledge',
@@ -263,6 +325,16 @@ export class ForkEngine {
         if (task.role !== 'explore' && task.role !== 'plan') {
           const { createRegisterSpaceGlobal } = await import('../globals/register-space.js');
           injectGlobal(vm.ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
+        }
+
+        // Delegation: a task may delegate ONLY to the targets it declares in `canDelegateTo`,
+        // and ONLY when the engine was given a delegateRunner (the Session / delegate runtime
+        // owns the registry + recursion bound). Default: no delegate global — keeps forks
+        // isolated and headless as before.
+        const canDelegate = (task.canDelegateTo?.length ?? 0) > 0 && typeof this.opts.delegateRunner === 'function';
+        if (canDelegate) {
+          const { createDelegateGlobal } = await import('../globals/delegate.js');
+          injectGlobal(vm.ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
         }
 
         // Inject the JSX runtime (React shim + design-system catalog stubs) so a fork
@@ -318,7 +390,15 @@ export class ForkEngine {
         const seedDts = task.seed
           ? Object.keys(task.seed).map((k) => `declare const ${k}: any;`).join('\n')
           : '';
-        const ambientDts = [LIBRARY_DTS_NO_ASK, functionsOverlay, currentTaskDts, upstreamDts, seedDts]
+        // Forks have NO tasklist/fork/ask — strip their declarations so a stray call fails
+        // typecheck (a clean retryable error) instead of passing typecheck then throwing at
+        // runtime and salvaging. `delegate` is added back ONLY when the task may delegate.
+        const forkBaseDts = LIBRARY_DTS_NO_ASK.replace(/^declare function (tasklist|fork|delegate)\b.*\r?\n/gm, '');
+        const delegateDts = canDelegate
+          ? 'declare function delegate(packageName: string, agentName: string, opts?: DelegateOpts): Promise<any>;\n'
+            + 'declare function delegate(packageName: string, agentName: string, action?: string, opts?: DelegateOpts): Promise<any>;'
+          : '';
+        const ambientDts = [forkBaseDts, delegateDts, functionsOverlay, currentTaskDts, upstreamDts, seedDts]
           .filter(Boolean)
           .join('\n');
 
@@ -334,9 +414,36 @@ export class ForkEngine {
             }).filter(Boolean).join('\n')}`
           : '';
 
+        // Standing context: the parent agent's charter (fork-safe identity/guardrails) and the
+        // overall tasklist goal, so an isolated task knows who it works for and what pipeline it
+        // serves. Kept short and placed before the task instruction. (instruct.md is deliberately
+        // NOT injected — it carries ask/delegate/UI prose a fork cannot honor.)
+        const charterSection = this.opts.parentAgentCharter?.trim()
+          ? `# Agent\n${this.opts.parentAgentCharter.trim()}\n`
+          : '';
+        const tasklistSection = task.tasklistDescription?.trim()
+          ? `# Tasklist (overall goal — your task is one step in it)\n${task.tasklistDescription.trim()}\n`
+          : '';
+
+        // The capability profile gates which host primitives actually exist in this VM
+        // (read-only roles have write withheld at injection). Advertise ONLY what is available,
+        // so a read-only task is never told about writeFileRaw and then errors on it.
+        const allowWrite = roleProfile(task.role).allowWrite !== false;
+        const ioLine = allowWrite
+          ? '- readFileRaw(path) → { ok, content } / writeFileRaw(path, content) → { ok } — binary-safe file I/O (relative paths resolve against the space dir)'
+          : '- readFileRaw(path) → { ok, content } — binary-safe file read (relative paths resolve against the space dir). You are READ-ONLY: writeFileRaw and mutating shell commands are unavailable.';
+        const shellLine = allowWrite
+          ? '- execShell(cmd: string) → { ok, stdout, stderr } — run a shell command / subprocess. This is the ONLY way to run a program (e.g. tests): `const { ok, stdout } = execShell("npx tsx test.ts");`'
+          : '- execShell(cmd: string) → { ok, stdout, stderr } — run a READ-ONLY shell command (ls, cat, grep…); mutating commands (rm/mv/git/npm…) are blocked.';
+        const noRuntimeLine = allowWrite
+          ? 'There is NO Node/Bun/Deno runtime: `require`, `import("child_process")`, `Bun`, `Deno`, `process.cwd()`, `TextDecoder`, and `Buffer` are NOT available. Use `execShell` to run anything and `fetch`/`readFileRaw`/`writeFileRaw` for I/O.'
+          : 'There is NO Node/Bun/Deno runtime: `require`, `import("child_process")`, `Bun`, `Deno`, `process.cwd()`, `TextDecoder`, and `Buffer` are NOT available. Use `execShell` (read-only) / `fetch` / `readFileRaw` for I/O.';
+
         const systemBlock = [
           'CRITICAL INSTRUCTION: You are a TypeScript code execution agent. You MUST respond with TypeScript code ONLY. Do NOT write any prose, explanations, JSON, markdown, or natural language. Your entire response will be fed directly into a TypeScript evaluator.',
           '',
+          ...(charterSection ? [charterSection] : []),
+          ...(tasklistSection ? [tasklistSection] : []),
           rolePreamble(task.role),
           '',
           'Respond with valid TypeScript statements only. Use top-level `await` for async operations. Do not wrap code in functions or markdown code blocks.',
@@ -347,15 +454,25 @@ export class ForkEngine {
           '- display(content: string | JSXDescriptor) — render output',
           '- loadKnowledge(domain: string, field: string, option: string) → Promise<string> — load a knowledge file shipped with this space, e.g. `const k = await loadKnowledge("espresso", "fundamentals", "overview.md");`',
           '- inspect(...values) — inspect variables',
-          '- execShell(cmd: string) → { ok, stdout, stderr } — run a shell command / subprocess. This is the ONLY way to run a program (e.g. tests): `const { ok, stdout } = execShell("npx tsx test.ts");`',
-          '- fetch(url, opts?) → { ok, status, text(), json() } — synchronous HTTP (curl-backed)',
-          '- readFileRaw(path) → { ok, content } / writeFileRaw(path, content) → { ok } — binary-safe file I/O (relative paths resolve against the space dir)',
+          shellLine,
+          '- fetch(url, opts?) → Promise<{ ok, status, text(), json() }> — `await fetch(...)` (real, non-blocking HTTP)',
+          ioLine,
           '',
-          'There is NO Node/Bun/Deno runtime: `require`, `import("child_process")`, `Bun`, `Deno`, `process.cwd()`, `TextDecoder`, and `Buffer` are NOT available. Use `execShell` to run anything and `fetch`/`readFileRaw`/`writeFileRaw` for I/O.',
+          noRuntimeLine,
           '',
           'FORBIDDEN: setTimeout, setInterval, queueMicrotask (not available)',
           'FORBIDDEN: markdown code fences (```typescript, ```ts, or ``` of any kind)',
           'FORBIDDEN: async IIFEs like `await (async () => { ... })()` — use sequential top-level await statements instead',
+          '',
+          ...(canDelegate
+            ? [
+                '',
+                '# Delegation (allowed for this task)',
+                'You MAY call `delegate(packageName, agentName, action?, { query, context })` (yields) — but ONLY to:',
+                ...(task.canDelegateTo ?? []).map((t) => `  - ${t}`),
+                'It returns the delegate\'s result; cast it. Keep the call FLAT at top level (never inside if/try/loop).',
+              ]
+            : []),
           '',
           'When your task is complete, call `currentTask.resolve(value)` with an object matching the output schema.',
           'The request and every input you need are in the seed variables / Inputs above — work with what you have, assume sensible defaults where details are missing, and resolve. Do not wait for input.',
@@ -397,6 +514,28 @@ export class ForkEngine {
               } catch (err) {
                 return { ok: false, spaceKey: '', agentSlug: '', error: String((err as Error)?.message ?? err) };
               }
+            }
+            // delegate: gated by the task's canDelegateTo allowlist; routed to the engine's
+            // delegateRunner (which owns the registry + recursion bound). A disallowed target
+            // throws a clear error that surfaces to the model (retryable) rather than silently
+            // binding undefined.
+            if (req.kind === 'delegate') {
+              const [packageName, agentName, action, delegateOpts] = req.args as [string, string, string | undefined, unknown];
+              const allow = resolveTaskDelegate(task.canDelegateTo ?? [], packageName, agentName);
+              if (!allow) {
+                throw new Error(
+                  `delegate("${packageName}", "${agentName}") is not permitted from this task — allowed: ${(task.canDelegateTo ?? []).join(', ') || '(none)'}`,
+                );
+              }
+              if (!this.opts.delegateRunner) throw new Error('delegation is not available in this context');
+              return this.opts.delegateRunner(packageName, agentName, action, delegateOpts, allow.allowedActions);
+            }
+            // fetch: a leaf VM has no parent yield-router to fall back to, so it resolves
+            // its own real, non-blocking HTTP call (same helper the session/delegate path uses).
+            if (req.kind === 'fetch') {
+              const [url, fetchOpts] = req.args as [string, import('../globals/fetch.js').FetchOpts | undefined];
+              const { resolveFetchYield } = await import('../eval/fetch-yield.js');
+              return resolveFetchYield(url, fetchOpts);
             }
             return undefined;
           };

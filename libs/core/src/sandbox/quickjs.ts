@@ -7,6 +7,7 @@ import {
   type QuickJSHandle,
 } from 'quickjs-emscripten';
 import type { YieldRequest } from '../eval/yield.js';
+import { disposePendingDeferreds } from './host-bridge.js';
 
 export type EvalResult =
   | { ok: true; value: unknown }
@@ -23,6 +24,11 @@ export interface VM {
   drivePendingJobs(): EvalResult;
   getScope(): Record<string, unknown>;
   setVar(name: string, value: unknown): void;
+  /** Read a global's current value back out of the VM (e.g. to recover the real
+   *  value of a binding whose yielding call was nested inside another async
+   *  function — see turn-loop's post-yield binding). Returns `undefined` if the
+   *  global is unset or its value can't be dumped. */
+  getVar(name: string): unknown;
   dispose(): void;
   pendingYields: YieldRequest[];
   ctx: QuickJSAsyncContext;
@@ -158,6 +164,17 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
     handle.dispose();
   }
 
+  function getVar(name: string): unknown {
+    const handle = ctx.getProp(ctx.global, name);
+    try {
+      return ctx.dump(handle);
+    } catch {
+      return undefined;
+    } finally {
+      handle.dispose();
+    }
+  }
+
   /**
    * Eval code in script mode (not module mode). Used for injecting utility functions
    * that need to bind to globalThis rather than export from a module.
@@ -179,11 +196,15 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
   }
 
   function dispose(): void {
+    // A bridged host call whose promise never settled before teardown (budget cap,
+    // fork timeout) would otherwise leave a live QuickJS handle behind — ctx.dispose()
+    // throws if any handle it created is still alive.
+    disposePendingDeferreds(ctx);
     ctx.dispose();
     runtime.dispose();
   }
 
-  return { evalStatement, evalScript, drivePendingJobs, getScope, setVar, dispose, pendingYields, ctx };
+  return { evalStatement, evalScript, drivePendingJobs, getScope, setVar, getVar, dispose, pendingYields, ctx };
 }
 
 function marshalSimple(ctx: QuickJSAsyncContext, value: unknown): ReturnType<typeof ctx.newString> {

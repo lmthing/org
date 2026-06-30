@@ -194,6 +194,45 @@ describe('turn loop — parallel yields (Promise.all of forks)', () => {
   });
 });
 
+describe('turn loop — nested yield binding (yield inside an awaited async wrapper)', () => {
+  it("binds the bound name to the outer async function's return value, not the inner yield's raw resolved value", async () => {
+    const vm = await createVM();
+    // A yielding global `y(tag)`, same shape as sleep/ask/etc.
+    const y = (tag: string) =>
+      new Promise((resolve, reject) => {
+        vm.pendingYields.push({ kind: 'y', args: [tag], deferred: { resolve, reject }, vmPromiseHandle: undefined } as unknown as YieldRequest);
+      });
+    injectGlobal(vm.ctx, 'y', y as (...a: unknown[]) => unknown);
+
+    // A plain async function (mirrors webSearch/webFetch awaiting fetch() internally)
+    // that awaits the yielding global and post-processes its result before returning.
+    const def = vm.evalScript(
+      'globalThis.wrapper = async function wrapper() { const inner = await y("tag"); return { processed: inner, marker: "real" }; };',
+    );
+    expect(def.ok).toBe(true);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: 'declare function wrapper(): Promise<any>; declare function y(tag: string): Promise<any>;',
+      renderHost: silentHost,
+      streamFn: scriptedStream('const out = await wrapper();'),
+      // The INNER yield resolves to a raw sentinel, distinct from wrapper's real return —
+      // proves the bound value isn't just this raw value passed through.
+      processYield: async () => 'RAW_INNER_VALUE',
+      maxRetries: 2,
+    });
+
+    expect(result).toBe('done');
+    expect(readGlobal(vm, 'out')).toEqual({ processed: 'RAW_INNER_VALUE', marker: 'real' });
+    vm.dispose();
+  });
+});
+
 describe('turn loop — inspect() surfaces values to the model', () => {
   // Regression: a BARE (unbound) inspect(x) must still surface x into the
   // VARIABLES block the model reads. Before this was wired, bare inspect

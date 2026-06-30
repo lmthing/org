@@ -8,6 +8,7 @@ output:
 dependsOn: []
 optional: false
 goal: false
+role: explore
 ---
 
 Locate the existing scaffolded space to iterate on and read enough of it to summarize

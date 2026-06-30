@@ -32,22 +32,27 @@ These relative paths resolve against the project directory.
    already know, just answer with `display(...)`. No delegation. This is the default for
    most messages — don't over-delegate.
 
-2. **Research the web** — when the request needs current/external facts, sources, or deep
+2. **Research the web** — when the request needs current/external facts, sources, or
    investigation **as the final answer**. Do NOT use this when the request is "research X
-   AND build a space/agent" — that is path 3; the architect does its own research, so a
-   separate research pass here just doubles the work (and can time the whole run out). Use
-   path 2 only for standalone research questions. The researcher ALWAYS resolves this exact
-   shape — cast it precisely so you can read its fields without a type error:
+   AND build a space/agent" — that is path 3; the architect does its own deep research, so a
+   separate research pass here just doubles the work. Pick the depth:
+
+   - **Quick question** → the `research` action (one fast search, concise sourced answer):
    ```typescript
-   const report = await delegate('system-deep-research', 'researcher', 'research_report', { query: '<the question>' }) as {
+   const r = await delegate('system-research', 'researcher', 'research', { query: '<the question>' }) as {
+     answer: string; sources: Array<{ title: string; url: string }>;
+   };
+   display(JSON.stringify(r, null, 2));
+   ```
+   - **Deep dive** → the `deep_research` action (parallel multi-angle investigation, cited report):
+   ```typescript
+   const report = await delegate('system-research', 'researcher', 'deep_research', { query: '<the topic>' }) as {
      topic: string; executive_summary: string;
      findings: Array<{ heading: string; detail: string }>;
      conclusion: string; sources: Array<{ title: string; url: string }>;
    };
    display(JSON.stringify(report, null, 2));
    ```
-   When you feed research into a later step (e.g. the architect), pass `report` as a JSON
-   string in the `query` — do NOT invent a different shape for it.
 
 3. **Build a new specialist** — when the user wants a REUSABLE agent/tool/workflow, or the
    job is a recurring specialized task no existing agent covers. **This includes any

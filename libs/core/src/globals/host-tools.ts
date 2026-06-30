@@ -134,28 +134,10 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
   }
   setGlobal('process', { env, exit: (code?: number) => { throw new Error(`process.exit(${code ?? 0})`); } });
 
-  // fetch — synchronous HTTP via curl; returns a plain object so `await fetch(...)` works
-  setGlobal('fetch', (url: string, fetchOpts?: { method?: string; headers?: Record<string, string>; body?: string }) => {
-    try {
-      const method = (fetchOpts?.method ?? 'GET').toUpperCase();
-      const headers = Object.entries(fetchOpts?.headers ?? {})
-        .map(([k, v]) => `-H ${JSON.stringify(`${k}: ${v}`)}`)
-        .join(' ');
-      const bodyArg = fetchOpts?.body ? `--data-binary ${JSON.stringify(fetchOpts.body)}` : '';
-      const cmd = `curl -s --max-time 30 -w "\\n__STATUS__%{http_code}" -X ${method} ${headers} ${bodyArg} ${JSON.stringify(String(url))}`;
-      // timeout is a stopgap until fetch moves to a yield-based async client (Wave 2);
-      // without it a hung endpoint blocks the single Node thread (and all forks) forever.
-      const raw = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout: 31000 }).toString();
-      const statusMatch = raw.match(/\n__STATUS__(\d+)$/);
-      const status = statusMatch ? parseInt(statusMatch[1]!) : 200;
-      const text = statusMatch ? raw.slice(0, raw.lastIndexOf('\n__STATUS__')) : raw;
-      const ok = status >= 200 && status < 300;
-      return { ok, status, text: () => text, json: () => JSON.parse(text) };
-    } catch (e) {
-      renderHost.log(`[fetch error] ${e instanceof Error ? e.message : String(e)}`);
-      return { ok: false, status: 0, text: () => '', json: () => ({}) };
-    }
-  });
+  // fetch is now a value-yielding global (see globals/fetch.ts + eval/fetch-yield.ts) —
+  // a real, non-blocking HTTP call instead of execSync(curl), injected alongside the
+  // other yielding globals (sleep/ask/etc.) at each of the 3 injection sites
+  // (session.ts/delegate.ts/fork.ts), not here.
 
   // readFileRaw — binary-safe file read via Node fs (no shell quoting hazards)
   setGlobal('readFileRaw', (path: string, readOpts?: { offset?: number; limit?: number }) => {

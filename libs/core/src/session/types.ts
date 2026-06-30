@@ -20,6 +20,9 @@ export interface SessionOpts {
   renderHost: RenderHost;
   maxRetries?: number;
   maxConcurrentForks?: number;
+  /** Inactivity watchdog for the model stream (ms). A turn whose stream emits no token
+   *  for this long is retried as a transient failure. Default 60000. */
+  streamIdleMs?: number;
   clock?: Clock;
   traceFile?: string;
   /** Override the always-loaded system space directories. Defaults to the

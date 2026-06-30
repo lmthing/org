@@ -8,6 +8,7 @@ output:
 dependsOn: [load, diagnose]
 optional: false
 goal: false
+role: general
 ---
 
 Apply the approved plan by **re-writing only the affected files** with the same per-file

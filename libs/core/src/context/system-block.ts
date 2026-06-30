@@ -225,7 +225,11 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
     );
   }
 
-  // 2. Agent instructions
+  // 2. Agent charter (fork-safe identity/guardrails) then instructions (orchestration/routing).
+  // The charter is also injected into forks; instructBody is top-level/delegate only.
+  if (agent.charterBody) {
+    sections.push(`# Agent\n\n${agent.charterBody}`);
+  }
   if (agent.instructBody) {
     sections.push(`# Agent Instructions\n\n${agent.instructBody}`);
   }

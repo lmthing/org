@@ -168,7 +168,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       opts.renderHost.log(`[warn] failed to inject function "${name}": ${error}`);
     });
 
-    // Shared synchronous host substrate: console, execShell, process.env, fetch,
+    // Shared synchronous host substrate: console, execShell, process.env,
     // readFileRaw, writeFileRaw.
     injectHostTools(vm, { renderHost: opts.renderHost, spaceDir: space.dir, projectSpacesDir: opts.projectSpacesDir });
 
@@ -206,6 +206,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     const { createDelegateGlobal } = await import('../globals/delegate.js');
     const { createTasklistGlobal } = await import('../globals/tasklist.js');
     const { createLoadKnowledgeGlobal } = await import('../globals/load-knowledge.js');
+    const { createFetchGlobal } = await import('../globals/fetch.js');
 
     const pushYield = (req: import('../eval/yield.js').YieldRequest) => {
       vm.pendingYields.push(req);
@@ -225,6 +226,27 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     injectGlobal(vm.ctx, 'fork', createForkGlobal(pushYield) as AnyFn);
     injectGlobal(vm.ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
     injectGlobal(vm.ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
+    injectGlobal(vm.ctx, 'fetch', createFetchGlobal(pushYield) as AnyFn);
+
+    // Runs a child delegate — from this agent's top level OR from one of its tasks' forks —
+    // one level deeper, with the recursion cap enforced by runDelegate's depth/maxDepth.
+    const runChildDelegate = (
+      packageName: string,
+      agentName: string,
+      action: string | undefined,
+      childOpts: DelegateOpts | undefined,
+      allowedActions: string[] | undefined,
+    ): Promise<unknown> =>
+      runDelegate({
+        ...opts,
+        packageName,
+        agentName,
+        action,
+        allowedActions,
+        delegateOpts: childOpts,
+        scope: delegateScope,
+        depth: opts.depth + 1,
+      });
 
     const { ForkEngine } = await import('../fork/fork.js');
     const forkEngine = new ForkEngine({
@@ -232,6 +254,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       parentHistory: history.messages,
       parentSpaceDir: space.dir,
       parentAgentSlug: agent.slug,
+      parentAgentCharter: agent.charterBody,
       agentFunctions: functions,
       agentFunctionsBundled: functionsBundled,
       renderHost: opts.renderHost,
@@ -240,6 +263,10 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       tracer: opts.tracer,
       projectSpacesDir: opts.projectSpacesDir,
       defaultModel: opts.model,
+      // A task in this agent's tasklist may delegate (gated by its own canDelegateTo); route it
+      // through the same depth-incrementing runner this agent uses for its own delegate() calls.
+      delegateRunner: (packageName, agentName2, action, childOpts, allowedActions) =>
+        runChildDelegate(packageName, agentName2, action, childOpts as DelegateOpts | undefined, allowedActions),
     });
 
     try {
@@ -275,16 +302,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
               const matchedDep = directDeps.find(
                 (d) => d.agent.slug === agentName && (d.target === packageName || d.target.endsWith(`/${packageName}`) || packageName.endsWith(`/${d.target}`)),
               );
-              return runDelegate({
-                ...opts,
-                packageName,
-                agentName,
-                action,
-                allowedActions: matchedDep?.allowedActions,
-                delegateOpts: delegateOpts2,
-                scope: delegateScope,
-                depth: opts.depth + 1,
-              });
+              return runChildDelegate(packageName, agentName, action, delegateOpts2, matchedDep?.allowedActions);
             },
           });
           return routed.handled ? routed.value : undefined;

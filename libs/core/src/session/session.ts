@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import type { SessionOpts, SessionDeps, RenderHost } from './types.js';
 import type { StreamOpts } from '../eval/stream-types.js';
 import type { YieldRequest } from '../eval/yield.js';
@@ -22,6 +23,7 @@ import { createAskGlobal } from '../globals/ask.js';
 import { createDisplayGlobal } from '../globals/display.js';
 import { createInspectGlobal } from '../globals/inspect.js';
 import { createSleepGlobal } from '../globals/sleep.js';
+import { createFetchGlobal } from '../globals/fetch.js';
 import { createLoadKnowledgeGlobal } from '../globals/load-knowledge.js';
 import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
@@ -140,6 +142,8 @@ export class Session {
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
         model: this.opts.modelAlias,
+        beforeTurn: () => this.readTodoReminder(),
+        streamIdleMs: this.opts.streamIdleMs,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -273,6 +277,8 @@ export class Session {
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
         model: this.opts.modelAlias,
+        beforeTurn: () => this.readTodoReminder(),
+        streamIdleMs: this.opts.streamIdleMs,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -390,6 +396,8 @@ export class Session {
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
         model: this.opts.modelAlias,
+        beforeTurn: () => this.readTodoReminder(),
+        streamIdleMs: this.opts.streamIdleMs,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -452,17 +460,70 @@ export class Session {
   }
 
   /**
+   * Run a delegate requested by a TASK FORK (gated by that task's `canDelegateTo`). Mirrors the
+   * runtime-context `runDelegate` but sources the space from `this.space` and forwards the task's
+   * `allowedActions`, one recursion level deep (bounded by runDelegate's maxDepth).
+   */
+  private async runDelegateForFork(
+    packageName: string,
+    agentName: string,
+    action: string | undefined,
+    delegateOpts: unknown,
+    allowedActions: string[] | undefined,
+  ): Promise<unknown> {
+    const space = this.space;
+    if (!space) throw new Error('delegate from a task requires a loaded space');
+    const { runDelegate } = await import('../delegate/delegate.js');
+    const { DelegateRegistry } = await import('../delegate/registry.js');
+    const spaceMap = new Map<string, Space>([[this.opts.spaceDir, space]]);
+    for (const [pkgName, depSpace] of Object.entries(space.dependentSpaces)) {
+      spaceMap.set(pkgName, depSpace);
+      spaceMap.set(depSpace.dir, depSpace);
+    }
+    for (const sysSpace of this.systemSpaces) {
+      spaceMap.set(sysSpace.dir, sysSpace);
+      if (sysSpace.packageName) spaceMap.set(sysSpace.packageName, sysSpace);
+    }
+    for (const [key, dynSpace] of this.dynamicSpaces) spaceMap.set(key, dynSpace);
+    return runDelegate({
+      packageName,
+      agentName,
+      action,
+      allowedActions,
+      delegateOpts: delegateOpts as import('../globals/delegate.js').DelegateOpts | undefined,
+      registry: new DelegateRegistry(spaceMap),
+      renderHost: this.opts.renderHost,
+      streamFn: this.deps.streamFn,
+      depth: 1,
+      maxDepth: 5,
+      maxConcurrentForks: this.opts.maxConcurrentForks ?? 4,
+      clock: this.opts.clock,
+      tracer: this.tracer,
+      scope: this.currentScope ?? undefined,
+      systemSpaces: this.systemSpaces,
+      projectSpacesDir: this.opts.projectSpacesDir,
+      model: this.opts.modelAlias,
+    });
+  }
+
+  /**
    * Lazily construct and cache the session's ForkEngine. Shared across fork and
    * tasklist yields so concurrency is bounded globally rather than per-yield.
    */
   private async getForkEngine(): Promise<import('../fork/fork.js').ForkEngine> {
     if (this.forkEngine) return this.forkEngine;
     const { ForkEngine } = await import('../fork/fork.js');
+    // Resolve the running agent's charter (fork-safe identity) to inject into every fork.
+    const agents = this.space?.agents ?? {};
+    const fkSlug = this.opts.agentSlug === 'default' && !agents['default']
+      ? (Object.keys(agents)[0] ?? this.opts.agentSlug)
+      : this.opts.agentSlug;
     this.forkEngine = new ForkEngine({
       maxConcurrentForks: this.opts.maxConcurrentForks ?? 4,
       parentHistory: this.history.messages,
       parentSpaceDir: this.opts.spaceDir,
       parentAgentSlug: this.opts.agentSlug,
+      parentAgentCharter: agents[fkSlug]?.charterBody,
       renderHost: this.opts.renderHost,
       streamFn: this.deps.streamFn,
       clock: this.opts.clock,
@@ -475,8 +536,36 @@ export class Session {
       // Same Map reference the delegate path reads — a fork's registerSpace() lands here.
       dynamicSpaces: this.dynamicSpaces,
       projectSpacesDir: this.opts.projectSpacesDir,
+      // A task in a tasklist may delegate (gated by its own canDelegateTo) — route through the
+      // session's registry with the recursion bound enforced by runDelegate.
+      delegateRunner: (p, a, act, o, allowed) => this.runDelegateForFork(p, a, act, o, allowed),
     });
     return this.forkEngine;
+  }
+
+  /**
+   * Soft per-turn reminder of OPEN todos (status pending/in_progress) from the
+   * model-maintained `.lmthing/todos.json` (written by the todoWrite system function).
+   * Re-surfaced every turn so the agent never loses track — but never blocks termination
+   * (soft). Top-level session only; forks/delegates do not get this. Returns undefined
+   * when there is no list or nothing open.
+   */
+  private readTodoReminder(): string | undefined {
+    try {
+      const raw = readFileSync(this.opts.spaceDir + '/.lmthing/todos.json', 'utf8');
+      const items = JSON.parse(raw) as Array<{ content?: unknown; status?: unknown }>;
+      const open = (Array.isArray(items) ? items : []).filter(
+        (i) => i && typeof i.content === 'string' && i.status !== 'completed',
+      );
+      if (open.length === 0) return undefined;
+      const lines = open.map((i) => `- [${i.status === 'in_progress' ? '~' : ' '}] ${String(i.content)}`);
+      return [
+        '## Open todos (you added these — keep working through them; mark each done with todoWrite when complete)',
+        ...lines,
+      ].join('\n');
+    } catch {
+      return undefined; // no file / unreadable / bad JSON → nothing to remind
+    }
   }
 
   private injectGlobals(): void {
@@ -505,8 +594,9 @@ export class Session {
     injectGlobal(this.vm.ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
     injectGlobal(this.vm.ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
+    injectGlobal(this.vm.ctx, 'fetch', createFetchGlobal(pushYield) as AnyFn);
 
-    // Shared synchronous host substrate: console, execShell, process.env, fetch,
+    // Shared synchronous host substrate: console, execShell, process.env,
     // readFileRaw, writeFileRaw. Single source of truth (also used by fork VMs).
     // `progress` reads the live per-run budget (the closure dereferences the
     // field, so resetting this.budget per task is reflected).
@@ -642,7 +732,7 @@ export class Session {
           spaceMap.set(pkgName, depSpace);
           spaceMap.set(depSpace.dir, depSpace);
         }
-        // System spaces are always delegatable (e.g. deep_research/researcher)
+        // System spaces are always delegatable (e.g. system-research/researcher)
         for (const sysSpace of this.systemSpaces) {
           spaceMap.set(sysSpace.dir, sysSpace);
           if (sysSpace.packageName) spaceMap.set(sysSpace.packageName, sysSpace);

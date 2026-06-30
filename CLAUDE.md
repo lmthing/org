@@ -48,7 +48,8 @@ One-liners — full explanations are in the linked file.
 
 - **Variables don't persist between evals** — propagated via `globalThis['x'] = x` appended after each statement. → `@.claude/arch/turn-loop.md`
 - **System spaces always merged; only `system-global` functions are universal** — all system agents are universally delegatable; user space wins on collisions (except empty placeholders). → `@.claude/arch/spaces.md` · `@.claude/skills/system-spaces.md`
-- **Yield-result binding is host-side**, not the QuickJS post-`await` continuation — `Promise.all` / destructured binds work via `extractBindingPattern` + `vm.setVar`. → `@.claude/arch/turn-loop.md`
+- **Yield-result binding is host-side**, not the QuickJS post-`await` continuation — `Promise.all` / destructured binds work via `extractBindingPattern` + `vm.setVar`, falling back to the VM's own computed value (`vm.getVar`) when a yield is nested inside another async function (e.g. `webSearch()` awaiting `fetch()` internally) — see DEVELOPMENT.md §5. → `@.claude/arch/turn-loop.md`
+- **A bridged host-function promise must not be disposed before it settles** — `sandbox/host-bridge.ts` used to dispose the QuickJS promise deferred immediately on creation; `resolve()`/`reject()` are no-ops after `dispose()` (quickjs-emscripten), so a yield nested inside another async function could never resume. Fixed by disposing on settle, with an `alive`-guard + per-context pending-deferred registry so a VM torn down mid-flight (budget cap, timeout) doesn't leave a live handle blocking `ctx.dispose()`.
 - **Forks always salvage a value unless hard-capped** — `BudgetExceededError` propagates; an explicit `timeout` rejects; orchestrator/delegate forks (no timeout) always salvage. → `@.claude/arch/fork-tasklist.md`
 - **Yield errors surface to the model** (retryable), not silent `undefined`; hard caps still short-circuit. → `@.claude/arch/turn-loop.md`
 - **`delegate()`'s `action` is optional** — omit for model-driven delegation; auto-captures tasklist results. → `@.claude/arch/delegate.md`
@@ -60,6 +61,12 @@ One-liners — full explanations are in the linked file.
 - **The server exposes system/user spaces as a synthetic `system` project** — `listProjects` (`libs/cli/src/server/projects.ts`) prepends `{id:'system'}` when `<root>/system/spaces/` is non-empty, so Studio can list/view/edit them through the normal `/api/projects/system/spaces/...` routes (`<root>/system/spaces/<id>` matches the generic `<root>/<projectId>/spaces/<id>` shape). `system` is reserved (can't be created/deleted as a project).
 - **`execShell` / `readFileRaw` / `writeFileRaw` rooted at `LMTHING_SPACE_DIR`**, not `process.cwd()`. → `@.claude/skills/system-spaces.md`
 - **JSX in model output** is transpiled to `React.createElement`; the JSX runtime is injected into every VM (sessions, forks, delegates). → `@.claude/arch/typecheck.md`
+- **Per-task capability is declared in tasklist frontmatter, enforced by the host** — `role` (`explore`/`plan` = read-only, `general` = write), `functions: [...]` (allowlist; **`[]` = no functions at all, incl. `webSearch`/`webFetch`**; omit = all), `forEach: "<task>.<field>"` (fan-out), `canDelegateTo` (delegation allowlist). **Never forbid a tool in prose — disable it in frontmatter.** → `libs/core/system-spaces/DEVELOPMENT.md`
+- **`forEach` map node** — the host runs the task once per element of an upstream array (parallel, within the fork cap), injects the element as `item`/`index`, and collects results into an array for dependents; the model never writes the loop. → `tasklist/orchestrator.ts` · DEVELOPMENT.md §3
+- **`charter.md` vs `instruct.md`** — `agents/<slug>/charter.md` (short, fork-safe identity/guardrails, no ask/delegate/UI prose) is injected into the top-level prompt **and every fork**; `instruct.md` (orchestration/routing) is top-level only. Forks also receive the tasklist `index.md` goal as standing context. → DEVELOPMENT.md §1
+- **Tasks have no `tasklist`/`fork`/`ask` and no `delegate` unless they opt in** — these are **stripped from the fork DTS** (stray calls fail typecheck, not at runtime). A task adds `delegate` back, allowlisted to `space/agent#action`, via frontmatter `canDelegateTo`; routed through `delegateRunner` wired at BOTH ForkEngine sites (`session.ts`, `delegate.ts` — the architect runs as a delegatee). → `fork/fork.ts` `resolveTaskDelegate` · DEVELOPMENT.md §3a
+- **Soft todos** — open `.lmthing/todos.json` items (`todoWrite`/`todoRead`) are re-injected into every top-level turn (non-blocking) so the agent doesn't forget them. → `session.ts readTodoReminder`
+- **Per-stream idle watchdog** — a no-token model-stream stall (`streamIdleMs`, default 60s) is retried as a transient error. **Caveat:** it cannot fire while a synchronous call (e.g. `execShell`) blocks the Node event loop. `fetch` is no longer in this category — it's a real, non-blocking yield (`globals/fetch.ts`), not `execSync(curl)`. → `eval/turn-loop.ts` · DEVELOPMENT.md §5
 
 ## Session API (`libs/core/src/session/session.ts`)
 
@@ -92,7 +99,6 @@ Secrets (Claude Code web): API keys stored encrypted in `.env.encrypted` (AES-25
 See `.issues/`. When all are resolved this section is empty.
 
 - `system-spaces-bundle-resolution.md` — `defaultSystemSpaceDirs()` resolves relative to the cli bundle; only the Docker image co-locates the assets, so a non-Docker built `serve` gets an empty `system/` and sessions fail with `Agent "thing" not found` (agent slug `thing`, in the `user-thing` space). `materializeRuntime` now warns + `runtimeNeedsInit` repairs an empty dir.
-- `architect-synthesize-stall.md` — the `system-architect` `synthesize_and_run` pipeline can hang mid-turn on a silent no-token model stream (observed on the prod free-tier pod): the turn loop retries dropped/"terminated" streams but has no inactivity watchdog for a stream that stops emitting tokens, so the orchestrator waits on the fork forever and no space is scaffolded. Needs a per-stream idle timeout.
 
 ## Rules
 
@@ -109,6 +115,7 @@ Load the matching file when working on:
 | the `lmthing` project server / session persistence / `.lmthing/` layout | `@.claude/skills/project-server.md` |
 | terminal+web UI design system (catalog, renderers, theming) | `@.claude/skills/ui-design-system.md` |
 | system spaces / host primitives / fork roles | `@.claude/skills/system-spaces.md` |
+| **developing the system spaces** (role/functions/forEach, charter split, architect/research pipelines, live-test commands, gotchas) | [./libs/core/system-spaces/DEVELOPMENT.md](./libs/core/system-spaces/DEVELOPMENT.md) |
 | creating or modifying a space | `@.claude/skills/new-space.md` |
 | adding a value-yielding global | `@.claude/skills/new-global.md` |
 | adding an AI provider | `@.claude/skills/new-provider.md` |

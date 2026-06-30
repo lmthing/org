@@ -21,6 +21,17 @@ export function validateDag(tasks: Record<string, TaskNode>): void {
         }
       }
     }
+    // forEach must name an upstream task (the head segment) that this task depends on, so
+    // its output array is available by the time the host fans this task out.
+    if (task.forEach) {
+      const head = task.forEach.split('.')[0]!;
+      if (!(head in tasks)) {
+        throw new Error(`Task "${id}" forEach references unknown task "${head}"`);
+      }
+      if (!(task.dependsOn ?? []).includes(head)) {
+        throw new Error(`Task "${id}" forEach "${task.forEach}" must also be listed in dependsOn (add "${head}")`);
+      }
+    }
   }
 
   // Check no cycles using DFS

@@ -44,6 +44,22 @@ function evalDump(vm: VM, code: string): unknown {
   return value;
 }
 
+/** Evaluate `await (<expr>)` and dump the resolved value — `webFetch`/`webSearch` are
+ *  async functions now; a bare (un-awaited) `ctx.evalCode` would just dump the pending
+ *  Promise. When the stubbed `fetch` resolves via a real (already-settled) Promise, the
+ *  host-bridge's continuation runs as a Node microtask, not synchronously within
+ *  `drivePendingJobs()` — so this must actually yield to the event loop before reading
+ *  the value back (reuses the same propagate-then-readback path turn-loop uses). */
+async function evalAwaitDump(vm: VM, expr: string): Promise<unknown> {
+  const res = vm.evalStatement(`const __r = await (${expr}); globalThis['__r'] = __r;`);
+  if (!res.ok) throw new Error(`eval error: ${res.error}`);
+  for (let i = 0; i < 5 && vm.getVar('__r') === undefined; i++) {
+    await new Promise((resolve) => setImmediate(resolve));
+    vm.drivePendingJobs();
+  }
+  return vm.getVar('__r');
+}
+
 describe('system/memory functions (round-trip through host primitives)', () => {
   let vm: VM;
   let dir: string;
@@ -175,21 +191,26 @@ describe('system/web webFetch function (HTML → text)', () => {
   const HTML =
     '<!doctype html><html><head><title>T</title><style>.a{color:red}</style></head>' +
     '<body><h1>Hello &amp; welcome</h1><script>var x=1;</script>' +
-    '<p>First para.</p><p>Second &lt;para&gt;.</p></body></html>';
+    '<p>First para.</p><p>Second &lt;para&gt;.</p>' +
+    '<p>See <a href="https://example.com/page">the docs</a> for more.</p>' +
+    '<ul><li>One</li><li>Two</li></ul></body></html>';
 
-  /** Override the host fetch with a stub returning fixed HTML. */
+  /** Override the host fetch with a real-Promise-returning stub for fixed HTML
+   *  (webFetch is now `async function ... { await fetch(...) }`, so the stub must
+   *  resolve like the real yield-based fetch global does). */
   function stubFetch(htmlBody: string): void {
-    injectGlobal(vm.ctx, 'fetch', ((_url: string) => ({
-      ok: true,
-      status: 200,
-      text: () => htmlBody,
-      json: () => ({}),
-    })) as (...a: unknown[]) => unknown);
+    injectGlobal(vm.ctx, 'fetch', ((_url: string) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: () => htmlBody,
+        json: () => ({}),
+      })) as (...a: unknown[]) => unknown);
   }
 
-  it('strips tags/script/style and decodes entities by default', () => {
+  it('strips tags/script/style and decodes entities by default', async () => {
     stubFetch(HTML);
-    const r = evalDump(vm, `webFetch("http://x")`) as { ok: boolean; content: string };
+    const r = await evalAwaitDump(vm, `webFetch("http://x")`) as { ok: boolean; content: string };
     expect(r.ok).toBe(true);
     expect(r.content).toContain('Hello & welcome');
     expect(r.content).toContain('First para.');
@@ -199,10 +220,100 @@ describe('system/web webFetch function (HTML → text)', () => {
     expect(r.content).not.toContain('color:red'); // style body dropped
   });
 
-  it('returns raw HTML when format:"html"', () => {
+  it('returns raw HTML when format:"html"', async () => {
     stubFetch(HTML);
-    const r = evalDump(vm, `webFetch("http://x", { format: "html" })`) as { content: string };
+    const r = await evalAwaitDump(vm, `webFetch("http://x", { format: "html" })`) as { content: string };
     expect(r.content).toContain('<p>First para.</p>');
+  });
+
+  it('preserves structure as Markdown when format:"markdown"', async () => {
+    stubFetch(HTML);
+    const r = await evalAwaitDump(vm, `webFetch("http://x", { format: "markdown" })`) as { content: string };
+    expect(r.content).toContain('# Hello & welcome');
+    expect(r.content).toContain('[the docs](https://example.com/page)');
+    expect(r.content).toContain('- One');
+    expect(r.content).toContain('- Two');
+    expect(r.content).not.toContain('<h1>');
+    expect(r.content).not.toContain('<a ');
+  });
+});
+
+describe('system/web webSearch function (DuckDuckGo fallback)', () => {
+  let vm: VM;
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'sysweb-search-'));
+    vm = await createVM();
+    injectHostTools(vm, { renderHost: host, spaceDir: dir });
+    const [web] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'system-global')]);
+    injectFunctions(vm, web!.functions);
+  });
+
+  afterEach(() => {
+    vm.dispose();
+    rmSync(dir, { recursive: true, force: true });
+    delete process.env['TAVILY_API_KEY'];
+  });
+
+  // A DuckDuckGo HTML-lite results fragment: one result wrapped in the `/l/?uddg=`
+  // redirect (must be decoded to recover the real target), with a title and snippet.
+  const DDG_HTML = `
+    <div class="result results_links">
+      <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Farticle&amp;rut=abc">Example Article Title</a>
+      <a class="result__snippet">A short snippet about the article.</a>
+    </div>
+  `;
+
+  it('falls back to DuckDuckGo when TAVILY_API_KEY is unset, decoding the redirect URL', async () => {
+    delete process.env['TAVILY_API_KEY'];
+    injectGlobal(vm.ctx, 'fetch', ((_url: string) =>
+      Promise.resolve({ ok: true, status: 200, text: () => DDG_HTML, json: () => ({}) })) as (...a: unknown[]) => unknown);
+
+    const r = await evalAwaitDump(vm, `webSearch("test query")`) as {
+      ok: boolean;
+      results: Array<{ title: string; url: string; snippet: string }>;
+    };
+    expect(r.ok).toBe(true);
+    expect(r.results.length).toBe(1);
+    expect(r.results[0]!.title).toBe('Example Article Title');
+    expect(r.results[0]!.url).toBe('https://example.com/article');
+    expect(r.results[0]!.snippet).toContain('short snippet');
+  });
+
+  it('uses Tavily when the key is set (provider: "auto" default)', async () => {
+    // `process.env` inside the VM is a snapshot taken when injectHostTools ran (in
+    // beforeEach) — mutating the host's real process.env now wouldn't propagate.
+    // Override the VM's `process` global directly instead.
+    injectGlobal(vm.ctx, 'process', { env: { TAVILY_API_KEY: 'test-key' } } as unknown as (...a: unknown[]) => unknown);
+    let calledUrl = '';
+    injectGlobal(vm.ctx, 'fetch', ((url: string) => {
+      calledUrl = url;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: () => '',
+        json: () => ({ query: 'q', answer: 'tavily answer', results: [] }),
+      });
+    }) as (...a: unknown[]) => unknown);
+
+    const r = await evalAwaitDump(vm, `webSearch("test query")`) as { ok: boolean; answer: string };
+    expect(calledUrl).toBe('https://api.tavily.com/search');
+    expect(r.ok).toBe(true);
+    expect(r.answer).toBe('tavily answer');
+  });
+
+  it('provider: "duckduckgo" forces the scrape even when a Tavily key is set', async () => {
+    process.env['TAVILY_API_KEY'] = 'test-key';
+    let calledUrl = '';
+    injectGlobal(vm.ctx, 'fetch', ((url: string) => {
+      calledUrl = url;
+      return Promise.resolve({ ok: true, status: 200, text: () => DDG_HTML, json: () => ({}) });
+    }) as (...a: unknown[]) => unknown);
+
+    const r = await evalAwaitDump(vm, `webSearch("test query", { provider: "duckduckgo" })`) as { ok: boolean };
+    expect(calledUrl).toContain('html.duckduckgo.com');
+    expect(r.ok).toBe(true);
   });
 });
 

@@ -12,6 +12,19 @@ export interface TaskNode {
   condition?: string; // DSL expression
   optional?: boolean;
   goal?: boolean;
+  /** Fork capability profile for this task's subagent (default 'general' when omitted).
+   *  Read-only roles ('explore'/'plan') cannot write files or run mutating shell. */
+  role?: 'explore' | 'plan' | 'general';
+  /** Allowlist of space-function names available to this task's fork. When set, only these
+   *  functions are injected + listed in the prompt (least privilege); omit for all. */
+  functions?: string[];
+  /** Host-driven fan-out: "<upstreamTaskId>.<field>" (or bare "<upstreamTaskId>") naming an
+   *  upstream array. The host runs this task once per element, in parallel, and collects the
+   *  resolved values into an array. The element is injected into each fork as `item` (+ `index`). */
+  forEach?: string;
+  /** Per-task delegation allowlist: `"space/agent"` (any action) or `"space/agent#action"`.
+   *  When set, the task's fork may `delegate()` to exactly these targets (and nothing else). */
+  canDelegateTo?: string[];
 }
 
 export async function loadTasklist(dir: string, files: string[]): Promise<Record<string, TaskNode>> {
@@ -60,6 +73,18 @@ export async function loadTasklist(dir: string, files: string[]): Promise<Record
     }
     if (data['goal'] === true) {
       task.goal = true;
+    }
+    if (data['role'] === 'explore' || data['role'] === 'plan' || data['role'] === 'general') {
+      task.role = data['role'];
+    }
+    if (Array.isArray(data['functions'])) {
+      task.functions = data['functions'].map(String);
+    }
+    if (typeof data['forEach'] === 'string' && data['forEach'].trim()) {
+      task.forEach = data['forEach'].trim();
+    }
+    if (Array.isArray(data['canDelegateTo'])) {
+      task.canDelegateTo = data['canDelegateTo'].map(String);
     }
 
     tasks[id] = task;

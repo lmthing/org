@@ -2,9 +2,17 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer, type Server } from 'node:http';
 import { createVM, type VM } from '../sandbox/quickjs.js';
 import { injectHostTools } from './host-tools.js';
+import { injectGlobal } from '../sandbox/host-bridge.js';
+import { createFetchGlobal } from './fetch.js';
+import { resolveFetchYield } from '../eval/fetch-yield.js';
+import { runTurnLoop } from '../eval/turn-loop.js';
+import { MessageHistory } from '../context/history.js';
 import type { RenderHost } from '../session/types.js';
+import type { StreamSession, StreamOpts } from '../eval/stream-types.js';
+import type { YieldRequest } from '../eval/yield.js';
 
 const silentHost: RenderHost = {
   display: () => {},
@@ -212,18 +220,104 @@ describe('injectHostTools — execShell exitCode', () => {
   });
 });
 
-describe('injectHostTools — fetch', () => {
+/** A streamFn that emits `statements` on the first turn, then nothing (so the loop ends). */
+function scriptedStream(statements: string): (opts: StreamOpts) => Promise<StreamSession> {
+  let calls = 0;
+  return async () => {
+    const text = calls++ === 0 ? statements : '';
+    let aborted = false;
+    async function* gen() { if (!aborted && text) yield text; }
+    return { textStream: gen(), abort() { aborted = true; } } as StreamSession;
+  };
+}
+
+function readGlobal(vm: VM, name: string): unknown {
+  const h = vm.ctx.getProp(vm.ctx.global, name);
+  try { return vm.ctx.dump(h); } finally { h.dispose(); }
+}
+
+describe('fetch — real async yield (replaces execSync(curl))', () => {
   it('returns ok:false (does not hang) when the connection is refused', async () => {
     const vm = await createVM();
-    injectHostTools(vm, { renderHost: silentHost, spaceDir: '/tmp' });
-    // Port 1 is reserved and refuses fast; with the curl --max-time guard a hung
-    // endpoint can no longer block the thread forever (stopgap until the Wave-2
-    // async client lands). This proves the error path returns a value, not a hang.
+    const pushYield = (req: YieldRequest) => { vm.pendingYields.push(req); };
+    injectGlobal(vm.ctx, 'fetch', createFetchGlobal(pushYield) as (...a: unknown[]) => unknown);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
     const started = Date.now();
-    const r = evalDump(vm, `fetch("http://127.0.0.1:1/")`) as { ok: boolean; status: number };
-    expect(r.ok).toBe(false);
-    expect(r.status).toBe(0);
+    const result = await runTurnLoop({
+      vm, history, systemBlock: 'test',
+      ambientDts: 'declare function fetch(url: string, opts?: unknown): Promise<{ ok: boolean; status: number }>;',
+      renderHost: silentHost,
+      // Port 1 is reserved and refuses fast.
+      streamFn: scriptedStream('const r = await fetch("http://127.0.0.1:1/");'),
+      processYield: async (req) => {
+        const [url, opts] = req.args as [string, undefined];
+        return resolveFetchYield(url, opts);
+      },
+      maxRetries: 2,
+    });
+
+    expect(result).toBe('done');
+    expect(readGlobal(vm, 'r')).toMatchObject({ ok: false, status: 0 });
     expect(Date.now() - started).toBeLessThan(31000);
     vm.dispose();
+  });
+
+  it('resolves two concurrent fetches without serializing — proves the event loop is not blocked', async () => {
+    // A local server that records each request's ARRIVAL time, then delays its
+    // response. If fetch blocked the thread (the old execSync(curl) behavior), the
+    // second request could not even arrive until the first's response was fully
+    // read; resolved concurrently, both arrive within milliseconds of each other.
+    const arrivals: number[] = [];
+    const server: Server = createServer((_req, res) => {
+      arrivals.push(Date.now());
+      setTimeout(() => { res.end('ok'); }, 150);
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    const vm = await createVM();
+    const pushYield = (req: YieldRequest) => { vm.pendingYields.push(req); };
+    injectGlobal(vm.ctx, 'fetch', createFetchGlobal(pushYield) as (...a: unknown[]) => unknown);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    // A host-side timer that should fire WHILE both fetches are in flight — proving
+    // the Node thread keeps running other work instead of blocking on the request.
+    let timerFiredDuringFetch = false;
+    const timer = setTimeout(() => { timerFiredDuringFetch = true; }, 50);
+
+    try {
+      const result = await runTurnLoop({
+        vm, history, systemBlock: 'test',
+        ambientDts: 'declare function fetch(url: string, opts?: unknown): Promise<{ ok: boolean; status: number }>;',
+        renderHost: silentHost,
+        streamFn: scriptedStream(
+          `const [a, b] = await Promise.all([fetch("http://127.0.0.1:${port}/"), fetch("http://127.0.0.1:${port}/")]);`,
+        ),
+        processYield: async (req) => {
+          const [url, opts] = req.args as [string, undefined];
+          return resolveFetchYield(url, opts);
+        },
+        maxRetries: 2,
+      });
+
+      expect(result).toBe('done');
+      expect(readGlobal(vm, 'a')).toMatchObject({ ok: true, status: 200 });
+      expect(readGlobal(vm, 'b')).toMatchObject({ ok: true, status: 200 });
+      expect(arrivals.length).toBe(2);
+      // Both requests reached the server within a tight window of each other —
+      // serialized, the second couldn't arrive until ~150ms after the first.
+      expect(Math.abs(arrivals[1]! - arrivals[0]!)).toBeLessThan(100);
+      expect(timerFiredDuringFetch).toBe(true);
+    } finally {
+      clearTimeout(timer);
+      vm.dispose();
+      server.close();
+    }
   });
 });

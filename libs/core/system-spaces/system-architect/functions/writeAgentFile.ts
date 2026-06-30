@@ -17,6 +17,10 @@ interface AgentFileSpec {
   agentSlug: string;
   agentTitle: string;
   systemPrompt: string;
+  /** Short fork-safe charter (identity + domain + standing guardrails) — written to
+   *  charter.md and injected into the agent's top-level prompt AND every task fork.
+   *  Keep it 2-4 sentences; NO ask/delegate/UI/routing instructions (a fork can't honor those). */
+  charter?: string;
   /** Bare function names (no .ts) the agent declares — written separately via writeFunctionFile. */
   functions?: string[];
   /** Knowledge refs "<domain>/<field>" (field-level) or "<domain>/<field>/<option>" (preload). */
@@ -83,7 +87,16 @@ export function writeAgentFile(
     items.length > 0 ? `${key}:\n` + items.map((n) => `  - ${n}`).join('\n') : `${key}: []`;
 
   const functionNames = (spec.functions ?? []).map(stripExt);
-  const knowledgeRefs = spec.knowledge ?? [];
+  // Safety net (host enforces): drop any declared knowledge ref whose index.md was not
+  // actually written — a weak model sometimes over-declares a field it planned but the
+  // build step never created. Keeping it would fail validateSpace and abort the whole
+  // build; dropping it lets the agent ship with the knowledge that DOES exist.
+  const knowledgeRefs = (spec.knowledge ?? []).filter((ref) => {
+    const parts = String(ref).split('/');
+    if (parts.length !== 2) return false; // must be "<domain>/<field>"
+    const idx = readFileRaw(joinPath(dir, 'knowledge', parts[0]!, parts[1]!, 'index.md'), { limit: 1 });
+    return idx.ok;
+  });
   const componentNames = (spec.components ?? []).map(stripExt);
   const delegateTargets = spec.canDelegateTo ?? [];
   const actions = spec.actions ?? [];
@@ -121,5 +134,16 @@ export function writeAgentFile(
   const path = joinPath(dir, 'agents', slug, 'instruct.md');
   const w = writeFileRaw(path, frontmatter);
   if (!w.ok) return { ok: false, path, error: `Failed to write ${path}: ${w.error}` };
+
+  // charter.md — fork-safe identity/guardrails (no frontmatter). Injected into every task
+  // fork as well as the top-level prompt. Required by validateSpace, so always write one:
+  // fall back to a minimal charter derived from the title when none is supplied.
+  const charterBody = (spec.charter && spec.charter.trim())
+    ? spec.charter.trim()
+    : `You are ${spec.agentTitle}. Answer the user's request in your domain accurately and concisely, grounded only in what you actually know or load — never fabricate.`;
+  const charterPath = joinPath(dir, 'agents', slug, 'charter.md');
+  const cw = writeFileRaw(charterPath, charterBody + '\n');
+  if (!cw.ok) return { ok: false, path: charterPath, error: `Failed to write ${charterPath}: ${cw.error}` };
+
   return { ok: true, path };
 }

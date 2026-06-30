@@ -1,0 +1,75 @@
+import { describe, it, expect } from 'vitest';
+import { createVM } from '../sandbox/quickjs.js';
+import { runTurnLoop } from './turn-loop.js';
+import { MessageHistory } from '../context/history.js';
+import { LIBRARY_DTS } from '../typecheck/library-dts.js';
+import type { RenderHost } from '../session/types.js';
+import type { StreamSession, StreamOpts } from './stream-types.js';
+
+const silentHost: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
+
+describe('turn loop — beforeTurn soft reminder', () => {
+  it('appends the beforeTurn reminder to the request messages without persisting it', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const seenMessages: Array<Array<{ role: string; content: string }>> = [];
+    let calls = 0;
+    const streamFn = async (o: StreamOpts): Promise<StreamSession> => {
+      seenMessages.push(o.messages);
+      const text = calls++ === 0 ? 'const x = 1;' : '';
+      let aborted = false;
+      async function* gen() { if (!aborted && text) yield text; }
+      return { textStream: gen(), abort() { aborted = true; } } as StreamSession;
+    };
+
+    await runTurnLoop({
+      vm, history, systemBlock: 'test', ambientDts: LIBRARY_DTS,
+      renderHost: silentHost, streamFn,
+      processYield: async () => undefined,
+      beforeTurn: () => '## Open todos\n- [ ] finish the thing',
+    });
+
+    // The reminder rode along on the request as a trailing user message...
+    const firstReq = seenMessages[0]!;
+    expect(firstReq[firstReq.length - 1]!.content).toContain('Open todos');
+    // ...but was NOT written to history (so it re-injects fresh, never duplicating).
+    expect(history.messages.some((m) => m.content.includes('Open todos'))).toBe(false);
+    vm.dispose();
+  });
+});
+
+describe('turn loop — idle watchdog', () => {
+  it('retries a stream that stalls with no tokens (treats the stall as transient)', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    let calls = 0;
+    const streamFn = async (): Promise<StreamSession> => {
+      const turn = calls++;
+      const stall = turn === 0; // first turn emits no tokens and never ends → idle timeout
+      let aborted = false;
+      async function* gen() {
+        if (stall) { await new Promise<void>(() => {}); }      // hangs forever
+        else if (!aborted) yield 'const recovered = true;';    // binds → globalThis via the loop
+      }
+      return { textStream: gen(), abort() { aborted = true; } } as StreamSession;
+    };
+
+    const result = await runTurnLoop({
+      vm, history, systemBlock: 'test', ambientDts: LIBRARY_DTS,
+      renderHost: silentHost, streamFn,
+      processYield: async () => undefined,
+      maxRetries: 3,
+      streamIdleMs: 40, // tiny so the stalled turn trips the watchdog fast
+    });
+
+    expect(result).toBe('done');
+    expect(calls).toBeGreaterThanOrEqual(2); // the stalled turn was retried
+    const h = vm.ctx.getProp(vm.ctx.global, 'recovered');
+    try { expect(vm.ctx.dump(h)).toBe(true); } finally { h.dispose(); }
+    vm.dispose();
+  });
+});

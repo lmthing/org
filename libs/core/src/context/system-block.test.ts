@@ -30,6 +30,7 @@ function makeAgent(functionNames: string[]): AgentDef {
     slug: 'main',
     title: 'Main',
     instructBody: 'Do the thing.',
+    charterBody: '',
     actions: [],
     canDelegateTo: [],
     config: { knowledge: [], functions: functionNames, components: [] },

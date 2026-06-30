@@ -15,6 +15,18 @@ interface TaskFileSpec {
   goal?: boolean;
   optional?: boolean;
   condition?: string;
+  /** Fork capability profile: 'explore'/'plan' are READ-ONLY (no writeFileRaw, no mutating
+   *  shell); 'general' has the full toolkit. Default 'general'. Choose the least that works. */
+  role?: 'explore' | 'plan' | 'general';
+  /** Allowlist of space-function names this task's fork may call (least privilege). Omit for all. */
+  functions?: string[];
+  /** Host-driven fan-out: "<upstreamTaskId>.<field>" naming an upstream array. The task runs
+   *  once per element (parallel), each fork receiving the element as `item`; results collect
+   *  into an array. The referenced task MUST also be in dependsOn. */
+  forEach?: string;
+  /** Per-task delegation allowlist: "space/agent" or "space/agent#action". When set, the task
+   *  may delegate() to exactly these targets (and nothing else). */
+  canDelegateTo?: string[];
   /** Force a specific 1-based ordinal; otherwise reuse the existing one for this id or append. */
   ordinal?: number;
 }
@@ -88,6 +100,9 @@ export function writeTaskFile(
   const deps = spec.dependsOn ?? [];
   const dependsOnYaml = deps.length > 0 ? `dependsOn: [${deps.join(', ')}]` : 'dependsOn: []';
 
+  const role = spec.role === 'explore' || spec.role === 'plan' || spec.role === 'general' ? spec.role : undefined;
+  const functions = Array.isArray(spec.functions) ? spec.functions.map((f) => String(f).replace(/\.(ts|md)$/i, '')) : [];
+
   const lines = [
     '---',
     `id: ${id}`,
@@ -96,6 +111,12 @@ export function writeTaskFile(
     dependsOnYaml,
     `optional: ${spec.optional ?? false}`,
     `goal: ${spec.goal ?? false}`,
+    ...(role ? [`role: ${role}`] : []),
+    ...(functions.length > 0 ? ['functions:', ...functions.map((f) => `  - ${f}`)] : []),
+    ...(spec.forEach ? [`forEach: ${String(spec.forEach).trim()}`] : []),
+    ...(Array.isArray(spec.canDelegateTo) && spec.canDelegateTo.length > 0
+      ? ['canDelegateTo:', ...spec.canDelegateTo.map((t) => `  - ${String(t).trim()}`)]
+      : []),
     ...(spec.condition ? [`condition: "${String(spec.condition).replace(/"/g, '\\"')}"`] : []),
     '---',
     '',

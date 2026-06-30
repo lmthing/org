@@ -132,16 +132,24 @@ describe('system-architect space loads with the restructured tasklists', () => {
     expect(space.agents['skill-to-space-transformer']).toBeUndefined();
   });
 
-  it('synthesize_and_run is a valid DAG: understand→research→build→register→execute, execute is the goal', async () => {
+  it('synthesize_and_run is a valid DAG: design→(build_field/build_function fan-out)→write_agent→write_tasks→validate→register→finalize', async () => {
     const space = await loadSpace(ARCHITECT_DIR);
     const tasks = await loadTasklistFromSpace(space, 'synthesize_and_run');
     expect(() => validateDag(tasks)).not.toThrow();
-    expect(Object.keys(tasks).sort()).toEqual(['build', 'execute', 'register', 'research', 'understand']);
-    expect(resolveGoalTask(tasks)?.id).toBe('execute');
-    expect(tasks['build']!.dependsOn).toEqual(['understand', 'research']);
-    expect(tasks['register']!.dependsOn).toEqual(['build']);
-    // research degrades gracefully → its knowledge output is an array (salvage-aligned).
-    expect(tasks['research']!.output['knowledge']).toBe('array');
+    expect(Object.keys(tasks).sort()).toEqual(
+      ['build_field', 'build_function', 'design', 'finalize', 'register', 'validate', 'write_agent', 'write_tasks'],
+    );
+    expect(resolveGoalTask(tasks)?.id).toBe('finalize');
+    // Per-file builds fan out over the design step's arrays (host-driven map nodes).
+    expect(tasks['build_field']!.forEach).toBe('design.fields');
+    expect(tasks['build_function']!.forEach).toBe('design.functions');
+    // Read-only steps are explore; file-writing steps are general (least privilege).
+    expect(tasks['design']!.role).toBe('explore');
+    expect(tasks['write_agent']!.role).toBe('general');
+    expect(tasks['validate']!.role).toBe('explore');
+    // write_agent waits for both fan-outs; register waits for validate.
+    expect(tasks['write_agent']!.dependsOn).toEqual(['design', 'build_field', 'build_function']);
+    expect(tasks['register']!.dependsOn).toEqual(['design', 'validate']);
   });
 
   it('iterate_space is a valid DAG: load→diagnose→edit→reregister→redelegate, redelegate is the goal', async () => {

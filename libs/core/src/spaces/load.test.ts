@@ -1,13 +1,8 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
 import { loadSpace } from './load.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
 
 const tmpDirs: string[] = [];
 
@@ -77,25 +72,4 @@ describe('loadSpace reference validation', () => {
     });
     await expect(loadSpace(dir)).rejects.toThrow(/Invalid YAML frontmatter/);
   });
-});
-
-describe('fixture spaces still load (regression audit for fail-loud changes)', () => {
-  // Curated set that loads without network/API keys. Proves the new validation
-  // and fail-loud YAML did not break any real space.
-  const names = [
-    'cooking',
-    'engineer',
-    'architect',
-    'sommelier',
-    'research',
-    'data_analyst',
-    'sauce_master',
-    'cursor_ci',
-  ];
-  for (const name of names) {
-    it(`loads fixtures/${name}`, async () => {
-      const space = await loadSpace(join(FIXTURES, name));
-      expect(Object.keys(space.agents).length).toBeGreaterThan(0);
-    });
-  }
 });

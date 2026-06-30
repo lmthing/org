@@ -82,6 +82,13 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
       continue;
     }
 
+    // charter.md is required — it is the fork-safe identity injected into every task fork.
+    // Write it with writeAgentFile's `charter` field (a short 2-4 sentence identity/guardrails).
+    const charterRead = readFileRaw(joinPath(dir, 'agents', slug, 'charter.md'), { limit: 40 });
+    if (!charterRead.ok || charterRead.content.trim().length < 20) {
+      errors.push(`Agent "${slug}": missing or too-short charter.md — pass a 2-4 sentence \`charter\` to writeAgentFile (fork-safe identity/guardrails, no ask/delegate/UI prose)`);
+    }
+
     const fm = fmMatch[1] ?? '';
 
     // The system-prompt body must only reference knowledge options that exist.
@@ -201,7 +208,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
         if (m) idSet.add(m[1]!);
       }
       for (const f of tlFiles) {
-        const r = readFileRaw(joinPath(dir, 'tasklists', tl, f), { limit: 500 });
+        const r = readFileRaw(joinPath(dir, 'tasklists', tl, f), { limit: 2000 });
         if (!r.ok) continue;
         const depMatch = r.content.match(/^dependsOn:\s*\[([^\]]*)\]/m);
         const taskDeps = depMatch
@@ -210,6 +217,24 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
         for (const d of taskDeps) {
           if (!idSet.has(d)) {
             errors.push(`Tasklist "${tl}": task in "${f}" dependsOn "${d}" which is not a known task id`);
+          }
+        }
+
+        // role must be one of the three capability profiles.
+        const roleMatch = r.content.match(/^role:\s*(\S+)/m);
+        if (roleMatch && !['explore', 'plan', 'general'].includes(roleMatch[1]!)) {
+          errors.push(`Tasklist "${tl}": task in "${f}" has invalid role "${roleMatch[1]}" (use explore | plan | general)`);
+        }
+
+        // forEach must reference a known upstream task that is also in this task's dependsOn,
+        // so its output array is available when the host fans the task out.
+        const forEachMatch = r.content.match(/^forEach:\s*(\S+)/m);
+        if (forEachMatch) {
+          const head = forEachMatch[1]!.split('.')[0]!;
+          if (!idSet.has(head)) {
+            errors.push(`Tasklist "${tl}": task in "${f}" forEach references unknown task "${head}"`);
+          } else if (!taskDeps.includes(head)) {
+            errors.push(`Tasklist "${tl}": task in "${f}" forEach "${forEachMatch[1]}" must also be in dependsOn (add "${head}")`);
           }
         }
       }

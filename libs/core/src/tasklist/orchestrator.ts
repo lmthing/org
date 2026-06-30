@@ -6,6 +6,18 @@ import type { TaskNode } from '../spaces/tasklist-load.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { validateInput } from './schema.js';
 
+/** Resolve a `forEach` reference ("taskId" or "taskId.field.subfield") against accumulated
+ *  task outputs. Returns the referenced array, or [] when missing / not an array. */
+function resolveForEachItems(ref: string, allOutputs: Record<string, unknown>): unknown[] {
+  const parts = ref.split('.');
+  let val: unknown = allOutputs[parts[0]!];
+  for (const part of parts.slice(1)) {
+    if (val && typeof val === 'object') val = (val as Record<string, unknown>)[part];
+    else { val = undefined; break; }
+  }
+  return Array.isArray(val) ? val : [];
+}
+
 export async function runTasklist(opts: {
   name: string;
   space: Space;
@@ -110,18 +122,46 @@ export async function runTasklist(opts: {
           const upstreamOutputs = getUpstreamOutputs(task);
           const taskScope = tracer && tasklistScope
             ? tracer.child(tasklistScope, 'task', `fork:${task.id}`, {
-                tasklist: name, dependsOn: task.dependsOn, optional: task.optional, condition: task.condition, goal: task.goal,
+                tasklist: name, dependsOn: task.dependsOn, optional: task.optional, condition: task.condition, goal: task.goal, forEach: task.forEach,
               })
             : undefined;
           taskScopes.set(task.id, taskScope);
-          const output = await forkEngine.fork({
-            instruction: task.instruction,
-            output: task.output,
-            seed: seed,
-            upstreamOutputs: Object.keys(upstreamOutputs).length > 0 ? upstreamOutputs : undefined,
-            taskId: task.id,
-            parentScope: taskScope,
-          });
+
+          const upstream = Object.keys(upstreamOutputs).length > 0 ? upstreamOutputs : undefined;
+          const runFork = (extraSeed?: Record<string, unknown>, elemScope?: TraceScope): Promise<unknown> =>
+            forkEngine.fork({
+              instruction: task.instruction,
+              output: task.output,
+              seed: extraSeed ? { ...(seed ?? {}), ...extraSeed } : seed,
+              upstreamOutputs: upstream,
+              taskId: task.id,
+              role: task.role,
+              functions: task.functions,
+              canDelegateTo: task.canDelegateTo,
+              tasklistDescription: tasklistDir.description,
+              parentScope: elemScope ?? taskScope,
+            });
+
+          // forEach: host-driven fan-out. Resolve the referenced upstream array and run the
+          // task once per element (parallel, within the engine's concurrency cap), injecting
+          // the element as `item` (+ `index`). Collect the resolved values into an array.
+          if (task.forEach) {
+            const items = resolveForEachItems(task.forEach, allOutputs);
+            const output = await Promise.all(
+              items.map((item, index) => {
+                const elemScope = tracer && taskScope
+                  ? tracer.child(taskScope, 'task', `fork:${task.id}[${index}]`, { tasklist: name, forEachIndex: index })
+                  : undefined;
+                return runFork({ item, index }, elemScope).then((value) => {
+                  if (tracer && elemScope) tracer.end(elemScope, 'done', { result: value });
+                  return value;
+                });
+              }),
+            );
+            return { task, output };
+          }
+
+          const output = await runFork();
           return { task, output };
         }),
       );
