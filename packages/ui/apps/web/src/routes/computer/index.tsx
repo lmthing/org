@@ -8,9 +8,7 @@ import { IdeLayout } from '@lmthing/ui/components/computer/ide-layout'
 import type { TerminalTab } from '@lmthing/ui/components/computer/ide-layout'
 import type { TerminalSession } from '@/lib/runtime/types'
 import type { FileTreeNode } from '@/lib/runtime/file-watcher'
-
-const COMPUTER_BASE_URL = import.meta.env.VITE_COMPUTER_BASE_URL
-  ?? (import.meta.env.DEV ? 'https://computer.test' : window.location.origin)
+import { COMPUTER_BASE_URL } from '@/lib/config'
 
 export const Route = createFileRoute('/computer/')({
   component: IdeRoute,

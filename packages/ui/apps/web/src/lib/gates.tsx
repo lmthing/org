@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth, isPodEmbedded, isLocalRun } from '@lmthing/auth'
 import { LoginScreen } from '@lmthing/ui/components/auth/login-screen'
-
-/** Gateway origin — must match @lmthing/auth's cloudUrl (prod: lmthing.cloud). */
-export const CLOUD_BASE_URL =
-  import.meta.env.VITE_CLOUD_URL ??
-  (import.meta.env.DEV ? 'https://cloud.test' : 'https://lmthing.cloud')
+import { CLOUD_BASE_URL } from '@/lib/config'
 
 export const centerStyles: React.CSSProperties = {
   display: 'flex',
