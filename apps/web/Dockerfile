@@ -2,10 +2,10 @@
 # This is the single Vite SPA whose client-side routes (/studio, /computer,
 # /chat) back lmthing.studio, lmthing.computer and lmthing.chat — served
 # statically (JWT-free); only /api/* is proxied to the user's compute pod.
-FROM node:22-slim AS builder
+FROM node:24-slim AS builder
 WORKDIR /repo
 
-# vite-plus (Rust) reads the system CA store; node:22-slim ships without it.
+# vite-plus (Rust) reads the system CA store; node:24-slim ships without it.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
