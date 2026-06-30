@@ -37,7 +37,7 @@ export function isRunnableSpaceFile(path: string): boolean {
 
 /**
  * Thin wrapper over the pod's project/space REST API
- * (`sdk/org/packages/cli/src/server/serve.ts`).
+ * (`sdk/org/libs/cli/src/server/serve.ts`).
  *
  * File I/O is whole-space granularity: a space's full file map is loaded on
  * entry and coalesced back via a wipe-and-rewrite PUT. There is no per-file or

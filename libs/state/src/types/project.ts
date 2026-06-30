@@ -68,7 +68,7 @@ export interface PodProject {
 
 /**
  * Space metadata, as returned by `GET /api/projects/:id/spaces`.
- * Shape mirrors `SpaceMeta` in `sdk/org/packages/cli/src/server/session-manager.ts`.
+ * Shape mirrors `SpaceMeta` in `sdk/org/libs/cli/src/server/session-manager.ts`.
  */
 export interface PodSpaceMeta {
   id: string

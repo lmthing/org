@@ -1,9 +1,0 @@
-{
-  "extends": "@lmthing/config/tsconfig/react-lib",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
-    "types": ["vite/client"]
-  },
-  "include": ["src"]
-}

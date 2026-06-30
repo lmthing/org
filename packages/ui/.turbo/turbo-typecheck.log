@@ -1,4 +1,0 @@
-
-> @lmthing/agent-ui@0.1.0 typecheck /home/vasilis/LMTHING/lmthing/sdk/org/packages/ui
-> tsc --noEmit
-

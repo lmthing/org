@@ -1,0 +1,27 @@
+{
+  "extends": "@lmthing/config/tsconfig/react-lib",
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@lmthing/ui": ["../../libs/ui/src"],
+      "@lmthing/ui/*": ["../../libs/ui/src/*"],
+      "@lmthing/css/*": ["../../libs/css/src/*"],
+      "@lmthing/state": ["../../libs/state/src"],
+      "@lmthing/state/*": ["../../libs/state/src/*"],
+      "@lmthing/auth": ["../../libs/auth/src"],
+      "@lmthing/auth/*": ["../../libs/auth/src/*"]
+    },
+    "allowJs": true,
+    "strict": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

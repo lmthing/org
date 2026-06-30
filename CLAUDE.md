@@ -13,7 +13,7 @@ pnpm typecheck        # tsc --noEmit across all packages (strict)
 pnpm test             # vitest run (co-located tests)
 pnpm dev              # watch + rebuild all packages
 # Single package: pnpm --filter @lmthing/core {build|test}
-# CLI: node packages/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
+# CLI: node libs/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
 ```
 
 Testing without keys: `--mock <file>` / `LM_MOCK=<file>` (scripted streamFn, no credentials). REPL: `--repl`. Programmatic/automated: `--claude`. Web DevTools UI: `--web <port>`. Headless single-shot: `--request "<msg>"` (runs THING agent, streams to stdout, exits — no TUI, no server). Full testing guide → `@.claude/skills/writing-tests.md`.
@@ -22,14 +22,13 @@ Testing without keys: `--mock <file>` / `LM_MOCK=<file>` (scripted streamFn, no 
 
 | Package | Entry | Purpose |
 |---------|-------|---------|
-| `@lmthing/core` | `packages/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
-| `@lmthing/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring, `lmthing serve`. Serves the unified SPA (studio/computer/chat) as a catch-all for non-`/api` requests. |
-| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React component library — exports `<AgentChatPanel>` (embeddable, pod-backed chat: ensure→createSession→`useReplSession`; modes `agentOnly`/`spaceDir`/`sync`). |
-| `@lmthing/web-app` | `packages/ui/apps/web/` | Unified Vite SPA — three product surfaces as client-side routes, served by `lmthing serve` and deployed as separate nginx K8s images per domain. See **App Surfaces** below. |
+| `@lmthing/core` | `libs/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
+| `@lmthing/cli` | `libs/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring, `lmthing serve`. Serves the unified SPA (studio/computer/chat) as a catch-all for non-`/api` requests. |
+| `@lmthing/web-app` | `apps/web/` | Unified Vite SPA — three product surfaces as client-side routes, served by `lmthing serve` and deployed as separate nginx K8s images per domain. See **App Surfaces** below. |
 
 `@lmthing/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
 
-## App Surfaces (`packages/ui/apps/web/`)
+## App Surfaces (`apps/web/`)
 
 The unified SPA (`@lmthing/web-app`) exposes three product surfaces as TanStack Router client-side routes. The CLI's `serve.ts` wires `createStaticApps(resolveAppDist())` as a catch-all for all non-`/api` requests (`LM_APP_DIST` overrides the dist path). The same build is deployed as separate nginx images (`lmthingacr.azurecr.io/{studio,computer,chat}`) — one K8s Deployment per domain, different Envoy JWT+Lua routing per domain.
 
@@ -41,7 +40,7 @@ The unified SPA (`@lmthing/web-app`) exposes three product surfaces as TanStack 
 
 ## Directory map (top level)
 
-`packages/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}` · `packages/cli/src/{providers,stream,render,rpc,web,cli,server}` · `packages/ui/src/{app,store,client,components,compat,lib,theme}` · `packages/ui/apps/web/{src,public}` (unified SPA). Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
+`libs/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}` · `libs/cli/src/{providers,stream,render,rpc,web,cli,server}` · `libs/ui/src/{app,store,client,components,compat,lib,theme}` · `apps/web/{src,public}` (unified SPA). Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
 
 ## Top gotchas
 
@@ -57,12 +56,12 @@ One-liners — full explanations are in the linked file.
 - **`tasklist`/`delegate`/`loadKnowledge` return `any`**, and a space function with no explicit return type is declared `any` — so `result.field` reads without a cast. Narrate via `// comments`, never bare prose. → `@.claude/arch/typecheck.md`
 - **Transient stream errors retry** (a dropped/"terminated" connection isn't mistaken for "done"). → `@.claude/arch/turn-loop.md`
 - **Knowledge: overview in `index.md`, multiple aspect options** — the field `index.md` body is the overview (surfaced to the agent); each field has ≥2 `<aspect>.md` files (no single `overview.md`), loaded on demand. → `@.claude/skills/new-space.md`
-- **System spaces auto-adopt source/image updates** — a pristine materialized copy re-syncs from `defaultSystemSpaceDirs()` on boot; locally-edited ones hold back (adopt with `--adopt-system-spaces`). → `packages/cli/src/cli/runtime-init.ts`
-- **The server exposes system/user spaces as a synthetic `system` project** — `listProjects` (`packages/cli/src/server/projects.ts`) prepends `{id:'system'}` when `<root>/system/spaces/` is non-empty, so Studio can list/view/edit them through the normal `/api/projects/system/spaces/...` routes (`<root>/system/spaces/<id>` matches the generic `<root>/<projectId>/spaces/<id>` shape). `system` is reserved (can't be created/deleted as a project).
+- **System spaces auto-adopt source/image updates** — a pristine materialized copy re-syncs from `defaultSystemSpaceDirs()` on boot; locally-edited ones hold back (adopt with `--adopt-system-spaces`). → `libs/cli/src/cli/runtime-init.ts`
+- **The server exposes system/user spaces as a synthetic `system` project** — `listProjects` (`libs/cli/src/server/projects.ts`) prepends `{id:'system'}` when `<root>/system/spaces/` is non-empty, so Studio can list/view/edit them through the normal `/api/projects/system/spaces/...` routes (`<root>/system/spaces/<id>` matches the generic `<root>/<projectId>/spaces/<id>` shape). `system` is reserved (can't be created/deleted as a project).
 - **`execShell` / `readFileRaw` / `writeFileRaw` rooted at `LMTHING_SPACE_DIR`**, not `process.cwd()`. → `@.claude/skills/system-spaces.md`
 - **JSX in model output** is transpiled to `React.createElement`; the JSX runtime is injected into every VM (sessions, forks, delegates). → `@.claude/arch/typecheck.md`
 
-## Session API (`packages/core/src/session/session.ts`)
+## Session API (`libs/core/src/session/session.ts`)
 
 - `start(message)` — load space, create VM, inject globals, run the turn loop from a fresh user message.
 - `continue(message)` — append a user message to existing history + VM/scope; re-run the turn loop. Auto-summarizes past `maxHistoryTurns*2` messages.
