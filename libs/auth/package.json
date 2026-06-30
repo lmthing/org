@@ -9,12 +9,15 @@
   },
   "sideEffects": false,
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
+    "@lmthing/config": "workspace:*",
     "@types/react": "^19.0.0",
     "typescript": "^5.6.0"
   },

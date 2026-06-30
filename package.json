@@ -6,9 +6,12 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "dev": "pnpm -r --parallel dev"
+    "dev": "pnpm -r --parallel dev",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "devDependencies": {
+    "@lmthing/config": "workspace:*",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0",
     "@vitest/coverage-v8": "^1.6.0",

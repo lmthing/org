@@ -17,7 +17,9 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "dev": "tsup --watch",
-    "fetch-azure-prices": "npx tsx scripts/fetch-azure-prices.ts"
+    "fetch-azure-prices": "npx tsx scripts/fetch-azure-prices.ts",
+    "lint": "eslint .",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@ai-sdk/anthropic": "1.2.12",
@@ -40,6 +42,7 @@
     "yaml": "^2.4.1"
   },
   "devDependencies": {
+    "@lmthing/config": "workspace:*",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@types/ws": "^8.5.10",
