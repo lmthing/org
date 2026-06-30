@@ -23,6 +23,7 @@
     "dev:css": "tailwindcss -i src/app/styles.css -o dist-web/app.css --watch"
   },
   "dependencies": {
+    "@lmthing/auth": "workspace:*",
     "@lmthing/core": "workspace:*",
     "marked": "^14.0.0",
     "react": "^18.3.1",

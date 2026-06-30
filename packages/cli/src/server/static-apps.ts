@@ -29,39 +29,9 @@ function mimeFor(filePath: string): string {
   return MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream';
 }
 
-// ─── Bootstrap IIFE (verbatim from serve.ts buildHtml, projectMode = true) ───
-//
-// Lifted from buildHtml() in serve.ts. Injected before the first
-// <script type="module" in the prebuilt index.html so studio/computer/chat
-// all receive the same globals: __LM_ACCESS_TOKEN__, __WS_URL__, __LM_PROJECT_MODE__.
-
-const BOOTSTRAP_IIFE = `(function(){
-    var p = new URLSearchParams(location.search);
-    var sid = p.get('sessionId') || '';
-    var tok = p.get('access_token') || '';
-    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    window.__LM_PROJECT_MODE__ = true;
-    // Gateway JWT (behind Envoy): stash for the agent-ui fetch/WS layer, then
-    // strip it from the address bar so it isn't bookmarked/leaked (mirrors how
-    // @lmthing/auth clears ?code=).
-    window.__LM_ACCESS_TOKEN__ = tok;
-    if (tok) {
-      p.delete('access_token');
-      var qs = p.toString();
-      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
-    }
-    function wsUrl(extra) {
-      var qp = [];
-      if (extra) qp.push(extra);
-      if (tok) qp.push('access_token=' + encodeURIComponent(tok));
-      return proto + '//' + location.host + '/api/ws' + (qp.length ? '?' + qp.join('&') : '');
-    }
-    if (sid) window.__WS_URL__ = wsUrl('sessionId=' + encodeURIComponent(sid));
-    else if (!true) window.__WS_URL__ = wsUrl('');
-  })();`;
-
-const BOOTSTRAP_TAG = `<script>${BOOTSTRAP_IIFE}</script>`;
-const INJECT_BEFORE = '<script type="module"';
+// The unified app self-authenticates via @lmthing/auth (token in localStorage)
+// and computes its own WS URL, so its index.html is served verbatim — no
+// bootstrap injection is needed.
 
 // ─── App dist resolution ──────────────────────────────────────────────────────
 
@@ -99,33 +69,21 @@ export function resolveAppDist(): string {
   return process.env['LM_APP_DIST'] ?? resolve(base, 'web/dist');
 }
 
-// ─── Bootstrap injection cache ────────────────────────────────────────────────
+// ─── index.html cache ─────────────────────────────────────────────────────────
 
-/** Per-distDir cache of the index.html with the bootstrap <script> spliced in. */
+/** Per-distDir cache of the served index.html (read once, served verbatim). */
 const htmlCache = new Map<string, string>();
 
-async function getInjectedHtml(distDir: string): Promise<string | null> {
+async function getIndexHtml(distDir: string): Promise<string | null> {
   const cached = htmlCache.get(distDir);
   if (cached !== undefined) return cached;
-
-  const indexPath = resolve(distDir, 'index.html');
-  let raw: string;
   try {
-    raw = await readFile(indexPath, 'utf8');
+    const raw = await readFile(resolve(distDir, 'index.html'), 'utf8');
+    htmlCache.set(distDir, raw);
+    return raw;
   } catch {
     return null;
   }
-
-  // Splice the bootstrap tag immediately before the first <script type="module"
-  // so that window.__LM_ACCESS_TOKEN__ / __WS_URL__ / __LM_PROJECT_MODE__ are
-  // set before the app bundle initialises. Single indexOf + string concat.
-  const idx = raw.indexOf(INJECT_BEFORE);
-  const injected = idx === -1
-    ? raw + '\n' + BOOTSTRAP_TAG
-    : raw.slice(0, idx) + BOOTSTRAP_TAG + '\n' + raw.slice(idx);
-
-  htmlCache.set(distDir, injected);
-  return injected;
 }
 
 // ─── Static file serving ──────────────────────────────────────────────────────
@@ -190,9 +148,9 @@ async function serveStaticApp(req: IncomingMessage, res: ServerResponse, distDir
   }
 
   // SPA fallback: / and all unmatched paths (deep client routes like
-  // /projects/123/spaces/x) get the app's index.html with the bootstrap script
-  // injected. no-store so the browser always fetches a fresh copy.
-  const html = await getInjectedHtml(distDir);
+  // /projects/123/spaces/x) get the app's index.html. no-store so the browser
+  // always fetches a fresh copy.
+  const html = await getIndexHtml(distDir);
   if (html === null) {
     res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end(`[lmthing] app not built yet — dist not found at: ${distDir}\nRun the Vite build for this app, or set LM_APP_DIST_* env vars to point at an existing dist.`);
