@@ -4,14 +4,7 @@ import { SpaceProvider } from '@lmthing/state'
 import { useAuth } from '@lmthing/auth'
 import { StudioLayout } from '@lmthing/ui/components/shell/studio-layout'
 import { AgentChatPanel } from '@lmthing/agent-ui'
-
-const COMPUTER_BASE_URL =
-  import.meta.env.VITE_COMPUTER_BASE_URL ??
-  (import.meta.env.DEV ? 'https://computer.test' : window.location.origin)
-
-const CLOUD_BASE_URL =
-  import.meta.env.VITE_CLOUD_URL ??
-  (import.meta.env.DEV ? 'https://cloud.test' : 'https://lmthing.cloud')
+import { COMPUTER_BASE_URL, CLOUD_BASE_URL } from '@/lib/config'
 
 /** The always-on right-side THING chat (pod-backed `thing` agent). */
 function ThingDock() {

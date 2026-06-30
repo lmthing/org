@@ -2,12 +2,7 @@ import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { AppProvider } from '@lmthing/state'
 import { useAuth } from '@lmthing/auth'
 import { PodEnsureGate } from '@/lib/gates'
-
-// Compute pod REST API origin. Studio keeps the JWT and calls the pod API
-// directly (unlike chat, it does NOT full-route to the pod's served UI).
-const COMPUTER_BASE_URL =
-  import.meta.env.VITE_COMPUTER_BASE_URL ??
-  (import.meta.env.DEV ? 'https://computer.test' : window.location.origin)
+import { COMPUTER_BASE_URL } from '@/lib/config'
 
 /**
  * `/studio` layout — studio-specific providers (pod readiness + AppProvider)

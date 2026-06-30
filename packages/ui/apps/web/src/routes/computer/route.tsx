@@ -5,10 +5,7 @@ import { ComputerProvider, useComputer } from '@/lib/runtime/ComputerContext'
 import { ComputerLayout } from '@lmthing/ui/components/computer/computer-layout'
 import { PodEnsureGate } from '@/lib/gates'
 import { useCallback, useEffect, useState } from 'react'
-
-const COMPUTER_BASE_URL =
-  import.meta.env.VITE_COMPUTER_BASE_URL ??
-  (import.meta.env.DEV ? 'https://computer.test' : window.location.origin)
+import { COMPUTER_BASE_URL } from '@/lib/config'
 
 /** Sync the user's GitHub repo into the pod filesystem when authenticated. */
 function RepoSyncGate({ children }: { children: React.ReactNode }) {

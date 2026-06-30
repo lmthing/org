@@ -2,16 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useCallback } from 'react'
 import { useAuth } from '@lmthing/auth'
 import { AgentChatPanel } from '@lmthing/agent-ui'
-
-// In production the pod is reached through the studio origin (Envoy proxies
-// /api/* to the user's compute pod); in dev it's the computer.test host.
-const COMPUTER_BASE_URL =
-  import.meta.env.VITE_COMPUTER_BASE_URL ??
-  (import.meta.env.DEV ? 'https://computer.test' : window.location.origin)
-
-const CLOUD_BASE_URL =
-  import.meta.env.VITE_CLOUD_URL ??
-  (import.meta.env.DEV ? 'https://cloud.test' : 'https://lmthing.cloud')
+import { COMPUTER_BASE_URL, CLOUD_BASE_URL } from '@/lib/config'
 
 /**
  * THING chat — a full-page chat with the user's pod-backed `thing` agent

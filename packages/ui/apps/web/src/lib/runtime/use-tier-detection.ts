@@ -1,11 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@lmthing/auth'
-
-const CLOUD_BASE_URL = import.meta.env.VITE_CLOUD_BASE_URL
-  ?? import.meta.env.VITE_CLOUD_URL
-  ?? (import.meta.env.DEV ? `${window.location.protocol}//cloud.test` : 'https://lmthing.cloud')
-const COMPUTER_BASE_URL = import.meta.env.VITE_COMPUTER_BASE_URL
-  ?? (import.meta.env.DEV ? `${window.location.protocol}//computer.test` : 'https://lmthing.computer')
+import { CLOUD_BASE_URL, COMPUTER_BASE_URL } from '@/lib/config'
 
 export interface PodConfig {
   computerBaseUrl: string

@@ -9,14 +9,7 @@ import {
   AskBlock,
   VariablesBlock,
 } from '@lmthing/agent-ui'
-
-const COMPUTER_BASE_URL =
-  import.meta.env.VITE_COMPUTER_BASE_URL ??
-  (import.meta.env.DEV ? 'https://computer.test' : window.location.origin)
-
-const CLOUD_BASE_URL =
-  import.meta.env.VITE_CLOUD_URL ??
-  (import.meta.env.DEV ? 'https://cloud.test' : 'https://lmthing.cloud')
+import { COMPUTER_BASE_URL, CLOUD_BASE_URL } from '@/lib/config'
 
 /** Ensure the user's compute pod is running before opening a session. */
 async function ensurePod(
