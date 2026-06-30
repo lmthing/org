@@ -1,38 +1,8 @@
 import React, { useEffect } from 'react';
-import { useStore, type Project, type InspectorTab } from '../store/store.js';
+import { useStore, type Project } from '../store/store.js';
 import { authHeaders } from './auth.js';
 import { AppShell } from './AppShell.js';
-
-// ─── URL ↔ state sync (deep-linkable; LLM-friendly) ─────────────────────────
-// ?node=<id>&tab=<tab>&follow=0  (lifted from main.tsx boot() shell branch so the
-// /chat route can render the full agent-ui shell as a plain component.)
-
-function applyUrlToState(): void {
-  const params = new URLSearchParams(window.location.search);
-  const node = params.get('node');
-  const tab = params.get('tab') as InspectorTab | null;
-  const follow = params.get('follow');
-  const st = useStore.getState();
-  if (node) st.selectNode(node, true);
-  if (tab) st.setTab(tab);
-  if (follow === '0') st.setFollow(false);
-}
-
-/** Subscribe store changes back into the URL. Returns an unsubscribe fn. */
-function syncStateToUrl(): () => void {
-  let lastKey = '';
-  return useStore.subscribe((s) => {
-    const key = `${s.selectedNodeId ?? ''}|${s.tab}|${s.follow ? 1 : 0}`;
-    if (key === lastKey) return;
-    lastKey = key;
-    const params = new URLSearchParams(window.location.search);
-    if (s.selectedNodeId) params.set('node', s.selectedNodeId); else params.delete('node');
-    params.set('tab', s.tab);
-    if (!s.follow) params.set('follow', '0'); else params.delete('follow');
-    const url = `${window.location.pathname}?${params.toString()}`;
-    window.history.replaceState(null, '', url);
-  });
-}
+import { applyUrlToState, syncStateToUrl } from './url-state.js';
 
 /**
  * The standalone agent-ui chat shell (sidebar + transcript + DevPanel), packaged

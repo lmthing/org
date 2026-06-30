@@ -9,7 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ChatRouteImport } from './routes/chat'
+import { Route as ChatRouteRouteImport } from './routes/chat/route'
+import { Route as ChatIndexRouteImport } from './routes/chat/index'
 import { Route as StudioRouteRouteImport } from './routes/studio/route'
 import { Route as ComputerRouteRouteImport } from './routes/computer/route'
 import { Route as IndexRouteImport } from './routes/index'
@@ -49,10 +50,15 @@ import { Route as StudioProjectIdSpaceIdKnowledgeFieldIdSubjectIdTopicIdIndexRou
 import { Route as StudioProjectIdSpaceIdAgentAgentIdWorkflowWorkflowIdIndexRouteImport } from './routes/studio/$projectId/$spaceId/agent/$agentId/workflow/$workflowId/index'
 import { Route as StudioProjectIdSpaceIdAgentAgentIdChatConversationIdIndexRouteImport } from './routes/studio/$projectId/$spaceId/agent/$agentId/chat/$conversationId/index'
 
-const ChatRoute = ChatRouteImport.update({
+const ChatRouteRoute = ChatRouteRouteImport.update({
   id: '/chat',
   path: '/chat',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ChatIndexRoute = ChatIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ChatRouteRoute,
 } as any)
 const StudioRouteRoute = StudioRouteRouteImport.update({
   id: '/studio',
@@ -276,7 +282,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/computer': typeof ComputerRouteRouteWithChildren
   '/studio': typeof StudioRouteRouteWithChildren
-  '/chat': typeof ChatRoute
+  '/chat': typeof ChatRouteRouteWithChildren
+  '/chat/': typeof ChatIndexRoute
   '/studio/$projectId': typeof StudioProjectIdRouteRouteWithChildren
   '/computer/dashboard': typeof ComputerDashboardRoute
   '/computer/login': typeof ComputerLoginRoute
@@ -315,7 +322,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/chat': typeof ChatRoute
+  '/chat': typeof ChatIndexRoute
   '/computer/dashboard': typeof ComputerDashboardRoute
   '/computer/login': typeof ComputerLoginRoute
   '/computer/settings': typeof ComputerSettingsRoute
@@ -355,7 +362,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/computer': typeof ComputerRouteRouteWithChildren
   '/studio': typeof StudioRouteRouteWithChildren
-  '/chat': typeof ChatRoute
+  '/chat': typeof ChatRouteRouteWithChildren
+  '/chat/': typeof ChatIndexRoute
   '/studio/$projectId': typeof StudioProjectIdRouteRouteWithChildren
   '/computer/dashboard': typeof ComputerDashboardRoute
   '/computer/login': typeof ComputerLoginRoute
@@ -399,6 +407,7 @@ export interface FileRouteTypes {
     | '/computer'
     | '/studio'
     | '/chat'
+    | '/chat/'
     | '/studio/$projectId'
     | '/computer/dashboard'
     | '/computer/login'
@@ -477,6 +486,7 @@ export interface FileRouteTypes {
     | '/computer'
     | '/studio'
     | '/chat'
+    | '/chat/'
     | '/studio/$projectId'
     | '/computer/dashboard'
     | '/computer/login'
@@ -518,7 +528,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ComputerRouteRoute: typeof ComputerRouteRouteWithChildren
   StudioRouteRoute: typeof StudioRouteRouteWithChildren
-  ChatRoute: typeof ChatRoute
+  ChatRouteRoute: typeof ChatRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -527,8 +537,15 @@ declare module '@tanstack/react-router' {
       id: '/chat'
       path: '/chat'
       fullPath: '/chat'
-      preLoaderRoute: typeof ChatRouteImport
+      preLoaderRoute: typeof ChatRouteRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/chat/': {
+      id: '/chat/'
+      path: '/'
+      fullPath: '/chat/'
+      preLoaderRoute: typeof ChatIndexRouteImport
+      parentRoute: typeof ChatRouteRoute
     }
     '/studio': {
       id: '/studio'
@@ -930,11 +947,23 @@ const StudioRouteRouteWithChildren = StudioRouteRoute._addFileChildren(
   StudioRouteRouteChildren,
 )
 
+interface ChatRouteRouteChildren {
+  ChatIndexRoute: typeof ChatIndexRoute
+}
+
+const ChatRouteRouteChildren: ChatRouteRouteChildren = {
+  ChatIndexRoute: ChatIndexRoute,
+}
+
+const ChatRouteRouteWithChildren = ChatRouteRoute._addFileChildren(
+  ChatRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ComputerRouteRoute: ComputerRouteRouteWithChildren,
   StudioRouteRoute: StudioRouteRouteWithChildren,
-  ChatRoute: ChatRoute,
+  ChatRouteRoute: ChatRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
