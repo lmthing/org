@@ -23,15 +23,25 @@ Testing without keys: `--mock <file>` / `LM_MOCK=<file>` (scripted streamFn, no 
 | Package | Entry | Purpose |
 |---------|-------|---------|
 | `@lmthing/core` | `packages/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
-| `@lmthing/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring, `lmthing run`. |
-| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React web surface — THING chat shell + DevTools panel. Exports `<AgentChatPanel>` (embeddable, pod-backed chat: ensure→createSession→`useReplSession`; modes `agentOnly`/`spaceDir`/`sync`). |
-| | | The served `--web` UI (`app/main.tsx`) renders the **chat-only `<AgentChatPanel>` only when embedded** (iframe / `?embed=1`); a standalone visit keeps the project/session shell + DevPanel. DevTools shell also reachable via `?sessionId=`/`?trace=`. |
+| `@lmthing/cli` | `packages/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring, `lmthing serve`. Serves the unified SPA (studio/computer/chat) as a catch-all for non-`/api` requests. |
+| `@lmthing/agent-ui` | `packages/ui/src/index.ts` | React component library — exports `<AgentChatPanel>` (embeddable, pod-backed chat: ensure→createSession→`useReplSession`; modes `agentOnly`/`spaceDir`/`sync`). |
+| `@lmthing/web-app` | `packages/ui/apps/web/` | Unified Vite SPA — three product surfaces as client-side routes, served by `lmthing serve` and deployed as separate nginx K8s images per domain. See **App Surfaces** below. |
 
 `@lmthing/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
 
+## App Surfaces (`packages/ui/apps/web/`)
+
+The unified SPA (`@lmthing/web-app`) exposes three product surfaces as TanStack Router client-side routes. The CLI's `serve.ts` wires `createStaticApps(resolveAppDist())` as a catch-all for all non-`/api` requests (`LM_APP_DIST` overrides the dist path). The same build is deployed as separate nginx images (`lmthingacr.azurecr.io/{studio,computer,chat}`) — one K8s Deployment per domain, different Envoy JWT+Lua routing per domain.
+
+| Route | Domain | Product |
+|-------|--------|---------|
+| `/chat` | lmthing.chat | **Chat** — the primary conversational interface to the THING agent. Users write to the agent, the agent streams TypeScript statements that run in their compute pod's QuickJS sandbox. Projects and spaces are visible as a side panel. |
+| `/studio`, `/studio/$projectId` | lmthing.studio | **Studio** — project and space management IDE. Users browse their pod's PVC projects and spaces, author space definitions (knowledge, personas, tools), and run agents within a project context. The always-on THING chat dock is present on the right side. |
+| `/computer`, `/computer/dashboard` | lmthing.computer | **Computer** — autonomous computer-use surface. The agent controls a browser/desktop environment running inside the user's compute pod. Users describe a task; the agent executes it with screen captures streamed back in real time. |
+
 ## Directory map (top level)
 
-`packages/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}` · `packages/cli/src/{providers,stream,render,rpc,web,cli}` · `packages/ui/src/{app,store,client,components,compat,lib,theme}`. Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
+`packages/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}` · `packages/cli/src/{providers,stream,render,rpc,web,cli,server}` · `packages/ui/src/{app,store,client,components,compat,lib,theme}` · `packages/ui/apps/web/{src,public}` (unified SPA). Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
 
 ## Top gotchas
 

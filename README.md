@@ -58,7 +58,13 @@ node /path/to/lmthing/sdk/org/packages/cli/dist/cli/bin.js          # bare = lau
 # or explicitly:  ... serve --port 8080 --model M
 ```
 
-Open the printed URL. In the web UI you can:
+Open the printed URL. The server serves all three product surfaces as client-side routes on the same origin:
+
+- **`/studio`** (default for unknown hosts) — project and space management IDE. Browse projects and spaces, author space definitions, and chat with THING via the always-on right-side dock.
+- **`/computer`** — autonomous computer-use surface. Describe a task; the agent executes it with screen captures streamed back in real time.
+- **`/chat`** — the primary conversational interface to THING. Chat with the agent, see projects and spaces in the sidebar.
+
+From any surface you can:
 
 - **Create projects** — each gets its own `.lmthing/<project>/` with isolated spaces, documents, and instructions.
 - **Chat with THING** — it answers directly, researches the web, writes code, or **builds a new specialist agent** for a recurring task. Agents THING builds for a project land under `.lmthing/<project>/spaces/` and stay available.

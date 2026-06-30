@@ -52,7 +52,13 @@ Beyond the existing session/ws routes:
 
 ## Web UI shell
 
-The web UI shell (project/session sidebar, chat, doc upload + instructions editor, toggleable DevTools panel) is `packages/ui/src/app/AppShell.tsx` and its components (`Sidebar`, `ChatView`, `Composer`, `Message`, `DevPanel`, `ProjectSettings`). `main.tsx` detects the mode (shell vs single-session `?sessionId=` vs `?trace=` replay) and mounts `AppShell`. (The older single-file `shell.tsx` + 3-pane `App.tsx` are superseded and no longer mounted.)
+The web UI is the unified SPA in `packages/ui/apps/web/` — three product surfaces as TanStack Router client-side routes. The `/` route redirects to `/studio`, `/computer`, or `/chat` based on the request hostname (or `/studio` for unknown hosts, including localhost).
+
+- **`/chat`** — mounts `ChatShell` from `packages/ui/src/app/ChatShell.tsx`. That component wraps `AppShell` (`AppShell.tsx`) with its sidebar, chat transcript, doc/instructions editor, and toggleable DevPanel; `main.tsx`-style boot logic is encapsulated in `ChatShell`.
+- **`/studio`**, **`/studio/$projectId`** — Studio IDE surface (space/project browser + always-on THING chat dock).
+- **`/computer`**, **`/computer/dashboard`** — Computer autonomous-use surface.
+
+`lmthing serve` (the bare `lmthing` command) calls `createStaticApps(resolveAppDist())` and serves the built SPA as a catch-all for all non-`/api` paths (`LM_APP_DIST` overrides the dist location).
 
 ## Space discovery
 

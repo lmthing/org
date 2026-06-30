@@ -2,7 +2,12 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['packages/*/src/**/*.test.ts', 'packages/*/src/**/*.test.tsx'],
+    include: [
+      'packages/*/src/**/*.test.ts',
+      'packages/*/src/**/*.test.tsx',
+      'packages/*/apps/*/src/**/*.test.ts',
+      'packages/*/apps/*/src/**/*.test.tsx',
+    ],
     environment: 'node',
     // Many suites spin up real QuickJS VMs (forks/delegates/solve) and a few spawn
     // the built CLI as a subprocess (keyless-cli, web-api). Under parallel load these
