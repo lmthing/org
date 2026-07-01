@@ -139,9 +139,6 @@ function FieldDetailPage() {
             <Heading level={3} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {field}
             </Heading>
-            <Caption muted style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {domain}
-            </Caption>
           </div>
         </Stack>
         <Button

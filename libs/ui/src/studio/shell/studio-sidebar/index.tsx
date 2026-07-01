@@ -105,7 +105,7 @@ export function StudioSidebar({
   const fields = useMemo(() => {
     return knowledgeFields.map((f: KnowledgeFieldMeta) => ({
       id: f.fieldId,
-      label: `${f.domain} / ${f.field}`,
+      label: f.field,
       path: f.path,
     }))
   }, [knowledgeFields])

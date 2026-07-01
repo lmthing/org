@@ -29,9 +29,6 @@ function FieldCard({ entry, spacePath }: { entry: FieldEntry; spacePath: string 
         <Stack row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <Label>{entry.field}</Label>
-            <Caption muted style={{ marginTop: '0.125rem' }}>
-              {entry.domain} / {entry.field}
-            </Caption>
           </div>
         </Stack>
       </CardBody>
