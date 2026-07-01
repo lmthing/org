@@ -27,6 +27,11 @@
     "inputPer1K": 0.00095,
     "outputPer1K": 0.004
   },
+  "gpt-5.5": {
+    "inputPer1K": 0.0047412,
+    "outputPer1K": 0.0284364,
+    "cachedInputPer1K": 0.0004752
+  },
   "DeepSeek-R1-0528": {
     "inputPer1K": 0.00135,
     "outputPer1K": 0.0054

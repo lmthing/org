@@ -2,12 +2,18 @@ import type { LanguageModelV1 } from 'ai';
 
 /**
  * Parse a "provider:modelId" spec and lazy-load the appropriate @ai-sdk/* provider.
- * Supported: openai, anthropic, google, mistral, azure, groq, cohere, bedrock, openai-compatible
+ * Supported: openai, anthropic, google, mistral, azure, lmthingcloud, groq, cohere,
+ * bedrock, openai-compatible
  *
  * Azure requires AZURE_API_KEY and AZURE_RESOURCE_NAME env vars.
  * azure:modelId maps to the deployment name on the configured Azure resource.
  * azure:claude* models are routed to the Foundry Anthropic endpoint instead of
  * the Azure OpenAI path.
+ *
+ * lmthingcloud:modelId calls the lmthing.cloud LiteLLM proxy (OpenAI-compatible /v1)
+ * with LMTHINGCLOUD_API_KEY. `modelId` is the LiteLLM model name, e.g.
+ * DeepSeek-V4-Flash, DeepSeek-V4-Pro, Kimi-K2.6, gpt-5.5. Budget windows are enforced
+ * server-side against the user's key. Override the endpoint with LMTHINGCLOUD_BASE_URL.
  */
 export async function resolveModel(modelSpec: string): Promise<LanguageModelV1> {
   const colonIdx = modelSpec.indexOf(':');
@@ -35,6 +41,13 @@ export async function resolveModel(modelSpec: string): Promise<LanguageModelV1> 
     case 'anthropic': {
       const { createAnthropic } = await import('@ai-sdk/anthropic');
       return createAnthropic()(modelId) as unknown as LanguageModelV1;
+    }
+    case 'lmthingcloud': {
+      const { createOpenAI } = await import('@ai-sdk/openai');
+      const apiKey = process.env['LMTHINGCLOUD_API_KEY'];
+      if (!apiKey) throw new Error('LMTHINGCLOUD_API_KEY env var is required for lmthingcloud: provider');
+      const baseURL = process.env['LMTHINGCLOUD_BASE_URL'] || 'https://lmthing.cloud/v1';
+      return createOpenAI({ baseURL, apiKey })(modelId) as unknown as LanguageModelV1;
     }
     case 'google': {
       const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
@@ -72,7 +85,7 @@ export async function resolveModel(modelSpec: string): Promise<LanguageModelV1> 
     }
     default:
       throw new Error(
-        `Unsupported provider "${provider}": supported providers are openai, anthropic, google, mistral, azure`,
+        `Unsupported provider "${provider}": supported providers are openai, anthropic, google, mistral, azure, lmthingcloud`,
       );
   }
 }
