@@ -11,6 +11,7 @@ import '@lmthing/css/elements/layouts/split-pane/index.css'
 import '@lmthing/css/elements/layouts/page/index.css'
 import '@lmthing/css/components/shell/studio-shell/index.css'
 import { StudioSidebar } from '../studio-sidebar'
+import { StudioAppSidebar } from '../studio-app-sidebar'
 import { SettingsView } from '../settings-view'
 import { useAgentList } from '@lmthing/ui/hooks/useAgentList'
 import { useKnowledgeFields } from '@lmthing/ui/hooks/useKnowledgeFields'
@@ -89,7 +90,12 @@ export function StudioShell({
 
   return (
     <div className="split-pane studio-shell">
+      {/* Outer shared sidebar: project dropdown + collapsible spaces (same in chat). */}
+      <StudioAppSidebar className="shrink-0" />
+
+      {/* Inner rail: the open space's contents (knowledge / agents / tasklists). */}
       <StudioSidebar
+        asRail
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={handleToggleSidebar}
         activeFieldId={activeFieldId}

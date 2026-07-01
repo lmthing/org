@@ -71,10 +71,20 @@ export function AppShell({ singleSession }: AppShellProps) {
   // On tablet, devpanel is always a drawer
   const devPanelAsDrawer = isTablet;
 
+  // Docked sidebar owns its own width (collapses to a slim rail via its header
+  // toggle). In the mobile drawer we fill the drawer width and hide the toggle.
   const sidebarContent = (
     <Sidebar
       onProjectSettings={(id, name) => setProjectSettings({ id, name })}
-      className="w-64 h-full"
+      className="h-full"
+    />
+  );
+
+  const drawerSidebarContent = (
+    <Sidebar
+      onProjectSettings={(id, name) => setProjectSettings({ id, name })}
+      className="w-full h-full"
+      collapsible={false}
     />
   );
 
@@ -89,7 +99,7 @@ export function AppShell({ singleSession }: AppShellProps) {
     <div className="h-full flex overflow-hidden bg-background">
       {/* Sidebar — docked on desktop, drawer on mobile */}
       {showSidebar && !sidebarAsDrawer && sidebarOpen && (
-        <div className="shrink-0 h-full" style={{ width: 256 }}>
+        <div className="shrink-0 h-full">
           {sidebarContent}
         </div>
       )}
@@ -100,7 +110,7 @@ export function AppShell({ singleSession }: AppShellProps) {
           side="left"
           width="w-64"
         >
-          {sidebarContent}
+          {drawerSidebarContent}
         </Drawer>
       )}
 

@@ -3,12 +3,16 @@ import { cn } from '../lib/cn.js';
 import { useStore, connectLive } from '../store/store.js';
 import type { Project, ModelPricing } from '../store/store.js';
 import { authHeaders, wsTokenSuffix } from './auth.js';
+import { AppSidebar } from '../../elements/nav/app-sidebar';
+import { crossAppOrigin, appRoute } from '../../lib/app-urls';
 
 interface PersistedSessionMeta {
   sessionId: string; projectId?: string; agentSlug: string; spaceDir: string;
   title?: string; createdAt?: number; lastActivity: number; messageCount?: number; status: string;
   totalCostUsd?: number;
 }
+
+interface SpaceMeta { id: string; name: string }
 
 function formatCost(usd: number): string {
   if (usd < 0.000001) return '';
@@ -38,18 +42,6 @@ function switchSession(sessionId: string): void {
   useStore.getState().setActiveSessionId(sessionId);
   // On mobile the sidebar is an overlay drawer — close it so the conversation shows.
   if (window.innerWidth < 768) useStore.getState().setSidebarOpen(false);
-}
-
-/**
- * Sibling lmthing-app origin for cross-app navigation. The pod UI is served at
- * lmthing.chat (prod) / chat.test (dev), so we derive the sibling app's origin
- * from the current host rather than build-time env (this bundle has none).
- */
-function siblingAppUrl(app: 'studio' | 'computer'): string {
-  if (typeof window === 'undefined') return `https://lmthing.${app}`;
-  const { protocol, hostname } = window.location;
-  if (hostname.endsWith('.test')) return `${protocol}//${app}.test`;
-  return `https://lmthing.${app}`;
 }
 
 const CROSS_APP_LINKS: { app: 'studio' | 'computer'; label: string; emoji: string }[] = [
@@ -86,9 +78,11 @@ function groupSessionsByRecency(sessions: PersistedSessionMeta[]) {
 interface SidebarProps {
   onProjectSettings?: (projectId: string, name: string) => void;
   className?: string;
+  /** Disable the whole-sidebar collapse control (e.g. inside a mobile drawer). */
+  collapsible?: boolean;
 }
 
-export function Sidebar({ onProjectSettings, className }: SidebarProps) {
+export function Sidebar({ onProjectSettings, className, collapsible = true }: SidebarProps) {
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
   const activeSessionId = useStore(s => s.activeSessionId);
@@ -98,14 +92,22 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
   const setPrices = useStore(s => s.setPrices);
 
   const [sessions, setSessions] = React.useState<PersistedSessionMeta[]>([]);
-  const [newProjectName, setNewProjectName] = React.useState('');
-  const [creatingProject, setCreatingProject] = React.useState(false);
+  const [spaces, setSpaces] = React.useState<SpaceMeta[]>([]);
+  const [spacesLoading, setSpacesLoading] = React.useState(false);
   const [creatingSession, setCreatingSession] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
 
   const loadSessions = React.useCallback((projectId: string) => {
     apiGet<{ sessions: PersistedSessionMeta[] }>(`/api/projects/${projectId}/sessions`)
       .then(r => setSessions(r.sessions)).catch(() => setSessions([]));
+  }, []);
+
+  const loadSpaces = React.useCallback((projectId: string) => {
+    setSpacesLoading(true);
+    apiGet<{ spaces: SpaceMeta[] }>(`/api/projects/${projectId}/spaces`)
+      .then(r => setSpaces(r.spaces ?? []))
+      .catch(() => setSpaces([]))
+      .finally(() => setSpacesLoading(false));
   }, []);
 
   React.useEffect(() => {
@@ -128,22 +130,18 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
   }, [setPrices]);
 
   React.useEffect(() => {
-    if (activeProjectId) loadSessions(activeProjectId); else setSessions([]);
-  }, [activeProjectId, loadSessions]);
+    if (activeProjectId) { loadSessions(activeProjectId); loadSpaces(activeProjectId); }
+    else { setSessions([]); setSpaces([]); }
+  }, [activeProjectId, loadSessions, loadSpaces]);
 
   const activeProject = projects.find(p => p.id === activeProjectId);
 
-  const createProject = async () => {
-    const name = newProjectName.trim(); if (!name) return;
-    setCreatingProject(true);
-    try {
-      await apiPost<{ id: string }>('/api/projects', { name });
-      const r = await apiGet<{ projects: Project[] }>('/api/projects');
-      setProjects(r.projects);
-      const created = r.projects.find(p => p.name === name);
-      if (created) setActiveProjectId(created.id);
-      setNewProjectName('');
-    } finally { setCreatingProject(false); }
+  const createProject = async (name: string) => {
+    await apiPost<{ id: string }>('/api/projects', { name });
+    const r = await apiGet<{ projects: Project[] }>('/api/projects');
+    setProjects(r.projects);
+    const created = r.projects.find(p => p.name === name);
+    if (created) setActiveProjectId(created.id);
   };
 
   const deleteProject = async (id: string) => {
@@ -179,131 +177,77 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
     }
   };
 
+  // Clicking a space in chat opens its studio view. Local → relative route on
+  // the same origin; production → the lmthing.studio domain.
+  const openSpaceInStudio = (spaceId: string) => {
+    if (!activeProjectId) return;
+    window.location.href = `${crossAppOrigin('studio')}/studio/${encodeURIComponent(activeProjectId)}/${encodeURIComponent(spaceId)}`;
+  };
+
   const filteredSessions = searchQuery
     ? sessions.filter(s => (s.title || s.agentSlug || s.sessionId).toLowerCase().includes(searchQuery.toLowerCase()))
     : sessions;
 
   const grouped = groupSessionsByRecency(filteredSessions);
 
-  return (
-    <nav
-      aria-label="projects and sessions"
-      className={cn('flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden', className)}
-    >
-      {/* Logo / brand */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-sidebar-border shrink-0">
-        <span className="font-display font-bold text-base text-foreground">THING</span>
-        <span className="text-xs text-muted-foreground">by lmthing</span>
-      </div>
-
-      {/* New chat + search */}
-      <div className="px-3 py-2 flex flex-col gap-2 shrink-0">
-        <button
-          onClick={() => void createSession()}
-          disabled={!activeProjectId || creatingSession}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          {creatingSession ? '…' : '+ New chat'}
-        </button>
-        <div className="relative">
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search chats…"
-            className="w-full bg-muted border-0 rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
+  const conversations = (
+    <div className="flex flex-col gap-2">
+      <input
+        value={searchQuery}
+        onChange={e => setSearchQuery(e.target.value)}
+        placeholder="Search chats…"
+        className="w-full bg-muted border-0 rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+      {grouped.length === 0 && activeProjectId && (
+        <p className="px-2 text-sm text-muted-foreground">No chats yet.</p>
+      )}
+      {grouped.map(group => (
+        <div key={group.label}>
+          <p className="px-2 py-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</p>
+          {group.sessions.map(s => {
+            const label = s.title || 'New chat';
+            const isActive = s.sessionId === activeSessionId;
+            const cost = isActive ? sessionCostUsd : s.totalCostUsd;
+            const costLabel = cost !== undefined && cost > 0 ? formatCost(cost) : '';
+            return (
+              <div key={s.sessionId} className="group flex items-center gap-1">
+                <button
+                  onClick={() => void resumeSession(s.sessionId)}
+                  className={cn(
+                    'flex-1 text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors',
+                    isActive
+                      ? 'bg-muted text-foreground font-medium'
+                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                  )}
+                  title={s.title || s.sessionId}
+                >
+                  <span className="block truncate">{label}</span>
+                  <span className="block text-xs text-muted-foreground/70 font-normal">
+                    {relativeTime(s.lastActivity)}
+                    {costLabel && <span className="ml-1.5 text-muted-foreground/50">{costLabel}</span>}
+                  </span>
+                </button>
+                <button
+                  onClick={() => void deleteSession(s.sessionId)}
+                  className="hidden group-hover:flex w-5 h-5 items-center justify-center text-muted-foreground hover:text-destructive rounded text-xs shrink-0"
+                  title="Delete"
+                >×</button>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      ))}
+    </div>
+  );
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-2 py-1">
-        {/* Project selector */}
-        <div className="mb-3">
-          <p className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Projects</p>
-          {projects.map(p => (
-            <div key={p.id} className="group flex items-center gap-1">
-              <button
-                onClick={() => setActiveProjectId(p.id)}
-                className={cn(
-                  'flex-1 text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors',
-                  activeProjectId === p.id
-                    ? 'bg-muted text-foreground font-medium'
-                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                )}
-              >
-                {p.name}
-              </button>
-              <button
-                onClick={() => void deleteProject(p.id)}
-                className="hidden group-hover:flex w-5 h-5 items-center justify-center text-muted-foreground hover:text-destructive rounded text-xs shrink-0"
-                title="Delete project"
-              >×</button>
-            </div>
-          ))}
-          <div className="flex gap-1 mt-1">
-            <input
-              className="flex-1 min-w-0 bg-muted rounded-lg px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              placeholder="New project…"
-              value={newProjectName}
-              onChange={e => setNewProjectName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') void createProject(); }}
-            />
-            <button
-              onClick={() => void createProject()}
-              disabled={creatingProject || !newProjectName.trim()}
-              className="px-2 py-1 bg-muted text-foreground rounded-lg text-xs hover:opacity-90 disabled:opacity-40"
-            >+</button>
-          </div>
-        </div>
-
-        {/* Session list grouped by recency */}
-        {grouped.length === 0 && activeProjectId && (
-          <p className="px-2 text-sm text-muted-foreground">No chats yet.</p>
-        )}
-        {grouped.map(group => (
-          <div key={group.label} className="mb-3">
-            <p className="px-2 py-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</p>
-            {group.sessions.map(s => {
-              const label = s.title || 'New chat';
-              const isActive = s.sessionId === activeSessionId;
-              const cost = isActive ? sessionCostUsd : s.totalCostUsd;
-              const costLabel = cost !== undefined && cost > 0 ? formatCost(cost) : '';
-              return (
-                <div key={s.sessionId} className="group flex items-center gap-1">
-                  <button
-                    onClick={() => void resumeSession(s.sessionId)}
-                    className={cn(
-                      'flex-1 text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors',
-                      isActive
-                        ? 'bg-muted text-foreground font-medium'
-                        : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                    )}
-                    title={s.title || s.sessionId}
-                  >
-                    <span className="block truncate">{label}</span>
-                    <span className="block text-xs text-muted-foreground/70 font-normal">
-                      {relativeTime(s.lastActivity)}
-                      {costLabel && <span className="ml-1.5 text-muted-foreground/50">{costLabel}</span>}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => void deleteSession(s.sessionId)}
-                    className="hidden group-hover:flex w-5 h-5 items-center justify-center text-muted-foreground hover:text-destructive rounded text-xs shrink-0"
-                    title="Delete"
-                  >×</button>
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-
+  const footer = (
+    <>
       {/* Cross-app links */}
-      <div className="shrink-0 border-t border-sidebar-border px-3 py-2 flex items-center gap-1">
+      <div className="px-3 py-2 flex items-center gap-1 border-b border-sidebar-border">
         {CROSS_APP_LINKS.map(link => (
           <a
             key={link.app}
-            href={siblingAppUrl(link.app)}
+            href={`${crossAppOrigin(link.app)}${appRoute(link.app)}`}
             title={`Open lmthing.${link.app}`}
             className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
           >
@@ -312,9 +256,8 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
           </a>
         ))}
       </div>
-
-      {/* Footer */}
-      <div className="shrink-0 border-t border-sidebar-border px-3 py-2 flex items-center gap-2">
+      {/* Project settings */}
+      <div className="px-3 py-2 flex items-center gap-2">
         {activeProject && onProjectSettings && (
           <button
             onClick={() => onProjectSettings(activeProject.id, activeProject.name)}
@@ -324,6 +267,27 @@ export function Sidebar({ onProjectSettings, className }: SidebarProps) {
           </button>
         )}
       </div>
-    </nav>
+    </>
+  );
+
+  return (
+    <AppSidebar
+      className={className}
+      storageKey="chat-sidebar"
+      collapsible={collapsible}
+      spacesDefaultExpanded={false}
+      projects={projects}
+      activeProjectId={activeProjectId}
+      onSelectProject={setActiveProjectId}
+      onCreateProject={createProject}
+      onDeleteProject={deleteProject}
+      spaces={spaces}
+      onSelectSpace={openSpaceInStudio}
+      spacesLoading={spacesLoading}
+      onNewChat={() => void createSession()}
+      newChatBusy={creatingSession}
+      conversations={conversations}
+      footer={footer}
+    />
   );
 }

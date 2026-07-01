@@ -47,6 +47,23 @@ export function appRoute(app: LmthingApp): string {
   return `/${app}`
 }
 
+/**
+ * Origin prefix for cross-surface navigation, chosen by environment:
+ *  - **Production** — each surface is served from its own `lmthing.<app>` domain,
+ *    so we return the absolute origin `https://lmthing.<app>`.
+ *  - **Local / unified** — all surfaces are routes on one origin, so we return
+ *    `''` and callers navigate via the relative route path (`/studio`, `/chat`…).
+ *
+ * An explicit `VITE_<APP>_URL` override always wins (used by standalone hosts).
+ */
+export function crossAppOrigin(app: LmthingApp): string {
+  const override = readEnv()[ENV_KEY[app]] as string | undefined
+  if (override) return override.replace(/\/$/, '')
+  if (typeof window === 'undefined') return ''
+  if (window.location.hostname.startsWith('lmthing.')) return `https://lmthing.${app}`
+  return ''
+}
+
 export interface AppLink {
   app: LmthingApp
   label: string
@@ -60,9 +77,13 @@ const APP_META: Record<LmthingApp, { label: string; emoji: string }> = {
   computer: { label: 'Computer', emoji: '🖥️' },
 }
 
-/** Links to the *other* unified surfaces (excludes `current`), for cross-app nav. */
+/**
+ * Links to the *other* unified surfaces (excludes `current`), for cross-app nav.
+ * Local → relative route path; production → absolute `lmthing.<app>` origin
+ * (see {@link crossAppOrigin}).
+ */
 export function otherAppLinks(current: LmthingApp): AppLink[] {
   return (Object.keys(APP_META) as LmthingApp[])
     .filter((app) => app !== current)
-    .map((app) => ({ app, ...APP_META[app], url: appRoute(app) }))
+    .map((app) => ({ app, ...APP_META[app], url: `${crossAppOrigin(app)}${appRoute(app)}` }))
 }

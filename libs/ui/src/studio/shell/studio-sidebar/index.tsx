@@ -40,6 +40,9 @@ import { otherAppLinks } from '@lmthing/ui/lib/app-urls'
 export interface StudioSidebarProps {
   isCollapsed?: boolean
   onToggleCollapse?: () => void
+  /** When true, render as an inner "space contents" rail: the brand header and
+   *  cross-app links are hidden (the shared AppSidebar owns them now). */
+  asRail?: boolean
   activeFieldId?: string
   activeAgentId?: string
   onOpenSettings?: () => void
@@ -67,6 +70,7 @@ function useSpacePath(): string {
 export function StudioSidebar({
   isCollapsed = false,
   onToggleCollapse,
+  asRail = false,
   activeFieldId,
   activeAgentId,
   onOpenSettings,
@@ -129,22 +133,31 @@ export function StudioSidebar({
 
   return (
     <aside className={`sidebar ${isCollapsed ? 'sidebar--collapsed' : ''}`}>
-      <div className="studio-sidebar__header">
-        <div className="studio-sidebar__header-inner">
-          <Link
-            to="/studio"
-            className="studio-sidebar__home-link"
-            title="lmthing"
-          >
-            <CozyThingText text="lmthing" />
-          </Link>
-          {!isCollapsed && (
-            <span className="studio-sidebar__space-name">
-              {spaceId || 'Space'}
-            </span>
-          )}
+      {!asRail && (
+        <div className="studio-sidebar__header">
+          <div className="studio-sidebar__header-inner">
+            <Link
+              to="/studio"
+              className="studio-sidebar__home-link"
+              title="lmthing"
+            >
+              <CozyThingText text="lmthing" />
+            </Link>
+            {!isCollapsed && (
+              <span className="studio-sidebar__space-name">
+                {spaceId || 'Space'}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+      {asRail && !isCollapsed && (
+        <div className="studio-sidebar__header">
+          <div className="studio-sidebar__header-inner">
+            <span className="studio-sidebar__space-name">{spaceId || 'Space'}</span>
+          </div>
+        </div>
+      )}
 
       <div className="studio-sidebar__body">
         {!isCollapsed ? (
@@ -335,7 +348,7 @@ export function StudioSidebar({
             <FileCode className="studio-sidebar__footer-icon" />
             {!isCollapsed && <span className="studio-sidebar__footer-label">Raw Files</span>}
           </Link>
-          {otherAppLinks('studio').map((link) => (
+          {!asRail && otherAppLinks('studio').map((link) => (
             <a
               key={link.app}
               href={link.url}
