@@ -9,13 +9,10 @@ import type {
   NetworkEntry,
   TerminalSession,
 } from './types'
-import type { ClientMessage, ServerMessage } from './ws-protocol'
-import { encodeMessage, decodeMessage } from './ws-protocol'
+import type { ServerMessage } from './ws-protocol'
+import { PodConnection } from './pod-connection'
 
 type Listener<T> = (value: T) => void
-
-const MAX_RETRIES = 5
-const BASE_DELAY_MS = 1000
 
 let sessionCounter = 0
 
@@ -31,18 +28,14 @@ export interface PodRuntimeOptions {
 /**
  * PodRuntime connects to a dedicated K8s compute pod via lmthing.computer.
  * Envoy Gateway handles JWT validation and routes /api/* to the user's pod.
- * Uses the same WebSocket protocol (ws-protocol.ts).
+ * Uses the same WebSocket protocol (ws-protocol.ts). Connection lifecycle
+ * (open/auth/reconnect-with-backoff) lives in pod-connection.ts; this class
+ * owns the public API and dispatches decoded server messages to listeners.
  */
 export class PodRuntime implements ComputerRuntime {
   readonly tier: RuntimeTier = 'pod'
   private _status: RuntimeStatus = 'stopped'
-  private ws: WebSocket | null = null
-  private retryCount = 0
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  private disposed = false
-
-  private readonly computerBaseUrl: string
-  private readonly getAccessToken: () => Promise<string>
+  private readonly connection: PodConnection
 
   private statusListeners = new Set<Listener<RuntimeStatus>>()
   private metricsListeners = new Set<Listener<RuntimeMetrics>>()
@@ -54,8 +47,18 @@ export class PodRuntime implements ComputerRuntime {
   private terminalDataListeners = new Map<string, Set<Listener<string>>>()
 
   constructor(options: PodRuntimeOptions) {
-    this.computerBaseUrl = options.computerBaseUrl
-    this.getAccessToken = options.getAccessToken
+    this.connection = new PodConnection(options, {
+      getStatus: () => this._status,
+      setStatus: (status) => this.setStatus(status),
+      emitLog: (level, source, message) => this.emitLog(level, source, message),
+      onOpen: () => {
+        this.connection.send({
+          type: 'subscribe',
+          channels: ['metrics', 'processes', 'agents', 'logs', 'network'],
+        })
+      },
+      onMessage: (msg) => this.handleMessage(msg),
+    })
   }
 
   get status(): RuntimeStatus {
@@ -70,12 +73,11 @@ export class PodRuntime implements ComputerRuntime {
   async boot(): Promise<void> {
     if (this._status === 'running' || this._status === 'booting') return
 
-    this.disposed = false
-    this.retryCount = 0
+    this.connection.reset()
     this.setStatus('booting')
 
     try {
-      await this.connect()
+      await this.connection.connect()
     } catch (err) {
       this.setStatus('error')
       this.emitLog('error', 'runtime', `Boot failed: ${err}`)
@@ -84,17 +86,12 @@ export class PodRuntime implements ComputerRuntime {
   }
 
   async shutdown(): Promise<void> {
-    this.disposed = true
-    this.clearReconnectTimer()
-    if (this.ws) {
-      this.ws.close(1000, 'shutdown')
-      this.ws = null
-    }
+    this.connection.close(1000, 'shutdown')
     this.setStatus('stopped')
   }
 
   async createTerminalSession(command?: string): Promise<TerminalSession> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.connection.isOpen()) {
       throw new Error('Not connected to compute pod')
     }
 
@@ -102,22 +99,22 @@ export class PodRuntime implements ComputerRuntime {
     const dataListeners = new Set<Listener<string>>()
     this.terminalDataListeners.set(id, dataListeners)
 
-    this.send({ type: 'terminal.open', sessionId: id, ...(command ? { command } : {}) })
+    this.connection.send({ type: 'terminal.open', sessionId: id, ...(command ? { command } : {}) })
 
     return {
       id,
       write: (data: string) => {
-        this.send({ type: 'terminal.input', sessionId: id, data })
+        this.connection.send({ type: 'terminal.input', sessionId: id, data })
       },
       onData: (cb: Listener<string>) => {
         dataListeners.add(cb)
         return () => { dataListeners.delete(cb) }
       },
       resize: (cols: number, rows: number) => {
-        this.send({ type: 'terminal.resize', sessionId: id, cols, rows })
+        this.connection.send({ type: 'terminal.resize', sessionId: id, cols, rows })
       },
       dispose: () => {
-        this.send({ type: 'terminal.close', sessionId: id })
+        this.connection.send({ type: 'terminal.close', sessionId: id })
         dataListeners.clear()
         this.terminalDataListeners.delete(id)
       },
@@ -156,71 +153,10 @@ export class PodRuntime implements ComputerRuntime {
 
   // --- Private ---
 
-  private async connect(): Promise<void> {
-    // Fetch a fresh token on every (re)connection — access tokens expire
-    // after ~12h and this WebSocket is long-lived, so a stale token would
-    // stick the runtime on auth.fail after the first expiry.
-    const token = await this.getAccessToken()
-
-    return new Promise<void>((resolve, reject) => {
-      // Connect via lmthing.computer/api/ws — Envoy strips /api, pod sees /ws
-      // JWT passed as query param since browsers can't set WebSocket headers
-      const wsBase = this.computerBaseUrl.replace(/^http/, 'ws')
-      const url = `${wsBase}/api/ws?access_token=${encodeURIComponent(token)}`
-      const ws = new WebSocket(url)
-      this.ws = ws
-
-      ws.onopen = () => {
-        this.send({
-          type: 'subscribe',
-          channels: ['metrics', 'processes', 'agents', 'logs', 'network'],
-        })
-      }
-
-      ws.onmessage = (event) => {
-        const msg = decodeMessage(event.data as string)
-        this.handleMessage(msg, resolve, reject)
-      }
-
-      ws.onerror = () => {
-        // onclose fires after — handle reconnect there
-      }
-
-      ws.onclose = (event) => {
-        if (this.disposed) return
-
-        if (this._status === 'booting') {
-          reject(new Error(`WebSocket closed during boot (code ${event.code})`))
-          return
-        }
-
-        this.emitLog('warn', 'runtime', `Connection lost (code ${event.code})`)
-        this.setStatus('error')
-        this.scheduleReconnect()
-      }
-    })
-  }
-
-  private handleMessage(
-    msg: ServerMessage,
-    onConnected?: (value: void) => void,
-    onFailed?: (reason: Error) => void,
-  ) {
+  /** Dispatches decoded server messages (excluding the auth handshake,
+   *  which PodConnection handles itself) to the registered listeners. */
+  private handleMessage(msg: ServerMessage) {
     switch (msg.type) {
-      case 'auth.ok':
-        this.retryCount = 0
-        this.setStatus('running')
-        this.emitLog('info', 'runtime', 'Connected to compute pod')
-        onConnected?.()
-        break
-
-      case 'auth.fail':
-        this.emitLog('error', 'runtime', `Auth failed: ${msg.reason}`)
-        this.setStatus('error')
-        this.ws?.close()
-        onFailed?.(new Error(`Auth failed: ${msg.reason}`))
-        break
-
       case 'terminal.data': {
         const listeners = this.terminalDataListeners.get(msg.sessionId)
         if (listeners) {
@@ -281,42 +217,8 @@ export class PodRuntime implements ComputerRuntime {
     }
   }
 
-  private send(msg: ClientMessage) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(encodeMessage(msg))
-    }
-  }
-
   private emitLog(level: LogEntry['level'], source: string, message: string) {
     const entry: LogEntry = { timestamp: Date.now(), level, source, message }
     for (const cb of this.logListeners) cb(entry)
-  }
-
-  private scheduleReconnect() {
-    if (this.disposed || this.retryCount >= MAX_RETRIES) {
-      if (this.retryCount >= MAX_RETRIES) {
-        this.emitLog('error', 'runtime', 'Max reconnection attempts reached')
-      }
-      return
-    }
-
-    const delay = BASE_DELAY_MS * Math.pow(2, this.retryCount)
-    this.retryCount++
-    this.emitLog('info', 'runtime', `Reconnecting in ${delay}ms (attempt ${this.retryCount}/${MAX_RETRIES})`)
-
-    this.reconnectTimer = setTimeout(async () => {
-      try {
-        await this.connect()
-      } catch {
-        // connect() failure triggers onclose → scheduleReconnect
-      }
-    }, delay)
-  }
-
-  private clearReconnectTimer() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-      this.reconnectTimer = null
-    }
   }
 }
