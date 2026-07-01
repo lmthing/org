@@ -403,6 +403,9 @@ importers:
       '@lmthing/core':
         specifier: workspace:*
         version: link:../core
+      '@lmthing/css':
+        specifier: workspace:*
+        version: link:../css
       '@monaco-editor/react':
         specifier: '*'
         version: 4.7.0(monaco-editor@0.55.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
