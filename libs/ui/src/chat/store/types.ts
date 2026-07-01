@@ -1,0 +1,101 @@
+// ─── Shared types for the chat store (composed from session/replay/pricing/
+// project/ui-panel slices in this folder). Kept in one file so every slice
+// can share a single `AppState` shape without circular runtime imports. ────
+
+import type { SessionModel, WireEvent } from './model.js';
+
+export type InspectorTab = 'llm' | 'statements' | 'yields' | 'variables' | 'raw';
+export type Mode = 'live' | 'replay';
+export type Connection = 'connecting' | 'open' | 'closed';
+
+// ─── Multi-session / project types ───────────────────────────────────────────
+
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface SessionMeta {
+  sessionId: string;
+  spaceDir: string;
+  agentSlug: string;
+  lastActivity: string;
+  started: string;
+  status: string;
+}
+
+// ─── Replay state ─────────────────────────────────────────────────────────────
+
+export interface ReplayState {
+  events: WireEvent[];
+  cursor: number;       // index into events (exclusive upper bound applied)
+  playing: boolean;
+  speed: number;
+}
+
+export interface ModelPricing { inputPer1K: number; outputPer1K: number }
+
+export interface AppState {
+  mode: Mode;
+  connection: Connection;
+  model: SessionModel;
+  version: number;             // bumped on every committed batch — selectors key on this
+  selectedNodeId: string | null;
+  userSelected: boolean;       // true once the user clicks a node (suppresses auto-select)
+  tab: InspectorTab;
+  follow: boolean;
+  expanded: Set<string>;
+  done: boolean;
+  spaceName: string;
+  agentSlug: string;
+  replay: ReplayState | null;
+  /** Running token cost for the current live session (resets on session switch). */
+  sessionCostUsd: number;
+  /** Real-time cost estimate for in-flight LLM turns (updates every llm_progress ~250ms). */
+  sessionCostInflight: number;
+  /** Per-model pricing loaded from /api/prices/azure. */
+  prices: Record<string, ModelPricing> | null;
+
+  // ─── Multi-session / project state ─────────────────────────────────────────
+  projects: Project[];
+  activeProjectId: string | null;
+  sessions: SessionMeta[];
+  activeSessionId: string | null;
+
+  // ─── UI panel state ───────────────────────────────────────────────────────────
+  devPanelOpen: boolean;
+  sidebarOpen: boolean;
+
+  // actions
+  feedLive: (events: WireEvent[]) => void;
+  setConnection: (c: Connection) => void;
+  setHello: (h: { spaceName: string; agentSlug: string }) => void;
+  setDone: (d: boolean) => void;
+  selectNode: (id: string | null, byUser?: boolean) => void;
+  setTab: (t: InspectorTab) => void;
+  toggleExpand: (id: string) => void;
+  setExpanded: (id: string, v: boolean) => void;
+  setFollow: (f: boolean) => void;
+  noteUserMessage: (content: string) => void;
+  noteError: (message: string) => void;
+  noteAskStart: (askId: string, descriptor: unknown) => void;
+  noteAskEnd: (askId: string, value: unknown, cancelled?: boolean) => void;
+  // replay
+  loadReplay: (events: WireEvent[]) => void;
+  seek: (cursor: number) => void;
+  play: () => void;
+  pause: () => void;
+  setSpeed: (s: number) => void;
+  exitReplay: () => void;
+  // multi-session / project actions
+  setProjects: (projects: Project[]) => void;
+  setActiveProjectId: (id: string | null) => void;
+  setSessions: (sessions: SessionMeta[]) => void;
+  setActiveSessionId: (id: string | null) => void;
+  setPrices: (p: Record<string, ModelPricing>) => void;
+  resetSession: () => void;
+  // UI panel actions
+  setDevPanelOpen: (v: boolean) => void;
+  setSidebarOpen: (v: boolean) => void;
+}

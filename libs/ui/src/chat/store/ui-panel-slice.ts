@@ -1,0 +1,23 @@
+// ─── UI panel slice ───────────────────────────────────────────────────────────
+// Owns purely presentational chrome toggles (dev panel / sidebar visibility).
+
+import type { AppState } from './types.js';
+
+export interface UiPanelSlice {
+  devPanelOpen: boolean;
+  sidebarOpen: boolean;
+  setDevPanelOpen: (v: boolean) => void;
+  setSidebarOpen: (v: boolean) => void;
+}
+
+export function createUiPanelSlice(
+  set: (partial: Partial<AppState>) => void,
+): UiPanelSlice {
+  return {
+    devPanelOpen: false,
+    sidebarOpen: true,
+
+    setDevPanelOpen: (devPanelOpen) => set({ devPanelOpen }),
+    setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
+  };
+}
