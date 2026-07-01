@@ -20,6 +20,9 @@
     "turbo": "latest"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "node-pty"
+    ],
     "peerDependencyRules": {
       "allowedVersions": {
         "react": "^18 || ^19",
