@@ -33,11 +33,12 @@
 }
 
 .app-sidebar__brand {
-  @apply font-display font-bold text-base text-foreground;
+  @apply font-display font-bold text-base;
 }
 
-.app-sidebar__brand-sub {
-  @apply text-xs text-muted-foreground;
+/* Compact brand mark shown in the collapsed icon rail. */
+.app-sidebar__rail-brand {
+  @apply font-display font-bold text-base leading-none;
 }
 
 .app-sidebar__collapse-btn {

@@ -2,6 +2,7 @@ import '@lmthing/css/elements/nav/app-sidebar/index.css'
 import * as React from 'react'
 import { ChevronDown, ChevronRight, ChevronLeft, Plus, X, PanelLeft } from 'lucide-react'
 import { cn } from '../../../lib/utils'
+import { CozyThingText } from '../../branding/cozy-text'
 
 export interface AppSidebarProject {
   id: string
@@ -245,6 +246,7 @@ export function AppSidebar({
     return (
       <nav aria-label="sidebar (collapsed)" className={cn('app-sidebar app-sidebar--collapsed', className)}>
         <div className="app-sidebar__rail">
+          <CozyThingText text="lmt" className="app-sidebar__rail-brand" />
           <button
             onClick={toggleCollapsed}
             title="Expand sidebar"
@@ -265,8 +267,7 @@ export function AppSidebar({
     >
       {/* Brand + collapse toggle */}
       <div className="app-sidebar__header">
-        <span className="app-sidebar__brand">THING</span>
-        <span className="app-sidebar__brand-sub">by lmthing</span>
+        <CozyThingText text="lmthing" className="app-sidebar__brand" />
         {collapsible && (
           <button
             onClick={toggleCollapsed}

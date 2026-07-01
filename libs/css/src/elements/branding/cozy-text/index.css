@@ -5,7 +5,7 @@
 }
 
 .cozy-text--neutral {
-  color: var(--neutral-1);
+  color: var(--foreground);
 }
 
 .cozy-text--brand-1 {

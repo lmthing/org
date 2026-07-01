@@ -336,12 +336,12 @@ export function StudioSidebar({
               title={thingOpen ? 'Hide THING chat' : 'Show THING chat'}
             >
               <MessageSquare className="studio-sidebar__footer-icon" />
-              {!isCollapsed && <span className="studio-sidebar__footer-label">THING</span>}
+              {!isCollapsed && <CozyThingText text="THING" className="studio-sidebar__footer-label" />}
             </button>
           ) : (
             <Link to="/studio/thing" className={`sidebar__item ${pathname.startsWith('/studio/thing') ? 'sidebar__item--active' : ''}`}>
               <span className="studio-sidebar__footer-icon" aria-hidden="true">🤖</span>
-              {!isCollapsed && <span className="studio-sidebar__footer-label">THING</span>}
+              {!isCollapsed && <CozyThingText text="THING" className="studio-sidebar__footer-label" />}
             </Link>
           )}
           <Link to={`${spacePath}/raw`} className={`sidebar__item ${pathname.includes('/raw') ? 'sidebar__item--active' : ''}`}>
