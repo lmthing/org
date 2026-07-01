@@ -1,22 +1,7 @@
 import React from 'react';
 import { cn } from '../lib/cn.js';
 import { useStore } from '../store/store.js';
-
-function fmtDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-const KIND_ICON: Record<string, string> = {
-  run: '⟳', fork: '⑂', delegate: '⤷', tasklist: '☰', session: '◉',
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  running: 'text-brand-2 bg-brand-2/10 border-brand-2/30',
-  done: 'text-muted-foreground bg-muted border-border',
-  error: 'text-destructive bg-destructive/10 border-destructive/30',
-  pending: 'text-muted-foreground bg-muted border-border',
-};
+import { KIND_ICON, STATUS_COLOR, fmtDuration } from './node-meta.js';
 
 interface ActivityStripProps {
   nodeIds?: string[];

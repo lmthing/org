@@ -3,6 +3,7 @@ import { useStore } from '../store/store.js';
 import type { ConvoBlock } from '../store/model.js';
 import { Message, AssistantTurn } from './Message.js';
 import { Composer } from './Composer.js';
+import { LiveActivity } from './LiveActivity.js';
 import { EmptyState } from './EmptyState.js';
 import { useTheme } from '../../theme/theme.js';
 import { TraceLoader } from './replay.js';
@@ -236,6 +237,11 @@ export function ChatView({
           <div ref={bottomRef} />
         </div>
       </main>
+
+      {/* Ephemeral sub-agent activity (delegates/forks/tasklists). Pinned above
+          the composer; renders nothing and takes no space when nothing runs, and
+          writes nothing to the transcript. */}
+      <LiveActivity />
 
       {/* Scroll to bottom button */}
       {!atBottom && (
