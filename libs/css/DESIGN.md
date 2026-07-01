@@ -23,11 +23,15 @@ Regenerate theme + manifest after editing tokens: `pnpm --filter @lmthing/css ge
      with alpha < 1 (`rgba(0,0,0,.5)`, `rgba(255,255,255,.7)`).
    - Genuinely non-brand color sets (terminal ANSI palettes, code syntax themes) put
      `ds-lint-file-ok` in a top comment; single lines use a `ds-lint-ok` comment.
-2. **Stone, not grey.** Neutrals are warm stone (`--foreground #1c1917`, `--border #e7e5e4`,
-   `--muted #f5f5f4`, `--sidebar #fafaf9`). No cool grey/slate/zinc anywhere.
-3. **Brand is an accent, never a CTA fill.** Primary actions use `--primary` (stone `#1c1917`).
-   The cozy rainbow (`--brand-1..5`, `--spectrum-*`) is for logo letters, per-product tints,
-   hover glows — not button fills.
+2. **Stone, not grey — warmly tinted.** Text/neutrals stay warm stone (`--foreground
+   #1c1917`, `--muted-foreground #57534e`); surfaces carry a faint warm brand tint
+   (`--background #fffdfb`, `--card #fffaf6`, `--border #efe6df`, `--sidebar #fdf5ef`).
+   No cool grey/slate/zinc anywhere.
+3. **Colorful: brand leads.** Primary actions, focus rings and active states use brand coral
+   (`--primary`/`--ring`/`--sidebar-primary` = `#f38358`, brand-3) with warm-near-black text
+   (`--primary-foreground #2b1a12`). Functional colors are saturated (vivid green/amber/plum/
+   sage). The full cozy rainbow (`--brand-1..5`, `--spectrum-*`) is rotated across sidebar
+   sections, tabs and avatars — see "Full-spectrum rotation" below.
 4. **THING is multi-color.** Render the wordmark with `CozyThingText`
    (`@lmthing/ui/elements/branding/cozy-text`) — each letter its own brand color
    (t=1 h=2 i=3 n=4 g=5). Never a single solid color.
@@ -42,17 +46,24 @@ Regenerate theme + manifest after editing tokens: `pnpm --filter @lmthing/css ge
 |---|---|---|---|
 | Brand (THING letters) | `--brand-1..5` | `#f5c815 #f9a94a #f38358 #ed92a1 #d59ec8` | yellow→amber→coral→rose→orchid; same in dark |
 | Product accents | `--spectrum-1..50` | ramp brand-1→brand-5 | interpolated; same in dark |
-| Surface | `--background` `--card` `--popover` | `#ffffff` | dark: warm stone `#1a1816`/`#211e1b` |
+| Surface | `--background` `--card` `--popover` | `#fffdfb` / `#fffaf6` | faint warm tint; dark `#1a1512`/`#221c18` |
 | Text | `--foreground` `--muted-foreground` | `#1c1917` `#57534e` | dark: `#ece8e3` `#a8a29e` |
-| Primary (CTA) | `--primary` | `#1c1917` stone | **not** a brand color |
-| Neutrals | `--secondary` `--muted` `--accent` | `#f5f5f4` | warm stone |
-| Border/input/ring | `--border` `--input` `--ring` | `#e7e5e4` / `#cbcac8` | 1px hairline |
-| Destructive | `--destructive` | `#c0502a` terracotta | errors |
-| Knowledge | `--knowledge` | `#8a8f4a` sage | data / knowledge streams |
-| Agent | `--agent` | `#7a4a6e` plum | AI / agent / chat streams |
-| Success | `--success` | `#5d8a4a` warm green | running / online / ok |
-| Warning | `--warning` | `#c2751c` warm amber | booting / pending / caution |
-| Sidebar | `--sidebar-*` | `#fafaf9` family | shell chrome |
+| Primary (CTA) | `--primary` / `--primary-foreground` | `#f38358` / `#2b1a12` | **brand coral** (brand-3) + warm-dark text |
+| Neutrals | `--secondary` `--muted` `--accent` | `#f7f1ec` / accent `#fbe7dd` | warm; accent = coral tint |
+| Border/input/ring | `--border` `--input` `--ring` | `#efe6df` / `#f38358` | ring = brand coral |
+| Destructive | `--destructive` | `#bd3b28` red-terracotta | errors (distinct from coral primary) |
+| Knowledge | `--knowledge` | `#8f9a2b` vivid sage | data / knowledge streams |
+| Agent | `--agent` | `#944a80` vivid plum | AI / agent / chat streams |
+| Success | `--success` | `#4f9a2f` vivid green | running / online / ok |
+| Warning | `--warning` | `#dd8410` vivid amber | booting / pending / caution |
+| Sidebar | `--sidebar-*` | `#fdf5ef` family; primary `#f38358` | shell chrome; coral active item |
+
+### Full-spectrum rotation
+
+For the colorful look, rotate the cozy rainbow across repeated UI: pick a brand/spectrum
+color by index or by a stable hash of the item's id. Use the `spectrumColor(key)` /
+`spectrumVar(i)` helpers in `@lmthing/ui/lib/spectrum` (avatars, sidebar section accents,
+tabs). Colors come from `--brand-1..5` / `--spectrum-1..50` — never hand-pick hex.
 
 Non-color scales: `--radius-sm/md/lg/xl/full`, `--font-sans/display/mono` (Cera Round Pro Bold).
 

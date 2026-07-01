@@ -210,7 +210,7 @@ export function SpaceList({
                     <div className="space-list__avatar-wrapper">
                       <Avatar>
                         {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
-                        <AvatarFallback className="space-list__avatar-fallback">
+                        <AvatarFallback className="space-list__avatar-fallback" colorKey={user.id}>
                           {user.name.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>

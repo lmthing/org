@@ -87,7 +87,7 @@
       "group": "brand",
       "light": "#f38358",
       "dark": "#f38358",
-      "description": "THING letter 'i' — coral"
+      "description": "THING letter 'i' — coral (the primary/CTA anchor)"
     },
     {
       "name": "brand-4",
@@ -130,9 +130,9 @@
       "cssVar": "--background",
       "utility": "--color-background",
       "group": "surface",
-      "light": "#ffffff",
-      "dark": "#1a1816",
-      "description": "Page background"
+      "light": "#fffdfb",
+      "dark": "#1a1512",
+      "description": "Page background — faint warm tint"
     },
     {
       "name": "foreground",
@@ -148,9 +148,9 @@
       "cssVar": "--card",
       "utility": "--color-card",
       "group": "surface",
-      "light": "#ffffff",
-      "dark": "#211e1b",
-      "description": "Card / raised surface"
+      "light": "#fffaf6",
+      "dark": "#221c18",
+      "description": "Card / raised surface — subtle warm tint"
     },
     {
       "name": "card-foreground",
@@ -166,8 +166,8 @@
       "cssVar": "--popover",
       "utility": "--color-popover",
       "group": "surface",
-      "light": "#ffffff",
-      "dark": "#211e1b",
+      "light": "#fffaf6",
+      "dark": "#221c18",
       "description": "Popover / menu surface"
     },
     {
@@ -184,27 +184,27 @@
       "cssVar": "--primary",
       "utility": "--color-primary",
       "group": "intent",
-      "light": "#1c1917",
-      "dark": "#ece8e3",
-      "description": "Primary action / CTA fill — stone, NOT a brand color"
+      "light": "#f38358",
+      "dark": "#f38358",
+      "description": "Primary action / CTA fill — brand coral (brand-3)"
     },
     {
       "name": "primary-foreground",
       "cssVar": "--primary-foreground",
       "utility": "--color-primary-foreground",
       "group": "intent",
-      "light": "#ffffff",
-      "dark": "#1a1816",
-      "description": "Text on primary"
+      "light": "#2b1a12",
+      "dark": "#2b1a12",
+      "description": "Text on primary — warm near-black for AA contrast on coral"
     },
     {
       "name": "secondary",
       "cssVar": "--secondary",
       "utility": "--color-secondary",
       "group": "intent",
-      "light": "#f5f5f4",
-      "dark": "#2e2a26",
-      "description": "Secondary surface / button"
+      "light": "#f7f1ec",
+      "dark": "#2e2723",
+      "description": "Secondary surface / button — warm"
     },
     {
       "name": "secondary-foreground",
@@ -220,9 +220,9 @@
       "cssVar": "--muted",
       "utility": "--color-muted",
       "group": "intent",
-      "light": "#f5f5f4",
-      "dark": "#2e2a26",
-      "description": "Muted background"
+      "light": "#f7f1ec",
+      "dark": "#2e2723",
+      "description": "Muted background — warm"
     },
     {
       "name": "muted-foreground",
@@ -238,9 +238,9 @@
       "cssVar": "--accent",
       "utility": "--color-accent",
       "group": "intent",
-      "light": "#f5f5f4",
-      "dark": "#2e2a26",
-      "description": "Accent hover surface"
+      "light": "#fbe7dd",
+      "dark": "#34271f",
+      "description": "Accent hover surface — warm coral tint"
     },
     {
       "name": "accent-foreground",
@@ -256,9 +256,9 @@
       "cssVar": "--destructive",
       "utility": "--color-destructive",
       "group": "functional",
-      "light": "#c0502a",
+      "light": "#bd3b28",
       "dark": "#e0754a",
-      "description": "Errors / destructive — warm terracotta (harmonizes with brand-3 coral)"
+      "description": "Errors / destructive — deep red-terracotta (distinct from coral primary)"
     },
     {
       "name": "destructive-foreground",
@@ -274,17 +274,17 @@
       "cssVar": "--border",
       "utility": "--color-border",
       "group": "state",
-      "light": "#e7e5e4",
-      "dark": "#2e2a26",
-      "description": "Hairline border"
+      "light": "#efe6df",
+      "dark": "#2f2620",
+      "description": "Hairline border — warm"
     },
     {
       "name": "input",
       "cssVar": "--input",
       "utility": "--color-input",
       "group": "state",
-      "light": "#e7e5e4",
-      "dark": "#2e2a26",
+      "light": "#efe6df",
+      "dark": "#2f2620",
       "description": "Input border"
     },
     {
@@ -292,18 +292,18 @@
       "cssVar": "--ring",
       "utility": "--color-ring",
       "group": "state",
-      "light": "#cbcac8",
-      "dark": "#57534e",
-      "description": "Focus ring"
+      "light": "#f38358",
+      "dark": "#f38358",
+      "description": "Focus ring — brand coral"
     },
     {
       "name": "knowledge",
       "cssVar": "--knowledge",
       "utility": "--color-knowledge",
       "group": "functional",
-      "light": "#8a8f4a",
-      "dark": "#b6bd66",
-      "description": "Knowledge / data streams — warm sage"
+      "light": "#8f9a2b",
+      "dark": "#c2ca5e",
+      "description": "Knowledge / data streams — vivid sage"
     },
     {
       "name": "knowledge-foreground",
@@ -319,9 +319,9 @@
       "cssVar": "--agent",
       "utility": "--color-agent",
       "group": "functional",
-      "light": "#7a4a6e",
-      "dark": "#c58fb4",
-      "description": "Agent / AI streams and chat — warm plum"
+      "light": "#944a80",
+      "dark": "#cf94bd",
+      "description": "Agent / AI streams and chat — vivid plum"
     },
     {
       "name": "agent-foreground",
@@ -337,9 +337,9 @@
       "cssVar": "--success",
       "utility": "--color-success",
       "group": "status",
-      "light": "#5d8a4a",
+      "light": "#4f9a2f",
       "dark": "#a6c56f",
-      "description": "Positive / running status — warm green"
+      "description": "Positive / running status — vivid green"
     },
     {
       "name": "success-foreground",
@@ -355,9 +355,9 @@
       "cssVar": "--warning",
       "utility": "--color-warning",
       "group": "status",
-      "light": "#c2751c",
+      "light": "#dd8410",
       "dark": "#f5b544",
-      "description": "Caution / booting status — warm amber"
+      "description": "Caution / booting status — vivid amber"
     },
     {
       "name": "warning-foreground",
@@ -373,34 +373,34 @@
       "cssVar": "--hover",
       "utility": "--color-hover",
       "group": "state",
-      "light": "rgba(28, 25, 23, 0.05)",
-      "dark": "rgba(236, 232, 227, 0.06)",
-      "description": "Hover overlay"
+      "light": "rgba(243, 131, 88, 0.08)",
+      "dark": "rgba(243, 131, 88, 0.12)",
+      "description": "Hover overlay — faint coral"
     },
     {
       "name": "active",
       "cssVar": "--active",
       "utility": "--color-active",
       "group": "state",
-      "light": "rgba(28, 25, 23, 0.1)",
-      "dark": "rgba(236, 232, 227, 0.12)",
-      "description": "Active/pressed overlay"
+      "light": "rgba(243, 131, 88, 0.16)",
+      "dark": "rgba(243, 131, 88, 0.22)",
+      "description": "Active/pressed overlay — coral"
     },
     {
       "name": "focus",
       "cssVar": "--focus",
       "utility": "--color-focus",
       "group": "state",
-      "light": "rgba(203, 202, 200, 0.5)",
-      "dark": "rgba(87, 83, 78, 0.6)",
-      "description": "Focus overlay"
+      "light": "rgba(243, 131, 88, 0.4)",
+      "dark": "rgba(243, 131, 88, 0.5)",
+      "description": "Focus overlay — coral"
     },
     {
       "name": "disabled",
       "cssVar": "--disabled",
       "utility": "--color-disabled",
       "group": "state",
-      "light": "#d6d3d1",
+      "light": "#e7e0da",
       "dark": "#3d3530",
       "description": "Disabled surface"
     },
@@ -418,9 +418,9 @@
       "cssVar": "--sidebar-background",
       "utility": "--color-sidebar-background",
       "group": "sidebar",
-      "light": "#fafaf9",
-      "dark": "#141210",
-      "description": "Sidebar background"
+      "light": "#fdf5ef",
+      "dark": "#17120f",
+      "description": "Sidebar background — warm brand tint"
     },
     {
       "name": "sidebar-foreground",
@@ -436,17 +436,17 @@
       "cssVar": "--sidebar-primary",
       "utility": "--color-sidebar-primary",
       "group": "sidebar",
-      "light": "#1c1917",
-      "dark": "#ece8e3",
-      "description": "Sidebar primary"
+      "light": "#f38358",
+      "dark": "#f38358",
+      "description": "Sidebar primary / active item — brand coral"
     },
     {
       "name": "sidebar-primary-foreground",
       "cssVar": "--sidebar-primary-foreground",
       "utility": "--color-sidebar-primary-foreground",
       "group": "sidebar",
-      "light": "#fafaf9",
-      "dark": "#1a1816",
+      "light": "#2b1a12",
+      "dark": "#2b1a12",
       "description": "Text on sidebar primary"
     },
     {
@@ -454,9 +454,9 @@
       "cssVar": "--sidebar-accent",
       "utility": "--color-sidebar-accent",
       "group": "sidebar",
-      "light": "#f5f5f4",
-      "dark": "#2e2a26",
-      "description": "Sidebar accent surface"
+      "light": "#fbe7dd",
+      "dark": "#2e241e",
+      "description": "Sidebar accent / hover surface — warm coral tint"
     },
     {
       "name": "sidebar-accent-foreground",
@@ -472,26 +472,26 @@
       "cssVar": "--sidebar-border",
       "utility": "--color-sidebar-border",
       "group": "sidebar",
-      "light": "#e7e5e4",
-      "dark": "#2e2a26",
-      "description": "Sidebar border"
+      "light": "#f2e4da",
+      "dark": "#2f2620",
+      "description": "Sidebar border — warm"
     },
     {
       "name": "sidebar-ring",
       "cssVar": "--sidebar-ring",
       "utility": "--color-sidebar-ring",
       "group": "sidebar",
-      "light": "#a8a29e",
-      "dark": "#57534e",
-      "description": "Sidebar focus ring"
+      "light": "#f38358",
+      "dark": "#f38358",
+      "description": "Sidebar focus ring — coral"
     },
     {
       "name": "sidebar",
       "cssVar": "--sidebar",
       "utility": "--color-sidebar",
       "group": "sidebar",
-      "light": "#fafaf9",
-      "dark": "#141210",
+      "light": "#fdf5ef",
+      "dark": "#17120f",
       "description": "Sidebar (alias)"
     },
     {
@@ -501,7 +501,7 @@
       "group": "spectrum",
       "light": "#f5c815",
       "dark": "#f5c815",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-2",
@@ -510,7 +510,7 @@
       "group": "spectrum",
       "light": "#f5c619",
       "dark": "#f5c619",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-3",
@@ -519,7 +519,7 @@
       "group": "spectrum",
       "light": "#f6c31d",
       "dark": "#f6c31d",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-4",
@@ -528,7 +528,7 @@
       "group": "spectrum",
       "light": "#f6c121",
       "dark": "#f6c121",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-5",
@@ -537,7 +537,7 @@
       "group": "spectrum",
       "light": "#f6be25",
       "dark": "#f6be25",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-6",
@@ -546,7 +546,7 @@
       "group": "spectrum",
       "light": "#f7bc29",
       "dark": "#f7bc29",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-7",
@@ -555,7 +555,7 @@
       "group": "spectrum",
       "light": "#f7ba2d",
       "dark": "#f7ba2d",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-8",
@@ -564,7 +564,7 @@
       "group": "spectrum",
       "light": "#f7b732",
       "dark": "#f7b732",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-9",
@@ -573,7 +573,7 @@
       "group": "spectrum",
       "light": "#f7b536",
       "dark": "#f7b536",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-10",
@@ -582,7 +582,7 @@
       "group": "spectrum",
       "light": "#f8b33a",
       "dark": "#f8b33a",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-11",
@@ -591,7 +591,7 @@
       "group": "spectrum",
       "light": "#f8b03e",
       "dark": "#f8b03e",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-12",
@@ -600,7 +600,7 @@
       "group": "spectrum",
       "light": "#f8ae42",
       "dark": "#f8ae42",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-13",
@@ -609,7 +609,7 @@
       "group": "spectrum",
       "light": "#f9ab46",
       "dark": "#f9ab46",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-14",
@@ -618,7 +618,7 @@
       "group": "spectrum",
       "light": "#f9a94a",
       "dark": "#f9a94a",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-15",
@@ -627,7 +627,7 @@
       "group": "spectrum",
       "light": "#f9a64b",
       "dark": "#f9a64b",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-16",
@@ -636,7 +636,7 @@
       "group": "spectrum",
       "light": "#f8a34c",
       "dark": "#f8a34c",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-17",
@@ -645,7 +645,7 @@
       "group": "spectrum",
       "light": "#f8a04d",
       "dark": "#f8a04d",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-18",
@@ -654,7 +654,7 @@
       "group": "spectrum",
       "light": "#f79d4e",
       "dark": "#f79d4e",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-19",
@@ -663,7 +663,7 @@
       "group": "spectrum",
       "light": "#f79a4f",
       "dark": "#f79a4f",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-20",
@@ -672,7 +672,7 @@
       "group": "spectrum",
       "light": "#f69750",
       "dark": "#f69750",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-21",
@@ -681,7 +681,7 @@
       "group": "spectrum",
       "light": "#f69552",
       "dark": "#f69552",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-22",
@@ -690,7 +690,7 @@
       "group": "spectrum",
       "light": "#f59253",
       "dark": "#f59253",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-23",
@@ -699,7 +699,7 @@
       "group": "spectrum",
       "light": "#f58f54",
       "dark": "#f58f54",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-24",
@@ -708,7 +708,7 @@
       "group": "spectrum",
       "light": "#f48c55",
       "dark": "#f48c55",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-25",
@@ -717,7 +717,7 @@
       "group": "spectrum",
       "light": "#f48956",
       "dark": "#f48956",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-26",
@@ -726,7 +726,7 @@
       "group": "spectrum",
       "light": "#f38657",
       "dark": "#f38657",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-27",
@@ -735,7 +735,7 @@
       "group": "spectrum",
       "light": "#f38358",
       "dark": "#f38358",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-28",
@@ -744,7 +744,7 @@
       "group": "spectrum",
       "light": "#f3845e",
       "dark": "#f3845e",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-29",
@@ -753,7 +753,7 @@
       "group": "spectrum",
       "light": "#f28563",
       "dark": "#f28563",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-30",
@@ -762,7 +762,7 @@
       "group": "spectrum",
       "light": "#f28669",
       "dark": "#f28669",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-31",
@@ -771,7 +771,7 @@
       "group": "spectrum",
       "light": "#f1886e",
       "dark": "#f1886e",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-32",
@@ -780,7 +780,7 @@
       "group": "spectrum",
       "light": "#f18974",
       "dark": "#f18974",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-33",
@@ -789,7 +789,7 @@
       "group": "spectrum",
       "light": "#f08a7a",
       "dark": "#f08a7a",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-34",
@@ -798,7 +798,7 @@
       "group": "spectrum",
       "light": "#f08b7f",
       "dark": "#f08b7f",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-35",
@@ -807,7 +807,7 @@
       "group": "spectrum",
       "light": "#ef8c85",
       "dark": "#ef8c85",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-36",
@@ -816,7 +816,7 @@
       "group": "spectrum",
       "light": "#ef8d8b",
       "dark": "#ef8d8b",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-37",
@@ -825,7 +825,7 @@
       "group": "spectrum",
       "light": "#ee8f90",
       "dark": "#ee8f90",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-38",
@@ -834,7 +834,7 @@
       "group": "spectrum",
       "light": "#ee9096",
       "dark": "#ee9096",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-39",
@@ -843,7 +843,7 @@
       "group": "spectrum",
       "light": "#ed919b",
       "dark": "#ed919b",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-40",
@@ -852,7 +852,7 @@
       "group": "spectrum",
       "light": "#ed92a1",
       "dark": "#ed92a1",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-41",
@@ -861,7 +861,7 @@
       "group": "spectrum",
       "light": "#eb93a4",
       "dark": "#eb93a4",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-42",
@@ -870,7 +870,7 @@
       "group": "spectrum",
       "light": "#e994a7",
       "dark": "#e994a7",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-43",
@@ -879,7 +879,7 @@
       "group": "spectrum",
       "light": "#e795aa",
       "dark": "#e795aa",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-44",
@@ -888,7 +888,7 @@
       "group": "spectrum",
       "light": "#e696ad",
       "dark": "#e696ad",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-45",
@@ -897,7 +897,7 @@
       "group": "spectrum",
       "light": "#e497b0",
       "dark": "#e497b0",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-46",
@@ -906,7 +906,7 @@
       "group": "spectrum",
       "light": "#e298b3",
       "dark": "#e298b3",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-47",
@@ -915,7 +915,7 @@
       "group": "spectrum",
       "light": "#e098b6",
       "dark": "#e098b6",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-48",
@@ -924,7 +924,7 @@
       "group": "spectrum",
       "light": "#de99b9",
       "dark": "#de99b9",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-49",
@@ -933,7 +933,7 @@
       "group": "spectrum",
       "light": "#dc9abc",
       "dark": "#dc9abc",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     },
     {
       "name": "spectrum-50",
@@ -942,7 +942,7 @@
       "group": "spectrum",
       "light": "#db9bbf",
       "dark": "#db9bbf",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
     }
   ]
 }
