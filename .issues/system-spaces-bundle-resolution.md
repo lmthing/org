@@ -27,3 +27,11 @@ src-layout candidate resolves.)
   so `__dirname` stays inside `core/dist`.
 - Or have the cli build step copy `system-spaces` into `cli/dist/` so the
   dist-layout candidate always resolves (parity with the Docker workaround).
+
+## Status
+
+Fix landed (Phase 0): `libs/cli/scripts/copy-system-spaces.mjs` now copies
+`libs/core/system-spaces/` → `libs/cli/dist/system-spaces` as part of the cli
+`build` script (`tsup && node scripts/copy-system-spaces.mjs`), giving the
+built cli parity with the Docker image's manual copy step without requiring
+Docker. Pending live verification — do not delete this file until confirmed.

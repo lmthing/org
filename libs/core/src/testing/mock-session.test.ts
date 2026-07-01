@@ -361,15 +361,18 @@ describe('mock-driven Session — per-role models (Phase 4)', () => {
     const exploreReqs = r.trace.filter((e): e is LlmRequest => e.type === 'llm_request' && e.context === 'fork:explore');
     expect(exploreReqs.length).toBeGreaterThanOrEqual(1);
     expect(exploreReqs.every((e) => e.model === 'cheap-model')).toBe(true);
-    // The session's own requests are unaffected (default model = undefined here).
-    expect(llmRequests(r.trace, 'session').every((e) => e.model === undefined)).toBe(true);
+    // The session's own requests are unaffected by roleModels: they carry the
+    // session's own model alias (every llm_request has a model field for cost tracking).
+    expect(llmRequests(r.trace, 'session').every((e) => e.model === 'mock')).toBe(true);
   });
 
-  it('no role config → the fork request carries no model override (session default)', async () => {
+  it('no role config → the fork inherits the session default model (no role override)', async () => {
     const r = await runMockSession({ streamFn: makeExploreForkMock(), message: 'go' });
     const exploreReqs = r.trace.filter((e): e is LlmRequest => e.type === 'llm_request' && e.context === 'fork:explore');
     expect(exploreReqs.length).toBeGreaterThanOrEqual(1);
-    expect(exploreReqs.every((e) => e.model === undefined)).toBe(true);
+    // ForkEngineOpts.defaultModel propagates the session alias so fork llm_request
+    // events carry a model field even without a per-role override.
+    expect(exploreReqs.every((e) => e.model === 'mock')).toBe(true);
   });
 });
 
@@ -502,5 +505,64 @@ describe('defaultAction — structural routing for weak models', () => {
     const flat = JSON.stringify(displays);
     expect(flat).toContain('BUILT_OK');          // the deterministic tasklist result was shown
     expect(flat).not.toContain('SESSION_MODEL_RAN'); // the unreliable freeform model never ran
+  });
+  it('reads chain coordinates from the tasklist ENVELOPE payload (envelope.data) and runs the second delegate', async () => {
+    // The build action's goal task resolves EXECUTION COORDINATES ({ spaceKey, agentSlug,
+    // actionId, query, … }). Since Phase 3 the auto-captured tasklist result is a
+    // TaskEnvelope, so the structural fast-path must find the coordinates in
+    // envelope.data — this test fails if it still reads them off the envelope itself.
+    const runnerDir = await mkdtemp(join(tmpdir(), 'lmthing-defaction-runner-'));
+    tmpDirs.push(runnerDir);
+    const runnerAgent = join(runnerDir, 'agents', 'runner', 'instruct.md');
+    await mkdir(dirname(runnerAgent), { recursive: true });
+    await writeFile(
+      runnerAgent,
+      `---\ntitle: Runner\nactions:\n  - id: run\n    label: Run\n    description: Run the built thing\n---\n\nYou are the runner.\n`,
+      'utf8',
+    );
+
+    const spaceDir = await mkdtemp(join(tmpdir(), 'lmthing-defaction-'));
+    tmpDirs.push(spaceDir);
+    const agentFile = join(spaceDir, 'agents', 'builder', 'instruct.md');
+    await mkdir(dirname(agentFile), { recursive: true });
+    await writeFile(
+      agentFile,
+      `---\ntitle: Builder\ndefaultAction: build\nactions:\n  - id: build\n    label: Build\n    description: Build the thing\n    tasklist: build\n---\n\nYou are a builder.\n`,
+      'utf8',
+    );
+    const taskFile = join(spaceDir, 'tasklists', 'build', '01-make.md');
+    await mkdir(dirname(taskFile), { recursive: true });
+    await writeFile(
+      taskFile,
+      `---\nid: make\ngoal: true\noutput:\n  spaceKey: string\n  agentSlug: string\n  actionId: string\n  query: string\n---\n\nCOORD_TASK: package the run coordinates.`,
+      'utf8',
+    );
+
+    const traceFile = join(spaceDir, 'trace.jsonl');
+    const displays: unknown[] = [];
+    const host: RenderHost = { display: (d) => { displays.push(d); }, ask: async () => undefined, log: () => {} };
+
+    const m = mockMatch(
+      [
+        // The build tasklist's goal fork resolves the coordinates of the runner agent.
+        { when: (o) => o.messages.some((msg) => msg.content.includes('COORD_TASK') && msg.content.includes('Output schema')), respond: () => `currentTask.resolve({ spaceKey: ${JSON.stringify(runnerDir)}, agentSlug: "runner", actionId: "run", query: "do it" });` },
+        // The chained SECOND delegate — only reached if the fast-path unwrapped envelope.data.
+        { when: (o) => o.messages.some((msg) => msg.content.includes('Run action: run')), respond: () => `currentTask.resolve({ answer: "CHAINED_FINAL" });` },
+        // The builder delegate: run the action tasklist (auto-captured as an envelope).
+        { when: (o) => o.messages.some((msg) => msg.content.includes('Run action: build')), respond: () => `const r = await tasklist("build", {});` },
+      ],
+      () => `display("SESSION_MODEL_RAN");`,
+    );
+
+    const session = new Session(
+      { spaceDir, agentSlug: 'builder', modelAlias: 'mock', renderHost: host, traceFile, systemSpaceDirs: [] },
+      { streamFn: m },
+    );
+    await session.start('build and run it');
+    session.dispose();
+
+    const flat = JSON.stringify(displays);
+    expect(flat).toContain('CHAINED_FINAL');         // the chained delegate ran off envelope.data
+    expect(flat).not.toContain('SESSION_MODEL_RAN'); // still fully structural
   });
 });

@@ -88,9 +88,11 @@ describe('runTasklist orchestrator', () => {
       seen,
     );
     const goal = await runTasklist({ name: 'flow', space, forkEngine: engine, seed: { base: 10 } });
-    // Both ready tasks ran (seed reached both); the goal task's output is returned.
+    // Both ready tasks ran (seed reached both); the goal task's output is the envelope payload.
     expect(seen.sort()).toEqual(['LEFT_T', 'RIGHT_T']);
-    expect(goal).toEqual({ v: 12 });
+    expect(goal.data).toEqual({ v: 12 });
+    expect(goal.ok).toBe(true);
+    expect(goal.degraded).toBe(false);
   });
 
   it('skips an optional task whose fork fails, and still completes the goal', async () => {
@@ -103,7 +105,8 @@ describe('runTasklist orchestrator', () => {
     // flaky has no scripted answer → its fork rejects → optional → skipped (no throw).
     const engine = engineFor(dir, [{ token: 'MAIN_T', code: `currentTask.resolve({ v: 5 });` }], seen);
     const goal = await runTasklist({ name: 'flow', space, forkEngine: engine });
-    expect(goal).toEqual({ v: 5 });
+    expect(goal.data).toEqual({ v: 5 });
+    expect(goal.ok).toBe(true); // the GOAL task itself resolved cleanly
     expect(seen).toEqual(['MAIN_T']); // main ran; the flaky fork produced no answer
   });
 
@@ -125,7 +128,7 @@ describe('runTasklist orchestrator', () => {
       seen,
     );
     const goal = await runTasklist({ name: 'flow', space, forkEngine: engine });
-    expect(goal).toEqual({ v: 9 });
+    expect(goal.data).toEqual({ v: 9 });
     // The conditional branch was skipped — its fork was never dispatched.
     expect(seen).toContain('GATE_T');
     expect(seen).toContain('FINAL_T');
@@ -207,17 +210,132 @@ describe('runTasklist orchestrator', () => {
     expect(ends.find((e) => e.nodeId === tasklistNode!.nodeId)!.status).toBe('done');
   });
 
-  it('salvages a never-resolving required task so the tasklist still completes', async () => {
+  it('salvages a never-resolving required task so the tasklist still completes, signalled via the envelope', async () => {
     // Robustness contract: a required task whose fork never calls resolve() is salvaged
-    // (schema-valid placeholder) rather than aborting the whole tasklist. This is the
-    // graceful-degradation path — a partial/empty result beats total failure.
+    // (NEUTRAL schema-valid placeholder) rather than aborting the whole tasklist. The
+    // degradation is a TYPED signal on the envelope — never prose inside the data.
     const dir = await makeTasklistSpace({
-      '01-boom.md': `---\nid: boom\ngoal: true\noutput:\n  v: number\n---\n\nBOOM_T: this required task never resolves.`,
+      '01-boom.md': `---\nid: boom\ngoal: true\noutput:\n  v: number\n  note: string\n---\n\nBOOM_T: this required task never resolves.`,
     });
     const space = await loadSpace(dir);
     const engine = engineFor(dir, [], []); // no answer → boom's fork salvages
     const result = await runTasklist({ name: 'flow', space, forkEngine: engine });
-    expect(result).toMatchObject({ v: 0 }); // salvaged number placeholder
+    expect(result.ok).toBe(false);
+    expect(result.degraded).toBe(true);
+    expect(result.reason).toBe('no_resolve');
+    expect(result.degradedTasks).toEqual(['boom']);
+    expect(result.data).toEqual({ v: 0, note: '' }); // neutral empties, schema-shaped
+    // The alarming prose placeholder is GONE from the data plane entirely.
+    expect(JSON.stringify(result)).not.toContain('(unavailable');
+  });
+
+  it('labels a degraded forEach ELEMENT as "task[i]" in degradedTasks', async () => {
+    // Only element index 2 (item 30) never resolves — its fork salvages. The envelope
+    // must name exactly that element, and the goal (a forEach task) counts as degraded.
+    const dir = await makeTasklistSpace({
+      '01-list.md': `---\nid: list\noutput:\n  items: array\n---\n\nLIST_T: produce the list.`,
+      '02-each.md': `---\nid: each\ndependsOn: [list]\nforEach: list.items\ngoal: true\noutput:\n  n: number\n---\n\nEACH_T: process one item.`,
+    });
+    const space = await loadSpace(dir);
+    const streamFn = createMockStreamFn((o: StreamOpts) => {
+      const user = o.messages.map((m) => m.content).join('\n');
+      if (user.includes('LIST_T')) return `currentTask.resolve({ items: [10, 20, 30] });`;
+      if (user.includes('EACH_T')) {
+        if (user.includes('- item: 30')) return ''; // this element never resolves → salvage
+        return `currentTask.resolve({ n: item });`;
+      }
+      return '';
+    });
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
+      renderHost: silentHost, streamFn,
+    });
+    const result = await runTasklist({ name: 'flow', space, forkEngine: engine });
+    expect(result.degraded).toBe(true);
+    expect(result.degradedTasks).toEqual(['each[2]']);
+    expect(result.ok).toBe(false); // the goal task itself had a salvaged element
+    expect(result.reason).toBe('no_resolve');
+    // Element outputs stay RAW schema data — the salvaged element is a neutral empty.
+    expect(result.data).toEqual([{ n: 10 }, { n: 20 }, { n: 0 }]);
+  });
+
+  it('a degraded NON-goal task marks the envelope degraded but keeps ok:true', async () => {
+    const dir = await makeTasklistSpace({
+      '01-shaky.md': `---\nid: shaky\noutput:\n  hint: string\n---\n\nSHAKY_T: never resolves.`,
+      '02-main.md': `---\nid: main\ndependsOn: [shaky]\ngoal: true\noutput:\n  v: number\n---\n\nMAIN_T: the goal.`,
+    });
+    const space = await loadSpace(dir);
+    const engine = engineFor(dir, [{ token: 'MAIN_T', code: `currentTask.resolve({ v: 3 });` }], []);
+    const result = await runTasklist({ name: 'flow', space, forkEngine: engine });
+    expect(result.ok).toBe(true); // the GOAL resolved un-salvaged
+    expect(result.degraded).toBe(true); // …but the pipeline carried a salvage
+    expect(result.degradedTasks).toEqual(['shaky']);
+    expect(result.reason).toBeUndefined(); // reason describes the goal only
+    expect(result.data).toEqual({ v: 3 });
+  });
+
+  it('hard-filters the seed to the DECLARED input keys before forking', async () => {
+    // Root cause A2: the whole seed used to spread into every fork, so delegator baggage
+    // (e.g. parentHistory) rode into leaf prompts under nesting. With a declared input
+    // schema, forks receive ONLY the declared keys.
+    const dir = await mkdtemp(join(tmpdir(), 'lmthing-orch-'));
+    tmpDirs.push(dir);
+    await mkdir(join(dir, 'agents', 'main'), { recursive: true });
+    await writeFile(join(dir, 'agents', 'main', 'instruct.md'), 'You are a runner.\n', 'utf8');
+    const tl = join(dir, 'tasklists', 'flow');
+    await mkdir(tl, { recursive: true });
+    await writeFile(join(tl, 'index.md'), `---\ninput:\n  query: string\n---\n\nEcho the query.`, 'utf8');
+    await writeFile(join(tl, '01-main.md'), `---\nid: main\ngoal: true\noutput:\n  echo: string\n---\n\nECHO_T: echo the query seed var.`, 'utf8');
+    const space = await loadSpace(dir);
+    let forkPrompt = '';
+    const streamFn = createMockStreamFn((o: StreamOpts) => {
+      const user = o.messages.map((m) => m.content).join('\n');
+      if (user.includes('ECHO_T')) {
+        forkPrompt = user;
+        return `currentTask.resolve({ echo: query });`;
+      }
+      return '';
+    });
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
+      renderHost: silentHost, streamFn,
+    });
+    const result = await runTasklist({
+      name: 'flow', space, forkEngine: engine,
+      seed: { query: 'x', junk: 'y', parentHistory: 'z' },
+    });
+    // The declared key made it through — as a real seed VAR (the fork read it) and in the prompt.
+    expect(result.data).toEqual({ echo: 'x' });
+    expect(forkPrompt).toContain('query');
+    // The undeclared baggage did NOT reach the fork's prompt/seed.
+    expect(forkPrompt).not.toContain('junk');
+    expect(forkPrompt).not.toContain('parentHistory');
+  });
+
+  it('passes the full seed through when the tasklist declares NO input schema (back-compat)', async () => {
+    const dir = await makeTasklistSpace({
+      '01-main.md': `---\nid: main\ngoal: true\noutput:\n  echo: string\n---\n\nPASS_T: echo the junk seed var.`,
+    });
+    const space = await loadSpace(dir);
+    let forkPrompt = '';
+    const streamFn = createMockStreamFn((o: StreamOpts) => {
+      const user = o.messages.map((m) => m.content).join('\n');
+      if (user.includes('PASS_T')) {
+        forkPrompt = user;
+        return `currentTask.resolve({ echo: junk });`;
+      }
+      return '';
+    });
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
+      renderHost: silentHost, streamFn,
+    });
+    const result = await runTasklist({
+      name: 'flow', space, forkEngine: engine,
+      seed: { query: 'x', junk: 'y' },
+    });
+    expect(result.data).toEqual({ echo: 'y' }); // undeclared-input tasklist: everything flows
+    expect(forkPrompt).toContain('junk');
   });
 
   it('throws when a required task hits a hard budget cap (genuine failure)', async () => {
@@ -250,7 +368,7 @@ describe('runTasklist orchestrator', () => {
       seen,
     );
     const result = await runTasklist({ name: 'flow', space, forkEngine: engine });
-    expect(result).toEqual({ v: 2 });
+    expect(result.data).toEqual({ v: 2 });
     expect(seen).toEqual(['FIRST_T', 'SECOND_T']);
   });
 
@@ -299,6 +417,6 @@ describe('runTasklist orchestrator', () => {
 
     // A valid seed is accepted and the tasklist runs to completion.
     const result = await runTasklist({ name: 'flow', space, forkEngine: engine, seed: { topic: 'pasta' } });
-    expect(result).toEqual({ v: 5 });
+    expect(result.data).toEqual({ v: 5 });
   });
 });

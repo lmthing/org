@@ -1,15 +1,38 @@
 import { catalogDts } from '../ui/catalog.js';
 
-export const LIBRARY_DTS = `
-declare function ask<T = unknown>(descriptor: JSXDescriptor | string): Promise<T>;
+/**
+ * Ambient declarations for the value-yielding ORCHESTRATION globals, split out
+ * per-global so `buildAmbientDts` (exec/bootstrap.ts) can compose each VM
+ * context's DTS additively:
+ *   - session: all of them
+ *   - delegate: everything except `ask`
+ *   - fork leaf: none of them; `delegate` is added back only when the task opts
+ *     in via `canDelegateTo`
+ * A global that is not declared fails typecheck on a stray call — a clean,
+ * retryable error — instead of passing typecheck and throwing at runtime.
+ */
+export const ASK_DTS = `declare function ask<T = unknown>(descriptor: JSXDescriptor | string): Promise<T>;`;
+// tasklist() resolves to a TaskEnvelope: { ok: boolean; degraded: boolean; data: <goal output>;
+// reason?: string; degradedTasks?: string[] }. Branch on r.ok / r.degraded; the payload is r.data.
+// Declared `any` by convention so r.data.field reads without casts.
+export const TASKLIST_DTS = `/** Runs a named tasklist. Resolves to { ok, degraded, data, reason?, degradedTasks? } — branch on r.ok/r.degraded; the goal output is r.data. */
+declare function tasklist(name: string, seed?: Record<string, unknown>): Promise<any>;`;
+export const FORK_DTS = `declare function fork<T>(opts: ForkOpts<T>): Promise<T>;`;
+export const DELEGATE_DTS = `declare function delegate(packageName: string, agentName: string, opts?: DelegateOpts): Promise<any>;
+declare function delegate(packageName: string, agentName: string, action?: string, opts?: DelegateOpts): Promise<any>;`;
+
+/**
+ * Declarations present in EVERY VM context (session, fork leaf, delegate): the
+ * non-orchestration globals, supporting interfaces, host-injected primitives and
+ * the design-system catalog. NOTE: `registerSpace` stays declared even where the
+ * global is not injected (read-only fork roles, delegates) — matching the
+ * pre-unification DTS, where only ask/tasklist/fork/delegate were stripped.
+ */
+export const COMMON_DTS = `
 declare function display(descriptor: unknown): void;
 declare function inspect(...args: (unknown | [unknown, InspectQuery])[]): Promise<void>;
 declare function loadKnowledge(...path: string[]): Promise<any>;
 declare function sleep(duration: string): Promise<void>;
-declare function tasklist(name: string, seed?: Record<string, unknown>): Promise<any>;
-declare function fork<T>(opts: ForkOpts<T>): Promise<T>;
-declare function delegate(packageName: string, agentName: string, opts?: DelegateOpts): Promise<any>;
-declare function delegate(packageName: string, agentName: string, action?: string, opts?: DelegateOpts): Promise<any>;
 declare function registerSpace(dir: string): Promise<{ ok: boolean; spaceKey: string; agentSlug: string; error?: string }>;
 
 declare interface JSXDescriptor {
@@ -63,8 +86,13 @@ declare const process: { env: Record<string, string | undefined>; exit(code?: nu
 declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };
 declare function writeFileRaw(path: string, content: string): { ok: boolean; bytes: number; error?: string };
 declare function typecheckSource(src: string): { ok: boolean; errors: string[] };
+declare function spacePath(...parts: string[]): string;
+declare function resolveSpaceDir(space: string): string;
 declare function progress(): { episodes: number; toolCalls: number; elapsedMs: number };
 ` + '\n' + catalogDts();
+
+/** Full library DTS for the top-level session VM (all globals, incl. `ask`). */
+export const LIBRARY_DTS = [ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS].join('\n');
 
 /**
  * Library DTS WITHOUT `ask`. Fork and delegate VMs run headless/autonomous — there is
@@ -73,4 +101,4 @@ declare function progress(): { episodes: number; toolCalls: number; elapsedMs: n
  * name 'ask'") and steers the model back to working from its seed/inputs, instead of
  * binding `undefined` (or, in a real PTY, blocking forever on stdin).
  */
-export const LIBRARY_DTS_NO_ASK = LIBRARY_DTS.replace(/^declare function ask\b.*\r?\n/m, '');
+export const LIBRARY_DTS_NO_ASK = [TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS].join('\n');

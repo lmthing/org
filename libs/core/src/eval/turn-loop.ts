@@ -9,7 +9,7 @@ import { BoundaryDetector } from '../sandbox/boundary.js';
 import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { buildErrorBlock } from './error-rewind.js';
-import { emitVariables, extractBindingNames, extractBindingPattern } from '../context/variables.js';
+import { emitVariables, extractBindingNames, extractBindingPattern, type BindingKind } from '../context/variables.js';
 import { formatInspectResult, type InspectQuery } from '../globals/inspect.js';
 import { serialize } from '../globals/serialize.js';
 import { BudgetExceededError, type Budget } from './budget.js';
@@ -141,6 +141,57 @@ const CONTINUATION_NUDGE =
   '- Otherwise keep emitting the remaining statements (validate, register, delegate, display the final result, …).\n' +
   'Only stop (reply with no code) once the whole task is complete and the final result has been displayed.';
 
+/** Outcome of running the shared per-statement pipeline (typecheck → transpile →
+ *  eval → pending-yield check). Callers own the parts that legitimately differ
+ *  between the streaming loop and the trailing-buffer flush (tracer/log emissions,
+ *  stream.abort()/aborted bookkeeping) — see the two call sites in runTurnLoop. */
+type StatementOutcome =
+  | { kind: 'dropped' }
+  | { kind: 'typecheck_error'; message: string }
+  | { kind: 'eval_error'; message: string }
+  | { kind: 'yielded'; yield: YieldRequest }
+  | { kind: 'ok' };
+
+/** Maps yield-resolved values onto the bound names of a yielding statement's binding
+ *  pattern (simple/array/object), then prefers the VM's own computed value for each
+ *  name over the raw resolved value where they diverge. They agree whenever the
+ *  yielding call IS the directly-awaited expression (every yield kind today). They
+ *  diverge when a yield is nested inside another async function the model awaited
+ *  instead (e.g. `webSearch()` awaiting `fetch()` internally) — there, the raw
+ *  resolved value is the INNER yield's value, not the outer call's real return value,
+ *  while the VM's own bytecode (continued via drivePendingJobs(), including the
+ *  per-statement `globalThis[name] = name` propagation) has already computed the
+ *  correct one. Falls back to the raw value when the VM reports the global as unset.
+ *  Exported so a later phase (host-executed preludes) can reuse it. */
+export function bindYieldResults(
+  vm: VM,
+  pattern: { kind: BindingKind; names: string[] },
+  yieldCount: number,
+  resolvedValues: unknown[],
+): Record<string, unknown> {
+  const variables: Record<string, unknown> = {};
+  // Multiple yields ⟹ the statement awaited a combinator (Promise.all), whose result
+  // is the array of resolved values in source order; a single yield ⟹ the result is
+  // that one value.
+  const awaited: unknown = yieldCount > 1 ? resolvedValues : resolvedValues[0];
+  const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
+  const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+  if (pattern.kind === 'array') {
+    const arr = asArray(awaited);
+    pattern.names.forEach((name, i) => { variables[name] = arr[i]; });
+  } else if (pattern.kind === 'object') {
+    const obj = asRecord(awaited);
+    pattern.names.forEach((name) => { variables[name] = obj[name]; });
+  } else if (pattern.names.length === 1) {
+    variables[pattern.names[0]!] = awaited;
+  }
+  for (const name of pattern.names) {
+    const vmValue = vm.getVar(name);
+    if (vmValue !== undefined) variables[name] = vmValue;
+  }
+  return variables;
+}
+
 export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'> {
   const { vm, history, systemBlock, ambientDts, renderHost, streamFn, processYield } = deps;
   const maxRetries = deps.maxRetries ?? 3;
@@ -216,6 +267,54 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     let assistantContent = '';
     const parsedStatements: string[] = [];
 
+    // Shared per-statement pipeline: prose-drop check → typecheck → transpile +
+    // globalThis-propagation → eval → pending-yield check → accumulatedContext append.
+    // Used by both the main streaming loop and the trailing-buffer flush below. Mutates
+    // the per-turn loop state captured above (turnError, failingStatement, pendingYield,
+    // yieldingStatement, parsedStatements, lastStmtNonYieldBinding); callers own the
+    // parts that differ between the two sites (tracer/log emissions, stream.abort()).
+    const processStatement = (stmt: string): StatementOutcome => {
+      if (looksLikeProse(stmt)) return { kind: 'dropped' };
+
+      const tscResult = runTsc({ ambientDts: fullAmbient(), sessionContext: accumulatedContext, statement: stmt });
+      if (!tscResult.ok) {
+        const errMsg = tscResult.diagnostics.map((d) => d.message).join('; ');
+        turnError = errMsg;
+        failingStatement = stmt;
+        return { kind: 'typecheck_error', message: errMsg };
+      }
+
+      // Transpile TS/JSX → JS, append globalThis bindings so the next module can
+      // access variables declared here (each evalStatement is an isolated module).
+      const boundNames = extractBindingNames(stmt);
+      let jsCode = transpileStatement(stmt);
+      if (boundNames.length > 0) {
+        const assigns = boundNames
+          .map((n) => `try { globalThis['${n}'] = ${n}; } catch {}`)
+          .join('\n');
+        jsCode += '\n' + assigns;
+      }
+      const evalResult = vm.evalStatement(jsCode);
+      if (!evalResult.ok) {
+        turnError = evalResult.error;
+        failingStatement = stmt;
+        return { kind: 'eval_error', message: evalResult.error };
+      }
+
+      if (vm.pendingYields.length > 0) {
+        const yieldReq = vm.pendingYields[vm.pendingYields.length - 1]!;
+        pendingYield = yieldReq;
+        yieldingStatement = stmt;
+        parsedStatements.push(stmt);
+        return { kind: 'yielded', yield: yieldReq };
+      }
+
+      parsedStatements.push(stmt);
+      appendContext(stmt);
+      lastStmtNonYieldBinding = boundNames.length > 0 && /[A-Za-z_$][\w.$]*\s*\(/.test(stmt);
+      return { kind: 'ok' };
+    };
+
     renderHost.log(`[turn ${attempt}] streaming...`);
     const idleMs = deps.streamIdleMs ?? 60_000;
     try {
@@ -248,7 +347,8 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
           // Drop narrated prose the model emitted instead of code (e.g. "Based on the
           // query, I will…"). It never parses as TS, so skipping it avoids burning a
           // retry on a guaranteed typecheck error. Same rationale as stray fence tags.
-          if (looksLikeProse(stmt)) {
+          const outcome = processStatement(stmt);
+          if (outcome.kind === 'dropped') {
             renderHost.log(`[stmt] (dropped prose) ${stmt}`);
             tracer.write({ ts: Date.now(), type: 'statement', context: ctx, ...(nodeId ? { nodeId } : {}), code: `/* dropped non-code prose: ${stmt.slice(0, 80)} */` });
             continue;
@@ -264,49 +364,25 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
             tracer.write({ ts: now, type: 'llm_progress', context: ctx, ...(nodeId ? { nodeId } : {}), chars: assistantContent.length, statements: parsedStatements.length });
           }
 
-          const tscResult = runTsc({ ambientDts: fullAmbient(), sessionContext: accumulatedContext, statement: stmt });
-          if (!tscResult.ok) {
-            const errMsg = tscResult.diagnostics.map((d) => d.message).join('; ');
+          if (outcome.kind === 'typecheck_error') {
             stream.abort();
             aborted = true;
-            turnError = errMsg;
-            failingStatement = stmt;
-            tracer.write({ ts: Date.now(), type: 'typecheck_error', context: ctx, ...(nodeId ? { nodeId } : {}), statement: stmt, message: errMsg, attempt });
+            tracer.write({ ts: Date.now(), type: 'typecheck_error', context: ctx, ...(nodeId ? { nodeId } : {}), statement: stmt, message: outcome.message, attempt });
             break;
           }
 
-          // Transpile TS/JSX → JS, append globalThis bindings so the next module can
-          // access variables declared here (each evalStatement is an isolated module).
-          const boundNames = extractBindingNames(stmt);
-          let jsCode = transpileStatement(stmt);
-          if (boundNames.length > 0) {
-            const assigns = boundNames
-              .map((n) => `try { globalThis['${n}'] = ${n}; } catch {}`)
-              .join('\n');
-            jsCode += '\n' + assigns;
-          }
-          const evalResult = vm.evalStatement(jsCode);
-          if (!evalResult.ok) {
+          if (outcome.kind === 'eval_error') {
             stream.abort();
             aborted = true;
-            turnError = evalResult.error;
-            failingStatement = stmt;
-            tracer.write({ ts: Date.now(), type: 'eval_error', context: ctx, ...(nodeId ? { nodeId } : {}), statement: stmt, message: evalResult.error });
+            tracer.write({ ts: Date.now(), type: 'eval_error', context: ctx, ...(nodeId ? { nodeId } : {}), statement: stmt, message: outcome.message });
             break;
           }
 
-          if (vm.pendingYields.length > 0) {
-            pendingYield = vm.pendingYields[vm.pendingYields.length - 1]!;
-            yieldingStatement = stmt;
-            parsedStatements.push(stmt);
+          if (outcome.kind === 'yielded') {
             stream.abort();
             aborted = true;
             break;
           }
-
-          parsedStatements.push(stmt);
-          appendContext(stmt);
-          lastStmtNonYieldBinding = boundNames.length > 0 && /[A-Za-z_$][\w.$]*\s*\(/.test(stmt);
         }
 
         if (aborted) break;
@@ -335,42 +411,15 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       continue;
     }
 
-    // Flush remaining buffer
+    // Flush remaining buffer. Unlike the streaming loop above, this never emits
+    // statement/progress/error tracer events or renderHost logs, and never touches
+    // `stream`/`aborted` (the stream has already ended) — that asymmetry is intentional
+    // and predates this refactor; processStatement only supplies the shared pipeline.
     if (!aborted) {
-      const trailing = stripMarkdownFences(detector.flush());
-      if (trailing.trim() && !looksLikeProse(trailing.trim())) {
-        const stmt = trailing.trim();
-        hadStatements = true;
-
-        const tscResult = runTsc({ ambientDts: fullAmbient(), sessionContext: accumulatedContext, statement: stmt });
-        if (!tscResult.ok) {
-          turnError = tscResult.diagnostics.map((d) => d.message).join('; ');
-          failingStatement = stmt;
-        } else {
-          const boundNamesFlush = extractBindingNames(stmt);
-          let jsCodeFlush = transpileStatement(stmt);
-          if (boundNamesFlush.length > 0) {
-            const assigns = boundNamesFlush
-              .map((n) => `try { globalThis['${n}'] = ${n}; } catch {}`)
-              .join('\n');
-            jsCodeFlush += '\n' + assigns;
-          }
-          const evalResult = vm.evalStatement(jsCodeFlush);
-          if (!evalResult.ok) {
-            turnError = evalResult.error;
-            failingStatement = stmt;
-          } else {
-            if (vm.pendingYields.length > 0) {
-              pendingYield = vm.pendingYields[vm.pendingYields.length - 1]!;
-              yieldingStatement = stmt;
-              parsedStatements.push(stmt);
-            } else {
-              parsedStatements.push(stmt);
-              appendContext(stmt);
-              lastStmtNonYieldBinding = boundNamesFlush.length > 0 && /[A-Za-z_$][\w.$]*\s*\(/.test(stmt);
-            }
-          }
-        }
+      const trailing = stripMarkdownFences(detector.flush()).trim();
+      if (trailing) {
+        const outcome = processStatement(trailing);
+        if (outcome.kind !== 'dropped') hadStatements = true;
       }
     }
 
@@ -429,7 +478,6 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       // Budget: count each resolved yield as a tool call. Throws (and the caller
       // disposes the VM) if over the tool-call or wall-clock cap.
       deps.budget?.tickToolCalls(yields.length);
-      const variables: Record<string, unknown> = {};
 
       // Binding pattern of the yielding statement (kind + names).
       const pattern = extractBindingPattern(yieldingStatement);
@@ -485,34 +533,10 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         continue;
       }
 
-      // Map resolved values onto the bound names. Multiple yields ⟹ the statement
-      // awaited a combinator (Promise.all), whose result is the array of resolved
-      // values in source order; a single yield ⟹ the result is that one value.
-      const awaited: unknown = yields.length > 1 ? resolvedValues : resolvedValues[0];
-      const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {});
-      const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-      if (pattern.kind === 'array') {
-        const arr = asArray(awaited);
-        pattern.names.forEach((name, i) => { variables[name] = arr[i]; });
-      } else if (pattern.kind === 'object') {
-        const obj = asRecord(awaited);
-        pattern.names.forEach((name) => { variables[name] = obj[name]; });
-      } else if (pattern.names.length === 1) {
-        variables[pattern.names[0]!] = awaited;
-      }
-      // Prefer the value the VM itself computed for each bound name over the raw
-      // resolved-yield value above. They agree whenever the yielding call IS the
-      // directly-awaited expression (every yield kind today). They diverge when a
-      // yield is nested inside another async function the model awaited instead
-      // (e.g. `webSearch()` awaiting `fetch()` internally) — there, `awaited` is the
-      // INNER yield's raw value, not the outer call's real return value, while the VM's
-      // own bytecode (continued via drivePendingJobs() above, including the per-statement
-      // `globalThis[name] = name` propagation) has already computed the correct one.
-      // Falls back to the value above when the VM reports the global as unset.
-      for (const name of pattern.names) {
-        const vmValue = vm.getVar(name);
-        if (vmValue !== undefined) variables[name] = vmValue;
-      }
+      // Map resolved values onto the bound names, preferring the VM's own computed
+      // value for each name over the raw resolved-yield value where they diverge
+      // (see bindYieldResults' doc comment — the webSearch()-awaiting-fetch() case).
+      const variables = bindYieldResults(vm, pattern, yields.length, resolvedValues);
       for (const [name, value] of Object.entries(variables)) {
         vm.setVar(name, value); // inject into VM scope + host scope for the next turn
       }

@@ -152,6 +152,6 @@ Fix: check filenames and frontmatter match exactly (case-sensitive).
 
 ## System spaces (always-on toolkit)
 
-Every user space is automatically merged with the **system spaces** in `libs/core/system-spaces/` (`system-global`, `system-engineer`, `system-architect`, `system-deep-research`, `user-memory`, `user-thing`). The `system-global` space's functions are universally injected into every agent — `readFile`/`writeFile`/`editFile`/`glob`/`grep`/`listDir`, `webSearch`/`webFetch`, `remember`/`recall`/`recallAll`/`forget`, and `todoWrite`/`todoRead` — you do NOT declare them in the agent's `functions:` list, and you should not re-implement them. They appear in the system prompt under `# Built-in Tools`.
+Every user space is automatically merged with the **system spaces** in `libs/core/system-spaces/` (`system-global`, `system-engineer`, `system-architect`, `system-research`, `user-memory`, `user-thing`). The `system-global` space's functions are universally injected into every agent — `readFile`/`writeFile`/`editFile`/`glob`/`grep`/`listDir`, `webSearch`/`webFetch`, `remember`/`recall`/`recallAll`/`forget`, and `todoWrite`/`todoRead` — you do NOT declare them in the agent's `functions:` list, and you should not re-implement them. They appear in the system prompt under `# Built-in Tools`.
 
 The user space **wins on name collisions**, so you can override a system tool by defining a function of the same name. To add/modify a system space or a `fork({ role })`, see `@.claude/skills/system-spaces.md`.

@@ -26,15 +26,15 @@ For a normal question that needs a fast, sourced answer:
 
 ```typescript
 // The question is the `query` you were given (in scope as a seed variable).
-const r = await tasklist("research", { query: query as string }) as {
-  answer: string; sources: Array<{ title: string; url: string }>;
-};
+// r = { ok, degraded, data } — the answer payload is r.data.
+const r = await tasklist("research", { query: query as string });
 ```
 ```typescript
+const a = r.data as { answer: string; sources: Array<{ title: string; url: string }> };
 display(<Stack gap={2}>
-  <Markdown text={r.answer} />
+  <Markdown text={a.answer} />
   <Divider label="Sources" />
-  <List>{r.sources.map((s) => <ListItem><Link href={s.url}>{s.title}</Link></ListItem>)}</List>
+  <List>{a.sources.map((s) => <ListItem><Link href={s.url}>{s.title}</Link></ListItem>)}</List>
 </Stack>);
 ```
 
@@ -42,16 +42,18 @@ display(<Stack gap={2}>
 
 For a topic that needs deep, multi-angle investigation. Internally this now runs a broad-scope
 search pass before decomposing into sub-questions, then a deeper per-question investigation, then
-a clustering + summarizing pass — the call signature and returned shape below are unchanged.
+a clustering + summarizing pass — the call signature is unchanged; the report payload is `r.data`.
 
 ```typescript
-const report = await tasklist("deep_research", { query: query as string }) as {
+// r = { ok, degraded, data } — the report payload is r.data.
+const r = await tasklist("deep_research", { query: query as string });
+```
+```typescript
+const report = r.data as {
   topic: string; executive_summary: string;
   findings: Array<{ heading: string; detail: string }>;
   conclusion: string; sources: Array<{ title: string; url: string }>;
 };
-```
-```typescript
 display(<Stack gap={2}>
   <Heading level={1}>{report.topic}</Heading>
   <Callout variant="info" title="Executive summary">{report.executive_summary}</Callout>
@@ -66,8 +68,8 @@ display(<Stack gap={2}>
 ## Rules
 
 - ALWAYS pass the request to the tasklist as `{ query: <the question/topic> }`.
-- `tasklist()` returns `unknown` — always cast the result, as shown above.
-- A `VARIABLES` block means you are MID-PROGRAM, not done — emit the next statement. Never reply
-  with prose or "done"; keep emitting TypeScript until the result is displayed.
+- `tasklist()` resolves to `{ ok, degraded, data }` — the payload is `.data`; cast it as shown above. Guard on `.ok` when the result must be trusted.
+- A `VARIABLES` block means you are MID-PROGRAM, not done — emit the next statement until the
+  result is displayed.
 - If an `await` resolved to an error or `undefined`, read the surfaced message, fix that one thing,
   and continue — do not abandon the program.

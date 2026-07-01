@@ -190,6 +190,32 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
     }
   });
 
+  // spacePath — join path segments with '/'. Replaces node:path.join inside the
+  // QuickJS VM (there is no Node there). Semantics match the joinPath helper the
+  // architect's builder functions used to carry verbatim in every file: the first
+  // segment keeps its leading slash (absolute paths stay absolute) and loses any
+  // trailing slashes; later segments are trimmed of leading+trailing slashes;
+  // empty segments are dropped.
+  const spacePathImpl = (...parts: string[]): string =>
+    parts
+      .map((p, i) => (i === 0 ? String(p).replace(/\/+$/, '') : String(p).replace(/^\/+|\/+$/g, '')))
+      .filter(Boolean)
+      .join('/');
+  setGlobal('spacePath', spacePathImpl);
+
+  // resolveSpaceDir — resolve a space arg (bare slug OR already-resolved dir) to
+  // its directory. Same semantics as the resolveSpaceDir helper previously
+  // duplicated across the architect builders: a value containing "/" is used
+  // verbatim (trailing slashes trimmed — the iterate flow passes a discovered
+  // dir); a bare slug resolves under the project spaces dir
+  // (LMTHING_PROJECT_SPACES_DIR, default .lmthing/user/spaces).
+  setGlobal('resolveSpaceDir', (space: string) => {
+    const s = String(space ?? '').replace(/\/+$/, '');
+    if (s.includes('/')) return s;
+    const base = (opts.projectSpacesDir || '.lmthing/user/spaces').replace(/\/+$/, '');
+    return spacePathImpl(base, s);
+  });
+
   // typecheckSource — run tsc over a standalone TS source string (e.g. a space
   // function the architect just wrote) against the library DTS, returning a
   // self-correctable error list. Pure/read-only, so available regardless of profile.

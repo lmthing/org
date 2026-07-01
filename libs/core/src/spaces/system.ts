@@ -13,7 +13,7 @@ import type { Space, AgentDef } from './load.js';
  * system space (the always-on toolkit: file editing, search, web, memory, todos).
  * Every other system space's functions are SCOPED to its own agent(s) — they reach
  * an agent solely through the per-agent path (getAgentFunctions), so a system space
- * that ships an agent (system-architect, system-deep-research) keeps its specialist
+ * that ships an agent (system-architect, system-research) keeps its specialist
  * functions out of every other space's prompt and VM. See systemFunctionSources below.
  *
  * Capabilities live in spaces, not in ad-hoc core globals (the runtime stays a

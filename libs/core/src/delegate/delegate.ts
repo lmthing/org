@@ -6,19 +6,19 @@ import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import { resolveDirectDeps, getAgentFunctions, getAgentFunctionsBundled } from '../spaces/agent.js';
 import { getAgentComponents } from '../spaces/components.js';
-import { CATALOG_NAMES } from '../ui/catalog.js';
-import { createVM } from '../sandbox/quickjs.js';
-import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { MessageHistory } from '../context/history.js';
 import { buildSystemBlock, resolvePreloadedKnowledge } from '../context/system-block.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { routeCommonYield } from '../eval/yield-router.js';
-import { LIBRARY_DTS_NO_ASK } from '../typecheck/library-dts.js';
 import { buildOverlay } from '../typecheck/overlay.js';
-import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
-import { injectHostTools } from '../globals/host-tools.js';
 import { systemFunctionSources, systemFunctionsBundled } from '../spaces/system.js';
 import type { Space } from '../spaces/load.js';
+import type { BudgetLimits } from '../eval/budget.js';
+import type { RoleModelConfig } from '../fork/roles.js';
+import { delegateCapabilities } from '../exec/capability.js';
+import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
+import { forkEngineOptsFrom } from '../exec/fork-config.js';
+import { evaluateDelegatePolicy, isDelegateAllowed, formatDelegateDenial } from '../exec/target-match.js';
 
 export interface RunDelegateOpts {
   packageName: string;
@@ -49,6 +49,19 @@ export interface RunDelegateOpts {
   /** Model spec/alias used by streamFn — forwarded to runTurnLoop so llm_request events
    *  carry a model field and cost tracking works across delegate chains. */
   model?: string;
+  /** Host budget caps inherited from the parent context (session opts, or the outer
+   *  delegate layer). Applied to each fork THIS delegate spawns (fresh Budget per
+   *  fork) — not to the delegate's own turn loop. Before the A1 fix this was
+   *  silently dropped at the delegate boundary, so leaf forks nested under a
+   *  delegate ran uncapped and never received the near-limit "resolve NOW" nudge. */
+  budgetLimits?: BudgetLimits;
+  /** Per-role fork model assignment inherited from the parent session (A1 fix —
+   *  previously dropped, so explore/plan forks under a delegate ran on the wrong model). */
+  roleModels?: RoleModelConfig;
+  /** Spaces registered at runtime via registerSpace() — the SAME Map reference the
+   *  parent Session owns, so a registerSpace() inside a fork under this delegate is
+   *  visible to later parent delegate() calls (A1 fix — previously a dead path). */
+  dynamicSpaces?: Map<string, Space>;
 }
 
 export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
@@ -89,6 +102,11 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     depth: opts.depth,
   });
 
+  // Unified canDelegateTo semantics: the DELEGATED agent's own policy decides
+  // whether `delegate` exists in its VM/DTS/prompt, and (yield-time, below)
+  // which targets its calls may hit. Omitted = unrestricted (back-compat);
+  // [] = none; ["*"] = unrestricted; list = hard allowlist (+ "registered:*").
+  const delegatePolicy = evaluateDelegatePolicy(agent.canDelegateTo, 'agent');
   const directDeps = resolveDirectDeps(space, agent.canDelegateTo);
 
   // The universal `global` toolkit (readFile, grep, remember, …) is injected into every
@@ -97,23 +115,73 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   // fails typecheck with "Cannot find name", since it declares no functions of its own.
   const systemFnSources = systemFunctionSources(opts.systemSpaces ?? []);
   const knowledgePreloads = await resolvePreloadedKnowledge(space, agent);
-  const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFnSources, knowledgePreloads, omitAsk: true });
+  const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFnSources, knowledgePreloads, omitAsk: true, omitDelegate: delegatePolicy.mode === 'none' });
 
-  const vm = await createVM();
+  const capabilities = delegateCapabilities(delegatePolicy.mode !== 'none');
+
+  // action is optional. When provided it must exist; when omitted the agent runs
+  // model-driven and may initiate one of its own actions' tasklists (its # Actions
+  // section is rendered into the system prompt by buildSystemBlock).
+  const actionDef = opts.action ? agent.actions.find((a) => a.id === opts.action) : undefined;
+  if (opts.action && !actionDef) {
+    throw new Error(`Action "${opts.action}" not found on agent "${agent.slug}"`);
+  }
+
+  const query = opts.delegateOpts?.query ?? '';
+  const context = opts.delegateOpts?.context;
+
+  // Result capture. Tasklists whose result should be auto-captured if the model
+  // forgets to call currentTask.resolve(): the action's own tasklist when an action
+  // was given, or ANY of the agent's action tasklists when delegated model-driven.
+  let capturedResult: unknown = undefined;
+  let resultCaptured = false;
+  const capturableTasklists = actionDef?.tasklist
+    ? new Set<string>([actionDef.tasklist])
+    : new Set<string>(agent.actions.map((a) => a.tasklist).filter(Boolean));
+
+  // Space functions injected into the VM (system functions + agent functions).
+  const agentFunctions = getAgentFunctions(space, agent);
+  const agentFunctionsBundled = getAgentFunctionsBundled(space, agent);
+  const agentComponents = getAgentComponents(space, agent);
+  const systemSpaces = opts.systemSpaces ?? [];
+  const functions = { ...systemFnSources, ...agentFunctions };
+  const functionsBundled = { ...systemFunctionsBundled(systemSpaces), ...agentFunctionsBundled };
+
+  // Shared child-VM bootstrap: query/context seed vars, currentTask capture,
+  // functions, host tools, yielding globals per the capability profile (no ask —
+  // a delegated agent is a programmatic sub-agent that must run autonomously from
+  // its query/context; no registerSpace) and the JSX runtime with this agent's
+  // component stubs. NOTE: no `progress` — the delegate's own turn loop carries
+  // no Budget today (only the forks it spawns do, via budgetLimits below).
+  const vm = await createChildVM({
+    capabilities,
+    renderHost: opts.renderHost,
+    clock: opts.clock,
+    spaceDir: space.dir,
+    projectSpacesDir: opts.projectSpacesDir,
+    progress: undefined,
+    functions,
+    functionsBundled,
+    componentNames: [...Object.keys(agentComponents.view), ...Object.keys(agentComponents.form)],
+    onDisplay: (value) => {
+      tracer.write({ ts: Date.now(), type: 'display', context: delegateScope.label, nodeId: delegateScope.nodeId, descriptor: value });
+    },
+    currentTaskResolve: (value) => {
+      capturedResult = value;
+      resultCaptured = true;
+    },
+    // Expose the seed as real VM variables so the agent can pass structured data
+    // straight into its tasklist (`tasklist(action, context)`) — see the seed
+    // declarations in the ambient DTS below.
+    seedVars: { query, context: context ?? {} },
+    onFunctionError: (name, error) => {
+      opts.renderHost.log(`[warn] failed to inject function "${name}": ${error}`);
+    },
+  });
 
   try {
     const history = new MessageHistory();
 
-    // action is optional. When provided it must exist; when omitted the agent runs
-    // model-driven and may initiate one of its own actions' tasklists (its # Actions
-    // section is rendered into the system prompt by buildSystemBlock).
-    const actionDef = opts.action ? agent.actions.find((a) => a.id === opts.action) : undefined;
-    if (opts.action && !actionDef) {
-      throw new Error(`Action "${opts.action}" not found on agent "${agent.slug}"`);
-    }
-
-    const query = opts.delegateOpts?.query ?? '';
-    const context = opts.delegateOpts?.context;
     const tasklistHint = actionDef?.tasklist
       ? `Implement this action by calling \`const result = await tasklist("${actionDef.tasklist}", context)\` — \`query\` (string) and \`context\` (object) are in scope as real variables holding the seed data above. The tasklist handles the orchestration. After it resolves, call \`currentTask.resolve(result)\`.`
       : actionDef
@@ -130,115 +198,23 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
 
     history.append({ role: 'user', content: userMessage, blockType: 'normal' });
 
-    // Build overlay DTS for this agent's functions and components
-    const agentFunctions = getAgentFunctions(space, agent);
-    const agentFunctionsBundled = getAgentFunctionsBundled(space, agent);
-    const agentComponents = getAgentComponents(space, agent);
+    // Ambient DTS via the shared additive builder: library minus `ask`, this
+    // agent's function/component overlay, the currentTask capture global, and
+    // the query/context seed variables (injected as real VM variables above so
+    // an agent can seed its tasklist with structured data handed down by the
+    // delegator instead of re-serializing it from prose).
     const overlay = buildOverlay({ ...systemFnSources, ...agentFunctions }, agentComponents);
-    // currentTask is injected below; declare it in DTS so typecheck passes.
-    // `query`/`context` are injected as real VM variables (below) so an agent can seed
-    // its tasklist with structured data handed down by the delegator (e.g. THING passing
-    // a deep-research report to the architect) instead of re-serializing it from prose.
-    const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
-    const seedDts = `declare const query: string;\ndeclare const context: Record<string, any>;`;
-    const ambientDts = LIBRARY_DTS_NO_ASK + '\n' + overlay + '\n' + currentTaskDts + '\n' + seedDts;
-
-    // Inject result capture global
-    let capturedResult: unknown = undefined;
-    let resultCaptured = false;
-
-    // Tasklists whose result should be auto-captured if the model forgets to call
-    // currentTask.resolve(): the action's own tasklist when an action was given, or
-    // ANY of the agent's action tasklists when delegated model-driven (no action).
-    const capturableTasklists = actionDef?.tasklist
-      ? new Set<string>([actionDef.tasklist])
-      : new Set<string>(agent.actions.map((a) => a.tasklist).filter(Boolean));
-
-    const captureHandle = marshalToQuickJS(vm.ctx, {
-      resolve: (value: unknown) => {
-        capturedResult = value;
-        resultCaptured = true;
-      },
+    const ambientDts = buildAmbientDts({
+      capabilities,
+      overlay,
+      currentTask: true,
+      extraDecls: [`declare const query: string;\ndeclare const context: Record<string, any>;`],
     });
-    vm.ctx.setProp(vm.ctx.global, 'currentTask', captureHandle);
-    captureHandle.dispose();
-
-    // Expose the seed as real VM variables so the agent can pass structured data straight
-    // into its tasklist (`tasklist(action, context)`) — see seedDts above.
-    vm.setVar('query', query);
-    vm.setVar('context', context ?? {});
-
-    // Inject space functions into the VM (combining system functions and agent functions)
-    const systemSpaces = opts.systemSpaces ?? [];
-    const functions = { ...systemFnSources, ...agentFunctions };
-    const functionsBundled = { ...systemFunctionsBundled(systemSpaces), ...agentFunctionsBundled };
-
-    injectSpaceFunctions(vm, functions, functionsBundled, (name, error) => {
-      opts.renderHost.log(`[warn] failed to inject function "${name}": ${error}`);
-    });
-
-    // Shared synchronous host substrate: console, execShell, process.env,
-    // readFileRaw, writeFileRaw.
-    injectHostTools(vm, { renderHost: opts.renderHost, spaceDir: space.dir, projectSpacesDir: opts.projectSpacesDir });
-
-    // Inject React shim + component stubs for JSX
-    const reactShim = {
-      createElement: (type: unknown, props: unknown, ...children: unknown[]) => {
-        const typeName =
-          typeof type === 'string'
-            ? type
-            : type && typeof type === 'object' && 'displayName' in type
-              ? (type as { displayName: string }).displayName
-              : String(type);
-        return { type: typeName, props: (props as Record<string, unknown>) ?? {}, children: children.flat(Infinity).filter((c) => c !== null && c !== undefined) };
-      },
-      Fragment: 'fragment',
-    };
-    const reactHandle = marshalToQuickJS(vm.ctx, reactShim);
-    vm.ctx.setProp(vm.ctx.global, 'React', reactHandle);
-    reactHandle.dispose();
-    const allComponentNames = [...CATALOG_NAMES, ...Object.keys(agentComponents.view), ...Object.keys(agentComponents.form)];
-    for (const name of allComponentNames) {
-      const stub = marshalToQuickJS(vm.ctx, { displayName: name });
-      vm.ctx.setProp(vm.ctx.global, name, stub);
-      stub.dispose();
-    }
-
-    // Inject standard globals. NOTE: `ask` is deliberately NOT injected — a delegated
-    // agent is a programmatic sub-agent (the top-level orchestrator owns the user
-    // conversation), so it must run autonomously from its `query`/`context` rather than
-    // prompt a user it cannot reach.
-    const { createDisplayGlobal } = await import('../globals/display.js');
-    const { createInspectGlobal } = await import('../globals/inspect.js');
-    const { createSleepGlobal } = await import('../globals/sleep.js');
-    const { createForkGlobal } = await import('../globals/fork.js');
-    const { createDelegateGlobal } = await import('../globals/delegate.js');
-    const { createTasklistGlobal } = await import('../globals/tasklist.js');
-    const { createLoadKnowledgeGlobal } = await import('../globals/load-knowledge.js');
-    const { createFetchGlobal } = await import('../globals/fetch.js');
-
-    const pushYield = (req: import('../eval/yield.js').YieldRequest) => {
-      vm.pendingYields.push(req);
-    };
-
-    type AnyFn = (...args: unknown[]) => unknown;
-    injectGlobal(vm.ctx, 'display', createDisplayGlobal(opts.renderHost, (value) => {
-      tracer.write({ ts: Date.now(), type: 'display', context: delegateScope.label, nodeId: delegateScope.nodeId, descriptor: value });
-    }) as AnyFn);
-    injectGlobal(vm.ctx, 'inspect', createInspectGlobal(pushYield) as AnyFn);
-    injectGlobal(vm.ctx, 'sleep', createSleepGlobal(pushYield, opts.clock) as AnyFn);
-    injectGlobal(
-      vm.ctx,
-      'loadKnowledge',
-      createLoadKnowledgeGlobal(pushYield, space.dir + '/knowledge') as AnyFn,
-    );
-    injectGlobal(vm.ctx, 'fork', createForkGlobal(pushYield) as AnyFn);
-    injectGlobal(vm.ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
-    injectGlobal(vm.ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
-    injectGlobal(vm.ctx, 'fetch', createFetchGlobal(pushYield) as AnyFn);
 
     // Runs a child delegate — from this agent's top level OR from one of its tasks' forks —
     // one level deeper, with the recursion cap enforced by runDelegate's depth/maxDepth.
+    // Spreading opts forwards the inherited parent context (budgetLimits/roleModels/
+    // dynamicSpaces/projectSpacesDir/…) down arbitrary nesting.
     const runChildDelegate = (
       packageName: string,
       agentName: string,
@@ -258,7 +234,13 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       });
 
     const { ForkEngine } = await import('../fork/fork.js');
-    const forkEngine = new ForkEngine({
+    // THE A1 FIX: the delegate-side ForkEngine is built through the same
+    // exhaustively-typed options builder as the session's, so it can no longer
+    // silently drop fields — it now inherits budgetLimits (leaf forks get real
+    // budgets + the near-limit nudge), roleModels (right per-role model),
+    // forkDepth (meaningful nesting accounting) and dynamicSpaces (a fork's
+    // registerSpace() propagates back to the session) from its parent context.
+    const forkEngine = new ForkEngine(forkEngineOptsFrom({
       maxConcurrentForks: opts.maxConcurrentForks,
       parentHistory: history.messages,
       parentSpaceDir: space.dir,
@@ -272,11 +254,18 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       tracer: opts.tracer,
       projectSpacesDir: opts.projectSpacesDir,
       defaultModel: opts.model,
+      budgetLimits: opts.budgetLimits,
+      roleModels: opts.roleModels,
+      // Forks spawned by this delegate nest one level below its delegation depth:
+      // a top-level delegate (depth 0) spawns depth-1 forks (same as session forks);
+      // each nested delegate layer pushes its forks one level deeper.
+      forkDepth: opts.depth + 1,
+      dynamicSpaces: opts.dynamicSpaces,
       // A task in this agent's tasklist may delegate (gated by its own canDelegateTo); route it
       // through the same depth-incrementing runner this agent uses for its own delegate() calls.
       delegateRunner: (packageName, agentName2, action, childOpts, allowedActions) =>
         runChildDelegate(packageName, agentName2, action, childOpts as DelegateOpts | undefined, allowedActions),
-    });
+    }));
 
     try {
       await runTurnLoop({
@@ -296,6 +285,9 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             tracer: opts.tracer,
             scope: delegateScope,
             getForkEngine: () => forkEngine,
+            // `result` is the tasklist's TaskEnvelope ({ ok, degraded, data, … })
+            // since Phase 3 — captured and returned UNTOUCHED, so the delegator
+            // sees the same envelope contract as a direct tasklist() caller.
             onTasklistResult: (name, result) => {
               if (capturableTasklists.has(name) && !resultCaptured) {
                 capturedResult = result;
@@ -303,15 +295,18 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
               }
             },
             runDelegate: (packageName, agentName, action, delegateOpts2) => {
-              // Look up this agent's allowed actions on the target, from its own
-              // canDelegateTo (directDeps), matched by agent slug + target string —
-              // the same matching the model used to reach this packageName/agentName
-              // pair via the `delegate()` global (target strings come straight from
-              // canDelegateTo entries resolved above).
-              const matchedDep = directDeps.find(
-                (d) => d.agent.slug === agentName && (d.target === packageName || d.target.endsWith(`/${packageName}`) || packageName.endsWith(`/${d.target}`)),
-              );
-              return runChildDelegate(packageName, agentName, action, delegateOpts2, matchedDep?.allowedActions);
+              // Yield-time canDelegateTo gate (unified semantics): this agent's
+              // policy decides whether the target is callable at all — an
+              // out-of-list target throws an actionable, retryable error naming
+              // the allowed targets. `registered:*` consults the session-shared
+              // dynamicSpaces map at call time. On an allowlist match, the
+              // entries' `#action` suffixes narrow the allowed actions (the same
+              // enforcement the old directDeps lookup fed into runDelegate).
+              const allow = isDelegateAllowed(delegatePolicy, packageName, agentName, opts.dynamicSpaces);
+              if (!allow.allowed) {
+                throw new Error(formatDelegateDenial(delegatePolicy, packageName, agentName, 'agent'));
+              }
+              return runChildDelegate(packageName, agentName, action, delegateOpts2, allow.allowedActions);
             },
           });
           return routed.handled ? routed.value : undefined;

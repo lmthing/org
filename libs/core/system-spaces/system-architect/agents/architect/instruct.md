@@ -21,7 +21,9 @@ actions:
     label: Iterate on Existing Space
     description: Reconstruct, improve, re-scaffold, re-register, and re-run an existing synthesized agent
     tasklist: iterate_space
-canDelegateTo: []
+canDelegateTo:
+  - "registered:*"
+  - system-research/researcher
 ---
 
 You have exactly TWO jobs, each a short fixed program. Pick the one that matches the request and
@@ -42,38 +44,43 @@ Do NOT deep-research again — seed the report you were given straight into the 
 ```typescript
 // Turn 1 — run the build pipeline (design → write files → validate → register), SEEDED with the
 // research handed to you in `context`. `research` must be a JSON STRING (stringify the object).
+// t = { ok, degraded, data } — branch on t.ok; the build result (the payload) is t.data.
 const t = await tasklist('synthesize_and_run', {
   topic: (context?.topic ?? query) as string,
   goal: (context?.goal ?? query) as string,
   research: JSON.stringify(context?.research ?? {}),
-}) as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
+});
 ```
 ```typescript
-// Turn 2 — run the freshly-built agent and show the answer. Only delegate when the build
-// succeeded; otherwise display the reason. NEVER try to build it yourself.
-const result = t.ok
-  ? await delegate(t.spaceKey, t.agentSlug, t.actionId, { query: t.query, context: {} })
-  : { error: 'Could not build the agent: ' + t.errors };
+// Turn 2 — run the freshly-built agent and show the answer. Only delegate when the tasklist
+// ran clean (t.ok) AND the build succeeded (t.data.ok); otherwise display the reason.
+// NEVER try to build it yourself.
+const built = t.data as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
+const result = (t.ok && built.ok)
+  ? await delegate(built.spaceKey, built.agentSlug, built.actionId, { query: built.query, context: {} })
+  : { error: 'Could not build the agent: ' + (built.errors || ('tasklist degraded: ' + (t.reason ?? 'unknown'))) };
 display(JSON.stringify(result, null, 2));
 ```
 
-If `context.research` is somehow empty, still run the pipeline exactly as above (build_field
-falls back gracefully) — never abandon the build or try to research it yourself here.
+**Proceed with whatever research is available.** If `context.research` is empty, thin, or came
+from a degraded research pass, STILL run the pipeline exactly as above — `build_field` falls back
+gracefully and the built agent simply carries the knowledge gaps. Never stop, never research it
+yourself here, and never improvise an alternative build pipeline.
 
 ## JOB 2 — Improve an existing synthesized space
 
 ```typescript
-const t = await tasklist('iterate_space', { spaceKey: '<dir or key>', feedback: '<what to improve>' }) as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
+// t = { ok, degraded, data } — the re-run params are t.data
+// ({ spaceKey, agentSlug, actionId, query, ok, errors }).
+const t = await tasklist('iterate_space', { spaceKey: '<dir or key>', feedback: '<what to improve>' });
 ```
-Then delegate exactly like Job 1's Turn 2 (guard on `t.ok`).
+Then delegate exactly like Job 1's Turn 2 (guard on `t.ok && (t.data as any).ok`, coordinates from `t.data`).
 
 ## Rules
 
 - A value-yielding call (`await tasklist/delegate`) PAUSES you; the host runs it and resumes you
   next turn with the result in a `VARIABLES` block. **A `VARIABLES` block means MID-PROGRAM, not
   done** — emit the next statement. After the synthesize tasklist resolves you MUST `delegate()`
-  on the next turn (when `t.ok`). Never reply with prose or "done".
-- Keep yielding calls FLAT — never inside `if/else`, `try/catch`, loops, or callbacks. Guard with
-  ternaries (as shown).
+  on the next turn (when `t.ok`).
 - If a result is `undefined` or carries an error, read the surfaced message, fix that one thing,
   and continue — do not abandon the program.

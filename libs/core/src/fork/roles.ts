@@ -23,11 +23,9 @@ const FIREWALL_TAIL = [
   'PARSING: For regex matching or structured parsing, use readFile(path).raw — it is',
   'the unmodified text. readFile(path).content carries 1-based "N\\t" line-number',
   'prefixes (for display/citation only) that break line-start patterns like /^export/.',
-  '',
-  'SCOPE: Each TypeScript statement is an isolated module. Variables declared in one',
-  'statement are NOT visible in the next. Declare and use a variable in the same',
-  'statement, or assign it to a well-known global. Never split a `let`/`const` declaration',
-  'from its first use across two separate statements.',
+  // NOTE: the statement-scope rules (declare+use in the same statement, flat
+  // top-level yields) now live in exec/preamble.ts STATEMENT_PROTOCOL, which the
+  // fork system-prompt builder injects once per fork — not duplicated here.
 ].join('\n');
 
 const PREAMBLES: Record<ForkRole, string> = {

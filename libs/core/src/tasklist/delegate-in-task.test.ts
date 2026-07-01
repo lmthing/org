@@ -61,7 +61,7 @@ describe('delegate inside a task (canDelegateTo)', () => {
         return { n: 42 };
       },
     });
-    const goal = await runTasklist({ name: 'flow', space, forkEngine: engine }) as { v: number };
+    const goal = (await runTasklist({ name: 'flow', space, forkEngine: engine })).data as { v: number };
     expect(goal).toEqual({ v: 42 });
     expect(calls).toEqual([{ pkg: 'helper', agent: 'agent', action: 'act', allowed: ['act'] }]);
   });
@@ -83,8 +83,69 @@ describe('delegate inside a task (canDelegateTo)', () => {
       renderHost: silentHost, streamFn,
       delegateRunner: async () => { runnerCalls++; return { n: 1 }; },
     });
-    const goal = await runTasklist({ name: 'flow', space, forkEngine: engine }) as { v: number };
-    expect(runnerCalls).toBe(0);       // forbidden target never reached the runner
-    expect(goal).toEqual({ v: 0 });    // fork salvaged a schema-valid placeholder
+    const env = await runTasklist({ name: 'flow', space, forkEngine: engine });
+    expect(runnerCalls).toBe(0);            // forbidden target never reached the runner
+    expect(env.data).toEqual({ v: 0 });     // fork salvaged a NEUTRAL schema-valid placeholder
+    expect(env.ok).toBe(false);             // …and the envelope signals the degradation
+    expect(env.degraded).toBe(true);
+  });
+
+  it('canDelegateTo: ["*"] gives the task an UNSCOPED delegate (any target routes to the runner)', async () => {
+    const dir = await makeTasklistSpace({
+      '01-call.md': `---\nid: call\ngoal: true\nrole: general\ncanDelegateTo:\n  - "*"\noutput:\n  v: number\n---\n\nSTAR_T: delegate anywhere then resolve.`,
+    });
+    const space = await loadSpace(dir);
+    const calls: Array<{ pkg: string; agent: string; allowed?: string[] }> = [];
+    let turn = 0;
+    const streamFn = createMockStreamFn(() => {
+      turn++;
+      if (turn === 1) return `const r = await delegate('any-space-at-all', 'whoever', 'act', { query: 'hi' });`;
+      return `currentTask.resolve({ v: r.n });`;
+    });
+    const engine = new ForkEngine({
+      maxConcurrentForks: 2, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
+      renderHost: silentHost, streamFn,
+      delegateRunner: async (pkg, agent, _action, _opts, allowed) => {
+        calls.push({ pkg, agent, allowed });
+        return { n: 7 };
+      },
+    });
+    const env = await runTasklist({ name: 'flow', space, forkEngine: engine });
+    expect(env.ok).toBe(true);
+    expect(env.data).toEqual({ v: 7 });
+    // Unrestricted: no target gate, no action narrowing.
+    expect(calls).toEqual([{ pkg: 'any-space-at-all', agent: 'whoever', allowed: undefined }]);
+  });
+
+  it('canDelegateTo: ["registered:*"] admits a dynamicSpaces-registered target and blocks others', async () => {
+    const dir = await makeTasklistSpace({
+      '01-call.md': `---\nid: call\ngoal: true\nrole: general\ncanDelegateTo:\n  - "registered:*"\noutput:\n  v: number\n---\n\nREG_T: delegate to the registered space.`,
+    });
+    const space = await loadSpace(dir);
+    const regDir = '/dyn/built-space';
+    const dynamicSpaces = new Map([[regDir, space]]); // any Space value; the gate matches keys/dirs
+    const calls: string[] = [];
+    let turn = 0;
+    const streamFn = createMockStreamFn((o: StreamOpts) => {
+      turn++;
+      // Turn 1: an UNREGISTERED target — the gate throws (retryable error).
+      if (turn === 1) return `const r = await delegate('never-registered', 'agent', 'act', { query: 'x' });`;
+      // Turn 2 (retry with the ERROR block): the registered one.
+      if (turn === 2) {
+        const last = o.messages[o.messages.length - 1]?.content ?? '';
+        if (!last.includes('is not permitted')) return `currentTask.resolve({ v: -1 });`;
+        return `const r = await delegate('${regDir}', 'agent', 'act', { query: 'x' });`;
+      }
+      return `currentTask.resolve({ v: r.n });`;
+    });
+    const engine = new ForkEngine({
+      maxConcurrentForks: 2, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
+      renderHost: silentHost, streamFn, dynamicSpaces,
+      delegateRunner: async (pkg) => { calls.push(pkg); return { n: 9 }; },
+    });
+    const env = await runTasklist({ name: 'flow', space, forkEngine: engine });
+    expect(env.ok).toBe(true);
+    expect(env.data).toEqual({ v: 9 });
+    expect(calls).toEqual([regDir]); // only the registered target reached the runner
   });
 });

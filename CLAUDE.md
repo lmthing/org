@@ -40,7 +40,7 @@ The unified SPA (`@lmthing/web-app`) exposes three product surfaces as TanStack 
 
 ## Directory map (top level)
 
-`libs/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}` · `libs/cli/src/{providers,stream,render,rpc,web,cli,server}` · `libs/ui/src/{app,store,client,components,compat,lib,theme}` · `apps/web/{src,public}` (unified SPA). Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
+`libs/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{system-global,system-engineer,system-architect,system-research,user-memory,user-thing}` · `libs/cli/src/{providers,stream,render,rpc,web,cli,server}` · `libs/ui/src/{app,store,client,components,compat,lib,theme}` · `apps/web/{src,public}` (unified SPA). Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
 
 ## Top gotchas
 

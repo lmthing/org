@@ -1,11 +1,3 @@
-/** Join path segments with '/'. Replaces node:path.join inside the QuickJS VM. */
-function joinPath(...parts: string[]): string {
-  return parts
-    .map((p, i) => (i === 0 ? p.replace(/\/+$/, '') : p.replace(/^\/+|\/+$/g, '')))
-    .filter(Boolean)
-    .join('/');
-}
-
 /**
  * List all sub-directories of the project spaces dir that look like spaces (contain
  * an agents/ subdirectory). Uses execShell ls only — no Node imports.
@@ -26,8 +18,8 @@ export function listScaffoldedSpaces(
   const results: { name: string; dir: string; agents: string[] }[] = [];
 
   for (const name of names) {
-    const dir = joinPath(root, name);
-    const agentsCheck = execShell(`ls -1 "${joinPath(dir, 'agents')}" 2>/dev/null`);
+    const dir = spacePath(root, name);
+    const agentsCheck = execShell(`ls -1 "${spacePath(dir, 'agents')}" 2>/dev/null`);
     if (agentsCheck.ok && agentsCheck.stdout.trim()) {
       const agents = agentsCheck.stdout.trim().split('\n').filter(Boolean);
       results.push({ name, dir, agents });

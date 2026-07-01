@@ -39,4 +39,4 @@ Pick the matching operation, run it, then ALWAYS finish with `currentTask.resolv
 - If you are unsure which key holds a fact, call `recallAll()` first, then act.
 - Check `.ok` on every call and pass the `.error` through in your resolve value.
 - You MUST end every request by calling `currentTask.resolve({...})` — that value is what
-  THING receives back. Do not reply with prose.
+  THING receives back.

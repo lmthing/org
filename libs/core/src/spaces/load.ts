@@ -29,9 +29,18 @@ export interface AgentDef {
   actions: ActionDef[];
   /** Other agents this agent can delegate to. Entries may carry an `#action`
    *  suffix or `npm:` prefix — raw strings only, parsing happens downstream
-   *  (WP-3 resolveDirectDeps). Read from the `canDelegateTo:` frontmatter key,
-   *  falling back to the deprecated `dependencies:` key when absent. */
-  canDelegateTo: string[];
+   *  (resolveDirectDeps + exec/target-match.ts evaluateDelegatePolicy). Read
+   *  from the `canDelegateTo:` frontmatter key, falling back to the deprecated
+   *  `dependencies:` key when absent.
+   *
+   *  Tri-state (unified canDelegateTo semantics — the loader preserves the
+   *  distinction, do NOT normalize):
+   *    - `undefined` (key omitted) → unrestricted delegation (back-compat)
+   *    - `[]`                      → NO delegation (global withheld + no DTS)
+   *    - `["*"]`                   → explicitly unrestricted
+   *    - explicit list             → hard allowlist, enforced at yield time
+   *      (`"registered:*"` entry = any runtime-registered space) */
+  canDelegateTo?: string[];
   config: AgentConfig;
   /** When set, a freeform session for this agent runs this action's tasklist
    *  deterministically (host-driven) instead of the model-driven turn loop — a
@@ -336,7 +345,11 @@ async function loadTasklists(dir: string): Promise<Record<string, TasklistDir>> 
   return result;
 }
 
-async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
+async function loadAgent(
+  agentsDir: string,
+  slug: string,
+  onWarn: (message: string) => void,
+): Promise<AgentDef> {
   const agentDir = join(agentsDir, slug);
 
   const instructPath = join(agentDir, 'instruct.md');
@@ -345,7 +358,9 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
   let title = slug;
   const actions: ActionDef[] = [];
   const config: AgentConfig = { knowledge: [], functions: [], components: [] };
-  const canDelegateTo: string[] = [];
+  // Omitted vs empty is SEMANTIC (see AgentDef.canDelegateTo): keep undefined
+  // when the key is absent so evaluateDelegatePolicy can apply the level default.
+  let canDelegateTo: string[] | undefined;
   let defaultAction: string | undefined;
 
   if (await fileExists(instructPath)) {
@@ -359,9 +374,20 @@ async function loadAgent(agentsDir: string, slug: string): Promise<AgentDef> {
     if (Array.isArray(data['components'])) config.components = data['components'].map(String);
     // `canDelegateTo` is the current key; `dependencies` is deprecated (one-release compat).
     if (Array.isArray(data['canDelegateTo'])) {
-      canDelegateTo.push(...data['canDelegateTo'].map(String));
+      canDelegateTo = data['canDelegateTo'].map(String);
     } else if (Array.isArray(data['dependencies'])) {
-      canDelegateTo.push(...data['dependencies'].map(String));
+      canDelegateTo = data['dependencies'].map(String);
+    }
+    if (canDelegateTo && canDelegateTo.length === 0 && instructBody.includes('delegate(')) {
+      // `[]` used to be a silent no-op (delegate stayed unrestricted); it now means
+      // NO delegation. Warn only for the genuinely confusing combo — an instruct
+      // body that CALLS delegate() while its frontmatter forbids delegation.
+      // A plain `canDelegateTo: []` on a non-delegating agent (every generated
+      // specialist the architect builds, plus researcher/engineer/memory) is the
+      // correct "hard none" declaration and must not spam a warning per agent.
+      onWarn(
+        `agent "${slug}" (${instructPath}): canDelegateTo: [] means no delegation, but the instruct body calls delegate() — use ["*"] or an explicit allowlist if this agent should delegate`,
+      );
     }
     if (Array.isArray(data['actions'])) {
       for (const action of data['actions'] as unknown[]) {
@@ -393,10 +419,14 @@ export interface LoadSpaceOpts {
   /** When false, a space without an agents/ directory is allowed (function-only
    *  system spaces). Defaults to true. */
   requireAgents?: boolean;
+  /** Warn channel for non-fatal load diagnostics (e.g. `canDelegateTo: []`).
+   *  Defaults to `console.warn` with a `[spaces]` prefix. */
+  onWarn?: (message: string) => void;
 }
 
 export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<Space> {
   const requireAgents = opts.requireAgents ?? true;
+  const onWarn = opts.onWarn ?? ((message: string) => console.warn(`[spaces] ${message}`));
   const agentsDir = join(dir, 'agents');
   const hasAgentsDir = await dirExists(agentsDir);
 
@@ -466,7 +496,7 @@ export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<
   // Load all agents
   const agents: Record<string, AgentDef> = {};
   for (const slug of agentDirs) {
-    agents[slug] = await loadAgent(agentsDir, slug);
+    agents[slug] = await loadAgent(agentsDir, slug, onWarn);
   }
 
   // Load tasklists

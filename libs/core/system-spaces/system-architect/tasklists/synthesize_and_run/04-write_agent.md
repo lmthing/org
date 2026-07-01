@@ -24,7 +24,7 @@ const w = writeAgentFile(design.slug, {
   // No ask/delegate/UI/routing instructions here.
   charter: "<2-3 sentence identity + domain + a 'never fabricate' guardrail>",
   // systemPrompt = top-level orchestration: run the action tasklist, then display the result.
-  systemPrompt: "You answer the user's request (in `query`) about <domain>. Run your action's tasklist, then display the result with built-in components. Code: const r = await tasklist('" + design.actionId + "', { query }); then display(...) the answer.",
+  systemPrompt: "You answer the user's request (in `query`) about <domain>. Run your action's tasklist, then display the result with built-in components. Code: const r = await tasklist('" + design.actionId + "', { query }); r is { ok, degraded, data } — the answer payload is r.data; display(...) r.data's fields next turn.",
   knowledge: knowledgeRefs,
   functions: fnNames,
   actions: [{ id: design.actionId, label: "<Label>", description: "<what the action does>", tasklist: design.actionId }],

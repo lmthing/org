@@ -41,7 +41,7 @@ backs it.
   | **`role`** | `explore`\|`plan`\|`general` — capability profile (see §2) |
   | **`functions`** | allowlist of space-function names visible to this task's fork. `[]` = NONE (also removes `webSearch`/`webFetch`); omit = all |
   | **`forEach`** | `"<upstreamTask>.<field>"` — host fan-out (see §3) |
-  | **`canDelegateTo`** | per-task delegation allowlist: `"space/agent"` or `"space/agent#action"` — the ONLY targets this task may `delegate()` to (see §3a). Omit = no delegation |
+  | **`canDelegateTo`** | per-task delegation policy (see §3a): omit/`[]` = no delegation; `["*"]` = unrestricted; list of `"space/agent[#action]"` = hard allowlist; a `"registered:*"` entry = any runtime-registered space |
 - Task body = the instruction the fork's model sees. Make it **short, code-first, autonomous**
   (uses the injected `query`/seed, never asks), ending in `currentTask.resolve({...})`.
 
@@ -82,24 +82,82 @@ array that downstream tasks receive. **The model never writes the loop.**
 Code: `tasklist/orchestrator.ts` (`resolveForEachItems` + the fan-out branch), `tasklist/dag.ts`
 (validation), `spaces/tasklist-load.ts` (parsing).
 
-## 3a. `canDelegateTo` — let a task delegate (opt-in, allowlisted)
+## 3a. `canDelegateTo` — unified delegation policy (agent frontmatter AND task frontmatter)
 
-By default a task/fork has **no** `delegate`/`tasklist`/`fork`/`ask` (isolated + headless). A task
-that declares `canDelegateTo` gets a `delegate()` global **restricted to exactly those targets**:
+`canDelegateTo` has ONE meaning at BOTH declaration levels — the agent's `instruct.md`
+frontmatter (gates the top-level session VM and every delegated-agent VM) and a task's
+frontmatter (gates that task's fork):
+
+| Value | Meaning |
+|---|---|
+| omitted | level default: **task** = no delegation (unchanged); **agent** = unrestricted (back-compat for user spaces on disk) |
+| `[]` | **NO delegation** — the `delegate` global is not injected AND absent from the ambient DTS (a stray call is a typecheck error, retryable). The loader warns: `canDelegateTo: [] means no delegation; use ["*"] for unrestricted` |
+| `["*"]` | explicitly unrestricted |
+| explicit list | **hard allowlist**, enforced at yield time — a violating `delegate()` throws an actionable error naming the allowed targets (the model self-corrects). Entries: `"space/agent"` (any action) or `"space/agent#action"` (that action only) |
+| `"registered:*"` (an entry, may accompany others) | any space registered at runtime via `registerSpace()` (present in the session's shared `dynamicSpaces` map at call time) — lets THING/architect run freshly built agents without granting `*` |
+
 ```yaml
 role: general
 canDelegateTo:
   - system-research/researcher#deep_research   # space/agent#action  (or space/agent for any action)
+  - "registered:*"                             # plus anything registerSpace()d at runtime
 ```
-- Enforced in `fork.ts` (`resolveTaskDelegate`): a call to a non-listed target **throws** a clear
-  error (surfaced to the model, retryable) — it never silently runs.
-- Routed via `ForkEngineOpts.delegateRunner`, wired by **both** the `Session` (`session.ts`
-  `runDelegateForFork`) and the delegate runtime (`delegate.ts` `runChildDelegate`, at `depth+1`).
-  The second one matters: the architect runs as a *delegatee*, so its tasks use the `delegate.ts`
-  ForkEngine — without that wiring, architect tasks couldn't delegate.
+- ⚠️ **Agent-level `[]` used to be a silent no-op** (every system agent declared it while
+  delegating freely); it now really removes `delegate`. Give an orchestrating agent an explicit
+  allowlist (see `user-thing`/`system-architect`) or `["*"]`.
+- Policy evaluation + the yield-time gate live in ONE place — `exec/target-match.ts`
+  (`evaluateDelegatePolicy`, `isDelegateAllowed`) — shared by all three enforcement points:
+  the session VM (`session.ts buildYieldContext`), the delegate VM (`delegate.ts`) and fork
+  leaves (`fork.ts`). `#action` suffixes still narrow `allowedActions` inside `runDelegate`
+  (the gate decides WHETHER a target is callable; `allowedActions` narrows WHICH actions).
+- The session's `defaultAction` fast path (host-driven, incl. the chained delegate to a
+  build's `{spaceKey, agentSlug}` coordinates) is HOST policy and exempt from the gate.
+- Task delegates are routed via `ForkEngineOpts.delegateRunner`, wired by **both** the
+  `Session` (`session.ts` `runDelegateForFork`) and the delegate runtime (`delegate.ts`
+  `runChildDelegate`, at `depth+1`). The second one matters: the architect runs as a
+  *delegatee*, so its tasks use the `delegate.ts` ForkEngine — without that wiring,
+  architect tasks couldn't delegate.
 - Recursion is bounded by `runDelegate`'s `maxDepth: 5` plus `assertForkDepth`.
 - ⚠️ Delegating from a task nests `delegate → tasklist → forks → web calls` deeper — with the
   sync-`fetch` issue (§5) that multiplies the hang risk. Keep web volume low, or wait for async fetch.
+
+## 3b. `prelude:` — host-executed setup statements (deterministic gather, zero model judgment)
+
+When a task file *dictates* exact statements the model must re-emit (`const question =
+String(item); const results = await webSearch(question); …`), every yield is a turn boundary
+where a weak model can skip/rename/reorder a binding (the `Cannot find name 'question'`
+failures under delegate nesting). Put those statements in frontmatter `prelude:` instead —
+the **HOST executes them in the fork VM before the model's first turn**, through the exact
+same per-statement pipeline as the turn loop (typecheck → transpile → eval → yield routing →
+the shared yield-result binding, incl. the nested-yield `getVar` preference):
+
+```yaml
+role: explore
+functions: [webSearch, webFetch]
+prelude: |
+  const question = String(item);
+  const results = await webSearch(question);
+  const top = results.results.slice(0, 3);
+```
+
+- **Yields are allowed** — `webSearch`/`webFetch`/`fetch`/`sleep`/`loadKnowledge` resolve
+  through the fork's own yield router; forEach `item`/`index` and seed vars are already in
+  scope. The model then sees every bound value in its **first VARIABLES block** (values, not
+  just names) and its own statements typecheck against the prelude's bindings.
+- **Error semantics: a failing statement never kills the fork.** On a typecheck/eval/yield
+  error its names are bound `undefined` (ambient `any`), the block gets a
+  `// prelude: statement N failed: …` note, and the remaining statements still run — the
+  model can resolve an honest degraded output per the task instructions.
+- **Budget:** prelude yields tick the fork's `toolCalls` counter (they're real web calls);
+  prelude statements do **not** count as episodes. Hard caps (`BudgetExceededError`) still
+  propagate.
+- **`currentTask.resolve()` is not callable from a prelude** (not in its typecheck ambient —
+  resolving is the model's job); calling it is a noted per-statement prelude error.
+- Reserve the model's turns for the part that needs judgment (synthesis/resolve); put
+  everything deterministic in the prelude.
+
+Code: `exec/prelude.ts` (`runPrelude`), `fork/fork.ts` (`runFork` integration),
+`spaces/tasklist-load.ts` (parsing).
 
 ---
 
@@ -172,9 +230,11 @@ write_agent (general) → write_tasks (general) → validate (explore) → regis
   statement; keep yielding calls (`await webSearch/webFetch/tasklist/delegate/registerSpace`) FLAT at
   top level, ternary-guarded, never inside `if/try/loop` (code after a nested yield is lost on resume).
 - **Forks salvage, they don't hard-fail.** A fork that never `resolve()`s gets forced resolve turns,
-  then a schema-valid placeholder (`[]`/`0`/`""`/`(unavailable…)`). So a "successful" tasklist can
-  carry empty data — `validate`-style gates and honest error fields matter. (Hard budget caps and an
-  explicit `timeout` still fail loudly.)
+  then a NEUTRAL schema-valid placeholder (`[]`/`0`/`false`/`""` — no prose note). Salvage is signalled
+  in the control plane: `tasklist()` resolves to a `TaskEnvelope` `{ ok, degraded, data, reason?,
+  degradedTasks? }` — branch on `.ok`/`.degraded`; the payload is `.data`. So a "successful" tasklist
+  can carry empty data — `validate`-style gates and honest error fields still matter. (Hard budget
+  caps and an explicit `timeout` still fail loudly.)
 - **`validateSpace` rejects placeholder `loadKnowledge('<domain>',…)`** and refs to files that don't
   exist. Builders must DERIVE refs from what was written, with REAL slugs.
 - **System spaces are read from SOURCE** (`libs/core/system-spaces/…`) at runtime — editing `.md`

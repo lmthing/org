@@ -20,7 +20,7 @@ immediately. **No session restart is required.**
 This task ALWAYS runs (no `condition:`) so the goal task downstream is never silently
 skipped — when the edit didn't validate, short-circuit here and pass the reason through.
 
-**Yield-safety:** keep `registerSpace` FLAT at top level, ternary-guarded:
+When the edit didn't validate, don't register — pass the reason through:
 
 ```typescript
 const reg = edit.ok

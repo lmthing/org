@@ -59,7 +59,7 @@ export class DelegateRegistry {
   }
 
   async preloadDirect(space: Space, agent: AgentDef): Promise<void> {
-    for (const dep of agent.canDelegateTo) {
+    for (const dep of agent.canDelegateTo ?? []) {
       const [_spaceName, depAgentSlug] = this.parseTarget(dep);
       const depAgent = space.agents[depAgentSlug];
       if (depAgent && !this.spaces.has(dep)) {

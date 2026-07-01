@@ -6,6 +6,7 @@ import { resolveKnowledge } from '../spaces/knowledge.js';
 import ts from 'typescript';
 import { extractFunctionSignature, extractPropsDeclaration, extractComponentDoc } from '../typecheck/overlay.js';
 import { catalogSummary } from '../ui/catalog.js';
+import { STATEMENT_PROTOCOL } from '../exec/preamble.js';
 
 /**
  * Render the prop list for a component's `<Name .../>` example tag using the
@@ -49,6 +50,10 @@ export interface SystemBlockOpts {
   /** Omit `ask` from the prompt — set for delegated/headless agents that have no
    *  interactive user (the global is not injected there either). Default false. */
   omitAsk?: boolean;
+  /** Omit `delegate` from the prompt — set when the agent's `canDelegateTo`
+   *  policy is 'none' (the global is not injected and absent from the DTS;
+   *  advertising it would bait the model into typecheck errors). Default false. */
+  omitDelegate?: boolean;
 }
 
 /**
@@ -112,33 +117,11 @@ function extractToolSummary(name: string, src: string): string {
   return `- \`${decl}\`${doc ? ` — ${doc}` : ''}`;
 }
 
-const RUNTIME_PREAMBLE = `
-CRITICAL INSTRUCTION: You are a TypeScript code execution agent. Your entire response is fed directly into a TypeScript evaluator, so it MUST be valid TypeScript. Do NOT emit bare prose or natural language — a single word of non-code, non-comment text is a typecheck error that wastes a turn.
-
-If you want to think out loud, explain your reasoning, or narrate a plan, write it INSIDE a \`// comment\`. Comments are valid TypeScript and are encouraged for narration — bare sentences are not. Example:
-  // First load the knowledge, then diagnose from the user's query.
-  const k = await loadKnowledge("espresso", "fundamentals", "overview.md");
-
-Respond with valid TypeScript statements only. Use top-level \`await\` for async operations (e.g. \`const x = await tasklist(...)\`). Do not wrap code in functions or markdown code blocks. Just write the statements directly.
-
-ABSOLUTELY FORBIDDEN — these will cause parse errors or runtime errors:
-  - \`\`\`typescript or \`\`\`ts or \`\`\` (markdown code fences)
-  - Bare English text or explanations OUTSIDE of a \`//\` comment
-  - function wrappers, IIFE patterns, or async IIFEs like \`await (async () => { ... })()\`
-  - setTimeout, setInterval, clearTimeout, clearInterval (not available — use sleep() instead)
-
-Use sequential top-level await statements, not IIFEs:
-WRONG: const x = await (async () => { const t = await tasklist("x"); return t; })()
-CORRECT: const x = await tasklist("x");
-
-WRONG (do not do this):
-  \`\`\`typescript
-  const result = await tasklist("make_pasta");
-  \`\`\`
-
-CORRECT (do this):
-  const result = await tasklist("make_pasta");
-
+// STATEMENT_PROTOCOL (exec/preamble.ts) is the single source of the shared
+// statement-emission rules (plain TS, no fences/IIFEs, flat top-level yields,
+// declare+use in the same statement); only the orchestration-level guidance
+// below (context economy, ground truth) is session/delegate-specific.
+const RUNTIME_PREAMBLE = STATEMENT_PROTOCOL + '\n\n' + `
 CONTEXT ECONOMY:
   - display() shows output to the user but does NOT grow the variables block — use it for intermediate results instead of binding large values you won't reuse.
   - Push heavy investigation into fork({ role: 'explore', ... }) — a subagent reads/searches in its own context and returns only a concise summary, keeping your context small.
@@ -151,19 +134,35 @@ GROUND TRUTH — never re-type a value you only saw in the VARIABLES block:
   - When you genuinely need to READ the full content of a truncated field (e.g. to split it across files, or to quote it), pull it back into scope FIRST with inspect — and BIND the result: \`const full = await inspect([report, { path: 'executive_summary' }]);\` or \`const head = await inspect([items, { slice: [0, 10] }]);\`. Only after inspecting should you use the value.
 `.trim();
 
-function globalsSummary(omitAsk: boolean): string {
+function globalsSummary(omitAsk: boolean, omitDelegate: boolean): string {
   const askBullet = omitAsk
     ? ''
     : '- `ask(descriptor)` — render an interactive form and await user input (yields). Compose built-in UI components — see # UI Components.\n';
-  const yieldList = omitAsk
-    ? 'inspect, loadKnowledge, sleep, tasklist, fork, delegate'
-    : 'ask, inspect, loadKnowledge, sleep, tasklist, fork, delegate';
+  const delegateBullet = omitDelegate
+    ? ''
+    : '\n- `delegate(packageName, agentName, action?, opts?)` — delegate to another agent (yields). With an `action` id it runs that action; omit `action` to let the agent run model-driven and pick one of its own actions/tasklists.';
+  const yieldList = [
+    ...(omitAsk ? [] : ['ask']),
+    'inspect',
+    'loadKnowledge',
+    'sleep',
+    'tasklist',
+    'fork',
+    ...(omitDelegate ? [] : ['delegate']),
+  ].join(', ');
   const autonomyNote = omitAsk
     ? '\nThis agent runs AUTONOMOUSLY: work entirely from the request/seed you were given. If a detail is missing, assume a sensible default and state it — never wait for input.\n'
     : '';
-  const castExamples = omitAsk
-    ? '  const result = await tasklist("my_list");   // result.field is usable directly\n  const data = await delegate(...);            // data.key is usable directly'
-    : '  const topic = await ask("...") as string;\n  const result = await tasklist("my_list");   // result.field is usable directly\n  const data = await delegate(...);            // data.key is usable directly';
+  const delegateCastLine = omitDelegate
+    ? ''
+    : '\n  const data = await delegate(...);            // data.key is usable directly';
+  const castExamples = (omitAsk
+    ? '  const r = await tasklist("my_list");        // r = { ok, degraded, data } — read r.data.field'
+    : '  const topic = await ask("...") as string;\n  const r = await tasklist("my_list");        // r = { ok, degraded, data } — read r.data.field'
+  ) + delegateCastLine;
+  const looseReturnsLine = omitDelegate
+    ? 'tasklist() and loadKnowledge() return loosely-typed values — read their fields directly.'
+    : 'tasklist(), delegate() and loadKnowledge() return loosely-typed values — read their fields directly.';
   return `
 # Available Globals
 
@@ -171,14 +170,14 @@ ${askBullet}- \`display(descriptor)\` — render content to the surface (void, n
 - \`inspect(...values)\` — inspect variables with optional queries (yields)
 - \`loadKnowledge(...path)\` — load a knowledge file by path segments (yields)
 - \`sleep(duration)\` — pause execution for a duration like "1s", "500ms" (yields)
-- \`tasklist(name, seed?)\` — run a named tasklist and return its goal output (yields). Pass seed to share variables with tasks: \`tasklist("my_list", { topic })\`
-- \`fork(opts)\` — spawn an isolated subagent and await its typed result (yields). The subagent runs in its own context and returns ONLY what it resolves — use it as a context firewall for heavy investigation. Set \`role\`: \`'explore'\` (read-only research), \`'plan'\` (read-only design), or \`'general'\` (full toolkit, default). Launch several at once with \`Promise.all([fork({role:'explore',...}), fork({role:'explore',...})])\`.
-- \`delegate(packageName, agentName, action?, opts?)\` — delegate to another agent (yields). With an \`action\` id it runs that action; omit \`action\` to let the agent run model-driven and pick one of its own actions/tasklists.
+- \`tasklist(name, seed?)\` — run a named tasklist (yields). Pass seed to share variables with tasks: \`tasklist("my_list", { topic })\`. Resolves to \`{ ok, degraded, data, reason?, degradedTasks? }\`: branch on \`r.ok\`/\`r.degraded\`; the goal output (the payload) is \`r.data\`.
+- \`fork(opts)\` — spawn an isolated subagent and await its typed result (yields). The subagent runs in its own context and returns ONLY what it resolves — use it as a context firewall for heavy investigation. Set \`role\`: \`'explore'\` (read-only research), \`'plan'\` (read-only design), or \`'general'\` (full toolkit, default). Launch several at once with \`Promise.all([fork({role:'explore',...}), fork({role:'explore',...})])\`.${delegateBullet}
 
 Value-yielding globals (${yieldList}) end the current turn.
 display() is void and does not end the turn.
 ${autonomyNote}
-tasklist(), delegate() and loadKnowledge() return loosely-typed values — read their fields directly:
+${looseReturnsLine}
+tasklist() always resolves to a TaskEnvelope \`{ ok, degraded, data, reason?, degradedTasks? }\` — the payload is \`r.data\`:
 ${castExamples}
 
 fork() spawns an isolated subagent. REQUIRED fields: \`instruction\` (what to do) and
@@ -210,7 +209,7 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
   sections.push(RUNTIME_PREAMBLE);
 
   // 1. Globals summary
-  sections.push(globalsSummary(opts.omitAsk === true));
+  sections.push(globalsSummary(opts.omitAsk === true, opts.omitDelegate === true));
 
   // 1a. UI component catalog — tell the model what display/form components exist
   sections.push(catalogSummary());

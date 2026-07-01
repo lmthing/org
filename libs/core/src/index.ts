@@ -116,9 +116,25 @@ export { runTasklist } from './tasklist/orchestrator.js';
 
 // Fork
 export { ForkEngine } from './fork/fork.js';
-export type { ForkTask } from './fork/fork.js';
+export type { ForkTask, ForkEngineOpts, ForkResultMeta } from './fork/fork.js';
 export { normalizeRole, rolePreamble, roleProfile, modelForRole } from './fork/roles.js';
 export type { ForkRole, RoleModelConfig } from './fork/roles.js';
+
+// Exec unification — shared child-VM wiring (capability profile, bootstrap,
+// ForkEngine options builder, delegate-target matcher, statement protocol)
+export { sessionCapabilities, forkCapabilities, delegateCapabilities } from './exec/capability.js';
+export type { CapabilityProfile } from './exec/capability.js';
+export { createChildVM, buildAmbientDts, CURRENT_TASK_DTS } from './exec/bootstrap.js';
+export type { ChildVMOpts, AmbientDtsOpts } from './exec/bootstrap.js';
+export { forkEngineOptsFrom } from './exec/fork-config.js';
+export type { ForkEngineParentContext } from './exec/fork-config.js';
+export { resolveTaskDelegate, refMatchesDelegateCall, evaluateDelegatePolicy, isDelegateAllowed, formatDelegateDenial, matchesRegisteredSpace, REGISTERED_WILDCARD } from './exec/target-match.js';
+export type { DelegatePolicy, DelegatePolicyLevel, DelegateAllowance } from './exec/target-match.js';
+export { STATEMENT_PROTOCOL } from './exec/preamble.js';
+export { salvageData } from './exec/envelope.js';
+export type { TaskEnvelope, DegradeReason } from './exec/envelope.js';
+export { runPrelude, splitPreludeStatements } from './exec/prelude.js';
+export type { RunPreludeOpts, PreludeResult, PreludeFailure } from './exec/prelude.js';
 
 // Delegate
 export { DelegateRegistry } from './delegate/registry.js';

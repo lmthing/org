@@ -149,12 +149,15 @@ describe('deep_research-shaped tasklist (plan -> investigate forEach -> synthesi
         agentFunctionsBundled: space.functionsBundled,
       });
 
-      const goal = await runTasklist({
+      const env = await runTasklist({
         name: 'deep_research',
         space,
         forkEngine: engine,
         seed: { query: 'test topic' },
-      }) as { count: number; tags: string[] };
+      });
+      expect(env.ok).toBe(true);
+      expect(env.degraded).toBe(false);
+      const goal = env.data as { count: number; tags: string[] };
 
       expect(seen.filter((s) => s === 'investigate')).toHaveLength(3);
       expect(goal.count).toBe(3);

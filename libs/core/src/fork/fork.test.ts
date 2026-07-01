@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import type { Space } from '../spaces/load.js';
-import { ForkEngine, salvageOutput } from './fork.js';
+import { ForkEngine } from './fork.js';
+import { salvageData } from '../exec/envelope.js';
 import { BudgetExceededError } from '../eval/budget.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamSession } from '../eval/stream-types.js';
@@ -36,19 +37,21 @@ function makeEngine(streamText: string): ForkEngine {
   });
 }
 
-describe('salvageOutput', () => {
-  it('produces type-appropriate placeholders for every schema field', () => {
-    const out = salvageOutput({ summary: 'string', findings: 'array', count: 'number', ok: 'boolean', meta: 'object' });
-    expect(typeof out.summary).toBe('string');
+describe('salvageData', () => {
+  it('produces type-appropriate NEUTRAL placeholders for every schema field', () => {
+    const out = salvageData({ summary: 'string', findings: 'array', count: 'number', ok: 'boolean', meta: 'object' });
+    // Strings are EMPTY — no prose note that a model could read and go off-script on.
+    expect(out.summary).toBe('');
     expect(out.findings).toEqual([]);
     expect(out.count).toBe(0);
     expect(out.ok).toBe(false);
     expect(out.meta).toEqual({});
+    expect(JSON.stringify(out)).not.toContain('unavailable');
   });
 
   it('handles array shorthand and empty schema', () => {
-    expect(salvageOutput({ items: 'string[]' }).items).toEqual([]);
-    expect(salvageOutput({})).toEqual({});
+    expect(salvageData({ items: 'string[]' }).items).toEqual([]);
+    expect(salvageData({})).toEqual({});
   });
 });
 
@@ -73,14 +76,31 @@ describe('ForkEngine', () => {
     expect(result).toMatchObject({ title: 'spaghetti', steps: 3, ready: true });
   });
 
-  it('salvages a schema-valid placeholder when currentTask.resolve() is never called', async () => {
+  it('salvages a NEUTRAL schema-valid placeholder when currentTask.resolve() is never called', async () => {
     // Robustness contract: rather than hard-failing the parent when the model wanders
     // without resolving (model stupidity), the fork forces resolve-only turns and, as a
-    // last resort, returns a type-appropriate placeholder so orchestration can proceed.
+    // last resort, returns a type-appropriate NEUTRAL placeholder ("" for strings — no
+    // alarming prose in the data plane) so orchestration can proceed.
     const engine = makeEngine('const x = 1;\n');
     const result = await engine.fork<{ x: string }>({ instruction: 'test', output: { x: 'string' } });
-    expect(typeof result.x).toBe('string');
-    expect(result.x).toMatch(/unavailable/i);
+    expect(result.x).toBe('');
+  });
+
+  it('forkWithMeta reports { degraded: true, reason: "no_resolve" } for a salvaged fork and degraded: false for a clean one', async () => {
+    // The typed degradation signal that replaces the old prose placeholder (Phase 3).
+    const salvagedMeta = await makeEngine('const x = 1;\n').forkWithMeta<{ x: string }>({
+      instruction: 'test', output: { x: 'string' },
+    });
+    expect(salvagedMeta.degraded).toBe(true);
+    expect(salvagedMeta.reason).toBe('no_resolve');
+    expect(salvagedMeta.value).toEqual({ x: '' });
+
+    const cleanMeta = await makeEngine('currentTask.resolve({ x: "real" });\n').forkWithMeta<{ x: string }>({
+      instruction: 'test', output: { x: 'string' },
+    });
+    expect(cleanMeta.degraded).toBe(false);
+    expect(cleanMeta.reason).toBeUndefined();
+    expect(cleanMeta.value).toEqual({ x: 'real' });
   });
 
   it('injects the JSX runtime so a fork can display(<JSX>) without "React is not defined"', async () => {

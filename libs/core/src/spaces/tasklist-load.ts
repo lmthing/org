@@ -25,6 +25,12 @@ export interface TaskNode {
   /** Per-task delegation allowlist: `"space/agent"` (any action) or `"space/agent#action"`.
    *  When set, the task's fork may `delegate()` to exactly these targets (and nothing else). */
   canDelegateTo?: string[];
+  /** Host-executed TS statements (YAML block scalar) run in the fork VM BEFORE the model's
+   *  first turn — the task's deterministic setup (bindings, webSearch/webFetch gathering)
+   *  executes with host reliability instead of being re-emitted by the model. Yields are
+   *  allowed; failures degrade per-statement (never kill the fork). Deep validation happens
+   *  at run time through the same typecheck pipeline as model statements. */
+  prelude?: string;
 }
 
 export async function loadTasklist(dir: string, files: string[]): Promise<Record<string, TaskNode>> {
@@ -85,6 +91,17 @@ export async function loadTasklist(dir: string, files: string[]): Promise<Record
     }
     if (Array.isArray(data['canDelegateTo'])) {
       task.canDelegateTo = data['canDelegateTo'].map(String);
+    }
+    if (data['prelude'] !== undefined) {
+      // Light load-time validation only (non-empty string). Deep validation is
+      // deferred to run time, where each statement goes through the same
+      // typecheck pipeline as model statements (see exec/prelude.ts).
+      if (typeof data['prelude'] !== 'string' || !data['prelude'].trim()) {
+        throw new Error(
+          `Task "${id}" (${filePath}): "prelude" must be a non-empty string of TypeScript statements`,
+        );
+      }
+      task.prelude = data['prelude'];
     }
 
     tasks[id] = task;

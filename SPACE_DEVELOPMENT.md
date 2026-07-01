@@ -56,7 +56,7 @@ title: <Agent Display Name>
 knowledge: [<domain>/<field>, ...]             # refs to knowledge/ tree
 functions: [<functionName>, ...]               # refs to functions/ files
 components: [<ComponentName>, ...]             # refs to components/ (view or form)
-canDelegateTo: [<space-ref>/<agent-slug>, ...]  # delegate access
+canDelegateTo: [<space-ref>/<agent-slug>, ...]  # delegation policy — see table below
 defaultAction: <action-id>                     # optional: robust freeform fallback
 actions:
   - id: <action-id>
@@ -68,6 +68,17 @@ actions:
 You are an expert agent... (System Prompt)
 ```
 `config.json` can alternatively be used to define function accessibility.
+
+`canDelegateTo` is a **delegation policy** with unified semantics (the same table applies to a
+task's frontmatter `canDelegateTo`, where the *omitted* default is "no delegation" instead):
+
+| Value | Meaning (agent level) |
+|---|---|
+| omitted | unrestricted delegation (back-compat default) |
+| `[]` | **no delegation** — the `delegate` global is not injected and absent from the typecheck DTS; the loader warns (`use ["*"] for unrestricted`) |
+| `["*"]` | explicitly unrestricted |
+| explicit list | hard allowlist enforced at call time — `"space/agent"` (any action) or `"space/agent#action"` (that action only); a violating `delegate()` throws an error naming the allowed targets |
+| `"registered:*"` entry | additionally allow any space registered at runtime via `registerSpace()` |
 
 ### Functions (`functions/*.ts`)
 Functions are synchronous TypeScript exports that utilize the core host primitives. No Node.js imports are allowed.

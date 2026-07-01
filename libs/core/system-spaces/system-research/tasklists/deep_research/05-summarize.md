@@ -31,6 +31,6 @@ Write the final, polished report from `synthesize.themes`/`synthesize.gaps`/
 If `synthesize.themes` is empty (no sources were ever available), say so plainly in
 `executive_summary` and `conclusion`, and resolve with `findings: []` and `sources: []`.
 
-Emit one PLAIN TypeScript statement (do NOT wrap it in markdown code fences):
+Emit ONE statement:
 
 currentTask.resolve({ topic: synthesize.topic, executive_summary, findings, conclusion, sources });

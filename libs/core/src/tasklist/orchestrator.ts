@@ -5,6 +5,7 @@ import { validateDag, findReadyTasks, resolveGoalTask } from './dag.js';
 import type { TaskNode } from '../spaces/tasklist-load.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { validateInput } from './schema.js';
+import type { TaskEnvelope, DegradeReason } from '../exec/envelope.js';
 
 /** Resolve a `forEach` reference ("taskId" or "taskId.field.subfield") against accumulated
  *  task outputs. Returns the referenced array, or [] when missing / not an array. */
@@ -18,6 +19,14 @@ function resolveForEachItems(ref: string, allOutputs: Record<string, unknown>): 
   return Array.isArray(val) ? val : [];
 }
 
+/**
+ * Run a tasklist DAG and return a `TaskEnvelope` wrapping the goal task's output.
+ *
+ * Task→task UPSTREAM outputs stay RAW schema data (task files keep referencing
+ * `plan.questions` etc.) — degradation metadata never leaks into upstream
+ * variable values. Only the tasklist BOUNDARY result is enveloped:
+ * `{ ok, degraded, data, reason?, degradedTasks? }`.
+ */
 export async function runTasklist(opts: {
   name: string;
   space: Space;
@@ -25,7 +34,7 @@ export async function runTasklist(opts: {
   seed?: Record<string, unknown>;
   tracer?: Tracer;
   parentScope?: TraceScope;
-}): Promise<unknown> {
+}): Promise<TaskEnvelope> {
   const { name, space, forkEngine, seed, tracer, parentScope } = opts;
 
   const tasklistDir = space.tasklists[name];
@@ -35,14 +44,29 @@ export async function runTasklist(opts: {
 
   // Validate the runtime seed against the tasklist's declared input schema
   // (tasklists/<name>/index.md frontmatter). No declared schema → accept any seed.
-  if (tasklistDir.input && Object.keys(tasklistDir.input).length > 0) {
-    const errors = validateInput(tasklistDir.input, seed ?? {});
+  const declaredInputKeys =
+    tasklistDir.input && Object.keys(tasklistDir.input).length > 0
+      ? Object.keys(tasklistDir.input)
+      : undefined;
+  if (declaredInputKeys) {
+    const errors = validateInput(tasklistDir.input!, seed ?? {});
     if (errors.length > 0) {
       throw new Error(
         `Tasklist "${name}" received an invalid seed:\n  - ${errors.join('\n  - ')}`,
       );
     }
   }
+
+  // INPUT HARD FILTER: when the tasklist declares an `input` schema, forks receive
+  // ONLY the declared keys — whatever extra baggage a delegator packed into the seed
+  // (e.g. `parentHistory`, stray context) never rides into leaf prompts/ambient DTS.
+  // This makes a leaf fork's prompt a pure function of (task file, declared inputs,
+  // upstream outputs, forEach item) — identical shallow vs nested. No declared
+  // schema → full passthrough (back-compat). Host-injected forEach `item`/`index`
+  // are added AFTER the filter and are unaffected.
+  const taskSeed = declaredInputKeys
+    ? Object.fromEntries(Object.entries(seed ?? {}).filter(([k]) => declaredInputKeys.includes(k)))
+    : seed;
 
   const tasks = await loadTasklist(tasklistDir.slug, tasklistDir.files);
   validateDag(tasks);
@@ -57,6 +81,11 @@ export async function runTasklist(opts: {
   const skipped = new Set<string>();
   const allOutputs: Record<string, unknown> = {};
   let goalOutput: unknown;
+  // Degradation aggregation (Phase 3): labels of every salvaged task / forEach
+  // element (e.g. "investigate[3]"), plus the goal task's own degradation state.
+  const degradedTasks: string[] = [];
+  let goalDegraded = false;
+  let goalReason: DegradeReason | undefined;
 
   // Build up upstream outputs per task
   function getUpstreamOutputs(task: TaskNode): Record<string, unknown> {
@@ -128,19 +157,36 @@ export async function runTasklist(opts: {
           taskScopes.set(task.id, taskScope);
 
           const upstream = Object.keys(upstreamOutputs).length > 0 ? upstreamOutputs : undefined;
-          const runFork = (extraSeed?: Record<string, unknown>, elemScope?: TraceScope): Promise<unknown> =>
-            forkEngine.fork({
+          // forkWithMeta: same execution path as fork(), plus typed degradation
+          // metadata so salvage becomes a control-plane signal (→ TaskEnvelope),
+          // not prose inside the data.
+          const runFork = (
+            extraSeed?: Record<string, unknown>,
+            elemScope?: TraceScope,
+          ): Promise<import('../fork/fork.js').ForkResultMeta> =>
+            forkEngine.forkWithMeta({
               instruction: task.instruction,
               output: task.output,
-              seed: extraSeed ? { ...(seed ?? {}), ...extraSeed } : seed,
+              seed: extraSeed ? { ...(taskSeed ?? {}), ...extraSeed } : taskSeed,
               upstreamOutputs: upstream,
               taskId: task.id,
               role: task.role,
               functions: task.functions,
               canDelegateTo: task.canDelegateTo,
+              prelude: task.prelude,
               tasklistDescription: tasklistDir.description,
               parentScope: elemScope ?? taskScope,
             });
+
+          // Record a salvage for the given label; when this is the goal task, its
+          // (first) degradation also determines the envelope's ok/reason.
+          const noteDegraded = (label: string, reason: DegradeReason | undefined): void => {
+            degradedTasks.push(label);
+            if (goalTask && task.id === goalTask.id) {
+              goalDegraded = true;
+              if (!goalReason) goalReason = reason ?? 'no_resolve';
+            }
+          };
 
           // forEach: host-driven fan-out. Resolve the referenced upstream array and run the
           // task once per element (parallel, within the engine's concurrency cap), injecting
@@ -152,17 +198,19 @@ export async function runTasklist(opts: {
                 const elemScope = tracer && taskScope
                   ? tracer.child(taskScope, 'task', `fork:${task.id}[${index}]`, { tasklist: name, forEachIndex: index })
                   : undefined;
-                return runFork({ item, index }, elemScope).then((value) => {
-                  if (tracer && elemScope) tracer.end(elemScope, 'done', { result: value });
-                  return value;
+                return runFork({ item, index }, elemScope).then((meta) => {
+                  if (meta.degraded) noteDegraded(`${task.id}[${index}]`, meta.reason);
+                  if (tracer && elemScope) tracer.end(elemScope, 'done', { result: meta.value, ...(meta.degraded ? { degraded: true, reason: meta.reason } : {}) });
+                  return meta.value;
                 });
               }),
             );
             return { task, output };
           }
 
-          const output = await runFork();
-          return { task, output };
+          const meta = await runFork();
+          if (meta.degraded) noteDegraded(task.id, meta.reason);
+          return { task, output: meta.value };
         }),
       );
 
@@ -213,8 +261,21 @@ export async function runTasklist(opts: {
       );
     }
 
-    if (tracer && tasklistScope) tracer.end(tasklistScope, 'done', { result: goalOutput });
-    return goalOutput;
+    // Wrap the goal output in a TaskEnvelope at the tasklist BOUNDARY:
+    //   ok        — the goal task itself resolved un-salvaged
+    //   degraded  — any salvage occurred anywhere in the DAG (incl. forEach elements)
+    //   data      — the goal task's RAW schema output (salvaged fields are neutral empties)
+    // Hard failures (stuck DAG, invalid seed, skipped goal, budget/timeout rejects)
+    // still THROW above — they surface as retryable yield errors, unchanged.
+    const envelope: TaskEnvelope = {
+      ok: !goalDegraded,
+      degraded: degradedTasks.length > 0,
+      data: goalOutput,
+      ...(goalDegraded ? { reason: goalReason ?? 'no_resolve' } : {}),
+      ...(degradedTasks.length > 0 ? { degradedTasks } : {}),
+    };
+    if (tracer && tasklistScope) tracer.end(tasklistScope, 'done', { result: envelope });
+    return envelope;
   } catch (err) {
     if (tracer && tasklistScope) tracer.end(tasklistScope, 'error', { error: err instanceof Error ? err.message : String(err) });
     throw err;

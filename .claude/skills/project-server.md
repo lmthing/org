@@ -9,7 +9,7 @@ description: Load when working on the lmthing project server, session persistenc
 
 ```
 <cwd>/.lmthing/
-  system/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/   ← materialized by `lmthing init`
+  system/{system-global,system-engineer,system-architect,system-research,user-memory,user-thing}/   ← materialized by `lmthing init`
   user/                       ← default project
     spaces/                   ← architect-synthesized spaces for this project
     documents/  instructions.md  project.json

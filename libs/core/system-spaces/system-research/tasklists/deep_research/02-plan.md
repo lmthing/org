@@ -30,6 +30,6 @@ These are NOT rephrasings of each other — each drives an independent investiga
 parallel and sees ONLY its own question string, not `topic` or `scope.landscape`. So make every
 question specific, search-friendly, and self-contained: it must name the subject.
 
-Emit this single statement (plain TypeScript — do NOT wrap it in markdown code fences):
+Emit this single statement:
 
 currentTask.resolve({ topic: scope.topic, questions: ["<question 1>", "<question 2>", "<question 3>", "<question 4>", "<question 5>", "<question 6>"] });

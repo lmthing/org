@@ -1,11 +1,3 @@
-/** Join path segments with '/'. Replaces node:path.join inside the QuickJS VM. */
-function joinPath(...parts: string[]): string {
-  return parts
-    .map((p, i) => (i === 0 ? p.replace(/\/+$/, '') : p.replace(/^\/+|\/+$/g, '')))
-    .filter(Boolean)
-    .join('/');
-}
-
 interface AgentActionSpec {
   id: string;
   label: string;
@@ -50,19 +42,6 @@ function stripExt(name: string): string {
  *
  * @returns { ok, path, error? }
  */
-/** Resolve a space arg to its absolute directory. The model passes only a bare slug
- *  (e.g. "gavdos-reference") and NEVER needs to know where spaces are stored — this
- *  resolves it under the host-injected project spaces dir
- *  (process.env.LMTHING_PROJECT_SPACES_DIR = .lmthing/<project>/spaces, default
- *  .lmthing/user/spaces). A value already containing "/" is treated as a resolved path
- *  and used verbatim (the iterate flow passes a discovered dir). */
-function resolveSpaceDir(space: string): string {
-  const s = String(space ?? '').replace(/\/+$/, '');
-  if (s.includes('/')) return s;
-  const base = (process.env.LMTHING_PROJECT_SPACES_DIR || '.lmthing/user/spaces').replace(/\/+$/, '');
-  return joinPath(base, s);
-}
-
 export function writeAgentFile(
   space: string,
   spec: AgentFileSpec,
@@ -94,7 +73,7 @@ export function writeAgentFile(
   const knowledgeRefs = (spec.knowledge ?? []).filter((ref) => {
     const parts = String(ref).split('/');
     if (parts.length !== 2) return false; // must be "<domain>/<field>"
-    const idx = readFileRaw(joinPath(dir, 'knowledge', parts[0]!, parts[1]!, 'index.md'), { limit: 1 });
+    const idx = readFileRaw(spacePath(dir, 'knowledge', parts[0]!, parts[1]!, 'index.md'), { limit: 1 });
     return idx.ok;
   });
   const componentNames = (spec.components ?? []).map(stripExt);
@@ -131,7 +110,7 @@ export function writeAgentFile(
     spec.systemPrompt,
   ].join('\n');
 
-  const path = joinPath(dir, 'agents', slug, 'instruct.md');
+  const path = spacePath(dir, 'agents', slug, 'instruct.md');
   const w = writeFileRaw(path, frontmatter);
   if (!w.ok) return { ok: false, path, error: `Failed to write ${path}: ${w.error}` };
 
@@ -141,7 +120,7 @@ export function writeAgentFile(
   const charterBody = (spec.charter && spec.charter.trim())
     ? spec.charter.trim()
     : `You are ${spec.agentTitle}. Answer the user's request in your domain accurately and concisely, grounded only in what you actually know or load — never fabricate.`;
-  const charterPath = joinPath(dir, 'agents', slug, 'charter.md');
+  const charterPath = spacePath(dir, 'agents', slug, 'charter.md');
   const cw = writeFileRaw(charterPath, charterBody + '\n');
   if (!cw.ok) return { ok: false, path: charterPath, error: `Failed to write ${charterPath}: ${cw.error}` };
 

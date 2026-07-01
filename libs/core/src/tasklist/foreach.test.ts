@@ -59,7 +59,9 @@ describe('forEach map node', () => {
     });
     const goal = await runTasklist({ name: 'flow', space, forkEngine: engine });
     // 2²+3²+4² = 29
-    expect(goal).toEqual({ total: 29 });
+    expect(goal.data).toEqual({ total: 29 });
+    expect(goal.ok).toBe(true);
+    expect(goal.degraded).toBe(false);
     // square ran three times (one per element).
     expect(seen.filter((s) => s === 'square')).toHaveLength(3);
   });
@@ -82,7 +84,7 @@ describe('forEach map node', () => {
       renderHost: silentHost, streamFn,
     });
     const goal = await runTasklist({ name: 'flow', space, forkEngine: engine });
-    expect(goal).toEqual([]); // empty source → empty collected array
+    expect(goal.data).toEqual([]); // empty source → empty collected array
     expect(seen).toHaveLength(0); // no element forks dispatched
   });
 });
@@ -138,7 +140,7 @@ describe('per-task role + functions scoping', () => {
       maxConcurrentForks: 4, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
       renderHost: silentHost, streamFn,
     });
-    const goal = await runTasklist({ name: 'flow', space, forkEngine: engine }) as { writeBlocked: boolean };
+    const goal = (await runTasklist({ name: 'flow', space, forkEngine: engine })).data as { writeBlocked: boolean };
     // Capability gate: writeFileRaw returned ok:false (write withheld at injection).
     expect(goal.writeBlocked).toBe(true);
     // Prompt gate: a read-only task is NOT told about writeFileRaw.
@@ -174,7 +176,7 @@ describe('per-task role + functions scoping', () => {
       renderHost: silentHost, streamFn,
       agentFunctions: { allowedFn: 'export function allowedFn(): number { return 7; }', deniedFn: 'export function deniedFn(): number { return 9; }' },
     });
-    const goal = await runTasklist({ name: 'flow', space, forkEngine: engine }) as { v: number };
+    const goal = (await runTasklist({ name: 'flow', space, forkEngine: engine })).data as { v: number };
     expect(goal.v).toBe(7); // allowlisted fn injected + callable
     expect(systemSeen).toContain('allowedFn');
     expect(systemSeen).not.toContain('deniedFn'); // denied fn neither advertised nor injected

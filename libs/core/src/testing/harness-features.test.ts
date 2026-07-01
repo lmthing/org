@@ -475,14 +475,15 @@ describe('harness — tasklist()', () => {
       () => {
         sessionStep++;
         if (sessionStep === 1) return `const out = await tasklist("pipeline", { seedVal: 7 });`;
-        if (sessionStep === 2) return `display(JSON.stringify(out));`;
+        if (sessionStep === 2) return `display(JSON.stringify(out.data));\ndisplay("ok=" + out.ok + " degraded=" + out.degraded);`;
         return '';
       },
     );
     const r = await runSession({ streamFn: m, message: 'go', spaceDir: dir });
     expect(r.error).toBeUndefined();
-    // Goal task is `second`; its output is what tasklist() resolves to.
+    // Goal task is `second`; its output is the TaskEnvelope payload (out.data).
     expect(JSON.parse(r.displays[0] as string)).toEqual({ b: 8 });
+    expect(r.displays).toContain('ok=true degraded=false');
     // Two tasks ⟹ two fork turns, and they ran in dependency order (first before second).
     const forks = forkRequests(r.trace);
     expect(forks.length).toBe(2);
@@ -499,6 +500,36 @@ describe('harness — tasklist()', () => {
     expect(firstPrompt).not.toContain('Inputs from upstream tasks'); // no deps → no upstream block
     expect(secondPrompt).toContain('Inputs from upstream tasks');
     expect(secondPrompt).toContain('first'); // upstream output injected under its task id
+  });
+  it('a salvaged task surfaces as a typed envelope — no prose placeholder in the result or the parent-visible variables', async () => {
+    // Regression for .issues/thing-abandons-build-on-salvaged-research.md: degradation
+    // must be a control-plane signal (out.ok/out.degraded/out.degradedTasks), and the
+    // old "(unavailable — …)" prose must never appear in the data the parent sees.
+    const dir = await makePipelineSpace();
+    let sessionStep = 0;
+    const m = mockMatch(
+      [
+        // FIRST_TASK deliberately never resolves → its fork salvages a NEUTRAL placeholder.
+        forkRule('FIRST_TASK', `const nothing = 1;`),
+        forkRule('SECOND_TASK', `currentTask.resolve({ b: (first as any).a + 1 });`),
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1) return `const out = await tasklist("pipeline", { seedVal: 7 });`;
+        if (sessionStep === 2)
+          return `display("ok=" + out.ok + " degraded=" + out.degraded + " tasks=" + JSON.stringify(out.degradedTasks));\ndisplay(JSON.stringify(out.data));`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go', spaceDir: dir });
+    expect(r.error).toBeUndefined();
+    // Goal resolved cleanly on top of the salvaged upstream (a:0 → b:1); envelope names the culprit.
+    expect(r.displays).toContain('ok=true degraded=true tasks=["first"]');
+    expect(JSON.parse(r.displays[1] as string)).toEqual({ b: 1 });
+    // The alarming prose appears NOWHERE — not in displays, not in any traced prompt
+    // or VARIABLES block the parent model could read.
+    const everything = JSON.stringify({ displays: r.displays, trace: r.trace });
+    expect(everything).not.toContain('(unavailable');
   });
 });
 
@@ -966,14 +997,14 @@ describe('harness — delegate() to a tasklist-backed action', () => {
       () => {
         sessionStep++;
         if (sessionStep === 1)
-          return `const d = await delegate(${JSON.stringify(workerDir)}, "worker", "build", { query: "go", context: { n: 3 } }) as { value: number };`;
-        if (sessionStep === 2) return `display("value=" + (d as any).value);`;
+          return `const d = await delegate(${JSON.stringify(workerDir)}, "worker", "build", { query: "go", context: { n: 3 } }) as { ok: boolean; data: { value: number } };`;
+        if (sessionStep === 2) return `display("value=" + (d as any).data.value);`;
         return '';
       },
     );
     const r = await runSession({ streamFn: m, message: 'go' });
     expect(r.error).toBeUndefined();
-    // Auto-capture returned the goal output ({ value: 4 }) despite no explicit resolve.
+    // Auto-capture returned the tasklist ENVELOPE untouched — the goal output is d.data.
     expect(r.displays).toContain('value=4');
 
     // The child's prompt carried the tasklist-guidance hint + the delegate context.
@@ -1003,8 +1034,8 @@ describe('harness — delegate() to a tasklist-backed action', () => {
       () => {
         sessionStep++;
         if (sessionStep === 1)
-          return `const d = await delegate(${JSON.stringify(workerDir)}, "worker", { context: { n: 9 } }) as { value: number };`;
-        if (sessionStep === 2) return `display("value=" + (d as any).value);`;
+          return `const d = await delegate(${JSON.stringify(workerDir)}, "worker", { context: { n: 9 } }) as { ok: boolean; data: { value: number } };`;
+        if (sessionStep === 2) return `display("value=" + (d as any).data.value);`;
         return '';
       },
     );

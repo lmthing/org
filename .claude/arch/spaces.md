@@ -8,7 +8,7 @@
 - `libs/core/src/spaces/components.ts` — `getAgentComponents`
 - `libs/core/src/spaces/knowledge.ts` — knowledge tree loading
 - `libs/core/src/spaces/tasklist-load.ts` — tasklist directory loading
-- `libs/core/src/spaces/system.ts` — **system spaces**: `loadSystemSpaces` + `mergeSystemInto` merge the always-on baseline spaces (`libs/core/system-spaces/{system-global,system-engineer,system-architect,system-deep-research,user-memory,user-thing}/`) into every user space. See `@.claude/skills/system-spaces.md`.
+- `libs/core/src/spaces/system.ts` — **system spaces**: `loadSystemSpaces` + `mergeSystemInto` merge the always-on baseline spaces (`libs/core/system-spaces/{system-global,system-engineer,system-architect,system-research,user-memory,user-thing}/`) into every user space. See `@.claude/skills/system-spaces.md`.
 
 ## Space Type
 
@@ -34,7 +34,7 @@ interface AgentDef {
   title: string;
   instructBody: string;
   actions: ActionDef[];
-  canDelegateTo: string[];   // delegation target strings
+  canDelegateTo?: string[];  // delegation POLICY (tri-state: omitted ≠ []) — see Agent Loading
   config: AgentConfig;       // { knowledge, functions, components }
 }
 ```
@@ -56,7 +56,7 @@ All agent configuration lives in its YAML frontmatter:
 - `title` — display name (defaults to slug)
 - `knowledge`, `functions`, `components` — string arrays for scoping
 - `actions[]` — `{id, label, description, tasklist}` entries
-- `canDelegateTo[]` — delegation target strings (see SPACE-SPEC.md for formats; legacy `dependencies[]` is still accepted on read)
+- `canDelegateTo[]` — delegation POLICY with unified semantics (`exec/target-match.ts evaluateDelegatePolicy`): omitted = unrestricted (back-compat), `[]` = NO delegation (global withheld + absent from DTS; loader warns `use ["*"] for unrestricted`), `["*"]` = unrestricted, explicit list = hard allowlist enforced at yield time, `"registered:*"` entry = any `registerSpace()`d space. Omitted-vs-`[]` is preserved on `AgentDef` (do not normalize). Legacy `dependencies[]` is still accepted on read
 
 The body of `instruct.md` (after the frontmatter) is the system prompt (`instructBody`).
 

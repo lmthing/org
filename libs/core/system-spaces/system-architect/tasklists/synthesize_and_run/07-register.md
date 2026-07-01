@@ -9,9 +9,8 @@ dependsOn: [design, validate]
 role: general
 ---
 
-Register the validated space into the live runtime so it can be run. `registerSpace` is a
-yielding call — keep it FLAT at the top level and guard it with a ternary (never inside
-if/try). Skip registration when the build didn't validate. Emit:
+Register the validated space into the live runtime so it can be run. Skip registration when the
+build didn't validate. Emit:
 
 const reg = validate.ok ? await registerSpace(validate.dir) : { ok: false, spaceKey: "", agentSlug: "", error: validate.errors };
 currentTask.resolve({

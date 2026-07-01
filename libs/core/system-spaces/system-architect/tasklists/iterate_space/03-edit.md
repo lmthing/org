@@ -38,8 +38,8 @@ Steps:
 2. Apply each change from `diagnose.plan` by calling the matching builder — e.g. rewrite the agent
    header with `writeAgentFile(load.dir, {...})`, add/replace a task with `writeTaskFile`, add a
    knowledge option with `writeKnowledgeOption`, fix a function with `writeFunctionFile` (read its
-   `errors` and rewrite if not ok). If the plan needs fresh web research, run `await webSearch(...)`
-   / `await webFetch(...)` FLAT at top level, ternary-guarded — never inside if/else/try/loops.
+   `errors` and rewrite if not ok). If the plan needs fresh web research, use `await webSearch(...)`
+   / `await webFetch(...)`.
 3. Re-validate (the gate):
    ```typescript
    const v = validateSpace(load.dir);

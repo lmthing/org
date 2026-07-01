@@ -1,23 +1,3 @@
-/** Join path segments with '/'. Replaces node:path.join inside the QuickJS VM. */
-function joinPath(...parts: string[]): string {
-  return parts
-    .map((p, i) => (i === 0 ? p.replace(/\/+$/, '') : p.replace(/^\/+|\/+$/g, '')))
-    .filter(Boolean)
-    .join('/');
-}
-
-/** Resolve a space arg to its absolute directory. The model passes only a bare slug
- *  and NEVER needs to know where spaces are stored — this resolves it under the
- *  host-injected project spaces dir (process.env.LMTHING_PROJECT_SPACES_DIR =
- *  .lmthing/<project>/spaces, default .lmthing/user/spaces). A value already containing
- *  "/" is used verbatim (the iterate flow passes a discovered dir). */
-function resolveSpaceDir(space: string): string {
-  const s = String(space ?? '').replace(/\/+$/, '');
-  if (s.includes('/')) return s;
-  const base = (process.env.LMTHING_PROJECT_SPACES_DIR || '.lmthing/user/spaces').replace(/\/+$/, '');
-  return joinPath(base, s);
-}
-
 /**
  * Validate that a scaffolded space is structurally correct before passing it to
  * registerSpace(). Uses readFileRaw and execShell ls only.
@@ -47,7 +27,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
       const key = `${domain}/${field}/${option}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const optPath = joinPath(dir, 'knowledge', domain, field, option);
+      const optPath = spacePath(dir, 'knowledge', domain, field, option);
       const r = readFileRaw(optPath, { limit: 1 });
       if (!r.ok) {
         errors.push(`${where}: loadKnowledge('${domain}', '${field}', '${option}') references knowledge/${key} which does not exist`);
@@ -55,7 +35,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
     }
   };
 
-  const agentsDirCheck = execShell(`ls "${joinPath(dir, 'agents')}" 2>&1`);
+  const agentsDirCheck = execShell(`ls "${spacePath(dir, 'agents')}" 2>&1`);
   if (!agentsDirCheck.ok || agentsDirCheck.stderr.includes('No such')) {
     errors.push(`Missing agents/ directory`);
     return { ok: false, errors, dir };
@@ -68,7 +48,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
   }
 
   for (const slug of agentSlugs) {
-    const instructPath = joinPath(dir, 'agents', slug, 'instruct.md');
+    const instructPath = spacePath(dir, 'agents', slug, 'instruct.md');
     const instructRead = readFileRaw(instructPath);
     if (!instructRead.ok) {
       errors.push(`Agent "${slug}": missing instruct.md (${instructRead.error})`);
@@ -84,7 +64,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
 
     // charter.md is required — it is the fork-safe identity injected into every task fork.
     // Write it with writeAgentFile's `charter` field (a short 2-4 sentence identity/guardrails).
-    const charterRead = readFileRaw(joinPath(dir, 'agents', slug, 'charter.md'), { limit: 40 });
+    const charterRead = readFileRaw(spacePath(dir, 'agents', slug, 'charter.md'), { limit: 40 });
     if (!charterRead.ok || charterRead.content.trim().length < 20) {
       errors.push(`Agent "${slug}": missing or too-short charter.md — pass a 2-4 sentence \`charter\` to writeAgentFile (fork-safe identity/guardrails, no ask/delegate/UI prose)`);
     }
@@ -101,7 +81,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
       .filter((n: string) => n && n !== '[]');
 
     for (const fnName of functionNames) {
-      const fnRead = readFileRaw(joinPath(dir, 'functions', `${fnName}.ts`), { limit: 2000 });
+      const fnRead = readFileRaw(spacePath(dir, 'functions', `${fnName}.ts`), { limit: 2000 });
       if (!fnRead.ok) {
         errors.push(`Agent "${slug}": function "${fnName}" declared but functions/${fnName}.ts not found`);
         continue;
@@ -128,8 +108,8 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
         errors.push(`Agent "${slug}": knowledge ref "${ref}" must be "<domain>/<field>"`);
         continue;
       }
-      const fieldDir = joinPath(dir, 'knowledge', parts[0]!, parts[1]!);
-      const idx = readFileRaw(joinPath(fieldDir, 'index.md'), { limit: 500 });
+      const fieldDir = spacePath(dir, 'knowledge', parts[0]!, parts[1]!);
+      const idx = readFileRaw(spacePath(fieldDir, 'index.md'), { limit: 500 });
       if (!idx.ok) {
         errors.push(`Agent "${slug}": knowledge "${ref}" declared but knowledge/${ref}/index.md not found`);
         continue;
@@ -161,8 +141,8 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
       .filter((n: string) => n && n !== '[]');
 
     for (const comp of componentNames) {
-      const viewFile = readFileRaw(joinPath(dir, 'components', 'view', `${comp}.tsx`), { limit: 1 });
-      const formFile = readFileRaw(joinPath(dir, 'components', 'form', `${comp}.tsx`), { limit: 1 });
+      const viewFile = readFileRaw(spacePath(dir, 'components', 'view', `${comp}.tsx`), { limit: 1 });
+      const formFile = readFileRaw(spacePath(dir, 'components', 'form', `${comp}.tsx`), { limit: 1 });
       if (!viewFile.ok && !formFile.ok) {
         errors.push(`Agent "${slug}": component "${comp}" declared but no components/view/${comp}.tsx or components/form/${comp}.tsx found`);
       }
@@ -171,7 +151,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
     // Check tasklist references
     const tasklistRefs = [...fm.matchAll(/tasklist:\s*(\S+)/g)].map((m: RegExpMatchArray) => m[1]!);
     for (const tl of tasklistRefs) {
-      const tlCheck = execShell(`ls "${joinPath(dir, 'tasklists', tl)}" 2>&1`);
+      const tlCheck = execShell(`ls "${spacePath(dir, 'tasklists', tl)}" 2>&1`);
       if (!tlCheck.ok || tlCheck.stderr.includes('No such')) {
         errors.push(`Agent "${slug}": action references tasklist "${tl}" but no directory found`);
         continue;
@@ -185,12 +165,12 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
 
       // Task instructions also call loadKnowledge — validate their option refs too.
       for (const f of tlFiles) {
-        const r = readFileRaw(joinPath(dir, 'tasklists', tl, f), { limit: 2000 });
+        const r = readFileRaw(spacePath(dir, 'tasklists', tl, f), { limit: 2000 });
         if (r.ok) checkLoadKnowledge(r.content, `Tasklist "${tl}" task ${f}`);
       }
 
       const goalCount = tlFiles.filter((f: string) => {
-        const r = readFileRaw(joinPath(dir, 'tasklists', tl, f), { limit: 500 });
+        const r = readFileRaw(spacePath(dir, 'tasklists', tl, f), { limit: 500 });
         return r.ok && /^goal:\s*true/m.test(r.content);
       }).length;
 
@@ -203,12 +183,12 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
       // Check dependsOn integrity: collect real task ids then validate every dependsOn entry
       const idSet = new Set<string>();
       for (const f of tlFiles) {
-        const r = readFileRaw(joinPath(dir, 'tasklists', tl, f), { limit: 500 });
+        const r = readFileRaw(spacePath(dir, 'tasklists', tl, f), { limit: 500 });
         const m = r.ok ? r.content.match(/^id:\s*(\S+)/m) : null;
         if (m) idSet.add(m[1]!);
       }
       for (const f of tlFiles) {
-        const r = readFileRaw(joinPath(dir, 'tasklists', tl, f), { limit: 2000 });
+        const r = readFileRaw(spacePath(dir, 'tasklists', tl, f), { limit: 2000 });
         if (!r.ok) continue;
         const depMatch = r.content.match(/^dependsOn:\s*\[([^\]]*)\]/m);
         const taskDeps = depMatch
