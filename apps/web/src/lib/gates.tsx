@@ -21,11 +21,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+interface EnsurePodResult {
+  pod?: { computeTag?: string; ready?: boolean }
+}
+
 /** Ensure the user's compute pod is running before any pod API call. */
 async function ensurePod(
   cloudBaseUrl: string,
   getAccessToken: () => Promise<string>,
-): Promise<void> {
+): Promise<EnsurePodResult> {
   const token = await getAccessToken()
   const res = await fetch(`${cloudBaseUrl}/api/compute/ensure`, {
     method: 'POST',
@@ -34,22 +38,85 @@ async function ensurePod(
   if (!res.ok) {
     throw new Error(`compute/ensure failed: ${res.status}`)
   }
+  return res.json() as Promise<EnsurePodResult>
 }
 
+/** Latest compute image tag CI has built, per the gateway. `null` if unknown. */
+async function fetchLatestTag(cloudBaseUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${cloudBaseUrl}/api/compute/version`)
+    if (!res.ok) return null
+    const data = (await res.json()) as { tag?: string | null }
+    return data.tag ?? null
+  } catch {
+    return null
+  }
+}
+
+async function upgradePod(
+  cloudBaseUrl: string,
+  getAccessToken: () => Promise<string>,
+): Promise<void> {
+  const token = await getAccessToken()
+  const res = await fetch(`${cloudBaseUrl}/api/compute/upgrade`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    throw new Error(`compute/upgrade failed: ${res.status}`)
+  }
+}
+
+/** Poll pod status until it's ready on `expectedTag`, or give up after ~2 minutes. */
+async function pollUntilUpgraded(
+  cloudBaseUrl: string,
+  getAccessToken: () => Promise<string>,
+  expectedTag: string,
+): Promise<void> {
+  const deadline = Date.now() + 120_000
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000))
+    try {
+      const token = await getAccessToken()
+      const res = await fetch(`${cloudBaseUrl}/api/compute/status`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { pod?: { ready?: boolean; computeTag?: string } }
+        if (data.pod?.ready && data.pod.computeTag === expectedTag) return
+      }
+    } catch {
+      /* still restarting */
+    }
+  }
+  throw new Error('Timed out waiting for the pod to come back up')
+}
+
+// Tags the user has already dismissed the upgrade prompt for, this browser
+// session — avoids re-nagging on every route (chat/studio/computer each mount
+// their own gate) once they've said "not now" for a given build.
+const UPGRADE_DISMISSED_KEY = 'lmthing:upgrade-dismissed-tag'
+
+type PodGateStatus = 'pending' | 'ready' | 'error' | 'upgrade-available' | 'upgrading'
+
 /**
- * Generic pod-readiness gate shared by the studio and computer surfaces. On an
- * authenticated session it POSTs {CLOUD_BASE_URL}/api/compute/ensure (Bearer
- * JWT), renders a "Starting compute pod…" state (+ Retry on failure), and only
- * renders children once ensure resolves. Pod-embedded (iframe) runs skip the
- * fetch and render children immediately.
+ * Generic pod-readiness gate shared by the studio, computer, and chat surfaces.
+ * On an authenticated session it POSTs {CLOUD_BASE_URL}/api/compute/ensure
+ * (Bearer JWT), renders a "Starting compute pod…" state (+ Retry on failure),
+ * and only renders children once ensure resolves. If the pod's running image
+ * tag is older than the latest one CI has built, it shows an "Upgrade
+ * available" prompt (rolling-restart via /api/compute/upgrade) instead of
+ * silently forcing a restart — the user chooses when to take the pod down.
+ * Pod-embedded (iframe) runs skip the fetch and render children immediately.
  */
 export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   // Pod-embedded (token injected) or local run (the pod is the server itself):
   // no need to ensure the pod via the cloud gateway.
   if (isPodEmbedded() || isLocalRun()) return <>{children}</>
   const { session, getAccessToken } = useAuth()
-  const [status, setStatus] = useState<'pending' | 'ready' | 'error'>('pending')
+  const [status, setStatus] = useState<PodGateStatus>('pending')
   const [error, setError] = useState<string | null>(null)
+  const [latestTag, setLatestTag] = useState<string | null>(null)
   const initRef = useRef(false)
 
   useEffect(() => {
@@ -59,8 +126,20 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     let cancelled = false
     async function init() {
       try {
-        await ensurePod(CLOUD_BASE_URL, getAccessToken)
-        if (!cancelled) setStatus('ready')
+        const [ensureResult, latest] = await Promise.all([
+          ensurePod(CLOUD_BASE_URL, getAccessToken),
+          fetchLatestTag(CLOUD_BASE_URL),
+        ])
+        if (cancelled) return
+
+        const currentTag = ensureResult.pod?.computeTag
+        const dismissed = sessionStorage.getItem(UPGRADE_DISMISSED_KEY)
+        if (latest && currentTag && latest !== currentTag && latest !== dismissed) {
+          setLatestTag(latest)
+          setStatus('upgrade-available')
+        } else {
+          setStatus('ready')
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err))
@@ -80,6 +159,24 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     setStatus('pending')
   }
 
+  const handleUpgrade = async () => {
+    if (!latestTag) return
+    setStatus('upgrading')
+    try {
+      await upgradePod(CLOUD_BASE_URL, getAccessToken)
+      await pollUntilUpgraded(CLOUD_BASE_URL, getAccessToken, latestTag)
+      setStatus('ready')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setStatus('error')
+    }
+  }
+
+  const handleContinueWithoutUpgrading = () => {
+    if (latestTag) sessionStorage.setItem(UPGRADE_DISMISSED_KEY, latestTag)
+    setStatus('ready')
+  }
+
   if (!session) {
     return <div style={centerStyles}>Signing in…</div>
   }
@@ -97,5 +194,80 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     return <div style={centerStyles}>Starting compute pod…</div>
   }
 
+  if (status === 'upgrading') {
+    return <div style={centerStyles}>Upgrading your compute pod…</div>
+  }
+
+  if (status === 'upgrade-available') {
+    return (
+      <div style={centerStyles}>
+        <div style={upgradeCardStyles.card}>
+          <p style={upgradeCardStyles.heading}>New version available</p>
+          <p style={upgradeCardStyles.sub}>
+            Your compute pod is running an older version. Upgrade now to get the
+            latest features and fixes — this briefly restarts your pod.
+          </p>
+          <div style={upgradeCardStyles.actions}>
+            <button onClick={() => { void handleUpgrade() }} style={upgradeCardStyles.btnPrimary}>
+              Upgrade
+            </button>
+            <button onClick={handleContinueWithoutUpgrading} style={upgradeCardStyles.btn}>
+              Continue without upgrading
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return <>{children}</>
 }
+
+const upgradeCardStyles = {
+  card: {
+    background: 'var(--color-card, #1a1a1a)',
+    border: '1px solid var(--color-border, #2a2a2a)',
+    borderRadius: 12,
+    padding: '32px 40px',
+    maxWidth: 420,
+    textAlign: 'center' as const,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 12,
+  },
+  heading: {
+    fontSize: 18,
+    fontWeight: 600,
+    color: 'var(--color-foreground, #fff)',
+    margin: 0,
+  },
+  sub: {
+    fontSize: 14,
+    color: 'var(--color-muted-foreground, #9ca3af)',
+    margin: 0,
+    lineHeight: 1.5,
+  },
+  actions: {
+    display: 'flex',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  btn: {
+    padding: '8px 16px',
+    borderRadius: 8,
+    border: '1px solid var(--color-border, #2a2a2a)',
+    background: 'transparent',
+    color: 'var(--color-foreground, #fff)',
+    cursor: 'pointer',
+  },
+  btnPrimary: {
+    padding: '8px 16px',
+    borderRadius: 8,
+    border: 'none',
+    background: 'var(--color-primary, #2563eb)',
+    color: 'var(--color-primary-foreground, #fff)',
+    cursor: 'pointer',
+    fontWeight: 600,
+  },
+} satisfies Record<string, React.CSSProperties>
