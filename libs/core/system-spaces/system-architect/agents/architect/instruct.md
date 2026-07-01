@@ -32,27 +32,33 @@ failure mode — don't.
 
 ## JOB 1 — Synthesize a new agent (the default)
 
-For ANY "create / build / make an agent or space about X" request, emit THREE statements across
-three turns. First gather VALIDATED, SOURCED knowledge with the deep-research agent, then feed it
-into the build pipeline so the new agent ships with real cited knowledge:
+For ANY "create / build / make an agent or space about X" request, emit TWO statements across two
+turns. The domain research was ALREADY done for you and handed down in `context` — a real variable
+in scope holding `{ topic, goal, research }`, where `research` is a cited deep-research report
+({ topic, executive_summary, findings:[{heading,detail}], conclusion, sources:[{title,url}] }).
+Do NOT deep-research again — seed the report you were given straight into the build pipeline so
+`build_field` writes VALIDATED, SOURCED knowledge grounded in it:
 
 ```typescript
-// Turn 1 — deep-research the domain to get a cited report (validated knowledge + sources):
-const research = await delegate('system-research', 'researcher', 'deep_research', { query: '<the user request / domain, verbatim>' }) as { topic: string; executive_summary: string; findings: Array<{ heading: string; detail: string }>; conclusion: string; sources: Array<{ title: string; url: string }> };
+// Turn 1 — run the build pipeline (design → write files → validate → register), SEEDED with the
+// research handed to you in `context`. `research` must be a JSON STRING (stringify the object).
+const t = await tasklist('synthesize_and_run', {
+  topic: (context?.topic ?? query) as string,
+  goal: (context?.goal ?? query) as string,
+  research: JSON.stringify(context?.research ?? {}),
+}) as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
 ```
 ```typescript
-// Turn 2 — run the build pipeline (design → write files → validate → register), SEEDING the
-// research so build_field writes knowledge grounded in the report instead of searching again:
-const t = await tasklist('synthesize_and_run', { topic: '<the user request, verbatim>', goal: '<what the new agent should do>', research: JSON.stringify(research) }) as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
-```
-```typescript
-// Turn 3 — run the freshly-built agent and show the answer. Only delegate when the build
+// Turn 2 — run the freshly-built agent and show the answer. Only delegate when the build
 // succeeded; otherwise display the reason. NEVER try to build it yourself.
 const result = t.ok
   ? await delegate(t.spaceKey, t.agentSlug, t.actionId, { query: t.query, context: {} })
   : { error: 'Could not build the agent: ' + t.errors };
 display(JSON.stringify(result, null, 2));
 ```
+
+If `context.research` is somehow empty, still run the pipeline exactly as above (build_field
+falls back gracefully) — never abandon the build or try to research it yourself here.
 
 ## JOB 2 — Improve an existing synthesized space
 

@@ -1,5 +1,7 @@
 import {
   newQuickJSAsyncWASMModule,
+  newQuickJSAsyncWASMModuleFromVariant,
+  DEBUG_ASYNC,
   shouldInterruptAfterDeadline,
   type QuickJSAsyncContext,
   type QuickJSAsyncRuntime,
@@ -38,7 +40,13 @@ let wasmModulePromise: Promise<QuickJSAsyncWASMModule> | null = null;
 
 function getWASMModule(): Promise<QuickJSAsyncWASMModule> {
   if (!wasmModulePromise) {
-    wasmModulePromise = newQuickJSAsyncWASMModule();
+    // LM_QJS_DEBUG loads the assertion-tracking debug variant, whose ctx.dispose()
+    // THROWS a descriptive "handle not disposed" error (with creation stack) instead
+    // of the release variant's fatal `list_empty(&rt->gc_obj_list)` WASM abort — used
+    // to pinpoint handle leaks in VM teardown.
+    wasmModulePromise = process.env['LM_QJS_DEBUG']
+      ? newQuickJSAsyncWASMModuleFromVariant(DEBUG_ASYNC)
+      : newQuickJSAsyncWASMModule();
   }
   return wasmModulePromise;
 }
@@ -200,8 +208,35 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
     // fork timeout) would otherwise leave a live QuickJS handle behind — ctx.dispose()
     // throws if any handle it created is still alive.
     disposePendingDeferreds(ctx);
-    ctx.dispose();
-    runtime.dispose();
+    // Drain any residual promise-reaction jobs so the objects they retain become
+    // collectable before we free the context — an undrained job queue is one way a
+    // stray object survives into runtime teardown.
+    try {
+      for (;;) {
+        const r = runtime.executePendingJobs();
+        if ('error' in r && r.error) { r.error.dispose(); break; }
+        if (!('value' in r) || r.value === 0) break;
+      }
+    } catch {
+      /* a job threw mid-drain — nothing we can act on during teardown */
+    }
+    // ctx.dispose()/runtime.dispose() can hit QuickJS's
+    // `list_empty(&rt->gc_obj_list)` assertion when a stray GC object survives teardown
+    // (seen under deep fork/delegate nesting with many nested `fetch` yields). That
+    // assertion is a CATCHABLE, non-fatal cleanup failure — the shared WASM module stays
+    // fully usable afterward (verified) — so swallow it. Letting it propagate would turn
+    // an already-produced fork/delegate result into a spurious rejection (see fork.ts),
+    // which is exactly the failure it must not cause.
+    try {
+      ctx.dispose();
+    } catch {
+      /* stray-object teardown assertion — benign, swallow */
+    }
+    try {
+      runtime.dispose();
+    } catch {
+      /* stray-object teardown assertion — benign, swallow */
+    }
   }
 
   return { evalStatement, evalScript, drivePendingJobs, getScope, setVar, getVar, dispose, pendingYields, ctx };

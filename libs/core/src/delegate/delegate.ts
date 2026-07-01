@@ -115,7 +115,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     const query = opts.delegateOpts?.query ?? '';
     const context = opts.delegateOpts?.context;
     const tasklistHint = actionDef?.tasklist
-      ? `Implement this action by calling \`const result = await tasklist("${actionDef.tasklist}", context)\` where context is any seed data from above. The tasklist handles the orchestration. After it resolves, call \`currentTask.resolve(result)\`.`
+      ? `Implement this action by calling \`const result = await tasklist("${actionDef.tasklist}", context)\` — \`query\` (string) and \`context\` (object) are in scope as real variables holding the seed data above. The tasklist handles the orchestration. After it resolves, call \`currentTask.resolve(result)\`.`
       : actionDef
         ? `When complete, call \`currentTask.resolve(result)\` with the final result value.`
         : `Handle this request directly. If one of your actions fits (see "# Actions"), run its tasklist with \`const result = await tasklist("<name>", context)\`. When done, call \`currentTask.resolve(result)\` with the final result value.`;
@@ -135,9 +135,13 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     const agentFunctionsBundled = getAgentFunctionsBundled(space, agent);
     const agentComponents = getAgentComponents(space, agent);
     const overlay = buildOverlay({ ...systemFnSources, ...agentFunctions }, agentComponents);
-    // currentTask is injected below; declare it in DTS so typecheck passes
+    // currentTask is injected below; declare it in DTS so typecheck passes.
+    // `query`/`context` are injected as real VM variables (below) so an agent can seed
+    // its tasklist with structured data handed down by the delegator (e.g. THING passing
+    // a deep-research report to the architect) instead of re-serializing it from prose.
     const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
-    const ambientDts = LIBRARY_DTS_NO_ASK + '\n' + overlay + '\n' + currentTaskDts;
+    const seedDts = `declare const query: string;\ndeclare const context: Record<string, any>;`;
+    const ambientDts = LIBRARY_DTS_NO_ASK + '\n' + overlay + '\n' + currentTaskDts + '\n' + seedDts;
 
     // Inject result capture global
     let capturedResult: unknown = undefined;
@@ -158,6 +162,11 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     });
     vm.ctx.setProp(vm.ctx.global, 'currentTask', captureHandle);
     captureHandle.dispose();
+
+    // Expose the seed as real VM variables so the agent can pass structured data straight
+    // into its tasklist (`tasklist(action, context)`) — see seedDts above.
+    vm.setVar('query', query);
+    vm.setVar('context', context ?? {});
 
     // Inject space functions into the VM (combining system functions and agent functions)
     const systemSpaces = opts.systemSpaces ?? [];
