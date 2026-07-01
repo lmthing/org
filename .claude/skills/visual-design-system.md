@@ -43,6 +43,15 @@ in warm-stone neutrals; the shared theme + component CSS live in `libs/css` and 
 - `@lmthing/ui` — React components that consume those classes (depends on `@lmthing/css`).
   Primitives in `src/elements/**` (Button/Badge/Input/Card/…); surfaces in `chat/ studio/ computer/`.
 
+## Styling a component (canonical pattern)
+
+BEM component CSS is canonical: give the component a stylesheet at
+`src/{elements,components}/<name>/index.css` (`@reference "…/theme.css"` + `@apply` with
+tokens + BEM classes) and reference the classes via `className`/`cn(...)`. Inline Tailwind
+utilities are only for trivial one-off layout (`flex gap-2`) — don't build a component out of
+long `cn('…')` utility strings. Reference shape: `elements/nav/app-sidebar`,
+`elements/nav/app-links`. Full spec + the `--lm-*` chat bridge → [DESIGN.md](../../libs/css/DESIGN.md).
+
 ## Adding/adjusting a color
 
 Edit `tokens.json` → `pnpm --filter @lmthing/css generate` → the new token is available as

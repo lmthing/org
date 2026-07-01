@@ -78,3 +78,29 @@ var(--token) N%, transparent)` for tints and `/NN` opacity for utilities (`bg-ag
 If a color is **decorative brand** (marketing gradient, slide accent) with no semantic role,
 use `--brand-1..5` / `--spectrum-*`. If it's a **non-brand palette** (terminal, syntax
 highlighting) it stays raw — mark the file `ds-lint-file-ok`.
+
+## Component styling pattern (canonical)
+
+**BEM component CSS is the canonical way to style a component.** A component owns a
+stylesheet under `libs/css/src/{elements,components}/<name>/index.css` using
+`@reference "…/theme.css"` + `@apply` with tokens, and BEM class names
+(`.name`, `.name__part`, `.name--modifier`). The React component imports that CSS
+(`import '@lmthing/css/elements/<name>/index.css'`) and references the classes via
+`className` / `cn(...)`. See `elements/nav/app-sidebar` and `elements/nav/app-links`
+for the reference shape; the generated `COMPONENTS.md` catalogs every class.
+
+- **Inline Tailwind utilities** are fine only for *trivial, one-off layout*
+  (`flex gap-2`, `mt-1`) — not for a component's substantive styling. Do not build a
+  whole component out of long `cn('… bg-muted …')` utility strings; extract those to a
+  BEM stylesheet so the styling is discoverable and themeable in one place.
+- **Never** hand-author raw colors or spacing that duplicates a token; use the token
+  utility (`bg-muted`, `text-agent`, `border-border`) or `var(--token)`.
+
+### Legacy `--lm-*` bridge (chat surface)
+
+The chat Ink-terminal components (`chat/app/tree|inspector|replay`, `chat/compat/*`,
+`chat/components/forms/*`) still use `--lm-*` / `lm-*` class names. These are **not** a
+separate palette — `chat/app/styles.css` aliases every `--lm-*` to a shared token
+(`--lm-bg: var(--background)`, `--lm-accent: var(--agent)`, …), so they are theme-aware
+and pass the lint gate. Treat `lm-*` as sanctioned; don't churn it to `bg-background`
+etc. New chat code should prefer the shared tokens directly.
