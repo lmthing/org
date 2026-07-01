@@ -13,9 +13,9 @@ import '@lmthing/css/components/shell/studio-shell/index.css'
 import { StudioSidebar } from '../studio-sidebar'
 import { StudioAppSidebar } from '../studio-app-sidebar'
 import { SettingsView } from '../settings-view'
-import { useAgentList } from '@lmthing/ui/hooks/useAgentList'
-import { useKnowledgeFields } from '@lmthing/ui/hooks/useKnowledgeFields'
-import { useWorkflowList } from '@lmthing/ui/hooks/useWorkflowList'
+import { useAgentList } from '@lmthing/ui/hooks/agent/useAgentList'
+import { useKnowledgeFields } from '@lmthing/ui/hooks/knowledge/useKnowledgeFields'
+import { useWorkflowList } from '@lmthing/ui/hooks/workflow/useWorkflowList'
 
 export interface StudioShellProps {
   defaultSidebarCollapsed?: boolean

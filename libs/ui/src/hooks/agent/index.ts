@@ -1,3 +1,7 @@
 export { useAgentInstruct } from './useAgentInstruct'
 export { useAgentConversations } from './useAgentConversations'
 export { useAgentConversation } from './useAgentConversation'
+export { useAgentList } from './useAgentList'
+export type { AgentListItem } from './useAgentList'
+export { useAgent } from './useAgent'
+export type { Agent } from './useAgent'
