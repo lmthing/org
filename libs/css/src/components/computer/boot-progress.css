@@ -21,7 +21,7 @@
 }
 
 .computer-boot-progress__step--done {
-  @apply text-green-500;
+  @apply text-success;
 }
 
 .computer-boot-progress__step--active {

@@ -1,15 +1,20 @@
+// Design-system tokens for the pitch deck. Decorative accents map to the brand
+// palette; text/surfaces/borders map to the semantic foreground/muted/card/border
+// tokens. Values are CSS var() references so they inherit theme + dark mode.
+// Note: when used on SVG presentation attributes (stroke/fill), set them via the
+// `style` prop, not the XML attribute — var() only resolves through CSS.
 export const colors = {
-  bg: '#FFFFFF',
-  bgSection: '#F8F8F8',
-  bgCard: '#FAFAF7',
-  bgDark: '#1A1A1A',
-  brand: '#F5A623',
-  brandDark: '#E8960A',
-  text: '#1A1A1A',
-  textSecondary: '#555555',
-  cardBorder: '#E5E5E5',
-  green: '#4CAF7D',
-  purple: '#7B68EE',
-  white: '#FFFFFF',
-  muted: '#999999',
+  bg: 'var(--background)',
+  bgSection: 'var(--muted)',
+  bgCard: 'var(--card)',
+  bgDark: 'var(--foreground)',
+  brand: 'var(--brand-2)',
+  brandDark: 'var(--brand-3)',
+  text: 'var(--foreground)',
+  textSecondary: 'var(--muted-foreground)',
+  cardBorder: 'var(--border)',
+  green: 'var(--success)',
+  purple: 'var(--agent)',
+  white: 'var(--card)',
+  muted: 'var(--muted-foreground)',
 } as const

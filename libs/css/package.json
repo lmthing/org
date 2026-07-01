@@ -5,17 +5,29 @@
   "type": "module",
   "exports": {
     "./theme": "./src/theme.css",
+    "./tokens.json": "./src/tokens/tokens.json",
+    "./tokens.manifest.json": "./tokens.manifest.json",
     "./elements/*": "./src/elements/*",
     "./components/*": "./src/components/*"
   },
+  "bin": {
+    "lmthing-lint-tokens": "./scripts/lint-design-tokens.mjs"
+  },
   "files": [
-    "src"
+    "src",
+    "scripts",
+    "tokens.manifest.json",
+    "DESIGN.md",
+    "COMPONENTS.md"
   ],
   "sideEffects": [
     "**/*.css"
   ],
   "scripts": {
-    "lint": "eslint .",
+    "generate": "node scripts/generate-theme.mjs && node scripts/generate-components-catalog.mjs",
+    "prebuild": "node scripts/generate-theme.mjs && node scripts/generate-components-catalog.mjs",
+    "lint:tokens": "node scripts/lint-design-tokens.mjs src",
+    "lint": "eslint . && node scripts/lint-design-tokens.mjs src",
     "format": "prettier --write ."
   },
   "devDependencies": {

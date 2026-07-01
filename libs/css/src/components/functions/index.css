@@ -11,7 +11,7 @@
 .functions-editor__header {
   @apply flex items-center justify-between;
   padding: 0 0 0.5rem;
-  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .functions-editor__list {
@@ -83,5 +83,5 @@
   padding: 0.5rem;
   background: var(--color-surface-subtle, rgba(0,0,0,0.02));
   border-radius: 0.375rem;
-  border: 1px dashed var(--color-border, #e2e8f0);
+  border: 1px dashed var(--color-border);
 }

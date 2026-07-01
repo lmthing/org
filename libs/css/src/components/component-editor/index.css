@@ -11,7 +11,7 @@
 .component-editor__header {
   @apply flex items-center justify-between;
   padding: 0 0 0.5rem;
-  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .component-editor__section-title {
@@ -30,13 +30,13 @@
 }
 
 .component-editor__kind-badge--view {
-  background: var(--color-info-subtle, #dbeafe);
-  color: var(--color-info, #1d4ed8);
+  background: color-mix(in srgb, var(--knowledge) 15%, transparent);
+  color: var(--knowledge);
 }
 
 .component-editor__kind-badge--form {
-  background: var(--color-success-subtle, #dcfce7);
-  color: var(--color-success, #15803d);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--color-success);
 }
 
 .component-editor__list {
@@ -108,5 +108,5 @@
   padding: 0.5rem;
   background: var(--color-surface-subtle, rgba(0,0,0,0.02));
   border-radius: 0.375rem;
-  border: 1px dashed var(--color-border, #e2e8f0);
+  border: 1px dashed var(--color-border);
 }

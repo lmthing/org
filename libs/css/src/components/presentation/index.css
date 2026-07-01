@@ -271,7 +271,7 @@
 
 .presentation {
   @apply relative h-screen w-screen overflow-hidden;
-  background: #ffffff;
+  background: var(--background);
 }
 
 .presentation__exit-btn {
@@ -299,5 +299,5 @@
 
 .presentation__footer {
   @apply absolute bottom-5 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap text-sm;
-  color: #ccc;
+  color: var(--muted-foreground);
 }

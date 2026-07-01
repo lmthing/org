@@ -9,11 +9,11 @@
 }
 
 .computer-status-card__indicator--running {
-  @apply text-green-500;
+  @apply text-success;
 }
 
 .computer-status-card__indicator--booting {
-  @apply text-yellow-500;
+  @apply text-warning;
 }
 
 .computer-status-card__indicator--stopped {
@@ -29,11 +29,11 @@
 }
 
 .computer-status-card__dot--running {
-  @apply bg-green-500;
+  @apply bg-success;
 }
 
 .computer-status-card__dot--booting {
-  @apply bg-yellow-500 animate-pulse;
+  @apply bg-warning animate-pulse;
 }
 
 .computer-status-card__dot--stopped {

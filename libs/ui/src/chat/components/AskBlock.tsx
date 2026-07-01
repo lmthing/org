@@ -174,7 +174,7 @@ export function AskBlock({ id, descriptor, onSubmit, onCancel }: AskBlockProps):
     .map((child, i) => renderFormField(child, i, formData, setFormData));
 
   return (
-    <div className="repl-ask" style={{ border: '1px solid #007bff', borderRadius: 4, padding: 16 }}>
+    <div className="repl-ask" style={{ border: '1px solid var(--agent)', borderRadius: 4, padding: 16 }}>
       {title && <h3 style={{ marginTop: 0 }}>{title}</h3>}
       <form onSubmit={handleSubmit}>
         {formFields}

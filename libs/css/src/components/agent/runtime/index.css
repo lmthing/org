@@ -296,36 +296,36 @@
   line-height: 1.6;
   padding: 0.75rem;
   border-radius: 0.375rem;
-  background-color: var(--color-bg-elevated, #f8fafc);
+  background-color: var(--card);
   border: 1px solid var(--color-border);
   max-height: 24rem;
   overflow: auto;
 }
 
 .structured-output__null {
-  color: var(--color-muted, #94a3b8);
+  color: var(--muted-foreground);
   font-style: italic;
 }
 
 .structured-output__boolean {
-  color: var(--color-primary, #8b5cf6);
+  color: var(--agent);
 }
 
 .structured-output__number {
-  color: var(--color-warning, #f59e0b);
+  color: var(--color-warning);
 }
 
 .structured-output__string {
-  color: var(--color-success, #10b981);
+  color: var(--color-success);
 }
 
 .structured-output__index {
-  color: var(--color-muted, #94a3b8);
+  color: var(--muted-foreground);
   margin-right: 0.5rem;
 }
 
 .structured-output__key {
-  color: var(--color-info, #06b6d4);
+  color: var(--knowledge);
   margin-right: 0.5rem;
 }
 
@@ -333,7 +333,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--color-muted, #94a3b8);
+  color: var(--muted-foreground);
   font-size: 0.75rem;
   padding: 0;
 }

@@ -43,7 +43,18 @@ function toSlug(value: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-const SPACE_COLORS = ['#10b981', '#8b5cf6', '#f59e0b', '#06b6d4', '#ef4444', '#84cc16']
+// Decorative per-space accents cycled from the brand palette.
+const SPACE_COLORS = [
+  'var(--brand-1)',
+  'var(--brand-2)',
+  'var(--brand-3)',
+  'var(--brand-4)',
+  'var(--brand-5)',
+  'var(--spectrum-30)',
+]
+
+/** Soft tinted background from a brand accent (replaces the old `color + '20'`). */
+const tint = (color: string) => `color-mix(in srgb, ${color} 12%, transparent)`
 
 type Space = { id: string; name: string; color: string }
 
@@ -189,7 +200,7 @@ export function SpacesLayout({ onOpenSpace, onGoHome }: SpacesLayoutProps) {
               onClick={() => setSelectedSpaceId(space.id)}
               className={`sidebar__item ${selectedSpaceId === space.id ? 'sidebar__item--active' : ''} spaces-layout__space-btn`}
             >
-              <div className="spaces-layout__space-icon-wrapper" style={{ backgroundColor: space.color + '20' }}>
+              <div className="spaces-layout__space-icon-wrapper" style={{ backgroundColor: tint(space.color) }}>
                 <Building2 className="spaces-layout__icon-sm" style={{ color: space.color }} />
               </div>
               {!isSidebarCollapsed && <span className="spaces-layout__space-name">{space.name}</span>}
@@ -219,7 +230,7 @@ export function SpacesLayout({ onOpenSpace, onGoHome }: SpacesLayoutProps) {
           {selectedSpace ? (
             <div className="spaces-layout__detail">
               <div className="spaces-layout__detail-header">
-                <div className="spaces-layout__detail-icon-wrapper" style={{ backgroundColor: selectedSpace.color + '20' }}>
+                <div className="spaces-layout__detail-icon-wrapper" style={{ backgroundColor: tint(selectedSpace.color) }}>
                   <Building2 className="spaces-layout__detail-icon" style={{ color: selectedSpace.color }} />
                 </div>
                 <div className="spaces-layout__detail-info">
@@ -240,7 +251,7 @@ export function SpacesLayout({ onOpenSpace, onGoHome }: SpacesLayoutProps) {
                       <Card interactive className="spaces-layout__grid-card">
                         <CardBody>
                           <div className="spaces-layout__grid-card-header">
-                            <div className="spaces-layout__grid-icon-wrapper" style={{ backgroundColor: SPACE_COLORS[idx % SPACE_COLORS.length] + '20' }}>
+                            <div className="spaces-layout__grid-icon-wrapper" style={{ backgroundColor: tint(SPACE_COLORS[idx % SPACE_COLORS.length]) }}>
                               <Building2 className="spaces-layout__grid-icon" style={{ color: SPACE_COLORS[idx % SPACE_COLORS.length] }} />
                             </div>
                           </div>

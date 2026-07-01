@@ -40,7 +40,7 @@
 }
 
 .delete-modal__header {
-  border-bottom: 2px solid #ef4444;
+  border-bottom: 2px solid var(--destructive);
 }
 
 .delete-modal__header-content {
@@ -51,11 +51,11 @@
 .delete-modal__warning-icon {
   width: 1.125rem;
   height: 1.125rem;
-  color: #ef4444;
+  color: var(--destructive);
 }
 
 .delete-modal__title {
-  color: #ef4444;
+  color: var(--destructive);
 }
 
 .delete-modal__close-icon {
@@ -148,7 +148,7 @@
 }
 
 .new-file-modal__title {
-  color: #10b981;
+  color: var(--success);
 }
 
 .new-file-modal__close-icon {
@@ -180,7 +180,7 @@
 }
 
 .new-file-modal__create-btn {
-  background-color: #10b981;
+  background-color: var(--success);
 }
 
 /* ── RenameModal ──────────────────────────────────────────────────── */
@@ -199,7 +199,7 @@
 }
 
 .rename-modal__error {
-  color: #ef4444;
+  color: var(--destructive);
   margin-top: 0.25rem;
   display: block;
 }
@@ -226,7 +226,7 @@
 .unsaved-modal__warning-icon {
   width: 1.125rem;
   height: 1.125rem;
-  color: #f59e0b;
+  color: var(--warning);
 }
 
 .unsaved-modal__close-icon {

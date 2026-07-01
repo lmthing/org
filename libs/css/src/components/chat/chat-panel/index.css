@@ -62,7 +62,7 @@
   display: inline-block;
   width: 4px;
   height: 1rem;
-  background: #a78bfa;
+  background: var(--agent);
   margin-left: 4px;
   animation: pulse 1s infinite;
 }
@@ -110,7 +110,7 @@
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 9999px;
-  background: #94a3b8;
+  background: var(--muted-foreground);
   animation: bounce 1s infinite;
 }
 

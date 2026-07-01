@@ -466,7 +466,7 @@
 }
 
 .studios-layout__delete-btn {
-  background-color: #ef4444;
+  background-color: var(--destructive);
   color: white;
 }
 
@@ -543,7 +543,7 @@
 }
 
 .settings-view__status--success {
-  color: #10b981;
+  color: var(--success);
   margin-top: 0.5rem;
 }
 
@@ -630,14 +630,14 @@
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: #10b981;
+  color: var(--knowledge);
 }
 
 .studio-sidebar__item-icon--assistant {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: #8b5cf6;
+  color: var(--agent);
 }
 
 .studio-sidebar__item-label {

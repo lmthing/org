@@ -74,7 +74,7 @@ export default function Slide6Scalability() {
                 <div className="mb-0.5 text-lg font-bold" style={{ color: colors.text }}>
                   {p.title}
                 </div>
-                <div className="text-base leading-[1.55]" style={{ color: '#888' }}>
+                <div className="text-base leading-[1.55]" style={{ color: colors.textSecondary }}>
                   {p.highlight90 ? (
                     <>
                       Train models on your own datasets. Cut LLM usage costs by up to{' '}
@@ -90,7 +90,7 @@ export default function Slide6Scalability() {
         </div>
 
         {/* DIVIDER */}
-        <div style={{ background: '#EFEFEC' }} />
+        <div style={{ background: colors.cardBorder }} />
 
         {/* RIGHT — Pricing tiers */}
         <div className="flex flex-col justify-center gap-2">
@@ -105,13 +105,17 @@ export default function Slide6Scalability() {
               key={tier.name}
               className="flex items-center gap-3 rounded-xl border px-4 py-3"
               style={{
-                background: tier.featured ? '#FFFDF7' : colors.bgCard,
-                borderColor: tier.featured ? 'rgba(245,166,35,0.3)' : colors.cardBorder,
+                background: tier.featured
+                  ? `color-mix(in srgb, ${colors.brand} 6%, var(--card))`
+                  : colors.bgCard,
+                borderColor: tier.featured
+                  ? `color-mix(in srgb, ${colors.brand} 30%, transparent)`
+                  : colors.cardBorder,
               }}
             >
               <div
                 className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
-                style={{ background: tier.featured ? colors.brand : '#E0DFDB' }}
+                style={{ background: tier.featured ? colors.brand : colors.cardBorder }}
               />
               <div
                 className="w-28 flex-shrink-0 text-base font-bold"
@@ -119,13 +123,13 @@ export default function Slide6Scalability() {
               >
                 {tier.name}
               </div>
-              <div className="flex-1 text-sm leading-snug" style={{ color: '#888' }}>
+              <div className="flex-1 text-sm leading-snug" style={{ color: colors.textSecondary }}>
                 {tier.desc}
               </div>
               {tier.tag && (
                 <span
                   className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold"
-                  style={{ background: 'rgba(245,166,35,0.1)', color: colors.brand }}
+                  style={{ background: `color-mix(in srgb, ${colors.brand} 10%, transparent)`, color: colors.brand }}
                 >
                   {tier.tag}
                 </span>

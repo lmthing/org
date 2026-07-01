@@ -60,7 +60,7 @@ function EnvTab() {
         spellCheck={false}
       />
       <div className="flex items-center gap-3 self-end">
-        {status === 'saved' && <span className="text-xs text-green-600">Saved</span>}
+        {status === 'saved' && <span className="text-xs text-success">Saved</span>}
         {status === 'error' && <span className="text-xs text-destructive">Error saving</span>}
         <Button variant="default" size="sm" loading={saving} onClick={() => void save()}>
           Save env

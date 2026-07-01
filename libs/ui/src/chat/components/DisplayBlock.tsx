@@ -44,13 +44,18 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
       return <code key={key} {...omitChildren(props)}>{renderedChildren}</code>;
     case 'card':
       return (
-        <div key={key} style={{ border: '1px solid #ccc', borderRadius: 4, padding: 12 }} {...omitChildren(props)}>
+        <div key={key} style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 12 }} {...omitChildren(props)}>
           {renderedChildren}
         </div>
       );
     case 'alert': {
       const variant = props['variant'] as string | undefined;
-      const color = variant === 'error' ? '#fee' : variant === 'warning' ? '#ffeeba' : '#d4edda';
+      const color =
+        variant === 'error'
+          ? 'color-mix(in srgb, var(--destructive) 15%, transparent)'
+          : variant === 'warning'
+            ? 'color-mix(in srgb, var(--warning) 15%, transparent)'
+            : 'color-mix(in srgb, var(--success) 15%, transparent)';
       return (
         <div key={key} style={{ backgroundColor: color, padding: 12, borderRadius: 4 }} {...omitChildren(props)}>
           {renderedChildren}
@@ -62,7 +67,7 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
       return (
         <span
           key={key}
-          style={{ backgroundColor: color ?? '#007bff', color: '#fff', padding: '2px 6px', borderRadius: 4 }}
+          style={{ backgroundColor: color ?? 'var(--agent)', color: 'var(--agent-foreground)', padding: '2px 6px', borderRadius: 4 }}
           {...omitChildren(props)}
         >
           {renderedChildren}

@@ -140,7 +140,7 @@ function AgentChatPage() {
   if (podError) {
     return (
       <div style={styles.center}>
-        <p style={{ color: '#c00' }}>Failed to run space: {podError}</p>
+        <p style={{ color: 'var(--destructive)' }}>Failed to run space: {podError}</p>
         <button onClick={() => void startSession()}>Retry</button>
       </div>
     )
@@ -154,10 +154,10 @@ function AgentChatPage() {
     <div style={styles.container}>
       {/* Connection status + re-sync control */}
       <div style={styles.statusBar}>
-        <span style={{ color: isConnected ? '#22c55e' : '#ef4444' }}>
+        <span style={{ color: isConnected ? 'var(--success)' : 'var(--destructive)' }}>
           {isConnected ? '● Connected' : '○ Connecting…'}
         </span>
-        {isDone && <span style={{ marginLeft: 12, color: '#6b7280' }}>Done</span>}
+        {isDone && <span style={{ marginLeft: 12, color: 'var(--muted-foreground)' }}>Done</span>}
         <button
           onClick={() => void startSession()}
           disabled={runningRef.current || phase !== 'ready'}
@@ -242,13 +242,13 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
-    color: '#6b7280',
+    color: 'var(--muted-foreground)',
   } as React.CSSProperties,
   statusBar: {
     display: 'flex',
     alignItems: 'center',
     padding: '4px 12px',
-    borderBottom: '1px solid #e5e7eb',
+    borderBottom: '1px solid var(--border)',
     fontSize: 12,
     flexShrink: 0,
   } as React.CSSProperties,
@@ -256,9 +256,9 @@ const styles = {
     marginLeft: 'auto',
     padding: '2px 10px',
     borderRadius: 4,
-    border: '1px solid #d1d5db',
-    background: '#f9fafb',
-    color: '#374151',
+    border: '1px solid var(--border)',
+    background: 'var(--secondary)',
+    color: 'var(--secondary-foreground)',
     fontSize: 12,
     cursor: 'pointer',
   } as React.CSSProperties,
@@ -271,11 +271,11 @@ const styles = {
     gap: '8px',
   },
   errorBlock: {
-    background: '#fee2e2',
-    border: '1px solid #fca5a5',
+    background: 'color-mix(in srgb, var(--destructive) 12%, transparent)',
+    border: '1px solid color-mix(in srgb, var(--destructive) 30%, transparent)',
     borderRadius: 4,
     padding: '8px 12px',
-    color: '#dc2626',
+    color: 'var(--destructive)',
     fontFamily: 'monospace',
     fontSize: 13,
   } as React.CSSProperties,
@@ -283,7 +283,7 @@ const styles = {
     display: 'flex',
     gap: 8,
     padding: '8px 12px',
-    borderTop: '1px solid #e5e7eb',
+    borderTop: '1px solid var(--border)',
     flexShrink: 0,
   } as React.CSSProperties,
   textarea: {
@@ -291,7 +291,7 @@ const styles = {
     resize: 'none' as const,
     padding: '8px',
     borderRadius: 4,
-    border: '1px solid #d1d5db',
+    border: '1px solid var(--border)',
     fontSize: 14,
     fontFamily: 'inherit',
   },
@@ -299,8 +299,8 @@ const styles = {
     padding: '0 16px',
     borderRadius: 4,
     border: 'none',
-    background: '#3b82f6',
-    color: '#fff',
+    background: 'var(--primary)',
+    color: 'var(--primary-foreground)',
     fontWeight: 500,
     cursor: 'pointer',
     alignSelf: 'flex-end',

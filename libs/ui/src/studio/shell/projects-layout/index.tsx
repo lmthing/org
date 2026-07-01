@@ -25,7 +25,18 @@ import { useProjects, useToggle, useUIState } from '@lmthing/state'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 import { buildProjectPath } from '@lmthing/ui/lib/space-path'
 
-const PROJECT_COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#06b6d4', '#ef4444', '#ec4899']
+// Decorative per-project accents cycled from the brand palette.
+const PROJECT_COLORS = [
+  'var(--brand-5)',
+  'var(--brand-1)',
+  'var(--brand-2)',
+  'var(--brand-3)',
+  'var(--brand-4)',
+  'var(--spectrum-40)',
+]
+
+/** Soft tinted background from a brand accent (replaces the old `color + '20'`). */
+const tint = (color: string) => `color-mix(in srgb, ${color} 12%, transparent)`
 
 /**
  * Derive a slug for a new project name. The pod assigns the canonical id;
@@ -142,7 +153,7 @@ export function ProjectsLayout({ onOpenProject, onGoHome }: ProjectsLayoutProps)
                     <div className="projects-layout__card-header">
                       <div
                         className="projects-layout__card-icon-wrapper"
-                        style={{ backgroundColor: PROJECT_COLORS[idx % PROJECT_COLORS.length] + '20' }}
+                        style={{ backgroundColor: tint(PROJECT_COLORS[idx % PROJECT_COLORS.length]) }}
                       >
                         <Layers
                           className="projects-layout__card-icon"

@@ -11,20 +11,20 @@ export function VariablesBlock({ vars }: VariablesBlockProps): React.ReactElemen
     <div
       className="repl-variables"
       style={{
-        backgroundColor: '#f8f9fa',
-        border: '1px solid #dee2e6',
+        backgroundColor: 'var(--muted)',
+        border: '1px solid var(--border)',
         borderRadius: 4,
         padding: 12,
         fontFamily: 'monospace',
         fontSize: 13,
       }}
     >
-      <div style={{ fontWeight: 'bold', marginBottom: 8, color: '#6c757d' }}>VARIABLES</div>
+      <div style={{ fontWeight: 'bold', marginBottom: 8, color: 'var(--muted-foreground)' }}>VARIABLES</div>
       {entries.map(([name, value]) => (
         <div key={name} style={{ marginBottom: 4 }}>
-          <span style={{ color: '#0d6efd' }}>{name}</span>
+          <span style={{ color: 'var(--agent)' }}>{name}</span>
           {': '}
-          <span style={{ color: '#198754' }}>
+          <span style={{ color: 'var(--knowledge)' }}>
             {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
           </span>
         </div>

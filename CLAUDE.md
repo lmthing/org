@@ -105,6 +105,7 @@ See `.issues/`. When all are resolved this section is empty.
 - **Always test every fix.** No fix is done until a test would have caught it.
 - **Issue lifecycle.** File a `.issues/` entry when a bug is found; delete it (and its Known issues entry) when fixed and tested.
 - **No issue file = no known bugs.** Keep `.issues/` empty by fixing things, not ignoring them.
+- **Design system is mandatory.** Any web styling uses `@lmthing/css` tokens — never a raw color (no hex, no literal `rgb()/hsl()`, no stock Tailwind colors like `gray-*`/`blue-*`/`green-500`); use `var(--foreground)`, `bg-primary`, `text-agent`, etc. Change colors only via `libs/css/src/tokens/tokens.json` + `pnpm --filter @lmthing/css generate` (never hand-edit `theme.css`). Enforced by `lint:tokens` (hard CI gate). → `@.claude/skills/visual-design-system.md` · `libs/css/DESIGN.md`.
 
 ## Task Index
 
@@ -114,6 +115,7 @@ Load the matching file when working on:
 |---|---|
 | the `lmthing` project server / session persistence / `.lmthing/` layout | `@.claude/skills/project-server.md` |
 | terminal+web UI design system (catalog, renderers, theming) | `@.claude/skills/ui-design-system.md` |
+| **visual** design system — brand palette, CSS design tokens, Tailwind theme, dark mode, component CSS (web SPAs) | `@.claude/skills/visual-design-system.md` (source: `libs/css/DESIGN.md` + `tokens.json`) |
 | system spaces / host primitives / fork roles | `@.claude/skills/system-spaces.md` |
 | **developing the system spaces** (role/functions/forEach, charter split, architect/research pipelines, live-test commands, gotchas) | [./libs/core/system-spaces/DEVELOPMENT.md](./libs/core/system-spaces/DEVELOPMENT.md) |
 | creating or modifying a space | `@.claude/skills/new-space.md` |

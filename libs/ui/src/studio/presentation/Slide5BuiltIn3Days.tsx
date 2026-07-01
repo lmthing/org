@@ -84,8 +84,12 @@ export default function Slide5BuiltIn3Days() {
             key={card.title}
             className="relative flex flex-col overflow-hidden rounded-2xl border p-7 pb-8"
             style={{
-              background: card.highlight ? '#FFFDF7' : colors.bgCard,
-              borderColor: card.highlight ? 'rgba(245,166,35,0.25)' : colors.cardBorder,
+              background: card.highlight
+                ? `color-mix(in srgb, ${colors.brand} 6%, var(--card))`
+                : colors.bgCard,
+              borderColor: card.highlight
+                ? `color-mix(in srgb, ${colors.brand} 25%, transparent)`
+                : colors.cardBorder,
             }}
           >
             {/* accent top bar */}
@@ -116,11 +120,13 @@ export default function Slide5BuiltIn3Days() {
             <div
               className="mb-4 h-[1.5px] w-8"
               style={{
-                background: card.highlight ? 'rgba(245,166,35,0.4)' : colors.cardBorder,
+                background: card.highlight
+                  ? `color-mix(in srgb, ${colors.brand} 40%, transparent)`
+                  : colors.cardBorder,
               }}
             />
 
-            <div className="text-lg leading-[1.65]" style={{ color: '#777' }}>
+            <div className="text-lg leading-[1.65]" style={{ color: colors.textSecondary }}>
               {card.body}
             </div>
           </div>

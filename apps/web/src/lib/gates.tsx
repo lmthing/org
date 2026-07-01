@@ -8,7 +8,7 @@ export const centerStyles: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   height: '100vh',
-  color: '#6b7280',
+  color: 'var(--muted-foreground)',
   flexDirection: 'column',
   gap: 12,
 }
@@ -184,7 +184,7 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   if (status === 'error') {
     return (
       <div style={centerStyles}>
-        <p style={{ color: '#c00' }}>Failed to start compute pod: {error}</p>
+        <p style={{ color: 'var(--destructive)' }}>Failed to start compute pod: {error}</p>
         <button onClick={handleRetry}>Retry</button>
       </div>
     )
@@ -225,8 +225,8 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
 
 const upgradeCardStyles = {
   card: {
-    background: 'var(--color-card, #1a1a1a)',
-    border: '1px solid var(--color-border, #2a2a2a)',
+    background: 'var(--color-card)',
+    border: '1px solid var(--color-border)',
     borderRadius: 12,
     padding: '32px 40px',
     maxWidth: 420,
@@ -238,12 +238,12 @@ const upgradeCardStyles = {
   heading: {
     fontSize: 18,
     fontWeight: 600,
-    color: 'var(--color-foreground, #fff)',
+    color: 'var(--color-foreground)',
     margin: 0,
   },
   sub: {
     fontSize: 14,
-    color: 'var(--color-muted-foreground, #9ca3af)',
+    color: 'var(--color-muted-foreground)',
     margin: 0,
     lineHeight: 1.5,
   },
@@ -256,17 +256,17 @@ const upgradeCardStyles = {
   btn: {
     padding: '8px 16px',
     borderRadius: 8,
-    border: '1px solid var(--color-border, #2a2a2a)',
+    border: '1px solid var(--color-border)',
     background: 'transparent',
-    color: 'var(--color-foreground, #fff)',
+    color: 'var(--color-foreground)',
     cursor: 'pointer',
   },
   btnPrimary: {
     padding: '8px 16px',
     borderRadius: 8,
     border: 'none',
-    background: 'var(--color-primary, #2563eb)',
-    color: 'var(--color-primary-foreground, #fff)',
+    background: 'var(--color-primary)',
+    color: 'var(--color-primary-foreground)',
     cursor: 'pointer',
     fontWeight: 600,
   },

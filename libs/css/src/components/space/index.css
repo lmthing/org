@@ -63,7 +63,7 @@
 }
 
 .space-list__avatar-fallback {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  background: linear-gradient(135deg, var(--agent), color-mix(in srgb, var(--agent) 80%, black));
   color: white;
   font-weight: 600;
 }
@@ -346,7 +346,7 @@
 }
 
 .user-detail__avatar-fallback {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  background: linear-gradient(135deg, var(--agent), color-mix(in srgb, var(--agent) 80%, black));
   color: white;
   font-weight: 700;
   font-size: 1.5rem;
@@ -438,7 +438,7 @@
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 9999px;
-  background: #7c3aed;
+  background: var(--agent);
   color: white;
   @apply flex items-center justify-center;
   flex-shrink: 0;
@@ -459,7 +459,7 @@
   width: 3rem;
   height: 3rem;
   border-radius: 9999px;
-  background: var(--destructive-bg, #fef2f2);
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
   @apply flex items-center justify-center;
   margin: 0 auto;
 }
@@ -467,7 +467,7 @@
 .confirm-dialog__icon {
   width: 1.5rem;
   height: 1.5rem;
-  color: var(--destructive, #dc2626);
+  color: var(--destructive);
 }
 
 .user-detail__role-check-icon {

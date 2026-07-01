@@ -1,0 +1,948 @@
+{
+  "$meta": {
+    "generatedBy": "generate-theme.mjs",
+    "source": "src/tokens/tokens.json",
+    "darkSelector": "[data-theme=\"dark\"]",
+    "note": "Generated. Every token is a CSS custom property; colors are also exposed as Tailwind utilities via --color-* (e.g. bg-primary, text-agent)."
+  },
+  "scales": [
+    {
+      "name": "radius-sm",
+      "cssVar": "--radius-sm",
+      "group": "radius",
+      "value": "0.125rem"
+    },
+    {
+      "name": "radius-md",
+      "cssVar": "--radius-md",
+      "group": "radius",
+      "value": "0.375rem"
+    },
+    {
+      "name": "radius",
+      "cssVar": "--radius",
+      "group": "radius",
+      "value": "0.375rem"
+    },
+    {
+      "name": "radius-lg",
+      "cssVar": "--radius-lg",
+      "group": "radius",
+      "value": "0.5rem"
+    },
+    {
+      "name": "radius-xl",
+      "cssVar": "--radius-xl",
+      "group": "radius",
+      "value": "0.75rem"
+    },
+    {
+      "name": "radius-full",
+      "cssVar": "--radius-full",
+      "group": "radius",
+      "value": "9999px"
+    },
+    {
+      "name": "font-sans",
+      "cssVar": "--font-sans",
+      "group": "font",
+      "value": "TypeMates Cera Round Pro Bold, system-ui, sans-serif"
+    },
+    {
+      "name": "font-display",
+      "cssVar": "--font-display",
+      "group": "font",
+      "value": "TypeMates Cera Round Pro Bold, system-ui, sans-serif"
+    },
+    {
+      "name": "font-mono",
+      "cssVar": "--font-mono",
+      "group": "font",
+      "value": "ui-monospace, monospace"
+    }
+  ],
+  "colors": [
+    {
+      "name": "brand-1",
+      "cssVar": "--brand-1",
+      "utility": "--color-brand-1",
+      "group": "brand",
+      "light": "#f5c815",
+      "dark": "#f5c815",
+      "description": "THING letter 't' — yellow (sunflower)"
+    },
+    {
+      "name": "brand-2",
+      "cssVar": "--brand-2",
+      "utility": "--color-brand-2",
+      "group": "brand",
+      "light": "#f9a94a",
+      "dark": "#f9a94a",
+      "description": "THING letter 'h' — amber"
+    },
+    {
+      "name": "brand-3",
+      "cssVar": "--brand-3",
+      "utility": "--color-brand-3",
+      "group": "brand",
+      "light": "#f38358",
+      "dark": "#f38358",
+      "description": "THING letter 'i' — coral"
+    },
+    {
+      "name": "brand-4",
+      "cssVar": "--brand-4",
+      "utility": "--color-brand-4",
+      "group": "brand",
+      "light": "#ed92a1",
+      "dark": "#ed92a1",
+      "description": "THING letter 'n' — rose"
+    },
+    {
+      "name": "brand-5",
+      "cssVar": "--brand-5",
+      "utility": "--color-brand-5",
+      "group": "brand",
+      "light": "#d59ec8",
+      "dark": "#d59ec8",
+      "description": "THING letter 'g' — orchid"
+    },
+    {
+      "name": "neutral-1",
+      "cssVar": "--neutral-1",
+      "utility": "--color-neutral-1",
+      "group": "neutral",
+      "light": "#cbcac8",
+      "dark": "#8a8175",
+      "description": "Warm stone neutral (never cool grey)"
+    },
+    {
+      "name": "neutral",
+      "cssVar": "--neutral",
+      "utility": "--color-neutral",
+      "group": "neutral",
+      "light": "#cbcac8",
+      "dark": "#8a8175",
+      "description": "Alias of neutral-1"
+    },
+    {
+      "name": "background",
+      "cssVar": "--background",
+      "utility": "--color-background",
+      "group": "surface",
+      "light": "#ffffff",
+      "dark": "#1a1816",
+      "description": "Page background"
+    },
+    {
+      "name": "foreground",
+      "cssVar": "--foreground",
+      "utility": "--color-foreground",
+      "group": "surface",
+      "light": "#1c1917",
+      "dark": "#ece8e3",
+      "description": "Default body text"
+    },
+    {
+      "name": "card",
+      "cssVar": "--card",
+      "utility": "--color-card",
+      "group": "surface",
+      "light": "#ffffff",
+      "dark": "#211e1b",
+      "description": "Card / raised surface"
+    },
+    {
+      "name": "card-foreground",
+      "cssVar": "--card-foreground",
+      "utility": "--color-card-foreground",
+      "group": "surface",
+      "light": "#1c1917",
+      "dark": "#ece8e3",
+      "description": "Text on card"
+    },
+    {
+      "name": "popover",
+      "cssVar": "--popover",
+      "utility": "--color-popover",
+      "group": "surface",
+      "light": "#ffffff",
+      "dark": "#211e1b",
+      "description": "Popover / menu surface"
+    },
+    {
+      "name": "popover-foreground",
+      "cssVar": "--popover-foreground",
+      "utility": "--color-popover-foreground",
+      "group": "surface",
+      "light": "#1c1917",
+      "dark": "#ece8e3",
+      "description": "Text on popover"
+    },
+    {
+      "name": "primary",
+      "cssVar": "--primary",
+      "utility": "--color-primary",
+      "group": "intent",
+      "light": "#1c1917",
+      "dark": "#ece8e3",
+      "description": "Primary action / CTA fill — stone, NOT a brand color"
+    },
+    {
+      "name": "primary-foreground",
+      "cssVar": "--primary-foreground",
+      "utility": "--color-primary-foreground",
+      "group": "intent",
+      "light": "#ffffff",
+      "dark": "#1a1816",
+      "description": "Text on primary"
+    },
+    {
+      "name": "secondary",
+      "cssVar": "--secondary",
+      "utility": "--color-secondary",
+      "group": "intent",
+      "light": "#f5f5f4",
+      "dark": "#2e2a26",
+      "description": "Secondary surface / button"
+    },
+    {
+      "name": "secondary-foreground",
+      "cssVar": "--secondary-foreground",
+      "utility": "--color-secondary-foreground",
+      "group": "intent",
+      "light": "#1c1917",
+      "dark": "#ece8e3",
+      "description": "Text on secondary"
+    },
+    {
+      "name": "muted",
+      "cssVar": "--muted",
+      "utility": "--color-muted",
+      "group": "intent",
+      "light": "#f5f5f4",
+      "dark": "#2e2a26",
+      "description": "Muted background"
+    },
+    {
+      "name": "muted-foreground",
+      "cssVar": "--muted-foreground",
+      "utility": "--color-muted-foreground",
+      "group": "intent",
+      "light": "#57534e",
+      "dark": "#a8a29e",
+      "description": "Muted / secondary text"
+    },
+    {
+      "name": "accent",
+      "cssVar": "--accent",
+      "utility": "--color-accent",
+      "group": "intent",
+      "light": "#f5f5f4",
+      "dark": "#2e2a26",
+      "description": "Accent hover surface"
+    },
+    {
+      "name": "accent-foreground",
+      "cssVar": "--accent-foreground",
+      "utility": "--color-accent-foreground",
+      "group": "intent",
+      "light": "#1c1917",
+      "dark": "#ece8e3",
+      "description": "Text on accent"
+    },
+    {
+      "name": "destructive",
+      "cssVar": "--destructive",
+      "utility": "--color-destructive",
+      "group": "functional",
+      "light": "#c0502a",
+      "dark": "#e0754a",
+      "description": "Errors / destructive — warm terracotta (harmonizes with brand-3 coral)"
+    },
+    {
+      "name": "destructive-foreground",
+      "cssVar": "--destructive-foreground",
+      "utility": "--color-destructive-foreground",
+      "group": "functional",
+      "light": "#ffffff",
+      "dark": "#1a1816",
+      "description": "Text on destructive"
+    },
+    {
+      "name": "border",
+      "cssVar": "--border",
+      "utility": "--color-border",
+      "group": "state",
+      "light": "#e7e5e4",
+      "dark": "#2e2a26",
+      "description": "Hairline border"
+    },
+    {
+      "name": "input",
+      "cssVar": "--input",
+      "utility": "--color-input",
+      "group": "state",
+      "light": "#e7e5e4",
+      "dark": "#2e2a26",
+      "description": "Input border"
+    },
+    {
+      "name": "ring",
+      "cssVar": "--ring",
+      "utility": "--color-ring",
+      "group": "state",
+      "light": "#cbcac8",
+      "dark": "#57534e",
+      "description": "Focus ring"
+    },
+    {
+      "name": "knowledge",
+      "cssVar": "--knowledge",
+      "utility": "--color-knowledge",
+      "group": "functional",
+      "light": "#8a8f4a",
+      "dark": "#b6bd66",
+      "description": "Knowledge / data streams — warm sage"
+    },
+    {
+      "name": "knowledge-foreground",
+      "cssVar": "--knowledge-foreground",
+      "utility": "--color-knowledge-foreground",
+      "group": "functional",
+      "light": "#ffffff",
+      "dark": "#1a1816",
+      "description": "Text on knowledge"
+    },
+    {
+      "name": "agent",
+      "cssVar": "--agent",
+      "utility": "--color-agent",
+      "group": "functional",
+      "light": "#7a4a6e",
+      "dark": "#c58fb4",
+      "description": "Agent / AI streams and chat — warm plum"
+    },
+    {
+      "name": "agent-foreground",
+      "cssVar": "--agent-foreground",
+      "utility": "--color-agent-foreground",
+      "group": "functional",
+      "light": "#ffffff",
+      "dark": "#1a1816",
+      "description": "Text on agent"
+    },
+    {
+      "name": "success",
+      "cssVar": "--success",
+      "utility": "--color-success",
+      "group": "status",
+      "light": "#5d8a4a",
+      "dark": "#a6c56f",
+      "description": "Positive / running status — warm green"
+    },
+    {
+      "name": "success-foreground",
+      "cssVar": "--success-foreground",
+      "utility": "--color-success-foreground",
+      "group": "status",
+      "light": "#ffffff",
+      "dark": "#1a1816",
+      "description": "Text on success"
+    },
+    {
+      "name": "warning",
+      "cssVar": "--warning",
+      "utility": "--color-warning",
+      "group": "status",
+      "light": "#c2751c",
+      "dark": "#f5b544",
+      "description": "Caution / booting status — warm amber"
+    },
+    {
+      "name": "warning-foreground",
+      "cssVar": "--warning-foreground",
+      "utility": "--color-warning-foreground",
+      "group": "status",
+      "light": "#ffffff",
+      "dark": "#1a1816",
+      "description": "Text on warning"
+    },
+    {
+      "name": "hover",
+      "cssVar": "--hover",
+      "utility": "--color-hover",
+      "group": "state",
+      "light": "rgba(28, 25, 23, 0.05)",
+      "dark": "rgba(236, 232, 227, 0.06)",
+      "description": "Hover overlay"
+    },
+    {
+      "name": "active",
+      "cssVar": "--active",
+      "utility": "--color-active",
+      "group": "state",
+      "light": "rgba(28, 25, 23, 0.1)",
+      "dark": "rgba(236, 232, 227, 0.12)",
+      "description": "Active/pressed overlay"
+    },
+    {
+      "name": "focus",
+      "cssVar": "--focus",
+      "utility": "--color-focus",
+      "group": "state",
+      "light": "rgba(203, 202, 200, 0.5)",
+      "dark": "rgba(87, 83, 78, 0.6)",
+      "description": "Focus overlay"
+    },
+    {
+      "name": "disabled",
+      "cssVar": "--disabled",
+      "utility": "--color-disabled",
+      "group": "state",
+      "light": "#d6d3d1",
+      "dark": "#3d3530",
+      "description": "Disabled surface"
+    },
+    {
+      "name": "disabled-foreground",
+      "cssVar": "--disabled-foreground",
+      "utility": "--color-disabled-foreground",
+      "group": "state",
+      "light": "#a8a29e",
+      "dark": "#6b625a",
+      "description": "Disabled text"
+    },
+    {
+      "name": "sidebar-background",
+      "cssVar": "--sidebar-background",
+      "utility": "--color-sidebar-background",
+      "group": "sidebar",
+      "light": "#fafaf9",
+      "dark": "#141210",
+      "description": "Sidebar background"
+    },
+    {
+      "name": "sidebar-foreground",
+      "cssVar": "--sidebar-foreground",
+      "utility": "--color-sidebar-foreground",
+      "group": "sidebar",
+      "light": "#1c1917",
+      "dark": "#ece8e3",
+      "description": "Sidebar text"
+    },
+    {
+      "name": "sidebar-primary",
+      "cssVar": "--sidebar-primary",
+      "utility": "--color-sidebar-primary",
+      "group": "sidebar",
+      "light": "#1c1917",
+      "dark": "#ece8e3",
+      "description": "Sidebar primary"
+    },
+    {
+      "name": "sidebar-primary-foreground",
+      "cssVar": "--sidebar-primary-foreground",
+      "utility": "--color-sidebar-primary-foreground",
+      "group": "sidebar",
+      "light": "#fafaf9",
+      "dark": "#1a1816",
+      "description": "Text on sidebar primary"
+    },
+    {
+      "name": "sidebar-accent",
+      "cssVar": "--sidebar-accent",
+      "utility": "--color-sidebar-accent",
+      "group": "sidebar",
+      "light": "#f5f5f4",
+      "dark": "#2e2a26",
+      "description": "Sidebar accent surface"
+    },
+    {
+      "name": "sidebar-accent-foreground",
+      "cssVar": "--sidebar-accent-foreground",
+      "utility": "--color-sidebar-accent-foreground",
+      "group": "sidebar",
+      "light": "#1c1917",
+      "dark": "#ece8e3",
+      "description": "Text on sidebar accent"
+    },
+    {
+      "name": "sidebar-border",
+      "cssVar": "--sidebar-border",
+      "utility": "--color-sidebar-border",
+      "group": "sidebar",
+      "light": "#e7e5e4",
+      "dark": "#2e2a26",
+      "description": "Sidebar border"
+    },
+    {
+      "name": "sidebar-ring",
+      "cssVar": "--sidebar-ring",
+      "utility": "--color-sidebar-ring",
+      "group": "sidebar",
+      "light": "#a8a29e",
+      "dark": "#57534e",
+      "description": "Sidebar focus ring"
+    },
+    {
+      "name": "sidebar",
+      "cssVar": "--sidebar",
+      "utility": "--color-sidebar",
+      "group": "sidebar",
+      "light": "#fafaf9",
+      "dark": "#141210",
+      "description": "Sidebar (alias)"
+    },
+    {
+      "name": "spectrum-1",
+      "cssVar": "--spectrum-1",
+      "utility": "--color-spectrum-1",
+      "group": "spectrum",
+      "light": "#f5c815",
+      "dark": "#f5c815",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-2",
+      "cssVar": "--spectrum-2",
+      "utility": "--color-spectrum-2",
+      "group": "spectrum",
+      "light": "#f5c619",
+      "dark": "#f5c619",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-3",
+      "cssVar": "--spectrum-3",
+      "utility": "--color-spectrum-3",
+      "group": "spectrum",
+      "light": "#f6c31d",
+      "dark": "#f6c31d",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-4",
+      "cssVar": "--spectrum-4",
+      "utility": "--color-spectrum-4",
+      "group": "spectrum",
+      "light": "#f6c121",
+      "dark": "#f6c121",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-5",
+      "cssVar": "--spectrum-5",
+      "utility": "--color-spectrum-5",
+      "group": "spectrum",
+      "light": "#f6be25",
+      "dark": "#f6be25",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-6",
+      "cssVar": "--spectrum-6",
+      "utility": "--color-spectrum-6",
+      "group": "spectrum",
+      "light": "#f7bc29",
+      "dark": "#f7bc29",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-7",
+      "cssVar": "--spectrum-7",
+      "utility": "--color-spectrum-7",
+      "group": "spectrum",
+      "light": "#f7ba2d",
+      "dark": "#f7ba2d",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-8",
+      "cssVar": "--spectrum-8",
+      "utility": "--color-spectrum-8",
+      "group": "spectrum",
+      "light": "#f7b732",
+      "dark": "#f7b732",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-9",
+      "cssVar": "--spectrum-9",
+      "utility": "--color-spectrum-9",
+      "group": "spectrum",
+      "light": "#f7b536",
+      "dark": "#f7b536",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-10",
+      "cssVar": "--spectrum-10",
+      "utility": "--color-spectrum-10",
+      "group": "spectrum",
+      "light": "#f8b33a",
+      "dark": "#f8b33a",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-11",
+      "cssVar": "--spectrum-11",
+      "utility": "--color-spectrum-11",
+      "group": "spectrum",
+      "light": "#f8b03e",
+      "dark": "#f8b03e",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-12",
+      "cssVar": "--spectrum-12",
+      "utility": "--color-spectrum-12",
+      "group": "spectrum",
+      "light": "#f8ae42",
+      "dark": "#f8ae42",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-13",
+      "cssVar": "--spectrum-13",
+      "utility": "--color-spectrum-13",
+      "group": "spectrum",
+      "light": "#f9ab46",
+      "dark": "#f9ab46",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-14",
+      "cssVar": "--spectrum-14",
+      "utility": "--color-spectrum-14",
+      "group": "spectrum",
+      "light": "#f9a94a",
+      "dark": "#f9a94a",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-15",
+      "cssVar": "--spectrum-15",
+      "utility": "--color-spectrum-15",
+      "group": "spectrum",
+      "light": "#f9a64b",
+      "dark": "#f9a64b",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-16",
+      "cssVar": "--spectrum-16",
+      "utility": "--color-spectrum-16",
+      "group": "spectrum",
+      "light": "#f8a34c",
+      "dark": "#f8a34c",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-17",
+      "cssVar": "--spectrum-17",
+      "utility": "--color-spectrum-17",
+      "group": "spectrum",
+      "light": "#f8a04d",
+      "dark": "#f8a04d",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-18",
+      "cssVar": "--spectrum-18",
+      "utility": "--color-spectrum-18",
+      "group": "spectrum",
+      "light": "#f79d4e",
+      "dark": "#f79d4e",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-19",
+      "cssVar": "--spectrum-19",
+      "utility": "--color-spectrum-19",
+      "group": "spectrum",
+      "light": "#f79a4f",
+      "dark": "#f79a4f",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-20",
+      "cssVar": "--spectrum-20",
+      "utility": "--color-spectrum-20",
+      "group": "spectrum",
+      "light": "#f69750",
+      "dark": "#f69750",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-21",
+      "cssVar": "--spectrum-21",
+      "utility": "--color-spectrum-21",
+      "group": "spectrum",
+      "light": "#f69552",
+      "dark": "#f69552",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-22",
+      "cssVar": "--spectrum-22",
+      "utility": "--color-spectrum-22",
+      "group": "spectrum",
+      "light": "#f59253",
+      "dark": "#f59253",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-23",
+      "cssVar": "--spectrum-23",
+      "utility": "--color-spectrum-23",
+      "group": "spectrum",
+      "light": "#f58f54",
+      "dark": "#f58f54",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-24",
+      "cssVar": "--spectrum-24",
+      "utility": "--color-spectrum-24",
+      "group": "spectrum",
+      "light": "#f48c55",
+      "dark": "#f48c55",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-25",
+      "cssVar": "--spectrum-25",
+      "utility": "--color-spectrum-25",
+      "group": "spectrum",
+      "light": "#f48956",
+      "dark": "#f48956",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-26",
+      "cssVar": "--spectrum-26",
+      "utility": "--color-spectrum-26",
+      "group": "spectrum",
+      "light": "#f38657",
+      "dark": "#f38657",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-27",
+      "cssVar": "--spectrum-27",
+      "utility": "--color-spectrum-27",
+      "group": "spectrum",
+      "light": "#f38358",
+      "dark": "#f38358",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-28",
+      "cssVar": "--spectrum-28",
+      "utility": "--color-spectrum-28",
+      "group": "spectrum",
+      "light": "#f3845e",
+      "dark": "#f3845e",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-29",
+      "cssVar": "--spectrum-29",
+      "utility": "--color-spectrum-29",
+      "group": "spectrum",
+      "light": "#f28563",
+      "dark": "#f28563",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-30",
+      "cssVar": "--spectrum-30",
+      "utility": "--color-spectrum-30",
+      "group": "spectrum",
+      "light": "#f28669",
+      "dark": "#f28669",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-31",
+      "cssVar": "--spectrum-31",
+      "utility": "--color-spectrum-31",
+      "group": "spectrum",
+      "light": "#f1886e",
+      "dark": "#f1886e",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-32",
+      "cssVar": "--spectrum-32",
+      "utility": "--color-spectrum-32",
+      "group": "spectrum",
+      "light": "#f18974",
+      "dark": "#f18974",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-33",
+      "cssVar": "--spectrum-33",
+      "utility": "--color-spectrum-33",
+      "group": "spectrum",
+      "light": "#f08a7a",
+      "dark": "#f08a7a",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-34",
+      "cssVar": "--spectrum-34",
+      "utility": "--color-spectrum-34",
+      "group": "spectrum",
+      "light": "#f08b7f",
+      "dark": "#f08b7f",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-35",
+      "cssVar": "--spectrum-35",
+      "utility": "--color-spectrum-35",
+      "group": "spectrum",
+      "light": "#ef8c85",
+      "dark": "#ef8c85",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-36",
+      "cssVar": "--spectrum-36",
+      "utility": "--color-spectrum-36",
+      "group": "spectrum",
+      "light": "#ef8d8b",
+      "dark": "#ef8d8b",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-37",
+      "cssVar": "--spectrum-37",
+      "utility": "--color-spectrum-37",
+      "group": "spectrum",
+      "light": "#ee8f90",
+      "dark": "#ee8f90",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-38",
+      "cssVar": "--spectrum-38",
+      "utility": "--color-spectrum-38",
+      "group": "spectrum",
+      "light": "#ee9096",
+      "dark": "#ee9096",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-39",
+      "cssVar": "--spectrum-39",
+      "utility": "--color-spectrum-39",
+      "group": "spectrum",
+      "light": "#ed919b",
+      "dark": "#ed919b",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-40",
+      "cssVar": "--spectrum-40",
+      "utility": "--color-spectrum-40",
+      "group": "spectrum",
+      "light": "#ed92a1",
+      "dark": "#ed92a1",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-41",
+      "cssVar": "--spectrum-41",
+      "utility": "--color-spectrum-41",
+      "group": "spectrum",
+      "light": "#eb93a4",
+      "dark": "#eb93a4",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-42",
+      "cssVar": "--spectrum-42",
+      "utility": "--color-spectrum-42",
+      "group": "spectrum",
+      "light": "#e994a7",
+      "dark": "#e994a7",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-43",
+      "cssVar": "--spectrum-43",
+      "utility": "--color-spectrum-43",
+      "group": "spectrum",
+      "light": "#e795aa",
+      "dark": "#e795aa",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-44",
+      "cssVar": "--spectrum-44",
+      "utility": "--color-spectrum-44",
+      "group": "spectrum",
+      "light": "#e696ad",
+      "dark": "#e696ad",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-45",
+      "cssVar": "--spectrum-45",
+      "utility": "--color-spectrum-45",
+      "group": "spectrum",
+      "light": "#e497b0",
+      "dark": "#e497b0",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-46",
+      "cssVar": "--spectrum-46",
+      "utility": "--color-spectrum-46",
+      "group": "spectrum",
+      "light": "#e298b3",
+      "dark": "#e298b3",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-47",
+      "cssVar": "--spectrum-47",
+      "utility": "--color-spectrum-47",
+      "group": "spectrum",
+      "light": "#e098b6",
+      "dark": "#e098b6",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-48",
+      "cssVar": "--spectrum-48",
+      "utility": "--color-spectrum-48",
+      "group": "spectrum",
+      "light": "#de99b9",
+      "dark": "#de99b9",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-49",
+      "cssVar": "--spectrum-49",
+      "utility": "--color-spectrum-49",
+      "group": "spectrum",
+      "light": "#dc9abc",
+      "dark": "#dc9abc",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    },
+    {
+      "name": "spectrum-50",
+      "cssVar": "--spectrum-50",
+      "utility": "--color-spectrum-50",
+      "group": "spectrum",
+      "light": "#db9bbf",
+      "dark": "#db9bbf",
+      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Used for per-product accents. Identical in light and dark."
+    }
+  ]
+}

@@ -29,7 +29,7 @@
 }
 
 .computer-logs-viewer__message--warn {
-  @apply text-yellow-500;
+  @apply text-warning;
 }
 
 .computer-logs-viewer__message--error {

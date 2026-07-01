@@ -94,11 +94,11 @@ function TreeItem({
           cursor: 'pointer',
           fontSize: '0.8125rem',
           borderRadius: '0.25rem',
-          background: isSelected ? 'var(--color-primary, #6d28d9)' : 'transparent',
-          color: isSelected ? 'var(--color-primary-foreground, #fff)' : 'inherit',
+          background: isSelected ? 'var(--color-primary)' : 'transparent',
+          color: isSelected ? 'var(--color-primary-foreground)' : 'inherit',
         }}
         onMouseEnter={(e) => {
-          if (!isSelected) (e.currentTarget.style.background = 'var(--color-muted, #222)')
+          if (!isSelected) (e.currentTarget.style.background = 'var(--color-muted)')
         }}
         onMouseLeave={(e) => {
           if (!isSelected) (e.currentTarget.style.background = 'transparent')
@@ -110,8 +110,8 @@ function TreeItem({
               ? <ChevronDown style={{ width: 14, height: 14, flexShrink: 0, opacity: 0.5 }} />
               : <ChevronRight style={{ width: 14, height: 14, flexShrink: 0, opacity: 0.5 }} />}
             {isOpen
-              ? <FolderOpen style={{ width: 15, height: 15, flexShrink: 0, color: isSelected ? 'inherit' : 'var(--color-primary, #8b5cf6)' }} />
-              : <Folder style={{ width: 15, height: 15, flexShrink: 0, color: isSelected ? 'inherit' : 'var(--color-primary, #8b5cf6)' }} />}
+              ? <FolderOpen style={{ width: 15, height: 15, flexShrink: 0, color: isSelected ? 'inherit' : 'var(--color-primary)' }} />
+              : <Folder style={{ width: 15, height: 15, flexShrink: 0, color: isSelected ? 'inherit' : 'var(--color-primary)' }} />}
           </>
         ) : (
           <>
@@ -164,7 +164,7 @@ function RawView() {
         style={{
           width: 260,
           minWidth: 200,
-          borderRight: '1px solid var(--color-border, #333)',
+          borderRight: '1px solid var(--color-border)',
           overflowY: 'auto',
           padding: '0.5rem 0',
           flexShrink: 0,
@@ -193,13 +193,13 @@ function RawView() {
             <div
               style={{
                 padding: '0.5rem 1rem',
-                borderBottom: '1px solid var(--color-border, #333)',
+                borderBottom: '1px solid var(--color-border)',
                 fontSize: '0.75rem',
                 fontWeight: 600,
-                color: 'var(--color-accent, #8b5cf6)',
+                color: 'var(--color-accent)',
                 position: 'sticky',
                 top: 0,
-                background: 'var(--color-background, #111)',
+                background: 'var(--color-background)',
                 zIndex: 1,
               }}
             >

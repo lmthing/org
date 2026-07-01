@@ -1,9 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is([data-theme="dark"] *));
 
-/* Auto-generated @theme fonts by generate-palette.mjs */
+/* Auto-generated @theme fonts by generate-theme.mjs — edit src/tokens/tokens.json, not this file */
 @theme {
   --radius-sm: 0.125rem;
   --radius-md: 0.375rem;
@@ -17,7 +17,7 @@
 }
 /* End Auto-generated global */
 
-/* Auto-generated @theme by generate-palette.mjs */
+/* Auto-generated @theme by generate-theme.mjs */
 @theme inline {
   --color-brand-1: var(--brand-1);
   --color-brand-2: var(--brand-2);
@@ -49,6 +49,10 @@
   --color-knowledge-foreground: var(--knowledge-foreground);
   --color-agent: var(--agent);
   --color-agent-foreground: var(--agent-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-hover: var(--hover);
   --color-active: var(--active);
   --color-focus: var(--focus);
@@ -116,7 +120,7 @@
 }
 /* End Auto-generated @theme */
 
-/* Auto-generated :root by generate-palette.mjs */
+/* Auto-generated :root (light) by generate-theme.mjs */
 :root {
   --brand-1: #f5c815;
   --brand-2: #f9a94a;
@@ -139,15 +143,19 @@
   --muted-foreground: #57534e;
   --accent: #f5f5f4;
   --accent-foreground: #1c1917;
-  --destructive: #e11d48;
+  --destructive: #c0502a;
   --destructive-foreground: #ffffff;
   --border: #e7e5e4;
   --input: #e7e5e4;
   --ring: #cbcac8;
-  --knowledge: #10b981;
+  --knowledge: #8a8f4a;
   --knowledge-foreground: #ffffff;
-  --agent: #7c3aed;
+  --agent: #7a4a6e;
   --agent-foreground: #ffffff;
+  --success: #5d8a4a;
+  --success-foreground: #ffffff;
+  --warning: #c2751c;
+  --warning-foreground: #ffffff;
   --hover: rgba(28, 25, 23, 0.05);
   --active: rgba(28, 25, 23, 0.1);
   --focus: rgba(203, 202, 200, 0.5);
@@ -192,7 +200,7 @@
   --spectrum-28: #f3845e;
   --spectrum-29: #f28563;
   --spectrum-30: #f28669;
-  --spectrum-31: #f18a6e;
+  --spectrum-31: #f1886e;
   --spectrum-32: #f18974;
   --spectrum-33: #f08a7a;
   --spectrum-34: #f08b7f;
@@ -214,3 +222,51 @@
   --spectrum-50: #db9bbf;
 }
 /* End Auto-generated :root */
+
+/* Auto-generated dark theme by generate-theme.mjs — warm-stone (brand + spectrum unchanged) */
+[data-theme="dark"] {
+  --neutral-1: #8a8175;
+  --neutral: #8a8175;
+  --background: #1a1816;
+  --foreground: #ece8e3;
+  --card: #211e1b;
+  --card-foreground: #ece8e3;
+  --popover: #211e1b;
+  --popover-foreground: #ece8e3;
+  --primary: #ece8e3;
+  --primary-foreground: #1a1816;
+  --secondary: #2e2a26;
+  --secondary-foreground: #ece8e3;
+  --muted: #2e2a26;
+  --muted-foreground: #a8a29e;
+  --accent: #2e2a26;
+  --accent-foreground: #ece8e3;
+  --destructive: #e0754a;
+  --destructive-foreground: #1a1816;
+  --border: #2e2a26;
+  --input: #2e2a26;
+  --ring: #57534e;
+  --knowledge: #b6bd66;
+  --knowledge-foreground: #1a1816;
+  --agent: #c58fb4;
+  --agent-foreground: #1a1816;
+  --success: #a6c56f;
+  --success-foreground: #1a1816;
+  --warning: #f5b544;
+  --warning-foreground: #1a1816;
+  --hover: rgba(236, 232, 227, 0.06);
+  --active: rgba(236, 232, 227, 0.12);
+  --focus: rgba(87, 83, 78, 0.6);
+  --disabled: #3d3530;
+  --disabled-foreground: #6b625a;
+  --sidebar-background: #141210;
+  --sidebar-foreground: #ece8e3;
+  --sidebar-primary: #ece8e3;
+  --sidebar-primary-foreground: #1a1816;
+  --sidebar-accent: #2e2a26;
+  --sidebar-accent-foreground: #ece8e3;
+  --sidebar-border: #2e2a26;
+  --sidebar-ring: #57534e;
+  --sidebar: #141210;
+}
+/* End Auto-generated dark */

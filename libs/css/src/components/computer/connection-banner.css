@@ -9,7 +9,7 @@
 }
 
 .computer-connection-banner--booting {
-  @apply bg-yellow-500/10 text-yellow-700 border-b border-yellow-500/20;
+  @apply bg-warning/10 text-warning border-b border-warning/20;
 }
 
 .computer-connection-banner__message {
@@ -25,5 +25,5 @@
 }
 
 .computer-connection-banner__dot--booting {
-  @apply bg-yellow-500 animate-pulse;
+  @apply bg-warning animate-pulse;
 }

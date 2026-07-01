@@ -17,7 +17,7 @@
 }
 
 .computer-network-panel__status--ok {
-  @apply text-green-500;
+  @apply text-success;
 }
 
 .computer-network-panel__status--error {

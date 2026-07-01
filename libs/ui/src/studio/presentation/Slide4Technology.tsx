@@ -19,11 +19,10 @@ function Arrow() {
         height="38"
         viewBox="0 0 24 24"
         fill="none"
-        stroke={colors.brand}
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
-        style={{ opacity: 0.7 }}
+        style={{ stroke: colors.brand, opacity: 0.7 }}
       >
         <path d="M5 12h14M13 6l6 6-6 6" />
       </svg>
@@ -65,9 +64,9 @@ export default function Slide4Technology() {
                 style={
                   node.hero
                     ? {
-                        background: '#E8E8E8',
-                        borderColor: '#D0D0D0',
-                        color: '#fff',
+                        background: colors.bgSection,
+                        borderColor: colors.cardBorder,
+                        color: colors.white,
                         fontSize: 26,
                         fontWeight: 800,
                         padding: '24px 40px',
@@ -110,14 +109,14 @@ export default function Slide4Technology() {
       </div>
 
       {/* Divider */}
-      <div className="mb-9 h-px w-full" style={{ background: '#F0EFEC' }} />
+      <div className="mb-9 h-px w-full" style={{ background: colors.cardBorder }} />
 
       {/* BOTTOM: technique badges */}
       <div className="flex items-center gap-5">
         {techniques.map((t) => (
           <span
             key={t}
-            className="rounded-full border-2 bg-white px-7 py-3.5 text-lg font-semibold"
+            className="rounded-full border-2 bg-card px-7 py-3.5 text-lg font-semibold"
             style={{ borderColor: colors.brand, color: colors.text }}
           >
             {t}

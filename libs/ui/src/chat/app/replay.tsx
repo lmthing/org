@@ -76,7 +76,7 @@ export function PlaybackBar(): React.ReactElement | null {
         max={total}
         value={replay.cursor}
         onChange={(e) => seek(Number(e.target.value))}
-        className="flex-1 accent-[#58a6ff]"
+        className="flex-1 accent-[var(--agent)]"
         data-testid="replay-scrubber"
       />
       <span className="text-[10px] font-mono text-lm-muted w-20 text-right">{replay.cursor}/{total}</span>

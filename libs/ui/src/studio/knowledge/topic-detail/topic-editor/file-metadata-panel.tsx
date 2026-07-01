@@ -14,6 +14,9 @@ interface FileMetadataPanelProps {
   topicPath: string
 }
 
+// Help text example only — not an actual UI color.
+const COLOR_PLACEHOLDER = 'Hex color (e.g. #f5a623)' // ds-lint-ok: example hex in placeholder copy
+
 export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
   const spaceFS = useSpaceFS()
   const rawContent = useFile(topicPath)
@@ -91,7 +94,7 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
         </div>
 
         {parseError && (
-          <Caption muted style={{ color: 'var(--color-danger, #c0392b)' }}>
+          <Caption muted style={{ color: 'var(--destructive)' }}>
             {parseError}
           </Caption>
         )}
@@ -122,7 +125,7 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
             type="text"
             value={color}
             onChange={handleChange(setColor)}
-            placeholder="Hex color (e.g. #f5a623)"
+            placeholder={COLOR_PLACEHOLDER}
           />
         </div>
 

@@ -22,7 +22,7 @@ export default function Slide8Partnership() {
           src={qrCode}
           alt="Scan to visit lmthing.studio"
           className="h-80 w-80 rounded-3xl shadow-xl"
-          style={{ boxShadow: '0 10px 40px rgba(245, 166, 35, 0.2)' }}
+          style={{ boxShadow: `0 10px 40px color-mix(in srgb, ${colors.brand} 20%, transparent)` }}
         />
       </div>
     </div>

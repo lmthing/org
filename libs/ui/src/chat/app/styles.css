@@ -17,107 +17,26 @@
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
-/* ── Light theme (DEFAULT) ────────────────────────────────────── */
-:root, [data-theme="light"] {
-  --brand-1: #f5c815;
-  --brand-2: #f9a94a;
-  --brand-3: #f38358;
-  --brand-4: #ed92a1;
-  --brand-5: #d59ec8;
-
-  --background: #ffffff;
-  --foreground: #1c1917;
-  --card: #ffffff;
-  --card-foreground: #1c1917;
-  --popover: #ffffff;
-  --popover-foreground: #1c1917;
-  --sidebar: #fafaf9;
-  --sidebar-foreground: #1c1917;
-  --sidebar-border: #e7e5e4;
-  --sidebar-accent: #f5f5f4;
-  --sidebar-accent-foreground: #1c1917;
-  --muted: #f5f5f4;
-  --muted-foreground: #57534e;
-  --accent: #f5f5f4;
-  --accent-foreground: #1c1917;
-  --border: #e7e5e4;
-  --input: #e7e5e4;
-  --ring: #a8a29e;
-  --primary: #1c1917;
-  --primary-foreground: #ffffff;
-  --secondary: #f5f5f4;
-  --secondary-foreground: #1c1917;
-  --destructive: #e11d48;
-  --destructive-foreground: #ffffff;
-  --knowledge: #10b981;
-  --knowledge-foreground: #ffffff;
-  --agent: #7c3aed;
-  --agent-foreground: #ffffff;
-
-  /* ── Legacy --lm-* bridge (used by tree.tsx, inspector.tsx, replay.tsx) ── */
-  --lm-bg: #ffffff;
-  --lm-panel: #f5f5f4;
-  --lm-panel2: #ece9e6;
-  --lm-border: #e7e5e4;
-  --lm-text: #1c1917;
-  --lm-muted: #57534e;
-  --lm-accent: #7c3aed;
-  --lm-green: #059669;
-  --lm-red: #e11d48;
-  --lm-amber: #d97706;
-  --lm-purple: #7c3aed;
-  --lm-cyan: #0891b2;
-}
-
-/* ── Dark theme ───────────────────────────────────────────────── */
-[data-theme="dark"] {
-  --brand-1: #f5c815;
-  --brand-2: #f9a94a;
-  --brand-3: #f38358;
-  --brand-4: #ed92a1;
-  --brand-5: #d59ec8;
-
-  --background: #1a1816;
-  --foreground: #ece8e3;
-  --card: #211e1b;
-  --card-foreground: #ece8e3;
-  --popover: #211e1b;
-  --popover-foreground: #ece8e3;
-  --sidebar: #141210;
-  --sidebar-foreground: #ece8e3;
-  --sidebar-border: #2e2a26;
-  --sidebar-accent: #2e2a26;
-  --sidebar-accent-foreground: #ece8e3;
-  --muted: #2e2a26;
-  --muted-foreground: #a8a29e;
-  --accent: #2e2a26;
-  --accent-foreground: #ece8e3;
-  --border: #2e2a26;
-  --input: #2e2a26;
-  --ring: #57534e;
-  --primary: #ece8e3;
-  --primary-foreground: #1a1816;
-  --secondary: #2e2a26;
-  --secondary-foreground: #ece8e3;
-  --destructive: #e11d48;
-  --destructive-foreground: #ffffff;
-  --knowledge: #34d399;
-  --knowledge-foreground: #064e3b;
-  --agent: #a78bfa;
-  --agent-foreground: #1a1816;
-
-  --lm-bg: #1a1816;
-  --lm-panel: #211e1b;
-  --lm-panel2: #2a2520;
-  --lm-border: #2e2a26;
-  --lm-text: #ece8e3;
-  --lm-muted: #a8a29e;
-  --lm-accent: #bc8cff;
-  --lm-green: #34d399;
-  --lm-red: #f87171;
-  --lm-amber: #fbbf24;
-  --lm-purple: #bc8cff;
-  --lm-cyan: #22d3ee;
+/* ── Theme tokens ─────────────────────────────────────────────────
+   The color palette is owned by the shared design system
+   (@lmthing/css/theme.css), which the app imports and which defines every
+   token on :root (light) and [data-theme="dark"]. This surface must NOT redeclare
+   shared tokens — it only bridges the legacy --lm-* aliases (still used by
+   tree.tsx, inspector.tsx, replay.tsx and the chat forms) onto shared tokens
+   so they inherit light/dark automatically. */
+:root {
+  --lm-bg: var(--background);
+  --lm-panel: var(--muted);
+  --lm-panel2: var(--accent);
+  --lm-border: var(--border);
+  --lm-text: var(--foreground);
+  --lm-muted: var(--muted-foreground);
+  --lm-accent: var(--agent);
+  --lm-green: var(--success);
+  --lm-red: var(--destructive);
+  --lm-amber: var(--warning);
+  --lm-purple: var(--agent);
+  --lm-cyan: var(--knowledge);
 }
 
 /* ── Tailwind color utilities (@theme inline binds classes to vars) ── */
@@ -189,7 +108,6 @@ body {
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
 *::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
-[data-theme="dark"] *::-webkit-scrollbar-thumb { background: #3d3530; }
 
 /* ── Focus ring ─────────────────────────────────────────────────── */
 :focus-visible {

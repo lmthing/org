@@ -18,7 +18,7 @@ function ThemeToggle(): React.ReactElement {
 function ConnectionDot(): React.ReactElement {
   const c = useStore((s) => s.connection);
   const mode = useStore((s) => s.mode);
-  const color = mode === 'replay' ? '#bc8cff' : c === 'open' ? '#3fb950' : c === 'connecting' ? '#d29922' : '#f85149';
+  const color = mode === 'replay' ? 'var(--agent)' : c === 'open' ? 'var(--success)' : c === 'connecting' ? 'var(--warning)' : 'var(--destructive)';
   const label = mode === 'replay' ? 'replay' : c;
   return (
     <span className="flex items-center gap-1.5 text-[11px] text-lm-muted">

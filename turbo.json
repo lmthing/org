@@ -12,6 +12,7 @@
       "dependsOn": ["^build"]
     },
     "lint": {},
+    "lint:tokens": {},
     "format": {},
     "dev": {
       "cache": false,

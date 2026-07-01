@@ -1,3 +1,4 @@
+// ds-lint-file-ok: terminal ANSI color palette (Ink color names → --lm-* terminal theme vars), not brand UI
 /**
  * Ink compatibility layer for the web.
  *

@@ -127,7 +127,7 @@ export function StudioShell({
             width: 400,
             flex: '0 0 400px',
             height: '100%',
-            borderLeft: '1px solid var(--border, #e5e7eb)',
+            borderLeft: '1px solid var(--border)',
             display: 'flex',
             flexDirection: 'column',
             minWidth: 0,

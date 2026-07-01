@@ -10,8 +10,8 @@ const chips = ['Structuring knowledge', 'Connecting it to the model']
 function Arrow() {
   return (
     <svg width="72" height="32" viewBox="0 0 72 32" fill="none" className="shrink-0">
-      <line x1="0" y1="16" x2="56" y2="16" stroke={colors.brand} strokeWidth="3" />
-      <polyline points="50,8 62,16 50,24" stroke={colors.brand} strokeWidth="3" fill="none" />
+      <line x1="0" y1="16" x2="56" y2="16" style={{ stroke: colors.brand }} strokeWidth="3" />
+      <polyline points="50,8 62,16 50,24" style={{ stroke: colors.brand }} strokeWidth="3" fill="none" />
     </svg>
   )
 }
@@ -87,7 +87,7 @@ export default function Slide2Problem() {
                 key={chip}
                 className="rounded-lg"
                 style={{
-                  background: `linear-gradient(135deg, ${colors.brand}15, ${colors.brand}25)`,
+                  background: `linear-gradient(135deg, color-mix(in srgb, ${colors.brand} 8%, transparent), color-mix(in srgb, ${colors.brand} 15%, transparent))`,
                   color: colors.brandDark,
                   fontSize: '1.25rem',
                   fontWeight: 700,

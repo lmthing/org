@@ -1,3 +1,4 @@
+// ds-lint-file-ok: terminal ANSI color palette (Ink compat inputs, --lm-* terminal theme vars), not brand UI
 /**
  * Web mirrors of the Ink input add-ons: `ink-text-input` (default export
  * TextInput), `ink-select-input` (SelectInput), plus ConfirmInput / MultiSelect.

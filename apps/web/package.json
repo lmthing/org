@@ -8,7 +8,8 @@
     "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
-    "lint": "eslint .",
+    "lint:tokens": "lmthing-lint-tokens src",
+    "lint": "eslint . && lmthing-lint-tokens src",
     "format": "prettier --write ."
   },
   "dependencies": {

@@ -21,12 +21,14 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "lint": "eslint .",
+    "lint:tokens": "lmthing-lint-tokens src",
+    "lint": "eslint . && lmthing-lint-tokens src",
     "format": "prettier --write ."
   },
   "dependencies": {
     "@lmthing/auth": "workspace:*",
     "@lmthing/core": "workspace:*",
+    "@lmthing/css": "workspace:*",
     "marked": "^14.0.0",
     "zustand": "^4.5.7"
   },

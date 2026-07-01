@@ -10,9 +10,9 @@ import { flattenForm, coerceValue, defaultFor } from '@lmthing/core/ui';
 import type { FieldSpec } from '@lmthing/core/ui';
 
 const inputStyle: React.CSSProperties = {
-  background: 'var(--lm-bg, #0d1117)',
-  color: 'var(--lm-text, #e6edf3)',
-  border: '1px solid var(--lm-border, #30363d)',
+  background: 'var(--lm-bg)',
+  color: 'var(--lm-text)',
+  border: '1px solid var(--lm-border)',
   borderRadius: 'var(--radius-lm-md, 6px)',
   padding: '4px 8px',
   font: 'inherit',
@@ -87,7 +87,7 @@ function Control({
     case 'date': return <input type="date" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
     case 'time': return <input type="time" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
     case 'datetime': return <input type="datetime-local" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
-    case 'color': return <input type="color" value={String(value || '#000000')} onChange={(e) => onChange(e.target.value)} />;
+    case 'color': return <input type="color" value={String(value || '#000000')} onChange={(e) => onChange(e.target.value)} />; // ds-lint-ok: default value for a native color picker, not a UI theme color
     case 'file': return <input type="text" style={inputStyle} placeholder={field.placeholder ?? 'path…'} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
     case 'taginput':
       return <input type="text" style={inputStyle} placeholder="comma,separated" value={Array.isArray(value) ? value.join(', ') : String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
@@ -103,7 +103,7 @@ function btnStyle(primary: boolean): React.CSSProperties {
   return {
     background: primary ? 'color-mix(in srgb, var(--lm-accent) 20%, transparent)' : 'transparent',
     color: primary ? 'var(--lm-accent)' : 'var(--lm-text)',
-    border: `1px solid ${primary ? 'var(--lm-accent)' : 'var(--lm-border, #30363d)'}`,
+    border: `1px solid ${primary ? 'var(--lm-accent)' : 'var(--lm-border)'}`,
     borderRadius: 'var(--radius-lm-md, 6px)',
     padding: '4px 12px',
     cursor: 'pointer',
