@@ -127,18 +127,18 @@ takeaway.
 **Goal:** a hard, host-enforced ceiling so any loop/escalation cannot run away.
 
 - Add `BudgetOpts { maxEpisodes?, maxForkDepth?, maxToolCalls?, maxWallClockMs? }`
-  to `SessionOpts` (`packages/core/src/session/session.ts`) and thread into
-  `ForkEngineOpts` (`packages/core/src/fork/fork.ts`).
+  to `SessionOpts` (`libs/core/src/session/session.ts`) and thread into
+  `ForkEngineOpts` (`libs/core/src/fork/fork.ts`).
 - Enforce in two places:
-  - `runTurnLoop` (`packages/core/src/eval/turn-loop.ts`) — episode/tool-call counts.
-  - `ForkEngine.runFork` (`packages/core/src/fork/fork.ts`) — fork depth, per-fork
+  - `runTurnLoop` (`libs/core/src/eval/turn-loop.ts`) — episode/tool-call counts.
+  - `ForkEngine.runFork` (`libs/core/src/fork/fork.ts`) — fork depth, per-fork
     wall clock (extend the existing `task.timeout` machinery at fork.ts:96).
 - On exceed: terminate cleanly with a structured `BudgetExceededError`, dispose the
   VM (respect the disposal-timing comments at fork.ts:128–147 / 291–304).
 - Sensible defaults; opt *up*, never opt out from inside the worker VM.
 
-**Tests** (`packages/core/src/eval/turn-loop.test.ts`,
-`packages/core/src/fork/fork.test.ts`):
+**Tests** (`libs/core/src/eval/turn-loop.test.ts`,
+`libs/core/src/fork/fork.test.ts`):
 - loop that never resolves halts at `maxEpisodes` with `BudgetExceededError`.
 - nested forks beyond `maxForkDepth` are rejected.
 - VM is disposed on budget termination (no leak).
@@ -150,10 +150,10 @@ takeaway.
 - `error-rewind.ts` / `turn-loop.ts` already track a retry count (`maxRetries: 3`).
   Surface a read-only `progress` snapshot: `{ attempts, verifyFailures, budgetUsed }`.
 - Expose to userland via the existing host-tools substrate
-  (`packages/core/src/globals/host-tools.ts`) as a read-only global, so a space
+  (`libs/core/src/globals/host-tools.ts`) as a read-only global, so a space
   function (and `solve`) can read it. **Read-only** — the worker cannot mutate it.
 
-**Tests** (`packages/core/src/globals/host-tools.test.ts`): counters increment on
+**Tests** (`libs/core/src/globals/host-tools.test.ts`): counters increment on
 eval-error retries; snapshot is immutable from inside the VM.
 
 ### Phase 3 — `solve` escalation helper (USERLAND first)
@@ -200,11 +200,11 @@ reuses it. Until then it stays space-local.
 
 **Goal:** cheap raters/explorers, capable provers.
 
-- Map fork `role` → model alias in `packages/core/src/fork/roles.ts` +
-  `packages/cli/src/providers/resolve.ts` (e.g. `explore` → `LM_MODEL_M`,
+- Map fork `role` → model alias in `libs/core/src/fork/roles.ts` +
+  `libs/cli/src/providers/resolve.ts` (e.g. `explore` → `LM_MODEL_M`,
   `plan`/`general` → `LM_MODEL_L`). Default to current behavior when unset.
 
-**Tests** (`packages/core/src/fork/roles.test.ts`): role resolves to the configured
+**Tests** (`libs/core/src/fork/roles.test.ts`): role resolves to the configured
 alias; absent config falls back to the session default.
 
 ---
@@ -218,7 +218,7 @@ Unit tests miss model-behavior issues. After Phases 1–3, drive the built CLI a
 - budget termination disposes VMs and surfaces `BudgetExceededError`.
 
 ```
-node packages/cli/dist/cli/bin.js --space ./fixtures/engineer --claude \
+node libs/cli/dist/cli/bin.js --space ./fixtures/engineer --claude \
   --trace /tmp/solve.jsonl "<task with a checkable acceptance test>"
 ```
 

@@ -1,16 +1,16 @@
 # system-spaces resolution depends on Docker co-location
 
-`defaultSystemSpaceDirs()` (`packages/core/src/spaces/system.ts`) resolves the
+`defaultSystemSpaceDirs()` (`libs/core/src/spaces/system.ts`) resolves the
 shipped system spaces relative to the running module's `__dirname`. Because the
-cli **bundles `@lmthing/core`** into `packages/cli/dist/cli/bin.js`, at runtime
+cli **bundles `@lmthing/core`** into `libs/cli/dist/cli/bin.js`, at runtime
 `__dirname` is the cli's `dist/cli/` dir, so the probed paths become
 `…/cli/dist/system-spaces` and `…/cli/system-spaces` — neither of which exists
-in a plain build. The real assets live under `packages/core/system-spaces`.
+in a plain build. The real assets live under `libs/core/system-spaces`.
 
 The compute Docker image works around this by copying `system-spaces` to
-`packages/cli/dist/system-spaces` (see `devops/argocd/compute/Dockerfile`), so
+`libs/cli/dist/system-spaces` (see `devops/argocd/compute/Dockerfile`), so
 `materializeRuntime` finds them. But a developer running the built cli **outside
-Docker** — e.g. `pnpm build && node packages/cli/dist/cli/bin.js serve` — still
+Docker** — e.g. `pnpm build && node libs/cli/dist/cli/bin.js serve` — still
 gets an empty `<root>/system/` and every session fails with
 `Agent "thing" not found`. (Running from source via tsx works, since the
 src-layout candidate resolves.)

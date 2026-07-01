@@ -69,12 +69,12 @@ The harness is domain-agnostic.
 >
 > **Operator protocol:**
 >
-> 1. **Pre-flight.** Confirm `pnpm build` output exists (`packages/cli/dist/cli/bin.js`),
+> 1. **Pre-flight.** Confirm `pnpm build` output exists (`libs/cli/dist/cli/bin.js`),
 >    `.env` has `AZURE_*` + `TAVILY_API_KEY`, and `.issues/` is empty. Pick a model
 >    (`--model M`). Use an absolute path for the deep_research registration.
 > 2. **Launch** the architect in the background with a trace:
 >    ```bash
->    node packages/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect \
+>    node libs/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect \
 >      --model M --claude --trace /tmp/arch-traces/runN.jsonl "<task message>" \
 >      > /tmp/arch-traces/runN.stdout.log 2>&1
 >    ```
@@ -139,7 +139,7 @@ The harness is domain-agnostic.
   control surface:
 
   ```bash
-  node packages/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect \
+  node libs/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect \
     --model M --claude --web 3480 --trace /tmp/arch-traces/run1.jsonl \
     > /tmp/arch-traces/run1.stdout.log 2>&1 &
 
@@ -154,7 +154,7 @@ The harness is domain-agnostic.
 
   The `--trace` file is also served at `/trace.jsonl`, so the same run is replayable in
   the browser at `http://localhost:3480/?trace=/trace.jsonl` (timeline scrubber).
-  Full API guide: `packages/cli/src/web/AGENT.md` (also at `/api/help`).
+  Full API guide: `libs/cli/src/web/AGENT.md` (also at `/api/help`).
 
   Two **model-adherence** findings this surfaced (both pre-existing, orthogonal to the
   observability layer — not runtime bugs):

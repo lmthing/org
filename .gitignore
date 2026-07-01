@@ -12,7 +12,7 @@ trace.jsonl
 *.trace.jsonl
 
 # Live/keyless CLI integration test traces
-packages/cli/.live-traces/
+libs/cli/.live-traces/
 
 # solve() candidate scratch dirs (written by the solver fixture)
 work/

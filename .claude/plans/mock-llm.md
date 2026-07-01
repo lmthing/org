@@ -17,7 +17,7 @@ streamFn: (opts: StreamOpts) => Promise<StreamSession>
   StreamSession = { textStream: AsyncIterable<string>, abort() }
 ```
 
-- `packages/cli/src/cli/bin.ts:127` builds the real `streamFn` from `resolveModel` +
+- `libs/cli/src/cli/bin.ts:127` builds the real `streamFn` from `resolveModel` +
   `createStream` (the AI SDK). That is the **only** place credentials are used.
 - `session.ts` passes the same `streamFn` to the turn loop, `ForkEngine`, and
   `runDelegate` (verified: `session.ts:104/180/248/321/485`, `fork.ts:275`,
@@ -29,7 +29,7 @@ streamFn: (opts: StreamOpts) => Promise<StreamSession>
   `live-testing.md` §2 works unchanged against mock runs. Only the *content* is
   scripted; the wiring is real.
 
-`packages/core/src/eval/turn-loop-yield.test.ts:13` already has a one-shot
+`libs/core/src/eval/turn-loop-yield.test.ts:13` already has a one-shot
 `scriptedStream` helper — this plan generalizes that into a reusable, multi-turn,
 fork-aware mock and exposes it from the CLI.
 
@@ -64,16 +64,16 @@ Three builders cover the ergonomics, all returning a ready `streamFn`:
 
 ## Steps
 
-### 1. Core test utility — `packages/core/src/testing/mock-provider.ts` (new)
+### 1. Core test utility — `libs/core/src/testing/mock-provider.ts` (new)
 - Implement `createMockStreamFn`, `mockScript`, `mockMatch` per the design above.
 - Each returns `(opts) => Promise<StreamSession>`; the `textStream` is an async
   generator that yields the resolved chunks and honors `abort()` (mirror the
   existing `scriptedStream` abort flag at `turn-loop-yield.test.ts:13`).
 - An empty/whitespace response ends the loop (the turn loop already treats
   "no statements" as done — `turn-loop.ts:260`), so a handler returns `''` to stop.
-- Export the three builders + `MockHandler` type from `packages/core/src/index.ts`.
+- Export the three builders + `MockHandler` type from `libs/core/src/index.ts`.
 
-### 2. Unit tests — `packages/core/src/testing/mock-provider.test.ts` (new)
+### 2. Unit tests — `libs/core/src/testing/mock-provider.test.ts` (new)
 - `mockScript` drives a real `Session` over multiple `continue()` turns; assert the
   scripted statements are evaluated in order and the loop ends on `''`.
 - `mockMatch` selects by `opts` (e.g. a fork instruction substring routes to the
@@ -82,9 +82,9 @@ Three builders cover the ergonomics, all returning a ready `streamFn`:
 - Reuse the minimal `RenderHost`/`SessionDeps` pattern from `session.test.ts`.
 
 ### 3. CLI wiring — `--mock <file>` flag (+ `LM_MOCK` env)
-- `packages/cli/src/cli/args.ts`: add `--mock <path>` → `CliArgs.mock`; add a unit
+- `libs/cli/src/cli/args.ts`: add `--mock <path>` → `CliArgs.mock`; add a unit
   test in `args.test.ts`.
-- `packages/cli/src/cli/bin.ts`: if `args.mock ?? process.env.LM_MOCK` is set, build
+- `libs/cli/src/cli/bin.ts`: if `args.mock ?? process.env.LM_MOCK` is set, build
   `streamFn` by dynamically `import()`ing that module instead of calling
   `resolveModel`/`createStream`. **Skip `resolveModel` entirely in mock mode** so no
   key is required. The mock module's default export is a `MockHandler` (or an array
@@ -113,7 +113,7 @@ Make `live-testing.md` runnable without keys. Author a mock per phase:
 
 ### 6. Docs
 - CLAUDE.md: add `--mock <file>` / `LM_MOCK` to the CLI invocation list and a one-line
-  "Testing without keys" note pointing at `packages/core/src/testing/mock-provider.ts`.
+  "Testing without keys" note pointing at `libs/core/src/testing/mock-provider.ts`.
 - `.claude/skills/`: a short note (or extend `writing-tests.md`) on driving a full
   `Session`/CLI run with a mock handler.
 
@@ -126,6 +126,6 @@ Make `live-testing.md` runnable without keys. Author a mock per phase:
 ## Verification
 - `pnpm --filter @repl/core test` (new mock-provider tests green) + `pnpm typecheck`.
 - `pnpm build`, then run a solver scenario with **no `.env`**:
-  `node packages/cli/dist/cli/bin.js --space fixtures/solver --claude --mock fixtures/solver/mock.mjs --trace /tmp/t.jsonl "<task>"`
+  `node libs/cli/dist/cli/bin.js --space fixtures/solver --claude --mock fixtures/solver/mock.mjs --trace /tmp/t.jsonl "<task>"`
   and confirm the trace shows the expected `rung`/`attempts` and fork parallelism —
   i.e. the live-testing assertions pass against a keyless run.

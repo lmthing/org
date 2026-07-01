@@ -17,9 +17,9 @@ Full design in `.claude/plans/mock-llm.md`. Shipped: a scripted `streamFn` that 
 TypeScript instead of calling the AI SDK; sits upstream of the tracer so all trace
 assertions keep working. Proven keyless end-to-end (see item 2).
 
-- [x] `packages/core/src/testing/mock-provider.ts` — `createMockStreamFn`,
+- [x] `libs/core/src/testing/mock-provider.ts` — `createMockStreamFn`,
       `mockScript`, `mockMatch`; exported from `index.ts`
-- [x] `packages/core/src/testing/mock-provider.test.ts` — 10 tests: builders +
+- [x] `libs/core/src/testing/mock-provider.test.ts` — 10 tests: builders +
       multi-turn `Session` (continue() + sleep yield) + fork-routing + abort
 - [x] CLI `--mock <file>` flag + `LM_MOCK` env (`args.ts` + `bin.ts`); skips
       `resolveModel` so no credentials are needed; + `args.test.ts` coverage

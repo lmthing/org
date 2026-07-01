@@ -10,15 +10,15 @@ const __utilsDir = path.dirname(fileURLToPath(import.meta.url))
 
 /**
  * Locate the `sdk/org` root — the directory holding `libs/` (the shared
- * @lmthing/{ui,css,state,auth,utils} packages) and `packages/ui` (agent-ui).
+ * @lmthing/{ui,css,state,auth,utils} packages) and `libs/ui` (agent-ui).
  * The shared libs live INSIDE the sdk/org submodule so the compute pod image
  * (Docker build context = sdk/org) can build the apps self-contained.
  *
  * Two checkout layouts must both resolve:
  *  - Submodule-only (compute image): startDir is under sdk/org, which itself
- *    contains `libs/ui` + `packages/ui` → that ancestor is the org root.
+ *    contains `libs/ui` + `libs/ui` → that ancestor is the org root.
  *  - Full monorepo: the parent root contains `sdk/org/libs/ui`; apps may sit at
- *    the parent root (com/…) or under sdk/org (packages/ui/apps/…). Either way
+ *    the parent root (com/…) or under sdk/org (libs/ui/apps/…). Either way
  *    we either walk up INTO sdk/org or detect it as a `sdk/org` child.
  * @param {string} startDir
  * @returns {string}

@@ -6,7 +6,7 @@ Chat, Studio, and Computer are now one unified Vite SPA (`@lmthing/web-app`) ser
 CLI (`lmthing serve`) and deployed as three nginx images. The consolidation works, but the
 workspace grew organically and now carries friction that slows every new contributor:
 
-- **Package naming is contradictory** — `libs/ui` is `@lmthing/ui` while `packages/ui` is
+- **Package naming is contradictory** — `libs/ui` is `@lmthing/ui` while `libs/ui` is
   `@lmthing/agent-ui`. Two "ui" directories, neither matching its npm name.
 - **Broken/duplicated config** — `libs/ui/tsconfig.json` aliases point at `../../studio/src/*`
   (a directory that no longer exists); every lib has a bespoke tsconfig; only `libs/state`
@@ -42,7 +42,7 @@ the two UI packages into a single `@lmthing/ui` with subpath exports; **(3)** de
   and every `eslint.config.js` to re-export `@lmthing/config/eslint`. Eliminates per-lib drift
   (libs/auth standalone, libs/state composite, libs/ui broken).
 - Files: new `libs/config/`; edit `tsconfig.json` in `libs/{auth,css,state,ui,utils}` and
-  `packages/{core,cli,ui}` and `packages/ui/apps/web`. Keep root `tsconfig.base.json` as a thin
+  `packages/{core,cli,ui}` and `libs/ui/apps/web`. Keep root `tsconfig.base.json` as a thin
   re-export for back-compat, or repoint references. (This supersedes a separate eslint-config
   package — §1.3 below consumes this one.)
 
@@ -70,7 +70,7 @@ the two UI packages into a single `@lmthing/ui` with subpath exports; **(3)** de
   either a root projects config or keep its override and document why.
 
 ### 1.6 Dedupe web-app config constants
-- Create `packages/ui/apps/web/src/lib/config.ts` exporting `COMPUTER_BASE_URL`,
+- Create `libs/ui/apps/web/src/lib/config.ts` exporting `COMPUTER_BASE_URL`,
   `CLOUD_BASE_URL`, `WS_URL` resolvers (the `import.meta.env.VITE_* ?? (DEV ? '.test' : origin)`
   pattern, written once).
 - Replace the inline definitions across the ~9 files found, representatively:
@@ -80,13 +80,13 @@ the two UI packages into a single `@lmthing/ui` with subpath exports; **(3)** de
   `src/routes/studio/thing/index.tsx`, `src/routes/studio/$projectId/$spaceId/agent/$agentId/chat/index.tsx`.
 
 ### 1.7 Extract `ChatShell` ↔ `main.tsx` shared logic
-- Pull the URL↔state sync out of `packages/ui/src/app/main.tsx` into a reusable hook/util
+- Pull the URL↔state sync out of `libs/ui/src/app/main.tsx` into a reusable hook/util
   (e.g. `src/app/url-state.ts`: `useUrlState()` / `applyUrlToState` / `syncStateToUrl`) and have
   both `main.tsx` and `app/ChatShell.tsx` consume it. Removes the copy-paste.
 
 ### 1.8 Remove dead code / align React
-- Delete the unused `packages/ui/apps/web/src/lib/auth/AuthContext.tsx` (routes use `@lmthing/auth`).
-- Move `react`/`react-dom` in `packages/ui/package.json` from `dependencies` → `peerDependencies`
+- Delete the unused `libs/ui/apps/web/src/lib/auth/AuthContext.tsx` (routes use `@lmthing/auth`).
+- Move `react`/`react-dom` in `libs/ui/package.json` from `dependencies` → `peerDependencies`
   (`^18 || ^19`) so the SPA's React 19 isn't double-bundled against agent-ui's pinned 18.3.
   Add a root `pnpm.overrides` to enforce one React version. (This also de-risks the Phase 2 merge.)
 
@@ -102,13 +102,13 @@ the two UI packages into a single `@lmthing/ui` with subpath exports; **(3)** de
 ## Phase 2 — Structural reorganization (on the Phase-1 base)
 
 ### 2.1 Merge the two UI packages → single `@lmthing/ui`, organized **by product surface**
-Replace `libs/ui` + `packages/ui`(`@lmthing/agent-ui`) with one package whose top-level dirs map
+Replace `libs/ui` + `libs/ui`(`@lmthing/agent-ui`) with one package whose top-level dirs map
 1:1 to the three surfaces, so a developer working on Studio looks in exactly one place:
 
 ```
 libs/ui/                      # @lmthing/ui
   src/
-    chat/        ← packages/ui/src/{app,components,client,store,compat}  (was @lmthing/agent-ui)
+    chat/        ← libs/ui/src/{app,components,client,store,compat}  (was @lmthing/agent-ui)
                  #   ChatShell, AppShell, AgentChatPanel, useReplSession, rpc-client, url-state.ts (new)
     studio/      ← libs/ui/src/components/{shell,studio,agent,space,thing,
                  #     knowledge,functions,workflow,component-editor,presentation}
@@ -117,7 +117,7 @@ libs/ui/                      # @lmthing/ui
     components/  ← cross-surface shared components  (libs/ui/src/components/auth: pin-gate,
                  #     login-screen, github-*; anything used by ≥2 surfaces)
     elements/    ← libs/ui/src/elements  (typography, forms, layouts, nav, overlays — primitives)
-    theme/       ← packages/ui/src/theme
+    theme/       ← libs/ui/src/theme
     index.ts
   package.json   exports:
                  #   "./chat", "./studio", "./computer",
@@ -138,19 +138,19 @@ libs/ui/                      # @lmthing/ui
 - **Build strategy**: `libs/ui` is source-only (`main: ./src/index.ts`); `agent-ui` is tsup-built
   and pulls in `@lmthing/core` + `zustand`. Keep the merged package **source-only** (only the Vite
   SPA consumes it; Vite transpiles workspace sources) to drop tsup + the `dist-web` CSS step — OR
-  retain a tsup build if a non-Vite consumer needs it. `packages/cli` imports `@lmthing/agent-ui`
+  retain a tsup build if a non-Vite consumer needs it. `libs/cli` imports `@lmthing/agent-ui`
   → repoint to `@lmthing/ui/chat`; confirm cli doesn't need a built `dist/` form before going
   source-only.
 - **CSS**: fold agent-ui's `styles.css`/`dist-web/app.css` into a documented `@lmthing/ui/chat/css`
   entry; update the `/chat` route import.
-- **Workspace**: `packages/ui` ceases to be a package (only `apps/web` remains under it) — handled
+- **Workspace**: `libs/ui` ceases to be a package (only `apps/web` remains under it) — handled
   by the move in §2.2.
 
 ### 2.2 Collapse to a two-way split: `libs/` (everything) + `apps/` (the SPA)
-- **Move `packages/core` → `libs/core` and `packages/cli` → `libs/cli`.** npm names
+- **Move `libs/core` → `libs/core` and `libs/cli` → `libs/cli`.** npm names
   (`@lmthing/core`, `@lmthing/cli`) are unchanged, so there are **no import rewrites** — only the
   directory moves, workspace globs, tsconfig `extends`/references, and tsup paths.
-- **Move the SPA `packages/ui/apps/web` → `apps/web`** (`@lmthing/web-app` unchanged).
+- **Move the SPA `libs/ui/apps/web` → `apps/web`** (`@lmthing/web-app` unchanged).
 - After §2.1 merged the UI package into `libs/ui` and core/cli/the-SPA moved out, the `packages/`
   directory is empty and is **removed**.
 - `pnpm-workspace.yaml` globs become just:
@@ -159,10 +159,10 @@ libs/ui/                      # @lmthing/ui
     - 'libs/*'
     - 'apps/*'
   ```
-- **`resolveAppDist()`** in `cli/src/server/static-apps.ts` walks for the `packages/ui/apps`
+- **`resolveAppDist()`** in `cli/src/server/static-apps.ts` walks for the `libs/ui/apps`
   marker — update it to the new `apps/` location (and the source-tree fallback guess), plus the
   `LM_APP_DIST` docs.
-- **Docker**: the build context is `sdk/org`; update any `packages/cli` / `packages/ui/apps/web`
+- **Docker**: the build context is `sdk/org`; update any `libs/cli` / `libs/ui/apps/web`
   paths in the Dockerfile(s) and CI to `libs/cli` / `apps/web`.
 - Result: `libs/` = all packages (libraries + the core/cli runtime), `apps/` = the SPA. Document
   this two-way split in a new `WORKSPACE.md` and update both `CLAUDE.md` files (they currently
@@ -202,7 +202,7 @@ server/
 
 ```
 sdk/org/
-├── pnpm-workspace.yaml          # globs: packages/*, packages/ui/apps/*, libs/*
+├── pnpm-workspace.yaml          # globs: packages/*, libs/ui/apps/*, libs/*
 ├── package.json                 # @repl/root  ·  pnpm -r build
 ├── tsconfig.base.json           # used by packages/* only
 ├── vitest.config.ts             # include packages/* only (libs excluded)
@@ -254,7 +254,7 @@ sdk/org/
 │   │   ├── package.json         #   exports "./chat","./studio","./computer",
 │   │   │                        #           "./components/*","./elements/*","./theme","./chat/css"
 │   │   └── src/
-│   │       ├── chat/            #   from old packages/ui/src/{app,components,client,store,compat}
+│   │       ├── chat/            #   from old libs/ui/src/{app,components,client,store,compat}
 │   │       │   ├── ChatShell.tsx
 │   │       │   ├── AgentChatPanel.tsx
 │   │       │   ├── url-state.ts #   NEW — shared URL↔state hook (was dup in ChatShell/main)
@@ -264,14 +264,14 @@ sdk/org/
 │   │       ├── computer/        #   from old libs/ui/src/components/computer (IDE)
 │   │       ├── components/      #   cross-surface shared (old components/auth, etc.)
 │   │       ├── elements/        #   from old libs/ui/src/elements (primitives)
-│   │       ├── theme/           #   from old packages/ui/src/theme
+│   │       ├── theme/           #   from old libs/ui/src/theme
 │   │       └── index.ts
-│   ├── core/                    # @lmthing/core   (moved from packages/core; name unchanged)
-│   └── cli/                     # @lmthing/cli    (moved from packages/cli) — imports @lmthing/ui/chat
+│   ├── core/                    # @lmthing/core   (moved from libs/core; name unchanged)
+│   └── cli/                     # @lmthing/cli    (moved from libs/cli) — imports @lmthing/ui/chat
 │       └── src/server/
 │           ├── serve.ts         #   bootstrap only (create server, wire router+ws+static, listen)
 │           ├── router.ts        #   NEW — method+path → handler registry
-│           ├── static-apps.ts   #   marker updated: packages/ui/apps → apps  (resolveAppDist)
+│           ├── static-apps.ts   #   marker updated: libs/ui/apps → apps  (resolveAppDist)
 │           ├── routes/          #   NEW — extracted handlers
 │           │   ├── sessions.ts
 │           │   ├── projects.ts
@@ -285,7 +285,7 @@ sdk/org/
 │
 │   # packages/  ← REMOVED (empty after the moves above)
 │
-└── apps/                        # ← THE SPA (moved from packages/ui/apps/web)
+└── apps/                        # ← THE SPA (moved from libs/ui/apps/web)
     └── web/                     # @lmthing/web-app
         └── src/
             ├── lib/
@@ -331,7 +331,7 @@ pnpm build              # via turbo, ordered (1.4)
 
 **Web app end-to-end:**
 ```bash
-cd apps/web   # (packages/ui/apps/web pre-2.2)
+cd apps/web   # (libs/ui/apps/web pre-2.2)
 pnpm dev
 # Visit /chat, /studio, /computer — confirm all three surfaces render, the Studio THING dock
 # (AgentChatPanel via new subpath) loads, and pod base-URL resolution still works.
@@ -358,3 +358,48 @@ resolve via the new surface subpaths (`@lmthing/ui/{chat,studio,computer}`, `@lm
 - Async session-init handshake (clients poll today) — add a "ready" event later.
 - `resolveAppDist()` heuristic simplification beyond the 2.2 marker update.
 - Deep route nesting in Studio knowledge routes (cosmetic).
+
+
+
+## Continue from here
+
+Resuming 2.1 and also spawning 2.3 in parallel since they're independent:
+Agent "a8c05f4634883ab0b" had no active task; resumed from transcript in the background with your message. You'll be notified when it finishes. Output: /tmp/claude-1000/-home-vasilis-LMTHING-lmthing-sdk-org/acbf5b9b-cbb9-47c7-92d9-0651dd5a6fa6/tasks/a8c05f4634883ab0b.output
+
+
+● Agent(Phase 2.3: Decompose serve.ts into route registry)
+Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+2.1 resumed and 2.3 spawned fresh. Both running in parallel:
+
+- 2.1 (UI merge): resumed from where it stalled, will continue moving libs/ui/src/ into libs/ui/src/chat/ and reorganizing components into surface directories
+- 2.3 (serve.ts decomposition): fresh agent extracting the ~800-line server into router.ts + routes/{sessions,projects,spaces,fs,env,prices}.ts + ws/{agent,terminal}.ts
+
+These are independent — 2.3 only touches libs/cli/src/server/, 2.1 touches libs/ui/ and libs/ui/src/. Will ping when either completes.
+
+✻ Waiting for 2 background agents to finish
+
+● Agent "Phase 2.1: Merge libs/ui + libs/ui into single @lmthing/ui by surface" finished · 14m 2s
+
+● API Error: Unable to connect to API (ConnectionRefused)
+
+✻ Waiting for 1 background agent to finish
+
+● Agent "Phase 2.3: Decompose serve.ts into route registry" failed: Agent stalled: no progress for 600s (stream watchdog did not recover)
+
+Both hit issues — 2.1 got an API connection error mid-run, 2.3 stalled again. Let me check what 2.1 actually accomplished before resuming 2.3:
+
+  Ran 4 shell commands
+
+Both worktrees were cleaned up (no commits before failure). Let me resume 2.3 and re-spawn 2.1 with tighter step-by-step guidance:
+Agent "a8d221a22a75fb638" had no active task; resumed from transcript in the background with your message. You'll be notified when it finishes. Output: /tmp/claude-1000/-home-vasilis-LMTHING-lmthing-sdk-org/acbf5b9b-cbb9-47c7-92d9-0651dd5a6fa6/tasks/a8d221
+
+● Agent(Phase 2.1: Merge UI packages, small a
+Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+Both running again:
+- 2.3 resumed with step-by-step instructionguidance
+- 2.1 fresh agent with explicit atomic steps, 100-line read limits, and commit after every step
+
+The key change: agents now commit after each individual step instead of trying to do everything before committing,
+which means progress is preserved even if t

@@ -23,7 +23,7 @@ controllable from the CLI. Each is a small, additive change; live testing is
 blocked on them, so they are step 0.
 
 ### P0.1 — Expose budget from the CLI  *(required for Phase 1)*  ✅ DONE
-`SessionOpts.budget` exists but `packages/cli/src/cli/args.ts` + `bin.ts` do not
+`SessionOpts.budget` exists but `libs/cli/src/cli/args.ts` + `bin.ts` do not
 set it, so there is no way to cap a real run. Add:
 - `args.ts`: `--max-episodes <n>`, `--max-tool-calls <n>`, `--max-fork-depth <n>`,
   `--max-wallclock-ms <n>` → `CliArgs`.
@@ -80,7 +80,7 @@ pnpm install && pnpm build               # build everything to dist/
 
 Run target (built CLI, agent-driven mode, always with a trace):
 ```bash
-CLI="node packages/cli/dist/cli/bin.js"
+CLI="node libs/cli/dist/cli/bin.js"
 $CLI --space <dir> --claude --trace /tmp/t.jsonl "<task>"
 ```
 Use `--claude` for all runs (programmatic stdin/stdout; no Ink raw-mode PTY).
