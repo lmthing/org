@@ -7,7 +7,12 @@ import React, { useState } from 'react';
 import { render, Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 
-// Load .env from the directory where the script is invoked
+// Load .env from the directory where the script is invoked. Unconditionally
+// overwrites process.env for any key present in the file — this file is the
+// one written by PUT /api/env (server/routes/env.ts) and persisted on the pod
+// volume, so it must supersede the pod's k8s-injected env vars (e.g. the
+// litellmEnvDefaults set by cloud/gateway), matching applyEnvContent's
+// semantics in server/serve.ts, which re-applies the same file later.
 function loadEnv() {
   try {
     const lines = readFileSync(join(process.cwd(), '.env'), 'utf8').split('\n');
@@ -18,7 +23,7 @@ function loadEnv() {
       if (eq === -1) continue;
       const key = trimmed.slice(0, eq).trim();
       const val = trimmed.slice(eq + 1).trim();
-      if (key && !(key in process.env)) process.env[key] = val;
+      if (key) process.env[key] = val;
     }
   } catch { /* no .env in cwd */ }
 }
