@@ -1,3 +1,4 @@
+import '@lmthing/css/elements/nav/app-sidebar/index.css'
 import * as React from 'react'
 import { ChevronDown, ChevronRight, ChevronLeft, Plus, X, PanelLeft } from 'lucide-react'
 import { cn } from '../../../lib/utils'
@@ -85,18 +86,15 @@ function SectionHeader({
   onToggle: () => void
 }) {
   return (
-    <button
-      onClick={onToggle}
-      className="w-full flex items-center gap-1 px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
-    >
+    <button onClick={onToggle} className="app-sidebar__section-header">
       {expanded ? (
-        <ChevronDown className="w-3 h-3 shrink-0" aria-hidden="true" />
+        <ChevronDown className="app-sidebar__section-icon" aria-hidden="true" />
       ) : (
-        <ChevronRight className="w-3 h-3 shrink-0" aria-hidden="true" />
+        <ChevronRight className="app-sidebar__section-icon" aria-hidden="true" />
       )}
-      <span className="flex-1 text-left">{label}</span>
+      <span className="app-sidebar__section-label">{label}</span>
       {count !== undefined && count > 0 && (
-        <span className="text-muted-foreground/60 font-normal">{count}</span>
+        <span className="app-sidebar__section-count">{count}</span>
       )}
     </button>
   )
@@ -140,32 +138,30 @@ function ProjectDropdown({
   }
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="app-sidebar__dropdown">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-muted text-foreground text-sm font-medium hover:bg-muted/70 transition-colors"
+        className="app-sidebar__dropdown-trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="flex-1 text-left truncate">{active?.name ?? 'Select project'}</span>
-        <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="app-sidebar__dropdown-label">{active?.name ?? 'Select project'}</span>
+        <ChevronDown className="app-sidebar__dropdown-chevron" aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-20 rounded-xl border border-border bg-popover shadow-lg overflow-hidden">
-          <div className="max-h-64 overflow-y-auto py-1">
+        <div className="app-sidebar__dropdown-menu">
+          <div className="app-sidebar__dropdown-list">
             {projects.map((p) => (
-              <div key={p.id} className="group flex items-center gap-1 px-1">
+              <div key={p.id} className="app-sidebar__dropdown-row">
                 <button
                   onClick={() => {
                     onSelectProject(p.id)
                     setOpen(false)
                   }}
                   className={cn(
-                    'flex-1 text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors',
-                    p.id === activeProjectId
-                      ? 'bg-muted text-foreground font-medium'
-                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                    'app-sidebar__dropdown-item',
+                    p.id === activeProjectId && 'app-sidebar__dropdown-item--active',
                   )}
                 >
                   {p.name}
@@ -173,19 +169,19 @@ function ProjectDropdown({
                 {onDeleteProject && p.id !== activeProjectId && (
                   <button
                     onClick={() => void onDeleteProject(p.id)}
-                    className="hidden group-hover:flex w-5 h-5 items-center justify-center text-muted-foreground hover:text-destructive rounded text-xs shrink-0"
+                    className="app-sidebar__dropdown-delete"
                     title="Delete project"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="app-sidebar__icon" />
                   </button>
                 )}
               </div>
             ))}
           </div>
           {onCreateProject && (
-            <div className="flex gap-1 border-t border-border px-2 py-2">
+            <div className="app-sidebar__dropdown-create">
               <input
-                className="flex-1 min-w-0 bg-muted rounded-lg px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                className="app-sidebar__dropdown-input"
                 placeholder="New project…"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
@@ -196,10 +192,10 @@ function ProjectDropdown({
               <button
                 onClick={() => void create()}
                 disabled={creating || !newName.trim()}
-                className="px-2 py-1 bg-muted text-foreground rounded-lg text-xs hover:opacity-90 disabled:opacity-40"
+                className="app-sidebar__dropdown-add"
                 title="Create project"
               >
-                <Plus className="w-3 h-3" />
+                <Plus className="app-sidebar__icon" />
               </button>
             </div>
           )}
@@ -244,21 +240,18 @@ export function AppSidebar({
   const [collapsed, toggleCollapsed] = usePersistentBool(`${storageKey}.collapsed`, defaultCollapsed)
   const isCollapsed = collapsible && collapsed
 
-  const baseClass =
-    'flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden transition-all duration-200'
-
   // Collapsed: a slim rail with just an expand affordance.
   if (isCollapsed) {
     return (
-      <nav aria-label="sidebar (collapsed)" className={cn(baseClass, 'w-12', className)}>
-        <div className="flex flex-col items-center py-3 gap-2">
+      <nav aria-label="sidebar (collapsed)" className={cn('app-sidebar app-sidebar--collapsed', className)}>
+        <div className="app-sidebar__rail">
           <button
             onClick={toggleCollapsed}
             title="Expand sidebar"
             aria-label="Expand sidebar"
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+            className="app-sidebar__rail-btn"
           >
-            <PanelLeft className="w-4 h-4" aria-hidden="true" />
+            <PanelLeft className="app-sidebar__section-icon" aria-hidden="true" />
           </button>
         </div>
       </nav>
@@ -268,26 +261,26 @@ export function AppSidebar({
   return (
     <nav
       aria-label="projects, spaces and conversations"
-      className={cn(baseClass, collapsible && 'w-64', className)}
+      className={cn('app-sidebar', collapsible && 'app-sidebar--fixed', className)}
     >
       {/* Brand + collapse toggle */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-sidebar-border shrink-0">
-        <span className="font-display font-bold text-base text-foreground">THING</span>
-        <span className="text-xs text-muted-foreground">by lmthing</span>
+      <div className="app-sidebar__header">
+        <span className="app-sidebar__brand">THING</span>
+        <span className="app-sidebar__brand-sub">by lmthing</span>
         {collapsible && (
           <button
             onClick={toggleCollapsed}
             title="Collapse sidebar"
             aria-label="Collapse sidebar"
-            className="ml-auto w-6 h-6 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+            className="app-sidebar__collapse-btn"
           >
-            <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+            <ChevronLeft className="app-sidebar__section-icon" aria-hidden="true" />
           </button>
         )}
       </div>
 
       {/* Project dropdown + optional new chat */}
-      <div className="px-3 py-2 flex flex-col gap-2 shrink-0">
+      <div className="app-sidebar__top">
         <ProjectDropdown
           projects={projects}
           activeProjectId={activeProjectId}
@@ -299,7 +292,7 @@ export function AppSidebar({
           <button
             onClick={onNewChat}
             disabled={!activeProjectId || newChatBusy}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="app-sidebar__new-chat"
           >
             {newChatBusy ? '…' : '+ New chat'}
           </button>
@@ -307,9 +300,9 @@ export function AppSidebar({
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-2 py-1">
+      <div className="app-sidebar__content">
         {/* Spaces */}
-        <div className="mb-3">
+        <div className="app-sidebar__section">
           <SectionHeader
             label="Spaces"
             count={spaces.length}
@@ -317,21 +310,19 @@ export function AppSidebar({
             onToggle={toggleSpaces}
           />
           {spacesExpanded && (
-            <div className="mt-0.5">
+            <div className="app-sidebar__section-body">
               {spacesLoading && spaces.length === 0 ? (
-                <p className="px-2 py-1 text-sm text-muted-foreground">Loading…</p>
+                <p className="app-sidebar__empty">Loading…</p>
               ) : spaces.length === 0 ? (
-                <p className="px-2 py-1 text-sm text-muted-foreground">No spaces yet.</p>
+                <p className="app-sidebar__empty">No spaces yet.</p>
               ) : (
                 spaces.map((s) => (
                   <button
                     key={s.id}
                     onClick={() => onSelectSpace(s.id)}
                     className={cn(
-                      'w-full text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors',
-                      s.id === activeSpaceId
-                        ? 'bg-muted text-foreground font-medium'
-                        : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                      'app-sidebar__item',
+                      s.id === activeSpaceId && 'app-sidebar__item--active',
                     )}
                     title={s.name}
                   >
@@ -345,15 +336,15 @@ export function AppSidebar({
 
         {/* Conversations (chat only) */}
         {conversations !== undefined && (
-          <div className="mb-3">
+          <div className="app-sidebar__section">
             <SectionHeader label="Conversations" expanded={convExpanded} onToggle={toggleConv} />
-            {convExpanded && <div className="mt-0.5">{conversations}</div>}
+            {convExpanded && <div className="app-sidebar__section-body">{conversations}</div>}
           </div>
         )}
       </div>
 
       {/* Footer */}
-      {footer && <div className="shrink-0 border-t border-sidebar-border">{footer}</div>}
+      {footer && <div className="app-sidebar__footer">{footer}</div>}
     </nav>
   )
 }

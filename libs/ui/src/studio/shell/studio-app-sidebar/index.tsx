@@ -12,9 +12,9 @@ import { useMemo } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useProjects, useProject } from '@lmthing/state'
 import { buildProjectPath, buildSpacePath } from '@lmthing/ui/lib/space-path'
-import { otherAppLinks } from '@lmthing/ui/lib/app-urls'
 import { AppSidebar } from '@lmthing/ui/elements/nav/app-sidebar'
 import type { AppSidebarSpace } from '@lmthing/ui/elements/nav/app-sidebar'
+import { AppLinks } from '@lmthing/ui/elements/nav/app-links'
 
 export interface StudioAppSidebarProps {
   className?: string
@@ -34,21 +34,7 @@ export function StudioAppSidebar({ className }: StudioAppSidebarProps) {
     [spaces],
   )
 
-  const footer = (
-    <div className="px-3 py-2 flex items-center gap-1">
-      {otherAppLinks('studio').map((link) => (
-        <a
-          key={link.app}
-          href={link.url}
-          title={`Open lmthing.${link.app}`}
-          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
-        >
-          <span aria-hidden="true">{link.emoji}</span>
-          {link.label}
-        </a>
-      ))}
-    </div>
-  )
+  const footer = <AppLinks current="studio" />
 
   return (
     <AppSidebar

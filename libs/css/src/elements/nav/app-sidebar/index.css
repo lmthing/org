@@ -1,0 +1,178 @@
+@reference "../../../theme.css";
+
+/* Shared left navigation for the chat + studio surfaces. Purely presentational;
+   width/collapse behaviour is driven by modifier classes from the component. */
+
+.app-sidebar {
+  @apply flex flex-col h-full bg-sidebar border-r border-sidebar-border
+         overflow-hidden transition-all duration-200;
+}
+
+/* Full width when the surface owns the sidebar sizing (collapsible mode). */
+.app-sidebar--fixed {
+  @apply w-64;
+}
+
+/* Slim icon rail when collapsed. */
+.app-sidebar--collapsed {
+  @apply w-12;
+}
+
+.app-sidebar__rail {
+  @apply flex flex-col items-center py-3 gap-2;
+}
+
+.app-sidebar__rail-btn {
+  @apply w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground
+         hover:bg-muted/60 hover:text-foreground transition-colors;
+}
+
+/* Brand + collapse toggle */
+.app-sidebar__header {
+  @apply flex items-center gap-2 px-4 py-3 border-b border-sidebar-border shrink-0;
+}
+
+.app-sidebar__brand {
+  @apply font-display font-bold text-base text-foreground;
+}
+
+.app-sidebar__brand-sub {
+  @apply text-xs text-muted-foreground;
+}
+
+.app-sidebar__collapse-btn {
+  @apply ml-auto w-6 h-6 flex items-center justify-center rounded-lg text-muted-foreground
+         hover:bg-muted/60 hover:text-foreground transition-colors;
+}
+
+/* Project dropdown + optional new-chat button */
+.app-sidebar__top {
+  @apply px-3 py-2 flex flex-col gap-2 shrink-0;
+}
+
+.app-sidebar__new-chat {
+  @apply w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl
+         bg-primary text-primary-foreground text-sm font-medium
+         hover:opacity-90 transition-opacity disabled:opacity-50;
+}
+
+/* Scrollable content */
+.app-sidebar__content {
+  @apply flex-1 overflow-y-auto px-2 py-1;
+}
+
+.app-sidebar__section {
+  @apply mb-3;
+}
+
+.app-sidebar__section-body {
+  @apply mt-0.5;
+}
+
+.app-sidebar__empty {
+  @apply px-2 py-1 text-sm text-muted-foreground;
+}
+
+.app-sidebar__item {
+  @apply w-full text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors
+         text-muted-foreground hover:bg-muted/60 hover:text-foreground;
+}
+
+.app-sidebar__item--active {
+  @apply bg-muted text-foreground font-medium;
+}
+
+.app-sidebar__footer {
+  @apply shrink-0 border-t border-sidebar-border;
+}
+
+/* Collapsible section header */
+.app-sidebar__section-header {
+  @apply w-full flex items-center gap-1 px-2 py-1 text-xs font-semibold
+         text-muted-foreground uppercase tracking-wider
+         hover:text-foreground transition-colors;
+}
+
+.app-sidebar__section-icon {
+  @apply w-3 h-3 shrink-0;
+}
+
+.app-sidebar__section-label {
+  @apply flex-1 text-left;
+}
+
+.app-sidebar__section-count {
+  @apply text-muted-foreground/60 font-normal;
+}
+
+/* Project dropdown */
+.app-sidebar__dropdown {
+  @apply relative;
+}
+
+.app-sidebar__dropdown-trigger {
+  @apply w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-muted text-foreground
+         text-sm font-medium hover:bg-muted/70 transition-colors;
+}
+
+.app-sidebar__dropdown-label {
+  @apply flex-1 text-left truncate;
+}
+
+.app-sidebar__dropdown-chevron {
+  @apply w-4 h-4 shrink-0 text-muted-foreground;
+}
+
+.app-sidebar__dropdown-menu {
+  @apply absolute left-0 right-0 top-full mt-1 z-20 rounded-xl border border-border
+         bg-popover shadow-lg overflow-hidden;
+}
+
+.app-sidebar__dropdown-list {
+  @apply max-h-64 overflow-y-auto py-1;
+}
+
+.app-sidebar__dropdown-row {
+  @apply flex items-center gap-1 px-1;
+}
+
+.app-sidebar__dropdown-item {
+  @apply flex-1 text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors
+         text-muted-foreground hover:bg-muted/60 hover:text-foreground;
+}
+
+.app-sidebar__dropdown-item--active {
+  @apply bg-muted text-foreground font-medium;
+}
+
+.app-sidebar__dropdown-delete {
+  @apply hidden w-5 h-5 items-center justify-center text-muted-foreground
+         rounded text-xs shrink-0;
+}
+
+.app-sidebar__dropdown-delete:hover {
+  @apply text-destructive;
+}
+
+/* Reveal the delete affordance on row hover (BEM alternative to `group-hover`). */
+.app-sidebar__dropdown-row:hover .app-sidebar__dropdown-delete {
+  @apply flex;
+}
+
+.app-sidebar__dropdown-create {
+  @apply flex gap-1 border-t border-border px-2 py-2;
+}
+
+.app-sidebar__dropdown-input {
+  @apply flex-1 min-w-0 bg-muted rounded-lg px-2 py-1 text-xs text-foreground
+         placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring;
+}
+
+.app-sidebar__dropdown-add {
+  @apply px-2 py-1 bg-muted text-foreground rounded-lg text-xs
+         hover:opacity-90 disabled:opacity-40;
+}
+
+.app-sidebar__icon {
+  @apply w-3 h-3;
+}

@@ -4,7 +4,8 @@ import { useStore, connectLive } from '../store/store.js';
 import type { Project, ModelPricing } from '../store/store.js';
 import { authHeaders, wsTokenSuffix } from './auth.js';
 import { AppSidebar } from '../../elements/nav/app-sidebar';
-import { crossAppOrigin, appRoute } from '../../lib/app-urls';
+import { AppLinks } from '../../elements/nav/app-links';
+import { crossAppOrigin } from '../../lib/app-urls';
 
 interface PersistedSessionMeta {
   sessionId: string; projectId?: string; agentSlug: string; spaceDir: string;
@@ -43,11 +44,6 @@ function switchSession(sessionId: string): void {
   // On mobile the sidebar is an overlay drawer — close it so the conversation shows.
   if (window.innerWidth < 768) useStore.getState().setSidebarOpen(false);
 }
-
-const CROSS_APP_LINKS: { app: 'studio' | 'computer'; label: string; emoji: string }[] = [
-  { app: 'studio', label: 'Studio', emoji: '🎛️' },
-  { app: 'computer', label: 'Computer', emoji: '🖥️' },
-];
 
 function relativeTime(ts: number): string {
   const diff = Date.now() - ts;
@@ -243,19 +239,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
   const footer = (
     <>
       {/* Cross-app links */}
-      <div className="px-3 py-2 flex items-center gap-1 border-b border-sidebar-border">
-        {CROSS_APP_LINKS.map(link => (
-          <a
-            key={link.app}
-            href={`${crossAppOrigin(link.app)}${appRoute(link.app)}`}
-            title={`Open lmthing.${link.app}`}
-            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
-          >
-            <span aria-hidden="true">{link.emoji}</span>
-            {link.label}
-          </a>
-        ))}
-      </div>
+      <AppLinks current="chat" className="app-links--bordered" />
       {/* Project settings */}
       <div className="px-3 py-2 flex items-center gap-2">
         {activeProject && onProjectSettings && (
