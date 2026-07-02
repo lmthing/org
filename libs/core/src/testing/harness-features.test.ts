@@ -146,10 +146,13 @@ function assertConversationInvariants(
 ): void {
   expect(reqs.length).toBeGreaterThan(0);
 
-  // The opening user message frames the task as an instruction to emit TS only.
+  // The opening user message carries the request under neutral framing — the
+  // TS-only reply channel lives in STATEMENT_PROTOCOL (system block), NOT in the
+  // user message (the old "write TypeScript code / Task:" wrapper primed triage
+  // toward the code path on every request — live E3 regression).
   const firstUser = reqs[0]!.messages.find((m) => m.role === 'user');
-  expect(firstUser?.content).toContain(`Task: ${opts.task}`);
-  expect(firstUser?.content).toContain('Respond with TypeScript code only');
+  expect(firstUser?.content).toContain(`User request:\n\n${opts.task}`);
+  expect(firstUser?.content).not.toContain('Respond with TypeScript code only');
 
   const system0 = reqs[0]!.system;
   for (const need of opts.expectInSystem ?? []) expect(system0).toContain(need);
@@ -1015,6 +1018,62 @@ describe('harness — delegate() to a tasklist-backed action', () => {
     expect(childPrompt).toContain('Implement this action by calling');
     expect(childPrompt).toContain('tasklist("assemble"');
     expect(childPrompt).toContain('Context: {"n":3}');
+  });
+
+  it('the dictated action hint `tasklist(name, { query, ...context })` passes a required-query input schema (E2 live finding)', async () => {
+    // A worker whose tasklist REQUIRES `query` in its seed — the shape of the shipped
+    // research/deep_research tasklists. The old hint dictated `tasklist(name, context)`,
+    // so a model following it verbatim hit "invalid seed: missing required field query"
+    // and burned a turn on every action-style delegate.
+    const dir = await mkdtemp(join(tmpdir(), 'lmthing-tlworker-q-'));
+    tmpDirs.push(dir);
+    const agent = join(dir, 'agents', 'worker', 'instruct.md');
+    await mkdir(dirname(agent), { recursive: true });
+    await writeFile(
+      agent,
+      `---\ntitle: Worker\nactions:\n  - id: build\n    label: Build\n    description: Build something\n    tasklist: assemble\n---\n\nYou are a worker.`,
+      'utf8',
+    );
+    const tl = join(dir, 'tasklists', 'assemble');
+    await mkdir(tl, { recursive: true });
+    await writeFile(
+      join(tl, '01-make.md'),
+      `---\nid: make\ngoal: true\ninput:\n  query: string\noutput:\n  echoed: string\n---\n\nMAKE_Q: echo the query.`,
+      'utf8',
+    );
+
+    let sessionStep = 0;
+    let childErrorTurns = 0;
+    const m = mockMatch(
+      [
+        forkRule('MAKE_Q', `currentTask.resolve({ echoed: query });`),
+        {
+          when: (o: StreamOpts) => o.messages.some((mm) => mm.content.includes('invalid seed')),
+          respond: () => { childErrorTurns++; return `currentTask.resolve({ echoed: 'error-path' });`; },
+        },
+        {
+          // The child follows the hint VERBATIM — first turn, no error yet.
+          when: (o: StreamOpts) => o.messages.some((mm) => mm.content.includes('Run action: build')),
+          respond: () => `const result = await tasklist("assemble", { query, ...context });`,
+        },
+      ],
+      () => {
+        sessionStep++;
+        if (sessionStep === 1)
+          return `const d = await delegate(${JSON.stringify(dir)}, "worker", "build", { query: "hello-q" }) as { ok: boolean; data: { echoed: string } };`;
+        if (sessionStep === 2) return `display("echoed=" + (d as any).data.echoed);`;
+        return '';
+      },
+    );
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(childErrorTurns).toBe(0); // the verbatim hint must NOT produce an invalid-seed turn
+    expect(r.displays).toContain('echoed=hello-q');
+    // And the hint itself now dictates the merged-seed form.
+    const delReqs = r.trace.filter(
+      (e): e is LlmReq => e.type === 'llm_request' && e.context.startsWith('delegate:'),
+    );
+    expect(lastUserMessage(delReqs[0]!)).toContain('{ query, ...context }');
   });
 
   it('no-action delegation: the child initiates one of its own tasklists, auto-captured', async () => {

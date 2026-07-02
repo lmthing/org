@@ -36,12 +36,72 @@ const FENCE_LANG_SUFFIXES: ReadonlySet<string> = new Set(
 );
 
 /** Strip markdown code fence lines (and stray/partial fence language tags) from a
- *  chunk before feeding to the boundary detector. Exported for direct testing. */
+ *  chunk before feeding to the boundary detector. Exported for direct testing.
+ *
+ *  NOTE: only safe on text whose newlines are FINAL (a complete response, or the
+ *  end-of-stream flush). For live streaming chunks use {@link FenceLineFilter} —
+ *  applying this per chunk swallowed mid-statement tokens that happened to arrive
+ *  as their own chunk and equal a fence-lang suffix (live E5 failure:
+ *  `JSON.stringify` streamed as […, "JSON", ".stringify…"] became `.stringify`,
+ *  corrupting the architect's statement; a lone " on" chunk dies the same way). */
 export function stripMarkdownFences(chunk: string): string {
   return chunk
     .split('\n')
     .filter((line) => !/^\s*```/.test(line) && !FENCE_LANG_SUFFIXES.has(line.trim().toLowerCase()))
     .join('\n');
+}
+
+/** Streaming-safe fence stripper: drop decisions are only ever made on COMPLETE
+ *  lines (chunk boundaries are token boundaries, not line boundaries), so a
+ *  mid-statement token that streams as its own chunk and equals a fence-lang
+ *  suffix (`JSON`, ` on`, `ts`, …) is never swallowed. A partial line is held
+ *  back ONLY while it could still grow into a droppable line — a short
+ *  all-letter run (potential bare fence tag) or a backtick opening; anything
+ *  else is released immediately so ordinary statements keep flowing through the
+ *  live streaming pipeline (with its tracer events) instead of piling into the
+ *  end-of-stream flush. Once a line's head has been released, its remainder is
+ *  exempt from drop checks (it is provably part of a real code line). A fence
+ *  tag split across chunks (```typ + escript) reassembles here and drops via
+ *  the ^``` rule. */
+export class FenceLineFilter {
+  private buf = '';
+  /** Part of the current (still-open) line was already released downstream. */
+  private headEmitted = false;
+
+  private static droppable(line: string): boolean {
+    return /^\s*```/.test(line) || FENCE_LANG_SUFFIXES.has(line.trim().toLowerCase());
+  }
+
+  /** Could this partial line still become droppable with more text appended? */
+  private static ambiguous(tail: string): boolean {
+    return /^\s*(?:`{1,3}.*|[A-Za-z]{0,10})$/.test(tail);
+  }
+
+  feed(chunk: string): string {
+    this.buf += chunk;
+    let out = '';
+    const lines = this.buf.split('\n');
+    this.buf = lines.pop()!;
+    for (const line of lines) {
+      const exempt = this.headEmitted; // remainder of a line whose head already shipped
+      this.headEmitted = false;
+      if (exempt || !FenceLineFilter.droppable(line)) out += line + '\n';
+    }
+    if (this.buf && (this.headEmitted || !FenceLineFilter.ambiguous(this.buf))) {
+      out += this.buf;
+      this.buf = '';
+      this.headEmitted = true;
+    }
+    return out;
+  }
+
+  flush(): string {
+    const tail = this.buf;
+    this.buf = '';
+    const exempt = this.headEmitted;
+    this.headEmitted = false;
+    return tail && (exempt || !FenceLineFilter.droppable(tail)) ? tail : '';
+  }
 }
 
 /** Statements that begin with one of these never parse as the start of a prose
@@ -247,6 +307,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     const stream = await streamFn({ system: systemBlock, messages: promptMessages, model: deps.model });
 
     const detector = new BoundaryDetector();
+    const fenceFilter = new FenceLineFilter();
     let pendingYield: YieldRequest | null = null;
     let yieldingStatement: string | null = null;
     let hadStatements = false;
@@ -341,7 +402,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         if (step.done) break;
         const chunk = step.value;
         assistantContent += chunk;
-        const statements = detector.feed(stripMarkdownFences(chunk));
+        const statements = detector.feed(fenceFilter.feed(chunk));
 
         for (const stmt of statements) {
           // Drop narrated prose the model emitted instead of code (e.g. "Based on the
@@ -416,26 +477,42 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     // `stream`/`aborted` (the stream has already ended) — that asymmetry is intentional
     // and predates this refactor; processStatement only supplies the shared pipeline.
     if (!aborted) {
-      const trailing = stripMarkdownFences(detector.flush()).trim();
-      if (trailing) {
-        const outcome = processStatement(trailing);
+      // Release the fence filter's held partial line first — it may complete one
+      // or more statements in the detector — then flush the detector's own tail.
+      const released = fenceFilter.flush();
+      const flushedStatements = released ? detector.feed(released) : [];
+      const trailing = detector.flush().trim();
+      for (const stmt of [...flushedStatements, ...(trailing ? [trailing] : [])]) {
+        const outcome = processStatement(stmt);
         if (outcome.kind !== 'dropped') hadStatements = true;
+        // Mirror the streaming loop: stop at the first error or yield.
+        if (outcome.kind !== 'ok' && outcome.kind !== 'dropped') break;
       }
     }
 
     // Await token usage from the stream (best-effort; available after stream is consumed).
     // Skip when the stream was aborted mid-way (yield/error): the usage event arrives
     // only in the final API chunk, which never comes after abort, so the promise hangs.
+    // Even on a "normal" end the promise can stay pending forever (provider ended the
+    // stream without the final usage chunk — live E6 hang: one fork stalled here with
+    // no timer left, the DAG deadlocked, and Node exited silently once every other
+    // promise drained). Usage is telemetry, never worth blocking on: bound the wait.
     let inputTokens: number | undefined;
     let outputTokens: number | undefined;
-    if (stream.usage && !aborted) {
+    if (stream.usage && !aborted && !streamErrored) {
+      let usageTimer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const u = await stream.usage;
-        if (u.promptTokens > 0 || u.completionTokens > 0) {
+        const u = await Promise.race([
+          stream.usage,
+          new Promise<undefined>((res) => { usageTimer = setTimeout(() => res(undefined), 10_000); }),
+        ]);
+        if (u && (u.promptTokens > 0 || u.completionTokens > 0)) {
           inputTokens = u.promptTokens;
           outputTokens = u.completionTokens;
         }
-      } catch { /* usage unavailable */ }
+      } catch { /* usage unavailable */ } finally {
+        if (usageTimer) clearTimeout(usageTimer);
+      }
     }
 
     // Use parsed statements for history so incomplete trailing stream text is excluded.

@@ -36,19 +36,26 @@ export interface VM {
   ctx: QuickJSAsyncContext;
 }
 
-let wasmModulePromise: Promise<QuickJSAsyncWASMModule> | null = null;
-
+// Each VM gets its OWN WebAssembly module instance. Asyncified module state
+// (suspension bookkeeping, and the teardown corruption behind the swallowed
+// `gc_obj_list` assertion) is shared across every runtime created inside one
+// module — quickjs-emscripten's docs call this out as the one way actions leak
+// between otherwise-isolated contexts, and recommend a module per independent
+// workload. Sharing one module across the session VM + concurrently-executing
+// fork/delegate VMs produced SILENTLY dropped host-bridge calls late in heavy
+// runs (a `delegate()` that never registered its yield, `fetch()` resolving
+// `undefined` inside webSearch, `currentTask.resolve()` no-oping so live forks
+// salvaged despite the model resolving) — see the E2 live-test finding
+// (2026-07-02). Instantiation overhead is milliseconds against fork lifetimes
+// of seconds, so isolation wins.
 function getWASMModule(): Promise<QuickJSAsyncWASMModule> {
-  if (!wasmModulePromise) {
-    // LM_QJS_DEBUG loads the assertion-tracking debug variant, whose ctx.dispose()
-    // THROWS a descriptive "handle not disposed" error (with creation stack) instead
-    // of the release variant's fatal `list_empty(&rt->gc_obj_list)` WASM abort — used
-    // to pinpoint handle leaks in VM teardown.
-    wasmModulePromise = process.env['LM_QJS_DEBUG']
-      ? newQuickJSAsyncWASMModuleFromVariant(DEBUG_ASYNC)
-      : newQuickJSAsyncWASMModule();
-  }
-  return wasmModulePromise;
+  // LM_QJS_DEBUG loads the assertion-tracking debug variant, whose ctx.dispose()
+  // THROWS a descriptive "handle not disposed" error (with creation stack) instead
+  // of the release variant's fatal `list_empty(&rt->gc_obj_list)` WASM abort — used
+  // to pinpoint handle leaks in VM teardown.
+  return process.env['LM_QJS_DEBUG']
+    ? newQuickJSAsyncWASMModuleFromVariant(DEBUG_ASYNC)
+    : newQuickJSAsyncWASMModule();
 }
 
 export async function createVM(opts: VMOpts = {}): Promise<VM> {

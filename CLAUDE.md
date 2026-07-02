@@ -99,9 +99,7 @@ Secrets (Claude Code web): API keys stored encrypted in `.env.encrypted` (AES-25
 
 See `.issues/`. When all are resolved this section is empty.
 
-- `system-spaces-bundle-resolution.md` — `defaultSystemSpaceDirs()` resolves relative to the cli bundle; only the Docker image co-locates the assets, so a non-Docker built `serve` gets an empty `system/` and sessions fail with `Agent "thing" not found` (agent slug `thing`, in the `user-thing` space). `materializeRuntime` now warns + `runtimeNeedsInit` repairs an empty dir.
-- `investigate-forks-degrade-under-delegate-nesting.md` — `deep_research`'s `investigate` forks are reliable standalone but 6–8 of them fail with small-model variable errors when `deep_research` runs inside a `delegate()` layer, salvaging a placeholder report that derails the `THING → architect` build. (The hard teardown crash on that path is already fixed.)
-- `thing-abandons-build-on-salvaged-research.md` — when research comes back as the salvaged "(unavailable …)" placeholder, THING/architect go off-script instead of proceeding to the build (which tolerates empty research).
+- `delegate-writes-resolve-against-system-space-dir.md` — a delegate's relative `writeFile` resolves against the delegated agent's OWN space dir; in workspace runs that is the SOURCE system-spaces tree, so a writing delegate (engineer) pollutes the installed system space instead of the project (found live in E4, 2026-07-02).
 
 ## Rules
 

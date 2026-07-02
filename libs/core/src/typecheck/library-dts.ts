@@ -52,6 +52,12 @@ declare namespace JSX {
   interface IntrinsicElements {
     [elemName: string]: Record<string, unknown>;
   }
+  // Models reflexively write key={i} inside .map() loops (React muscle memory).
+  // Accept it on every component instead of failing the statement — the renderer
+  // simply ignores it.
+  interface IntrinsicAttributes {
+    key?: string | number;
+  }
 }
 
 declare interface InspectQuery {

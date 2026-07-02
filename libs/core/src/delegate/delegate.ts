@@ -14,6 +14,7 @@ import { buildOverlay } from '../typecheck/overlay.js';
 import { systemFunctionSources, systemFunctionsBundled } from '../spaces/system.js';
 import type { Space } from '../spaces/load.js';
 import type { BudgetLimits } from '../eval/budget.js';
+import { Budget, BudgetExceededError } from '../eval/budget.js';
 import type { RoleModelConfig } from '../fork/roles.js';
 import { delegateCapabilities } from '../exec/capability.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
@@ -183,10 +184,10 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     const history = new MessageHistory();
 
     const tasklistHint = actionDef?.tasklist
-      ? `Implement this action by calling \`const result = await tasklist("${actionDef.tasklist}", context)\` — \`query\` (string) and \`context\` (object) are in scope as real variables holding the seed data above. The tasklist handles the orchestration. After it resolves, call \`currentTask.resolve(result)\`.`
+      ? `Implement this action by calling \`const result = await tasklist("${actionDef.tasklist}", { query, ...context })\` — \`query\` (string) and \`context\` (object) are in scope as real variables holding the seed data above; the tasklist's input schema needs \`query\` INSIDE the seed object, so spread both as shown. The tasklist handles the orchestration. After it resolves, call \`currentTask.resolve(result)\`.`
       : actionDef
         ? `When complete, call \`currentTask.resolve(result)\` with the final result value.`
-        : `Handle this request directly. If one of your actions fits (see "# Actions"), run its tasklist with \`const result = await tasklist("<name>", context)\`. When done, call \`currentTask.resolve(result)\` with the final result value.`;
+        : `Handle this request directly. If one of your actions fits (see "# Actions"), run its tasklist with \`const result = await tasklist("<name>", { query, ...context })\`. When done, call \`currentTask.resolve(result)\` with the final result value.`;
     const userMessage = [
       opts.action ? `Run action: ${opts.action}` : `You have been delegated this request — handle it using your available actions/tasklists or directly.`,
       query ? `Query: ${query}` : '',
@@ -317,6 +318,46 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
         scope: delegateScope,
         model: opts.model,
       });
+      // GUARANTEE (mirrors fork.ts): a delegate whose model finished without calling
+      // currentTask.resolve() — and without running a capturable tasklist — must not
+      // hand `undefined` back to the delegator. The live E4 failure: the engineer did
+      // all the work (wrote files, ran tests) but never resolved, the delegator got
+      // null twice, gave up on the specialist, and improvised the work inline. Force
+      // resolve-only turns with a fresh small budget before returning.
+      for (let nudge = 0; nudge < 2 && !resultCaptured; nudge++) {
+        opts.renderHost.log(`[delegate] no resolve — forcing resolve (attempt ${nudge + 1})`);
+        history.append({
+          role: 'user',
+          content: [
+            'STOP. Do NOT run any more tools, searches, shell commands, or edits.',
+            'You must return your result THIS TURN by calling currentTask.resolve().',
+            'Emit EXACTLY ONE statement: a single currentTask.resolve({...}) call that',
+            'packages the deliverable you already produced above (the code you wrote,',
+            'the answer you found, the files you created — reference bound variables',
+            'where possible). Returning a result is REQUIRED; any other code is rejected.',
+          ].join('\n'),
+          blockType: 'normal',
+        });
+        try {
+          await runTurnLoop({
+            vm,
+            history,
+            systemBlock,
+            ambientDts,
+            renderHost: opts.renderHost,
+            streamFn: opts.streamFn,
+            processYield: async () => undefined, // resolve-only turns: no yields serviced
+            maxRetries: 3,
+            budget: new Budget({ maxEpisodes: 4 }),
+            tracer: tracer,
+            traceContext: `${delegateLabel}:resolve_nudge`,
+            scope: delegateScope,
+            model: opts.model,
+          });
+        } catch (err) {
+          if (!(err instanceof BudgetExceededError)) throw err;
+        }
+      }
       tracer.end(delegateScope, 'done', resultCaptured ? { result: capturedResult } : undefined);
     } catch (err) {
       tracer.end(delegateScope, 'error', { error: err instanceof Error ? err.message : String(err) });

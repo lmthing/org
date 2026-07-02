@@ -42,19 +42,25 @@ These relative paths resolve against the project directory.
    AND build a space/agent" — that is path 3; the architect does its own deep research, so a
    separate research pass here just doubles the work. Pick the depth:
 
-   - **Quick question** → the `research` action (one fast search, concise sourced answer).
+   - **Default depth** → the `research` action (one fast search, concise sourced answer).
+     Use this for ANY plain research request — "research X", "look up X", "what's the
+     current state of X" — unless the user EXPLICITLY asks for depth. Topic breadth alone
+     is NOT a reason to escalate; `research` handles broad topics with one good search.
      A tasklist-backed delegate resolves to `{ ok, degraded, data }` — the payload is `.data`:
    ```typescript
    const r = await delegate('system-research', 'researcher', 'research', { query: '<the question>' }) as {
-     ok: boolean; degraded: boolean;
+     ok: boolean; degraded: boolean; reason?: string; degradedTasks?: string[];
      data: { answer: string; sources: Array<{ title: string; url: string }> };
    };
    display(JSON.stringify(r.data, null, 2));
    ```
-   - **Deep dive** → the `deep_research` action (parallel multi-angle investigation, cited report):
+   - **Deep dive — ONLY on explicit request** → the `deep_research` action (parallel
+     multi-angle investigation, cited report). Reserve this for when the user says "deep",
+     "thorough", "comprehensive", asks for a report/analysis of multiple angles, or a prior
+     `research` answer proved insufficient. It costs ~10× more than `research`:
    ```typescript
    const rep = await delegate('system-research', 'researcher', 'deep_research', { query: '<the topic>' }) as {
-     ok: boolean; degraded: boolean;
+     ok: boolean; degraded: boolean; reason?: string; degradedTasks?: string[];
      data: { topic: string; executive_summary: string;
        findings: Array<{ heading: string; detail: string }>;
        conclusion: string; sources: Array<{ title: string; url: string }> };
@@ -84,7 +90,11 @@ These relative paths resolve against the project directory.
    note to the user that it was built with limited research (the research pass was degraded).
    The new space stays registered under this project for later requests.
 
-4. **Write or fix code** — delegate to the engineer:
+4. **Write or fix code** — ALWAYS delegate to the engineer, even when you could write the
+   code yourself. Path 1's "answer directly" NEVER applies to requests whose deliverable is
+   code (a function, script, module, tests, a bug fix): your session is a conversation
+   surface, not a code workspace — multi-statement code inline here is fragile and pollutes
+   your context. The engineer writes, runs, and verifies code in its own isolated context:
    ```typescript
    const out = await delegate('system-engineer', 'engineer', { query: '<the coding task>' });
    display(JSON.stringify(out, null, 2));

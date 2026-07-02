@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripMarkdownFences, looksLikeProse } from './turn-loop.js';
+import { stripMarkdownFences, looksLikeProse, FenceLineFilter } from './turn-loop.js';
 
 describe('looksLikeProse', () => {
   it('flags narrated sentences the model emits instead of code', () => {
@@ -105,6 +105,57 @@ describe('stripMarkdownFences', () => {
     expect(stripFences('result')).toBe('result');
     expect(stripFences('topic')).toBe('topic');
     expect(stripFences('questions')).toBe('questions');
+  });
+});
+
+describe('FenceLineFilter (streaming-safe fence stripping)', () => {
+  function run(chunks: string[]): string {
+    const f = new FenceLineFilter();
+    let out = '';
+    for (const c of chunks) out += f.feed(c);
+    out += f.flush();
+    return out;
+  }
+
+  it('does NOT swallow a mid-statement token that arrives as its own chunk (E5 live: JSON.stringify → .stringify)', () => {
+    expect(run(['const s = ', 'JSON', '.stringify({});\n'])).toBe('const s = JSON.stringify({});\n');
+    expect(run(['display("game ', 'on', '");\n'])).toBe('display("game on");\n');
+    expect(run(['const x = 1; // no', 'ts', '\n'])).toBe('const x = 1; // nots\n');
+  });
+
+  it('still drops complete fence lines and stray tags on their own lines', () => {
+    expect(run(['```typescript\nconst x = 1;\n```\n'])).toBe('const x = 1;\n');
+    expect(run(['typescript\nconst y = 2;\n'])).toBe('const y = 2;\n');
+  });
+
+  it('drops a fence tag split across chunks by reassembling the full line', () => {
+    // Old per-chunk stripping handled this via the suffix set; the line buffer
+    // reassembles ```typ + escript into one ```typescript line, dropped directly.
+    expect(run(['```typ', 'escript\nconst z = 3;\n'])).toBe('const z = 3;\n');
+    expect(run(['```', 'json\n{"a":1}\n'])).toBe('{"a":1}\n');
+  });
+
+  it('flush() applies the drop rules to the final unterminated line', () => {
+    expect(run(['const a = 1;\n', '```'])).toBe('const a = 1;\n');
+    expect(run(['const a = 1;\nts'])).toBe('const a = 1;\n');
+    expect(run(['const a = 1;'])).toBe('const a = 1;');
+  });
+
+  it('releases an unterminated statement line immediately (streaming pipeline must see it, not the flush path)', () => {
+    const f = new FenceLineFilter();
+    // A single-chunk statement without trailing newline must come out of feed(),
+    // not be held until flush — otherwise its statement/typecheck trace events
+    // are lost to the (event-less) trailing-flush path.
+    expect(f.feed('const n: number = "not a number";')).toBe('const n: number = "not a number";');
+    expect(f.flush()).toBe('');
+  });
+
+  it('a line whose head was already released is exempt from drop checks on its remainder', () => {
+    const f = new FenceLineFilter();
+    let out = f.feed('const s = "game "; // comment about j');
+    out += f.feed('son\nconst t = 2;\n');
+    // "son" is a fence-lang suffix, but it is the REMAINDER of a released line — kept.
+    expect(out).toBe('const s = "game "; // comment about json\nconst t = 2;\n');
   });
 });
 

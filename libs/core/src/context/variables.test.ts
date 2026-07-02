@@ -35,6 +35,23 @@ describe('extractBindingNames', () => {
     expect(extractBindingNames('foo.push(bar)')).toEqual([]);
   });
 
+  it('extracts function declarations (regression: E4 — later statements ReferenceError while typecheck passes)', () => {
+    expect(extractBindingNames('function parseDuration(s: string): number {\n  return 0;\n}')).toEqual(['parseDuration']);
+    expect(extractBindingNames('async function loadAll() {\n  return [];\n}')).toEqual(['loadAll']);
+    expect(extractBindingNames('function* gen() { yield 1; }')).toEqual(['gen']);
+    expect(extractBindingNames('// helper\nfunction helper() {}')).toEqual(['helper']);
+  });
+
+  it('extracts class declarations', () => {
+    expect(extractBindingNames('class Parser {\n  parse() {}\n}')).toEqual(['Parser']);
+    expect(extractBindingNames('abstract class Base {}')).toEqual(['Base']);
+  });
+
+  it('does not extract type-only declarations (no runtime binding exists)', () => {
+    expect(extractBindingNames('type Opts = { a: number };')).toEqual([]);
+    expect(extractBindingNames('interface Shape { x: number }')).toEqual([]);
+  });
+
   it('handles complex types in declarations', () => {
     expect(extractBindingNames('const data: { key: string; val: number } = { key: "a", val: 1 }')).toEqual(['data']);
     expect(extractBindingNames('const fn: (x: number) => string = x => String(x)')).toEqual(['fn']);

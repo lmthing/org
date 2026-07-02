@@ -113,9 +113,13 @@ export class Session {
     if (!this.vm || !this.systemBlock || !this.ambientDts) {
       throw new Error('Session not started — call start() first');
     }
+    // Neutral framing: the TS-statement reply channel is fully specified by
+    // STATEMENT_PROTOCOL in the system block. Framing the user's message itself as
+    // "write TypeScript code" primed the triage toward the code path for EVERY
+    // request (live E3 regression: a deep-research ask routed to the engineer).
     this.history.append({
       role: 'user',
-      content: `Write TypeScript code to accomplish the following task. Respond with TypeScript code only.\n\nTask: ${message}`,
+      content: `User request:\n\n${message}`,
       blockType: 'normal',
     });
     // Context economy: collapse old turns into a summary once history grows large,
@@ -186,7 +190,7 @@ export class Session {
     // 4. Build system block (system functions rendered as a concise Built-in Tools list)
     const systemFns = systemFunctionSources(this.systemSpaces);
     const knowledgePreloads = await resolvePreloadedKnowledge(this.space, agent);
-    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads, omitDelegate: this.delegatePolicy.mode === 'none' });
+    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads, omitDelegate: this.delegatePolicy.mode === 'none' }) + this.projectAgentsBlock();
 
     // 4b. Build ambient DTS overlay — system functions are always in scope, then agent functions
     const { functions: agentFunctions, functionsBundled: agentFunctionsBundled } =
@@ -209,10 +213,11 @@ export class Session {
       ...Object.keys(agentComponents.form),
     ]);
 
-    // 6. Append initial user message to history
+    // 6. Append initial user message to history (neutral framing — see continue()'s
+    // comment: the TS reply channel belongs to STATEMENT_PROTOCOL, not the request).
     this.history.append({
       role: 'user',
-      content: `Write TypeScript code to accomplish the following task. Respond with TypeScript code only.\n\nTask: ${initialMessage}`,
+      content: `User request:\n\n${initialMessage}`,
       blockType: 'normal',
     });
 
@@ -339,6 +344,17 @@ export class Session {
     this.space = await this.loadMergedSpace(snapshot.spaceDir);
     this.sessionId = snapshot.sessionId;
 
+    // Preload project spaces (mirrors start()'s step 1b) so agents built in
+    // earlier sessions stay delegatable and advertised after a resume.
+    for (const dir of this.opts.preloadSpaceDirs ?? []) {
+      try {
+        const preloadedSpace = await loadSpace(dir);
+        this.dynamicSpaces.set(dir, preloadedSpace);
+      } catch (err) {
+        this.opts.renderHost.log(`[warn] preloadSpaceDirs: failed to load space at "${dir}": ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
     // Get agent
     const agent = this.space.agents[snapshot.agentSlug];
     if (!agent) {
@@ -359,7 +375,7 @@ export class Session {
     const directDeps = resolveDirectDeps(this.space, agent.canDelegateTo);
     const systemFns = systemFunctionSources(this.systemSpaces);
     const knowledgePreloads = await resolvePreloadedKnowledge(this.space, agent);
-    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads, omitDelegate: this.delegatePolicy.mode === 'none' });
+    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads, omitDelegate: this.delegatePolicy.mode === 'none' }) + this.projectAgentsBlock();
     const { functions: agentFunctions, functionsBundled: agentFunctionsBundled } =
       this.buildInjectedFunctions(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
@@ -430,6 +446,38 @@ export class Session {
       this.history.summarize(summary, 6);
       this.opts.renderHost.log(`[context] history summarized → ${this.history.messages.length} messages`);
     }
+  }
+
+  /**
+   * Render the preloaded/runtime-registered project agents as a system-block
+   * section so the model KNOWS they exist. Without this, an agent built in an
+   * earlier session was invisible to the next one (live E7 failure: THING
+   * grepped the project for its own reading-list agent and gave up) — the
+   * spaces were delegatable via `registered:*`, but nothing advertised them.
+   */
+  private projectAgentsBlock(): string {
+    if (this.dynamicSpaces.size === 0) return '';
+    const lines: string[] = [];
+    for (const [dir, space] of this.dynamicSpaces) {
+      for (const [slug, agent] of Object.entries(space.agents)) {
+        const actions = (agent.actions ?? []).map((a) => a.id);
+        const actionArg = actions.length > 0 ? `, ${JSON.stringify(actions[0])}` : '';
+        lines.push(
+          `- **${agent.title || slug}** — \`await delegate(${JSON.stringify(dir)}, ${JSON.stringify(slug)}${actionArg}, { query: '<request>' })\`` +
+          (actions.length > 0 ? ` (actions: ${actions.join(', ')})` : ''),
+        );
+      }
+    }
+    if (lines.length === 0) return '';
+    return [
+      '',
+      '',
+      '# Project agents (already built & registered)',
+      '',
+      'These specialist agents ALREADY EXIST in this project. When a request matches one,',
+      'delegate to it directly — do NOT rebuild it and do NOT search the filesystem for it:',
+      ...lines,
+    ].join('\n');
   }
 
   /**

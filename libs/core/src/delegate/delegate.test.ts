@@ -94,6 +94,42 @@ describe('runDelegate exposes the global toolkit to declared-functionless agents
   });
 });
 
+describe('runDelegate forced-resolve nudge (E4 live finding)', () => {
+  it('a model-driven delegate that finishes without resolving gets resolve-only turns instead of returning undefined', async () => {
+    const systemSpaces = await loadSystemSpaces(defaultSystemSpaceDirs());
+    const memory = systemSpaces.find((s) => s.dir.endsWith('/user-memory'));
+    expect(memory).toBeTruthy();
+    const registry = new DelegateRegistry(new Map([[memory!.dir, memory!]]));
+
+    let nudged = false;
+    const streamFn = createMockStreamFn((o) => {
+      const last = [...o.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+      if (last.includes('currentTask.resolve()')) {
+        // The STOP nudge — NOW resolve.
+        nudged = true;
+        return `currentTask.resolve({ done: true, via: 'nudge' });`;
+      }
+      // Main run: do work, display, and end WITHOUT resolving (the live E4 engineer shape).
+      return `display("did the work but forgot to resolve");`;
+    });
+
+    const result = (await runDelegate({
+      packageName: memory!.dir,
+      agentName: 'memory',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+      systemSpaces,
+    })) as { done: boolean; via: string } | undefined;
+
+    expect(nudged).toBe(true);
+    expect(result).toEqual({ done: true, via: 'nudge' });
+  });
+});
+
 /**
  * Action-restriction enforcement (WP-3 / SPACE-SPEC). A `canDelegateTo` entry with
  * a `#action` suffix (e.g. "helper#greet") resolves to a `ResolvedDep` whose

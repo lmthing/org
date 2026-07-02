@@ -128,6 +128,24 @@ export function extractBindingNames(statement: string): string[] {
       const name = part.replace(/\s*:.*$/, '').trim(); // strip type annotation
       if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) names.push(name);
     }
+    return names;
+  }
+
+  // function / class declarations. Each eval statement is its own module, so a
+  // `function foo() {}` in one statement is invisible to the next unless we
+  // propagate it via globalThis like any other binding. Without this, typecheck
+  // (which sees the accumulated context) accepts a later `foo(...)` while eval
+  // throws "'foo' is not defined" — the model then re-declares and hits
+  // "Duplicate identifier" (live E4 failure shape). Type-only declarations
+  // (type/interface) need no runtime propagation.
+  const fnMatch = stripped.match(/^(?:export\s+)?(?:async\s+)?function\s*\*?\s*([a-zA-Z_$][a-zA-Z0-9_$]*)/);
+  if (fnMatch) {
+    names.push(fnMatch[1]!);
+    return names;
+  }
+  const classMatch = stripped.match(/^(?:export\s+)?(?:abstract\s+)?class\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/);
+  if (classMatch) {
+    names.push(classMatch[1]!);
   }
 
   return names;

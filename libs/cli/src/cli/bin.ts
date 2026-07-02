@@ -487,6 +487,14 @@ async function main(): Promise<void> {
     // dir, writing files where registerSpace can't find them (the build "succeeds" but
     // registration fails with "must have an agents/ directory").
     const projectSpacesDir = join(lmthingRoot, 'user', 'spaces');
+    // Agents built by earlier sessions live under projectSpacesDir — preload them
+    // so they are delegatable (registered:*) AND advertised in the system prompt.
+    // Without this, a follow-up session couldn't see its own built agents.
+    let preloadSpaceDirs: string[] = [];
+    try {
+      const entries = await readdir(projectSpacesDir, { withFileTypes: true });
+      preloadSpaceDirs = entries.filter((e) => e.isDirectory()).map((e) => join(projectSpacesDir, e.name));
+    } catch { /* no project spaces yet */ }
     const session = new Session(
       {
         spaceDir,
@@ -499,6 +507,7 @@ async function main(): Promise<void> {
         roleModels,
         budget,
         projectSpacesDir,
+        preloadSpaceDirs,
       },
       { streamFn },
     );
