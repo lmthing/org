@@ -9,6 +9,10 @@ export default defineConfig({
       'packages/*/apps/*/src/**/*.test.tsx',
       'libs/*/src/**/*.test.ts',
       'libs/*/src/**/*.test.tsx',
+      // apps/web has a handful of pure (node-safe) unit tests — origin
+      // resolution, host→surface routing. DOM/component tests live in libs/ui
+      // (its own jsdom config); keep only node-safe suites matched here.
+      'apps/web/src/**/*.test.ts',
     ],
     // libs/state and libs/ui have their own vitest configs (jsdom + React
     // transforms); exclude them from the root node runner to avoid conflicts.
