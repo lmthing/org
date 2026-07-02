@@ -9,11 +9,9 @@ import { cn } from '../lib/cn.js';
 
 interface AppShellProps {
   singleSession?: boolean;
-  /** Optional node rendered beneath the composer input (e.g. budget windows). */
-  composerFooter?: React.ReactNode;
 }
 
-export function AppShell({ singleSession, composerFooter }: AppShellProps) {
+export function AppShell({ singleSession }: AppShellProps) {
   const devPanelOpen = useStore(s => s.devPanelOpen);
   const sidebarOpen = useStore(s => s.sidebarOpen);
   const setDevPanelOpen = useStore(s => s.setDevPanelOpen);
@@ -142,7 +140,6 @@ export function AppShell({ singleSession, composerFooter }: AppShellProps) {
             devPanelOpen={devPanelOpen}
             projectId={activeProjectId}
             singleSession={singleSession}
-            composerFooter={composerFooter}
             className="flex-1 min-h-0"
           />
         )}

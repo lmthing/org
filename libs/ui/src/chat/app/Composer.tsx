@@ -1,18 +1,16 @@
 import React from 'react';
 import { cn } from '../lib/cn.js';
 import { useStore } from '../store/store.js';
+import { BudgetWindows } from './BudgetWindows.js';
 
 interface ComposerProps {
   onSend: (text: string) => void;
   projectId?: string | null;
   className?: string;
   disabled?: boolean;
-  /** Optional node rendered directly beneath the input (e.g. budget windows).
-   *  Not shown in replay mode. The chat lib stays agnostic to its contents. */
-  composerFooter?: React.ReactNode;
 }
 
-export function Composer({ onSend, projectId, className, disabled, composerFooter }: ComposerProps) {
+export function Composer({ onSend, projectId, className, disabled }: ComposerProps) {
   const mode = useStore((s) => s.mode);
   const [text, setText] = React.useState('');
   const [uploading, setUploading] = React.useState(false);
@@ -211,7 +209,7 @@ export function Composer({ onSend, projectId, className, disabled, composerFoote
       <p className="mt-1.5 text-xs text-muted-foreground text-center">
         Enter to send · Shift+Enter for newline
       </p>
-      {composerFooter}
+      <BudgetWindows />
     </div>
   );
 }

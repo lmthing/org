@@ -11,6 +11,7 @@ import { Router } from './router.js';
 // ─── Route handlers ───────────────────────────────────────────────────────────
 import { applyEnvContent, handleEnvGet, handleEnvPut } from './routes/env.js';
 import { handlePricesAzure } from './routes/prices.js';
+import { handleBudget } from './routes/budget.js';
 import { handleCreateSession, handleListSessions, handleDeleteSession, handleSessionSubRoute } from './routes/sessions.js';
 import {
   handleListProjects, handleCreateProject, handleDeleteProject,
@@ -110,6 +111,9 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
 
   // Prices
   router.add('GET', '/api/prices/azure', handlePricesAzure);
+
+  // Budget (lmthingcloud rolling windows: remaining % per 1d/7d/30d)
+  router.add('GET', '/api/budget', handleBudget);
 
   // Restart
   router.add('POST', '/api/restart', async (_req, res) => {

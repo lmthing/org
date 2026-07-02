@@ -72,8 +72,6 @@ interface ChatViewProps {
   projectId?: string | null;
   singleSession?: boolean;
   className?: string;
-  /** Optional node rendered beneath the composer input (e.g. budget windows). */
-  composerFooter?: React.ReactNode;
 }
 
 export function ChatView({
@@ -82,7 +80,6 @@ export function ChatView({
   projectId,
   singleSession,
   className,
-  composerFooter,
 }: ChatViewProps) {
   const spaceName = useStore(s => s.spaceName);
   const agentSlug = useStore(s => s.agentSlug);
@@ -262,7 +259,7 @@ export function ChatView({
       )}
 
       {/* Composer */}
-      <Composer onSend={handleSend} projectId={projectId} composerFooter={composerFooter} />
+      <Composer onSend={handleSend} projectId={projectId} />
     </div>
   );
 }
