@@ -7,9 +7,12 @@ interface ComposerProps {
   projectId?: string | null;
   className?: string;
   disabled?: boolean;
+  /** Optional node rendered directly beneath the input (e.g. budget windows).
+   *  Not shown in replay mode. The chat lib stays agnostic to its contents. */
+  composerFooter?: React.ReactNode;
 }
 
-export function Composer({ onSend, projectId, className, disabled }: ComposerProps) {
+export function Composer({ onSend, projectId, className, disabled, composerFooter }: ComposerProps) {
   const mode = useStore((s) => s.mode);
   const [text, setText] = React.useState('');
   const [uploading, setUploading] = React.useState(false);
@@ -208,6 +211,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
       <p className="mt-1.5 text-xs text-muted-foreground text-center">
         Enter to send · Shift+Enter for newline
       </p>
+      {composerFooter}
     </div>
   );
 }

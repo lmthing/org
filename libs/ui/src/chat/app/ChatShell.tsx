@@ -10,7 +10,13 @@ import { applyUrlToState, syncStateToUrl } from './url-state.js';
  * app (mirrors main.tsx boot()'s shell-mode branch: render AppShell, preload
  * projects, and wire URL ↔ state).
  */
-export function ChatShell(): React.ReactElement {
+interface ChatShellProps {
+  /** Optional node rendered beneath the composer input (e.g. budget windows).
+   *  Injected by the host app so the chat lib stays agnostic to its contents. */
+  composerFooter?: React.ReactNode;
+}
+
+export function ChatShell({ composerFooter }: ChatShellProps = {}): React.ReactElement {
   useEffect(() => {
     let unsub: (() => void) | undefined;
     void (async () => {
@@ -37,5 +43,5 @@ export function ChatShell(): React.ReactElement {
     };
   }, []);
 
-  return <AppShell />;
+  return <AppShell composerFooter={composerFooter} />;
 }
