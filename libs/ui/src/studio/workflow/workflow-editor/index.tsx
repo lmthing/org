@@ -13,6 +13,7 @@ import { ManifestSection } from './manifest-section'
 import { TaskForm } from './task-form'
 import { useTasklistEditor } from './useTasklistEditor'
 import type { TasklistEditorProps } from './types'
+import './tasklist-editor.css'
 
 export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
   const {
