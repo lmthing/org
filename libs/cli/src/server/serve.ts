@@ -24,6 +24,8 @@ import {
 } from './routes/projects.js';
 import { handleCreateSpace } from './routes/spaces.js';
 import { handleFsTree, handleFsRead, handleFsWrite } from './routes/fs.js';
+import { handleBackupNow, handleBackupStatus, handleRestore } from './routes/backup.js';
+import { runBackup, startBackupTimer } from './backup.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
 import { handleAgentWsUpgrade } from './ws/agent.js';
@@ -159,6 +161,11 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   router.add('GET', '/api/fs/read', handleFsRead);
   router.add('PUT', '/api/fs/write', handleFsWrite);
 
+  // Workspace backup / restore to the user's GitHub repo
+  router.add('POST', '/api/backup', handleBackupNow);
+  router.add('GET', '/api/backup/status', handleBackupStatus);
+  router.add('POST', '/api/restore', handleRestore);
+
   // ─── HTTP server ──────────────────────────────────────────────────────────
   const httpServer = createServer((req, res) => {
     const matched = router.dispatch(req, res, ctx);
@@ -204,6 +211,22 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   const httpBase = `http://localhost:${actualPort}`;
   console.log(`Multi-session server ready: ${httpBase}`);
   console.log(`Create a session:  POST ${httpBase}/api/sessions`);
+
+  // Workspace backup: start the auto timer (no-op unless GITHUB_BACKUP_AUTO=1),
+  // and flush a final backup on SIGTERM so idle scale-to-zero / restarts don't
+  // lose un-backed-up changes. Best-effort with a hard cap so we exit within
+  // the pod's termination grace period.
+  if (effectiveLmthingRoot) {
+    const backupRoot = effectiveLmthingRoot;
+    startBackupTimer(backupRoot);
+    process.on('SIGTERM', () => {
+      const flush = runBackup({ trigger: 'shutdown', workTree: backupRoot }).catch((err) => {
+        console.warn('[serve] shutdown backup failed:', err instanceof Error ? err.message : err);
+      });
+      const cap = new Promise((r) => setTimeout(r, 25_000).unref?.());
+      void Promise.race([flush, cap]).finally(() => process.exit(0));
+    });
+  }
 
   return {
     port: actualPort,
