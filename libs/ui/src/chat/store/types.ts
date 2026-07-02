@@ -49,6 +49,8 @@ export interface AppState {
   done: boolean;
   spaceName: string;
   agentSlug: string;
+  /** Live session title, set by the agent via setSessionMeta() (resets on session switch). */
+  sessionTitle: string;
   replay: ReplayState | null;
   /** Running token cost for the current live session (resets on session switch). */
   sessionCostUsd: number;
@@ -71,6 +73,7 @@ export interface AppState {
   feedLive: (events: WireEvent[]) => void;
   setConnection: (c: Connection) => void;
   setHello: (h: { spaceName: string; agentSlug: string }) => void;
+  setSessionTitle: (t: string) => void;
   setDone: (d: boolean) => void;
   selectNode: (id: string | null, byUser?: boolean) => void;
   setTab: (t: InspectorTab) => void;

@@ -75,6 +75,12 @@ export function createConnectLive(useStore: Pick<StoreApi<AppState>, 'getState' 
           const wireEvents = events.map((x) => ({ seq: x.seq, event: x.event }));
           const rebuilt = buildModel(wireEvents);
           inflightTurns.clear();
+          // Recover the agent-set title from the snapshot (last one wins) so a
+          // resumed/reconnected session shows its title in the header immediately.
+          let snapshotTitle: string | undefined;
+          for (const { event } of wireEvents) {
+            if (event.type === 'session_meta' && event.title) snapshotTitle = event.title;
+          }
           useStore.setState((s) => {
             const expanded = new Set(s.expanded);
             for (const id of parentNodeIds(rebuilt)) expanded.add(id);
@@ -85,6 +91,7 @@ export function createConnectLive(useStore: Pick<StoreApi<AppState>, 'getState' 
               selectedNodeId: s.selectedNodeId ?? rebuilt.rootId,
               sessionCostUsd: computeTotalCostFromEvents(wireEvents, s.prices),
               sessionCostInflight: 0,
+              ...(snapshotTitle !== undefined ? { sessionTitle: snapshotTitle } : {}),
             };
           });
           break;

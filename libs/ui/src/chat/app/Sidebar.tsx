@@ -82,6 +82,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
   const activeSessionId = useStore(s => s.activeSessionId);
+  const sessionTitle = useStore(s => s.sessionTitle);
   const setProjects = useStore(s => s.setProjects);
   const setActiveProjectId = useStore(s => s.setActiveProjectId);
   const sessionCostUsd = useStore(s => s.sessionCostUsd);
@@ -201,8 +202,11 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
         <div key={group.label}>
           <p className="px-2 py-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</p>
           {group.sessions.map(s => {
-            const label = s.title || 'New chat';
             const isActive = s.sessionId === activeSessionId;
+            // The active session's title can change live (agent setSessionMeta) before
+            // the persisted list refetches — prefer the live store title for that row.
+            const displayTitle = (isActive && sessionTitle) || s.title;
+            const label = displayTitle || 'New chat';
             const cost = isActive ? sessionCostUsd : s.totalCostUsd;
             const costLabel = cost !== undefined && cost > 0 ? formatCost(cost) : '';
             return (
@@ -215,7 +219,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                       ? 'bg-muted text-foreground font-medium'
                       : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
                   )}
-                  title={s.title || s.sessionId}
+                  title={displayTitle || s.sessionId}
                 >
                   <span className="block truncate">{label}</span>
                   <span className="block text-xs text-muted-foreground/70 font-normal">

@@ -24,10 +24,12 @@ export interface SessionSlice {
   done: boolean;
   spaceName: string;
   agentSlug: string;
+  sessionTitle: string;
 
   feedLive: (events: WireEvent[]) => void;
   setConnection: (c: Connection) => void;
   setHello: (h: { spaceName: string; agentSlug: string }) => void;
+  setSessionTitle: (t: string) => void;
   setDone: (d: boolean) => void;
   selectNode: (id: string | null, byUser?: boolean) => void;
   setTab: (t: InspectorTab) => void;
@@ -58,6 +60,7 @@ export function createSessionSlice(
     done: false,
     spaceName: '',
     agentSlug: '',
+    sessionTitle: '',
 
     feedLive: (events) => {
       const s = get();
@@ -67,10 +70,13 @@ export function createSessionSlice(
       let mutatedExpand = false;
       let costDelta = 0;
       let inflightChanged = false;
+      let titleUpdate: string | undefined;
       for (const we of events) {
         applyWireEvent(m, we);
         const ev = we.event;
         costDelta += computeEventCost(ev, s.prices);
+        // The agent named the session — surface the title live in the header + sidebar.
+        if (ev.type === 'session_meta' && ev.title) titleUpdate = ev.title;
         // Track in-flight turns for real-time cost estimate
         if (ev.type === 'llm_request') {
           const key = ev.nodeId ?? ev.context;
@@ -109,11 +115,13 @@ export function createSessionSlice(
         ...(nextSel !== s.selectedNodeId ? { selectedNodeId: nextSel } : {}),
         ...(costDelta > 0 ? { sessionCostUsd: s.sessionCostUsd + costDelta } : {}),
         ...(inflightChanged ? { sessionCostInflight: newInflight } : {}),
+        ...(titleUpdate !== undefined ? { sessionTitle: titleUpdate } : {}),
       });
     },
 
     setConnection: (connection) => set({ connection }),
     setHello: (h) => set({ spaceName: h.spaceName, agentSlug: h.agentSlug }),
+    setSessionTitle: (sessionTitle) => set({ sessionTitle }),
     setDone: (done) => set({ done }),
     selectNode: (id, byUser = false) => set((s) => ({ selectedNodeId: id, userSelected: byUser || s.userSelected })),
     setTab: (tab) => set({ tab }),
@@ -146,6 +154,7 @@ export function createSessionSlice(
         done: false,
         spaceName: '',
         agentSlug: '',
+        sessionTitle: '',
         replay: null,
         mode: 'live',
         connection: 'connecting',

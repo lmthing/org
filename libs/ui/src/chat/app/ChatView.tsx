@@ -86,6 +86,7 @@ export function ChatView({
 }: ChatViewProps) {
   const spaceName = useStore(s => s.spaceName);
   const agentSlug = useStore(s => s.agentSlug);
+  const sessionTitle = useStore(s => s.sessionTitle);
   const sessionCostUsd = useStore(s => s.sessionCostUsd + s.sessionCostInflight);
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
@@ -149,10 +150,13 @@ export function ChatView({
   const spaceLabel = singleSession
     ? spaceName.split('/').filter(Boolean).pop() || ''
     : projectName ?? '';
-  const title =
+  // Once the agent has named the session (setSessionMeta), show that title;
+  // otherwise fall back to the space · agent label.
+  const fallbackTitle =
     spaceLabel && prettyAgent
       ? `${spaceLabel} · ${prettyAgent}`
       : spaceLabel || prettyAgent || 'THING';
+  const title = sessionTitle || fallbackTitle;
 
   return (
     <div className={cn('flex flex-col h-full bg-background', className)}>
