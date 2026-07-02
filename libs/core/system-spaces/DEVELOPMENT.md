@@ -42,6 +42,7 @@ backs it.
   | **`functions`** | allowlist of space-function names visible to this task's fork. `[]` = NONE (also removes `webSearch`/`webFetch`); omit = all |
   | **`forEach`** | `"<upstreamTask>.<field>"` — host fan-out (see §3) |
   | **`canDelegateTo`** | per-task delegation policy (see §3a): omit/`[]` = no delegation; `["*"]` = unrestricted; list of `"space/agent[#action]"` = hard allowlist; a `"registered:*"` entry = any runtime-registered space |
+  | **`prelude`** | trusted TS statements (YAML block scalar) the HOST executes in the fork VM before the model's first turn (see §3b) — put every deterministic gather/aggregate statement here |
 - Task body = the instruction the fork's model sees. Make it **short, code-first, autonomous**
   (uses the injected `query`/seed, never asks), ending in `currentTask.resolve({...})`.
 
@@ -50,6 +51,13 @@ backs it.
 > (no functions at all, incl. web); a task that should only touch two builders → `functions: [a, b]`.
 > Prose restrictions are advisory and the weak model ignores them; the frontmatter is enforced by the
 > host. The task body should only ever describe what the model SHOULD do with the tools it HAS.
+
+> 🚫 **NEVER restate the statement-emission protocol in a space file.** The harness injects
+> `STATEMENT_PROTOCOL` (`libs/core/src/exec/preamble.ts`) into EVERY context — session, delegate,
+> and fork — so "emit plain TypeScript", "no markdown fences", "one statement per turn", and the
+> flat/ternary-guarded yield rules are already in every prompt. Repeating them in an instruct or
+> task body is pure token noise. Keep only task-SPECIFIC guidance (budgets like "≤3 fetches",
+> output contracts, honesty rules, continuation cues like "a VARIABLES block means mid-program").
 
 ---
 

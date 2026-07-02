@@ -32,4 +32,4 @@ missing/failed result, resolve empty coordinates with `ok: false` and the error 
 
 const built = (t && t.data) ? t.data : { spaceKey: "", agentSlug: "", actionId: "", query: "", ok: false, errors: "the architect returned no result" };
 
-currentTask.resolve({ spaceKey: String(built.spaceKey || ""), agentSlug: String(built.agentSlug || ""), actionId: String(built.actionId || ""), query: String(built.query || request), ok: t && t.ok === true && built.ok === true, errors: String(built.errors || "") });
+currentTask.resolve({ spaceKey: String(built.spaceKey || ""), agentSlug: String(built.agentSlug || ""), actionId: String(built.actionId || ""), query: String(built.query || request), ok: !!(t && t.ok === true && built.ok === true), errors: String(built.errors || "") });
