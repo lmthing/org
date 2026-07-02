@@ -68,6 +68,8 @@ export interface AppState {
   // ─── UI panel state ───────────────────────────────────────────────────────────
   devPanelOpen: boolean;
   sidebarOpen: boolean;
+  /** True when a budget window is exhausted (0% left) — the composer blocks sends. */
+  budgetBlocked: boolean;
 
   // actions
   feedLive: (events: WireEvent[]) => void;
@@ -101,4 +103,5 @@ export interface AppState {
   // UI panel actions
   setDevPanelOpen: (v: boolean) => void;
   setSidebarOpen: (v: boolean) => void;
+  setBudgetBlocked: (v: boolean) => void;
 }

@@ -6,8 +6,10 @@ import type { AppState } from './types.js';
 export interface UiPanelSlice {
   devPanelOpen: boolean;
   sidebarOpen: boolean;
+  budgetBlocked: boolean;
   setDevPanelOpen: (v: boolean) => void;
   setSidebarOpen: (v: boolean) => void;
+  setBudgetBlocked: (v: boolean) => void;
 }
 
 export function createUiPanelSlice(
@@ -16,8 +18,10 @@ export function createUiPanelSlice(
   return {
     devPanelOpen: false,
     sidebarOpen: true,
+    budgetBlocked: false,
 
     setDevPanelOpen: (devPanelOpen) => set({ devPanelOpen }),
     setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
+    setBudgetBlocked: (budgetBlocked) => set({ budgetBlocked }),
   };
 }

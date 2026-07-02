@@ -22,7 +22,16 @@ export function BudgetWindows(): React.ReactElement | null {
   // Refetch whenever the running session cost changes so the numbers move right
   // after the agent spends.
   const sessionCost = useStore((s) => s.sessionCostUsd);
+  const setBudgetBlocked = useStore((s) => s.setBudgetBlocked);
   const [windows, setWindows] = React.useState<BudgetWindow[] | null>(null);
+
+  // A window at exactly 0% left is exhausted — LiteLLM 429s any send. Mirror that
+  // in the store so the composer can block the send pre-emptively.
+  React.useEffect(() => {
+    const blocked = !!windows?.some((w) => w.remainingPct === 0);
+    setBudgetBlocked(blocked);
+    return () => setBudgetBlocked(false);
+  }, [windows, setBudgetBlocked]);
 
   const load = React.useCallback(async () => {
     try {
@@ -62,7 +71,7 @@ export function BudgetWindows(): React.ReactElement | null {
             {' · '}
             {w.label}{' '}
             <span className={low ? 'text-destructive' : undefined}>
-              {pct != null ? `${Math.round(pct)}%` : '—'}
+              {pct == null ? '—' : pct === 0 ? '0%' : `${Math.max(1, Math.round(pct))}%`}
             </span>
           </span>
         );

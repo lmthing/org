@@ -113,6 +113,8 @@ export function ChatView({
   };
 
   const handleSend = (text: string) => {
+    // A budget window is exhausted (0% left) — LiteLLM would 429 the turn anyway.
+    if (useStore.getState().budgetBlocked) return;
     noteUser(text);
     const send = (window as unknown as { __LM_SEND__?: (m: unknown) => void }).__LM_SEND__;
     send?.({ type: 'sendMessage', content: text });

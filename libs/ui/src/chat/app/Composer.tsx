@@ -12,6 +12,7 @@ interface ComposerProps {
 
 export function Composer({ onSend, projectId, className, disabled }: ComposerProps) {
   const mode = useStore((s) => s.mode);
+  const budgetBlocked = useStore((s) => s.budgetBlocked);
   const [text, setText] = React.useState('');
   const [uploading, setUploading] = React.useState(false);
   const [completions, setCompletions] = React.useState<string[]>([]);
@@ -21,7 +22,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const dropdownRef = React.useRef<HTMLUListElement>(null);
-  const isDisabled = disabled || mode === 'replay';
+  const isDisabled = disabled || mode === 'replay' || budgetBlocked;
 
   React.useEffect(() => {
     if (dropdownOpen && dropdownRef.current) {
@@ -191,7 +192,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           onKeyDown={handleKeyDown}
           disabled={isDisabled}
           rows={1}
-          placeholder="Message THING…"
+          placeholder={budgetBlocked ? 'Budget reached — try again after it resets' : 'Message THING…'}
           data-testid="message-input"
           className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground text-sm resize-none focus:outline-none min-h-[24px] max-h-[180px] leading-6 disabled:opacity-50"
         />
