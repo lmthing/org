@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { createStaticApps, resolveAppDist } from './static-apps.js';
+import { createDevWeb, type DevWeb } from './dev-web.js';
 import type { SessionManager, SessionEntry } from './session-manager.js';
 import type { UiControlAction } from '../rpc/events.js';
 import { Router } from './router.js';
@@ -95,6 +96,9 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   }
 
   const staticApps = createStaticApps(resolveAppDist());
+  // Dev only: when LM_DEV_WEB points at the web app source, serve it in-process
+  // via Vite (HMR) on THIS port — no separate dev-server port. Set by `pnpm thing`.
+  let devWeb: DevWeb | null = null;
 
   const broadcastUiControl = (entry: SessionEntry): ((action: UiControlAction) => void) =>
     (action) => entry.renderHost.emit({ type: 'ui_control', action });
@@ -162,7 +166,8 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       res.end(JSON.stringify({ error: `unknown API route ${req.method ?? 'GET'} ${path}` }));
       return;
     }
-    // Static app catch-all
+    // Web app: Vite dev middleware (HMR) when enabled, else the built dist.
+    if (devWeb) { devWeb.handle(req, res); return; }
     void staticApps.handle(req, res);
   });
 
@@ -171,6 +176,9 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on('upgrade', (req, socket, head) => {
+    // Dev: let Vite's own upgrade listener handle its HMR socket (identified by
+    // the `vite-hmr` subprotocol); don't claim it for the agent WS.
+    if (devWeb && String(req.headers['sec-websocket-protocol'] ?? '').includes('vite-hmr')) return;
     const url = new URL(req.url ?? '/', 'http://localhost');
     const termMatch = url.pathname.match(/^\/api\/terminals\/([^/]+)$/);
     if (termMatch) {
@@ -179,6 +187,12 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     }
     handleAgentWsUpgrade(req, socket, head, { wss, manager, terminalCwd });
   });
+
+  const devWebDir = process.env['LM_DEV_WEB'];
+  if (devWebDir) {
+    devWeb = await createDevWeb(devWebDir, httpServer);
+    console.log(`[serve] dev web (Vite HMR) enabled from ${devWebDir}`);
+  }
 
   await new Promise<void>((res) => httpServer.listen(port, res));
   const addr = httpServer.address();
@@ -190,6 +204,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   return {
     port: actualPort,
     close: async () => {
+      if (devWeb) await devWeb.close();
       wss.close();
       await new Promise<void>((res) => httpServer.close(() => res()));
     },

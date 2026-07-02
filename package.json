@@ -8,6 +8,7 @@
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
     "dev": "turbo run dev --parallel",
+    "thing": "node scripts/thing-dev.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
