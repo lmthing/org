@@ -66,8 +66,11 @@ export interface SessionEntry {
   status: SessionStatus;
   /** Project id (project-mode only). */
   projectId?: string;
-  /** Human-readable title set from the first user message. */
+  /** Human-readable title set from the first user message, or overridden by the
+   *  agent via setSessionMeta(). */
   title?: string;
+  /** URL-safe handle for the session, set by the agent via setSessionMeta(). */
+  slug?: string;
   /** Epoch ms when this entry was created. */
   createdAt: number;
   /** Number of user messages sent so far. */
@@ -200,6 +203,13 @@ export class SessionManager {
         typeof e.outputTokens === 'number'
       ) {
         entry.totalCostUsd += computeTurnCost(this.prices, e.model, e.inputTokens, e.outputTokens);
+      }
+      // The agent named the session via setSessionMeta(): adopt the title/slug and
+      // persist so it survives eviction/restart and surfaces in the sessions list.
+      if (e.type === 'session_meta') {
+        if (e.title) entry.title = e.title;
+        if (e.slug) entry.slug = e.slug;
+        void this.persistSession(entry);
       }
     });
   }
@@ -495,6 +505,7 @@ export class SessionManager {
       const raw = await readFile(metaPath, 'utf8');
       const meta = JSON.parse(raw) as PersistedSessionMeta;
       entry.title = meta.title || undefined;
+      entry.slug = meta.slug || undefined;
       entry.createdAt = meta.createdAt;
       entry.messageCount = meta.messageCount;
       entry.agentSlug = meta.agentSlug || entry.agentSlug;
@@ -566,6 +577,7 @@ export class SessionManager {
         agentSlug: entry.agentSlug,
         spaceDir: entry.spaceDir,
         title: entry.title ?? '',
+        slug: entry.slug,
         createdAt: entry.createdAt,
         lastActivity: entry.lastActivity,
         messageCount: entry.messageCount,
@@ -778,6 +790,7 @@ export class SessionManager {
         status: live.status,
         lastActivity: live.lastActivity,
         title: live.title ?? meta.title,
+        slug: live.slug ?? meta.slug,
         messageCount: live.messageCount,
         totalCostUsd: live.totalCostUsd > 0 ? live.totalCostUsd : meta.totalCostUsd,
       };
@@ -793,6 +806,7 @@ export class SessionManager {
         agentSlug: entry.agentSlug,
         spaceDir: entry.spaceDir,
         title: entry.title ?? '',
+        slug: entry.slug,
         createdAt: entry.createdAt,
         lastActivity: entry.lastActivity,
         messageCount: entry.messageCount,

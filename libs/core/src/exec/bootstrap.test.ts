@@ -81,12 +81,13 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     expect(names).toContain('tasklist');
     expect(names).toContain('fork');
     expect(names.filter((n) => n === 'delegate')).toHaveLength(2);
+    expect(names).toContain('setSessionMeta');
     expect(names).not.toContain('currentTask');
   });
 
   it('fork (no canDelegateTo) declares NONE of ask/tasklist/fork/delegate, but keeps the common globals + currentTask', () => {
     const names = declNames(forkPlain);
-    for (const absent of ['ask', 'tasklist', 'fork', 'delegate']) expect(names).not.toContain(absent);
+    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta']) expect(names).not.toContain(absent);
     for (const present of ['display', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'fetch', 'execShell', 'readFileRaw', 'writeFileRaw', 'currentTask']) {
       expect(names).toContain(present);
     }
@@ -101,6 +102,7 @@ describe('buildAmbientDts — per-context declaration contract', () => {
   it('delegate context has no ask but has fork/tasklist/delegate/currentTask/query/context', () => {
     const names = declNames(delegate);
     expect(names).not.toContain('ask');
+    expect(names).not.toContain('setSessionMeta');
     for (const present of ['fork', 'tasklist', 'delegate', 'currentTask', 'query', 'context']) {
       expect(names).toContain(present);
     }
@@ -124,6 +126,13 @@ describe('buildAmbientDts — typecheck enforcement (stray calls fail cleanly)',
 
   it('ask() fails typecheck in a delegate but passes in the session', () => {
     const stmt = 'const a = await ask("q?");';
+    expect(runTsc({ ambientDts: delegate, sessionContext: '', statement: stmt }).ok).toBe(false);
+    expect(runTsc({ ambientDts: session, sessionContext: '', statement: stmt }).ok).toBe(true);
+  });
+
+  it('setSessionMeta() fails typecheck in fork/delegate but passes in the session', () => {
+    const stmt = 'const r = await setSessionMeta({ title: "T", slug: "s" });';
+    expect(runTsc({ ambientDts: forkPlain, sessionContext: '', statement: stmt }).ok).toBe(false);
     expect(runTsc({ ambientDts: delegate, sessionContext: '', statement: stmt }).ok).toBe(false);
     expect(runTsc({ ambientDts: session, sessionContext: '', statement: stmt }).ok).toBe(true);
   });

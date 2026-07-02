@@ -46,6 +46,8 @@ export type { DelegateOpts } from './globals/delegate.js';
 export { createTasklistGlobal } from './globals/tasklist.js';
 export { createRegisterSpaceGlobal } from './globals/register-space.js';
 export type { RegisterSpaceResult } from './globals/register-space.js';
+export { createSetSessionMetaGlobal } from './globals/set-session-meta.js';
+export type { SessionMetaInput, SetSessionMetaResult } from './globals/set-session-meta.js';
 
 // Context
 export { emitVariables, extractBindingNames } from './context/variables.js';

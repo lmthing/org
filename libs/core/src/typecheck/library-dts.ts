@@ -12,6 +12,10 @@ import { catalogDts } from '../ui/catalog.js';
  * retryable error — instead of passing typecheck and throwing at runtime.
  */
 export const ASK_DTS = `declare function ask<T = unknown>(descriptor: JSXDescriptor | string): Promise<T>;`;
+// setSessionMeta() names the current conversation. Session-only (like ask): absent
+// from fork/delegate DTS so a stray call there fails typecheck.
+export const SET_SESSION_META_DTS = `/** Set the current session's human-readable title and/or URL-safe slug. Top-level session only. */
+declare function setSessionMeta(meta: { title?: string; slug?: string }): Promise<{ ok: boolean }>;`;
 // tasklist() resolves to a TaskEnvelope: { ok: boolean; degraded: boolean; data: <goal output>;
 // reason?: string; degradedTasks?: string[] }. Branch on r.ok / r.degraded; the payload is r.data.
 // Declared `any` by convention so r.data.field reads without casts.
@@ -98,7 +102,7 @@ declare function progress(): { episodes: number; toolCalls: number; elapsedMs: n
 ` + '\n' + catalogDts();
 
 /** Full library DTS for the top-level session VM (all globals, incl. `ask`). */
-export const LIBRARY_DTS = [ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS].join('\n');
+export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS].join('\n');
 
 /**
  * Library DTS WITHOUT `ask`. Fork and delegate VMs run headless/autonomous — there is

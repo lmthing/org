@@ -699,6 +699,22 @@ export class Session {
           return { ok: false, spaceKey: '', agentSlug: '', error: String(err?.message ?? err) };
         }
       }
+      case 'setSessionMeta': {
+        // The agent names the session. Core stays persistence-free: we just emit a
+        // session_meta trace event that the server's wireTracer ingests to update +
+        // persist the SessionEntry (mirrors how totalCostUsd rides llm_response events).
+        const meta = (req.args[0] ?? {}) as { title?: unknown; slug?: unknown };
+        const title = typeof meta.title === 'string' ? meta.title.trim().slice(0, 120) : undefined;
+        // slugify: lowercase, non-alphanumerics → '-', collapse/trim dashes, cap length.
+        const rawSlug = typeof meta.slug === 'string'
+          ? meta.slug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
+          : undefined;
+        const slug = rawSlug || undefined;
+        if (title || slug) {
+          this.tracer.write({ ts: Date.now(), type: 'session_meta', nodeId: this.sessionId, title, slug });
+        }
+        return { ok: Boolean(title || slug) };
+      }
       default: {
         // sleep / fork / tasklist / delegate are resolved by the shared router.
         // Model-initiated yields ARE subject to the agent's canDelegateTo gate.

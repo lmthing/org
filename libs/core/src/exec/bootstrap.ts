@@ -12,8 +12,9 @@ import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
+import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
-import { ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS } from '../typecheck/library-dts.js';
+import { ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS } from '../typecheck/library-dts.js';
 import type { RenderHost, Clock } from '../session/types.js';
 import type { YieldRequest } from '../eval/yield.js';
 import type { BudgetSnapshot } from '../eval/budget.js';
@@ -132,6 +133,7 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   }
   if (caps.delegate) injectGlobal(ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
   if (caps.registerSpace) injectGlobal(ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
+  if (caps.setSessionMeta) injectGlobal(ctx, 'setSessionMeta', createSetSessionMetaGlobal(pushYield) as AnyFn);
 
   // 6. JSX runtime: React shim (classic transform → JSXDescriptor) + component
   //    stubs, so model-emitted `display(<Stack>…)` works in EVERY context (the
@@ -179,7 +181,7 @@ export const CURRENT_TASK_DTS = `declare const currentTask: { resolve: (value: u
 export interface AmbientDtsOpts {
   /** Which orchestration globals are declared. `registerSpace` and everything
    *  in COMMON_DTS are declared unconditionally (matching the old DTS). */
-  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate'>;
+  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta'>;
   /** Function/component overlay (buildOverlay output). Empty/omitted → none. */
   overlay?: string;
   /** Declare the `currentTask` capture global (fork + delegate contexts). */
@@ -192,6 +194,7 @@ export function buildAmbientDts(opts: AmbientDtsOpts): string {
   const caps = opts.capabilities;
   return [
     caps.ask ? ASK_DTS : '',
+    caps.setSessionMeta ? SET_SESSION_META_DTS : '',
     caps.orchestrate ? TASKLIST_DTS : '',
     caps.orchestrate ? FORK_DTS : '',
     caps.delegate ? DELEGATE_DTS : '',

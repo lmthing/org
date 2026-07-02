@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createVM, type VM } from '../sandbox/quickjs.js';
 import { injectGlobal } from '../sandbox/host-bridge.js';
 import { injectHostTools } from '../globals/host-tools.js';
+import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
 import { runTurnLoop } from './turn-loop.js';
 import { MessageHistory } from '../context/history.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
@@ -190,6 +191,39 @@ describe('turn loop — parallel yields (Promise.all of forks)', () => {
 
     expect(readGlobal(vm, 'name')).toBe('Ada');
     expect(readGlobal(vm, 'age')).toBe(36);
+    vm.dispose();
+  });
+});
+
+describe('turn loop — setSessionMeta() runs end-to-end in a real VM', () => {
+  it('injects the real global, typechecks against LIBRARY_DTS, and binds {ok:true}', async () => {
+    const vm = await createVM();
+    // The genuine global factory pushes a 'setSessionMeta' yield.
+    const setSessionMeta = createSetSessionMetaGlobal((req) => vm.pendingYields.push(req));
+    injectGlobal(vm.ctx, 'setSessionMeta', setSessionMeta as (...a: unknown[]) => unknown);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    let seen: unknown;
+    await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      // LIBRARY_DTS is the real session DTS — proves setSessionMeta typechecks there.
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: scriptedStream('const r = await setSessionMeta({ title: "Pasta night", slug: "pasta-night" });'),
+      processYield: async (req) => {
+        seen = req.args[0];
+        expect(req.kind).toBe('setSessionMeta');
+        return { ok: true }; // mirrors Session.handleYield's return
+      },
+      maxRetries: 2,
+    });
+
+    expect(seen).toEqual({ title: 'Pasta night', slug: 'pasta-night' });
+    expect(readGlobal(vm, 'r')).toEqual({ ok: true });
     vm.dispose();
   });
 });

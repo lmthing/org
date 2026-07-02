@@ -31,6 +31,18 @@ Treat `instructions.md` (when present) as standing guidance for this project. Wh
 request relates to the user's uploaded material, `grep`/`readFile` under `documents/`.
 These relative paths resolve against the project directory.
 
+## Name the conversation (once, early)
+
+As soon as the user's intent is clear (usually your first substantive reply), give the
+session a short, human-readable title and a URL-safe slug so it is easy to find later.
+Call it once — not every turn — and don't ask the user for a name:
+
+```typescript
+await setSessionMeta({ title: 'Bolognese from scratch', slug: 'bolognese-from-scratch' });
+```
+
+The host slugifies `slug` (lowercased, non-alphanumerics → `-`); either field is optional.
+
 ## Triage — pick ONE path per request
 
 1. **Answer directly.** For general knowledge, conversation, reasoning, or anything you

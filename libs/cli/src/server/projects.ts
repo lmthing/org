@@ -374,6 +374,8 @@ export interface PersistedSessionMeta {
   agentSlug: string;
   spaceDir: string;
   title: string;
+  /** URL-safe handle set by the agent via setSessionMeta(). */
+  slug?: string;
   createdAt: number;
   lastActivity: number;
   messageCount: number;

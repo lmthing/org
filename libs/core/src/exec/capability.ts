@@ -36,6 +36,10 @@ export interface CapabilityProfile {
    *  like writeFileRaw. NOTE: its DTS declaration is unconditional (matching
    *  the pre-unification DTS, which only stripped ask/tasklist/fork/delegate). */
   registerSpace: boolean;
+  /** `setSessionMeta()` — sets the session title/slug. Top-level session only
+   *  (forks/delegates are headless sub-runs with no session identity to name),
+   *  so it is gated exactly like `ask`. */
+  setSessionMeta: boolean;
   /** Host write access: writeFileRaw + mutating shell commands (host-tools profile). */
   allowWrite: boolean;
 }
@@ -44,7 +48,7 @@ export interface CapabilityProfile {
  *  `canDelegate` comes from the session agent's `canDelegateTo` policy
  *  (`evaluateDelegatePolicy(...).mode !== 'none'`); defaults to true. */
 export function sessionCapabilities(canDelegate = true): CapabilityProfile {
-  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: true, allowWrite: true };
+  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: true, setSessionMeta: true, allowWrite: true };
 }
 
 /**
@@ -55,7 +59,7 @@ export function sessionCapabilities(canDelegate = true): CapabilityProfile {
  */
 export function forkCapabilities(role: string | undefined, canDelegate: boolean): CapabilityProfile {
   const allowWrite = roleProfile(role).allowWrite !== false;
-  return { kind: 'fork', ask: false, orchestrate: false, delegate: canDelegate, registerSpace: allowWrite, allowWrite };
+  return { kind: 'fork', ask: false, orchestrate: false, delegate: canDelegate, registerSpace: allowWrite, setSessionMeta: false, allowWrite };
 }
 
 /**
@@ -66,5 +70,5 @@ export function forkCapabilities(role: string | undefined, canDelegate: boolean)
  * are registered by the session or by write-capable forks).
  */
 export function delegateCapabilities(canDelegate = true): CapabilityProfile {
-  return { kind: 'delegate', ask: false, orchestrate: true, delegate: canDelegate, registerSpace: false, allowWrite: true };
+  return { kind: 'delegate', ask: false, orchestrate: true, delegate: canDelegate, registerSpace: false, setSessionMeta: false, allowWrite: true };
 }

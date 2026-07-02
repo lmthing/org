@@ -65,7 +65,10 @@ export type TraceEvent =
   | { ts: number; type: 'llm_progress'; context: string; nodeId?: string; chars: number; statements: number }
   // New: a user-sent chat message — captured in the trace so the conversation
   // (the user's prompts, not just display() output) reconstructs on reconnect/replay.
-  | { ts: number; type: 'user_message'; nodeId?: string; content: string };
+  | { ts: number; type: 'user_message'; nodeId?: string; content: string }
+  // New: the agent named the session via setSessionMeta — the server ingests this
+  // to update + persist the SessionEntry's title/slug (keeps core persistence-free).
+  | { ts: number; type: 'session_meta'; nodeId?: string; title?: string; slug?: string };
 
 /** Event types excluded from the NDJSON file (ephemeral, high-frequency). */
 const FILE_EXCLUDED = new Set<TraceEvent['type']>(['llm_progress']);
