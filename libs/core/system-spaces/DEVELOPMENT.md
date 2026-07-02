@@ -169,7 +169,28 @@ Code: `exec/prelude.ts` (`runPrelude`), `fork/fork.ts` (`runFork` integration),
 
 ---
 
-## 4. The two system spaces that matter most
+## 4. The system spaces that matter most
+
+### `user-thing` — the orchestrator's structural build pipeline
+THING answers/routes model-driven, but its "build a specialist" path (instruct path 3) is now
+STRUCTURAL: the `build_specialist` tasklist (`input: { request }`) runs the whole
+research-then-build program host-driven, so a weak THING can no longer stall between the research
+and the build:
+```
+research (explore, optional, prelude-delegates to system-research/researcher#deep_research)
+  → build (goal, general, delegates to system-architect/architect#synthesize_and_run)
+```
+- `research` is `optional: true` and its PRELUDE performs the delegation (`canDelegateTo:
+  ["system-research/researcher#deep_research"]` — delegate works in preludes; it routes through
+  the fork's own yield router). The model's only job is `currentTask.resolve({ report:
+  researchEnv?.data ?? {} })` — a failed/degraded research resolves `{ report: {} }`.
+- `build` ALWAYS runs (deps done OR skipped are both satisfied) and delegates to the architect
+  with `{ topic, goal, research }` in `context` — even when the report is empty. Its output
+  mirrors the architect finalize task field-for-field:
+  `{ spaceKey, agentSlug, actionId, query, ok, errors }`.
+- THING then emits just `const b = await tasklist('build_specialist', { request })` and, next
+  turn, the guarded delegate to `b.data.*` (allowed via THING's `"registered:*"` grant), adding a
+  degraded note to the user when `b.degraded`.
 
 ### `system-architect` — builds + runs other agents
 `synthesize_and_run` is decomposed into per-file, host-driven tasks (NOT a one-turn monolith):
@@ -183,36 +204,51 @@ write_agent (general) → write_tasks (general) → validate (explore) → regis
 - `validate` runs `validateSpace`; `register` calls `registerSpace`; `finalize` packages
   `{ spaceKey, agentSlug, actionId, query, ok, errors }`.
 - The architect's **instruct** does the top-level program (it's model-driven when delegated to):
-  deep-research the domain → `tasklist('synthesize_and_run', { topic, goal, research })` → delegate
-  to the built agent.
+  the research is HANDED DOWN in `context` (by THING's `build_specialist` research task) →
+  `tasklist('synthesize_and_run', { topic, goal, research })` → delegate to the built agent.
+  Degraded/empty research is NOT a stop condition — the instruct explicitly proceeds and lets the
+  built agent carry the knowledge gaps.
 - Builder functions (`functions/`): `writeAgentFile` (writes charter.md + instruct.md),
   `writeTaskFile` (emits role/functions/forEach), `writeKnowledgeIndex/Option`, `writeFunctionFile`
   (typechecks on write), `validateSpace` (requires charter, validates roles/forEach refs, knowledge
   refs, one goal/tasklist). `writeAgentFile` also **drops declared knowledge refs whose index.md
-  wasn't written** — a host-side safety net for weak-model over-declaration.
+  wasn't written** — a host-side safety net for weak-model over-declaration. Path handling is
+  shared: the builders call the host-injected `spacePath(...parts)` / `resolveSpaceDir(space)`
+  globals (`globals/host-tools.ts`, declared in the library DTS) instead of each carrying its own
+  copy of those helpers.
+- `writeAgentFile` emits `canDelegateTo: []` for every generated agent — hard "no delegation" is
+  the RIGHT declaration for a built specialist (it never delegates). The loader only warns about
+  `[]` when the agent's instruct body actually calls `delegate(` (the genuinely confusing combo).
 
 ### `system-research` — `researcher` agent, two actions
-- **`research`** (default, tasklist `research`): shallow — ONE search + one fetch + concise sourced
-  answer → `{ answer, sources }`. For quick questions.
+- **`research`** (default, tasklist `research`): shallow — ONE search + one fetch (both in the
+  task's PRELUDE — the host gathers, the model only composes) + concise sourced answer →
+  `{ answer, sources }`. For quick questions.
 - **`deep_research`** (tasklist `deep_research`): a 5-stage pipeline, each task narrow per the
-  governing principle (no one-turn monolith):
+  governing principle (no one-turn monolith). Every deterministic gather/aggregate step is a
+  `prelude:` (§3b) — the model's turns are reserved for synthesis + resolve:
   ```
-  scope (explore, webSearch only) → plan (explore, no tools) →
-  investigate (forEach: plan.questions, explore, webSearch+webFetch) →
-  synthesize (explore, no tools) → summarize (explore, no tools, goal)
+  scope (explore, webSearch only, prelude: 2 searches) → plan (explore, no tools) →
+  investigate (forEach: plan.questions, explore, prelude: search + 3 fetches) →
+  synthesize (explore, no tools, prelude: source-dedup + findings concat) →
+  summarize (explore, no tools, goal)
   ```
-  - `scope` runs TWO broad, fetch-free searches (the raw topic + a `topic:'news'`-biased
-    reformulation) and writes `{ topic, landscape, seedSources }` — reconnaissance the planner
-    uses instead of decomposing blind.
+  - `scope`'s PRELUDE runs TWO broad, fetch-free searches (the raw topic + a `topic:'news'`-biased
+    reformulation, bound as `overview`/`recent`); the model writes `{ topic, landscape,
+    seedSources }` — reconnaissance the planner uses instead of decomposing blind.
   - `plan` decomposes `scope.landscape` into 6-8 sub-questions spread across a fixed angle
     taxonomy (background, current state, key players, risks/debate, outlook, +1 topic-specific) →
     `{ topic, questions }`.
-  - `investigate` (`forEach: plan.questions`, parallel within `maxConcurrentForks`) does ONE search
-    + up to THREE fetches per question → `{ question, findings, sources, confidence, gaps }` — the
+  - `investigate` (`forEach: plan.questions`, parallel within `maxConcurrentForks`): its PRELUDE
+    derives `question` from `item`, runs ONE search and up to THREE fetches (`search`/`top`/
+    `page1..3` — the statements a weak model used to skip/rename across turn boundaries); the
+    model synthesizes → `{ question, findings, sources, confidence, gaps }` — the
     `confidence`/`gaps` fields are free (no extra web calls) and let downstream steps reason about
     evidence quality instead of presenting everything with equal certainty.
-  - `synthesize` clusters `investigate`'s array into themed buckets, dedupes sources (incl.
-    `scope.seedSources`), and rolls up gaps → `{ topic, themes, all_sources, gaps }`. NOT the goal.
+  - `synthesize`'s PRELUDE mechanically aggregates the fan-out (deduped `all_sources` incl.
+    `scope.seedSources`, `combined_findings`, `gap_notes` — this killed the observed `'sourceMap'
+    is not defined` improvisation); the model clusters into themed buckets →
+    `{ topic, themes, all_sources, gaps }`. NOT the goal.
   - `summarize` (goal) writes the final narrative from `synthesize`'s output → the **unchanged
     external contract** `{ topic, executive_summary, findings[], conclusion, sources[] }` that THING
     and the architect already destructure.
@@ -220,8 +256,9 @@ write_agent (general) → write_tasks (general) → validate (explore) → regis
     (not multiplied by fan-out); `investigate`'s fetch count went from 2→3 per question (the
     user-accepted depth/risk tradeoff, see §6) and questions from 3-5→6-8. All fetches remain
     individually bounded by the curl hardening in §5.
-- THING routes quick questions → `research`, deep dives → `deep_research`. The architect uses
-  `deep_research` for validated, sourced knowledge before building an agent.
+- THING routes quick questions → `research`, deep dives → `deep_research`. The build path gets
+  its `deep_research` report structurally, via `user-thing`'s `build_specialist` research task
+  (see the `user-thing` section above), and hands it to the architect as `context.research`.
 
 ---
 
@@ -234,9 +271,12 @@ write_agent (general) → write_tasks (general) → validate (explore) → regis
   level (incl. an agent's instruct when it is delegated to), and per-task delegation via §3a.
 - **Cross-fork data is JSON-only.** Values pass via `output` schema → `vm.setVar`. No functions/class
   instances. Upstream outputs arrive as vars named by task id; `forEach` element as `item`.
-- **Variables don't persist between statements/turns** unless re-bound — declare and use in the same
-  statement; keep yielding calls (`await webSearch/webFetch/tasklist/delegate/registerSpace`) FLAT at
-  top level, ternary-guarded, never inside `if/try/loop` (code after a nested yield is lost on resume).
+- **Statement-emission rules live in ONE place** — `exec/preamble.ts STATEMENT_PROTOCOL`, injected
+  by the harness into EVERY context's system prompt (session, delegate, fork): plain TS only, no
+  fences/IIFEs, one statement at a time, yielding calls FLAT at top level (ternary-guarded, never
+  inside `if/try/loop`), declare-and-use in the same statement. Do NOT restate any of it in space
+  files (see the §1 callout); for statements that need zero model judgment, use `prelude:` (§3b)
+  so the host executes them instead.
 - **Forks salvage, they don't hard-fail.** A fork that never `resolve()`s gets forced resolve turns,
   then a NEUTRAL schema-valid placeholder (`[]`/`0`/`false`/`""` — no prose note). Salvage is signalled
   in the control plane: `tasklist()` resolves to a `TaskEnvelope` `{ ok, degraded, data, reason?,

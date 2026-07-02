@@ -137,6 +137,14 @@ Boil the water. Confirm when the pot is at a full rolling boil.
 - `dependsOn` references other task IDs in the same tasklist.
 - `condition` (optional): a condition-DSL expression evaluated against upstream outputs, e.g. `garnish.done == true`.
 - `optional: true` means failure is non-blocking.
+- `role` (`explore`/`plan` read-only, `general` full), `functions: [...]` (allowlist; `[]` = none), `forEach: "<task>.<field>"` (host fan-out) and `canDelegateTo` (per-task delegation allowlist; `["*"]` unrestricted, `"registered:*"` = runtime-registered spaces) scope the task's fork — enforced by the host, never by prose.
+- `prelude:` (YAML block scalar of TS statements) — the HOST executes these in the fork VM before the model's first turn (yields like `webSearch`/`webFetch`/`delegate` allowed; a failing statement binds its names `undefined` and is noted, never kills the fork). Put every statement that needs zero model judgment here; the model only synthesizes + resolves.
+- Do NOT restate runtime protocol ("plain TypeScript", "no fences", flat-yield rules) in instructs or task bodies — the harness injects `STATEMENT_PROTOCOL` into every context already.
+
+### Calling a tasklist
+
+- `tasklists/<name>/index.md` frontmatter declares the `input:` schema; the body is the overall goal (injected into every task fork). The input schema is a **hard filter**: forks receive ONLY the declared seed keys — declare every key a task legitimately reads.
+- `tasklist(name, seed)` resolves to a `TaskEnvelope` `{ ok, degraded, data, reason?, degradedTasks? }` — branch on `.ok`/`.degraded`; the goal payload is `.data`. Salvaged fields are neutral empties (`""`/`0`/`false`/`[]`/`{}`), never prose.
 
 ## Validation Errors
 
