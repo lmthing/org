@@ -212,6 +212,9 @@ export interface AmbientDtsOpts {
   currentTask?: boolean;
   /** Extra ambient declarations (fork seed/upstream vars, delegate query/context). */
   extraDecls?: string[];
+  /** Project-generated typed `apiCall` overloads (Phase 4). When present AND the agent
+   *  holds `api:call`, these REPLACE the generic apiCall fragment so calls are strictly typed. */
+  appDts?: string;
 }
 
 /**
@@ -222,11 +225,15 @@ export interface AmbientDtsOpts {
  * the DTS, so a stray call fails typecheck — the same "not listed ⇒ not injected AND
  * absent from the DTS" invariant the boolean flags enforce for ask/fork/delegate.
  */
-function buildAppCapabilityDts(app: AppCapabilities): string {
+function buildAppCapabilityDts(app: AppCapabilities, appDts?: string): string {
   const parts: string[] = [
     composeDbDts({ read: !!app['db:read'], write: !!app['db:write'], schema: !!app['db:schema'] }),
   ];
-  for (const id of ['api:call', 'pages:write', 'api:write', 'hooks:write'] as const) {
+  // api:call — when the caller supplies project-generated typed overloads (Phase 4:
+  // `apiCall('markRead', { id: string }): { ok: boolean }` + a generic fallback), use
+  // those so a malformed call fails the agent's typecheck; otherwise the generic fragment.
+  if (app['api:call']) parts.push(appDts && appDts.trim() ? appDts : CAPABILITY_DTS_FRAGMENTS['api:call']);
+  for (const id of ['pages:write', 'api:write', 'hooks:write'] as const) {
     if (app[id]) parts.push(CAPABILITY_DTS_FRAGMENTS[id]);
   }
   return parts.filter(Boolean).join('\n');
@@ -247,7 +254,7 @@ export function buildAmbientDts(opts: AmbientDtsOpts): string {
     // failing at runtime (the fix for the old unconditional COMMON_DTS declaration).
     caps.allowWrite ? EXEC_SHELL_DTS : '',
     caps.allowWrite ? WRITE_FILE_RAW_DTS : '',
-    buildAppCapabilityDts(caps.app),
+    buildAppCapabilityDts(caps.app, opts.appDts),
     opts.overlay ?? '',
     opts.currentTask ? CURRENT_TASK_DTS : '',
     ...(opts.extraDecls ?? []),

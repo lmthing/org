@@ -1,0 +1,384 @@
+/**
+ * Typed-contract **schema generation** (Phase 4, 4A).
+ *
+ * The single source of truth for a project's app types is TS + JSDoc:
+ *   - `database/<table>.json` — table/column/relation schemas → **row interfaces**
+ *   - `api/<route>/<METHOD>.ts` — `export interface Input`/`Output` → **JSON Schema**
+ *
+ * This module turns both into text/JSON that the rest of the build consumes:
+ *   - {@link generateRowTypes} — TS `interface` per table (columns + typed relation
+ *     fields, JSDoc'd from each `description`).
+ *   - {@link generateEndpointContracts} — per endpoint: JSON Schema for `Input`/
+ *     `Output` (via `ts-json-schema-generator`) plus a compact TS-type string.
+ *   - {@link generateAppTypes} — writes `<projectRoot>/types/generated.d.ts` (a
+ *     git-ignored build artifact) and returns it alongside the endpoint contracts
+ *     (which 4B's `validate.ts`/`apicall-dts.ts` consume).
+ *
+ * Runs in the **Node/cli layer** (npm available). `ts-json-schema-generator` is
+ * heavy, so the generator is instantiated **once per handler file per build** —
+ * generation is called on save/boot, never per request.
+ */
+
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createGenerator, type Config } from 'ts-json-schema-generator';
+
+import {
+  isBelongsTo,
+  isHasMany,
+  type LoadedTable,
+  type ColumnType,
+  type RelationSchema,
+} from '@lmthing/core';
+import type { Endpoint } from '../api/loader.js';
+import type { HttpMethod } from '../api/input.js';
+
+/** A JSON-Schema-shaped object (draft-07). Kept loose — it is passed to `ajv`. */
+export type JsonSchema = Record<string, unknown>;
+
+/**
+ * The typed contract for one API endpoint — the unit 4B's `validate.ts` (ajv) and
+ * `apicall-dts.ts` (agent DTS overload) consume.
+ */
+export interface EndpointContract {
+  /** Stable agent-facing id (`export const name`). */
+  name: string;
+  /** HTTP method (from the handler filename). */
+  method: HttpMethod;
+  /** Route pattern (`[id]` → `:id`), e.g. `/items/:id`. */
+  routePath: string;
+  /** Human-readable description (`export const description`), `''` when absent. */
+  description: string;
+  /** JSON Schema for the assembled `Input` (empty-object schema when no `Input`). */
+  inputSchema: JsonSchema;
+  /** JSON Schema for `Output` (empty-object schema when no `Output`). */
+  outputSchema: JsonSchema;
+  /** Compact TS-type text for `Input`, e.g. `{ id: string }`. */
+  inputTsType: string;
+  /** Compact TS-type text for `Output`, e.g. `{ ok: boolean }`. */
+  outputTsType: string;
+}
+
+/** Result of {@link generateAppTypes}. */
+export interface GeneratedAppTypes {
+  /** The full text written to `types/generated.d.ts`. */
+  generatedDts: string;
+  /** The per-endpoint contracts (cached by the integrator; consumed by 4B). */
+  endpoints: EndpointContract[];
+}
+
+// ── Row types ───────────────────────────────────────────────────────────────
+
+/** TS type for a column kind. `date` is an ISO string; `json` is opaque `unknown`. */
+const COLUMN_TS: Record<ColumnType, string> = {
+  string: 'string',
+  number: 'number',
+  boolean: 'boolean',
+  date: 'string',
+  json: 'unknown',
+};
+
+/**
+ * Generate a TS `interface` per table from `database/*.json`.
+ *
+ * Each column maps by kind (`string→string`, `number→number`, `boolean→boolean`,
+ * `date→string` (ISO), `json→unknown`); a **required or primary-key** column is
+ * non-optional, every other column is optional (`?`). Each field is JSDoc'd from
+ * its `description`. Typed **relation fields** are appended: a `hasMany` →
+ * `<Target>[]`, a `belongsTo` → `<Target>`, both optional (present only when
+ * `include`d). Output is deterministic (tables sorted by name).
+ *
+ * Table → interface name: the snake/kebab basename is PascalCased and its **last
+ * word singularized** (`feed_items` → `FeedItem`, `comments` → `Comment`,
+ * `categories` → `Category`). See {@link tableInterfaceName}.
+ */
+export function generateRowTypes(tables: LoadedTable[]): string {
+  const sorted = [...tables].sort((a, b) => a.name.localeCompare(b.name));
+  return sorted.map((t) => renderRowInterface(t)).join('\n\n');
+}
+
+function renderRowInterface(table: LoadedTable): string {
+  const iface = tableInterfaceName(table.name);
+  const lines: string[] = [];
+  lines.push(`/** ${table.schema.description} */`);
+  lines.push(`export interface ${iface} {`);
+
+  for (const [colName, col] of Object.entries(table.schema.columns)) {
+    const optional = col.primaryKey || col.required ? '' : '?';
+    lines.push(`  /** ${col.description} */`);
+    lines.push(`  ${colName}${optional}: ${COLUMN_TS[col.type]};`);
+  }
+
+  const relations = table.schema.relations ?? {};
+  for (const [relName, rel] of Object.entries(relations)) {
+    lines.push(`  /** ${rel.description} */`);
+    lines.push(`  ${relName}?: ${relationTsType(rel)};`);
+  }
+
+  lines.push('}');
+  return lines.join('\n');
+}
+
+/** TS type for a relation field — `hasMany` → `Target[]`, `belongsTo` → `Target`. */
+function relationTsType(rel: RelationSchema): string {
+  if (isHasMany(rel)) return `${tableInterfaceName(rel.hasMany)}[]`;
+  if (isBelongsTo(rel)) return tableInterfaceName(rel.belongsTo);
+  return 'unknown';
+}
+
+/**
+ * Map a table name (snake/kebab basename) to its row-interface name.
+ *
+ * Rule (deterministic): split on `_`/`-`, singularize the **last** word with a
+ * small English rule set, then PascalCase every word. E.g. `feed_items` →
+ * `FeedItem`, `comments` → `Comment`, `categories` → `Category`,
+ * `feed-status` → `FeedStatus` (unchanged tail).
+ */
+export function tableInterfaceName(tableName: string): string {
+  const words = tableName.split(/[_-]+/).filter((w) => w.length > 0);
+  if (words.length === 0) return 'Row';
+  words[words.length - 1] = singularize(words[words.length - 1]);
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+}
+
+/**
+ * Small deterministic English singularizer for the last word of a table name.
+ * Rules, in order: `…{cons}ies` → `…y`; `…{s,x,z,ch,sh}es` → strip `es`; a bare
+ * trailing `s` is stripped only when preceded by a "normal" consonant — NOT after
+ * `s`/`u`/`i`, which keeps already-singular tails like `status`/`address`/`axis`.
+ */
+function singularize(word: string): string {
+  if (/[^aeiou]ies$/i.test(word)) return word.slice(0, -3) + 'y'; // categories → category
+  if (/(ses|xes|zes|ches|shes)$/i.test(word)) return word.slice(0, -2); // boxes → box
+  if (/[^sui]s$/i.test(word)) return word.slice(0, -1); // items → item (but not status/axis/address)
+  return word;
+}
+
+// ── Endpoint contracts ──────────────────────────────────────────────────────
+
+const INPUT_TYPE = 'Input';
+const OUTPUT_TYPE = 'Output';
+
+/** An empty-object JSON Schema (used when a handler declares no `Input`/`Output`). */
+function emptyObjectSchema(): JsonSchema {
+  return { type: 'object', properties: {}, additionalProperties: false };
+}
+
+/**
+ * Build a {@link EndpointContract} for every discovered endpoint.
+ *
+ * For each handler file a single `ts-json-schema-generator` generator is created
+ * and asked for the `Input` and `Output` exported interfaces. A handler with no
+ * `Input` (e.g. a param-less GET) yields an empty-object input schema; same for a
+ * missing `Output`. The schema is resolved to a self-contained root (its `$ref`
+ * inlined, any nested `definitions` retained) so it is directly `ajv`-usable, and
+ * a compact TS-type string is derived from it for 4B's `apiCall` overload.
+ *
+ * Endpoints are returned sorted by `name` for cache-friendly determinism.
+ */
+export async function generateEndpointContracts(
+  projectRoot: string,
+  routes: Endpoint[],
+): Promise<EndpointContract[]> {
+  void projectRoot; // routes already carry absolute handler paths; kept for symmetry
+  const contracts = await Promise.all(routes.map((ep) => buildContract(ep)));
+  return contracts.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function buildContract(ep: Endpoint): Promise<EndpointContract> {
+  const source = await readFile(ep.file, 'utf8');
+  const hasInput = hasExportedType(source, INPUT_TYPE);
+  const hasOutput = hasExportedType(source, OUTPUT_TYPE);
+
+  // One generator per handler file (heavy) — reused for both Input and Output.
+  const generator =
+    hasInput || hasOutput ? createGenerator(generatorConfig(ep.file)) : null;
+
+  const inputRaw = hasInput && generator ? generator.createSchema(INPUT_TYPE) : null;
+  const outputRaw = hasOutput && generator ? generator.createSchema(OUTPUT_TYPE) : null;
+
+  const inputSchema = inputRaw ? resolveRootSchema(inputRaw as JsonSchema) : emptyObjectSchema();
+  const outputSchema = outputRaw ? resolveRootSchema(outputRaw as JsonSchema) : emptyObjectSchema();
+
+  return {
+    name: ep.name,
+    method: ep.method,
+    routePath: ep.pattern,
+    description: ep.description ?? '',
+    inputSchema,
+    outputSchema,
+    inputTsType: schemaToTs(inputSchema),
+    outputTsType: schemaToTs(outputSchema),
+  };
+}
+
+function generatorConfig(file: string): Config {
+  return {
+    path: file,
+    // Handler ctx types (AsyncDbApi, SpawnFn, …) are ambient/unimported — we only
+    // want the Input/Output interfaces, so skip whole-program typechecking.
+    skipTypeCheck: true,
+    expose: 'all',
+    additionalProperties: false,
+  };
+}
+
+/** True when `source` exports `interface <name>` or `type <name>`. */
+function hasExportedType(source: string, name: string): boolean {
+  return new RegExp(`export\\s+(?:interface|type)\\s+${name}\\b`).test(source);
+}
+
+/**
+ * Inline a generator result's top-level `$ref` so the returned schema's own
+ * `type`/`properties`/`required` describe the root type directly (ajv-usable),
+ * while any *other* definitions it referenced are retained under `definitions`.
+ */
+function resolveRootSchema(generated: JsonSchema): JsonSchema {
+  const defs = (generated.definitions as Record<string, JsonSchema> | undefined) ?? {};
+  const ref = generated.$ref;
+  if (typeof ref !== 'string' || !ref.startsWith('#/definitions/')) return generated;
+
+  const rootName = decodeURIComponent(ref.slice('#/definitions/'.length));
+  const root = defs[rootName];
+  if (!root) return generated;
+
+  const rest: Record<string, JsonSchema> = {};
+  for (const [k, v] of Object.entries(defs)) if (k !== rootName) rest[k] = v;
+
+  return Object.keys(rest).length > 0 ? { ...root, definitions: rest } : { ...root };
+}
+
+// ── Schema → compact TS printer ──────────────────────────────────────────────
+
+/**
+ * Print a resolved JSON Schema as a compact single-line TS type string
+ * (`{ id: string }`, `{ ok: boolean }`, `string[]`, …). Local `$ref`s resolve
+ * against the schema's own `definitions`. Unknown/empty schemas print `unknown`.
+ */
+function schemaToTs(schema: JsonSchema): string {
+  const defs = (schema.definitions as Record<string, JsonSchema> | undefined) ?? {};
+  return printNode(schema, defs, new Set());
+}
+
+function printNode(node: JsonSchema, defs: Record<string, JsonSchema>, seen: Set<string>): string {
+  const ref = node.$ref;
+  if (typeof ref === 'string' && ref.startsWith('#/definitions/')) {
+    const name = decodeURIComponent(ref.slice('#/definitions/'.length));
+    if (seen.has(name)) return 'unknown'; // guard against self-referential cycles
+    const target = defs[name];
+    if (!target) return 'unknown';
+    return printNode(target, defs, new Set([...seen, name]));
+  }
+
+  const union = node.anyOf ?? node.oneOf;
+  if (Array.isArray(union)) {
+    const parts = union.map((s) => printNode(s as JsonSchema, defs, seen));
+    return dedupeUnion(parts);
+  }
+
+  if (Array.isArray(node.enum)) {
+    return dedupeUnion(node.enum.map((v) => JSON.stringify(v)));
+  }
+  if ('const' in node) return JSON.stringify(node.const);
+
+  const type = node.type;
+  if (type === 'array') {
+    const items = node.items as JsonSchema | undefined;
+    const inner = items ? printNode(items, defs, seen) : 'unknown';
+    return needsParens(inner) ? `(${inner})[]` : `${inner}[]`;
+  }
+  if (type === 'object' || node.properties) return printObject(node, defs, seen);
+  if (type === 'string') return 'string';
+  if (type === 'number' || type === 'integer') return 'number';
+  if (type === 'boolean') return 'boolean';
+  if (type === 'null') return 'null';
+
+  return 'unknown';
+}
+
+function printObject(node: JsonSchema, defs: Record<string, JsonSchema>, seen: Set<string>): string {
+  const props = (node.properties as Record<string, JsonSchema> | undefined) ?? {};
+  const required = new Set((node.required as string[] | undefined) ?? []);
+  const keys = Object.keys(props).sort(); // deterministic ordering
+  if (keys.length === 0) return '{}';
+  const fields = keys.map((k) => {
+    const opt = required.has(k) ? '' : '?';
+    return `${k}${opt}: ${printNode(props[k], defs, seen)}`;
+  });
+  return `{ ${fields.join('; ')} }`;
+}
+
+function dedupeUnion(parts: string[]): string {
+  const uniq = [...new Set(parts)];
+  return uniq.length === 1 ? uniq[0] : uniq.join(' | ');
+}
+
+/** A union needs parenthesising before a `[]` suffix. */
+function needsParens(ts: string): boolean {
+  return ts.includes(' | ');
+}
+
+// ── generated.d.ts ───────────────────────────────────────────────────────────
+
+/**
+ * Load a project's tables + api routes, build the row interfaces and endpoint
+ * contracts, write `<projectRoot>/types/generated.d.ts` (a **git-ignored build
+ * artifact** — created at runtime under a project dir, never committed), and
+ * return the dts text plus the endpoint contracts.
+ *
+ * Deterministic: tables and endpoints are emitted in sorted order so an unchanged
+ * project produces byte-identical output (cache-friendly).
+ */
+export async function generateAppTypes(projectRoot: string): Promise<GeneratedAppTypes> {
+  // Cheap filesystem loaders (no db engine, no handler evaluation). Imported
+  // relatively-lazily to keep the top of this module purely declarative.
+  const { loadProjectApp } = await import('../loader.js');
+  const { loadApiRoutes } = await import('../api/loader.js');
+
+  const [app, routes] = await Promise.all([loadProjectApp(projectRoot), loadApiRoutes(projectRoot)]);
+  const endpoints = await generateEndpointContracts(projectRoot, routes.endpoints);
+
+  const generatedDts = renderGeneratedDts(app.tables, endpoints);
+
+  const typesDir = join(projectRoot, 'types');
+  await mkdir(typesDir, { recursive: true });
+  await writeFile(join(typesDir, 'generated.d.ts'), generatedDts, 'utf8');
+
+  return { generatedDts, endpoints };
+}
+
+/** PascalCase an endpoint name for its `Input`/`Output` interface prefix (`markRead` → `MarkRead`). */
+function endpointTypePrefix(name: string): string {
+  const words = name.split(/[^A-Za-z0-9]+/).filter((w) => w.length > 0);
+  return words
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('')
+    .replace(/^(.)/, (c) => c.toUpperCase());
+}
+
+/** Emit an `Input`/`Output` declaration — `interface` for object shapes, else a `type` alias. */
+function renderNamedType(name: string, tsType: string): string {
+  return tsType.startsWith('{')
+    ? `export interface ${name} ${tsType}`
+    : `export type ${name} = ${tsType};`;
+}
+
+function renderGeneratedDts(tables: LoadedTable[], endpoints: EndpointContract[]): string {
+  const header = [
+    '// AUTO-GENERATED — do not edit. Regenerated by the per-project build (@lmthing/cli).',
+    '// Source: database/*.json (row types) + api/**/{GET,POST,PUT,PATCH,DELETE}.ts (endpoint I/O).',
+  ].join('\n');
+
+  const rows = generateRowTypes(tables);
+
+  const endpointBlocks = endpoints.map((ep) => {
+    const prefix = endpointTypePrefix(ep.name);
+    const lines: string[] = [];
+    if (ep.description) lines.push(`/** ${ep.description} */`);
+    lines.push(renderNamedType(`${prefix}Input`, ep.inputTsType));
+    lines.push(renderNamedType(`${prefix}Output`, ep.outputTsType));
+    return lines.join('\n');
+  });
+
+  return [header, rows, ...endpointBlocks].filter((s) => s.length > 0).join('\n\n') + '\n';
+}

@@ -56,6 +56,10 @@ export interface SessionOpts {
   projectRoot?: string;
   /** The project id (basename of projectRoot); exposed as LMTHING_PROJECT_ID. */
   projectId?: string;
+  /** Project-generated typed `apiCall` overloads (Phase 4) — appended to the agent's ambient
+   *  DTS when it holds `api:call`, so `apiCall('markRead', …)` is strictly typed. Built by
+   *  libs/cli from the project's `api/` endpoint contracts. */
+  appDts?: string;
   /** Host-provided app-global engine impls (the project's db store, etc.). Wrapped in the
    *  capability-scope check and injected into the session VM + its forks/delegates when the
    *  agent holds the matching grants AND projectRoot is set (see exec/app-globals.ts). The

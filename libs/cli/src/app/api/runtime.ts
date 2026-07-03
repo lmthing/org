@@ -34,7 +34,7 @@ import {
   toErrorBody,
   type ApiErrorBody,
 } from './errors.js';
-import { assembleInput, passThroughValidator, type HttpMethod } from './input.js';
+import { assembleInput, passThroughValidator, type HttpMethod, type InputValidator } from './input.js';
 import {
   loadApiRoutes,
   matchRoute,
@@ -91,6 +91,10 @@ export interface ApiRuntimeOpts {
   apiCallResolver?: ApiCallFn;
   /** Where to log leaked-internal-error messages (defaults to `console.error`). */
   logError?: (message: string, err?: unknown) => void;
+  /** Per-endpoint input validators keyed by endpoint `name` (Phase 4: ajv-compiled from
+   *  the generated JSON Schema, `coerceTypes` on). Absent ⇒ the Phase-3 pass-through seam
+   *  (no validation). Built once at generation time by `makeValidatorMap`. */
+  validators?: Map<string, InputValidator>;
 }
 
 /** The api runtime handle. */
@@ -195,7 +199,8 @@ export function createApiRuntime(opts: ApiRuntimeOpts): ApiRuntime {
     const body = isQueryMethod(method) ? undefined : rawInput;
     const assembled = assembleInput(method as HttpMethod, params, query, body);
 
-    const validated = passThroughValidator(assembled);
+    const validate = opts.validators?.get(endpoint.name) ?? passThroughValidator;
+    const validated = validate(assembled);
     if (!validated.ok) return { status: 400, body: toErrorBody(400, 'invalid input', validated.details) };
 
     const code = await transpile(endpoint.file);

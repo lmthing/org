@@ -35,6 +35,7 @@ import { parseArgs, type CliArgs } from './args.js';
 import { materializeRuntime, runtimeNeedsInit, syncSystemSpaces } from './runtime-init.js';
 import { bootProjectApp } from '../app/boot.js';
 import type { ProjectDb } from '../app/store.js';
+import { generateProjectContracts } from '../app/build/contracts.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
 import { createStream } from '../stream/stream.js';
@@ -511,6 +512,17 @@ async function main(): Promise<void> {
       console.error(`[app] failed to boot project "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
+    // Phase 4: generate the typed-contract bundle (typed apiCall overloads for the agent's
+    // DTS). Only when the project has an api/ dir; failure is non-fatal (agent falls back to
+    // the generic apiCall signature).
+    let appDts: string | undefined;
+    if (existsSync(join(projectRoot, 'api'))) {
+      try {
+        appDts = (await generateProjectContracts(projectRoot)).apiCallDts;
+      } catch (err) {
+        console.error(`[app] contract generation failed for "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     const session = new Session(
       {
         spaceDir,
@@ -527,6 +539,7 @@ async function main(): Promise<void> {
         projectId,
         projectRoot,
         appGlobals: projectDb ? { db: projectDb.db } : undefined,
+        appDts,
       },
       { streamFn },
     );

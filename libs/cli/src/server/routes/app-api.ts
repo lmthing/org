@@ -34,9 +34,12 @@ export function createAppApiHandler(
     if (lmthingRoot) {
       const projectDb = await manager.getProjectDb(lmthingRoot, projectId);
       if (projectDb) {
+        const contracts = await manager.getProjectContracts(lmthingRoot, projectId);
         rt = createApiRuntime({
           projectRoot: join(lmthingRoot, projectId),
           db: projectDb.async,
+          // Phase 4: per-endpoint ajv validators (coerceTypes) from the generated schema.
+          validators: contracts?.validators,
           // Phase-3 seam: return a runId placeholder. The real fire-and-forget agent
           // runner (SessionManager.runHeadless) is Phase 6; until then a spawned run
           // does not execute, so we do NOT fire onError (nothing failed — it deferred).

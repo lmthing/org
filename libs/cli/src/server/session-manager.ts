@@ -8,6 +8,7 @@ import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
 import type { StreamOpts, StreamSession, AppGlobalImpls } from '@lmthing/core';
 import { bootProjectApp } from '../app/boot.js';
 import type { ProjectDb } from '../app/store.js';
+import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
 import { WebRenderHost } from '../rpc/server.js';
 import { TraceHub } from '../rpc/trace-hub.js';
 import {
@@ -106,6 +107,8 @@ export interface BuildSessionArgs {
   /** The project's booted app-global impls (db store, …). Injected into the session VM +
    *  its forks/delegates when the agent holds the matching capability grants. */
   appGlobals?: AppGlobalImpls;
+  /** Project-generated typed `apiCall` overloads (Phase 4) for the agent's DTS. */
+  appDts?: string;
   model?: string;
   budget?: {
     maxEpisodes?: number;
@@ -239,6 +242,7 @@ export class SessionManager {
         projectId: args.projectId,
         projectRoot: args.projectRoot,
         appGlobals: args.appGlobals,
+        appDts: args.appDts,
       },
       { streamFn: this.streamFn },
     );
@@ -273,6 +277,28 @@ export class SessionManager {
       try { db?.close(); } catch { /* best-effort */ }
     }
     this.projectDbs.clear();
+  }
+
+  /** Per-project Phase-4 typed-contract bundle (validators + apiCall DTS + generated types).
+   *  Generated once (heavy: ts-json-schema-generator) and cached; `null` when the project has
+   *  no `api/` dir. Feeds both the api runtime (validators) and the session (apiCall DTS). */
+  private projectContracts = new Map<string, ProjectContracts | null>();
+
+  async getProjectContracts(root: string, projectId: string): Promise<ProjectContracts | null> {
+    let c = this.projectContracts.get(projectId);
+    if (c === undefined) {
+      const projectRoot = join(root, projectId);
+      c = null;
+      if (existsSync(join(projectRoot, 'api'))) {
+        try {
+          c = await generateProjectContracts(projectRoot);
+        } catch (err) {
+          console.warn(`[app] failed to generate contracts for "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      this.projectContracts.set(projectId, c);
+    }
+    return c;
   }
 
   /**
@@ -503,6 +529,7 @@ export class SessionManager {
     ]);
 
     const appGlobals = await this.getProjectAppGlobals(root, projectId);
+    const contracts = await this.getProjectContracts(root, projectId);
     const session = this.buildSessionFn({
       spaceDir,
       agentSlug,
@@ -515,6 +542,7 @@ export class SessionManager {
       projectId,
       projectRoot: join(root, projectId),
       appGlobals,
+      appDts: contracts?.apiCallDts,
     });
 
     // Wire up the tracer to this session's hub + cost tracking.
@@ -569,6 +597,7 @@ export class SessionManager {
     ]);
 
     const appGlobals = await this.getProjectAppGlobals(root, projectId);
+    const contracts = await this.getProjectContracts(root, projectId);
     const session = this.buildSessionFn({
       spaceDir,
       agentSlug,
@@ -581,6 +610,7 @@ export class SessionManager {
       projectId,
       projectRoot: join(root, projectId),
       appGlobals,
+      appDts: contracts?.apiCallDts,
     });
 
     // Wire up the tracer to this session's hub + cost tracking.
