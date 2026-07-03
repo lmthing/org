@@ -17,7 +17,7 @@ import {
   handleListProjects, handleCreateProject, handleDeleteProject,
   handleGetProjectInstructions, handlePutProjectInstructions,
   handleListDocuments, handleCreateDocument,
-  handleListProjectSessions,
+  handleListProjectSessions, handleListSpaceSessions,
   handleGetProjectSpaceFiles, handlePutProjectSpaceFiles, handlePostProjectSpaceFile,
   handlePutProjectSpaceFile, handleDeleteProjectSpaceFile,
   handleListProjectSpaces, handleGetProjectCompletions,
@@ -147,6 +147,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   router.add('GET', '/api/projects/:projectId/documents', handleListDocuments);
   router.add('POST', '/api/projects/:projectId/documents', handleCreateDocument);
   router.add('GET', '/api/projects/:projectId/sessions', handleListProjectSessions);
+  router.add('GET', '/api/projects/:projectId/spaces/:spaceId/sessions', handleListSpaceSessions);
   router.add('GET', '/api/projects/:projectId/spaces/:spaceId/files', handleGetProjectSpaceFiles);
   router.add('PUT', '/api/projects/:projectId/spaces/:spaceId/files', handlePutProjectSpaceFiles);
   router.add('POST', '/api/projects/:projectId/spaces/:spaceId/files', handlePostProjectSpaceFile);

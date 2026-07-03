@@ -30,4 +30,6 @@ export type {
 } from './router.js';
 
 // Phase 7: <Chat> — a page-droppable `<Chat agent="space/agent" />` component
-// (render-descriptor + @lmthing/ui). Not implemented in this phase.
+// (the @lmthing/ui catalog descriptor renderer + the standard pod chat protocol).
+export { Chat } from './chat.js';
+export type { ChatProps } from './chat.js';

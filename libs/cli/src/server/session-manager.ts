@@ -32,6 +32,8 @@ import {
   safeDocumentName,
   sessionsDir,
   listProjectSessions,
+  spaceSessionsDir,
+  listSpaceSessions,
   projectSpaceDir,
   readSpaceFiles,
   writeSpaceFiles,
@@ -71,6 +73,10 @@ export interface SessionEntry {
   status: SessionStatus;
   /** Project id (project-mode only). */
   projectId?: string;
+  /** When set (spaceRef-created session), the project-relative space basename this
+   *  session is bound to. Selects the per-space snapshot dir
+   *  (`<project>/spaces/<spaceId>/sessions/<id>`) for persist + resume. */
+  spaceId?: string;
   /** Human-readable title set from the first user message, or overridden by the
    *  agent via setSessionMeta(). */
   title?: string;
@@ -371,6 +377,12 @@ export class SessionManager {
   createSession(opts: {
     spaceDir?: string;
     agentSlug?: string;
+    /** Project-relative `space/agent` (e.g. `curation/curator`). In project mode
+     *  this loads that specific space's agent with full project capability
+     *  inheritance and persists the session under
+     *  `<project>/spaces/<space>/sessions/<id>`. On resume, pass the same ref so
+     *  the per-space snapshot dir is located. */
+    spaceRef?: string;
     model?: string;
     budget?: BuildSessionArgs['budget'];
     /** Project id to use when running in project mode. Defaults to 'user'. */
@@ -394,7 +406,16 @@ export class SessionManager {
         return { sessionId: resumeId };
       }
 
-      const snapshotDir = join(root, projectId, 'sessions', resumeId);
+      // A spaceRef-bound session persists under the per-space dir; a plain
+      // project session under `<project>/sessions/`.
+      let spaceId: string | undefined;
+      let snapshotDir: string;
+      if (opts.spaceRef) {
+        spaceId = parseSpaceRef(opts.spaceRef).space;
+        snapshotDir = join(spaceSessionsDir(root, projectId, spaceId), resumeId);
+      } else {
+        snapshotDir = join(sessionsDir(root, projectId), resumeId);
+      }
       const snapshotFile = join(snapshotDir, 'snapshot.json');
 
       if (!existsSync(snapshotFile)) {
@@ -422,6 +443,7 @@ export class SessionManager {
         started: false,
         status: 'idle',
         projectId,
+        spaceId,
         createdAt: now,
         messageCount: 0,
         totalCostUsd: 0,
@@ -460,7 +482,21 @@ export class SessionManager {
     if (this.lmthingRoot) {
       const root = this.lmthingRoot;
       const projectId = opts.projectId ?? DEFAULT_PROJECT_ID;
-      const snapshotDir = join(root, projectId, 'sessions', sessionId);
+      // A spaceRef-created session (chat bound to `space/agent`) persists under
+      // the per-space sessions dir; a plain project session under
+      // `<project>/sessions/`. `spaceId` is recorded so persist/list resolve the
+      // same dir later. The agent segment (if any) is resolved async.
+      let spaceId: string | undefined;
+      let snapshotDir: string;
+      let placeholderAgentSlug = opts.agentSlug ?? 'thing';
+      if (opts.spaceRef) {
+        const ref = parseSpaceRef(opts.spaceRef);
+        spaceId = ref.space;
+        if (ref.agent) placeholderAgentSlug = ref.agent;
+        snapshotDir = join(spaceSessionsDir(root, projectId, spaceId), sessionId);
+      } else {
+        snapshotDir = join(sessionsDir(root, projectId), sessionId);
+      }
 
       // Placeholder entry so callers can look up the session immediately.
       const placeholderEntry: SessionEntry = {
@@ -469,11 +505,12 @@ export class SessionManager {
         renderHost,
         hub,
         spaceDir: join(root, projectId),
-        agentSlug: opts.agentSlug ?? 'thing',
+        agentSlug: placeholderAgentSlug,
         lastActivity: Date.now(),
         started: false,
         status: 'idle',
         projectId,
+        spaceId,
         createdAt: Date.now(),
         messageCount: 0,
         totalCostUsd: 0,
@@ -539,12 +576,21 @@ export class SessionManager {
     projectId: string,
     opts: {
       agentSlug?: string;
+      spaceRef?: string;
       model?: string;
       budget?: BuildSessionArgs['budget'];
     },
   ): Promise<void> {
-    const spaceDir = join(root, projectId);
-    const agentSlug = opts.agentSlug ?? 'thing';
+    // A spaceRef binds the session to a specific project space + agent; else the
+    // agent runs at the project root. Either way it keeps full project context
+    // (appGlobals, contracts, preloaded spaces) so its `db` writes fire hooks.
+    let spaceDir = join(root, projectId);
+    let agentSlug = opts.agentSlug ?? 'thing';
+    if (opts.spaceRef) {
+      const { space, agent } = parseSpaceRef(opts.spaceRef);
+      spaceDir = projectSpaceDir(root, projectId, space);
+      agentSlug = agent ?? (await resolveDefaultAgent(spaceDir)) ?? agentSlug;
+    }
     const projectSpacesDir = join(root, projectId, 'spaces');
 
     const [systemSpaceDirs, preloadSpaceDirs] = await Promise.all([
@@ -589,13 +635,18 @@ export class SessionManager {
     projectId: string,
     opts: {
       agentSlug?: string;
+      spaceRef?: string;
       model?: string;
       budget?: BuildSessionArgs['budget'];
     },
     sessionId: string,
     snapshotDir: string,
   ): Promise<void> {
-    const spaceDir = join(root, projectId);
+    // Resume a spaceRef-bound session against its own space dir; else the
+    // project root. agentSlug is restored from persisted meta below.
+    const spaceDir = opts.spaceRef
+      ? projectSpaceDir(root, projectId, parseSpaceRef(opts.spaceRef).space)
+      : join(root, projectId);
     const projectSpacesDir = join(root, projectId, 'spaces');
 
     // Load persisted meta to restore title/createdAt/messageCount.
@@ -681,6 +732,7 @@ export class SessionManager {
         projectId: entry.projectId,
         agentSlug: entry.agentSlug,
         spaceDir: entry.spaceDir,
+        spaceId: entry.spaceId,
         title: entry.title ?? '',
         slug: entry.slug,
         createdAt: entry.createdAt,
@@ -1028,6 +1080,7 @@ export class SessionManager {
     // Add live sessions that aren't persisted yet (new sessions not yet sent a message).
     for (const [, entry] of this.sessions) {
       if (entry.projectId !== safe) continue;
+      if (entry.spaceId) continue; // space-bound sessions belong to listSpaceSessions
       if (result.some((m) => m.sessionId === entry.sessionId)) continue;
       result.unshift({
         sessionId: entry.sessionId,
@@ -1045,6 +1098,57 @@ export class SessionManager {
     }
 
     // Sort newest-first.
+    return result.sort((a, b) => b.lastActivity - a.lastActivity);
+  }
+
+  /**
+   * List persisted chat sessions for a single project space
+   * (`<root>/<projectId>/spaces/<spaceId>/sessions/`), overlaid with live status
+   * where applicable. Mirrors {@link listProjectSessions}; newest-first.
+   */
+  async listSpaceSessions(projectId: string, spaceId: string): Promise<PersistedSessionMeta[]> {
+    const root = this.requireRoot();
+    const safeProj = safeProjectId(projectId);
+    if (!safeProj) throw new Error(`invalid project id: ${projectId}`);
+    const safeSpace = safeProjectId(spaceId);
+    if (!safeSpace) throw new Error(`invalid space id: ${spaceId}`);
+    const persisted = await listSpaceSessions(root, safeProj, safeSpace);
+
+    // Overlay live status for any of these sessions currently in memory.
+    const result = persisted.map((meta) => {
+      const live = this.sessions.get(meta.sessionId);
+      if (!live) return meta;
+      return {
+        ...meta,
+        status: live.status,
+        lastActivity: live.lastActivity,
+        title: live.title ?? meta.title,
+        slug: live.slug ?? meta.slug,
+        messageCount: live.messageCount,
+        totalCostUsd: live.totalCostUsd > 0 ? live.totalCostUsd : meta.totalCostUsd,
+      };
+    });
+
+    // Add live space sessions not yet persisted (created, no message sent yet).
+    for (const [, entry] of this.sessions) {
+      if (entry.projectId !== safeProj || entry.spaceId !== safeSpace) continue;
+      if (result.some((m) => m.sessionId === entry.sessionId)) continue;
+      result.unshift({
+        sessionId: entry.sessionId,
+        projectId: safeProj,
+        agentSlug: entry.agentSlug,
+        spaceDir: entry.spaceDir,
+        spaceId: safeSpace,
+        title: entry.title ?? '',
+        slug: entry.slug,
+        createdAt: entry.createdAt,
+        lastActivity: entry.lastActivity,
+        messageCount: entry.messageCount,
+        status: entry.status,
+        totalCostUsd: entry.totalCostUsd > 0 ? entry.totalCostUsd : undefined,
+      });
+    }
+
     return result.sort((a, b) => b.lastActivity - a.lastActivity);
   }
 
@@ -1216,6 +1320,30 @@ export class SessionManager {
       clearInterval(this.reaper);
       this.reaper = null;
     }
+  }
+}
+
+/**
+ * Parse a project-relative `spaceRef` (`space/agent`, e.g. `curation/curator`)
+ * into its `space` basename and optional `agent` segment. Extra path segments
+ * are ignored. `space` falls back to the whole ref when there is no separator.
+ */
+function parseSpaceRef(spaceRef: string): { space: string; agent?: string } {
+  const parts = spaceRef.split('/').filter(Boolean);
+  return { space: parts[0] ?? spaceRef, agent: parts[1] };
+}
+
+/**
+ * Resolve a space's default agent slug (its first declared agent) when a
+ * `spaceRef` omits the `/agent` segment. Returns undefined if the space can't be
+ * loaded or declares no agents (callers fall back to their own default).
+ */
+async function resolveDefaultAgent(spaceDir: string): Promise<string | undefined> {
+  try {
+    const space = await loadSpace(spaceDir, { requireAgents: false });
+    return Object.keys(space.agents)[0];
+  } catch {
+    return undefined;
   }
 }
 

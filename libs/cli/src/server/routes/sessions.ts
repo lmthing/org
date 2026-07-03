@@ -11,7 +11,7 @@ export const handleCreateSession: RouteHandler = async (
 ): Promise<void> => {
   const body = await readBody(req);
   const parsed = JSON.parse(body || '{}') as {
-    spaceDir?: string; agentSlug?: string; model?: string; projectId?: string;
+    spaceDir?: string; agentSlug?: string; spaceRef?: string; model?: string; projectId?: string;
     resumeSessionId?: string;
     budget?: { maxEpisodes?: number; maxToolCalls?: number; maxForkDepth?: number; maxWallClockMs?: number };
   };
@@ -19,6 +19,7 @@ export const handleCreateSession: RouteHandler = async (
     const { sessionId } = ctx.manager.createSession({
       spaceDir: parsed.spaceDir,
       agentSlug: parsed.agentSlug,
+      spaceRef: parsed.spaceRef,
       model: parsed.model,
       budget: parsed.budget,
       projectId: parsed.projectId,

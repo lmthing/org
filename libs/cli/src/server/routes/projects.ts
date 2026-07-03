@@ -150,6 +150,25 @@ export const handleListProjectSessions: RouteHandler = async (
   }
 };
 
+export const handleListSpaceSessions: RouteHandler = async (
+  _req: IncomingMessage,
+  res: ServerResponse,
+  params: Record<string, string>,
+  ctx,
+): Promise<void> => {
+  const rawId = params['projectId']!;
+  const spaceId = params['spaceId']!;
+  if (!safeProjectId(spaceId)) {
+    sendJson(res, 400, { error: `invalid space id: ${spaceId}` }); return;
+  }
+  try {
+    const sessions = await ctx.manager.listSpaceSessions(rawId, spaceId);
+    sendJson(res, 200, { sessions });
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+  }
+};
+
 export const handleGetProjectSpaceFiles: RouteHandler = async (
   _req: IncomingMessage,
   res: ServerResponse,

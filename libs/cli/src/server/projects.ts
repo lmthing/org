@@ -373,6 +373,9 @@ export interface PersistedSessionMeta {
   projectId: string;
   agentSlug: string;
   spaceDir: string;
+  /** When set, this session belongs to a project space (chat under
+   *  `<project>/spaces/<spaceId>/sessions/`) rather than the project root. */
+  spaceId?: string;
   title: string;
   /** URL-safe handle set by the agent via setSessionMeta(). */
   slug?: string;
@@ -397,6 +400,39 @@ export async function listProjectSessions(
   projectId: string,
 ): Promise<PersistedSessionMeta[]> {
   const dir = sessionsDir(root, projectId);
+  const entries = await safeDirEntries(dir);
+  const results: PersistedSessionMeta[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const metaPath = join(dir, entry.name, 'meta.json');
+      const raw = await readFile(metaPath, 'utf8');
+      results.push(JSON.parse(raw) as PersistedSessionMeta);
+    } catch {
+      // Corrupt or incomplete — skip.
+    }
+  }
+  return results.sort((a, b) => b.lastActivity - a.lastActivity);
+}
+
+/** `<root>/<projectId>/spaces/<spaceId>/sessions/` — where chat sessions bound to
+ *  a specific project space are persisted (net-new; the project-root
+ *  `<root>/<projectId>/sessions/` remains for plain project sessions). */
+export function spaceSessionsDir(root: string, projectId: string, spaceId: string): string {
+  return join(root, projectId, 'spaces', spaceId, 'sessions');
+}
+
+/**
+ * List persisted session metas for a single project space
+ * (`<root>/<projectId>/spaces/<spaceId>/sessions/`), sorted by lastActivity
+ * desc. Mirrors {@link listProjectSessions}; tolerates a missing dir → [].
+ */
+export async function listSpaceSessions(
+  root: string,
+  projectId: string,
+  spaceId: string,
+): Promise<PersistedSessionMeta[]> {
+  const dir = spaceSessionsDir(root, projectId, spaceId);
   const entries = await safeDirEntries(dir);
   const results: PersistedSessionMeta[] = [];
   for (const entry of entries) {
