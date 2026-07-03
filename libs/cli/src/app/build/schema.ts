@@ -212,9 +212,25 @@ async function buildContract(ep: Endpoint): Promise<EndpointContract> {
   };
 }
 
+/**
+ * Escape glob metacharacters in a file path so `ts-json-schema-generator` — which
+ * feeds `config.path` through `globSync(normalize(resolve(path)))` — treats a
+ * literal path as a literal, not a pattern. **Dynamic api routes** live in
+ * bracketed dirs (`api/articles/[id]/GET.ts`); an unescaped `[id]` is a glob
+ * character-class that matches nothing, so the generator finds "No input files"
+ * and contract/type generation dies for any app with a `[param]` segment.
+ *
+ * Uses **bracket-wrap** escaping (`[` → `[[]`, `]` → `[]]`, …) rather than
+ * backslash escaping because the generator runs the path through `normalize-path`
+ * first, which would strip a backslash. Bracket-wrapping survives normalization.
+ */
+export function escapeGlobPath(file: string): string {
+  return file.replace(/[[\]{}()*?]/g, '[$&]');
+}
+
 function generatorConfig(file: string): Config {
   return {
-    path: file,
+    path: escapeGlobPath(file),
     // Handler ctx types (AsyncDbApi, SpawnFn, …) are ambient/unimported — we only
     // want the Input/Output interfaces, so skip whole-program typechecking.
     skipTypeCheck: true,

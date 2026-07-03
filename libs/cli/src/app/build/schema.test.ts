@@ -16,6 +16,7 @@ import {
   generateEndpointContracts,
   generateAppTypes,
   tableInterfaceName,
+  escapeGlobPath,
 } from './schema.js';
 import { loadApiRoutes } from '../api/loader.js';
 import type { LoadedTable } from '@lmthing/core';
@@ -174,6 +175,35 @@ describe('generateEndpointContracts', () => {
     expect(c.inputSchema).toEqual({ type: 'object', properties: {}, additionalProperties: false });
     expect(c.inputTsType).toBe('{}');
     expect(c.outputTsType).toBe('{ pong: boolean }');
+  });
+
+  // Regression: a handler in a **dynamic** route dir (`[id]`) must generate its
+  // contract. The generator globs `config.path`; an unescaped `[id]` is a glob
+  // character-class that matches no file → "No input files" and the whole build
+  // dies. `escapeGlobPath` must neutralise the brackets. (Every project app with
+  // a `[param]` route — e.g. `blog`'s `api/articles/[id]/GET.ts` — depends on this.)
+  it('generates a contract for a dynamic [id] route dir (glob-escaped path)', async () => {
+    const root = await scratch();
+    await mkdir(join(root, 'api', 'articles', '[id]'), { recursive: true });
+    await writeFile(
+      join(root, 'api', 'articles', '[id]', 'GET.ts'),
+      `export const name = 'getArticle'\nexport interface Input { id: string }\nexport interface Output { id: string; title: string }\nexport default async function handler(input: Input) { return { id: input.id, title: 't' } }\n`,
+      'utf8',
+    );
+
+    const routes = await loadApiRoutes(root);
+    const [c] = await generateEndpointContracts(root, routes.endpoints);
+    expect(c.name).toBe('getArticle');
+    expect(c.routePath).toBe('/articles/:id');
+    expect(c.inputTsType).toBe('{ id: string }');
+    expect(c.outputTsType).toBe('{ id: string; title: string }');
+  });
+});
+
+describe('escapeGlobPath', () => {
+  it('bracket-wraps glob metacharacters so a literal path stays literal', () => {
+    expect(escapeGlobPath('/a/[id]/GET.ts')).toBe('/a/[[]id[]]/GET.ts');
+    expect(escapeGlobPath('/plain/path.ts')).toBe('/plain/path.ts');
   });
 });
 
