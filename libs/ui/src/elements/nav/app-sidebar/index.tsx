@@ -1,6 +1,6 @@
 import '@lmthing/css/elements/nav/app-sidebar/index.css'
 import * as React from 'react'
-import { ChevronDown, ChevronRight, ChevronLeft, Plus, X, PanelLeft } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronLeft, Plus, X, PanelLeft, Settings } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { CozyThingText } from '../../branding/cozy-text'
 
@@ -23,6 +23,9 @@ export interface AppSidebarProps {
   onCreateProject?: (name: string) => void | Promise<void>
   /** Optional inline project delete. */
   onDeleteProject?: (id: string) => void | Promise<void>
+  /** Optional per-project settings action — renders a gear beside the project
+   *  dropdown when provided. */
+  onProjectSettings?: () => void
 
   /** Spaces belonging to the active project — the collapsible `SPACES` section. */
   spaces: AppSidebarSpace[]
@@ -219,6 +222,7 @@ export function AppSidebar({
   onSelectProject,
   onCreateProject,
   onDeleteProject,
+  onProjectSettings,
   spaces,
   activeSpaceId,
   onSelectSpace,
@@ -280,15 +284,27 @@ export function AppSidebar({
         )}
       </div>
 
-      {/* Project dropdown + optional new chat */}
+      {/* Project dropdown (+ optional project settings) + optional new chat */}
       <div className="app-sidebar__top">
-        <ProjectDropdown
-          projects={projects}
-          activeProjectId={activeProjectId}
-          onSelectProject={onSelectProject}
-          onCreateProject={onCreateProject}
-          onDeleteProject={onDeleteProject}
-        />
+        <div className="app-sidebar__project-row">
+          <ProjectDropdown
+            projects={projects}
+            activeProjectId={activeProjectId}
+            onSelectProject={onSelectProject}
+            onCreateProject={onCreateProject}
+            onDeleteProject={onDeleteProject}
+          />
+          {onProjectSettings && activeProjectId && (
+            <button
+              onClick={onProjectSettings}
+              className="app-sidebar__project-settings"
+              title="Project settings"
+              aria-label="Project settings"
+            >
+              <Settings className="app-sidebar__section-icon" aria-hidden="true" />
+            </button>
+          )}
+        </div>
         {onNewChat && (
           <button
             onClick={onNewChat}

@@ -240,21 +240,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
     </div>
   );
 
-  const footer = (
-    <SidebarFooter current="chat">
-      {/* Chat-only: per-project settings drawer */}
-      {activeProject && onProjectSettings && (
-        <div className="px-3 py-2 flex items-center gap-2">
-          <button
-            onClick={() => onProjectSettings(activeProject.id, activeProject.name)}
-            className="flex-1 text-left text-xs text-muted-foreground hover:text-foreground truncate"
-          >
-            ⚙ {activeProject.name}
-          </button>
-        </div>
-      )}
-    </SidebarFooter>
-  );
+  const footer = <SidebarFooter current="chat" />;
 
   return (
     <AppSidebar
@@ -267,6 +253,11 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
       onSelectProject={setActiveProjectId}
       onCreateProject={createProject}
       onDeleteProject={deleteProject}
+      onProjectSettings={
+        activeProject && onProjectSettings
+          ? () => onProjectSettings(activeProject.id, activeProject.name)
+          : undefined
+      }
       spaces={spaces}
       onSelectSpace={openSpaceInStudio}
       spacesLoading={spacesLoading}

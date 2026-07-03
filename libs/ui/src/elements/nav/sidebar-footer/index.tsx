@@ -4,16 +4,8 @@ import { useAuth } from '@lmthing/auth'
 import { cn } from '../../../lib/utils'
 import { AppLinks } from '../app-links'
 import { SettingsDialog } from '../settings-dialog'
+import { initials } from '../../settings/account'
 import type { LmthingApp } from '../../../lib/app-urls'
-
-/** Initials for the avatar fallback, derived from a name or email. */
-function initials(label: string): string {
-  const cleaned = label.split('@')[0].replace(/[._-]+/g, ' ').trim()
-  const parts = cleaned.split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
 
 export interface SidebarFooterProps {
   /** Current surface — its own link is omitted from the cross-app row. */

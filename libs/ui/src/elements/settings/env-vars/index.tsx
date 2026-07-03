@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@lmthing/auth'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Input } from '@lmthing/ui/elements/forms/input'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { CLOUD_BASE_URL } from '@/lib/config'
+import { Button } from '../../forms/button'
+import { Input } from '../../forms/input'
+import { Caption } from '../../typography/caption'
+import { dataPlaneOrigin } from '../../../lib/app-urls'
+import { isModelKey } from '../models'
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 /**
- * Env-vars editor for the compute pod's Settings page: load, add/remove/edit
- * key-value pairs, and save (which triggers a pod restart to apply changes).
+ * Env-vars editor (no heading/card): load, add/remove/edit key-value pairs, and
+ * save (which triggers a pod restart to apply changes). Config lives on the
+ * gateway. Shared by the settings dialog and the computer settings page.
  */
 export function EnvVars() {
   const { authFetch, isAuthenticated } = useAuth()
+  const CLOUD = dataPlaneOrigin('cloud')
   const [vars, setVars] = useState<Record<string, string>>({})
   const [newKey, setNewKey] = useState('')
   const [newVal, setNewVal] = useState('')
@@ -24,13 +27,19 @@ export function EnvVars() {
   useEffect(() => {
     if (!isAuthenticated) { setLoading(false); return }
     let cancelled = false
-    authFetch(`${CLOUD_BASE_URL}/api/compute/env`)
+    authFetch(`${CLOUD}/api/compute/env`)
       .then(r => r.json())
-      .then(d => { if (!cancelled && d.vars) setVars(d.vars) })
+      .then(d => {
+        if (cancelled || !d.vars) return
+        // Model aliases (LM_MODEL*) are managed in the Models tab — hide them here.
+        setVars(Object.fromEntries(
+          Object.entries(d.vars as Record<string, string>).filter(([k]) => !isModelKey(k)),
+        ))
+      })
       .catch(() => { if (!cancelled) setError('Failed to load env vars') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [authFetch, isAuthenticated])
+  }, [authFetch, isAuthenticated, CLOUD])
 
   const addVar = () => {
     const k = newKey.trim()
@@ -53,10 +62,16 @@ export function EnvVars() {
     setError(null)
     setSaved(false)
     try {
-      const res = await authFetch(`${CLOUD_BASE_URL}/api/compute/env`, {
+      // Preserve model aliases (managed in the Models tab) — PUT replaces the
+      // whole set, so re-read them fresh and merge before saving.
+      const cur = await authFetch(`${CLOUD}/api/compute/env`).then(r => r.json()).catch(() => ({ vars: {} }))
+      const modelVars = Object.fromEntries(
+        Object.entries((cur.vars ?? {}) as Record<string, string>).filter(([k]) => isModelKey(k)),
+      )
+      const res = await authFetch(`${CLOUD}/api/compute/env`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vars }),
+        body: JSON.stringify({ vars: { ...modelVars, ...vars } }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed to save')
@@ -68,6 +83,7 @@ export function EnvVars() {
     }
   }
 
+  if (!isAuthenticated) return <Caption muted>Log in to manage environment variables.</Caption>
   if (loading) return <Caption muted>Loading...</Caption>
 
   return (
@@ -98,7 +114,7 @@ export function EnvVars() {
           style={{ flex: 1, fontFamily: 'monospace' }}
           onKeyDown={e => e.key === 'Enter' && addVar()}
         />
-        <Button variant="secondary" size="sm" onClick={addVar}>Add</Button>
+        <Button variant="outline" size="sm" onClick={addVar}>Add</Button>
       </div>
       {error && <Caption className="text-destructive">{error}</Caption>}
       {saved && <Caption muted>Saved. Pod is restarting to apply changes.</Caption>}

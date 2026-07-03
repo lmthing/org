@@ -1,0 +1,52 @@
+@reference "../../../theme.css";
+
+/* Tabbed account/workspace settings dialog (side-based tabs). Widens the base
+   dialog and lays out a left tab rail + a scrollable content panel. */
+
+.settings-dialog {
+  @apply w-full;
+  max-width: min(92vw, 56rem);
+  max-height: 85vh;
+}
+
+.settings-dialog__body {
+  @apply flex gap-6 min-h-0;
+}
+
+/* Left vertical tab rail. */
+.settings-dialog__tabs {
+  @apply flex flex-col gap-1 shrink-0 w-44 border-r border-border pr-3;
+}
+
+.settings-dialog__tab {
+  @apply w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left
+         text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors;
+}
+
+.settings-dialog__tab--active {
+  @apply bg-muted text-foreground font-medium;
+}
+
+.settings-dialog__tab-icon {
+  @apply w-4 h-4 shrink-0;
+}
+
+/* Right content panel — scrolls independently. */
+.settings-dialog__panel {
+  @apply flex-1 min-w-0 overflow-y-auto pr-1;
+  max-height: 70vh;
+}
+
+.settings-dialog__section {
+  @apply flex flex-col gap-2;
+}
+
+/* Stack tabs above content on narrow viewports. */
+@media (max-width: 640px) {
+  .settings-dialog__body {
+    @apply flex-col gap-3;
+  }
+  .settings-dialog__tabs {
+    @apply flex-row flex-wrap w-full border-r-0 border-b border-border pr-0 pb-3;
+  }
+}
