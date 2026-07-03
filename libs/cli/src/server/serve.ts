@@ -35,6 +35,7 @@ import {
   handleAppManifest, handleGetAppFile, handlePutAppFile,
   handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild,
 } from './routes/app-admin.js';
+import { handleListApps, handleInstallApp } from './routes/apps.js';
 import { listProjects } from './projects.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
@@ -200,6 +201,12 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   router.add('GET', '/api/projects/:projectId/app/files/*', handleGetAppFile(manager, effectiveLmthingRoot));
   router.add('PUT', '/api/projects/:projectId/app/files/*', handlePutAppFile(manager, effectiveLmthingRoot));
   router.add('GET', '/api/projects/:projectId/app', handleAppManifest(manager, effectiveLmthingRoot));
+
+  // Store distribution (Phase 10) — list the catalog + install a catalog app into the
+  // user's runtime root (materialize `store/apps/<id>/` → `<root>/<projectId>/`, then boot
+  // + build). Reserved `/api/*`, so these match before the SPA catch-all.
+  router.add('GET', '/api/apps', handleListApps());
+  router.add('POST', '/api/apps/install', handleInstallApp(manager, effectiveLmthingRoot));
 
   // Project-app PAGES — `/app/<project>/*` (non-api). The built React bundle is served
   // with an asset-manifest SPA fallback (dotted route params route client-side) + a strict

@@ -1,6 +1,7 @@
 ---
 title: Architect
-knowledge: []
+knowledge:
+  - space_format/frontmatter
 functions:
   - writeAgentFile
   - writeTaskFile

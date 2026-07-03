@@ -80,6 +80,42 @@ task's frontmatter `canDelegateTo`, where the *omitted* default is "no delegatio
 | explicit list | hard allowlist enforced at call time — `"space/agent"` (any action) or `"space/agent#action"` (that action only); a violating `delegate()` throws an error naming the allowed targets |
 | `"registered:*"` entry | additionally allow any space registered at runtime via `registerSpace()` |
 
+### Capabilities (`capabilities:` frontmatter)
+
+An agent can additionally declare **project-app capability grants** — the powers behind a
+project's `database/pages/api/hooks` (see **§7 Project Apps**). Each `capabilities:` list entry is
+either a **bare capability id** (full scope) or a **single-key map** carrying that capability's
+config (narrowed scope). A capability not listed is not injected as a global, **and is stripped
+from the agent's typecheck DTS** — a stray call fails typecheck, not just at runtime.
+
+```yaml
+capabilities:
+  - db:read: { tables: [sources, raw_items] }   # narrowed: only these tables
+  - db:write: { tables: [raw_items] }           # per-verb scope — read wide, write narrow
+  - api:call: { allow: [webSearch, markRead] }  # the allowlist IS api:call's config
+  - pages:write                                 # bare = full scope
+```
+
+| Capability | Unlocks | Config |
+|---|---|---|
+| `db:read` | `db.query`, `db.tables` | optional `{ tables: [...] }` (bare = all tables) |
+| `db:write` | `db.insert`, `db.update`, `db.remove` | optional `{ tables: [...] }` |
+| `db:schema` | `db.createTable`, `db.addColumn`, `writeTableSchema` | optional `{ tables: [...] }` |
+| `pages:write` | `writePage(route, src)` | bare only |
+| `api:write` | `writeApi(route, src)` | bare only |
+| `hooks:write` | `writeHook(slug, def)` | bare only |
+| `api:call` | `apiCall(name, input)` | **required** `{ allow: [...] }` — there is no "call anything" |
+| `project:manage` | `createProject(id, opts)`, `selectProject(id)` | bare only |
+
+Validation is **fail-loud**: an unknown capability id, an unknown config key, a `db:*` `tables`
+entry naming a table absent from the project's `database/`, a config payload given to a bare-only
+capability, or a bare `api:call` (its `allow` list is required) all throw and abort the space load.
+
+**All top-level frontmatter keys are validated against an allow-list** — `title`, `knowledge`,
+`functions`, `components`, `actions`, `defaultAction`, `canDelegateTo`, `dependencies`,
+`capabilities`. An unrecognized key (e.g. a typo'd `capabilties`) throws instead of being silently
+ignored.
+
 ### Functions (`functions/*.ts`)
 Functions are synchronous TypeScript exports that utilize the core host primitives. No Node.js imports are allowed.
 ```typescript
@@ -261,3 +297,152 @@ Run this Hello World space with:
 ```bash
 node libs/cli/dist/cli/bin.js --space ./hello-world --agent greeter --repl
 ```
+
+---
+
+## 7. Project Apps
+
+A **project** can own an application: `database/ pages/ api/ hooks/` at the **project root**
+(siblings of `spaces/`, not inside any one space). Spaces stay the reusable "agent capability"
+layer (§2); the project is the app + its data — several spaces in one project can share the same
+database and pages. See [project-as-application.md](./project-as-application.md) for the full
+design (serving/domains, Studio admin, safety, boot sequence); this section is the quick reference
+for authoring one.
+
+### `database/<table>.json` — the data model
+
+One JSON file per table (table name = file basename). The table **and every column and relation
+require a `description`** — the schema is the agent's mental model of the data, not just its
+shape; the loader fails loud on any missing one.
+
+```json
+{
+  "title": "Feed items",
+  "description": "One personalized item in the user's feed.",
+  "columns": {
+    "id":    { "type": "string",  "description": "unique id", "primaryKey": true, "generated": "uuid" },
+    "title": { "type": "string",  "description": "headline", "required": true },
+    "read":  { "type": "boolean", "description": "opened yet", "default": false }
+  },
+  "relations": {
+    "comments": { "hasMany": "comments", "via": "feedItemId", "description": "notes attached" }
+  }
+}
+```
+
+- Column `type`: `string | number | boolean | date | json`. Flags: `primaryKey` (exactly one,
+  `generated: "uuid"` recommended), `required`, `unique`, `default`, `generated` (`uuid`|`now`).
+- `references: { table, column?, onDelete? }` maps to a real SQLite `FOREIGN KEY` (`onDelete`:
+  `cascade`|`setNull`|`restrict`, default `restrict`).
+- `relations` name navigable links (`belongsTo`/`hasMany` + `via`), driving generated typed
+  relation fields (e.g. `FeedItem.comments: Comment[]`) and `db.query(table, { include: [...] })`
+  joins.
+- Evolution is additive-lenient only — new tables/columns via `createTable`/`addColumn`; a
+  rename/drop/type-change diverging from the live schema fails loud at boot rather than silently
+  dropping data.
+
+### Two db surfaces — sync in the agent, async on the Node side
+
+One schema (`libs/core/src/db/schema.ts`) drives one `DbApi` interface with **two typed surfaces**
+(`libs/core/src/db/types.ts`):
+
+- **Agent sandbox — synchronous.** `db.query`/`tables`/`insert`/`update`/`remove`/`createTable`/
+  `addColumn` is an execShell-class host call (SQLite in the same process, no turn boundary).
+  Gated per verb by the `db:read`/`db:write`/`db:schema` capabilities (§2).
+- **Node handlers (`api/`/`hooks/`) — `AsyncDbApi`.** The identical method set, each returning a
+  `Promise` — a cross-thread message-channel proxy to the main process (`await ctx.db.update(...)`),
+  because the handler runs worker-isolated. Every write still executes in the **main** process
+  (what keeps hook dispatch and the loop guard sound); the worker is a crash boundary, not a second
+  writer.
+
+### `api/<route>/<METHOD>.ts` — named, typed Node handlers
+
+The endpoint route is a directory; the HTTP method is the filename (`GET.ts`/`POST.ts`/`PUT.ts`/
+`PATCH.ts`/`DELETE.ts`). Each exports a stable `name` (the agent-facing id), a `description`,
+`Input`/`Output` interfaces, and a default **async** handler:
+
+```ts
+// api/mark-read/POST.ts → HTTP POST ".../api/mark-read" ; agent name "markRead"
+export const name = 'markRead';
+export const description = 'Mark a single feed item read, by its id.';
+export interface Input  { id: string }
+export interface Output { ok: boolean }
+
+export default async function handler(
+  input: Input,
+  ctx: { db: AsyncDbApi; spawn: SpawnFn; apiCall: ApiCallFn },
+): Promise<Output> {
+  const n = await ctx.db.update('feed_items', { where: { id: input.id }, set: { read: true } });
+  return { ok: n > 0 };
+}
+```
+
+- **Dual-addressed**: the browser calls the HTTP route + method; an agent calls by `name` via the
+  typed `apiCall('markRead', { id })`. `name` is unique per project (fail-loud on a duplicate).
+- Runs in **Node, worker-isolated** — a crash boundary for the app, not a security boundary (the
+  per-user pod is). TS + JSDoc are the single source of truth: `ts-json-schema-generator` emits a
+  JSON Schema per endpoint that drives **ajv** request validation, a typed `apiCall` overload
+  injected into the calling agent's DTS, and the client's typed `useApi`/`useApiMutation`.
+- A handler may `ctx.spawn('space/agent#action', input, { onError })` to kick a headless agent run
+  fire-and-forget (returns a `runId`; `onError` fails-close any pending row it wrote).
+
+### `pages/*.tsx` — client-side React
+
+File-based routing: `pages/index.tsx` → `/`, `pages/items/[id].tsx` → `/items/:id`; `_app.tsx` /
+`_layout.tsx` are non-route wrappers (root providers / persistent chrome). A page is a
+default-exported component; route params arrive as `params`, and data comes from **`@app/runtime`**
+— never a pod-side loader:
+
+```tsx
+// pages/items/[id].tsx → route /items/:id
+import { useApi } from '@app/runtime'
+export default function ItemPage({ params }: { params: { id: string } }) {
+  const { data: item, isLoading } = useApi('getItem', { id: params.id })  // typed to endpoint I/O
+  if (isLoading) return <Spinner />
+  return <article><h1>{item.title}</h1></article>
+}
+```
+
+`useApi(name, input)` is a typed query hook (`{ data, error, isLoading, refetch }`);
+`useApiMutation(name, { invalidates? })` is a typed mutation (`{ mutate, isPending, error }`); the
+bare `apiCall(name, input)` covers one-shot/non-React calls. Styling uses `@lmthing/css` design
+tokens only — the same hard token gate as every other web surface. A page may also drop in
+**`<Chat agent="space/agent" />`** (from `@app/runtime`) for a live, full-capability conversation
+with a project agent — the one place the catalog descriptor renderer lives inside an app.
+
+### `hooks/<slug>.ts` — unified triggers
+
+A default-exported hook object, `type: 'cron'` (`every: '<n>(m|h|d)'`, clamped ≥5m, or `daily:
+'HH:MM'`) or `type: 'database'` (`on: { table, event: 'insert'|'update'|'remove' }`), each either
+**declarative** (`trigger: 'space/agent#action'`) or **imperative** (`handler: async ({ row, db,
+delegate }) => {...}`). `database` dispatch is **in-process and decoupled from the write** — a
+`db.*` write enqueues matching hooks and returns immediately; the queue drains on the event loop
+after the current eval unwinds (never re-entrant). `cron` rides the pod's native crond in
+production (regenerated on boot) and an in-process 60s tick in local dev. A host-enforced **loop
+guard** (depth cap, self-write exclusion, per-hook cooldown/coalesce) applies regardless of what an
+agent authors.
+
+### The capability model gates every surface
+
+None of the above is ambient — every `db`/`pages:write`/`api:write`/`hooks:write`/`api:call` power
+is off unless the authoring agent's frontmatter grants it (§2 Capabilities). There is no default
+app access; even THING (the top-level chat agent) holds no app capabilities of its own.
+
+### `system-appbuilder` — the space that builds apps
+
+THING never authors an app directly — it **delegates** to the system space `system-appbuilder`
+(`libs/core/system-spaces/system-appbuilder/`), which supplies five least-privilege agents:
+
+| Agent | Capabilities | Role |
+|---|---|---|
+| `app-architect` | `project:manage` + the full authoring set + delegation to the other four | binds/creates the target project, plans, fans out |
+| `data-modeler` | `db:schema`, `db:read` | designs/evolves tables |
+| `page-builder` | `pages:write`, `db:read` | authors pages |
+| `api-author` | `api:write`, `db:read` | authors named typed endpoints |
+| `automator` | `hooks:write` | wires cron/db hooks |
+
+Its `build_app` tasklist decomposes a request into `design → create_project → build_table[] →
+build_api[] → build_page[] → build_hook[] → finalize` — one authoring call per file, the same
+incremental, per-file scaffolding discipline `system-architect` uses for plain spaces (never one
+giant scaffold call). See [project-as-application.md](./project-as-application.md) for the rest —
+serving/domains, Studio admin/dev, safety rules, and the boot sequence.
