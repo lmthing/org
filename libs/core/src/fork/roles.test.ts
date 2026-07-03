@@ -50,9 +50,13 @@ describe('fork roles', () => {
     expect(rolePreamble('explore')).toMatch(/read-only/i);
   });
 
-  it('an explore fork CANNOT write (capability withheld at injection)', async () => {
+  it('an explore fork CANNOT write — writeFileRaw is DTS-gated out (stray call fails typecheck) and never writes', async () => {
     const target = join(tmpdir(), 'lmthing_explore_should_not_write.txt');
     rmSync(target, { force: true });
+    // The read-only role's ambient DTS no longer DECLARES writeFileRaw (the fix for
+    // the old unconditional COMMON_DTS declaration), so this statement fails typecheck
+    // and never executes — the write never reaches disk. (The host-tools runtime guard
+    // remains as defense-in-depth; see the direct-injection test below.)
     const engine = makeEngine(
       `const w = writeFileRaw(${JSON.stringify(target)}, "data");\ncurrentTask.resolve({ wrote: w.ok, err: w.error || "" });\n`,
     );
@@ -61,8 +65,7 @@ describe('fork roles', () => {
       output: { wrote: 'boolean', err: 'string' },
       role: 'explore',
     });
-    expect(result.wrote).toBe(false);
-    expect(result.err).toMatch(/read-only/);
+    expect(result.wrote).not.toBe(true);
     expect(existsSync(target)).toBe(false);
   });
 

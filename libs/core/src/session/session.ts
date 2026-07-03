@@ -26,6 +26,7 @@ import { loadSnapshot } from './snapshot.js';
 import { Tracer } from '../sandbox/trace.js';
 import type { TraceScope } from '../sandbox/trace.js';
 import { sessionCapabilities } from '../exec/capability.js';
+import type { AppCapabilities } from '../spaces/capabilities.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
 import { forkEngineOptsFrom } from '../exec/fork-config.js';
 import {
@@ -61,6 +62,11 @@ export class Session {
    * start()/resume(); the default (unrestricted) matches the pre-start state.
    */
   private delegatePolicy: DelegatePolicy = { mode: 'unrestricted', entries: [], allowRegistered: false };
+  /** The running agent's parsed app-capability grants (from `capabilities:` frontmatter).
+   *  Set wherever the agent is resolved (start/continue/resume); consumed by the VM
+   *  bootstrap + fork engine so the session, its forks, and its delegates all run with
+   *  the agent's app grants (project-rooted). `{}` for an agent that declares none. */
+  private appCapabilities: AppCapabilities = {};
   /** Root scope for the entire session (nodeId === sessionId). */
   private rootScope: TraceScope | null = null;
   /** Scope of the currently-running turn (run node). Reset per start/continue/resume. */
@@ -199,7 +205,8 @@ export class Session {
     const overlay = buildOverlay(agentFunctions, agentComponents, (name, message) => {
       this.opts.renderHost.log(`[warn] ${name}: ${message}`);
     });
-    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none'), overlay });
+    this.appCapabilities = agent.capabilities ?? {};
+    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities), overlay });
     this.systemBlock = systemBlock;
     this.ambientDts = ambientDts;
     this.agentFunctions = agentFunctions;
@@ -330,7 +337,8 @@ export class Session {
     const overlay = buildOverlay(agentFunctions, agentComponents, (name, message) => {
       this.opts.renderHost.log(`[warn] ${name}: ${message}`);
     });
-    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(delegatePolicy.mode !== 'none'), overlay });
+    this.appCapabilities = agent.capabilities ?? {};
+    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(delegatePolicy.mode !== 'none', this.appCapabilities), overlay });
     return { agentSlug: resolvedSlug, systemBlock, ambientDts };
   }
 
@@ -382,7 +390,8 @@ export class Session {
     const overlay = buildOverlay(agentFunctions, agentComponents, (name, message2) => {
       this.opts.renderHost.log(`[warn] ${name}: ${message2}`);
     });
-    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none'), overlay });
+    this.appCapabilities = agent.capabilities ?? {};
+    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities), overlay });
     this.agentFunctions = agentFunctions;
     this.agentFunctionsBundled = agentFunctionsBundled;
     this.forkEngine = null; // agent functions changed — rebuild on next fork yield
@@ -526,11 +535,13 @@ export class Session {
     return createChildVM({
       // `delegate` follows the agent's canDelegateTo policy (mode 'none' ⇒ the
       // global is withheld here AND absent from the ambient DTS built above).
-      capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none'),
+      capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities),
       renderHost: this.opts.renderHost,
       clock: this.opts.clock,
       spaceDir: this.opts.spaceDir,
       projectSpacesDir: this.opts.projectSpacesDir,
+      projectRoot: this.opts.projectRoot,
+      projectId: this.opts.projectId,
       // `progress` reads the live per-run budget (the closure dereferences the
       // field, so resetting this.budget per task is reflected).
       progress: () => this.budget.snapshot(),
@@ -591,6 +602,8 @@ export class Session {
       scope: this.currentScope ?? undefined,
       systemSpaces: this.systemSpaces,
       projectSpacesDir: this.opts.projectSpacesDir,
+      projectRoot: this.opts.projectRoot,
+      projectId: this.opts.projectId,
       model: this.opts.modelAlias,
       // Inherit the session's fork wiring down the delegation chain (A1 fix):
       // budget caps + role models for the delegate's leaf forks, and the SHARED
@@ -635,6 +648,11 @@ export class Session {
       // Same Map reference the delegate path reads — a fork's registerSpace() lands here.
       dynamicSpaces: this.dynamicSpaces,
       projectSpacesDir: this.opts.projectSpacesDir,
+      projectRoot: this.opts.projectRoot,
+      projectId: this.opts.projectId,
+      // The session agent's app grants flow to its forks (role-intersected in forkCapabilities).
+      parentAppCapabilities: this.appCapabilities,
+      appGlobals: undefined,
       // A task in a tasklist may delegate (gated by its own canDelegateTo) — route through the
       // session's registry with the recursion bound enforced by runDelegate.
       delegateRunner: (p, a, act, o, allowed) => this.runDelegateForFork(p, a, act, o, allowed),
@@ -810,6 +828,8 @@ export class Session {
           scope: this.currentScope ?? undefined,
           systemSpaces: this.systemSpaces,
           projectSpacesDir: this.opts.projectSpacesDir,
+          projectRoot: this.opts.projectRoot,
+          projectId: this.opts.projectId,
           model: this.opts.modelAlias,
           // Inherit the session's fork wiring down the delegation chain (A1 fix).
           budgetLimits: this.opts.budget,

@@ -2,6 +2,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, basename, extname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parseFrontmatter } from './frontmatter.js';
+import { parseCapabilities, type AppCapabilities } from './capabilities.js';
 
 export interface Space {
   dir: string;
@@ -46,6 +47,13 @@ export interface AgentDef {
    *  deterministically (host-driven) instead of the model-driven turn loop — a
    *  structural guarantee for less-capable models that won't follow routing prose. */
   defaultAction?: string;
+  /** Parsed app-capability grants from the `capabilities:` frontmatter key.
+   *  `loadAgent` ALWAYS populates this (empty object when the key is absent), so
+   *  a loaded agent's `capabilities` is never undefined; it is declared optional
+   *  only so hand-built `AgentDef` literals (tests, merge scaffolding) needn't
+   *  spell it out. The integrator's `exec/capability.ts` consumes this to gate
+   *  global injection + per-invocation scope. */
+  capabilities?: AppCapabilities;
 }
 
 export interface ActionDef {
@@ -345,10 +353,30 @@ async function loadTasklists(dir: string): Promise<Record<string, TasklistDir>> 
   return result;
 }
 
+/**
+ * Allowed top-level keys in an agent `instruct.md` frontmatter block. Fail-loud
+ * gate (mirrors `validateKnowledgeOptionFrontmatter`): a key outside this set is
+ * an authoring error — most importantly a typo'd `capabilities`/`canDelegateTo`
+ * would otherwise be silently ignored, granting nothing. Kept in lockstep with
+ * every key `loadAgent` reads below.
+ */
+const AGENT_FRONTMATTER_ALLOWED_KEYS = new Set([
+  'title',
+  'knowledge',
+  'functions',
+  'components',
+  'actions',
+  'defaultAction',
+  'canDelegateTo',
+  'dependencies',
+  'capabilities',
+]);
+
 async function loadAgent(
   agentsDir: string,
   slug: string,
   onWarn: (message: string) => void,
+  knownTables?: string[],
 ): Promise<AgentDef> {
   const agentDir = join(agentsDir, slug);
 
@@ -362,11 +390,22 @@ async function loadAgent(
   // when the key is absent so evaluateDelegatePolicy can apply the level default.
   let canDelegateTo: string[] | undefined;
   let defaultAction: string | undefined;
+  let capabilities: AppCapabilities = {};
 
   if (await fileExists(instructPath)) {
     const raw = await readFile(instructPath, 'utf8');
     const { data, body } = parseFrontmatter(raw, instructPath);
     instructBody = body;
+
+    const unknownKeys = Object.keys(data).filter((k) => !AGENT_FRONTMATTER_ALLOWED_KEYS.has(k));
+    if (unknownKeys.length > 0) {
+      throw new Error(
+        `Agent "${slug}" (${instructPath}) has disallowed frontmatter key(s): ${unknownKeys.join(', ')}. Allowed keys: ${[...AGENT_FRONTMATTER_ALLOWED_KEYS].join(', ')}`,
+      );
+    }
+
+    capabilities = parseCapabilities(data['capabilities'], { agentId: slug, knownTables });
+
     if (typeof data['title'] === 'string') title = data['title'];
     if (typeof data['defaultAction'] === 'string') defaultAction = data['defaultAction'];
     if (Array.isArray(data['knowledge'])) config.knowledge = data['knowledge'].map(String);
@@ -412,7 +451,7 @@ async function loadAgent(
     charterBody = body.trim();
   }
 
-  return { slug, title, instructBody, charterBody, actions, canDelegateTo, config, defaultAction };
+  return { slug, title, instructBody, charterBody, actions, canDelegateTo, config, defaultAction, capabilities };
 }
 
 export interface LoadSpaceOpts {
@@ -422,6 +461,10 @@ export interface LoadSpaceOpts {
   /** Warn channel for non-fatal load diagnostics (e.g. `canDelegateTo: []`).
    *  Defaults to `console.warn` with a `[spaces]` prefix. */
   onWarn?: (message: string) => void;
+  /** Table names in the resolving project's `database/`, used to fail-loud on a
+   *  `db:*` capability naming a non-existent table. Omit for a project-agnostic
+   *  (system) space load — the table-existence check is DEFERRED to run time. */
+  knownTables?: string[];
 }
 
 export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<Space> {
@@ -496,7 +539,7 @@ export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<
   // Load all agents
   const agents: Record<string, AgentDef> = {};
   for (const slug of agentDirs) {
-    agents[slug] = await loadAgent(agentsDir, slug, onWarn);
+    agents[slug] = await loadAgent(agentsDir, slug, onWarn, opts.knownTables);
   }
 
   // Load tasklists

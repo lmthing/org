@@ -121,9 +121,9 @@ describe('charter + tasklist goal injection into task forks', () => {
 });
 
 describe('per-task role + functions scoping', () => {
-  it('withholds write capability and the writeFileRaw prompt line from a read-only task', async () => {
+  it('withholds the writeFileRaw prompt line from a read-only task (write cap is DTS-gated)', async () => {
     const dir = await makeTasklistSpace({
-      '01-probe.md': `---\nid: probe\nrole: explore\ngoal: true\noutput:\n  wrotePrompt: boolean\n  writeBlocked: boolean\n---\n\nPROBE_T: read-only probe.`,
+      '01-probe.md': `---\nid: probe\nrole: explore\ngoal: true\noutput:\n  ok: boolean\n---\n\nPROBE_T: read-only probe.`,
     });
     const space = await loadSpace(dir);
     let systemSeen = '';
@@ -131,8 +131,11 @@ describe('per-task role + functions scoping', () => {
       systemSeen = o.system ?? '';
       const user = o.messages.map((m) => m.content).join('\n');
       if (user.includes('PROBE_T')) {
-        // writeFileRaw is replaced by an error-returning no-op for read-only roles.
-        return `const w = writeFileRaw("x.txt", "nope");\ncurrentTask.resolve({ wrotePrompt: false, writeBlocked: w.ok === false });`;
+        // A read-only task must NOT reference writeFileRaw — it is now stripped from
+        // the ambient DTS (allowWrite:false), so a stray call would fail typecheck.
+        // The capability/DTS gate itself is pinned by bootstrap.test.ts + roles.test.ts;
+        // this test owns the PROMPT gate below.
+        return `currentTask.resolve({ ok: true });`;
       }
       return '';
     });
@@ -140,10 +143,10 @@ describe('per-task role + functions scoping', () => {
       maxConcurrentForks: 4, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
       renderHost: silentHost, streamFn,
     });
-    const goal = (await runTasklist({ name: 'flow', space, forkEngine: engine })).data as { writeBlocked: boolean };
-    // Capability gate: writeFileRaw returned ok:false (write withheld at injection).
-    expect(goal.writeBlocked).toBe(true);
-    // Prompt gate: a read-only task is NOT told about writeFileRaw.
+    const goal = (await runTasklist({ name: 'flow', space, forkEngine: engine })).data as { ok: boolean };
+    expect(goal.ok).toBe(true);
+    // Prompt gate: a read-only task's system prompt is NOT told about writeFileRaw
+    // and IS told it is read-only.
     expect(systemSeen).not.toMatch(/writeFileRaw\(path, content\)/);
     expect(systemSeen).toMatch(/READ-ONLY/);
   });

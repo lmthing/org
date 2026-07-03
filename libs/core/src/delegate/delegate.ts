@@ -18,6 +18,7 @@ import { Budget, BudgetExceededError } from '../eval/budget.js';
 import type { RoleModelConfig } from '../fork/roles.js';
 import { delegateCapabilities } from '../exec/capability.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
+import type { AppGlobalImpls } from '../exec/app-globals.js';
 import { forkEngineOptsFrom } from '../exec/fork-config.js';
 import { evaluateDelegatePolicy, isDelegateAllowed, formatDelegateDenial } from '../exec/target-match.js';
 
@@ -47,6 +48,15 @@ export interface RunDelegateOpts {
   /** Absolute path to the project's spaces/ dir. Propagated into the delegate VM as
    *  LMTHING_PROJECT_SPACES_DIR and forwarded to nested delegate/fork VMs. */
   projectSpacesDir?: string;
+  /** Absolute project root — the delegated specialist operates on the PARENT's project
+   *  (LMTHING_PROJECT_DIR), so app grants resolve against the current project, not the
+   *  system space the specialist lives in. Forwarded to nested delegates/forks. */
+  projectRoot?: string;
+  /** Project id — forwarded as LMTHING_PROJECT_ID. */
+  projectId?: string;
+  /** Host-provided app-global engine impls (libs/cli, P2+), forwarded to the delegate
+   *  VM and its nested forks so a delegated db-writer reaches the project's engine. */
+  appGlobals?: AppGlobalImpls;
   /** Model spec/alias used by streamFn — forwarded to runTurnLoop so llm_request events
    *  carry a model field and cost tracking works across delegate chains. */
   model?: string;
@@ -118,7 +128,10 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   const knowledgePreloads = await resolvePreloadedKnowledge(space, agent);
   const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFnSources, knowledgePreloads, omitAsk: true, omitDelegate: delegatePolicy.mode === 'none' });
 
-  const capabilities = delegateCapabilities(delegatePolicy.mode !== 'none');
+  // The delegated agent runs with ITS OWN declared app grants, but project-rooted at
+  // the PARENT's projectRoot (forwarded below) — so a delegated specialist mutates the
+  // current project's app, not the system space it lives in.
+  const capabilities = delegateCapabilities(delegatePolicy.mode !== 'none', agent.capabilities ?? {});
 
   // action is optional. When provided it must exist; when omitted the agent runs
   // model-driven and may initiate one of its own actions' tasklists (its # Actions
@@ -160,6 +173,9 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     clock: opts.clock,
     spaceDir: space.dir,
     projectSpacesDir: opts.projectSpacesDir,
+    projectRoot: opts.projectRoot,
+    projectId: opts.projectId,
+    appGlobals: opts.appGlobals,
     progress: undefined,
     functions,
     functionsBundled,
@@ -254,6 +270,11 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       clock: opts.clock,
       tracer: opts.tracer,
       projectSpacesDir: opts.projectSpacesDir,
+      projectRoot: opts.projectRoot,
+      projectId: opts.projectId,
+      // This delegate's forks inherit ITS app grants (role-intersected in forkCapabilities).
+      parentAppCapabilities: capabilities.app,
+      appGlobals: opts.appGlobals,
       defaultModel: opts.model,
       budgetLimits: opts.budgetLimits,
       roleModels: opts.roleModels,

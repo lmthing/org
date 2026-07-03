@@ -12,7 +12,9 @@ import { NULL_TRACER } from '../sandbox/trace.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { Budget, BudgetExceededError, type BudgetLimits } from '../eval/budget.js';
 import { forkCapabilities } from '../exec/capability.js';
+import type { AppCapabilities } from '../spaces/capabilities.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
+import type { AppGlobalImpls } from '../exec/app-globals.js';
 import { resolveTaskDelegate, evaluateDelegatePolicy, isDelegateAllowed, formatDelegateDenial } from '../exec/target-match.js';
 import { STATEMENT_PROTOCOL } from '../exec/preamble.js';
 import { salvageData, type DegradeReason } from '../exec/envelope.js';
@@ -105,6 +107,16 @@ export interface ForkEngineOpts {
   /** Absolute path to the project's spaces/ dir. Propagated into each fork VM as
    *  LMTHING_PROJECT_SPACES_DIR so the architect can target it when scaffolding. */
   projectSpacesDir?: string;
+  /** Absolute project root — propagated into each fork VM as LMTHING_PROJECT_DIR and
+   *  gating app-global injection (a fork inside a project reads/writes that project's app). */
+  projectRoot?: string;
+  /** Project id — propagated as LMTHING_PROJECT_ID. */
+  projectId?: string;
+  /** The parent agent's app-capability grants. A fork task receives the
+   *  `allowWrite`-intersected subset (read-only roles keep only db:read/api:call). */
+  parentAppCapabilities?: AppCapabilities;
+  /** Host-provided app-global engine impls (libs/cli, P2+), passed through to the fork VM. */
+  appGlobals?: AppGlobalImpls;
 }
 
 export class ForkEngine {
@@ -226,7 +238,7 @@ export class ForkEngine {
         // Default: no delegate global — keeps forks isolated and headless as before.
         const delegatePolicy = evaluateDelegatePolicy(task.canDelegateTo, 'task');
         const canDelegate = delegatePolicy.mode !== 'none' && typeof this.opts.delegateRunner === 'function';
-        const capabilities = forkCapabilities(task.role, canDelegate);
+        const capabilities = forkCapabilities(task.role, canDelegate, this.opts.parentAppCapabilities ?? {});
 
         // Space functions from the parent agent. When the task declares a `functions`
         // allowlist, scope to exactly those (least privilege — fewer tools to misuse,
@@ -270,6 +282,9 @@ export class ForkEngine {
           clock: this.opts.clock,
           spaceDir: this.opts.parentSpaceDir,
           projectSpacesDir: this.opts.projectSpacesDir,
+          projectRoot: this.opts.projectRoot,
+          projectId: this.opts.projectId,
+          appGlobals: this.opts.appGlobals,
           progress: () => budget.snapshot(),
           functions: agentFunctions,
           functionsBundled: agentFunctionsBundled,

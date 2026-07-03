@@ -1,0 +1,93 @@
+import { describe, it, expect } from 'vitest';
+import {
+  COMMON_DTS,
+  LIBRARY_DTS,
+  LIBRARY_DTS_NO_ASK,
+  EXEC_SHELL_DTS,
+  WRITE_FILE_RAW_DTS,
+  composeDbDts,
+  API_CALL_DTS,
+  PAGES_WRITE_DTS,
+  API_WRITE_DTS,
+  HOOKS_WRITE_DTS,
+  CAPABILITY_DTS_FRAGMENTS,
+} from './library-dts.js';
+
+describe('library-dts write primitives are gated', () => {
+  it('COMMON_DTS no longer declares execShell/writeFileRaw', () => {
+    expect(COMMON_DTS).not.toContain('execShell');
+    expect(COMMON_DTS).not.toContain('writeFileRaw');
+  });
+
+  it('LIBRARY_DTS still includes both write primitives via fragments', () => {
+    expect(LIBRARY_DTS).toContain('declare function execShell(');
+    expect(LIBRARY_DTS).toContain('declare function writeFileRaw(');
+  });
+
+  it('LIBRARY_DTS_NO_ASK also includes both write primitives but not ask', () => {
+    expect(LIBRARY_DTS_NO_ASK).toContain('declare function execShell(');
+    expect(LIBRARY_DTS_NO_ASK).toContain('declare function writeFileRaw(');
+    expect(LIBRARY_DTS_NO_ASK).not.toContain('declare function ask');
+  });
+
+  it('the split fragments carry the verbatim signatures', () => {
+    expect(EXEC_SHELL_DTS).toContain('execShell(cmd: string');
+    expect(WRITE_FILE_RAW_DTS).toContain('writeFileRaw(path: string, content: string)');
+  });
+});
+
+describe('composeDbDts', () => {
+  it('returns empty string when no db capability is present', () => {
+    expect(composeDbDts({})).toBe('');
+  });
+
+  it('read-only exposes query/tables but not write members', () => {
+    const dts = composeDbDts({ read: true });
+    expect(dts).toContain('declare const db: {');
+    expect(dts).toContain('query(');
+    expect(dts).toContain('tables(');
+    expect(dts).not.toContain('insert(');
+  });
+
+  it('all three capabilities emit six members inside ONE declare const db', () => {
+    const dts = composeDbDts({ read: true, write: true, schema: true });
+    // exactly one db declaration
+    expect(dts.match(/declare const db/g)?.length).toBe(1);
+    for (const m of ['query(', 'tables(', 'insert(', 'update(', 'remove(', 'createTable(', 'addColumn(']) {
+      expect(dts).toContain(m);
+    }
+  });
+
+  it('db.* signatures are synchronous (no Promise)', () => {
+    const dts = composeDbDts({ read: true, write: true, schema: true });
+    expect(dts).not.toContain('Promise');
+  });
+});
+
+describe('standalone capability fragments', () => {
+  it('apiCall is value-yielding (Promise)', () => {
+    expect(API_CALL_DTS).toContain('declare function apiCall(');
+    expect(API_CALL_DTS).toContain('Promise<any>');
+    expect(API_CALL_DTS.trim().length).toBeGreaterThan(0);
+  });
+
+  it('the write helpers are non-empty one-liners', () => {
+    for (const frag of [PAGES_WRITE_DTS, API_WRITE_DTS, HOOKS_WRITE_DTS]) {
+      expect(frag.trim().length).toBeGreaterThan(0);
+      expect(frag).not.toContain('\n');
+      expect(frag).toContain('declare function');
+    }
+  });
+});
+
+describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
+  it('maps the four standalone capability ids and omits the db trio', () => {
+    expect(CAPABILITY_DTS_FRAGMENTS).toEqual({
+      'api:call': API_CALL_DTS,
+      'pages:write': PAGES_WRITE_DTS,
+      'api:write': API_WRITE_DTS,
+      'hooks:write': HOOKS_WRITE_DTS,
+    });
+    expect(CAPABILITY_DTS_FRAGMENTS['db:read']).toBeUndefined();
+  });
+});

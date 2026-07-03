@@ -1,4 +1,20 @@
 import { roleProfile } from '../fork/roles.js';
+import type { AppCapabilities } from '../spaces/capabilities.js';
+
+/**
+ * Read-only fork roles (`explore`/`plan`) can never receive a write/authoring
+ * capability — the app grants are intersected with `allowWrite`, exactly as the
+ * host-tools write gate withholds `writeFileRaw`. Only the read/outbound grants
+ * (`db:read`, `api:call`) survive; every mutating/authoring grant
+ * (`db:write`/`db:schema`/`pages:write`/`api:write`/`hooks:write`) is dropped.
+ */
+export function intersectAppCaps(app: AppCapabilities, allowWrite: boolean): AppCapabilities {
+  if (allowWrite) return app;
+  const out: AppCapabilities = {};
+  if (app['db:read']) out['db:read'] = app['db:read'];
+  if (app['api:call']) out['api:call'] = app['api:call'];
+  return out;
+}
 
 /**
  * CapabilityProfile — the single description of what a child VM context may do.
@@ -42,13 +58,20 @@ export interface CapabilityProfile {
   setSessionMeta: boolean;
   /** Host write access: writeFileRaw + mutating shell commands (host-tools profile). */
   allowWrite: boolean;
+  /** Project-app capability grants (`capabilities:` frontmatter → parsed `AppCapabilities`).
+   *  Drives BOTH which app globals `createChildVM` injects (`db.*`/`apiCall`/`writePage`/…)
+   *  AND which capability fragments `buildAmbientDts` emits — kept in lockstep exactly like
+   *  the boolean flags above. Empty (`{}`) for any agent that declares no `capabilities:`
+   *  (the default), so a session/fork/delegate with no app grants injects no app globals and
+   *  declares none in its DTS. Read-only fork roles receive the `allowWrite`-intersected set. */
+  app: AppCapabilities;
 }
 
 /** Top-level session VM: the full toolkit, including the interactive `ask()`.
  *  `canDelegate` comes from the session agent's `canDelegateTo` policy
  *  (`evaluateDelegatePolicy(...).mode !== 'none'`); defaults to true. */
-export function sessionCapabilities(canDelegate = true): CapabilityProfile {
-  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: true, setSessionMeta: true, allowWrite: true };
+export function sessionCapabilities(canDelegate = true, app: AppCapabilities = {}): CapabilityProfile {
+  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: true, setSessionMeta: true, allowWrite: true, app };
 }
 
 /**
@@ -57,9 +80,9 @@ export function sessionCapabilities(canDelegate = true): CapabilityProfile {
  * caller; write capability (and registerSpace, which mutates session state)
  * follows the role's host-tools profile — explore/plan are read-only.
  */
-export function forkCapabilities(role: string | undefined, canDelegate: boolean): CapabilityProfile {
+export function forkCapabilities(role: string | undefined, canDelegate: boolean, app: AppCapabilities = {}): CapabilityProfile {
   const allowWrite = roleProfile(role).allowWrite !== false;
-  return { kind: 'fork', ask: false, orchestrate: false, delegate: canDelegate, registerSpace: allowWrite, setSessionMeta: false, allowWrite };
+  return { kind: 'fork', ask: false, orchestrate: false, delegate: canDelegate, registerSpace: allowWrite, setSessionMeta: false, allowWrite, app: intersectAppCaps(app, allowWrite) };
 }
 
 /**
@@ -69,6 +92,6 @@ export function forkCapabilities(role: string | undefined, canDelegate: boolean)
  * registerSpace is not injected (matching the pre-unification wiring — spaces
  * are registered by the session or by write-capable forks).
  */
-export function delegateCapabilities(canDelegate = true): CapabilityProfile {
-  return { kind: 'delegate', ask: false, orchestrate: true, delegate: canDelegate, registerSpace: false, setSessionMeta: false, allowWrite: true };
+export function delegateCapabilities(canDelegate = true, app: AppCapabilities = {}): CapabilityProfile {
+  return { kind: 'delegate', ask: false, orchestrate: true, delegate: canDelegate, registerSpace: false, setSessionMeta: false, allowWrite: true, app };
 }

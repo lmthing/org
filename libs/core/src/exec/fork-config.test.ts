@@ -43,6 +43,10 @@ describe('forkEngineOptsFrom (A1 regression lock)', () => {
       defaultModel: 'main-model',
       dynamicSpaces,
       projectSpacesDir: '/proj/spaces',
+      projectRoot: '/proj',
+      projectId: 'proj',
+      parentAppCapabilities: {},
+      appGlobals: undefined,
       delegateRunner,
     };
   }

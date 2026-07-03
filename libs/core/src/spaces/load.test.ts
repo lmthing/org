@@ -73,3 +73,54 @@ describe('loadSpace reference validation', () => {
     await expect(loadSpace(dir)).rejects.toThrow(/Invalid YAML frontmatter/);
   });
 });
+
+describe('loadSpace agent-frontmatter allow-list gate', () => {
+  it('throws on an unknown top-level frontmatter key', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md': '---\ntitle: A\nbogusKey: 1\n---\nbody',
+    });
+    await expect(loadSpace(dir)).rejects.toThrow(/disallowed frontmatter key\(s\): bogusKey/);
+  });
+
+  it('accepts every existing frontmatter key (back-compat)', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md':
+        '---\ntitle: A\ndefaultAction: go\ncanDelegateTo: ["*"]\ndependencies: []\nactions:\n  - id: go\n    label: Go\n    description: d\n    tasklist: tl\n---\nbody',
+      'tasklists/tl/00-x.md': 'step',
+    });
+    const space = await loadSpace(dir);
+    expect(space.agents['a']!.capabilities).toEqual({});
+  });
+
+  it('parses capabilities and attaches AppCapabilities to the agent', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md':
+        '---\ntitle: A\ncapabilities:\n  - db:schema\n  - pages:write\n  - api:call: { allow: [markRead] }\n---\nbody',
+    });
+    const space = await loadSpace(dir);
+    expect(space.agents['a']!.capabilities).toEqual({
+      'db:schema': {},
+      'pages:write': true,
+      'api:call': { allow: ['markRead'] },
+    });
+  });
+
+  it('fails loud on a bad capability (bare api:call)', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md': '---\ncapabilities:\n  - api:call\n---\nbody',
+    });
+    await expect(loadSpace(dir)).rejects.toThrow(/"api:call" requires a config/);
+  });
+
+  it('checks db table existence against knownTables when supplied', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md': '---\ncapabilities:\n  - db:read: { tables: [ghost] }\n---\nbody',
+    });
+    await expect(loadSpace(dir, { knownTables: ['sources'] })).rejects.toThrow(
+      /names table\(s\) not in the project's database/,
+    );
+    // Defers (no throw) when knownTables is omitted.
+    const space = await loadSpace(dir);
+    expect(space.agents['a']!.capabilities).toEqual({ 'db:read': { tables: ['ghost'] } });
+  });
+});

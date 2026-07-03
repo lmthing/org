@@ -47,6 +47,14 @@ export interface SessionOpts {
    *  delegates) as process.env.LMTHING_PROJECT_SPACES_DIR so the architect can write
    *  synthesized spaces there instead of stripping LMTHING_SPACE_DIR. */
   projectSpacesDir?: string;
+  /** Absolute project root `<root>/<projectId>` — the app layer (database/pages/api/hooks)
+   *  root, distinct from spaceDir (per-agent) and projectSpacesDir (the spaces/ dir).
+   *  Threaded into every child VM (session/fork/delegate) and exposed as
+   *  LMTHING_PROJECT_DIR; gates app-capability global injection. A top-level THING
+   *  session with no projectRoot gets no app globals. */
+  projectRoot?: string;
+  /** The project id (basename of projectRoot); exposed as LMTHING_PROJECT_ID. */
+  projectId?: string;
 }
 
 export interface SessionDeps {

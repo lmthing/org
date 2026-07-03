@@ -14,11 +14,16 @@ import { createTasklistGlobal } from '../globals/tasklist.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
-import { ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS } from '../typecheck/library-dts.js';
+import {
+  ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
+  EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
+} from '../typecheck/library-dts.js';
+import { injectAppGlobals, type AppGlobalImpls } from './app-globals.js';
 import type { RenderHost, Clock } from '../session/types.js';
 import type { YieldRequest } from '../eval/yield.js';
 import type { BudgetSnapshot } from '../eval/budget.js';
 import type { CapabilityProfile } from './capability.js';
+import type { AppCapabilities } from '../spaces/capabilities.js';
 
 /**
  * VM bootstrap — the single implementation of the child-VM wiring that used to
@@ -45,6 +50,15 @@ export interface ChildVMOpts {
   spaceDir: string;
   /** Exposed as LMTHING_PROJECT_SPACES_DIR (architect scaffolding target). */
   projectSpacesDir?: string;
+  /** Absolute project root `<root>/<projectId>` — the app layer (db/pages/api/hooks)
+   *  resolves against THIS, never LMTHING_SPACE_DIR. Exposed as LMTHING_PROJECT_DIR and
+   *  gates app-global injection (no projectRoot ⇒ no app globals). */
+  projectRoot?: string;
+  /** The project id (basename of projectRoot). Exposed as LMTHING_PROJECT_ID. */
+  projectId?: string;
+  /** Host-provided app-global engine impls (libs/cli, P2+). Core wraps them in the
+   *  capability-scope check before injecting. Absent ⇒ no app globals injected. */
+  appGlobals?: AppGlobalImpls;
   /** Live budget snapshot for the `progress()` global. Session + fork VMs pass
    *  their Budget; the delegate's own turn loop has no Budget (only its forks
    *  do), so the delegate site passes undefined — no progress() global there. */
@@ -109,7 +123,14 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
     profile: { allowWrite: caps.allowWrite },
     progress: opts.progress,
     projectSpacesDir: opts.projectSpacesDir,
+    projectRoot: opts.projectRoot,
+    projectId: opts.projectId,
   });
+
+  // 4b. Project-app globals (db/…), gated by the capability grants AND projectRoot.
+  //     Scope-checked host-side (see injectAppGlobals). A session outside a project
+  //     (no projectRoot) receives none — the backward-compat invariant.
+  injectAppGlobals(vm, { app: caps.app, projectRoot: opts.projectRoot, appGlobals: opts.appGlobals });
 
   // 5. Yielding globals, gated by the capability profile.
   //    - ask: top-level session only (headless contexts must not prompt).
@@ -179,15 +200,36 @@ export const CURRENT_TASK_DTS = `declare const currentTask: { resolve: (value: u
  * (whitespace aside) — pinned by exec/bootstrap.test.ts.
  */
 export interface AmbientDtsOpts {
-  /** Which orchestration globals are declared. `registerSpace` and everything
-   *  in COMMON_DTS are declared unconditionally (matching the old DTS). */
-  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta'>;
+  /** Which orchestration + write + app-capability globals are declared. `registerSpace`
+   *  and everything left in COMMON_DTS are declared unconditionally; `execShell`/
+   *  `writeFileRaw` are now gated on `allowWrite` (they were split OUT of COMMON_DTS —
+   *  fixing the old unconditional-declaration bug), and the project-app globals are
+   *  gated on the `app` grants. Pass the full CapabilityProfile (it satisfies this Pick). */
+  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta' | 'allowWrite' | 'app'>;
   /** Function/component overlay (buildOverlay output). Empty/omitted → none. */
   overlay?: string;
   /** Declare the `currentTask` capture global (fork + delegate contexts). */
   currentTask?: boolean;
   /** Extra ambient declarations (fork seed/upstream vars, delegate query/context). */
   extraDecls?: string[];
+}
+
+/**
+ * The DTS side of the capability→{inject, dts} registry: emit exactly the app-global
+ * declarations the agent's `capabilities:` grants earned — the `db` object with only
+ * the granted verbs (`composeDbDts`), plus each standalone authoring/outbound global
+ * (`apiCall`/`writePage`/`writeApi`/`writeHook`). A grant that is absent is absent from
+ * the DTS, so a stray call fails typecheck — the same "not listed ⇒ not injected AND
+ * absent from the DTS" invariant the boolean flags enforce for ask/fork/delegate.
+ */
+function buildAppCapabilityDts(app: AppCapabilities): string {
+  const parts: string[] = [
+    composeDbDts({ read: !!app['db:read'], write: !!app['db:write'], schema: !!app['db:schema'] }),
+  ];
+  for (const id of ['api:call', 'pages:write', 'api:write', 'hooks:write'] as const) {
+    if (app[id]) parts.push(CAPABILITY_DTS_FRAGMENTS[id]);
+  }
+  return parts.filter(Boolean).join('\n');
 }
 
 export function buildAmbientDts(opts: AmbientDtsOpts): string {
@@ -199,6 +241,13 @@ export function buildAmbientDts(opts: AmbientDtsOpts): string {
     caps.orchestrate ? FORK_DTS : '',
     caps.delegate ? DELEGATE_DTS : '',
     COMMON_DTS,
+    // execShell/writeFileRaw are injected by injectHostTools always, but a read-only
+    // role's impl no-ops/blocks them — so their DECLARATION is gated on allowWrite,
+    // making a stray write call in a read-only role fail typecheck instead of silently
+    // failing at runtime (the fix for the old unconditional COMMON_DTS declaration).
+    caps.allowWrite ? EXEC_SHELL_DTS : '',
+    caps.allowWrite ? WRITE_FILE_RAW_DTS : '',
+    buildAppCapabilityDts(caps.app),
     opts.overlay ?? '',
     opts.currentTask ? CURRENT_TASK_DTS : '',
     ...(opts.extraDecls ?? []),

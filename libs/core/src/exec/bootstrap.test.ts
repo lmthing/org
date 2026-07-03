@@ -85,12 +85,24 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     expect(names).not.toContain('currentTask');
   });
 
-  it('fork (no canDelegateTo) declares NONE of ask/tasklist/fork/delegate, but keeps the common globals + currentTask', () => {
+  it('read-only fork (explore) declares NONE of ask/tasklist/fork/delegate NOR the write primitives, but keeps the read-only common globals + currentTask', () => {
     const names = declNames(forkPlain);
-    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta']) expect(names).not.toContain(absent);
-    for (const present of ['display', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'fetch', 'execShell', 'readFileRaw', 'writeFileRaw', 'currentTask']) {
+    // Orchestration/session globals absent (headless leaf) AND the write primitives
+    // absent — the fix for the old unconditional COMMON_DTS declaration: a read-only
+    // role (allowWrite:false) no longer DECLARES execShell/writeFileRaw, so a stray
+    // write call fails typecheck instead of silently returning a runtime error.
+    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw']) {
+      expect(names, `read-only fork DTS must not declare ${absent}`).not.toContain(absent);
+    }
+    for (const present of ['display', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'fetch', 'readFileRaw', 'currentTask']) {
       expect(names).toContain(present);
     }
+  });
+
+  it('write-capable fork (general) DOES declare the write primitives (allowWrite gate)', () => {
+    const names = declNames(forkDelegating); // general role → allowWrite:true
+    expect(names).toContain('execShell');
+    expect(names).toContain('writeFileRaw');
   });
 
   it('fork WITH canDelegateTo gets exactly the delegate overloads back — still no ask/tasklist/fork', () => {

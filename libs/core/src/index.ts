@@ -124,10 +124,22 @@ export type { ForkRole, RoleModelConfig } from './fork/roles.js';
 
 // Exec unification — shared child-VM wiring (capability profile, bootstrap,
 // ForkEngine options builder, delegate-target matcher, statement protocol)
-export { sessionCapabilities, forkCapabilities, delegateCapabilities } from './exec/capability.js';
+export { sessionCapabilities, forkCapabilities, delegateCapabilities, intersectAppCaps } from './exec/capability.js';
 export type { CapabilityProfile } from './exec/capability.js';
 export { createChildVM, buildAmbientDts, CURRENT_TASK_DTS } from './exec/bootstrap.js';
 export type { ChildVMOpts, AmbientDtsOpts } from './exec/bootstrap.js';
+export { injectAppGlobals } from './exec/app-globals.js';
+export type { AppGlobalImpls } from './exec/app-globals.js';
+
+// Project-app layer (Phase 1 foundation): db schema + runtime API interfaces +
+// fail-loud validator, and the parsed capability model. Storage engine is in libs/cli.
+export type {
+  DbApi, AsyncDbApi, ApiCallFn, SpawnFn, Row, QueryOpts, UpdateOpts, RemoveOpts,
+  TableSchema, ColumnSchema, RelationSchema, LoadedTable, ColumnType, GeneratedKind, OnDelete, ColumnReference,
+} from './db/index.js';
+export { validateTableSchema, validateSchemaSet, isBelongsTo, isHasMany } from './db/index.js';
+export { parseCapabilities, CAPABILITY_IDS, DB_CAPABILITY_IDS } from './spaces/capabilities.js';
+export type { AppCapabilities, CapabilityId } from './spaces/capabilities.js';
 export { forkEngineOptsFrom } from './exec/fork-config.js';
 export type { ForkEngineParentContext } from './exec/fork-config.js';
 export { resolveTaskDelegate, refMatchesDelegateCall, evaluateDelegatePolicy, isDelegateAllowed, formatDelegateDenial, matchesRegisteredSpace, REGISTERED_WILDCARD } from './exec/target-match.js';

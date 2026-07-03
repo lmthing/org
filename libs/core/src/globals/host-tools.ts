@@ -30,6 +30,12 @@ export interface HostToolsOpts {
   /** Absolute path to the project's spaces/ dir. Exposed as LMTHING_PROJECT_SPACES_DIR
    *  so the architect can target it when scaffolding new spaces. */
   projectSpacesDir?: string;
+  /** Absolute project root `<root>/<projectId>` (the app layer's root). Exposed as
+   *  LMTHING_PROJECT_DIR — env parity with LMTHING_SPACE_DIR/LMTHING_PROJECT_SPACES_DIR;
+   *  the db/pages/api/hooks capabilities resolve against this, never LMTHING_SPACE_DIR. */
+  projectRoot?: string;
+  /** The project id (basename of projectRoot). Exposed as LMTHING_PROJECT_ID. */
+  projectId?: string;
 }
 
 const READ_BYTE_CAP = 256 * 1024;
@@ -131,6 +137,12 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
   env['LMTHING_SPACE_DIR'] = spaceRoot;
   if (opts.projectSpacesDir) {
     env['LMTHING_PROJECT_SPACES_DIR'] = opts.projectSpacesDir;
+  }
+  if (opts.projectRoot) {
+    env['LMTHING_PROJECT_DIR'] = opts.projectRoot;
+  }
+  if (opts.projectId) {
+    env['LMTHING_PROJECT_ID'] = opts.projectId;
   }
   setGlobal('process', { env, exit: (code?: number) => { throw new Error(`process.exit(${code ?? 0})`); } });
 

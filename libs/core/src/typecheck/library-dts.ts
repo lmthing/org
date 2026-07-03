@@ -90,19 +90,91 @@ declare interface DelegateOpts {
 }
 
 // Host-injected globals available in space functions and agent code
-declare function execShell(cmd: string, opts?: { timeout?: number }): { ok: boolean; stdout: string; stderr: string; exitCode: number };
 declare function fetch(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status: number; text(): string; json(): unknown }>;
 declare const process: { env: Record<string, string | undefined>; exit(code?: number): never };
 declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };
-declare function writeFileRaw(path: string, content: string): { ok: boolean; bytes: number; error?: string };
 declare function typecheckSource(src: string): { ok: boolean; errors: string[] };
 declare function spacePath(...parts: string[]): string;
 declare function resolveSpaceDir(space: string): string;
 declare function progress(): { episodes: number; toolCalls: number; elapsedMs: number };
 ` + '\n' + catalogDts();
 
+/**
+ * Write primitives — split out of COMMON_DTS so they are only appended where the
+ * host actually injects them (under `allowWrite`). Declaring them unconditionally
+ * inside COMMON_DTS made a stray `writeFileRaw`/`execShell` pass typecheck in a
+ * read-only VM and throw at runtime; gating the DTS fragment fixes that.
+ */
+export const EXEC_SHELL_DTS = `declare function execShell(cmd: string, opts?: { timeout?: number }): { ok: boolean; stdout: string; stderr: string; exitCode: number };`;
+export const WRITE_FILE_RAW_DTS = `declare function writeFileRaw(path: string, content: string): { ok: boolean; bytes: number; error?: string };`;
+
+/**
+ * App-capability globals (project-as-application). Each fragment is emitted ONLY
+ * when the owning agent holds the capability — the integrator gates them per
+ * `allowWrite`/per-capability in `buildAmbientDts`. Kept dependency-free (no
+ * import from `db/`); the precise row/schema types are generated in Phase 4.
+ *
+ * In the AGENT sandbox `db.*` is a SYNCHRONOUS host call (non-Promise), whereas
+ * `apiCall` is value-yielding and therefore returns a Promise.
+ */
+
+// `db:read` members — reads against the project database.
+export const DB_READ_MEMBERS = `  query(table: string, opts?: { where?: Record<string, unknown>; include?: string[]; orderBy?: string | { column: string; dir?: 'asc' | 'desc' }; limit?: number; offset?: number }): any[];
+  tables(): string[];`;
+
+// `db:write` members — row mutations.
+export const DB_WRITE_MEMBERS = `  insert(table: string, values: Record<string, unknown> | Record<string, unknown>[]): any;
+  update(table: string, opts: { where: Record<string, unknown>; set: Record<string, unknown> }): number;
+  remove(table: string, opts: { where: Record<string, unknown> }): number;`;
+
+// `db:schema` members — DDL.
+export const DB_SCHEMA_MEMBERS = `  createTable(schema: any): void;
+  addColumn(table: string, name: string, column: any): void;`;
+
+/**
+ * Compose the single `declare const db` from whichever of the three db capabilities
+ * are present. All db members live on ONE `db` object, so we cannot emit three
+ * separate `declare const db` blocks — we union the present member strings into a
+ * single declaration. Returns `''` when none are present (so the `db` global fails
+ * typecheck on a stray call in a VM without any db capability).
+ */
+export function composeDbDts(present: { read?: boolean; write?: boolean; schema?: boolean }): string {
+  const members: string[] = [];
+  if (present.read) members.push(DB_READ_MEMBERS);
+  if (present.write) members.push(DB_WRITE_MEMBERS);
+  if (present.schema) members.push(DB_SCHEMA_MEMBERS);
+  if (members.length === 0) return '';
+  return `declare const db: {\n${members.join('\n')}\n};`;
+}
+
+// Standalone `declare function` capability fragments.
+// `apiCall` is value-yielding → Promise; the write helpers are synchronous host calls.
+export const API_CALL_DTS = `declare function apiCall(name: string, input?: unknown): Promise<any>;`;
+export const PAGES_WRITE_DTS = `declare function writePage(route: string, src: string): { ok: boolean; error?: string };`;
+export const API_WRITE_DTS = `declare function writeApi(route: string, src: string): { ok: boolean; error?: string };`;
+export const HOOKS_WRITE_DTS = `declare function writeHook(slug: string, src: string): { ok: boolean; error?: string };`;
+
+/**
+ * Registry of the STANDALONE app-capability fragments, keyed by capability id, for
+ * the integrator to gate additively per agent in `buildAmbientDts`. The `db:*` trio
+ * (`db:read`/`db:write`/`db:schema`) is NOT in this flat map — because all three
+ * share one `db` object they are composed together via `composeDbDts`.
+ */
+export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
+  'api:call': API_CALL_DTS,
+  'pages:write': PAGES_WRITE_DTS,
+  'api:write': API_WRITE_DTS,
+  'hooks:write': HOOKS_WRITE_DTS,
+};
+
+// Write primitives, appended to the full-DTS bundles below. `host-tools.ts`'s
+// `typecheckSource` needs the FULL global set (incl. execShell/writeFileRaw), so the
+// LIBRARY_DTS bundles re-append these two fragments to stay byte-equivalent to the
+// pre-split COMMON_DTS.
+const WRITE_PRIMITIVES_DTS = [EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS].join('\n');
+
 /** Full library DTS for the top-level session VM (all globals, incl. `ask`). */
-export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS].join('\n');
+export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS].join('\n');
 
 /**
  * Library DTS WITHOUT `ask`. Fork and delegate VMs run headless/autonomous — there is
@@ -111,4 +183,4 @@ export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DT
  * name 'ask'") and steers the model back to working from its seed/inputs, instead of
  * binding `undefined` (or, in a real PTY, blocking forever on stdin).
  */
-export const LIBRARY_DTS_NO_ASK = [TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS].join('\n');
+export const LIBRARY_DTS_NO_ASK = [TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS].join('\n');
