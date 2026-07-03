@@ -70,7 +70,7 @@ function typecheckPrelude(task: TaskNode, tl: TasklistDir, allFns: Record<string
 }
 
 describe('shipped system spaces load + validate', () => {
-  for (const name of ['system-architect', 'system-research', 'user-thing']) {
+  for (const name of ['system-architect', 'system-research', 'system-appbuilder', 'user-thing']) {
     it(`${name}: agents have charters and all tasklists are valid DAGs`, async () => {
       const space = await loadSpace(resolve(SYS, name), { requireAgents: false });
       // Every agent ships a non-trivial charter (fork-safe identity).
@@ -100,6 +100,25 @@ describe('shipped system spaces load + validate', () => {
     for (const t of Object.values(tasks)) {
       if (t.role) expect(['explore', 'plan', 'general']).toContain(t.role);
     }
+  });
+
+  it('appbuilder build_app fans out per-file with valid roles and a finalize goal', async () => {
+    const space = await loadSpace(resolve(SYS, 'system-appbuilder'), { requireAgents: false });
+    const tasks = await loadTasklistFromSpace(space, 'build_app');
+    // design → create_project → per-file forEach builders → finalize (goal).
+    expect(tasks['build_table']!.forEach).toBe('design.tables');
+    expect(tasks['build_api']!.forEach).toBe('design.endpoints');
+    expect(tasks['build_page']!.forEach).toBe('design.pages');
+    expect(tasks['build_hook']!.forEach).toBe('design.hooks');
+    // Every per-file step runs with write access (role general) under the architect's caps.
+    for (const id of ['design', 'create_project', 'build_table', 'build_api', 'build_page', 'build_hook', 'finalize']) {
+      expect(tasks[id]!.role).toBe('general');
+    }
+    // Optional builders don't sink the pipeline; the goal is finalize.
+    expect(tasks['build_table']!.optional).toBe(true);
+    expect(tasks['build_hook']!.optional).toBe(true);
+    expect(resolveGoalTask(tasks)!.id).toBe('finalize');
+    expect(space.tasklists['build_app']!.input).toEqual({ request: 'string' });
   });
 
   it('architect tasklists declare input schemas matching what their callers pass', async () => {

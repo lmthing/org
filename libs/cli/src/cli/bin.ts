@@ -36,6 +36,7 @@ import { materializeRuntime, runtimeNeedsInit, syncSystemSpaces } from './runtim
 import { bootProjectApp } from '../app/boot.js';
 import type { ProjectDb } from '../app/store.js';
 import { generateProjectContracts } from '../app/build/contracts.js';
+import { createAppAuthoringGlobals, resolveCatalogRoot } from '../app/authoring/index.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
 import { createStream } from '../stream/stream.js';
@@ -538,7 +539,24 @@ async function main(): Promise<void> {
         preloadSpaceDirs,
         projectId,
         projectRoot,
-        appGlobals: projectDb ? { db: projectDb.db } : undefined,
+        // Authoring globals are harmless to always include: core only injects
+        // writePage/writeApi/writeHook/writeTableSchema/createProject/selectProject
+        // for an agent holding the matching authoring capability (none of which
+        // THING or ordinary agents have), so a headless "build me a feed"
+        // capstone run has them available to an appbuilder delegate without
+        // affecting any other agent.
+        appGlobals: (() => {
+          const authoring = createAppAuthoringGlobals({ catalogRoot: resolveCatalogRoot() });
+          return {
+            ...(projectDb ? { db: projectDb.db } : undefined),
+            writePage: authoring.writePage,
+            writeApi: authoring.writeApi,
+            writeHook: authoring.writeHook,
+            writeTableSchema: authoring.writeTableSchema,
+            createProject: authoring.createProject,
+            selectProject: authoring.selectProject,
+          };
+        })(),
         appDts,
       },
       { streamFn },

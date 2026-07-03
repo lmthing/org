@@ -154,17 +154,33 @@ export const PAGES_WRITE_DTS = `declare function writePage(route: string, src: s
 export const API_WRITE_DTS = `declare function writeApi(route: string, src: string): { ok: boolean; error?: string };`;
 export const HOOKS_WRITE_DTS = `declare function writeHook(slug: string, src: string): { ok: boolean; error?: string };`;
 
+// `db:schema` also earns `writeTableSchema` — the AUTHORING form that writes a
+// `database/<name>.json` schema file into the catalog app (distinct from the runtime
+// `db.createTable` migration on `db`). Emitted alongside `composeDbDts` when db:schema
+// is granted (see buildAppCapabilityDts) — kept OUT of composeDbDts because it is a
+// standalone global, not a member of the `db` object.
+export const WRITE_TABLE_SCHEMA_DTS = `declare function writeTableSchema(name: string, schema: unknown): { ok: boolean; error?: string };`;
+
+// `project:manage` — the appbuilder's authority to scaffold or bind a catalog app.
+// createProject creates a NEW store/apps/<id>/ template + selects it as the authoring
+// target; selectProject binds an existing one. Subsequent writePage/writeApi/... land
+// in the currently-selected app. Synchronous host calls.
+export const PROJECT_MANAGE_DTS = `declare function createProject(id: string, opts?: { title?: string }): { ok: boolean; appId?: string; root?: string; error?: string };
+declare function selectProject(id: string): { ok: boolean; appId?: string; root?: string; error?: string };`;
+
 /**
  * Registry of the STANDALONE app-capability fragments, keyed by capability id, for
  * the integrator to gate additively per agent in `buildAmbientDts`. The `db:*` trio
  * (`db:read`/`db:write`/`db:schema`) is NOT in this flat map — because all three
- * share one `db` object they are composed together via `composeDbDts`.
+ * share one `db` object they are composed together via `composeDbDts` (db:schema also
+ * emits the standalone `WRITE_TABLE_SCHEMA_DTS`, handled in buildAppCapabilityDts).
  */
 export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:call': API_CALL_DTS,
   'pages:write': PAGES_WRITE_DTS,
   'api:write': API_WRITE_DTS,
   'hooks:write': HOOKS_WRITE_DTS,
+  'project:manage': PROJECT_MANAGE_DTS,
 };
 
 // Write primitives, appended to the full-DTS bundles below. `host-tools.ts`'s

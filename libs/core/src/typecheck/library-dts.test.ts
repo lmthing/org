@@ -10,6 +10,8 @@ import {
   PAGES_WRITE_DTS,
   API_WRITE_DTS,
   HOOKS_WRITE_DTS,
+  PROJECT_MANAGE_DTS,
+  WRITE_TABLE_SCHEMA_DTS,
   CAPABILITY_DTS_FRAGMENTS,
 } from './library-dts.js';
 
@@ -81,13 +83,24 @@ describe('standalone capability fragments', () => {
 });
 
 describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
-  it('maps the four standalone capability ids and omits the db trio', () => {
+  it('maps the standalone capability ids and omits the db trio', () => {
     expect(CAPABILITY_DTS_FRAGMENTS).toEqual({
       'api:call': API_CALL_DTS,
       'pages:write': PAGES_WRITE_DTS,
       'api:write': API_WRITE_DTS,
       'hooks:write': HOOKS_WRITE_DTS,
+      'project:manage': PROJECT_MANAGE_DTS,
     });
+    // db:schema is composed onto the `db` object, but ALSO earns the standalone
+    // writeTableSchema authoring global (emitted directly in buildAppCapabilityDts),
+    // so it is deliberately NOT a flat-map entry.
     expect(CAPABILITY_DTS_FRAGMENTS['db:read']).toBeUndefined();
+    expect(CAPABILITY_DTS_FRAGMENTS['db:schema']).toBeUndefined();
+  });
+
+  it('PROJECT_MANAGE_DTS declares createProject + selectProject; WRITE_TABLE_SCHEMA_DTS declares writeTableSchema', () => {
+    expect(PROJECT_MANAGE_DTS).toContain('createProject(');
+    expect(PROJECT_MANAGE_DTS).toContain('selectProject(');
+    expect(WRITE_TABLE_SCHEMA_DTS).toContain('writeTableSchema(');
   });
 });

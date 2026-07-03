@@ -49,6 +49,9 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
     expect(dts).not.toContain('writePage');
     expect(dts).not.toContain('writeApi');
     expect(dts).not.toContain('writeHook');
+    expect(dts).not.toContain('writeTableSchema');
+    expect(dts).not.toContain('createProject');
+    expect(dts).not.toContain('selectProject');
   });
 
   it('db:read only ⇒ db has query/tables but NOT insert/createTable', () => {
@@ -73,6 +76,29 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
     expect(dtsFor({ 'pages:write': true })).toContain('writePage');
     expect(dtsFor({ 'api:write': true })).toContain('writeApi');
     expect(dtsFor({ 'hooks:write': true })).toContain('writeHook');
+  });
+
+  it('db:schema ⇒ writeTableSchema authoring global in ADDITION to db.createTable', () => {
+    const dts = dtsFor({ 'db:schema': {} });
+    expect(dts).toContain('createTable('); // the db member
+    expect(dts).toContain('writeTableSchema'); // the standalone authoring global
+    // db:read/db:write alone must NOT earn writeTableSchema
+    expect(dtsFor({ 'db:read': {} })).not.toContain('writeTableSchema');
+    expect(dtsFor({ 'db:write': {} })).not.toContain('writeTableSchema');
+  });
+
+  it('project:manage ⇒ createProject + selectProject declarations', () => {
+    const dts = dtsFor({ 'project:manage': true });
+    expect(dts).toContain('createProject(');
+    expect(dts).toContain('selectProject(');
+  });
+
+  it('read-only role drops project:manage / db:schema authoring (intersectAppCaps)', () => {
+    const full: AppCapabilities = { 'db:schema': {}, 'project:manage': true, 'db:read': {} };
+    const ro = intersectAppCaps(full, false);
+    expect(ro['project:manage']).toBeUndefined();
+    expect(ro['db:schema']).toBeUndefined();
+    expect(ro['db:read']).toEqual({});
   });
 
   it('delegate context composes app DTS the same way (grants flow to delegates)', () => {

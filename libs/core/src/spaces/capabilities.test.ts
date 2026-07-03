@@ -97,11 +97,34 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     expect(dirs.length).toBeGreaterThan(0);
     const spaces = await loadSystemSpaces(dirs);
     expect(spaces.length).toBe(dirs.length);
-    // No system agent declares capabilities yet → all parse to {}.
+    // Only system-appbuilder's agents declare capabilities (the project-authoring
+    // grants); every other system agent parses to {}.
     for (const space of spaces) {
+      const isAppbuilder = space.dir.endsWith('system-appbuilder');
       for (const agent of Object.values(space.agents)) {
-        expect(agent.capabilities).toEqual({});
+        if (isAppbuilder) {
+          expect(Object.keys(agent.capabilities ?? {}).length).toBeGreaterThan(0);
+        } else {
+          expect(agent.capabilities).toEqual({});
+        }
       }
     }
+  });
+
+  it("system-appbuilder's app-architect holds the full authoring capability set", async () => {
+    const dirs = defaultSystemSpaceDirs();
+    const spaces = await loadSystemSpaces(dirs);
+    const appbuilder = spaces.find((s) => s.dir.endsWith('system-appbuilder'));
+    expect(appbuilder, 'system-appbuilder loads').toBeTruthy();
+    const architect = appbuilder!.agents['app-architect'];
+    expect(architect, 'app-architect agent present').toBeTruthy();
+    expect(architect!.capabilities).toEqual({
+      'project:manage': true,
+      'db:schema': {},
+      'db:read': {},
+      'pages:write': true,
+      'api:write': true,
+      'hooks:write': true,
+    });
   });
 });

@@ -32,6 +32,7 @@ export const SYSTEM_SPACE_NAMES = [
   'system-engineer',
   'system-architect',
   'system-research',
+  'system-appbuilder',
   'user-memory',
   'user-thing',
 ] as const;

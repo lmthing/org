@@ -129,7 +129,7 @@ export type { CapabilityProfile } from './exec/capability.js';
 export { createChildVM, buildAmbientDts, CURRENT_TASK_DTS } from './exec/bootstrap.js';
 export type { ChildVMOpts, AmbientDtsOpts } from './exec/bootstrap.js';
 export { injectAppGlobals } from './exec/app-globals.js';
-export type { AppGlobalImpls } from './exec/app-globals.js';
+export type { AppGlobalImpls, AuthoringResult, ProjectResult } from './exec/app-globals.js';
 
 // Project-app layer (Phase 1 foundation): db schema + runtime API interfaces +
 // fail-loud validator, and the parsed capability model. Storage engine is in libs/cli.

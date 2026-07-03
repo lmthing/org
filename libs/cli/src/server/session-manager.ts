@@ -8,6 +8,7 @@ import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
 import type { StreamOpts, StreamSession, AppGlobalImpls } from '@lmthing/core';
 import { bootProjectApp } from '../app/boot.js';
 import type { ProjectDb } from '../app/store.js';
+import { createAppAuthoringGlobals, resolveCatalogRoot, type AppAuthoringGlobals } from '../app/authoring/index.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
 import { loadHooks } from '../app/hooks/index.js';
 import { ProjectHookRuntime } from '../app/hooks/runtime.js';
@@ -292,9 +293,30 @@ export class SessionManager {
     return db;
   }
 
+  /** One authoring-globals instance per SessionManager (lazy singleton), so
+   *  `currentApp` state (createProject/selectProject) is shared across a
+   *  delegation tree within this manager rather than reset per session. */
+  private authoringGlobals: AppAuthoringGlobals | undefined;
+
+  private getAuthoringGlobals(): AppAuthoringGlobals {
+    if (!this.authoringGlobals) {
+      this.authoringGlobals = createAppAuthoringGlobals({ catalogRoot: resolveCatalogRoot() });
+    }
+    return this.authoringGlobals;
+  }
+
   private async getProjectAppGlobals(root: string, projectId: string): Promise<AppGlobalImpls | undefined> {
     const db = await this.getProjectDb(root, projectId);
-    return db ? { db: db.db } : undefined;
+    const authoring = this.getAuthoringGlobals();
+    return {
+      ...(db ? { db: db.db } : undefined),
+      writePage: authoring.writePage,
+      writeApi: authoring.writeApi,
+      writeHook: authoring.writeHook,
+      writeTableSchema: authoring.writeTableSchema,
+      createProject: authoring.createProject,
+      selectProject: authoring.selectProject,
+    };
   }
 
   /** Close all cached project db handles (call on server shutdown). */

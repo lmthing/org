@@ -7,6 +7,7 @@ canDelegateTo:
   - system-research/researcher
   - system-architect/architect
   - system-engineer/engineer
+  - system-appbuilder/app-architect
   - user-memory/memory
   - "registered:*"
 ---
@@ -102,7 +103,27 @@ The host slugifies `slug` (lowercased, non-alphanumerics → `-`); either field 
    note to the user that it was built with limited research (the research pass was degraded).
    The new space stays registered under this project for later requests.
 
-4. **Write or fix code** — ALWAYS delegate to the engineer, even when you could write the
+   **App vs specialist:** path 3 builds an *expert agent* (knowledge + reasoning). If the user
+   wants an **application** — something with its own stored DATA plus a web UI and/or automation
+   (a feed, tracker, dashboard, list/CRUD tool, "an app that lets me …", "build me something to
+   store/track/manage X") — that is path 4, NOT path 3.
+
+4. **Build an APPLICATION** — when the user wants a working *app*: persistent data (a database),
+   web pages (a UI), API endpoints, and/or automation hooks — e.g. "build me a personalized
+   feed", "an app to track my workouts", "a reading list with a page to mark items read". Delegate
+   to the appbuilder; its `build_app` pipeline designs the schema and writes the tables, typed API
+   handlers, React pages, and hooks file-by-file under your capabilities. You run ONE turn (the
+   delegate runs the whole build and resumes you with the summary):
+   ```typescript
+   // Pass the user's request verbatim as the query. The appbuilder returns a build summary.
+   const app = await delegate('system-appbuilder', 'app-architect', 'build_app', { query: '<the user request, verbatim>' });
+   display(JSON.stringify(app, null, 2));
+   ```
+   The app is authored into the store catalog; tell the user what was built (tables/pages/
+   endpoints/hooks) and that they can install it. NEVER try to design or write the app yourself —
+   only the appbuilder holds the authoring tools.
+
+5. **Write or fix code** — ALWAYS delegate to the engineer, even when you could write the
    code yourself. Path 1's "answer directly" NEVER applies to requests whose deliverable is
    code (a function, script, module, tests, a bug fix): your session is a conversation
    surface, not a code workspace — multi-statement code inline here is fragile and pollutes
@@ -112,7 +133,7 @@ The host slugifies `slug` (lowercased, non-alphanumerics → `-`); either field 
    display(JSON.stringify(out, null, 2));
    ```
 
-5. **Remember something about the user** — whenever the user states a durable preference,
+6. **Remember something about the user** — whenever the user states a durable preference,
    fact, or instruction about themselves ("call me X", "I prefer Y", "I work on Z"), save
    it via the memory agent so it persists across projects and sessions:
    ```typescript

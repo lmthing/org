@@ -36,3 +36,23 @@ under the system-spaces source tree (trace: E4 runs, 2026-07-02 session scratchp
   (`exec/bootstrap.ts` `spaceDir` opt), keeping the agent's space dir only for
   knowledge/function loading. Add a test asserting a delegate `writeFile` never
   lands inside a system space dir.
+
+## Status (2026-07-04, Phase 9 review)
+
+Reviewed as part of the project-as-application Phase 9 audit and **deliberately
+deferred**, NOT because it's unimportant but because the correct fix is a
+cross-cutting host-tools *write-resolution* redesign — splitting the write-root
+from the knowledge-root across `globals/host-tools.ts` (`injectHostTools`),
+`exec/bootstrap.ts` (`ChildVMOpts.spaceDir` currently serves BOTH write-root and
+`<spaceDir>/knowledge`), and `delegate.ts` — that touches EVERY delegate
+(engineer/architect/research), so it carries real regression risk and should not
+be bundled into the capstone phase (especially while a concurrent autonomous
+builder is editing those same hot files). **Phase 9's appbuilder is unaffected**:
+it authors via the capability GLOBALS (`writePage`/`writeApi`/`writeHook`/
+`writeTableSchema`), which write to the resolved catalog root (`store/apps/<id>/`,
+`AppAuthoringGlobals`), never via `writeFileRaw`→`spaceDir`. Recommended standalone
+fix: add an optional `writeRoot?` to `ChildVMOpts`/`injectHostTools` (defaults to
+`spaceDir` = current behavior) resolved to the project dir for project-context
+delegates, plus a scratch dir for non-project system-agent delegates; keep
+`loadKnowledge` on `spaceDir`. Test: a delegate `writeFileRaw` never lands inside a
+`system-spaces/` dir.

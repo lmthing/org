@@ -50,9 +50,10 @@ describe('system spaces', () => {
   it('defaultSystemSpaceDirs points under libs/core/system-spaces', () => {
     const dirs = defaultSystemSpaceDirs();
     expect(dirs.some((d) => d.endsWith('system-spaces/system-global'))).toBe(true);
-    expect(dirs.length).toBe(6);
+    expect(dirs.length).toBe(7);
     expect(dirs.some((d) => d.endsWith('system-spaces/solver'))).toBe(false);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-research'))).toBe(true);
+    expect(dirs.some((d) => d.endsWith('system-spaces/system-appbuilder'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/user-memory'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/user-thing'))).toBe(true);
   });

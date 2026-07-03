@@ -28,7 +28,8 @@ export type CapabilityId =
   | 'pages:write'
   | 'api:write'
   | 'hooks:write'
-  | 'api:call';
+  | 'api:call'
+  | 'project:manage';
 
 /** Every recognized capability id. Unknown ids fail the space load. */
 export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
@@ -39,6 +40,7 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'api:write',
   'hooks:write',
   'api:call',
+  'project:manage',
 ]);
 
 /** The three db verbs whose (optional) config narrows scope to `{ tables: [...] }`. */
@@ -53,14 +55,17 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
   'pages:write',
   'api:write',
   'hooks:write',
+  'project:manage',
 ]);
 
 /**
  * The parsed capability model attached to a loaded agent. A present key means
  * the cap is GRANTED; its value carries the (optional) scope narrowing:
- *   - `db:*`      → `{ tables?: string[] }` (omitted `tables` = all tables)
- *   - `api:call`  → `{ allow: string[] }` (always present — required)
- *   - authoring   → `true` (bare, no config)
+ *   - `db:*`         → `{ tables?: string[] }` (omitted `tables` = all tables)
+ *   - `api:call`     → `{ allow: string[] }` (always present — required)
+ *   - authoring      → `true` (bare, no config)
+ *   - project:manage → `true` (bare; grants createProject/selectProject — the
+ *                      appbuilder's authority to scaffold/select a catalog app)
  */
 export interface AppCapabilities {
   'db:read'?: { tables?: string[] };
@@ -70,6 +75,7 @@ export interface AppCapabilities {
   'api:write'?: true;
   'hooks:write'?: true;
   'api:call'?: { allow: string[] };
+  'project:manage'?: true;
 }
 
 export interface ParseCapabilitiesCtx {

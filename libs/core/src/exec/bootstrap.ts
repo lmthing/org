@@ -17,6 +17,7 @@ import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
   EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
+  WRITE_TABLE_SCHEMA_DTS,
 } from '../typecheck/library-dts.js';
 import { injectAppGlobals, type AppGlobalImpls } from './app-globals.js';
 import type { RenderHost, Clock } from '../session/types.js';
@@ -229,11 +230,17 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string): string {
   const parts: string[] = [
     composeDbDts({ read: !!app['db:read'], write: !!app['db:write'], schema: !!app['db:schema'] }),
   ];
+  // db:schema earns the standalone authoring global `writeTableSchema` (writes a
+  // catalog `database/<name>.json`) in ADDITION to the `db.createTable`/`addColumn`
+  // members composeDbDts put on the `db` object.
+  if (app['db:schema']) parts.push(WRITE_TABLE_SCHEMA_DTS);
   // api:call — when the caller supplies project-generated typed overloads (Phase 4:
   // `apiCall('markRead', { id: string }): { ok: boolean }` + a generic fallback), use
   // those so a malformed call fails the agent's typecheck; otherwise the generic fragment.
   if (app['api:call']) parts.push(appDts && appDts.trim() ? appDts : CAPABILITY_DTS_FRAGMENTS['api:call']);
-  for (const id of ['pages:write', 'api:write', 'hooks:write'] as const) {
+  // Standalone authoring/management globals (Phase 9): writePage/writeApi/writeHook +
+  // createProject/selectProject. Each emitted only when its grant is present.
+  for (const id of ['pages:write', 'api:write', 'hooks:write', 'project:manage'] as const) {
     if (app[id]) parts.push(CAPABILITY_DTS_FRAGMENTS[id]);
   }
   return parts.filter(Boolean).join('\n');

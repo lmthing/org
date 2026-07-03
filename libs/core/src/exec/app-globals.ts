@@ -1,7 +1,12 @@
 import type { VM } from '../sandbox/quickjs.js';
-import { marshalToQuickJS } from '../sandbox/host-bridge.js';
+import { marshalToQuickJS, injectGlobal } from '../sandbox/host-bridge.js';
 import type { DbApi, QueryOpts, UpdateOpts, RemoveOpts, Row } from '../db/types.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
+
+/** Result shape common to the synchronous authoring globals. */
+export type AuthoringResult = { ok: boolean; error?: string };
+/** createProject/selectProject also report the resolved app id + root. */
+export type ProjectResult = { ok: boolean; appId?: string; root?: string; error?: string };
 
 /**
  * The INJECT side of the capability→{inject, dts} registry (the DTS side lives in
@@ -12,15 +17,27 @@ import type { AppCapabilities } from '../spaces/capabilities.js';
  * frontmatter granted, enforced on EVERY call (not just at injection).
  *
  * Phase 1 wires the flagship SYNCHRONOUS `db` global (execShell-class: a same-process
- * host call, no yield). The value-yielding app globals (`apiCall`, `writePage`,
- * `writeApi`, `writeHook`) are injected in their owning phases (P3 api runtime, P9
- * authoring) once their yield-router resolvers exist; their DTS is already emitted
- * here in P1 so agents typecheck against them.
+ * host call, no yield). Phase 9 adds the SYNCHRONOUS authoring globals
+ * (`writePage`/`writeApi`/`writeHook`/`writeTableSchema` + `createProject`/`selectProject`)
+ * — the DTS declares them non-Promise, so like `db` they are plain host calls (no
+ * yield-router). `apiCall` remains the one value-yielding app global (wired at its P4/P6
+ * seam). Each impl below is UNSCOPED (host engine, libs/cli); core injects it only when
+ * the agent holds the matching capability.
  */
 export interface AppGlobalImpls {
   /** Project-rooted db (sync agent surface), provided by libs/cli's better-sqlite3
    *  store in Phase 2. Unscoped — core applies the per-verb table grant on top. */
   db?: DbApi;
+  /** Phase 9 authoring globals — write into the `store/apps/<id>/` catalog source of
+   *  the currently-selected app. Provided by libs/cli (`createAppAuthoringGlobals`).
+   *  Injected purely on the capability grant (NOT projectRoot): the appbuilder has no
+   *  project of its own until `createProject` establishes one. */
+  writePage?: (route: string, src: string) => AuthoringResult;
+  writeApi?: (route: string, src: string) => AuthoringResult;
+  writeHook?: (slug: string, src: string) => AuthoringResult;
+  writeTableSchema?: (name: string, schema: unknown) => AuthoringResult;
+  createProject?: (id: string, opts?: { title?: string }) => ProjectResult;
+  selectProject?: (id: string) => ProjectResult;
 }
 
 /** Throw the host error shape (naming the allowed tables, like the canDelegateTo
@@ -87,26 +104,47 @@ function buildScopedDb(db: DbApi, app: AppCapabilities): Record<string, unknown>
 }
 
 /**
- * Inject the granted project-app globals onto a VM. Gated on `projectRoot`: a
- * session/fork/delegate running OUTSIDE a project (no `projectRoot`) receives NO
- * app globals — the backward-compat invariant that keeps a top-level THING session
- * behaving exactly as before. In Phase 1 no caller supplies `appGlobals`, so nothing
- * is injected at runtime yet; the engine plugs into this seam in Phase 2.
+ * Inject the granted project-app globals onto a VM.
+ *
+ * Two gating regimes, because two kinds of global:
+ *   - **`db`** (the live project database) is gated on `projectRoot` AND its grant:
+ *     a session/fork/delegate running OUTSIDE a project (no `projectRoot`) receives
+ *     NO `db` — the backward-compat invariant that keeps a top-level THING session
+ *     behaving exactly as before, and there is no live db to bind without a project.
+ *   - **The Phase-9 authoring globals** (`writePage`/`writeApi`/`writeHook`/
+ *     `writeTableSchema` + `createProject`/`selectProject`) are gated on the
+ *     CAPABILITY GRANT ALONE, not `projectRoot`: the appbuilder legitimately has no
+ *     project of its own — `createProject` is precisely what establishes the catalog
+ *     app the other authoring writes target. THING and ordinary agents hold none of
+ *     these caps, so nothing is injected for them (invariant preserved: no caps ⇒ no
+ *     app globals), regardless of whether the host passes the impls.
+ *
+ * Nothing is injected unless the host supplies `appGlobals` (libs/cli, P2+).
  */
 export function injectAppGlobals(
   vm: VM,
   opts: { app: AppCapabilities; projectRoot?: string; appGlobals?: AppGlobalImpls },
 ): void {
-  if (!opts.projectRoot) return; // no project context ⇒ no app globals
   const impls = opts.appGlobals;
   if (!impls) return;
   const app = opts.app;
+  const ctx = vm.ctx;
 
+  // db — requires a live project context (projectRoot) in addition to a db grant.
   const dbGranted = app['db:read'] || app['db:write'] || app['db:schema'];
-  if (impls.db && dbGranted) {
-    const ctx = vm.ctx;
+  if (opts.projectRoot && impls.db && dbGranted) {
     const handle = marshalToQuickJS(ctx, buildScopedDb(impls.db, app));
     ctx.setProp(ctx.global, 'db', handle);
     handle.dispose();
+  }
+
+  // Authoring/management globals — capability-gated only (project-independent).
+  if (app['pages:write'] && impls.writePage) injectGlobal(ctx, 'writePage', impls.writePage as (...a: unknown[]) => unknown);
+  if (app['api:write'] && impls.writeApi) injectGlobal(ctx, 'writeApi', impls.writeApi as (...a: unknown[]) => unknown);
+  if (app['hooks:write'] && impls.writeHook) injectGlobal(ctx, 'writeHook', impls.writeHook as (...a: unknown[]) => unknown);
+  if (app['db:schema'] && impls.writeTableSchema) injectGlobal(ctx, 'writeTableSchema', impls.writeTableSchema as (...a: unknown[]) => unknown);
+  if (app['project:manage']) {
+    if (impls.createProject) injectGlobal(ctx, 'createProject', impls.createProject as (...a: unknown[]) => unknown);
+    if (impls.selectProject) injectGlobal(ctx, 'selectProject', impls.selectProject as (...a: unknown[]) => unknown);
   }
 }
