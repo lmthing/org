@@ -52,9 +52,17 @@ import {
 } from '@lmthing/core';
 
 /** The public handle returned by {@link openProjectDb}. */
+/** Fired (main-process, synchronously after commit) on every row-mutating db write, so the
+ *  Phase-6 hook dispatcher can enqueue matching `database` hooks. `rows` carries the inserted
+ *  rows for `insert`; for `update`/`remove` it is empty (the affected rows are not re-queried). */
+export type WriteListener = (e: { table: string; event: 'insert' | 'update' | 'remove'; rows: unknown[] }) => void;
+
 export interface ProjectDb {
   /** The **synchronous** agent-side data API (same-process host call). */
   db: DbApi;
+  /** Install (or clear) the write listener that fires on insert/update/remove — the seam the
+   *  Phase-6 hook dispatcher uses to react to db changes. Set after boot by the integrator. */
+  setOnWrite(fn: WriteListener | undefined): void;
   /**
    * A `Promise`-returning mirror of {@link db} for Node handlers. Currently a
    * thin wrapper (each method returns `Promise.resolve(sync-result)`); a real
@@ -84,6 +92,8 @@ export interface OpenProjectDbOpts {
    * table and `include` throws.
    */
   schemas?: LoadedTable[];
+  /** Initial write listener (Phase 6 hook dispatch); also settable later via `setOnWrite`. */
+  onWrite?: WriteListener;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -523,12 +533,30 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
     }
   }
 
+  // Write listener seam (Phase 6): fires synchronously after a committed row mutation.
+  let writeListener: WriteListener | undefined = opts.onWrite;
+  const notify = (event: 'insert' | 'update' | 'remove', table: string, rows: unknown[]): void => {
+    if (writeListener) { try { writeListener({ table, event, rows }); } catch { /* dispatch is best-effort */ } }
+  };
+
   const db: DbApi = {
     query,
     tables,
-    insert,
-    update,
-    remove,
+    insert: (table, values) => {
+      const r = insert(table, values);
+      notify('insert', table, Array.isArray(r) ? r : [r]);
+      return r;
+    },
+    update: (table, o) => {
+      const n = update(table, o);
+      if (n > 0) notify('update', table, []);
+      return n;
+    },
+    remove: (table, o) => {
+      const n = remove(table, o);
+      if (n > 0) notify('remove', table, []);
+      return n;
+    },
     createTable,
     addColumn,
   };
@@ -551,6 +579,7 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
     listTables,
     tableColumns,
     close: () => raw.close(),
+    setOnWrite: (fn) => { writeListener = fn; },
   };
 }
 

@@ -9,6 +9,8 @@ import type { StreamOpts, StreamSession, AppGlobalImpls } from '@lmthing/core';
 import { bootProjectApp } from '../app/boot.js';
 import type { ProjectDb } from '../app/store.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
+import { loadHooks } from '../app/hooks/index.js';
+import { ProjectHookRuntime } from '../app/hooks/runtime.js';
 import { WebRenderHost } from '../rpc/server.js';
 import { TraceHub } from '../rpc/trace-hub.js';
 import {
@@ -117,6 +119,8 @@ export interface BuildSessionArgs {
     maxWallClockMs?: number;
   };
   renderHost: WebRenderHost;
+  /** Optional NDJSON trace file (headless runs may want a trace on disk). */
+  traceFile?: string;
   /** Override the always-loaded system space dirs (absolute paths). */
   systemSpaceDirs?: string[];
   /** Absolute space dirs pre-loaded into dynamicSpaces at start. */
@@ -234,6 +238,7 @@ export class SessionManager {
         agentSlug: args.agentSlug,
         modelAlias: args.model ?? this.defaultModelAlias ?? 'default',
         renderHost: args.renderHost,
+        traceFile: args.traceFile,
         budget: args.budget,
         maxHistoryTurns: 20,
         systemSpaceDirs: args.systemSpaceDirs,
@@ -257,11 +262,26 @@ export class SessionManager {
   /** Boot (once) and return the project's app db, or `null` for a spaces-only project.
    *  Cached across sessions in that project; the same handle backs the agent's sync `db`
    *  global (via {@link getProjectAppGlobals}) AND the Node api runtime (`.async`). */
+  /** Per-project database-hook dispatch runtimes (wired to the db's onWrite seam). */
+  private projectHookRuntimes = new Map<string, ProjectHookRuntime>();
+
   async getProjectDb(root: string, projectId: string): Promise<ProjectDb | null> {
     let db = this.projectDbs.get(projectId);
     if (db === undefined) {
       db = await bootProjectApp(join(root, projectId));
       this.projectDbs.set(projectId, db);
+      // Wire the project's `database` hooks to the db's onWrite seam (Phase 6). Once per
+      // project, when the db first boots. A project with no db/hooks gets nothing.
+      if (db && !this.projectHookRuntimes.has(projectId)) {
+        try {
+          const hooks = await loadHooks(join(root, projectId));
+          if (hooks.some((h) => (h.def as { type?: string }).type === 'database')) {
+            this.projectHookRuntimes.set(projectId, new ProjectHookRuntime(projectId, root, this, db, hooks));
+          }
+        } catch (err) {
+          console.warn(`[hooks] failed to wire database hooks for "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
     }
     return db;
   }
@@ -273,6 +293,10 @@ export class SessionManager {
 
   /** Close all cached project db handles (call on server shutdown). */
   closeProjectDbs(): void {
+    for (const rt of this.projectHookRuntimes.values()) {
+      try { rt.dispose(); } catch { /* best-effort */ }
+    }
+    this.projectHookRuntimes.clear();
     for (const db of this.projectDbs.values()) {
       try { db?.close(); } catch { /* best-effort */ }
     }
@@ -752,6 +776,130 @@ export class SessionManager {
     }
     this.sessions.delete(id);
     return true;
+  }
+
+  /**
+   * Run one agent turn **headlessly** and return its result, then tear the VM
+   * down. Consolidates the `bin.ts --request` single-shot pattern (build a
+   * Session with the SAME project wiring the interactive path uses → app db +
+   * typed apiCall + system/preload spaces → `start(message)` → dispose) INTO the
+   * manager so a hook (Phase 6) can run an agent and capture its output.
+   *
+   * The session is **ephemeral**: it is NEVER registered in `this.sessions`, so
+   * it does not count against `maxSessions`, is never persisted, and is fully
+   * isolated from the interactive session lifecycle. Its own throwaway
+   * {@link WebRenderHost} swallows display/ask/log (no hub is wired). `budget`
+   * (if given) applies host-enforced caps so a hook runs bounded.
+   *
+   * Resolution mirrors the interactive project path:
+   *   - `root = this.lmthingRoot`, `projectId = opts.projectId ?? DEFAULT_PROJECT_ID`,
+   *     `projectRoot = <root>/<projectId>`.
+   *   - `spaceDir`: `opts.spaceDir` if given; else if `opts.spaceRef` a
+   *     project-relative space under `<projectRoot>/spaces/<space>` (Phase 7
+   *     formalizes `spaceRef` — `space/agent`/nested paths; here we take the
+   *     leading segment as the space dir and ignore any trailing `/agent`); else
+   *     the project dir itself.
+   *
+   * @returns `{ ok:true, result, sessionId }` where `result` is the agent's
+   *   final output (last `display(...)` descriptor, else the last history
+   *   message content), or `{ ok:false, error, sessionId }` on any throw.
+   */
+  async runHeadless(opts: {
+    projectId?: string;
+    spaceRef?: string;
+    spaceDir?: string;
+    agentSlug: string;
+    message: string;
+    budget?: BuildSessionArgs['budget'];
+    traceFile?: string;
+  }): Promise<{ ok: boolean; result?: unknown; error?: string; sessionId: string }> {
+    const sessionId = randomUUID();
+    let session: Session | undefined;
+    const displays: unknown[] = [];
+    try {
+      const root = this.lmthingRoot;
+      let args: BuildSessionArgs;
+      if (root) {
+        const projectId = opts.projectId ?? DEFAULT_PROJECT_ID;
+        const projectRoot = join(root, projectId);
+
+        // Resolve the space dir (Phase 7 will extend spaceRef parsing).
+        let spaceDir: string;
+        if (opts.spaceDir) {
+          spaceDir = opts.spaceDir;
+        } else if (opts.spaceRef) {
+          const spaceName = opts.spaceRef.split('/')[0] ?? opts.spaceRef;
+          spaceDir = join(projectRoot, 'spaces', spaceName);
+        } else {
+          spaceDir = projectRoot;
+        }
+
+        const projectSpacesDir = join(projectRoot, 'spaces');
+        const [systemSpaceDirs, preloadSpaceDirs] = await Promise.all([
+          listSystemSpaceDirs(root),
+          listProjectSpaceDirs(root, projectId),
+        ]);
+        const appGlobals = await this.getProjectAppGlobals(root, projectId);
+        const contracts = await this.getProjectContracts(root, projectId);
+
+        args = {
+          spaceDir,
+          agentSlug: opts.agentSlug,
+          budget: opts.budget,
+          traceFile: opts.traceFile,
+          renderHost: new WebRenderHost(),
+          systemSpaceDirs,
+          preloadSpaceDirs,
+          projectSpacesDir,
+          projectId,
+          projectRoot,
+          appGlobals,
+          appDts: contracts?.apiCallDts,
+        };
+      } else {
+        // No project root: fall back to a bare space-dir build (legacy mode).
+        const spaceDir = opts.spaceDir ?? this.defaultSpaceDir;
+        if (!spaceDir) {
+          throw new Error('runHeadless: no spaceDir provided and no lmthingRoot/defaultSpaceDir configured');
+        }
+        args = {
+          spaceDir,
+          agentSlug: opts.agentSlug,
+          budget: opts.budget,
+          traceFile: opts.traceFile,
+          renderHost: new WebRenderHost(),
+        };
+      }
+
+      session = this.buildSessionFn(args);
+
+      // Capture display descriptors so we can return the agent's final output.
+      // We subscribe to the session's OWN tracer (not a hub) — this run is
+      // isolated from every interactive session.
+      if (typeof session.getTracer === 'function') {
+        session.getTracer().subscribe((e) => {
+          if (e.type === 'display') displays.push(e.descriptor);
+        });
+      }
+
+      await session.start(opts.message);
+
+      const lastDisplay = displays.length ? displays[displays.length - 1] : undefined;
+      let result: unknown = lastDisplay;
+      if (result === undefined && typeof session.getHistory === 'function') {
+        const history = session.getHistory();
+        result = history.length ? history[history.length - 1]?.content : undefined;
+      }
+      return { ok: true, result, sessionId };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err), sessionId };
+    } finally {
+      try {
+        session?.dispose();
+      } catch {
+        /* best-effort */
+      }
+    }
   }
 
   // ─── Project lifecycle (only meaningful when lmthingRoot is set) ──────────

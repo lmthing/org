@@ -30,6 +30,8 @@ import { handleReportBug } from './routes/report-bug.js';
 import { createAppApiHandler } from './routes/app-api.js';
 import { createPageServeHandler } from '../app/pages-serve.js';
 import { buildProjectPages } from '../app/build/pages.js';
+import { createHookRunHandler, bootCatchUpAndSchedule } from './routes/hooks.js';
+import { listProjects } from './projects.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
 import { handleAgentWsUpgrade } from './ws/agent.js';
@@ -180,6 +182,10 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   const appApiHandler = createAppApiHandler(manager, effectiveLmthingRoot);
   router.add('*', '/app/:projectId/api/*', appApiHandler);
 
+  // Hook-run endpoint (Phase 6) — the ONE authoritative run path that Studio's manual
+  // run, the pod crond, and the boot catch-up/tick all funnel through. Reserved `/api/`.
+  router.add('POST', '/api/projects/:projectId/hooks/:slug/run', createHookRunHandler(manager, effectiveLmthingRoot));
+
   // Project-app PAGES — `/app/<project>/*` (non-api). The built React bundle is served
   // with an asset-manifest SPA fallback (dotted route params route client-side) + a strict
   // CSP. Registered AFTER the api route so `…/api/*` matches first. The bundle is built
@@ -248,6 +254,28 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   console.log(`Multi-session server ready: ${httpBase}`);
   console.log(`Create a session:  POST ${httpBase}/api/sessions`);
 
+  // Hooks (Phase 6): regenerate the pod crontab (guarded), run overdue cron hooks once
+  // (boot catch-up), and — with no crond (local dev) — start an in-process 60s tick. All
+  // drive the same hook-run endpoint above. Also warms each project's db so its `database`
+  // hooks wire to the onWrite seam.
+  let hookTick: NodeJS.Timeout | undefined;
+  if (effectiveLmthingRoot) {
+    try {
+      const root = effectiveLmthingRoot;
+      const projects = (await listProjects(root)).map((p) => p.id).filter((id) => id !== 'system');
+      // Warm each project's db so its database-hook runtime is wired (getProjectDb side-effect).
+      for (const id of projects) { try { await manager.getProjectDb(root, id); } catch { /* skip */ } }
+      const runHookFn = async (projectId: string, slug: string): Promise<unknown> => {
+        const r = await fetch(`${httpBase}/api/projects/${projectId}/hooks/${slug}/run`, { method: 'POST' });
+        return r.json().catch(() => ({}));
+      };
+      const { tick } = await bootCatchUpAndSchedule(manager, root, projects, actualPort, runHookFn);
+      hookTick = tick;
+    } catch (err) {
+      console.warn('[hooks] boot catch-up/schedule failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
   // Workspace backup: start the auto timer (no-op unless GITHUB_BACKUP_AUTO=1),
   // and flush a final backup on SIGTERM so idle scale-to-zero / restarts don't
   // lose un-backed-up changes. Best-effort with a hard cap so we exit within
@@ -267,6 +295,8 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   return {
     port: actualPort,
     close: async () => {
+      if (hookTick) clearInterval(hookTick);
+      try { manager.closeProjectDbs(); } catch { /* best-effort */ }
       if (devWeb) await devWeb.close();
       wss.close();
       await new Promise<void>((res) => httpServer.close(() => res()));
