@@ -1,0 +1,257 @@
+import { createFileRoute, useParams } from '@tanstack/react-router'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText } from 'lucide-react'
+import { Button } from '@lmthing/ui/elements/forms/button'
+import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { buildTree } from '@/lib/file-tree'
+import type { FileTreeNode } from '@/lib/runtime/file-watcher'
+import { useAppApi, manifestFilePaths, type AppManifest } from '../-lib/appApi'
+
+/**
+ * App-file editor. The tree is derived from the manifest (pages/api/hooks/
+ * tables + `package.json`); a file opens via `GET …/app/files/<path>` and saves
+ * via `PUT …/app/files/<path>`. The management API is **path-scoped** and
+ * refuses `.data/`/`types/` writes — those refusals surface as the save error.
+ * A simple styled `<textarea>` is the editor (no code-editor component ships in
+ * `apps/web`/`@lmthing/ui` today).
+ */
+function TreeItem({
+  node,
+  depth,
+  selectedPath,
+  onSelect,
+  expanded,
+  onToggle,
+}: {
+  node: FileTreeNode
+  depth: number
+  selectedPath: string | null
+  onSelect: (path: string) => void
+  expanded: Set<string>
+  onToggle: (path: string) => void
+}) {
+  const isDir = node.type === 'directory'
+  const isOpen = expanded.has(node.path)
+  const isSelected = node.path === selectedPath
+  return (
+    <>
+      <div
+        onClick={() => (isDir ? onToggle(node.path) : onSelect(node.path))}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.375rem',
+          padding: '0.25rem 0.5rem',
+          paddingLeft: `${depth + 0.5}rem`,
+          cursor: 'pointer',
+          fontSize: '0.8125rem',
+          borderRadius: '0.25rem',
+          background: isSelected ? 'var(--color-primary)' : 'transparent',
+          color: isSelected ? 'var(--color-primary-foreground)' : 'inherit',
+        }}
+      >
+        {isDir ? (
+          <>
+            {isOpen ? (
+              <ChevronDown style={{ width: 14, height: 14, flexShrink: 0, opacity: 0.5 }} />
+            ) : (
+              <ChevronRight style={{ width: 14, height: 14, flexShrink: 0, opacity: 0.5 }} />
+            )}
+            {isOpen ? (
+              <FolderOpen style={{ width: 15, height: 15, flexShrink: 0, color: isSelected ? 'inherit' : 'var(--color-primary)' }} />
+            ) : (
+              <Folder style={{ width: 15, height: 15, flexShrink: 0, color: isSelected ? 'inherit' : 'var(--color-primary)' }} />
+            )}
+          </>
+        ) : (
+          <>
+            <span style={{ width: 14, flexShrink: 0 }} />
+            <FileText style={{ width: 15, height: 15, flexShrink: 0, opacity: 0.5 }} />
+          </>
+        )}
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {node.name}
+        </span>
+      </div>
+      {isDir &&
+        isOpen &&
+        node.children?.map((child) => (
+          <TreeItem
+            key={child.path}
+            node={child}
+            depth={depth + 1}
+            selectedPath={selectedPath}
+            onSelect={onSelect}
+            expanded={expanded}
+            onToggle={onToggle}
+          />
+        ))}
+    </>
+  )
+}
+
+function FilesEditor() {
+  const { projectId } = useParams({ from: '/studio/$projectId/app' })
+  const api = useAppApi(projectId)
+
+  const [paths, setPaths] = useState<string[]>([])
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [selected, setSelected] = useState<string | null>(null)
+  const [content, setContent] = useState<string>('')
+  const [original, setOriginal] = useState<string>('')
+  const [loadingFile, setLoadingFile] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    const ac = new AbortController()
+    api
+      .getManifest(ac.signal)
+      .then((m: AppManifest) => setPaths(manifestFilePaths(m)))
+      .catch((e) => {
+        if (!ac.signal.aborted) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => ac.abort()
+  }, [api])
+
+  const tree = useMemo(() => buildTree(paths), [paths])
+
+  const openFile = useCallback(
+    async (path: string) => {
+      setSelected(path)
+      setLoadingFile(true)
+      setError(null)
+      setNotice(null)
+      try {
+        const c = await api.readFile(path)
+        setContent(c)
+        setOriginal(c)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+        setContent('')
+        setOriginal('')
+      } finally {
+        setLoadingFile(false)
+      }
+    },
+    [api],
+  )
+
+  const save = useCallback(async () => {
+    if (!selected) return
+    setSaving(true)
+    setError(null)
+    setNotice(null)
+    try {
+      await api.writeFile(selected, content)
+      setOriginal(content)
+      setNotice('Saved.')
+    } catch (e) {
+      // Respect the API's refusals (e.g. `.data/`/`types/` writes) — show them.
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }, [api, selected, content])
+
+  const dirty = content !== original
+
+  return (
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      {/* Tree */}
+      <div
+        style={{
+          width: 260,
+          minWidth: 200,
+          borderRight: '1px solid var(--color-border)',
+          overflowY: 'auto',
+          padding: '0.5rem 0',
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ padding: '0.5rem 0.75rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5 }}>
+          App files ({paths.length})
+        </div>
+        {tree.map((node) => (
+          <TreeItem
+            key={node.path}
+            node={node}
+            depth={0}
+            selectedPath={selected}
+            onSelect={openFile}
+            expanded={expanded}
+            onToggle={(p) =>
+              setExpanded((prev) => {
+                const next = new Set(prev)
+                if (next.has(p)) next.delete(p)
+                else next.add(p)
+                return next
+              })
+            }
+          />
+        ))}
+      </div>
+
+      {/* Editor */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {selected ? (
+          <>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.5rem 1rem',
+                borderBottom: '1px solid var(--color-border)',
+              }}
+            >
+              <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-accent)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selected}
+                {dirty ? ' •' : ''}
+              </span>
+              {notice ? <Caption style={{ color: 'var(--color-accent)' }}>{notice}</Caption> : null}
+              <Button variant="primary" disabled={!dirty || saving} onClick={save}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+            {error ? (
+              <Caption style={{ padding: '0.5rem 1rem', color: 'var(--color-destructive)' }}>{error}</Caption>
+            ) : null}
+            <textarea
+              value={content}
+              spellCheck={false}
+              disabled={loadingFile}
+              onChange={(e) => setContent(e.target.value)}
+              style={{
+                flex: 1,
+                width: '100%',
+                border: 'none',
+                outline: 'none',
+                resize: 'none',
+                padding: '1rem',
+                fontFamily: 'monospace',
+                fontSize: '0.8125rem',
+                lineHeight: 1.6,
+                background: 'var(--color-background)',
+                color: 'var(--color-foreground)',
+              }}
+            />
+          </>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.4, fontSize: '0.875rem' }}>
+            {error ? (
+              <span style={{ color: 'var(--color-destructive)', opacity: 1 }}>{error}</span>
+            ) : (
+              'Select an app file to edit.'
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export const Route = createFileRoute('/studio/$projectId/app/files/')({
+  component: FilesEditor,
+})

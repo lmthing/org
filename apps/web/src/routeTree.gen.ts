@@ -24,11 +24,16 @@ import { Route as StudioProjectIdRouteRouteImport } from './routes/studio/$proje
 import { Route as StudioThingIndexRouteImport } from './routes/studio/thing/index'
 import { Route as StudioProjectIdIndexRouteImport } from './routes/studio/$projectId/index'
 import { Route as ComputerSpacesIndexRouteImport } from './routes/computer/spaces/index'
+import { Route as StudioProjectIdAppRouteRouteImport } from './routes/studio/$projectId/app/route'
 import { Route as StudioProjectIdSpaceIdRouteRouteImport } from './routes/studio/$projectId/$spaceId/route'
+import { Route as StudioProjectIdAppIndexRouteImport } from './routes/studio/$projectId/app/index'
 import { Route as StudioProjectIdSpaceIdIndexRouteImport } from './routes/studio/$projectId/$spaceId/index'
 import { Route as ComputerSpacesSpaceIdIndexRouteImport } from './routes/computer/spaces/$spaceId/index'
 import { Route as ComputerSpacesSpaceIdLogsRouteImport } from './routes/computer/spaces/$spaceId/logs'
 import { Route as ComputerSpacesSpaceIdConfigRouteImport } from './routes/computer/spaces/$spaceId/config'
+import { Route as StudioProjectIdAppPreviewIndexRouteImport } from './routes/studio/$projectId/app/preview/index'
+import { Route as StudioProjectIdAppFilesIndexRouteImport } from './routes/studio/$projectId/app/files/index'
+import { Route as StudioProjectIdAppDataIndexRouteImport } from './routes/studio/$projectId/app/data/index'
 import { Route as StudioProjectIdSpaceIdWorkflowIndexRouteImport } from './routes/studio/$projectId/$spaceId/workflow/index'
 import { Route as StudioProjectIdSpaceIdSettingsIndexRouteImport } from './routes/studio/$projectId/$spaceId/settings/index'
 import { Route as StudioProjectIdSpaceIdRawIndexRouteImport } from './routes/studio/$projectId/$spaceId/raw/index'
@@ -125,12 +130,22 @@ const ComputerSpacesIndexRoute = ComputerSpacesIndexRouteImport.update({
   path: '/spaces/',
   getParentRoute: () => ComputerRouteRoute,
 } as any)
+const StudioProjectIdAppRouteRoute = StudioProjectIdAppRouteRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => StudioProjectIdRouteRoute,
+} as any)
 const StudioProjectIdSpaceIdRouteRoute =
   StudioProjectIdSpaceIdRouteRouteImport.update({
     id: '/$spaceId',
     path: '/$spaceId',
     getParentRoute: () => StudioProjectIdRouteRoute,
   } as any)
+const StudioProjectIdAppIndexRoute = StudioProjectIdAppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StudioProjectIdAppRouteRoute,
+} as any)
 const StudioProjectIdSpaceIdIndexRoute =
   StudioProjectIdSpaceIdIndexRouteImport.update({
     id: '/',
@@ -154,6 +169,24 @@ const ComputerSpacesSpaceIdConfigRoute =
     id: '/spaces/$spaceId/config',
     path: '/spaces/$spaceId/config',
     getParentRoute: () => ComputerRouteRoute,
+  } as any)
+const StudioProjectIdAppPreviewIndexRoute =
+  StudioProjectIdAppPreviewIndexRouteImport.update({
+    id: '/preview/',
+    path: '/preview/',
+    getParentRoute: () => StudioProjectIdAppRouteRoute,
+  } as any)
+const StudioProjectIdAppFilesIndexRoute =
+  StudioProjectIdAppFilesIndexRouteImport.update({
+    id: '/files/',
+    path: '/files/',
+    getParentRoute: () => StudioProjectIdAppRouteRoute,
+  } as any)
+const StudioProjectIdAppDataIndexRoute =
+  StudioProjectIdAppDataIndexRouteImport.update({
+    id: '/data/',
+    path: '/data/',
+    getParentRoute: () => StudioProjectIdAppRouteRoute,
   } as any)
 const StudioProjectIdSpaceIdWorkflowIndexRoute =
   StudioProjectIdSpaceIdWorkflowIndexRouteImport.update({
@@ -292,6 +325,7 @@ export interface FileRoutesByFullPath {
   '/computer/': typeof ComputerIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/studio/$projectId/$spaceId': typeof StudioProjectIdSpaceIdRouteRouteWithChildren
+  '/studio/$projectId/app': typeof StudioProjectIdAppRouteRouteWithChildren
   '/computer/spaces/': typeof ComputerSpacesIndexRoute
   '/studio/$projectId/': typeof StudioProjectIdIndexRoute
   '/studio/thing/': typeof StudioThingIndexRoute
@@ -299,6 +333,7 @@ export interface FileRoutesByFullPath {
   '/computer/spaces/$spaceId/logs': typeof ComputerSpacesSpaceIdLogsRoute
   '/computer/spaces/$spaceId/': typeof ComputerSpacesSpaceIdIndexRoute
   '/studio/$projectId/$spaceId/': typeof StudioProjectIdSpaceIdIndexRoute
+  '/studio/$projectId/app/': typeof StudioProjectIdAppIndexRoute
   '/studio/$projectId/$spaceId/agent/': typeof StudioProjectIdSpaceIdAgentIndexRoute
   '/studio/$projectId/$spaceId/components/': typeof StudioProjectIdSpaceIdComponentsIndexRoute
   '/studio/$projectId/$spaceId/functions/': typeof StudioProjectIdSpaceIdFunctionsIndexRoute
@@ -306,6 +341,9 @@ export interface FileRoutesByFullPath {
   '/studio/$projectId/$spaceId/raw/': typeof StudioProjectIdSpaceIdRawIndexRoute
   '/studio/$projectId/$spaceId/settings/': typeof StudioProjectIdSpaceIdSettingsIndexRoute
   '/studio/$projectId/$spaceId/workflow/': typeof StudioProjectIdSpaceIdWorkflowIndexRoute
+  '/studio/$projectId/app/data/': typeof StudioProjectIdAppDataIndexRoute
+  '/studio/$projectId/app/files/': typeof StudioProjectIdAppFilesIndexRoute
+  '/studio/$projectId/app/preview/': typeof StudioProjectIdAppPreviewIndexRoute
   '/studio/$projectId/$spaceId/agent/$agentId/': typeof StudioProjectIdSpaceIdAgentAgentIdIndexRoute
   '/studio/$projectId/$spaceId/agent/new/': typeof StudioProjectIdSpaceIdAgentNewIndexRoute
   '/studio/$projectId/$spaceId/knowledge/$fieldId/': typeof StudioProjectIdSpaceIdKnowledgeFieldIdIndexRoute
@@ -336,6 +374,7 @@ export interface FileRoutesByTo {
   '/computer/spaces/$spaceId/logs': typeof ComputerSpacesSpaceIdLogsRoute
   '/computer/spaces/$spaceId': typeof ComputerSpacesSpaceIdIndexRoute
   '/studio/$projectId/$spaceId': typeof StudioProjectIdSpaceIdIndexRoute
+  '/studio/$projectId/app': typeof StudioProjectIdAppIndexRoute
   '/studio/$projectId/$spaceId/agent': typeof StudioProjectIdSpaceIdAgentIndexRoute
   '/studio/$projectId/$spaceId/components': typeof StudioProjectIdSpaceIdComponentsIndexRoute
   '/studio/$projectId/$spaceId/functions': typeof StudioProjectIdSpaceIdFunctionsIndexRoute
@@ -343,6 +382,9 @@ export interface FileRoutesByTo {
   '/studio/$projectId/$spaceId/raw': typeof StudioProjectIdSpaceIdRawIndexRoute
   '/studio/$projectId/$spaceId/settings': typeof StudioProjectIdSpaceIdSettingsIndexRoute
   '/studio/$projectId/$spaceId/workflow': typeof StudioProjectIdSpaceIdWorkflowIndexRoute
+  '/studio/$projectId/app/data': typeof StudioProjectIdAppDataIndexRoute
+  '/studio/$projectId/app/files': typeof StudioProjectIdAppFilesIndexRoute
+  '/studio/$projectId/app/preview': typeof StudioProjectIdAppPreviewIndexRoute
   '/studio/$projectId/$spaceId/agent/$agentId': typeof StudioProjectIdSpaceIdAgentAgentIdIndexRoute
   '/studio/$projectId/$spaceId/agent/new': typeof StudioProjectIdSpaceIdAgentNewIndexRoute
   '/studio/$projectId/$spaceId/knowledge/$fieldId': typeof StudioProjectIdSpaceIdKnowledgeFieldIdIndexRoute
@@ -372,6 +414,7 @@ export interface FileRoutesById {
   '/computer/': typeof ComputerIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/studio/$projectId/$spaceId': typeof StudioProjectIdSpaceIdRouteRouteWithChildren
+  '/studio/$projectId/app': typeof StudioProjectIdAppRouteRouteWithChildren
   '/computer/spaces/': typeof ComputerSpacesIndexRoute
   '/studio/$projectId/': typeof StudioProjectIdIndexRoute
   '/studio/thing/': typeof StudioThingIndexRoute
@@ -379,6 +422,7 @@ export interface FileRoutesById {
   '/computer/spaces/$spaceId/logs': typeof ComputerSpacesSpaceIdLogsRoute
   '/computer/spaces/$spaceId/': typeof ComputerSpacesSpaceIdIndexRoute
   '/studio/$projectId/$spaceId/': typeof StudioProjectIdSpaceIdIndexRoute
+  '/studio/$projectId/app/': typeof StudioProjectIdAppIndexRoute
   '/studio/$projectId/$spaceId/agent/': typeof StudioProjectIdSpaceIdAgentIndexRoute
   '/studio/$projectId/$spaceId/components/': typeof StudioProjectIdSpaceIdComponentsIndexRoute
   '/studio/$projectId/$spaceId/functions/': typeof StudioProjectIdSpaceIdFunctionsIndexRoute
@@ -386,6 +430,9 @@ export interface FileRoutesById {
   '/studio/$projectId/$spaceId/raw/': typeof StudioProjectIdSpaceIdRawIndexRoute
   '/studio/$projectId/$spaceId/settings/': typeof StudioProjectIdSpaceIdSettingsIndexRoute
   '/studio/$projectId/$spaceId/workflow/': typeof StudioProjectIdSpaceIdWorkflowIndexRoute
+  '/studio/$projectId/app/data/': typeof StudioProjectIdAppDataIndexRoute
+  '/studio/$projectId/app/files/': typeof StudioProjectIdAppFilesIndexRoute
+  '/studio/$projectId/app/preview/': typeof StudioProjectIdAppPreviewIndexRoute
   '/studio/$projectId/$spaceId/agent/$agentId/': typeof StudioProjectIdSpaceIdAgentAgentIdIndexRoute
   '/studio/$projectId/$spaceId/agent/new/': typeof StudioProjectIdSpaceIdAgentNewIndexRoute
   '/studio/$projectId/$spaceId/knowledge/$fieldId/': typeof StudioProjectIdSpaceIdKnowledgeFieldIdIndexRoute
@@ -416,6 +463,7 @@ export interface FileRouteTypes {
     | '/computer/'
     | '/studio/'
     | '/studio/$projectId/$spaceId'
+    | '/studio/$projectId/app'
     | '/computer/spaces/'
     | '/studio/$projectId/'
     | '/studio/thing/'
@@ -423,6 +471,7 @@ export interface FileRouteTypes {
     | '/computer/spaces/$spaceId/logs'
     | '/computer/spaces/$spaceId/'
     | '/studio/$projectId/$spaceId/'
+    | '/studio/$projectId/app/'
     | '/studio/$projectId/$spaceId/agent/'
     | '/studio/$projectId/$spaceId/components/'
     | '/studio/$projectId/$spaceId/functions/'
@@ -430,6 +479,9 @@ export interface FileRouteTypes {
     | '/studio/$projectId/$spaceId/raw/'
     | '/studio/$projectId/$spaceId/settings/'
     | '/studio/$projectId/$spaceId/workflow/'
+    | '/studio/$projectId/app/data/'
+    | '/studio/$projectId/app/files/'
+    | '/studio/$projectId/app/preview/'
     | '/studio/$projectId/$spaceId/agent/$agentId/'
     | '/studio/$projectId/$spaceId/agent/new/'
     | '/studio/$projectId/$spaceId/knowledge/$fieldId/'
@@ -460,6 +512,7 @@ export interface FileRouteTypes {
     | '/computer/spaces/$spaceId/logs'
     | '/computer/spaces/$spaceId'
     | '/studio/$projectId/$spaceId'
+    | '/studio/$projectId/app'
     | '/studio/$projectId/$spaceId/agent'
     | '/studio/$projectId/$spaceId/components'
     | '/studio/$projectId/$spaceId/functions'
@@ -467,6 +520,9 @@ export interface FileRouteTypes {
     | '/studio/$projectId/$spaceId/raw'
     | '/studio/$projectId/$spaceId/settings'
     | '/studio/$projectId/$spaceId/workflow'
+    | '/studio/$projectId/app/data'
+    | '/studio/$projectId/app/files'
+    | '/studio/$projectId/app/preview'
     | '/studio/$projectId/$spaceId/agent/$agentId'
     | '/studio/$projectId/$spaceId/agent/new'
     | '/studio/$projectId/$spaceId/knowledge/$fieldId'
@@ -495,6 +551,7 @@ export interface FileRouteTypes {
     | '/computer/'
     | '/studio/'
     | '/studio/$projectId/$spaceId'
+    | '/studio/$projectId/app'
     | '/computer/spaces/'
     | '/studio/$projectId/'
     | '/studio/thing/'
@@ -502,6 +559,7 @@ export interface FileRouteTypes {
     | '/computer/spaces/$spaceId/logs'
     | '/computer/spaces/$spaceId/'
     | '/studio/$projectId/$spaceId/'
+    | '/studio/$projectId/app/'
     | '/studio/$projectId/$spaceId/agent/'
     | '/studio/$projectId/$spaceId/components/'
     | '/studio/$projectId/$spaceId/functions/'
@@ -509,6 +567,9 @@ export interface FileRouteTypes {
     | '/studio/$projectId/$spaceId/raw/'
     | '/studio/$projectId/$spaceId/settings/'
     | '/studio/$projectId/$spaceId/workflow/'
+    | '/studio/$projectId/app/data/'
+    | '/studio/$projectId/app/files/'
+    | '/studio/$projectId/app/preview/'
     | '/studio/$projectId/$spaceId/agent/$agentId/'
     | '/studio/$projectId/$spaceId/agent/new/'
     | '/studio/$projectId/$spaceId/knowledge/$fieldId/'
@@ -638,12 +699,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ComputerSpacesIndexRouteImport
       parentRoute: typeof ComputerRouteRoute
     }
+    '/studio/$projectId/app': {
+      id: '/studio/$projectId/app'
+      path: '/app'
+      fullPath: '/studio/$projectId/app'
+      preLoaderRoute: typeof StudioProjectIdAppRouteRouteImport
+      parentRoute: typeof StudioProjectIdRouteRoute
+    }
     '/studio/$projectId/$spaceId': {
       id: '/studio/$projectId/$spaceId'
       path: '/$spaceId'
       fullPath: '/studio/$projectId/$spaceId'
       preLoaderRoute: typeof StudioProjectIdSpaceIdRouteRouteImport
       parentRoute: typeof StudioProjectIdRouteRoute
+    }
+    '/studio/$projectId/app/': {
+      id: '/studio/$projectId/app/'
+      path: '/'
+      fullPath: '/studio/$projectId/app/'
+      preLoaderRoute: typeof StudioProjectIdAppIndexRouteImport
+      parentRoute: typeof StudioProjectIdAppRouteRoute
     }
     '/studio/$projectId/$spaceId/': {
       id: '/studio/$projectId/$spaceId/'
@@ -672,6 +747,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/computer/spaces/$spaceId/config'
       preLoaderRoute: typeof ComputerSpacesSpaceIdConfigRouteImport
       parentRoute: typeof ComputerRouteRoute
+    }
+    '/studio/$projectId/app/preview/': {
+      id: '/studio/$projectId/app/preview/'
+      path: '/preview'
+      fullPath: '/studio/$projectId/app/preview/'
+      preLoaderRoute: typeof StudioProjectIdAppPreviewIndexRouteImport
+      parentRoute: typeof StudioProjectIdAppRouteRoute
+    }
+    '/studio/$projectId/app/files/': {
+      id: '/studio/$projectId/app/files/'
+      path: '/files'
+      fullPath: '/studio/$projectId/app/files/'
+      preLoaderRoute: typeof StudioProjectIdAppFilesIndexRouteImport
+      parentRoute: typeof StudioProjectIdAppRouteRoute
+    }
+    '/studio/$projectId/app/data/': {
+      id: '/studio/$projectId/app/data/'
+      path: '/data'
+      fullPath: '/studio/$projectId/app/data/'
+      preLoaderRoute: typeof StudioProjectIdAppDataIndexRouteImport
+      parentRoute: typeof StudioProjectIdAppRouteRoute
     }
     '/studio/$projectId/$spaceId/workflow/': {
       id: '/studio/$projectId/$spaceId/workflow/'
@@ -929,14 +1025,36 @@ const StudioProjectIdSpaceIdRouteRouteWithChildren =
     StudioProjectIdSpaceIdRouteRouteChildren,
   )
 
+interface StudioProjectIdAppRouteRouteChildren {
+  StudioProjectIdAppIndexRoute: typeof StudioProjectIdAppIndexRoute
+  StudioProjectIdAppDataIndexRoute: typeof StudioProjectIdAppDataIndexRoute
+  StudioProjectIdAppFilesIndexRoute: typeof StudioProjectIdAppFilesIndexRoute
+  StudioProjectIdAppPreviewIndexRoute: typeof StudioProjectIdAppPreviewIndexRoute
+}
+
+const StudioProjectIdAppRouteRouteChildren: StudioProjectIdAppRouteRouteChildren =
+  {
+    StudioProjectIdAppIndexRoute: StudioProjectIdAppIndexRoute,
+    StudioProjectIdAppDataIndexRoute: StudioProjectIdAppDataIndexRoute,
+    StudioProjectIdAppFilesIndexRoute: StudioProjectIdAppFilesIndexRoute,
+    StudioProjectIdAppPreviewIndexRoute: StudioProjectIdAppPreviewIndexRoute,
+  }
+
+const StudioProjectIdAppRouteRouteWithChildren =
+  StudioProjectIdAppRouteRoute._addFileChildren(
+    StudioProjectIdAppRouteRouteChildren,
+  )
+
 interface StudioProjectIdRouteRouteChildren {
   StudioProjectIdSpaceIdRouteRoute: typeof StudioProjectIdSpaceIdRouteRouteWithChildren
+  StudioProjectIdAppRouteRoute: typeof StudioProjectIdAppRouteRouteWithChildren
   StudioProjectIdIndexRoute: typeof StudioProjectIdIndexRoute
 }
 
 const StudioProjectIdRouteRouteChildren: StudioProjectIdRouteRouteChildren = {
   StudioProjectIdSpaceIdRouteRoute:
     StudioProjectIdSpaceIdRouteRouteWithChildren,
+  StudioProjectIdAppRouteRoute: StudioProjectIdAppRouteRouteWithChildren,
   StudioProjectIdIndexRoute: StudioProjectIdIndexRoute,
 }
 

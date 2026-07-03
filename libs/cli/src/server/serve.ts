@@ -31,6 +31,10 @@ import { createAppApiHandler } from './routes/app-api.js';
 import { createPageServeHandler } from '../app/pages-serve.js';
 import { buildProjectPages } from '../app/build/pages.js';
 import { createHookRunHandler, bootCatchUpAndSchedule } from './routes/hooks.js';
+import {
+  handleAppManifest, handleGetAppFile, handlePutAppFile,
+  handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild,
+} from './routes/app-admin.js';
 import { listProjects } from './projects.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
@@ -186,6 +190,16 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // Hook-run endpoint (Phase 6) — the ONE authoritative run path that Studio's manual
   // run, the pod crond, and the boot catch-up/tick all funnel through. Reserved `/api/`.
   router.add('POST', '/api/projects/:projectId/hooks/:slug/run', createHookRunHandler(manager, effectiveLmthingRoot));
+
+  // Studio admin/dev management API (Phase 8) — reserved `/api/`, NOT the app's own
+  // `/app/<project>/api/*`. Register the specific sub-routes before the bare `/app` manifest.
+  router.add('GET', '/api/projects/:projectId/app/build', handleBuildStatus(manager, effectiveLmthingRoot));
+  router.add('POST', '/api/projects/:projectId/app/build', handleRebuild(manager, effectiveLmthingRoot));
+  router.add('GET', '/api/projects/:projectId/app/data/:table', handleListRows(manager, effectiveLmthingRoot));
+  router.add('PATCH', '/api/projects/:projectId/app/data/:table/:id', handleUpdateRow(manager, effectiveLmthingRoot));
+  router.add('GET', '/api/projects/:projectId/app/files/*', handleGetAppFile(manager, effectiveLmthingRoot));
+  router.add('PUT', '/api/projects/:projectId/app/files/*', handlePutAppFile(manager, effectiveLmthingRoot));
+  router.add('GET', '/api/projects/:projectId/app', handleAppManifest(manager, effectiveLmthingRoot));
 
   // Project-app PAGES — `/app/<project>/*` (non-api). The built React bundle is served
   // with an asset-manifest SPA fallback (dotted route params route client-side) + a strict
