@@ -155,9 +155,51 @@ export function WorkspaceBackup() {
       ) : !cfg?.configured ? (
         <Caption muted>GitHub backup is not enabled on this server.</Caption>
       ) : !cfg.connected ? (
-        <Button variant="primary" size="sm" onClick={connect}>Connect GitHub</Button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <Caption muted>
+            Connecting installs the backup App on your GitHub account. Next you'll point it at
+            an empty private repo you own — nothing is pushed until you choose one and save.
+          </Caption>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={connect}
+            style={{ alignSelf: 'flex-start' }}
+          >
+            Connect GitHub
+          </Button>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            <Caption>Point backups at an empty repo you own:</Caption>
+            <Caption muted>
+              1.{' '}
+              <a
+                href="https://github.com/new?visibility=private"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                Create a new private repo ↗
+              </a>{' '}
+              — leave it empty (no README, license or .gitignore).
+            </Caption>
+            <Caption muted>
+              2. Give the backup App access to it —{' '}
+              <a
+                href="https://github.com/settings/installations"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                manage App access ↗
+              </a>{' '}
+              (add the repo, or install on “All repositories”).
+            </Caption>
+            <Caption muted>3. Enter it below as owner/name and save.</Caption>
+          </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             <Caption muted>Repository (owner/name)</Caption>
             <Input
@@ -166,7 +208,10 @@ export function WorkspaceBackup() {
               onChange={(e) => setRepo(e.target.value)}
               style={{ fontFamily: 'monospace' }}
             />
-            <Caption muted>Create the (empty, private) repo on GitHub first.</Caption>
+            <Caption muted>
+              Must be empty — a repo that already has commits is rejected so a backup can never
+              overwrite existing work.
+            </Caption>
           </div>
 
           <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
