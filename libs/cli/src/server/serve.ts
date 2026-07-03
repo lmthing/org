@@ -28,6 +28,8 @@ import { handleBackupNow, handleBackupStatus, handleRestore } from './routes/bac
 import { runBackup, startBackupTimer } from './backup.js';
 import { handleReportBug } from './routes/report-bug.js';
 import { createAppApiHandler } from './routes/app-api.js';
+import { createPageServeHandler } from '../app/pages-serve.js';
+import { buildProjectPages } from '../app/build/pages.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
 import { handleAgentWsUpgrade } from './ws/agent.js';
@@ -177,6 +179,28 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // matched by the router before the static SPA fallback.
   const appApiHandler = createAppApiHandler(manager, effectiveLmthingRoot);
   router.add('*', '/app/:projectId/api/*', appApiHandler);
+
+  // Project-app PAGES — `/app/<project>/*` (non-api). The built React bundle is served
+  // with an asset-manifest SPA fallback (dotted route params route client-side) + a strict
+  // CSP. Registered AFTER the api route so `…/api/*` matches first. The bundle is built
+  // lazily per project (esbuild; buildProjectPages caches by content hash internally) and
+  // the result is cached here for the server's lifetime (a save-triggered rebuild is Phase 8).
+  const pageBuildCache = new Map<string, { outDir: string; assetManifest: string[] } | null>();
+  const getOutDirForProject = async (projectId: string): Promise<{ outDir: string; assetManifest: string[] } | null> => {
+    if (!effectiveLmthingRoot) return null;
+    if (!pageBuildCache.has(projectId)) {
+      let built: { outDir: string; assetManifest: string[] } | null = null;
+      try {
+        const r = await buildProjectPages(join(effectiveLmthingRoot, projectId));
+        if (r.assetManifest.length > 0) built = { outDir: r.outDir, assetManifest: r.assetManifest };
+      } catch (err) {
+        console.error(`[app] page build failed for "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
+      }
+      pageBuildCache.set(projectId, built);
+    }
+    return pageBuildCache.get(projectId) ?? null;
+  };
+  router.add('*', '/app/:projectId/*', createPageServeHandler(getOutDirForProject));
 
   // ─── HTTP server ──────────────────────────────────────────────────────────
   const httpServer = createServer((req, res) => {

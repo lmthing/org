@@ -5,6 +5,6 @@
     "outDir": "dist"
   },
   "include": ["src"],
-  "comment:exclude": "src/web/app.tsx is a BROWSER entry (react-dom/client) bundled fresh by esbuild in web/serve.ts (resolving @lmthing/ui via req.resolve) — not part of this NodeNext Node program. Including it makes tsc deep-typecheck @lmthing/ui's bundler-authored source under NodeNext and fail on extensionless imports.",
-  "exclude": ["src/web/app.tsx"]
+  "comment:exclude": "src/web/app.tsx and src/app/runtime/** are BROWSER entries (react-dom/client, DOM globals) bundled fresh by esbuild (web/serve.ts; app/build/pages.ts) — not part of this NodeNext Node program. Including them makes tsc deep-typecheck bundler-authored / DOM code under NodeNext and fail on extensionless imports + missing DOM lib.",
+  "exclude": ["src/web/app.tsx", "src/app/runtime"]
 }
