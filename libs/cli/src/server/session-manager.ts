@@ -5,7 +5,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
-import type { StreamOpts, StreamSession } from '@lmthing/core';
+import type { StreamOpts, StreamSession, AppGlobalImpls } from '@lmthing/core';
+import { bootProjectApp } from '../app/boot.js';
+import type { ProjectDb } from '../app/store.js';
 import { WebRenderHost } from '../rpc/server.js';
 import { TraceHub } from '../rpc/trace-hub.js';
 import {
@@ -97,6 +99,13 @@ export interface SessionMeta {
 export interface BuildSessionArgs {
   spaceDir: string;
   agentSlug: string;
+  /** Project id + absolute project root (`<root>/<projectId>`), set in project mode so the
+   *  session's app globals resolve against the project. */
+  projectId?: string;
+  projectRoot?: string;
+  /** The project's booted app-global impls (db store, …). Injected into the session VM +
+   *  its forks/delegates when the agent holds the matching capability grants. */
+  appGlobals?: AppGlobalImpls;
   model?: string;
   budget?: {
     maxEpisodes?: number;
@@ -227,9 +236,35 @@ export class SessionManager {
         systemSpaceDirs: args.systemSpaceDirs,
         preloadSpaceDirs: args.preloadSpaceDirs,
         projectSpacesDir: args.projectSpacesDir,
+        projectId: args.projectId,
+        projectRoot: args.projectRoot,
+        appGlobals: args.appGlobals,
       },
       { streamFn: this.streamFn },
     );
+  }
+
+  /** Per-project app-db cache. Lazily boots (restore→open→reconcile, fail-loud on
+   *  non-additive schema drift) on first use and reuses the handle across sessions in
+   *  that project; `null` is cached for spaces-only projects (e.g. `system`) so we don't
+   *  re-probe every session. Closed in {@link closeProjectDbs} on shutdown. */
+  private projectDbs = new Map<string, ProjectDb | null>();
+
+  private async getProjectAppGlobals(root: string, projectId: string): Promise<AppGlobalImpls | undefined> {
+    let db: ProjectDb | null | undefined = this.projectDbs.get(projectId);
+    if (db === undefined) {
+      db = await bootProjectApp(join(root, projectId));
+      this.projectDbs.set(projectId, db);
+    }
+    return db ? { db: db.db } : undefined;
+  }
+
+  /** Close all cached project db handles (call on server shutdown). */
+  closeProjectDbs(): void {
+    for (const db of this.projectDbs.values()) {
+      try { db?.close(); } catch { /* best-effort */ }
+    }
+    this.projectDbs.clear();
   }
 
   /**
@@ -459,6 +494,7 @@ export class SessionManager {
       listProjectSpaceDirs(root, projectId),
     ]);
 
+    const appGlobals = await this.getProjectAppGlobals(root, projectId);
     const session = this.buildSessionFn({
       spaceDir,
       agentSlug,
@@ -468,6 +504,9 @@ export class SessionManager {
       systemSpaceDirs,
       preloadSpaceDirs,
       projectSpacesDir,
+      projectId,
+      projectRoot: join(root, projectId),
+      appGlobals,
     });
 
     // Wire up the tracer to this session's hub + cost tracking.
@@ -521,6 +560,7 @@ export class SessionManager {
       listProjectSpaceDirs(root, projectId),
     ]);
 
+    const appGlobals = await this.getProjectAppGlobals(root, projectId);
     const session = this.buildSessionFn({
       spaceDir,
       agentSlug,
@@ -530,6 +570,9 @@ export class SessionManager {
       systemSpaceDirs,
       preloadSpaceDirs,
       projectSpacesDir,
+      projectId,
+      projectRoot: join(root, projectId),
+      appGlobals,
     });
 
     // Wire up the tracer to this session's hub + cost tracking.

@@ -1,6 +1,7 @@
 import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
 import type { BudgetLimits } from '../eval/budget.js';
 import type { RoleModelConfig } from '../fork/roles.js';
+import type { AppGlobalImpls } from '../exec/app-globals.js';
 
 export interface RenderHost {
   display(descriptor: unknown): void;
@@ -55,6 +56,11 @@ export interface SessionOpts {
   projectRoot?: string;
   /** The project id (basename of projectRoot); exposed as LMTHING_PROJECT_ID. */
   projectId?: string;
+  /** Host-provided app-global engine impls (the project's db store, etc.). Wrapped in the
+   *  capability-scope check and injected into the session VM + its forks/delegates when the
+   *  agent holds the matching grants AND projectRoot is set (see exec/app-globals.ts). The
+   *  db impl is built by libs/cli (better-sqlite3) per project. */
+  appGlobals?: AppGlobalImpls;
 }
 
 export interface SessionDeps {

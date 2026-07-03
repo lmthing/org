@@ -33,6 +33,8 @@ import { Session, createMockStreamFn, mockScript, defaultSystemSpaceDirs } from 
 import type { StreamOpts, StreamSession, MockHandler } from '@lmthing/core';
 import { parseArgs, type CliArgs } from './args.js';
 import { materializeRuntime, runtimeNeedsInit, syncSystemSpaces } from './runtime-init.js';
+import { bootProjectApp } from '../app/boot.js';
+import type { ProjectDb } from '../app/store.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
 import { createStream } from '../stream/stream.js';
@@ -495,6 +497,20 @@ async function main(): Promise<void> {
       const entries = await readdir(projectSpacesDir, { withFileTypes: true });
       preloadSpaceDirs = entries.filter((e) => e.isDirectory()).map((e) => join(projectSpacesDir, e.name));
     } catch { /* no project spaces yet */ }
+    // Project-app layer: the default 'user' project is the ambient app. Boot its db
+    // (restore→open→reconcile, fail-loud on non-additive schema drift) so an agent
+    // holding db:* capabilities reaches the project's SQLite store. Returns null for a
+    // spaces-only project (no database/), leaving THING and other cap-less agents
+    // exactly as before (no projectRoot ⇒ no app globals).
+    const projectId = 'user';
+    const projectRoot = join(lmthingRoot, projectId);
+    let projectDb: ProjectDb | null = null;
+    try {
+      projectDb = await bootProjectApp(projectRoot);
+    } catch (err) {
+      console.error(`[app] failed to boot project "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
     const session = new Session(
       {
         spaceDir,
@@ -508,12 +524,16 @@ async function main(): Promise<void> {
         budget,
         projectSpacesDir,
         preloadSpaceDirs,
+        projectId,
+        projectRoot,
+        appGlobals: projectDb ? { db: projectDb.db } : undefined,
       },
       { streamFn },
     );
 
     await session.start(args.request);
     session.dispose();
+    projectDb?.close();
   } else {
     // Terminal mode: single message, run to completion
     const renderHost = new InkRenderHost(args.claude);

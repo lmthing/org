@@ -3,6 +3,8 @@ import { promisify } from 'node:util';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, basename, join } from 'node:path';
+import { listProjects } from './projects.js';
+import { openProjectDb } from '../app/store.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -38,6 +40,11 @@ const EXCLUDE_PATTERNS = [
   '**/conversations/',
   'node_modules/',
   '.cache/',
+  // The live binary project-app db is DR state, never tracked; its regenerated
+  // `.data/app.sql` dump (see dumpAllProjectDbs) is the committed, restorable
+  // form. `app.db-*` catches the WAL/SHM sidecars (`app.db-wal`, `app.db-shm`).
+  '**/.data/app.db',
+  '**/.data/app.db-*',
 ];
 
 export interface BackupResult {
@@ -262,6 +269,50 @@ async function pushBranch(
   }
 }
 
+// ─── project-app db dumps ────────────────────────────────────────────────────
+
+/**
+ * Regenerate `<root>/<id>/.data/app.sql` for every project that has a live
+ * binary db at `<root>/<id>/.data/app.db`. The binary db is DR-only and never
+ * committed (see EXCLUDE_PATTERNS); the `.sql` dump is the tracked, restorable
+ * form (`hooks-state.json` alongside it stays tracked too). Runs immediately
+ * before the git staging step in {@link runBackup}.
+ *
+ * Each project is dumped independently and defensively: a single unreadable /
+ * corrupt db logs and is skipped so it can't abort the whole backup. The
+ * synthetic `system` project has no app db, so the existence check skips it.
+ */
+export async function dumpAllProjectDbs(root: string): Promise<void> {
+  let projects: { id: string }[];
+  try {
+    projects = await listProjects(root);
+  } catch (err) {
+    console.warn(
+      '[backup] could not enumerate projects for db dump:',
+      err instanceof Error ? err.message : err,
+    );
+    return;
+  }
+  for (const { id } of projects) {
+    const dataDir = join(root, id, '.data');
+    const dbPath = join(dataDir, 'app.db');
+    if (!existsSync(dbPath)) continue; // no app db (e.g. the synthetic system project)
+    try {
+      const db = openProjectDb(dbPath, { create: false });
+      try {
+        await writeFile(join(dataDir, 'app.sql'), db.dumpToSql(), 'utf8');
+      } finally {
+        db.close();
+      }
+    } catch (err) {
+      console.warn(
+        `[backup] db dump failed for project ${id}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+}
+
 // ─── public: backup ─────────────────────────────────────────────────────────
 
 export async function runBackup(opts: {
@@ -277,6 +328,9 @@ export async function runBackup(opts: {
       remote = await resolveRemote();
       await ensureRepo(workTree);
       await setRemote(workTree, remote.cloneUrl);
+      // Pre-dump: regenerate each project's `.data/app.sql` from its live db so
+      // the tracked dump reflects current rows (the binary db itself is excluded).
+      await dumpAllProjectDbs(workTree);
       await git(workTree, ['add', '-A']);
 
       const dirty = (await git(workTree, ['status', '--porcelain'])).stdout.trim();

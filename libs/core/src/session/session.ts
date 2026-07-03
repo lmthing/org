@@ -542,6 +542,7 @@ export class Session {
       projectSpacesDir: this.opts.projectSpacesDir,
       projectRoot: this.opts.projectRoot,
       projectId: this.opts.projectId,
+      appGlobals: this.opts.appGlobals,
       // `progress` reads the live per-run budget (the closure dereferences the
       // field, so resetting this.budget per task is reflected).
       progress: () => this.budget.snapshot(),
@@ -604,6 +605,7 @@ export class Session {
       projectSpacesDir: this.opts.projectSpacesDir,
       projectRoot: this.opts.projectRoot,
       projectId: this.opts.projectId,
+      appGlobals: this.opts.appGlobals,
       model: this.opts.modelAlias,
       // Inherit the session's fork wiring down the delegation chain (A1 fix):
       // budget caps + role models for the delegate's leaf forks, and the SHARED
@@ -652,7 +654,7 @@ export class Session {
       projectId: this.opts.projectId,
       // The session agent's app grants flow to its forks (role-intersected in forkCapabilities).
       parentAppCapabilities: this.appCapabilities,
-      appGlobals: undefined,
+      appGlobals: this.opts.appGlobals,
       // A task in a tasklist may delegate (gated by its own canDelegateTo) — route through the
       // session's registry with the recursion bound enforced by runDelegate.
       delegateRunner: (p, a, act, o, allowed) => this.runDelegateForFork(p, a, act, o, allowed),
@@ -830,6 +832,7 @@ export class Session {
           projectSpacesDir: this.opts.projectSpacesDir,
           projectRoot: this.opts.projectRoot,
           projectId: this.opts.projectId,
+          appGlobals: this.opts.appGlobals,
           model: this.opts.modelAlias,
           // Inherit the session's fork wiring down the delegation chain (A1 fix).
           budgetLimits: this.opts.budget,

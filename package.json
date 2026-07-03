@@ -22,7 +22,8 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "node-pty"
+      "node-pty",
+      "better-sqlite3"
     ],
     "peerDependencyRules": {
       "allowedVersions": {
