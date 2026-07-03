@@ -250,12 +250,20 @@ export class SessionManager {
    *  re-probe every session. Closed in {@link closeProjectDbs} on shutdown. */
   private projectDbs = new Map<string, ProjectDb | null>();
 
-  private async getProjectAppGlobals(root: string, projectId: string): Promise<AppGlobalImpls | undefined> {
-    let db: ProjectDb | null | undefined = this.projectDbs.get(projectId);
+  /** Boot (once) and return the project's app db, or `null` for a spaces-only project.
+   *  Cached across sessions in that project; the same handle backs the agent's sync `db`
+   *  global (via {@link getProjectAppGlobals}) AND the Node api runtime (`.async`). */
+  async getProjectDb(root: string, projectId: string): Promise<ProjectDb | null> {
+    let db = this.projectDbs.get(projectId);
     if (db === undefined) {
       db = await bootProjectApp(join(root, projectId));
       this.projectDbs.set(projectId, db);
     }
+    return db;
+  }
+
+  private async getProjectAppGlobals(root: string, projectId: string): Promise<AppGlobalImpls | undefined> {
+    const db = await this.getProjectDb(root, projectId);
     return db ? { db: db.db } : undefined;
   }
 

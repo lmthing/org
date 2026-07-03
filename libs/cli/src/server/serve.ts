@@ -27,6 +27,7 @@ import { handleFsTree, handleFsRead, handleFsWrite } from './routes/fs.js';
 import { handleBackupNow, handleBackupStatus, handleRestore } from './routes/backup.js';
 import { runBackup, startBackupTimer } from './backup.js';
 import { handleReportBug } from './routes/report-bug.js';
+import { createAppApiHandler } from './routes/app-api.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
 import { handleAgentWsUpgrade } from './ws/agent.js';
@@ -169,6 +170,13 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
 
   // Bug reports: forward the report + session trace history to the gateway
   router.add('POST', '/api/report-bug', handleReportBug);
+
+  // Project-app API runtime — `/app/<project>/api/<name>` (browser-facing; the agent's
+  // apiCall enters the same runtime by name). Handlers run Node, worker-isolated. This
+  // is OUTSIDE the reserved `/api/*` (so the 404 rule above never intercepts it) and
+  // matched by the router before the static SPA fallback.
+  const appApiHandler = createAppApiHandler(manager, effectiveLmthingRoot);
+  router.add('*', '/app/:projectId/api/*', appApiHandler);
 
   // ─── HTTP server ──────────────────────────────────────────────────────────
   const httpServer = createServer((req, res) => {

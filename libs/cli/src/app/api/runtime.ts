@@ -1,0 +1,318 @@
+/**
+ * The **main-process api runtime** (Phase 3, 3A).
+ *
+ * Matches a request to a file-based endpoint ({@link ./loader.js}), transpiles the
+ * handler with esbuild (cached by file mtime), and runs it in a **worker**
+ * (`worker_threads`) — a crash boundary. The worker's `db`/`spawn`/`apiCall`
+ * proxies post messages that this runtime services against the **main-process**
+ * `db` / `spawnRunner` / `apiCallResolver`, so every db write executes here (never
+ * in the worker — the worker is a crash boundary, not a data path). A handler that
+ * throws / `process.exit()`s / segfaults takes down only its worker; the runtime
+ * catches the `error`/`exit` and returns a generic 500 (the real message logged,
+ * never leaked).
+ *
+ * The worker entry (`worker.ts`) is bundled once to a self-contained CJS string
+ * (esbuild) and launched with `new Worker(code, { eval: true })`, so it runs
+ * identically under vitest (source) and the built CLI (no `.ts` toolchain needed
+ * in the worker).
+ *
+ * ⚠️ Imports the error contract + input assembly from **3B** (`./errors.js`,
+ * `./input.js`).
+ */
+
+import { Worker as NodeWorker } from 'node:worker_threads';
+import { stat, readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+import { build, transform } from 'esbuild';
+import type { AsyncDbApi, ApiCallFn } from '@lmthing/core';
+
+import {
+  errorResponseFor,
+  toErrorBody,
+  type ApiErrorBody,
+} from './errors.js';
+import { assembleInput, passThroughValidator, type HttpMethod } from './input.js';
+import {
+  loadApiRoutes,
+  matchRoute,
+  type Endpoint,
+  type RouteTable,
+} from './loader.js';
+import type { MainToWorker, ProxyRequestMessage, WorkerJob, WorkerToMain } from './protocol.js';
+
+/**
+ * The subset of a `node:worker_threads` Worker this runtime uses. Typed locally
+ * because the shared tsconfig's DOM lib defines a **global** `Worker` that
+ * collides with the node class and shadows its `EventEmitter` `.on` in this
+ * program — so we cast the constructed worker to this interface instead.
+ */
+interface WorkerHandle {
+  on(event: 'message', listener: (msg: WorkerToMain) => void): void;
+  on(event: 'error', listener: (err: Error) => void): void;
+  on(event: 'exit', listener: (code: number) => void): void;
+  postMessage(value: MainToWorker): void;
+  terminate(): Promise<number>;
+}
+
+/** The result of running an endpoint: an HTTP status + a JSON-able body. */
+export interface ApiResponse {
+  status: number;
+  body: unknown;
+}
+
+/**
+ * The seam the integrator supplies for `spawn` (fire-and-forget agent runs). The
+ * real agent runner is Phase 6; for P3 the integrator passes a minimal impl or a
+ * stub. Returns immediately with a `runId`; a **synchronous** failure is reported
+ * via `onError` (delivered back into the still-live worker before its `spawn`
+ * promise resolves — see `worker.ts`).
+ */
+export type SpawnRunner = (
+  ref: string,
+  input: unknown,
+  onError?: (err: unknown) => void,
+) => { runId: string };
+
+/** Options for {@link createApiRuntime}. */
+export interface ApiRuntimeOpts {
+  /** The project root (`<root>/<projectId>`) whose `api/` dir is served. */
+  projectRoot: string;
+  /** The project's **main-process** async db (e.g. `openProjectDb(...).async`). */
+  db: AsyncDbApi;
+  /** Fire-and-forget agent-run seam (Phase 6 supplies the real runner). */
+  spawnRunner: SpawnRunner;
+  /**
+   * Resolve a named endpoint in-process (the agent-facing `apiCall` path).
+   * Optional — defaults to re-entering this runtime's {@link ApiRuntime.callByName}.
+   */
+  apiCallResolver?: ApiCallFn;
+  /** Where to log leaked-internal-error messages (defaults to `console.error`). */
+  logError?: (message: string, err?: unknown) => void;
+}
+
+/** The api runtime handle. */
+export interface ApiRuntime {
+  /** Route + run a browser-style request (`method`, `path`, already-parsed `input`). */
+  handle(method: string, path: string, input?: unknown): Promise<ApiResponse>;
+  /** Route + run by endpoint `name` (the agent-facing `apiCall` path). */
+  callByName(name: string, input?: unknown): Promise<ApiResponse>;
+  /** The discovered route table (loaded lazily; cached). */
+  routes(): Promise<RouteTable>;
+  /** Drop caches (routes + transpiled handlers). */
+  dispose(): void;
+}
+
+// ── Worker source bundling (once per process) ─────────────────────────────────
+
+let workerSourcePromise: Promise<string> | undefined;
+
+/** Bundle `worker.ts` → a self-contained CJS string (cached for the process). */
+function workerSource(): Promise<string> {
+  if (!workerSourcePromise) {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const tsEntry = join(here, 'worker.ts');
+    const jsEntry = join(here, 'worker.js');
+    const entry = existsSync(tsEntry) ? tsEntry : jsEntry;
+    workerSourcePromise = build({
+      entryPoints: [entry],
+      bundle: true,
+      write: false,
+      format: 'cjs',
+      platform: 'node',
+      target: 'node18',
+    }).then((res) => res.outputFiles[0].text);
+  }
+  return workerSourcePromise;
+}
+
+// ── Runtime ───────────────────────────────────────────────────────────────────
+
+function isQueryMethod(method: string): boolean {
+  return method === 'GET' || method === 'DELETE';
+}
+
+function errMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * Create the main-process api runtime. See {@link ApiRuntimeOpts}.
+ */
+export function createApiRuntime(opts: ApiRuntimeOpts): ApiRuntime {
+  const { projectRoot, db, spawnRunner } = opts;
+  const log = opts.logError ?? ((message: string, err?: unknown) => console.error(message, err ?? ''));
+
+  let routeTable: Promise<RouteTable> | undefined;
+  const transpileCache = new Map<string, { mtimeMs: number; code: string }>();
+
+  function routes(): Promise<RouteTable> {
+    if (!routeTable) routeTable = loadApiRoutes(projectRoot);
+    return routeTable;
+  }
+
+  /** Transpile a handler `.ts` → CJS, cached by file mtime. */
+  async function transpile(file: string): Promise<string> {
+    const { mtimeMs } = await stat(file);
+    const cached = transpileCache.get(file);
+    if (cached && cached.mtimeMs === mtimeMs) return cached.code;
+    const source = await readFile(file, 'utf8');
+    const { code } = await transform(source, {
+      loader: 'ts',
+      format: 'cjs',
+      target: 'node18',
+      sourcefile: file,
+    });
+    transpileCache.set(file, { mtimeMs, code });
+    return code;
+  }
+
+  // apiCall resolver — defaults to re-entering callByName (own-project endpoints).
+  const apiCallResolver: ApiCallFn =
+    opts.apiCallResolver ??
+    (async (name: string, input?: unknown) => {
+      const res = await callByName(name, input);
+      if (res.status >= 400) {
+        // Surface the endpoint's error to the caller as a thrown value.
+        const body = res.body as ApiErrorBody;
+        const err = new Error(body?.error?.message ?? `apiCall("${name}") failed`);
+        (err as { status?: number }).status = res.status;
+        throw err;
+      }
+      return res.body;
+    });
+
+  /** Assemble the single Input (method-aware) then run the endpoint in a worker. */
+  async function runEndpoint(
+    endpoint: Endpoint,
+    params: Record<string, string>,
+    method: string,
+    rawInput: unknown,
+  ): Promise<ApiResponse> {
+    const query = isQueryMethod(method) && isRecord(rawInput) ? rawInput : {};
+    const body = isQueryMethod(method) ? undefined : rawInput;
+    const assembled = assembleInput(method as HttpMethod, params, query, body);
+
+    const validated = passThroughValidator(assembled);
+    if (!validated.ok) return { status: 400, body: toErrorBody(400, 'invalid input', validated.details) };
+
+    const code = await transpile(endpoint.file);
+    return runWorker(code, method, validated.value);
+  }
+
+  /** Spawn a worker for one job, servicing its proxies, and resolve the response. */
+  function runWorker(handlerCode: string, method: string, input: unknown): Promise<ApiResponse> {
+    return new Promise<ApiResponse>((resolve) => {
+      const job: WorkerJob = { handlerCode, method, input };
+      let settled = false;
+      let worker: WorkerHandle;
+
+      const settle = (res: ApiResponse): void => {
+        if (settled) return;
+        settled = true;
+        resolve(res);
+        // Fire-and-forget teardown; the worker is one-shot.
+        void worker?.terminate();
+      };
+
+      workerSource()
+        .then((source) => {
+          worker = new NodeWorker(source, { eval: true, workerData: job }) as unknown as WorkerHandle;
+
+          worker.on('message', (msg: WorkerToMain) => {
+            if (msg.type === 'proxy') {
+              void serviceProxy(worker, msg);
+            } else if (msg.type === 'result') {
+              settle({ status: 200, body: msg.value });
+            } else if (msg.type === 'error') {
+              if (msg.serialized) {
+                settle(errorResponseFor(msg.serialized));
+              } else {
+                log(`[api] handler error: ${msg.message ?? 'unknown'}`);
+                settle({ status: 500, body: toErrorBody(500, 'internal error') });
+              }
+            }
+          });
+
+          // Worker CRASH isolation — an uncaught throw or a non-zero exit
+          // (`process.exit(1)`, segfault) must NOT take down the main process.
+          worker.on('error', (err) => {
+            log('[api] worker error', err);
+            settle({ status: 500, body: toErrorBody(500, 'internal error') });
+          });
+          worker.on('exit', (exitCode) => {
+            if (settled) return;
+            log(`[api] worker exited early (code ${exitCode})`);
+            settle({ status: 500, body: toErrorBody(500, 'internal error') });
+          });
+        })
+        .catch((err) => {
+          log('[api] failed to start worker', err);
+          settle({ status: 500, body: toErrorBody(500, 'internal error') });
+        });
+    });
+  }
+
+  /** Service one worker proxy request against the main-process capabilities. */
+  async function serviceProxy(worker: WorkerHandle, msg: ProxyRequestMessage): Promise<void> {
+    try {
+      let result: unknown;
+      if (msg.kind === 'db') {
+        const { method, args } = msg.payload as { method: string; args: unknown[] };
+        const fn = (db as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[method];
+        if (typeof fn !== 'function') throw new Error(`db.${method} is not a function`);
+        result = await fn(...args);
+      } else if (msg.kind === 'apiCall') {
+        const { name, input } = msg.payload as { name: string; input: unknown };
+        result = await apiCallResolver(name, input);
+      } else {
+        // spawn — fire-and-forget; capture a SYNCHRONOUS onError to fold into the
+        // reply (P3 delivers only synchronous-onError; async-later is Phase 6).
+        const { ref, input } = msg.payload as { ref: string; input: unknown };
+        let captured: unknown = null;
+        const { runId } = spawnRunner(ref, input, (e) => {
+          captured = e;
+        });
+        result = { runId, error: captured ? { message: errMessage(captured) } : null };
+      }
+      worker.postMessage({ type: 'proxyReply', id: msg.id, ok: true, result });
+    } catch (err) {
+      worker.postMessage({
+        type: 'proxyReply',
+        id: msg.id,
+        ok: false,
+        error: { message: errMessage(err) },
+      });
+    }
+  }
+
+  async function handle(method: string, path: string, input?: unknown): Promise<ApiResponse> {
+    const table = await routes();
+    const matched = matchRoute(table, method, path);
+    if (!matched) return { status: 404, body: toErrorBody(404, 'not found') };
+    return runEndpoint(matched.endpoint, matched.params, method, input);
+  }
+
+  async function callByName(name: string, input?: unknown): Promise<ApiResponse> {
+    const table = await routes();
+    const endpoint = table.byName.get(name);
+    if (!endpoint) return { status: 404, body: toErrorBody(404, `no endpoint named "${name}"`) };
+    return runEndpoint(endpoint, {}, endpoint.method, input);
+  }
+
+  return {
+    handle,
+    callByName,
+    routes,
+    dispose(): void {
+      routeTable = undefined;
+      transpileCache.clear();
+    },
+  };
+}
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x);
+}
