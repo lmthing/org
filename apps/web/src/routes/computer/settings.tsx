@@ -8,7 +8,6 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { EnvVars } from './env-vars'
-import { Backup } from './backup'
 import { BillingSection } from './billing-section'
 
 export const Route = createFileRoute('/computer/settings')({
@@ -62,8 +61,6 @@ function Settings() {
             <EnvVars />
           </CardBody>
         </Card>
-
-        <Backup />
 
         <BillingSection />
       </PageBody>

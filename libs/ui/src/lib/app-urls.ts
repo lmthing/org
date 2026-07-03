@@ -17,6 +17,9 @@ interface ViteEnv {
   VITE_STUDIO_URL?: string
   VITE_CHAT_URL?: string
   VITE_COMPUTER_URL?: string
+  VITE_COMPUTER_BASE_URL?: string
+  VITE_CLOUD_BASE_URL?: string
+  VITE_CLOUD_URL?: string
 }
 
 function readEnv(): ViteEnv {
@@ -62,6 +65,39 @@ export function crossAppOrigin(app: LmthingApp): string {
   if (typeof window === 'undefined') return ''
   if (window.location.hostname.startsWith('lmthing.')) return `https://lmthing.${app}`
   return ''
+}
+
+/** Data-plane services the served UI talks to: the compute pod and the gateway. */
+export type ApiRole = 'computer' | 'cloud'
+
+/**
+ * Origin for a data-plane API (compute pod or cloud gateway), resolved the same
+ * way the web app's own `lib/config`/`lib/origins` do so the shared UI (e.g. the
+ * settings dialog) can reach them without importing app-level config:
+ *  - **Production** — the pod is same-origin (Envoy proxies `/api/*`); the
+ *    gateway is the canonical `https://lmthing.cloud`.
+ *  - **`*.test` nginx dev proxy** — per-service vhost (`computer.test` /
+ *    `cloud.test`).
+ *  - **`pnpm thing` single-port serve** (localhost) — everything same-origin.
+ *
+ * An explicit `VITE_{COMPUTER,CLOUD}_BASE_URL` (or `VITE_CLOUD_URL`) override
+ * always wins, matching `apps/web/src/lib/config.ts`.
+ */
+export function dataPlaneOrigin(role: ApiRole): string {
+  const env = readEnv()
+  const override =
+    role === 'cloud'
+      ? (env.VITE_CLOUD_BASE_URL ?? env.VITE_CLOUD_URL)
+      : env.VITE_COMPUTER_BASE_URL
+  if (override) return override.replace(/\/$/, '')
+
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  if (!env.DEV) return role === 'cloud' ? 'https://lmthing.cloud' : origin
+  if (hostname.endsWith('.test')) {
+    return role === 'cloud' ? 'https://cloud.test' : 'https://computer.test'
+  }
+  return origin
 }
 
 export interface AppLink {

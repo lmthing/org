@@ -4,7 +4,7 @@ import { useStore, connectLive } from '../store/store.js';
 import type { Project, ModelPricing } from '../store/store.js';
 import { authHeaders, wsTokenSuffix } from './auth.js';
 import { AppSidebar } from '../../elements/nav/app-sidebar';
-import { AppLinks } from '../../elements/nav/app-links';
+import { SidebarFooter } from '../../elements/nav/sidebar-footer';
 import { crossAppOrigin } from '../../lib/app-urls';
 
 interface PersistedSessionMeta {
@@ -241,21 +241,19 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
   );
 
   const footer = (
-    <>
-      {/* Cross-app links */}
-      <AppLinks current="chat" className="app-links--bordered" />
-      {/* Project settings */}
-      <div className="px-3 py-2 flex items-center gap-2">
-        {activeProject && onProjectSettings && (
+    <SidebarFooter current="chat">
+      {/* Chat-only: per-project settings drawer */}
+      {activeProject && onProjectSettings && (
+        <div className="px-3 py-2 flex items-center gap-2">
           <button
             onClick={() => onProjectSettings(activeProject.id, activeProject.name)}
             className="flex-1 text-left text-xs text-muted-foreground hover:text-foreground truncate"
           >
             ⚙ {activeProject.name}
           </button>
-        )}
-      </div>
-    </>
+        </div>
+      )}
+    </SidebarFooter>
   );
 
   return (

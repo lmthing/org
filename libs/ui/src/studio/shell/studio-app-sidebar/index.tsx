@@ -14,7 +14,7 @@ import { useProjects, useProject } from '@lmthing/state'
 import { buildProjectPath, buildSpacePath } from '@lmthing/ui/lib/space-path'
 import { AppSidebar } from '@lmthing/ui/elements/nav/app-sidebar'
 import type { AppSidebarSpace } from '@lmthing/ui/elements/nav/app-sidebar'
-import { AppLinks } from '@lmthing/ui/elements/nav/app-links'
+import { SidebarFooter } from '@lmthing/ui/elements/nav/sidebar-footer'
 
 export interface StudioAppSidebarProps {
   className?: string
@@ -34,7 +34,7 @@ export function StudioAppSidebar({ className }: StudioAppSidebarProps) {
     [spaces],
   )
 
-  const footer = <AppLinks current="studio" />
+  const footer = <SidebarFooter current="studio" />
 
   return (
     <AppSidebar
