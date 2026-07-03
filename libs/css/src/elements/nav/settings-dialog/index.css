@@ -3,10 +3,13 @@
 /* Tabbed account/workspace settings dialog (side-based tabs). Widens the base
    dialog and lays out a left tab rail + a scrollable content panel. */
 
-.settings-dialog {
+/* Compound selector (`.dialog.settings-dialog`) so these win over the base
+   `.dialog` width cap regardless of stylesheet order — both are single-class
+   otherwise and `.dialog` (which sets max-w-lg) is emitted later. */
+.dialog.settings-dialog {
   @apply w-full;
-  max-width: min(92vw, 56rem);
-  max-height: 85vh;
+  max-width: min(96vw, 72rem);
+  max-height: 88vh;
 }
 
 .settings-dialog__body {
@@ -15,7 +18,7 @@
 
 /* Left vertical tab rail. */
 .settings-dialog__tabs {
-  @apply flex flex-col gap-1 shrink-0 w-44 border-r border-border pr-3;
+  @apply flex flex-col gap-1 shrink-0 w-48 border-r border-border pr-3;
 }
 
 .settings-dialog__tab {
@@ -34,7 +37,7 @@
 /* Right content panel — scrolls independently. */
 .settings-dialog__panel {
   @apply flex-1 min-w-0 overflow-y-auto pr-1;
-  max-height: 70vh;
+  max-height: 74vh;
 }
 
 .settings-dialog__section {

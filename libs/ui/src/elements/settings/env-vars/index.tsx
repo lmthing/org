@@ -89,29 +89,29 @@ export function EnvVars() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       {Object.entries(vars).map(([k, v]) => (
-        <div key={k} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <Input value={k} readOnly style={{ flex: '0 0 40%', fontFamily: 'monospace' }} />
+        <div key={k} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+          <Input value={k} readOnly style={{ flex: '1 1 8rem', minWidth: '6rem', fontFamily: 'monospace' }} />
           <Input
             value={v}
             onChange={e => setVars(prev => ({ ...prev, [k]: e.target.value }))}
-            style={{ flex: 1, fontFamily: 'monospace' }}
+            style={{ flex: '2 1 12rem', minWidth: '10rem', fontFamily: 'monospace' }}
           />
           <Button variant="ghost" size="sm" onClick={() => removeVar(k)}>Remove</Button>
         </div>
       ))}
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
         <Input
           placeholder="KEY"
           value={newKey}
           onChange={e => setNewKey(e.target.value)}
-          style={{ flex: '0 0 40%', fontFamily: 'monospace' }}
+          style={{ flex: '1 1 8rem', minWidth: '6rem', fontFamily: 'monospace' }}
           onKeyDown={e => e.key === 'Enter' && addVar()}
         />
         <Input
           placeholder="value"
           value={newVal}
           onChange={e => setNewVal(e.target.value)}
-          style={{ flex: 1, fontFamily: 'monospace' }}
+          style={{ flex: '2 1 12rem', minWidth: '10rem', fontFamily: 'monospace' }}
           onKeyDown={e => e.key === 'Enter' && addVar()}
         />
         <Button variant="outline" size="sm" onClick={addVar}>Add</Button>

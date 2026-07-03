@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useAuth } from '@lmthing/auth'
 import { Button } from '../../forms/button'
 import { Input } from '../../forms/input'
@@ -11,15 +11,30 @@ export function isModelKey(key: string): boolean {
   return /^LM_MODEL(_|$)/.test(key)
 }
 
-/** Normalise an alias name into its env-key suffix (mirrors provider resolveAlias). */
+/** The canonical size/tier aliases, with human labels (raw codes are hidden). */
+const KNOWN_ALIASES: { code: string; label: string }[] = [
+  { code: 'XS', label: 'Extra small' },
+  { code: 'S', label: 'Small' },
+  { code: 'M', label: 'Medium' },
+  { code: 'L', label: 'Large' },
+  { code: 'M_R', label: 'Medium (reasoning)' },
+  { code: 'L_R', label: 'Large (reasoning)' },
+]
+
+/** Friendly label for an alias code, falling back to the code for custom ones. */
+function labelFor(code: string): string {
+  return KNOWN_ALIASES.find(a => a.code === code)?.label ?? code
+}
+
+/** Normalise an alias code into its env-key suffix (mirrors provider resolveAlias). */
 function aliasKey(alias: string): string {
   return 'LM_MODEL_' + alias.toUpperCase().replace(/[^A-Z0-9]/g, '_')
 }
 
 interface AliasRow {
-  /** Display alias (as referenced by `LM_MODEL`), e.g. `M`. */
+  /** Alias code (as referenced by `LM_MODEL`), e.g. `M` / `M_R`. */
   alias: string
-  /** Full model spec, e.g. `azure:DeepSeek-V4-Flash`. */
+  /** Full model spec, any string, e.g. `azure:gpt-5.5`. */
   spec: string
 }
 
@@ -30,16 +45,17 @@ function parseAliases(vars: Record<string, string>): AliasRow[] {
 }
 
 /**
- * Model-alias editor (no heading/card): map short aliases (e.g. `M`) to full
- * model specs (`azure:DeepSeek-V4-Flash`) and pick the default model. Aliases are
- * stored as `LM_MODEL_<ALIAS>` env vars and the default as `LM_MODEL`; the pod's
- * provider resolves them at runtime. Merges with the existing env on save so the
- * plain Env Vars are preserved.
+ * Model-alias editor (no heading/card): map size tiers (Extra small … Large,
+ * plus reasoning variants) to any model spec (e.g. `azure:gpt-5.5`) and pick the
+ * default. Aliases are stored as `LM_MODEL_<CODE>` env vars and the default as
+ * `LM_MODEL`; the pod's provider resolves them at runtime. Merges with the
+ * existing env on save so the plain Env Vars are preserved.
  */
 export function Models() {
   const { authFetch, isAuthenticated } = useAuth()
   const CLOUD = dataPlaneOrigin('cloud')
   const POD = dataPlaneOrigin('computer')
+  const listId = useId()
 
   const [rows, setRows] = useState<AliasRow[]>([])
   const [defaultAlias, setDefaultAlias] = useState('')
@@ -71,7 +87,11 @@ export function Models() {
   const setRow = (i: number, patch: Partial<AliasRow>) =>
     setRows(prev => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
   const removeRow = (i: number) => setRows(prev => prev.filter((_, idx) => idx !== i))
-  const addRow = () => setRows(prev => [...prev, { alias: '', spec: models[0] ?? '' }])
+  const addRow = () => {
+    const used = new Set(rows.map(r => r.alias))
+    const next = KNOWN_ALIASES.find(a => !used.has(a.code))?.code ?? ''
+    setRows(prev => [...prev, { alias: next, spec: '' }])
+  }
 
   const save = async () => {
     if (!isAuthenticated) return
@@ -79,9 +99,9 @@ export function Models() {
     const seen = new Set<string>()
     for (const r of rows) {
       const a = r.alias.trim()
-      if (!a) { setError('Every alias needs a name'); return }
+      if (!a) { setError('Every row needs a size'); return }
       const key = aliasKey(a)
-      if (seen.has(key)) { setError(`Duplicate alias "${a}"`); return }
+      if (seen.has(key)) { setError(`Duplicate size "${labelFor(a)}"`); return }
       seen.add(key)
     }
     setSaving(true); setError(null); setSaved(false)
@@ -111,61 +131,72 @@ export function Models() {
     }
   }
 
-  if (!isAuthenticated) return <Caption muted>Log in to manage model aliases.</Caption>
+  if (!isAuthenticated) return <Caption muted>Log in to manage models.</Caption>
   if (loading) return <Caption muted>Loading…</Caption>
 
-  const modelOptions = (current: string) => {
-    const opts = models.includes(current) || !current ? models : [current, ...models]
-    return opts
-  }
+  // Each row's dropdown offers the known sizes plus its own value if custom.
+  const aliasOptions = (current: string) =>
+    KNOWN_ALIASES.some(a => a.code === current) || !current
+      ? KNOWN_ALIASES
+      : [{ code: current, label: current }, ...KNOWN_ALIASES]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       <Caption muted>
-        Aliases let you refer to a model by a short name (e.g. <code>M</code>) in agents and the
-        CLI. The default is used when no model is specified.
+        Pick which model powers each size tier. Agents and the CLI request a size (e.g. Medium) and
+        the pod resolves it to the model you set here.
       </Caption>
 
+      {models.length > 0 && (
+        <datalist id={listId}>
+          {models.map(m => <option key={m} value={m} />)}
+        </datalist>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        {rows.length === 0 && <Caption muted>No aliases yet.</Caption>}
+        {rows.length === 0 && <Caption muted>No models configured yet.</Caption>}
         {rows.map((r, i) => (
-          <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <Input
-              value={r.alias}
-              placeholder="alias"
-              onChange={e => setRow(i, { alias: e.target.value })}
-              style={{ flex: '0 0 25%', fontFamily: 'monospace' }}
-            />
+          <div
+            key={i}
+            style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}
+          >
             <Select
-              value={r.spec}
-              onChange={e => setRow(i, { spec: e.target.value })}
-              style={{ flex: 1 }}
+              value={r.alias}
+              onChange={e => setRow(i, { alias: e.target.value })}
+              style={{ flex: '1 1 9rem', minWidth: '8rem' }}
             >
-              {modelOptions(r.spec).map(m => (
-                <SelectOption key={m} value={m}>{m}</SelectOption>
+              {aliasOptions(r.alias).map(a => (
+                <SelectOption key={a.code} value={a.code}>{a.label}</SelectOption>
               ))}
             </Select>
+            <Input
+              value={r.spec}
+              placeholder="azure:gpt-5.5"
+              list={models.length > 0 ? listId : undefined}
+              onChange={e => setRow(i, { spec: e.target.value })}
+              style={{ flex: '2 1 16rem', minWidth: '12rem', fontFamily: 'monospace' }}
+            />
             <Button variant="ghost" size="sm" onClick={() => removeRow(i)}>Remove</Button>
           </div>
         ))}
         <div>
-          <Button variant="outline" size="sm" onClick={addRow}>Add alias</Button>
+          <Button variant="outline" size="sm" onClick={addRow}>Add model</Button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-        <Caption muted>Default model</Caption>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+        <Caption muted>Default size</Caption>
         <Select
           value={defaultAlias}
           onChange={e => setDefaultAlias(e.target.value)}
-          style={{ flex: 1, maxWidth: '16rem' }}
+          style={{ flex: '1 1 12rem', minWidth: '10rem', maxWidth: '18rem' }}
         >
           <SelectOption value="">— none —</SelectOption>
           {rows
             .map(r => r.alias.trim())
             .filter(Boolean)
             .map(a => (
-              <SelectOption key={a} value={a}>{a}</SelectOption>
+              <SelectOption key={a} value={a}>{labelFor(a)}</SelectOption>
             ))}
         </Select>
       </div>
