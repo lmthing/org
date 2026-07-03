@@ -30,6 +30,7 @@
     "@lmthing/core": "workspace:*",
     "@lmthing/css": "workspace:*",
     "marked": "^14.0.0",
+    "modern-screenshot": "^4.6.0",
     "zustand": "^4.5.7"
   },
   "devDependencies": {

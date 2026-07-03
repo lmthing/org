@@ -8,6 +8,7 @@ import { EmptyState } from './EmptyState.js';
 import { useTheme } from '../../theme/theme.js';
 import { TraceLoader } from './replay.js';
 import { cn } from '../lib/cn.js';
+import { BugReportDialog } from './BugReportDialog.js';
 
 function formatCost(usd: number): string {
   if (usd < 0.000001) return '';
@@ -122,6 +123,19 @@ export function ChatView({
 
   const handleSuggestion = (text: string) => handleSend(text);
 
+  const [bugOpen, setBugOpen] = React.useState(false);
+  const [shot, setShot] = React.useState<string | null>(null);
+  const openBugReport = async () => {
+    let dataUrl: string | null = null;
+    try {
+      const { domToPng } = await import('modern-screenshot'); // dynamic import keeps it out of the main bundle
+      const root = document.getElementById('root') ?? document.body;
+      dataUrl = await domToPng(root);
+    } catch { /* capture failed; proceed without screenshot */ }
+    setShot(dataUrl);
+    setBugOpen(true);
+  };
+
   const [restarting, setRestarting] = React.useState(false);
   const handleRestart = async () => {
     setRestarting(true);
@@ -196,6 +210,13 @@ export function ChatView({
             Inspect
           </button>
           <button
+            onClick={() => { void openBugReport(); }}
+            className="text-xs text-muted-foreground hover:text-foreground"
+            title="Report a bug"
+          >
+            Report bug
+          </button>
+          <button
             onClick={toggleTheme}
             data-testid="theme-toggle"
             className="text-xs text-muted-foreground hover:text-foreground"
@@ -262,6 +283,8 @@ export function ChatView({
 
       {/* Composer */}
       <Composer onSend={handleSend} projectId={projectId} />
+
+      <BugReportDialog open={bugOpen} onClose={() => setBugOpen(false)} screenshot={shot} />
     </div>
   );
 }

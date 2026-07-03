@@ -26,6 +26,7 @@ import { handleCreateSpace } from './routes/spaces.js';
 import { handleFsTree, handleFsRead, handleFsWrite } from './routes/fs.js';
 import { handleBackupNow, handleBackupStatus, handleRestore } from './routes/backup.js';
 import { runBackup, startBackupTimer } from './backup.js';
+import { handleReportBug } from './routes/report-bug.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
 import { handleAgentWsUpgrade } from './ws/agent.js';
@@ -165,6 +166,9 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   router.add('POST', '/api/backup', handleBackupNow);
   router.add('GET', '/api/backup/status', handleBackupStatus);
   router.add('POST', '/api/restore', handleRestore);
+
+  // Bug reports: forward the report + session trace history to the gateway
+  router.add('POST', '/api/report-bug', handleReportBug);
 
   // ─── HTTP server ──────────────────────────────────────────────────────────
   const httpServer = createServer((req, res) => {
