@@ -12,13 +12,21 @@ interface DialogProps {
 export function Dialog({ open, onClose, title, children, className }: DialogProps) {
   const ref = React.useRef<HTMLDivElement>(null);
 
+  // Focus the first field ONLY when the dialog opens — not on every render.
+  // Callers commonly pass `onClose` as a fresh arrow each render; keying this
+  // effect on it would re-run on every keystroke and yank focus back to the
+  // first focusable node (the × button), making inputs impossible to type in.
   React.useEffect(() => {
     if (!open) return;
     const el = ref.current;
-    if (el) {
-      const focusable = el.querySelectorAll<HTMLElement>('button,input,textarea,select,[tabindex]:not([tabindex="-1"])');
-      focusable[0]?.focus();
-    }
+    if (!el) return;
+    const preferred = el.querySelector<HTMLElement>('input,textarea,select');
+    const fallback = el.querySelector<HTMLElement>('button,[tabindex]:not([tabindex="-1"])');
+    (preferred ?? fallback)?.focus();
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
