@@ -52,7 +52,7 @@ function AppLauncher() {
                 onClick={() => openApp(p.id)}
                 className="flex w-full flex-col gap-1 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-muted"
               >
-                <span className="font-medium text-foreground">{p.title ?? p.id}</span>
+                <span className="font-medium text-foreground">{p.name ?? p.id}</span>
                 <span className="font-mono text-xs text-muted-foreground">/app/{p.id}/</span>
               </button>
             </li>
