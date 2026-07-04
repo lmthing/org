@@ -5,10 +5,11 @@ import { PodEnsureGate } from '@/lib/gates'
 import { COMPUTER_BASE_URL } from '@/lib/config'
 
 /**
- * `/app` layout — the end-user **app surface** (lmthing.app). Same shell shape as
+ * `/apps` layout — the end-user **app surface** (lmthing.app). Same shell shape as
  * `/studio`: the shared root provides auth (login), `PodEnsureGate` provisions/awaits
  * the user's compute pod, and `AppProvider` wires the pod base URL + access token so
- * the launcher can list the user's installed apps and open them.
+ * the launcher can list the user's installed apps and open them. (The surface lives at
+ * `/apps`, not `/app`, because `/app/<project>/` is proxied to the pod for the app pages.)
  */
 function AppLayout() {
   const { getAccessTokenSync, refreshAuth } = useAuth()
@@ -27,6 +28,6 @@ function AppLayout() {
   )
 }
 
-export const Route = createFileRoute('/app')({
+export const Route = createFileRoute('/apps')({
   component: AppLayout,
 })

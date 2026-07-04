@@ -63,6 +63,6 @@ function AppLauncher() {
   )
 }
 
-export const Route = createFileRoute('/app/')({
+export const Route = createFileRoute('/apps/')({
   component: AppLauncher,
 })
