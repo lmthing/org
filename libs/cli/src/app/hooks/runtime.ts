@@ -96,5 +96,11 @@ export class ProjectHookRuntime {
     } finally {
       this.draining = false;
     }
+    // A hook-triggered run may have enqueued cascaded database hooks DURING the drain above:
+    // its agent/main-process db writes fire `onDbWrite` while `this.draining` was true, so
+    // `scheduleDrain` was suppressed and the dispatcher's snapshot-up-front drain never saw them.
+    // Re-arm a fresh drain tick so the cascade continues on the next tick — still non-re-entrant,
+    // and bounded by the loop guard's depth cap (3), so it always terminates.
+    if (this.dispatcher.queued.length > 0) this.scheduleDrain();
   }
 }
