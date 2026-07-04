@@ -186,6 +186,12 @@ export function handleInstallApp(
   manager: AppsInstallManager,
   lmthingRoot: string | undefined,
   storeUrl?: string,
+  /** Invoked after a successful (re)install so the server can drop any cached
+   *  page-build result for the project — a re-install rebuilds pages with fresh
+   *  asset hashes, and a stale in-memory asset manifest would make the serve
+   *  handler fall back to index.html for the new `assets/entry-*.js` (MIME error →
+   *  blank app). See `serve.ts`'s `pageBuildCache`. */
+  onInstalled?: (projectId: string) => void,
 ): AppHandler {
   return async (req, res) => {
     let body: InstallBody;
@@ -281,6 +287,10 @@ export function handleInstallApp(
       const [tables, pages, endpoints, hooks] = await Promise.all([
         scanTables(dest), scanPages(dest), scanEndpoints(dest), scanHooks(dest),
       ]);
+
+      // Drop any cached page-build for this project — the rebuild above wrote new
+      // asset hashes, so a stale asset manifest in the serve handler would 404 them.
+      onInstalled?.(projectId);
 
       sendJson(res, 200, {
         ok: true,

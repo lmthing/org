@@ -202,18 +202,28 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   router.add('PUT', '/api/projects/:projectId/app/files/*', handlePutAppFile(manager, effectiveLmthingRoot));
   router.add('GET', '/api/projects/:projectId/app', handleAppManifest(manager, effectiveLmthingRoot));
 
+  // Per-project built-pages cache (declared before the install route so a reinstall can
+  // invalidate it). The bundle is built lazily per project (esbuild; buildProjectPages caches
+  // by content hash internally) and the result is cached here for the server's lifetime.
+  const pageBuildCache = new Map<string, { outDir: string; assetManifest: string[] } | null>();
+
   // Store distribution (Phase 10) — list the catalog + install a catalog app into the
   // user's runtime root (materialize `store/projects/<id>/` → `<root>/<projectId>/`, then boot
-  // + build). Reserved `/api/*`, so these match before the SPA catch-all.
+  // + build). Reserved `/api/*`, so these match before the SPA catch-all. On (re)install we
+  // DROP the cached page build so the freshly-rebuilt assets (new hashes) are served instead
+  // of the stale manifest (which would 404 the new assets/entry-*.js → blank app).
   router.add('GET', '/api/apps', handleListApps());
-  router.add('POST', '/api/apps/install', handleInstallApp(manager, effectiveLmthingRoot));
+  router.add(
+    'POST',
+    '/api/apps/install',
+    handleInstallApp(manager, effectiveLmthingRoot, undefined, (projectId) => {
+      pageBuildCache.delete(projectId);
+    }),
+  );
 
   // Project-app PAGES — `/app/<project>/*` (non-api). The built React bundle is served
   // with an asset-manifest SPA fallback (dotted route params route client-side) + a strict
-  // CSP. Registered AFTER the api route so `…/api/*` matches first. The bundle is built
-  // lazily per project (esbuild; buildProjectPages caches by content hash internally) and
-  // the result is cached here for the server's lifetime (a save-triggered rebuild is Phase 8).
-  const pageBuildCache = new Map<string, { outDir: string; assetManifest: string[] } | null>();
+  // CSP. Registered AFTER the api route so `…/api/*` matches first.
   const getOutDirForProject = async (projectId: string): Promise<{ outDir: string; assetManifest: string[] } | null> => {
     if (!effectiveLmthingRoot) return null;
     if (!pageBuildCache.has(projectId)) {

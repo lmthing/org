@@ -344,6 +344,15 @@ describe('handleInstallApp', () => {
     expect(body.diverged).toBeUndefined();
   }, 30_000);
 
+  it('fires onInstalled(projectId) after a successful install (page-cache invalidation)', async () => {
+    const seen: string[] = [];
+    const { res, captured } = mockRes();
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL, (pid) => seen.push(pid));
+    await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: APP, projectId: 'cache-check' }) }), res, {});
+    expect(captured.status).toBe(200);
+    expect(seen).toEqual(['cache-check']);
+  }, 30_000);
+
   it('installs into a custom projectId distinct from appId', async () => {
     const { res, captured } = mockRes();
     const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
