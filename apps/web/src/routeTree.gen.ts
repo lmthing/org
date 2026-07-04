@@ -12,10 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as StudioRouteRouteImport } from './routes/studio/route'
 import { Route as ComputerRouteRouteImport } from './routes/computer/route'
 import { Route as ChatRouteRouteImport } from './routes/chat/route'
+import { Route as AppRouteRouteImport } from './routes/app/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudioIndexRouteImport } from './routes/studio/index'
 import { Route as ComputerIndexRouteImport } from './routes/computer/index'
 import { Route as ChatIndexRouteImport } from './routes/chat/index'
+import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as ComputerTerminalRouteImport } from './routes/computer/terminal'
 import { Route as ComputerSettingsRouteImport } from './routes/computer/settings'
 import { Route as ComputerLoginRouteImport } from './routes/computer/login'
@@ -70,6 +72,11 @@ const ChatRouteRoute = ChatRouteRouteImport.update({
   path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRouteRoute = AppRouteRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -89,6 +96,11 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ChatRouteRoute,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRouteRoute,
 } as any)
 const ComputerTerminalRoute = ComputerTerminalRouteImport.update({
   id: '/terminal',
@@ -313,6 +325,7 @@ const StudioProjectIdSpaceIdAgentAgentIdChatConversationIdIndexRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteRouteWithChildren
   '/chat': typeof ChatRouteRouteWithChildren
   '/computer': typeof ComputerRouteRouteWithChildren
   '/studio': typeof StudioRouteRouteWithChildren
@@ -321,6 +334,7 @@ export interface FileRoutesByFullPath {
   '/computer/login': typeof ComputerLoginRoute
   '/computer/settings': typeof ComputerSettingsRoute
   '/computer/terminal': typeof ComputerTerminalRoute
+  '/app/': typeof AppIndexRoute
   '/chat/': typeof ChatIndexRoute
   '/computer/': typeof ComputerIndexRoute
   '/studio/': typeof StudioIndexRoute
@@ -364,6 +378,7 @@ export interface FileRoutesByTo {
   '/computer/login': typeof ComputerLoginRoute
   '/computer/settings': typeof ComputerSettingsRoute
   '/computer/terminal': typeof ComputerTerminalRoute
+  '/app': typeof AppIndexRoute
   '/chat': typeof ChatIndexRoute
   '/computer': typeof ComputerIndexRoute
   '/studio': typeof StudioIndexRoute
@@ -402,6 +417,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/app': typeof AppRouteRouteWithChildren
   '/chat': typeof ChatRouteRouteWithChildren
   '/computer': typeof ComputerRouteRouteWithChildren
   '/studio': typeof StudioRouteRouteWithChildren
@@ -410,6 +426,7 @@ export interface FileRoutesById {
   '/computer/login': typeof ComputerLoginRoute
   '/computer/settings': typeof ComputerSettingsRoute
   '/computer/terminal': typeof ComputerTerminalRoute
+  '/app/': typeof AppIndexRoute
   '/chat/': typeof ChatIndexRoute
   '/computer/': typeof ComputerIndexRoute
   '/studio/': typeof StudioIndexRoute
@@ -451,6 +468,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/app'
     | '/chat'
     | '/computer'
     | '/studio'
@@ -459,6 +477,7 @@ export interface FileRouteTypes {
     | '/computer/login'
     | '/computer/settings'
     | '/computer/terminal'
+    | '/app/'
     | '/chat/'
     | '/computer/'
     | '/studio/'
@@ -502,6 +521,7 @@ export interface FileRouteTypes {
     | '/computer/login'
     | '/computer/settings'
     | '/computer/terminal'
+    | '/app'
     | '/chat'
     | '/computer'
     | '/studio'
@@ -539,6 +559,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/app'
     | '/chat'
     | '/computer'
     | '/studio'
@@ -547,6 +568,7 @@ export interface FileRouteTypes {
     | '/computer/login'
     | '/computer/settings'
     | '/computer/terminal'
+    | '/app/'
     | '/chat/'
     | '/computer/'
     | '/studio/'
@@ -587,6 +609,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRouteRoute: typeof AppRouteRouteWithChildren
   ChatRouteRoute: typeof ChatRouteRouteWithChildren
   ComputerRouteRoute: typeof ComputerRouteRouteWithChildren
   StudioRouteRoute: typeof StudioRouteRouteWithChildren
@@ -613,6 +636,13 @@ declare module '@tanstack/react-router' {
       path: '/chat'
       fullPath: '/chat'
       preLoaderRoute: typeof ChatRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -642,6 +672,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/chat/'
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRouteRoute
+    }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRouteRoute
     }
     '/computer/terminal': {
       id: '/computer/terminal'
@@ -912,6 +949,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppRouteRouteChildren {
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
+  AppRouteRouteChildren,
+)
+
 interface ChatRouteRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
 }
@@ -1079,6 +1128,7 @@ const StudioRouteRouteWithChildren = StudioRouteRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRouteRoute: AppRouteRouteWithChildren,
   ChatRouteRoute: ChatRouteRouteWithChildren,
   ComputerRouteRoute: ComputerRouteRouteWithChildren,
   StudioRouteRoute: StudioRouteRouteWithChildren,
