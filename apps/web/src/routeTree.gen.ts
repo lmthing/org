@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as InstallRouteImport } from './routes/install'
 import { Route as StudioRouteRouteImport } from './routes/studio/route'
 import { Route as ComputerRouteRouteImport } from './routes/computer/route'
 import { Route as ChatRouteRouteImport } from './routes/chat/route'
@@ -57,6 +58,11 @@ import { Route as StudioProjectIdSpaceIdKnowledgeFieldIdSubjectIdTopicIdIndexRou
 import { Route as StudioProjectIdSpaceIdAgentAgentIdWorkflowWorkflowIdIndexRouteImport } from './routes/studio/$projectId/$spaceId/agent/$agentId/workflow/$workflowId/index'
 import { Route as StudioProjectIdSpaceIdAgentAgentIdChatConversationIdIndexRouteImport } from './routes/studio/$projectId/$spaceId/agent/$agentId/chat/$conversationId/index'
 
+const InstallRoute = InstallRouteImport.update({
+  id: '/install',
+  path: '/install',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudioRouteRoute = StudioRouteRouteImport.update({
   id: '/studio',
   path: '/studio',
@@ -329,6 +335,7 @@ export interface FileRoutesByFullPath {
   '/chat': typeof ChatRouteRouteWithChildren
   '/computer': typeof ComputerRouteRouteWithChildren
   '/studio': typeof StudioRouteRouteWithChildren
+  '/install': typeof InstallRoute
   '/studio/$projectId': typeof StudioProjectIdRouteRouteWithChildren
   '/computer/dashboard': typeof ComputerDashboardRoute
   '/computer/login': typeof ComputerLoginRoute
@@ -374,6 +381,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/install': typeof InstallRoute
   '/computer/dashboard': typeof ComputerDashboardRoute
   '/computer/login': typeof ComputerLoginRoute
   '/computer/settings': typeof ComputerSettingsRoute
@@ -421,6 +429,7 @@ export interface FileRoutesById {
   '/chat': typeof ChatRouteRouteWithChildren
   '/computer': typeof ComputerRouteRouteWithChildren
   '/studio': typeof StudioRouteRouteWithChildren
+  '/install': typeof InstallRoute
   '/studio/$projectId': typeof StudioProjectIdRouteRouteWithChildren
   '/computer/dashboard': typeof ComputerDashboardRoute
   '/computer/login': typeof ComputerLoginRoute
@@ -472,6 +481,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/computer'
     | '/studio'
+    | '/install'
     | '/studio/$projectId'
     | '/computer/dashboard'
     | '/computer/login'
@@ -517,6 +527,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/install'
     | '/computer/dashboard'
     | '/computer/login'
     | '/computer/settings'
@@ -563,6 +574,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/computer'
     | '/studio'
+    | '/install'
     | '/studio/$projectId'
     | '/computer/dashboard'
     | '/computer/login'
@@ -613,10 +625,18 @@ export interface RootRouteChildren {
   ChatRouteRoute: typeof ChatRouteRouteWithChildren
   ComputerRouteRoute: typeof ComputerRouteRouteWithChildren
   StudioRouteRoute: typeof StudioRouteRouteWithChildren
+  InstallRoute: typeof InstallRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/install': {
+      id: '/install'
+      path: '/install'
+      fullPath: '/install'
+      preLoaderRoute: typeof InstallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/studio': {
       id: '/studio'
       path: '/studio'
@@ -1132,6 +1152,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChatRouteRoute: ChatRouteRouteWithChildren,
   ComputerRouteRoute: ComputerRouteRouteWithChildren,
   StudioRouteRoute: StudioRouteRouteWithChildren,
+  InstallRoute: InstallRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
