@@ -141,20 +141,36 @@ studio/chat/computer SPA, the dynamic app, and the management API all live behin
 domains proxy the **same** pod, and the `Host` sets the root anchor. Locally there is one origin and
 every prefix coexists exactly as prod.
 
-| Public URL | → pod path |
+| Public URL | serves |
 |---|---|
-| `lmthing.app/` · `lmthing.app/<project>/…` | `/app/` · `/app/<project>/…` |
-| `lmthing.app/<project>/api/<name>` | `/app/<project>/api/<name>` |
+| `lmthing.app/` · `lmthing.app/apps` | public app SPA shell (login → app launcher) — static, JWT-free |
+| `lmthing.app/install?appId=<id>` | install hand-off from lmthing.store (POSTs to the pod's `/api/apps/install`) |
+| `lmthing.app/app/<project>/…` | pod `/app/<project>/…` (the app's pages) |
+| `lmthing.app/app/<project>/api/<name>` | pod `/app/<project>/api/<name>` (the app's own api) |
 | `lmthing.studio/` | `/studio` (client-side routed) |
 | `lmthing.studio/app/<project>/…` | `/app/<project>/…` (preview, byte-identical to the CLI) |
 | `lmthing.studio/api/projects/<project>/app` | `/api/projects/<project>/app` (management) |
 | **Local CLI** (both) | `localhost:8080/{studio, app/<project>/…, api/…}` |
 
-- **`lmthing.app` is root-anchored to `/app`** — `lmthing.app/<project>/…` → pod `/app/<project>/…`.
-  It reaches an app's pages and its own `/app/<project>/api/*`, but **no** top-level admin `/api/*`
-  (nothing on this host maps there) — **safe by construction**. Auth identifies the user; `<project>`
-  selects a project **within that user's pod** (Envoy JWT + per-user routing; wiring per the
-  `authentication` / devops skills).
+- **`lmthing.app`** serves the public app SPA shell at `/` (login → the `/apps` launcher listing the
+  user's installed apps) and proxies the app itself at `/app/<project>/…` (pages + its own
+  `/app/<project>/api/*`) to the user's pod. It reaches **no** top-level admin `/api/*` (nothing on
+  this host maps there) — **safe by construction**.
+
+- **Security model — a project-app is SINGLE-USER; the pod is the boundary; the app has NO auth of
+  its own.** An app is meant only for its owner. It runs inside that user's private compute pod, which
+  IS the security boundary, so the app layer (`pages/ api/ hooks/`) performs **no authentication or
+  authorization** — there is no per-app login, no per-request token check in app code. Concretely:
+  - **Localhost / dev** — `lmthing serve` serves `localhost:8080/app/<project>/…` (pages + api) with
+    **no auth at all**. You are the pod; every request is trusted. This is the reference behaviour.
+  - **Prod** — the only auth is the **platform** deciding *which pod* a request goes to. The user logs
+    in once on the public `lmthing.app` shell; the platform then routes ALL of that user's `lmthing.app`
+    pod traffic — `/api/*`, `/app/<project>/…` pages **and their assets** — to their pod. Because a
+    browser page navigation and its relative `<script>/<link>` asset requests can't carry an
+    `Authorization` header, the platform session rides a **scoped cookie** set by the shell after login
+    (the same per-user JWT the gateway already uses for `/api/*`, just also readable from the cookie).
+    This is a *platform* concern (which pod), **not** app auth — the pod never checks it; the gateway
+    routes on it. Wiring per the `authentication` / devops skills (Envoy JWT + Lua per-user routing).
 - **`lmthing.studio`** passes `/app/*` and `/api/*` through unchanged and maps `/` → the Studio
   surface, so Studio previews a running app **same-origin** at `lmthing.studio/app/<project>/…`.
   (Devops note: because `/app/*` and `/api/*` are per-user **dynamic** content, those prefixes route

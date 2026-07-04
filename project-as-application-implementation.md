@@ -442,11 +442,22 @@ the two-TLD Host anchoring (monorepo devops).
   Strict CSP + sanitize on served pages (P5) — the same-origin preview is the one XSS-sensitive spot.
 
 **Files (monorepo only — commit in monorepo, no submodule):**
-- `devops/` + domain nginx/Envoy — `lmthing.app` root-anchored to `/app` (no admin `/api/*` reachable —
-  safe by construction); `lmthing.studio` passes `/app/*` + `/api/*` and maps `/` → Studio (pod-routed
-  for those prefixes; static shell only otherwise). Envoy JWT + per-user routing per the
-  `authentication`/devops skills. **Build & validate the engine locally
+- `devops/` + domain nginx/Envoy — `lmthing.app` serves the public app SPA shell at `/` (login → the
+  `/apps` launcher; static, JWT-free — same image as studio/chat) and proxies the app itself at
+  `/app/<project>/*` to the user's pod (no admin `/api/*` reachable — safe by construction);
+  `lmthing.studio` passes `/app/*` + `/api/*` and maps `/` → Studio (pod-routed for those prefixes;
+  static shell only otherwise). **Build & validate the engine locally
   (`localhost:8080/app/<project>/`) first; stand up the domain last** (net-new infra).
+- **Auth model — SINGLE-USER apps, no app auth (see spec §Serving & domains).** A project-app is only
+  for its owner and runs in that user's private pod (the security boundary), so the app layer performs
+  **no auth**. **Localhost needs no auth at all** — `lmthing serve` serves `/app/<project>/*` to any
+  local request. In prod the only auth is the **platform** picking *which pod*: the user logs in once
+  on the `lmthing.app` shell, which sets a **scoped `access_token` cookie**; the gateway's `app-jwt`
+  SecurityPolicy validates the per-user JWT from that **cookie** (so page navigations + their relative
+  assets route) as well as the `Authorization: Bearer` header / `access_token` param (so SPA fetches
+  and the install POST route). One JWT+Lua policy pair covers both `/api/*` (`app-api-proxy`) and
+  `/app/*` (`app-pages-proxy`) → `lmthing.user-<sub>.svc:8080`. The pod never checks auth; the gateway
+  routes on it. Wiring in `devops/argocd/envoy/app-{routes,policies}.yaml`.
 
 **Tests (integration + browser).** Manifest returns pages/tables/endpoints/hooks/build-status;
 app-file route writes exactly one file and **refuses** `.data/`/`types/`; **chrome-devtools MCP** drives

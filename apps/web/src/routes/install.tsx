@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@lmthing/auth'
 import { COMPUTER_BASE_URL } from '@/lib/config'
+import { setPodSessionCookie } from '@/lib/pod-session'
 
 /**
  * lmthing.app **install page** — the authenticated landing the public store
@@ -72,7 +73,10 @@ function InstallPage() {
     void runInstall()
   }, [runInstall])
 
-  function openApp(projectId: string) {
+  async function openApp(projectId: string) {
+    // Single-user app, no app auth — just set the platform-session cookie so the pod-served
+    // pages + assets route to this user's pod (no-op / unneeded in local dev).
+    setPodSessionCookie(await getAccessToken())
     window.location.href = `${COMPUTER_BASE_URL}/app/${encodeURIComponent(projectId)}/`
   }
 

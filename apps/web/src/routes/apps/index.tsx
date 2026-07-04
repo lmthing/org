@@ -2,22 +2,22 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useProjects } from '@lmthing/state'
 import { useAuth } from '@lmthing/auth'
 import { COMPUTER_BASE_URL } from '@/lib/config'
+import { setPodSessionCookie } from '@/lib/pod-session'
 
 /**
- * lmthing.app landing — the user's **app launcher**. Lists the projects installed
- * in their pod and opens the pod-served app at `/app/<project>/`. Auth is exactly
- * like studio/chat: the app opens with the `access_token` query param (the same way
- * chat opens its authenticated WS), which the gateway `/app/*` route validates and
- * routes to this user's pod. No special-case auth for apps.
+ * lmthing.app landing — the user's **app launcher**. Lists the projects installed in
+ * their pod and opens the pod-served app at `/app/<project>/`. A project-app is single-user
+ * and has no auth of its own; opening one just ensures the platform-session cookie is set
+ * (so the app's pages + assets route to this user's pod — see {@link setPodSessionCookie}).
+ * In local dev there is no gateway and the pod is reached directly with no auth at all.
  */
 function AppLauncher() {
   const { projects, isLoading } = useProjects()
   const { getAccessTokenSync } = useAuth()
 
   function openApp(id: string) {
-    const token = getAccessTokenSync?.()
-    const q = token ? `?access_token=${encodeURIComponent(token)}` : ''
-    window.open(`${COMPUTER_BASE_URL}/app/${encodeURIComponent(id)}/${q}`, '_blank', 'noopener')
+    setPodSessionCookie(getAccessTokenSync?.())
+    window.open(`${COMPUTER_BASE_URL}/app/${encodeURIComponent(id)}/`, '_blank', 'noopener')
   }
 
   return (
