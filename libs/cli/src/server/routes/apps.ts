@@ -1,6 +1,6 @@
 /**
  * Phase 10 — **store distribution**: the in-pod CLI-server endpoints that let a
- * user browse the app catalog (`store/apps/<id>/`, {@link resolveCatalogRoot})
+ * user browse the app catalog (`store/projects/<id>/`, {@link resolveCatalogRoot})
  * and install one into their own runtime root:
  *
  *   1. {@link handleListApps}    GET  /api/apps            — list the catalog.

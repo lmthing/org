@@ -3,7 +3,7 @@
  *
  * Covers: `LM_STORE_APPS_DIR` env override wins over everything else, walking
  * up to a monorepo root (dir with both `store/` and `pnpm-workspace.yaml`)
- * from a nested cwd, and the `<cwd>/store/apps` fallback when no such
+ * from a nested cwd, and the `<cwd>/store/projects` fallback when no such
  * ancestor exists.
  *
  * `process.chdir()` isn't supported under vitest's worker-thread pool, so cwd
@@ -52,18 +52,18 @@ describe('resolveCatalogRoot', () => {
     vi.spyOn(process, 'cwd').mockReturnValue(nested);
 
     const result = resolveCatalogRoot();
-    expect(result).toBe(join(monorepoRoot, 'store', 'apps'));
+    expect(result).toBe(join(monorepoRoot, 'store', 'projects'));
     expect(existsSync(result)).toBe(true);
   });
 
-  it('falls back to <cwd>/store/apps when no monorepo root is found', () => {
+  it('falls back to <cwd>/store/projects when no monorepo root is found', () => {
     delete process.env.LM_STORE_APPS_DIR;
     const isolated = join(scratch, 'isolated');
     mkdirSync(isolated, { recursive: true });
     vi.spyOn(process, 'cwd').mockReturnValue(isolated);
 
     const result = resolveCatalogRoot();
-    expect(result).toBe(join(isolated, 'store', 'apps'));
+    expect(result).toBe(join(isolated, 'store', 'projects'));
     expect(existsSync(result)).toBe(true);
   });
 });

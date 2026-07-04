@@ -3,7 +3,7 @@
  * `AppGlobalImpls` `writePage`/`writeApi`/`writeHook`/`writeTableSchema`/
  * `createProject`/`selectProject` fields (`libs/core/src/exec/app-globals.ts`).
  *
- * These are pure, SYNCHRONOUS, validated file-writers into a `store/apps/<id>/`
+ * These are pure, SYNCHRONOUS, validated file-writers into a `store/projects/<id>/`
  * catalog-source template (see {@link resolveCatalogRoot}). Authoring never
  * builds/migrates/installs the app — that ("apply") happens later, at
  * install+boot time, from the written source. A writer here does exactly one
@@ -100,7 +100,7 @@ function writeFile(absPath: string, contents: string): void {
 
 /**
  * Build the app-authoring globals bound to a single `catalogRoot`
- * (`<monorepoRoot>/store/apps`). Holds ONE piece of mutable state — the
+ * (`<monorepoRoot>/store/projects`). Holds ONE piece of mutable state — the
  * currently-selected authoring app — shared across every call made through
  * this instance (a SessionManager caches one instance so a delegation tree
  * within it shares `currentApp`).
