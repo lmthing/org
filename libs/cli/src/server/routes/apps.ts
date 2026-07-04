@@ -117,7 +117,7 @@ export function handleListApps(storeUrl?: string): AppHandler {
  * missing app, an empty/unsafe file list, or any failed fetch. Path-safe: rejects `..`,
  * absolute, and NUL segments, and verifies each write stays inside `destDir`.
  */
-async function downloadStoreApp(storeUrl: string, appId: string, destDir: string): Promise<void> {
+async function downloadStoreApp(storeUrl: string, appId: string, destDir: string): Promise<StoreCatalogApp> {
   const apps = await fetchStoreCatalog(storeUrl);
   const app = apps.find((a) => a.id === appId);
   if (!app) throw new Error(`"${appId}" not found in the store catalog`);
@@ -138,6 +138,30 @@ async function downloadStoreApp(storeUrl: string, appId: string, destDir: string
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, Buffer.from(await res.arrayBuffer()));
   }
+  return app;
+}
+
+/**
+ * Ensure `<dir>/project.json` exists — apps authored by the `system-appbuilder`
+ * space ship a `package.json` but no `project.json` (only the hand-authored
+ * catalog apps like `demo-feed` carry one). The store manifest already derives a
+ * `title`/`description` for every app, so we synthesize a **deterministic**
+ * `project.json` from the catalog entry when one is absent. Determinism matters:
+ * `project.json` is part of {@link hashAppTemplate}, so a volatile field (e.g. a
+ * fresh `createdAt`) would make every re-install look "diverged". The pod's
+ * project loader defaults `createdAt` from the file's own mtime, so omitting it
+ * here is safe.
+ */
+function ensureProjectJson(dir: string, app: StoreCatalogApp): void {
+  const path = join(dir, 'project.json');
+  if (existsSync(path)) return;
+  const project = {
+    id: app.id,
+    title: app.title ?? app.id,
+    description: app.description ?? '',
+    icon: app.icon ?? null,
+  };
+  writeFileSync(path, `${JSON.stringify(project, null, 2)}\n`, 'utf8');
 }
 
 // ── Install ────────────────────────────────────────────────────────────────
@@ -196,17 +220,17 @@ export function handleInstallApp(
     // all read from it), then cleaned up in `finally`.
     const staging = mkdtempSync(join(tmpdir(), `lm-app-${appId}-`));
     try {
+      let catalogApp: StoreCatalogApp;
       try {
-        await downloadStoreApp(storeBaseUrl(storeUrl), appId, staging);
+        catalogApp = await downloadStoreApp(storeBaseUrl(storeUrl), appId, staging);
       } catch (err) {
         sendJson(res, 404, { error: `app not available in store catalog: ${appId} (${err instanceof Error ? err.message : String(err)})` });
         return;
       }
       const src = staging;
-      if (!existsSync(join(src, 'project.json'))) {
-        sendJson(res, 404, { error: `catalog entry "${appId}" is missing project.json` });
-        return;
-      }
+      // Apps authored by `system-appbuilder` ship no project.json — synthesize a
+      // deterministic one from the catalog manifest entry so any published app installs.
+      ensureProjectJson(src, catalogApp);
 
       const isNew = !existsSync(dest);
       const shippedHash = hashAppTemplate(src);

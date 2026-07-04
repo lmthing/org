@@ -109,9 +109,35 @@ async function listFiles(dir: string, base = dir): Promise<string[]> {
   return out.sort();
 }
 
-/** Write `<storeDir>/manifest.json` describing the demo app (incl. its `files` list). */
+/** A second app that ships ONLY package.json (no project.json) — mirrors an app
+ *  authored by the `system-appbuilder` space. Install must synthesize project.json. */
+const NOPROJ = 'noproj';
+
+async function writeNoProjApp(storeDir: string): Promise<void> {
+  const appRoot = join(storeDir, NOPROJ);
+  await mkdir(join(appRoot, 'database'), { recursive: true });
+  await writeFile(
+    join(appRoot, 'database', 'items.json'),
+    JSON.stringify({
+      description: 'The items',
+      columns: { id: { type: 'string', primaryKey: true, description: 'The id' } },
+    }),
+    'utf8',
+  );
+  await mkdir(join(appRoot, 'pages'), { recursive: true });
+  await writeFile(join(appRoot, 'pages', 'index.tsx'), DEMO_PAGE, 'utf8');
+  // NOTE: package.json only — deliberately NO project.json.
+  await writeFile(
+    join(appRoot, 'package.json'),
+    JSON.stringify({ name: '@app/noproj', private: true, type: 'module', version: '0.0.0' }),
+    'utf8',
+  );
+}
+
+/** Write `<storeDir>/manifest.json` describing both fixture apps (incl. `files` lists). */
 async function writeManifest(storeDir: string): Promise<void> {
   const files = await listFiles(join(storeDir, APP));
+  const noprojFiles = await listFiles(join(storeDir, NOPROJ));
   const manifest = {
     apps: [
       {
@@ -124,6 +150,17 @@ async function writeManifest(storeDir: string): Promise<void> {
         endpoints: ['list'],
         hooks: [],
         files,
+      },
+      {
+        id: NOPROJ,
+        title: 'No-Project App',
+        description: 'An app-builder app with no project.json',
+        icon: null,
+        tables: ['items'],
+        pages: ['index.tsx'],
+        endpoints: [],
+        hooks: [],
+        files: noprojFiles,
       },
     ],
   };
@@ -154,6 +191,7 @@ beforeAll(async () => {
   storeDir = await mkdtemp(join(tmpdir(), 'lm-store-'));
   lmthingRoot = await mkdtemp(join(tmpdir(), 'lm-apps-root-'));
   await writeDemoApp(storeDir);
+  await writeNoProjApp(storeDir);
   await writeManifest(storeDir);
   stubStoreFetch(storeDir);
 });
@@ -172,8 +210,8 @@ describe('handleListApps', () => {
     await handleListApps(STORE_URL)(mockReq(), res, {});
     expect(captured.status).toBe(200);
     const body = captured.body as { apps: Array<Record<string, unknown>> };
-    expect(body.apps).toHaveLength(1);
-    const demo = body.apps[0]!;
+    expect(body.apps.length).toBeGreaterThanOrEqual(1);
+    const demo = body.apps.find((a) => a.id === 'demo')!;
     expect(demo.id).toBe('demo');
     expect(demo.title).toBe('Demo App');
     expect(demo.description).toBe('A demo catalog app');
@@ -276,6 +314,34 @@ describe('handleInstallApp', () => {
     expect(captured.status).toBe(200);
     expect((captured.body as { ok: boolean }).ok).toBe(true);
     expect(await readFile(join(dest, 'pages', 'index.tsx'), 'utf8')).not.toContain('edited');
+  }, 30_000);
+
+  it('synthesizes project.json for an app that ships only package.json', async () => {
+    const { res, captured } = mockRes();
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
+    await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: NOPROJ }) }), res, {});
+    expect(captured.status).toBe(200);
+    const body = captured.body as { ok: boolean; projectId: string };
+    expect(body.ok).toBe(true);
+    expect(body.projectId).toBe(NOPROJ);
+
+    const dest = join(lmthingRoot, NOPROJ);
+    const projectJson = JSON.parse(await readFile(join(dest, 'project.json'), 'utf8')) as {
+      id: string; title: string; description: string;
+    };
+    expect(projectJson.id).toBe(NOPROJ);
+    expect(projectJson.title).toBe('No-Project App');
+    expect(projectJson.description).toBe('An app-builder app with no project.json');
+  }, 30_000);
+
+  it('re-installing a synthesized-project app stays pristine (deterministic project.json)', async () => {
+    const { res, captured } = mockRes();
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
+    await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: NOPROJ }) }), res, {});
+    expect(captured.status).toBe(200);
+    const body = captured.body as { ok: boolean; diverged?: boolean };
+    expect(body.ok).toBe(true);
+    expect(body.diverged).toBeUndefined();
   }, 30_000);
 
   it('installs into a custom projectId distinct from appId', async () => {
