@@ -28,18 +28,25 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash } from 'node:crypto';
 import {
   existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync,
-  cpSync, copyFileSync, rmSync,
+  cpSync, copyFileSync, rmSync, mkdtempSync,
 } from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { readBody, sendJson } from './utils.js';
 import { safeProjectId } from '../projects.js';
 import type { AppAdminManager } from './app-admin.js';
-import { resolveCatalogRoot } from '../../app/authoring/catalog-root.js';
 import { generateProjectContracts } from '../../app/build/contracts.js';
 import { buildProjectPages } from '../../app/build/pages.js';
+
+/** Public store base — the CLI downloads catalog apps from `${STORE_URL}/projects/…`
+ *  (there is NO local catalog in the pod). Overridable for tests / self-hosting. */
+const DEFAULT_STORE_URL = 'https://lmthing.store';
+function storeBaseUrl(override?: string): string {
+  return (override ?? process.env['LM_STORE_URL'] ?? DEFAULT_STORE_URL).replace(/\/+$/, '');
+}
 
 type AppHandler = (
   req: IncomingMessage,
@@ -66,60 +73,71 @@ const APP_TEMPLATE_ROOT_FILES = ['package.json', 'project.json', 'tsconfig.json'
 
 // ── Catalog listing ───────────────────────────────────────────────────────────
 
-export interface CatalogAppSummary {
+/** One app entry in the store's static catalog manifest (`/projects/manifest.json`).
+ *  `files` is the full download list (every template file, relative path). */
+export interface StoreCatalogApp {
   id: string;
-  title: string;
-  description?: string;
-  icon?: string;
-  tables: string[];
-  pages: string[];
-  endpoints: string[];
-  hooks: string[];
-}
-
-interface CatalogAppMeta {
   title?: string;
   description?: string;
-  icon?: string;
+  icon?: string | null;
+  tables?: string[];
+  pages?: string[];
+  endpoints?: string[];
+  hooks?: string[];
+  files?: string[];
+}
+
+/** Fetch the store's static catalog manifest. */
+async function fetchStoreCatalog(storeUrl: string): Promise<StoreCatalogApp[]> {
+  const res = await fetch(`${storeUrl}/projects/manifest.json`);
+  if (!res.ok) throw new Error(`store catalog HTTP ${res.status}`);
+  const body = (await res.json()) as { apps?: StoreCatalogApp[] };
+  return Array.isArray(body.apps) ? body.apps : [];
 }
 
 /**
- * `GET /api/apps` — list every app in the catalog (`catalogRoot ??
- * resolveCatalogRoot()`). Tolerates a missing/empty catalog root (→ `{ apps: [] }`)
- * and a broken individual app (skipped, never aborts the whole listing).
+ * `GET /api/apps` — list the PUBLIC store catalog (there is no local catalog in the
+ * pod; the catalog lives at `${STORE_URL}/projects/`). Returns `{ apps: [] }` if the
+ * store is unreachable rather than erroring the request.
  */
-export function handleListApps(catalogRoot?: string): AppHandler {
+export function handleListApps(storeUrl?: string): AppHandler {
   return async (_req, res) => {
-    const root = catalogRoot ?? resolveCatalogRoot();
-    const apps = await listCatalogApps(root);
-    sendJson(res, 200, { apps });
+    try {
+      const apps = await fetchStoreCatalog(storeBaseUrl(storeUrl));
+      sendJson(res, 200, { apps });
+    } catch {
+      sendJson(res, 200, { apps: [] });
+    }
   };
 }
 
-async function listCatalogApps(root: string): Promise<CatalogAppSummary[]> {
-  const entries = await safeReaddir(root);
-  const apps: CatalogAppSummary[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    try {
-      const appDir = join(root, entry.name);
-      const meta = JSON.parse(await readFile(join(appDir, 'project.json'), 'utf8')) as CatalogAppMeta;
-      const [tables, pages, endpoints, hooks] = await Promise.all([
-        scanTables(appDir), scanPages(appDir), scanEndpoints(appDir), scanHooks(appDir),
-      ]);
-      apps.push({
-        id: entry.name,
-        title: meta.title ?? entry.name,
-        ...(meta.description ? { description: meta.description } : {}),
-        ...(meta.icon ? { icon: meta.icon } : {}),
-        tables, pages, endpoints, hooks,
-      });
-    } catch {
-      continue; // not a valid catalog app (missing/unreadable project.json) — skip
+/**
+ * Download every file of `appId` from the store's public path into `destDir`, using the
+ * manifest's per-app `files` list (`${store}/projects/<id>/<relpath>`). Throws on a
+ * missing app, an empty/unsafe file list, or any failed fetch. Path-safe: rejects `..`,
+ * absolute, and NUL segments, and verifies each write stays inside `destDir`.
+ */
+async function downloadStoreApp(storeUrl: string, appId: string, destDir: string): Promise<void> {
+  const apps = await fetchStoreCatalog(storeUrl);
+  const app = apps.find((a) => a.id === appId);
+  if (!app) throw new Error(`"${appId}" not found in the store catalog`);
+  const files = Array.isArray(app.files) ? app.files : [];
+  if (files.length === 0) throw new Error(`catalog entry "${appId}" lists no files`);
+  const resolvedDest = resolve(destDir);
+  for (const rel of files) {
+    if (rel.includes('\0') || rel.startsWith('/') || rel.split('/').some((s) => s === '..' || s === '')) {
+      throw new Error(`unsafe catalog file path: ${rel}`);
     }
+    const target = resolve(resolvedDest, rel);
+    if (target !== resolvedDest && !target.startsWith(resolvedDest + sep)) {
+      throw new Error(`path traversal rejected: ${rel}`);
+    }
+    const fileUrl = `${storeUrl}/projects/${encodeURIComponent(appId)}/${rel.split('/').map(encodeURIComponent).join('/')}`;
+    const res = await fetch(fileUrl);
+    if (!res.ok) throw new Error(`download ${rel} → HTTP ${res.status}`);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, Buffer.from(await res.arrayBuffer()));
   }
-  apps.sort((a, b) => a.id.localeCompare(b.id));
-  return apps;
 }
 
 // ── Install ────────────────────────────────────────────────────────────────
@@ -143,7 +161,7 @@ interface InstallBody {
 export function handleInstallApp(
   manager: AppsInstallManager,
   lmthingRoot: string | undefined,
-  catalogRoot?: string,
+  storeUrl?: string,
 ): AppHandler {
   return async (req, res) => {
     let body: InstallBody;
@@ -171,72 +189,85 @@ export function handleInstallApp(
       return;
     }
 
-    const root = catalogRoot ?? resolveCatalogRoot();
-    const src = join(root, appId);
-    if (!existsSync(src) || !existsSync(join(src, 'project.json'))) {
-      sendJson(res, 404, { error: `app not found in catalog: ${appId}` });
-      return;
-    }
-
     const dest = join(lmthingRoot, projectId);
-    const isNew = !existsSync(dest);
-    const shippedHash = hashAppTemplate(src);
 
-    if (!isNew) {
-      const currentHash = hashAppTemplate(dest);
-      if (currentHash !== shippedHash) {
-        const manifest = readInstallManifest(dest);
-        const pristine = manifest !== undefined && manifest.sourceHash === currentHash;
-        if (!pristine && !force) {
-          sendJson(res, 200, {
-            ok: false,
-            diverged: true,
-            projectId,
-            appId,
-            message:
-              `"${projectId}" has local edits that diverge from the "${appId}" catalog template — ` +
-              'pass force:true to overwrite them.',
-          });
-          return;
+    // Download the app from the PUBLIC store into a staging dir — there is no local
+    // catalog in the pod. The staging copy is the install SOURCE (hash/re-sync/materialize
+    // all read from it), then cleaned up in `finally`.
+    const staging = mkdtempSync(join(tmpdir(), `lm-app-${appId}-`));
+    try {
+      try {
+        await downloadStoreApp(storeBaseUrl(storeUrl), appId, staging);
+      } catch (err) {
+        sendJson(res, 404, { error: `app not available in store catalog: ${appId} (${err instanceof Error ? err.message : String(err)})` });
+        return;
+      }
+      const src = staging;
+      if (!existsSync(join(src, 'project.json'))) {
+        sendJson(res, 404, { error: `catalog entry "${appId}" is missing project.json` });
+        return;
+      }
+
+      const isNew = !existsSync(dest);
+      const shippedHash = hashAppTemplate(src);
+      if (!isNew) {
+        const currentHash = hashAppTemplate(dest);
+        if (currentHash !== shippedHash) {
+          const manifest = readInstallManifest(dest);
+          const pristine = manifest !== undefined && manifest.sourceHash === currentHash;
+          if (!pristine && !force) {
+            sendJson(res, 200, {
+              ok: false,
+              diverged: true,
+              projectId,
+              appId,
+              message:
+                `"${projectId}" has local edits that diverge from the "${appId}" catalog template — ` +
+                'pass force:true to overwrite them.',
+            });
+            return;
+          }
         }
       }
+
+      try {
+        materializeAppTemplate(src, dest);
+        writeInstallManifest(dest, { appId, sourceHash: shippedHash, installedAt: new Date().toISOString() });
+      } catch (err) {
+        sendJson(res, 400, { error: `materialize failed: ${err instanceof Error ? err.message : String(err)}` });
+        return;
+      }
+
+      // Boot — through the manager so the resulting handle is cached/closed like
+      // every other project db. A hard failure here aborts the install.
+      try {
+        await manager.getProjectDb(lmthingRoot, projectId);
+      } catch (err) {
+        sendJson(res, 500, { error: `boot failed: ${err instanceof Error ? err.message : String(err)}` });
+        return;
+      }
+
+      // Best-effort contracts + pages build — each failure is reported but never
+      // aborts the install (the materialized+booted app is still usable).
+      const built = {
+        contracts: await tryBuildContracts(dest),
+        pages: await tryBuildPages(dest),
+      };
+
+      const [tables, pages, endpoints, hooks] = await Promise.all([
+        scanTables(dest), scanPages(dest), scanEndpoints(dest), scanHooks(dest),
+      ]);
+
+      sendJson(res, 200, {
+        ok: true,
+        projectId,
+        appId,
+        installed: { tables, pages, endpoints, hooks },
+        built,
+      });
+    } finally {
+      rmSync(staging, { recursive: true, force: true });
     }
-
-    try {
-      materializeAppTemplate(src, dest);
-      writeInstallManifest(dest, { appId, sourceHash: shippedHash, installedAt: new Date().toISOString() });
-    } catch (err) {
-      sendJson(res, 400, { error: `materialize failed: ${err instanceof Error ? err.message : String(err)}` });
-      return;
-    }
-
-    // Boot — through the manager so the resulting handle is cached/closed like
-    // every other project db. A hard failure here aborts the install.
-    try {
-      await manager.getProjectDb(lmthingRoot, projectId);
-    } catch (err) {
-      sendJson(res, 500, { error: `boot failed: ${err instanceof Error ? err.message : String(err)}` });
-      return;
-    }
-
-    // Best-effort contracts + pages build — each failure is reported but never
-    // aborts the install (the materialized+booted app is still usable).
-    const built = {
-      contracts: await tryBuildContracts(dest),
-      pages: await tryBuildPages(dest),
-    };
-
-    const [tables, pages, endpoints, hooks] = await Promise.all([
-      scanTables(dest), scanPages(dest), scanEndpoints(dest), scanHooks(dest),
-    ]);
-
-    sendJson(res, 200, {
-      ok: true,
-      projectId,
-      appId,
-      installed: { tables, pages, endpoints, hooks },
-      built,
-    });
   };
 }
 

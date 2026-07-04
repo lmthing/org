@@ -21,6 +21,15 @@ export const Route = createFileRoute('/install')({
   validateSearch: (search: Record<string, unknown>): { appId: string } => ({
     appId: typeof search.appId === 'string' ? search.appId : '',
   }),
+  // Runs during routing, BEFORE the auth gate renders the login screen — so an
+  // unauthenticated arrival (store → install → sign in) still records the intent.
+  // The SSO callback returns to `/` (callbackPath), where the root waiter reads this
+  // and forwards back here once login completes.
+  beforeLoad: ({ search }) => {
+    if (typeof window !== 'undefined' && search.appId) {
+      try { sessionStorage.setItem('lmthing_pending_install', search.appId) } catch { /* ignore */ }
+    }
+  },
   component: InstallPage,
 })
 

@@ -1,18 +1,18 @@
 /**
  * Phase 10 — store distribution: `GET /api/apps` (catalog listing) and
- * `POST /api/apps/install` (materialize + boot + build a catalog app).
+ * `POST /api/apps/install` (download + materialize + boot + build a catalog app).
  *
- * Uses a REAL tmp `catalogRoot` (one `demo/` app: database/pages/api) and a
- * REAL tmp `lmthingRoot`, driving the handlers directly with faked req/res
- * objects (mirrors `app-admin.test.ts`). The install path boots a real SQLite
- * db via `bootProjectApp` (through a manager stub) and runs the real
- * contracts/pages builds (best-effort — a failure there must never fail the
- * install itself).
+ * There is NO local catalog in the pod — the catalog lives on the public store at
+ * `${STORE_URL}/projects/`. These tests stub `fetch` to serve a fixture "store": a
+ * `manifest.json` (with each app's `files` download-list) plus the app's files at
+ * `/projects/<id>/<relpath>`. The install path downloads into a staging dir, boots a
+ * real SQLite db via `bootProjectApp` (through a manager stub), and runs the real
+ * contracts/pages builds (best-effort — a failure there must never fail the install).
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { mkdtemp, mkdir, writeFile, rm, readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -52,12 +52,12 @@ function mockRes(): { res: ServerResponse; captured: Captured } {
   return { res: res as unknown as ServerResponse, captured };
 }
 
-// ── Fixtures ───────────────────────────────────────────────────────────────
+// ── Fixture store (served via a stubbed fetch) ────────────────────────────────
 
 const APP = 'demo';
+const STORE_URL = 'http://store.test';
 
 const DEMO_PAGE = `export default function Index() { return null; }\n`;
-
 const DEMO_API = `
 export const name = 'list'
 export const description = 'List items.'
@@ -67,8 +67,9 @@ export default async function handler(): Promise<Output> {
 }
 `;
 
-async function writeDemoApp(root: string): Promise<void> {
-  const appRoot = join(root, APP);
+/** Write the demo app's template files under `<storeDir>/demo/`. */
+async function writeDemoApp(storeDir: string): Promise<void> {
+  const appRoot = join(storeDir, APP);
   await mkdir(join(appRoot, 'database'), { recursive: true });
   await writeFile(
     join(appRoot, 'database', 'items.json'),
@@ -92,23 +93,57 @@ async function writeDemoApp(root: string): Promise<void> {
   );
   await writeFile(
     join(appRoot, 'project.json'),
-    JSON.stringify({
-      id: APP,
-      title: 'Demo App',
-      description: 'A demo catalog app',
-      createdAt: new Date().toISOString(),
-    }),
+    JSON.stringify({ id: APP, title: 'Demo App', description: 'A demo catalog app', createdAt: new Date().toISOString() }),
     'utf8',
   );
-  // Junk under `.data/`/`types/` in the SOURCE — these must never be copied to
-  // the runtime dest (they're the runtime/generated dirs, excluded by design).
-  await mkdir(join(appRoot, '.data'), { recursive: true });
-  await writeFile(join(appRoot, '.data', 'junk.txt'), 'not a template file\n', 'utf8');
-  await mkdir(join(appRoot, 'types'), { recursive: true });
-  await writeFile(join(appRoot, 'types', 'junk.d.ts'), '// stray\n', 'utf8');
 }
 
-let catalogRoot: string;
+/** Recursively list `<dir>` files, relative + `/`-joined + sorted. */
+async function listFiles(dir: string, base = dir): Promise<string[]> {
+  const out: string[] = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const abs = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...(await listFiles(abs, base)));
+    else if (entry.isFile()) out.push(relative(base, abs).split('/').join('/'));
+  }
+  return out.sort();
+}
+
+/** Write `<storeDir>/manifest.json` describing the demo app (incl. its `files` list). */
+async function writeManifest(storeDir: string): Promise<void> {
+  const files = await listFiles(join(storeDir, APP));
+  const manifest = {
+    apps: [
+      {
+        id: APP,
+        title: 'Demo App',
+        description: 'A demo catalog app',
+        icon: null,
+        tables: ['items'],
+        pages: ['index.tsx'],
+        endpoints: ['list'],
+        hooks: [],
+        files,
+      },
+    ],
+  };
+  await writeFile(join(storeDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+}
+
+/** Stub `fetch` to serve `<storeDir>` at `${STORE_URL}/projects/<relpath>`. */
+function stubStoreFetch(storeDir: string): void {
+  vi.stubGlobal('fetch', async (url: string | URL): Promise<Response> => {
+    const u = new URL(typeof url === 'string' ? url : url.toString());
+    const m = /^\/projects\/(.+)$/.exec(u.pathname);
+    if (!m) return new Response('not found', { status: 404 });
+    const rel = decodeURIComponent(m[1]!);
+    const filePath = join(storeDir, rel);
+    if (!existsSync(filePath)) return new Response('not found', { status: 404 });
+    return new Response(await readFile(filePath), { status: 200 });
+  });
+}
+
+let storeDir: string;
 let lmthingRoot: string;
 
 const manager: AppsInstallManager = {
@@ -116,22 +151,25 @@ const manager: AppsInstallManager = {
 };
 
 beforeAll(async () => {
-  catalogRoot = await mkdtemp(join(tmpdir(), 'lm-apps-catalog-'));
+  storeDir = await mkdtemp(join(tmpdir(), 'lm-store-'));
   lmthingRoot = await mkdtemp(join(tmpdir(), 'lm-apps-root-'));
-  await writeDemoApp(catalogRoot);
+  await writeDemoApp(storeDir);
+  await writeManifest(storeDir);
+  stubStoreFetch(storeDir);
 });
 
 afterAll(async () => {
-  await rm(catalogRoot, { recursive: true, force: true });
+  vi.unstubAllGlobals();
+  await rm(storeDir, { recursive: true, force: true });
   await rm(lmthingRoot, { recursive: true, force: true });
 });
 
 // ── GET /api/apps ────────────────────────────────────────────────────────────
 
 describe('handleListApps', () => {
-  it('lists the demo app with derived tables/pages/endpoints/hooks', async () => {
+  it('lists the demo app from the store manifest', async () => {
     const { res, captured } = mockRes();
-    await handleListApps(catalogRoot)(mockReq(), res, {});
+    await handleListApps(STORE_URL)(mockReq(), res, {});
     expect(captured.status).toBe(200);
     const body = captured.body as { apps: Array<Record<string, unknown>> };
     expect(body.apps).toHaveLength(1);
@@ -140,62 +178,60 @@ describe('handleListApps', () => {
     expect(demo.title).toBe('Demo App');
     expect(demo.description).toBe('A demo catalog app');
     expect(demo.tables).toEqual(['items']);
-    expect(demo.pages).toEqual(['/']);
-    expect(demo.endpoints).toEqual(['GET /list']);
-    expect(demo.hooks).toEqual([]);
   });
 
-  it('tolerates a missing catalog root', async () => {
-    const { res, captured } = mockRes();
-    const missing = join(tmpdir(), `lm-apps-does-not-exist-${Date.now()}`);
-    await handleListApps(missing)(mockReq(), res, {});
-    expect(captured.status).toBe(200);
-    expect(captured.body).toEqual({ apps: [] });
+  it('tolerates an unreachable store (→ empty list)', async () => {
+    vi.stubGlobal('fetch', async () => { throw new Error('network down'); });
+    try {
+      const { res, captured } = mockRes();
+      await handleListApps(STORE_URL)(mockReq(), res, {});
+      expect(captured.status).toBe(200);
+      expect(captured.body).toEqual({ apps: [] });
+    } finally {
+      stubStoreFetch(storeDir); // restore the fixture store for the remaining tests
+    }
   });
 });
 
 // ── POST /api/apps/install ───────────────────────────────────────────────────
 
 describe('handleInstallApp', () => {
-  it('404s for a non-existent appId', async () => {
+  it('404s for an app not in the store catalog', async () => {
     const { res, captured } = mockRes();
-    const handler = handleInstallApp(manager, lmthingRoot, catalogRoot);
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
     await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: 'nope' }) }), res, {});
     expect(captured.status).toBe(404);
   });
 
   it('refuses a path-traversal appId', async () => {
     const { res, captured } = mockRes();
-    const handler = handleInstallApp(manager, lmthingRoot, catalogRoot);
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
     await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: '../x' }) }), res, {});
     expect(captured.status).toBe(400);
   });
 
   it('refuses the reserved "system" appId', async () => {
     const { res, captured } = mockRes();
-    const handler = handleInstallApp(manager, lmthingRoot, catalogRoot);
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
     await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: 'system' }) }), res, {});
     expect(captured.status).toBe(400);
   });
 
-  it('installs, boots, and best-effort builds a fresh app', async () => {
+  it('downloads, installs, boots, and best-effort builds a fresh app', async () => {
     const { res, captured } = mockRes();
-    const handler = handleInstallApp(manager, lmthingRoot, catalogRoot);
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
     await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: APP }) }), res, {});
     expect(captured.status).toBe(200);
     const body = captured.body as {
       ok: boolean;
       projectId: string;
-      appId: string;
       installed: { tables: string[]; pages: string[]; endpoints: string[]; hooks: string[] };
-      built: { contracts: { ok: boolean }; pages: { ok: boolean } };
     };
     expect(body.ok).toBe(true);
     expect(body.projectId).toBe(APP);
     expect(body.installed.tables).toEqual(['items']);
     expect(body.installed.pages).toEqual(['/']);
     expect(body.installed.endpoints).toEqual(['GET /list']);
-    expect(body.installed.hooks).toEqual([]);
 
     const dest = join(lmthingRoot, APP);
     expect(existsSync(join(dest, 'database', 'items.json'))).toBe(true);
@@ -203,19 +239,13 @@ describe('handleInstallApp', () => {
     expect(existsSync(join(dest, 'api', 'list', 'GET.ts'))).toBe(true);
     expect(existsSync(join(dest, 'package.json'))).toBe(true);
 
-    // Never copied from the source's `.data/`/`types/`.
-    expect(existsSync(join(dest, '.data', 'junk.txt'))).toBe(false);
-    expect(existsSync(join(dest, 'types', 'junk.d.ts'))).toBe(false);
-
     // Boot ran: a sqlite db (or its DR dump) exists.
-    const dbExists = existsSync(join(dest, '.data', 'app.db'));
-    const sqlExists = existsSync(join(dest, '.data', 'app.sql'));
-    expect(dbExists || sqlExists).toBe(true);
+    expect(existsSync(join(dest, '.data', 'app.db')) || existsSync(join(dest, '.data', 'app.sql'))).toBe(true);
   }, 30_000);
 
   it('re-installing an unedited (pristine) copy re-syncs ok, no divergence', async () => {
     const { res, captured } = mockRes();
-    const handler = handleInstallApp(manager, lmthingRoot, catalogRoot);
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
     await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: APP }) }), res, {});
     expect(captured.status).toBe(200);
     const body = captured.body as { ok: boolean; diverged?: boolean };
@@ -228,42 +258,30 @@ describe('handleInstallApp', () => {
     await writeFile(join(dest, 'pages', 'index.tsx'), 'export default function Index() { return "edited"; }\n', 'utf8');
 
     const { res, captured } = mockRes();
-    const handler = handleInstallApp(manager, lmthingRoot, catalogRoot);
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
     await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: APP }) }), res, {});
     expect(captured.status).toBe(200);
     const body = captured.body as { ok: boolean; diverged?: boolean };
     expect(body.ok).toBe(false);
     expect(body.diverged).toBe(true);
 
-    const content = await readFile(join(dest, 'pages', 'index.tsx'), 'utf8');
-    expect(content).toContain('edited');
-  });
+    expect(await readFile(join(dest, 'pages', 'index.tsx'), 'utf8')).toContain('edited');
+  }, 30_000);
 
   it('force:true overwrites a diverged copy', async () => {
     const dest = join(lmthingRoot, APP);
     const { res, captured } = mockRes();
-    const handler = handleInstallApp(manager, lmthingRoot, catalogRoot);
-    await handler(
-      mockReq({ method: 'POST', body: JSON.stringify({ appId: APP, force: true }) }),
-      res,
-      {},
-    );
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
+    await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: APP, force: true }) }), res, {});
     expect(captured.status).toBe(200);
-    const body = captured.body as { ok: boolean };
-    expect(body.ok).toBe(true);
-
-    const content = await readFile(join(dest, 'pages', 'index.tsx'), 'utf8');
-    expect(content).not.toContain('edited');
+    expect((captured.body as { ok: boolean }).ok).toBe(true);
+    expect(await readFile(join(dest, 'pages', 'index.tsx'), 'utf8')).not.toContain('edited');
   }, 30_000);
 
   it('installs into a custom projectId distinct from appId', async () => {
     const { res, captured } = mockRes();
-    const handler = handleInstallApp(manager, lmthingRoot, catalogRoot);
-    await handler(
-      mockReq({ method: 'POST', body: JSON.stringify({ appId: APP, projectId: 'my-demo' }) }),
-      res,
-      {},
-    );
+    const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
+    await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: APP, projectId: 'my-demo' }) }), res, {});
     expect(captured.status).toBe(200);
     const body = captured.body as { ok: boolean; projectId: string };
     expect(body.ok).toBe(true);

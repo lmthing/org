@@ -44,12 +44,21 @@ export const Route = createFileRoute('/')({
  *  (authenticated → the surface content; still not → the surface's own login gate). */
 function RootRedirect() {
   const navigate = useNavigate()
-  const { isLoading } = useAuth()
+  const { isLoading, isAuthenticated } = useAuth()
   useEffect(() => {
     if (isLoading) return
+    // Resume a pending install captured before login (store → install → sign in).
+    if (isAuthenticated && typeof window !== 'undefined') {
+      const pending = sessionStorage.getItem('lmthing_pending_install')
+      if (pending) {
+        sessionStorage.removeItem('lmthing_pending_install')
+        navigate({ to: '/install', search: { appId: pending }, replace: true })
+        return
+      }
+    }
     const host = typeof window !== 'undefined' ? window.location.hostname : ''
     navigate({ to: surfaceForHost(host), replace: true })
-  }, [isLoading, navigate])
+  }, [isLoading, isAuthenticated, navigate])
   return (
     <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
       Signing you in…
