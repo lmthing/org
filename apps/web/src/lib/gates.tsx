@@ -97,6 +97,13 @@ async function pollUntilUpgraded(
 // their own gate) once they've said "not now" for a given build.
 const UPGRADE_DISMISSED_KEY = 'lmthing:upgrade-dismissed-tag'
 
+// How often a live surface re-checks for a newer compute image after it's
+// booted. The cold-boot check (in `init`) blocks; this one only ever raises a
+// non-blocking banner, so a longer interval is fine — it exists so long-lived
+// surfaces (studio/computer/app IDE tabs, left open for hours) notice a new
+// build without a reload, the same way chat does on its frequent remounts.
+const UPGRADE_POLL_MS = 60_000
+
 type PodGateStatus = 'pending' | 'ready' | 'error' | 'upgrade-available' | 'upgrading'
 
 /**
@@ -117,6 +124,13 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<PodGateStatus>('pending')
   const [error, setError] = useState<string | null>(null)
   const [latestTag, setLatestTag] = useState<string | null>(null)
+  // Newer tag detected *after* boot, while the surface is live — surfaced as a
+  // non-blocking banner (never the full-screen card) so we don't yank the user
+  // out of studio/computer/app mid-task. null = nothing to offer.
+  const [bannerTag, setBannerTag] = useState<string | null>(null)
+  // The image tag the pod is currently running, per the last ensure/upgrade.
+  // Baseline for the live poll below.
+  const currentTagRef = useRef<string | null>(null)
   const initRef = useRef(false)
 
   useEffect(() => {
@@ -133,6 +147,7 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
         if (cancelled) return
 
         const currentTag = ensureResult.pod?.computeTag
+        currentTagRef.current = currentTag ?? null
         const dismissed = sessionStorage.getItem(UPGRADE_DISMISSED_KEY)
         if (latest && currentTag && latest !== currentTag && latest !== dismissed) {
           setLatestTag(latest)
@@ -153,18 +168,44 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     }
   }, [session, getAccessToken])
 
+  // Live poll: once the surface is up, keep an eye out for a newer build so a
+  // long-open studio/computer/app tab offers the upgrade (as a banner) without
+  // needing a reload. Only runs in the 'ready' state — never while a blocking
+  // card/spinner is showing — and never re-nags a dismissed tag.
+  useEffect(() => {
+    if (status !== 'ready') return
+    let cancelled = false
+    const id = setInterval(() => {
+      void (async () => {
+        const latest = await fetchLatestTag(CLOUD_BASE_URL)
+        if (cancelled || !latest) return
+        const current = currentTagRef.current
+        const dismissed = sessionStorage.getItem(UPGRADE_DISMISSED_KEY)
+        if (current && latest !== current && latest !== dismissed) {
+          setBannerTag(latest)
+        }
+      })()
+    }, UPGRADE_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [status])
+
   const handleRetry = () => {
     initRef.current = false
     setError(null)
     setStatus('pending')
   }
 
-  const handleUpgrade = async () => {
-    if (!latestTag) return
+  const handleUpgrade = async (tag: string | null = latestTag) => {
+    if (!tag) return
+    setBannerTag(null)
     setStatus('upgrading')
     try {
       await upgradePod(CLOUD_BASE_URL, getAccessToken)
-      await pollUntilUpgraded(CLOUD_BASE_URL, getAccessToken, latestTag)
+      await pollUntilUpgraded(CLOUD_BASE_URL, getAccessToken, tag)
+      currentTagRef.current = tag
       setStatus('ready')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -175,6 +216,11 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   const handleContinueWithoutUpgrading = () => {
     if (latestTag) sessionStorage.setItem(UPGRADE_DISMISSED_KEY, latestTag)
     setStatus('ready')
+  }
+
+  const handleDismissBanner = () => {
+    if (bannerTag) sessionStorage.setItem(UPGRADE_DISMISSED_KEY, bannerTag)
+    setBannerTag(null)
   }
 
   if (!session) {
@@ -220,8 +266,76 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     )
   }
 
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      {bannerTag && (
+        <div style={upgradeBannerStyles.bar} role="status">
+          <span style={upgradeBannerStyles.text}>
+            A new version of your compute pod is available.
+          </span>
+          <div style={upgradeBannerStyles.actions}>
+            <button
+              onClick={() => { void handleUpgrade(bannerTag) }}
+              style={upgradeBannerStyles.btnPrimary}
+            >
+              Upgrade
+            </button>
+            <button onClick={handleDismissBanner} style={upgradeBannerStyles.btn}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
+
+const upgradeBannerStyles = {
+  bar: {
+    position: 'fixed' as const,
+    left: '50%',
+    bottom: 24,
+    transform: 'translateX(-50%)',
+    zIndex: 1000,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 16,
+    padding: '10px 16px',
+    borderRadius: 10,
+    background: 'var(--color-card)',
+    border: '1px solid var(--color-border)',
+    maxWidth: 'calc(100vw - 32px)',
+  },
+  text: {
+    fontSize: 14,
+    color: 'var(--color-foreground)',
+  },
+  actions: {
+    display: 'flex',
+    gap: 8,
+    flexShrink: 0,
+  },
+  btn: {
+    padding: '6px 12px',
+    borderRadius: 8,
+    border: '1px solid var(--color-border)',
+    background: 'transparent',
+    color: 'var(--color-foreground)',
+    cursor: 'pointer',
+    fontSize: 13,
+  },
+  btnPrimary: {
+    padding: '6px 12px',
+    borderRadius: 8,
+    border: 'none',
+    background: 'var(--color-primary)',
+    color: 'var(--color-primary-foreground)',
+    cursor: 'pointer',
+    fontWeight: 600,
+    fontSize: 13,
+  },
+} satisfies Record<string, React.CSSProperties>
 
 const upgradeCardStyles = {
   card: {
