@@ -103,6 +103,14 @@ export function createPageServeHandler(
     const { outDir, assetManifest } = bundle;
     const rest = normalize(params['rest'] ?? '');
 
+    // The app is always mounted at `/app/<project>/` on the pod (this handler's
+    // route pattern), so that is the exact, prefix-safe base for the SPA shell's
+    // *relative* asset URLs (`./assets/…`). Without an injected `<base>`, a route
+    // of depth ≥2 (`/app/<project>/labs/:id`) resolves `./assets/x` against
+    // `…/labs/` → 404 → this very fallback → the browser loads index.html as a
+    // module and errors on the `text/html` MIME type. The `<base>` fixes every depth.
+    const appBase = `/app/${projectId}/`;
+
     // Path-traversal guard: the requested sub-path must resolve INSIDE outDir. A
     // `..` escape (e.g. `../../etc/passwd`) is rejected outright, independent of the
     // manifest — we never serve a byte from outside the bundle.
@@ -120,7 +128,7 @@ export function createPageServeHandler(
         data = await readFile(abs);
       } catch {
         // In-manifest but missing on disk (stale build) — degrade to SPA fallback.
-        await serveIndex(res, outDir);
+        await serveIndex(res, outDir, appBase);
         return;
       }
       // Hashed assets are content-addressed → immutable & far-future cacheable.
@@ -136,11 +144,16 @@ export function createPageServeHandler(
     }
 
     // Asset-manifest SPA fallback: not a known asset → the client router owns it.
-    await serveIndex(res, outDir);
+    await serveIndex(res, outDir, appBase);
   };
 }
 
-async function serveIndex(res: ServerResponse, outDir: string): Promise<void> {
+/**
+ * Serve the SPA shell, injecting `<base href="${appBase}">` so the shell's
+ * relative asset URLs resolve to `/app/<project>/assets/…` at **any** route
+ * depth (not just the root). Idempotent — never doubles an existing `<base>`.
+ */
+async function serveIndex(res: ServerResponse, outDir: string, appBase: string): Promise<void> {
   let html: Buffer;
   try {
     html = await readFile(resolve(outDir, 'index.html'));
@@ -148,10 +161,14 @@ async function serveIndex(res: ServerResponse, outDir: string): Promise<void> {
     sendText(res, 500, 'page bundle missing index.html');
     return;
   }
+  let text = html.toString('utf8');
+  if (!/<base\s/i.test(text)) {
+    text = text.replace(/<head>/i, `<head>\n    <base href="${appBase}">`);
+  }
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-cache',
     'Content-Security-Policy': CSP,
   });
-  res.end(html);
+  res.end(text);
 }

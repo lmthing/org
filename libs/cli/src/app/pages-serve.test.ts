@@ -39,7 +39,10 @@ const assetManifest = ['index.html', 'assets/app-abc123.js'];
 beforeAll(async () => {
   outDir = await mkdtemp(join(tmpdir(), 'pages-serve-'));
   await mkdir(join(outDir, 'assets'), { recursive: true });
-  await writeFile(join(outDir, 'index.html'), '<!doctype html><div id="root"></div>');
+  await writeFile(
+    join(outDir, 'index.html'),
+    '<!doctype html>\n<html>\n  <head>\n    <link rel="stylesheet" href="./assets/app.css">\n  </head>\n  <body><div id="root"></div><script type="module" src="./assets/app-abc123.js"></script></body>\n</html>',
+  );
   await writeFile(join(outDir, 'assets', 'app-abc123.js'), 'console.log("app")');
 });
 
@@ -85,6 +88,21 @@ describe('createPageServeHandler', () => {
     expect(out.statusCode).toBe(200);
     expect(out.headers['content-type']).toBe('text/html; charset=utf-8');
     expect(out.body.toString()).toContain('id="root"');
+  });
+
+  it('injects <base href="/app/<project>/"> into the SPA fallback so relative assets resolve at any route depth', async () => {
+    const handler = handlerFor({ outDir, assetManifest });
+    // A depth-≥2 client route (e.g. /app/health/labs/:id): without <base>, the
+    // shell's `./assets/…` would resolve against `…/labs/` → 404 → this fallback →
+    // the JS loads as text/html and the page is blank. The injected base fixes it.
+    const { res, out } = makeRes();
+    await handler(fakeReq, res, { projectId: 'health', rest: 'labs/abc-123' });
+
+    expect(out.statusCode).toBe(200);
+    const body = out.body.toString();
+    expect(body).toContain('<base href="/app/health/">');
+    // Injected exactly once, right inside <head>, and never doubled.
+    expect(body.match(/<base\s/gi)?.length).toBe(1);
   });
 
   it('serves an explicit index.html request with no-cache', async () => {
