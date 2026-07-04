@@ -2,10 +2,12 @@
  * {@link buildProjectPages} — route discovery, esbuild bundle, asset manifest,
  * and the content-hash cache.
  *
- * Fixtures are intentionally tiny and import **only** React + `@app/runtime`
+ * Most fixtures are intentionally tiny and import **only** React + `@app/runtime`
  * (no `@lmthing/ui`/`@lmthing/css`) so the bundle resolves entirely from the
  * cli's own node_modules and the build stays fast. `@app/runtime` and React are
- * aliased/single-instanced by `pages.ts` itself.
+ * aliased/single-instanced by `pages.ts` itself. The final test deliberately
+ * exercises the full `<Chat>` closure (`@lmthing/ui/chat` → auth/css/core-ui) —
+ * the resolution path that must also work in the compute image.
  */
 import { afterAll, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm, stat } from 'node:fs/promises';
@@ -101,4 +103,24 @@ describe('buildProjectPages', () => {
     const res = await buildProjectPages(root);
     expect(res).toMatchObject({ built: false, assetManifest: [], routes: [] });
   });
+
+  // Regression: the `@app/runtime` barrel re-exports `<Chat>` from `@lmthing/ui/chat`,
+  // whose closure reaches `@lmthing/auth`, `@lmthing/css/elements/*` (+tokens) and
+  // `@lmthing/core/ui`. A Chat-using page (blog/discover, trips, health, kitchen)
+  // must bundle for the browser — this guards against the barrel picking up a
+  // node-only import, and (in the compute image) against those libs not being shipped.
+  it('builds a page that imports <Chat> (full @lmthing/ui closure)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lm-chatpage-'));
+    tmpDirs.push(dir);
+    await mkdir(join(dir, 'pages'), { recursive: true });
+    await writeFile(
+      join(dir, 'pages', 'index.tsx'),
+      `import { Chat } from '@app/runtime';
+export default function Index() { return <Chat agent="space/agent" />; }
+`,
+    );
+    const res = await buildProjectPages(dir, { force: true, minify: false });
+    expect(res.built).toBe(true);
+    expect(res.assetManifest.length).toBeGreaterThan(0);
+  }, 60_000);
 });
