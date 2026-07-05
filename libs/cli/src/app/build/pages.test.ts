@@ -10,7 +10,7 @@
  * the resolution path that must also work in the compute image.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, stat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -103,6 +103,45 @@ describe('buildProjectPages', () => {
     const res = await buildProjectPages(root);
     expect(res).toMatchObject({ built: false, assetManifest: [], routes: [] });
   });
+
+  // Regression (CSS loading): the bundle must ship **compiled** design-system CSS —
+  // `@lmthing/css`'s `@theme` tokens + the Tailwind utilities the page uses + the
+  // `@apply`/`@reference` element styles from `@lmthing/ui`, all expanded. esbuild's
+  // raw `.css` loader passes those directives through verbatim (browser drops them),
+  // so without the Tailwind compile step project apps render unstyled.
+  it('emits compiled Tailwind CSS (tokens + utilities + expanded @apply), no raw directives', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lm-css-'));
+    tmpDirs.push(dir);
+    await mkdir(join(dir, 'pages'), { recursive: true });
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'css-scratch', version: '0.0.0' }));
+    await writeFile(
+      join(dir, 'pages', 'index.tsx'),
+      `import { Card } from '@lmthing/ui/elements/content/card/index.tsx';
+export default function Home() {
+  return <Card className="p-4 bg-background text-foreground">styled</Card>;
+}
+`,
+    );
+    const res = await buildProjectPages(dir, { force: true, minify: false });
+    expect(res.built).toBe(true);
+
+    // A CSS asset must be emitted and linked from index.html.
+    const cssAsset = res.assetManifest.find((f) => /^assets\/.*\.css$/.test(f));
+    expect(cssAsset).toBeDefined();
+    const html = await readFile(join(res.outDir, 'index.html'), 'utf8');
+    expect(html).toContain('rel="stylesheet"');
+
+    const css = await readFile(join(res.outDir, cssAsset!), 'utf8');
+    // Design tokens from `@theme` (the CSS custom properties element styles rely on).
+    expect(css).toMatch(/--background\s*:/);
+    // The utility classes the page uses were generated.
+    expect(css).toMatch(/\.p-4\b/);
+    expect(css).toMatch(/\.bg-background\b/);
+    // The `@apply` element styles from `@lmthing/ui` were expanded, not passed through.
+    expect(css).toContain('.card');
+    expect(css).not.toMatch(/@apply\b/);
+    expect(css).not.toMatch(/@reference\b/);
+  }, 60_000);
 
   // Regression: the `@app/runtime` barrel re-exports `<Chat>` from `@lmthing/ui/chat`,
   // whose closure reaches `@lmthing/auth`, `@lmthing/css/elements/*` (+tokens) and
