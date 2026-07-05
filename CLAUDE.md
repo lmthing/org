@@ -40,7 +40,7 @@ The unified SPA (`@lmthing/web-app`) exposes three product surfaces as TanStack 
 
 ## Directory map (top level)
 
-`libs/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `system-spaces/{system-global,system-engineer,system-architect,system-research,user-memory,user-thing}` · `libs/cli/src/{providers,stream,render,rpc,web,cli,server}` · `libs/ui/src/{app,store,client,components,compat,lib,theme}` · `apps/web/{src,public}` (unified SPA). Full subsystem detail lives in `@.claude/arch/*` (see Task Index).
+`libs/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `libs/core/src/{db,exec,app}` (project-app db/capability-globals/build layer) · `system-spaces/{system-global,system-engineer,system-architect,system-research,system-appbuilder,user-memory,user-thing}` · `libs/cli/src/{providers,stream,render,rpc,web,cli,server,app}` · `libs/ui/src/{app,store,client,components,compat,lib,theme}` · `apps/web/{src,public}` (unified SPA). Full subsystem detail lives in `@.claude/arch/*` (see Task Index). Project-app authoring/serving → `@.claude/skills/project-app.md`.
 
 ## Top gotchas
 
@@ -117,6 +117,7 @@ Load the matching file when working on:
 | Working on… | Load |
 |---|---|
 | the `lmthing` project server / session persistence / `.lmthing/` layout | `@.claude/skills/project-server.md` |
+| **project-as-application** — a project's `database/ pages/ api/ hooks/` app, capability globals, `system-appbuilder`, store install/serve | `@.claude/skills/project-app.md` (quick ref: [./SPACE_DEVELOPMENT.md](./SPACE_DEVELOPMENT.md) §7 · full design: [./project-as-application.md](./project-as-application.md)) |
 | terminal+web UI design system (catalog, renderers, theming) | `@.claude/skills/ui-design-system.md` |
 | **visual** design system — brand palette, CSS design tokens, Tailwind theme, dark mode, component CSS (web SPAs) | `@.claude/skills/visual-design-system.md` (source: `libs/css/DESIGN.md` + `tokens.json`) |
 | system spaces / host primitives / fork roles | `@.claude/skills/system-spaces.md` |
