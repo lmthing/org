@@ -1,6 +1,6 @@
 # lmthing
 
-An LLM agent runtime where the model drives programs by writing TypeScript, executed one statement at a time in a QuickJS WASM sandbox. The user-facing surface is **THING** — an orchestrator agent that talks to you and routes each request to the right specialist (research, coding, or a brand-new agent it builds on demand).
+An LLM agent runtime where the model drives programs by writing TypeScript, executed one statement at a time in a QuickJS WASM sandbox. The user-facing surface is **THING** — an orchestrator agent that talks to you and routes each request to the right specialist (research, coding, a brand-new agent it builds on demand, or a full **app** it builds for a project — see [Project-as-application](#project-as-application) below).
 
 For the runtime internals (turn loop, spaces, forks, delegation, system spaces) see [CLAUDE.md](./CLAUDE.md). For authoring Spaces and the `@lmthing/core`/`@lmthing/cli` APIs see [SPACE_DEVELOPMENT.md](./SPACE_DEVELOPMENT.md).
 
@@ -67,7 +67,7 @@ Open the printed URL. The server serves all three product surfaces as client-sid
 From any surface you can:
 
 - **Create projects** — each gets its own `.lmthing/<project>/` with isolated spaces, documents, and instructions.
-- **Chat with THING** — it answers directly, researches the web, writes code, or **builds a new specialist agent** for a recurring task. Agents THING builds for a project land under `.lmthing/<project>/spaces/` and stay available.
+- **Chat with THING** — it answers directly, researches the web, writes code, **builds a new specialist agent** for a recurring task, or **builds a whole app** for the project (see below). Agents THING builds for a project land under `.lmthing/<project>/spaces/` and stay available.
 - **Upload documents & instructions** per project — THING reads `instructions.md` as standing guidance and can reference uploaded `documents/`.
 - **Save memories** — tell THING a durable preference ("call me X", "I prefer Rust") and it persists it (globally, across projects).
 
@@ -87,6 +87,35 @@ curl -s $B/api/sessions/$SID/state                                   # ASCII exe
 ```
 
 Per-project document/instructions routes: `GET/PUT /api/projects/:id/instructions`, `GET/POST /api/projects/:id/documents`.
+
+## Project-as-application
+
+A project isn't limited to spaces — it can own a full **application** built on the same pod
+runtime. Alongside `spaces/`, a project root can hold:
+
+```
+<project>/
+  database/<table>.json   # typed SQLite tables (schema = the agent's mental model of the data)
+  api/<route>/<METHOD>.ts  # named, typed, worker-isolated Node handlers
+  pages/*.tsx              # client-side React, file-based routing, typed data via @app/runtime
+  hooks/<slug>.ts          # cron + database triggers (declarative or imperative)
+  spaces/<id>/             # project-scoped agents that read/write the app's data
+```
+
+Every app surface is **capability-gated** — an agent can touch `db`/`pages`/`api`/`hooks` only
+when its `capabilities:` frontmatter grants it (nothing is ambient, not even for THING). You never
+write these files by hand: THING **delegates** "build me an app" to the **`system-appbuilder`**
+system space, whose `app-architect` plans the app and fans out to least-privilege agents
+(`data-modeler`, `page-builder`, `api-author`, `automator`), one authoring call per file.
+
+Finished apps are served by the pod at `/app/<project>/` and distributed through the
+**lmthing.store** catalog (`store/projects/<id>/`); the pod's CLI server installs one via
+`GET /api/apps` + `POST /api/apps/install`. Five ship today: `blog`, `health`, `kitchen`, `trips`,
+`demo-feed`.
+
+- Quick authoring reference → [SPACE_DEVELOPMENT.md](./SPACE_DEVELOPMENT.md) §7 · skill `.claude/skills/project-app.md`
+- Full design (serving/domains, Studio admin, safety, boot sequence) → [project-as-application.md](./project-as-application.md)
+- Concrete worked examples → `blog-application.md`, `health-application.md`, `kitchen-application.md`, `trips-application.md`
 
 ## Other ways to run (development)
 

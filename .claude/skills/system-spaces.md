@@ -9,7 +9,7 @@ description: Load when adding a system space, host primitive, or fork role, or w
 
 ## Where things live
 
-- `libs/core/system-spaces/{system-global,system-engineer,system-architect,system-research,user-memory,user-thing}/` — the always-loaded baseline spaces (NOT under `src/`; read from disk at runtime). Function-only spaces need no `package.json` (a package.json would trigger `npm install` on load).
+- `libs/core/system-spaces/{system-global,system-engineer,system-architect,system-research,system-appbuilder,user-memory,user-thing}/` — the always-loaded baseline spaces (NOT under `src/`; read from disk at runtime). Function-only spaces need no `package.json` (a package.json would trigger `npm install` on load). `system-appbuilder` is the project-app authoring space (THING delegates "build me an app" to it) — details in `@.claude/skills/project-app.md`.
 - `libs/core/src/spaces/system.ts` — `loadSystemSpaces`, `mergeSystemInto`, `defaultSystemSpaceDirs`, `systemFunctionSources`/`systemFunctionsBundled`/`systemFunctionNames` (these return ONLY the `system-global` space's functions — `GLOBAL_SPACE_NAME`). The delegate runner (`delegate/delegate.ts`) also calls `systemFunctionSources`/`systemFunctionsBundled` to merge system functions into delegate VMs via `RunDelegateOpts.systemSpaces`.
 - `libs/core/src/globals/host-tools.ts` — the synchronous host substrate the system functions build on.
 - `libs/core/src/fork/roles.ts` — `fork({ role })` capability profiles + preambles.
