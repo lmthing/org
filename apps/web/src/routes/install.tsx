@@ -43,39 +43,62 @@ type InstalledInfo = {
 type State =
   | { status: 'installing' }
   | { status: 'done'; info: InstalledInfo }
+  // The app is already installed with local edits that diverge from the store
+  // template. The pod held the install back (`ok:false, diverged:true`) rather
+  // than clobber the edits — we surface an explicit "upgrade & replace" choice
+  // that re-runs the install with `force:true`.
+  | { status: 'diverged'; info: InstalledInfo }
   | { status: 'error'; message: string }
+
+/**
+ * Classify the pod's `/api/apps/install` response into the UI state. Kept a pure,
+ * exported function (no DOM/network) so the install-vs-upgrade branching is unit-
+ * testable. The pod returns HTTP 200 with `{ ok:false, diverged:true }` when the
+ * destination has local edits — that is NOT an error, it's the "offer an upgrade"
+ * signal, so it must not fall through to the error branch.
+ */
+export function classifyInstallResponse(
+  httpOk: boolean,
+  httpStatus: number,
+  body: (InstalledInfo & { ok?: boolean }) | null,
+): State {
+  if (httpOk && body?.ok) return { status: 'done', info: body }
+  if (httpOk && body?.diverged) return { status: 'diverged', info: body }
+  return { status: 'error', message: body?.message ?? `Install failed (HTTP ${httpStatus}).` }
+}
 
 function InstallPage() {
   const { appId } = Route.useSearch()
   const { getAccessToken } = useAuth()
   const [state, setState] = useState<State>({ status: 'installing' })
 
-  const runInstall = useCallback(async () => {
-    if (!appId) {
-      setState({ status: 'error', message: 'No app was specified (missing ?appId=).' })
-      return
-    }
-    setState({ status: 'installing' })
-    try {
-      const token = await getAccessToken()
-      const res = await fetch(`${COMPUTER_BASE_URL}/api/apps/install`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ appId }),
-      })
-      const body = (await res.json().catch(() => null)) as (InstalledInfo & { ok?: boolean }) | null
-      if (!res.ok || !body?.ok) {
-        setState({ status: 'error', message: body?.message ?? `Install failed (HTTP ${res.status}).` })
+  // `force` re-runs the install past a divergence guard, replacing the app's files
+  // with the current store template (used by the "Upgrade & replace files" action).
+  const runInstall = useCallback(
+    async (force = false) => {
+      if (!appId) {
+        setState({ status: 'error', message: 'No app was specified (missing ?appId=).' })
         return
       }
-      setState({ status: 'done', info: body })
-    } catch (err) {
-      setState({ status: 'error', message: err instanceof Error ? err.message : String(err) })
-    }
-  }, [appId, getAccessToken])
+      setState({ status: 'installing' })
+      try {
+        const token = await getAccessToken()
+        const res = await fetch(`${COMPUTER_BASE_URL}/api/apps/install`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ appId, force }),
+        })
+        const body = (await res.json().catch(() => null)) as (InstalledInfo & { ok?: boolean }) | null
+        setState(classifyInstallResponse(res.ok, res.status, body))
+      } catch (err) {
+        setState({ status: 'error', message: err instanceof Error ? err.message : String(err) })
+      }
+    },
+    [appId, getAccessToken],
+  )
 
   // The user arrives here to install — kick it off automatically.
   useEffect(() => {
@@ -107,23 +130,14 @@ function InstallPage() {
       {state.status === 'done' && (
         <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
           <div className="text-sm text-foreground">
-            {state.info.diverged ? (
-              <>
-                <span className="font-mono">{appId}</span> is already installed with local changes — kept
-                as-is. Open it below.
-              </>
-            ) : (
-              <>
-                Installed <span className="font-mono">{appId}</span>
-                {state.info.installed && (
-                  <span className="text-muted-foreground">
-                    {' '}
-                    — {state.info.installed.tables?.length ?? 0} table(s),{' '}
-                    {state.info.installed.endpoints?.length ?? 0} endpoint(s),{' '}
-                    {state.info.installed.pages?.length ?? 0} page(s).
-                  </span>
-                )}
-              </>
+            Installed <span className="font-mono">{appId}</span>
+            {state.info.installed && (
+              <span className="text-muted-foreground">
+                {' '}
+                — {state.info.installed.tables?.length ?? 0} table(s),{' '}
+                {state.info.installed.endpoints?.length ?? 0} endpoint(s),{' '}
+                {state.info.installed.pages?.length ?? 0} page(s).
+              </span>
             )}
           </div>
           <button
@@ -133,6 +147,32 @@ function InstallPage() {
           >
             Open app
           </button>
+        </div>
+      )}
+
+      {state.status === 'diverged' && (
+        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
+          <div className="text-sm text-foreground">
+            <span className="font-mono">{appId}</span> is already installed and has local changes.
+            Upgrading replaces its app files (pages, API, hooks, database schema and spaces) with the
+            latest version from the store. Your saved data is kept.
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void runInstall(true)}
+              className="w-fit rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              Upgrade &amp; replace files
+            </button>
+            <button
+              type="button"
+              onClick={() => openApp(state.info.projectId ?? appId)}
+              className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              Keep my version &amp; open
+            </button>
+          </div>
         </div>
       )}
 
