@@ -33,7 +33,9 @@ import { createRequire } from 'node:module';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { build, type BuildOptions } from 'esbuild';
+import { build, type BuildOptions, type Plugin } from 'esbuild';
+import { compile, Features } from '@tailwindcss/node';
+import { Scanner } from '@tailwindcss/oxide';
 
 import { generateAppTypes, type EndpointContract } from './schema.js';
 
@@ -69,6 +71,14 @@ const PAGE_EXT = /\.(tsx|jsx)$/;
 const OUT_SUBDIR = join('.data', 'pages-dist');
 const BUILD_SUBDIR = join('.data', 'pages-build');
 const CACHE_FILE = join('.data', 'pages-cache.json');
+
+/**
+ * Bumped whenever the **builder itself** changes what it emits (independent of
+ * project sources), so an existing pod's cached bundle is invalidated and rebuilt.
+ * `2` = Tailwind-compiled design-system CSS is now bundled (previously the theme
+ * tokens/utilities/`@apply` never made it into the output → apps rendered unstyled).
+ */
+const BUILDER_VERSION = '2';
 
 interface CacheMeta {
   hash: string;
@@ -181,19 +191,32 @@ async function runBuild(
   const { endpoints } = await generateAppTypes(projectRoot);
   const manifest = endpointManifest(endpoints);
 
+  const { aliases, nodePaths, designSystem } = resolveEnv(projectRoot);
+
   // Generate the client entry in a scratch build dir (never the repo tree).
   const buildDir = join(projectRoot, BUILD_SUBDIR);
   await rm(buildDir, { recursive: true, force: true });
   await mkdir(buildDir, { recursive: true });
   const wrappers = findWrappers(pagesDir);
+
+  // Design-system stylesheet entry: pulls in `@lmthing/css` (theme tokens,
+  // Tailwind base/utilities), scanned against the page + component + design-system
+  // sources so every class the pages/`@lmthing/ui` use is generated. Compiled by
+  // the Tailwind plugin below (esbuild alone can't expand `@theme`/`@apply`).
+  const appCssFile = join(buildDir, 'app.css');
+  await writeFile(appCssFile, renderAppCss(projectRoot, designSystem), 'utf8');
+
   const entryFile = join(buildDir, 'entry.tsx');
-  await writeFile(entryFile, renderEntry(routes, wrappers, manifest), 'utf8');
+  await writeFile(
+    entryFile,
+    renderEntry(routes, wrappers, manifest, designSystem.themeCss ? './app.css' : undefined),
+    'utf8',
+  );
 
   // Fresh output dir (drop stale hashed assets).
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
 
-  const { aliases, nodePaths } = resolveEnv(projectRoot);
   const generatedDts = join(projectRoot, 'types', 'generated.d.ts');
   if (existsSync(generatedDts)) aliases['@app/types'] = generatedDts;
 
@@ -217,6 +240,7 @@ async function runBuild(
     loader: { '.css': 'css', '.png': 'file', '.svg': 'file', '.jpg': 'file' },
     alias: aliases,
     nodePaths,
+    plugins: [tailwindCssPlugin()],
     logLevel: 'silent',
   };
 
@@ -256,8 +280,12 @@ function renderEntry(
   routes: PageRoute[],
   wrappers: { app?: string; layout?: string },
   manifest: Record<string, ManifestEntry>,
+  cssEntry?: string,
 ): string {
   const lines: string[] = [];
+  // The design-system stylesheet must be first so its tokens/base cascade under
+  // element + page styles. Omitted when `@lmthing/css` can't be resolved.
+  if (cssEntry) lines.push(`import ${JSON.stringify(cssEntry)};`);
   lines.push(`import { mountApp } from '@app/runtime';`);
   routes.forEach((r, i) => lines.push(`import Page${i} from ${JSON.stringify(r.file)};`));
   if (wrappers.app) lines.push(`import App from ${JSON.stringify(wrappers.app)};`);
@@ -274,6 +302,78 @@ function renderEntry(
   lines.push('});');
   lines.push('');
   return lines.join('\n');
+}
+
+/**
+ * Emit the design-system stylesheet entry (`app.css`). It imports `@lmthing/css`'s
+ * theme (Tailwind base + `@theme` tokens) and declares `@source` globs so the
+ * Tailwind compiler generates every utility class the pages, shared components and
+ * `@lmthing/ui` actually use. A tiny base gives pages the token-driven background /
+ * foreground / font by default. Compiled by {@link tailwindCssPlugin}.
+ */
+function renderAppCss(projectRoot: string, ds: DesignSystem): string {
+  if (!ds.themeCss) return '';
+  const lines = [`@import ${JSON.stringify(ds.themeCss)};`];
+  for (const dir of [
+    join(projectRoot, 'pages'),
+    join(projectRoot, 'components'),
+    join(projectRoot, 'lib'),
+    ...ds.sourceDirs,
+  ]) {
+    if (existsSync(dir)) lines.push(`@source ${JSON.stringify(dir)};`);
+  }
+  lines.push('@layer base {');
+  lines.push('  html, body, #root { height: 100%; }');
+  lines.push('  body { @apply bg-background text-foreground font-sans antialiased; }');
+  lines.push('}');
+  lines.push('');
+  return lines.join('\n');
+}
+
+/** CSS files carrying any Tailwind v4 directive that esbuild can't expand on its own. */
+const TAILWIND_DIRECTIVE =
+  /@(tailwind|apply|reference|theme|source|variant|custom-variant|utility|plugin|config)\b|@import\s+["']tailwindcss/;
+
+/**
+ * esbuild plugin that runs the **Tailwind v4 compiler** over every CSS file
+ * carrying a Tailwind directive — the design-system theme (`@import "tailwindcss"`
+ * + `@theme` tokens + utilities) and the `@lmthing/ui` element styles
+ * (`@reference` + `@apply`). Without this, esbuild's raw `.css` loader passes
+ * those directives through verbatim and the browser drops them, so project apps
+ * render **unstyled**. Plain third-party CSS (e.g. xterm) is passed through
+ * untouched (and fast).
+ */
+function tailwindCssPlugin(): Plugin {
+  return {
+    name: 'lmthing-tailwind',
+    setup(pluginBuild) {
+      pluginBuild.onLoad({ filter: /\.css$/ }, async (args) => {
+        const raw = await readFile(args.path, 'utf8');
+        if (!TAILWIND_DIRECTIVE.test(raw)) return null; // plain CSS → esbuild's own loader
+        const base = dirname(args.path);
+        const compiler = await compile(raw, {
+          base,
+          shouldRewriteUrls: true,
+          onDependency: () => {},
+        });
+        // Scanner sources = the compiler's auto-detected root + any `@source` globs.
+        const sources = (
+          compiler.root === 'none'
+            ? []
+            : compiler.root === null
+              ? [{ base, pattern: '**/*', negated: false }]
+              : [{ ...compiler.root, negated: false }]
+        ).concat(compiler.sources);
+        const candidates: string[] = [];
+        if (compiler.features & Features.Utilities) {
+          const scanner = new Scanner({ sources });
+          for (const c of scanner.scan()) candidates.push(c);
+        }
+        const contents = compiler.build(candidates);
+        return { contents, loader: 'css', resolveDir: base };
+      });
+    },
+  };
 }
 
 /** The static HTML shell — references the hashed bundle with **relative** URLs. */
@@ -309,7 +409,11 @@ function renderIndexHtml(jsRel: string, cssRel?: string): string {
  * lives at `<cliRoot>/src/app/runtime/`, present on disk because the built cli runs
  * from the repo).
  */
-function resolveEnv(projectRoot: string): { aliases: Record<string, string>; nodePaths: string[] } {
+function resolveEnv(projectRoot: string): {
+  aliases: Record<string, string>;
+  nodePaths: string[];
+  designSystem: DesignSystem;
+} {
   const here = dirname(fileURLToPath(import.meta.url)); // src/app/build OR dist/…
   const cliRoot = findCliRoot(here);
 
@@ -347,7 +451,41 @@ function resolveEnv(projectRoot: string): { aliases: Record<string, string>; nod
   const nodePaths = [...nodeModulesUpward(cliRoot), join(projectRoot, 'node_modules')].filter((p) =>
     existsSync(p),
   );
-  return { aliases, nodePaths };
+  return { aliases, nodePaths, designSystem: resolveDesignSystem(req) };
+}
+
+/** Resolved design-system assets for the Tailwind CSS build. */
+interface DesignSystem {
+  /** Absolute path to `@lmthing/css`'s theme stylesheet, if resolvable. */
+  themeCss?: string;
+  /** Source dirs to scan for Tailwind class candidates (`@lmthing/ui`/`@lmthing/css`). */
+  sourceDirs: string[];
+}
+
+/**
+ * Locate `@lmthing/css` (theme tokens/utilities) and the design-system source
+ * trees the Tailwind compiler must scan for used classes. Missing packages leave
+ * `themeCss` undefined — the build proceeds without the injected stylesheet rather
+ * than failing (mirrors the tiny React-only fixtures in tests).
+ */
+function resolveDesignSystem(req: NodeRequire): DesignSystem {
+  const sourceDirs: string[] = [];
+  let themeCss: string | undefined;
+  try {
+    // `@lmthing/css` exports `./theme` → `src/theme.css`; scan its whole `src`.
+    themeCss = req.resolve('@lmthing/css/theme');
+    sourceDirs.push(dirname(themeCss));
+  } catch {
+    /* design system not resolvable (e.g. a minimal fixture) — skip */
+  }
+  try {
+    // `@lmthing/ui` components carry raw utility classNames the theme must emit.
+    // Its `.` export is `src/index.ts`, so its dir is the source tree to scan.
+    sourceDirs.push(dirname(req.resolve('@lmthing/ui')));
+  } catch {
+    /* ui not resolvable — pages that avoid it still style correctly */
+  }
+  return { themeCss, sourceDirs };
 }
 
 /** Walk up from `startDir` to the dir whose `package.json` is `@lmthing/cli`. */
@@ -398,6 +536,7 @@ function firstExisting(paths: string[]): string | undefined {
  */
 async function sourceHash(projectRoot: string): Promise<string> {
   const hash = createHash('sha256');
+  hash.update('builder\0').update(BUILDER_VERSION).update('\0');
   const pkg = join(projectRoot, 'package.json');
   if (existsSync(pkg)) hash.update('package.json\0').update(await readFile(pkg));
   for (const sub of ['pages', 'components', 'lib']) {
