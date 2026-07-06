@@ -122,6 +122,12 @@ describe('createPageServeHandler', () => {
     // in the path to derive from), else it renders "No page for /health/".
     expect(body).toContain('window.__APP_BASE__ = "/health"');
     expect(body.match(/<base\s/gi)?.length).toBe(1);
+    // The bootstrap runs under the strict `script-src 'self'` CSP only via a per-response
+    // nonce — the script tag's nonce MUST be whitelisted in the CSP header, or the browser
+    // blocks it and __APP_BASE__ is never set (the "No page" bug we are fixing).
+    const scriptNonce = body.match(/<script nonce="([^"]+)">window\.__APP_BASE__/)?.[1];
+    expect(scriptNonce).toBeTruthy();
+    expect(out.headers['content-security-policy']).toContain(`'nonce-${scriptNonce}'`);
   });
 
   it('serves an explicit index.html request with no-cache', async () => {

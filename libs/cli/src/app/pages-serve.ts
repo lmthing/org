@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve, sep, extname, basename } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 /**
@@ -174,19 +175,24 @@ async function serveIndex(res: ServerResponse, outDir: string, appBase: string):
     return;
   }
   let text = html.toString('utf8');
+  // Per-response nonce so the `__APP_BASE__` bootstrap can run under the strict
+  // `script-src 'self'` CSP (which otherwise blocks ALL inline script — the whole
+  // point, to stop LLM-authored content from injecting executable script). The nonce
+  // is random per request and unguessable, so it does not weaken that protection.
+  const nonce = randomBytes(16).toString('base64');
   if (!/<base\s/i.test(text)) {
     // `__APP_BASE__` is the base WITHOUT the trailing slash (resolveAppBase strips it):
     // `/app/blog/` → `/app/blog`, `/blog/` → `/blog`.
     const appBaseNoSlash = appBase.replace(/\/+$/, '') || '/';
     text = text.replace(
       /<head>/i,
-      `<head>\n    <base href="${appBase}">\n    <script>window.__APP_BASE__ = ${JSON.stringify(appBaseNoSlash)};</script>`,
+      `<head>\n    <base href="${appBase}">\n    <script nonce="${nonce}">window.__APP_BASE__ = ${JSON.stringify(appBaseNoSlash)};</script>`,
     );
   }
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-cache',
-    'Content-Security-Policy': CSP,
+    'Content-Security-Policy': CSP.replace("script-src 'self'", `script-src 'self' 'nonce-${nonce}'`),
   });
   res.end(text);
 }
