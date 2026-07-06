@@ -101,6 +101,8 @@ describe('createPageServeHandler', () => {
     expect(out.statusCode).toBe(200);
     const body = out.body.toString();
     expect(body).toContain('<base href="/app/health/">');
+    // Client-router basename override (no trailing slash).
+    expect(body).toContain('window.__APP_BASE__ = "/app/health"');
     // Injected exactly once, right inside <head>, and never doubled.
     expect(body.match(/<base\s/gi)?.length).toBe(1);
   });
@@ -116,6 +118,9 @@ describe('createPageServeHandler', () => {
     const body = out.body.toString();
     expect(body).toContain('<base href="/health/">');
     expect(body).not.toContain('<base href="/app/health/">');
+    // Root mount: the client router MUST get the basename override (no `/app/` segment
+    // in the path to derive from), else it renders "No page for /health/".
+    expect(body).toContain('window.__APP_BASE__ = "/health"');
     expect(body.match(/<base\s/gi)?.length).toBe(1);
   });
 

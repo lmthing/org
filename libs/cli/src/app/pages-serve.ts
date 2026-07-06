@@ -153,9 +153,17 @@ export function createPageServeHandler(
 }
 
 /**
- * Serve the SPA shell, injecting `<base href="${appBase}">` so the shell's
- * relative asset URLs resolve to `/app/<project>/assets/…` at **any** route
- * depth (not just the root). Idempotent — never doubles an existing `<base>`.
+ * Serve the SPA shell, injecting into `<head>`:
+ *  - `<base href="${appBase}">` so the shell's relative asset URLs resolve to
+ *    `${appBase}assets/…` at **any** route depth (not just the root), and
+ *  - `window.__APP_BASE__` — the client router's basename override
+ *    (`@app/runtime` `resolveAppBase`). On the `/app/<project>/` mount the router
+ *    can derive its base from the `…/app/<project>` path segment, but on the ROOT
+ *    mount (`lmthing.app/<project>/…`, where Envoy strips nothing) there is no
+ *    `/app/` segment to match, so without this override the router sees the full
+ *    pathname and renders "No page for /<project>/". Injecting it makes both mounts
+ *    work (on `/app` it is the same value the path regex would derive).
+ * Idempotent — never doubles an existing `<base>`.
  */
 async function serveIndex(res: ServerResponse, outDir: string, appBase: string): Promise<void> {
   let html: Buffer;
@@ -167,7 +175,13 @@ async function serveIndex(res: ServerResponse, outDir: string, appBase: string):
   }
   let text = html.toString('utf8');
   if (!/<base\s/i.test(text)) {
-    text = text.replace(/<head>/i, `<head>\n    <base href="${appBase}">`);
+    // `__APP_BASE__` is the base WITHOUT the trailing slash (resolveAppBase strips it):
+    // `/app/blog/` → `/app/blog`, `/blog/` → `/blog`.
+    const appBaseNoSlash = appBase.replace(/\/+$/, '') || '/';
+    text = text.replace(
+      /<head>/i,
+      `<head>\n    <base href="${appBase}">\n    <script>window.__APP_BASE__ = ${JSON.stringify(appBaseNoSlash)};</script>`,
+    );
   }
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
