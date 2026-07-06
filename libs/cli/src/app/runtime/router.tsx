@@ -93,24 +93,67 @@ export function useParams<T extends Record<string, string> = Record<string, stri
 /** Custom event the router listens on for in-app (pushState) navigation. */
 const NAV_EVENT = 'lmthing:navigate';
 
-/** Programmatic navigation — pushes History state and re-renders the router. */
-export function navigate(href: string): void {
-  window.history.pushState({}, '', href);
+/**
+ * Turn an app-relative route (`to`, a route-table path like `/discover`) into a
+ * real, server-absolute href by prefixing the resolved `…/app/<project>` base.
+ *
+ * Route-table paths are authored base-agnostically (`/`, `/discover`,
+ * `/items/:id`) — the mirror image of {@link clientPath}, which strips the base
+ * before matching. Without re-adding it here, `navigate('/discover')` would
+ * push the origin-absolute `/discover`, dropping the `/app/<project>/` prefix:
+ * the URL leaves the app entirely (e.g. `lmthing.app/discover`) and a reload no
+ * longer hits the pod's app handler. External URLs, protocol-relative (`//…`),
+ * hash, and query links pass through untouched; an already-based path is left
+ * as-is so a stray absolute `to` never double-prefixes.
+ */
+export function toHref(to: string): string {
+  if (!to.startsWith('/') || to.startsWith('//')) return to;
+  const base = resolveAppBase(window.location.pathname);
+  if (!base || to === base || to.startsWith(base + '/')) return to;
+  return base + to;
+}
+
+/**
+ * Programmatic navigation — pushes History state and re-renders the router.
+ * `to` is an app-relative route path; the `…/app/<project>` base is re-applied
+ * by {@link toHref} so the pushed URL stays inside the app.
+ */
+export function navigate(to: string): void {
+  window.history.pushState({}, '', toHref(to));
   window.dispatchEvent(new Event(NAV_EVENT));
 }
 
+/** Props for {@link Link}: destination as `to` (router-style) or `href` (anchor-style). */
+export type LinkProps = { to?: string; href?: string } & Omit<
+  React.AnchorHTMLAttributes<HTMLAnchorElement>,
+  'href'
+>;
+
+/**
+ * A `<Link>`'s destination. The router API documents `to`, but page authors
+ * (and the app-builder) overwhelmingly reach for the natural anchor prop
+ * `href`; accept **both** so a page never silently degrades to a full-page
+ * `<a href>` that leaves the app. `to` wins if both are given.
+ */
+export function linkDest(props: { to?: string; href?: string }): string {
+  return props.to ?? props.href ?? '';
+}
+
 /** An anchor that navigates client-side (History API) instead of full-loading. */
-export function Link(
-  props: { to: string } & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'>,
-): React.ReactElement {
-  const { to, onClick, ...rest } = props;
+export function Link(props: LinkProps): React.ReactElement {
+  // Pull BOTH `to` and `href` out of `rest` — otherwise a caller's `href` would
+  // spread back onto the `<a>` and override the based href we compute.
+  const { to: _to, href: _href, onClick, ...rest } = props;
+  const dest = linkDest(props);
+  // The rendered href carries the base (so middle/⌘-click, "copy link", and SSR
+  // crawlers get a working URL); the click handler navigates client-side.
   return (
     <a
-      href={to}
+      href={toHref(dest)}
       onClick={(e) => {
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey) return;
         e.preventDefault();
-        navigate(to);
+        navigate(dest);
         onClick?.(e);
       }}
       {...rest}

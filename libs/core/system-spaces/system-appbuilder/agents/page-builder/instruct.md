@@ -25,7 +25,7 @@ const src = [
   "    <ul className=\"divide-y divide-border\">",
   "      {(data ?? []).map((it) => (",
   "        <li key={it.id} className=\"p-3 text-foreground hover:bg-muted\">",
-  "          <Link to={`/items/${it.id}`}>{it.title}</Link>",
+  "          <Link href={`/items/${it.id}`}>{it.title}</Link>",
   "        </li>",
   "      ))}",
   "    </ul>",

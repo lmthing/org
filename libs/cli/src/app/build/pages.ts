@@ -73,12 +73,17 @@ const BUILD_SUBDIR = join('.data', 'pages-build');
 const CACHE_FILE = join('.data', 'pages-cache.json');
 
 /**
- * Bumped whenever the **builder itself** changes what it emits (independent of
- * project sources), so an existing pod's cached bundle is invalidated and rebuilt.
+ * Bumped whenever the **builder itself** — or the bundled `@app/runtime` source it
+ * inlines — changes what it emits (independent of project sources), so an existing
+ * pod's cached bundle is invalidated and rebuilt. The content hash tracks only the
+ * project's own files, so a runtime-only fix needs a bump here to reach cached apps.
  * `2` = Tailwind-compiled design-system CSS is now bundled (previously the theme
- * tokens/utilities/`@apply` never made it into the output → apps rendered unstyled).
+ *       tokens/utilities/`@apply` never made it into the output → apps rendered unstyled).
+ * `3` = router `Link`/`navigate` re-apply the `…/app/<project>` base and accept the
+ *       `href` prop (previously `<Link href>` degraded to a full-page nav that left
+ *       the app — e.g. `/discover` instead of `/app/<project>/discover`).
  */
-const BUILDER_VERSION = '2';
+const BUILDER_VERSION = '3';
 
 interface CacheMeta {
   hash: string;
