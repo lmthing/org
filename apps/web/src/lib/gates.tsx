@@ -166,7 +166,13 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [session, getAccessToken])
+    // Depend on the stable token STRING, not the `session` object / `getAccessToken`
+    // closure (both change identity on unrelated re-renders). Re-running the effect
+    // mid-`ensure` would cancel the in-flight init (cancelled=true) while initRef
+    // blocked a re-run, leaving the gate stuck on "Starting compute pod…" forever —
+    // far more likely now that scale-to-zero means pods are often cold-starting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accessToken])
 
   // Live poll: once the surface is up, keep an eye out for a newer build so a
   // long-open studio/computer/app tab offers the upgrade (as a banner) without
