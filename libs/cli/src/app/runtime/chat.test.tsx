@@ -89,6 +89,20 @@ describe('createChatSession', () => {
     expect(JSON.parse(init.body as string)).toEqual({ spaceRef: 'cooking/chef', projectId: 'feed' });
   });
 
+  it('sends Authorization: Bearer when an access token is supplied (JWT-gated /api/*)', async () => {
+    const fetchFn = mockFetch(200, { sessionId: 's' });
+    await createChatSession('a/b', 'blog', 'https://lmthing.app', 'tok-abc');
+    const [, init] = fetchFn.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['authorization']).toBe('Bearer tok-abc');
+  });
+
+  it('omits Authorization when no token (local/no-auth direct pod)', async () => {
+    const fetchFn = mockFetch(200, { sessionId: 's' });
+    await createChatSession('a/b', 'blog', 'https://x');
+    const [, init] = fetchFn.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['authorization']).toBeUndefined();
+  });
+
   it('throws on a non-2xx response', async () => {
     mockFetch(500, { error: 'boom' });
     await expect(createChatSession('a/b', 'p', 'https://x')).rejects.toThrow(/session create failed: 500/);

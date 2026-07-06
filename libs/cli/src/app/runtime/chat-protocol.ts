@@ -43,15 +43,25 @@ export function originBase(loc: { protocol: string; host: string } = window.loca
  * Create the pod chat session for `agent` (`space/agent`) scoped to `projectId`.
  * POSTs the Phase 7A `{ spaceRef, projectId }` body to `<base>/api/sessions` and
  * returns the new `sessionId`.
+ *
+ * On the platform, `/api/*` is the JWT-authenticated per-user pod proxy (Envoy
+ * `app-api-proxy`) — a bare fetch is 401. When `accessToken` is supplied (the
+ * platform `@lmthing/auth` session, same-origin with the app page) it's sent as
+ * `Authorization: Bearer`, exactly as the main chat UI does. Omitted in
+ * local/no-auth mode (direct pod), where `/api/*` needs no token.
  */
 export async function createChatSession(
   agent: string,
   projectId: string,
   base: string,
+  accessToken?: string,
 ): Promise<string> {
   const res = await fetch(`${base}/api/sessions`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+    },
     body: JSON.stringify(sessionCreateBody(agent, projectId)),
   });
   if (!res.ok) {

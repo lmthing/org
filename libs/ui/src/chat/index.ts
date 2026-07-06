@@ -9,6 +9,7 @@ export type { ReplBlock } from './client/useReplSession.js';
 export { AgentChatPanel } from './components/AgentChatPanel.js';
 export type { AgentChatPanelProps, SessionTarget } from './components/AgentChatPanel.js';
 export { ChatShell } from './app/ChatShell.js';
+export { getAccessToken, authHeaders, wsTokenSuffix } from './app/auth.js';
 
 // Design system: Ink-compatibility layer + theming
 export * as compat from './compat/index.js';

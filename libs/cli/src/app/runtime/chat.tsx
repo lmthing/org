@@ -29,10 +29,27 @@ import {
   DisplayBlock,
   AskBlock,
   VariablesBlock,
+  getAccessToken,
   type ReplBlock,
 } from '@lmthing/ui/chat';
 
 import { createChatSession, originBase, resolveProjectId } from './chat-protocol.js';
+
+/**
+ * Platform access token from the same-origin `@lmthing/auth` session (reused via
+ * the `@lmthing/ui/chat` barrel — the identical reader the main chat UI uses). On
+ * lmthing.app the app page shares localStorage with the launcher, so the OAuth
+ * session (set at login) is readable here; the pod's `/api/*` proxy is JWT-gated
+ * and 401s an unauthenticated fetch without it. `undefined` in local/no-auth
+ * mode (direct pod) — then no token is needed.
+ */
+function platformAccessToken(): string | undefined {
+  try {
+    return getAccessToken();
+  } catch {
+    return undefined;
+  }
+}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -66,7 +83,7 @@ export function Chat({ agent, projectId, className }: ChatProps): React.ReactEle
     void (async () => {
       try {
         const pid = projectId ?? resolveProjectId(window.location.pathname);
-        const sid = await createChatSession(agent, pid, originBase());
+        const sid = await createChatSession(agent, pid, originBase(), platformAccessToken());
         setSessionId(sid);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -75,8 +92,13 @@ export function Chat({ agent, projectId, className }: ChatProps): React.ReactEle
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Same token for the WS (`&access_token=`) and the `/api/sessions/:id/*` HTTP
+  // sub-routes — both flow through the JWT-gated `/api/*` proxy on the platform.
+  const accessToken = platformAccessToken();
   const { blocks, sendMessage, submitForm, cancelAsk, isConnected, isDone } = useReplSession(
-    sessionId ? { baseUrl: originBase(), sessionId } : { baseUrl: originBase(), sessionId: '' },
+    sessionId
+      ? { baseUrl: originBase(), sessionId, accessToken }
+      : { baseUrl: originBase(), sessionId: '', accessToken },
   );
 
   useEffect(() => {

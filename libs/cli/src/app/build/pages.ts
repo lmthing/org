@@ -82,8 +82,10 @@ const CACHE_FILE = join('.data', 'pages-cache.json');
  * `3` = router `Link`/`navigate` re-apply the `…/app/<project>` base and accept the
  *       `href` prop (previously `<Link href>` degraded to a full-page nav that left
  *       the app — e.g. `/discover` instead of `/app/<project>/discover`).
+ * `4` = `<Chat>` sends the platform `@lmthing/auth` Bearer token on session create +
+ *       WS (previously the pod's JWT-gated `/api/*` proxy 401'd the curator chat).
  */
-const BUILDER_VERSION = '3';
+const BUILDER_VERSION = '4';
 
 interface CacheMeta {
   hash: string;
