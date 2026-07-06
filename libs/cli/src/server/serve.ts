@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { createStaticApps, resolveAppDist } from './static-apps.js';
@@ -239,6 +239,24 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     return pageBuildCache.get(projectId) ?? null;
   };
   router.add('*', '/app/:projectId/*', createPageServeHandler(getOutDirForProject));
+
+  // Project-app ROOT mount — `/<project>/*` (+ `/<project>/api/*`), the SAME app
+  // served with NO `/app` prefix so lmthing.app can show clean URLs
+  // (`lmthing.app/blog/…`); in prod Envoy reserves `/api`,`/assets`,`/install` and
+  // Exact `/` for the shell and sends the rest of the catch-all straight here.
+  //
+  // ONLY registered when this server does NOT also serve the unified SPA. When it
+  // does (local single-serve / `pnpm thing` dist, or Vite HMR via LM_DEV_WEB) the
+  // SPA owns the non-`/api` catch-all, so a bare `/:projectId/*` would shadow every
+  // SPA route — there we keep apps under the reserved `/app/*` prefix instead
+  // (hence `localhost/app/blog`). Registered LAST so the literal `/api/*` and
+  // `/app/*` routes above always win over the `:projectId` param.
+  const servesUnifiedSpa =
+    Boolean(process.env['LM_DEV_WEB']) || existsSync(join(resolveAppDist(), 'index.html'));
+  if (!servesUnifiedSpa) {
+    router.add('*', '/:projectId/api/*', appApiHandler);
+    router.add('*', '/:projectId/*', createPageServeHandler(getOutDirForProject, ''));
+  }
 
   // ─── HTTP server ──────────────────────────────────────────────────────────
   const httpServer = createServer((req, res) => {

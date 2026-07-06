@@ -105,6 +105,20 @@ describe('createPageServeHandler', () => {
     expect(body.match(/<base\s/gi)?.length).toBe(1);
   });
 
+  it('injects the ROOT-mount base <base href="/<project>/"> when mountPrefix is empty (prod lmthing.app/<project>/)', async () => {
+    // Behind Envoy the app is served at the clean root mount, so the base must be
+    // `/<project>/` (matching the visible URL), NOT `/app/<project>/`.
+    const handler = createPageServeHandler(async () => ({ outDir, assetManifest }), '');
+    const { res, out } = makeRes();
+    await handler(fakeReq, res, { projectId: 'health', rest: 'labs/abc-123' });
+
+    expect(out.statusCode).toBe(200);
+    const body = out.body.toString();
+    expect(body).toContain('<base href="/health/">');
+    expect(body).not.toContain('<base href="/app/health/">');
+    expect(body.match(/<base\s/gi)?.length).toBe(1);
+  });
+
   it('serves an explicit index.html request with no-cache', async () => {
     const handler = handlerFor({ outDir, assetManifest });
     const { res, out } = makeRes();

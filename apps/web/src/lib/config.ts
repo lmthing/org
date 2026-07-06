@@ -24,3 +24,16 @@ export const CLOUD_BASE_URL =
   import.meta.env.VITE_CLOUD_BASE_URL ??
   import.meta.env.VITE_CLOUD_URL ??
   resolveApiOrigin('cloud', loc, import.meta.env.DEV)
+
+/**
+ * URL path prefix the pod serves installed app pages under, per environment.
+ *
+ * Production `lmthing.app` serves apps at the ROOT (`lmthing.app/<project>/…`) —
+ * Envoy reserves `/api`,`/assets`,`/install` and Exact `/` for the shell and sends
+ * the rest of the catch-all to the pod, which registers a bare `/<project>/*` mount.
+ * Every other context (localhost single-serve, the `*.test` proxy) is served by ONE
+ * origin where the SPA owns the non-`/api` catch-all, so apps stay under the reserved
+ * `/app/<project>/…` prefix (hence `localhost/app/blog`). Must match the pod's mount
+ * (`serve.ts` `servesUnifiedSpa`) and the injected `<base href>` (`pages-serve.ts`).
+ */
+export const APP_PATH_PREFIX = loc.hostname === 'lmthing.app' ? '' : '/app'

@@ -5,19 +5,30 @@ import type { RouterHistory, HistoryLocation } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
 import { surfaceForHost } from './routes/index'
 
-const DOMAIN_HOSTS = new Set(['lmthing.computer', 'lmthing.chat', 'lmthing.studio'])
+const DOMAIN_HOSTS = new Set(['lmthing.computer', 'lmthing.chat', 'lmthing.studio', 'lmthing.app'])
 
 /**
- * On domain-specific hosts (lmthing.computer etc.) the surface prefix is implicit
- * in the hostname. This history wrapper makes TanStack Router see paths with the
- * prefix (so /computer/dashboard routes correctly) while the browser URL stays
- * clean (shows /dashboard, not /computer/dashboard).
+ * Top-level routes that must NOT receive the surface prefix — they are served by the
+ * shell at their literal path on the domain host. On lmthing.app the store redirects
+ * to `/install?appId=…` (Envoy reserves `/install` for the shell), so prefixing it to
+ * `/apps/install` would 404 the install flow. Harmless on the other domains (they never
+ * navigate here).
+ */
+const RESERVED_TOPLEVEL = new Set(['/install'])
+
+/**
+ * On domain-specific hosts (lmthing.computer, lmthing.app, …) the surface prefix is
+ * implicit in the hostname. This history wrapper makes TanStack Router see paths with
+ * the prefix (so /computer/dashboard routes correctly, and lmthing.app's launcher at
+ * internal /apps shows as browser /) while the browser URL stays clean.
  */
 function createPrefixedHistory(prefix: string): RouterHistory {
   const base = createBrowserHistory()
 
   const addPrefix = (pathname: string): string =>
-    pathname.startsWith(prefix) ? pathname : prefix + (pathname === '/' ? '' : pathname)
+    pathname.startsWith(prefix) || RESERVED_TOPLEVEL.has(pathname)
+      ? pathname
+      : prefix + (pathname === '/' ? '' : pathname)
 
   const addPrefixToHref = (href: string): string => {
     const qi = href.indexOf('?'), hi = href.indexOf('#')

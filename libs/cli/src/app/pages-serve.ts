@@ -91,6 +91,7 @@ export function createPageServeHandler(
   getOutDirForProject: (
     projectId: string,
   ) => Promise<{ outDir: string; assetManifest: string[] } | null>,
+  mountPrefix = '/app',
 ): (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void> {
   return async (_req, res, params) => {
     const projectId = params['projectId']!;
@@ -103,13 +104,16 @@ export function createPageServeHandler(
     const { outDir, assetManifest } = bundle;
     const rest = normalize(params['rest'] ?? '');
 
-    // The app is always mounted at `/app/<project>/` on the pod (this handler's
+    // The app is mounted at `<mountPrefix>/<project>/` on the pod (this handler's
     // route pattern), so that is the exact, prefix-safe base for the SPA shell's
-    // *relative* asset URLs (`./assets/…`). Without an injected `<base>`, a route
-    // of depth ≥2 (`/app/<project>/labs/:id`) resolves `./assets/x` against
-    // `…/labs/` → 404 → this very fallback → the browser loads index.html as a
-    // module and errors on the `text/html` MIME type. The `<base>` fixes every depth.
-    const appBase = `/app/${projectId}/`;
+    // *relative* asset URLs (`./assets/…`). `mountPrefix` is `/app` for the
+    // reserved-prefix mount (localhost single-serve, `*.test`) and `''` for the
+    // production root mount (lmthing.app/<project>/, where Envoy's catch-all sends
+    // the request straight to the pod) — the base MUST equal the visible URL or a
+    // deep route (`…/labs/:id`) resolves `./assets/x` against `…/labs/` → 404 →
+    // this very fallback → the browser loads index.html as a module and errors on
+    // the `text/html` MIME type. The `<base>` fixes every depth in both mounts.
+    const appBase = `${mountPrefix}/${projectId}/`;
 
     // Path-traversal guard: the requested sub-path must resolve INSIDE outDir. A
     // `..` escape (e.g. `../../etc/passwd`) is rejected outright, independent of the

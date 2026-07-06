@@ -12,7 +12,9 @@ const HOST_SURFACE: Record<string, '/chat' | '/studio' | '/computer' | '/apps'> 
 /**
  * The unified-app surface for a hostname: lmthing.chat → /chat,
  * lmthing.studio → /studio, lmthing.computer → /computer, lmthing.app → /apps
- * (the app launcher; `/app/<project>/` is reserved for the pod-served app pages).
+ * (the app launcher). On lmthing.app the prefixed history shows this surface at a
+ * clean browser `/`, and installed apps open at the pod's mount — clean
+ * `/<project>/` in prod (Envoy catch-all → pod), `/app/<project>/` on localhost.
  * Unknown hosts (localhost, the `*.test` dev proxy, …) fall back to /studio.
  * Each product domain is served the same unified app statically; the surface is
  * chosen client-side, here, from the hostname.

@@ -30,6 +30,19 @@ export const DEFAULT_PROJECT_ID = 'user';
  */
 export const SYSTEM_PROJECT_ID = 'system';
 
+/**
+ * Project ids that would collide with reserved lmthing.app URL paths once apps are
+ * served at the production ROOT mount (`lmthing.app/<id>/`): the platform API
+ * (`/api`), the SPA shell's assets (`/assets`), the install page (`/install`), and
+ * the synthetic `system` project. Rejected at install time so no app can shadow them.
+ */
+export const RESERVED_PROJECT_IDS: ReadonlySet<string> = new Set([
+  SYSTEM_PROJECT_ID,
+  'api',
+  'assets',
+  'install',
+]);
+
 export interface ProjectMeta {
   id: string;
   name: string;

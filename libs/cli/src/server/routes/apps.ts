@@ -36,7 +36,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { readBody, sendJson } from './utils.js';
-import { safeProjectId } from '../projects.js';
+import { safeProjectId, RESERVED_PROJECT_IDS } from '../projects.js';
 import type { AppAdminManager } from './app-admin.js';
 import { generateProjectContracts } from '../../app/build/contracts.js';
 import { buildProjectPages } from '../../app/build/pages.js';
@@ -203,12 +203,12 @@ export function handleInstallApp(
     }
 
     const appId = typeof body.appId === 'string' ? body.appId : '';
-    if (!appId || !safeProjectId(appId) || appId === 'system') {
+    if (!appId || !safeProjectId(appId) || RESERVED_PROJECT_IDS.has(appId)) {
       sendJson(res, 400, { error: `invalid appId: ${JSON.stringify(body.appId)}` });
       return;
     }
     const projectId = typeof body.projectId === 'string' && body.projectId.length > 0 ? body.projectId : appId;
-    if (!safeProjectId(projectId) || projectId === 'system') {
+    if (!safeProjectId(projectId) || RESERVED_PROJECT_IDS.has(projectId)) {
       sendJson(res, 400, { error: `invalid projectId: ${JSON.stringify(body.projectId)}` });
       return;
     }
