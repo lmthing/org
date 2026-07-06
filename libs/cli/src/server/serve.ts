@@ -26,6 +26,9 @@ import { handleCreateSpace } from './routes/spaces.js';
 import { handleFsTree, handleFsRead, handleFsWrite } from './routes/fs.js';
 import { handleBackupNow, handleBackupStatus, handleRestore } from './routes/backup.js';
 import { runBackup, startBackupTimer } from './backup.js';
+import { startSelfIdleWatchdog } from './self-idle.js';
+import { startMemWatchdog } from './mem-watchdog.js';
+import { buildCronManifest, publishCronManifest } from './cron-manifest.js';
 import { handleReportBug } from './routes/report-bug.js';
 import { createAppApiHandler } from './routes/app-api.js';
 import { createPageServeHandler } from '../app/pages-serve.js';
@@ -260,8 +263,36 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     router.add('*', '/:projectId/*', createPageServeHandler(getOutDirForProject, ''));
   }
 
+  // ─── Activity tracking (for the self-idle watchdog) ───────────────────────
+  // "Busy" = a turn is running OR a mutating request is in flight (e.g. a hook
+  // run). We deliberately IGNORE GET/HEAD/OPTIONS so the K8s readiness probe
+  // (GET /api/sessions every 5s) and SPA polling never keep an idle pod awake —
+  // only real activity (agent turns, session creates, message posts, hook runs)
+  // counts, matching the session reaper's notion of idleness.
+  const serverStartTime = Date.now();
+  let inFlightMutating = 0;
+  let lastMutatingRequestAt = serverStartTime;
+  const isBusy = (): boolean =>
+    manager.runningCount() > 0 || inFlightMutating > 0;
+  const lastActivityMs = (): number =>
+    Math.max(manager.lastActivityAt(), lastMutatingRequestAt, serverStartTime);
+
   // ─── HTTP server ──────────────────────────────────────────────────────────
   const httpServer = createServer((req, res) => {
+    const method = (req.method ?? 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+      inFlightMutating++;
+      lastMutatingRequestAt = Date.now();
+      let settled = false;
+      const settle = (): void => {
+        if (settled) return;
+        settled = true;
+        inFlightMutating = Math.max(0, inFlightMutating - 1);
+        lastMutatingRequestAt = Date.now();
+      };
+      res.on('finish', settle);
+      res.on('close', settle);
+    }
     const matched = router.dispatch(req, res, ctx);
     if (matched) return;
     // Unknown /api/* → 404
@@ -311,6 +342,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // drive the same hook-run endpoint above. Also warms each project's db so its `database`
   // hooks wire to the onWrite seam.
   let hookTick: NodeJS.Timeout | undefined;
+  let selfIdleTimer: NodeJS.Timeout | undefined;
   if (effectiveLmthingRoot) {
     try {
       const root = effectiveLmthingRoot;
@@ -323,10 +355,48 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       };
       const { tick } = await bootCatchUpAndSchedule(manager, root, projects, actualPort, runHookFn);
       hookTick = tick;
+
+      // ── Externalized cron + self-idle scale-to-zero (prod pods only) ────────
+      // Gated on the gateway-injected env (compute JWT + gateway URL), which is
+      // ABSENT under `lmthing serve` — so this whole block is inert in local dev.
+      const gatewayUrl = process.env.LMTHING_GATEWAY_URL;
+      const computeJwt = process.env.LMTHING_COMPUTE_JWT;
+      // Publish the cron schedule to the gateway on boot + whenever it changes
+      // (a hook ran ⇒ nextRunAt advanced). The gateway wakes the pod at each due
+      // next_run_at while it sleeps.
+      let lastManifestJson = '';
+      const publishManifestIfChanged = async (): Promise<void> => {
+        if (!gatewayUrl || !computeJwt) return;
+        try {
+          const jobs = await buildCronManifest(root, projects, Date.now());
+          const json = JSON.stringify(jobs);
+          if (json === lastManifestJson) return;
+          lastManifestJson = json;
+          await publishCronManifest(gatewayUrl, computeJwt, jobs);
+        } catch (err) {
+          console.warn('[cron-manifest] build/publish failed:', err instanceof Error ? err.message : err);
+        }
+      };
+      await publishManifestIfChanged();
+
+      if (gatewayUrl && computeJwt && process.env.LMTHING_SELF_IDLE !== '0') {
+        selfIdleTimer = startSelfIdleWatchdog({
+          gatewayUrl,
+          jwt: computeJwt,
+          idleMs: manager.idleTtlMs,
+          isBusy,
+          lastActivityMs,
+          onTick: publishManifestIfChanged,
+        });
+      }
     } catch (err) {
       console.warn('[hooks] boot catch-up/schedule failed:', err instanceof Error ? err.message : err);
     }
   }
+
+  // In-pod memory watchdog (P3): sheds idle sessions before the cgroup OOMKills.
+  // Inert off-container (no cgroup v2 memory limit) — a no-op under `lmthing serve`.
+  const memTimer = startMemWatchdog({ evictOneIdle: () => manager.evictOneIdle() });
 
   // Workspace backup: start the auto timer (no-op unless GITHUB_BACKUP_AUTO=1),
   // and flush a final backup on SIGTERM so idle scale-to-zero / restarts don't
@@ -348,6 +418,8 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     port: actualPort,
     close: async () => {
       if (hookTick) clearInterval(hookTick);
+      if (selfIdleTimer) clearInterval(selfIdleTimer);
+      if (memTimer) clearInterval(memTimer);
       try { manager.closeProjectDbs(); } catch { /* best-effort */ }
       if (devWeb) await devWeb.close();
       wss.close();

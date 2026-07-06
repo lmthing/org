@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { handleAgentApi, agentApiContextFromEntry } from '../../web/agent-api.js';
 import { readBody, sendJson } from './utils.js';
+import { isUnderMemoryPressure } from '../mem-watchdog.js';
 import type { RouteHandler } from '../router.js';
 
 export const handleCreateSession: RouteHandler = async (
@@ -9,6 +10,13 @@ export const handleCreateSession: RouteHandler = async (
   _params: Record<string, string>,
   ctx,
 ): Promise<void> => {
+  // Backpressure under hard memory pressure (P3): refuse a new VM rather than risk
+  // an OOMKill. The watchdog is already shedding idle sessions; retry shortly.
+  if (isUnderMemoryPressure()) {
+    res.setHeader('Retry-After', '5');
+    sendJson(res, 503, { error: 'pod under memory pressure — retry shortly' });
+    return;
+  }
   const body = await readBody(req);
   const parsed = JSON.parse(body || '{}') as {
     spaceDir?: string; agentSlug?: string; spaceRef?: string; model?: string; projectId?: string;

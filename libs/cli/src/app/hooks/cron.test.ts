@@ -15,6 +15,7 @@ import {
   crontabSchedule,
   dueCronHooks,
   nextCrontabLines,
+  nextRunAt,
   parseEvery,
 } from './cron.js';
 import type { CronHookDef, LoadedHook } from './loader.js';
@@ -99,6 +100,43 @@ describe('crontabSchedule', () => {
   it('renders hour / day intervals', () => {
     expect(crontabSchedule({ type: 'cron', every: '2h', trigger: 't' })).toBe('0 */2 * * *');
     expect(crontabSchedule({ type: 'cron', every: '1d', trigger: 't' })).toBe('0 0 */1 * *');
+  });
+});
+
+describe('nextRunAt', () => {
+  it('daily fires at the wall-clock HH:MM — next occurrence after fromMs (drift fix)', () => {
+    // At local 10:00, the 09:00 daily has passed today → next is tomorrow 09:00,
+    // NOT `fromMs + 24h` (10:00), which was the historical drift bug.
+    const t = new Date(2026, 0, 1, 10, 0, 0, 0).getTime();
+    const d = new Date(nextRunAt({ type: 'cron', daily: '09:00', trigger: 't' }, t));
+    expect(d.getHours()).toBe(9);
+    expect(d.getMinutes()).toBe(0);
+    expect(d.getDate()).toBe(2); // rolled to the next day
+  });
+
+  it('daily returns today when the time is still ahead', () => {
+    const t = new Date(2026, 0, 1, 8, 0, 0, 0).getTime(); // 08:00
+    const next = nextRunAt({ type: 'cron', daily: '09:00', trigger: 't' }, t);
+    expect(next - t).toBe(60 * 60_000); // same-day 09:00, one hour later
+  });
+
+  it('every-N-minutes lands on epoch-aligned boundaries strictly after fromMs', () => {
+    const i = 30 * 60_000;
+    expect(nextRunAt({ type: 'cron', every: '30m', trigger: 't' }, i)).toBe(2 * i); // on boundary → next
+    expect(nextRunAt({ type: 'cron', every: '30m', trigger: 't' }, i + 5 * 60_000)).toBe(2 * i); // mid → next
+  });
+
+  it('every-N-hours / N-days align to the interval', () => {
+    const h = 2 * 3_600_000;
+    expect(nextRunAt({ type: 'cron', every: '2h', trigger: 't' }, h + 1)).toBe(2 * h);
+    const day = 24 * 3_600_000;
+    expect(nextRunAt({ type: 'cron', every: '1d', trigger: 't' }, day + 1)).toBe(2 * day);
+  });
+
+  it('a never-run hook (fromMs=0) yields a past time ⇒ due immediately', () => {
+    const now = Date.now();
+    expect(nextRunAt({ type: 'cron', daily: '09:00', trigger: 't' }, 0)).toBeLessThan(now);
+    expect(nextRunAt({ type: 'cron', every: '30m', trigger: 't' }, 0)).toBeLessThan(now);
   });
 });
 

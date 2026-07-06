@@ -367,7 +367,19 @@ export class SessionManager {
    */
   private ensureCapacity(): boolean {
     if (this.sessions.size < this.maxSessions) return true;
+    return this.evictOneIdle();
+  }
 
+  /**
+   * Evict the least-recently-active NON-running session, persisting it first so it
+   * resumes transparently when reopened. Frees exactly one slot. Returns false
+   * only when every resident session is actively running (nothing safe to evict).
+   *
+   * Reused by both the capacity gate ({@link ensureCapacity}) and the in-pod memory
+   * watchdog (P3): under memory pressure the watchdog sheds idle sessions this way
+   * — a graceful, recoverable shrink instead of a data-losing cgroup OOMKill.
+   */
+  evictOneIdle(): boolean {
     let victim: SessionEntry | undefined;
     for (const e of this.sessions.values()) {
       if (e.status === 'running') continue; // never evict an in-flight turn
@@ -379,12 +391,33 @@ export class SessionManager {
     // persist + dispose in the background.
     const evicted = victim;
     this.sessions.delete(evicted.sessionId);
-    console.warn(`[session-manager] evicted idle session ${evicted.sessionId} to free a slot (cap ${this.maxSessions})`);
+    console.warn(`[session-manager] evicted idle session ${evicted.sessionId} (persist-first)`);
     void (async () => {
       try { await this.persistSession(evicted); } catch { /* best-effort */ }
       try { evicted.session?.dispose(); } catch { /* best-effort */ }
     })();
     return true;
+  }
+
+  /** Number of resident sessions (each is a live QuickJS VM). */
+  residentCount(): number {
+    return this.sessions.size;
+  }
+
+  /** Number of sessions currently running a turn (never evicted / scaled-down under). */
+  runningCount(): number {
+    let n = 0;
+    for (const e of this.sessions.values()) if (e.status === 'running') n++;
+    return n;
+  }
+
+  /** Epoch-ms of the most recent activity across resident sessions (0 if none). */
+  lastActivityAt(): number {
+    let max = 0;
+    for (const e of this.sessions.values()) {
+      if (e.lastActivity > max) max = e.lastActivity;
+    }
+    return max;
   }
 
   /**

@@ -34,6 +34,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { build, type BuildOptions, type Plugin } from 'esbuild';
+import { isUnderMemoryPressure } from '../../server/mem-watchdog.js';
 import { compile, Features } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 
@@ -91,6 +92,27 @@ interface CacheMeta {
   hash: string;
   assetManifest: string[];
   routes: PageRoute[];
+}
+
+// Process-wide esbuild serialization: each page build peaks ~100 MB, so two
+// concurrent builds double that. Chain them so at most one runs at a time.
+let esbuildChain: Promise<unknown> = Promise.resolve();
+function serializeEsbuild<T>(fn: () => Promise<T>): Promise<T> {
+  const run = esbuildChain.then(fn, fn);
+  esbuildChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/** Wait (bounded) for hard memory pressure to clear before a heavy build. No-op
+ *  off-container (the watchdog never raises pressure there). */
+async function waitForMemoryHeadroom(maxWaitMs = 30_000): Promise<void> {
+  const start = Date.now();
+  while (isUnderMemoryPressure() && Date.now() - start < maxWaitMs) {
+    await new Promise((r) => setTimeout(r, 1000));
+  }
 }
 
 /**
@@ -251,7 +273,13 @@ async function runBuild(
     logLevel: 'silent',
   };
 
-  const result = await build(buildOpts);
+  // Serialize esbuild across the process (each build peaks ~100 MB — two at once
+  // can trip the memory watchdog) and defer while the pod is under hard memory
+  // pressure, so a rare cold build never races resident sessions into an OOM.
+  const result = await serializeEsbuild(async () => {
+    await waitForMemoryHeadroom();
+    return build(buildOpts);
+  });
 
   // Locate the entry's JS output (+ any extracted CSS bundle) from the metafile.
   let jsRel: string | undefined;

@@ -37,10 +37,42 @@ export function parseEvery(spec: string): number {
   return Math.max(ms, MIN_CRON_INTERVAL_MS);
 }
 
-/** The interval (ms) a cron hook repeats at — `every` parsed, or 24h for `daily`. */
+/** The interval (ms) a cron hook repeats at — `every` parsed, or 24h for `daily`.
+ *  Used as the manifest `everyMs` (cadence hint); dueness itself uses
+ *  {@link nextRunAt}, which is wall-clock accurate. */
 export function cronIntervalMs(def: CronHookDef): number {
   if (def.every) return parseEvery(def.every);
-  return DAY_MS; // `daily:` — the trigger no-ops off-schedule; boot-catch-up is daily
+  return DAY_MS; // `daily:` cadence is 24h; the exact fire time comes from nextRunAt
+}
+
+/**
+ * The next wall-clock time (epoch-ms) this hook should fire, strictly after
+ * `fromMs` (its persisted `lastRunAt`). This is the single source of dueness for
+ * both the pod's boot catch-up ({@link dueCronHooks}) and the gateway-published
+ * cron manifest, so the gateway wakes the pod at exactly the minute the pod would
+ * consider the hook due.
+ *
+ *   - `daily:'HH:MM'` → the next occurrence of HH:MM after `fromMs`. **This fixes
+ *     the historical drift bug** where a daily hook re-fired 24h after whenever it
+ *     was last caught up instead of at its wall-clock time.
+ *   - `every:'Nm|Nh|Nd'` → the next epoch-aligned boundary of the interval
+ *     (drift-free; for intervals that divide evenly into an hour/day this
+ *     coincides with the natural wall-clock slots, e.g. every 30m → :00/:30).
+ *
+ * A never-run hook (`fromMs = 0`) yields a long-past time, so it is due
+ * immediately (fires once on first boot, then tracks its real schedule). Pure.
+ */
+export function nextRunAt(def: CronHookDef, fromMs: number): number {
+  if (def.daily) {
+    const [hh, mm] = def.daily.split(':').map(Number);
+    const next = new Date(fromMs);
+    next.setHours(hh ?? 0, mm ?? 0, 0, 0);
+    if (next.getTime() <= fromMs) next.setDate(next.getDate() + 1);
+    return next.getTime();
+  }
+  const intervalMs = parseEvery(def.every ?? '5m'); // clamped ≥5min
+  // Next multiple of intervalMs strictly greater than fromMs (epoch-aligned).
+  return Math.floor(fromMs / intervalMs) * intervalMs + intervalMs;
 }
 
 /**
@@ -54,7 +86,7 @@ export function dueCronHooks(hooks: LoadedHook[], state: HooksState, now: number
   return hooks.filter((h) => {
     if (h.def.type !== 'cron') return false;
     const lastRunAt = state.cron[h.slug]?.lastRunAt ?? 0;
-    return now - lastRunAt >= cronIntervalMs(h.def);
+    return now >= nextRunAt(h.def, lastRunAt);
   });
 }
 
