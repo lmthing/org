@@ -1,4 +1,11 @@
-import type { TraceEvent } from '@lmthing/core';
+import type { TraceEvent, TraceAttachment } from '@lmthing/core';
+
+/** A user attachment as returned by POST /api/uploads and held by the composer
+ *  until send. Superset of {@link TraceAttachment} with the server-side `id` the
+ *  client echoes back so the server can re-read the stored bytes. */
+export interface UploadedAttachment extends TraceAttachment {
+  id: string;
+}
 
 // ─── Wire event (what the WS / trace file delivers) ─────────────────────────
 
@@ -58,7 +65,7 @@ export interface ExecNode {
 }
 
 export type ConvoBlock =
-  | { id: string; ts: number; nodeId: string; type: 'user'; content: string }
+  | { id: string; ts: number; nodeId: string; type: 'user'; content: string; attachments?: TraceAttachment[] }
   | { id: string; ts: number; nodeId: string; type: 'display'; descriptor: unknown }
   | { id: string; ts: number; nodeId: string; type: 'error'; message: string }
   | { id: string; ts: number; nodeId: string; type: 'ask'; askId: string; descriptor: unknown; state: 'open' | 'answered' | 'cancelled'; answer?: unknown };
@@ -127,8 +134,19 @@ export function applyWireEvent(m: SessionModel, we: WireEvent): void {
     // A conversation block, not an execution node. Attribute to its node (root)
     // if known; never mint a phantom node for it.
     const last = m.blocks[m.blocks.length - 1];
-    if (!(last && last.type === 'user' && last.content === ev.content)) {
-      m.blocks.push({ id: `b${++blockCounter}`, ts: ev.ts, nodeId: (ev as { nodeId?: string }).nodeId ?? m.rootId ?? '', type: 'user', content: ev.content });
+    if (last && last.type === 'user' && last.content === ev.content) {
+      // Optimistic block already present — backfill server-resolved attachments
+      // (with their served urls) if the optimistic push didn't have them.
+      if (ev.attachments && !last.attachments) last.attachments = ev.attachments;
+    } else {
+      m.blocks.push({
+        id: `b${++blockCounter}`,
+        ts: ev.ts,
+        nodeId: (ev as { nodeId?: string }).nodeId ?? m.rootId ?? '',
+        type: 'user',
+        content: ev.content,
+        ...(ev.attachments ? { attachments: ev.attachments } : {}),
+      });
     }
     return;
   }
@@ -244,9 +262,16 @@ export function parentNodeIds(m: SessionModel): string[] {
 
 // ─── Conversation-block helpers (driven by interaction events, not trace) ────
 
-export function pushUserBlock(m: SessionModel, content: string): void {
+export function pushUserBlock(m: SessionModel, content: string, attachments?: TraceAttachment[]): void {
   const nid = m.rootId ?? 'session';
-  m.blocks.push({ id: `b${++blockCounter}`, ts: Date.now(), nodeId: nid, type: 'user', content });
+  m.blocks.push({
+    id: `b${++blockCounter}`,
+    ts: Date.now(),
+    nodeId: nid,
+    type: 'user',
+    content,
+    ...(attachments && attachments.length ? { attachments } : {}),
+  });
 }
 
 export function pushErrorBlock(m: SessionModel, message: string): void {

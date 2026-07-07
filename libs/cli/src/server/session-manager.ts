@@ -5,7 +5,18 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
-import type { StreamOpts, StreamSession, AppGlobalImpls } from '@lmthing/core';
+import type { StreamOpts, StreamSession, AppGlobalImpls, TraceAttachment, UserInput } from '@lmthing/core';
+import { transcribeAudio } from '../providers/transcribe.js';
+import {
+  resolveUploadsDir,
+  saveUpload as saveUploadToDisk,
+  readUploadMeta,
+  readUploadBytes,
+  uploadUrl,
+  classifyKind,
+  assembleParts,
+  type AttachmentRef,
+} from './uploads.js';
 import { bootProjectApp } from '../app/boot.js';
 import type { ProjectDb } from '../app/store.js';
 import { createAppAuthoringGlobals, resolveCatalogRoot, type AppAuthoringGlobals } from '../app/authoring/index.js';
@@ -821,9 +832,65 @@ export class SessionManager {
     }));
   }
 
+  /** Absolute path to the shared uploads directory (under the runtime root). */
+  private get uploadsDir(): string {
+    return resolveUploadsDir(this.lmthingRoot);
+  }
+
+  /** Store an uploaded file. Audio is transcribed on the way in (best-effort —
+   *  a transcription failure still stores the file, just without a transcript).
+   *  Returns a reference the chat client sends back with `sendMessage`. */
+  async saveUpload(input: { bytes: Uint8Array; mediaType: string; filename?: string }): Promise<AttachmentRef> {
+    let transcript: string | undefined;
+    if (classifyKind(input.mediaType) === 'audio') {
+      try {
+        transcript = (await transcribeAudio(input.bytes)).text;
+      } catch (err) {
+        // Non-fatal: the audio is still stored/playable; the model just won't
+        // receive a transcript for it.
+        // eslint-disable-next-line no-console
+        console.warn(`[uploads] transcription failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    const meta = await saveUploadToDisk(this.uploadsDir, { ...input, ...(transcript ? { transcript } : {}) });
+    return { ...meta, url: uploadUrl(meta.id) };
+  }
+
+  /** Read a stored upload's bytes + metadata for the serving route. */
+  async readUpload(id: string): Promise<{ bytes: Uint8Array; mediaType: string } | null> {
+    const meta = await readUploadMeta(this.uploadsDir, id);
+    if (!meta) return null;
+    const bytes = await readUploadBytes(this.uploadsDir, id);
+    if (!bytes) return null;
+    return { bytes, mediaType: meta.mediaType };
+  }
+
+  /** Assemble the model input (text + image/file parts) and the trace-facing
+   *  attachment list from stored uploads. Server-authoritative: only the id is
+   *  trusted; bytes/metadata are re-read from disk. Audio contributes its
+   *  transcript to the text (the model gets text, not the raw audio). */
+  private async assembleAttachments(
+    content: string,
+    attachmentIds: string[],
+  ): Promise<{ input: UserInput; traceAttachments?: TraceAttachment[] }> {
+    const items = await Promise.all(
+      attachmentIds.map(async (aid) => {
+        const meta = await readUploadMeta(this.uploadsDir, aid);
+        // Audio needs no bytes (it rides as a transcript); skip the read for it.
+        const bytes = meta && meta.kind !== 'audio' ? await readUploadBytes(this.uploadsDir, aid) : null;
+        return { meta, bytes };
+      }),
+    );
+    const { mediaParts, traceAttachments, transcripts } = assembleParts(items);
+    const text = transcripts.length ? [content, ...transcripts].filter(Boolean).join('\n\n') : content;
+    const input: UserInput = mediaParts.length ? { text, attachments: mediaParts } : text;
+    return { input, ...(traceAttachments.length ? { traceAttachments } : {}) };
+  }
+
   /** Send a user message: start() on first message, continue() after. Surfaces
-   *  errors via the entry's renderHost like serve.ts does. */
-  sendMessage(id: string, content: string): void {
+   *  errors via the entry's renderHost like serve.ts does. `attachmentIds` name
+   *  previously-uploaded files (see saveUpload) to attach to this turn. */
+  async sendMessage(id: string, content: string, attachmentIds?: string[]): Promise<void> {
     const entry = this.sessions.get(id);
     if (!entry) throw new Error(`unknown session "${id}"`);
     if (!entry.session) throw new Error(`session "${id}" is still initializing — retry in a moment`);
@@ -832,25 +899,30 @@ export class SessionManager {
     if (!entry.title) entry.title = content.trim().slice(0, 80);
     entry.messageCount++;
 
+    const { input, traceAttachments } =
+      attachmentIds && attachmentIds.length
+        ? await this.assembleAttachments(content, attachmentIds)
+        : { input: content as UserInput, traceAttachments: undefined };
+
     // Write user message as a trace event so it appears in the conversation.
     // Attribute it to the session root node so the reducer never falls back to a
     // phantom/legacy node (which would hijack rootId and hide the real tree).
     if (typeof entry.session.getTracer === 'function') {
       const nodeId = typeof entry.session.getRootNodeId === 'function' ? entry.session.getRootNodeId() : undefined;
-      entry.session.getTracer().write({ ts: Date.now(), type: 'user_message', nodeId, content });
+      entry.session.getTracer().write({ ts: Date.now(), type: 'user_message', nodeId, content, ...(traceAttachments ? { attachments: traceAttachments } : {}) });
     }
 
     let run: Promise<void>;
     if (entry.needsResume && entry.snapshotDir) {
       // Resume from saved snapshot.
       const snapshotDir = entry.snapshotDir;
-      run = entry.session.resume(snapshotDir, content);
+      run = entry.session.resume(snapshotDir, input);
       entry.needsResume = false;
       entry.started = true;
     } else {
       run = entry.started
-        ? entry.session.continue(content)
-        : entry.session.start(content);
+        ? entry.session.continue(input)
+        : entry.session.start(input);
       entry.started = true;
     }
 

@@ -1,8 +1,12 @@
+import type { MediaPart } from '../eval/stream-types.js';
+
 export type MessageRole = 'user' | 'assistant';
 
 export interface Message {
   role: MessageRole;
   content: string;
+  /** Multimodal attachments (images/files) carried by this user message. */
+  attachments?: MediaPart[];
   blockType?: 'normal' | 'variables' | 'error' | 'system';
 }
 
@@ -13,8 +17,12 @@ export class MessageHistory {
     this.messages.push(msg);
   }
 
-  getPromptMessages(): Array<{ role: MessageRole; content: string }> {
-    return this.messages.map((m) => ({ role: m.role, content: m.content }));
+  getPromptMessages(): Array<{ role: MessageRole; content: string; attachments?: MediaPart[] }> {
+    return this.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      ...(m.attachments && m.attachments.length ? { attachments: m.attachments } : {}),
+    }));
   }
 
   /**

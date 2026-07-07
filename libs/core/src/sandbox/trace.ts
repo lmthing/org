@@ -38,6 +38,17 @@ export interface NodeDetail {
   forEachIndex?: number;
 }
 
+/** A user-message attachment as surfaced to the UI (via the `user_message`
+ *  trace event). `url` points at the server's upload-serving route; `transcript`
+ *  is present for audio (the text the model actually received). */
+export interface TraceAttachment {
+  kind: 'image' | 'audio' | 'file';
+  url: string;
+  mediaType: string;
+  filename?: string;
+  transcript?: string;
+}
+
 // ─── Trace event union ─────────────────────────────────────────────────────
 
 export type TraceEvent =
@@ -65,7 +76,9 @@ export type TraceEvent =
   | { ts: number; type: 'llm_progress'; context: string; nodeId?: string; chars: number; statements: number }
   // New: a user-sent chat message — captured in the trace so the conversation
   // (the user's prompts, not just display() output) reconstructs on reconnect/replay.
-  | { ts: number; type: 'user_message'; nodeId?: string; content: string }
+  // `attachments` carries any images/audio/files the user sent, so the UI can
+  // re-render them in the user bubble on reconnect/replay.
+  | { ts: number; type: 'user_message'; nodeId?: string; content: string; attachments?: TraceAttachment[] }
   // New: the agent named the session via setSessionMeta — the server ingests this
   // to update + persist the SessionEntry's title/slug (keeps core persistence-free).
   | { ts: number; type: 'session_meta'; nodeId?: string; title?: string; slug?: string };
