@@ -67,6 +67,35 @@ async function upgradePod(
   }
 }
 
+/**
+ * Poll pod status until it reports ready, or give up after ~45s. Used on cold
+ * wake: the gateway's /ensure returns after a bounded (~9s) wait, so a slower
+ * boot can come back not-ready — keep polling here so we never mount children
+ * against a not-serving pod (which would hit Envoy "connection refused" 503s).
+ */
+async function pollUntilReady(
+  cloudBaseUrl: string,
+  getAccessToken: () => Promise<string>,
+): Promise<void> {
+  const deadline = Date.now() + 45_000
+  while (Date.now() < deadline) {
+    try {
+      const token = await getAccessToken()
+      const res = await fetch(`${cloudBaseUrl}/api/compute/status`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { pod?: { ready?: boolean } }
+        if (data.pod?.ready) return
+      }
+    } catch {
+      /* transient — keep polling */
+    }
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  throw new Error('Timed out waiting for your workspace to start')
+}
+
 /** Poll pod status until it's ready on `expectedTag`, or give up after ~2 minutes. */
 async function pollUntilUpgraded(
   cloudBaseUrl: string,
@@ -148,6 +177,15 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
 
         const currentTag = ensureResult.pod?.computeTag
         currentTagRef.current = currentTag ?? null
+
+        // /ensure resolves after a bounded wait; if the freshly-woken pod isn't
+        // serving yet, wait for real readiness before mounting children so they
+        // never race the cold-boot window and hit Envoy 503s.
+        if (ensureResult.pod && ensureResult.pod.ready === false) {
+          await pollUntilReady(CLOUD_BASE_URL, getAccessToken)
+          if (cancelled) return
+        }
+
         const dismissed = sessionStorage.getItem(UPGRADE_DISMISSED_KEY)
         if (latest && currentTag && latest !== currentTag && latest !== dismissed) {
           setLatestTag(latest)
@@ -243,7 +281,7 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   }
 
   if (status === 'pending') {
-    return <div style={centerStyles}>Starting compute pod…</div>
+    return <div style={centerStyles}>Waking your workspace…</div>
   }
 
   if (status === 'upgrading') {

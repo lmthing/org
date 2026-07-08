@@ -152,6 +152,25 @@ export async function ensureValidToken(config: AuthConfig): Promise<string> {
  * retries — this is what keeps long-lived tabs working after the 12h access
  * token expires. Returns the raw Response; callers check `res.ok` like fetch.
  */
+/**
+ * True when `res` is the Envoy activator's "waking" 503: the target pod was
+ * scaled to zero, so Envoy had no endpoint and returned a JSON `{waking:true}`
+ * body after firing a wake. A no-endpoint 503 means the request never reached
+ * the pod (zero side effects), so retrying it — even a POST — is always safe.
+ */
+async function isWakingResponse(res: Response): Promise<boolean> {
+  if (res.status !== 503) return false
+  try {
+    const data = (await res.clone().json()) as { waking?: boolean }
+    return data?.waking === true
+  } catch {
+    return false
+  }
+}
+
+const WAKE_RETRIES = 6
+const WAKE_RETRY_MS = 1200
+
 export async function authFetch(
   config: AuthConfig,
   url: string,
@@ -171,6 +190,14 @@ export async function authFetch(
     } else {
       clearSession()
     }
+  }
+
+  // The pod was scaled to zero: the Envoy activator returned a "waking" 503 and
+  // fired a wake. Transparently retry so the request self-heals into the freshly
+  // woken pod instead of surfacing a one-off failure to the user.
+  for (let i = 0; i < WAKE_RETRIES && (await isWakingResponse(res)); i++) {
+    await new Promise((r) => setTimeout(r, WAKE_RETRY_MS))
+    res = await fetch(url, { ...options, headers })
   }
 
   return res

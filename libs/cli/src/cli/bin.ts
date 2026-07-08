@@ -342,7 +342,18 @@ async function main(): Promise<void> {
     // spaces if the `thing` agent isn't present. Without this the pod serves
     // from an empty system/ dir and every session fails with
     // `Agent "thing" not found`. (The bare-`lmthing` path below does the same.)
-    ensureRuntime(lmthingRoot, args);
+    //
+    // Only the correctness-critical MATERIALIZE runs pre-`listen`; the adopt-
+    // updates SYNC (a full hashDir walk of the system-spaces tree) is deferred
+    // until AFTER the server is listening (below), so on a scaled-to-zero cold
+    // wake it never delays time-to-serve / the startup probe. A pod's PVC keeps
+    // the materialized tree across scale-to-zero, so the common wake path takes
+    // the fast `!needsInit` branch and pays zero pre-listen I/O here.
+    const runtimeInitialized = runtimeNeedsInit(lmthingRoot);
+    if (runtimeInitialized) {
+      materializeRuntime(lmthingRoot);
+      process.stdout.write(`lmthing runtime initialized/repaired at ${lmthingRoot}\n`);
+    }
     const manager = new SessionManager({
       streamFn,
       defaultSpaceDir: args.space,
@@ -355,7 +366,28 @@ async function main(): Promise<void> {
     process.on('SIGINT', () => { manager.stopReaper(); process.exit(0); });
     // __dirname is dist/cli/ at runtime; app.tsx is at dist/web/app.tsx
     const appTsxPath = join(__dirname, '..', 'web', 'app.tsx');
+    // startSessionServer resolves once the HTTP server is LISTENING (its own
+    // post-listen boot work runs without blocking routability). Adopt any
+    // updated system spaces now — off the boot critical path, so this hashDir
+    // walk never gates time-to-serve. Skipped when we just materialized above
+    // (a fresh tree has nothing to adopt), matching the old ensureRuntime flow.
     await startSessionServer({ port, manager, appTsxPath, defaultSpaceDir: args.space, lmthingRoot });
+    if (!runtimeInitialized) {
+      try {
+        const sync = syncSystemSpaces(lmthingRoot, { adopt: args.adoptSystemSpaces });
+        if (sync.updated.length > 0) {
+          process.stdout.write(`lmthing: adopted updated system space(s): ${sync.updated.join(', ')}\n`);
+        }
+        if (sync.heldBack.length > 0) {
+          process.stderr.write(
+            `lmthing: system space update(s) available but held back (local edits preserved): ` +
+            `${sync.heldBack.join(', ')} — re-run with --adopt-system-spaces to overwrite\n`,
+          );
+        }
+      } catch (err) {
+        process.stderr.write(`lmthing: system-space sync failed (non-fatal): ${err}\n`);
+      }
+    }
     return; // keep process alive via the listening server
   }
 
