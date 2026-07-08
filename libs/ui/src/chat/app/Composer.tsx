@@ -3,6 +3,7 @@ import { cn } from '../lib/cn.js';
 import { useStore } from '../store/store.js';
 import type { UploadedAttachment } from '../store/model.js';
 import { BudgetWindows } from './BudgetWindows.js';
+import { authHeaders, withAuthToken } from './auth.js';
 
 interface ComposerProps {
   onSend: (text: string, attachments?: UploadedAttachment[]) => void;
@@ -93,7 +94,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     const dataUrl = await readAsDataUrl(file);
     const res = await fetch('/api/uploads', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...authHeaders() },
       body: JSON.stringify({
         filename: file.name,
         mediaType: file.type || 'application/octet-stream',
@@ -279,7 +280,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
               title={a.filename ?? a.mediaType}
             >
               {a.kind === 'image' ? (
-                <img src={a.url} alt={a.filename ?? 'image'} className="h-5 w-5 rounded object-cover" />
+                <img src={withAuthToken(a.url)} alt={a.filename ?? 'image'} className="h-5 w-5 rounded object-cover" />
               ) : (
                 <span className="text-muted-foreground">{a.kind === 'audio' ? '♪' : '📎'}</span>
               )}

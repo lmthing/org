@@ -9,6 +9,7 @@ import { CatalogForm } from '../components/forms/CatalogForm.js';
 import { renderDescriptor, isDescriptor } from '../components/render-descriptor.js';
 import type { Descriptor } from '../components/render-descriptor.js';
 import { ActivityStrip } from './ActivityStrip.js';
+import { withAuthToken } from './auth.js';
 import { cn } from '../lib/cn.js';
 
 // ─── Space component registry ─────────────────────────────────────────────────
@@ -133,11 +134,15 @@ function CopyButton({ text }: { text: string }) {
 // ─── User attachment rendering ─────────────────────────────────────────────────
 
 function UserAttachment({ att }: { att: TraceAttachment }) {
+  // `<img>`/`<audio>`/`<a>` can't send an Authorization header, so carry the
+  // token as a query param — Envoy's chat-jwt SecurityPolicy accepts it and
+  // routes the /api/uploads GET to the user's pod (see withAuthToken).
+  const url = withAuthToken(att.url);
   if (att.kind === 'image') {
     return (
-      <a href={att.url} target="_blank" rel="noreferrer">
+      <a href={url} target="_blank" rel="noreferrer">
         <img
-          src={att.url}
+          src={url}
           alt={att.filename ?? 'image attachment'}
           className="max-w-[260px] max-h-[260px] rounded-xl border border-border object-cover"
         />
@@ -148,7 +153,7 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
     return (
       <div className="flex flex-col items-end gap-1">
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <audio controls src={att.url} className="max-w-[260px]" />
+        <audio controls src={url} className="max-w-[260px]" />
         {att.transcript && (
           <div className="max-w-[260px] text-xs text-muted-foreground italic text-right">
             “{att.transcript}”
@@ -159,7 +164,7 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
   }
   return (
     <a
-      href={att.url}
+      href={url}
       target="_blank"
       rel="noreferrer"
       className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground hover:opacity-90"

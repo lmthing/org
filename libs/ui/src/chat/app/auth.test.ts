@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { getAccessToken, authHeaders, wsTokenSuffix } from './auth'
+import { getAccessToken, authHeaders, wsTokenSuffix, withAuthToken } from './auth'
 
 /** Install a minimal localStorage backed by an in-memory store. */
 function mockLocalStorage(store: Record<string, string>): void {
@@ -33,5 +33,17 @@ describe('app/auth (token from @lmthing/auth session)', () => {
     expect(getAccessToken()).toBeUndefined()
     expect(authHeaders()).toEqual({})
     expect(wsTokenSuffix()).toBe('')
+  })
+
+  it('withAuthToken appends access_token to an upload URL so <img>/<audio> GETs authenticate', () => {
+    mockLocalStorage({ lmthing_session: JSON.stringify({ accessToken: 'tok-123' }) })
+    // No existing query string → `?`.
+    expect(withAuthToken('/api/uploads/abc')).toBe('/api/uploads/abc?access_token=tok-123')
+    // Existing query string → `&`.
+    expect(withAuthToken('/api/uploads/abc?x=1')).toBe('/api/uploads/abc?x=1&access_token=tok-123')
+  })
+
+  it('withAuthToken is a no-op with no session (local/demo mode)', () => {
+    expect(withAuthToken('/api/uploads/abc')).toBe('/api/uploads/abc')
   })
 })

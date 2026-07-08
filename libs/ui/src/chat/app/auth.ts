@@ -24,3 +24,19 @@ export function wsTokenSuffix(): string {
   const token = getAccessToken()
   return token ? `&access_token=${encodeURIComponent(token)}` : ''
 }
+
+/**
+ * Append the auth token as an `access_token` query param to a same-origin
+ * `/api/*` URL used by an element that can't send an Authorization header —
+ * `<img src>` / `<audio src>` / `<a href>` for a stored upload. In production
+ * Envoy's `chat-jwt` SecurityPolicy validates `/api/*` from the header OR this
+ * query param (there is no cookie source) and uses the `sub` claim to route to
+ * the user's pod, so an unauthenticated `<img>` GET is 401'd before routing.
+ * No-op (returns the url unchanged) in local/demo mode where no token exists.
+ */
+export function withAuthToken(url: string): string {
+  const token = getAccessToken()
+  if (!token) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}access_token=${encodeURIComponent(token)}`
+}
