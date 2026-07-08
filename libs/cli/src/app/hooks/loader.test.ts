@@ -90,15 +90,29 @@ describe('validateHook — fail-loud', () => {
     expect(ok({ type: 'cron', daily: '08:00', trigger: 't' })).toMatchObject({ type: 'cron', daily: '08:00' });
   });
 
+  it('accepts an imperative cron hook (handler instead of trigger)', () => {
+    const fn = () => {};
+    expect(ok({ type: 'cron', every: '30m', handler: fn })).toMatchObject({ type: 'cron', every: '30m' });
+    expect(ok({ type: 'cron', every: '30m', handler: fn })).toHaveProperty('handler', fn);
+    // handler-cron carries no trigger
+    expect(ok({ type: 'cron', daily: '07:00', handler: fn })).not.toHaveProperty('trigger');
+  });
+
   it('rejects a cron hook with neither / both of every|daily', () => {
     expect(bad({ type: 'cron', trigger: 't' })).toThrow(/exactly one of/);
     expect(bad({ type: 'cron', every: '30m', daily: '08:00', trigger: 't' })).toThrow(/exactly one of/);
   });
 
-  it('rejects an invalid every / daily / missing trigger', () => {
+  it('rejects a cron hook with neither / both of trigger|handler', () => {
+    expect(bad({ type: 'cron', every: '30m' })).toThrow(/exactly one of `trigger`.*or `handler`/);
+    expect(bad({ type: 'cron', every: '30m', trigger: 't', handler: () => {} })).toThrow(
+      /exactly one of `trigger`.*or `handler`/,
+    );
+  });
+
+  it('rejects an invalid every / daily', () => {
     expect(bad({ type: 'cron', every: '30s', trigger: 't' })).toThrow(/every/);
     expect(bad({ type: 'cron', daily: '25:00', trigger: 't' })).toThrow(/daily/);
-    expect(bad({ type: 'cron', every: '30m' })).toThrow(/trigger/);
   });
 
   it('accepts a database hook with exactly one of trigger | handler', () => {

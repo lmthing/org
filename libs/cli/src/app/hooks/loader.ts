@@ -43,28 +43,41 @@ export interface HookBudget {
   maxWallClockMs?: number;
 }
 
-/** The arguments an imperative database-hook `handler` receives. */
+/** The arguments an imperative hook `handler` receives. */
 export interface HookHandlerArgs {
-  /** The written row (for `remove`, the row as it was before deletion). */
-  row: Record<string, unknown>;
+  /**
+   * The written row (for `remove`, the row as it was before deletion). Present on
+   * a `database` hook; **`undefined` on a `cron` hook** (there is no triggering
+   * row — a scheduled handler self-queries what it needs).
+   */
+  row?: Record<string, unknown>;
   /** The project's async data API (a triggered-session write path). */
   db: unknown;
   /** Delegate into a `space/agent`; the integrator wires headless runs. */
   delegate: (agent: string, action?: string, opts?: unknown) => Promise<unknown>;
 }
 
-/** An imperative database-hook handler. */
-export type DatabaseHookHandler = (args: HookHandlerArgs) => unknown | Promise<unknown>;
+/** An imperative hook handler (database or cron). */
+export type HookHandler = (args: HookHandlerArgs) => unknown | Promise<unknown>;
+/** @deprecated Use {@link HookHandler}. Retained for existing imports. */
+export type DatabaseHookHandler = HookHandler;
 
-/** A time-based hook — fires on a cron schedule and runs its `trigger`. */
+/**
+ * A time-based hook — fires on a cron schedule and either runs a declarative
+ * `trigger` (delegate to an agent) OR an imperative `handler` (real code, no
+ * agent/LLM). Exactly one of `trigger`/`handler` is present. Prefer `handler`
+ * for deterministic fetch/compute work — it does NOT spin up an agent session.
+ */
 export interface CronHookDef {
   type: 'cron';
   /** Interval spec (`'30m' | '2h' | '1d'`); mutually exclusive with `daily`. */
   every?: string;
   /** Time-of-day spec `'HH:MM'`; mutually exclusive with `every`. */
   daily?: string;
-  /** Declarative `space/agent#action` to run when due. */
-  trigger: string;
+  /** Declarative `space/agent#action` to run when due (mutually exclusive with `handler`). */
+  trigger?: string;
+  /** Imperative handler run in-proc when due — no agent, no LLM (mutually exclusive with `trigger`). */
+  handler?: HookHandler;
   budget?: HookBudget;
 }
 
@@ -174,14 +187,19 @@ export function validateHook(slug: string, file: string, raw: unknown): HookDef 
     if (hasDaily && !DAILY_RE.test(obj.daily as string)) {
       throw new Error(`${where}: invalid \`daily\` "${String(obj.daily)}" (expected 'HH:MM')`);
     }
-    if (typeof obj.trigger !== 'string' || obj.trigger.length === 0) {
-      throw new Error(`${where}: a cron hook needs a \`trigger\` ('space/agent#action')`);
+    const hasTrigger = typeof obj.trigger === 'string' && (obj.trigger as string).length > 0;
+    const hasHandler = typeof obj.handler === 'function';
+    if (hasTrigger === hasHandler) {
+      throw new Error(
+        `${where}: a cron hook needs exactly one of \`trigger\` ('space/agent#action') or \`handler\` (imperative)`,
+      );
     }
     return {
       type: 'cron',
       ...(hasEvery ? { every: obj.every as string } : {}),
       ...(hasDaily ? { daily: obj.daily as string } : {}),
-      trigger: obj.trigger,
+      ...(hasTrigger ? { trigger: obj.trigger as string } : {}),
+      ...(hasHandler ? { handler: obj.handler as HookHandler } : {}),
       budget: validateBudget(where, obj.budget),
     };
   }
