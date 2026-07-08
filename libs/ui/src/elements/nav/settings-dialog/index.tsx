@@ -1,6 +1,6 @@
 import '@lmthing/css/elements/nav/settings-dialog/index.css'
 import * as React from 'react'
-import { User, Cpu, Terminal, CreditCard, GitBranch, type LucideIcon } from 'lucide-react'
+import { User, Cpu, Terminal, CreditCard, GitBranch, Plug, type LucideIcon } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { Models } from '../../settings/models'
 import { EnvVars } from '../../settings/env-vars'
 import { Billing } from '../../settings/billing'
 import { WorkspaceBackup } from '../../settings/backup'
+import { Connections } from '../../settings/connections'
 
 interface TabDef {
   id: string
@@ -56,6 +57,14 @@ const TABS: TabDef[] = [
     icon: CreditCard,
     title: 'Billing',
     render: () => <Billing />,
+  },
+  {
+    id: 'connections',
+    label: 'Connections',
+    icon: Plug,
+    title: 'Connections',
+    description: 'Connect external services once via OAuth — usable by any agent on your pod.',
+    render: () => <Connections />,
   },
   {
     id: 'backup',

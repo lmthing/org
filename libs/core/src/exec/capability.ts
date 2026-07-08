@@ -5,14 +5,19 @@ import type { AppCapabilities } from '../spaces/capabilities.js';
  * Read-only fork roles (`explore`/`plan`) can never receive a write/authoring
  * capability — the app grants are intersected with `allowWrite`, exactly as the
  * host-tools write gate withholds `writeFileRaw`. Only the read/outbound grants
- * (`db:read`, `api:call`) survive; every mutating/authoring grant
- * (`db:write`/`db:schema`/`pages:write`/`api:write`/`hooks:write`) is dropped.
+ * (`db:read`, `api:call`, `connections:use`) survive; every mutating/authoring
+ * grant (`db:write`/`db:schema`/`pages:write`/`api:write`/`hooks:write`) is
+ * dropped. NOTE: `connections:use` can POST to an external service (a
+ * side-effect), but is treated as outbound like `api:call` — the caller's own
+ * read-only intent governs, not the transport. Drop it here if read-only forks
+ * must never mutate external state.
  */
 export function intersectAppCaps(app: AppCapabilities, allowWrite: boolean): AppCapabilities {
   if (allowWrite) return app;
   const out: AppCapabilities = {};
   if (app['db:read']) out['db:read'] = app['db:read'];
   if (app['api:call']) out['api:call'] = app['api:call'];
+  if (app['connections:use']) out['connections:use'] = app['connections:use'];
   return out;
 }
 

@@ -105,4 +105,18 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
     const dts = buildAmbientDts({ capabilities: { ...delegateCapabilities(true, { 'db:write': {} }) } });
     expect(dts).toContain('insert(');
   });
+
+  it('connections:use ⇒ callConnection declared with the granted provider union; absent otherwise', () => {
+    const dts = dtsFor({ 'connections:use': { providers: ['google', 'slack'] } });
+    expect(dts).toContain('declare function callConnection(');
+    expect(dts).toContain("provider: 'google' | 'slack'");
+    expect(dtsFor({})).not.toContain('callConnection');
+  });
+
+  it('connections:use survives read-only intersection (outbound, like api:call)', () => {
+    const app: AppCapabilities = { 'db:write': {}, 'connections:use': { providers: ['google'] } };
+    const ro = intersectAppCaps(app, false);
+    expect(ro['connections:use']).toEqual({ providers: ['google'] });
+    expect(ro['db:write']).toBeUndefined();
+  });
 });

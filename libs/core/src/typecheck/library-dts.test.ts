@@ -13,6 +13,7 @@ import {
   PROJECT_MANAGE_DTS,
   WRITE_TABLE_SCHEMA_DTS,
   CAPABILITY_DTS_FRAGMENTS,
+  composeConnectionsDts,
 } from './library-dts.js';
 
 describe('library-dts write primitives are gated', () => {
@@ -71,6 +72,23 @@ describe('standalone capability fragments', () => {
     expect(API_CALL_DTS).toContain('declare function apiCall(');
     expect(API_CALL_DTS).toContain('Promise<any>');
     expect(API_CALL_DTS.trim().length).toBeGreaterThan(0);
+  });
+
+  it('composeConnectionsDts types provider as the granted union and is value-yielding', () => {
+    const dts = composeConnectionsDts(['google', 'slack']);
+    expect(dts).toContain('declare function callConnection(');
+    expect(dts).toContain("provider: 'google' | 'slack'");
+    expect(dts).toContain('Promise<{ ok: boolean; status: number; data: any }>');
+  });
+
+  it('composeConnectionsDts falls back to `string` for an empty provider list', () => {
+    expect(composeConnectionsDts([])).toContain('provider: string');
+  });
+
+  it('callConnection is capability-gated: absent from COMMON_DTS/LIBRARY_DTS (like apiCall)', () => {
+    expect(COMMON_DTS).not.toContain('callConnection');
+    expect(LIBRARY_DTS).not.toContain('callConnection');
+    expect(CAPABILITY_DTS_FRAGMENTS['connections:use']).toBeUndefined();
   });
 
   it('the write helpers are non-empty one-liners', () => {

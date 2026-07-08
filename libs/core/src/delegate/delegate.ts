@@ -331,6 +331,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             tracer: opts.tracer,
             scope: delegateScope,
             apiCallResolver: opts.appGlobals?.apiCall,
+            connectionResolver: opts.appGlobals?.callConnection,
             getForkEngine: () => forkEngine,
             // `result` is the tasklist's TaskEnvelope ({ ok, degraded, data, … })
             // since Phase 3 — captured and returned UNTOUCHED, so the delegator

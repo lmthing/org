@@ -131,6 +131,48 @@ export type AsyncDbApi = {
 export type ApiCallFn = (name: string, input?: unknown) => Promise<unknown>;
 
 /**
+ * A single authenticated request to a connected external service, made through
+ * the gateway egress proxy. `path` is ALWAYS relative to the provider's API base
+ * (the gateway pins the host and rejects absolute URLs); the OAuth token is
+ * attached server-side and never enters the pod or the sandbox.
+ */
+export interface ConnectionRequest {
+  /** HTTP method (GET/POST/PUT/PATCH/DELETE). */
+  method: string;
+  /** Path relative to the provider's API base, e.g. `/gmail/v1/users/me/messages`. */
+  path: string;
+  /** Query-string params appended to the URL. */
+  query?: Record<string, string>;
+  /** JSON request body (serialized by the proxy). */
+  body?: unknown;
+  /** Extra request headers (an `Authorization` header here is ignored — the
+   *  gateway attaches the connection's token). */
+  headers?: Record<string, string>;
+}
+
+/** The proxy's normalized response — `data` is parsed JSON (or text on non-JSON). */
+export interface ConnectionResponse {
+  ok: boolean;
+  status: number;
+  data: unknown;
+}
+
+/**
+ * Resolve a `callConnection()` yield — forward a {@link ConnectionRequest} to the
+ * gateway's egress proxy for the named provider and return its normalized
+ * response. Host-supplied (libs/cli, from the pod's scoped connections JWT);
+ * absent outside a pod with a configured connections gateway, in which case a
+ * `callConnection` yield rejects with a clear, retryable error.
+ * @param provider The connection provider id (e.g. `google`/`slack`/`github`).
+ * @param req      The request to forward.
+ * @returns The proxy response.
+ */
+export type ConnectionResolver = (
+  provider: string,
+  req: ConnectionRequest,
+) => Promise<ConnectionResponse>;
+
+/**
  * Fire-and-forget spawn of an agent action from a Node handler. Returns
  * immediately with a run id; failures surface via the optional `onError`.
  * @param ref   The action reference, shaped `'space/agent#action'`.

@@ -428,6 +428,7 @@ export class ForkEngine {
           resolveRegisterSpace: true,
           dynamicSpaces: this.opts.dynamicSpaces,
           apiCallResolver: this.opts.appGlobals?.apiCall,
+          connectionResolver: this.opts.appGlobals?.callConnection,
           // delegate: gated by the task's canDelegateTo policy via the unified
           // yield-time gate (exec/target-match.ts isDelegateAllowed — same gate the
           // session and delegate VMs use); routed to the engine's delegateRunner

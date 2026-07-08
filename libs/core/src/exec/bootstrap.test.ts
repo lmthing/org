@@ -149,3 +149,25 @@ describe('buildAmbientDts — typecheck enforcement (stray calls fail cleanly)',
     expect(runTsc({ ambientDts: session, sessionContext: '', statement: stmt }).ok).toBe(true);
   });
 });
+
+describe('buildAmbientDts — connections:use gates callConnection', () => {
+  const withGoogle = buildAmbientDts({
+    capabilities: sessionCapabilities(true, { 'connections:use': { providers: ['google'] } }),
+  });
+  const withoutCap = buildAmbientDts({ capabilities: sessionCapabilities() });
+
+  it('callConnection typechecks for a granted provider', () => {
+    const stmt = 'const r = await callConnection("google", { method: "GET", path: "/x" }); const d = r.data;';
+    expect(runTsc({ ambientDts: withGoogle, sessionContext: '', statement: stmt }).ok).toBe(true);
+  });
+
+  it('callConnection with a non-granted provider fails typecheck (provider union)', () => {
+    const stmt = 'const r = await callConnection("slack", { method: "GET", path: "/x" });';
+    expect(runTsc({ ambientDts: withGoogle, sessionContext: '', statement: stmt }).ok).toBe(false);
+  });
+
+  it('callConnection is absent without the connections:use grant', () => {
+    const stmt = 'const r = await callConnection("google", { method: "GET", path: "/x" });';
+    expect(runTsc({ ambientDts: withoutCap, sessionContext: '', statement: stmt }).ok).toBe(false);
+  });
+});

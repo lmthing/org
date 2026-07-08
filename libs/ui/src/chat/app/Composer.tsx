@@ -328,15 +328,16 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           </ul>
         )}
 
-        {/* Attach image / audio / file to the message */}
+        {/* Attach image / audio / file to the message — the paperclip is the
+            universal "attach to my message" affordance users reach for first. */}
         <label
           className={cn(
-            'shrink-0 mb-0.5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors',
+            'shrink-0 mb-0.5 p-1 -m-1 text-muted-foreground hover:text-foreground cursor-pointer transition-colors',
             (attaching || isDisabled) && 'opacity-50 pointer-events-none',
           )}
-          title="Attach image, audio, or file"
+          title="Attach image, audio, or file to your message"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
           <input ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple className="hidden" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
         </label>
 
@@ -360,10 +361,11 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           )}
         </button>
 
-        {/* Attach a project document (text ingestion into the project) */}
+        {/* Add a reference document to the PROJECT (grep-able by THING later) —
+            a distinct file-text icon so it is not mistaken for message-attach. */}
         {projectId && (
-          <label className={cn('shrink-0 mb-0.5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors', uploading && 'opacity-50 pointer-events-none')} title="Attach document to project">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          <label className={cn('shrink-0 mb-0.5 p-1 -m-1 text-muted-foreground hover:text-foreground cursor-pointer transition-colors', uploading && 'opacity-50 pointer-events-none')} title="Add a reference document to this project">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
             <input ref={fileRef} type="file" className="hidden" onChange={(e) => void handleFile(e)} />
           </label>
         )}

@@ -1,7 +1,8 @@
 # System-Spaces Development Guide
 
 How to develop the system spaces (`system-architect`, `system-research`, `system-engineer`,
-`system-global`, `user-thing`, `user-memory`) and the tasklist/agent authoring model they use.
+`system-global`, `system-appbuilder`, `system-vision`, `system-files`, the `integration-*` OAuth
+spaces, `user-thing`, `user-memory`) and the tasklist/agent authoring model they use.
 Written after the mid-2026 rewrite that tuned everything for the **weak production model**
 (`DeepSeek-V4-Flash`, alias `S`). Read this before editing a system space or the runtime that
 backs it.
@@ -262,6 +263,29 @@ write_agent (general) → write_tasks (general) → validate (explore) → regis
 
 ---
 
+### `integration-google` / `integration-slack` / `integration-github` — user OAuth connections
+Three model-driven agent spaces that let an agent act on the user's OWN connected third-party
+account. They are the space-layer half of the `connections:use` capability (the runtime half —
+the `callConnection(provider, req)` global + gateway egress proxy — lives in `libs/core/src` and
+`libs/cli/src/server/connections.ts`).
+- Each ships ONE agent (`google`/`slack`/`github`) whose `instruct.md` frontmatter declares
+  `capabilities: [ { connections:use: { providers: [<svc>] } } ]`. The DTS narrows
+  `callConnection`'s `provider` param to exactly the granted providers, so the agent can only reach
+  its own service. These are the ONLY system agents besides `system-appbuilder` that carry
+  `capabilities:` (asserted by `spaces/capabilities.test.ts`'s smoke test).
+- Their `functions/*.ts` are thin typed wrappers over `callConnection` (pure request-builders /
+  response-shapers — no npm SDKs, no Node imports; `gmailSend` inlines its own base64url helper).
+  Each returns the shaped `callConnection(...).data`. The gateway pins the API host
+  (google→`googleapis.com`, slack→`slack.com/api`, github→`api.github.com`) and attaches the OAuth
+  token; the agent never sees credentials and passes only a RELATIVE `path`.
+- `knowledge/<svc>/api/{index.md,endpoints.md,auth.md}` are short cheat-sheets (base URL, the
+  wrapped endpoints/params, and the "auth is handled by the gateway" note).
+- These spaces have NO tasklists — the agents run model-driven (like THING), picking the wrapper
+  that matches the request. `actions`/`defaultAction` are declared for UI affordance only (no
+  `tasklist:` field ⇒ the session's defaultAction fast-path is skipped). The instruct guardrail:
+  on a `{ok:false}` / thrown "not connected"/"no connections gateway", tell the user to connect the
+  service in Studio → Connections and never fabricate data.
+
 ## 5. Hard invariants & gotchas (these bite the weak model)
 
 - **Forks/tasks have NO `tasklist`, `fork`, or `ask`** (and no `delegate` unless the task opts in via
@@ -288,9 +312,10 @@ write_agent (general) → write_tasks (general) → validate (explore) → regis
 - **System spaces are read from SOURCE** (`libs/core/system-spaces/…`) at runtime — editing `.md`
   and builder `.ts` needs **no rebuild**. Only changes to compiled runtime code
   (`libs/core/src/**`) need `pnpm --filter @lmthing/core build`.
-- **`SYSTEM_SPACE_NAMES`** (`libs/core/src/spaces/system.ts`) must list every system-space dir; the
-  6 names are materialized into `<root>/system/`. Renaming a space = update this + tests + any
-  instruct that delegates to it by dir-key.
+- **`SYSTEM_SPACE_NAMES`** (`libs/core/src/spaces/system.ts`) must list every system-space dir; all
+  listed names are materialized into `<root>/system/`. Adding/renaming a space = update this +
+  tests (`spaces/system.test.ts` asserts the exact `defaultSystemSpaceDirs().length`) + any instruct
+  that delegates to it by dir-key.
 
 ### `fetch` is now a real, non-blocking yield (Wave 2 — done)
 `fetch` (`globals/fetch.ts` + `eval/fetch-yield.ts`) is a **value-yielding global**, exactly like

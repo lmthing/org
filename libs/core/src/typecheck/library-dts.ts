@@ -153,6 +153,19 @@ export function composeDbDts(present: { read?: boolean; write?: boolean; schema?
 // Standalone `declare function` capability fragments.
 // `apiCall` is value-yielding → Promise; the write helpers are synchronous host calls.
 export const API_CALL_DTS = `declare function apiCall(name: string, input?: unknown): Promise<any>;`;
+
+/**
+ * `connections:use` earns `callConnection` — an authenticated request to a
+ * user-connected external service through the gateway egress proxy. Value-yielding
+ * (Promise). The `provider` parameter is typed to the UNION of the granted
+ * providers (built per-grant in `buildAppCapabilityDts`), so a call to a provider
+ * the agent didn't declare fails typecheck. `data` is `any` by convention so
+ * `r.data.field` reads without a cast. Emitted only when the grant is present.
+ */
+export function composeConnectionsDts(providers: string[]): string {
+  const union = providers.length ? providers.map((p) => `'${p}'`).join(' | ') : 'string';
+  return `declare function callConnection(provider: ${union}, req: { method: string; path: string; query?: Record<string, string>; body?: unknown; headers?: Record<string, string> }): Promise<{ ok: boolean; status: number; data: any }>;`;
+}
 export const PAGES_WRITE_DTS = `declare function writePage(route: string, src: string): { ok: boolean; error?: string };`;
 export const API_WRITE_DTS = `declare function writeApi(route: string, src: string): { ok: boolean; error?: string };`;
 export const HOOKS_WRITE_DTS = `declare function writeHook(slug: string, src: string): { ok: boolean; error?: string };`;

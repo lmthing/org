@@ -10,6 +10,7 @@
  *   - db:read: { tables: [sources, raw_items] }   # narrowed to named tables
  *   - db:write: { tables: [raw_items] }           # per-VERB scope
  *   - api:call: { allow: [webSearch, markRead] }  # allowlist IS the config (required)
+ *   - connections:use: { providers: [google, slack] } # provider allowlist (required)
  *   - pages:write                                 # bare = full scope, no config
  * ```
  *
@@ -29,6 +30,7 @@ export type CapabilityId =
   | 'api:write'
   | 'hooks:write'
   | 'api:call'
+  | 'connections:use'
   | 'project:manage';
 
 /** Every recognized capability id. Unknown ids fail the space load. */
@@ -40,6 +42,7 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'api:write',
   'hooks:write',
   'api:call',
+  'connections:use',
   'project:manage',
 ]);
 
@@ -63,6 +66,7 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
  * the cap is GRANTED; its value carries the (optional) scope narrowing:
  *   - `db:*`         → `{ tables?: string[] }` (omitted `tables` = all tables)
  *   - `api:call`     → `{ allow: string[] }` (always present — required)
+ *   - `connections:use` → `{ providers: string[] }` (always present — required)
  *   - authoring      → `true` (bare, no config)
  *   - project:manage → `true` (bare; grants createProject/selectProject — the
  *                      appbuilder's authority to scaffold/select a catalog app)
@@ -75,6 +79,7 @@ export interface AppCapabilities {
   'api:write'?: true;
   'hooks:write'?: true;
   'api:call'?: { allow: string[] };
+  'connections:use'?: { providers: string[] };
   'project:manage'?: true;
 }
 
@@ -158,6 +163,28 @@ function parseApiCallConfig(config: unknown, ctx: ParseCapabilitiesCtx): { allow
   return { allow: rawAllow as string[] };
 }
 
+/** Parse + validate a `connections:use` config payload into `{ providers: string[] }`. */
+function parseConnectionsConfig(config: unknown, ctx: ParseCapabilitiesCtx): { providers: string[] } {
+  if (!isRecord(config)) {
+    throw new Error(
+      `Agent "${ctx.agentId}" capability "connections:use" has an invalid config: expected a map like { providers: [...] }`,
+    );
+  }
+  const unknownKeys = Object.keys(config).filter((k) => k !== 'providers');
+  if (unknownKeys.length > 0) {
+    throw new Error(
+      `Agent "${ctx.agentId}" capability "connections:use" has disallowed config key(s): ${unknownKeys.join(', ')}. Allowed key: providers`,
+    );
+  }
+  const rawProviders = config['providers'];
+  if (!Array.isArray(rawProviders) || rawProviders.length === 0 || rawProviders.some((p) => typeof p !== 'string')) {
+    throw new Error(
+      `Agent "${ctx.agentId}" capability "connections:use" requires a non-empty "providers" list of service ids (there is no "connect to anything")`,
+    );
+  }
+  return { providers: rawProviders as string[] };
+}
+
 /**
  * Parse the frontmatter `capabilities:` list into an {@link AppCapabilities}
  * model. `raw` is the raw frontmatter value (expected: a list); `undefined`/
@@ -219,6 +246,17 @@ export function parseCapabilities(raw: unknown, ctx: ParseCapabilitiesCtx): AppC
       // Bare db cap = all tables; config narrows to named tables.
       (result as Record<string, unknown>)[capId] =
         config === undefined ? {} : parseDbConfig(capId, config, ctx);
+      continue;
+    }
+
+    // connections:use — providers list is REQUIRED, so a bare entry is an error.
+    if (capId === 'connections:use') {
+      if (config === undefined) {
+        throw new Error(
+          `Agent "${ctx.agentId}" capability "connections:use" requires a config with a "providers" list, e.g. connections:use: { providers: [google] }`,
+        );
+      }
+      result['connections:use'] = parseConnectionsConfig(config, ctx);
       continue;
     }
 

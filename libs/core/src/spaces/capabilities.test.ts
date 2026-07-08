@@ -17,6 +17,7 @@ describe('parseCapabilities', () => {
       'db:schema', // bare db = all tables
       'pages:write', // bare authoring
       { 'api:call': { allow: ['webSearch', 'markRead'] } },
+      { 'connections:use': { providers: ['google', 'slack'] } },
     ];
     const parsed = parseCapabilities(raw, ctx(['sources', 'raw_items']));
     const expected: AppCapabilities = {
@@ -25,6 +26,7 @@ describe('parseCapabilities', () => {
       'db:schema': {},
       'pages:write': true,
       'api:call': { allow: ['webSearch', 'markRead'] },
+      'connections:use': { providers: ['google', 'slack'] },
     };
     expect(parsed).toEqual(expected);
   });
@@ -32,6 +34,7 @@ describe('parseCapabilities', () => {
   it('exposes the known capability ids', () => {
     expect(CAPABILITY_IDS.has('db:read')).toBe(true);
     expect(CAPABILITY_IDS.has('api:call')).toBe(true);
+    expect(CAPABILITY_IDS.has('connections:use')).toBe(true);
     expect(CAPABILITY_IDS.has('hooks:write')).toBe(true);
   });
 
@@ -55,6 +58,24 @@ describe('parseCapabilities', () => {
     expect(() => parseCapabilities([{ 'api:call': { allow: [] } }], ctx())).toThrow(
       /requires a non-empty "allow" list/,
     );
+  });
+
+  it('throws on a bare connections:use (providers is required)', () => {
+    expect(() => parseCapabilities(['connections:use'], ctx())).toThrow(
+      /"connections:use" requires a config with a "providers" list/,
+    );
+  });
+
+  it('throws on connections:use with an empty providers list', () => {
+    expect(() => parseCapabilities([{ 'connections:use': { providers: [] } }], ctx())).toThrow(
+      /requires a non-empty "providers" list/,
+    );
+  });
+
+  it('throws on connections:use with an unknown config key', () => {
+    expect(() =>
+      parseCapabilities([{ 'connections:use': { services: ['google'] } }], ctx()),
+    ).toThrow(/disallowed config key\(s\): services/);
   });
 
   it('throws when a bare-only authoring cap is given a config', () => {
@@ -97,12 +118,13 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     expect(dirs.length).toBeGreaterThan(0);
     const spaces = await loadSystemSpaces(dirs);
     expect(spaces.length).toBe(dirs.length);
-    // Only system-appbuilder's agents declare capabilities (the project-authoring
-    // grants); every other system agent parses to {}.
+    // Two families of system agents declare capabilities: system-appbuilder's agents
+    // (the project-authoring grants) and the integration-* spaces (connections:use).
+    // Every other system agent parses to {}.
     for (const space of spaces) {
-      const isAppbuilder = space.dir.endsWith('system-appbuilder');
+      const hasCaps = space.dir.endsWith('system-appbuilder') || space.dir.includes('integration-');
       for (const agent of Object.values(space.agents)) {
-        if (isAppbuilder) {
+        if (hasCaps) {
           expect(Object.keys(agent.capabilities ?? {}).length).toBeGreaterThan(0);
         } else {
           expect(agent.capabilities).toEqual({});

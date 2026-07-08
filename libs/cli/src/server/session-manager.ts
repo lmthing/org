@@ -5,7 +5,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
-import type { StreamOpts, StreamSession, AppGlobalImpls, TraceAttachment, UserInput } from '@lmthing/core';
+import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, TraceAttachment, UserInput } from '@lmthing/core';
+import { createConnectionResolver } from './connections.js';
 import { transcribeAudio } from '../providers/transcribe.js';
 import {
   resolveUploadsDir,
@@ -243,6 +244,14 @@ export class SessionManager {
   readonly snapshotsDir: string;
   readonly idleTtlMs: number;
   private buildSessionFn: BuildSession;
+  /** Pod-side resolver for the agent `callConnection` global. Built once and
+   *  attached to EVERY session (project-independent — connections are per-user,
+   *  not per-project). `undefined` when the pod has no connections gateway
+   *  configured (no LMTHING_CONNECTIONS_JWT) — the yield router then throws a
+   *  clear "no connections gateway configured" error. Lazy so it reflects env
+   *  set after construction. */
+  private connectionResolver?: ConnectionResolver;
+  private connectionResolverResolved = false;
   private reaper: ReturnType<typeof setInterval> | null = null;
   /** Absolute path to `<cwd>/.lmthing` — set when running in project mode. */
   readonly lmthingRoot?: string;
@@ -282,6 +291,25 @@ export class SessionManager {
     });
   }
 
+  /** Lazily build (once) the pod-side connection resolver. */
+  private getConnectionResolver(): ConnectionResolver | undefined {
+    if (!this.connectionResolverResolved) {
+      this.connectionResolver = createConnectionResolver();
+      this.connectionResolverResolved = true;
+    }
+    return this.connectionResolver;
+  }
+
+  /** Fold the project-independent `callConnection` resolver into a session's app
+   *  globals so EVERY session (project, legacy, headless) can use connections.
+   *  When no resolver is configured, the field is left absent so the router emits
+   *  the clear "no connections gateway configured" error. */
+  private withConnections(appGlobals?: AppGlobalImpls): AppGlobalImpls | undefined {
+    const resolver = this.getConnectionResolver();
+    if (!resolver) return appGlobals;
+    return { ...appGlobals, callConnection: appGlobals?.callConnection ?? resolver };
+  }
+
   /** Default session builder — constructs a Session bound to `streamFn`. */
   private defaultBuildSession(args: BuildSessionArgs): Session {
     return new Session(
@@ -298,7 +326,7 @@ export class SessionManager {
         projectSpacesDir: args.projectSpacesDir,
         projectId: args.projectId,
         projectRoot: args.projectRoot,
-        appGlobals: args.appGlobals,
+        appGlobals: this.withConnections(args.appGlobals),
         appDts: args.appDts,
       },
       { streamFn: this.streamFn },

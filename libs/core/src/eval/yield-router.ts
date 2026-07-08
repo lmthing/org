@@ -1,5 +1,5 @@
 import type { YieldRequest } from './yield.js';
-import type { ApiCallFn } from '../db/types.js';
+import type { ApiCallFn, ConnectionResolver } from '../db/types.js';
 import type { Clock } from '../session/types.js';
 import type { Space } from '../spaces/load.js';
 import type { ForkEngine, ForkTask } from '../fork/fork.js';
@@ -62,6 +62,11 @@ export interface YieldRouterContext {
    *  `name` (host-supplied via the project's app globals). Absent outside a
    *  project-app context; an `apiCall` yield then rejects with a clear error. */
   apiCallResolver?: ApiCallFn;
+  /** Resolve a `callConnection()` yield — forward the request to the gateway's
+   *  egress proxy for the named connected service (host-supplied via the pod's
+   *  scoped connections JWT). Absent outside a pod with a configured connections
+   *  gateway; a `callConnection` yield then rejects with a clear error. */
+  connectionResolver?: ConnectionResolver;
 }
 
 export type RouteResult =
@@ -134,6 +139,18 @@ export async function routeCommonYield(
       }
       const [name, input] = req.args as [string, unknown];
       const value = await ctx.apiCallResolver(name, input);
+      return { handled: true, value };
+    }
+    case 'callConnection': {
+      // Forward an authenticated request to a connected external service via the
+      // gateway egress proxy. A missing resolver means this context has no
+      // connections gateway (e.g. local dev without LMTHING_CONNECTIONS_JWT) —
+      // throw an actionable, retryable error rather than binding undefined.
+      if (!ctx.connectionResolver) {
+        throw new Error('callConnection is not available here: no connections gateway configured');
+      }
+      const [provider, request] = req.args as [string, import('../db/types.js').ConnectionRequest];
+      const value = await ctx.connectionResolver(provider, request);
       return { handled: true, value };
     }
     case 'loadKnowledge': {

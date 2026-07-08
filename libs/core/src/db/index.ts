@@ -22,6 +22,9 @@ export { isBelongsTo, isHasMany } from './schema.js';
 export type {
   ApiCallFn,
   AsyncDbApi,
+  ConnectionRequest,
+  ConnectionResolver,
+  ConnectionResponse,
   DbApi,
   QueryOpts,
   RemoveOpts,

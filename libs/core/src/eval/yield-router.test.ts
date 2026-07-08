@@ -93,4 +93,26 @@ describe('routeCommonYield', () => {
       /apiCall is not available/,
     );
   });
+
+  it('routes callConnection through the connectionResolver with (provider, request)', async () => {
+    const calls: unknown[] = [];
+    const request = { method: 'GET', path: '/gmail/v1/users/me/messages' };
+    const r = await routeCommonYield(
+      req('callConnection', ['google', request]),
+      baseCtx({
+        connectionResolver: async (provider, reqArg) => {
+          calls.push([provider, reqArg]);
+          return { ok: true, status: 200, data: { messages: [] } };
+        },
+      }),
+    );
+    expect(r).toEqual({ handled: true, value: { ok: true, status: 200, data: { messages: [] } } });
+    expect(calls).toEqual([['google', request]]);
+  });
+
+  it('callConnection without a resolver throws (no connections gateway) — surfaced retryably', async () => {
+    await expect(
+      routeCommonYield(req('callConnection', ['google', { method: 'GET', path: '/x' }]), baseCtx()),
+    ).rejects.toThrow(/callConnection is not available/);
+  });
 });

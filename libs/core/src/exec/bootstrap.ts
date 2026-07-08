@@ -12,13 +12,14 @@ import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
 import { createApiCallGlobal } from '../globals/api-call.js';
+import { createCallConnectionGlobal } from '../globals/call-connection.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
   EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
-  WRITE_TABLE_SCHEMA_DTS,
+  WRITE_TABLE_SCHEMA_DTS, composeConnectionsDts,
 } from '../typecheck/library-dts.js';
 import { injectAppGlobals, type AppGlobalImpls } from './app-globals.js';
 import type { RenderHost, Clock } from '../session/types.js';
@@ -159,6 +160,10 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   // `api:call` grant. The host resolver is threaded through the yield router
   // (apiCallResolver); the DTS is declared by buildAppCapabilityDts on the same grant.
   if (caps.app['api:call']) injectGlobal(ctx, 'apiCall', createApiCallGlobal(pushYield) as AnyFn);
+  // callConnection: value-yielding entry to a user-connected external service, gated on the
+  // `connections:use` grant. Resolver threaded via the yield router (connectionResolver); the
+  // per-grant typed DTS (buildAppCapabilityDts) restricts `provider` to the granted providers.
+  if (caps.app['connections:use']) injectGlobal(ctx, 'callConnection', createCallConnectionGlobal(pushYield) as AnyFn);
   if (caps.registerSpace) injectGlobal(ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
   if (caps.setSessionMeta) injectGlobal(ctx, 'setSessionMeta', createSetSessionMetaGlobal(pushYield) as AnyFn);
 
@@ -243,6 +248,9 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string): string {
   // `apiCall('markRead', { id: string }): { ok: boolean }` + a generic fallback), use
   // those so a malformed call fails the agent's typecheck; otherwise the generic fragment.
   if (app['api:call']) parts.push(appDts && appDts.trim() ? appDts : CAPABILITY_DTS_FRAGMENTS['api:call']);
+  // connections:use — emit the typed `callConnection` with `provider` narrowed to the
+  // granted providers (union), so a stray provider fails the agent's typecheck.
+  if (app['connections:use']) parts.push(composeConnectionsDts(app['connections:use'].providers));
   // Standalone authoring/management globals (Phase 9): writePage/writeApi/writeHook +
   // createProject/selectProject. Each emitted only when its grant is present.
   for (const id of ['pages:write', 'api:write', 'hooks:write', 'project:manage'] as const) {

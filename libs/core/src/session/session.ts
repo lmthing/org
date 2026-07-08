@@ -846,6 +846,7 @@ export class Session {
       tracer: this.tracer,
       scope: this.currentScope ?? undefined,
       apiCallResolver: this.opts.appGlobals?.apiCall,
+      connectionResolver: this.opts.appGlobals?.callConnection,
       getForkEngine: () => this.getForkEngine(),
       // Runs host-side with the space dir as cwd, so a checker (tests / tsc) sees
       // files written by attempt forks.
