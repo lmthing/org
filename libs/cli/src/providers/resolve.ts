@@ -36,7 +36,11 @@ export async function resolveModel(modelSpec: string): Promise<LanguageModel> {
       const baseURL = process.env['OPENAI_BASE_URL'];
       const apiKey = process.env['OPENAI_API_KEY'];
       const opts = baseURL ? { baseURL, apiKey } : {};
-      return createOpenAI(opts)(modelId) as unknown as LanguageModel;
+      // `.chat()` pins the Chat Completions API. AI SDK v5's default callable
+      // (`provider(modelId)`) switched to the OpenAI Responses API, which Azure
+      // (via LiteLLM) rejects on older api-versions ("Responses API is enabled
+      // only for api-version 2025-03-01-preview and later").
+      return createOpenAI(opts).chat(modelId) as unknown as LanguageModel;
     }
     case 'anthropic': {
       const { createAnthropic } = await import('@ai-sdk/anthropic');
@@ -47,7 +51,9 @@ export async function resolveModel(modelSpec: string): Promise<LanguageModel> {
       const apiKey = process.env['LMTHINGCLOUD_API_KEY'];
       if (!apiKey) throw new Error('LMTHINGCLOUD_API_KEY env var is required for lmthingcloud: provider');
       const baseURL = process.env['LMTHINGCLOUD_BASE_URL'] || 'https://lmthing.cloud/v1';
-      return createOpenAI({ baseURL, apiKey })(modelId) as unknown as LanguageModel;
+      // `.chat()` — see the openai case: v5's default is the Responses API, which
+      // the LiteLLM→Azure path rejects.
+      return createOpenAI({ baseURL, apiKey }).chat(modelId) as unknown as LanguageModel;
     }
     case 'google': {
       const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
@@ -81,7 +87,8 @@ export async function resolveModel(modelSpec: string): Promise<LanguageModel> {
 
       const { createAzure } = await import('@ai-sdk/azure');
       const azure = createAzure({ resourceName, apiKey });
-      return azure(modelId) as unknown as LanguageModel;
+      // `.chat()` — pin Chat Completions (v5's default callable is the Responses API).
+      return azure.chat(modelId) as unknown as LanguageModel;
     }
     default:
       throw new Error(
