@@ -30,7 +30,7 @@ describe('Session multimodal input threading', () => {
     });
     const host: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
     const session = new Session(
-      { spaceDir: await makeSpace(), agentSlug: 'default', renderHost: host, systemSpaceDirs: [] },
+      { spaceDir: await makeSpace(), agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [] },
       { streamFn },
     );
 
@@ -60,7 +60,7 @@ describe('Session multimodal input threading', () => {
     });
     const host: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
     const session = new Session(
-      { spaceDir: await makeSpace(), agentSlug: 'default', renderHost: host, systemSpaceDirs: [] },
+      { spaceDir: await makeSpace(), agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [] },
       { streamFn },
     );
 

@@ -45,6 +45,24 @@ describe('assembleParts', () => {
     ]);
   });
 
+  it('inlines a text file as text (not an unsupported file part)', () => {
+    const r = assembleParts([
+      { meta: meta({ id: 't1', kind: 'file', mediaType: 'text/plain', filename: 'notes.txt' }), bytes: new TextEncoder().encode('the code is BANANA42') },
+    ]);
+    expect(r.mediaParts).toEqual([]); // NOT sent as a file part (would throw on OpenAI/Azure)
+    expect(r.transcripts).toEqual(['[File notes.txt]:\nthe code is BANANA42']);
+    expect(r.traceAttachments[0]).toMatchObject({ kind: 'file', mediaType: 'text/plain' });
+  });
+
+  it('keeps a binary document (pdf) as a file part', () => {
+    const r = assembleParts([
+      { meta: meta({ id: 'p1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf' }), bytes: new Uint8Array([37, 80, 68, 70]) },
+    ]);
+    expect(r.mediaParts).toHaveLength(1);
+    expect(r.mediaParts[0]!.type).toBe('file');
+    expect(r.transcripts).toEqual([]);
+  });
+
   it('turns audio into a transcript block (no bytes sent to the model)', () => {
     const r = assembleParts([
       { meta: meta({ id: 'a1', kind: 'audio', mediaType: 'audio/mpeg', filename: 'clip.mp3', transcript: 'hello there' }), bytes: null },

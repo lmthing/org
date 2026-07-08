@@ -29,6 +29,18 @@ export function classifyKind(mediaType: string): AttachmentKind {
   return 'file';
 }
 
+/** Max characters of a text file inlined into the prompt (guards context size). */
+const TEXT_FILE_MAX_CHARS = 100_000;
+
+/** Whether a media type is text the model can read directly (so we inline its
+ *  content as text rather than sending an unreadable/unsupported file part). */
+export function isTextMediaType(mediaType: string): boolean {
+  return (
+    mediaType.startsWith('text/') ||
+    /(json|xml|yaml|csv|javascript|typescript|markdown|x-sh|toml)/i.test(mediaType)
+  );
+}
+
 /** Resolve the uploads directory under the runtime root (falls back to cwd when
  *  the manager is not in project mode). */
 export function resolveUploadsDir(root?: string): string {
@@ -118,10 +130,20 @@ export function assembleParts(
       continue;
     }
     if (!bytes) continue;
-    const dataUrl = `data:${meta.mediaType};base64,${Buffer.from(bytes).toString('base64')}`;
     if (meta.kind === 'image') {
+      const dataUrl = `data:${meta.mediaType};base64,${Buffer.from(bytes).toString('base64')}`;
       mediaParts.push({ type: 'image', image: dataUrl, mediaType: meta.mediaType });
+    } else if (isTextMediaType(meta.mediaType)) {
+      // Text-based documents: chat providers (incl. Azure/OpenAI) can't ingest a
+      // text/* file *part* — text/plain even throws UnsupportedFunctionality — so
+      // inline the decoded content as text, the same channel audio transcripts use.
+      const text = Buffer.from(bytes).toString('utf8').slice(0, TEXT_FILE_MAX_CHARS);
+      transcripts.push(`[File ${meta.filename ?? meta.mediaType}]:\n${text}`);
     } else {
+      // Binary documents (PDF, etc.) ride as a file part — supported by providers
+      // that accept documents (Anthropic/OpenAI/Google); on providers that don't,
+      // the model simply can't read it (no crash).
+      const dataUrl = `data:${meta.mediaType};base64,${Buffer.from(bytes).toString('base64')}`;
       mediaParts.push({ type: 'file', data: dataUrl, mediaType: meta.mediaType, ...(meta.filename ? { filename: meta.filename } : {}) });
     }
   }

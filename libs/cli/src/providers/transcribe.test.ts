@@ -15,6 +15,17 @@ describe('transcribeAudio provider resolution', () => {
     );
   });
 
+  it('requires the LiteLLM key when lmthingcloud is configured', async () => {
+    process.env['LM_TRANSCRIBE_MODEL'] = 'lmthingcloud:whisper-1';
+    const savedKey = process.env['LMTHINGCLOUD_API_KEY'];
+    delete process.env['LMTHINGCLOUD_API_KEY'];
+    try {
+      await expect(transcribeAudio(new Uint8Array([1]))).rejects.toThrow(/LMTHINGCLOUD_API_KEY/);
+    } finally {
+      if (savedKey !== undefined) process.env['LMTHINGCLOUD_API_KEY'] = savedKey;
+    }
+  });
+
   it('requires azure credentials when azure is configured', async () => {
     process.env['LM_TRANSCRIBE_MODEL'] = 'azure:whisper';
     const savedResource = process.env['AZURE_RESOURCE_NAME'];

@@ -37,11 +37,20 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [filteredCompletions, setFilteredCompletions] = React.useState<string[]>([]);
+  const [recording, setRecording] = React.useState(false);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const mediaRef = React.useRef<HTMLInputElement>(null);
   const dropdownRef = React.useRef<HTMLUListElement>(null);
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const recordChunksRef = React.useRef<Blob[]>([]);
+  const recordStreamRef = React.useRef<MediaStream | null>(null);
   const isDisabled = disabled || mode === 'replay' || budgetBlocked;
+
+  // Stop any live mic track if the composer unmounts mid-recording.
+  React.useEffect(() => () => {
+    recordStreamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
 
   React.useEffect(() => {
     if (dropdownOpen && dropdownRef.current) {
@@ -69,7 +78,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
 
   const handleSend = () => {
     const t = text.trim();
-    if ((!t && attachments.length === 0) || isDisabled || attaching) return;
+    if ((!t && attachments.length === 0) || isDisabled || attaching || recording) return;
     onSend(t, attachments.length ? attachments : undefined);
     setText('');
     setAttachments([]);
@@ -78,37 +87,87 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  /** Upload one or more picked files to /api/uploads and stage them as
-   *  attachments on the pending message. Audio is transcribed server-side. */
+  /** Upload one File to /api/uploads and stage it as a pending attachment. Audio
+   *  is transcribed server-side; the returned ref carries the transcript. */
+  const uploadFile = async (file: File): Promise<void> => {
+    const dataUrl = await readAsDataUrl(file);
+    const res = await fetch('/api/uploads', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: file.name,
+        mediaType: file.type || 'application/octet-stream',
+        data: dataUrl,
+      }),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err.error || `upload failed (${res.status})`);
+    }
+    const ref = (await res.json()) as UploadedAttachment;
+    setAttachments((prev) => [...prev, ref]);
+  };
+
+  /** Upload one or more picked files and stage them on the pending message. */
   const handleMedia = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setAttaching(true);
     setAttachError(null);
     try {
-      for (const file of files) {
-        const dataUrl = await readAsDataUrl(file);
-        const res = await fetch('/api/uploads', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            filename: file.name,
-            mediaType: file.type || 'application/octet-stream',
-            data: dataUrl,
-          }),
-        });
-        if (!res.ok) {
-          const err = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(err.error || `upload failed (${res.status})`);
-        }
-        const ref = (await res.json()) as UploadedAttachment;
-        setAttachments((prev) => [...prev, ref]);
-      }
+      for (const file of files) await uploadFile(file);
     } catch (err) {
       setAttachError(err instanceof Error ? err.message : String(err));
     } finally {
       setAttaching(false);
       if (mediaRef.current) mediaRef.current.value = '';
+    }
+  };
+
+  /** Toggle mic recording. Stopping uploads the clip (transcribed server-side)
+   *  and stages it like any audio attachment — the transcript rides to the model
+   *  as text when the message is sent, so the user can "talk" to THING. */
+  const toggleRecord = async () => {
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    if (isDisabled || attaching) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setAttachError('Voice recording is not supported in this browser');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordStreamRef.current = stream;
+      recordChunksRef.current = [];
+      const rec = new MediaRecorder(stream);
+      rec.ondataavailable = (ev) => { if (ev.data.size > 0) recordChunksRef.current.push(ev.data); };
+      rec.onstop = async () => {
+        recordStreamRef.current?.getTracks().forEach((t) => t.stop());
+        recordStreamRef.current = null;
+        setRecording(false);
+        const type = rec.mimeType || 'audio/webm';
+        const blob = new Blob(recordChunksRef.current, { type });
+        if (blob.size === 0) return;
+        const ext = type.includes('mp4') ? 'mp4' : type.includes('ogg') ? 'ogg' : 'webm';
+        const file = new File([blob], `voice-${Date.now()}.${ext}`, { type });
+        setAttaching(true);
+        setAttachError(null);
+        try {
+          await uploadFile(file);
+        } catch (err) {
+          setAttachError(err instanceof Error ? err.message : String(err));
+        } finally {
+          setAttaching(false);
+        }
+      };
+      mediaRecorderRef.current = rec;
+      rec.start();
+      setRecording(true);
+      setAttachError(null);
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : 'Microphone permission denied');
     }
   };
 
@@ -211,7 +270,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   return (
     <div className={cn('px-4 pb-4 pt-2', className)}>
       {/* Staged attachments */}
-      {(attachments.length > 0 || attaching || attachError) && (
+      {(attachments.length > 0 || attaching || attachError || recording) && (
         <div className="mb-2 flex flex-wrap items-center gap-2">
           {attachments.map((a) => (
             <span
@@ -224,7 +283,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
               ) : (
                 <span className="text-muted-foreground">{a.kind === 'audio' ? '♪' : '📎'}</span>
               )}
-              <span className="truncate">{a.filename ?? a.kind}</span>
+              <span className="truncate">{a.kind === 'audio' && a.transcript ? a.transcript : (a.filename ?? a.kind)}</span>
               <button
                 onClick={() => removeAttachment(a.id)}
                 className="shrink-0 text-muted-foreground hover:text-foreground"
@@ -234,7 +293,13 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
               </button>
             </span>
           ))}
-          {attaching && <span className="text-xs text-muted-foreground">Uploading…</span>}
+          {recording && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-destructive">
+              <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+              Recording… tap ■ to stop
+            </span>
+          )}
+          {attaching && <span className="text-xs text-muted-foreground">Transcribing…</span>}
           {attachError && <span className="text-xs text-destructive">{attachError}</span>}
         </div>
       )}
@@ -273,6 +338,26 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
           <input ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple className="hidden" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
         </label>
+
+        {/* Voice: record → transcribe → stage as an attachment (talk to THING) */}
+        <button
+          type="button"
+          onClick={() => void toggleRecord()}
+          disabled={(isDisabled || attaching) && !recording}
+          className={cn(
+            'shrink-0 mb-0.5 transition-colors disabled:opacity-50',
+            recording ? 'text-destructive animate-pulse' : 'text-muted-foreground hover:text-foreground',
+          )}
+          title={recording ? 'Stop recording' : 'Record a voice message'}
+          aria-label={recording ? 'Stop recording' : 'Record a voice message'}
+          data-testid="mic-button"
+        >
+          {recording ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+          )}
+        </button>
 
         {/* Attach a project document (text ingestion into the project) */}
         {projectId && (
