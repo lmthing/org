@@ -23,12 +23,12 @@ afterAll(async () => {
 const meta = (m: Partial<UploadMeta> & Pick<UploadMeta, 'id' | 'kind' | 'mediaType'>): UploadMeta => m;
 
 describe('assembleParts', () => {
-  it('maps an image to a base64 data-url image part + trace attachment', () => {
+  it('maps an image to a delegatable attachment carrying its id + image part', () => {
     const r = assembleParts([
       { meta: meta({ id: 'i1', kind: 'image', mediaType: 'image/png', filename: 'a.png' }), bytes: new Uint8Array([1, 2, 3]) },
     ]);
-    expect(r.mediaParts).toEqual([
-      { type: 'image', image: `data:image/png;base64,${Buffer.from([1, 2, 3]).toString('base64')}`, mediaType: 'image/png' },
+    expect(r.attachments).toEqual([
+      { id: 'i1', kind: 'image', mediaType: 'image/png', filename: 'a.png', part: { type: 'image', image: `data:image/png;base64,${Buffer.from([1, 2, 3]).toString('base64')}`, mediaType: 'image/png' } },
     ]);
     expect(r.traceAttachments).toEqual([
       { kind: 'image', url: '/api/uploads/i1', mediaType: 'image/png', filename: 'a.png' },
@@ -36,38 +36,32 @@ describe('assembleParts', () => {
     expect(r.transcripts).toEqual([]);
   });
 
-  it('maps a non-image file to a file part carrying its filename', () => {
+  it('maps a binary (pdf) file to an attachment carrying a file part', () => {
     const r = assembleParts([
       { meta: meta({ id: 'f1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf' }), bytes: new Uint8Array([9]) },
     ]);
-    expect(r.mediaParts).toEqual([
-      { type: 'file', data: `data:application/pdf;base64,${Buffer.from([9]).toString('base64')}`, mediaType: 'application/pdf', filename: 'doc.pdf' },
+    expect(r.attachments).toEqual([
+      { id: 'f1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf', part: { type: 'file', data: `data:application/pdf;base64,${Buffer.from([9]).toString('base64')}`, mediaType: 'application/pdf', filename: 'doc.pdf' } },
     ]);
   });
 
-  it('inlines a text file as text (not an unsupported file part)', () => {
+  it('carries a text file as decoded text (not an unsupported file part)', () => {
     const r = assembleParts([
       { meta: meta({ id: 't1', kind: 'file', mediaType: 'text/plain', filename: 'notes.txt' }), bytes: new TextEncoder().encode('the code is BANANA42') },
     ]);
-    expect(r.mediaParts).toEqual([]); // NOT sent as a file part (would throw on OpenAI/Azure)
-    expect(r.transcripts).toEqual(['[File notes.txt]:\nthe code is BANANA42']);
+    expect(r.attachments).toEqual([
+      { id: 't1', kind: 'file', mediaType: 'text/plain', filename: 'notes.txt', text: 'the code is BANANA42' },
+    ]);
+    expect(r.attachments[0]!.part).toBeUndefined(); // NOT a file part (would throw on OpenAI/Azure)
+    expect(r.transcripts).toEqual([]);
     expect(r.traceAttachments[0]).toMatchObject({ kind: 'file', mediaType: 'text/plain' });
   });
 
-  it('keeps a binary document (pdf) as a file part', () => {
-    const r = assembleParts([
-      { meta: meta({ id: 'p1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf' }), bytes: new Uint8Array([37, 80, 68, 70]) },
-    ]);
-    expect(r.mediaParts).toHaveLength(1);
-    expect(r.mediaParts[0]!.type).toBe('file');
-    expect(r.transcripts).toEqual([]);
-  });
-
-  it('turns audio into a transcript block (no bytes sent to the model)', () => {
+  it('turns audio into a transcript block (no attachment, no bytes to the model)', () => {
     const r = assembleParts([
       { meta: meta({ id: 'a1', kind: 'audio', mediaType: 'audio/mpeg', filename: 'clip.mp3', transcript: 'hello there' }), bytes: null },
     ]);
-    expect(r.mediaParts).toEqual([]); // audio is NOT sent as bytes
+    expect(r.attachments).toEqual([]); // audio → text, handled by the text model directly
     expect(r.transcripts).toEqual(['[Transcript of clip.mp3]:\nhello there']);
     expect(r.traceAttachments[0]).toMatchObject({ kind: 'audio', url: '/api/uploads/a1', transcript: 'hello there' });
   });
@@ -77,7 +71,7 @@ describe('assembleParts', () => {
       { meta: null, bytes: null },
       { meta: meta({ id: 'i2', kind: 'image', mediaType: 'image/png' }), bytes: null },
     ]);
-    expect(r.mediaParts).toEqual([]);
+    expect(r.attachments).toEqual([]);
     expect(r.traceAttachments).toHaveLength(1); // the image's metadata still surfaces to the UI
   });
 
@@ -87,7 +81,8 @@ describe('assembleParts', () => {
       { meta: meta({ id: 'f', kind: 'file', mediaType: 'application/pdf' }), bytes: new Uint8Array([2]) },
       { meta: meta({ id: 'a', kind: 'audio', mediaType: 'audio/wav', transcript: 'spoken' }), bytes: null },
     ]);
-    expect(r.mediaParts.map((p) => p.type)).toEqual(['image', 'file']);
+    expect(r.attachments.map((a) => a.kind)).toEqual(['image', 'file']);
+    expect(r.attachments.map((a) => a.part?.type)).toEqual(['image', 'file']);
     expect(r.transcripts).toEqual(['[Transcript of audio]:\nspoken']);
     expect(r.traceAttachments.map((t) => t.kind)).toEqual(['image', 'file', 'audio']);
   });

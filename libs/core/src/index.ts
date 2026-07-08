@@ -114,7 +114,7 @@ export type { TaskNode } from './spaces/tasklist-load.js';
 
 // Session
 export { Session } from './session/session.js';
-export type { UserInput } from './session/session.js';
+export type { UserInput, UserAttachment } from './session/session.js';
 export { saveSnapshot, loadSnapshot } from './session/snapshot.js';
 export type { Snapshot } from './session/snapshot.js';
 

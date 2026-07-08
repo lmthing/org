@@ -22,7 +22,7 @@ async function makeSpace(): Promise<string> {
 }
 
 describe('Session multimodal input threading', () => {
-  it('carries image attachments from start() through to the streamFn', async () => {
+  it('exposes an image to a text agent as a delegatable note (NOT raw parts)', async () => {
     const captured: StreamOpts[] = [];
     const streamFn = createMockStreamFn((opts: StreamOpts) => {
       captured.push(opts);
@@ -36,18 +36,22 @@ describe('Session multimodal input threading', () => {
 
     await session.start({
       text: 'what is in this picture?',
-      attachments: [{ type: 'image', image: 'data:image/png;base64,AAAA', mediaType: 'image/png' }],
+      attachments: [
+        { id: 'up1', kind: 'image', mediaType: 'image/png', filename: 'p.png', part: { type: 'image', image: 'data:image/png;base64,AAAA', mediaType: 'image/png' } },
+      ],
     });
 
     expect(captured.length).toBeGreaterThan(0);
     const userMsg = [...captured[0]!.messages].reverse().find((m) => m.role === 'user');
     expect(userMsg).toBeTruthy();
-    // Framed like a normal text turn…
+    // The user's text is framed as usual…
     expect(userMsg!.content).toContain('what is in this picture?');
-    // …and the image rides alongside as an attachment.
-    expect(userMsg!.attachments).toEqual([
-      { type: 'image', image: 'data:image/png;base64,AAAA', mediaType: 'image/png' },
-    ]);
+    // …the attachment is surfaced as a note (id + kind) so a text model can delegate…
+    expect(userMsg!.content).toContain('up1');
+    expect(userMsg!.content).toMatch(/image/i);
+    expect(userMsg!.content).toContain('system-vision');
+    // …and the raw image bytes are NOT sent to the (text) THING model.
+    expect(userMsg!.attachments).toBeUndefined();
 
     await session.dispose();
   });

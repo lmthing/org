@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
-import type { MediaPart, TraceAttachment } from '@lmthing/core';
+import type { MediaPart, TraceAttachment, UserAttachment } from '@lmthing/core';
 
 /** The kind of a user attachment, derived from its IANA media type. Audio is
  *  transcribed to text server-side; images/files are passed to vision/doc models. */
@@ -95,25 +95,26 @@ export async function readUploadBytes(uploadsDir: string, id: string): Promise<U
   }
 }
 
-/** The result of turning stored uploads into model input + UI-facing metadata. */
+/** The result of turning stored uploads into delegatable attachments + metadata. */
 export interface AssembledAttachments {
-  /** Image/file parts to attach to the model message. Audio is excluded — it
-   *  contributes its transcript to the text instead. */
-  mediaParts: MediaPart[];
+  /** Image/file attachments (keyed by upload id). A text agent (THING) delegates
+   *  each to a vision/file agent; images/binaries carry a `part`, text files carry
+   *  decoded `text`. Audio is excluded — it contributes its transcript to the text. */
+  attachments: UserAttachment[];
   /** Attachment metadata (with served urls) for the `user_message` trace event. */
   traceAttachments: TraceAttachment[];
-  /** Transcribed-audio blocks to append to the user's text. */
+  /** Transcribed-AUDIO blocks to append to the user's text (audio → text → THING). */
   transcripts: string[];
 }
 
 /** Pure transform: given each requested upload's metadata + bytes (bytes null
- *  for audio, which needs none), build the model parts, the trace-facing
- *  attachment list, and the transcript text blocks. Missing metadata entries are
- *  skipped. Kept free of I/O so it is fully unit-testable. */
+ *  for audio, which needs none), build the delegatable attachment list, the
+ *  trace-facing attachment list, and the audio transcript blocks. Missing
+ *  metadata entries are skipped. Kept free of I/O so it is fully unit-testable. */
 export function assembleParts(
   items: Array<{ meta: UploadMeta | null; bytes: Uint8Array | null }>,
 ): AssembledAttachments {
-  const mediaParts: MediaPart[] = [];
+  const attachments: UserAttachment[] = [];
   const traceAttachments: TraceAttachment[] = [];
   const transcripts: string[] = [];
   for (const { meta, bytes } of items) {
@@ -126,26 +127,26 @@ export function assembleParts(
       ...(meta.transcript ? { transcript: meta.transcript } : {}),
     });
     if (meta.kind === 'audio') {
+      // Audio is transcribed to text upstream and handled by the text model directly.
       if (meta.transcript) transcripts.push(`[Transcript of ${meta.filename ?? 'audio'}]:\n${meta.transcript}`);
       continue;
     }
     if (!bytes) continue;
+    const base = { id: meta.id, kind: meta.kind, mediaType: meta.mediaType, ...(meta.filename ? { filename: meta.filename } : {}) };
     if (meta.kind === 'image') {
       const dataUrl = `data:${meta.mediaType};base64,${Buffer.from(bytes).toString('base64')}`;
-      mediaParts.push({ type: 'image', image: dataUrl, mediaType: meta.mediaType });
+      attachments.push({ ...base, part: { type: 'image', image: dataUrl, mediaType: meta.mediaType } });
     } else if (isTextMediaType(meta.mediaType)) {
-      // Text-based documents: chat providers (incl. Azure/OpenAI) can't ingest a
-      // text/* file *part* — text/plain even throws UnsupportedFunctionality — so
-      // inline the decoded content as text, the same channel audio transcripts use.
-      const text = Buffer.from(bytes).toString('utf8').slice(0, TEXT_FILE_MAX_CHARS);
-      transcripts.push(`[File ${meta.filename ?? meta.mediaType}]:\n${text}`);
+      // Text-based documents: chat providers can't ingest a text/* file *part*
+      // (text/plain even throws), so carry the decoded content as text for the
+      // files agent to read.
+      attachments.push({ ...base, text: Buffer.from(bytes).toString('utf8').slice(0, TEXT_FILE_MAX_CHARS) });
     } else {
-      // Binary documents (PDF, etc.) ride as a file part — supported by providers
-      // that accept documents (Anthropic/OpenAI/Google); on providers that don't,
-      // the model simply can't read it (no crash).
+      // Binary documents (PDF, etc.) ride as a file part — for providers/models
+      // that accept documents; where they don't, the file agent reports it can't.
       const dataUrl = `data:${meta.mediaType};base64,${Buffer.from(bytes).toString('base64')}`;
-      mediaParts.push({ type: 'file', data: dataUrl, mediaType: meta.mediaType, ...(meta.filename ? { filename: meta.filename } : {}) });
+      attachments.push({ ...base, part: { type: 'file', data: dataUrl, mediaType: meta.mediaType, ...(meta.filename ? { filename: meta.filename } : {}) } });
     }
   }
-  return { mediaParts, traceAttachments, transcripts };
+  return { attachments, traceAttachments, transcripts };
 }

@@ -87,6 +87,9 @@ declare interface ForkOpts<T> {
 declare interface DelegateOpts {
   query?: string;
   context?: unknown;
+  /** Upload ids of image/file attachments to hand to the delegated agent (e.g. an
+   *  image to a vision agent). Read the ids from your user message's attachment list. */
+  attachmentIds?: string[];
 }
 
 // Host-injected globals available in space functions and agent code

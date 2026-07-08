@@ -1,5 +1,5 @@
 import type { RenderHost, Clock } from '../session/types.js';
-import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
+import type { StreamOpts, StreamSession, MediaPart } from '../eval/stream-types.js';
 import type { DelegateOpts } from '../globals/delegate.js';
 import type { DelegateRegistry } from './registry.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
@@ -58,8 +58,16 @@ export interface RunDelegateOpts {
    *  VM and its nested forks so a delegated db-writer reaches the project's engine. */
   appGlobals?: AppGlobalImpls;
   /** Model spec/alias used by streamFn — forwarded to runTurnLoop so llm_request events
-   *  carry a model field and cost tracking works across delegate chains. */
+   *  carry a model field and cost tracking works across delegate chains. Overridden
+   *  by the delegated agent's own `model:` frontmatter when set (e.g. a vision agent). */
   model?: string;
+  /** Multimodal attachments (image/binary-file MediaParts) to attach to the
+   *  delegated agent's initial user message — lets THING route an image to a
+   *  vision agent. Resolved by the session's runDelegate from `attachmentIds`. */
+  attachments?: MediaPart[];
+  /** Decoded text of text-based file attachments, appended to the delegated
+   *  agent's message (text files can't ride as a provider file part). */
+  attachmentTexts?: string[];
   /** Host budget caps inherited from the parent context (session opts, or the outer
    *  delegate layer). Applied to each fork THIS delegate spawns (fresh Budget per
    *  fork) — not to the delegate's own turn loop. Before the A1 fix this was
@@ -85,6 +93,11 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   }
 
   const { space, agent } = await opts.registry.resolveLazy(target);
+
+  // The delegated agent may declare its own model (frontmatter `model:`), e.g. a
+  // vision agent needing a vision-capable model. Its own turns run on that model;
+  // fall back to the caller's inherited model when unset.
+  const turnModel = agent.model ?? opts.model;
 
   // Seed registry with this space's npm deps so nested delegates can resolve them
   for (const [pkgName, depSpace] of Object.entries(space.dependentSpaces)) {
@@ -208,12 +221,23 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       opts.action ? `Run action: ${opts.action}` : `You have been delegated this request — handle it using your available actions/tasklists or directly.`,
       query ? `Query: ${query}` : '',
       context ? `Context: ${JSON.stringify(context)}` : '',
+      // Text-file attachments inline their decoded content here (they can't ride
+      // as a provider file part). Image/binary attachments ride on the message.
+      ...(opts.attachmentTexts ?? []),
       tasklistHint,
     ]
       .filter(Boolean)
       .join('\n');
 
-    history.append({ role: 'user', content: userMessage, blockType: 'normal' });
+    // Attachments (image/file MediaParts) ride on the delegate's user message so a
+    // vision/file agent's model actually receives the image/document. The turn loop
+    // + provider layer already forward `attachments` into the ModelMessage content.
+    history.append({
+      role: 'user',
+      content: userMessage,
+      ...(opts.attachments && opts.attachments.length ? { attachments: opts.attachments } : {}),
+      blockType: 'normal',
+    });
 
     // Ambient DTS via the shared additive builder: library minus `ask`, this
     // agent's function/component overlay, the currentTask capture global, and
@@ -338,7 +362,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
         tracer: tracer,
         traceContext: delegateLabel,
         scope: delegateScope,
-        model: opts.model,
+        model: turnModel,
       });
       // GUARANTEE (mirrors fork.ts): a delegate whose model finished without calling
       // currentTask.resolve() — and without running a capturable tasklist — must not
@@ -374,7 +398,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             tracer: tracer,
             traceContext: `${delegateLabel}:resolve_nudge`,
             scope: delegateScope,
-            model: opts.model,
+            model: turnModel,
           });
         } catch (err) {
           if (!(err instanceof BudgetExceededError)) throw err;

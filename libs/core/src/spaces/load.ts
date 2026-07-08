@@ -42,6 +42,12 @@ export interface AgentDef {
    *    - explicit list             → hard allowlist, enforced at yield time
    *      (`"registered:*"` entry = any runtime-registered space) */
   canDelegateTo?: string[];
+  /** Optional model alias/spec this agent's turns run on (frontmatter `model:`).
+   *  Overrides the inherited caller/session model when this agent is delegated —
+   *  lets a specialized agent (e.g. system-vision) declare it needs a vision
+   *  model. Resolved by the provider layer (alias via LM_MODEL_<NAME>, or a full
+   *  `provider:modelId` spec). Undefined = inherit the caller's model. */
+  model?: string;
   config: AgentConfig;
   /** When set, a freeform session for this agent runs this action's tasklist
    *  deterministically (host-driven) instead of the model-driven turn loop — a
@@ -370,6 +376,7 @@ const AGENT_FRONTMATTER_ALLOWED_KEYS = new Set([
   'canDelegateTo',
   'dependencies',
   'capabilities',
+  'model',
 ]);
 
 async function loadAgent(
@@ -390,6 +397,7 @@ async function loadAgent(
   // when the key is absent so evaluateDelegatePolicy can apply the level default.
   let canDelegateTo: string[] | undefined;
   let defaultAction: string | undefined;
+  let model: string | undefined;
   let capabilities: AppCapabilities = {};
 
   if (await fileExists(instructPath)) {
@@ -408,6 +416,7 @@ async function loadAgent(
 
     if (typeof data['title'] === 'string') title = data['title'];
     if (typeof data['defaultAction'] === 'string') defaultAction = data['defaultAction'];
+    if (typeof data['model'] === 'string' && data['model'].trim()) model = data['model'].trim();
     if (Array.isArray(data['knowledge'])) config.knowledge = data['knowledge'].map(String);
     if (Array.isArray(data['functions'])) config.functions = data['functions'].map(String);
     if (Array.isArray(data['components'])) config.components = data['components'].map(String);
@@ -451,7 +460,7 @@ async function loadAgent(
     charterBody = body.trim();
   }
 
-  return { slug, title, instructBody, charterBody, actions, canDelegateTo, config, defaultAction, capabilities };
+  return { slug, title, instructBody, charterBody, actions, canDelegateTo, config, defaultAction, capabilities, ...(model ? { model } : {}) };
 }
 
 export interface LoadSpaceOpts {

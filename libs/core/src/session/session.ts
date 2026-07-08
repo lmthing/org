@@ -37,23 +37,45 @@ import {
   type DelegatePolicy,
 } from '../exec/target-match.js';
 
-/** A user turn's input: plain text, or text plus multimodal attachments
- *  (images/files; audio is transcribed to text upstream). */
-export type UserInput = string | { text: string; attachments?: MediaPart[] };
+/** One image/file attachment on a user turn. Audio is transcribed to text
+ *  upstream, so it never appears here. Carries EITHER a model-facing `part`
+ *  (image, or a binary document like PDF) OR decoded `text` (text-based files,
+ *  which chat providers can't ingest as a file part) — the session hands whichever
+ *  applies to a delegated vision/file agent (keyed by `id`). */
+export interface UserAttachment {
+  id: string;
+  kind: 'image' | 'file';
+  mediaType: string;
+  filename?: string;
+  /** Image or binary-document part (sent to a vision/doc model). */
+  part?: MediaPart;
+  /** Decoded text of a text-based file (appended to the delegate's message). */
+  text?: string;
+}
+
+/** A user turn's input: plain text, or text plus image/file attachments. A text
+ *  orchestrator (THING) can't read the parts directly — it delegates them to a
+ *  vision/file agent by their id (see the attachment note added to its message). */
+export type UserInput = string | { text: string; attachments?: UserAttachment[] };
 
 /** Normalize a user turn to its text + attachments. */
-function normalizeInput(message: UserInput): { text: string; attachments?: MediaPart[] } {
+function normalizeInput(message: UserInput): { text: string; attachments?: UserAttachment[] } {
   return typeof message === 'string' ? { text: message } : message;
 }
 
-/** Apply the neutral "User request:" framing to a user turn's text while
- *  carrying any attachments through unchanged. */
-function frameUserContent(message: UserInput): { content: string; attachments?: MediaPart[] } {
-  const { text, attachments } = normalizeInput(message);
-  return {
-    content: `User request:\n\n${text}`,
-    ...(attachments && attachments.length ? { attachments } : {}),
-  };
+/** A short text note listing the turn's image/file attachments (by id), appended
+ *  to a text agent's message so it knows what's attached and can delegate each to
+ *  the right specialist. The bytes are NOT in the text — only ids + metadata. */
+function attachmentNote(attachments: UserAttachment[]): string {
+  if (!attachments.length) return '';
+  const lines = attachments
+    .map((a) => `  - ${a.kind}: ${a.filename ?? a.mediaType} — attachmentId "${a.id}"`)
+    .join('\n');
+  return (
+    `\n\n[The user attached the following. You cannot read them yourself — delegate each ` +
+    `by its id: an image to \`system-vision/vision\`, a file to \`system-files/reader\`, ` +
+    `passing \`{ query, attachmentIds: ["<id>"] }\`.\n${lines}]`
+  );
 }
 
 /** Extract the plain-text portion of a user turn (drops framing/attachments) —
@@ -70,6 +92,12 @@ export class Session {
   private space: Space | null = null;
   private sessionId: string;
   private tracer: Tracer;
+  /** Image/file attachments on the CURRENT user turn, keyed by upload id. A text
+   *  agent (THING) can't read them, so it delegates by id — runDelegate resolves
+   *  the id here to the MediaPart and hands it to the vision/file agent. Cleared
+   *  and repopulated on each start/continue/resume (only the latest turn's
+   *  attachments are addressable). */
+  private pendingAttachments = new Map<string, UserAttachment>();
   private systemBlock: string | null = null;
   private ambientDts: string | null = null;
   private agentFunctions: Record<string, string> = {};
@@ -141,6 +169,19 @@ export class Session {
   /** The full message history (for persisting a resumable session snapshot). */
   getHistory(): import('../context/history.js').Message[] { return this.history.messages; }
 
+  /** Ingest a user turn: reset + record this turn's image/file attachments into
+   *  `pendingAttachments` (for id-based delegation) and return the text to append
+   *  to history — the user's text, optionally framed, plus a note listing the
+   *  attachments by id. The raw bytes are NOT put on the text agent's message. */
+  private ingestUserTurn(message: UserInput, opts?: { frame?: boolean }): string {
+    const { text, attachments } = normalizeInput(message);
+    this.pendingAttachments.clear();
+    const atts = attachments ?? [];
+    for (const a of atts) this.pendingAttachments.set(a.id, a);
+    const framed = opts?.frame === false ? text : `User request:\n\n${text}`;
+    return framed + attachmentNote(atts);
+  }
+
   async continue(message: UserInput): Promise<void> {
     if (!this.vm || !this.systemBlock || !this.ambientDts) {
       throw new Error('Session not started — call start() first');
@@ -151,7 +192,7 @@ export class Session {
     // request (live E3 regression: a deep-research ask routed to the engineer).
     this.history.append({
       role: 'user',
-      ...frameUserContent(message),
+      content: this.ingestUserTurn(message),
       blockType: 'normal',
     });
     // Context economy: collapse old turns into a summary once history grows large,
@@ -250,7 +291,7 @@ export class Session {
     // comment: the TS reply channel belongs to STATEMENT_PROTOCOL, not the request).
     this.history.append({
       role: 'user',
-      ...frameUserContent(initialMessage),
+      content: this.ingestUserTurn(initialMessage),
       blockType: 'normal',
     });
 
@@ -404,13 +445,11 @@ export class Session {
 
     // Append new user message. resume() historically appends the raw message
     // (no "User request:" framing, unlike start()/continue()); preserve that,
-    // while still carrying any multimodal attachments through.
+    // while recording this turn's attachments for id-based delegation.
     {
-      const { text, attachments } = normalizeInput(message);
       this.history.append({
         role: 'user',
-        content: text,
-        ...(attachments && attachments.length ? { attachments } : {}),
+        content: this.ingestUserTurn(message, { frame: false }),
         blockType: 'normal',
       });
     }
@@ -851,12 +890,26 @@ export class Session {
           spaceMap.set(key, dynSpace);
         }
         const registry = new DelegateRegistry(spaceMap);
+        // Resolve any attachment ids the delegating agent passed (e.g. THING
+        // handing an image to system-vision) to the parts/text held for this turn.
+        // Image/binary → a MediaPart; text-based file → a text block. Both are
+        // attached to the delegated agent's message.
+        const reqIds = (delegateOpts as import('../globals/delegate.js').DelegateOpts | undefined)?.attachmentIds;
+        const resolved = (reqIds ?? [])
+          .map((aid) => this.pendingAttachments.get(aid))
+          .filter((a): a is UserAttachment => a !== undefined);
+        const attachments = resolved.map((a) => a.part).filter((p): p is MediaPart => p !== undefined);
+        const attachmentTexts = resolved
+          .filter((a) => a.text)
+          .map((a) => `[File ${a.filename ?? a.mediaType}]:\n${a.text}`);
         return runDelegate({
           packageName,
           agentName,
           action,
           allowedActions,
           delegateOpts,
+          ...(attachments.length ? { attachments } : {}),
+          ...(attachmentTexts.length ? { attachmentTexts } : {}),
           registry,
           renderHost: this.opts.renderHost,
           streamFn: this.deps.streamFn,

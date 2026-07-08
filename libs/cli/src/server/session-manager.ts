@@ -966,9 +966,12 @@ export class SessionManager {
         return { meta, bytes };
       }),
     );
-    const { mediaParts, traceAttachments, transcripts } = assembleParts(items);
+    const { attachments, traceAttachments, transcripts } = assembleParts(items);
+    // Audio transcripts fold into the text (handled by the text model directly);
+    // image/file attachments ride as delegatable attachments (THING routes each
+    // to a vision/file agent by id).
     const text = transcripts.length ? [content, ...transcripts].filter(Boolean).join('\n\n') : content;
-    const input: UserInput = mediaParts.length ? { text, attachments: mediaParts } : text;
+    const input: UserInput = attachments.length ? { text, attachments } : text;
     return { input, ...(traceAttachments.length ? { traceAttachments } : {}) };
   }
 

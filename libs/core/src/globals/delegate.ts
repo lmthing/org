@@ -3,6 +3,11 @@ import type { YieldRequest } from '../eval/yield.js';
 export interface DelegateOpts {
   query?: string;
   context?: unknown;
+  /** Upload ids of attachments (image/file) to hand to the delegated agent — the
+   *  session resolves these to the actual bytes and attaches them to the delegate's
+   *  message, so a vision/file agent's model receives the image/document. THING
+   *  reads the ids from its message (the server lists attached uploads by id). */
+  attachmentIds?: string[];
 }
 
 /**
