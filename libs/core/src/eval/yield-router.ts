@@ -1,4 +1,5 @@
 import type { YieldRequest } from './yield.js';
+import type { ApiCallFn } from '../db/types.js';
 import type { Clock } from '../session/types.js';
 import type { Space } from '../spaces/load.js';
 import type { ForkEngine, ForkTask } from '../fork/fork.js';
@@ -57,6 +58,10 @@ export interface YieldRouterContext {
    *  registered inside a fork is reachable by the parent's later delegate(). */
   resolveRegisterSpace?: boolean;
   dynamicSpaces?: Map<string, Space>;
+  /** Resolve an `apiCall()` yield — enter the project's api runtime by endpoint
+   *  `name` (host-supplied via the project's app globals). Absent outside a
+   *  project-app context; an `apiCall` yield then rejects with a clear error. */
+  apiCallResolver?: ApiCallFn;
 }
 
 export type RouteResult =
@@ -118,6 +123,17 @@ export async function routeCommonYield(
       const [url, fetchOpts] = req.args as [string, import('../globals/fetch.js').FetchOpts | undefined];
       const { resolveFetchYield } = await import('./fetch-yield.js');
       const value = await resolveFetchYield(url, fetchOpts);
+      return { handled: true, value };
+    }
+    case 'apiCall': {
+      // Enter the project's own api endpoint by name (agent-facing `apiCall`).
+      // A missing resolver means this context has no project api runtime — throw
+      // an actionable, retryable error rather than binding undefined.
+      if (!ctx.apiCallResolver) {
+        throw new Error('apiCall is not available here: this session has no project api runtime');
+      }
+      const [name, input] = req.args as [string, unknown];
+      const value = await ctx.apiCallResolver(name, input);
       return { handled: true, value };
     }
     case 'loadKnowledge': {

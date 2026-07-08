@@ -11,6 +11,7 @@ import { createLoadKnowledgeGlobal } from '../globals/load-knowledge.js';
 import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
+import { createApiCallGlobal } from '../globals/api-call.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
@@ -154,6 +155,10 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
     injectGlobal(ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
   }
   if (caps.delegate) injectGlobal(ctx, 'delegate', createDelegateGlobal(pushYield) as AnyFn);
+  // apiCall: value-yielding entry to the project's own api endpoints, gated on the
+  // `api:call` grant. The host resolver is threaded through the yield router
+  // (apiCallResolver); the DTS is declared by buildAppCapabilityDts on the same grant.
+  if (caps.app['api:call']) injectGlobal(ctx, 'apiCall', createApiCallGlobal(pushYield) as AnyFn);
   if (caps.registerSpace) injectGlobal(ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
   if (caps.setSessionMeta) injectGlobal(ctx, 'setSessionMeta', createSetSessionMetaGlobal(pushYield) as AnyFn);
 

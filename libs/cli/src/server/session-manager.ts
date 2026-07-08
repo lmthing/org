@@ -7,6 +7,7 @@ import { dirname } from 'node:path';
 import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
 import type { StreamOpts, StreamSession, AppGlobalImpls } from '@lmthing/core';
 import { bootProjectApp } from '../app/boot.js';
+import { createApiRuntime, type ApiRuntime } from '../app/api/runtime.js';
 import type { ProjectDb } from '../app/store.js';
 import { createAppAuthoringGlobals, resolveCatalogRoot, type AppAuthoringGlobals } from '../app/authoring/index.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
@@ -185,6 +186,39 @@ function computeTurnCost(
   return (inputTokens / 1000) * p.inputPer1K + (outputTokens / 1000) * p.outputPer1K;
 }
 
+/** Parse a `space/agent#action` spawn ref → the pieces `runHeadless` wants
+ *  (mirrors the hook `parseTrigger`). No `#` ⇒ the whole ref is the space, no action. */
+function parseAgentRef(ref: string): { spaceRef: string; agentSlug: string; action: string } {
+  const hash = ref.indexOf('#');
+  const spaceRef = hash >= 0 ? ref.slice(0, hash) : ref;
+  const action = hash >= 0 ? ref.slice(hash + 1) : '';
+  const agentSlug = spaceRef.split('/').pop() ?? spaceRef;
+  return { spaceRef, agentSlug, action };
+}
+
+/** Best-effort JSON for embedding spawn input into the agent's kickoff message. */
+function safeStringify(v: unknown): string {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+/** Run a project api endpoint by name and unwrap it to a value/throw — the
+ *  agent-facing `apiCall` contract (mirrors the runtime's internal resolver): a
+ *  ≥400 status becomes a thrown Error carrying `.status`, else the body is returned. */
+async function unwrapApiCall(rt: ApiRuntime, name: string, input?: unknown): Promise<unknown> {
+  const res = await rt.callByName(name, input);
+  if (res.status >= 400) {
+    const body = res.body as { error?: { message?: string } } | undefined;
+    const err = new Error(body?.error?.message ?? `apiCall("${name}") failed`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return res.body;
+}
+
 /**
  * Owns a pool of independent agent sessions. Each session gets its OWN
  * WebRenderHost + TraceHub so display/ask/trace events never cross sessions.
@@ -308,8 +342,13 @@ export class SessionManager {
   private async getProjectAppGlobals(root: string, projectId: string): Promise<AppGlobalImpls | undefined> {
     const db = await this.getProjectDb(root, projectId);
     const authoring = this.getAuthoringGlobals();
+    const apiRt = await this.getApiRuntime(root, projectId);
     return {
       ...(db ? { db: db.db } : undefined),
+      // Agent-facing apiCall — re-enter the project's OWN api endpoints by name
+      // (same runtime the browser + hooks use). Only present when the project has
+      // an `api/` dir; the yield router rejects apiCall() otherwise.
+      ...(apiRt ? { apiCall: (name: string, input?: unknown) => unwrapApiCall(apiRt, name, input) } : undefined),
       writePage: authoring.writePage,
       writeApi: authoring.writeApi,
       writeHook: authoring.writeHook,
@@ -319,8 +358,54 @@ export class SessionManager {
     };
   }
 
+  /** Per-project api runtime (main-process), cached. Backs BOTH the browser-facing
+   *  `/app/<project>/api/*` handler AND the agent-facing `apiCall` global, and its
+   *  `spawn` seam runs a REAL fire-and-forget headless agent via {@link runHeadless}
+   *  (this replaces the old Phase-3 no-op stub). `null` is cached for a project with
+   *  no `api/` dir. Closed in {@link closeProjectDbs} on shutdown. */
+  private apiRuntimes = new Map<string, ApiRuntime | null>();
+
+  async getApiRuntime(root: string, projectId: string): Promise<ApiRuntime | null> {
+    let rt = this.apiRuntimes.get(projectId);
+    if (rt !== undefined) return rt;
+    rt = null;
+    const projectDb = await this.getProjectDb(root, projectId);
+    if (projectDb) {
+      const contracts = await this.getProjectContracts(root, projectId);
+      rt = createApiRuntime({
+        projectRoot: join(root, projectId),
+        db: projectDb.async,
+        validators: contracts?.validators,
+        // Real fire-and-forget agent runner (was a stub returning a bare runId). A
+        // `spawn(ref, input)` from an api handler starts an ISOLATED headless session
+        // — exactly like a declarative hook `trigger` — so the agent actually runs.
+        // Errors surface async (logged); the synchronous-onError seam is unused here.
+        spawnRunner: (ref, input) => {
+          const runId = randomUUID();
+          const { spaceRef, agentSlug, action } = parseAgentRef(ref);
+          const message =
+            `Spawned run "${ref}"` +
+            (action ? ` — perform the "${action}" action.` : '.') +
+            (input != null ? `\nInput: ${safeStringify(input)}` : '');
+          void this.runHeadless({ projectId, spaceRef, agentSlug, message }).catch((err) => {
+            console.warn(
+              `[app-api] spawn("${ref}") failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+          return { runId };
+        },
+      });
+    }
+    this.apiRuntimes.set(projectId, rt);
+    return rt;
+  }
+
   /** Close all cached project db handles (call on server shutdown). */
   closeProjectDbs(): void {
+    for (const rt of this.apiRuntimes.values()) {
+      try { rt?.dispose(); } catch { /* best-effort */ }
+    }
+    this.apiRuntimes.clear();
     for (const rt of this.projectHookRuntimes.values()) {
       try { rt.dispose(); } catch { /* best-effort */ }
     }

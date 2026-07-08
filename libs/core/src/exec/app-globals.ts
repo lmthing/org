@@ -1,6 +1,6 @@
 import type { VM } from '../sandbox/quickjs.js';
 import { marshalToQuickJS, injectGlobal } from '../sandbox/host-bridge.js';
-import type { DbApi, QueryOpts, UpdateOpts, RemoveOpts, Row } from '../db/types.js';
+import type { DbApi, QueryOpts, UpdateOpts, RemoveOpts, Row, ApiCallFn } from '../db/types.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 
 /** Result shape common to the synchronous authoring globals. */
@@ -28,6 +28,12 @@ export interface AppGlobalImpls {
   /** Project-rooted db (sync agent surface), provided by libs/cli's better-sqlite3
    *  store in Phase 2. Unscoped — core applies the per-verb table grant on top. */
   db?: DbApi;
+  /** Agent-facing `apiCall` — enter the project's own `api/` endpoints by name.
+   *  Value-yielding (Promise-returning): unlike the synchronous globals below it is
+   *  NOT injected here but wired through the yield router (`createApiCallGlobal` +
+   *  `YieldRouterContext.apiCallResolver`), so it can end the turn and resume. The
+   *  host (libs/cli) supplies a resolver that re-enters the project's api runtime. */
+  apiCall?: ApiCallFn;
   /** Phase 9 authoring globals — write into the `store/apps/<id>/` catalog source of
    *  the currently-selected app. Provided by libs/cli (`createAppAuthoringGlobals`).
    *  Injected purely on the capability grant (NOT projectRoot): the appbuilder has no

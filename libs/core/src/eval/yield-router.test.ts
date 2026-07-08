@@ -72,4 +72,25 @@ describe('routeCommonYield', () => {
     expect(r).toEqual({ handled: true, value: 'delegated-result' });
     expect(calls).toEqual([['pkg', 'agentA', 'analyze', { query: 'q' }]]);
   });
+
+  it('routes apiCall through the apiCallResolver with (name, input)', async () => {
+    const calls: unknown[] = [];
+    const r = await routeCommonYield(
+      req('apiCall', ['markRead', { id: 'a1' }]),
+      baseCtx({
+        apiCallResolver: async (name, input) => {
+          calls.push([name, input]);
+          return { ok: true };
+        },
+      }),
+    );
+    expect(r).toEqual({ handled: true, value: { ok: true } });
+    expect(calls).toEqual([['markRead', { id: 'a1' }]]);
+  });
+
+  it('apiCall without a resolver throws (no project api runtime) — surfaced retryably', async () => {
+    await expect(routeCommonYield(req('apiCall', ['markRead', {}]), baseCtx())).rejects.toThrow(
+      /apiCall is not available/,
+    );
+  });
 });
