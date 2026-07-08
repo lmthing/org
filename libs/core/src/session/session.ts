@@ -5,6 +5,7 @@ import type { SessionOpts, SessionDeps } from './types.js';
 import type { YieldRequest } from '../eval/yield.js';
 import type { VM } from '../sandbox/quickjs.js';
 import { MessageHistory } from '../context/history.js';
+import type { MediaPart } from '../eval/stream-types.js';
 import { summarizeHistory } from '../context/summarize.js';
 import { buildSystemBlock, resolvePreloadedKnowledge } from '../context/system-block.js';
 import { loadSpace } from '../spaces/load.js';
@@ -35,6 +36,31 @@ import {
   formatDelegateDenial,
   type DelegatePolicy,
 } from '../exec/target-match.js';
+
+/** A user turn's input: plain text, or text plus multimodal attachments
+ *  (images/files; audio is transcribed to text upstream). */
+export type UserInput = string | { text: string; attachments?: MediaPart[] };
+
+/** Normalize a user turn to its text + attachments. */
+function normalizeInput(message: UserInput): { text: string; attachments?: MediaPart[] } {
+  return typeof message === 'string' ? { text: message } : message;
+}
+
+/** Apply the neutral "User request:" framing to a user turn's text while
+ *  carrying any attachments through unchanged. */
+function frameUserContent(message: UserInput): { content: string; attachments?: MediaPart[] } {
+  const { text, attachments } = normalizeInput(message);
+  return {
+    content: `User request:\n\n${text}`,
+    ...(attachments && attachments.length ? { attachments } : {}),
+  };
+}
+
+/** Extract the plain-text portion of a user turn (drops framing/attachments) —
+ *  used for the defaultAction fast-path `query`. */
+function userInputText(message: UserInput): string {
+  return normalizeInput(message).text;
+}
 
 export class Session {
   private opts: SessionOpts;
@@ -115,7 +141,7 @@ export class Session {
   /** The full message history (for persisting a resumable session snapshot). */
   getHistory(): import('../context/history.js').Message[] { return this.history.messages; }
 
-  async continue(message: string): Promise<void> {
+  async continue(message: UserInput): Promise<void> {
     if (!this.vm || !this.systemBlock || !this.ambientDts) {
       throw new Error('Session not started — call start() first');
     }
@@ -125,7 +151,7 @@ export class Session {
     // request (live E3 regression: a deep-research ask routed to the engineer).
     this.history.append({
       role: 'user',
-      content: `User request:\n\n${message}`,
+      ...frameUserContent(message),
       blockType: 'normal',
     });
     // Context economy: collapse old turns into a summary once history grows large,
@@ -160,7 +186,7 @@ export class Session {
     }
   }
 
-  async start(initialMessage: string): Promise<void> {
+  async start(initialMessage: UserInput): Promise<void> {
     // 1. Load space + merge always-on system spaces
     this.space = await this.loadMergedSpace(this.opts.spaceDir);
 
@@ -224,7 +250,7 @@ export class Session {
     // comment: the TS reply channel belongs to STATEMENT_PROTOCOL, not the request).
     this.history.append({
       role: 'user',
-      content: `User request:\n\n${initialMessage}`,
+      ...frameUserContent(initialMessage),
       blockType: 'normal',
     });
 
@@ -255,8 +281,9 @@ export class Session {
       // `registered:*` grant), so THING/architect flows keep working even when
       // the agent's own allowlist wouldn't name the freshly built space.
       const ctx = this.buildYieldContext(this.space);
+      const initialQuery = userInputText(initialMessage);
       try {
-        const built = await ctx.runDelegate(this.opts.spaceDir, resolvedSlug!, defAction.id, { query: initialMessage, context: {} });
+        const built = await ctx.runDelegate(this.opts.spaceDir, resolvedSlug!, defAction.id, { query: initialQuery, context: {} });
         let finalResult: unknown = built;
         // A tasklist-backed delegate result is a TaskEnvelope ({ ok, degraded, data, … })
         // since Phase 3 — the execution coordinates live in `envelope.data`. Unwrap it
@@ -268,7 +295,7 @@ export class Session {
           : built;
         const b = payload as { spaceKey?: unknown; agentSlug?: unknown; actionId?: unknown; query?: unknown } | null;
         if (b && typeof b === 'object' && typeof b.spaceKey === 'string' && typeof b.agentSlug === 'string') {
-          finalResult = await ctx.runDelegate(b.spaceKey, b.agentSlug, typeof b.actionId === 'string' ? b.actionId : 'run', { query: typeof b.query === 'string' ? b.query : initialMessage, context: {} });
+          finalResult = await ctx.runDelegate(b.spaceKey, b.agentSlug, typeof b.actionId === 'string' ? b.actionId : 'run', { query: typeof b.query === 'string' ? b.query : initialQuery, context: {} });
         }
         this.opts.renderHost.display(typeof finalResult === 'string' ? finalResult : JSON.stringify(finalResult, null, 2));
         this.tracer.end(runScope, 'done');
@@ -342,7 +369,7 @@ export class Session {
     return { agentSlug: resolvedSlug, systemBlock, ambientDts };
   }
 
-  async resume(snapshotDir: string, message: string): Promise<void> {
+  async resume(snapshotDir: string, message: UserInput): Promise<void> {
     const snapshot = await loadSnapshot(snapshotDir);
     if (!snapshot) {
       throw new Error(`No snapshot found in "${snapshotDir}"`);
@@ -375,8 +402,18 @@ export class Session {
       this.history.append(msg);
     }
 
-    // Append new user message
-    this.history.append({ role: 'user', content: message, blockType: 'normal' });
+    // Append new user message. resume() historically appends the raw message
+    // (no "User request:" framing, unlike start()/continue()); preserve that,
+    // while still carrying any multimodal attachments through.
+    {
+      const { text, attachments } = normalizeInput(message);
+      this.history.append({
+        role: 'user',
+        content: text,
+        ...(attachments && attachments.length ? { attachments } : {}),
+        blockType: 'normal',
+      });
+    }
 
     // Resolve direct deps + canDelegateTo policy and build system block
     this.delegatePolicy = evaluateDelegatePolicy(agent.canDelegateTo, 'agent');

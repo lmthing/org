@@ -5,7 +5,7 @@
 // events, updates running cost, and auto-selects/expands while following.
 
 import {
-  type SessionModel, type WireEvent, emptyModel, applyWireEvent,
+  type SessionModel, type WireEvent, type UploadedAttachment, emptyModel, applyWireEvent,
   pushUserBlock, pushErrorBlock, pushAskBlock, resolveAskBlock,
 } from './model.js';
 import { computeEventCost, computeInflightCost, inflightTurns } from './pricing-slice.js';
@@ -36,7 +36,7 @@ export interface SessionSlice {
   toggleExpand: (id: string) => void;
   setExpanded: (id: string, v: boolean) => void;
   setFollow: (f: boolean) => void;
-  noteUserMessage: (content: string) => void;
+  noteUserMessage: (content: string, attachments?: UploadedAttachment[]) => void;
   noteError: (message: string) => void;
   noteAskStart: (askId: string, descriptor: unknown) => void;
   noteAskEnd: (askId: string, value: unknown, cancelled?: boolean) => void;
@@ -137,7 +137,7 @@ export function createSessionSlice(
     }),
     setFollow: (follow) => set({ follow }),
 
-    noteUserMessage: (content) => set((s) => { pushUserBlock(s.model, content); return { version: s.version + 1, done: false }; }),
+    noteUserMessage: (content, attachments) => set((s) => { pushUserBlock(s.model, content, attachments); return { version: s.version + 1, done: false }; }),
     noteError: (message) => set((s) => { pushErrorBlock(s.model, message); return { version: s.version + 1 }; }),
     noteAskStart: (askId, descriptor) => set((s) => { pushAskBlock(s.model, askId, descriptor); return { version: s.version + 1 }; }),
     noteAskEnd: (askId, value, cancelled) => set((s) => { resolveAskBlock(s.model, askId, value, cancelled); return { version: s.version + 1 }; }),

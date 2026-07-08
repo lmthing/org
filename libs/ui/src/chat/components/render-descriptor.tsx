@@ -50,6 +50,20 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'quote': return <blockquote key={key} className="border-l-2 border-lm-border pl-2 my-1 text-lm-muted italic">{body}</blockquote>;
     case 'link': return <a key={key} href={String(props['href'] ?? '#')} target="_blank" rel="noreferrer" className="text-lm-accent underline">{body}</a>;
 
+    // ── media ──
+    case 'image': case 'img': {
+      const src = String(props['src'] ?? props['url'] ?? '');
+      const alt = String(props['alt'] ?? props['caption'] ?? 'image');
+      if (!src) return null;
+      return <img key={key} src={src} alt={alt} className="max-w-full max-h-[360px] rounded-lg border border-lm-border my-1 object-contain" />;
+    }
+    case 'audio': {
+      const src = String(props['src'] ?? props['url'] ?? '');
+      if (!src) return null;
+      // eslint-disable-next-line jsx-a11y/media-has-caption
+      return <audio key={key} controls src={src} className="my-1 max-w-full" />;
+    }
+
     // ── layout ──
     case 'stack': return <div key={key} className="flex flex-col my-1" style={{ gap: ((props['gap'] as number) ?? 1) * 4 }}>{body}</div>;
     case 'row': case 'inline': {

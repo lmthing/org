@@ -92,7 +92,15 @@ export interface MockRule {
 
 /** The text a `RegExp` rule is tested against: the system block plus every message. */
 function matchHaystack(opts: StreamOpts): string {
-  return opts.system + '\n' + opts.messages.map((m) => m.content).join('\n');
+  const attachmentText = (m: StreamOpts['messages'][number]): string =>
+    (m.attachments ?? [])
+      .map((a) => (a.type === 'image' ? `[image${a.mediaType ? ` ${a.mediaType}` : ''}]` : `[file: ${a.filename ?? a.mediaType}]`))
+      .join('\n');
+  return (
+    opts.system +
+    '\n' +
+    opts.messages.map((m) => m.content + (m.attachments?.length ? '\n' + attachmentText(m) : '')).join('\n')
+  );
 }
 
 /**

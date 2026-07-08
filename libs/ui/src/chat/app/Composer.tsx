@@ -1,26 +1,45 @@
 import React from 'react';
 import { cn } from '../lib/cn.js';
 import { useStore } from '../store/store.js';
+import type { UploadedAttachment } from '../store/model.js';
 import { BudgetWindows } from './BudgetWindows.js';
 
 interface ComposerProps {
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: UploadedAttachment[]) => void;
   projectId?: string | null;
   className?: string;
   disabled?: boolean;
 }
+
+/** Read a browser File as a base64 data URL (the upload endpoint accepts the
+ *  `data:<mime>;base64,` form and strips the prefix server-side). */
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('file read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** File types the message-attachment picker accepts. */
+const ATTACH_ACCEPT = 'image/*,audio/*,application/pdf,text/plain';
 
 export function Composer({ onSend, projectId, className, disabled }: ComposerProps) {
   const mode = useStore((s) => s.mode);
   const budgetBlocked = useStore((s) => s.budgetBlocked);
   const [text, setText] = React.useState('');
   const [uploading, setUploading] = React.useState(false);
+  const [attachments, setAttachments] = React.useState<UploadedAttachment[]>([]);
+  const [attaching, setAttaching] = React.useState(false);
+  const [attachError, setAttachError] = React.useState<string | null>(null);
   const [completions, setCompletions] = React.useState<string[]>([]);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [filteredCompletions, setFilteredCompletions] = React.useState<string[]>([]);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
+  const mediaRef = React.useRef<HTMLInputElement>(null);
   const dropdownRef = React.useRef<HTMLUListElement>(null);
   const isDisabled = disabled || mode === 'replay' || budgetBlocked;
 
@@ -50,12 +69,50 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
 
   const handleSend = () => {
     const t = text.trim();
-    if (!t || isDisabled) return;
-    onSend(t);
+    if ((!t && attachments.length === 0) || isDisabled || attaching) return;
+    onSend(t, attachments.length ? attachments : undefined);
     setText('');
+    setAttachments([]);
+    setAttachError(null);
     setDropdownOpen(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
+
+  /** Upload one or more picked files to /api/uploads and stage them as
+   *  attachments on the pending message. Audio is transcribed server-side. */
+  const handleMedia = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setAttaching(true);
+    setAttachError(null);
+    try {
+      for (const file of files) {
+        const dataUrl = await readAsDataUrl(file);
+        const res = await fetch('/api/uploads', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            filename: file.name,
+            mediaType: file.type || 'application/octet-stream',
+            data: dataUrl,
+          }),
+        });
+        if (!res.ok) {
+          const err = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(err.error || `upload failed (${res.status})`);
+        }
+        const ref = (await res.json()) as UploadedAttachment;
+        setAttachments((prev) => [...prev, ref]);
+      }
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAttaching(false);
+      if (mediaRef.current) mediaRef.current.value = '';
+    }
+  };
+
+  const removeAttachment = (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id));
 
   const applyCompletion = (completion: string) => {
     const cursor = textareaRef.current?.selectionStart ?? text.length;
@@ -153,6 +210,35 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
 
   return (
     <div className={cn('px-4 pb-4 pt-2', className)}>
+      {/* Staged attachments */}
+      {(attachments.length > 0 || attaching || attachError) && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          {attachments.map((a) => (
+            <span
+              key={a.id}
+              className="inline-flex items-center gap-1.5 max-w-[220px] rounded-lg border border-border bg-muted px-2 py-1 text-xs text-foreground"
+              title={a.filename ?? a.mediaType}
+            >
+              {a.kind === 'image' ? (
+                <img src={a.url} alt={a.filename ?? 'image'} className="h-5 w-5 rounded object-cover" />
+              ) : (
+                <span className="text-muted-foreground">{a.kind === 'audio' ? '♪' : '📎'}</span>
+              )}
+              <span className="truncate">{a.filename ?? a.kind}</span>
+              <button
+                onClick={() => removeAttachment(a.id)}
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                aria-label="Remove attachment"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {attaching && <span className="text-xs text-muted-foreground">Uploading…</span>}
+          {attachError && <span className="text-xs text-destructive">{attachError}</span>}
+        </div>
+      )}
+
       <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-ring transition-shadow">
         {/* Dropdown */}
         {dropdownOpen && (
@@ -176,9 +262,21 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           </ul>
         )}
 
-        {/* Attach */}
+        {/* Attach image / audio / file to the message */}
+        <label
+          className={cn(
+            'shrink-0 mb-0.5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors',
+            (attaching || isDisabled) && 'opacity-50 pointer-events-none',
+          )}
+          title="Attach image, audio, or file"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+          <input ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple className="hidden" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
+        </label>
+
+        {/* Attach a project document (text ingestion into the project) */}
         {projectId && (
-          <label className={cn('shrink-0 mb-0.5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors', uploading && 'opacity-50 pointer-events-none')} title="Attach document">
+          <label className={cn('shrink-0 mb-0.5 text-muted-foreground hover:text-foreground cursor-pointer transition-colors', uploading && 'opacity-50 pointer-events-none')} title="Attach document to project">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             <input ref={fileRef} type="file" className="hidden" onChange={(e) => void handleFile(e)} />
           </label>
@@ -200,7 +298,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         {/* Send */}
         <button
           onClick={handleSend}
-          disabled={isDisabled || !text.trim()}
+          disabled={isDisabled || attaching || (!text.trim() && attachments.length === 0)}
           className="shrink-0 mb-0.5 w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center transition-all disabled:opacity-40 hover:opacity-90"
           aria-label="Send message"
         >

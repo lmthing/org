@@ -3,6 +3,7 @@ import { marked } from 'marked';
 import { isFormDescriptor } from '@lmthing/core/ui';
 import { useStore } from '../store/store.js';
 import type { ConvoBlock } from '../store/model.js';
+import type { TraceAttachment } from '@lmthing/core';
 import { preview } from './common.js';
 import { CatalogForm } from '../components/forms/CatalogForm.js';
 import { renderDescriptor, isDescriptor } from '../components/render-descriptor.js';
@@ -129,6 +130,46 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// ─── User attachment rendering ─────────────────────────────────────────────────
+
+function UserAttachment({ att }: { att: TraceAttachment }) {
+  if (att.kind === 'image') {
+    return (
+      <a href={att.url} target="_blank" rel="noreferrer">
+        <img
+          src={att.url}
+          alt={att.filename ?? 'image attachment'}
+          className="max-w-[260px] max-h-[260px] rounded-xl border border-border object-cover"
+        />
+      </a>
+    );
+  }
+  if (att.kind === 'audio') {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <audio controls src={att.url} className="max-w-[260px]" />
+        {att.transcript && (
+          <div className="max-w-[260px] text-xs text-muted-foreground italic text-right">
+            “{att.transcript}”
+          </div>
+        )}
+      </div>
+    );
+  }
+  return (
+    <a
+      href={att.url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground hover:opacity-90"
+    >
+      <span className="text-muted-foreground">📎</span>
+      <span className="truncate max-w-[200px]">{att.filename ?? att.mediaType}</span>
+    </a>
+  );
+}
+
 // ─── Message ──────────────────────────────────────────────────────────────────
 
 interface MessageProps {
@@ -142,12 +183,24 @@ export function Message({ block }: MessageProps) {
 
   // User bubble
   if (block.type === 'user') {
+    const attachments = block.attachments ?? [];
     return (
       <div className="flex justify-end px-4 py-2 lm-fade-in group">
         <div className="max-w-[75%] flex items-start gap-1.5">
           <CopyButton text={block.content} />
-          <div className="bg-muted text-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed">
-            {block.content}
+          <div className="flex flex-col items-end gap-1.5">
+            {attachments.length > 0 && (
+              <div className="flex flex-col items-end gap-1.5">
+                {attachments.map((a, i) => (
+                  <UserAttachment key={i} att={a} />
+                ))}
+              </div>
+            )}
+            {block.content && (
+              <div className="bg-muted text-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
+                {block.content}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -85,7 +85,11 @@ function registerSocket(
     try {
       switch (msg.type) {
         case 'sendMessage':
-          manager.sendMessage(entry.sessionId, msg.content ?? '');
+          // Async (attachment assembly reads uploads from disk); route both
+          // pre-run assembly errors and the sync-throw case to the client.
+          void manager
+            .sendMessage(entry.sessionId, msg.content ?? '', msg.attachments?.map((a) => a.id))
+            .catch((err) => send({ type: 'error', message: err instanceof Error ? err.message : String(err) }));
           break;
         case 'submitForm':
           entry.renderHost.submitForm(msg.id, msg.value);

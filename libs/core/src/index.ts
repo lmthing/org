@@ -9,7 +9,7 @@ export { marshalToQuickJS, marshalToHost, injectGlobal } from './sandbox/host-br
 export { JSX_RUNTIME_CODE } from './sandbox/jsx-runtime.js';
 export { injectSpaceFunctions } from './sandbox/inject-functions.js';
 export { Tracer, NULL_TRACER } from './sandbox/trace.js';
-export type { TraceEvent, TraceScope, NodeKind, NodeStatus, NodeDetail } from './sandbox/trace.js';
+export type { TraceEvent, TraceScope, NodeKind, NodeStatus, NodeDetail, TraceAttachment } from './sandbox/trace.js';
 export { buildTraceTree, applyEvent } from './sandbox/trace-tree.js';
 export type { TraceTree, TreeNode, LlmCall, StatementEntry, YieldEntry, DisplayEntry } from './sandbox/trace-tree.js';
 
@@ -65,7 +65,14 @@ export { routeCommonYield } from './eval/yield-router.js';
 export type { YieldRouterContext, RouteResult } from './eval/yield-router.js';
 
 // Stream types
-export type { StreamOpts, StreamSession } from './eval/stream-types.js';
+export type {
+  StreamOpts,
+  StreamSession,
+  StreamMessage,
+  MediaPart,
+  ImagePart,
+  FilePart,
+} from './eval/stream-types.js';
 
 // Turn loop
 export { runTurnLoop } from './eval/turn-loop.js';
@@ -107,6 +114,7 @@ export type { TaskNode } from './spaces/tasklist-load.js';
 
 // Session
 export { Session } from './session/session.js';
+export type { UserInput } from './session/session.js';
 export { saveSnapshot, loadSnapshot } from './session/snapshot.js';
 export type { Snapshot } from './session/snapshot.js';
 

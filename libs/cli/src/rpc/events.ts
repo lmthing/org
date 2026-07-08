@@ -29,8 +29,20 @@ export type ServerEvent =
   // ─── control socket auth (Envoy already validated JWT; confirms to client) ───
   | { type: 'auth.ok' };
 
+/** A chat attachment as the client sends it back with a message. Mirrors the
+ *  server's `AttachmentRef` (server/uploads.ts) — the server trusts only `id`
+ *  (re-reads bytes/metadata from disk), the rest lets the UI render optimistically. */
+export interface ChatAttachmentRef {
+  id: string;
+  kind: 'image' | 'audio' | 'file';
+  mediaType: string;
+  filename?: string;
+  url: string;
+  transcript?: string;
+}
+
 export type ClientMessage =
-  | { type: 'sendMessage'; content: string }
+  | { type: 'sendMessage'; content: string; attachments?: ChatAttachmentRef[] }
   | { type: 'submitForm'; id: string; value: unknown }
   | { type: 'cancelAsk'; id: string }
   | { type: 'subscribeTrace'; sinceSeq?: number }

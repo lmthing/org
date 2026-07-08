@@ -24,6 +24,7 @@ import {
 } from './routes/projects.js';
 import { handleCreateSpace } from './routes/spaces.js';
 import { handleFsTree, handleFsRead, handleFsWrite } from './routes/fs.js';
+import { handleUpload, handleServeUpload } from './routes/uploads.js';
 import { handleBackupNow, handleBackupStatus, handleRestore } from './routes/backup.js';
 import { runBackup, startBackupTimer } from './backup.js';
 import { startSelfIdleWatchdog } from './self-idle.js';
@@ -170,6 +171,10 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // Per-session routes (DELETE session + all sub-routes via catch-all)
   router.add('DELETE', '/api/sessions/:id', handleDeleteSession);
   router.add('*', '/api/sessions/:id/*', handleSessionSubRoute);
+
+  // Chat attachments (vision/audio/file upload): store + serve back for the UI.
+  router.add('POST', '/api/uploads', handleUpload);
+  router.add('GET', '/api/uploads/:id', handleServeUpload);
 
   // Filesystem
   router.add('GET', '/api/fs/tree', handleFsTree);

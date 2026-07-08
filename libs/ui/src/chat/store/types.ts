@@ -2,7 +2,7 @@
 // project/ui-panel slices in this folder). Kept in one file so every slice
 // can share a single `AppState` shape without circular runtime imports. ────
 
-import type { SessionModel, WireEvent } from './model.js';
+import type { SessionModel, WireEvent, UploadedAttachment } from './model.js';
 
 export type InspectorTab = 'llm' | 'statements' | 'yields' | 'variables' | 'raw';
 export type Mode = 'live' | 'replay';
@@ -82,7 +82,7 @@ export interface AppState {
   toggleExpand: (id: string) => void;
   setExpanded: (id: string, v: boolean) => void;
   setFollow: (f: boolean) => void;
-  noteUserMessage: (content: string) => void;
+  noteUserMessage: (content: string, attachments?: UploadedAttachment[]) => void;
   noteError: (message: string) => void;
   noteAskStart: (askId: string, descriptor: unknown) => void;
   noteAskEnd: (askId: string, value: unknown, cancelled?: boolean) => void;

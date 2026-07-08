@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStore } from '../store/store.js';
-import type { ConvoBlock } from '../store/model.js';
+import type { ConvoBlock, UploadedAttachment } from '../store/model.js';
 import { Message, AssistantTurn } from './Message.js';
 import { Composer } from './Composer.js';
 import { LiveActivity } from './LiveActivity.js';
@@ -113,12 +113,12 @@ export function ChatView({
     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 60);
   };
 
-  const handleSend = (text: string) => {
+  const handleSend = (text: string, attachments?: UploadedAttachment[]) => {
     // A budget window is exhausted (0% left) — LiteLLM would 429 the turn anyway.
     if (useStore.getState().budgetBlocked) return;
-    noteUser(text);
+    noteUser(text, attachments);
     const send = (window as unknown as { __LM_SEND__?: (m: unknown) => void }).__LM_SEND__;
-    send?.({ type: 'sendMessage', content: text });
+    send?.({ type: 'sendMessage', content: text, ...(attachments && attachments.length ? { attachments } : {}) });
   };
 
   const handleSuggestion = (text: string) => handleSend(text);

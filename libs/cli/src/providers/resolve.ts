@@ -1,4 +1,4 @@
-import type { LanguageModelV1 } from 'ai';
+import type { LanguageModel } from 'ai';
 
 /**
  * Parse a "provider:modelId" spec and lazy-load the appropriate @ai-sdk/* provider.
@@ -15,7 +15,7 @@ import type { LanguageModelV1 } from 'ai';
  * DeepSeek-V4-Flash, DeepSeek-V4-Pro, Kimi-K2.6, gpt-5.5. Budget windows are enforced
  * server-side against the user's key. Override the endpoint with LMTHINGCLOUD_BASE_URL.
  */
-export async function resolveModel(modelSpec: string): Promise<LanguageModelV1> {
+export async function resolveModel(modelSpec: string): Promise<LanguageModel> {
   const colonIdx = modelSpec.indexOf(':');
   if (colonIdx === -1) {
     throw new Error(
@@ -36,26 +36,26 @@ export async function resolveModel(modelSpec: string): Promise<LanguageModelV1> 
       const baseURL = process.env['OPENAI_BASE_URL'];
       const apiKey = process.env['OPENAI_API_KEY'];
       const opts = baseURL ? { baseURL, apiKey } : {};
-      return createOpenAI(opts)(modelId) as unknown as LanguageModelV1;
+      return createOpenAI(opts)(modelId) as unknown as LanguageModel;
     }
     case 'anthropic': {
       const { createAnthropic } = await import('@ai-sdk/anthropic');
-      return createAnthropic()(modelId) as unknown as LanguageModelV1;
+      return createAnthropic()(modelId) as unknown as LanguageModel;
     }
     case 'lmthingcloud': {
       const { createOpenAI } = await import('@ai-sdk/openai');
       const apiKey = process.env['LMTHINGCLOUD_API_KEY'];
       if (!apiKey) throw new Error('LMTHINGCLOUD_API_KEY env var is required for lmthingcloud: provider');
       const baseURL = process.env['LMTHINGCLOUD_BASE_URL'] || 'https://lmthing.cloud/v1';
-      return createOpenAI({ baseURL, apiKey })(modelId) as unknown as LanguageModelV1;
+      return createOpenAI({ baseURL, apiKey })(modelId) as unknown as LanguageModel;
     }
     case 'google': {
       const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
-      return createGoogleGenerativeAI()(modelId) as unknown as LanguageModelV1;
+      return createGoogleGenerativeAI()(modelId) as unknown as LanguageModel;
     }
     case 'mistral': {
       const { createMistral } = await import('@ai-sdk/mistral');
-      return createMistral()(modelId) as unknown as LanguageModelV1;
+      return createMistral()(modelId) as unknown as LanguageModel;
     }
     case 'azure': {
       const resourceName = process.env['AZURE_RESOURCE_NAME'];
@@ -76,12 +76,12 @@ export async function resolveModel(modelSpec: string): Promise<LanguageModelV1> 
           baseURL: `https://${resourceName}.services.ai.azure.com/anthropic/v1`,
           apiKey,                             // → x-api-key
           headers: { 'api-key': apiKey },     // Foundry also accepts the Azure-standard api-key header
-        })(modelId) as unknown as LanguageModelV1;
+        })(modelId) as unknown as LanguageModel;
       }
 
       const { createAzure } = await import('@ai-sdk/azure');
       const azure = createAzure({ resourceName, apiKey });
-      return azure(modelId) as unknown as LanguageModelV1;
+      return azure(modelId) as unknown as LanguageModel;
     }
     default:
       throw new Error(
