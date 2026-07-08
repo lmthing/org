@@ -64,7 +64,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
 
   React.useEffect(() => {
     if (!projectId) return;
-    fetch(`/api/projects/${projectId}/completions`)
+    fetch(`/api/projects/${projectId}/completions`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((d: { completions?: string[] }) => { if (d.completions) setCompletions(d.completions); })
       .catch(() => {});
@@ -251,7 +251,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
       const content = await file.text();
       await fetch(`/api/projects/${projectId}/documents`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ name: file.name, content }),
       });
     } finally {

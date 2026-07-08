@@ -9,6 +9,7 @@ import { useTheme } from '../../theme/theme.js';
 import { TraceLoader } from './replay.js';
 import { cn } from '../lib/cn.js';
 import { BugReportDialog } from './BugReportDialog.js';
+import { authHeaders } from './auth.js';
 
 function formatCost(usd: number): string {
   if (usd < 0.000001) return '';
@@ -140,12 +141,12 @@ export function ChatView({
   const handleRestart = async () => {
     setRestarting(true);
     try {
-      await fetch('/api/restart', { method: 'POST' });
+      await fetch('/api/restart', { method: 'POST', headers: authHeaders() });
     } catch { /* expected — server exits */ }
     // Poll until the server is back up, then reload.
     const poll = async () => {
       try {
-        const r = await fetch('/api/env');
+        const r = await fetch('/api/env', { headers: authHeaders() });
         if (r.ok) { setTimeout(() => window.location.reload(), 1500); return; }
       } catch { /* still down */ }
       setTimeout(poll, 800);
