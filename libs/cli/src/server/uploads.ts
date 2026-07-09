@@ -91,6 +91,38 @@ export async function extractSpreadsheetText(bytes: Uint8Array): Promise<string 
   }
 }
 
+/** Office-document media types / extensions officeparser extracts to text — Word
+ *  (`docx`), PowerPoint (`pptx`), and their OpenDocument counterparts (`odt`/`odp`).
+ *  Spreadsheets (`xlsx`/`ods`) are deliberately excluded (SheetJS handles them with
+ *  proper tabular structure) as is PDF (unpdf). Detected by mediaType OR filename
+ *  since browsers often send a generic `application/octet-stream`. */
+function isOfficeDocument(mediaType: string, filename?: string): boolean {
+  if (
+    /officedocument\.(wordprocessingml|presentationml)|opendocument\.(text|presentation)|msword|ms-powerpoint/i.test(
+      mediaType,
+    )
+  )
+    return true;
+  return /\.(docx|doc|pptx|ppt|odt|odp)$/i.test(filename ?? '');
+}
+
+/** Best-effort extract an office document's text via officeparser (`officeparser`,
+ *  lazily imported; external in tsup, ships in node_modules). Reads Word (.docx),
+ *  PowerPoint (.pptx), and OpenDocument text/presentation (.odt/.odp) from the raw
+ *  bytes in-memory (yauzl — no temp files). Returns undefined when the document
+ *  can't be parsed or yields no text (e.g. an empty or image-only file). */
+export async function extractOfficeText(bytes: Uint8Array): Promise<string | undefined> {
+  try {
+    const { parseOfficeAsync } = await import('officeparser');
+    const text = (await parseOfficeAsync(Buffer.from(bytes))).trim();
+    return text.length > 0 ? text : undefined;
+  } catch {
+    // Corrupt / password-protected / unsupported legacy binary (.doc/.ppt) — fall
+    // back to the "unsupported" note rather than throwing.
+    return undefined;
+  }
+}
+
 /** Resolve the uploads directory under the runtime root (falls back to cwd when
  *  the manager is not in project mode). */
 export function resolveUploadsDir(root?: string): string {
@@ -212,7 +244,16 @@ export async function resolveUploadDocument(
     }
     return { ok: false, ...common, kind: 'unsupported', error: 'no extractable text (likely a scanned/image-only PDF)' };
   }
-  // Everything else (docx/other binary) is not yet supported host-side.
+  // Office documents (Word/PowerPoint/OpenDocument text+presentation) → officeparser.
+  if (isOfficeDocument(meta.mediaType, meta.filename)) {
+    const extracted = await extractOfficeText(bytes);
+    if (extracted && extracted.trim()) {
+      const text = extracted.slice(0, maxChars);
+      return { ok: true, ...common, kind: 'text', text, ...(extracted.length > maxChars ? { truncated: true } : {}) };
+    }
+    return { ok: false, ...common, kind: 'unsupported', error: 'office document could not be parsed or has no text' };
+  }
+  // Everything else (legacy binary, unknown types) is not yet supported host-side.
   return { ok: false, ...common, kind: 'unsupported', error: `file type not yet supported: ${meta.mediaType}` };
 }
 

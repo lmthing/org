@@ -11,7 +11,8 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: 'node20',
-  // `unpdf` (PDF) and `xlsx` (spreadsheets) are lazily-imported document extractors
-  // kept external so tsup doesn't inline them; they ship in node_modules.
-  external: ['ink', 'react', 'ws', 'esbuild', 'unpdf', 'xlsx'],
+  // `unpdf` (PDF), `xlsx` (spreadsheets) and `officeparser` (docx/pptx/odt/odp) are
+  // lazily-imported document extractors kept external so tsup doesn't inline them;
+  // they ship in node_modules.
+  external: ['ink', 'react', 'ws', 'esbuild', 'unpdf', 'xlsx', 'officeparser'],
 });

@@ -20,7 +20,16 @@ export async function loadKnowledgeFile(filePath: string): Promise<unknown> {
   try {
     content = await readFile(filePath, 'utf8');
   } catch (err) {
-    throw new Error(`loadKnowledge(): cannot read "${filePath}": ${(err as Error).message}`);
+    // On-demand loads arrive as `loadKnowledge(domain, field, option)` — the host
+    // reconstructs `<knowledge>/<domain>/<field>/<option>` from the OPTION SLUG,
+    // which has no extension (the slug is the basename minus `.md`). Fall back to
+    // `<path>.md` (the option file) and then `<path>/index.md` (a field/domain
+    // overview) before failing, so the slug the prompt hands the agent resolves.
+    const fallback = await readWithKnowledgeFallback(filePath);
+    if (fallback === undefined) {
+      throw new Error(`loadKnowledge(): cannot read "${filePath}": ${(err as Error).message}`);
+    }
+    content = fallback;
   }
 
   const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
@@ -38,6 +47,21 @@ export async function loadKnowledgeFile(filePath: string): Promise<unknown> {
 
   // No frontmatter → plain markdown body. Return it verbatim (never YAML-parse it).
   return content.trim();
+}
+
+/** Try `<path>.md` then `<path>/index.md` for an extension-less knowledge path.
+ *  Returns the file content, or undefined when neither exists. Only invoked after a
+ *  direct read miss, so a path that already ends in `.md` never reaches here. */
+async function readWithKnowledgeFallback(filePath: string): Promise<string | undefined> {
+  if (filePath.endsWith('.md')) return undefined;
+  for (const candidate of [`${filePath}.md`, join(filePath, 'index.md')]) {
+    try {
+      return await readFile(candidate, 'utf8');
+    } catch {
+      // try the next candidate
+    }
+  }
+  return undefined;
 }
 
 /**

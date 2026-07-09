@@ -11,12 +11,18 @@ import {
   readUploadMeta,
   readUploadBytes,
   extractDocumentText,
+  extractOfficeText,
   resolveUploadDocument,
 } from './uploads.js';
 
 /** A tiny reportlab-generated PDF whose only text is "MASCOT_IS_PICO". */
 const TINY_PDF_B64 =
   'JVBERi0xLjMKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgaHR0cDovL3d3dy5yZXBvcnRsYWIuY29tCjEgMCBvYmoKPDwKL0YxIDIgMCBSCj4+CmVuZG9iagoyIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nIC9OYW1lIC9GMSAvU3VidHlwZSAvVHlwZTEgL1R5cGUgL0ZvbnQKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL0NvbnRlbnRzIDcgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUuMjc1NiA4NDEuODg5OCBdIC9QYXJlbnQgNiAwIFIgL1Jlc291cmNlcyA8PAovRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKNCAwIG9iago8PAovUGFnZU1vZGUgL1VzZU5vbmUgL1BhZ2VzIDYgMCBSIC9UeXBlIC9DYXRhbG9nCj4+CmVuZG9iago1IDAgb2JqCjw8Ci9BdXRob3IgKGFub255bW91cykgL0NyZWF0aW9uRGF0ZSAoRDoyMDI2MDcwOTA5MzMxNCswMCcwMCcpIC9DcmVhdG9yIChSZXBvcnRMYWIgUERGIExpYnJhcnkgLSB3d3cucmVwb3J0bGFiLmNvbSkgL0tleXdvcmRzICgpIC9Nb2REYXRlIChEOjIwMjYwNzA5MDkzMzE0KzAwJzAwJykgL1Byb2R1Y2VyIChSZXBvcnRMYWIgUERGIExpYnJhcnkgLSB3d3cucmVwb3J0bGFiLmNvbSkgCiAgL1N1YmplY3QgKHVuc3BlY2lmaWVkKSAvVGl0bGUgKHVudGl0bGVkKSAvVHJhcHBlZCAvRmFsc2UKPj4KZW5kb2JqCjYgMCBvYmoKPDwKL0NvdW50IDEgL0tpZHMgWyAzIDAgUiBdIC9UeXBlIC9QYWdlcwo+PgplbmRvYmoKNyAwIG9iago8PAovRmlsdGVyIFsgL0FTQ0lJODVEZWNvZGUgL0ZsYXRlRGVjb2RlIF0gL0xlbmd0aCAxMDYKPj4Kc3RyZWFtCkdhcFFoMEU9RiwwVVxIM1RccE5ZVF5RS2s/dGM+SVAsO1cjVTFeMjNpaFBFTV8/Q1c0S0lTaTkwTWpHLmlmSUNLJTpALmBCRSsnPGNmIlF1Ok01L09Lb2RqPiYxcnVpIllLZEkzPjVafj5lbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCA4CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDA3MyAwMDAwMCBuIAowMDAwMDAwMTA0IDAwMDAwIG4gCjAwMDAwMDAyMTEgMDAwMDAgbiAKMDAwMDAwMDQxNCAwMDAwMCBuIAowMDAwMDAwNDgyIDAwMDAwIG4gCjAwMDAwMDA3NzggMDAwMDAgbiAKMDAwMDAwMDgzNyAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9JRCAKWzxjOTI2ZTQwZTdiZTAwNmUwNzYxYjY0MTY1NzY2ZWQyMT48YzkyNmU0MGU3YmUwMDZlMDc2MWI2NDE2NTc2NmVkMjE+XQolIFJlcG9ydExhYiBnZW5lcmF0ZWQgUERGIGRvY3VtZW50IC0tIGRpZ2VzdCAoaHR0cDovL3d3dy5yZXBvcnRsYWIuY29tKQoKL0luZm8gNSAwIFIKL1Jvb3QgNCAwIFIKL1NpemUgOAo+PgpzdGFydHhyZWYKMTAzMwolJUVPRgo=';
+
+/** A minimal valid .docx (OOXML zip) whose body is two paragraphs:
+ *  "Quarterly report: revenue grew by 20 percent." / "The team shipped three features." */
+const TINY_DOCX_B64 =
+  'UEsDBBQAAAAIAKdx6VzIZt/Q7AAAAK8BAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH1QyW7CMBC98xWWryhx6KGqqiQcuhzbHugHjOxJYuFNHkPh7zsByqGiPc68Va9dH7wTe8xkY+jkqm6kwKCjsWHs5OfmtXqQggoEAy4G7OQRSa77Rbs5JiTB4kCdnEpJj0qRntAD1TFhYGSI2UPhM48qgd7CiOquae6VjqFgKFWZPWTfPuMAO1fEy4Hf5yIZHUnxdCbOWZ2ElJzVUBhX+2B+pVSXhJqVJw5NNtGSCVLdTJiRvwMuundeJluD4gNyeQPPLPUVs1Em6p1nZf2/zY2ecRisxqt+dks5aiTiyb2rr4gHG376q9Pc/eIbUEsDBAoAAAAAAKdx6VwAAAAAAAAAAAAAAAAGAAAAX3JlbHMvUEsDBBQAAAAIAKdx6Vw6SRuAsQAAACsBAAALAAAAX3JlbHMvLnJlbHONzzsOwjAMBuC9p4i807QMCKGmXRBSV1QOECVuGtE8lIRHb08GBooYGG3//iw33dPM5I4hamcZ1GUFBK1wUlvF4DKcNnsgMXEr+ewsMlgwQtcWzRlnnvJOnLSPJCM2MphS8gdKo5jQ8Fg6jzZPRhcMT7kMinourlwh3VbVjoZPA9qVSXrJIPSyBjIsHv+x3ThqgUcnbgZt+nHiK5FlHhQmBg8XJJXvdplZoG1DVy+2xQtQSwMECgAAAAAAp3HpXAAAAAAAAAAAAAAAAAUAAAB3b3JkL1BLAwQUAAAACACncelcaD/wy9IAAAA5AQAAEQAAAHdvcmQvZG9jdW1lbnQueG1sbY/LasQwDEX38xXC+8bpLEoJSWbXfWH6AR77ThKIH8jKpPn72oVSKN0cIYSOrvrLp1/pAc5LDIN6blpFCDa6JUyD+ri+Pb0qymKCM2sMGNSBrC7jqd87F+3mEYSKIeRuH9Qskjqts53hTW5iQiize2RvpLQ86T2ySxwtci4H/KrPbfuivVmCGovyFt1Ra6rgChnfN8MCXg9ipMjSlfpA2EATY6fbQeeWEtiWKE2v60olfzP9tV1nkMB4yvOSEhzJzADdYWRj5P8E+ieX/v15PH0BUEsBAh4DFAAAAAgAp3HpXMhm39DsAAAArwEAABMAAAAAAAAAAQAAALSBAAAAAFtDb250ZW50X1R5cGVzXS54bWxQSwECHgMKAAAAAACncelcAAAAAAAAAAAAAAAABgAAAAAAAAAAABAA/UEdAQAAX3JlbHMvUEsBAh4DFAAAAAgAp3HpXDpJG4CxAAAAKwEAAAsAAAAAAAAAAQAAALSBQQEAAF9yZWxzLy5yZWxzUEsBAh4DCgAAAAAAp3HpXAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAQAP1BGwIAAHdvcmQvUEsBAh4DFAAAAAgAp3HpXGg/8MvSAAAAOQEAABEAAAAAAAAAAQAAALSBPgIAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAAFAAUAIAEAAD8DAAAAAA==';
 
 const tmpDirs: string[] = [];
 afterAll(async () => {
@@ -95,6 +101,17 @@ describe('uploads', () => {
     expect(await extractDocumentText('application/pdf', new Uint8Array([1, 2, 3]))).toBeUndefined();
   });
 
+  it('extractOfficeText pulls text out of a .docx', async () => {
+    const bytes = new Uint8Array(Buffer.from(TINY_DOCX_B64, 'base64'));
+    const text = await extractOfficeText(bytes);
+    expect(text).toContain('revenue grew by 20 percent');
+    expect(text).toContain('shipped three features');
+  });
+
+  it('extractOfficeText returns undefined for garbage bytes', async () => {
+    expect(await extractOfficeText(new Uint8Array([1, 2, 3]))).toBeUndefined();
+  });
+
   it('returns null for an unsafe or missing id', async () => {
     const dir = await makeDir();
     expect(await readUploadMeta(dir, '../secrets')).toBeNull();
@@ -145,12 +162,51 @@ describe('resolveUploadDocument (the readDocument host resolver)', () => {
     expect(r.error).toMatch(/no extractable text/);
   });
 
-  it('returns kind:unsupported for an unsupported binary type', async () => {
+  it('extracts a Word (.docx) upload to text via officeparser', async () => {
+    const dir = await makeDir();
+    const meta = await saveUpload(dir, {
+      bytes: new Uint8Array(Buffer.from(TINY_DOCX_B64, 'base64')),
+      mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      filename: 'report.docx',
+    });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r.ok).toBe(true);
+    expect(r.kind).toBe('text');
+    expect(r.text).toContain('revenue grew by 20 percent');
+  });
+
+  it('extracts an office document even with a generic media type (by extension)', async () => {
+    const dir = await makeDir();
+    // Browsers often send octet-stream — detection must fall back to the .docx extension.
+    const meta = await saveUpload(dir, {
+      bytes: new Uint8Array(Buffer.from(TINY_DOCX_B64, 'base64')),
+      mediaType: 'application/octet-stream',
+      filename: 'report.docx',
+    });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r).toMatchObject({ ok: true, kind: 'text' });
+    expect(r.text).toContain('shipped three features');
+  });
+
+  it('returns kind:unsupported for a corrupt office document', async () => {
     const dir = await makeDir();
     const meta = await saveUpload(dir, {
       bytes: new Uint8Array([1, 2, 3]),
       mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       filename: 'report.docx',
+    });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe('unsupported');
+    expect(r.error).toMatch(/office document could not be parsed/);
+  });
+
+  it('returns kind:unsupported for a genuinely unsupported binary type', async () => {
+    const dir = await makeDir();
+    const meta = await saveUpload(dir, {
+      bytes: new Uint8Array([1, 2, 3]),
+      mediaType: 'application/x-tar',
+      filename: 'archive.tar',
     });
     const r = await resolveUploadDocument(dir, meta.id);
     expect(r.ok).toBe(false);
