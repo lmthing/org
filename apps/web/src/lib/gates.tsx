@@ -22,8 +22,21 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+interface PodProgress {
+  ready?: boolean
+  computeTag?: string
+  stage?: string
+  progress?: number
+}
+
 interface EnsurePodResult {
-  pod?: { computeTag?: string; ready?: boolean }
+  pod?: PodProgress
+}
+
+/** Live boot progress surfaced to the WakingScreen. Monotonic (never regresses). */
+export interface WakeProgress {
+  progress?: number
+  stage?: string
 }
 
 /** Ensure the user's compute pod is running before any pod API call. */
@@ -77,6 +90,7 @@ async function upgradePod(
 async function pollUntilReady(
   cloudBaseUrl: string,
   getAccessToken: () => Promise<string>,
+  onProgress?: (p: WakeProgress) => void,
 ): Promise<void> {
   const deadline = Date.now() + 45_000
   while (Date.now() < deadline) {
@@ -86,7 +100,8 @@ async function pollUntilReady(
         headers: { authorization: `Bearer ${token}` },
       })
       if (res.ok) {
-        const data = (await res.json()) as { pod?: { ready?: boolean } }
+        const data = (await res.json()) as { pod?: PodProgress }
+        if (data.pod) onProgress?.({ progress: data.pod.progress, stage: data.pod.stage })
         if (data.pod?.ready) return
       }
     } catch {
@@ -102,6 +117,7 @@ async function pollUntilUpgraded(
   cloudBaseUrl: string,
   getAccessToken: () => Promise<string>,
   expectedTag: string,
+  onProgress?: (p: WakeProgress) => void,
 ): Promise<void> {
   const deadline = Date.now() + 120_000
   while (Date.now() < deadline) {
@@ -112,7 +128,8 @@ async function pollUntilUpgraded(
         headers: { authorization: `Bearer ${token}` },
       })
       if (res.ok) {
-        const data = (await res.json()) as { pod?: { ready?: boolean; computeTag?: string } }
+        const data = (await res.json()) as { pod?: PodProgress }
+        if (data.pod) onProgress?.({ progress: data.pod.progress, stage: data.pod.stage })
         if (data.pod?.ready && data.pod.computeTag === expectedTag) return
       }
     } catch {
@@ -153,6 +170,15 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   const { session, getAccessToken } = useAuth()
   const [status, setStatus] = useState<PodGateStatus>('pending')
   const [error, setError] = useState<string | null>(null)
+  // Live cold-boot progress from /api/compute/status, clamped monotonic so the
+  // bar never regresses across polls (a rare pod restart would otherwise dip it).
+  const [wake, setWake] = useState<WakeProgress>({})
+  const reportProgress = (p: WakeProgress) =>
+    setWake((prev) => ({
+      stage: p.stage ?? prev.stage,
+      progress:
+        p.progress == null ? prev.progress : Math.max(prev.progress ?? 0, p.progress),
+    }))
   const [latestTag, setLatestTag] = useState<string | null>(null)
   // Newer tag detected *after* boot, while the surface is live — surfaced as a
   // non-blocking banner (never the full-screen card) so we don't yank the user
@@ -183,7 +209,11 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
         // serving yet, wait for real readiness before mounting children so they
         // never race the cold-boot window and hit Envoy 503s.
         if (ensureResult.pod && ensureResult.pod.ready === false) {
-          await pollUntilReady(CLOUD_BASE_URL, getAccessToken)
+          // Seed the bar with the milestone /ensure already observed.
+          reportProgress({ progress: ensureResult.pod.progress, stage: ensureResult.pod.stage })
+          await pollUntilReady(CLOUD_BASE_URL, getAccessToken, (p) => {
+            if (!cancelled) reportProgress(p)
+          })
           if (cancelled) return
         }
 
@@ -240,16 +270,18 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   const handleRetry = () => {
     initRef.current = false
     setError(null)
+    setWake({})
     setStatus('pending')
   }
 
   const handleUpgrade = async (tag: string | null = latestTag) => {
     if (!tag) return
     setBannerTag(null)
+    setWake({})
     setStatus('upgrading')
     try {
       await upgradePod(CLOUD_BASE_URL, getAccessToken)
-      await pollUntilUpgraded(CLOUD_BASE_URL, getAccessToken, tag)
+      await pollUntilUpgraded(CLOUD_BASE_URL, getAccessToken, tag, reportProgress)
       currentTagRef.current = tag
       setStatus('ready')
     } catch (err) {
@@ -282,11 +314,11 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   }
 
   if (status === 'pending') {
-    return <WakingScreen mode="waking" />
+    return <WakingScreen mode="waking" progress={wake.progress} />
   }
 
   if (status === 'upgrading') {
-    return <WakingScreen mode="upgrading" />
+    return <WakingScreen mode="upgrading" progress={wake.progress} />
   }
 
   if (status === 'upgrade-available') {

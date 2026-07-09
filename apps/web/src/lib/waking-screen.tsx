@@ -22,6 +22,12 @@ const WAKING_LINES = [
   'Spinning up QuickJS…',
   'Teaching electrons to think…',
   'Brewing fresh tokens…',
+  'Untangling the neural spaghetti…',
+  'Convincing the GPU to cooperate…',
+  'Reticulating splines…',
+  'Feeding the hamsters…',
+  'Aligning the flux capacitor…',
+  'Polishing the pixels…',
   'Almost there…',
 ]
 
@@ -30,6 +36,8 @@ const UPGRADING_LINES = [
   'Swapping in fresh code…',
   'Restarting your pod…',
   'Reconnecting your spaces…',
+  'Migrating your sessions…',
+  'Dusting off the new features…',
   'Almost back…',
 ]
 
@@ -47,9 +55,23 @@ const LINES: Record<WakingMode, string[]> = {
   'signing-in': ['One moment…'],
 }
 
-export function WakingScreen({ mode = 'waking' }: { mode?: WakingMode }) {
+export function WakingScreen({
+  mode = 'waking',
+  progress,
+}: {
+  mode?: WakingMode
+  /**
+   * Real cold-boot progress 0..1, milestone-based (see gateway getUserPodStatus).
+   * When provided the bar is determinate (fills to the milestone); when omitted
+   * it falls back to the indeterminate sliding loop.
+   */
+  progress?: number
+}) {
   const lines = LINES[mode]
   const [i, setI] = useState(0)
+
+  const determinate = typeof progress === 'number' && Number.isFinite(progress)
+  const pct = determinate ? Math.max(0, Math.min(100, Math.round(progress! * 100))) : null
 
   useEffect(() => {
     if (lines.length <= 1) return
@@ -73,6 +95,25 @@ export function WakingScreen({ mode = 'waking' }: { mode?: WakingMode }) {
           {lines[i]}
         </p>
       </div>
+      {/* Progress bar. Determinate when the gate feeds real milestone progress
+          (fills to the current boot stage); otherwise an honest indeterminate
+          loop — never a fake timed fill. */}
+      <div
+        style={styles.track}
+        role="progressbar"
+        aria-label="Loading"
+        aria-valuemin={determinate ? 0 : undefined}
+        aria-valuemax={determinate ? 100 : undefined}
+        aria-valuenow={determinate ? pct! : undefined}
+        aria-valuetext={determinate ? `${pct}%` : lines[i]}
+      >
+        <div
+          className={determinate ? undefined : 'lm-wake-bar'}
+          style={
+            determinate ? { ...styles.bar, ...styles.barFill, width: `${pct}%` } : styles.bar
+          }
+        />
+      </div>
     </div>
   )
 }
@@ -87,9 +128,14 @@ const KEYFRAMES = `
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes lm-wake-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
 @media (prefers-reduced-motion: reduce) {
   .lm-wake-orbit { animation: none !important; }
   .lm-wake-core { animation: none !important; }
+  .lm-wake-bar { animation: none !important; left: 0 !important; width: 100% !important; opacity: 0.5; }
 }
 `
 
@@ -165,5 +211,29 @@ const styles = {
     fontSize: 14,
     color: 'var(--muted-foreground)',
     animation: 'lm-wake-fade 0.5s ease',
+  },
+  track: {
+    position: 'relative' as const,
+    width: 200,
+    height: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+    background: 'var(--muted)',
+  },
+  bar: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    height: '100%',
+    width: '25%',
+    borderRadius: 999,
+    background: 'var(--primary)',
+    animation: 'lm-wake-slide 1.6s ease-in-out infinite',
+  },
+  // Determinate override: pinned to the left, no slide, eases toward the
+  // milestone width so stepped progress feels smooth instead of snapping.
+  barFill: {
+    animation: 'none',
+    transition: 'width 0.6s ease',
   },
 } satisfies Record<string, React.CSSProperties>
