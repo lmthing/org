@@ -60,6 +60,11 @@ export interface AgentDef {
    *  spell it out. The integrator's `exec/capability.ts` consumes this to gate
    *  global injection + per-invocation scope. */
   capabilities?: AppCapabilities;
+  /** Inbound-webhook bindings declared via the `triggers:` frontmatter key —
+   *  lets an agent be webhook-triggered without a project `hooks/*.ts` file.
+   *  Scanned by the CLI's `webhook-manifest.ts` into the pod-wide manifest.
+   *  Undefined when the key is absent (no bindings), matching `canDelegateTo`. */
+  triggers?: WebhookTrigger[];
 }
 
 export interface ActionDef {
@@ -67,6 +72,14 @@ export interface ActionDef {
   label: string;
   description: string;
   tasklist: string;
+}
+
+/** An inbound-webhook binding declared in an agent's `triggers:` frontmatter.
+ *  `path` is the URL-safe binding key (unique per pod, enforced by the CLI
+ *  manifest builder); `provider` selects the inbound verifier/adapter. */
+export interface WebhookTrigger {
+  path: string;
+  provider?: string;
 }
 
 export interface AgentConfig {
@@ -377,7 +390,12 @@ const AGENT_FRONTMATTER_ALLOWED_KEYS = new Set([
   'dependencies',
   'capabilities',
   'model',
+  'triggers',
 ]);
+
+/** URL-safe webhook path pattern — matches `WEBHOOK_PATH_RE` in
+ *  `libs/cli/src/app/hooks/loader.ts` (letters, digits, `_`, `-`). */
+const WEBHOOK_PATH_RE = /^[A-Za-z0-9_-]+$/;
 
 async function loadAgent(
   agentsDir: string,
@@ -399,6 +417,10 @@ async function loadAgent(
   let defaultAction: string | undefined;
   let model: string | undefined;
   let capabilities: AppCapabilities = {};
+  // Omitted vs empty follows canDelegateTo's convention: undefined when the key
+  // is absent, so the manifest scanner (libs/cli/webhook-manifest.ts) treats a
+  // triggers-less agent as contributing no bindings.
+  let triggers: WebhookTrigger[] | undefined;
 
   if (await fileExists(instructPath)) {
     const raw = await readFile(instructPath, 'utf8');
@@ -450,6 +472,45 @@ async function loadAgent(
         }
       }
     }
+    if (data['triggers'] !== undefined) {
+      if (!Array.isArray(data['triggers'])) {
+        throw new Error(`Agent "${slug}" (${instructPath}) has a "triggers" frontmatter key that is not an array`);
+      }
+      triggers = data['triggers'].map((entry) => {
+        if (typeof entry !== 'object' || entry === null) {
+          throw new Error(
+            `Agent "${slug}" (${instructPath}) has a malformed "triggers" entry: expected an object with a "webhook" key`,
+          );
+        }
+        const e = entry as Record<string, unknown>;
+        const webhook = e['webhook'];
+        if (typeof webhook !== 'object' || webhook === null) {
+          throw new Error(
+            `Agent "${slug}" (${instructPath}) has a malformed "triggers" entry: expected \`webhook: { path, provider? }\``,
+          );
+        }
+        const w = webhook as Record<string, unknown>;
+        if (typeof w['path'] !== 'string' || w['path'].length === 0) {
+          throw new Error(
+            `Agent "${slug}" (${instructPath}) has a "triggers" entry with a missing or empty webhook.path`,
+          );
+        }
+        if (!WEBHOOK_PATH_RE.test(w['path'])) {
+          throw new Error(
+            `Agent "${slug}" (${instructPath}) has a "triggers" entry with an invalid webhook.path "${w['path']}" (expected URL-safe: letters, digits, '_', '-')`,
+          );
+        }
+        if (w['provider'] !== undefined && typeof w['provider'] !== 'string') {
+          throw new Error(
+            `Agent "${slug}" (${instructPath}) has a "triggers" entry with a non-string webhook.provider`,
+          );
+        }
+        return {
+          path: w['path'],
+          ...(typeof w['provider'] === 'string' ? { provider: w['provider'] } : {}),
+        };
+      });
+    }
   }
 
   // charter.md (optional): fork-safe identity/guardrails, no frontmatter required.
@@ -460,7 +521,19 @@ async function loadAgent(
     charterBody = body.trim();
   }
 
-  return { slug, title, instructBody, charterBody, actions, canDelegateTo, config, defaultAction, capabilities, ...(model ? { model } : {}) };
+  return {
+    slug,
+    title,
+    instructBody,
+    charterBody,
+    actions,
+    canDelegateTo,
+    config,
+    defaultAction,
+    capabilities,
+    ...(model ? { model } : {}),
+    ...(triggers ? { triggers } : {}),
+  };
 }
 
 export interface LoadSpaceOpts {

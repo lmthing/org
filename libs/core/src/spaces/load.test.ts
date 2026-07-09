@@ -124,3 +124,56 @@ describe('loadSpace agent-frontmatter allow-list gate', () => {
     expect(space.agents['a']!.capabilities).toEqual({ 'db:read': { tables: ['ghost'] } });
   });
 });
+
+describe('loadSpace agent `triggers:` frontmatter (inbound webhooks)', () => {
+  it('parses a valid triggers entry into WebhookTrigger[]', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md':
+        '---\ntitle: A\ntriggers:\n  - webhook: { path: support, provider: slack }\n---\nbody',
+    });
+    const space = await loadSpace(dir);
+    expect(space.agents['a']!.triggers).toEqual([{ path: 'support', provider: 'slack' }]);
+  });
+
+  it('omits provider when not given and leaves triggers undefined when the key is absent', async () => {
+    const dirWithPath = await makeSpace({
+      'agents/a/instruct.md': '---\ntriggers:\n  - webhook: { path: inbound }\n---\nbody',
+    });
+    const spaceWithPath = await loadSpace(dirWithPath);
+    expect(spaceWithPath.agents['a']!.triggers).toEqual([{ path: 'inbound' }]);
+
+    const dirWithout = await makeSpace({
+      'agents/a/instruct.md': '---\ntitle: A\n---\nbody',
+    });
+    const spaceWithout = await loadSpace(dirWithout);
+    expect(spaceWithout.agents['a']!.triggers).toBeUndefined();
+  });
+
+  it('rejects a non-array triggers value', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md': '---\ntriggers: { webhook: { path: bad } }\n---\nbody',
+    });
+    await expect(loadSpace(dir)).rejects.toThrow(/"triggers".*not an array/);
+  });
+
+  it('rejects a triggers entry missing the webhook key', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md': '---\ntriggers:\n  - notAWebhook: true\n---\nbody',
+    });
+    await expect(loadSpace(dir)).rejects.toThrow(/expected `webhook: { path, provider\? }`/);
+  });
+
+  it('rejects a triggers entry with an invalid webhook.path', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md': '---\ntriggers:\n  - webhook: { path: "bad path" }\n---\nbody',
+    });
+    await expect(loadSpace(dir)).rejects.toThrow(/invalid webhook\.path/);
+  });
+
+  it('rejects a triggers entry with a missing webhook.path', async () => {
+    const dir = await makeSpace({
+      'agents/a/instruct.md': '---\ntriggers:\n  - webhook: { provider: slack }\n---\nbody',
+    });
+    await expect(loadSpace(dir)).rejects.toThrow(/missing or empty webhook\.path/);
+  });
+});

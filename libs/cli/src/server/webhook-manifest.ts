@@ -1,21 +1,28 @@
 /**
  * Inbound-webhook manifest (pod → gateway).
  *
- * A project-app can declare a `webhook` hook (`app/hooks/loader.ts`) binding a
- * URL-safe `path` to an agent `trigger`. This module scans every project's
- * hooks for `webhook` defs, builds a flat manifest of `{ projectId, path,
- * provider, agentRef }` bindings, and publishes it to the gateway so external
- * callers can be routed to the right (possibly sleeping) pod at
- * `<gateway>/webhooks/<path>` → pod `POST /api/inbound/<path>` (mirrors
- * `cron-manifest.ts`'s publish path). `path` must be globally unique across
- * ALL projects on the pod — enforced fail-loud here, since the gateway routes
- * on `path` alone.
+ * A binding can come from either of two sources:
+ *   - a project-app `webhook` hook (`app/hooks/loader.ts`), binding a
+ *     URL-safe `path` to an agent `trigger`; or
+ *   - a SPACE agent's `triggers:` frontmatter (`@lmthing/core` `loadAgent`),
+ *     binding a `path` directly on the agent — no `hooks/*.ts` file needed.
+ *
+ * This module scans every project's hooks AND space agents for these
+ * bindings, builds a flat manifest of `{ projectId, path, provider, agentRef
+ * }` entries, and publishes it to the gateway so external callers can be
+ * routed to the right (possibly sleeping) pod at `<gateway>/webhooks/<path>`
+ * → pod `POST /api/inbound/<path>` (mirrors `cron-manifest.ts`'s publish
+ * path). `path` must be globally unique across ALL projects AND both binding
+ * kinds on the pod — enforced fail-loud here, since the gateway routes on
+ * `path` alone.
  *
  * Pure disk I/O — no model calls, no new deps. Gated by the caller on the pod
  * having gateway env (compute JWT + gateway URL); a no-op in local dev.
  */
-import { join } from 'node:path';
-import { loadHooks, type WebhookHookDef } from '../app/hooks/index.js';
+import { basename, join } from 'node:path';
+import { loadSpace } from '@lmthing/core';
+import { loadHooks, type LoadedHook, type WebhookHookDef } from '../app/hooks/index.js';
+import { listProjectSpaceDirs } from './projects.js';
 
 /** One inbound-webhook binding in the published manifest. */
 export interface WebhookBinding {
@@ -29,32 +36,60 @@ export interface WebhookBinding {
 }
 
 /**
- * Build the webhook manifest across `projects` from disk (`hooks/*.ts`). A
- * project whose hooks fail to load is skipped. Fail-loud on a duplicate
- * `path` across ANY two projects (a webhook path must be globally unique on
- * this pod — the gateway cannot otherwise disambiguate the target project).
+ * Scan every space under `<root>/<projectId>/spaces/` for agents declaring a
+ * `triggers:` frontmatter (`@lmthing/core` `loadAgent` → `AgentDef.triggers`)
+ * and return one {@link WebhookBinding} per declared trigger. A space that
+ * fails to load (bad frontmatter, missing files) is skipped — same
+ * fail-soft-per-item posture as `buildWebhookManifest`'s hook loop, since a
+ * single broken space must not blank the whole manifest.
+ */
+async function scanSpaceTriggers(root: string, projectId: string): Promise<WebhookBinding[]> {
+  const bindings: WebhookBinding[] = [];
+  const spaceDirs = await listProjectSpaceDirs(root, projectId);
+  for (const dir of spaceDirs) {
+    let space;
+    try {
+      space = await loadSpace(dir, { requireAgents: false, onWarn: () => {} });
+    } catch {
+      continue;
+    }
+    const spaceId = basename(dir);
+    for (const [agentSlug, agent] of Object.entries(space.agents)) {
+      for (const trigger of agent.triggers ?? []) {
+        bindings.push({
+          projectId,
+          path: trigger.path,
+          provider: trigger.provider ?? 'generic',
+          agentRef: `${spaceId}/${agentSlug}`,
+        });
+      }
+    }
+  }
+  return bindings;
+}
+
+/**
+ * Build the webhook manifest across `projects` from disk — project-app
+ * `hooks/*.ts` webhook defs AND space-agent `triggers:` frontmatter. A
+ * project whose hooks fail to load, or a space that fails to load, is
+ * skipped. Fail-loud on a duplicate `path` across ANY two bindings — hook or
+ * space-trigger, same or different project — since a webhook path must be
+ * globally unique on this pod (the gateway routes on `path` alone and cannot
+ * otherwise disambiguate the target).
  */
 export async function buildWebhookManifest(root: string, projects: string[]): Promise<WebhookBinding[]> {
   const bindings: WebhookBinding[] = [];
-  const ownerByPath = new Map<string, string>();
   for (const projectId of projects) {
     const projectRoot = join(root, projectId);
-    let loaded;
+    let loaded: LoadedHook[];
     try {
       loaded = await loadHooks(projectRoot);
     } catch {
-      continue;
+      loaded = [];
     }
     const webhookHooks = loaded.filter((h) => h.def.type === 'webhook');
     for (const h of webhookHooks) {
       const def = h.def as WebhookHookDef;
-      const owner = ownerByPath.get(def.path);
-      if (owner !== undefined && owner !== projectId) {
-        throw new Error(
-          `[webhook-manifest] duplicate webhook path "${def.path}": owned by project "${owner}" and project "${projectId}" — paths must be globally unique per pod`,
-        );
-      }
-      ownerByPath.set(def.path, projectId);
       bindings.push({
         projectId,
         path: def.path,
@@ -62,7 +97,20 @@ export async function buildWebhookManifest(root: string, projects: string[]): Pr
         agentRef: def.trigger,
       });
     }
+    bindings.push(...(await scanSpaceTriggers(root, projectId)));
   }
+
+  const ownerByPath = new Map<string, { projectId: string; agentRef: string }>();
+  for (const binding of bindings) {
+    const owner = ownerByPath.get(binding.path);
+    if (owner !== undefined && owner.projectId !== binding.projectId) {
+      throw new Error(
+        `[webhook-manifest] duplicate webhook path "${binding.path}": owned by project "${owner.projectId}" (${owner.agentRef}) and project "${binding.projectId}" (${binding.agentRef}) — paths must be globally unique per pod`,
+      );
+    }
+    ownerByPath.set(binding.path, { projectId: binding.projectId, agentRef: binding.agentRef });
+  }
+
   return bindings;
 }
 
@@ -97,9 +145,12 @@ export async function publishWebhookManifest(
 }
 
 /**
- * Find the webhook hook bound to `path` (across all `projects`) and resolve it
- * into what the inbound dispatcher needs to run it. Returns `null` when no
- * project declares a webhook hook with that `path`.
+ * Find the binding for `path` (across all `projects`) and resolve it into
+ * what the inbound dispatcher needs to run it. Checks project-app webhook
+ * hooks first (cheap, no space loading), then falls back to space-agent
+ * `triggers:` frontmatter. Returns `null` when neither declares that `path`.
+ * (`buildWebhookManifest` already fails loud at boot on a path colliding
+ * across the two kinds, so in practice they never both match.)
  */
 export async function resolveBinding(
   root: string,
@@ -125,5 +176,19 @@ export async function resolveBinding(
       };
     }
   }
+
+  for (const projectId of projects) {
+    const spaceBindings = await scanSpaceTriggers(root, projectId);
+    const hit = spaceBindings.find((b) => b.path === path);
+    if (hit) {
+      return {
+        projectId,
+        agentRef: hit.agentRef,
+        provider: hit.provider,
+        budget: undefined,
+      };
+    }
+  }
+
   return null;
 }

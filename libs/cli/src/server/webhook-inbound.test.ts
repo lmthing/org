@@ -8,6 +8,9 @@
  *   - `createInboundHandler` routes threaded (same `x-lmthing-thread` header
  *     → same `sessionId` via `runHeadlessThreaded`) vs. stateless (no thread
  *     header → `runHeadless`) events (Phase 2).
+ *   - Phase 3: a SPACE agent's `triggers:` frontmatter (no `hooks/*.ts` file)
+ *     is scanned into the same manifest and resolved the same way, and a path
+ *     collision between a hook and a space trigger is fail-loud too.
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
@@ -33,6 +36,26 @@ async function writeHook(root: string, projectId: string, slug: string, source: 
   const dir = join(root, projectId, 'hooks');
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, `${slug}.ts`), source, 'utf8');
+}
+
+/** Write a minimal space agent whose `instruct.md` frontmatter declares a
+ *  `triggers:` webhook binding (Phase 3 — no `hooks/*.ts` file needed). */
+async function writeSpaceAgentTrigger(
+  root: string,
+  projectId: string,
+  spaceId: string,
+  agentSlug: string,
+  path: string,
+  provider?: string,
+): Promise<void> {
+  const dir = join(root, projectId, 'spaces', spaceId, 'agents', agentSlug);
+  await mkdir(dir, { recursive: true });
+  const webhookLine = provider ? `{ path: ${path}, provider: ${provider} }` : `{ path: ${path} }`;
+  await writeFile(
+    join(dir, 'instruct.md'),
+    `---\ntitle: ${agentSlug}\ntriggers:\n  - webhook: ${webhookLine}\n---\nbody`,
+    'utf8',
+  );
 }
 
 describe('validateHook — webhook', () => {
@@ -114,6 +137,49 @@ describe('buildWebhookManifest', () => {
 
     await expect(buildWebhookManifest(root, ['proj-a', 'proj-b'])).rejects.toThrow(/proj-a.*proj-b|proj-b.*proj-a/s);
   });
+
+  // ── Phase 3: space-agent `triggers:` frontmatter ──────────────────────────
+
+  it('includes a space agent trigger binding (no hooks/*.ts file)', async () => {
+    const root = await makeRoot();
+    await writeSpaceAgentTrigger(root, 'proj-a', 'space', 'agent', 'from-space', 'slack');
+
+    const bindings = await buildWebhookManifest(root, ['proj-a']);
+    expect(bindings).toContainEqual({
+      projectId: 'proj-a',
+      path: 'from-space',
+      provider: 'slack',
+      agentRef: 'space/agent',
+    });
+  });
+
+  it('defaults a space trigger provider to "generic" when omitted', async () => {
+    const root = await makeRoot();
+    await writeSpaceAgentTrigger(root, 'proj-a', 'space', 'agent', 'from-space-2');
+
+    const bindings = await buildWebhookManifest(root, ['proj-a']);
+    expect(bindings).toContainEqual({
+      projectId: 'proj-a',
+      path: 'from-space-2',
+      provider: 'generic',
+      agentRef: 'space/agent',
+    });
+  });
+
+  it('throws fail-loud on a duplicate path across a hook and a space trigger', async () => {
+    const root = await makeRoot();
+    await writeHook(
+      root,
+      'proj-a',
+      'incoming',
+      `export default { type: 'webhook', path: 'dup-mixed', trigger: 'a/h#e' }`,
+    );
+    await writeSpaceAgentTrigger(root, 'proj-b', 'space', 'agent', 'dup-mixed');
+
+    await expect(buildWebhookManifest(root, ['proj-a', 'proj-b'])).rejects.toThrow(
+      /proj-a.*proj-b|proj-b.*proj-a/s,
+    );
+  });
 });
 
 describe('resolveBinding', () => {
@@ -137,6 +203,20 @@ describe('resolveBinding', () => {
 
     const miss = await resolveBinding(root, ['proj-a', 'proj-b'], 'nope');
     expect(miss).toBeNull();
+  });
+
+  it('resolves a space-agent trigger path when no hook matches (Phase 3)', async () => {
+    const root = await makeRoot();
+    await writeHook(
+      root,
+      'proj-a',
+      'incoming',
+      `export default { type: 'webhook', path: 'from-a', trigger: 'billing/handler#onEvent' }`,
+    );
+    await writeSpaceAgentTrigger(root, 'proj-b', 'space', 'agent', 'from-space');
+
+    const hit = await resolveBinding(root, ['proj-a', 'proj-b'], 'from-space');
+    expect(hit).toMatchObject({ projectId: 'proj-b', agentRef: 'space/agent', provider: 'generic' });
   });
 });
 

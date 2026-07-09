@@ -96,6 +96,7 @@ export type {
   KnowledgeTree,
   KnowledgeDomain,
   KnowledgeField,
+  WebhookTrigger,
 } from './spaces/load.js';
 export { getAgentFunctions, resolveDirectDeps } from './spaces/agent.js';
 export type { ResolvedDep } from './spaces/agent.js';
