@@ -1,6 +1,6 @@
 import type { VM } from '../sandbox/quickjs.js';
 import { marshalToQuickJS, injectGlobal } from '../sandbox/host-bridge.js';
-import type { DbApi, QueryOpts, UpdateOpts, RemoveOpts, Row, ApiCallFn, ConnectionResolver } from '../db/types.js';
+import type { DbApi, QueryOpts, UpdateOpts, RemoveOpts, Row, ApiCallFn, ConnectionResolver, ToolCallFn } from '../db/types.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 
 /** Result shape common to the synchronous authoring globals. */
@@ -42,6 +42,13 @@ export interface AppGlobalImpls {
    *  JWT to the gateway proxy; project-independent, so it is attached to EVERY
    *  session, not only project-app sessions. */
   callConnection?: ConnectionResolver;
+  /** Agent-facing `tool` — dispatch to a host-registered tool (an OpenClaw plugin
+   *  tool loaded via `@lmthing/openclaw-compat`). Value-yielding like `apiCall`:
+   *  NOT injected here but wired through the yield router (`createToolGlobal` +
+   *  `YieldRouterContext.toolResolver`). The host (libs/cli) supplies a resolver
+   *  that dispatches to the loaded `PluginRegistry`; project-independent, so it is
+   *  attached to EVERY session, not only project-app sessions. */
+  tool?: ToolCallFn;
   /** Phase 9 authoring globals — write into the `store/apps/<id>/` catalog source of
    *  the currently-selected app. Provided by libs/cli (`createAppAuthoringGlobals`).
    *  Injected purely on the capability grant (NOT projectRoot): the appbuilder has no

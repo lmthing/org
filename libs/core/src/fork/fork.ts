@@ -433,6 +433,7 @@ export class ForkEngine {
           dynamicSpaces: this.opts.dynamicSpaces,
           apiCallResolver: this.opts.appGlobals?.apiCall,
           connectionResolver: this.opts.appGlobals?.callConnection,
+          toolResolver: this.opts.appGlobals?.tool,
           documentResolver: this.opts.documentResolver,
           // delegate: gated by the task's canDelegateTo policy via the unified
           // yield-time gate (exec/target-match.ts isDelegateAllowed — same gate the

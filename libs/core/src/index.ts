@@ -145,7 +145,7 @@ export type { AppGlobalImpls, AuthoringResult, ProjectResult } from './exec/app-
 // Project-app layer (Phase 1 foundation): db schema + runtime API interfaces +
 // fail-loud validator, and the parsed capability model. Storage engine is in libs/cli.
 export type {
-  DbApi, AsyncDbApi, ApiCallFn, ConnectionRequest, ConnectionResolver, ConnectionResponse, SpawnFn, Row, QueryOpts, UpdateOpts, RemoveOpts,
+  DbApi, AsyncDbApi, ApiCallFn, ToolCallFn, ConnectionRequest, ConnectionResolver, ConnectionResponse, SpawnFn, Row, QueryOpts, UpdateOpts, RemoveOpts,
   TableSchema, ColumnSchema, RelationSchema, LoadedTable, ColumnType, GeneratedKind, OnDelete, ColumnReference,
 } from './db/index.js';
 export { validateTableSchema, validateSchemaSet, isBelongsTo, isHasMany } from './db/index.js';

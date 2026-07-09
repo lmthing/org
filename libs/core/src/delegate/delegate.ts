@@ -339,6 +339,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             scope: delegateScope,
             apiCallResolver: opts.appGlobals?.apiCall,
             connectionResolver: opts.appGlobals?.callConnection,
+            toolResolver: opts.appGlobals?.tool,
             documentResolver: opts.documentResolver,
             getForkEngine: () => forkEngine,
             // `result` is the tasklist's TaskEnvelope ({ ok, degraded, data, … })

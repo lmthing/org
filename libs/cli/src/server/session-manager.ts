@@ -7,6 +7,7 @@ import { dirname } from 'node:path';
 import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
 import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
+import type { PluginRegistry } from '@lmthing/openclaw-compat';
 import { transcribeAudio } from '../providers/transcribe.js';
 import {
   resolveUploadsDir,
@@ -254,6 +255,13 @@ export class SessionManager {
    *  set after construction. */
   private connectionResolver?: ConnectionResolver;
   private connectionResolverResolved = false;
+  /** Pod-side registry of loaded OpenClaw-compat plugin tools (see
+   *  `server/openclaw-host.ts` `loadOpenClawPlugins`). Wired once at boot via
+   *  {@link setToolRegistry}; `undefined` when no `.openclaw-plugins/` dir was
+   *  loaded (or no plugin registered a tool) — the yield router then throws the
+   *  clear "no tool registry configured" error. Project-independent (attached
+   *  to EVERY session), same as the connection resolver above. */
+  private toolRegistry?: PluginRegistry;
   private reaper: ReturnType<typeof setInterval> | null = null;
   /** Absolute path to `<cwd>/.lmthing` — set when running in project mode. */
   readonly lmthingRoot?: string;
@@ -312,6 +320,35 @@ export class SessionManager {
     return { ...appGlobals, callConnection: appGlobals?.callConnection ?? resolver };
   }
 
+  /** Wire a loaded OpenClaw `PluginRegistry` so agent `tool()` calls can dispatch
+   *  to its registered tools. Called once from `serve.ts` after
+   *  `loadOpenClawPlugins` resolves (best-effort — a pod with no
+   *  `.openclaw-plugins/` dir never calls this, so `tool()` stays unavailable). */
+  setToolRegistry(registry: PluginRegistry): void {
+    this.toolRegistry = registry;
+  }
+
+  /** Resolve a `tool()` yield by dispatching to the loaded `PluginRegistry` —
+   *  mirrors the agent-facing `apiCall` contract: an unknown tool name throws
+   *  (fail loud), a registered tool's `execute(callId, params)` result is
+   *  returned verbatim (the `{ content: [...] }` shape). */
+  private async resolveTool(name: string, input?: unknown): Promise<unknown> {
+    const tool = this.toolRegistry?.getTool(name);
+    if (!tool) {
+      throw new Error(`tool("${name}") not found: no OpenClaw plugin registered a tool with that name`);
+    }
+    return tool.execute(randomUUID(), (input as Record<string, unknown>) ?? {});
+  }
+
+  /** Fold the project-independent `tool` resolver into a session's app globals so
+   *  EVERY session (when granted `tools:use`) can dispatch to a loaded OpenClaw
+   *  plugin tool. When no registry is set, the field is left absent so the router
+   *  emits the clear "no tool registry configured" error. */
+  private withTools(appGlobals?: AppGlobalImpls): AppGlobalImpls | undefined {
+    if (!this.toolRegistry) return appGlobals;
+    return { ...appGlobals, tool: appGlobals?.tool ?? ((name: string, input?: unknown) => this.resolveTool(name, input)) };
+  }
+
   /** Pod-side resolver for the universal `readDocument` global — extract a stored
    *  upload's content Node-side (see {@link resolveUploadDocument}). Attached to
    *  EVERY session (project-independent). */
@@ -335,7 +372,7 @@ export class SessionManager {
         projectSpacesDir: args.projectSpacesDir,
         projectId: args.projectId,
         projectRoot: args.projectRoot,
-        appGlobals: this.withConnections(args.appGlobals),
+        appGlobals: this.withTools(this.withConnections(args.appGlobals)),
         appDts: args.appDts,
         documentResolver: (id, opts) => this.resolveDocument(id, opts),
       },

@@ -11,6 +11,7 @@
  *   - db:write: { tables: [raw_items] }           # per-VERB scope
  *   - api:call: { allow: [webSearch, markRead] }  # allowlist IS the config (required)
  *   - connections:use: { providers: [google, slack] } # provider allowlist (required)
+ *   - tools:use: { allow: [webSearch] }            # host-tool allowlist (required)
  *   - pages:write                                 # bare = full scope, no config
  * ```
  *
@@ -18,8 +19,8 @@
  * `load.ts`: a module-level allow-list `Set` + an unknown-key throw): an unknown
  * capability id, an unknown config key, a `db:*` `tables` naming a table absent
  * from the project's `database/` (only when `knownTables` is supplied), a bare
- * `api:call` (its `allow` is required — there is no "call anything"), or a
- * config given to a bare-only cap all throw.
+ * `api:call`/`tools:use` (their `allow` is required — there is no "call/use
+ * anything"), or a config given to a bare-only cap all throw.
  */
 
 export type CapabilityId =
@@ -31,6 +32,7 @@ export type CapabilityId =
   | 'hooks:write'
   | 'api:call'
   | 'connections:use'
+  | 'tools:use'
   | 'project:manage';
 
 /** Every recognized capability id. Unknown ids fail the space load. */
@@ -43,6 +45,7 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'hooks:write',
   'api:call',
   'connections:use',
+  'tools:use',
   'project:manage',
 ]);
 
@@ -67,6 +70,7 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
  *   - `db:*`         → `{ tables?: string[] }` (omitted `tables` = all tables)
  *   - `api:call`     → `{ allow: string[] }` (always present — required)
  *   - `connections:use` → `{ providers: string[] }` (always present — required)
+ *   - `tools:use`    → `{ allow: string[] }` (always present — required)
  *   - authoring      → `true` (bare, no config)
  *   - project:manage → `true` (bare; grants createProject/selectProject — the
  *                      appbuilder's authority to scaffold/select a catalog app)
@@ -80,6 +84,7 @@ export interface AppCapabilities {
   'hooks:write'?: true;
   'api:call'?: { allow: string[] };
   'connections:use'?: { providers: string[] };
+  'tools:use'?: { allow: string[] };
   'project:manage'?: true;
 }
 
@@ -158,6 +163,28 @@ function parseApiCallConfig(config: unknown, ctx: ParseCapabilitiesCtx): { allow
   if (!Array.isArray(rawAllow) || rawAllow.length === 0 || rawAllow.some((a) => typeof a !== 'string')) {
     throw new Error(
       `Agent "${ctx.agentId}" capability "api:call" requires a non-empty "allow" list of endpoint names (there is no "call anything")`,
+    );
+  }
+  return { allow: rawAllow as string[] };
+}
+
+/** Parse + validate a `tools:use` config payload into `{ allow: string[] }`. */
+function parseToolsConfig(config: unknown, ctx: ParseCapabilitiesCtx): { allow: string[] } {
+  if (!isRecord(config)) {
+    throw new Error(
+      `Agent "${ctx.agentId}" capability "tools:use" has an invalid config: expected a map like { allow: [...] }`,
+    );
+  }
+  const unknownKeys = Object.keys(config).filter((k) => k !== 'allow');
+  if (unknownKeys.length > 0) {
+    throw new Error(
+      `Agent "${ctx.agentId}" capability "tools:use" has disallowed config key(s): ${unknownKeys.join(', ')}. Allowed key: allow`,
+    );
+  }
+  const rawAllow = config['allow'];
+  if (!Array.isArray(rawAllow) || rawAllow.length === 0 || rawAllow.some((a) => typeof a !== 'string')) {
+    throw new Error(
+      `Agent "${ctx.agentId}" capability "tools:use" requires a non-empty "allow" list of tool names (there is no "use anything")`,
     );
   }
   return { allow: rawAllow as string[] };
@@ -257,6 +284,17 @@ export function parseCapabilities(raw: unknown, ctx: ParseCapabilitiesCtx): AppC
         );
       }
       result['connections:use'] = parseConnectionsConfig(config, ctx);
+      continue;
+    }
+
+    // tools:use — allow list is REQUIRED, so a bare entry is an error.
+    if (capId === 'tools:use') {
+      if (config === undefined) {
+        throw new Error(
+          `Agent "${ctx.agentId}" capability "tools:use" requires a config with an "allow" list, e.g. tools:use: { allow: [myTool] }`,
+        );
+      }
+      result['tools:use'] = parseToolsConfig(config, ctx);
       continue;
     }
 

@@ -420,6 +420,10 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
         const { spaceRef, agentSlug } = parseOpenClawAgentEnv(process.env['LM_OPENCLAW_AGENT']);
         const openclawHost = createComputeCompatHost(manager, { projectId: DEFAULT_PROJECT_ID, spaceRef, agentSlug }, openclawRoutes);
         const { registry } = await loadOpenClawPlugins(join(root, '.openclaw-plugins'), openclawHost, console.log);
+        // Wire the loaded plugin registry so agent `tool()` calls (gated by the
+        // `tools:use` capability) can dispatch to its registered tools — see
+        // SessionManager.setToolRegistry / resolveTool.
+        manager.setToolRegistry(registry);
         if (registry.httpRoutes.length > 0 || registry.tools.size > 0) {
           console.log(
             `[openclaw] loaded ${registry.httpRoutes.length} http route(s), ${registry.tools.size} tool(s) from .openclaw-plugins/`,
