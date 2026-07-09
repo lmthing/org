@@ -13,7 +13,16 @@ interface Provider {
   /** This user has an active connection. */
   connected: boolean
   status?: string
-  scopes?: string[]
+  /** Granted scopes — the gateway sends a space/comma-delimited string; older
+   *  shapes sent an array, so accept both and normalize at the render site. */
+  scopes?: string | string[]
+}
+
+/** Normalize the provider `scopes` (string or array) into a display list. */
+function scopeList(scopes?: string | string[]): string[] {
+  if (Array.isArray(scopes)) return scopes
+  if (typeof scopes === 'string') return scopes.split(/[\s,]+/).filter(Boolean)
+  return []
 }
 
 /**
@@ -130,8 +139,8 @@ export function Connections() {
                     </Caption>
                   ) : !p.configured ? (
                     <Caption muted>Not enabled on this server.</Caption>
-                  ) : p.scopes && p.scopes.length > 0 ? (
-                    <Caption muted>{p.scopes.join(', ')}</Caption>
+                  ) : scopeList(p.scopes).length > 0 ? (
+                    <Caption muted>{scopeList(p.scopes).join(', ')}</Caption>
                   ) : null}
                 </div>
 
