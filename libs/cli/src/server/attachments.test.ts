@@ -36,13 +36,23 @@ describe('assembleParts', () => {
     expect(r.transcripts).toEqual([]);
   });
 
-  it('maps a binary (pdf) file to an attachment carrying a file part', () => {
+  it('inlines a binary doc with extracted text as text (never an unreadable file part)', () => {
     const r = assembleParts([
-      { meta: meta({ id: 'f1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf' }), bytes: new Uint8Array([9]) },
+      { meta: meta({ id: 'f1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf', text: 'the mascot is Pico' }), bytes: new Uint8Array([9]) },
     ]);
     expect(r.attachments).toEqual([
-      { id: 'f1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf', part: { type: 'file', data: `data:application/pdf;base64,${Buffer.from([9]).toString('base64')}`, mediaType: 'application/pdf', filename: 'doc.pdf' } },
+      { id: 'f1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf', text: 'the mascot is Pico' },
     ]);
+    expect(r.attachments[0]!.part).toBeUndefined(); // NEVER a file part — no chat model reads one
+  });
+
+  it('inlines a plain-text NOTE for a binary doc with no extracted text (so the agent replies gracefully)', () => {
+    const r = assembleParts([
+      { meta: meta({ id: 'f2', kind: 'file', mediaType: 'application/pdf', filename: 'scan.pdf' }), bytes: new Uint8Array([9]) },
+    ]);
+    expect(r.attachments[0]!.part).toBeUndefined();
+    expect(r.attachments[0]!.text).toContain('scan.pdf');
+    expect(r.attachments[0]!.text).toContain('could not be read as text');
   });
 
   it('carries a text file as decoded text (not an unsupported file part)', () => {
@@ -82,7 +92,10 @@ describe('assembleParts', () => {
       { meta: meta({ id: 'a', kind: 'audio', mediaType: 'audio/wav', transcript: 'spoken' }), bytes: null },
     ]);
     expect(r.attachments.map((a) => a.kind)).toEqual(['image', 'file']);
-    expect(r.attachments.map((a) => a.part?.type)).toEqual(['image', 'file']);
+    // image → image part; pdf (no extracted text) → a plain-text note, not a file part
+    expect(r.attachments[0]!.part?.type).toBe('image');
+    expect(r.attachments[1]!.part).toBeUndefined();
+    expect(r.attachments[1]!.text).toContain('could not be read as text');
     expect(r.transcripts).toEqual(['[Transcript of audio]:\nspoken']);
     expect(r.traceAttachments.map((t) => t.kind)).toEqual(['image', 'file', 'audio']);
   });

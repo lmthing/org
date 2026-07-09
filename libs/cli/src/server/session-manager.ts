@@ -16,6 +16,7 @@ import {
   uploadUrl,
   classifyKind,
   assembleParts,
+  extractDocumentText,
   type AttachmentRef,
 } from './uploads.js';
 import { bootProjectApp } from '../app/boot.js';
@@ -955,7 +956,9 @@ export class SessionManager {
    *  Returns a reference the chat client sends back with `sendMessage`. */
   async saveUpload(input: { bytes: Uint8Array; mediaType: string; filename?: string }): Promise<AttachmentRef> {
     let transcript: string | undefined;
-    if (classifyKind(input.mediaType) === 'audio') {
+    let text: string | undefined;
+    const kind = classifyKind(input.mediaType);
+    if (kind === 'audio') {
       try {
         transcript = (await transcribeAudio(input.bytes)).text;
       } catch (err) {
@@ -964,8 +967,17 @@ export class SessionManager {
         // eslint-disable-next-line no-console
         console.warn(`[uploads] transcription failed: ${err instanceof Error ? err.message : String(err)}`);
       }
+    } else if (kind === 'file') {
+      // Binary documents (PDF, …): extract text now so the files agent — which
+      // runs a text model that can't ingest a raw file part — reads real text.
+      try {
+        text = await extractDocumentText(input.mediaType, input.bytes);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[uploads] text extraction failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
-    const meta = await saveUploadToDisk(this.uploadsDir, { ...input, ...(transcript ? { transcript } : {}) });
+    const meta = await saveUploadToDisk(this.uploadsDir, { ...input, ...(transcript ? { transcript } : {}), ...(text ? { text } : {}) });
     return { ...meta, url: uploadUrl(meta.id) };
   }
 

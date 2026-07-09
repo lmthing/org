@@ -15,6 +15,10 @@ export interface UploadMeta {
   filename?: string;
   /** Transcript text for audio uploads (what the model actually receives). */
   transcript?: string;
+  /** Extracted plain text for a binary DOCUMENT (e.g. a PDF) whose bytes a text
+   *  model can't ingest as a file part. Populated best-effort at upload time so
+   *  the files agent reads real text instead of an unreadable binary part. */
+  text?: string;
 }
 
 /** What the upload endpoint returns and the chat client sends back on
@@ -41,6 +45,24 @@ export function isTextMediaType(mediaType: string): boolean {
   );
 }
 
+/** Best-effort extract plain text from a binary document so a text model can
+ *  read it. Currently handles PDFs (via `unpdf`, lazily imported so it never
+ *  costs anything unless a PDF is actually uploaded). Returns undefined when the
+ *  type is unsupported or extraction yields nothing (scanned/image-only PDFs). */
+export async function extractDocumentText(mediaType: string, bytes: Uint8Array): Promise<string | undefined> {
+  if (mediaType !== 'application/pdf') return undefined;
+  try {
+    const { extractText, getDocumentProxy } = await import('unpdf');
+    const pdf = await getDocumentProxy(new Uint8Array(bytes));
+    const { text } = await extractText(pdf, { mergePages: true });
+    const joined = (Array.isArray(text) ? text.join('\n') : text).trim();
+    return joined.length > 0 ? joined : undefined;
+  } catch {
+    // Corrupt/encrypted/unsupported PDF — fall back to the "unreadable" note.
+    return undefined;
+  }
+}
+
 /** Resolve the uploads directory under the runtime root (falls back to cwd when
  *  the manager is not in project mode). */
 export function resolveUploadsDir(root?: string): string {
@@ -61,7 +83,7 @@ export function uploadUrl(id: string): string {
 
 export async function saveUpload(
   uploadsDir: string,
-  input: { bytes: Uint8Array; mediaType: string; filename?: string; transcript?: string },
+  input: { bytes: Uint8Array; mediaType: string; filename?: string; transcript?: string; text?: string },
 ): Promise<UploadMeta> {
   await mkdir(uploadsDir, { recursive: true });
   const id = randomUUID();
@@ -71,6 +93,7 @@ export async function saveUpload(
     mediaType: input.mediaType,
     ...(input.filename ? { filename: input.filename } : {}),
     ...(input.transcript ? { transcript: input.transcript } : {}),
+    ...(input.text ? { text: input.text } : {}),
   };
   await writeFile(join(uploadsDir, id), input.bytes);
   await writeFile(join(uploadsDir, `${id}.json`), JSON.stringify(meta), 'utf8');
@@ -142,10 +165,15 @@ export function assembleParts(
       // files agent to read.
       attachments.push({ ...base, text: Buffer.from(bytes).toString('utf8').slice(0, TEXT_FILE_MAX_CHARS) });
     } else {
-      // Binary documents (PDF, etc.) ride as a file part — for providers/models
-      // that accept documents; where they don't, the file agent reports it can't.
-      const dataUrl = `data:${meta.mediaType};base64,${Buffer.from(bytes).toString('base64')}`;
-      attachments.push({ ...base, part: { type: 'file', data: dataUrl, mediaType: meta.mediaType, ...(meta.filename ? { filename: meta.filename } : {}) } });
+      // Binary documents (PDF, etc.): NO chat model reads a raw file *part* (the
+      // provider errors, the files agent then loops and returns nothing). Always
+      // hand the model TEXT — the server-extracted document text when we have it,
+      // else a plain note so the agent can tell the user it couldn't be read.
+      const extracted = meta.text?.trim();
+      const text = extracted
+        ? extracted.slice(0, TEXT_FILE_MAX_CHARS)
+        : `[The file "${meta.filename ?? meta.mediaType}" (${meta.mediaType}) could not be read as text on the server — its contents are unavailable.]`;
+      attachments.push({ ...base, text });
     }
   }
   return { attachments, traceAttachments, transcripts };
