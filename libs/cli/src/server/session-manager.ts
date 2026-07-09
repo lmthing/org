@@ -1133,60 +1133,7 @@ export class SessionManager {
     let session: Session | undefined;
     const displays: unknown[] = [];
     try {
-      const root = this.lmthingRoot;
-      let args: BuildSessionArgs;
-      if (root) {
-        const projectId = opts.projectId ?? DEFAULT_PROJECT_ID;
-        const projectRoot = join(root, projectId);
-
-        // Resolve the space dir (Phase 7 will extend spaceRef parsing).
-        let spaceDir: string;
-        if (opts.spaceDir) {
-          spaceDir = opts.spaceDir;
-        } else if (opts.spaceRef) {
-          const spaceName = opts.spaceRef.split('/')[0] ?? opts.spaceRef;
-          spaceDir = join(projectRoot, 'spaces', spaceName);
-        } else {
-          spaceDir = projectRoot;
-        }
-
-        const projectSpacesDir = join(projectRoot, 'spaces');
-        const [systemSpaceDirs, preloadSpaceDirs] = await Promise.all([
-          listSystemSpaceDirs(root),
-          listProjectSpaceDirs(root, projectId),
-        ]);
-        const appGlobals = await this.getProjectAppGlobals(root, projectId);
-        const contracts = await this.getProjectContracts(root, projectId);
-
-        args = {
-          spaceDir,
-          agentSlug: opts.agentSlug,
-          budget: opts.budget,
-          traceFile: opts.traceFile,
-          renderHost: new WebRenderHost(),
-          systemSpaceDirs,
-          preloadSpaceDirs,
-          projectSpacesDir,
-          projectId,
-          projectRoot,
-          appGlobals,
-          appDts: contracts?.apiCallDts,
-        };
-      } else {
-        // No project root: fall back to a bare space-dir build (legacy mode).
-        const spaceDir = opts.spaceDir ?? this.defaultSpaceDir;
-        if (!spaceDir) {
-          throw new Error('runHeadless: no spaceDir provided and no lmthingRoot/defaultSpaceDir configured');
-        }
-        args = {
-          spaceDir,
-          agentSlug: opts.agentSlug,
-          budget: opts.budget,
-          traceFile: opts.traceFile,
-          renderHost: new WebRenderHost(),
-        };
-      }
-
+      const args = await this.buildProjectSessionArgs(opts);
       session = this.buildSessionFn(args);
 
       // Capture display descriptors so we can return the agent's final output.
@@ -1216,6 +1163,220 @@ export class SessionManager {
         /* best-effort */
       }
     }
+  }
+
+  /**
+   * Build the `BuildSessionArgs` for a one-shot headless run (project-mode
+   * resolution mirrored from the interactive path — see {@link runHeadless}'s
+   * former inline body). Shared by {@link runHeadless} (fresh, unpersisted VM)
+   * and {@link runHeadlessThreaded} (same wiring, but resumed/persisted against
+   * a stable snapshot dir).
+   *
+   * Resolution:
+   *   - `root = this.lmthingRoot`, `projectId = opts.projectId ?? DEFAULT_PROJECT_ID`,
+   *     `projectRoot = <root>/<projectId>`.
+   *   - `spaceDir`: `opts.spaceDir` if given; else if `opts.spaceRef` a
+   *     project-relative space under `<projectRoot>/spaces/<space>` (leading
+   *     segment only — trailing `/agent` is ignored here); else the project dir
+   *     itself.
+   *   - No `lmthingRoot`: legacy fallback to a bare `opts.spaceDir ?? this.defaultSpaceDir`
+   *     build (no project wiring).
+   */
+  private async buildProjectSessionArgs(opts: {
+    projectId?: string;
+    spaceRef?: string;
+    spaceDir?: string;
+    agentSlug: string;
+    budget?: BuildSessionArgs['budget'];
+    traceFile?: string;
+  }): Promise<BuildSessionArgs> {
+    const root = this.lmthingRoot;
+    if (!root) {
+      // No project root: fall back to a bare space-dir build (legacy mode).
+      const spaceDir = opts.spaceDir ?? this.defaultSpaceDir;
+      if (!spaceDir) {
+        throw new Error('runHeadless: no spaceDir provided and no lmthingRoot/defaultSpaceDir configured');
+      }
+      return {
+        spaceDir,
+        agentSlug: opts.agentSlug,
+        budget: opts.budget,
+        traceFile: opts.traceFile,
+        renderHost: new WebRenderHost(),
+      };
+    }
+
+    const projectId = opts.projectId ?? DEFAULT_PROJECT_ID;
+    const projectRoot = join(root, projectId);
+
+    // Resolve the space dir (Phase 7 will extend spaceRef parsing).
+    let spaceDir: string;
+    if (opts.spaceDir) {
+      spaceDir = opts.spaceDir;
+    } else if (opts.spaceRef) {
+      const spaceName = opts.spaceRef.split('/')[0] ?? opts.spaceRef;
+      spaceDir = join(projectRoot, 'spaces', spaceName);
+    } else {
+      spaceDir = projectRoot;
+    }
+
+    const projectSpacesDir = join(projectRoot, 'spaces');
+    const [systemSpaceDirs, preloadSpaceDirs] = await Promise.all([
+      listSystemSpaceDirs(root),
+      listProjectSpaceDirs(root, projectId),
+    ]);
+    const appGlobals = await this.getProjectAppGlobals(root, projectId);
+    const contracts = await this.getProjectContracts(root, projectId);
+
+    return {
+      spaceDir,
+      agentSlug: opts.agentSlug,
+      budget: opts.budget,
+      traceFile: opts.traceFile,
+      renderHost: new WebRenderHost(),
+      systemSpaceDirs,
+      preloadSpaceDirs,
+      projectSpacesDir,
+      projectId,
+      projectRoot,
+      appGlobals,
+      appDts: contracts?.apiCallDts,
+    };
+  }
+
+  /** Per-sessionId chain of in-flight {@link runHeadlessThreaded} turns, so two
+   *  near-simultaneous inbound events on the SAME thread never resume the same
+   *  on-disk snapshot concurrently (which would silently lose one update). Each
+   *  call is queued behind the previous one for its `sessionId`; unrelated
+   *  sessionIds run fully in parallel. Entries are removed once their chain
+   *  drains, so this never grows unbounded. */
+  private threadLocks = new Map<string, Promise<void>>();
+
+  private runExclusive<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const prior = this.threadLocks.get(key) ?? Promise.resolve();
+    const result = prior.then(fn, fn);
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.threadLocks.set(key, tail);
+    void tail.finally(() => {
+      if (this.threadLocks.get(key) === tail) this.threadLocks.delete(key);
+    });
+    return result;
+  }
+
+  /**
+   * Run one agent turn **threaded**: like {@link runHeadless}, but bound to a
+   * caller-provided STABLE `sessionId` (minted by the webhook-thread store) so
+   * repeated inbound events on the same external thread continue ONE persisted
+   * multi-turn session instead of a fresh one-shot each time.
+   *
+   * Snapshot dir resolution mirrors {@link createSession}'s resume path:
+   * `opts.spaceRef` → `spaceSessionsDir(root, projectId, spaceId)/<sessionId>`,
+   * else `sessionsDir(root, projectId)/<sessionId>`. If a snapshot already
+   * exists there, `session.resume()` continues it; otherwise `session.start()`
+   * begins it. Either way the turn is persisted back to the SAME snapshot dir
+   * afterward (`saveSnapshot`, mirroring `persistSession`'s shape), so the next
+   * call for this `sessionId` resumes it.
+   *
+   * Project-mode only (requires `lmthingRoot`) — threading has no meaning for
+   * the legacy bare-spaceDir mode. Like `runHeadless`, the session is NEVER
+   * registered in `this.sessions`: it doesn't count against `maxSessions` and
+   * has its own throwaway `WebRenderHost` (no hub). Concurrent calls for the
+   * same `sessionId` are serialized (see {@link runExclusive}) so they can't
+   * race on the same snapshot file.
+   */
+  async runHeadlessThreaded(opts: {
+    sessionId: string;
+    projectId?: string;
+    spaceRef?: string;
+    agentSlug: string;
+    message: string;
+    budget?: BuildSessionArgs['budget'];
+  }): Promise<{ ok: boolean; result?: unknown; error?: string; sessionId: string }> {
+    return this.runExclusive(opts.sessionId, async () => {
+      let session: Session | undefined;
+      const displays: unknown[] = [];
+      try {
+        const root = this.lmthingRoot;
+        if (!root) {
+          throw new Error('runHeadlessThreaded: no lmthingRoot configured — threading is project-mode only');
+        }
+        const projectId = opts.projectId ?? DEFAULT_PROJECT_ID;
+
+        // A spaceRef-bound session persists under the per-space dir; a plain
+        // project session under `<project>/sessions/` — same rule as
+        // createSession's resume path.
+        let snapshotDir: string;
+        if (opts.spaceRef) {
+          const spaceId = parseSpaceRef(opts.spaceRef).space;
+          snapshotDir = join(spaceSessionsDir(root, projectId, spaceId), opts.sessionId);
+        } else {
+          snapshotDir = join(sessionsDir(root, projectId), opts.sessionId);
+        }
+        const snapshotFile = join(snapshotDir, 'snapshot.json');
+
+        const args = await this.buildProjectSessionArgs({
+          projectId,
+          spaceRef: opts.spaceRef,
+          agentSlug: opts.agentSlug,
+          budget: opts.budget,
+        });
+        session = this.buildSessionFn(args);
+
+        // Capture display descriptors so we can return the agent's final output —
+        // same isolated-tracer pattern as runHeadless (no hub is wired).
+        if (typeof session.getTracer === 'function') {
+          session.getTracer().subscribe((e) => {
+            if (e.type === 'display') displays.push(e.descriptor);
+          });
+        }
+
+        // Preserve the original createdAt across a resume (best-effort — a
+        // missing/corrupt existing snapshot just falls back to "now", which is
+        // fine since it's cosmetic metadata, not the source of truth for history).
+        let createdAt = Date.now();
+        const resuming = existsSync(snapshotFile);
+        if (resuming) {
+          try {
+            const raw = await readFile(snapshotFile, 'utf8');
+            const existing = JSON.parse(raw) as { createdAt?: number };
+            if (typeof existing.createdAt === 'number') createdAt = existing.createdAt;
+          } catch {
+            // Corrupt/unreadable snapshot meta — createdAt falls back to now.
+          }
+          await session.resume(snapshotDir, opts.message);
+        } else {
+          await session.start(opts.message);
+        }
+
+        await saveSnapshot(snapshotDir, {
+          sessionId: opts.sessionId,
+          agentSlug: opts.agentSlug,
+          spaceDir: args.spaceDir,
+          history: session.getHistory(),
+          scope: {},
+          createdAt,
+        });
+
+        const lastDisplay = displays.length ? displays[displays.length - 1] : undefined;
+        let result: unknown = lastDisplay;
+        if (result === undefined && typeof session.getHistory === 'function') {
+          const history = session.getHistory();
+          result = history.length ? history[history.length - 1]?.content : undefined;
+        }
+        return { ok: true, result, sessionId: opts.sessionId };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err), sessionId: opts.sessionId };
+      } finally {
+        try {
+          session?.dispose();
+        } catch {
+          /* best-effort */
+        }
+      }
+    });
   }
 
   // ─── Project lifecycle (only meaningful when lmthingRoot is set) ──────────

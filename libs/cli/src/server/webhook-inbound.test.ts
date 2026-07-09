@@ -1,10 +1,13 @@
 /**
- * Inbound-webhook Phase 1 (pod side) — offline, deterministic. Covers:
+ * Inbound-webhook Phase 1+2 (pod side) — offline, deterministic. Covers:
  *   - `validateHook` accepts a valid `webhook` def and rejects missing
  *     `path`/`trigger` and a bad `path` (non-URL-safe chars);
  *   - `buildWebhookManifest` throws fail-loud on a duplicate `path` across two
  *     projects, and otherwise returns the correct flat bindings;
- *   - `resolveBinding` finds the right project/agentRef by `path`.
+ *   - `resolveBinding` finds the right project/agentRef by `path`;
+ *   - `createInboundHandler` routes threaded (same `x-lmthing-thread` header
+ *     → same `sessionId` via `runHeadlessThreaded`) vs. stateless (no thread
+ *     header → `runHeadless`) events (Phase 2).
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
@@ -181,6 +184,9 @@ describe('createInboundHandler — POST /api/inbound/:path', () => {
         calls.push(args);
         return { ok: true, result: 'handled', sessionId: 'sess-1' };
       },
+      runHeadlessThreaded: async () => {
+        throw new Error('unexpected: no thread key on this request');
+      },
     };
 
     const handler = createInboundHandler(manager, root);
@@ -223,6 +229,10 @@ describe('createInboundHandler — POST /api/inbound/:path', () => {
         ran = true;
         return { ok: true };
       },
+      runHeadlessThreaded: async () => {
+        ran = true;
+        return { ok: true };
+      },
     };
 
     const handler = createInboundHandler(manager, root);
@@ -237,10 +247,88 @@ describe('createInboundHandler — POST /api/inbound/:path', () => {
     const manager: InboundManager = {
       listProjects: async () => [],
       runHeadless: async () => ({ ok: true }),
+      runHeadlessThreaded: async () => ({ ok: true }),
     };
     const handler = createInboundHandler(manager, undefined);
     const { res, get } = fakeRes();
     await handler(fakeReq('{}'), res, { path: 'lead' });
     expect(get().status).toBe(404);
+  });
+
+  // ── Phase 2: threading ──────────────────────────────────────────────────
+
+  it('routes repeated events carrying the same thread header to runHeadlessThreaded with the SAME sessionId', async () => {
+    const root = await makeRoot();
+    await writeHook(
+      root,
+      'crm',
+      'on-lead',
+      `export default { type: 'webhook', path: 'lead', trigger: 'intake/handler#onLead' }`,
+    );
+
+    const threadedCalls: Array<Record<string, unknown>> = [];
+    const headlessCalls: Array<Record<string, unknown>> = [];
+    const manager: InboundManager = {
+      listProjects: async () => [{ id: 'crm' }],
+      runHeadless: async (args) => {
+        headlessCalls.push(args);
+        return { ok: true, result: 'one-shot', sessionId: 'ephemeral' };
+      },
+      runHeadlessThreaded: async (args) => {
+        threadedCalls.push(args);
+        return { ok: true, result: 'threaded', sessionId: args.sessionId };
+      },
+    };
+
+    const handler = createInboundHandler(manager, root);
+    const headers = { 'content-type': 'application/json', 'x-lmthing-thread': 'conv-42' };
+
+    const { res: res1, get: get1 } = fakeRes();
+    await handler(fakeReq(JSON.stringify({ n: 1 }), headers), res1, { path: 'lead' });
+    const { res: res2, get: get2 } = fakeRes();
+    await handler(fakeReq(JSON.stringify({ n: 2 }), headers), res2, { path: 'lead' });
+
+    expect(get1().status).toBe(200);
+    expect(get2().status).toBe(200);
+    expect(headlessCalls).toHaveLength(0);
+    expect(threadedCalls).toHaveLength(2);
+
+    const first = threadedCalls[0]!;
+    const second = threadedCalls[1]!;
+    expect(first['sessionId']).toBeTruthy();
+    expect(second['sessionId']).toBe(first['sessionId']);
+    expect(first).toMatchObject({ projectId: 'crm', spaceRef: 'intake/handler', agentSlug: 'handler' });
+  });
+
+  it('routes an event with no thread key to the stateless runHeadless path', async () => {
+    const root = await makeRoot();
+    await writeHook(
+      root,
+      'crm',
+      'on-lead',
+      `export default { type: 'webhook', path: 'lead', trigger: 'intake/handler#onLead' }`,
+    );
+
+    const threadedCalls: Array<Record<string, unknown>> = [];
+    const headlessCalls: Array<Record<string, unknown>> = [];
+    const manager: InboundManager = {
+      listProjects: async () => [{ id: 'crm' }],
+      runHeadless: async (args) => {
+        headlessCalls.push(args);
+        return { ok: true, result: 'one-shot', sessionId: 'ephemeral' };
+      },
+      runHeadlessThreaded: async (args) => {
+        threadedCalls.push(args);
+        return { ok: true, result: 'threaded', sessionId: args.sessionId };
+      },
+    };
+
+    const handler = createInboundHandler(manager, root);
+    const { res, get } = fakeRes();
+    await handler(fakeReq(JSON.stringify({ n: 1 }), { 'content-type': 'application/json' }), res, { path: 'lead' });
+
+    expect(get().status).toBe(200);
+    expect(threadedCalls).toHaveLength(0);
+    expect(headlessCalls).toHaveLength(1);
   });
 });
