@@ -94,6 +94,7 @@ declare interface DelegateOpts {
 
 // Host-injected globals available in space functions and agent code
 declare function fetch(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status: number; text(): string; json(): unknown }>;
+declare function readDocument(attachmentId: string, opts?: { maxChars?: number }): Promise<{ ok: boolean; attachmentId: string; mediaType: string; filename?: string; kind: 'text' | 'unsupported'; text?: string; truncated?: boolean; error?: string }>;
 declare const process: { env: Record<string, string | undefined>; exit(code?: number): never };
 declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };
 declare function typecheckSource(src: string): { ok: boolean; errors: string[] };

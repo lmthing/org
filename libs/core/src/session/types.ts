@@ -2,6 +2,7 @@ import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
 import type { BudgetLimits } from '../eval/budget.js';
 import type { RoleModelConfig } from '../fork/roles.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
+import type { DocumentResolver } from '../globals/read-document.js';
 
 export interface RenderHost {
   display(descriptor: unknown): void;
@@ -65,6 +66,12 @@ export interface SessionOpts {
    *  agent holds the matching grants AND projectRoot is set (see exec/app-globals.ts). The
    *  db impl is built by libs/cli (better-sqlite3) per project. */
   appGlobals?: AppGlobalImpls;
+  /** Host resolver for the universal `readDocument` global — extracts a stored
+   *  upload's text (unpdf/utf8/transcript) Node-side. Supplied by libs/cli (where
+   *  the uploads dir is known) and threaded into the session, its delegates and
+   *  forks. Project-independent (NOT an app-global): absent ⇒ a readDocument yield
+   *  rejects with a clear "no document resolver configured" error. */
+  documentResolver?: DocumentResolver;
 }
 
 export interface SessionDeps {

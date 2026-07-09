@@ -36,33 +36,28 @@ describe('assembleParts', () => {
     expect(r.transcripts).toEqual([]);
   });
 
-  it('inlines a binary doc with extracted text as text (never an unreadable file part)', () => {
+  it('carries a binary doc (PDF) as an id-only attachment — no text, no part (read on demand)', () => {
     const r = assembleParts([
       { meta: meta({ id: 'f1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf', text: 'the mascot is Pico' }), bytes: new Uint8Array([9]) },
     ]);
+    // The delegated files agent fetches content itself via readDocument(id): the
+    // attachment carries ONLY its id + metadata, never inlined text or a file part.
     expect(r.attachments).toEqual([
-      { id: 'f1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf', text: 'the mascot is Pico' },
+      { id: 'f1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf' },
     ]);
     expect(r.attachments[0]!.part).toBeUndefined(); // NEVER a file part — no chat model reads one
+    expect(r.attachments[0]!.text).toBeUndefined(); // NEVER inlined — read via readDocument(id)
   });
 
-  it('inlines a plain-text NOTE for a binary doc with no extracted text (so the agent replies gracefully)', () => {
-    const r = assembleParts([
-      { meta: meta({ id: 'f2', kind: 'file', mediaType: 'application/pdf', filename: 'scan.pdf' }), bytes: new Uint8Array([9]) },
-    ]);
-    expect(r.attachments[0]!.part).toBeUndefined();
-    expect(r.attachments[0]!.text).toContain('scan.pdf');
-    expect(r.attachments[0]!.text).toContain('could not be read as text');
-  });
-
-  it('carries a text file as decoded text (not an unsupported file part)', () => {
+  it('carries a text file as an id-only attachment too (uniform readDocument path)', () => {
     const r = assembleParts([
       { meta: meta({ id: 't1', kind: 'file', mediaType: 'text/plain', filename: 'notes.txt' }), bytes: new TextEncoder().encode('the code is BANANA42') },
     ]);
     expect(r.attachments).toEqual([
-      { id: 't1', kind: 'file', mediaType: 'text/plain', filename: 'notes.txt', text: 'the code is BANANA42' },
+      { id: 't1', kind: 'file', mediaType: 'text/plain', filename: 'notes.txt' },
     ]);
-    expect(r.attachments[0]!.part).toBeUndefined(); // NOT a file part (would throw on OpenAI/Azure)
+    expect(r.attachments[0]!.part).toBeUndefined();
+    expect(r.attachments[0]!.text).toBeUndefined(); // text files ALSO go through readDocument now
     expect(r.transcripts).toEqual([]);
     expect(r.traceAttachments[0]).toMatchObject({ kind: 'file', mediaType: 'text/plain' });
   });
@@ -92,10 +87,10 @@ describe('assembleParts', () => {
       { meta: meta({ id: 'a', kind: 'audio', mediaType: 'audio/wav', transcript: 'spoken' }), bytes: null },
     ]);
     expect(r.attachments.map((a) => a.kind)).toEqual(['image', 'file']);
-    // image → image part; pdf (no extracted text) → a plain-text note, not a file part
+    // image → image part; pdf → an id-only attachment (read on demand), never a part/text
     expect(r.attachments[0]!.part?.type).toBe('image');
     expect(r.attachments[1]!.part).toBeUndefined();
-    expect(r.attachments[1]!.text).toContain('could not be read as text');
+    expect(r.attachments[1]!.text).toBeUndefined();
     expect(r.transcripts).toEqual(['[Transcript of audio]:\nspoken']);
     expect(r.traceAttachments.map((t) => t.kind)).toEqual(['image', 'file', 'audio']);
   });

@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
-import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, TraceAttachment, UserInput } from '@lmthing/core';
+import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
 import { transcribeAudio } from '../providers/transcribe.js';
 import {
@@ -17,6 +17,7 @@ import {
   classifyKind,
   assembleParts,
   extractDocumentText,
+  resolveUploadDocument,
   type AttachmentRef,
 } from './uploads.js';
 import { bootProjectApp } from '../app/boot.js';
@@ -311,6 +312,13 @@ export class SessionManager {
     return { ...appGlobals, callConnection: appGlobals?.callConnection ?? resolver };
   }
 
+  /** Pod-side resolver for the universal `readDocument` global — extract a stored
+   *  upload's content Node-side (see {@link resolveUploadDocument}). Attached to
+   *  EVERY session (project-independent). */
+  private resolveDocument(attachmentId: string, opts?: { maxChars?: number }): Promise<ReadDocumentResult> {
+    return resolveUploadDocument(this.uploadsDir, attachmentId, opts);
+  }
+
   /** Default session builder — constructs a Session bound to `streamFn`. */
   private defaultBuildSession(args: BuildSessionArgs): Session {
     return new Session(
@@ -329,6 +337,7 @@ export class SessionManager {
         projectRoot: args.projectRoot,
         appGlobals: this.withConnections(args.appGlobals),
         appDts: args.appDts,
+        documentResolver: (id, opts) => this.resolveDocument(id, opts),
       },
       { streamFn: this.streamFn },
     );

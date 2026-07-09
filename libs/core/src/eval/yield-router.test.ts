@@ -115,4 +115,26 @@ describe('routeCommonYield', () => {
       routeCommonYield(req('callConnection', ['google', { method: 'GET', path: '/x' }]), baseCtx()),
     ).rejects.toThrow(/callConnection is not available/);
   });
+
+  it('routes readDocument through the documentResolver with (attachmentId, opts)', async () => {
+    const calls: unknown[] = [];
+    const result = { ok: true, attachmentId: 'a1', mediaType: 'text/plain', kind: 'text' as const, text: 'hello' };
+    const r = await routeCommonYield(
+      req('readDocument', ['a1', { maxChars: 50 }]),
+      baseCtx({
+        documentResolver: async (id, opts) => {
+          calls.push([id, opts]);
+          return result;
+        },
+      }),
+    );
+    expect(r).toEqual({ handled: true, value: result });
+    expect(calls).toEqual([['a1', { maxChars: 50 }]]);
+  });
+
+  it('readDocument without a resolver throws (no document resolver) — surfaced retryably', async () => {
+    await expect(
+      routeCommonYield(req('readDocument', ['a1', undefined]), baseCtx()),
+    ).rejects.toThrow(/readDocument is not available/);
+  });
 });

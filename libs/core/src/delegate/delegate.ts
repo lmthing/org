@@ -19,6 +19,7 @@ import type { RoleModelConfig } from '../fork/roles.js';
 import { delegateCapabilities } from '../exec/capability.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
+import type { DocumentResolver } from '../globals/read-document.js';
 import { forkEngineOptsFrom } from '../exec/fork-config.js';
 import { evaluateDelegatePolicy, isDelegateAllowed, formatDelegateDenial } from '../exec/target-match.js';
 
@@ -57,6 +58,10 @@ export interface RunDelegateOpts {
   /** Host-provided app-global engine impls (libs/cli, P2+), forwarded to the delegate
    *  VM and its nested forks so a delegated db-writer reaches the project's engine. */
   appGlobals?: AppGlobalImpls;
+  /** Host resolver for the universal `readDocument` global — threaded from the session
+   *  (project-independent, NOT an app-global) so a delegated files agent can read an
+   *  attached upload's text. Forwarded verbatim to nested delegates + forks. */
+  documentResolver?: DocumentResolver;
   /** Model spec/alias used by streamFn — forwarded to runTurnLoop so llm_request events
    *  carry a model field and cost tracking works across delegate chains. Overridden
    *  by the delegated agent's own `model:` frontmatter when set (e.g. a vision agent). */
@@ -65,8 +70,8 @@ export interface RunDelegateOpts {
    *  delegated agent's initial user message — lets THING route an image to a
    *  vision agent. Resolved by the session's runDelegate from `attachmentIds`. */
   attachments?: MediaPart[];
-  /** Decoded text of text-based file attachments, appended to the delegated
-   *  agent's message (text files can't ride as a provider file part). */
+  /** Id-anchored notes for file attachments, appended to the delegated agent's
+   *  message telling it to fetch each file's content via `readDocument(id)`. */
   attachmentTexts?: string[];
   /** Host budget caps inherited from the parent context (session opts, or the outer
    *  delegate layer). Applied to each fork THIS delegate spawns (fresh Budget per
@@ -221,8 +226,8 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       opts.action ? `Run action: ${opts.action}` : `You have been delegated this request — handle it using your available actions/tasklists or directly.`,
       query ? `Query: ${query}` : '',
       context ? `Context: ${JSON.stringify(context)}` : '',
-      // Text-file attachments inline their decoded content here (they can't ride
-      // as a provider file part). Image/binary attachments ride on the message.
+      // File attachments contribute an id-anchored note here telling this agent to
+      // fetch their content via readDocument(id). Image attachments ride as a part.
       ...(opts.attachmentTexts ?? []),
       tasklistHint,
     ]
@@ -311,6 +316,8 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       // through the same depth-incrementing runner this agent uses for its own delegate() calls.
       delegateRunner: (packageName, agentName2, action, childOpts, allowedActions) =>
         runChildDelegate(packageName, agentName2, action, childOpts as DelegateOpts | undefined, allowedActions),
+      // Forks under this delegate may read attachments too — thread the resolver.
+      documentResolver: opts.documentResolver,
     }));
 
     try {
@@ -332,6 +339,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             scope: delegateScope,
             apiCallResolver: opts.appGlobals?.apiCall,
             connectionResolver: opts.appGlobals?.callConnection,
+            documentResolver: opts.documentResolver,
             getForkEngine: () => forkEngine,
             // `result` is the tasklist's TaskEnvelope ({ ok, degraded, data, … })
             // since Phase 3 — captured and returned UNTOUCHED, so the delegator

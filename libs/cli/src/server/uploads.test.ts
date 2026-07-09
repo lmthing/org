@@ -11,6 +11,7 @@ import {
   readUploadMeta,
   readUploadBytes,
   extractDocumentText,
+  resolveUploadDocument,
 } from './uploads.js';
 
 /** A tiny reportlab-generated PDF whose only text is "MASCOT_IS_PICO". */
@@ -99,5 +100,76 @@ describe('uploads', () => {
     expect(await readUploadMeta(dir, '../secrets')).toBeNull();
     expect(await readUploadBytes(dir, '../secrets')).toBeNull();
     expect(await readUploadMeta(dir, '123e4567-e89b-12d3-a456-426614174000')).toBeNull();
+  });
+});
+
+describe('resolveUploadDocument (the readDocument host resolver)', () => {
+  it('decodes a text upload to text', async () => {
+    const dir = await makeDir();
+    const meta = await saveUpload(dir, {
+      bytes: new TextEncoder().encode('the code is BANANA42'),
+      mediaType: 'text/plain',
+      filename: 'notes.txt',
+    });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r).toMatchObject({ ok: true, kind: 'text', mediaType: 'text/plain', filename: 'notes.txt', text: 'the code is BANANA42' });
+    expect(r.truncated).toBeUndefined();
+  });
+
+  it('caps text at maxChars and flags truncated', async () => {
+    const dir = await makeDir();
+    const meta = await saveUpload(dir, { bytes: new TextEncoder().encode('abcdefghij'), mediaType: 'text/plain' });
+    const r = await resolveUploadDocument(dir, meta.id, { maxChars: 4 });
+    expect(r).toMatchObject({ ok: true, kind: 'text', text: 'abcd', truncated: true });
+  });
+
+  it('extracts text from a PDF upload via unpdf', async () => {
+    const dir = await makeDir();
+    const meta = await saveUpload(dir, {
+      bytes: new Uint8Array(Buffer.from(TINY_PDF_B64, 'base64')),
+      mediaType: 'application/pdf',
+      filename: 'doc.pdf',
+    });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r.ok).toBe(true);
+    expect(r.kind).toBe('text');
+    expect(r.text).toContain('MASCOT_IS_PICO');
+  });
+
+  it('returns kind:unsupported for a scanned/no-text PDF', async () => {
+    const dir = await makeDir();
+    const meta = await saveUpload(dir, { bytes: new Uint8Array([1, 2, 3]), mediaType: 'application/pdf' });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe('unsupported');
+    expect(r.error).toMatch(/no extractable text/);
+  });
+
+  it('returns kind:unsupported for an unsupported binary type', async () => {
+    const dir = await makeDir();
+    const meta = await saveUpload(dir, {
+      bytes: new Uint8Array([1, 2, 3]),
+      mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      filename: 'report.docx',
+    });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe('unsupported');
+    expect(r.error).toMatch(/not yet supported/);
+  });
+
+  it('returns transcript text for an audio upload', async () => {
+    const dir = await makeDir();
+    const meta = await saveUpload(dir, { bytes: new Uint8Array([9]), mediaType: 'audio/mpeg', transcript: 'hello world' });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r).toMatchObject({ ok: true, kind: 'text', text: 'hello world' });
+  });
+
+  it('rejects an image (routes to vision) and an invalid/missing id', async () => {
+    const dir = await makeDir();
+    const img = await saveUpload(dir, { bytes: new Uint8Array([1]), mediaType: 'image/png' });
+    expect(await resolveUploadDocument(dir, img.id)).toMatchObject({ ok: false, kind: 'unsupported', error: expect.stringMatching(/system-vision/) });
+    expect(await resolveUploadDocument(dir, '../secrets')).toMatchObject({ ok: false, kind: 'unsupported', error: 'invalid attachment id' });
+    expect(await resolveUploadDocument(dir, '123e4567-e89b-12d3-a456-426614174000')).toMatchObject({ ok: false, error: 'attachment not found' });
   });
 });

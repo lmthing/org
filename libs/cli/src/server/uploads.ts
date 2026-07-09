@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
-import type { MediaPart, TraceAttachment, UserAttachment } from '@lmthing/core';
+import type { MediaPart, TraceAttachment, UserAttachment, ReadDocumentResult } from '@lmthing/core';
 
 /** The kind of a user attachment, derived from its IANA media type. Audio is
  *  transcribed to text server-side; images/files are passed to vision/doc models. */
@@ -33,11 +33,8 @@ export function classifyKind(mediaType: string): AttachmentKind {
   return 'file';
 }
 
-/** Max characters of a text file inlined into the prompt (guards context size). */
-const TEXT_FILE_MAX_CHARS = 100_000;
-
-/** Whether a media type is text the model can read directly (so we inline its
- *  content as text rather than sending an unreadable/unsupported file part). */
+/** Whether a media type is plain text the host can decode as utf8 directly (vs.
+ *  needing a binary extractor like unpdf). Used by the readDocument resolver. */
 export function isTextMediaType(mediaType: string): boolean {
   return (
     mediaType.startsWith('text/') ||
@@ -118,11 +115,71 @@ export async function readUploadBytes(uploadsDir: string, id: string): Promise<U
   }
 }
 
+/** Default cap for the text `readDocument` returns to an agent (guards context size). */
+const READ_DOCUMENT_MAX_CHARS = 100_000;
+
+/**
+ * Host implementation of the `readDocument` global (the {@link DocumentResolver}):
+ * extract a stored upload's content from the uploads dir — audio → transcript,
+ * text media → utf8, PDF → unpdf-extracted text, everything else → unsupported.
+ * Server-authoritative: only the id is trusted; bytes/metadata are re-read from
+ * disk. Never throws — a bad id / unsupported type resolves to a `kind:'unsupported'`
+ * result the agent can relay. Text is capped at `opts.maxChars` (default 100k).
+ */
+export async function resolveUploadDocument(
+  uploadsDir: string,
+  attachmentId: string,
+  opts?: { maxChars?: number },
+): Promise<ReadDocumentResult> {
+  const maxChars = opts?.maxChars ?? READ_DOCUMENT_MAX_CHARS;
+  if (!isSafeUploadId(attachmentId)) {
+    return { ok: false, attachmentId, mediaType: '', kind: 'unsupported', error: 'invalid attachment id' };
+  }
+  const meta = await readUploadMeta(uploadsDir, attachmentId);
+  if (!meta) {
+    return { ok: false, attachmentId, mediaType: '', kind: 'unsupported', error: 'attachment not found' };
+  }
+  const common = { attachmentId, mediaType: meta.mediaType, ...(meta.filename ? { filename: meta.filename } : {}) };
+  // Audio is transcribed at upload time — hand back the transcript as text.
+  if (meta.kind === 'audio') {
+    return { ok: true, ...common, kind: 'text', text: meta.transcript ?? '' };
+  }
+  // Images belong to the vision specialist, not the document reader.
+  if (meta.kind === 'image') {
+    return { ok: false, ...common, kind: 'unsupported', error: 'image — use system-vision instead' };
+  }
+  const bytes = await readUploadBytes(uploadsDir, attachmentId);
+  if (!bytes) {
+    return { ok: false, ...common, kind: 'unsupported', error: 'attachment bytes not found' };
+  }
+  // Plain-text media: decode utf8 directly (capped). Guard against the OOXML/office
+  // container family (docx/xlsx/…), whose media types contain the substring "xml"
+  // and so slip past the loose isTextMediaType check even though they are binary zips.
+  const isBinaryOffice = /officedocument|opendocument|ms-excel|msword|ms-powerpoint/i.test(meta.mediaType);
+  if (isTextMediaType(meta.mediaType) && !isBinaryOffice) {
+    const full = Buffer.from(bytes).toString('utf8');
+    const text = full.slice(0, maxChars);
+    return { ok: true, ...common, kind: 'text', text, ...(full.length > maxChars ? { truncated: true } : {}) };
+  }
+  // PDF: extract text via unpdf (reused from the upload path).
+  if (meta.mediaType === 'application/pdf') {
+    const extracted = await extractDocumentText('application/pdf', bytes);
+    if (extracted && extracted.trim()) {
+      const text = extracted.slice(0, maxChars);
+      return { ok: true, ...common, kind: 'text', text, ...(extracted.length > maxChars ? { truncated: true } : {}) };
+    }
+    return { ok: false, ...common, kind: 'unsupported', error: 'no extractable text (likely a scanned/image-only PDF)' };
+  }
+  // Everything else (docx/xlsx/other binary) is not yet supported host-side.
+  return { ok: false, ...common, kind: 'unsupported', error: `file type not yet supported: ${meta.mediaType}` };
+}
+
 /** The result of turning stored uploads into delegatable attachments + metadata. */
 export interface AssembledAttachments {
   /** Image/file attachments (keyed by upload id). A text agent (THING) delegates
-   *  each to a vision/file agent; images/binaries carry a `part`, text files carry
-   *  decoded `text`. Audio is excluded — it contributes its transcript to the text. */
+   *  each to a vision/file agent; images carry a `part`, files carry only their id
+   *  (read on demand via readDocument). Audio is excluded — it contributes its
+   *  transcript to the text. */
   attachments: UserAttachment[];
   /** Attachment metadata (with served urls) for the `user_message` trace event. */
   traceAttachments: TraceAttachment[];
@@ -159,21 +216,13 @@ export function assembleParts(
     if (meta.kind === 'image') {
       const dataUrl = `data:${meta.mediaType};base64,${Buffer.from(bytes).toString('base64')}`;
       attachments.push({ ...base, part: { type: 'image', image: dataUrl, mediaType: meta.mediaType } });
-    } else if (isTextMediaType(meta.mediaType)) {
-      // Text-based documents: chat providers can't ingest a text/* file *part*
-      // (text/plain even throws), so carry the decoded content as text for the
-      // files agent to read.
-      attachments.push({ ...base, text: Buffer.from(bytes).toString('utf8').slice(0, TEXT_FILE_MAX_CHARS) });
     } else {
-      // Binary documents (PDF, etc.): NO chat model reads a raw file *part* (the
-      // provider errors, the files agent then loops and returns nothing). Always
-      // hand the model TEXT — the server-extracted document text when we have it,
-      // else a plain note so the agent can tell the user it couldn't be read.
-      const extracted = meta.text?.trim();
-      const text = extracted
-        ? extracted.slice(0, TEXT_FILE_MAX_CHARS)
-        : `[The file "${meta.filename ?? meta.mediaType}" (${meta.mediaType}) could not be read as text on the server — its contents are unavailable.]`;
-      attachments.push({ ...base, text });
+      // Files (text, pdf, docx, xlsx, …): carry ONLY the id + metadata — no bytes,
+      // no inlined text, no file part. The delegated files agent fetches the
+      // content itself via `readDocument(id)`, which extracts it host-side (unpdf
+      // for PDF, utf8 for text). This keeps THING's context small and routes ALL
+      // files through one uniform, agent-driven extraction path.
+      attachments.push({ ...base });
     }
   }
   return { attachments, traceAttachments, transcripts };

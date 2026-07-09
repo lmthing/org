@@ -48,6 +48,7 @@ describe('forkEngineOptsFrom (A1 regression lock)', () => {
       parentAppCapabilities: {},
       appGlobals: undefined,
       delegateRunner,
+      documentResolver: undefined,
     };
   }
 

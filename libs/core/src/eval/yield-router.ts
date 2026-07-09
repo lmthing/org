@@ -1,5 +1,6 @@
 import type { YieldRequest } from './yield.js';
 import type { ApiCallFn, ConnectionResolver } from '../db/types.js';
+import type { DocumentResolver } from '../globals/read-document.js';
 import type { Clock } from '../session/types.js';
 import type { Space } from '../spaces/load.js';
 import type { ForkEngine, ForkTask } from '../fork/fork.js';
@@ -67,6 +68,11 @@ export interface YieldRouterContext {
    *  scoped connections JWT). Absent outside a pod with a configured connections
    *  gateway; a `callConnection` yield then rejects with a clear error. */
   connectionResolver?: ConnectionResolver;
+  /** Resolve a `readDocument()` yield — extract a stored upload's text host-side
+   *  (host-supplied by libs/cli, where the uploads dir is known). Absent outside a
+   *  pod/CLI with an uploads dir; a `readDocument` yield then rejects with a clear
+   *  error. Not an app-global (project-independent) — threaded from SessionOpts. */
+  documentResolver?: DocumentResolver;
 }
 
 export type RouteResult =
@@ -151,6 +157,18 @@ export async function routeCommonYield(
       }
       const [provider, request] = req.args as [string, import('../db/types.js').ConnectionRequest];
       const value = await ctx.connectionResolver(provider, request);
+      return { handled: true, value };
+    }
+    case 'readDocument': {
+      // Extract a stored upload's content host-side (unpdf for PDF, utf8 for text,
+      // transcript for audio). A missing resolver means this context has no uploads
+      // dir (e.g. a bare in-memory session) — throw an actionable, retryable error
+      // rather than binding undefined.
+      if (!ctx.documentResolver) {
+        throw new Error('readDocument is not available here: no document resolver configured');
+      }
+      const [attachmentId, opts] = req.args as [string, { maxChars?: number } | undefined];
+      const value = await ctx.documentResolver(attachmentId, opts);
       return { handled: true, value };
     }
     case 'loadKnowledge': {

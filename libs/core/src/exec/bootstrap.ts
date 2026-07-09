@@ -13,6 +13,7 @@ import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
 import { createApiCallGlobal } from '../globals/api-call.js';
 import { createCallConnectionGlobal } from '../globals/call-connection.js';
+import { createReadDocumentGlobal } from '../globals/read-document.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
@@ -150,6 +151,10 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   injectGlobal(ctx, 'inspect', createInspectGlobal(pushYield) as AnyFn);
   injectGlobal(ctx, 'sleep', createSleepGlobal(pushYield, opts.clock) as AnyFn);
   injectGlobal(ctx, 'fetch', createFetchGlobal(pushYield) as AnyFn);
+  // readDocument: universal (like fetch), NOT capability-gated — any agent/fork/
+  // delegate can read an attached upload's text by id. The host resolver is threaded
+  // via the yield router (documentResolver); absent ⇒ a clear retryable error.
+  injectGlobal(ctx, 'readDocument', createReadDocumentGlobal(pushYield) as AnyFn);
   injectGlobal(ctx, 'loadKnowledge', createLoadKnowledgeGlobal(pushYield, opts.spaceDir + '/knowledge') as AnyFn);
   if (caps.orchestrate) {
     injectGlobal(ctx, 'fork', createForkGlobal(pushYield) as AnyFn);

@@ -9,7 +9,7 @@ canDelegateTo:
   - system-engineer/engineer
   - system-appbuilder/app-architect
   - system-vision/vision
-  - system-files/reader
+  - system-files/dispatch
   - user-memory/memory
   - "registered:*"
 ---
@@ -58,8 +58,8 @@ const seen = await delegate('system-vision', 'vision', {
   query: 'What is in this picture?',           // the user's question about the image
   attachmentIds: ['<the image attachmentId>'],
 });
-// file → the document reader
-const readFile = await delegate('system-files', 'reader', {
+// file → the files dispatcher (routes PDFs/docs to the reader, CSV/XLSX to the sheet analyst)
+const fileAnswer = await delegate('system-files', 'dispatch', {
   query: 'Summarize this document',
   attachmentIds: ['<the file attachmentId>'],
 });

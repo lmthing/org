@@ -38,18 +38,19 @@ import {
 } from '../exec/target-match.js';
 
 /** One image/file attachment on a user turn. Audio is transcribed to text
- *  upstream, so it never appears here. Carries EITHER a model-facing `part`
- *  (image, or a binary document like PDF) OR decoded `text` (text-based files,
- *  which chat providers can't ingest as a file part) — the session hands whichever
- *  applies to a delegated vision/file agent (keyed by `id`). */
+ *  upstream, so it never appears here. An IMAGE carries a model-facing `part`
+ *  (sent to a vision model). A FILE carries neither `part` nor `text` — the
+ *  delegated files agent fetches its content itself via `readDocument(id)`, so
+ *  the session hands it only an id-anchored note (keyed by `id`). */
 export interface UserAttachment {
   id: string;
   kind: 'image' | 'file';
   mediaType: string;
   filename?: string;
-  /** Image or binary-document part (sent to a vision/doc model). */
+  /** Image part (sent to a vision model). Absent for files. */
   part?: MediaPart;
-  /** Decoded text of a text-based file (appended to the delegate's message). */
+  /** Legacy: decoded text of a text file. No longer populated — files are read
+   *  on demand via `readDocument(id)`. Retained for backward-compatible shape. */
   text?: string;
 }
 
@@ -73,7 +74,7 @@ function attachmentNote(attachments: UserAttachment[]): string {
     .join('\n');
   return (
     `\n\n[The user attached the following. You cannot read them yourself — delegate each ` +
-    `by its id: an image to \`system-vision/vision\`, a file to \`system-files/reader\`, ` +
+    `by its id: an image to \`system-vision/vision\`, a file to \`system-files/dispatch\`, ` +
     `passing \`{ query, attachmentIds: ["<id>"] }\`.\n${lines}]`
   );
 }
@@ -734,6 +735,8 @@ export class Session {
       // A task in a tasklist may delegate (gated by its own canDelegateTo) — route through the
       // session's registry with the recursion bound enforced by runDelegate.
       delegateRunner: (p, a, act, o, allowed) => this.runDelegateForFork(p, a, act, o, allowed),
+      // Forks may read attachments too — thread the same host resolver.
+      documentResolver: this.opts.documentResolver,
     }));
     return this.forkEngine;
   }
@@ -847,6 +850,7 @@ export class Session {
       scope: this.currentScope ?? undefined,
       apiCallResolver: this.opts.appGlobals?.apiCall,
       connectionResolver: this.opts.appGlobals?.callConnection,
+      documentResolver: this.opts.documentResolver,
       getForkEngine: () => this.getForkEngine(),
       // Runs host-side with the space dir as cwd, so a checker (tests / tsc) sees
       // files written by attempt forks.
@@ -892,17 +896,23 @@ export class Session {
         }
         const registry = new DelegateRegistry(spaceMap);
         // Resolve any attachment ids the delegating agent passed (e.g. THING
-        // handing an image to system-vision) to the parts/text held for this turn.
-        // Image/binary → a MediaPart; text-based file → a text block. Both are
-        // attached to the delegated agent's message.
+        // handing an image to system-vision, or a file to system-files) to the
+        // parts/notes held for this turn. Images ride as a MediaPart; files carry
+        // NO bytes/text — the specialist fetches their content itself via
+        // readDocument(id), so we hand it an id-anchored note instead.
         const reqIds = (delegateOpts as import('../globals/delegate.js').DelegateOpts | undefined)?.attachmentIds;
         const resolved = (reqIds ?? [])
           .map((aid) => this.pendingAttachments.get(aid))
           .filter((a): a is UserAttachment => a !== undefined);
         const attachments = resolved.map((a) => a.part).filter((p): p is MediaPart => p !== undefined);
+        // File attachments (no image part): tell the specialist to read them with
+        // readDocument(id) rather than inlining server-extracted text.
         const attachmentTexts = resolved
-          .filter((a) => a.text)
-          .map((a) => `[File ${a.filename ?? a.mediaType}]:\n${a.text}`);
+          .filter((a) => !a.part)
+          .map(
+            (a) =>
+              `[Attached file id="${a.id}" type="${a.mediaType}"${a.filename ? ` name="${a.filename}"` : ''} — call \`await readDocument("${a.id}")\` to read it.]`,
+          );
         return runDelegate({
           packageName,
           agentName,
@@ -930,6 +940,7 @@ export class Session {
           budgetLimits: this.opts.budget,
           roleModels: this.opts.roleModels,
           dynamicSpaces: this.dynamicSpaces,
+          documentResolver: this.opts.documentResolver,
         });
       },
     };

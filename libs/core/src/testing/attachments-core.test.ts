@@ -1,11 +1,16 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { Session } from '../session/session.js';
-import { createMockStreamFn } from './mock-provider.js';
+import { createMockStreamFn, mockMatch } from './mock-provider.js';
 import type { StreamOpts } from '../eval/stream-types.js';
 import type { RenderHost } from '../session/types.js';
+import type { DocumentResolver } from '../globals/read-document.js';
+
+/** The real system-files space (dispatch/reader/sheet), for the delegation test. */
+const SYSTEM_FILES_DIR = fileURLToPath(new URL('../../system-spaces/system-files', import.meta.url));
 
 const tmpDirs: string[] = [];
 afterAll(async () => {
@@ -71,6 +76,73 @@ describe('Session multimodal input threading', () => {
     await session.start('just text');
     const userMsg = [...captured[0]!.messages].reverse().find((m) => m.role === 'user');
     expect(userMsg!.attachments).toBeUndefined();
+
+    await session.dispose();
+  });
+
+  it('hands a delegated files agent an id-anchored readDocument note (no bytes/text)', async () => {
+    // Drive the full session→delegate path: the top-level agent delegates the file
+    // to system-files/reader; the session resolves the attachment id into an
+    // id-anchored note telling the specialist to call readDocument(id). No bytes or
+    // inlined text ever ride on the message — the whole point of the new design.
+    let topLevelMsg = '';
+    let readerMsg = '';
+    let delegated = false;
+    const streamFn = mockMatch(
+      [
+        // The reader delegate's turn (its charter "document reader" is in the system
+        // block): capture its first user message, then resolve.
+        {
+          when: /document reader/,
+          respond: (opts: StreamOpts) => {
+            const u = [...opts.messages].reverse().find((m) => m.role === 'user');
+            readerMsg = u?.content ?? '';
+            return 'currentTask.resolve("done");';
+          },
+        },
+      ],
+      // Fallback = the top-level agent's turn: delegate the file once, then stop.
+      (opts: StreamOpts) => {
+        const u = [...opts.messages].reverse().find((m) => m.role === 'user');
+        topLevelMsg = u?.content ?? '';
+        if (delegated) return '';
+        delegated = true;
+        return `await delegate('system-files', 'reader', { query: 'summarize', attachmentIds: ['up1'] });`;
+      },
+    );
+
+    // A document resolver need not be exercised here (the reader is mocked), but the
+    // session threads it — assert it is not required to build the note.
+    const documentResolver: DocumentResolver = async (id) => ({ ok: true, attachmentId: id, mediaType: 'application/pdf', kind: 'text', text: 'x' });
+
+    const host: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
+    const session = new Session(
+      {
+        spaceDir: await makeSpace(),
+        agentSlug: 'default',
+        modelAlias: 'mock',
+        renderHost: host,
+        systemSpaceDirs: [SYSTEM_FILES_DIR],
+        documentResolver,
+      },
+      { streamFn },
+    );
+
+    await session.start({
+      text: 'summarize this file',
+      attachments: [
+        // A FILE attachment: no image part, no inlined text — id + metadata only.
+        { id: 'up1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf' },
+      ],
+    });
+
+    // The top-level note routes files to system-files (by id), NOT raw bytes.
+    expect(topLevelMsg).toContain('up1');
+    expect(topLevelMsg).toContain('system-files');
+    // The delegated reader is told to fetch the file itself via readDocument(id).
+    expect(readerMsg).toContain('readDocument');
+    expect(readerMsg).toContain('up1');
+    expect(readerMsg).toContain('doc.pdf');
 
     await session.dispose();
   });

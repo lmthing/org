@@ -15,6 +15,7 @@ import { forkCapabilities } from '../exec/capability.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
+import type { DocumentResolver } from '../globals/read-document.js';
 import { resolveTaskDelegate, evaluateDelegatePolicy, isDelegateAllowed, formatDelegateDenial } from '../exec/target-match.js';
 import { STATEMENT_PROTOCOL } from '../exec/preamble.js';
 import { salvageData, type DegradeReason } from '../exec/envelope.js';
@@ -117,6 +118,9 @@ export interface ForkEngineOpts {
   parentAppCapabilities?: AppCapabilities;
   /** Host-provided app-global engine impls (libs/cli, P2+), passed through to the fork VM. */
   appGlobals?: AppGlobalImpls;
+  /** Host resolver for the universal `readDocument` global — threaded from the parent
+   *  session/delegate so a fork leaf can read an attached upload's text by id. */
+  documentResolver?: DocumentResolver;
 }
 
 export class ForkEngine {
@@ -429,6 +433,7 @@ export class ForkEngine {
           dynamicSpaces: this.opts.dynamicSpaces,
           apiCallResolver: this.opts.appGlobals?.apiCall,
           connectionResolver: this.opts.appGlobals?.callConnection,
+          documentResolver: this.opts.documentResolver,
           // delegate: gated by the task's canDelegateTo policy via the unified
           // yield-time gate (exec/target-match.ts isDelegateAllowed — same gate the
           // session and delegate VMs use); routed to the engine's delegateRunner
