@@ -11,7 +11,7 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: 'node20',
-  // `unpdf` (lazy-imported for PDF text extraction) bundles a serverless pdfjs
-  // build — keep it external so tsup doesn't inline it; it ships in node_modules.
-  external: ['ink', 'react', 'ws', 'esbuild', 'unpdf'],
+  // `unpdf` (PDF) and `xlsx` (spreadsheets) are lazily-imported document extractors
+  // kept external so tsup doesn't inline them; they ship in node_modules.
+  external: ['ink', 'react', 'ws', 'esbuild', 'unpdf', 'xlsx'],
 });

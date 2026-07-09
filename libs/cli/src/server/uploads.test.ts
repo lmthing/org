@@ -158,6 +158,40 @@ describe('resolveUploadDocument (the readDocument host resolver)', () => {
     expect(r.error).toMatch(/not yet supported/);
   });
 
+  it('extracts an Excel (.xlsx) upload to CSV text', async () => {
+    const XLSX = await import('xlsx');
+    const ws = XLSX.utils.aoa_to_sheet([['name', 'qty'], ['apples', 5], ['pears', 3]]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const dir = await makeDir();
+    const meta = await saveUpload(dir, {
+      bytes: new Uint8Array(buf),
+      mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: 'data.xlsx',
+    });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r.ok).toBe(true);
+    expect(r.kind).toBe('text');
+    expect(r.text).toContain('apples,5');
+    expect(r.text).toContain('pears,3');
+  });
+
+  it('extracts an OpenDocument spreadsheet (.ods) even with a generic media type (by extension)', async () => {
+    const XLSX = await import('xlsx');
+    const ws = XLSX.utils.aoa_to_sheet([['city', 'pop'], ['athens', 664046]]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'ods' }) as Buffer;
+    const dir = await makeDir();
+    // Browsers often send octet-stream for .ods — detection must fall back to the filename.
+    const meta = await saveUpload(dir, { bytes: new Uint8Array(buf), mediaType: 'application/octet-stream', filename: 'οικονομικα.ods' });
+    const r = await resolveUploadDocument(dir, meta.id);
+    expect(r.ok).toBe(true);
+    expect(r.kind).toBe('text');
+    expect(r.text).toContain('athens,664046');
+  });
+
   it('returns transcript text for an audio upload', async () => {
     const dir = await makeDir();
     const meta = await saveUpload(dir, { bytes: new Uint8Array([9]), mediaType: 'audio/mpeg', transcript: 'hello world' });

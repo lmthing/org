@@ -60,6 +60,37 @@ export async function extractDocumentText(mediaType: string, bytes: Uint8Array):
   }
 }
 
+/** Spreadsheet-family media types / extensions SheetJS can parse (Excel, ODS, CSV,
+ *  TSV). Detected by mediaType OR filename since browsers often send a generic
+ *  `application/octet-stream` for `.ods`/`.csv`. */
+function isSpreadsheet(mediaType: string, filename?: string): boolean {
+  if (/spreadsheet|ms-excel|excel|officedocument\.spreadsheetml|csv|tab-separated/i.test(mediaType)) return true;
+  return /\.(xlsx|xls|xlsm|ods|csv|tsv)$/i.test(filename ?? '');
+}
+
+/** Best-effort extract a spreadsheet's data as text — every sheet rendered to CSV
+ *  (prefixed with its name when there is more than one), via SheetJS (`xlsx`,
+ *  lazily imported; external in tsup, ships in node_modules). Reads Excel
+ *  (.xlsx/.xls), OpenDocument (.ods), and delimited (.csv/.tsv) uniformly.
+ *  Returns undefined when the workbook can't be parsed or has no cells. */
+export async function extractSpreadsheetText(bytes: Uint8Array): Promise<string | undefined> {
+  try {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.read(bytes, { type: 'buffer' });
+    const names = wb.SheetNames ?? [];
+    if (names.length === 0) return undefined;
+    const parts = names.map((name) => {
+      const csv = XLSX.utils.sheet_to_csv(wb.Sheets[name]!).trim();
+      if (!csv) return '';
+      return names.length > 1 ? `# Sheet: ${name}\n${csv}` : csv;
+    });
+    const joined = parts.filter(Boolean).join('\n\n').trim();
+    return joined.length > 0 ? joined : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Resolve the uploads directory under the runtime root (falls back to cwd when
  *  the manager is not in project mode). */
 export function resolveUploadsDir(root?: string): string {
@@ -152,10 +183,21 @@ export async function resolveUploadDocument(
   if (!bytes) {
     return { ok: false, ...common, kind: 'unsupported', error: 'attachment bytes not found' };
   }
+  // Spreadsheet family (Excel/ODS/CSV/TSV) → SheetJS renders every sheet to CSV.
+  // Checked BEFORE the text branch so a binary .xlsx/.ods isn't utf8-garbled, and
+  // so a .csv sent as octet-stream is still parsed rather than falling to unsupported.
+  if (isSpreadsheet(meta.mediaType, meta.filename)) {
+    const extracted = await extractSpreadsheetText(bytes);
+    if (extracted && extracted.trim()) {
+      const text = extracted.slice(0, maxChars);
+      return { ok: true, ...common, kind: 'text', text, ...(extracted.length > maxChars ? { truncated: true } : {}) };
+    }
+    return { ok: false, ...common, kind: 'unsupported', error: 'spreadsheet could not be parsed or is empty' };
+  }
   // Plain-text media: decode utf8 directly (capped). Guard against the OOXML/office
-  // container family (docx/xlsx/…), whose media types contain the substring "xml"
-  // and so slip past the loose isTextMediaType check even though they are binary zips.
-  const isBinaryOffice = /officedocument|opendocument|ms-excel|msword|ms-powerpoint/i.test(meta.mediaType);
+  // container family (docx/…), whose media types contain the substring "xml" and so
+  // slip past the loose isTextMediaType check even though they are binary zips.
+  const isBinaryOffice = /officedocument|opendocument|msword|ms-powerpoint/i.test(meta.mediaType);
   if (isTextMediaType(meta.mediaType) && !isBinaryOffice) {
     const full = Buffer.from(bytes).toString('utf8');
     const text = full.slice(0, maxChars);
@@ -170,7 +212,7 @@ export async function resolveUploadDocument(
     }
     return { ok: false, ...common, kind: 'unsupported', error: 'no extractable text (likely a scanned/image-only PDF)' };
   }
-  // Everything else (docx/xlsx/other binary) is not yet supported host-side.
+  // Everything else (docx/other binary) is not yet supported host-side.
   return { ok: false, ...common, kind: 'unsupported', error: `file type not yet supported: ${meta.mediaType}` };
 }
 

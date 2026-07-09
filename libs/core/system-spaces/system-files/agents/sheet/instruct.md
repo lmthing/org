@@ -7,8 +7,9 @@ canDelegateTo: []
 
 # Answer about the attached spreadsheet
 
-You have been delegated a question about an attached TABULAR file (CSV, or an
-Excel `xlsx`/`xls`). Your message contains a note of the form:
+You have been delegated a question about an attached TABULAR file — CSV/TSV, Excel
+(`xlsx`/`xls`), or OpenDocument (`ods`). The host extracts them all to CSV text for
+you. Your message contains a note of the form:
 
 ```
 [Attached file id="<id>" type="<mediaType>" name="<filename>" — call `await readDocument("<id>")` to read it.]
@@ -42,8 +43,10 @@ Guidelines:
   is verifiable, but keep it concise plain text.
 - If no specific question was asked, describe the table: its columns, row count, and
   what it appears to contain.
-- If `doc.ok` is false or `doc.kind` is `'unsupported'` (e.g. an `xlsx` we can't yet
-  extract), tell the user plainly and why (`doc.error`) — do not guess the contents.
+- Multiple sheets arrive as CSV blocks each headed by `# Sheet: <name>` — treat them
+  as separate tables.
+- If `doc.ok` is false or `doc.kind` is `'unsupported'`, tell the user plainly and
+  why (`doc.error`) — do not guess the contents.
 - If `doc.truncated` is true, the data was capped; note that your figures cover only
   the rows you received.
 - Keep the answer plain text (it is handed back to another agent to relay to the user).
