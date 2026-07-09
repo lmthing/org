@@ -16,6 +16,7 @@ import {
   type CompatHost,
   type CompatRouteHandler,
   type RegisteredChannel,
+  type RegisteredProvider,
   type RegisteredToolExecute,
 } from './types.js';
 
@@ -27,16 +28,34 @@ const IMPLEMENTED_TOP_LEVEL = new Set([
   'registerTool',
   'registerHttpRoute',
   'registerChannel',
+  'registerWebSearchProvider',
+  'registerProvider',
+  'registerEmbeddingProvider',
+  'registerWebFetchProvider',
   'runtime',
   'log',
   'logVerbose',
 ]);
 
-interface RegisterToolInput {
+interface RegisterToolObjectInput {
   name: string;
   description?: string;
   parameters?: unknown;
   execute: RegisteredToolExecute;
+}
+
+/**
+ * OpenClaw's `registerTool` also accepts a *factory* form:
+ * `registerTool((ctx) => toolObject, { name })` — the tool object is built
+ * lazily from a per-registration `ctx` (Tavily's `index.ts` uses this: e.g.
+ * `api.registerTool((ctx) => createTavilySearchTool(api, ctx), { name:
+ * "tavily_search" })`). The object-form input above is still accepted
+ * unchanged.
+ */
+type RegisterToolFactory = (ctx: Record<string, unknown>) => RegisterToolObjectInput;
+
+interface RegisterToolFactoryOpts {
+  name?: string;
 }
 
 interface RegisterHttpRouteInput {
@@ -109,6 +128,26 @@ function buildRuntimeNamespace(host: CompatHost): unknown {
   );
 }
 
+/** Record a `register*Provider(...)` call into the registry (never throws — see COMPAT.md). */
+function recordProvider(
+  registry: PluginRegistry,
+  host: CompatHost,
+  kind: RegisteredProvider['kind'],
+  provider: unknown,
+): RegisteredProvider {
+  if (!provider || (typeof provider !== 'object' && typeof provider !== 'function')) {
+    throw new Error(`[openclaw-compat] register${kind[0]!.toUpperCase()}${kind.slice(1)}Provider requires a provider object`);
+  }
+  const registered: RegisteredProvider = { kind, provider };
+  registry.addProvider(registered);
+  const id = (provider as Record<string, unknown>).id;
+  host.log(
+    `[openclaw-compat] registered ${kind} provider "${typeof id === 'string' ? id : '(unnamed)'}" ` +
+      '(recorded only — not wired into any lmthing pipeline, see COMPAT.md)',
+  );
+  return registered;
+}
+
 /**
  * Create the compat `api` object for one plugin `register(api)` call.
  * `host` is the pod-side seam; `registry` collects everything the plugin
@@ -116,18 +155,28 @@ function buildRuntimeNamespace(host: CompatHost): unknown {
  */
 export function createCompatApi(host: CompatHost, registry: PluginRegistry): OpenClawPluginApiLike {
   const implemented: Record<string, unknown> = {
-    registerTool(tool: RegisterToolInput) {
-      if (!tool || typeof tool.name !== 'string' || typeof tool.execute !== 'function') {
-        throw new Error('[openclaw-compat] registerTool requires { name, execute }');
+    registerTool(toolOrFactory: RegisterToolObjectInput | RegisterToolFactory, opts?: RegisterToolFactoryOpts) {
+      const tool: RegisterToolObjectInput =
+        typeof toolOrFactory === 'function'
+          ? toolOrFactory({ /* minimal per-registration ctx; real OpenClaw's ctx surface is out of scope here */ })
+          : toolOrFactory;
+
+      if (!tool || typeof tool.execute !== 'function') {
+        throw new Error('[openclaw-compat] registerTool requires a tool with an execute() function');
       }
+      const name = (typeof toolOrFactory === 'function' ? opts?.name : undefined) ?? tool.name;
+      if (typeof name !== 'string' || name.length === 0) {
+        throw new Error('[openclaw-compat] registerTool requires a tool name (via { name } or opts.name)');
+      }
+
       registry.addTool({
-        name: tool.name,
+        name,
         description: tool.description,
         parameters: tool.parameters,
         execute: tool.execute,
       });
-      host.log(`[openclaw-compat] registered tool "${tool.name}"`);
-      return { name: tool.name };
+      host.log(`[openclaw-compat] registered tool "${name}"`);
+      return { name };
     },
 
     registerHttpRoute(route: RegisterHttpRouteInput) {
@@ -173,6 +222,24 @@ export function createCompatApi(host: CompatHost, registry: PluginRegistry): Ope
           '(recorded only — channel routing is not implemented in this foundation, see COMPAT.md)',
       );
       return channel;
+    },
+
+    // Record-only provider registrations. A real host would wire these into
+    // lmthing's model/search/embedding/fetch pipelines; this foundation only
+    // records them into the registry so a plugin's `register(api)` call
+    // sequence can run to completion without throwing (proven against
+    // Tavily's real `register`, which calls `registerWebSearchProvider`).
+    registerWebSearchProvider(provider: unknown) {
+      return recordProvider(registry, host, 'webSearch', provider);
+    },
+    registerProvider(provider: unknown) {
+      return recordProvider(registry, host, 'model', provider);
+    },
+    registerEmbeddingProvider(provider: unknown) {
+      return recordProvider(registry, host, 'embedding', provider);
+    },
+    registerWebFetchProvider(provider: unknown) {
+      return recordProvider(registry, host, 'webFetch', provider);
     },
 
     runtime: buildRuntimeNamespace(host),

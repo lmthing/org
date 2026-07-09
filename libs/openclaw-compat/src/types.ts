@@ -114,6 +114,20 @@ export interface RegisteredChannel {
 }
 
 /**
+ * A provider registered via one of the record-only `register*Provider`
+ * methods (`registerWebSearchProvider`, `registerProvider`,
+ * `registerEmbeddingProvider`, `registerWebFetchProvider`). This foundation
+ * only *records* the registration — it does not wire the provider into any
+ * lmthing model/search/embedding pipeline (see `../COMPAT.md`).
+ */
+export interface RegisteredProvider {
+  /** Which `register*Provider` method recorded this. */
+  kind: 'webSearch' | 'model' | 'embedding' | 'webFetch';
+  /** The provider object/descriptor passed to the register call, kept verbatim. */
+  provider: unknown;
+}
+
+/**
  * Thrown by any part of the compat surface that a real OpenClaw plugin might
  * call but that this package does not (yet) implement. Fail loud, never
  * silently no-op.

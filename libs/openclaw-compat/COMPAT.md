@@ -1,8 +1,11 @@
 # OpenClaw compatibility — feasibility & gap report
 
-Status: **foundation only** (Phase 5, "OpenClaw messaging extensions as-is",
-first increment). This package proves the host↔plugin seam with a synthetic
-fixture; it does not yet load a real OpenClaw plugin package.
+Status: **foundation, now proven against one real extension** (Phase 5,
+"OpenClaw messaging extensions as-is"). The first increment proved the
+host↔plugin seam with a synthetic fixture (`test/echo-plugin/`); a second
+increment (below) loads a REAL OpenClaw extension's entry code AS-IS —
+Tavily — and runs its actual `register(api)` call sequence against this
+package's compat api.
 
 ## Confirmed packaging facts (given, not re-derived here)
 
@@ -54,18 +57,95 @@ the full loop: tool registered → route mounted → handler invocation reaches
 
 | Method / namespace                  | Status | Notes |
 |---|---|---|
-| `registerTool({ name, description, parameters, execute })` | **Implemented** | Recorded in `PluginRegistry.tools`; `execute` directly callable off the registry (lmthing has no separate tool-calling registry yet). |
+| `registerTool(tool)` / `registerTool(factory, { name })` | **Implemented** | Accepts BOTH the object form (`{ name, description, parameters, execute }`) and OpenClaw's factory form (`(ctx) => tool`, second arg `{ name }` — used by Tavily's `index.ts`: `api.registerTool((ctx) => createTavilySearchTool(api, ctx), { name: "tavily_search" })`). Factory form is invoked with a minimal `ctx` object; the resolved tool must have an `execute` function or it throws. Recorded in `PluginRegistry.tools`; `execute` directly callable off the registry (lmthing has no separate tool-calling registry yet). |
 | `registerHttpRoute({ method, path, handler })` | **Implemented** | Recorded in `PluginRegistry.httpRoutes` + forwarded to `host.mountRoute`. |
 | `registerChannel(registration)` | **Partial** | Recorded in `PluginRegistry.channels`; best-effort extraction of an `inbound`/`send` pair from common shapes (`onMessage`/`handleInbound`/`inbound`, `send`). No actual routing (webhook binding, Socket Mode connection, etc.) — that's a later increment. |
+| `registerWebSearchProvider(provider)` | **Implemented (record-only)** | Recorded in `PluginRegistry.providers` as `{ kind: 'webSearch', provider }`; not wired into any lmthing search pipeline. Proven against Tavily's real `register(api)`, which calls this directly. |
+| `registerProvider(provider)` / `registerEmbeddingProvider(provider)` / `registerWebFetchProvider(provider)` | **Implemented (record-only)** | Same pattern as `registerWebSearchProvider`, with `kind: 'model' \| 'embedding' \| 'webFetch'` respectively. Added pre-emptively alongside `registerWebSearchProvider` (structurally identical `register*Provider` shape) — not yet exercised against a real extension that calls them. |
 | `runtime.subagent.run({ sessionKey, message, provider?, model? })` | **Implemented** | Calls `host.runAgent({ sessionKey, message, agentRef: provider ?? model })`. |
 | `log(msg)` / `logVerbose(msg)` | **Implemented** | No-op formatting; forwarded to `host.log`. |
 | `runtime.*` (anything but `subagent.run`) | **Throws** | e.g. `runtime.subagent.spawn`, any other `runtime.*` property. |
-| `registerProvider`, `registerGatewayMethod`, and all other `register*` | **Throws** | Not implemented. |
+| `registerGatewayMethod` and all other `register*` not listed above | **Throws** | Not implemented. |
 | `session`, `agent`, `lifecycle`, and any other namespace | **Throws** | Accessing the namespace itself or any property on it returns a nested throwing proxy — `api.session.getUser()` fails with a path-specific message. |
 
 Every unimplemented path throws `UnsupportedCompatError`, whose message is
 always `unsupported in @lmthing/openclaw-compat: <path> is not implemented in @lmthing/openclaw-compat`
 so failures are greppable and point at exactly what a plugin touched.
+
+## Loading a real extension (Tavily) — proven
+
+This increment loads Tavily's REAL `extensions/tavily/index.ts` (vendored
+verbatim from `github.com/openclaw/openclaw` — see `test/tavily/index.ts`,
+byte-for-byte the same source `gh api
+repos/openclaw/openclaw/contents/extensions/tavily/index.ts` returns) and
+runs its actual `register(api)` call sequence — unmodified — against this
+package's compat `api`. `src/tavily-load.test.ts` proves the full loop:
+`loadPlugin` resolves `{ id: 'tavily' }`, both tools
+(`tavily_search`/`tavily_extract`) land in `PluginRegistry.tools` via the
+factory form, one web-search provider is recorded, and invoking a registered
+tool's `execute` returns the value the factory-built tool object actually
+produces.
+
+### What worked unmodified
+
+- The real entry's `import { definePluginEntry } from
+  "openclaw/plugin-sdk/plugin-entry"` → `definePluginEntry({ id, name,
+  description, register(api) {...} })` → default-export shape — exactly what
+  `loadPlugin` already expected.
+- The real `register(api)` body, verbatim:
+  `api.registerWebSearchProvider(createTavilyWebSearchProvider())` then two
+  `api.registerTool((ctx) => createTavilyXTool(api, ctx), { name: "..." })`
+  calls. No source edits were needed to run this against the compat api.
+- `registerTool`'s **factory form** (Step 3 below) — Tavily doesn't call
+  `registerTool` with a plain object like the `echo-plugin` fixture; it
+  passes a `(ctx) => tool` factory plus `{ name }`. The compat api now
+  detects a function first argument, invokes it with a minimal `ctx`, and
+  registers the resulting tool under `opts.name`.
+- **Provider recording** — `registerWebSearchProvider` is now implemented
+  (record-only) instead of throwing, so Tavily's `register(api)` runs to
+  completion instead of aborting on its very first line.
+
+### What was substituted, and why
+
+- **The SDK entry point** (`openclaw/plugin-sdk/plugin-entry` →
+  `src/plugin-sdk-shim.ts`). This is a **faithful** substitution, not a
+  simplification: the real `definePluginEntry` is itself just an identity
+  function (`(def) => def`) that exists for type-checking, not runtime
+  behavior — the host always calls `.register(api)` on whatever the entry
+  default-exports. `loadPlugin`'s new `moduleOverrides` option
+  (`{ "openclaw/plugin-sdk/plugin-entry": { definePluginEntry } }`) redirects
+  the real entry's `require("openclaw/plugin-sdk/plugin-entry")` to this
+  shim instead of a real `openclaw` npm install.
+- **Tavily's own `./src/*` tool/provider factories**
+  (`test/tavily/src/tavily-{search,extract}-tool.ts`,
+  `tavily-search-provider.ts`) are stubs, NOT vendored — their real
+  implementations call `runTavilySearch`/`runTavilyExtract` from
+  `./tavily-client.js`, a thin wrapper around the `@tavily/core` npm SDK
+  (plus `typebox` for JSON-schema parameter validation). Both are real
+  npm dependencies this sandbox cannot install (no npm-registry egress —
+  only `gh api`/GitHub is reachable here). Each stub file's header comment
+  records the real function's confirmed export signature
+  (`createTavilySearchTool(api, ctx)`, `createTavilyExtractTool(api, ctx)`,
+  `createTavilyWebSearchProvider()`) and return shape, fetched from GitHub
+  before writing the stub, so the stub is faithful to the real contract even
+  though its body is synthetic.
+
+### Remaining path to fully-as-installed
+
+1. `npm install openclaw @openclaw/tavily-plugin @tavily/core typebox` in an
+   environment with npm-registry egress (this package's own dependency list
+   stays untouched — these would live in the *plugin's* `node_modules`, not
+   `@lmthing/openclaw-compat`'s).
+2. Replace `test/tavily/src/*` stubs with the real vendored files (or point
+   `loadPlugin` at an installed `@openclaw/tavily-plugin` package directory
+   directly, no vendoring needed).
+3. Drop the `moduleOverrides` entirely — with a real `openclaw` install,
+   `require("openclaw/plugin-sdk/plugin-entry")` resolves for real via
+   `importTsAsCjs`'s `createRequire(file)` fallback (already wired; see Step 1
+   of `loadPlugin`'s doc comment).
+4. Everything else — `registerTool` factory form, `registerWebSearchProvider`
+   recording, `loadPlugin`'s call sequence — needs no further changes; this
+   increment already proves it against Tavily's real code.
 
 ## What a REAL webhook-mode plugin needs beyond this foundation
 
@@ -117,12 +197,19 @@ so failures are greppable and point at exactly what a plugin touched.
    existing Triggers/webhook ingress path (`server/webhook-manifest.ts` /
    `server/routes/webhooks.ts` in `@lmthing/cli`), and bind `CompatHost.runAgent`
    to `SessionManager.runHeadless`.
-2. Add `openclaw` + one real, non-Socket-Mode extension package as an actual
-   dependency and attempt loading its real entry (no more
-   `definePluginEntryLocal` shim) through this same `loadPlugin` — see which
-   `UnsupportedCompatError`s it hits and implement those `api` methods for
-   real.
-3. Only after (2) succeeds for a webhook-mode channel, revisit Slack/Socket
-   Mode as a warm-pod-only, explicitly-opt-in tier feature.
+2. ~~Add `openclaw` + one real, non-Socket-Mode extension package as an actual
+   dependency and attempt loading its real entry...~~ **Done for Tavily**
+   (`test/tavily/`, `src/tavily-load.test.ts`) — no real `openclaw`/`@tavily/core`
+   dependency was installable in this sandbox (no npm-registry egress), so the
+   real entry is vendored verbatim and its one SDK import + `@tavily/core`-backed
+   internals are substituted per "Loading a real extension (Tavily) — proven"
+   above. This DID surface real `UnsupportedCompatError`s
+   (`registerWebSearchProvider`, `registerTool`'s factory form), now
+   implemented for real. Remaining: install the real npm packages (see
+   "Remaining path to fully-as-installed" above) and re-run with zero
+   `moduleOverrides`; try a second, structurally different real extension to
+   further pressure-test the api surface.
+3. Only after a webhook-mode channel extension is proven end-to-end, revisit
+   Slack/Socket Mode as a warm-pod-only, explicitly-opt-in tier feature.
 4. `defineBundledChannelEntry` support (currently a hard throw in
    `loadPlugin`) once a concrete channel package that uses it is targeted.

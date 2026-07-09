@@ -74,8 +74,11 @@ describe('openclaw-compat foundation: unsupported api surface', () => {
     const { host } = createFakeHost();
     const api = createCompatApi(host, registry) as Record<string, (...args: unknown[]) => unknown>;
 
-    expect(() => api.registerProvider({})).toThrow(UnsupportedCompatError);
-    expect(() => api.registerProvider({})).toThrow(/api\.registerProvider/);
+    // `registerProvider` (unlike `registerWebSearchProvider`) is now a
+    // record-only implemented method (see `tavily-load.test.ts`), so
+    // `registerGatewayMethod` stands in as the still-unimplemented example.
+    expect(() => api.registerGatewayMethod({})).toThrow(UnsupportedCompatError);
+    expect(() => api.registerGatewayMethod({})).toThrow(/api\.registerGatewayMethod/);
   });
 
   it('throws UnsupportedCompatError for an unimplemented nested namespace method', () => {

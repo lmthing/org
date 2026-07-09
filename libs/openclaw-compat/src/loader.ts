@@ -30,14 +30,29 @@ export interface LoadPluginResult {
   id: string;
 }
 
+/** Options accepted by {@link loadPlugin}. */
+export interface LoadPluginOptions {
+  /**
+   * Module overrides keyed by the exact import specifier as written in the
+   * entry's source (e.g. `"openclaw/plugin-sdk/plugin-entry"`,
+   * `"./src/tavily-search-tool.js"`). When `shimRequire` sees a specifier in
+   * this map it returns the override value directly as the module's exports
+   * — no real resolution/`require` is attempted. Lets a vendored real entry's
+   * imports resolve without installing the real packages (no npm-registry
+   * egress needed). Falls back to a real `require` for anything not listed.
+   */
+  moduleOverrides?: Record<string, unknown>;
+}
+
 /**
  * Load the plugin at `dir` and call its `register(api)`.
  *
  * @param dir Absolute or cwd-relative path to the plugin's directory (must
  *   contain `package.json` + `openclaw.plugin.json`).
  * @param api The compat api object, e.g. from {@link createCompatApi}.
+ * @param opts Optional {@link LoadPluginOptions} (e.g. `moduleOverrides`).
  */
-export async function loadPlugin(dir: string, api: unknown): Promise<LoadPluginResult> {
+export async function loadPlugin(dir: string, api: unknown, opts?: LoadPluginOptions): Promise<LoadPluginResult> {
   const absDir = resolve(dir);
 
   const pkg = (await readJson(join(absDir, 'package.json'))) as Record<string, unknown>;
@@ -55,7 +70,7 @@ export async function loadPlugin(dir: string, api: unknown): Promise<LoadPluginR
     throw new Error(`[openclaw-compat] ${join(absDir, 'openclaw.plugin.json')} is missing "id"`);
   }
 
-  const mod = await importTsAsCjs(entryFile);
+  const mod = await importTsAsCjs(entryFile, opts?.moduleOverrides);
   const entry = (mod.default ?? mod) as Record<string, unknown> | undefined;
 
   if (isBundledChannelDescriptor(entry)) {
@@ -100,7 +115,10 @@ async function readJson(file: string): Promise<unknown> {
 }
 
 /** Transpile a `.ts` entry file to CJS and evaluate it, returning its `module.exports`. */
-async function importTsAsCjs(file: string): Promise<Record<string, unknown>> {
+async function importTsAsCjs(
+  file: string,
+  moduleOverrides?: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
   const source = await readFile(file, 'utf8');
   const { code } = await transform(source, {
     loader: 'ts',
@@ -113,7 +131,12 @@ async function importTsAsCjs(file: string): Promise<Record<string, unknown>> {
   // (e.g. a real plugin's `require('openclaw/plugin-sdk/...')`) resolve
   // against the plugin's own node_modules — mirrors the cli hook loader.
   const localRequire = createRequire(file);
-  const shimRequire = (id: string): unknown => localRequire(id);
+  const shimRequire = (id: string): unknown => {
+    if (moduleOverrides && Object.prototype.hasOwnProperty.call(moduleOverrides, id)) {
+      return moduleOverrides[id];
+    }
+    return localRequire(id);
+  };
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const fn = new Function('module', 'exports', 'require', '__filename', '__dirname', code);
   fn(moduleObj, moduleObj.exports, shimRequire, file, dirname(file));

@@ -1,0 +1,18 @@
+{
+  "id": "tavily",
+  "activation": {
+    "onStartup": false
+  },
+  "setup": {
+    "providers": [
+      {
+        "id": "tavily",
+        "envVars": ["TAVILY_API_KEY"]
+      }
+    ]
+  },
+  "contracts": {
+    "webSearchProviders": ["tavily"],
+    "tools": ["tavily_search", "tavily_extract"]
+  }
+}

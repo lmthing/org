@@ -14,6 +14,7 @@ export type {
   CompatRunAgentResult,
   RegisteredChannel,
   RegisteredHttpRoute,
+  RegisteredProvider,
   RegisteredTool,
   RegisteredToolExecute,
   RegisteredToolResult,
@@ -27,4 +28,6 @@ export { createCompatApi } from './api.js';
 export type { OpenClawPluginApiLike } from './api.js';
 
 export { loadPlugin } from './loader.js';
-export type { LoadPluginResult } from './loader.js';
+export type { LoadPluginResult, LoadPluginOptions } from './loader.js';
+
+export { definePluginEntry } from './plugin-sdk-shim.js';

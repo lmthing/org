@@ -6,12 +6,13 @@
  * channels into the rest of lmthing.
  */
 
-import type { RegisteredChannel, RegisteredHttpRoute, RegisteredTool } from './types.js';
+import type { RegisteredChannel, RegisteredHttpRoute, RegisteredProvider, RegisteredTool } from './types.js';
 
 export class PluginRegistry {
   private readonly _tools = new Map<string, RegisteredTool>();
   private readonly _httpRoutes: RegisteredHttpRoute[] = [];
   private readonly _channels: RegisteredChannel[] = [];
+  private readonly _providers: RegisteredProvider[] = [];
 
   /** Record a tool registration. Throws on a duplicate name (fail loud). */
   addTool(tool: RegisteredTool): void {
@@ -31,6 +32,11 @@ export class PluginRegistry {
     this._channels.push(channel);
   }
 
+  /** Record a provider registration (web-search, model, embedding, or web-fetch). */
+  addProvider(provider: RegisteredProvider): void {
+    this._providers.push(provider);
+  }
+
   /** All registered tools, keyed by name. */
   get tools(): ReadonlyMap<string, RegisteredTool> {
     return this._tools;
@@ -44,6 +50,16 @@ export class PluginRegistry {
   /** All registered channels, in registration order. */
   get channels(): readonly RegisteredChannel[] {
     return this._channels;
+  }
+
+  /** All registered providers, in registration order. */
+  get providers(): readonly RegisteredProvider[] {
+    return this._providers;
+  }
+
+  /** Registered providers of a single kind (e.g. `'webSearch'`), in registration order. */
+  getProviders(kind: RegisteredProvider['kind']): readonly RegisteredProvider[] {
+    return this._providers.filter((p) => p.kind === kind);
   }
 
   /** Look up a single registered tool by name. */
