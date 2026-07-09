@@ -1,17 +1,18 @@
 /**
- * Phase 1+2 (pod side) — inbound-webhook dispatcher.
+ * Phase 1+2+4a (pod side) — inbound-webhook dispatcher.
  *
  * ONE endpoint, `POST /api/inbound/:path`, that an external caller (or the
  * gateway, relaying on the pod's behalf) hits to fire a project's `webhook`
  * hook (`../../app/hooks/loader.ts`'s `WebhookHookDef`). Resolves `:path` to
  * its owning project + `trigger` via `resolveBinding` (`../webhook-manifest.js`),
- * renders the raw request body into an agent message, and dispatches it: a
- * one-shot ephemeral run via `manager.runHeadless` (Phase 1 — the SAME
- * agent-run seam `routes/hooks.ts` uses for cron/database hooks) when the
- * event carries no thread key, or a persisted multi-turn run via
- * `manager.runHeadlessThreaded` (Phase 2 — `../webhook-threads.js`'s
- * `getOrCreateThreadSession` maps the external thread key to a stable
- * `sessionId`) when it does.
+ * then hands off to the provider adapter (`../webhook-verifiers.js` — Phase
+ * 4a) for signature verification, an optional setup preflight, thread-key
+ * extraction, and message rendering. Dispatches a one-shot ephemeral run via
+ * `manager.runHeadless` (Phase 1 — the SAME agent-run seam `routes/hooks.ts`
+ * uses for cron/database hooks) when the event carries no thread key, or a
+ * persisted multi-turn run via `manager.runHeadlessThreaded` (Phase 2 —
+ * `../webhook-threads.js`'s `getOrCreateThreadSession` maps the external
+ * thread key to a stable `sessionId`) when it does.
  *
  * Typed structurally (see {@link InboundManager}), mirroring `routes/hooks.ts`'s
  * `HookManager` — decoupled from the concrete `SessionManager` type.
@@ -21,6 +22,7 @@ import { join } from 'node:path';
 import { readBody, sendJson } from './utils.js';
 import { resolveBinding } from '../webhook-manifest.js';
 import { getOrCreateThreadSession } from '../webhook-threads.js';
+import { getAdapter, resolveWebhookSecret } from '../webhook-verifiers.js';
 
 /** Host-enforced budget forwarded verbatim to `runHeadless` (same shape as
  *  `routes/hooks.ts`'s `HookBudget`, kept structural to avoid a cross-import). */
@@ -67,52 +69,23 @@ function parseTrigger(trigger: string): { spaceRef: string; agentSlug: string; a
 }
 
 /**
- * Render the inbound request into the agent's user message. `provider`
- * selects the adapter; only `'generic'` exists today — it embeds the raw
- * body verbatim. Kept plain text (no JSON.parse) so a non-JSON payload still
- * renders instead of failing the whole request.
- */
-function renderInbound(provider: string, path: string, rawBody: string, headers: Record<string, string>): string {
-  void provider; // reserved: future providers (e.g. 'stripe', 'github') render differently
-  void headers; // reserved: future providers may surface signature/event-type headers
-  return (
-    `Inbound webhook "${path}" received. Payload (JSON):\n\n${rawBody}\n\nProcess this event.`
-  );
-}
-
-/**
- * Extract an external thread key from an inbound event, if any (Phase 2 —
- * threading). `provider` selects the adapter; only `'generic'` exists today:
- *   1. the `x-lmthing-thread` header, if present;
- *   2. else, if the body parses as JSON, a string `threadKey` or `thread` field;
- *   3. else `null` (no thread key ⇒ caller keeps the stateless one-shot path).
- * Tolerant of a non-JSON body — never throws.
- */
-function extractThreadKey(provider: string, rawBody: string, headers: Record<string, string>): string | null {
-  void provider; // reserved: future providers may derive a thread key differently
-  const headerKey = headers['x-lmthing-thread'];
-  if (headerKey) return headerKey;
-  try {
-    const parsed = JSON.parse(rawBody) as unknown;
-    if (parsed !== null && typeof parsed === 'object') {
-      const obj = parsed as Record<string, unknown>;
-      if (typeof obj['threadKey'] === 'string') return obj['threadKey'];
-      if (typeof obj['thread'] === 'string') return obj['thread'];
-    }
-  } catch {
-    // Non-JSON body — no thread key derivable from it.
-  }
-  return null;
-}
-
-/**
  * Handler for `POST /api/inbound/:path` — resolves `:path` to its owning
- * project + `trigger` (via {@link resolveBinding}), renders the raw body into
- * an agent message, and dispatches it. Events carrying a thread key (Phase 2 —
- * see {@link extractThreadKey}) continue ONE persisted multi-turn session per
- * thread via `manager.runHeadlessThreaded`; events with no thread key keep the
- * stateless one-shot `runHeadless` path. Returns the result verbatim
- * (`{ ok, result, error, sessionId }`).
+ * project + `trigger` (via {@link resolveBinding}), looks up the provider
+ * adapter (`../webhook-verifiers.js`'s {@link getAdapter}) for
+ * `binding.provider`, verifies the request's authenticity, answers a setup
+ * preflight if the provider defines one (e.g. Slack's `url_verification`),
+ * then renders the raw body into an agent message and dispatches it. Events
+ * carrying a thread key (Phase 2 — `adapter.extractThread`) continue ONE
+ * persisted multi-turn session per thread via `manager.runHeadlessThreaded`;
+ * events with no thread key keep the stateless one-shot `runHeadless` path.
+ * Returns the result verbatim (`{ ok, result, error, sessionId }`).
+ *
+ * Ordering: verify BEFORE preflight. A setup handshake request (e.g. Slack's
+ * `url_verification`) is itself a signed request, so verifying first rejects
+ * a forged handshake the same as any other forged event, and a legitimate
+ * handshake still passes through to `preflight` right after. This keeps ONE
+ * verification gate ahead of every different kind of response instead of
+ * special-casing preflight as pre-auth.
  */
 export function createInboundHandler(
   manager: InboundManager,
@@ -139,11 +112,25 @@ export function createInboundHandler(
     for (const [k, v] of Object.entries(req.headers)) {
       if (typeof v === 'string') headers[k] = v;
     }
-    const message = renderInbound(binding.provider, path, rawBody, headers);
+
+    const adapter = getAdapter(binding.provider);
+    const secret = resolveWebhookSecret(path, binding.provider);
+    if (!adapter.verify(rawBody, headers, secret)) {
+      sendJson(res, 401, { error: { status: 401, message: 'signature verification failed' } });
+      return;
+    }
+
+    const pf = adapter.preflight?.(rawBody, headers) ?? null;
+    if (pf) {
+      sendJson(res, pf.status, pf.body);
+      return;
+    }
+
+    const message = adapter.renderMessage(path, rawBody, headers);
     const { spaceRef, agentSlug } = parseTrigger(binding.agentRef);
     const budget = binding.budget as InboundBudget | undefined;
 
-    const threadKey = extractThreadKey(binding.provider, rawBody, headers);
+    const threadKey = adapter.extractThread(rawBody, headers);
     const out =
       threadKey === null
         ? await manager.runHeadless({ projectId: binding.projectId, spaceRef, agentSlug, message, budget })

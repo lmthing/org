@@ -1,6 +1,6 @@
 import '@lmthing/css/elements/nav/settings-dialog/index.css'
 import * as React from 'react'
-import { User, Cpu, Terminal, CreditCard, GitBranch, Plug, type LucideIcon } from 'lucide-react'
+import { User, Cpu, Terminal, CreditCard, GitBranch, Plug, Webhook, type LucideIcon } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ import { EnvVars } from '../../settings/env-vars'
 import { Billing } from '../../settings/billing'
 import { WorkspaceBackup } from '../../settings/backup'
 import { Connections } from '../../settings/connections'
+import { Triggers } from '../../settings/triggers'
 
 interface TabDef {
   id: string
@@ -67,6 +68,14 @@ const TABS: TabDef[] = [
     render: () => <Connections />,
   },
   {
+    id: 'triggers',
+    label: 'Triggers',
+    icon: Webhook,
+    title: 'Triggers',
+    description: 'Inbound webhook URLs that trigger your agents.',
+    render: () => <Triggers />,
+  },
+  {
     id: 'backup',
     label: 'Backup',
     icon: GitBranch,
@@ -84,9 +93,9 @@ export interface SettingsDialogProps {
 
 /**
  * Shared account + workspace settings dialog, opened from the chat and studio
- * sidebar footers. Side-tabbed: Account, Models, Environment, Billing and
- * Workspace Backup. Depends only on `@lmthing/auth`, so it works identically on
- * every surface.
+ * sidebar footers. Side-tabbed: Account, Models, Environment, Billing,
+ * Connections, Triggers and Workspace Backup. Depends only on `@lmthing/auth`,
+ * so it works identically on every surface.
  */
 export function SettingsDialog({ open, onOpenChange, initialTab = 'account' }: SettingsDialogProps) {
   const [active, setActive] = React.useState(initialTab)

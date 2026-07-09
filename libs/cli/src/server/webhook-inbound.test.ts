@@ -1,5 +1,5 @@
 /**
- * Inbound-webhook Phase 1+2 (pod side) — offline, deterministic. Covers:
+ * Inbound-webhook Phase 1+2+4a (pod side) — offline, deterministic. Covers:
  *   - `validateHook` accepts a valid `webhook` def and rejects missing
  *     `path`/`trigger` and a bad `path` (non-URL-safe chars);
  *   - `buildWebhookManifest` throws fail-loud on a duplicate `path` across two
@@ -11,11 +11,16 @@
  *   - Phase 3: a SPACE agent's `triggers:` frontmatter (no `hooks/*.ts` file)
  *     is scanned into the same manifest and resolved the same way, and a path
  *     collision between a hook and a space trigger is fail-loud too.
+ *   - Phase 4a: the handler rejects a request with a bad provider signature
+ *     (401, no agent run) and answers a Slack `url_verification` preflight
+ *     (200 + challenge, no agent run) — see `webhook-verifiers.test.ts` for
+ *     the adapter unit tests themselves.
  */
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHmac } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validateHook } from '../app/hooks/loader.js';
 import { buildWebhookManifest, resolveBinding } from './webhook-manifest.js';
@@ -24,6 +29,14 @@ import { createInboundHandler, type InboundManager } from './routes/webhooks.js'
 const tmpDirs: string[] = [];
 afterAll(async () => {
   await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+});
+
+const ORIGINAL_ENV = { ...process.env };
+beforeEach(() => {
+  process.env = { ...ORIGINAL_ENV };
+});
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV };
 });
 
 async function makeRoot(): Promise<string> {
@@ -410,5 +423,129 @@ describe('createInboundHandler — POST /api/inbound/:path', () => {
     expect(get().status).toBe(200);
     expect(threadedCalls).toHaveLength(0);
     expect(headlessCalls).toHaveLength(1);
+  });
+});
+
+// ── Phase 4a: provider-verifier registry wired into the handler ──────────
+
+describe('createInboundHandler — provider verification (Phase 4a)', () => {
+  it('rejects a slack request with the wrong secret (401, no agent run)', async () => {
+    const root = await makeRoot();
+    await writeHook(
+      root,
+      'crm',
+      'on-slack',
+      `export default { type: 'webhook', path: 'slack-in', provider: 'slack', trigger: 'intake/handler#onEvent' }`,
+    );
+    process.env['SLACK_SIGNING_SECRET'] = 'the-real-secret';
+
+    let ran = false;
+    const manager: InboundManager = {
+      listProjects: async () => [{ id: 'crm' }],
+      runHeadless: async () => {
+        ran = true;
+        return { ok: true };
+      },
+      runHeadlessThreaded: async () => {
+        ran = true;
+        return { ok: true };
+      },
+    };
+
+    const handler = createInboundHandler(manager, root);
+    const { res, get } = fakeRes();
+    const body = JSON.stringify({ type: 'event_callback', event: { text: 'hi' } });
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    // Signed with the WRONG secret — verification must fail.
+    const badSig =
+      'v0=' + createHmac('sha256', 'wrong-secret').update(`v0:${timestamp}:${body}`, 'utf8').digest('hex');
+
+    await handler(
+      fakeReq(body, { 'x-slack-request-timestamp': timestamp, 'x-slack-signature': badSig }),
+      res,
+      { path: 'slack-in' },
+    );
+
+    expect(get().status).toBe(401);
+    expect(ran).toBe(false);
+  });
+
+  it('rejects a github request with the wrong secret (401, no agent run)', async () => {
+    const root = await makeRoot();
+    await writeHook(
+      root,
+      'crm',
+      'on-gh',
+      `export default { type: 'webhook', path: 'gh-in', provider: 'github', trigger: 'intake/handler#onEvent' }`,
+    );
+    process.env['GITHUB_WEBHOOK_SECRET'] = 'the-real-secret';
+
+    let ran = false;
+    const manager: InboundManager = {
+      listProjects: async () => [{ id: 'crm' }],
+      runHeadless: async () => {
+        ran = true;
+        return { ok: true };
+      },
+      runHeadlessThreaded: async () => {
+        ran = true;
+        return { ok: true };
+      },
+    };
+
+    const handler = createInboundHandler(manager, root);
+    const { res, get } = fakeRes();
+    const body = JSON.stringify({ action: 'opened', issue: { number: 1 } });
+    const badSig = 'sha256=' + createHmac('sha256', 'wrong-secret').update(body, 'utf8').digest('hex');
+
+    await handler(fakeReq(body, { 'x-hub-signature-256': badSig, 'x-github-event': 'issues' }), res, {
+      path: 'gh-in',
+    });
+
+    expect(get().status).toBe(401);
+    expect(ran).toBe(false);
+  });
+
+  it('answers a slack url_verification preflight with the challenge (200, no agent run)', async () => {
+    const root = await makeRoot();
+    await writeHook(
+      root,
+      'crm',
+      'on-slack',
+      `export default { type: 'webhook', path: 'slack-in', provider: 'slack', trigger: 'intake/handler#onEvent' }`,
+    );
+    process.env['SLACK_SIGNING_SECRET'] = 'the-real-secret';
+
+    let ran = false;
+    const manager: InboundManager = {
+      listProjects: async () => [{ id: 'crm' }],
+      runHeadless: async () => {
+        ran = true;
+        return { ok: true };
+      },
+      runHeadlessThreaded: async () => {
+        ran = true;
+        return { ok: true };
+      },
+    };
+
+    const handler = createInboundHandler(manager, root);
+    const { res, get } = fakeRes();
+    const body = JSON.stringify({ type: 'url_verification', challenge: 'chal-xyz' });
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const sig =
+      'v0=' +
+      createHmac('sha256', 'the-real-secret').update(`v0:${timestamp}:${body}`, 'utf8').digest('hex');
+
+    await handler(
+      fakeReq(body, { 'x-slack-request-timestamp': timestamp, 'x-slack-signature': sig }),
+      res,
+      { path: 'slack-in' },
+    );
+
+    const { status, body: resBody } = get();
+    expect(status).toBe(200);
+    expect(resBody).toMatchObject({ challenge: 'chal-xyz' });
+    expect(ran).toBe(false);
   });
 });
