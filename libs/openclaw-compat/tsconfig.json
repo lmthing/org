@@ -1,0 +1,10 @@
+{
+  "extends": "@lmthing/config/tsconfig/node-lib",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "test", "**/*.test.ts"]
+}

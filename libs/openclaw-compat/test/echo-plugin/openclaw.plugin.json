@@ -1,0 +1,6 @@
+{
+  "id": "echo",
+  "contracts": {
+    "tools": ["echo"]
+  }
+}
