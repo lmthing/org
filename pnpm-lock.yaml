@@ -232,6 +232,9 @@ importers:
       '@lmthing/css':
         specifier: workspace:*
         version: link:../css
+      '@lmthing/openclaw-compat':
+        specifier: workspace:*
+        version: link:../openclaw-compat
       '@lmthing/ui':
         specifier: workspace:*
         version: link:../ui
