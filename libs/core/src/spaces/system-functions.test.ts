@@ -315,6 +315,83 @@ describe('system/web webSearch function (DuckDuckGo fallback)', () => {
     expect(calledUrl).toContain('html.duckduckgo.com');
     expect(r.ok).toBe(true);
   });
+
+  // Rendered-Google fragment: a direct-href result, a `/url?q=` redirect result (real
+  // target must be decoded), and an internal google.com link that must be skipped.
+  const GOOGLE_HTML = `
+    <div id="search">
+      <div class="g">
+        <a href="https://example.com/alpha" data-ved="x"><br><h3 class="LC20lb">Alpha Result Title</h3></a>
+        <div class="VwiC3b">Alpha snippet text about the topic.</div>
+      </div>
+      <div class="g">
+        <a href="/url?q=https://beta.org/page&amp;sa=U&amp;ved=y"><h3>Beta Result Title</h3></a>
+        <div>Beta snippet.</div>
+      </div>
+      <a href="https://www.google.com/preferences?hl=en"><h3>Settings</h3></a>
+    </div>
+  `;
+
+  it('provider: "google" renders via RENDER_SERVICE_URL, parses results, decodes redirects, skips internal links', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000', RENDER_SERVICE_TOKEN: 'tok' } } as unknown as (...a: unknown[]) => unknown);
+    let calledUrl = '';
+    let calledBody = '';
+    injectGlobal(vm.ctx, 'fetch', ((url: string, options: { body?: string }) => {
+      calledUrl = url;
+      calledBody = options?.body ?? '';
+      return Promise.resolve({ ok: true, status: 200, text: () => GOOGLE_HTML, json: () => ({}) });
+    }) as (...a: unknown[]) => unknown);
+
+    const r = await evalAwaitDump(vm, `webSearch("test query", { provider: "google", maxResults: 5 })`) as {
+      ok: boolean;
+      results: Array<{ title: string; url: string }>;
+    };
+    // Request went to the render service's /content with the token, posting the Google URL.
+    expect(calledUrl).toBe('http://render.local:3000/content?token=tok');
+    expect(calledBody).toContain('https://www.google.com/search');
+    expect(r.ok).toBe(true);
+    expect(r.results.length).toBe(2); // internal google.com link skipped
+    expect(r.results[0]!.title).toBe('Alpha Result Title');
+    expect(r.results[0]!.url).toBe('https://example.com/alpha');
+    expect(r.results[1]!.url).toBe('https://beta.org/page'); // /url?q= redirect decoded
+  });
+
+  it('provider: "auto" uses Google (not DuckDuckGo) when no Tavily key but RENDER_SERVICE_URL is set', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000' } } as unknown as (...a: unknown[]) => unknown);
+    let hitDdg = false;
+    injectGlobal(vm.ctx, 'fetch', ((url: string) => {
+      if (url.includes('duckduckgo')) hitDdg = true;
+      const body = url.includes('/content') ? GOOGLE_HTML : DDG_HTML;
+      return Promise.resolve({ ok: true, status: 200, text: () => body, json: () => ({}) });
+    }) as (...a: unknown[]) => unknown);
+
+    const r = await evalAwaitDump(vm, `webSearch("test query")`) as { ok: boolean; results: Array<{ url: string }> };
+    expect(r.ok).toBe(true);
+    expect(r.results[0]!.url).toBe('https://example.com/alpha'); // Google result
+    expect(hitDdg).toBe(false);
+  });
+
+  it('provider: "auto" falls through to DuckDuckGo when Google renders no results', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000' } } as unknown as (...a: unknown[]) => unknown);
+    injectGlobal(vm.ctx, 'fetch', ((url: string) => {
+      const body = url.includes('/content') ? '<html><body>No results found.</body></html>' : DDG_HTML;
+      return Promise.resolve({ ok: true, status: 200, text: () => body, json: () => ({}) });
+    }) as (...a: unknown[]) => unknown);
+
+    const r = await evalAwaitDump(vm, `webSearch("test query")`) as { ok: boolean; results: Array<{ url: string }> };
+    expect(r.ok).toBe(true);
+    expect(r.results[0]!.url).toBe('https://example.com/article'); // DDG fallback result
+  });
+
+  it('provider: "google" returns ok:false when RENDER_SERVICE_URL is unset', async () => {
+    injectGlobal(vm.ctx, 'process', { env: {} } as unknown as (...a: unknown[]) => unknown);
+    injectGlobal(vm.ctx, 'fetch', (() =>
+      Promise.resolve({ ok: true, status: 200, text: () => GOOGLE_HTML, json: () => ({}) })) as (...a: unknown[]) => unknown);
+
+    const r = await evalAwaitDump(vm, `webSearch("test query", { provider: "google" })`) as { ok: boolean; error?: string };
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain('RENDER_SERVICE_URL');
+  });
 });
 
 describe('system/todo functions', () => {
