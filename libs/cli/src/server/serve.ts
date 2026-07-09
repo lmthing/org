@@ -42,7 +42,8 @@ import {
   handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild,
 } from './routes/app-admin.js';
 import { handleListApps, handleInstallApp } from './routes/apps.js';
-import { listProjects } from './projects.js';
+import { listProjects, DEFAULT_PROJECT_ID } from './projects.js';
+import { createComputeCompatHost, loadOpenClawPlugins, parseOpenClawAgentEnv, type OpenClawRouteTable } from './openclaw-host.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
 import { handleAgentWsUpgrade } from './ws/agent.js';
@@ -204,7 +205,13 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
 
   // Inbound-webhook dispatcher (Phase 1) — external `POST /api/inbound/:path` fires the
   // project's `webhook` hook bound to `:path` (globally unique per pod). Reserved `/api/`.
-  router.add('POST', '/api/inbound/:path', createInboundHandler(manager, effectiveLmthingRoot));
+  // `openclawRoutes` (populated best-effort in the boot block below, from any loaded
+  // OpenClaw plugin's `registerHttpRoute(...)` calls — see `./openclaw-host.js`) is this
+  // SAME ingress's fallback when no webhook-hook/space-trigger binding matches `:path`; the
+  // Map reference is captured now and mutated later, so routes registered after boot are
+  // still visible to every request the handler serves.
+  const openclawRoutes: OpenClawRouteTable = new Map();
+  router.add('POST', '/api/inbound/:path', createInboundHandler(manager, effectiveLmthingRoot, openclawRoutes));
 
   // Studio admin/dev management API (Phase 8) — reserved `/api/`, NOT the app's own
   // `/app/<project>/api/*`. Register the specific sub-routes before the bare `/app` manifest.
@@ -398,6 +405,28 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
         if (gatewayUrl && computeJwt) await publishWebhookManifest(gatewayUrl, computeJwt, bindings);
       } catch (err) {
         console.warn('[webhook-manifest] build/publish failed:', err instanceof Error ? err.message : err);
+      }
+
+      // OpenClaw plugins (pod-only increment) — best-effort: no `.openclaw-plugins/` dir
+      // ⇒ no-op, so existing pods are completely unaffected. Every loaded plugin's
+      // `registerHttpRoute(...)` calls land in `openclawRoutes` (mutated in place, already
+      // captured by the `/api/inbound/:path` handler registered above) and its
+      // `runtime.subagent.run(...)` calls route into this project's default agent — see
+      // `./openclaw-host.js`. The default agent/space is configurable via `LM_OPENCLAW_AGENT`
+      // (`space/agent`, e.g. `billing/handler`); unset falls back to the top-level THING
+      // agent (`{ spaceRef: '', agentSlug: 'thing' }` — the same default `createSession`/
+      // `runHeadless` already use).
+      try {
+        const { spaceRef, agentSlug } = parseOpenClawAgentEnv(process.env['LM_OPENCLAW_AGENT']);
+        const openclawHost = createComputeCompatHost(manager, { projectId: DEFAULT_PROJECT_ID, spaceRef, agentSlug }, openclawRoutes);
+        const { registry } = await loadOpenClawPlugins(join(root, '.openclaw-plugins'), openclawHost, console.log);
+        if (registry.httpRoutes.length > 0 || registry.tools.size > 0) {
+          console.log(
+            `[openclaw] loaded ${registry.httpRoutes.length} http route(s), ${registry.tools.size} tool(s) from .openclaw-plugins/`,
+          );
+        }
+      } catch (err) {
+        console.warn('[openclaw] plugin load failed:', err instanceof Error ? err.message : err);
       }
 
       if (gatewayUrl && computeJwt && process.env.LMTHING_SELF_IDLE !== '0') {
