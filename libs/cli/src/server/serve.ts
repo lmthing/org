@@ -35,6 +35,8 @@ import { createAppApiHandler } from './routes/app-api.js';
 import { createPageServeHandler } from '../app/pages-serve.js';
 import { buildProjectPages } from '../app/build/pages.js';
 import { createHookRunHandler, bootCatchUpAndSchedule } from './routes/hooks.js';
+import { createInboundHandler } from './routes/webhooks.js';
+import { buildWebhookManifest, publishWebhookManifest } from './webhook-manifest.js';
 import {
   handleAppManifest, handleGetAppFile, handlePutAppFile,
   handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild,
@@ -199,6 +201,10 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // Hook-run endpoint (Phase 6) — the ONE authoritative run path that Studio's manual
   // run, the pod crond, and the boot catch-up/tick all funnel through. Reserved `/api/`.
   router.add('POST', '/api/projects/:projectId/hooks/:slug/run', createHookRunHandler(manager, effectiveLmthingRoot));
+
+  // Inbound-webhook dispatcher (Phase 1) — external `POST /api/inbound/:path` fires the
+  // project's `webhook` hook bound to `:path` (globally unique per pod). Reserved `/api/`.
+  router.add('POST', '/api/inbound/:path', createInboundHandler(manager, effectiveLmthingRoot));
 
   // Studio admin/dev management API (Phase 8) — reserved `/api/`, NOT the app's own
   // `/app/<project>/api/*`. Register the specific sub-routes before the bare `/app` manifest.
@@ -383,6 +389,16 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
         }
       };
       await publishManifestIfChanged();
+
+      // Publish the inbound-webhook bindings (Phase 1) so the gateway can route
+      // `<gateway>/webhooks/<path>` to this pod (waking it if asleep). Best-effort,
+      // same gating as the cron manifest above — inert without gateway env.
+      try {
+        const bindings = await buildWebhookManifest(root, projects);
+        if (gatewayUrl && computeJwt) await publishWebhookManifest(gatewayUrl, computeJwt, bindings);
+      } catch (err) {
+        console.warn('[webhook-manifest] build/publish failed:', err instanceof Error ? err.message : err);
+      }
 
       if (gatewayUrl && computeJwt && process.env.LMTHING_SELF_IDLE !== '0') {
         selfIdleTimer = startSelfIdleWatchdog({

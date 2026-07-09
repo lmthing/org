@@ -2,8 +2,9 @@
  * Hook **discovery + validation** (Phase 6, 6A).
  *
  * Walks `<projectRoot>/hooks/` and loads each `*.ts` file as one hook. A hook is
- * a **default-exported object** — either a **cron** trigger (time-based) or a
- * **database** trigger (fires on a table write):
+ * a **default-exported object** — a **cron** trigger (time-based), a
+ * **database** trigger (fires on a table write), or a **webhook** trigger
+ * (fires on an external inbound POST):
  *
  *   // hooks/refresh-sources.ts — cron, declarative
  *   export default {
@@ -19,6 +20,12 @@
  *     handler: async ({ row, delegate }) => { … },
  *   }
  *
+ *   // hooks/incoming.ts — webhook, declarative
+ *   export default {
+ *     type: 'webhook', path: 'stripe-events', provider: 'generic',
+ *     trigger: 'billing/handler#onEvent',
+ *   }
+ *
  * The **slug** is the filename basename (`refresh-sources`). Because a database
  * hook may carry an **imperative `handler`** (real code), discovery must actually
  * *import* the module — unlike the api loader, which can static-parse `name`. We
@@ -26,7 +33,10 @@
  * and evaluate it in a fresh module scope. Validation is **fail-loud**:
  *   - a cron hook needs exactly one of `every`/`daily`, plus a `trigger`;
  *   - a database hook needs `on: { table, event }` and **exactly one** of
- *     `trigger` / `handler`.
+ *     `trigger` / `handler`;
+ *   - a webhook hook needs a URL-safe `path` and a `trigger` (`path` is the
+ *     public binding key — global uniqueness across projects is enforced by
+ *     the manifest builder, not here).
  */
 
 import { readdir, readFile } from 'node:fs/promises';
@@ -95,8 +105,25 @@ export interface DatabaseHookDef {
   budget?: HookBudget;
 }
 
+/**
+ * A webhook-triggered hook — fires when an external caller `POST`s to the
+ * pod's inbound endpoint bound to `path` (see `server/webhook-manifest.ts` /
+ * `server/routes/webhooks.ts`). Declarative only (no imperative `handler`) —
+ * every event delegates to `trigger` (`space/agent#action`).
+ */
+export interface WebhookHookDef {
+  type: 'webhook';
+  /** URL-safe path segment, unique per pod (the public binding key). */
+  path: string;
+  /** Verifier/adapter id; defaults to 'generic'. */
+  provider?: string;
+  /** `space/agent#action` agent to run for each event (like cron's `trigger`). */
+  trigger: string;
+  budget?: HookBudget;
+}
+
 /** A hook definition — the default export of a `hooks/<slug>.ts` file. */
-export type HookDef = CronHookDef | DatabaseHookDef;
+export type HookDef = CronHookDef | DatabaseHookDef | WebhookHookDef;
 
 /** A discovered, validated hook. */
 export interface LoadedHook {
@@ -108,6 +135,7 @@ export interface LoadedHook {
 const HOOK_FILE_RE = /^([A-Za-z0-9_-]+)\.ts$/;
 const DAILY_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
 const EVERY_RE = /^\d+[mhd]$/;
+const WEBHOOK_PATH_RE = /^[A-Za-z0-9_-]+$/;
 
 // Base a real `require` at the project cwd so a hook's incidental bare imports
 // resolve against the project's node_modules (mirrors api/handler-module.ts).
@@ -226,7 +254,29 @@ export function validateHook(slug: string, file: string, raw: unknown): HookDef 
     };
   }
 
-  throw new Error(`${where}: \`type\` must be 'cron' | 'database' (got ${JSON.stringify(obj.type)})`);
+  if (obj.type === 'webhook') {
+    if (typeof obj.path !== 'string' || obj.path.length === 0) {
+      throw new Error(`${where}: a webhook hook needs a non-empty \`path\``);
+    }
+    if (!WEBHOOK_PATH_RE.test(obj.path)) {
+      throw new Error(`${where}: invalid \`path\` "${obj.path}" (expected URL-safe: letters, digits, '_', '-')`);
+    }
+    if (typeof obj.trigger !== 'string' || obj.trigger.length === 0) {
+      throw new Error(`${where}: a webhook hook needs a non-empty \`trigger\` ('space/agent#action')`);
+    }
+    if (obj.provider !== undefined && typeof obj.provider !== 'string') {
+      throw new Error(`${where}: \`provider\` must be a string`);
+    }
+    return {
+      type: 'webhook',
+      path: obj.path,
+      ...(typeof obj.provider === 'string' ? { provider: obj.provider } : {}),
+      trigger: obj.trigger,
+      budget: validateBudget(where, obj.budget),
+    };
+  }
+
+  throw new Error(`${where}: \`type\` must be 'cron' | 'database' | 'webhook' (got ${JSON.stringify(obj.type)})`);
 }
 
 /** Validate an optional budget object; returns `undefined` when absent. */
