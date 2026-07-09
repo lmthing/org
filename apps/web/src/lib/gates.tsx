@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuth, isPodEmbedded, isLocalRun } from '@lmthing/auth'
 import { LoginScreen } from '@lmthing/ui/components/auth/login-screen'
 import { CLOUD_BASE_URL } from '@/lib/config'
+import { WakingScreen } from '@/lib/waking-screen'
 
 export const centerStyles: React.CSSProperties = {
   display: 'flex',
@@ -268,7 +269,7 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!session) {
-    return <div style={centerStyles}>Signing in…</div>
+    return <WakingScreen mode="signing-in" />
   }
 
   if (status === 'error') {
@@ -281,11 +282,11 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
   }
 
   if (status === 'pending') {
-    return <div style={centerStyles}>Waking your workspace…</div>
+    return <WakingScreen mode="waking" />
   }
 
   if (status === 'upgrading') {
-    return <div style={centerStyles}>Upgrading your compute pod…</div>
+    return <WakingScreen mode="upgrading" />
   }
 
   if (status === 'upgrade-available') {
