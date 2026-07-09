@@ -3,50 +3,53 @@ import type { ConnectionResolver, ConnectionRequest, ConnectionResponse } from '
 /**
  * Pod-side resolver for the agent/space `callConnection(provider, req)` global.
  *
- * The pod NEVER holds a provider OAuth token. For each call it forwards the
- * request to the gateway's egress proxy (`POST /api/connections/:provider/proxy`),
- * authenticated only with the scoped connections JWT (`LMTHING_CONNECTIONS_JWT`,
- * `aud:"connections"`) injected into the pod's env on first connect. The gateway
- * attaches the user's token, pins the outbound host to the provider's API base,
- * and returns `{ ok, status, data }`.
+ * The gateway is the sole custodian of the long-lived OAuth REFRESH token. This
+ * resolver asks the gateway (`POST /api/connections/:provider/token`, authed with
+ * the scoped `LMTHING_CONNECTIONS_JWT`) for a short-lived ACCESS token + the
+ * provider `apiBase`, caches it until just before expiry, and makes the REST call
+ * DIRECTLY to the provider — the raw request never round-trips through the
+ * gateway. On a `401` (token revoked/expired early) it forces a fresh token from
+ * the gateway (which refreshes via the stored refresh token) and retries once.
  *
  * Returns `undefined` when `LMTHING_CONNECTIONS_JWT` is unset (local dev, or a
  * pod with no connections yet) — the yield router then throws a clear, retryable
  * "no connections gateway configured" error rather than binding undefined.
  *
- * Uses a non-blocking `fetch` with an AbortSignal timeout so a slow provider
+ * Uses non-blocking `fetch` with AbortSignal timeouts so a slow provider/gateway
  * can't stall the session server's event loop / trip the idle watchdog.
  */
 
-const GATEWAY_URL =
-  process.env.LMTHING_GATEWAY_URL || 'http://gateway.lmthing.svc.cluster.local:3000';
+const DEFAULT_GATEWAY_URL = 'http://gateway.lmthing.svc.cluster.local:3000';
 
-const PROXY_TIMEOUT_MS = 25_000;
+const CALL_TIMEOUT_MS = 25_000;
+/** Refresh a cached access token this many ms before its nominal expiry. */
+const EXPIRY_SKEW_MS = 60_000;
+
+interface CachedToken {
+  accessToken: string;
+  apiBase: string;
+  /** Epoch-ms expiry, or null when the token doesn't expire. */
+  expiresAt: number | null;
+}
 
 export function createConnectionResolver(): ConnectionResolver | undefined {
   const jwt = process.env.LMTHING_CONNECTIONS_JWT;
   if (!jwt) return undefined;
+  const gatewayUrl = process.env.LMTHING_GATEWAY_URL || DEFAULT_GATEWAY_URL;
 
-  return async (provider: string, req: ConnectionRequest): Promise<ConnectionResponse> => {
-    let r: Response;
-    try {
-      r = await fetch(`${GATEWAY_URL}/api/connections/${encodeURIComponent(provider)}/proxy`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          method: req.method,
-          path: req.path,
-          query: req.query,
-          body: req.body,
-          headers: req.headers,
-        }),
-        signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
-      });
-    } catch (err) {
-      throw new Error(`callConnection("${provider}"): could not reach connections gateway: ${String((err as Error)?.message ?? err)}`);
-    }
+  // Per-provider access-token cache + in-flight de-dupe (so concurrent calls
+  // don't each hit the gateway / double-spend a one-time refresh token).
+  const cache = new Map<string, CachedToken>();
+  const inflight = new Map<string, Promise<CachedToken>>();
 
-    const text = await r.text().catch(() => '');
+  async function mintToken(provider: string, force: boolean): Promise<CachedToken> {
+    const res = await fetch(`${gatewayUrl}/api/connections/${encodeURIComponent(provider)}/token`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ refresh: force }),
+      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+    });
+    const text = await res.text().catch(() => '');
     let parsed: unknown = text;
     if (text) {
       try {
@@ -55,25 +58,105 @@ export function createConnectionResolver(): ConnectionResolver | undefined {
         parsed = text;
       }
     }
-
-    // Gateway-level errors (unknown provider, not connected, expired-and-unrefreshable,
-    // refresh/proxy failure) come back non-2xx as `{ error }`. Surface them as a clear,
-    // retryable yield error rather than a misleading { ok:false } payload.
-    if (!r.ok) {
+    if (!res.ok) {
       const message =
         parsed && typeof parsed === 'object' && 'error' in parsed
           ? String((parsed as { error: unknown }).error)
-          : `gateway returned ${r.status}`;
-      throw new Error(`callConnection("${provider}") failed: ${message}`);
+          : `gateway returned ${res.status}`;
+      throw new Error(`callConnection("${provider}"): ${message}`);
+    }
+    const p = parsed as { accessToken?: unknown; apiBase?: unknown; expiresAt?: unknown };
+    if (typeof p.accessToken !== 'string' || typeof p.apiBase !== 'string') {
+      throw new Error(`callConnection("${provider}"): gateway token response missing accessToken/apiBase`);
+    }
+    const tok: CachedToken = {
+      accessToken: p.accessToken,
+      apiBase: p.apiBase,
+      expiresAt: typeof p.expiresAt === 'number' ? p.expiresAt : null,
+    };
+    cache.set(provider, tok);
+    return tok;
+  }
+
+  async function getToken(provider: string, force: boolean): Promise<CachedToken> {
+    if (force) {
+      cache.delete(provider);
+    } else {
+      const cached = cache.get(provider);
+      if (cached && (cached.expiresAt === null || cached.expiresAt - EXPIRY_SKEW_MS > Date.now())) {
+        return cached;
+      }
+    }
+    const key = `${provider}:${force}`;
+    let p = inflight.get(key);
+    if (!p) {
+      p = mintToken(provider, force).finally(() => inflight.delete(key));
+      inflight.set(key, p);
+    }
+    return p;
+  }
+
+  async function callProvider(tok: CachedToken, req: ConnectionRequest): Promise<Response> {
+    const path = req.path ?? '';
+    // Host-pinning: `path` is sandbox-supplied, so it MUST be relative to the
+    // provider apiBase — reject absolute URLs / scheme / protocol-relative so an
+    // agent can't redirect the bearer token to an attacker-controlled host.
+    if (/^https?:\/\//i.test(path) || path.includes('://') || path.startsWith('//')) {
+      throw new Error('callConnection: path must be relative to the provider apiBase');
+    }
+    const base = tok.apiBase.replace(/\/+$/, '');
+    const rel = path.startsWith('/') ? path : `/${path}`;
+    let url = `${base}${rel}`;
+    if (req.query && Object.keys(req.query).length > 0) {
+      url += (url.includes('?') ? '&' : '?') + new URLSearchParams(req.query).toString();
     }
 
-    // Success envelope from the proxy: `{ ok, status, data }` (the provider's own
-    // status, distinct from the gateway HTTP status which is 200 on a delivered call).
-    if (parsed && typeof parsed === 'object' && 'ok' in parsed && 'status' in parsed && 'data' in parsed) {
-      return parsed as ConnectionResponse;
+    const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': 'lmthing-pod' };
+    if (req.headers) {
+      for (const [k, v] of Object.entries(req.headers)) {
+        const lk = k.toLowerCase();
+        if (lk === 'authorization' || lk === 'host') continue;
+        headers[k] = v;
+      }
     }
-    // Defensive fallback: the proxy always returns the envelope, but if it ever
-    // doesn't, wrap the body so callers still get a well-typed response.
-    return { ok: true, status: r.status, data: parsed };
+    headers['Authorization'] = `Bearer ${tok.accessToken}`;
+
+    const method = (req.method || 'GET').toUpperCase();
+    let body: string | undefined;
+    if (req.body !== undefined && method !== 'GET' && method !== 'HEAD') {
+      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) {
+        headers['Content-Type'] = 'application/json';
+      }
+    }
+
+    return fetch(url, { method, headers, body, signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });
+  }
+
+  return async (provider: string, req: ConnectionRequest): Promise<ConnectionResponse> => {
+    let tok = await getToken(provider, false);
+    let res: Response;
+    try {
+      res = await callProvider(tok, req);
+      // A 401 means the access token was rejected (revoked / expired early). Ask
+      // the gateway to refresh (via the refresh token it holds) and retry once.
+      if (res.status === 401) {
+        tok = await getToken(provider, true);
+        res = await callProvider(tok, req);
+      }
+    } catch (err) {
+      throw new Error(`callConnection("${provider}"): request failed: ${String((err as Error)?.message ?? err)}`);
+    }
+
+    const text = await res.text().catch(() => '');
+    let data: unknown = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+    return { ok: res.ok, status: res.status, data };
   };
 }
