@@ -12,12 +12,50 @@ import { buildErrorBlock } from './error-rewind.js';
 import { emitVariables, extractBindingNames, extractBindingPattern, type BindingKind } from '../context/variables.js';
 import { formatInspectResult, type InspectQuery } from '../globals/inspect.js';
 import { serialize } from '../globals/serialize.js';
+import type { ReadDocumentResult } from '../globals/read-document.js';
 import { BudgetExceededError, type Budget } from './budget.js';
 
 export type { StreamOpts, StreamSession };
 
 /** Known markdown fence language tags. */
 const FENCE_LANGS = ['typescript', 'javascript', 'tsx', 'jsx', 'json', 'ts', 'js'];
+
+/** Duck-typed check for a successful text {@link ReadDocumentResult}. */
+function isReadableDocument(v: unknown): v is ReadDocumentResult & { text: string } {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    (v as ReadDocumentResult).ok === true &&
+    (v as ReadDocumentResult).kind === 'text' &&
+    typeof (v as ReadDocumentResult).text === 'string'
+  );
+}
+
+/**
+ * Build a DOCUMENT CONTENTS block from any `readDocument` yields that returned
+ * text, so the model reads the FULL document rather than the 200-char VARIABLES
+ * preview of the bound result. Returns '' when no document was read. `yields[i]`
+ * aligns with `resolvedValues[i]`.
+ */
+export function formatReadDocuments(yields: YieldRequest[], resolvedValues: unknown[]): string {
+  const docs: Array<ReadDocumentResult & { text: string }> = [];
+  for (let i = 0; i < yields.length; i++) {
+    if (yields[i]?.kind !== 'readDocument') continue;
+    const v = resolvedValues[i];
+    if (isReadableDocument(v)) docs.push(v);
+  }
+  if (docs.length === 0) return '';
+  const blocks = docs.map((d) => {
+    const label = d.filename ?? d.attachmentId;
+    const trunc = d.truncated ? ' — truncated (capped); later content was not included' : '';
+    return `--- ${label} (${d.mediaType})${trunc} ---\n${d.text}`;
+  });
+  return (
+    'DOCUMENT CONTENTS (full text of the file(s) you just read — answer from THIS, ' +
+    'not from the truncated `doc` preview in VARIABLES above):\n\n' +
+    blocks.join('\n\n')
+  );
+}
 
 /** Every suffix (length ≥ 2) of a fence language tag. A bare fence tag is left
  *  behind when the stream splits the opening ``` from its language across chunks,
@@ -660,6 +698,14 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         const inspectLines = formatInspectResult(inspectArgs).split('\n').slice(1);
         varContent = varContent.replace(/^VARIABLES\n?/, (m) => m + inspectLines.join('\n') + '\n');
       }
+      // readDocument results are meant to be READ IN FULL. The VARIABLES preview
+      // serializes the bound `doc` with a 200-char string cap, so the model would
+      // otherwise see only the opening of any real document (and mistake the preview
+      // marker for real truncation). Surface each successfully-read document's whole
+      // text as its own block, exactly as it came back from readDocument (already
+      // capped host-side at READ_DOCUMENT_MAX_CHARS).
+      const documentBlock = formatReadDocuments(yields, resolvedValues);
+      if (documentBlock) varContent += `\n\n${documentBlock}`;
       const budgetWarning = deps.budget?.nearLimitWarning();
       if (budgetWarning) varContent += `\n\n${budgetWarning}`;
       history.append({ role: 'user', content: varContent, blockType: 'variables' });

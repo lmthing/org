@@ -1,12 +1,48 @@
 import { describe, it, expect } from 'vitest';
 import { createVM } from '../sandbox/quickjs.js';
-import { runTurnLoop } from './turn-loop.js';
+import { runTurnLoop, formatReadDocuments } from './turn-loop.js';
 import { MessageHistory } from '../context/history.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamSession, StreamOpts } from './stream-types.js';
+import type { YieldRequest } from './yield.js';
 
 const silentHost: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
+
+describe('formatReadDocuments', () => {
+  const ydoc = (): YieldRequest =>
+    ({ kind: 'readDocument', args: ['id', undefined], deferred: { resolve() {}, reject() {} }, vmPromiseHandle: undefined } as unknown as YieldRequest);
+  const yother = (): YieldRequest =>
+    ({ kind: 'fetch', args: [], deferred: { resolve() {}, reject() {} }, vmPromiseHandle: undefined } as unknown as YieldRequest);
+
+  it('surfaces the FULL text of a read document (bypassing the 200-char preview cap)', () => {
+    const longText = 'A'.repeat(5000) + ' END';
+    const out = formatReadDocuments(
+      [ydoc()],
+      [{ ok: true, attachmentId: 'abc', mediaType: 'application/pdf', filename: 'report.pdf', kind: 'text', text: longText }],
+    );
+    expect(out).toContain('DOCUMENT CONTENTS');
+    expect(out).toContain('report.pdf (application/pdf)');
+    expect(out).toContain(longText); // whole text present, not truncated to 200 chars
+    expect(out).not.toContain('chars total');
+  });
+
+  it('flags a host-truncated document and aligns yields with resolved values by index', () => {
+    const out = formatReadDocuments(
+      [yother(), ydoc()],
+      [{ some: 'other yield' }, { ok: true, attachmentId: 'x', mediaType: 'text/plain', kind: 'text', text: 'hi', truncated: true }],
+    );
+    expect(out).toContain('truncated');
+    expect(out).toContain('x (text/plain)'); // no filename → falls back to attachmentId
+    expect(out).toContain('hi');
+  });
+
+  it('returns empty string for no documents, failed reads, and unsupported results', () => {
+    expect(formatReadDocuments([], [])).toBe('');
+    expect(formatReadDocuments([ydoc()], [{ ok: false, attachmentId: 'x', mediaType: '', kind: 'unsupported', error: 'nope' }])).toBe('');
+    expect(formatReadDocuments([yother()], [{ ok: true, kind: 'text', text: 'not a doc yield' }])).toBe('');
+  });
+});
 
 describe('turn loop — beforeTurn soft reminder', () => {
   it('appends the beforeTurn reminder to the request messages without persisting it', async () => {

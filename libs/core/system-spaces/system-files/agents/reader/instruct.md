@@ -45,6 +45,13 @@ const docs = await Promise.all([
 
 Each `doc` holds `{ ok, kind, text?, error?, filename?, truncated? }`.
 
+**Reading the text:** after `readDocument` resolves, the file's FULL text is surfaced
+to you in a **`DOCUMENT CONTENTS`** block (below the VARIABLES). Read and answer from
+THAT block. The `doc` value shown in VARIABLES is a short preview that is cut off with
+a `… (N chars total)` marker — that marker is just the preview limit, **NOT** the
+document being truncated. Only treat the document as truncated if `doc.truncated ===
+true` (the DOCUMENT CONTENTS header will also say so).
+
 ## 3. Answer from what the documents actually say
 
 ```ts

@@ -42,6 +42,12 @@ Each `doc` holds `{ ok, kind, text?, error?, filename?, truncated? }`; when
 `doc.ok && doc.kind === 'text'`, `doc.text` is the table as CSV (multiple sheets arrive
 as `# Sheet: <name>` blocks).
 
+**Reading the data:** after `readDocument` resolves, each table's FULL CSV is surfaced
+in a **`DOCUMENT CONTENTS`** block (below the VARIABLES) — parse and compute from THAT.
+The `doc` value in VARIABLES is only a short preview cut off with a `… (N chars total)`
+marker; that marker is the preview limit, **NOT** missing rows. Only treat data as
+capped if `doc.truncated === true`.
+
 ## 3. Compute the answer from the data
 
 ```ts

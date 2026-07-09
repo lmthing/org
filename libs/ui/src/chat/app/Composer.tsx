@@ -23,8 +23,27 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
-/** File types the message-attachment picker accepts. */
-const ATTACH_ACCEPT = 'image/*,audio/*,application/pdf,text/plain';
+/** File types the message-attachment picker accepts. Images/audio, plus every
+ *  document type the system-files reader can extract host-side: PDF, plain
+ *  text/Markdown/CSV, Office & OpenDocument (Word/PowerPoint/Excel + odt/odp/ods),
+ *  and legacy Excel. Listed as both MIME types and extensions since browsers vary
+ *  in which they match. The server accepts any type — this only shapes the picker. */
+const ATTACH_ACCEPT = [
+  'image/*',
+  'audio/*',
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.presentation',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.ms-excel',
+  '.md,.csv,.tsv,.docx,.pptx,.xlsx,.xls,.odt,.odp,.ods',
+].join(',');
 
 export function Composer({ onSend, projectId, className, disabled }: ComposerProps) {
   const mode = useStore((s) => s.mode);
