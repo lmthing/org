@@ -2,6 +2,7 @@ import type { ConnectionResolver, ConnectionRequest, ConnectionResponse } from '
 import { createHmac, randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
+import { lookup as dnsLookupCb } from 'node:dns';
 import type { AuthStyle, ProviderConfig } from './providers/types.js';
 import { scanIntegrationDescriptors } from './integration-manifests.js';
 
@@ -164,6 +165,48 @@ async function assertResolvedHostSafe(hostname: string): Promise<void> {
   }
 }
 
+/**
+ * A DNS `lookup` that rejects any resolved internal IP — used as the undici
+ * dispatcher's connect lookup so the address we VALIDATE is the exact address the
+ * socket CONNECTS to (closing the resolve-vs-connect TOCTOU that a plain pre-check
+ * can't). Mirrors `net.LookupFunction`; supports both `all` shapes.
+ */
+function pinnedLookup(
+  hostname: string,
+  options: unknown,
+  cb: (err: Error | null, address?: unknown, family?: number) => void,
+): void {
+  dnsLookupCb(hostname, (options ?? {}) as never, (err, address, family) => {
+    if (err) return cb(err, address as unknown, family);
+    const list = Array.isArray(address) ? address : [{ address: address as string, family }];
+    for (const item of list) {
+      if (isPrivateIp((item as { address: string }).address)) {
+        return cb(new BlockedHostError(`host "${hostname}" resolves to internal address ${(item as { address: string }).address}`));
+      }
+    }
+    cb(null, address as unknown, family);
+  });
+}
+
+/** Lazily build an undici dispatcher that pins connections to a validated public
+ *  IP. If undici isn't resolvable (or the opt-out is set) returns undefined and
+ *  the caller falls back to plain `fetch` — the pinning is a hardening ENHANCEMENT
+ *  that can never break a normal call. Memoized (attempted once). */
+let dispatcherResolved = false;
+let pinnedDispatcher: unknown;
+async function getPinnedDispatcher(): Promise<unknown> {
+  if (dispatcherResolved) return pinnedDispatcher;
+  dispatcherResolved = true;
+  if (process.env['LMTHING_ALLOW_INTERNAL_CONNECTIONS'] === '1') return undefined;
+  try {
+    const undici = (await import('undici')) as { Agent: new (opts: unknown) => unknown };
+    pinnedDispatcher = new undici.Agent({ connect: { lookup: pinnedLookup } });
+  } catch {
+    pinnedDispatcher = undefined; // undici not available → plain fetch + the resolve pre-check
+  }
+  return pinnedDispatcher;
+}
+
 /** Redact a secret's literal value from an error string before surfacing it to
  *  the agent/logs — token-in-path providers (e.g. Telegram `…/bot<token>/…`) can
  *  otherwise leak the token via a fetch error message that echoes the URL. */
@@ -278,7 +321,15 @@ async function callProvider(cfg: ProviderConfig, token: string, req: ConnectionR
   }
 
   await assertResolvedHostSafe(new URL(base).hostname);
-  return fetch(url, { method, headers, body, signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });
+  const dispatcher = await getPinnedDispatcher();
+  const init: RequestInit & { dispatcher?: unknown } = {
+    method,
+    headers,
+    body,
+    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+  };
+  if (dispatcher) init.dispatcher = dispatcher; // pin to the validated IP when undici is available
+  return fetch(url, init);
 }
 
 /**

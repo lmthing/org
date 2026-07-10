@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createInboundHandler, type InboundManager } from './routes/webhooks.js';
 import { clearIntegrationDescriptorCache } from './integration-manifests.js';
+import { clearInboundDedupe } from './webhook-dedupe.js';
 
 const tmpDirs: string[] = [];
 afterAll(async () => {
@@ -29,6 +30,7 @@ const ORIGINAL_ENV = { ...process.env };
 beforeEach(() => {
   process.env = { ...ORIGINAL_ENV };
   clearIntegrationDescriptorCache();
+  clearInboundDedupe();
 });
 
 /** Build a project with an `integration-fake` space that DECLARES the `fake9`
@@ -132,6 +134,25 @@ describe('containment: a descriptor-only provider works end-to-end (zero pod edi
     expect(String(arg['message'])).toContain(payload);
     expect(String(arg['message'])).toContain('[inbound-context]');
     expect(String(arg['message'])).toContain('fake9');
+  });
+
+  it('deduplicates a replayed identical signed inbound (runs the agent once)', async () => {
+    const root = await makeProjectWithFakeProvider();
+    process.env['INTEGRATION_FAKE_SECRET'] = 'sh4red';
+
+    const calls: Array<Record<string, unknown>> = [];
+    const handler = createInboundHandler(manager(calls), root);
+    const payload = JSON.stringify({ from: 'user-7', text: 'only once' });
+    const headers = { 'x-fake-token': 'sh4red', 'content-type': 'application/json' };
+
+    const r1 = fakeRes();
+    await handler(fakeReq(payload, headers), r1.res, { path: 'fake9' });
+    const r2 = fakeRes();
+    await handler(fakeReq(payload, headers), r2.res, { path: 'fake9' }); // exact replay
+
+    expect(r1.get().status).toBe(200);
+    expect(r2.get().status).toBe(200);
+    expect(calls).toHaveLength(1); // agent ran only for the first
   });
 
   it('rejects a wrong signature (401) and never runs an agent', async () => {

@@ -24,6 +24,7 @@ import { resolveBinding } from '../webhook-manifest.js';
 import { getOrCreateThreadSession } from '../webhook-threads.js';
 import { getAdapter, resolveWebhookSecret, resolveChallenge } from '../webhook-verifiers.js';
 import { scanIntegrationDescriptors } from '../integration-manifests.js';
+import { isDuplicateInbound } from '../webhook-dedupe.js';
 import type { OpenClawRouteTable } from '../openclaw-host.js';
 import type { CompatHttpRequest } from '@lmthing/openclaw-compat';
 
@@ -178,6 +179,14 @@ export function createInboundHandler(
     const pf = adapter.preflight?.(rawBody, headers) ?? null;
     if (pf) {
       sendJson(res, pf.status, pf.body);
+      return;
+    }
+
+    // Replay / idempotency guard: a byte-identical authentic payload (a replay of
+    // a captured webhook, or a provider resending on timeout/5xx) is processed at
+    // most once per TTL. Runs AFTER verify, so it can't be poisoned by forgeries.
+    if (isDuplicateInbound(path, rawBody)) {
+      sendJson(res, 200, { ok: true, deduped: true });
       return;
     }
 

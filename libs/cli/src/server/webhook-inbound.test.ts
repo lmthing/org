@@ -25,6 +25,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validateHook } from '../app/hooks/loader.js';
 import { buildWebhookManifest, resolveBinding } from './webhook-manifest.js';
 import { createInboundHandler, type InboundManager } from './routes/webhooks.js';
+import { clearInboundDedupe } from './webhook-dedupe.js';
 
 const tmpDirs: string[] = [];
 afterAll(async () => {
@@ -34,6 +35,7 @@ afterAll(async () => {
 const ORIGINAL_ENV = { ...process.env };
 beforeEach(() => {
   process.env = { ...ORIGINAL_ENV };
+  clearInboundDedupe();
 });
 afterEach(() => {
   process.env = { ...ORIGINAL_ENV };

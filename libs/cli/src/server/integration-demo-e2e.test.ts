@@ -31,6 +31,7 @@ import { SessionManager, type BuildSessionArgs } from './session-manager.js';
 import { createConnectionResolver } from './connections.js';
 import { createInboundHandler } from './routes/webhooks.js';
 import { clearIntegrationDescriptorCache } from './integration-manifests.js';
+import { clearInboundDedupe } from './webhook-dedupe.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEMO_SPACE_SRC = join(HERE, '../../../../../../store/spaces/integration-demo');
@@ -81,6 +82,7 @@ const ORIGINAL_ENV = { ...process.env };
 beforeEach(() => {
   process.env = { ...ORIGINAL_ENV };
   clearIntegrationDescriptorCache();
+  clearInboundDedupe();
   // The mock provider binds to 127.0.0.1 (loopback), which the SSRF guard blocks
   // in prod — opt out for this local end-to-end test (per-pod, test-only).
   process.env['LMTHING_ALLOW_INTERNAL_CONNECTIONS'] = '1';
