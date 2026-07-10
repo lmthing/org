@@ -2,19 +2,20 @@
  * ProjectSettingsView — the `/studio/$projectId/settings` landing.
  *
  * Currently hosts one section, **Integrations**: every integration space
- * installed into this project (via {@link InstallPanel}, hosted on
- * {@link StudioProjectView}) gets a settings form generated from its
- * `settings` JSON Schema ({@link SettingsSchemaForm}). Field values are
- * pod-global env vars — loaded/saved via the gateway GET/PUT
- * `/api/compute/env`, the same GET-merge-PUT convention the former global
- * Integrations tab used (`elements/settings/integrations`, now removed).
+ * installed into this project gets a settings form generated from its
+ * `settings` JSON Schema ({@link SettingsSchemaForm}). Installing is done from
+ * the store (lmthing.store → lmthing.app/install), not here — this surface only
+ * CONFIGURES already-installed integrations. Field values are pod-global env
+ * vars — loaded/saved via the gateway GET/PUT `/api/compute/env`, the same
+ * GET-merge-PUT convention the former global Integrations tab used
+ * (`elements/settings/integrations`, now removed).
  */
 import '@lmthing/css/elements/layouts/split-pane/index.css'
 import '@lmthing/css/elements/layouts/page/index.css'
 import '@lmthing/css/elements/content/panel/index.css'
 import '@lmthing/css/components/shell/studio-shell/index.css'
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from '@tanstack/react-router'
+import { useParams } from '@tanstack/react-router'
 import { useAuth } from '@lmthing/auth'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
@@ -22,8 +23,14 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Panel, PanelHeader, PanelBody } from '@lmthing/ui/elements/content/panel'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { dataPlaneOrigin } from '@lmthing/ui/lib/app-urls'
-import { buildProjectPath } from '@lmthing/ui/lib/space-path'
 import { StudioAppSidebar } from '../studio-app-sidebar'
+
+/** lmthing.store origin, resolved from the current host (prod → lmthing.store,
+ *  the `*.test` proxy → store.test) — for the "browse the store" hand-off. */
+function storeOrigin(): string {
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('.test')) return 'https://store.test'
+  return 'https://lmthing.store'
+}
 import { SettingsSchemaForm, type JsonSchema } from '../../integrations/SettingsSchemaForm'
 
 /** `InstalledIntegration` per INTEGRATIONS_PROGRESS.md §3. */
@@ -41,7 +48,6 @@ function schemaKeys(schema: JsonSchema | null | undefined): string[] {
 
 export function ProjectSettingsView() {
   const { projectId } = useParams({ strict: false }) as { projectId?: string }
-  const navigate = useNavigate()
   const { authFetch, isAuthenticated } = useAuth()
   const COMPUTER = dataPlaneOrigin('computer')
   const CLOUD = dataPlaneOrigin('cloud')
@@ -153,7 +159,7 @@ export function ProjectSettingsView() {
                         variant="outline"
                         size="sm"
                         style={{ alignSelf: 'flex-start' }}
-                        onClick={() => navigate({ to: buildProjectPath(projectId) })}
+                        onClick={() => window.open(`${storeOrigin()}/spaces`, '_blank', 'noopener')}
                       >
                         Browse the store
                       </Button>

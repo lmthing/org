@@ -11,10 +11,9 @@ import '@lmthing/css/elements/content/panel/index.css'
 import '@lmthing/css/components/shell/studio-shell/index.css'
 import { useProject } from '@lmthing/state'
 import { StudioAppSidebar } from '../studio-app-sidebar'
-import { InstallPanel } from '../../integrations/InstallPanel'
 
 export function StudioProjectView() {
-  const { projectId, spaces, isLoadingSpaces } = useProject()
+  const { spaces, isLoadingSpaces } = useProject()
 
   return (
     <div className="split-pane studio-shell">
@@ -32,11 +31,6 @@ export function StudioProjectView() {
             </p>
           </div>
         </div>
-        {projectId && (
-          <div className="page__body" style={{ paddingTop: 0 }}>
-            <InstallPanel projectId={projectId} />
-          </div>
-        )}
       </div>
     </div>
   )
