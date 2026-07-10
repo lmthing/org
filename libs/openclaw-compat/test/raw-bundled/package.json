@@ -1,0 +1,1 @@
+{ "name": "@test/raw-bundled", "private": true, "openclaw": { "extensions": ["./index.ts"] } }

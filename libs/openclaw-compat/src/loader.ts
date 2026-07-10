@@ -22,7 +22,25 @@ import { dirname, join, resolve } from 'node:path';
 
 import { transform } from 'esbuild';
 
-import { UnsupportedCompatError } from './types.js';
+import {
+  applyBundledChannelDescriptor,
+  defineBundledChannelEntry,
+  definePluginEntry,
+  type BundledChannelDescriptor,
+} from './plugin-sdk-shim.js';
+
+/**
+ * Builtin module shims, merged UNDER any explicit `moduleOverrides` (which
+ * still win). They let a real plugin's `import { definePluginEntry } from
+ * "openclaw/plugin-sdk/plugin-entry"` / `import { defineBundledChannelEntry }
+ * from "openclaw/plugin-sdk/channel-entry-contract"` resolve to our shims even
+ * for an as-installed `.openclaw-plugins/` plugin that passes no overrides —
+ * this host has no npm-registry egress to resolve the real subpaths.
+ */
+const BUILTIN_SHIMS: Record<string, unknown> = {
+  'openclaw/plugin-sdk/plugin-entry': { definePluginEntry },
+  'openclaw/plugin-sdk/channel-entry-contract': { defineBundledChannelEntry },
+};
 
 /** The result of a successful {@link loadPlugin} call. */
 export interface LoadPluginResult {
@@ -73,24 +91,28 @@ export async function loadPlugin(dir: string, api: unknown, opts?: LoadPluginOpt
   const mod = await importTsAsCjs(entryFile, opts?.moduleOverrides);
   const entry = (mod.default ?? mod) as Record<string, unknown> | undefined;
 
+  // A `definePluginEntry`/`defineBundledChannelEntry` result (both go through
+  // our shims → a `{ id, register }` object). Also covers hand-written entries.
+  if (entry && typeof entry.register === 'function') {
+    await (entry.register as (api: unknown) => unknown)(api);
+    return { id };
+  }
+
+  // Fallback: a RAW bundled-channel descriptor (has `plugin.specifier` but no
+  // `register` — e.g. built against the real SDK without our shim). Apply it
+  // the same way `defineBundledChannelEntry`'s generated `register` would:
+  // record the channel + run its webhook-mode `registerFull` hook. The
+  // socket/native runtime behind `plugin.specifier` is NOT loaded (deferred —
+  // Socket-Mode / warm-pod; see COMPAT.md).
   if (isBundledChannelDescriptor(entry)) {
-    throw new UnsupportedCompatError(
-      `defineBundledChannelEntry-style plugin at "${entryFile}" (bundled-channel loading) — ` +
-        'see COMPAT.md for the plan to support these; this foundation only loads the simple ' +
-        'definePluginEntry({ id, register }) shape',
-    );
+    await applyBundledChannelDescriptor(entry as unknown as BundledChannelDescriptor, api);
+    return { id };
   }
 
-  const register = entry && typeof entry.register === 'function' ? (entry.register as (api: unknown) => unknown) : undefined;
-  if (!register) {
-    throw new Error(
-      `[openclaw-compat] plugin entry "${entryFile}" default export has no register(api) function ` +
-        '(expected the definePluginEntry({ id, register }) shape)',
-    );
-  }
-
-  await register(api);
-  return { id };
+  throw new Error(
+    `[openclaw-compat] plugin entry "${entryFile}" default export has no register(api) function ` +
+      '(expected the definePluginEntry({ id, register }) or defineBundledChannelEntry({ id, plugin }) shape)',
+  );
 }
 
 /** An entry "looks like" a bundled-channel descriptor when it carries `plugin.specifier`. */
@@ -134,6 +156,9 @@ async function importTsAsCjs(
   const shimRequire = (id: string): unknown => {
     if (moduleOverrides && Object.prototype.hasOwnProperty.call(moduleOverrides, id)) {
       return moduleOverrides[id];
+    }
+    if (Object.prototype.hasOwnProperty.call(BUILTIN_SHIMS, id)) {
+      return BUILTIN_SHIMS[id];
     }
     return localRequire(id);
   };

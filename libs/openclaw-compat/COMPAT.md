@@ -211,5 +211,50 @@ produces.
    further pressure-test the api surface.
 3. Only after a webhook-mode channel extension is proven end-to-end, revisit
    Slack/Socket Mode as a warm-pod-only, explicitly-opt-in tier feature.
-4. `defineBundledChannelEntry` support (currently a hard throw in
-   `loadPlugin`) once a concrete channel package that uses it is targeted.
+4. ~~`defineBundledChannelEntry` support (currently a hard throw in
+   `loadPlugin`)~~ **Done (webhook-mode)** — see "Coverage-widening increments"
+   below. Remaining: load the `plugin.specifier` Socket-Mode runtime on a warm pod.
+
+---
+
+## Full compatibility audit — all 145 extensions (2026-07-10)
+
+Every `extensions/<x>/index.ts` was fetched and classified by entry **shape** +
+which `api.register*` methods `register()` calls, against the implemented set.
+
+| Verdict | Count | Deciding factor |
+|---|--:|---|
+| ✅ Functional (baseline) | 4 | `registerTool`/`registerHttpRoute`: **tavily, firecrawl, admin-http-rpc, llm-task** |
+| 🟡 Inert (loads, unwired) | ~17 | `registerProvider` (anthropic-vertex, arcee, chutes, clawrouter, copilot-proxy, kimi-coding, sglang, stepfun, tencent, vllm), `registerWebSearchProvider` (brave, exa, searxng, perplexity, parallel, duckduckgo), `registerEmbeddingProvider` (llama-cpp); + no-op `register()` bodies (document-extract, web-readability, open-prose, qa-matrix) |
+| ⛔ Rejected → now loadable | 25 | `defineBundledChannelEntry` channels (slack, telegram, discord, whatsapp, signal, matrix, msteams, imessage, sms, line, feishu, googlechat, irc, mattermost, nostr, twitch, tlon, zalo, zalouser, qqbot, raft, clickclack, synology-chat, nextcloud-talk, qa-channel) |
+| ❌ Throws (skipped) | ~91 | Unimplemented `register*`: media/speech/image/video/music/embedding/model-catalog providers; `registerCli`/`registerCommand`/`registerService`/`registerMemoryCapability`/`registerAgentHarness`/`registerSandboxBackend`; every `defineSingleProviderPluginEntry` provider (openai, google, deepseek, cerebras, mistral, …) via `registerModelCatalogProvider` |
+| ⚙️ Core lib (no entry) | 4 | image/media/video-generation-core, test-support |
+
+**Key structural findings:** (a) there is **no `api.registerWebhookRoutes` method** — OpenClaw's
+`webhooks` extension declares a *local* `function registerWebhookRoutes(api)` that calls
+`api.registerHttpRoute`; (b) `defineSingleProviderPluginEntry`'s generated `register` always calls
+`api.registerModelCatalogProvider` right after `api.registerProvider`, so all ~44 provider plugins
+built on it throw; (c) channel entries (`defineBundledChannelEntry`) hide their inbound behind a
+`plugin.specifier` (Socket-Mode) + an optional webhook-mode `registerFull`.
+
+## Coverage-widening increments (the "3 wins", implemented 2026-07-10)
+
+1. **Broaden HTTP-route loadability** — `api.logger.{info,warn,error,debug,trace,log}` → `host.log`;
+   `registerHttpRoute` tolerates OpenClaw's method-less route shape (default `POST`, still requires
+   `path`+`handler`); read-only `api.pluginConfig`/`api.config` (default `{}`, override via
+   `createCompatApi(host, registry, { pluginConfig, config })`). Config-reading route plugins (e.g.
+   `webhooks`, which early-returns on no routes) now load instead of throwing on a proxy.
+2. **Search/fetch providers → agent tools** — `recordProvider` now calls `exposeProviderAsTool`: a
+   `webSearch`/`webFetch` provider with a `createTool(ctx)` factory (Brave/Exa/Firecrawl shape) is
+   also added to the tool registry as a `tool()`-callable tool, adapting `execute(args)` →
+   `(toolCallId, params)`. Best-effort (bad shape/dup/throw → logged, skipped).
+3. **Bundled-channel loading** — `loadPlugin` no longer hard-rejects `defineBundledChannelEntry`. The
+   `plugin-sdk-shim.ts` `defineBundledChannelEntry` records the channel and runs its webhook-mode
+   `registerFull(api)` hook (routes mount on the Triggers ingress); the `plugin`/`runtime` specifier
+   modules (Socket-Mode/native runtime) are **not** loaded (deferred, warm-pod). Builtin module shims
+   resolve `openclaw/plugin-sdk/{plugin-entry,channel-entry-contract}` without npm egress; a
+   raw-descriptor fallback covers entries with `plugin.specifier` but no `register`.
+
+Tests: `src/wins.test.ts` (10) + fixtures `test/bundled-channel/` (webhook-mode) & `test/raw-bundled/`
+(fallback). **Caveat:** these make plugins *load*; end-to-end execution still needs the plugin's own
+deps/keys, and real socket channels still need the deferred runtime + a warm pod.

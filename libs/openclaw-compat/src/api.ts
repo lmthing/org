@@ -35,6 +35,13 @@ const IMPLEMENTED_TOP_LEVEL = new Set([
   'runtime',
   'log',
   'logVerbose',
+  // Win #1 — broaden loadability: a `logger` namespace (a very common call
+  // sequence — `api.logger.info(...)` — that would otherwise throw) and a
+  // read-only `pluginConfig`/`config` surface so config-reading route plugins
+  // (e.g. OpenClaw's own `webhooks` extension) load instead of throwing.
+  'logger',
+  'pluginConfig',
+  'config',
 ]);
 
 interface RegisterToolObjectInput {
@@ -59,7 +66,8 @@ interface RegisterToolFactoryOpts {
 }
 
 interface RegisterHttpRouteInput {
-  method: string;
+  /** Optional — OpenClaw's route shape omits it; defaults to `POST`. */
+  method?: string;
   path: string;
   handler: CompatRouteHandler;
 }
@@ -128,6 +136,59 @@ function buildRuntimeNamespace(host: CompatHost): unknown {
   );
 }
 
+/**
+ * Win #2 — expose a search/fetch provider as an agent-callable tool.
+ *
+ * OpenClaw's web-search / web-fetch providers carry a `createTool(ctx)` factory
+ * whose result is a normal tool object `{ name?, description?, parameters?,
+ * execute }` — the SAME shape `registerTool`'s factory form yields (see Brave's
+ * `createBraveWebSearchProvider()` → `{ id, createTool }`). So a recorded
+ * provider can ALSO be surfaced as a tool the agent reaches through the `tool()`
+ * global, with no lmthing-side search-pipeline change. Best-effort: a provider
+ * with no `createTool`, a throwing factory, a bad tool shape, or a name that
+ * collides with an already-registered tool is skipped (logged) — never fails
+ * the provider registration.
+ */
+function exposeProviderAsTool(
+  registry: PluginRegistry,
+  host: CompatHost,
+  kind: RegisteredProvider['kind'],
+  provider: Record<string, unknown>,
+): void {
+  if (kind !== 'webSearch' && kind !== 'webFetch') return;
+  const createTool = provider['createTool'];
+  if (typeof createTool !== 'function') return;
+  try {
+    // OpenClaw's search-provider `createTool` reads `ctx.searchConfig`; pass a
+    // minimal ctx (same posture as `registerTool`'s factory form, which passes `{}`).
+    const built = (createTool as (ctx: Record<string, unknown>) => unknown)({ searchConfig: {} });
+    if (!built || typeof built !== 'object') return;
+    const t = built as Record<string, unknown>;
+    if (typeof t['execute'] !== 'function') return;
+    const providerId = typeof provider['id'] === 'string' ? (provider['id'] as string) : undefined;
+    const name =
+      (typeof t['name'] === 'string' && t['name']) ||
+      (providerId ? `${providerId}_${kind === 'webSearch' ? 'search' : 'fetch'}` : undefined);
+    if (!name) return;
+    if (registry.getTool(name)) {
+      host.log(`[openclaw-compat] provider tool "${name}" already registered — skipping duplicate`);
+      return;
+    }
+    const providerExecute = t['execute'] as (args: unknown) => unknown;
+    registry.addTool({
+      name,
+      description: typeof t['description'] === 'string' ? (t['description'] as string) : undefined,
+      parameters: t['parameters'] ?? t['inputSchema'],
+      // OpenClaw provider tools take a single `args` object; adapt to the host
+      // resolver's `(toolCallId, params)` signature by forwarding `params`.
+      execute: (_toolCallId, params) => providerExecute(params) as never,
+    });
+    host.log(`[openclaw-compat] exposed ${kind} provider "${providerId ?? '(unnamed)'}" as tool "${name}"`);
+  } catch (err) {
+    host.log(`[openclaw-compat] could not expose ${kind} provider as a tool: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 /** Record a `register*Provider(...)` call into the registry (never throws — see COMPAT.md). */
 function recordProvider(
   registry: PluginRegistry,
@@ -143,17 +204,40 @@ function recordProvider(
   const id = (provider as Record<string, unknown>).id;
   host.log(
     `[openclaw-compat] registered ${kind} provider "${typeof id === 'string' ? id : '(unnamed)'}" ` +
-      '(recorded only — not wired into any lmthing pipeline, see COMPAT.md)',
+      '(recorded; search/fetch providers are also exposed as tools — see COMPAT.md)',
   );
+  exposeProviderAsTool(registry, host, kind, provider as Record<string, unknown>);
   return registered;
+}
+
+/** Build `api.logger` — every level maps to the host's single `log` sink. A
+ *  namespace real plugins call constantly (`api.logger.info(...)`); without it
+ *  the compat proxy would throw on first use and drop the plugin. */
+function buildLogger(host: CompatHost): Record<string, (...args: unknown[]) => void> {
+  const level = (name: string) => (...args: unknown[]) =>
+    host.log(`[${name}] ${args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')}`);
+  return { info: level('info'), warn: level('warn'), error: level('error'), debug: level('debug'), trace: level('trace'), log: level('log') };
+}
+
+/** Options for {@link createCompatApi} — the read-only config surface a plugin
+ *  sees via `api.pluginConfig` / `api.config`. Both default to `{}` so a
+ *  config-reading plugin loads (and typically registers nothing) rather than
+ *  throwing; a host that has per-plugin config can supply it here. */
+export interface CreateCompatApiOptions {
+  pluginConfig?: Record<string, unknown>;
+  config?: Record<string, unknown>;
 }
 
 /**
  * Create the compat `api` object for one plugin `register(api)` call.
  * `host` is the pod-side seam; `registry` collects everything the plugin
- * registers.
+ * registers; `opts` supplies the read-only `pluginConfig`/`config` surface.
  */
-export function createCompatApi(host: CompatHost, registry: PluginRegistry): OpenClawPluginApiLike {
+export function createCompatApi(
+  host: CompatHost,
+  registry: PluginRegistry,
+  opts?: CreateCompatApiOptions,
+): OpenClawPluginApiLike {
   const implemented: Record<string, unknown> = {
     registerTool(toolOrFactory: RegisterToolObjectInput | RegisterToolFactory, opts?: RegisterToolFactoryOpts) {
       const tool: RegisterToolObjectInput =
@@ -180,15 +264,13 @@ export function createCompatApi(host: CompatHost, registry: PluginRegistry): Ope
     },
 
     registerHttpRoute(route: RegisterHttpRouteInput) {
-      if (
-        !route ||
-        typeof route.method !== 'string' ||
-        typeof route.path !== 'string' ||
-        typeof route.handler !== 'function'
-      ) {
-        throw new Error('[openclaw-compat] registerHttpRoute requires { method, path, handler }');
+      if (!route || typeof route.path !== 'string' || typeof route.handler !== 'function') {
+        throw new Error('[openclaw-compat] registerHttpRoute requires { path, handler }');
       }
-      const method = route.method.toUpperCase();
+      // Win #1 — OpenClaw's route shape omits `method` (it uses `match`/`auth`
+      // and defaults to accepting POST webhooks); default to POST when absent
+      // instead of rejecting, so those route plugins mount instead of throwing.
+      const method = typeof route.method === 'string' ? route.method.toUpperCase() : 'POST';
       registry.addHttpRoute({ method, path: route.path, handler: route.handler });
       host.mountRoute(method, route.path, route.handler);
       host.log(`[openclaw-compat] mounted HTTP route ${method} ${route.path}`);
@@ -251,6 +333,14 @@ export function createCompatApi(host: CompatHost, registry: PluginRegistry): Ope
     logVerbose(msg: unknown) {
       host.log(String(msg));
     },
+
+    // Win #1 — a `logger` namespace + a read-only config surface. `pluginConfig`
+    // / `config` default to `{}` so a plugin that reads config to decide what to
+    // register (OpenClaw's `webhooks` early-returns when it finds no routes)
+    // loads cleanly instead of hitting a throwing proxy.
+    logger: buildLogger(host),
+    pluginConfig: opts?.pluginConfig ?? {},
+    config: opts?.config ?? {},
   };
 
   return new Proxy(implemented, {

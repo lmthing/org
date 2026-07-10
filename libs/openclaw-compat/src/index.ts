@@ -25,9 +25,14 @@ export { UnsupportedCompatError } from './types.js';
 export { PluginRegistry } from './registry.js';
 
 export { createCompatApi } from './api.js';
-export type { OpenClawPluginApiLike } from './api.js';
+export type { OpenClawPluginApiLike, CreateCompatApiOptions } from './api.js';
 
 export { loadPlugin } from './loader.js';
 export type { LoadPluginResult, LoadPluginOptions } from './loader.js';
 
-export { definePluginEntry } from './plugin-sdk-shim.js';
+export {
+  definePluginEntry,
+  defineBundledChannelEntry,
+  applyBundledChannelDescriptor,
+} from './plugin-sdk-shim.js';
+export type { BundledChannelDescriptor, BundledEntryModuleRef } from './plugin-sdk-shim.js';
