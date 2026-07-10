@@ -63,6 +63,8 @@ const STORE_URL = 'http://store.test';
 
 const AGENT_INSTRUCT = `---\ntitle: Demo\nknowledge: []\nfunctions: []\ncomponents: []\n---\n\nYou are the demo integration agent.\n`;
 
+const DEMO_README = `# Connect Demo\n\n1. Get a token.\n2. Paste it below.\n`;
+
 const SPACE_SETTINGS_SCHEMA = {
   type: 'object',
   properties: {
@@ -76,6 +78,7 @@ async function writeDemoSpace(storeDir: string): Promise<void> {
   const spaceRoot = join(storeDir, 'spaces', SPACE);
   await mkdir(join(spaceRoot, 'agents', 'demo'), { recursive: true });
   await writeFile(join(spaceRoot, 'agents', 'demo', 'instruct.md'), AGENT_INSTRUCT, 'utf8');
+  await writeFile(join(spaceRoot, 'README.md'), DEMO_README, 'utf8');
   await writeFile(
     join(spaceRoot, 'package.json'),
     JSON.stringify({
@@ -357,7 +360,10 @@ describe('handleListProjectIntegrations', () => {
     await handler(mockReq(), res, { projectId: DEFAULT_PROJECT_ID });
     expect(captured.status).toBe(200);
     const body = captured.body as {
-      integrations: Array<{ spaceId: string; title: string; icon: string | null; tags: string[]; settings: unknown }>;
+      integrations: Array<{
+        spaceId: string; title: string; icon: string | null;
+        tags: string[]; settings: unknown; readme: string;
+      }>;
     };
     expect(body.integrations.map((i) => i.spaceId)).toEqual([SPACE]);
     const demo = body.integrations[0]!;
@@ -365,6 +371,8 @@ describe('handleListProjectIntegrations', () => {
     expect(demo.icon).toBe('🔌');
     expect(demo.tags).toEqual(['integration']);
     expect(demo.settings).toEqual(SPACE_SETTINGS_SCHEMA);
+    // The bundled README is materialized on install and surfaced verbatim.
+    expect(demo.readme).toBe(DEMO_README);
   });
 
   it('returns [] for a project with no installed spaces', async () => {

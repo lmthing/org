@@ -14,6 +14,7 @@ import '@lmthing/css/elements/layouts/split-pane/index.css'
 import '@lmthing/css/elements/layouts/page/index.css'
 import '@lmthing/css/elements/content/panel/index.css'
 import '@lmthing/css/components/shell/studio-shell/index.css'
+import '@lmthing/css/components/setup-guide/index.css'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useAuth } from '@lmthing/auth'
@@ -21,6 +22,7 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Panel, PanelHeader, PanelBody } from '@lmthing/ui/elements/content/panel'
+import { Markdown } from '@lmthing/ui/elements/content/markdown'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { dataPlaneOrigin } from '@lmthing/ui/lib/app-urls'
 import { StudioAppSidebar } from '../studio-app-sidebar'
@@ -40,6 +42,8 @@ interface InstalledIntegration {
   icon: string | null
   tags: string[]
   settings: JsonSchema | null
+  /** Bundled setup instructions (markdown), shown above the token fields. */
+  readme?: string | null
 }
 
 function schemaKeys(schema: JsonSchema | null | undefined): string[] {
@@ -177,15 +181,27 @@ export function ProjectSettingsView() {
                         </Stack>
                       </PanelHeader>
                       <PanelBody>
-                        {integration.settings && schemaKeys(integration.settings).length > 0 ? (
-                          <SettingsSchemaForm
-                            schema={integration.settings}
-                            values={fields}
-                            onChange={(key, value) => setFields((prev) => ({ ...prev, [key]: value }))}
-                          />
-                        ) : (
-                          <Caption muted>This integration has no configurable settings.</Caption>
-                        )}
+                        <Stack gap="md">
+                          {integration.readme ? (
+                            <details className="lm-setup-guide" open>
+                              <summary className="lm-setup-guide__summary">
+                                How to get your keys — setup guide
+                              </summary>
+                              <div className="lm-setup-guide__body">
+                                <Markdown source={integration.readme} />
+                              </div>
+                            </details>
+                          ) : null}
+                          {integration.settings && schemaKeys(integration.settings).length > 0 ? (
+                            <SettingsSchemaForm
+                              schema={integration.settings}
+                              values={fields}
+                              onChange={(key, value) => setFields((prev) => ({ ...prev, [key]: value }))}
+                            />
+                          ) : (
+                            <Caption muted>This integration has no configurable settings.</Caption>
+                          )}
+                        </Stack>
                       </PanelBody>
                     </Panel>
                   ))}

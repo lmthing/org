@@ -103,7 +103,7 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
 ### `elements/nav/app-sidebar/index.css`
 
-- **.app-sidebar** — `.app-sidebar` `.app-sidebar--collapsed` `.app-sidebar--fixed` `.app-sidebar__brand` `.app-sidebar__collapse-btn` `.app-sidebar__content` `.app-sidebar__dropdown` `.app-sidebar__dropdown-add` `.app-sidebar__dropdown-chevron` `.app-sidebar__dropdown-create` `.app-sidebar__dropdown-delete` `.app-sidebar__dropdown-input` `.app-sidebar__dropdown-item` `.app-sidebar__dropdown-item--active` `.app-sidebar__dropdown-label` `.app-sidebar__dropdown-list` `.app-sidebar__dropdown-menu` `.app-sidebar__dropdown-row` `.app-sidebar__dropdown-trigger` `.app-sidebar__empty` `.app-sidebar__footer` `.app-sidebar__header` `.app-sidebar__icon` `.app-sidebar__item` `.app-sidebar__item--active` `.app-sidebar__new-chat` `.app-sidebar__rail` `.app-sidebar__rail-brand` `.app-sidebar__rail-btn` `.app-sidebar__section` `.app-sidebar__section-body` `.app-sidebar__section-count` `.app-sidebar__section-header` `.app-sidebar__section-icon` `.app-sidebar__section-label` `.app-sidebar__top`
+- **.app-sidebar** — `.app-sidebar` `.app-sidebar--collapsed` `.app-sidebar--fixed` `.app-sidebar__brand` `.app-sidebar__collapse-btn` `.app-sidebar__content` `.app-sidebar__dropdown` `.app-sidebar__dropdown-add` `.app-sidebar__dropdown-chevron` `.app-sidebar__dropdown-create` `.app-sidebar__dropdown-delete` `.app-sidebar__dropdown-input` `.app-sidebar__dropdown-item` `.app-sidebar__dropdown-item--active` `.app-sidebar__dropdown-label` `.app-sidebar__dropdown-list` `.app-sidebar__dropdown-menu` `.app-sidebar__dropdown-row` `.app-sidebar__dropdown-trigger` `.app-sidebar__empty` `.app-sidebar__footer` `.app-sidebar__header` `.app-sidebar__icon` `.app-sidebar__item` `.app-sidebar__item--active` `.app-sidebar__new-chat` `.app-sidebar__project-row` `.app-sidebar__project-settings` `.app-sidebar__rail` `.app-sidebar__rail-brand` `.app-sidebar__rail-btn` `.app-sidebar__section` `.app-sidebar__section-body` `.app-sidebar__section-count` `.app-sidebar__section-header` `.app-sidebar__section-icon` `.app-sidebar__section-label` `.app-sidebar__top`
 
   Tokens: `border`, `destructive`, `foreground`, `muted`, `muted-foreground`, `popover`, `primary`, `primary-foreground`, `ring`, `sidebar`, `sidebar-border`
 
@@ -112,6 +112,13 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.breadcrumb** — `.breadcrumb` `.breadcrumb__segment` `.breadcrumb__separator`
 
   Tokens: `foreground`, `muted-foreground`
+
+### `elements/nav/settings-dialog/index.css`
+
+- **.dialog** — `.dialog`
+- **.settings-dialog** — `.settings-dialog` `.settings-dialog__body` `.settings-dialog__panel` `.settings-dialog__section` `.settings-dialog__tab` `.settings-dialog__tab--active` `.settings-dialog__tab-icon` `.settings-dialog__tabs`
+
+  Tokens: `border`, `foreground`, `muted`, `muted-foreground`
 
 ### `elements/nav/sidebar/index.css`
 
@@ -350,12 +357,26 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `--border`, `--destructive`, `--foreground`, `--muted`, `--muted-foreground`, `--success`, `--warning`
 
+### `components/markdown/index.css`
+
+- **.g** — `.g`
+- **.lm-markdown** — `.lm-markdown`
+
+  Tokens: `border`, `foreground`, `muted`, `muted-foreground`, `primary`
+
 ### `components/presentation/index.css`
 
 - **.presentation** — `.presentation` `.presentation__counter` `.presentation__exit-btn` `.presentation__footer` `.presentation__nav-overlay` `.presentation__slide`
 - **.slide** — `.slide` `.slide--centered` `.slide--padded` `.slide--padded-lg` `.slide--padded-xl` `.slide--row` `.slide__badge` `.slide__card` `.slide__card-accent` `.slide__chip` `.slide__divider` `.slide__flow-node` `.slide__flow-node--hero` `.slide__flow-node--regular` `.slide__flow-row` `.slide__flow-sub` `.slide__flow-sub--hero` `.slide__grid-3` `.slide__grid-split` `.slide__headline` `.slide__headline--lg` `.slide__headline--md` `.slide__headline--sm` `.slide__headline--xl` `.slide__pill` `.slide__pill--lg` `.slide__pill--sm` `.slide__point` `.slide__point-icon` `.slide__qr` `.slide__screenshot` `.slide__screenshot-img` `.slide__section-label` `.slide__section-label--lg` `.slide__section-label--md` `.slide__section-label--sm` `.slide__strip` `.slide__strip-dot` `.slide__strip-text` `.slide__subtitle` `.slide__subtitle--lg` `.slide__team-grid` `.slide__team-member` `.slide__team-photo` `.slide__tier-desc` `.slide__tier-dot` `.slide__tier-item` `.slide__tier-name` `.slide__tier-tag` `.slide__video` `.slide__video-container`
 
   Tokens: `--background`, `--muted-foreground`
+
+### `components/setup-guide/index.css`
+
+- **.lm-markdown** — `.lm-markdown`
+- **.lm-setup-guide** — `.lm-setup-guide` `.lm-setup-guide__body` `.lm-setup-guide__summary`
+
+  Tokens: `background`, `border`, `foreground`, `muted`
 
 ### `components/shell/index.css`
 

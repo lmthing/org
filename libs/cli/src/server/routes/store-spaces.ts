@@ -355,6 +355,8 @@ export interface InstalledIntegration {
   icon: string | null;
   tags: string[];
   settings: unknown | null;
+  /** The space's bundled `README.md` (setup instructions), `''` if none. */
+  readme: string;
 }
 
 interface LmthingPackageBlock {
@@ -399,12 +401,21 @@ export function handleListProjectIntegrations(lmthingRoot: string | undefined): 
       }
       const lm = pkg.lmthing;
       if (!lm || lm.kind !== 'integration') continue;
+      // Bundled setup instructions (trusted, shipped in the space) — rendered as
+      // markdown on the settings page. Missing/unreadable README is not fatal.
+      let readme = '';
+      try {
+        readme = await readFile(join(spacesDir, entry.name, 'README.md'), 'utf8');
+      } catch {
+        readme = '';
+      }
       integrations.push({
         spaceId: entry.name,
         title: typeof lm.title === 'string' && lm.title.length > 0 ? lm.title : entry.name,
         icon: typeof lm.icon === 'string' ? lm.icon : null,
         tags: Array.isArray(lm.tags) ? lm.tags.filter((t): t is string => typeof t === 'string') : [],
         settings: lm.settings ?? null,
+        readme,
       });
     }
     integrations.sort((a, b) => a.spaceId.localeCompare(b.spaceId));
