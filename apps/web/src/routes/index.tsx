@@ -51,10 +51,16 @@ function RootRedirect() {
     if (isLoading) return
     // Resume a pending install captured before login (store → install → sign in).
     if (isAuthenticated && typeof window !== 'undefined') {
+      const pendingSpace = sessionStorage.getItem('lmthing_pending_install_space')
+      if (pendingSpace) {
+        sessionStorage.removeItem('lmthing_pending_install_space')
+        navigate({ to: '/install', search: { spaceId: pendingSpace, appId: '' }, replace: true })
+        return
+      }
       const pending = sessionStorage.getItem('lmthing_pending_install')
       if (pending) {
         sessionStorage.removeItem('lmthing_pending_install')
-        navigate({ to: '/install', search: { appId: pending }, replace: true })
+        navigate({ to: '/install', search: { appId: pending, spaceId: '' }, replace: true })
         return
       }
     }

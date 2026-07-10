@@ -230,48 +230,49 @@ function AppInstall({ appId }: { appId: string }) {
 type ProjectMeta = { id: string; name?: string }
 
 function SpaceInstall({ spaceId }: { spaceId: string }) {
-  const { getAccessToken } = useAuth()
+  // `authFetch` attaches a FRESH token (refreshing if needed) and retries a waking
+  // pod — a plain `getAccessToken()` can hand over a stale token → 401.
+  const { authFetch, isAuthenticated } = useAuth()
   const [projects, setProjects] = useState<ProjectMeta[] | null>(null)
   const [projectId, setProjectId] = useState('user')
   const [state, setState] = useState<State | { status: 'choose' }>({ status: 'choose' })
 
   // Load the user's projects for the target picker (default `user`, the project
-  // THING chats under so an installed integration is reachable by THING).
+  // THING chats under so an installed integration is reachable by THING). `user`
+  // always exists as the scaffolded default, so fall back to it if the list can't
+  // be read — the picker must never be empty.
   useEffect(() => {
+    if (!isAuthenticated) return
     let cancelled = false
     void (async () => {
       try {
-        const token = await getAccessToken()
-        const res = await fetch(`${COMPUTER_BASE_URL}/api/projects`, {
-          headers: token ? { authorization: `Bearer ${token}` } : {},
-        })
+        const res = await authFetch(`${COMPUTER_BASE_URL}/api/projects`)
         const body = (await res.json().catch(() => null)) as { projects?: ProjectMeta[] } | ProjectMeta[] | null
         const list = Array.isArray(body) ? body : (body?.projects ?? [])
-        if (cancelled) return
         const installable = list.filter((p) => p.id !== 'system')
-        setProjects(installable)
-        if (installable.some((p) => p.id === 'user')) setProjectId('user')
-        else if (installable[0]) setProjectId(installable[0].id)
+        if (cancelled) return
+        const usable = installable.length > 0 ? installable : [{ id: 'user' }]
+        setProjects(usable)
+        setProjectId(usable.some((p) => p.id === 'user') ? 'user' : usable[0]!.id)
       } catch {
-        if (!cancelled) setProjects([])
+        if (!cancelled) {
+          setProjects([{ id: 'user' }])
+          setProjectId('user')
+        }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [getAccessToken])
+  }, [authFetch, isAuthenticated])
 
   const runInstall = useCallback(
     async (force = false) => {
       setState({ status: 'installing' })
       try {
-        const token = await getAccessToken()
-        const res = await fetch(`${COMPUTER_BASE_URL}/api/store/spaces/install`, {
+        const res = await authFetch(`${COMPUTER_BASE_URL}/api/store/spaces/install`, {
           method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            ...(token ? { authorization: `Bearer ${token}` } : {}),
-          },
+          headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ spaceId, projectId, force }),
         })
         const body = (await res.json().catch(() => null)) as (InstalledInfo & { ok?: boolean }) | null
@@ -280,7 +281,7 @@ function SpaceInstall({ spaceId }: { spaceId: string }) {
         setState({ status: 'error', message: err instanceof Error ? err.message : String(err) })
       }
     },
-    [spaceId, projectId, getAccessToken],
+    [spaceId, projectId, authFetch],
   )
 
   function configure(pid: string) {

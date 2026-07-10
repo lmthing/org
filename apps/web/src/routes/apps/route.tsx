@@ -35,10 +35,16 @@ function AppLayout() {
   // (for non-prefixed hosts) never runs here. Re-check once auth settles and forward.
   useEffect(() => {
     if (!isAuthenticated || typeof window === 'undefined') return
+    const pendingSpace = sessionStorage.getItem('lmthing_pending_install_space')
+    if (pendingSpace) {
+      sessionStorage.removeItem('lmthing_pending_install_space')
+      void navigate({ to: '/install', search: { spaceId: pendingSpace, appId: '' }, replace: true })
+      return
+    }
     const pending = sessionStorage.getItem('lmthing_pending_install')
     if (!pending) return
     sessionStorage.removeItem('lmthing_pending_install')
-    void navigate({ to: '/install', search: { appId: pending }, replace: true })
+    void navigate({ to: '/install', search: { appId: pending, spaceId: '' }, replace: true })
   }, [isAuthenticated, navigate])
 
   return (
