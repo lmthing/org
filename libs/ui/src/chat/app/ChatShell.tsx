@@ -14,7 +14,9 @@ export function ChatShell(): React.ReactElement {
   useEffect(() => {
     let unsub: (() => void) | undefined;
     void (async () => {
-      // Pre-load projects and pick a default.
+      // Pre-load projects and pick a default. PodEnsureGate has already
+      // confirmed the pod's edge is serving before mounting us, so a single
+      // fetch is safe here (no cold-wake race to retry around).
       try {
         const res = await fetch('/api/projects', { headers: authHeaders() });
         if (res.ok) {

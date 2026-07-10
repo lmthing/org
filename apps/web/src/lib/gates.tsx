@@ -112,6 +112,51 @@ async function pollUntilReady(
   throw new Error('Timed out waiting for your workspace to start')
 }
 
+/**
+ * Wait until the pod's OWN edge actually serves before mounting children.
+ *
+ * The gateway reports `ready` on `readyReplicas>0`, which flips the instant the
+ * pod's startupProbe (`/api/sessions`) first passes — but the pod has no
+ * readinessProbe, and Envoy still needs a beat to register the freshly-woken
+ * endpoint. In that window a same-origin pod request (`/api/*` → Envoy → pod)
+ * 503s / connection-refuses. Mounting a surface then means its first data fetch
+ * (chat's `/api/projects`, studio's project list, computer's session) races the
+ * not-yet-wired data path and silently renders empty.
+ *
+ * So after the gateway says ready, probe the pod's edge directly (relative URL
+ * → this domain's `*-api-proxy` → the user's pod) until it responds with
+ * anything other than Envoy's no-endpoint 503/504. This is shared by all three
+ * surfaces via PodEnsureGate, so the fix lands everywhere at once. Throws on
+ * timeout so the gate shows its Retry state rather than an empty shell.
+ */
+export async function waitForPodEdge(
+  getAccessToken: () => Promise<string>,
+  { timeoutMs = 25_000, intervalMs = 400 }: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  let lastStatus = 0
+  while (Date.now() < deadline) {
+    try {
+      const token = await getAccessToken()
+      // Same-origin (NOT CLOUD_BASE_URL): hits the pod through this domain's
+      // Envoy api-proxy, exactly like the surface's own fetches will.
+      const res = await fetch('/api/sessions', {
+        headers: { authorization: `Bearer ${token}` },
+      })
+      lastStatus = res.status
+      // Envoy's own no-endpoint reply is a locally-generated 503/504; anything
+      // else (200, 401, 404, …) means the endpoint is wired and the pod serves.
+      if (res.status !== 503 && res.status !== 504) return
+    } catch {
+      /* connection refused during endpoint propagation — keep polling */
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  throw new Error(
+    `Your workspace started but isn't serving yet (last status ${lastStatus || 'no response'})`,
+  )
+}
+
 /** Poll pod status until it's ready on `expectedTag`, or give up after ~2 minutes. */
 async function pollUntilUpgraded(
   cloudBaseUrl: string,
@@ -217,6 +262,13 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
           if (cancelled) return
         }
 
+        // The gateway's `ready` precedes the pod's Envoy edge actually serving
+        // (no readinessProbe; EDS propagation lag). Confirm the same-origin pod
+        // edge responds before mounting any surface, so children never race a
+        // not-yet-wired data path and render empty. Cheap no-op for a warm pod.
+        await waitForPodEdge(getAccessToken)
+        if (cancelled) return
+
         const dismissed = sessionStorage.getItem(UPGRADE_DISMISSED_KEY)
         if (latest && currentTag && latest !== currentTag && latest !== dismissed) {
           setLatestTag(latest)
@@ -282,6 +334,9 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     try {
       await upgradePod(CLOUD_BASE_URL, getAccessToken)
       await pollUntilUpgraded(CLOUD_BASE_URL, getAccessToken, tag, reportProgress)
+      // Same edge race as cold wake: the restarted pod reports ready before
+      // Envoy re-wires it. Wait for the pod edge before returning to the surface.
+      await waitForPodEdge(getAccessToken)
       currentTagRef.current = tag
       setStatus('ready')
     } catch (err) {
