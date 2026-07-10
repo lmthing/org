@@ -265,6 +265,47 @@ describe('turn loop — nested yield binding (yield inside an awaited async wrap
     expect(readGlobal(vm, 'out')).toEqual({ processed: 'RAW_INNER_VALUE', marker: 'real' });
     vm.dispose();
   });
+
+  it('services SEQUENTIAL internal yields to completion (webFetch plain→render), not just the first', async () => {
+    const vm = await createVM();
+    // A yielding global `y(tag)`, same shape as fetch — each call is one host yield.
+    const y = (tag: string) =>
+      new Promise((resolve, reject) => {
+        vm.pendingYields.push({ kind: 'y', args: [tag], deferred: { resolve, reject }, vmPromiseHandle: undefined } as unknown as YieldRequest);
+      });
+    injectGlobal(vm.ctx, 'y', y as (...a: unknown[]) => unknown);
+
+    // A wrapper that awaits the yielding global TWICE in sequence (mirrors webFetch's
+    // auto-dynamic path: a plain fetch, then — based on its result — a second fetch to
+    // the render service). The second await only becomes a pending yield after the
+    // first resumes, so the turn loop must loop-service both before binding.
+    const def = vm.evalScript(
+      'globalThis.wrapper = async function wrapper() { const first = await y("a"); const second = await y("b"); return { first, second, marker: "real" }; };',
+    );
+    expect(def.ok).toBe(true);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    let call = 0;
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: 'declare function wrapper(): Promise<any>; declare function y(tag: string): Promise<any>;',
+      renderHost: silentHost,
+      streamFn: scriptedStream('const out = await wrapper();'),
+      // Distinct value per sequential yield — proves BOTH ran (not just the first).
+      processYield: async () => `R${call++}`,
+      maxRetries: 2,
+    });
+
+    expect(result).toBe('done');
+    // Before the sequential-yield fix, `out` bound the raw first Response ("R0");
+    // now it is the wrapper's real return after BOTH internal awaits completed.
+    expect(readGlobal(vm, 'out')).toEqual({ first: 'R0', second: 'R1', marker: 'real' });
+    vm.dispose();
+  });
 });
 
 describe('turn loop — inspect() surfaces values to the model', () => {

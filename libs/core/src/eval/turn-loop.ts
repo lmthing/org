@@ -20,6 +20,13 @@ export type { StreamOpts, StreamSession };
 /** Known markdown fence language tags. */
 const FENCE_LANGS = ['typescript', 'javascript', 'tsx', 'jsx', 'json', 'ts', 'js'];
 
+/** Max sequential yield batches serviced for one statement (see the servicing loop in
+ *  runTurnLoop). A statement normally yields once or one concurrent batch; helpers that
+ *  await host calls back-to-back (webFetch's plain→render, webSearch's provider chain)
+ *  need a few more. Generous cap purely to bound a pathological await-in-loop; the
+ *  tool-call budget is the real limiter. */
+const MAX_SEQUENTIAL_YIELDS = 64;
+
 /** Duck-typed check for a successful text {@link ReadDocumentResult}. */
 function isReadableDocument(v: unknown): v is ReadDocumentResult & { text: string } {
   return (
@@ -589,42 +596,60 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     }
 
     if (pendingYield && yieldingStatement) {
-      const yields = vm.pendingYields.splice(0);
-      // Budget: count each resolved yield as a tool call. Throws (and the caller
-      // disposes the VM) if over the tool-call or wall-clock cap.
-      deps.budget?.tickToolCalls(yields.length);
-
       // Binding pattern of the yielding statement (kind + names).
       const pattern = extractBindingPattern(yieldingStatement);
 
-      // Resolve every pending yield. A single statement can produce several yields
-      // when they run concurrently — `await Promise.all([fork(...), fork(...)])`.
-      // The QuickJS module continuation after `await` does NOT re-run in this sync
-      // eval model, so the host must bind the values itself (see below).
-      const resolvedValues: unknown[] = new Array(yields.length);
+      // Resolve the statement's yields to completion. Most statements yield once, or a
+      // single CONCURRENT batch — `await Promise.all([fork(...), fork(...)])`. But a
+      // model-awaited helper can also await host calls SEQUENTIALLY: e.g. `webFetch`
+      // does a plain fetch and THEN, if the page is JS-rendered, a second fetch to the
+      // render service; `webSearch`'s `auto` chain likewise falls Tavily→Bing→DuckDuckGo.
+      // Each later await only surfaces as a pending yield AFTER `drivePendingJobs()`
+      // resumes the prior one, so we loop until the VM has no pending yields left (the
+      // statement has fully returned). Servicing only the first batch would bind an
+      // incomplete value — the raw first Response — instead of the helper's real return.
+      // The QuickJS module continuation after `await` does NOT re-run in this sync eval
+      // model, so the host binds the final value itself (see bindYieldResults, below).
+      // Bounded by MAX_SEQUENTIAL_YIELDS (a runaway is also bounded by the tool-call budget).
+      const yields: YieldRequest[] = [];
+      const resolvedValues: unknown[] = [];
       const yieldErrors: Array<{ kind: string; message: string }> = [];
-      await Promise.all(yields.map(async (yieldReq, i) => {
-        const yieldId = `${nodeId ?? ctx}_y${++yieldCounter}`;
-        tracer.write({ ts: Date.now(), type: 'yield', context: ctx, ...(nodeId ? { nodeId } : {}), kind: yieldReq.kind, args: yieldReq.args, yieldId });
-        try {
-          const resolved = await processYield(yieldReq);
-          tracer.write({ ts: Date.now(), type: 'yield_resolved', context: ctx, ...(nodeId ? { nodeId } : {}), kind: yieldReq.kind, value: resolved, yieldId });
-          yieldReq.deferred.resolve(resolved);
-          resolvedValues[i] = resolved;
-        } catch (err) {
-          // A budget breach inside a yield (e.g. a fork rejected by the fork-depth
-          // cap, or an over-budget fork) is a HARD stop, not a recoverable
-          // tool error. Propagate it so it surfaces exactly like the episode and
-          // tool-call caps (clean non-zero exit + VM disposal by the caller) —
-          // instead of being swallowed into an undefined binding that lets the run
-          // continue past its ceiling.
-          if (err instanceof BudgetExceededError) throw err;
-          yieldReq.deferred.reject(err);
-          resolvedValues[i] = undefined;
-          yieldErrors.push({ kind: yieldReq.kind, message: err instanceof Error ? err.message : String(err) });
-        }
-      }));
-      vm.drivePendingJobs();
+      let batch = vm.pendingYields.splice(0);
+      for (let guard = 0; batch.length > 0 && guard < MAX_SEQUENTIAL_YIELDS; guard++) {
+        const base = resolvedValues.length;
+        for (const y of batch) { yields.push(y); resolvedValues.push(undefined); }
+        // Budget: count each resolved yield as a tool call. Throws (and the caller
+        // disposes the VM) if over the tool-call or wall-clock cap.
+        deps.budget?.tickToolCalls(batch.length);
+        await Promise.all(batch.map(async (yieldReq, i) => {
+          const yieldId = `${nodeId ?? ctx}_y${++yieldCounter}`;
+          tracer.write({ ts: Date.now(), type: 'yield', context: ctx, ...(nodeId ? { nodeId } : {}), kind: yieldReq.kind, args: yieldReq.args, yieldId });
+          try {
+            const resolved = await processYield(yieldReq);
+            tracer.write({ ts: Date.now(), type: 'yield_resolved', context: ctx, ...(nodeId ? { nodeId } : {}), kind: yieldReq.kind, value: resolved, yieldId });
+            yieldReq.deferred.resolve(resolved);
+            resolvedValues[base + i] = resolved;
+          } catch (err) {
+            // A budget breach inside a yield (e.g. a fork rejected by the fork-depth
+            // cap, or an over-budget fork) is a HARD stop, not a recoverable
+            // tool error. Propagate it so it surfaces exactly like the episode and
+            // tool-call caps (clean non-zero exit + VM disposal by the caller) —
+            // instead of being swallowed into an undefined binding that lets the run
+            // continue past its ceiling.
+            if (err instanceof BudgetExceededError) throw err;
+            yieldReq.deferred.reject(err);
+            resolvedValues[base + i] = undefined;
+            yieldErrors.push({ kind: yieldReq.kind, message: err instanceof Error ? err.message : String(err) });
+          }
+        }));
+        vm.drivePendingJobs();
+        // A yield that errored can't cleanly resume the VM continuation, so stop
+        // servicing further sequential yields and let the error path below surface it
+        // (and retry the turn). `fetch` never rejects — it resolves `{ok:false}` — so
+        // webFetch/webSearch's sequential fetches always run to completion here.
+        if (yieldErrors.length > 0) break;
+        batch = vm.pendingYields.splice(0);
+      }
 
       // A yield that threw (e.g. delegate() to a hallucinated space key, a function
       // that errored) used to bind `undefined` silently — the model never learned why
