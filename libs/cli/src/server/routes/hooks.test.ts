@@ -207,6 +207,29 @@ describe('boot catch-up', () => {
     expect(st.lastFiredAt['refresh-feed']).toBe(now);
   });
 
+  it('fires every overdue cron hook (yield between runs drops none)', async () => {
+    // Two cron hooks, both overdue at `now` — the yield between runs must not skip any.
+    await writeFile(
+      join(root, PROJECT, 'hooks', 'refresh-feed.ts'),
+      `export default { type: 'cron', every: '1h', trigger: 'feed/curator#refresh' }`,
+    );
+    await writeFile(
+      join(root, PROJECT, 'hooks', 'digest.ts'),
+      `export default { type: 'cron', every: '1h', trigger: 'feed/curator#digest' }`,
+    );
+    const runHookFn = vi.fn(async (_projectId: string, _slug: string) => {});
+    const now = 1_000_000_000_000;
+
+    await runDueCronHooks(root, [PROJECT], runHookFn, now);
+
+    expect(runHookFn).toHaveBeenCalledTimes(2);
+    const slugs = runHookFn.mock.calls.map((c) => c[1]).sort();
+    expect(slugs).toEqual(['digest', 'refresh-feed']);
+    const st = await readState();
+    expect(st.lastFiredAt['refresh-feed']).toBe(now);
+    expect(st.lastFiredAt['digest']).toBe(now);
+  });
+
   it('does NOT double-run on an immediate second catch-up (not yet due)', async () => {
     const runHookFn = vi.fn(async () => {});
     const now = 1_000_000_000_000;

@@ -387,11 +387,26 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   let hookTick: NodeJS.Timeout | undefined;
   let selfIdleTimer: NodeJS.Timeout | undefined;
   if (effectiveLmthingRoot) {
+    // Run all boot-time app/cron work OFF the readiness path. The HTTP server is
+    // already listening (above), so the K8s startup probe (`GET /api/sessions`)
+    // must NOT be blocked by the synchronous better-sqlite3 opens/reconciles in the
+    // db-warm loop or by an overdue cron hook that runs a full agent turn. This runs
+    // in the background (not awaited) and yields the event loop between units so the
+    // probe is serviced promptly; the pod is Ready in ~1-2s regardless of how many
+    // apps/overdue crons exist. `hookTick`/`selfIdleTimer` are assigned into the
+    // outer `let`s so `close()` still clears them (a shutdown racing boot just sees
+    // `undefined` — harmless).
+    void (async () => {
     try {
       const root = effectiveLmthingRoot;
       const projects = (await listProjects(root)).map((p) => p.id).filter((id) => id !== 'system');
-      // Warm each project's db so its database-hook runtime is wired (getProjectDb side-effect).
-      for (const id of projects) { try { await manager.getProjectDb(root, id); } catch { /* skip */ } }
+      // Warm each project's db so its database-hook runtime is wired (getProjectDb
+      // side-effect). Yield after each so the readiness probe runs between the
+      // synchronous db open + schema reconcile of one project and the next.
+      for (const id of projects) {
+        try { await manager.getProjectDb(root, id); } catch { /* skip */ }
+        await new Promise<void>((r) => setImmediate(r));
+      }
       const runHookFn = async (projectId: string, slug: string): Promise<unknown> => {
         const r = await fetch(`${httpBase}/api/projects/${projectId}/hooks/${slug}/run`, { method: 'POST' });
         return r.json().catch(() => ({}));
@@ -471,6 +486,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     } catch (err) {
       console.warn('[hooks] boot catch-up/schedule failed:', err instanceof Error ? err.message : err);
     }
+    })();
   }
 
   // In-pod memory watchdog (P3): sheds idle sessions before the cgroup OOMKills.
