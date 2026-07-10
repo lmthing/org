@@ -9,8 +9,8 @@
  * may also define a synchronous `preflight` for setup handshakes (Slack's
  * `url_verification`) that must be answered without waking an agent.
  *
- * Shaped like `cloud/gateway/src/lib/connections-registry.ts`'s `PROVIDERS`
- * map — adding a new provider is pure config/behavior, no dispatcher changes.
+ * A per-provider registry (like the pod's `connections.ts` `PROVIDERS` map) —
+ * adding a new provider is pure config/behavior, no dispatcher changes.
  * `getAdapter` falls back to `generic` for an unknown/unconfigured `provider`
  * string so a bad manifest entry degrades gracefully instead of 500ing.
  *
@@ -136,15 +136,30 @@ const slack: WebhookAdapter = {
     const body = tryParseJson(rawBody);
     const event = body?.['event'] as Record<string, unknown> | undefined;
     const text = event && typeof event['text'] === 'string' ? event['text'] : undefined;
+
+    // Machine-readable reply target so a channel agent can post its answer back
+    // to the exact channel/thread via callConnection('slack', ...). `thread_ts`
+    // falls back to the message `ts` (replying starts a thread on the message);
+    // absent for events with no channel (nothing to reply to). Emitted for both
+    // the text and non-text branches so any Slack-triggered agent can rely on it.
+    const channel = typeof event?.['channel'] === 'string' ? (event['channel'] as string) : undefined;
+    const threadTs =
+      typeof event?.['thread_ts'] === 'string'
+        ? (event['thread_ts'] as string)
+        : typeof event?.['ts'] === 'string'
+          ? (event['ts'] as string)
+          : undefined;
+    const user = typeof event?.['user'] === 'string' ? (event['user'] as string) : undefined;
+    const team = typeof body?.['team_id'] === 'string' ? (body['team_id'] as string) : undefined;
+    const replyTarget = channel
+      ? `\n\n[slack-reply-target] ${JSON.stringify({ channel, thread_ts: threadTs, user, team })}`
+      : '';
+
     if (text === undefined) {
-      return `Inbound Slack webhook "${path}" received. Payload (JSON):\n\n${rawBody}\n\nProcess this event.`;
+      return `Inbound Slack webhook "${path}" received. Payload (JSON):\n\n${rawBody}${replyTarget}\n\nProcess this event.`;
     }
-    const user = typeof event?.['user'] === 'string' ? event['user'] : undefined;
-    const channel = typeof event?.['channel'] === 'string' ? event['channel'] : undefined;
     const context = [user ? `user ${user}` : null, channel ? `channel ${channel}` : null].filter(Boolean).join(', ');
-    return context
-      ? `Slack message (${context}):\n\n${text}`
-      : `Slack message:\n\n${text}`;
+    return `${context ? `Slack message (${context}):` : 'Slack message:'}\n\n${text}${replyTarget}`;
   },
 };
 

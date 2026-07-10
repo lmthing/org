@@ -163,6 +163,27 @@ describe('slack adapter', () => {
     expect(msg).toContain('C1');
   });
 
+  it('renderMessage emits a parseable [slack-reply-target] with channel + thread_ts', () => {
+    const body = JSON.stringify({
+      team_id: 'T9',
+      event: { text: 'hi', user: 'U1', channel: 'C1', ts: '1699.1', thread_ts: '1699.0' },
+    });
+    const msg = adapter.renderMessage('slack-events', body, {});
+    const line = msg.split('\n').find((l) => l.startsWith('[slack-reply-target]'))!;
+    expect(line).toBeDefined();
+    const target = JSON.parse(line.replace('[slack-reply-target] ', ''));
+    expect(target).toEqual({ channel: 'C1', thread_ts: '1699.0', user: 'U1', team: 'T9' });
+  });
+
+  it('renderMessage reply-target falls back thread_ts→ts when not already threaded', () => {
+    const body = JSON.stringify({ event: { text: 'hi', channel: 'C1', ts: '1699.5' } });
+    const line = adapter
+      .renderMessage('slack-events', body, {})
+      .split('\n')
+      .find((l) => l.startsWith('[slack-reply-target]'))!;
+    expect(JSON.parse(line.replace('[slack-reply-target] ', '')).thread_ts).toBe('1699.5');
+  });
+
   it('renderMessage falls back to the raw body when the shape is unexpected', () => {
     const msg = adapter.renderMessage('slack-events', '{"weird":true}', {});
     expect(msg).toContain('{"weird":true}');

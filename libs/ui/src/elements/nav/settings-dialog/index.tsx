@@ -16,7 +16,7 @@ import { Models } from '../../settings/models'
 import { EnvVars } from '../../settings/env-vars'
 import { Billing } from '../../settings/billing'
 import { WorkspaceBackup } from '../../settings/backup'
-import { Connections } from '../../settings/connections'
+import { Integrations } from '../../settings/integrations'
 import { Triggers } from '../../settings/triggers'
 
 interface TabDef {
@@ -60,12 +60,12 @@ const TABS: TabDef[] = [
     render: () => <Billing />,
   },
   {
-    id: 'connections',
-    label: 'Connections',
+    id: 'integrations',
+    label: 'Integrations',
     icon: Plug,
-    title: 'Connections',
-    description: 'Connect external services once via OAuth — usable by any agent on your pod.',
-    render: () => <Connections />,
+    title: 'Integrations',
+    description: 'Paste your own provider tokens — stored on your pod and used by any agent.',
+    render: () => <Integrations />,
   },
   {
     id: 'triggers',
@@ -94,7 +94,7 @@ export interface SettingsDialogProps {
 /**
  * Shared account + workspace settings dialog, opened from the chat and studio
  * sidebar footers. Side-tabbed: Account, Models, Environment, Billing,
- * Connections, Triggers and Workspace Backup. Depends only on `@lmthing/auth`,
+ * Integrations, Triggers and Workspace Backup. Depends only on `@lmthing/auth`,
  * so it works identically on every surface.
  */
 export function SettingsDialog({ open, onOpenChange, initialTab = 'account' }: SettingsDialogProps) {

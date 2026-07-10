@@ -249,10 +249,10 @@ export class SessionManager {
   private buildSessionFn: BuildSession;
   /** Pod-side resolver for the agent `callConnection` global. Built once and
    *  attached to EVERY session (project-independent — connections are per-user,
-   *  not per-project). `undefined` when the pod has no connections gateway
-   *  configured (no LMTHING_CONNECTIONS_JWT) — the yield router then throws a
-   *  clear "no connections gateway configured" error. Lazy so it reflects env
-   *  set after construction. */
+   *  not per-project). Bring-your-own-token: the resolver reads each provider's
+   *  token from the pod env (Settings → Integrations) and calls the provider
+   *  directly; it throws a clear per-provider "not configured" error when a
+   *  token env var is unset. Lazy so it reflects env set after construction. */
   private connectionResolver?: ConnectionResolver;
   private connectionResolverResolved = false;
   /** Pod-side registry of loaded OpenClaw-compat plugin tools (see
@@ -311,9 +311,10 @@ export class SessionManager {
   }
 
   /** Fold the project-independent `callConnection` resolver into a session's app
-   *  globals so EVERY session (project, legacy, headless) can use connections.
-   *  When no resolver is configured, the field is left absent so the router emits
-   *  the clear "no connections gateway configured" error. */
+   *  globals so EVERY session (project, legacy, headless) can use connections
+   *  (bring-your-own-token — the resolver reads each provider's token from the
+   *  pod env). When no resolver is configured, the field is left absent so the
+   *  router emits the clear "no connection resolver configured" error. */
   private withConnections(appGlobals?: AppGlobalImpls): AppGlobalImpls | undefined {
     const resolver = this.getConnectionResolver();
     if (!resolver) return appGlobals;

@@ -153,12 +153,13 @@ export async function routeCommonYield(
       return { handled: true, value };
     }
     case 'callConnection': {
-      // Forward an authenticated request to a connected external service via the
-      // gateway egress proxy. A missing resolver means this context has no
-      // connections gateway (e.g. local dev without LMTHING_CONNECTIONS_JWT) —
+      // Forward an authenticated request to an external service; the pod resolver
+      // attaches the user's own token (bring-your-own-token, Settings →
+      // Integrations) and calls the provider directly. A missing resolver means
+      // this context has no connection support wired (e.g. a bare unit test) —
       // throw an actionable, retryable error rather than binding undefined.
       if (!ctx.connectionResolver) {
-        throw new Error('callConnection is not available here: no connections gateway configured');
+        throw new Error('callConnection is not available here: no connection resolver configured');
       }
       const [provider, request] = req.args as [string, import('../db/types.js').ConnectionRequest];
       const value = await ctx.connectionResolver(provider, request);

@@ -3,147 +3,99 @@ import type { ConnectionResolver, ConnectionRequest, ConnectionResponse } from '
 /**
  * Pod-side resolver for the agent/space `callConnection(provider, req)` global.
  *
- * The gateway is the sole custodian of the long-lived OAuth REFRESH token. This
- * resolver asks the gateway (`POST /api/connections/:provider/token`, authed with
- * the scoped `LMTHING_CONNECTIONS_JWT`) for a short-lived ACCESS token + the
- * provider `apiBase`, caches it until just before expiry, and makes the REST call
- * DIRECTLY to the provider — the raw request never round-trips through the
- * gateway. On a `401` (token revoked/expired early) it forces a fresh token from
- * the gateway (which refreshes via the stored refresh token) and retries once.
+ * BRING-YOUR-OWN-TOKEN model: the user configures their OWN provider token in
+ * the pod env (Settings → Integrations) — lmthing does NOT broker OAuth or store
+ * refresh tokens. This resolver looks the token up in `process.env` by the
+ * provider's `tokenEnv`, host-pins the request to the provider `apiBase`, and
+ * makes the REST call DIRECTLY. No gateway round-trip.
  *
- * Returns `undefined` when `LMTHING_CONNECTIONS_JWT` is unset (local dev, or a
- * pod with no connections yet) — the yield router then throws a clear, retryable
- * "no connections gateway configured" error rather than binding undefined.
+ * Errors are thrown (never silently binding undefined) so the yield router
+ * surfaces them to the agent: an unknown provider, or a provider whose token env
+ * var is unset ("not configured — set <TOKEN_ENV> in Settings → Integrations").
  *
- * Uses non-blocking `fetch` with AbortSignal timeouts so a slow provider/gateway
- * can't stall the session server's event loop / trip the idle watchdog.
+ * Uses non-blocking `fetch` with an AbortSignal timeout so a slow provider can't
+ * stall the session server's event loop / trip the idle watchdog.
  */
 
-const DEFAULT_GATEWAY_URL = 'http://gateway.lmthing.svc.cluster.local:3000';
-
 const CALL_TIMEOUT_MS = 25_000;
-/** Refresh a cached access token this many ms before its nominal expiry. */
-const EXPIRY_SKEW_MS = 60_000;
 
-interface CachedToken {
-  accessToken: string;
+/** One BYO provider: where its REST API lives (`apiBase`, used to host-pin the
+ *  sandbox-supplied path) and which env var holds the user's own token. */
+interface ProviderConfig {
   apiBase: string;
-  /** Epoch-ms expiry, or null when the token doesn't expire. */
-  expiresAt: number | null;
+  tokenEnv: string;
+}
+
+/**
+ * The providers `callConnection` supports and where each reads its token from.
+ * `apiBase` mirrors the old gateway connections-registry so existing
+ * `integration-*` spaces (which build relative paths like `/chat.postMessage`)
+ * keep working unchanged.
+ */
+const PROVIDERS: Record<string, ProviderConfig> = {
+  slack: { apiBase: 'https://slack.com/api', tokenEnv: 'SLACK_BOT_TOKEN' },
+  github: { apiBase: 'https://api.github.com', tokenEnv: 'GITHUB_TOKEN' },
+  google: { apiBase: 'https://www.googleapis.com', tokenEnv: 'GOOGLE_ACCESS_TOKEN' },
+};
+
+/** Exposed for tests / the Integrations UI contract. */
+export const SUPPORTED_CONNECTION_PROVIDERS = Object.keys(PROVIDERS);
+
+async function callProvider(apiBase: string, token: string, req: ConnectionRequest): Promise<Response> {
+  const path = req.path ?? '';
+  // Host-pinning: `path` is sandbox-supplied, so it MUST be relative to the
+  // provider apiBase — reject absolute URLs / scheme / protocol-relative so an
+  // agent can't redirect the bearer token to an attacker-controlled host.
+  if (/^https?:\/\//i.test(path) || path.includes('://') || path.startsWith('//')) {
+    throw new Error('callConnection: path must be relative to the provider apiBase');
+  }
+  const base = apiBase.replace(/\/+$/, '');
+  const rel = path.startsWith('/') ? path : `/${path}`;
+  let url = `${base}${rel}`;
+  if (req.query && Object.keys(req.query).length > 0) {
+    url += (url.includes('?') ? '&' : '?') + new URLSearchParams(req.query).toString();
+  }
+
+  const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': 'lmthing-pod' };
+  if (req.headers) {
+    for (const [k, v] of Object.entries(req.headers)) {
+      const lk = k.toLowerCase();
+      if (lk === 'authorization' || lk === 'host') continue;
+      headers[k] = v;
+    }
+  }
+  headers['Authorization'] = `Bearer ${token}`;
+
+  const method = (req.method || 'GET').toUpperCase();
+  let body: string | undefined;
+  if (req.body !== undefined && method !== 'GET' && method !== 'HEAD') {
+    body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) {
+      headers['Content-Type'] = 'application/json';
+    }
+  }
+
+  return fetch(url, { method, headers, body, signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });
 }
 
 export function createConnectionResolver(): ConnectionResolver | undefined {
-  const jwt = process.env.LMTHING_CONNECTIONS_JWT;
-  if (!jwt) return undefined;
-  const gatewayUrl = process.env.LMTHING_GATEWAY_URL || DEFAULT_GATEWAY_URL;
-
-  // Per-provider access-token cache + in-flight de-dupe (so concurrent calls
-  // don't each hit the gateway / double-spend a one-time refresh token).
-  const cache = new Map<string, CachedToken>();
-  const inflight = new Map<string, Promise<CachedToken>>();
-
-  async function mintToken(provider: string, force: boolean): Promise<CachedToken> {
-    const res = await fetch(`${gatewayUrl}/api/connections/${encodeURIComponent(provider)}/token`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ refresh: force }),
-      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-    });
-    const text = await res.text().catch(() => '');
-    let parsed: unknown = text;
-    if (text) {
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = text;
-      }
-    }
-    if (!res.ok) {
-      const message =
-        parsed && typeof parsed === 'object' && 'error' in parsed
-          ? String((parsed as { error: unknown }).error)
-          : `gateway returned ${res.status}`;
-      throw new Error(`callConnection("${provider}"): ${message}`);
-    }
-    const p = parsed as { accessToken?: unknown; apiBase?: unknown; expiresAt?: unknown };
-    if (typeof p.accessToken !== 'string' || typeof p.apiBase !== 'string') {
-      throw new Error(`callConnection("${provider}"): gateway token response missing accessToken/apiBase`);
-    }
-    const tok: CachedToken = {
-      accessToken: p.accessToken,
-      apiBase: p.apiBase,
-      expiresAt: typeof p.expiresAt === 'number' ? p.expiresAt : null,
-    };
-    cache.set(provider, tok);
-    return tok;
-  }
-
-  async function getToken(provider: string, force: boolean): Promise<CachedToken> {
-    if (force) {
-      cache.delete(provider);
-    } else {
-      const cached = cache.get(provider);
-      if (cached && (cached.expiresAt === null || cached.expiresAt - EXPIRY_SKEW_MS > Date.now())) {
-        return cached;
-      }
-    }
-    const key = `${provider}:${force}`;
-    let p = inflight.get(key);
-    if (!p) {
-      p = mintToken(provider, force).finally(() => inflight.delete(key));
-      inflight.set(key, p);
-    }
-    return p;
-  }
-
-  async function callProvider(tok: CachedToken, req: ConnectionRequest): Promise<Response> {
-    const path = req.path ?? '';
-    // Host-pinning: `path` is sandbox-supplied, so it MUST be relative to the
-    // provider apiBase — reject absolute URLs / scheme / protocol-relative so an
-    // agent can't redirect the bearer token to an attacker-controlled host.
-    if (/^https?:\/\//i.test(path) || path.includes('://') || path.startsWith('//')) {
-      throw new Error('callConnection: path must be relative to the provider apiBase');
-    }
-    const base = tok.apiBase.replace(/\/+$/, '');
-    const rel = path.startsWith('/') ? path : `/${path}`;
-    let url = `${base}${rel}`;
-    if (req.query && Object.keys(req.query).length > 0) {
-      url += (url.includes('?') ? '&' : '?') + new URLSearchParams(req.query).toString();
-    }
-
-    const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': 'lmthing-pod' };
-    if (req.headers) {
-      for (const [k, v] of Object.entries(req.headers)) {
-        const lk = k.toLowerCase();
-        if (lk === 'authorization' || lk === 'host') continue;
-        headers[k] = v;
-      }
-    }
-    headers['Authorization'] = `Bearer ${tok.accessToken}`;
-
-    const method = (req.method || 'GET').toUpperCase();
-    let body: string | undefined;
-    if (req.body !== undefined && method !== 'GET' && method !== 'HEAD') {
-      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-      if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) {
-        headers['Content-Type'] = 'application/json';
-      }
-    }
-
-    return fetch(url, { method, headers, body, signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });
-  }
-
   return async (provider: string, req: ConnectionRequest): Promise<ConnectionResponse> => {
-    let tok = await getToken(provider, false);
+    const cfg = PROVIDERS[provider];
+    if (!cfg) {
+      throw new Error(
+        `callConnection("${provider}"): unknown provider (supported: ${SUPPORTED_CONNECTION_PROVIDERS.join(', ')})`,
+      );
+    }
+    const token = process.env[cfg.tokenEnv];
+    if (!token) {
+      throw new Error(
+        `callConnection("${provider}"): not configured — set ${cfg.tokenEnv} in Settings → Integrations`,
+      );
+    }
+
     let res: Response;
     try {
-      res = await callProvider(tok, req);
-      // A 401 means the access token was rejected (revoked / expired early). Ask
-      // the gateway to refresh (via the refresh token it holds) and retry once.
-      if (res.status === 401) {
-        tok = await getToken(provider, true);
-        res = await callProvider(tok, req);
-      }
+      res = await callProvider(cfg.apiBase, token, req);
     } catch (err) {
       throw new Error(`callConnection("${provider}"): request failed: ${String((err as Error)?.message ?? err)}`);
     }
