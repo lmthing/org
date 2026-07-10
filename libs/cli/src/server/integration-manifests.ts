@@ -166,16 +166,33 @@ function webhookEnvRefs(w: WebhookDescriptor): string[] {
   return refs;
 }
 
-/** Reject (skip) a descriptor that reaches for an env var the space didn't
- *  declare in its own `settings` — the guard that stops a malicious/agent-written
- *  space from naming `LMTHINGCLOUD_API_KEY`, `LMTHING_BACKUP_JWT`, another
- *  integration's token, etc. and exfiltrating/misusing it. */
-function envRefsAllowed(kind: string, spaceId: string, refs: string[], allowed: Set<string>): boolean {
-  const bad = refs.filter((r) => !allowed.has(r));
+/**
+ * The env-var NAMESPACE an integration space owns: `INTEGRATION_<SPACEID>_`.
+ * A descriptor may reference ONLY env vars under this prefix — positive
+ * containment that stops a malicious/agent-written space from reading:
+ *   - system / gateway-injected secrets (`LMTHINGCLOUD_API_KEY`, `LMTHING_*`,
+ *     `RENDER_SERVICE_TOKEN`, `GITHUB_*`) — none start with `INTEGRATION_`; and
+ *   - ANOTHER integration's token — the `<SPACEID>` segment isolates spaces.
+ *
+ * The leading `INTEGRATION_` is the real guard, and it's guaranteed because a
+ * descriptor is only honored when the space's install id is `integration-*`
+ * (returns null otherwise → no descriptors from that space). This is a stronger
+ * replacement for a reserved-name denylist: it needs no list to maintain and
+ * auto-protects any future system env var (as long as it isn't `INTEGRATION_…`).
+ */
+function namespacePrefix(spaceId: string): string | null {
+  if (!/^integration-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(spaceId)) return null;
+  return spaceId.toUpperCase().replace(/-/g, '_') + '_';
+}
+
+/** Reject (skip) a descriptor that reaches OUTSIDE its own namespace — or names
+ *  an env it didn't declare in its settings (defense-in-depth / typo catch). */
+function envRefsOwned(kind: string, spaceId: string, refs: string[], allowed: Set<string>, prefix: string): boolean {
+  const bad = refs.filter((r) => !r.startsWith(prefix) || !allowed.has(r));
   if (bad.length > 0) {
     console.warn(
-      `[integration-manifests] skipping ${kind} descriptor in space "${spaceId}": ` +
-        `references env not declared in its settings: ${bad.join(', ')}`,
+      `[integration-manifests] dropping ${kind} descriptor in "${spaceId}": ` +
+        `env refs outside its namespace (${prefix}*) or undeclared: ${bad.join(', ')}`,
     );
     return false;
   }
@@ -202,13 +219,15 @@ function scan(spacesDir: string): IntegrationDescriptors {
       continue; // no/invalid package.json
     }
     if (!block) continue;
+    const prefix = namespacePrefix(d.name);
+    if (prefix === null) continue; // descriptors are only honored in `integration-*` spaces
     const allowed = settingsKeys(block);
     const conn = parseConnection(block['connection']);
-    if (conn && envRefsAllowed('connection', d.name, connectionEnvRefs(conn), allowed)) {
+    if (conn && envRefsOwned('connection', d.name, connectionEnvRefs(conn), allowed, prefix)) {
       connections[conn.provider] = conn;
     }
     const wh = parseWebhook(block['webhook']);
-    if (wh && envRefsAllowed('webhook', d.name, webhookEnvRefs(wh), allowed)) {
+    if (wh && envRefsOwned('webhook', d.name, webhookEnvRefs(wh), allowed, prefix)) {
       webhooks[wh.provider] = wh;
     }
   }

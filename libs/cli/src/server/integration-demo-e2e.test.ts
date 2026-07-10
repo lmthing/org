@@ -126,9 +126,9 @@ function fakeRes(): { res: ServerResponse; get: () => { status: number } } {
 describe('integration-demo — full contained loop against a mock provider (keyless)', () => {
   it('verifies a signed inbound, runs the handler agent, and posts the reply outbound via callConnection', async () => {
     const root = await makeRootWithDemoSpace();
-    process.env['DEMO_BASE_URL'] = providerBase;
-    process.env['DEMO_API_TOKEN'] = DEMO_BASE_TOKEN;
-    process.env['DEMO_WEBHOOK_SECRET'] = DEMO_WEBHOOK_SECRET;
+    process.env['INTEGRATION_DEMO_BASE_URL'] = providerBase;
+    process.env['INTEGRATION_DEMO_API_TOKEN'] = DEMO_BASE_TOKEN;
+    process.env['INTEGRATION_DEMO_WEBHOOK_SECRET'] = DEMO_WEBHOOK_SECRET;
 
     // The mock model: on the handler's first turn, reply into the same chat via the
     // space's own wrapper (which calls callConnection('demo', …)); then stop. Also
@@ -198,9 +198,9 @@ describe('integration-demo — full contained loop against a mock provider (keyl
 
   it('rejects a wrongly-signed inbound (401) and never calls the provider', async () => {
     const root = await makeRootWithDemoSpace();
-    process.env['DEMO_BASE_URL'] = providerBase;
-    process.env['DEMO_API_TOKEN'] = DEMO_BASE_TOKEN;
-    process.env['DEMO_WEBHOOK_SECRET'] = DEMO_WEBHOOK_SECRET;
+    process.env['INTEGRATION_DEMO_BASE_URL'] = providerBase;
+    process.env['INTEGRATION_DEMO_API_TOKEN'] = DEMO_BASE_TOKEN;
+    process.env['INTEGRATION_DEMO_WEBHOOK_SECRET'] = DEMO_WEBHOOK_SECRET;
     received.length = 0;
 
     const manager = new SessionManager({

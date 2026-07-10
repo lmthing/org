@@ -1,6 +1,7 @@
 import type { ConnectionResolver, ConnectionRequest, ConnectionResponse } from '@lmthing/core';
 import { createHmac, randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
 import type { AuthStyle, ProviderConfig } from './providers/types.js';
 import { scanIntegrationDescriptors } from './integration-manifests.js';
 
@@ -141,6 +142,28 @@ function assertSafeBaseUrl(base: string): void {
   }
 }
 
+/** DNS-rebinding guard: resolve the hostname and reject if ANY resolved address
+ *  is internal — the static host check in {@link assertSafeBaseUrl} can't see a
+ *  PUBLIC name that resolves to a private IP. (Residual: a TOCTOU race with a
+ *  fast-rebinding TTL between this lookup and fetch's own; full closure needs
+ *  connection-time IP pinning.) IP literals are already covered statically. */
+async function assertResolvedHostSafe(hostname: string): Promise<void> {
+  if (process.env['LMTHING_ALLOW_INTERNAL_CONNECTIONS'] === '1') return;
+  const h = hostname.replace(/^\[|\]$/g, '');
+  if (isIP(h) !== 0) return; // IP literal — already checked in assertSafeBaseUrl
+  let addrs: Array<{ address: string }>;
+  try {
+    addrs = await lookup(h, { all: true });
+  } catch {
+    return; // DNS failure — let fetch surface the network error
+  }
+  for (const a of addrs) {
+    if (isPrivateIp(a.address)) {
+      throw new BlockedHostError(`provider host "${hostname}" resolves to internal address ${a.address}`);
+    }
+  }
+}
+
 /** Redact a secret's literal value from an error string before surfacing it to
  *  the agent/logs — token-in-path providers (e.g. Telegram `…/bot<token>/…`) can
  *  otherwise leak the token via a fetch error message that echoes the URL. */
@@ -254,6 +277,7 @@ async function callProvider(cfg: ProviderConfig, token: string, req: ConnectionR
     url += (url.includes('?') ? '&' : '?') + new URLSearchParams(query).toString();
   }
 
+  await assertResolvedHostSafe(new URL(base).hostname);
   return fetch(url, { method, headers, body, signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });
 }
 

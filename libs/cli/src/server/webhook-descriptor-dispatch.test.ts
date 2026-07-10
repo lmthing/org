@@ -48,13 +48,13 @@ async function makeProjectWithFakeProvider(): Promise<string> {
         // settings must declare every env the descriptor references (security allowlist).
         settings: {
           type: 'object',
-          properties: { FAKE9_SECRET: { type: 'string' }, FAKE9_VERIFY: { type: 'string' } },
+          properties: { INTEGRATION_FAKE_SECRET: { type: 'string' }, INTEGRATION_FAKE_VERIFY: { type: 'string' } },
         },
         webhook: {
           provider: 'fake9',
-          secretEnv: 'FAKE9_SECRET',
+          secretEnv: 'INTEGRATION_FAKE_SECRET',
           verify: { type: 'header-equals', header: 'x-fake-token' },
-          challenge: { type: 'hub-challenge', verifyTokenEnv: 'FAKE9_VERIFY' },
+          challenge: { type: 'hub-challenge', verifyTokenEnv: 'INTEGRATION_FAKE_VERIFY' },
         },
       },
     }),
@@ -113,7 +113,7 @@ const manager = (sink: Array<Record<string, unknown>>): InboundManager => ({
 describe('containment: a descriptor-only provider works end-to-end (zero pod edits)', () => {
   it('verifies a correctly-signed inbound and dispatches the raw payload to the handler', async () => {
     const root = await makeProjectWithFakeProvider();
-    process.env['FAKE9_SECRET'] = 'sh4red';
+    process.env['INTEGRATION_FAKE_SECRET'] = 'sh4red';
 
     const calls: Array<Record<string, unknown>> = [];
     const handler = createInboundHandler(manager(calls), root);
@@ -136,7 +136,7 @@ describe('containment: a descriptor-only provider works end-to-end (zero pod edi
 
   it('rejects a wrong signature (401) and never runs an agent', async () => {
     const root = await makeProjectWithFakeProvider();
-    process.env['FAKE9_SECRET'] = 'sh4red';
+    process.env['INTEGRATION_FAKE_SECRET'] = 'sh4red';
 
     const calls: Array<Record<string, unknown>> = [];
     const handler = createInboundHandler(manager(calls), root);
@@ -149,7 +149,7 @@ describe('containment: a descriptor-only provider works end-to-end (zero pod edi
 
   it('answers a GET hub-challenge with the echoed challenge (no agent run)', async () => {
     const root = await makeProjectWithFakeProvider();
-    process.env['FAKE9_VERIFY'] = 'verify-me';
+    process.env['INTEGRATION_FAKE_VERIFY'] = 'verify-me';
 
     const calls: Array<Record<string, unknown>> = [];
     const handler = createInboundHandler(manager(calls), root);
@@ -167,7 +167,7 @@ describe('containment: a descriptor-only provider works end-to-end (zero pod edi
 
   it('rejects a GET challenge with a wrong verify token (403)', async () => {
     const root = await makeProjectWithFakeProvider();
-    process.env['FAKE9_VERIFY'] = 'verify-me';
+    process.env['INTEGRATION_FAKE_VERIFY'] = 'verify-me';
 
     const calls: Array<Record<string, unknown>> = [];
     const handler = createInboundHandler(manager(calls), root);
