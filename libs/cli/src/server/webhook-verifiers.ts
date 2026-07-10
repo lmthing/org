@@ -345,11 +345,18 @@ function descriptorRender(provider: string, path: string, rawBody: string): stri
   );
 }
 
-/** Build a {@link WebhookAdapter} from a space's declarative descriptor. */
+/** Build a {@link WebhookAdapter} from a space's declarative descriptor.
+ *
+ *  An unauthenticated (`verify:{type:'none'}`) descriptor is honored ONLY when it
+ *  explicitly sets `allowUnauthenticated: true`; otherwise it fails CLOSED
+ *  (rejects every request) so a space can't accidentally/sneakily expose an
+ *  unsigned webhook that wakes the pod + runs an agent for any anonymous caller. */
 export function buildAdapterFromDescriptor(desc: WebhookDescriptor): WebhookAdapter {
+  const unauthenticated = desc.verify.type === 'none';
+  const permitted = !unauthenticated || desc.allowUnauthenticated === true;
   return {
-    requiresSecret: desc.verify.type !== 'none',
-    verify: (rawBody, headers, secret) => verifyFromSpec(desc.verify, rawBody, headers, secret),
+    requiresSecret: !unauthenticated,
+    verify: (rawBody, headers, secret) => (permitted ? verifyFromSpec(desc.verify, rawBody, headers, secret) : false),
     extractThread: (rawBody, headers) => extractThreadFromSpec(desc.thread, rawBody, headers),
     renderMessage: (path, rawBody) => descriptorRender(desc.provider, path, rawBody),
     preflight: desc.preflight ? (rawBody) => preflightFromSpec(desc.preflight!, rawBody) : undefined,

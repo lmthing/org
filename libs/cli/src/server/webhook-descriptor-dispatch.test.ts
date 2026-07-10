@@ -45,6 +45,11 @@ async function makeProjectWithFakeProvider(): Promise<string> {
       lmthing: {
         kind: 'integration',
         title: 'Fake9',
+        // settings must declare every env the descriptor references (security allowlist).
+        settings: {
+          type: 'object',
+          properties: { FAKE9_SECRET: { type: 'string' }, FAKE9_VERIFY: { type: 'string' } },
+        },
         webhook: {
           provider: 'fake9',
           secretEnv: 'FAKE9_SECRET',

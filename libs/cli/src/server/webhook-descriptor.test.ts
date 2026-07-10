@@ -149,10 +149,14 @@ describe('verify: twilio (base64 HMAC-SHA1 over URL + sorted params)', () => {
   });
 });
 
-describe('verify: none', () => {
-  it('always passes and does not require a secret', () => {
+describe('verify: none (fail-closed unless opted in)', () => {
+  it('REJECTS every request when allowUnauthenticated is not set', () => {
     const a = adapterFor({ type: 'none' });
     expect(a.requiresSecret).toBe(false);
+    expect(a.verify('anything', {}, undefined)).toBe(false); // fail-closed
+  });
+  it('passes only with an explicit allowUnauthenticated opt-in', () => {
+    const a = adapterFor({ type: 'none' }, { allowUnauthenticated: true });
     expect(a.verify('anything', {}, undefined)).toBe(true);
   });
 });

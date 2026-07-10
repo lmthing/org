@@ -1,5 +1,6 @@
 import type { ConnectionResolver, ConnectionRequest, ConnectionResponse } from '@lmthing/core';
 import { createHmac, randomBytes } from 'node:crypto';
+import { isIP } from 'node:net';
 import type { AuthStyle, ProviderConfig } from './providers/types.js';
 import { scanIntegrationDescriptors } from './integration-manifests.js';
 
@@ -78,6 +79,76 @@ function requireEnv(name: string): string {
   return v;
 }
 
+/** Thrown when a resolved provider base URL points at an internal/loopback host
+ *  — an SSRF guard so a space's `apiBase` can't turn the pod into a proxy for
+ *  cloud-metadata / cluster-internal services (litellm, gateway, 169.254.169.254…). */
+class BlockedHostError extends Error {}
+
+/** Is `ip` in a private / loopback / link-local range (IPv4 or IPv6)? Malformed
+ *  input is treated as blocked (fail-closed). */
+function isPrivateIp(ip: string): boolean {
+  const fam = isIP(ip);
+  if (fam === 4) {
+    const p = ip.split('.').map((n) => Number(n));
+    if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true;
+    const [a, b] = p as [number, number, number, number];
+    if (a === 0 || a === 10 || a === 127) return true; // this-host / private / loopback
+    if (a === 169 && b === 254) return true; // link-local incl. 169.254.169.254 metadata
+    if (a === 172 && b >= 16 && b <= 31) return true; // private
+    if (a === 192 && b === 168) return true; // private
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
+    return false;
+  }
+  if (fam === 6) {
+    const h = ip.toLowerCase();
+    if (h === '::1' || h === '::') return true; // loopback / unspecified
+    if (h.startsWith('fe80')) return true; // link-local
+    if (h.startsWith('fc') || h.startsWith('fd')) return true; // unique-local fc00::/7
+    if (h.startsWith('::ffff:')) return isPrivateIp(h.slice(7)); // IPv4-mapped
+    return false;
+  }
+  return false; // not an IP literal — handled by the hostname checks in isBlockedHost
+}
+
+/** Reject internal hosts: loopback/private/link-local IPs, single-label names
+ *  (cluster services like `litellm`/`gateway`), and internal TLDs. */
+function isBlockedHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 brackets
+  if (h === 'localhost' || h.endsWith('.localhost')) return true;
+  if (h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.svc') || h.endsWith('.cluster.local')) return true;
+  const isIpLiteral = isIP(h) !== 0;
+  if (!isIpLiteral && !h.includes('.')) return true; // bare hostname ⇒ cluster-internal
+  return isPrivateIp(h);
+}
+
+/** Guard a resolved base URL before any request: http(s) only, no internal host. */
+function assertSafeBaseUrl(base: string): void {
+  let u: URL;
+  try {
+    u = new URL(base);
+  } catch {
+    throw new BlockedHostError('provider base URL is not a valid absolute URL');
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+    throw new BlockedHostError(`provider base URL scheme "${u.protocol}" is not allowed`);
+  }
+  // Per-pod opt-out for local dev / a self-hosted provider on a private network
+  // the pod can legitimately reach. Only ever weakens the pod whose OWN env sets
+  // it (never cross-user), so it's a safe escape hatch.
+  if (process.env['LMTHING_ALLOW_INTERNAL_CONNECTIONS'] === '1') return;
+  if (isBlockedHost(u.hostname)) {
+    throw new BlockedHostError(`provider base host "${u.hostname}" is internal/blocked`);
+  }
+}
+
+/** Redact a secret's literal value from an error string before surfacing it to
+ *  the agent/logs — token-in-path providers (e.g. Telegram `…/bot<token>/…`) can
+ *  otherwise leak the token via a fetch error message that echoes the URL. */
+function redactSecret(message: string, secret: string | undefined): string {
+  if (!secret || secret.length < 4) return message;
+  return message.split(secret).join('***');
+}
+
 /**
  * Resolve `cfg.apiBase` to a concrete base URL:
  * - `{ env, suffix }` → `process.env[env]` (required) + suffix (self-hosted servers).
@@ -93,7 +164,9 @@ function resolveApiBase(cfg: ProviderConfig, token: string): string {
       .replace('{token}', token)
       .replace(/\{env:([A-Z0-9_]+)\}/g, (_m, name: string) => requireEnv(name));
   }
-  return base.replace(/\/+$/, '');
+  base = base.replace(/\/+$/, '');
+  assertSafeBaseUrl(base);
+  return base;
 }
 
 /** Attach the provider's auth to `headers`/`query`, given the raw serialized body. */
@@ -212,7 +285,11 @@ export function createConnectionResolver(projectRoot?: string): ConnectionResolv
       if (err instanceof NotConfiguredError) {
         throw new Error(`callConnection("${provider}"): ${err.message}`);
       }
-      throw new Error(`callConnection("${provider}"): request failed: ${String((err as Error)?.message ?? err)}`);
+      if (err instanceof BlockedHostError) {
+        throw new Error(`callConnection("${provider}"): blocked — ${err.message}`);
+      }
+      const msg = redactSecret(String((err as Error)?.message ?? err), token);
+      throw new Error(`callConnection("${provider}"): request failed: ${msg}`);
     }
 
     const text = await res.text().catch(() => '');

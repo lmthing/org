@@ -81,6 +81,9 @@ const ORIGINAL_ENV = { ...process.env };
 beforeEach(() => {
   process.env = { ...ORIGINAL_ENV };
   clearIntegrationDescriptorCache();
+  // The mock provider binds to 127.0.0.1 (loopback), which the SSRF guard blocks
+  // in prod — opt out for this local end-to-end test (per-pod, test-only).
+  process.env['LMTHING_ALLOW_INTERNAL_CONNECTIONS'] = '1';
 });
 
 /** Temp lmthingRoot with the REAL integration-demo space installed into `demo-proj`. */

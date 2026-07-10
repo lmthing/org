@@ -85,15 +85,36 @@ function parseConnection(raw: unknown): ConnectionDescriptor | undefined {
   };
 }
 
+/** Known verify-spec types + the allowed hmac params. A descriptor carrying an
+ *  unknown type / weak-or-bogus hmac config is rejected outright (fail-closed)
+ *  rather than reaching the crypto engine as an unvalidated `unknown`. */
+const VERIFY_TYPES = new Set(['none', 'header-equals', 'body-token', 'hmac', 'ed25519', 'twilio']);
+const HMAC_ALGOS = new Set(['sha1', 'sha256']);
+const HMAC_ENCODINGS = new Set(['hex', 'base64']);
+
+function isValidVerifySpec(verify: Record<string, unknown>): boolean {
+  const type = verify['type'];
+  if (typeof type !== 'string' || !VERIFY_TYPES.has(type)) return false;
+  if (type === 'hmac') {
+    if (!HMAC_ALGOS.has(String(verify['algo']))) return false;
+    if (!HMAC_ENCODINGS.has(String(verify['encoding']))) return false;
+    if (typeof verify['header'] !== 'string' || !verify['header']) return false;
+  }
+  if (type === 'header-equals' && (typeof verify['header'] !== 'string' || !verify['header'])) return false;
+  if (type === 'body-token' && (typeof verify['field'] !== 'string' || !verify['field'])) return false;
+  if (type === 'ed25519' && (typeof verify['sigHeader'] !== 'string' || !verify['sigHeader'])) return false;
+  return true;
+}
+
 /** Validate a raw `lmthing.webhook` block. Returns undefined if it lacks a
- *  provider or a verify spec (the two fields the dispatcher must have). */
+ *  provider or a valid verify spec (the two fields the dispatcher must have). */
 function parseWebhook(raw: unknown): WebhookDescriptor | undefined {
   if (raw === null || typeof raw !== 'object') return undefined;
   const w = raw as Record<string, unknown>;
   const provider = w['provider'];
   const verify = w['verify'];
   if (typeof provider !== 'string' || !provider) return undefined;
-  if (verify === null || typeof verify !== 'object' || typeof (verify as Record<string, unknown>)['type'] !== 'string') {
+  if (verify === null || typeof verify !== 'object' || !isValidVerifySpec(verify as Record<string, unknown>)) {
     return undefined;
   }
   return {
@@ -103,7 +124,62 @@ function parseWebhook(raw: unknown): WebhookDescriptor | undefined {
     thread: w['thread'] as WebhookDescriptor['thread'],
     preflight: w['preflight'] as WebhookDescriptor['preflight'],
     challenge: w['challenge'] as WebhookDescriptor['challenge'],
+    allowUnauthenticated: w['allowUnauthenticated'] === true,
   };
+}
+
+/** The env-var names a `settings` JSON Schema declares (its property keys). A
+ *  space may only reference env vars it declared here (and that the user set for
+ *  IT) — never another integration's or the pod's system env. */
+function settingsKeys(block: Record<string, unknown>): Set<string> {
+  const s = block['settings'];
+  const props = s !== null && typeof s === 'object' ? (s as Record<string, unknown>)['properties'] : undefined;
+  return new Set(props !== null && typeof props === 'object' ? Object.keys(props as Record<string, unknown>) : []);
+}
+
+/** Every env-var name an `apiBase` references: `{env:VAR}` in a string, or the
+ *  `env` of the object form. */
+function apiBaseEnvRefs(apiBase: ConnectionDescriptor['apiBase']): string[] {
+  if (typeof apiBase === 'string') {
+    return [...apiBase.matchAll(/\{env:([A-Z0-9_]+)\}/g)].map((m) => m[1]!);
+  }
+  if (apiBase !== null && typeof apiBase === 'object' && typeof apiBase.env === 'string') {
+    return [apiBase.env];
+  }
+  return [];
+}
+
+/** All pod env vars a connection descriptor would read. */
+function connectionEnvRefs(c: ConnectionDescriptor): string[] {
+  const refs = [c.tokenEnv, ...apiBaseEnvRefs(c.apiBase)];
+  if (c.auth && c.auth.kind === 'basic') refs.push(c.auth.userEnv);
+  return refs;
+}
+
+/** All pod env vars a webhook descriptor would read. */
+function webhookEnvRefs(w: WebhookDescriptor): string[] {
+  const refs: string[] = [];
+  if (w.secretEnv) refs.push(w.secretEnv);
+  if (w.challenge && w.challenge.type === 'hub-challenge' && w.challenge.verifyTokenEnv) {
+    refs.push(w.challenge.verifyTokenEnv);
+  }
+  return refs;
+}
+
+/** Reject (skip) a descriptor that reaches for an env var the space didn't
+ *  declare in its own `settings` — the guard that stops a malicious/agent-written
+ *  space from naming `LMTHINGCLOUD_API_KEY`, `LMTHING_BACKUP_JWT`, another
+ *  integration's token, etc. and exfiltrating/misusing it. */
+function envRefsAllowed(kind: string, spaceId: string, refs: string[], allowed: Set<string>): boolean {
+  const bad = refs.filter((r) => !allowed.has(r));
+  if (bad.length > 0) {
+    console.warn(
+      `[integration-manifests] skipping ${kind} descriptor in space "${spaceId}": ` +
+        `references env not declared in its settings: ${bad.join(', ')}`,
+    );
+    return false;
+  }
+  return true;
 }
 
 function scan(spacesDir: string): IntegrationDescriptors {
@@ -126,10 +202,15 @@ function scan(spacesDir: string): IntegrationDescriptors {
       continue; // no/invalid package.json
     }
     if (!block) continue;
+    const allowed = settingsKeys(block);
     const conn = parseConnection(block['connection']);
-    if (conn) connections[conn.provider] = conn;
+    if (conn && envRefsAllowed('connection', d.name, connectionEnvRefs(conn), allowed)) {
+      connections[conn.provider] = conn;
+    }
     const wh = parseWebhook(block['webhook']);
-    if (wh) webhooks[wh.provider] = wh;
+    if (wh && envRefsAllowed('webhook', d.name, webhookEnvRefs(wh), allowed)) {
+      webhooks[wh.provider] = wh;
+    }
   }
   return { connections, webhooks };
 }

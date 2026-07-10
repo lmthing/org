@@ -107,4 +107,9 @@ export interface WebhookDescriptor {
   preflight?: PreflightSpec;
   /** Optional GET subscription-verification echo (WhatsApp). */
   challenge?: ChallengeSpec;
+  /** Explicit opt-in for an UNAUTHENTICATED inbound (`verify:{type:'none'}`).
+   *  Without this flag a `none` verifier fails CLOSED (rejects every request) so
+   *  a space can't accidentally — or sneakily — expose an unsigned webhook that
+   *  wakes the pod + runs an agent for any anonymous caller. */
+  allowUnauthenticated?: boolean;
 }
