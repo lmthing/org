@@ -1,68 +1,38 @@
 /**
- * Provider registry for inbound webhooks (Phase 4a — pod side).
+ * Inbound-webhook verification — the generic, self-contained engine.
  *
- * One entry per provider bundles the three things `routes/webhooks.ts` needs
- * to safely dispatch an inbound event: signature verification (is this
- * request really from the provider?), thread extraction (which persisted
- * conversation, if any, does this event belong to?), and message rendering
- * (how does the raw request become the agent's user message?). A provider
- * may also define a synchronous `preflight` for setup handshakes (Slack's
- * `url_verification`) that must be answered without waking an agent.
+ * TWO sources of adapter behaviour:
+ *   1. Built-in adapters (`generic`, `slack`, `github`) defined inline below —
+ *      shipped, live, and left untouched.
+ *   2. DESCRIPTOR-DRIVEN adapters built at dispatch time from an integration
+ *      space's declarative `lmthing.webhook` block (`buildAdapterFromDescriptor`).
+ *      This is what makes messaging integrations SELF-CONTAINED: the space
+ *      carries its own `verify`/`thread`/`preflight`/`challenge` spec, and the
+ *      pod interprets it with generic crypto primitives — no per-provider code.
  *
- * A per-provider registry (like the pod's `connections.ts` `PROVIDERS` map) —
- * adding a new provider is pure config/behavior, no dispatcher changes.
- * `getAdapter` falls back to `generic` for an unknown/unconfigured `provider`
- * string so a bad manifest entry degrades gracefully instead of 500ing.
+ * `routes/webhooks.ts` looks up the owning space's descriptor (via
+ * `integration-manifests.ts`) and passes it to {@link getAdapter} /
+ * {@link resolveWebhookSecret}; when there's no descriptor it falls back to the
+ * built-in map, then `generic`.
  *
- * Every adapter method is defensive: a malformed body/header never throws
- * out of `verify`/`extractThread`/`renderMessage`/`preflight` — worst case
- * `verify` returns `false` (safe default: reject) and the others fall back to
- * embedding the raw body.
+ * Every adapter method is defensive: a malformed body/header never throws out of
+ * `verify`/`extractThread`/`renderMessage`/`preflight` — worst case `verify`
+ * returns `false` (safe default: reject) and the others fall back to embedding
+ * the raw body.
  */
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { safeEqual, tryParseJson, formDecode, verifyEd25519, type WebhookAdapter } from './webhook-crypto.js';
+import type {
+  WebhookDescriptor,
+  VerifySpec,
+  SignedPart,
+  PreflightSpec,
+  ThreadSpec,
+} from './webhook-descriptor.js';
 
-export interface WebhookAdapter {
-  /** Verify the request authenticity. `secret` is the per-binding/provider
-   *  signing secret (may be undefined). Return true when authentic (or when no
-   *  verification applies). Never throw — return false on any parse/HMAC error. */
-  verify(rawBody: string, headers: Record<string, string>, secret: string | undefined): boolean;
-  /** A stable thread key for conversation continuity, or null for one-shot. */
-  extractThread(rawBody: string, headers: Record<string, string>): string | null;
-  /** Render the request into the agent's user message (plain text). */
-  renderMessage(path: string, rawBody: string, headers: Record<string, string>): string;
-  /** Optional synchronous pre-response (e.g. Slack url_verification handshake).
-   *  Return { status, body } to short-circuit BEFORE waking any agent, or null. */
-  preflight?(rawBody: string, headers: Record<string, string>): { status: number; body: unknown } | null;
-  /** When true, a missing/invalid secret means reject (401). 'generic' with no
-   *  secret configured is allowed (returns false here). */
-  requiresSecret: boolean;
-}
+export type { WebhookAdapter } from './webhook-crypto.js';
 
-/** Constant-time compare of two hex/base64-ish strings. `timingSafeEqual`
- *  throws on a length mismatch, so guard that first — a length mismatch is
- *  itself just "not equal", not an error. */
-function safeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
-}
-
-/** Parse `rawBody` as JSON, returning `undefined` (never throwing) on a
- *  non-JSON or non-object body. */
-function tryParseJson(rawBody: string): Record<string, unknown> | undefined {
-  try {
-    const parsed = JSON.parse(rawBody) as unknown;
-    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // Non-JSON body — caller falls back to the raw text.
-  }
-  return undefined;
-}
-
-// ── generic ──────────────────────────────────────────────────────────────
+// ── built-in: generic ──────────────────────────────────────────────────────
 
 const generic: WebhookAdapter = {
   requiresSecret: false,
@@ -92,7 +62,7 @@ const generic: WebhookAdapter = {
   },
 };
 
-// ── slack ────────────────────────────────────────────────────────────────
+// ── built-in: slack ────────────────────────────────────────────────────────
 
 const SLACK_MAX_CLOCK_SKEW_SECONDS = 5 * 60;
 
@@ -163,7 +133,7 @@ const slack: WebhookAdapter = {
   },
 };
 
-// ── github ───────────────────────────────────────────────────────────────
+// ── built-in: github ───────────────────────────────────────────────────────
 
 const github: WebhookAdapter = {
   requiresSecret: true,
@@ -217,39 +187,228 @@ const github: WebhookAdapter = {
 
 export const WEBHOOK_ADAPTERS: Record<string, WebhookAdapter> = { generic, slack, github };
 
-/** Look up an adapter by provider id, falling back to `generic` for an
- *  unknown/unconfigured provider — a bad manifest entry degrades gracefully
- *  rather than 500ing the whole dispatch. */
-export function getAdapter(provider: string): WebhookAdapter {
-  return WEBHOOK_ADAPTERS[provider] ?? generic;
-}
-
-/** Provider-standard secret env var, keyed by provider id (Task 2). */
+/** Provider-standard secret env var for the built-in adapters. Descriptor-driven
+ *  providers carry their own `secretEnv` and don't need an entry here. */
 const PROVIDER_SECRET_ENV: Record<string, string> = {
   slack: 'SLACK_SIGNING_SECRET',
   github: 'GITHUB_WEBHOOK_SECRET',
 };
 
+// ── descriptor-driven generic engine ───────────────────────────────────────
+
+/** Case-insensitive header read. */
+function header(headers: Record<string, string>, name: string): string | undefined {
+  return headers[name.toLowerCase()];
+}
+
+/** Concatenate the byte string a signature is computed over. */
+function computeSigned(parts: SignedPart[] | undefined, rawBody: string, headers: Record<string, string>): string {
+  if (!parts || parts.length === 0) return rawBody;
+  let out = '';
+  for (const p of parts) {
+    if (p === 'body') out += rawBody;
+    else if (typeof p === 'object' && 'header' in p) out += header(headers, p.header) ?? '';
+    else if (typeof p === 'object' && 'literal' in p) out += p.literal;
+  }
+  return out;
+}
+
+/** Top-level fields of a JSON body, each stringified (for `body-token`). */
+function jsonFields(rawBody: string): Record<string, string> {
+  const obj = tryParseJson(rawBody);
+  const out: Record<string, string> = {};
+  if (obj) for (const [k, v] of Object.entries(obj)) if (v != null) out[k] = String(v);
+  return out;
+}
+
+/** Verify per a declarative {@link VerifySpec}. Never throws — false on any error. */
+function verifyFromSpec(
+  spec: VerifySpec,
+  rawBody: string,
+  headers: Record<string, string>,
+  secret: string | undefined,
+): boolean {
+  try {
+    switch (spec.type) {
+      case 'none':
+        return true;
+      case 'header-equals': {
+        if (!secret) return false;
+        const got = header(headers, spec.header);
+        return typeof got === 'string' && safeEqual(got, secret);
+      }
+      case 'body-token': {
+        if (!secret) return false;
+        const fields =
+          spec.bodyType === 'form'
+            ? formDecode(rawBody)
+            : spec.bodyType === 'json'
+              ? jsonFields(rawBody)
+              : tryParseJson(rawBody)
+                ? jsonFields(rawBody)
+                : formDecode(rawBody);
+        const got = fields[spec.field];
+        return typeof got === 'string' && safeEqual(got, secret);
+      }
+      case 'hmac': {
+        if (!secret) return false;
+        const got = header(headers, spec.header);
+        if (!got) return false;
+        if (spec.skewHeader && spec.maxSkewSeconds != null) {
+          const ts = Number(header(headers, spec.skewHeader));
+          const skew = Math.abs(Math.floor(Date.now() / 1000) - ts);
+          if (!Number.isFinite(skew) || skew > spec.maxSkewSeconds) return false;
+        }
+        const signed = computeSigned(spec.signed, rawBody, headers);
+        const mac = createHmac(spec.algo, secret).update(signed, 'utf8').digest(spec.encoding);
+        return safeEqual(got, (spec.prefix ?? '') + mac);
+      }
+      case 'ed25519': {
+        if (!secret) return false;
+        const sig = header(headers, spec.sigHeader);
+        if (!sig) return false;
+        const signed = spec.signed
+          ? computeSigned(spec.signed, rawBody, headers)
+          : (spec.tsHeader ? header(headers, spec.tsHeader) ?? '' : '') + rawBody;
+        return verifyEd25519(secret, signed, sig);
+      }
+      case 'twilio': {
+        if (!secret) return false;
+        const sig = header(headers, 'x-twilio-signature');
+        const url = header(headers, 'x-lmthing-inbound-url');
+        if (!sig || !url) return false; // no forwarded URL ⇒ can't reconstruct the base
+        const params = formDecode(rawBody);
+        const base = Object.keys(params)
+          .sort()
+          .reduce((acc, k) => acc + k + params[k], url);
+        const mac = createHmac('sha1', secret).update(base, 'utf8').digest('base64');
+        return safeEqual(sig, mac);
+      }
+      default:
+        return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
+/** Answer a declarative {@link PreflightSpec} handshake, or null. */
+function preflightFromSpec(
+  spec: PreflightSpec,
+  rawBody: string,
+): { status: number; body: unknown } | null {
+  const body = tryParseJson(rawBody);
+  if (!body) return null;
+  if (body[spec.when.field] !== spec.when.equals) return null;
+  if (spec.respondEcho) return { status: 200, body: { [spec.respondEcho.field]: body[spec.respondEcho.field] } };
+  return { status: 200, body: spec.respond ?? {} };
+}
+
+/** Walk a dotted path (`a.b.c`) into a parsed JSON object. */
+function getPath(obj: Record<string, unknown>, path: string): unknown {
+  let cur: unknown = obj;
+  for (const seg of path.split('.')) {
+    if (cur === null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[seg];
+  }
+  return cur;
+}
+
+/** Derive a thread key per a declarative {@link ThreadSpec}, or null. */
+function extractThreadFromSpec(
+  spec: ThreadSpec | undefined,
+  rawBody: string,
+  headers: Record<string, string>,
+): string | null {
+  if (!spec) return null;
+  let val: unknown;
+  if (spec.from === 'body') {
+    const obj = tryParseJson(rawBody);
+    val = obj ? getPath(obj, spec.path) : undefined;
+  } else if (spec.from === 'form') {
+    val = formDecode(rawBody)[spec.field];
+  } else {
+    val = header(headers, spec.header);
+  }
+  if (val === null || val === undefined || val === '') return null;
+  return spec.prefix ? `${spec.prefix}:${String(val)}` : String(val);
+}
+
+/** Passthrough render: hand the raw verified payload to the space's handler
+ *  agent, which parses it per its own instructions/knowledge and replies via
+ *  `callConnection`. No per-provider field extraction in the pod. */
+function descriptorRender(provider: string, path: string, rawBody: string): string {
+  return (
+    `Inbound ${provider} event on "${path}":\n\n${rawBody}\n\n` +
+    `[inbound-context] ${JSON.stringify({ provider, path })}\n\n` +
+    `Parse this event per your instructions and reply via callConnection('${provider}', …) if a response is warranted.`
+  );
+}
+
+/** Build a {@link WebhookAdapter} from a space's declarative descriptor. */
+export function buildAdapterFromDescriptor(desc: WebhookDescriptor): WebhookAdapter {
+  return {
+    requiresSecret: desc.verify.type !== 'none',
+    verify: (rawBody, headers, secret) => verifyFromSpec(desc.verify, rawBody, headers, secret),
+    extractThread: (rawBody, headers) => extractThreadFromSpec(desc.thread, rawBody, headers),
+    renderMessage: (path, rawBody) => descriptorRender(desc.provider, path, rawBody),
+    preflight: desc.preflight ? (rawBody) => preflightFromSpec(desc.preflight!, rawBody) : undefined,
+  };
+}
+
+// ── public lookup surface ──────────────────────────────────────────────────
+
+/**
+ * Resolve the adapter for a binding. A space `descriptor` (from
+ * `integration-manifests.ts`) wins — it's built into a generic adapter. Else a
+ * built-in (`slack`/`github`/`generic`), falling back to `generic` for an
+ * unknown/unconfigured provider so a bad manifest entry degrades gracefully.
+ */
+export function getAdapter(provider: string, descriptor?: WebhookDescriptor): WebhookAdapter {
+  if (descriptor) return buildAdapterFromDescriptor(descriptor);
+  return WEBHOOK_ADAPTERS[provider] ?? generic;
+}
+
 /**
  * Resolve the signing secret for one webhook binding, checked in order:
  *   1. a per-path override, `LMTHING_WEBHOOK_SECRET_<PATH>` (`path` upper-cased,
  *      `-` → `_`) — lets one project pin a distinct secret per binding;
- *   2. the provider-standard env var (`SLACK_SIGNING_SECRET`,
- *      `GITHUB_WEBHOOK_SECRET`, …) — shared across all bindings for that
- *      provider on this pod;
+ *   2. the space descriptor's `secretEnv` (self-contained providers), else the
+ *      built-in provider-standard env (`SLACK_SIGNING_SECRET`, …);
  *   3. `undefined` — no secret configured (a `requiresSecret` adapter then
  *      rejects every request; `generic` allows unsigned requests through).
  */
-export function resolveWebhookSecret(path: string, provider: string): string | undefined {
+export function resolveWebhookSecret(path: string, provider: string, descriptor?: WebhookDescriptor): string | undefined {
   const perPathEnv = `LMTHING_WEBHOOK_SECRET_${path.toUpperCase().replace(/-/g, '_')}`;
   const perPath = process.env[perPathEnv];
   if (perPath) return perPath;
 
-  const providerEnv = PROVIDER_SECRET_ENV[provider];
-  if (providerEnv) {
-    const fromProvider = process.env[providerEnv];
-    if (fromProvider) return fromProvider;
+  const envName = descriptor?.secretEnv ?? PROVIDER_SECRET_ENV[provider];
+  if (envName) {
+    const v = process.env[envName];
+    if (v) return v;
   }
-
   return undefined;
+}
+
+/**
+ * Answer a GET subscription-verification challenge (WhatsApp/Meta) per a
+ * descriptor's `challenge` spec. Returns the plain-text body to echo (HTTP 200)
+ * when the query's verify-token matches `process.env[verifyTokenEnv]`, else null
+ * (the caller 4xxs). Only meaningful on GET.
+ */
+export function resolveChallenge(
+  descriptor: WebhookDescriptor | undefined,
+  query: URLSearchParams,
+): { status: number; body: string } | null {
+  const spec = descriptor?.challenge;
+  if (!spec || spec.type !== 'hub-challenge') return null;
+  const tokenParam = spec.tokenParam ?? 'hub.verify_token';
+  const challengeParam = spec.challengeParam ?? 'hub.challenge';
+  const expected = process.env[spec.verifyTokenEnv];
+  const got = query.get(tokenParam);
+  const challenge = query.get(challengeParam);
+  if (!expected || got === null || challenge === null) return null;
+  if (!safeEqual(got, expected)) return null;
+  return { status: 200, body: challenge };
 }

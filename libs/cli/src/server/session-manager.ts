@@ -247,14 +247,14 @@ export class SessionManager {
   readonly snapshotsDir: string;
   readonly idleTtlMs: number;
   private buildSessionFn: BuildSession;
-  /** Pod-side resolver for the agent `callConnection` global. Built once and
-   *  attached to EVERY session (project-independent — connections are per-user,
-   *  not per-project). Bring-your-own-token: the resolver reads each provider's
-   *  token from the pod env (Settings → Integrations) and calls the provider
-   *  directly; it throws a clear per-provider "not configured" error when a
-   *  token env var is unset. Lazy so it reflects env set after construction. */
-  private connectionResolver?: ConnectionResolver;
-  private connectionResolverResolved = false;
+  /** Pod-side resolvers for the agent `callConnection` global, cached per project
+   *  root. Built-in providers (slack/github/google) work in every project; a
+   *  provider contributed by an INSTALLED integration space is discovered by
+   *  scanning `<projectRoot>/spaces/` — so the resolver is project-scoped.
+   *  Bring-your-own-token: it reads each provider's token from the pod env
+   *  (Settings → Integrations) and calls the provider directly; it throws a clear
+   *  per-provider "not configured" error when a token env var is unset. */
+  private connectionResolvers = new Map<string, ConnectionResolver>();
   /** Pod-side registry of loaded OpenClaw-compat plugin tools (see
    *  `server/openclaw-host.ts` `loadOpenClawPlugins`). Wired once at boot via
    *  {@link setToolRegistry}; `undefined` when no `.openclaw-plugins/` dir was
@@ -301,13 +301,15 @@ export class SessionManager {
     });
   }
 
-  /** Lazily build (once) the pod-side connection resolver. */
-  private getConnectionResolver(): ConnectionResolver | undefined {
-    if (!this.connectionResolverResolved) {
-      this.connectionResolver = createConnectionResolver();
-      this.connectionResolverResolved = true;
+  /** Lazily build (and cache) the connection resolver for a project root. */
+  private getConnectionResolver(projectRoot?: string): ConnectionResolver {
+    const key = projectRoot ?? '';
+    let resolver = this.connectionResolvers.get(key);
+    if (!resolver) {
+      resolver = createConnectionResolver(projectRoot);
+      this.connectionResolvers.set(key, resolver);
     }
-    return this.connectionResolver;
+    return resolver;
   }
 
   /** Fold the project-independent `callConnection` resolver into a session's app
@@ -315,9 +317,8 @@ export class SessionManager {
    *  (bring-your-own-token — the resolver reads each provider's token from the
    *  pod env). When no resolver is configured, the field is left absent so the
    *  router emits the clear "no connection resolver configured" error. */
-  private withConnections(appGlobals?: AppGlobalImpls): AppGlobalImpls | undefined {
-    const resolver = this.getConnectionResolver();
-    if (!resolver) return appGlobals;
+  private withConnections(appGlobals?: AppGlobalImpls, projectRoot?: string): AppGlobalImpls | undefined {
+    const resolver = this.getConnectionResolver(projectRoot);
     return { ...appGlobals, callConnection: appGlobals?.callConnection ?? resolver };
   }
 
@@ -373,7 +374,7 @@ export class SessionManager {
         projectSpacesDir: args.projectSpacesDir,
         projectId: args.projectId,
         projectRoot: args.projectRoot,
-        appGlobals: this.withTools(this.withConnections(args.appGlobals)),
+        appGlobals: this.withTools(this.withConnections(args.appGlobals, args.projectRoot)),
         appDts: args.appDts,
         documentResolver: (id, opts) => this.resolveDocument(id, opts),
       },

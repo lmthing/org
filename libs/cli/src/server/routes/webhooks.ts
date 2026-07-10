@@ -22,7 +22,8 @@ import { join } from 'node:path';
 import { readBody, sendJson } from './utils.js';
 import { resolveBinding } from '../webhook-manifest.js';
 import { getOrCreateThreadSession } from '../webhook-threads.js';
-import { getAdapter, resolveWebhookSecret } from '../webhook-verifiers.js';
+import { getAdapter, resolveWebhookSecret, resolveChallenge } from '../webhook-verifiers.js';
+import { scanIntegrationDescriptors } from '../integration-manifests.js';
 import type { OpenClawRouteTable } from '../openclaw-host.js';
 import type { CompatHttpRequest } from '@lmthing/openclaw-compat';
 
@@ -148,8 +149,27 @@ export function createInboundHandler(
       return;
     }
 
-    const adapter = getAdapter(binding.provider);
-    const secret = resolveWebhookSecret(path, binding.provider);
+    // The owning space's declarative `lmthing.webhook` descriptor (self-contained
+    // integrations). Absent for built-in providers (slack/github) and project-app
+    // hooks — those fall back to the built-in adapter map inside getAdapter.
+    const descriptor = scanIntegrationDescriptors(join(lmthingRoot, binding.projectId)).webhooks[binding.provider];
+
+    // GET = a provider subscription-verification handshake (WhatsApp/Meta
+    // `hub.challenge`) — answered from the descriptor's `challenge` spec, no agent.
+    if ((req.method ?? 'POST').toUpperCase() === 'GET') {
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      const challenge = resolveChallenge(descriptor, url.searchParams);
+      if (challenge) {
+        res.writeHead(challenge.status, { 'Content-Type': 'text/plain' });
+        res.end(challenge.body);
+        return;
+      }
+      sendJson(res, 403, { error: { status: 403, message: 'challenge verification failed' } });
+      return;
+    }
+
+    const adapter = getAdapter(binding.provider, descriptor);
+    const secret = resolveWebhookSecret(path, binding.provider, descriptor);
     if (!adapter.verify(rawBody, headers, secret)) {
       sendJson(res, 401, { error: { status: 401, message: 'signature verification failed' } });
       return;
