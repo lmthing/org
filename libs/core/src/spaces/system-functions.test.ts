@@ -236,6 +236,85 @@ describe('system/web webFetch function (HTML → text)', () => {
     expect(r.content).not.toContain('<h1>');
     expect(r.content).not.toContain('<a ');
   });
+
+  // A client-rendered page: the server sends an empty app shell (thin text + a script bundle);
+  // the real content only exists after JS runs, which the render service supplies.
+  const SHELL = '<!doctype html><html><body><div id="root"></div><script src="/app.js"></script></body></html>';
+  const RENDERED = '<html><body><h1>Rendered Heading</h1><p>Real content that only exists after JavaScript runs on this SPA.</p></body></html>';
+
+  /** Stub fetch, routing the render service's /content endpoint to `renderedHtml` and every other
+   *  URL to `plainHtml`; records whether /content was hit and with what URL/body. */
+  function stubFetchWithRender(plainHtml: string, renderedHtml: string, plainStatus = 200): { hits: () => { url: string; body: string } | null } {
+    let hit: { url: string; body: string } | null = null;
+    injectGlobal(vm.ctx, 'fetch', ((url: string, options?: { body?: string }) => {
+      if (url.includes('/content')) {
+        hit = { url, body: options?.body ?? '' };
+        return Promise.resolve({ ok: true, status: 200, text: () => renderedHtml, json: () => ({}) });
+      }
+      return Promise.resolve({ ok: plainStatus < 400, status: plainStatus, text: () => plainHtml, json: () => ({}) });
+    }) as (...a: unknown[]) => unknown);
+    return { hits: () => hit };
+  }
+
+  it('render:"auto" falls back to the render service for a dynamic (JS-shell) page', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000', RENDER_SERVICE_TOKEN: 'tok' } } as unknown as (...a: unknown[]) => unknown);
+    const rec = stubFetchWithRender(SHELL, RENDERED);
+    const r = await evalAwaitDump(vm, `webFetch("http://spa.example")`) as { ok: boolean; content: string; rendered?: boolean };
+    expect(r.ok).toBe(true);
+    expect(r.rendered).toBe(true);
+    expect(r.content).toContain('Rendered Heading');
+    expect(r.content).toContain('Real content');
+    // Rendered through /content with the token, posting the requested URL.
+    expect(rec.hits()?.url).toBe('http://render.local:3000/content?token=tok');
+    expect(rec.hits()?.body).toContain('http://spa.example');
+  });
+
+  it('render:"auto" does NOT render a content-rich static page', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000' } } as unknown as (...a: unknown[]) => unknown);
+    const rec = stubFetchWithRender(HTML, RENDERED);
+    const r = await evalAwaitDump(vm, `webFetch("http://x")`) as { ok: boolean; content: string; rendered?: boolean };
+    expect(r.ok).toBe(true);
+    expect(r.rendered).toBeFalsy();
+    expect(r.content).toContain('First para.'); // plain content, not the rendered fixture
+    expect(rec.hits()).toBeNull(); // render service never called
+  });
+
+  it('render:"off" never calls the render service, even for a dynamic page', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000' } } as unknown as (...a: unknown[]) => unknown);
+    const rec = stubFetchWithRender(SHELL, RENDERED);
+    const r = await evalAwaitDump(vm, `webFetch("http://spa.example", { render: "off" })`) as { ok: boolean; rendered?: boolean };
+    expect(r.ok).toBe(true);
+    expect(r.rendered).toBeFalsy();
+    expect(rec.hits()).toBeNull();
+  });
+
+  it('render:"force" renders even a content-rich static page', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000' } } as unknown as (...a: unknown[]) => unknown);
+    const rec = stubFetchWithRender(HTML, RENDERED);
+    const r = await evalAwaitDump(vm, `webFetch("http://x", { render: "force" })`) as { content: string; rendered?: boolean };
+    expect(r.rendered).toBe(true);
+    expect(r.content).toContain('Rendered Heading');
+    expect(rec.hits()).not.toBeNull();
+  });
+
+  it('render:"auto" degrades gracefully to the plain fetch when RENDER_SERVICE_URL is unset', async () => {
+    injectGlobal(vm.ctx, 'process', { env: {} } as unknown as (...a: unknown[]) => unknown);
+    const rec = stubFetchWithRender(SHELL, RENDERED);
+    const r = await evalAwaitDump(vm, `webFetch("http://spa.example")`) as { ok: boolean; rendered?: boolean };
+    expect(r.ok).toBe(true); // no throw despite the missing env
+    expect(r.rendered).toBeFalsy();
+    expect(rec.hits()).toBeNull();
+  });
+
+  it('render:"auto" falls back to the render service on a 403 bot-wall', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000' } } as unknown as (...a: unknown[]) => unknown);
+    const rec = stubFetchWithRender('Forbidden', RENDERED, 403);
+    const r = await evalAwaitDump(vm, `webFetch("http://blocked.example")`) as { ok: boolean; content: string; rendered?: boolean };
+    expect(r.ok).toBe(true);
+    expect(r.rendered).toBe(true);
+    expect(r.content).toContain('Rendered Heading');
+    expect(rec.hits()).not.toBeNull();
+  });
 });
 
 describe('system/web webSearch function (DuckDuckGo fallback)', () => {
