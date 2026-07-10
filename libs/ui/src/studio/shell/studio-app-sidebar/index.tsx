@@ -11,7 +11,11 @@
 import { useMemo } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useProjects, useProject } from '@lmthing/state'
-import { buildProjectPath, buildSpacePath } from '@lmthing/ui/lib/space-path'
+import {
+  buildProjectPath,
+  buildSpacePath,
+  buildProjectSettingsPath,
+} from '@lmthing/ui/lib/space-path'
 import { AppSidebar } from '@lmthing/ui/elements/nav/app-sidebar'
 import type { AppSidebarSpace } from '@lmthing/ui/elements/nav/app-sidebar'
 import { SidebarFooter } from '@lmthing/ui/elements/nav/sidebar-footer'
@@ -43,6 +47,11 @@ export function StudioAppSidebar({ className }: StudioAppSidebarProps) {
       projects={projects}
       activeProjectId={projectId ?? null}
       onSelectProject={(id) => navigate({ to: buildProjectPath(id) })}
+      onProjectSettings={
+        projectId
+          ? () => navigate({ to: buildProjectSettingsPath(projectId) })
+          : undefined
+      }
       onCreateProject={async (name) => {
         const { id } = await createProject(name)
         navigate({ to: buildProjectPath(id) })

@@ -154,6 +154,29 @@ describe('SessionManager.listProjects — synthetic system project', () => {
     expect(sysSpaces.map((s) => s.id).sort()).toEqual(['system-global', 'user-thing']);
   });
 
+  it('labels a store-installed project from its `title` when `name` is absent', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'lmthing-installed-'));
+    tmpDirs.push(root);
+
+    // Store-installed apps synthesize project.json with `title` (no `name`),
+    // and omit `createdAt` to stay hash-deterministic — see ensureProjectJson
+    // in server/routes/apps.ts. The switcher reads `name`, so listProjects must
+    // fall back name→title→id or the project renders with a blank label.
+    await writeAgent(join(root, 'blog', 'spaces', 'writer'), 'writer', '---\ntitle: Writer\n---\nWrites.\n');
+    await writeFile(
+      join(root, 'blog', 'project.json'),
+      JSON.stringify({ id: 'blog', title: 'Blog', description: 'A blog app', icon: null }),
+      'utf8',
+    );
+
+    const manager = makeManager(root);
+    const projects = await manager.listProjects();
+    const blog = projects.find((p) => p.id === 'blog');
+    expect(blog).toBeDefined();
+    expect(blog?.name).toBe('Blog'); // falls back to title, not blank
+    expect(typeof blog?.createdAt).toBe('number'); // defaulted from mtime
+  });
+
   it('omits the synthetic system project when there are no system spaces', async () => {
     const root = await mkdtemp(join(tmpdir(), 'lmthing-sysproj-empty-'));
     tmpDirs.push(root);

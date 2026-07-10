@@ -268,11 +268,32 @@ export async function scaffoldProject(root: string, id: string, name: string): P
   return meta;
 }
 
-/** Read project.json for a project. Throws if not found. */
+/**
+ * Read project.json for a project. Throws if not found.
+ *
+ * Normalizes the display name: store-installed apps synthesize a `project.json`
+ * carrying `title` (not `name`) — see `ensureProjectJson` in
+ * `server/routes/apps.ts` — so we fall back `name → title → id` to guarantee a
+ * non-empty label (otherwise installed projects render blank in the switcher).
+ * `createdAt` is likewise defaulted from the file's own mtime when absent (the
+ * synthetic install JSON omits it to stay hash-deterministic).
+ */
 export async function readProjectMeta(root: string, id: string): Promise<ProjectMeta> {
   assertUnder(root, id);
-  const raw = await readFile(projectJsonPath(root, id), 'utf8');
-  return JSON.parse(raw) as ProjectMeta;
+  const path = projectJsonPath(root, id);
+  const raw = await readFile(path, 'utf8');
+  const parsed = JSON.parse(raw) as Partial<ProjectMeta> & { title?: string };
+  let createdAt = typeof parsed.createdAt === 'number' ? parsed.createdAt : undefined;
+  if (createdAt === undefined) {
+    createdAt = await stat(path)
+      .then((s) => s.mtimeMs)
+      .catch(() => 0);
+  }
+  return {
+    id: parsed.id ?? id,
+    name: parsed.name || parsed.title || id,
+    createdAt,
+  };
 }
 
 /**

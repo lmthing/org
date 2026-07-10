@@ -149,7 +149,9 @@ function ProjectDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="app-sidebar__dropdown-label">{active?.name ?? 'Select project'}</span>
+        <span className="app-sidebar__dropdown-label">
+          {active ? active.name || active.id : 'Select project'}
+        </span>
         <ChevronDown className="app-sidebar__dropdown-chevron" aria-hidden="true" />
       </button>
 
@@ -168,7 +170,7 @@ function ProjectDropdown({
                     p.id === activeProjectId && 'app-sidebar__dropdown-item--active',
                   )}
                 >
-                  {p.name}
+                  {p.name || p.id}
                 </button>
                 {onDeleteProject && p.id !== activeProjectId && (
                   <button
