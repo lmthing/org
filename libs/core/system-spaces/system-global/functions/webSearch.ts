@@ -1,13 +1,14 @@
 /** Search the web. Returns ranked results and (Tavily only) an AI answer. `provider`
- *  (default `'auto'`): `'tavily'` requires TAVILY_API_KEY; `'google'` renders Google's
+ *  (default `'auto'`): `'tavily'` requires TAVILY_API_KEY; `'bing'` renders Bing's
  *  results page with JavaScript via the in-cluster headless-browser service
  *  (RENDER_SERVICE_URL) and scrapes it — no key, real rendered DOM, no `answer`;
  *  `'duckduckgo'` scrapes the no-JS HTML endpoint (no key, lower-quality ranking, no
- *  `answer`); `'auto'` tries the best available in order — Tavily (when keyed) → Google
+ *  `answer`); `'auto'` tries the best available in order — Tavily (when keyed) → Bing
  *  (when RENDER_SERVICE_URL is set) → DuckDuckGo — returning the first with results.
- *  `topic: 'news'` + `timeRange` bias results toward recent coverage instead of evergreen
- *  pages (Tavily only) — use for "latest developments" angles instead of faking recency in
- *  the query text. */
+ *  (Bing rather than Google: Google serves datacenter IPs a consent/bot redirect loop that
+ *  never renders, whereas Bing renders cleanly.) `topic: 'news'` + `timeRange` bias results
+ *  toward recent coverage instead of evergreen pages (Tavily only) — use for "latest
+ *  developments" angles instead of faking recency in the query text. */
 export async function webSearch(
   query: string,
   opts?: {
@@ -15,7 +16,7 @@ export async function webSearch(
     maxResults?: number;
     topic?: 'general' | 'news';
     timeRange?: 'day' | 'week' | 'month' | 'year';
-    provider?: 'tavily' | 'google' | 'duckduckgo' | 'auto';
+    provider?: 'tavily' | 'bing' | 'duckduckgo' | 'auto';
   },
 ): Promise<{
   ok: boolean;
@@ -28,21 +29,21 @@ export async function webSearch(
   const maxResults = opts?.maxResults ?? 5;
   const apiKey = process.env['TAVILY_API_KEY'];
 
-  if (provider === 'google') return webSearchGoogle(query, maxResults);
+  if (provider === 'bing') return webSearchBing(query, maxResults);
   if (provider === 'duckduckgo') return webSearchDuckDuckGo(query, maxResults);
 
   if (provider === 'auto') {
-    // Ordered fallback: Tavily (when keyed) → Google (when rendered) → DuckDuckGo. Tavily is
+    // Ordered fallback: Tavily (when keyed) → Bing (when rendered) → DuckDuckGo. Tavily is
     // authoritative whenever its call succeeds — it can return an AI `answer` with few/no
     // results, so don't gate it on result count. The scrapers only "win" when they actually
-    // yield results, so a missing key, an unset render service, or an empty/blocked Google
+    // yield results, so a missing key, an unset render service, or an empty/blocked Bing
     // page each fall through to the next option (DuckDuckGo is the always-available last resort).
     if (apiKey) {
       const t = await webSearchTavily(query, opts, apiKey);
       if (t.ok) return t;
     }
-    const g = await webSearchGoogle(query, maxResults);
-    if (g.ok && g.results.length > 0) return g;
+    const b = await webSearchBing(query, maxResults);
+    if (b.ok && b.results.length > 0) return b;
     return webSearchDuckDuckGo(query, maxResults);
   }
 
@@ -101,77 +102,98 @@ async function webSearchTavily(
   };
 }
 
-/** Render Google's results page WITH JavaScript executed (via the in-cluster headless-browser
+/** Render Bing's results page WITH JavaScript executed (via the in-cluster headless-browser
  *  service at RENDER_SERVICE_URL) and scrape the rendered DOM. No API key, no AI-synthesized
  *  `answer`, rank-based `score` only. The render service is reachable only from inside the
  *  cluster and is authenticated with RENDER_SERVICE_TOKEN. When RENDER_SERVICE_URL is unset
  *  (e.g. local dev) this returns `{ ok: false }` so `provider:'auto'` falls through to
- *  DuckDuckGo. Dependency-free regex extraction, matching the rest of this space. */
-async function webSearchGoogle(query: string, maxResults: number): Promise<WebSearchResult> {
+ *  DuckDuckGo. Bing (not Google) because Google serves datacenter IPs a consent/bot redirect
+ *  loop that never renders. Dependency-free regex extraction, matching the rest of this space. */
+async function webSearchBing(query: string, maxResults: number): Promise<WebSearchResult> {
   const base = process.env['RENDER_SERVICE_URL'];
   if (!base) {
     return { ok: false, query, answer: '', results: [], error: 'RENDER_SERVICE_URL not set in environment' };
   }
   const token = process.env['RENDER_SERVICE_TOKEN'] ?? '';
-  // Ask for a few extra results — Google interleaves non-organic blocks we skip below.
   const searchUrl =
-    `https://www.google.com/search?q=${encodeURIComponent(query)}&num=${maxResults + 5}&hl=en&gl=us`;
+    `https://www.bing.com/search?q=${encodeURIComponent(query)}&count=${maxResults + 5}&setlang=en&cc=us`;
   const endpoint = `${base.replace(/\/$/, '')}/content${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   let response: { ok: boolean; status: number; text: () => string };
   try {
     response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: searchUrl }),
+      // `domcontentloaded` returns as soon as the results DOM is parsed instead of waiting for
+      // every tracker/beacon to settle (the default `load` can hang ~30s on a search page).
+      body: JSON.stringify({ url: searchUrl, gotoOptions: { waitUntil: 'domcontentloaded', timeout: 15000 } }),
     });
   } catch (e) {
     return { ok: false, query, answer: '', results: [], error: `Render service unreachable: ${String(e)}` };
   }
   if (!response.ok) {
-    return { ok: false, query, answer: '', results: [], error: `Google render failed: HTTP ${response.status}` };
+    return { ok: false, query, answer: '', results: [], error: `Bing render failed: HTTP ${response.status}` };
   }
   const html = response.text();
   const results: Array<{ title: string; url: string; snippet: string; score: number }> = [];
   const seen = new Set<string>();
-  // Rendered Google wraps each organic result in an <a href="..."> that contains an <h3>
-  // title. Match the anchor's href then its inner <h3>, using an anchor-scoped negative
-  // lookahead so a lazy match can't cross into the next result's anchor.
-  const blockRe = /<a\b[^>]*\bhref="([^"]+)"[^>]*>(?:(?!<\/a>)[\s\S])*?<h3\b[^>]*>([\s\S]*?)<\/h3>/g;
-  let match: RegExpExecArray | null;
-  while ((match = blockRe.exec(html)) !== null && results.length < maxResults) {
-    const url = decodeGoogleRedirect(match[1]!);
-    const title = decodeHtmlEntities(stripTags(match[2]!));
-    if (!url || !title || isInternalGoogleHost(url) || seen.has(url)) continue;
+  // Rendered Bing wraps each organic result in `<li class="b_algo">`; the title is an
+  // `<h2><a href="…">` and the snippet the block's first `<p>`. Split on the block marker,
+  // then extract the anchor + first paragraph per block.
+  const blocks = html.split('<li class="b_algo"');
+  for (let i = 1; i < blocks.length && results.length < maxResults; i++) {
+    const block = blocks[i]!;
+    const am = block.match(/<h2\b[^>]*>\s*<a\b[^>]*\bhref="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+    if (!am) continue;
+    const url = decodeBingRedirect(decodeHtmlEntities(am[1]!));
+    const title = decodeHtmlEntities(stripTags(am[2]!));
+    if (!url || !title || isInternalBingHost(url) || seen.has(url)) continue;
     seen.add(url);
-    // Best-effort snippet: the readable text immediately following the result anchor.
-    const after = html.slice(match.index + match[0].length, match.index + match[0].length + 800);
-    const snippet = decodeHtmlEntities(stripTags(after)).replace(/\s+/g, ' ').trim().slice(0, 300);
+    const pm = block.match(/<p\b[^>]*>([\s\S]*?)<\/p>/);
+    const snippet = pm ? decodeHtmlEntities(stripTags(pm[1]!)).replace(/\s+/g, ' ').trim().slice(0, 300) : '';
     results.push({ title, url, snippet, score: Math.max(0.1, 1 - results.length * 0.1) });
   }
   return { ok: true, query, answer: '', results };
 }
 
-/** Google sometimes links results through a `/url?q=<encoded>&sa=...` redirect and sometimes
- *  with a direct absolute href. Recover the real target in both cases; reject relative
- *  in-page (`/search`, `/preferences`, …) links by returning ''. */
-function decodeGoogleRedirect(href: string): string {
-  if (href.startsWith('/url?')) {
-    const m = href.match(/[?&]q=([^&]+)/);
-    if (!m) return '';
-    try {
-      return decodeURIComponent(m[1]!);
-    } catch {
-      return '';
-    }
+/** Bing links every result through a `bing.com/ck/a?…&u=a1<base64url>` redirect — the real
+ *  target is the base64url payload after the `a1` scheme marker. A direct (non-ck) absolute
+ *  href is returned as-is; anything else (or a bing.com host) yields ''. */
+function decodeBingRedirect(href: string): string {
+  const m = href.match(/[?&]u=a1([^&]+)/);
+  if (m) {
+    const decoded = base64UrlDecode(m[1]!);
+    return /^https?:\/\//.test(decoded) ? decoded : '';
   }
-  return /^https?:\/\//.test(href) ? href : '';
+  return /^https?:\/\//.test(href) && !/^https?:\/\/(?:[^/]*\.)?bing\.com/i.test(href) ? href : '';
 }
 
-/** Google's own chrome (nav, images, cache, accounts, "more results" links) shouldn't be
- *  returned as organic results — filter those hosts out. */
-function isInternalGoogleHost(url: string): boolean {
-  return /^https?:\/\/(?:[^/]*\.)?(?:google\.[a-z.]+|gstatic\.com|googleusercontent\.com)(?:[/:]|$)/i.test(url)
-    || /accounts\.google|webcache\.googleusercontent|\/search\?/i.test(url);
+/** Bing's own chrome (its /ck redirector once decoded to a bing host, translate/maps links)
+ *  shouldn't be returned as organic results. */
+function isInternalBingHost(url: string): boolean {
+  return /^https?:\/\/(?:[^/]*\.)?(?:bing\.com|go\.microsoft\.com|microsofttranslator\.com)(?:[/:]|$)/i.test(url);
+}
+
+/** Minimal, dependency-free base64url → string decoder (no atob/Buffer, which the sandbox
+ *  may not expose). URLs are ASCII, so the Latin1 byte string this yields is the target URL
+ *  verbatim (any non-ASCII stays percent-encoded, as it already is in the href). */
+function base64UrlDecode(s: string): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const normalized = s.replace(/-/g, '+').replace(/_/g, '/');
+  let out = '';
+  let buffer = 0;
+  let bits = 0;
+  for (const c of normalized) {
+    if (c === '=') break;
+    const idx = chars.indexOf(c);
+    if (idx === -1) continue;
+    buffer = (buffer << 6) | idx;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out += String.fromCharCode((buffer >> bits) & 0xff);
+    }
+  }
+  return out;
 }
 
 /** Scrape DuckDuckGo's no-JS HTML results page. No API key, no AI-synthesized `answer`,
