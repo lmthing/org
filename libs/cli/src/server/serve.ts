@@ -42,6 +42,7 @@ import {
   handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild,
 } from './routes/app-admin.js';
 import { handleListApps, handleInstallApp } from './routes/apps.js';
+import { handleListStoreSpaces, handleInstallStoreSpace, handleListProjectIntegrations } from './routes/store-spaces.js';
 import { listProjects, DEFAULT_PROJECT_ID } from './projects.js';
 import { createComputeCompatHost, loadOpenClawPlugins, parseOpenClawAgentEnv, type OpenClawRouteTable } from './openclaw-host.js';
 
@@ -142,6 +143,16 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     setTimeout(() => process.exit(0), 100);
   });
 
+  // Keep-warm heartbeat. The SPA pings this (POST) while its tab is visible so a
+  // user actively reading/using an open surface doesn't idle out and eat a cold
+  // wake on their next click. It's a POST, so the outer server wrapper's activity
+  // tracking bumps `lastMutatingRequestAt` for free — the handler just 200s. A
+  // hidden/closed tab stops pinging → the pod idles out normally.
+  router.add('POST', '/api/keepalive', async (_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ ok: true }));
+  });
+
   // Env
   router.add('GET', '/api/env', handleEnvGet);
   router.add('PUT', '/api/env', handleEnvPut);
@@ -167,6 +178,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   router.add('DELETE', '/api/projects/:projectId/spaces/:spaceId/files/*', handleDeleteProjectSpaceFile);
   router.add('GET', '/api/projects/:projectId/spaces', handleListProjectSpaces);
   router.add('GET', '/api/projects/:projectId/completions', handleGetProjectCompletions);
+  router.add('GET', '/api/projects/:projectId/integrations', handleListProjectIntegrations(effectiveLmthingRoot));
 
   // Spaces sync
   router.add('POST', '/api/spaces', handleCreateSpace);
@@ -238,6 +250,19 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     'POST',
     '/api/apps/install',
     handleInstallApp(manager, effectiveLmthingRoot, undefined, (projectId) => {
+      pageBuildCache.delete(projectId);
+    }),
+  );
+
+  // Store-installable integration spaces (a project installs the ones it needs
+  // into its OWN `spaces/` dir, rather than every session always carrying all
+  // of them — see routes/store-spaces.ts). Dropping the page cache mirrors the
+  // app-install invalidation above; harmless when the project has no pages.
+  router.add('GET', '/api/store/spaces', handleListStoreSpaces());
+  router.add(
+    'POST',
+    '/api/store/spaces/install',
+    handleInstallStoreSpace(effectiveLmthingRoot, undefined, (projectId) => {
       pageBuildCache.delete(projectId);
     }),
   );

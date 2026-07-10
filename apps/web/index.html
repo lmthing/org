@@ -3,6 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Early-wake beacon: kick the compute pod's cold-start the moment this HTML
+      // parses — in parallel with the heavy SPA bundle download + React mount +
+      // auth resolve that would otherwise gate the first /api/compute/ensure. This
+      // shaves the pod boot off the critical path (it runs concurrently with SPA
+      // boot). Purely best-effort: fail-silent, throttled, and the PodEnsureGate
+      // still drives real readiness — this only starts the wake earlier.
+      (function () {
+        try {
+          var h = location.hostname;
+          var cloud =
+            h === 'localhost' || h === '127.0.0.1'
+              ? null // localhost IS the pod (lmthing serve) — no gateway to call
+              : /\.test$/.test(h)
+                ? 'https://cloud.test'
+                : /(^|\.)lmthing\./.test(h)
+                  ? 'https://lmthing.cloud'
+                  : null;
+          if (!cloud) return;
+          var s = JSON.parse(localStorage.getItem('lmthing_session') || 'null');
+          if (!s || !s.accessToken) return; // not signed in — nothing to wake
+          var last = +sessionStorage.getItem('lmthing_wake_beacon') || 0;
+          if (Date.now() - last < 60000) return; // throttle: at most once / minute
+          sessionStorage.setItem('lmthing_wake_beacon', String(Date.now()));
+          // /wake is non-blocking (202), does no LiteLLM work, and is idempotent;
+          // an expired token just 401s harmlessly.
+          fetch(cloud + '/api/compute/wake', {
+            method: 'POST',
+            headers: { authorization: 'Bearer ' + s.accessToken },
+            keepalive: true,
+          }).catch(function () {});
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/png" href="/favicon.ico/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.ico/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.ico/favicon.ico" />

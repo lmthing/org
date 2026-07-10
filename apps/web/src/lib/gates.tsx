@@ -107,7 +107,7 @@ async function pollUntilReady(
     } catch {
       /* transient — keep polling */
     }
-    await new Promise((r) => setTimeout(r, 500))
+    await new Promise((r) => setTimeout(r, 300))
   }
   throw new Error('Timed out waiting for your workspace to start')
 }
@@ -131,7 +131,7 @@ async function pollUntilReady(
  */
 export async function waitForPodEdge(
   getAccessToken: () => Promise<string>,
-  { timeoutMs = 25_000, intervalMs = 400 }: { timeoutMs?: number; intervalMs?: number } = {},
+  { timeoutMs = 25_000, intervalMs = 250 }: { timeoutMs?: number; intervalMs?: number } = {},
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs
   let lastStatus = 0
@@ -195,6 +195,11 @@ const UPGRADE_DISMISSED_KEY = 'lmthing:upgrade-dismissed-tag'
 // surfaces (studio/computer/app IDE tabs, left open for hours) notice a new
 // build without a reload, the same way chat does on its frequent remounts.
 const UPGRADE_POLL_MS = 60_000
+
+// How often a VISIBLE surface pings the pod's keep-warm heartbeat so an
+// actively-viewed pod doesn't idle out (free tier idles at 15 min) and force a
+// cold wake on the user's next click. Comfortably under the idle TTL for margin.
+const KEEPALIVE_MS = 5 * 60_000
 
 type PodGateStatus = 'pending' | 'ready' | 'error' | 'upgrade-available' | 'upgrading'
 
@@ -317,6 +322,43 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
       cancelled = true
       clearInterval(id)
     }
+  }, [status])
+
+  // Keep-warm: while this surface's tab is visible, ping the pod's keep-warm
+  // heartbeat so a user actively reading/using an open tab doesn't idle the pod
+  // out (and eat a cold wake on their next click). A POST bumps the pod's
+  // activity clock; a hidden/closed tab stops pinging → normal idle-out resumes.
+  useEffect(() => {
+    if (status !== 'ready') return
+    let cancelled = false
+    const ping = async () => {
+      if (document.visibilityState !== 'visible') return
+      try {
+        const token = await getAccessToken()
+        // Same-origin (pod edge, via Envoy), not the gateway.
+        await fetch('/api/keepalive', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}` },
+        })
+      } catch {
+        /* best-effort */
+      }
+    }
+    void ping() // close any gap from a just-became-visible tab
+    const id = setInterval(() => {
+      if (!cancelled) void ping()
+    }, KEEPALIVE_MS)
+    // Also ping immediately when the tab returns to the foreground.
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void ping()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status])
 
   const handleRetry = () => {
