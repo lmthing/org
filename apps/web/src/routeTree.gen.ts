@@ -29,6 +29,7 @@ import { Route as StudioProjectIdIndexRouteImport } from './routes/studio/$proje
 import { Route as ComputerSpacesIndexRouteImport } from './routes/computer/spaces/index'
 import { Route as StudioProjectIdAppRouteRouteImport } from './routes/studio/$projectId/app/route'
 import { Route as StudioProjectIdSpaceIdRouteRouteImport } from './routes/studio/$projectId/$spaceId/route'
+import { Route as StudioProjectIdSettingsIndexRouteImport } from './routes/studio/$projectId/settings/index'
 import { Route as StudioProjectIdAppIndexRouteImport } from './routes/studio/$projectId/app/index'
 import { Route as StudioProjectIdSpaceIdIndexRouteImport } from './routes/studio/$projectId/$spaceId/index'
 import { Route as ComputerSpacesSpaceIdIndexRouteImport } from './routes/computer/spaces/$spaceId/index'
@@ -157,6 +158,12 @@ const StudioProjectIdSpaceIdRouteRoute =
   StudioProjectIdSpaceIdRouteRouteImport.update({
     id: '/$spaceId',
     path: '/$spaceId',
+    getParentRoute: () => StudioProjectIdRouteRoute,
+  } as any)
+const StudioProjectIdSettingsIndexRoute =
+  StudioProjectIdSettingsIndexRouteImport.update({
+    id: '/settings/',
+    path: '/settings/',
     getParentRoute: () => StudioProjectIdRouteRoute,
   } as any)
 const StudioProjectIdAppIndexRoute = StudioProjectIdAppIndexRouteImport.update({
@@ -355,6 +362,7 @@ export interface FileRoutesByFullPath {
   '/computer/spaces/$spaceId/': typeof ComputerSpacesSpaceIdIndexRoute
   '/studio/$projectId/$spaceId/': typeof StudioProjectIdSpaceIdIndexRoute
   '/studio/$projectId/app/': typeof StudioProjectIdAppIndexRoute
+  '/studio/$projectId/settings/': typeof StudioProjectIdSettingsIndexRoute
   '/studio/$projectId/$spaceId/agent/': typeof StudioProjectIdSpaceIdAgentIndexRoute
   '/studio/$projectId/$spaceId/components/': typeof StudioProjectIdSpaceIdComponentsIndexRoute
   '/studio/$projectId/$spaceId/functions/': typeof StudioProjectIdSpaceIdFunctionsIndexRoute
@@ -398,6 +406,7 @@ export interface FileRoutesByTo {
   '/computer/spaces/$spaceId': typeof ComputerSpacesSpaceIdIndexRoute
   '/studio/$projectId/$spaceId': typeof StudioProjectIdSpaceIdIndexRoute
   '/studio/$projectId/app': typeof StudioProjectIdAppIndexRoute
+  '/studio/$projectId/settings': typeof StudioProjectIdSettingsIndexRoute
   '/studio/$projectId/$spaceId/agent': typeof StudioProjectIdSpaceIdAgentIndexRoute
   '/studio/$projectId/$spaceId/components': typeof StudioProjectIdSpaceIdComponentsIndexRoute
   '/studio/$projectId/$spaceId/functions': typeof StudioProjectIdSpaceIdFunctionsIndexRoute
@@ -449,6 +458,7 @@ export interface FileRoutesById {
   '/computer/spaces/$spaceId/': typeof ComputerSpacesSpaceIdIndexRoute
   '/studio/$projectId/$spaceId/': typeof StudioProjectIdSpaceIdIndexRoute
   '/studio/$projectId/app/': typeof StudioProjectIdAppIndexRoute
+  '/studio/$projectId/settings/': typeof StudioProjectIdSettingsIndexRoute
   '/studio/$projectId/$spaceId/agent/': typeof StudioProjectIdSpaceIdAgentIndexRoute
   '/studio/$projectId/$spaceId/components/': typeof StudioProjectIdSpaceIdComponentsIndexRoute
   '/studio/$projectId/$spaceId/functions/': typeof StudioProjectIdSpaceIdFunctionsIndexRoute
@@ -501,6 +511,7 @@ export interface FileRouteTypes {
     | '/computer/spaces/$spaceId/'
     | '/studio/$projectId/$spaceId/'
     | '/studio/$projectId/app/'
+    | '/studio/$projectId/settings/'
     | '/studio/$projectId/$spaceId/agent/'
     | '/studio/$projectId/$spaceId/components/'
     | '/studio/$projectId/$spaceId/functions/'
@@ -544,6 +555,7 @@ export interface FileRouteTypes {
     | '/computer/spaces/$spaceId'
     | '/studio/$projectId/$spaceId'
     | '/studio/$projectId/app'
+    | '/studio/$projectId/settings'
     | '/studio/$projectId/$spaceId/agent'
     | '/studio/$projectId/$spaceId/components'
     | '/studio/$projectId/$spaceId/functions'
@@ -594,6 +606,7 @@ export interface FileRouteTypes {
     | '/computer/spaces/$spaceId/'
     | '/studio/$projectId/$spaceId/'
     | '/studio/$projectId/app/'
+    | '/studio/$projectId/settings/'
     | '/studio/$projectId/$spaceId/agent/'
     | '/studio/$projectId/$spaceId/components/'
     | '/studio/$projectId/$spaceId/functions/'
@@ -768,6 +781,13 @@ declare module '@tanstack/react-router' {
       path: '/$spaceId'
       fullPath: '/studio/$projectId/$spaceId'
       preLoaderRoute: typeof StudioProjectIdSpaceIdRouteRouteImport
+      parentRoute: typeof StudioProjectIdRouteRoute
+    }
+    '/studio/$projectId/settings/': {
+      id: '/studio/$projectId/settings/'
+      path: '/settings'
+      fullPath: '/studio/$projectId/settings/'
+      preLoaderRoute: typeof StudioProjectIdSettingsIndexRouteImport
       parentRoute: typeof StudioProjectIdRouteRoute
     }
     '/studio/$projectId/app/': {
@@ -1118,6 +1138,7 @@ interface StudioProjectIdRouteRouteChildren {
   StudioProjectIdSpaceIdRouteRoute: typeof StudioProjectIdSpaceIdRouteRouteWithChildren
   StudioProjectIdAppRouteRoute: typeof StudioProjectIdAppRouteRouteWithChildren
   StudioProjectIdIndexRoute: typeof StudioProjectIdIndexRoute
+  StudioProjectIdSettingsIndexRoute: typeof StudioProjectIdSettingsIndexRoute
 }
 
 const StudioProjectIdRouteRouteChildren: StudioProjectIdRouteRouteChildren = {
@@ -1125,6 +1146,7 @@ const StudioProjectIdRouteRouteChildren: StudioProjectIdRouteRouteChildren = {
     StudioProjectIdSpaceIdRouteRouteWithChildren,
   StudioProjectIdAppRouteRoute: StudioProjectIdAppRouteRouteWithChildren,
   StudioProjectIdIndexRoute: StudioProjectIdIndexRoute,
+  StudioProjectIdSettingsIndexRoute: StudioProjectIdSettingsIndexRoute,
 }
 
 const StudioProjectIdRouteRouteWithChildren =

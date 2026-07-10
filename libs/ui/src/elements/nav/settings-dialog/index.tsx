@@ -1,6 +1,6 @@
 import '@lmthing/css/elements/nav/settings-dialog/index.css'
 import * as React from 'react'
-import { User, Cpu, Terminal, CreditCard, GitBranch, Plug, Webhook, type LucideIcon } from 'lucide-react'
+import { User, Cpu, Terminal, CreditCard, GitBranch, Webhook, type LucideIcon } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,6 @@ import { Models } from '../../settings/models'
 import { EnvVars } from '../../settings/env-vars'
 import { Billing } from '../../settings/billing'
 import { WorkspaceBackup } from '../../settings/backup'
-import { Integrations } from '../../settings/integrations'
 import { Triggers } from '../../settings/triggers'
 
 interface TabDef {
@@ -60,14 +59,6 @@ const TABS: TabDef[] = [
     render: () => <Billing />,
   },
   {
-    id: 'integrations',
-    label: 'Integrations',
-    icon: Plug,
-    title: 'Integrations',
-    description: 'Paste your own provider tokens — stored on your pod and used by any agent.',
-    render: () => <Integrations />,
-  },
-  {
     id: 'triggers',
     label: 'Triggers',
     icon: Webhook,
@@ -94,8 +85,12 @@ export interface SettingsDialogProps {
 /**
  * Shared account + workspace settings dialog, opened from the chat and studio
  * sidebar footers. Side-tabbed: Account, Models, Environment, Billing,
- * Integrations, Triggers and Workspace Backup. Depends only on `@lmthing/auth`,
- * so it works identically on every surface.
+ * Triggers and Workspace Backup. Depends only on `@lmthing/auth`, so it works
+ * identically on every surface.
+ *
+ * Per-project integrations (installed from the store) have their own settings
+ * surface — see `ProjectSettingsView` (`/studio/$projectId/settings`) — not a
+ * tab here, since env vars are pod-global but integrations are per-project.
  */
 export function SettingsDialog({ open, onOpenChange, initialTab = 'account' }: SettingsDialogProps) {
   const [active, setActive] = React.useState(initialTab)

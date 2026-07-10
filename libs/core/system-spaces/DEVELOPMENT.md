@@ -1,8 +1,10 @@
 # System-Spaces Development Guide
 
 How to develop the system spaces (`system-architect`, `system-research`, `system-engineer`,
-`system-global`, `system-appbuilder`, `system-vision`, `system-files`, the `integration-*` OAuth
-spaces, `user-thing`, `user-memory`) and the tasklist/agent authoring model they use.
+`system-global`, `system-appbuilder`, `system-vision`, `system-files`, `user-thing`,
+`user-memory`) and the tasklist/agent authoring model they use. The `integration-*` connection
+spaces (google/slack/github) are no longer bundled system spaces — they're store-installable
+(see the `integration-google` / `integration-slack` / `integration-github` section below).
 Written after the mid-2026 rewrite that tuned everything for the **weak production model**
 (`DeepSeek-V4-Flash`, alias `S`). Read this before editing a system space or the runtime that
 backs it.
@@ -263,7 +265,18 @@ write_agent (general) → write_tasks (general) → validate (explore) → regis
 
 ---
 
-### `integration-google` / `integration-slack` / `integration-github` — user OAuth connections
+### `integration-google` / `integration-slack` / `integration-github` — store-installable connections
+
+**No longer bundled system spaces.** These moved out of `SYSTEM_SPACE_NAMES` /
+`libs/core/system-spaces/` into the store catalog (`store/spaces/integration-*` in the parent
+repo) — a project installs the ones it needs via `POST /api/store/spaces/install`
+(`libs/cli/src/server/routes/store-spaces.ts`), rather than every session always carrying all
+three. THING no longer hard-codes `canDelegateTo` entries for them; it delegates to whichever
+integration space the user has installed (reachable via `registered:*` by its registered name)
+and tells the user to install one from the store when none is installed. The shape below still
+describes how each individual integration space is authored — only the always-on bundling
+changed.
+
 Three model-driven agent spaces that let an agent act on the user's OWN connected third-party
 account. They are the space-layer half of the `connections:use` capability (the runtime half —
 the `callConnection(provider, req)` global + gateway egress proxy — lives in `libs/core/src` and

@@ -7,4 +7,5 @@ export { StudioAppSidebar } from './studio-app-sidebar'
 export type { StudioAppSidebarProps } from './studio-app-sidebar'
 export { StudioProjectView } from './studio-project-view'
 export { SettingsView } from './settings-view'
+export { ProjectSettingsView } from './project-settings-view'
 

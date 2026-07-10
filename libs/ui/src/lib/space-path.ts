@@ -33,3 +33,9 @@ export function buildSpacePath(
   if (!spaceId) return buildProjectPath(projectId)
   return `${STUDIO_PREFIX}/${enc(projectId)}/${enc(spaceId)}`
 }
+
+/** `/studio/$projectId/settings` — the project settings page (Integrations, …). */
+export function buildProjectSettingsPath(projectId: string | null | undefined): string {
+  if (!projectId) return STUDIO_PREFIX
+  return `${STUDIO_PREFIX}/${enc(projectId)}/settings`
+}

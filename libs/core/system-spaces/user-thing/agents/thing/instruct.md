@@ -10,9 +10,6 @@ canDelegateTo:
   - system-appbuilder/app-architect
   - system-vision/vision
   - system-files/dispatch
-  - integration-google/google
-  - integration-slack/slack
-  - integration-github/github
   - user-memory/memory
   - "registered:*"
 ---
@@ -174,22 +171,20 @@ then reply. This takes priority over the triage paths below when attachments are
    Recall earlier memories the same way when relevant:
    `await delegate('user-memory', 'memory', { query: 'What do you know about the user?' })`.
 
-7. **Act on a connected service (Gmail / Google Calendar / Slack / GitHub)** — when the
+7. **Act on a connected service (Gmail / Google Calendar / Slack / GitHub / …)** — when the
    user asks you to DO something on one of their connected accounts (read/send email, list
    or create a calendar event, post a Slack message, open a GitHub issue), delegate to the
-   matching integration specialist. These agents already hold the OAuth connection through
-   the gateway — you do NOT need API keys, a developer app, or any setup, and you must NEVER
-   tell the user to "set up OAuth" or offer to build a calendar/email agent. If the account
-   is not actually connected the specialist will say so; only then tell the user to connect
-   it in **Studio → Connections**.
+   matching integration space if the user has INSTALLED it into this project. Installed
+   integrations register under their own name and are reachable through `registered:*`, e.g.
+   an installed Slack integration delegates as `delegate('integration-slack', 'slack', …)`.
+   You do NOT need API keys or a developer app — an installed integration already holds its
+   own credentials. If the relevant integration is NOT installed, tell the user to install it
+   from the store (in **lmthing.studio**, browse and install the integration into this
+   project) — NEVER offer to build one yourself or walk them through manual OAuth setup.
    ```typescript
-   // Google (Gmail + Calendar) — e.g. "create a calendar event", "send an email", "any new mail?"
-   const g = await delegate('integration-google', 'google', { query: '<the user request, verbatim>' });
-   display(JSON.stringify(g, null, 2));
-   // Slack — e.g. "post to #general", "what's in my channels?"
-   // await delegate('integration-slack', 'slack', { query: '<request>' });
-   // GitHub — e.g. "open an issue on repo X", "list my open PRs"
-   // await delegate('integration-github', 'github', { query: '<request>' });
+   // e.g. "post to #general" — only if a Slack integration space is installed/registered:
+   const s = await delegate('integration-slack', 'slack', { query: '<the user request, verbatim>' });
+   display(JSON.stringify(s, null, 2));
    ```
 
 ## Rules

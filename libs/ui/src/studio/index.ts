@@ -7,3 +7,4 @@ export * from './workflow/index.js';
 export * from './knowledge/index.js';
 export * from './space/index.js';
 export * from './thing/index.js';
+export * from './integrations/index.js';
