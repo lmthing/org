@@ -269,6 +269,22 @@ describe('system/web webFetch function (HTML → text)', () => {
     expect(rec.hits()?.body).toContain('http://spa.example');
   });
 
+  it('render:"auto" renders a data-injection page (thin text, inline-script-dominant)', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000', RENDER_SERVICE_TOKEN: 'tok' } } as unknown as (...a: unknown[]) => unknown);
+    // ~90 chars of chrome text + a large inline data script that JS renders into the DOM
+    // (mirrors quotes.toscrape.com/js/) — no SPA-root marker, yet clearly client-rendered.
+    const dataPage =
+      '<!doctype html><html><body><h1>Quotes to Scrape</h1><a>Login</a><footer>Made by Zyte</footer>' +
+      '<script>var data=[' + '{"t":"a very long quote payload that dwarfs the visible chrome text"},'.repeat(30) + '];renderQuotes(data);</script>' +
+      '</body></html>';
+    const rec = stubFetchWithRender(dataPage, RENDERED);
+    const r = await evalAwaitDump(vm, `webFetch("http://data.example")`) as { ok: boolean; content: string; rendered?: boolean };
+    expect(r.ok).toBe(true);
+    expect(r.rendered).toBe(true);
+    expect(r.content).toContain('Rendered Heading');
+    expect(rec.hits()).not.toBeNull();
+  });
+
   it('render:"auto" does NOT render a content-rich static page', async () => {
     injectGlobal(vm.ctx, 'process', { env: { RENDER_SERVICE_URL: 'http://render.local:3000' } } as unknown as (...a: unknown[]) => unknown);
     const rec = stubFetchWithRender(HTML, RENDERED);

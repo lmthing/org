@@ -101,16 +101,25 @@ async function renderViaService(url: string): Promise<{ ok: boolean; status: num
 
 /** Heuristic: does this plain-fetched page look client-rendered (so the render service would
  *  help)? Only pages whose readable text is **thin** are candidates (a content-rich page is
- *  returned as-is). Among those, it's dynamic when the raw HTML shows an unambiguous JS-gating
- *  marker: a known SPA root element (`id="root"|"app"|"__next"`, `data-reactroot`, `ng-app`) or a
- *  `<noscript>`/"enable JavaScript" notice. A bare `<script>` only counts when the text is
- *  *near-empty* — otherwise a short static page carrying an analytics script would be rendered
- *  needlessly. */
+ *  returned as-is). Among those it's dynamic when the raw HTML shows JS builds the real content:
+ *   - a known SPA root element (`id="root"|"app"|"__next"`, `data-reactroot`, `ng-app`), or
+ *   - a `<noscript>`/"enable JavaScript" notice, or
+ *   - a near-empty body (<50 chars) with any `<script>`, or
+ *   - **inline-script dominance** — the bytes inside `<script>…</script>` far outweigh the
+ *     visible text (e.g. a data/templating page like `quotes.toscrape.com/js/`: ~100 chars of
+ *     chrome, ~4KB of inline quote data that JS renders into the DOM).
+ *  A bare external analytics `<script src>` (no inline bytes) on an otherwise short static page
+ *  does NOT trigger — rendering it would add nothing. Correctness doesn't hinge on this being
+ *  perfect: the caller only ADOPTS the rendered result when it yields more text, so an
+ *  over-trigger merely wastes one render, never returns worse content. */
 function looksDynamic(rawHtml: string, reducedText: string): boolean {
   if (reducedText.length >= 200) return false;
   if (/\bid=["'](?:root|app|__next)["']|data-reactroot|\bng-app\b/i.test(rawHtml)) return true;
   if (/<noscript\b|enable\s+JavaScript/i.test(rawHtml)) return true;
   if (reducedText.length < 50 && /<script\b/i.test(rawHtml)) return true;
+  const inlineScriptBytes = (rawHtml.match(/<script\b[^>]*>([\s\S]*?)<\/script>/gi) ?? [])
+    .reduce((n, s) => n + s.length, 0);
+  if (inlineScriptBytes >= 1000 && inlineScriptBytes > reducedText.length * 4) return true;
   return false;
 }
 
