@@ -57,6 +57,17 @@ export interface SessionOpts {
   projectRoot?: string;
   /** The project id (basename of projectRoot); exposed as LMTHING_PROJECT_ID. */
   projectId?: string;
+  /** The PROJECT's functions (`<projectRoot>/functions/*.ts`) — the THIRD function
+   *  scope, loaded by libs/cli (loadProjectFunctions) and injected into project-rooted
+   *  sessions (and their forks, via the shared agentFunctions map) alongside the
+   *  system + space functions. Original TS source keyed by name; `projectFunctionsBundled`
+   *  carries esbuild output when the project shipped node_modules. Absent for
+   *  legacy/non-project sessions — that scoping is what keeps them project-only. A name
+   *  already provided by the system toolkit or the agent's selected space functions WINS
+   *  (the colliding project function is dropped + a shadow warning is logged), so the
+   *  DTS overlay never double-declares. */
+  projectFunctions?: Record<string, string>;
+  projectFunctionsBundled?: Record<string, string>;
   /** Project-generated typed `apiCall` overloads (Phase 4) — appended to the agent's ambient
    *  DTS when it holds `api:call`, so `apiCall('markRead', …)` is strictly typed. Built by
    *  libs/cli from the project's `api/` endpoint contracts. */

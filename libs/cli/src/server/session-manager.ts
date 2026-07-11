@@ -4,8 +4,8 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
-import { Session, saveSnapshot, loadSpace } from '@lmthing/core';
-import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput } from '@lmthing/core';
+import { Session, saveSnapshot, loadSpace, loadProjectFunctions } from '@lmthing/core';
+import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
 import type { PluginRegistry } from '@lmthing/openclaw-compat';
 import { transcribeAudio } from '../providers/transcribe.js';
@@ -150,6 +150,12 @@ export interface BuildSessionArgs {
   preloadSpaceDirs?: string[];
   /** Absolute path to the project's spaces/ dir; exposed to VMs as env. */
   projectSpacesDir?: string;
+  /** The project's `functions/*.ts` (third function scope), loaded from
+   *  `<projectRoot>/functions/` and injected into the project-rooted session +
+   *  its forks. Original TS source + esbuild-bundled ESM (when the project has
+   *  node_modules). Absent for legacy (non-project) sessions. */
+  projectFunctions?: Record<string, string>;
+  projectFunctionsBundled?: Record<string, string>;
 }
 
 /** Encapsulates the bin.ts wiring: construct a Session bound to the chosen
@@ -372,6 +378,8 @@ export class SessionManager {
         systemSpaceDirs: args.systemSpaceDirs,
         preloadSpaceDirs: args.preloadSpaceDirs,
         projectSpacesDir: args.projectSpacesDir,
+        projectFunctions: args.projectFunctions,
+        projectFunctionsBundled: args.projectFunctionsBundled,
         projectId: args.projectId,
         projectRoot: args.projectRoot,
         appGlobals: this.withTools(this.withConnections(args.appGlobals, args.projectRoot)),
@@ -524,6 +532,36 @@ export class SessionManager {
       this.projectContracts.set(projectId, c);
     }
     return c;
+  }
+
+  /** Per-project cache of the project's `functions/` (third function scope),
+   *  keyed by absolute project root. Loaded once (esbuild bundling can be heavy
+   *  when the project ships node_modules) and reused across sessions in that
+   *  project; a load failure caches an empty set so we don't re-probe every
+   *  session. Republish-on-write (S9/S11) should invalidate via
+   *  {@link invalidateProjectFunctions} after the engineer writes a function. */
+  private projectFunctionsCache = new Map<string, ProjectFunctions>();
+
+  async getProjectFunctions(projectRoot: string): Promise<ProjectFunctions> {
+    let pf = this.projectFunctionsCache.get(projectRoot);
+    if (!pf) {
+      try {
+        pf = await loadProjectFunctions(projectRoot);
+      } catch (err) {
+        console.warn(
+          `[project-functions] failed to load for "${projectRoot}": ${err instanceof Error ? err.message : String(err)}`,
+        );
+        pf = { functions: {}, functionsBundled: {} };
+      }
+      this.projectFunctionsCache.set(projectRoot, pf);
+    }
+    return pf;
+  }
+
+  /** Drop the cached project functions for a root so the next session reloads
+   *  `<projectRoot>/functions/` from disk (call after an authoring write). */
+  invalidateProjectFunctions(projectRoot: string): void {
+    this.projectFunctionsCache.delete(projectRoot);
   }
 
   /**
@@ -828,6 +866,7 @@ export class SessionManager {
 
     const appGlobals = await this.getProjectAppGlobals(root, projectId);
     const contracts = await this.getProjectContracts(root, projectId);
+    const projectFunctions = await this.getProjectFunctions(join(root, projectId));
     const session = this.buildSessionFn({
       spaceDir,
       agentSlug,
@@ -837,6 +876,8 @@ export class SessionManager {
       systemSpaceDirs,
       preloadSpaceDirs,
       projectSpacesDir,
+      projectFunctions: projectFunctions.functions,
+      projectFunctionsBundled: projectFunctions.functionsBundled,
       projectId,
       projectRoot: join(root, projectId),
       appGlobals,
@@ -901,6 +942,7 @@ export class SessionManager {
 
     const appGlobals = await this.getProjectAppGlobals(root, projectId);
     const contracts = await this.getProjectContracts(root, projectId);
+    const projectFunctions = await this.getProjectFunctions(join(root, projectId));
     const session = this.buildSessionFn({
       spaceDir,
       agentSlug,
@@ -910,6 +952,8 @@ export class SessionManager {
       systemSpaceDirs,
       preloadSpaceDirs,
       projectSpacesDir,
+      projectFunctions: projectFunctions.functions,
+      projectFunctionsBundled: projectFunctions.functionsBundled,
       projectId,
       projectRoot: join(root, projectId),
       appGlobals,
@@ -1266,6 +1310,7 @@ export class SessionManager {
     ]);
     const appGlobals = await this.getProjectAppGlobals(root, projectId);
     const contracts = await this.getProjectContracts(root, projectId);
+    const projectFunctions = await this.getProjectFunctions(projectRoot);
 
     return {
       spaceDir,
@@ -1276,6 +1321,8 @@ export class SessionManager {
       systemSpaceDirs,
       preloadSpaceDirs,
       projectSpacesDir,
+      projectFunctions: projectFunctions.functions,
+      projectFunctionsBundled: projectFunctions.functionsBundled,
       projectId,
       projectRoot,
       appGlobals,

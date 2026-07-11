@@ -22,6 +22,7 @@ import { Budget } from '../eval/budget.js';
 import { routeCommonYield, type YieldRouterContext } from '../eval/yield-router.js';
 import { buildOverlay } from '../typecheck/overlay.js';
 import { getAgentFunctions, getAgentFunctionsBundled, resolveDirectDeps } from '../spaces/agent.js';
+import { scopeProjectFunctions } from '../spaces/project-functions-load.js';
 import { getAgentComponents } from '../spaces/components.js';
 import { loadSnapshot } from './snapshot.js';
 import { Tracer } from '../sandbox/trace.js';
@@ -581,19 +582,44 @@ export class Session {
   }
 
   /**
-   * Build the function maps injected into the VM: system functions are always
-   * present (universal capability), agent-declared functions overlay them.
+   * Build the function maps injected into the VM (and, via the same map, the DTS
+   * overlay + forks): system functions are always present (universal capability),
+   * PROJECT functions overlay them, then agent-declared SPACE functions overlay
+   * both. Because a SPACE function of the same name WINS over a project function
+   * (see scopeProjectFunctions — colliding project fns are dropped + warned), the
+   * merged set stays name-disjoint, so the overlay never double-declares.
+   * Project functions are present only for project-rooted sessions (the caller
+   * populates `projectFunctions` from `<projectRoot>/functions/`); a legacy
+   * session's map is byte-identical to before.
    */
   private buildInjectedFunctions(space: Space, agent: import('../spaces/load.js').AgentDef): {
     functions: Record<string, string>;
     functionsBundled: Record<string, string>;
   } {
+    const systemFns = systemFunctionSources(this.systemSpaces);
+    const systemBundled = systemFunctionsBundled(this.systemSpaces);
+    const spaceFns = getAgentFunctions(space, agent);
+    const spaceBundled = getAgentFunctionsBundled(space, agent);
+
+    // Third scope: project functions, minus any name already taken by the system
+    // toolkit or the agent's selected space functions (space/system wins).
+    const scoped = this.opts.projectFunctions
+      ? scopeProjectFunctions(
+          {
+            functions: this.opts.projectFunctions,
+            functionsBundled: this.opts.projectFunctionsBundled ?? {},
+          },
+          new Set([...Object.keys(systemFns), ...Object.keys(spaceFns)]),
+          (name) =>
+            this.opts.renderHost.log(
+              `[warn] project function "${name}" is shadowed by a space/system function of the same name — the project version is ignored`,
+            ),
+        )
+      : { functions: {}, functionsBundled: {} };
+
     return {
-      functions: { ...systemFunctionSources(this.systemSpaces), ...getAgentFunctions(space, agent) },
-      functionsBundled: {
-        ...systemFunctionsBundled(this.systemSpaces),
-        ...getAgentFunctionsBundled(space, agent),
-      },
+      functions: { ...systemFns, ...scoped.functions, ...spaceFns },
+      functionsBundled: { ...systemBundled, ...scoped.functionsBundled, ...spaceBundled },
     };
   }
 
