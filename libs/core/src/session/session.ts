@@ -879,6 +879,17 @@ export class Session {
       toolResolver: this.opts.appGlobals?.tool,
       documentResolver: this.opts.documentResolver,
       integrationStatusResolver: this.opts.integrationStatusResolver,
+      // Store + manual-emit resolvers (plan S10) ride appGlobals like callConnection.
+      storeResolver: this.opts.appGlobals?.store,
+      emitEventResolver: this.opts.appGlobals?.emitEvent,
+      // Consent gate (plan S10): set ONLY for interactive sessions (cli wires it
+      // from renderHost.ask); absent ⇒ consent-marked yields fail closed.
+      requestConsent: this.opts.consentPrompter,
+      // installSpace live-registers the installed space here — the SAME shared
+      // map registerSpace writes, so delegate() reaches it immediately. (The
+      // router's registerSpace case stays fork-only: it is gated on
+      // resolveRegisterSpace, which the session never sets.)
+      dynamicSpaces: this.dynamicSpaces,
       // Code-node runner for `tasklist()` yields whose SPACE tasklist has code
       // nodes (plan S9). Host-built (libs/cli) — core never executes node modules.
       codeNodeCtxFactory: this.opts.codeNodeCtxFactory,

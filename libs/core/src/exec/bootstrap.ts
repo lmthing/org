@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import { createVM, type VM } from '../sandbox/quickjs.js';
 import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
@@ -18,6 +19,9 @@ import { createReadDocumentGlobal } from '../globals/read-document.js';
 import { createIntegrationStatusGlobal } from '../globals/integration-status.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
+import { createStoreSearchGlobal, createStoreInspectGlobal, createInstallSpaceGlobal } from '../globals/store.js';
+import { createEmitEventGlobal, deriveEventScope } from '../globals/emit-event.js';
+import { createConsentRequestGlobal } from '../globals/consent.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
@@ -182,6 +186,27 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   // may re-gate it. The host resolver is threaded via the yield router
   // (integrationStatusResolver); absent ⇒ a clear "no project scope" error.
   if (opts.projectRoot) injectGlobal(ctx, 'integrationStatus', createIntegrationStatusGlobal(pushYield) as AnyFn);
+  // storeSearch/storeInspect: catalog discovery, gated on the `store:read` grant.
+  // Resolver threaded via the yield router (storeResolver, from AppGlobalImpls.store).
+  if (caps.app['store:read']) {
+    injectGlobal(ctx, 'storeSearch', createStoreSearchGlobal(pushYield) as AnyFn);
+    injectGlobal(ctx, 'storeInspect', createStoreInspectGlobal(pushYield) as AnyFn);
+  }
+  // installSpace: CONSENT-MARKED store install, gated on the `store:install` grant.
+  // The consent gate runs host-side in the yield router before the resolver — the
+  // sandbox can never skip it (see globals/consent.ts).
+  if (caps.app['store:install']) injectGlobal(ctx, 'installSpace', createInstallSpaceGlobal(pushYield) as AnyFn);
+  // emitEvent: manual event publication, gated on the `events:emit` grant. The
+  // emitting scope is derived HOST-side at injection (spaceDir vs projectRoot) and
+  // baked into the closure, so sandbox code cannot spoof another scope's events.
+  if (caps.app['events:emit']) {
+    injectGlobal(ctx, 'emitEvent', createEmitEventGlobal(pushYield, deriveEventScope(opts.spaceDir, opts.projectRoot)) as AnyFn);
+  }
+  // __requestConsent: the internal seam consent-wrapped SPACE FUNCTIONS yield
+  // through (sandbox/inject-functions.ts wrapWithConsentGate). Injected into EVERY
+  // context — the yield router's consent gate decides (fail-closed without a
+  // prompter) — and deliberately absent from the ambient DTS.
+  injectGlobal(ctx, '__requestConsent', createConsentRequestGlobal(pushYield, basename(opts.spaceDir)) as AnyFn);
   if (caps.registerSpace) injectGlobal(ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
   if (caps.setSessionMeta) injectGlobal(ctx, 'setSessionMeta', createSetSessionMetaGlobal(pushYield) as AnyFn);
 
@@ -272,9 +297,10 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string): string {
   // tools:use — emit the typed `tool` with `name` narrowed to the granted allow-list
   // (union), so a stray tool name fails the agent's typecheck.
   if (app['tools:use']) parts.push(composeToolDts(app['tools:use'].allow));
-  // Standalone authoring/management globals (Phase 9): writePage/writeApi/writeHook +
-  // createProject/selectProject. Each emitted only when its grant is present.
-  for (const id of ['pages:write', 'api:write', 'hooks:write', 'project:manage'] as const) {
+  // Standalone authoring/management/store/event globals: writePage/writeApi/
+  // writeHook + createProject/selectProject (Phase 9), storeSearch/storeInspect +
+  // installSpace + emitEvent (plan S10). Each emitted only when its grant is present.
+  for (const id of ['pages:write', 'api:write', 'hooks:write', 'project:manage', 'store:read', 'store:install', 'events:emit'] as const) {
     if (app[id]) parts.push(CAPABILITY_DTS_FRAGMENTS[id]);
   }
   return parts.filter(Boolean).join('\n');

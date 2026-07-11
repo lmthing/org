@@ -52,6 +52,20 @@ export { createRegisterSpaceGlobal } from './globals/register-space.js';
 export type { RegisterSpaceResult } from './globals/register-space.js';
 export { createSetSessionMetaGlobal } from './globals/set-session-meta.js';
 export type { SessionMetaInput, SetSessionMetaResult } from './globals/set-session-meta.js';
+export { createStoreSearchGlobal, createStoreInspectGlobal, createInstallSpaceGlobal } from './globals/store.js';
+export type { StoreResolver, StoreInstallOutcome, InstallSpaceResult } from './globals/store.js';
+export { createEmitEventGlobal, deriveEventScope } from './globals/emit-event.js';
+export type { EmitEventResolver, EmitEventResult } from './globals/emit-event.js';
+export {
+  CONSENT_MARKED_YIELD_KINDS,
+  enforceConsent,
+  functionRequiresConsent,
+  createConsentRequestGlobal,
+  createAskConsentPrompter,
+  isConsentApproval,
+  summarizeConsentArgs,
+} from './globals/consent.js';
+export type { ConsentCard, ConsentPrompter } from './globals/consent.js';
 
 // Context
 export { emitVariables, extractBindingNames } from './context/variables.js';

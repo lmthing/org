@@ -4,12 +4,14 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
-import { Session, saveSnapshot, loadSpace, loadProjectFunctions, ForkEngine, runTasklist, Tracer } from '@lmthing/core';
+import { Session, saveSnapshot, loadSpace, loadProjectFunctions, ForkEngine, runTasklist, Tracer, createAskConsentPrompter } from '@lmthing/core';
 import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
 import { createCodeNodeCtxFactory } from './tasklist-runner.js';
 import { emitInternalSignal } from './internal-signals.js';
 import { integrationStatusFor } from './routes/store-spaces.js';
+import { createStoreResolver } from './store-resolver.js';
+import { createEmitEventResolver, type ManualEmitDepth } from './emit-event.js';
 import type { PluginRegistry } from '@lmthing/openclaw-compat';
 import { transcribeAudio } from '../providers/transcribe.js';
 import {
@@ -29,8 +31,9 @@ import { createApiRuntime, type ApiRuntime } from '../app/api/runtime.js';
 import type { ProjectDb } from '../app/store.js';
 import { createAppAuthoringGlobals, resolveCatalogRoot, type AppAuthoringGlobals } from '../app/authoring/index.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
-import { loadHooks } from '../app/hooks/index.js';
+import { loadAllHooks } from '../app/hooks/index.js';
 import { ProjectHookRuntime } from '../app/hooks/runtime.js';
+import { scanEmitterDefs } from './emitter-manifests.js';
 import { WebRenderHost } from '../rpc/server.js';
 import { TraceHub } from '../rpc/trace-hub.js';
 import {
@@ -159,6 +162,11 @@ export interface BuildSessionArgs {
    *  node_modules). Absent for legacy (non-project) sessions. */
   projectFunctions?: Record<string, string>;
   projectFunctionsBundled?: Record<string, string>;
+  /** True for INTERACTIVE sessions (create/resume — a client answers asks over
+   *  the WS). Gates the consent prompter (plan S10): headless runs leave this
+   *  unset so consent-marked calls fail closed instead of hanging on an ask
+   *  no client will ever answer. */
+  interactive?: boolean;
 }
 
 /** Encapsulates the bin.ts wiring: construct a Session bound to the chosen
@@ -385,6 +393,41 @@ export class SessionManager {
     return resolveUploadDocument(this.uploadsDir, attachmentId, opts);
   }
 
+  /** Pod-wide manual-emit chain depth (plan S10) — SHARED across all sessions so
+   *  a manual emit whose subscriber's headless run emits again (a different
+   *  session's resolver) still counts as one deepening chain. Lockstep with
+   *  `HOOK_DEPTH_CAP` inside {@link createEmitEventResolver}. */
+  private manualEmitDepth: ManualEmitDepth = { value: 0 };
+
+  /** Fold the store + manual-emit resolvers (plan S10) into a project-rooted
+   *  session's app globals — mirroring {@link withConnections}: the resolvers ride
+   *  `AppGlobalImpls` so delegates/forks inherit them, while injection of the
+   *  agent-facing globals stays capability-gated (`store:read`/`store:install`/
+   *  `events:emit`) in core's bootstrap. Sessions outside a project get neither
+   *  (the yield router then errors clearly). */
+  private withStore(appGlobals: AppGlobalImpls | undefined, projectId?: string): AppGlobalImpls | undefined {
+    const root = this.lmthingRoot;
+    if (!root || !projectId) return appGlobals;
+    return {
+      ...appGlobals,
+      store:
+        appGlobals?.store ??
+        createStoreResolver({
+          root,
+          projectId,
+          republish: () => this.republish(),
+          // Same side effects as the HTTP install route's callback (serve.ts):
+          // the S8 space.installed signal. (The page-build cache lives in serve.ts;
+          // republish() already refreshes the manifest/crontab/emitter caches.)
+          onInstalled: (pid, spaceId) =>
+            emitInternalSignal('space.installed', { projectId: pid, ...(spaceId ? { spaceId } : {}) }),
+        }),
+      emitEvent:
+        appGlobals?.emitEvent ??
+        createEmitEventResolver({ root, projectId, manager: this, depth: this.manualEmitDepth }),
+    };
+  }
+
   /** Default session builder — constructs a Session bound to `streamFn`. */
   private defaultBuildSession(args: BuildSessionArgs): Session {
     return new Session(
@@ -403,9 +446,14 @@ export class SessionManager {
         projectFunctionsBundled: args.projectFunctionsBundled,
         projectId: args.projectId,
         projectRoot: args.projectRoot,
-        appGlobals: this.withTools(this.withConnections(args.appGlobals, args.projectRoot)),
+        appGlobals: this.withStore(this.withTools(this.withConnections(args.appGlobals, args.projectRoot)), args.projectId),
         appDts: args.appDts,
         documentResolver: (id, opts) => this.resolveDocument(id, opts),
+        // Consent gate (plan S10): ONLY interactive sessions get a prompter (the
+        // consent card rides renderHost.ask → the ask_start WS event). Headless
+        // runs leave it unset so consent-marked calls FAIL CLOSED instead of
+        // hanging on an ask with no client attached.
+        consentPrompter: args.interactive ? createAskConsentPrompter(args.renderHost) : undefined,
         // Presence-only integration config status (S13) — reads the installed space's
         // required env-var NAMES vs `process.env`, never any secret values. Only a
         // project-rooted session (THING) gets it; absent ⇒ the yield errors clearly.
@@ -473,16 +521,27 @@ export class SessionManager {
     if (db === undefined) {
       db = await bootProjectApp(join(root, projectId));
       this.projectDbs.set(projectId, db);
-      // Wire the project's `database` hooks to the db's onWrite seam (Phase 6). Once per
-      // project, when the db first boots. A project with no db/hooks gets nothing.
+      // Wire the project's DB-write → EVENT dispatch to the db's onWrite seam
+      // (Phase 6; unified in S6). Once per project, when the db first boots. A db
+      // write produces the synthetic `project/db.*` event (consumed by EVENT hooks)
+      // plus any `{type:'db'}` emitter def's events, so we wire the runtime when the
+      // project has EVENT hooks (project OR space) OR any db emitter def.
       if (db && !this.projectHookRuntimes.has(projectId)) {
         try {
-          const hooks = await loadHooks(join(root, projectId));
-          if (hooks.some((h) => (h.def as { type?: string }).type === 'database')) {
+          const hooks = await loadAllHooks(join(root, projectId));
+          const hasEventHook = hooks.some((h) => (h.def as { type?: string }).type === 'event');
+          let hasDbEmitter = false;
+          try {
+            const { scopes } = await scanEmitterDefs(root, projectId);
+            hasDbEmitter = Object.values(scopes).some((s) => s.defs.some((d) => d.def.type === 'db'));
+          } catch {
+            /* scan failure ⇒ treat as no db emitters (fail-soft) */
+          }
+          if (hasEventHook || hasDbEmitter) {
             this.projectHookRuntimes.set(projectId, new ProjectHookRuntime(projectId, root, this, db, hooks));
           }
         } catch (err) {
-          console.warn(`[hooks] failed to wire database hooks for "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
+          console.warn(`[hooks] failed to wire db-write event dispatch for "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     }
@@ -875,6 +934,7 @@ export class SessionManager {
       model: opts.model,
       budget: opts.budget,
       renderHost,
+      interactive: true,
     });
 
     const entry: SessionEntry = {
@@ -948,6 +1008,7 @@ export class SessionManager {
       projectRoot: join(root, projectId),
       appGlobals,
       appDts: contracts?.apiCallDts,
+      interactive: true,
     });
 
     // Wire up the tracer to this session's hub + cost tracking.
@@ -1024,6 +1085,7 @@ export class SessionManager {
       projectRoot: join(root, projectId),
       appGlobals,
       appDts: contracts?.apiCallDts,
+      interactive: true,
     });
 
     // Wire up the tracer to this session's hub + cost tracking.

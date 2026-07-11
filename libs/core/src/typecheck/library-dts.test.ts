@@ -12,6 +12,9 @@ import {
   HOOKS_WRITE_DTS,
   PROJECT_MANAGE_DTS,
   WRITE_TABLE_SCHEMA_DTS,
+  STORE_READ_DTS,
+  STORE_INSTALL_DTS,
+  EVENTS_EMIT_DTS,
   CAPABILITY_DTS_FRAGMENTS,
   composeConnectionsDts,
 } from './library-dts.js';
@@ -108,6 +111,9 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
       'api:write': API_WRITE_DTS,
       'hooks:write': HOOKS_WRITE_DTS,
       'project:manage': PROJECT_MANAGE_DTS,
+      'store:read': STORE_READ_DTS,
+      'store:install': STORE_INSTALL_DTS,
+      'events:emit': EVENTS_EMIT_DTS,
     });
     // db:schema is composed onto the `db` object, but ALSO earns the standalone
     // writeTableSchema authoring global (emitted directly in buildAppCapabilityDts),

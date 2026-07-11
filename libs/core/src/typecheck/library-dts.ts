@@ -204,6 +204,30 @@ export const WRITE_TABLE_SCHEMA_DTS = `declare function writeTableSchema(name: s
 export const PROJECT_MANAGE_DTS = `declare function createProject(id: string, opts?: { title?: string }): { ok: boolean; appId?: string; root?: string; error?: string };
 declare function selectProject(id: string): { ok: boolean; appId?: string; root?: string; error?: string };`;
 
+// `store:read` earns the two catalog-discovery globals (plan S10). Both are
+// value-yielding (Promise); entries are the store catalog records VERBATIM
+// (S12-enriched fields flow through), `any` by convention so `entry.field`
+// reads without casts.
+export const STORE_READ_DTS = `/** Search the lmthing store's space catalog (id/title/description/tag match; omit query for the full catalog). */
+declare function storeSearch(query?: string): Promise<any[]>;
+/** The full catalog entry for one store space, or undefined when the id is not in the catalog. */
+declare function storeInspect(spaceId: string): Promise<any>;`;
+
+// `store:install` earns the CONSENT-MARKED `installSpace` (plan S10): the host
+// asks the user for approval before installing; denial rejects the call. On
+// success the space is installed into the CURRENT project AND live-registered —
+// spaceKey/agentSlug are ready for delegate(). ok:false + diverged:true means
+// local edits were held back (relay the message to the user).
+export const STORE_INSTALL_DTS = `/** Install a store space into the current project and live-register it for delegate(). Asks the user for consent first; denial rejects. */
+declare function installSpace(spaceId: string): Promise<{ ok: boolean; spaceId: string; projectId?: string; spaceKey?: string; agentSlug?: string; diverged?: boolean; message?: string; error?: string }>;`;
+
+// `events:emit` earns `emitEvent` (plan S10) — publish an event DECLARED by the
+// agent's OWN scope's `events/*.ts` defs into the hook pipeline. Undeclared
+// names / schema-mismatched payloads reject; `event` in the result is the
+// source-qualified address (`<scope>/<name>`).
+export const EVENTS_EMIT_DTS = `/** Publish an event declared by this scope's events/ defs; subscribing event hooks run before this resolves. */
+declare function emitEvent(name: string, payload: Record<string, unknown>): Promise<{ ok: boolean; event: string }>;`;
+
 /**
  * Registry of the STANDALONE app-capability fragments, keyed by capability id, for
  * the integrator to gate additively per agent in `buildAmbientDts`. The `db:*` trio
@@ -217,6 +241,9 @@ export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:write': API_WRITE_DTS,
   'hooks:write': HOOKS_WRITE_DTS,
   'project:manage': PROJECT_MANAGE_DTS,
+  'store:read': STORE_READ_DTS,
+  'store:install': STORE_INSTALL_DTS,
+  'events:emit': EVENTS_EMIT_DTS,
 };
 
 // Write primitives, appended to the full-DTS bundles below. `host-tools.ts`'s

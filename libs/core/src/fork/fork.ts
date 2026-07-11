@@ -435,6 +435,11 @@ export class ForkEngine {
           connectionResolver: this.opts.appGlobals?.callConnection,
           toolResolver: this.opts.appGlobals?.tool,
           documentResolver: this.opts.documentResolver,
+          // Store discovery + manual emits follow the (role-intersected) app
+          // grants into forks; consent-marked kinds (installSpace) FAIL CLOSED —
+          // no requestConsent is ever wired for a headless fork leaf.
+          storeResolver: this.opts.appGlobals?.store,
+          emitEventResolver: this.opts.appGlobals?.emitEvent,
           // delegate: gated by the task's canDelegateTo policy via the unified
           // yield-time gate (exec/target-match.ts isDelegateAllowed — same gate the
           // session and delegate VMs use); routed to the engine's delegateRunner

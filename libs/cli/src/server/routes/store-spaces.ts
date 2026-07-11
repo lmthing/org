@@ -75,6 +75,37 @@ async function fetchStoreSpaces(storeUrl: string): Promise<CatalogSpace[]> {
 }
 
 /**
+ * Catalog entries matching `query` — the pod half of the agent-facing
+ * `storeSearch` global (plan S10). Case-insensitive substring match over
+ * id/title/description/tags/kind; an empty/omitted query returns the full
+ * catalog. Entries pass through VERBATIM (S12 enriches them with
+ * events/functions/agents — nothing here picks fields). Throws when the store
+ * is unreachable (the yield surfaces a clear, retryable error to the agent —
+ * unlike the listing ROUTE, which degrades to `[]` for the UI).
+ */
+export async function searchCatalog(query?: string, storeUrl?: string): Promise<CatalogSpace[]> {
+  const spaces = await fetchStoreSpaces(storeBaseUrl(storeUrl));
+  const q = query?.trim().toLowerCase();
+  if (!q) return spaces;
+  return spaces.filter((s) => {
+    const hay = [s.id, s.title, s.description, s.kind ?? '', ...(Array.isArray(s.tags) ? s.tags : [])]
+      .join('\n')
+      .toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+/**
+ * The full catalog entry for one space (the pod half of `storeInspect`), or
+ * `undefined` when `spaceId` is not in the catalog. Verbatim entry, like
+ * {@link searchCatalog}.
+ */
+export async function inspectCatalogSpace(spaceId: string, storeUrl?: string): Promise<CatalogSpace | undefined> {
+  const spaces = await fetchStoreSpaces(storeBaseUrl(storeUrl));
+  return spaces.find((s) => s.id === spaceId);
+}
+
+/**
  * `GET /api/store/spaces` — list the PUBLIC store's space catalog. Returns
  * `{ spaces: [] }` if the store is unreachable rather than erroring the request.
  */
@@ -129,26 +160,126 @@ interface InstallSpaceBody {
   force?: unknown;
 }
 
+/** Options for the pure {@link installStoreSpace}. */
+export interface InstallStoreSpaceOpts {
+  /** `.lmthing` root (the projects root). */
+  lmthingRoot: string;
+  spaceId: string;
+  projectId: string;
+  /** Overwrite a locally-edited (diverged) copy. */
+  force?: boolean;
+  /** Store base override (tests / self-hosting). */
+  storeUrl?: string;
+}
+
+/** Outcome of the pure {@link installStoreSpace} — a discriminated shape the two
+ *  callers map to their own contracts (the HTTP route to statuses, the
+ *  `installSpace` yield resolver to a {@link StoreInstallOutcome}-alike). */
+export type InstallStoreSpaceResult =
+  /** Installed (or pristine re-sync). `installedDir` = the materialized space dir. */
+  | { ok: true; projectId: string; spaceId: string; installedDir: string }
+  /** Local edits held back by the pristine-hash divergence guard. */
+  | { ok: false; diverged: true; projectId: string; spaceId: string; message: string }
+  /** Validation/download/materialize failure. `status` hints the HTTP mapping. */
+  | { ok: false; diverged?: undefined; status: 400 | 404; error: string };
+
 /**
- * `POST /api/store/spaces/install { spaceId, projectId?, force? }` — materialize
- * a catalog space (`${store}/spaces/<spaceId>/`) into
- * `<lmthingRoot>/<projectId>/spaces/<spaceId>/`. `projectId` defaults to
- * {@link DEFAULT_PROJECT_ID}; the target project must already exist (404 otherwise).
+ * The PURE install engine (factored out of the route closure in plan S10 so the
+ * HTTP route and the agent-facing `installSpace` yield resolver share ONE code
+ * path): download `spaceId` from the public store into staging, apply the
+ * pristine-vs-diverged hash guard, and materialize into
+ * `<lmthingRoot>/<projectId>/spaces/<spaceId>/` + write the install marker.
  *
  * Re-sync semantics on an existing dest, mirroring `apps.ts`'s `handleInstallApp`:
  * a **pristine** copy (unchanged since the last install, or already matching the
  * current shipped template) is re-synced silently; a **locally-edited** copy is
- * held back (`{ ok:false, diverged:true }`) unless `force:true`. A brand-new dest
- * always installs. No db boot, no page build — just the one space dir.
+ * held back (`diverged: true`) unless `force`. A brand-new dest always installs.
+ * No db boot, no page build — just the one space dir. Validates its own inputs
+ * (agent-supplied ids reach this directly), never throws, and deliberately does
+ * NOT republish/notify — each caller owns its post-install effects.
+ */
+export async function installStoreSpace(opts: InstallStoreSpaceOpts): Promise<InstallStoreSpaceResult> {
+  const { lmthingRoot, spaceId, projectId } = opts;
+  if (!spaceId || !safeProjectId(spaceId)) {
+    return { ok: false, status: 400, error: `invalid spaceId: ${JSON.stringify(spaceId)}` };
+  }
+  if (!projectId || !safeProjectId(projectId) || RESERVED_PROJECT_IDS.has(projectId)) {
+    return { ok: false, status: 400, error: `invalid projectId: ${JSON.stringify(projectId)}` };
+  }
+
+  const projectDir = join(lmthingRoot, projectId);
+  if (!existsSync(projectDir)) {
+    return { ok: false, status: 404, error: `project not found: ${projectId}` };
+  }
+
+  const dest = join(projectDir, 'spaces', spaceId);
+
+  // Download the space from the PUBLIC store into a staging dir — there is no
+  // local catalog in the pod. The staging copy is the install SOURCE
+  // (hash/re-sync/materialize all read from it), then cleaned up in `finally`.
+  const staging = mkdtempSync(join(tmpdir(), `lm-space-${spaceId}-`));
+  try {
+    let catalogSpace: CatalogSpace;
+    try {
+      catalogSpace = await downloadStoreSpace(storeBaseUrl(opts.storeUrl), spaceId, staging);
+    } catch (err) {
+      return {
+        ok: false,
+        status: 404,
+        error: `space not available in store catalog: ${spaceId} (${err instanceof Error ? err.message : String(err)})`,
+      };
+    }
+    void catalogSpace; // fetched for validation only — no per-space metadata needed here
+
+    const isNew = !existsSync(dest);
+    const shippedHash = hashSpaceDir(staging);
+    if (!isNew) {
+      const currentHash = hashSpaceDir(dest);
+      if (currentHash !== shippedHash) {
+        const manifest = readInstallMarker(dest);
+        const pristine = manifest !== undefined && manifest.sourceHash === currentHash;
+        if (!pristine && !opts.force) {
+          return {
+            ok: false,
+            diverged: true,
+            projectId,
+            spaceId,
+            message:
+              `"${spaceId}" in project "${projectId}" has local edits that diverge from the ` +
+              `store template — pass force:true to overwrite them.`,
+          };
+        }
+      }
+    }
+
+    try {
+      materializeSpaceDir(staging, dest);
+      writeInstallMarker(dest, { spaceId, sourceHash: shippedHash, installedAt: new Date().toISOString() });
+    } catch (err) {
+      return { ok: false, status: 400, error: `materialize failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
+
+    return { ok: true, projectId, spaceId, installedDir: dest };
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+/**
+ * `POST /api/store/spaces/install { spaceId, projectId?, force? }` — the HTTP
+ * face of {@link installStoreSpace}. `projectId` defaults to
+ * {@link DEFAULT_PROJECT_ID}; the target project must already exist (404
+ * otherwise); the divergence guard answers 200 `{ ok:false, diverged:true }`.
  *
- * On success, best-effort republishes the webhook manifest (fire-and-forget,
- * awaited but internally error-swallowed) so a bundled `triggers:` agent
- * registers with the gateway.
+ * On success, fires `onInstalled(projectId, spaceId)` (cache invalidation +
+ * republish + the S8 `space.installed` signal live in serve.ts's callback) and
+ * best-effort republishes the webhook manifest (awaited but internally
+ * error-swallowed) so a bundled `triggers:` agent registers with the gateway.
  */
 export function handleInstallStoreSpace(
   lmthingRoot: string | undefined,
   storeUrl?: string,
-  onInstalled?: (projectId: string) => void,
+  onInstalled?: (projectId: string, spaceId?: string) => void,
 ): StoreHandler {
   return async (req, res) => {
     let body: InstallSpaceBody;
@@ -171,77 +302,42 @@ export function handleInstallStoreSpace(
       sendJson(res, 400, { error: `invalid projectId: ${JSON.stringify(body.projectId)}` });
       return;
     }
-    const force = body.force === true;
 
     if (!lmthingRoot) {
       sendJson(res, 404, { error: 'no project root configured' });
       return;
     }
 
-    const projectDir = join(lmthingRoot, projectId);
-    if (!existsSync(projectDir)) {
-      sendJson(res, 404, { error: `project not found: ${projectId}` });
+    const result = await installStoreSpace({
+      lmthingRoot,
+      spaceId,
+      projectId,
+      force: body.force === true,
+      storeUrl,
+    });
+
+    if (!result.ok && result.diverged !== true) {
+      sendJson(res, result.status, { error: result.error });
+      return;
+    }
+    if (!result.ok) {
+      sendJson(res, 200, {
+        ok: false,
+        diverged: true,
+        projectId: result.projectId,
+        spaceId: result.spaceId,
+        message: result.message,
+      });
       return;
     }
 
-    const dest = join(projectDir, 'spaces', spaceId);
+    onInstalled?.(result.projectId, result.spaceId);
 
-    // Download the space from the PUBLIC store into a staging dir — there is no
-    // local catalog in the pod. The staging copy is the install SOURCE
-    // (hash/re-sync/materialize all read from it), then cleaned up in `finally`.
-    const staging = mkdtempSync(join(tmpdir(), `lm-space-${spaceId}-`));
-    try {
-      let catalogSpace: CatalogSpace;
-      try {
-        catalogSpace = await downloadStoreSpace(storeBaseUrl(storeUrl), spaceId, staging);
-      } catch (err) {
-        sendJson(res, 404, {
-          error: `space not available in store catalog: ${spaceId} (${err instanceof Error ? err.message : String(err)})`,
-        });
-        return;
-      }
-      void catalogSpace; // fetched for validation only — no per-space metadata needed here
+    // Best-effort: a freshly-installed space may bundle a `triggers:` agent —
+    // republish so the gateway learns about it. Never fails the install.
+    await republishWebhookManifest(lmthingRoot);
 
-      const isNew = !existsSync(dest);
-      const shippedHash = hashSpaceDir(staging);
-      if (!isNew) {
-        const currentHash = hashSpaceDir(dest);
-        if (currentHash !== shippedHash) {
-          const manifest = readInstallMarker(dest);
-          const pristine = manifest !== undefined && manifest.sourceHash === currentHash;
-          if (!pristine && !force) {
-            sendJson(res, 200, {
-              ok: false,
-              diverged: true,
-              projectId,
-              spaceId,
-              message:
-                `"${spaceId}" in project "${projectId}" has local edits that diverge from the ` +
-                `store template — pass force:true to overwrite them.`,
-            });
-            return;
-          }
-        }
-      }
-
-      try {
-        materializeSpaceDir(staging, dest);
-        writeInstallMarker(dest, { spaceId, sourceHash: shippedHash, installedAt: new Date().toISOString() });
-      } catch (err) {
-        sendJson(res, 400, { error: `materialize failed: ${err instanceof Error ? err.message : String(err)}` });
-        return;
-      }
-
-      onInstalled?.(projectId);
-
-      // Best-effort: a freshly-installed space may bundle a `triggers:` agent —
-      // republish so the gateway learns about it. Never fails the install.
-      await republishWebhookManifest(lmthingRoot);
-
-      sendJson(res, 200, { ok: true, projectId, spaceId });
-    } finally {
-      rmSync(staging, { recursive: true, force: true });
-    }
+    sendJson(res, 200, { ok: true, projectId: result.projectId, spaceId: result.spaceId });
   };
 }
 

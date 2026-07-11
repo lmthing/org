@@ -4,6 +4,7 @@ import type { RoleModelConfig } from '../fork/roles.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
 import type { DocumentResolver } from '../globals/read-document.js';
 import type { IntegrationStatusResolver } from '../globals/integration-status.js';
+import type { ConsentPrompter } from '../globals/consent.js';
 import type { CodeNodeCtxFactory } from '../tasklist/orchestrator.js';
 
 export interface RenderHost {
@@ -91,6 +92,13 @@ export interface SessionOpts {
    *  `process.env`); threaded into the project-rooted session. Absent ⇒ an
    *  `integrationStatus` yield rejects with a clear "no project scope" error. */
   integrationStatusResolver?: IntegrationStatusResolver;
+  /** Consent prompter for consent-marked invocations (plan S10) — built on the
+   *  `renderHost.ask` plumbing (see `createAskConsentPrompter`) and supplied ONLY
+   *  for INTERACTIVE sessions: headless runs/forks/delegates/hooks leave it unset
+   *  so a consent-marked call FAILS CLOSED ("requires user consent — run
+   *  interactively") instead of hanging on an ask nobody will answer. Threaded
+   *  into the yield router as `requestConsent`. */
+  consentPrompter?: ConsentPrompter;
   /** Host-built factory for `kind:'code'` tasklist nodes (plan S9). Threaded into
    *  the session's yield-router context so a `tasklist()` yield whose SPACE tasklist
    *  contains code nodes can run them: for each node the CLI/pod loads its

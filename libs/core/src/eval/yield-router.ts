@@ -2,6 +2,15 @@ import type { YieldRequest } from './yield.js';
 import type { ApiCallFn, ConnectionResolver } from '../db/types.js';
 import type { DocumentResolver } from '../globals/read-document.js';
 import type { IntegrationStatusResolver } from '../globals/integration-status.js';
+import type { StoreResolver, InstallSpaceResult } from '../globals/store.js';
+import type { EmitEventResolver } from '../globals/emit-event.js';
+import {
+  CONSENT_MARKED_YIELD_KINDS,
+  enforceConsent,
+  summarizeConsentArgs,
+  type ConsentCard,
+  type ConsentPrompter,
+} from '../globals/consent.js';
 import type { Clock } from '../session/types.js';
 import type { Space } from '../spaces/load.js';
 import type { ForkEngine, ForkTask } from '../fork/fork.js';
@@ -91,6 +100,19 @@ export interface YieldRouterContext {
    *  project root + `process.env`). Absent outside a project-rooted session; an
    *  `integrationStatus` yield then rejects with a clear error. */
   integrationStatusResolver?: IntegrationStatusResolver;
+  /** Consent prompter for consent-marked invocations (plan S10) — supplied ONLY
+   *  by interactive session contexts (the cli builds it on `renderHost.ask`).
+   *  Absent (headless runs, forks, delegates, hooks) ⇒ a consent-marked yield
+   *  FAILS CLOSED with a clear "requires user consent" error. */
+  requestConsent?: ConsentPrompter;
+  /** Resolve the store-global yields (`storeSearch`/`storeInspect`/`installSpace`)
+   *  — host-supplied by libs/cli on `AppGlobalImpls.store` (mirrors
+   *  `connectionResolver`). Absent ⇒ a store yield rejects with a clear error. */
+  storeResolver?: StoreResolver;
+  /** Resolve an `emitEvent()` yield — validate against the caller scope's
+   *  declared events and dispatch to subscribing hooks (host-supplied by
+   *  libs/cli on `AppGlobalImpls.emitEvent`). Absent ⇒ a clear error. */
+  emitEventResolver?: EmitEventResolver;
 }
 
 export type RouteResult =
@@ -110,6 +132,17 @@ export async function routeCommonYield(
   req: YieldRequest,
   ctx: YieldRouterContext,
 ): Promise<RouteResult> {
+  // Generic HOST-ENFORCED consent (plan S10): a consent-marked yield kind (the
+  // registry in globals/consent.ts — `installSpace` today) must be approved by
+  // the USER before its resolver runs. No prompter (headless/fork/delegate/hook
+  // contexts) ⇒ FAIL CLOSED; denial ⇒ a structured refusal the agent sees. This
+  // runs BEFORE the switch so no resolver below can execute unapproved.
+  if (CONSENT_MARKED_YIELD_KINDS.has(req.kind)) {
+    await enforceConsent(ctx.requestConsent, {
+      function: req.kind,
+      argsSummary: summarizeConsentArgs(req.args),
+    });
+  }
   switch (req.kind) {
     case 'sleep': {
       const ms = req.args[1] as number;
@@ -212,6 +245,101 @@ export async function routeCommonYield(
       }
       const [spaceId] = req.args as [string];
       const value = await ctx.integrationStatusResolver(spaceId);
+      return { handled: true, value };
+    }
+    case 'consent': {
+      // The consent gate for a consent-marked SPACE FUNCTION: its injection-time
+      // wrapper (sandbox/inject-functions.ts) awaits `__requestConsent`, which
+      // pushes this yield with the HOST-built card. Same enforcement primitive
+      // as the pre-switch gate: no prompter ⇒ fail closed; deny ⇒ refusal.
+      const card = req.args[0] as ConsentCard;
+      await enforceConsent(ctx.requestConsent, card);
+      return { handled: true, value: { granted: true } };
+    }
+    case 'storeSearch': {
+      // Catalog search (agent-facing `storeSearch`, gated on `store:read`). A
+      // missing resolver means this context has no store wiring (e.g. a bare
+      // unit test / no project) — throw an actionable, retryable error.
+      if (!ctx.storeResolver) {
+        throw new Error('storeSearch is not available here: no store resolver configured');
+      }
+      const [query] = req.args as [string | undefined];
+      const value = await ctx.storeResolver.search(query);
+      return { handled: true, value };
+    }
+    case 'storeInspect': {
+      // One catalog entry (agent-facing `storeInspect`, gated on `store:read`).
+      if (!ctx.storeResolver) {
+        throw new Error('storeInspect is not available here: no store resolver configured');
+      }
+      const [spaceId] = req.args as [string];
+      const value = await ctx.storeResolver.inspect(spaceId);
+      return { handled: true, value };
+    }
+    case 'installSpace': {
+      // Consent-marked store install (the pre-switch gate already ran): pure
+      // install via the pod resolver, then LIVE-REGISTER the installed dir into
+      // the shared dynamicSpaces map (same mechanism as registerSpace, so
+      // delegate() reaches the space in THIS session), then republish the pod's
+      // runtime artifacts. Order: consent → install → register → republish.
+      if (!ctx.storeResolver) {
+        throw new Error('installSpace is not available here: no store resolver configured');
+      }
+      const [spaceId] = req.args as [string];
+      const outcome = await ctx.storeResolver.install(spaceId);
+      if (!outcome.ok || !outcome.installedDir) {
+        // Divergence guard / install failure — surfaced as a value (not a throw)
+        // so the agent can relay the "local edits held back" message verbatim.
+        const value: InstallSpaceResult = {
+          ok: false,
+          spaceId: outcome.spaceId ?? spaceId,
+          ...(outcome.projectId !== undefined ? { projectId: outcome.projectId } : {}),
+          ...(outcome.diverged ? { diverged: true } : {}),
+          ...(outcome.message !== undefined ? { message: outcome.message } : {}),
+          ...(outcome.error !== undefined ? { error: outcome.error } : {}),
+        };
+        return { handled: true, value };
+      }
+      let spaceKey: string | undefined;
+      let agentSlug: string | undefined;
+      let registerError: string | undefined;
+      try {
+        const { loadSpace } = await import('../spaces/load.js');
+        const space = await loadSpace(outcome.installedDir);
+        ctx.dynamicSpaces?.set(outcome.installedDir, space);
+        spaceKey = outcome.installedDir;
+        agentSlug = Object.keys(space.agents)[0] ?? '';
+      } catch (err) {
+        // The files are installed even if live registration failed — report ok
+        // with the registration error so the agent knows delegate() needs a
+        // session restart (rather than pretending the install failed).
+        registerError = `installed, but live registration failed: ${String((err as Error)?.message ?? err)}`;
+      }
+      try {
+        await ctx.storeResolver.republish?.();
+      } catch {
+        // Republish is best-effort — never fail a completed install on it.
+      }
+      const value: InstallSpaceResult = {
+        ok: true,
+        spaceId: outcome.spaceId ?? spaceId,
+        ...(outcome.projectId !== undefined ? { projectId: outcome.projectId } : {}),
+        ...(spaceKey !== undefined ? { spaceKey } : {}),
+        ...(agentSlug !== undefined ? { agentSlug } : {}),
+        ...(registerError !== undefined ? { error: registerError } : {}),
+      };
+      return { handled: true, value };
+    }
+    case 'emitEvent': {
+      // Manual event publication (agent-facing `emitEvent`, gated on
+      // `events:emit`). `sourceScope` comes from the global's HOST closure
+      // (injection-time derived — never sandbox-controlled), so an agent can
+      // only emit its own scope's declared events.
+      if (!ctx.emitEventResolver) {
+        throw new Error('emitEvent is not available here: no event resolver configured (project-rooted sessions only)');
+      }
+      const [name, payload, sourceScope] = req.args as [string, Record<string, unknown>, string];
+      const value = await ctx.emitEventResolver(name, payload, sourceScope);
       return { handled: true, value };
     }
     case 'loadKnowledge': {

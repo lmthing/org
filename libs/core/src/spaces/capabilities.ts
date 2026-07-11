@@ -33,7 +33,10 @@ export type CapabilityId =
   | 'api:call'
   | 'connections:use'
   | 'tools:use'
-  | 'project:manage';
+  | 'project:manage'
+  | 'store:read'
+  | 'store:install'
+  | 'events:emit';
 
 /** Every recognized capability id. Unknown ids fail the space load. */
 export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
@@ -47,6 +50,9 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'connections:use',
   'tools:use',
   'project:manage',
+  'store:read',
+  'store:install',
+  'events:emit',
 ]);
 
 /** The three db verbs whose (optional) config narrows scope to `{ tables: [...] }`. */
@@ -56,12 +62,15 @@ export const DB_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
   'db:schema',
 ]);
 
-/** Authoring caps that are **bare-only** — a config payload is an error. */
+/** Authoring/store/event caps that are **bare-only** — a config payload is an error. */
 const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'pages:write',
   'api:write',
   'hooks:write',
   'project:manage',
+  'store:read',
+  'store:install',
+  'events:emit',
 ]);
 
 /**
@@ -74,6 +83,10 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
  *   - authoring      → `true` (bare, no config)
  *   - project:manage → `true` (bare; grants createProject/selectProject — the
  *                      appbuilder's authority to scaffold/select a catalog app)
+ *   - store:read     → `true` (bare; grants storeSearch/storeInspect — catalog discovery)
+ *   - store:install  → `true` (bare; grants the consent-marked installSpace)
+ *   - events:emit    → `true` (bare; grants emitEvent — publish the OWN scope's
+ *                      declared events into the hook pipeline)
  */
 export interface AppCapabilities {
   'db:read'?: { tables?: string[] };
@@ -86,6 +99,9 @@ export interface AppCapabilities {
   'connections:use'?: { providers: string[] };
   'tools:use'?: { allow: string[] };
   'project:manage'?: true;
+  'store:read'?: true;
+  'store:install'?: true;
+  'events:emit'?: true;
 }
 
 export interface ParseCapabilitiesCtx {

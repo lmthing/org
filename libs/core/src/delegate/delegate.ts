@@ -341,6 +341,15 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             connectionResolver: opts.appGlobals?.callConnection,
             toolResolver: opts.appGlobals?.tool,
             documentResolver: opts.documentResolver,
+            // Store search/inspect + manual emits work in delegates (system-store
+            // runs AS a delegate of THING); consent-marked kinds (installSpace)
+            // still FAIL CLOSED here — no requestConsent is wired (delegates are
+            // headless), so the router's consent gate refuses before install.
+            storeResolver: opts.appGlobals?.store,
+            emitEventResolver: opts.appGlobals?.emitEvent,
+            // installSpace live-registers into the session-shared map (visible to
+            // the parent's later delegate()) — same reference forks receive.
+            dynamicSpaces: opts.dynamicSpaces,
             getForkEngine: () => forkEngine,
             // `result` is the tasklist's TaskEnvelope ({ ok, degraded, data, … })
             // since Phase 3 — captured and returned UNTOUCHED, so the delegator

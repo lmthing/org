@@ -20,6 +20,9 @@ import {
   handleInstallStoreSpace,
   handleListProjectIntegrations,
   integrationStatusFor,
+  installStoreSpace,
+  searchCatalog,
+  inspectCatalogSpace,
   type CatalogSpace,
 } from './routes/store-spaces.js';
 import { DEFAULT_PROJECT_ID, scaffoldProject } from './projects.js';
@@ -329,17 +332,86 @@ describe('handleInstallStoreSpace', () => {
     expect(existsSync(join(lmthingRoot, 'other-project', 'spaces', SPACE, 'package.json'))).toBe(true);
   });
 
-  it('fires onInstalled(projectId) after a successful install', async () => {
-    const seen: string[] = [];
+  it('fires onInstalled(projectId, spaceId) after a successful install', async () => {
+    const seen: Array<[string, string | undefined]> = [];
     const { res, captured } = mockRes();
-    const handler = handleInstallStoreSpace(lmthingRoot, STORE_URL, (pid) => seen.push(pid));
+    const handler = handleInstallStoreSpace(lmthingRoot, STORE_URL, (pid, sid) => seen.push([pid, sid]));
     await handler(
       mockReq({ method: 'POST', body: JSON.stringify({ spaceId: SPACE, force: true }) }),
       res,
       {},
     );
     expect(captured.status).toBe(200);
-    expect(seen).toEqual([DEFAULT_PROJECT_ID]);
+    expect(seen).toEqual([[DEFAULT_PROJECT_ID, SPACE]]);
+  });
+});
+
+// ── installStoreSpace (the pure engine, factored out for the S10 resolver) ─────
+
+describe('installStoreSpace (pure)', () => {
+  it('installs and reports the installed dir', async () => {
+    const result = await installStoreSpace({
+      lmthingRoot,
+      spaceId: SPACE,
+      projectId: 'other-project',
+      force: true, // the route tests above may have left local edits behind
+      storeUrl: STORE_URL,
+    });
+    const dest = join(lmthingRoot, 'other-project', 'spaces', SPACE);
+    expect(result).toEqual({ ok: true, projectId: 'other-project', spaceId: SPACE, installedDir: dest });
+    expect(existsSync(join(dest, '.installed.json'))).toBe(true);
+  });
+
+  it('applies the pristine-hash divergence guard without force', async () => {
+    const dest = join(lmthingRoot, 'other-project', 'spaces', SPACE);
+    await writeFile(join(dest, 'README.md'), 'edited locally', 'utf8');
+    const result = await installStoreSpace({ lmthingRoot, spaceId: SPACE, projectId: 'other-project', storeUrl: STORE_URL });
+    expect(result).toMatchObject({ ok: false, diverged: true, projectId: 'other-project', spaceId: SPACE });
+    // …and force overwrites.
+    const forced = await installStoreSpace({
+      lmthingRoot, spaceId: SPACE, projectId: 'other-project', force: true, storeUrl: STORE_URL,
+    });
+    expect(forced.ok).toBe(true);
+  });
+
+  it('validates its own inputs (the agent resolver calls it directly)', async () => {
+    expect(await installStoreSpace({ lmthingRoot, spaceId: '../x', projectId: 'other-project', storeUrl: STORE_URL }))
+      .toMatchObject({ ok: false, status: 400 });
+    expect(await installStoreSpace({ lmthingRoot, spaceId: SPACE, projectId: 'system', storeUrl: STORE_URL }))
+      .toMatchObject({ ok: false, status: 400 }); // reserved project id
+    expect(await installStoreSpace({ lmthingRoot, spaceId: SPACE, projectId: 'ghost', storeUrl: STORE_URL }))
+      .toMatchObject({ ok: false, status: 404 });
+    expect(await installStoreSpace({ lmthingRoot, spaceId: 'nope', projectId: 'other-project', storeUrl: STORE_URL }))
+      .toMatchObject({ ok: false, status: 404 });
+  });
+});
+
+// ── searchCatalog / inspectCatalogSpace (the S10 storeSearch/storeInspect pod half) ──
+
+describe('searchCatalog / inspectCatalogSpace', () => {
+  it('returns the full catalog without a query, filtered entries with one', async () => {
+    const all = await searchCatalog(undefined, STORE_URL);
+    expect(all.map((s) => s.id).sort()).toEqual([SPACE, PLAIN_SPACE].sort());
+    // Case-insensitive match across id/title/description/tags.
+    expect((await searchCatalog('DEMO INTEG', STORE_URL)).map((s) => s.id)).toEqual([SPACE]);
+    expect((await searchCatalog('integration', STORE_URL)).map((s) => s.id)).toEqual([SPACE]);
+    expect(await searchCatalog('zebra', STORE_URL)).toEqual([]);
+  });
+
+  it('inspect returns the verbatim entry, or undefined when absent', async () => {
+    const entry = await inspectCatalogSpace(SPACE, STORE_URL);
+    expect(entry?.title).toBe('Demo Integration');
+    expect(entry?.settings).toEqual(SPACE_SETTINGS_SCHEMA);
+    expect(await inspectCatalogSpace('nope', STORE_URL)).toBeUndefined();
+  });
+
+  it('throws on an unreachable store (the yield surfaces a retryable error)', async () => {
+    vi.stubGlobal('fetch', async () => { throw new Error('network down'); });
+    try {
+      await expect(searchCatalog(undefined, STORE_URL)).rejects.toThrow();
+    } finally {
+      stubStoreFetch(storeDir);
+    }
   });
 });
 

@@ -2,6 +2,8 @@ import type { VM } from '../sandbox/quickjs.js';
 import { marshalToQuickJS, injectGlobal } from '../sandbox/host-bridge.js';
 import type { DbApi, QueryOpts, UpdateOpts, RemoveOpts, Row, ApiCallFn, ConnectionResolver, ToolCallFn } from '../db/types.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
+import type { StoreResolver } from '../globals/store.js';
+import type { EmitEventResolver } from '../globals/emit-event.js';
 
 /** Result shape common to the synchronous authoring globals. */
 export type AuthoringResult = { ok: boolean; error?: string };
@@ -49,6 +51,17 @@ export interface AppGlobalImpls {
    *  that dispatches to the loaded `PluginRegistry`; project-independent, so it is
    *  attached to EVERY session, not only project-app sessions. */
   tool?: ToolCallFn;
+  /** Store-global resolver (plan S10) — `storeSearch`/`storeInspect`/`installSpace`
+   *  are value-yielding like `apiCall`: NOT injected here but wired through the
+   *  yield router (`YieldRouterContext.storeResolver`). The host (libs/cli)
+   *  supplies a resolver over the store catalog + the pure `installStoreSpace`;
+   *  project-scoped (installs land in the session's project). */
+  store?: StoreResolver;
+  /** `emitEvent` resolver (plan S10) — value-yielding like `apiCall`: NOT injected
+   *  here but wired through the yield router (`YieldRouterContext.emitEventResolver`).
+   *  The host (libs/cli) validates against the caller scope's declared events and
+   *  dispatches via the event pipeline; project-scoped. */
+  emitEvent?: EmitEventResolver;
   /** Phase 9 authoring globals — write into the `store/apps/<id>/` catalog source of
    *  the currently-selected app. Provided by libs/cli (`createAppAuthoringGlobals`).
    *  Injected purely on the capability grant (NOT projectRoot): the appbuilder has no
