@@ -132,6 +132,15 @@ function workerSource(): Promise<string> {
   return workerSourcePromise;
 }
 
+/**
+ * The bundled (CJS) source of the shared worker entry (`worker.ts`), cached once
+ * per process. Exposed so the emitter-def scanner (S4) can run its generic
+ * `loadModule` job in the SAME crash-isolated worker (no parallel worker impl).
+ */
+export function bundledWorkerSource(): Promise<string> {
+  return workerSource();
+}
+
 // ── Runtime ───────────────────────────────────────────────────────────────────
 
 function isQueryMethod(method: string): boolean {

@@ -25,9 +25,10 @@ import { parentPort, workerData } from 'node:worker_threads';
 import type { AsyncDbApi, ApiCallFn } from '@lmthing/core';
 
 import { HttpError, serializeHttpError } from './errors.js';
-import { loadHandlerFromCode } from './handler-module.js';
+import { loadHandlerFromCode, loadModuleExports } from './handler-module.js';
 import type {
   WorkerJob,
+  LoadModuleJob,
   ProxyKind,
   ProxyRequestMessage,
   ProxyReplyMessage,
@@ -63,10 +64,49 @@ const DB_METHODS = [
   'addColumn',
 ] as const;
 
+/**
+ * The generic **load-module** path (emitter-def scanner, S4). Eval the
+ * transpiled module in this isolated thread and post back ONLY the picked DATA
+ * fields of its default export — never a function (`postMessage` can't clone
+ * one, and `emit` is deliberately not extracted). This thread IS the containment
+ * boundary: a hostile def's top-level code (infinite loop, fs probe) dies here,
+ * and main-side terminates it on timeout; nothing reaches the pod process.
+ */
+function runLoadModule(port: NonNullable<typeof parentPort>, job: LoadModuleJob): void {
+  try {
+    const exp = loadModuleExports(job.code);
+    const def = exp['default'];
+    const data: Record<string, unknown> = {};
+    if (def !== null && typeof def === 'object') {
+      for (const key of job.pick) {
+        const v = (def as Record<string, unknown>)[key];
+        if (v === undefined || typeof v === 'function') continue; // elide functions
+        data[key] = v;
+      }
+    }
+    // JSON round-trip → guaranteed structured-cloneable + any stray nested
+    // function silently dropped (never a DataCloneError back to main).
+    const value = JSON.parse(JSON.stringify(data)) as unknown;
+    port.postMessage({ type: 'result', value } satisfies WorkerToMain);
+  } catch (err) {
+    port.postMessage({
+      type: 'error',
+      message: err instanceof Error ? err.message : String(err),
+    } satisfies WorkerToMain);
+  }
+}
+
 function main(): void {
   const port = parentPort;
   if (!port) throw new Error('api worker: no parentPort (must run as a worker_thread)');
-  const job = workerData as WorkerJob;
+  const raw = workerData as WorkerJob | LoadModuleJob;
+
+  // Generic module-load job (no `ctx`, no proxies) — branch before wiring any.
+  if ((raw as LoadModuleJob).loadModule) {
+    runLoadModule(port, raw as LoadModuleJob);
+    return;
+  }
+  const job = raw as WorkerJob;
 
   // ── Proxy request/reply registry ──────────────────────────────────────────
   let seq = 0;

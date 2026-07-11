@@ -38,13 +38,14 @@ const APP_RUNTIME_MODULE = { HttpError } as const;
 const realRequire = createRequire(join(process.cwd(), 'lmthing-app-handler.cjs'));
 
 /**
- * Evaluate a CJS handler-module string and return its exports. Runs the module's
- * top-level code (which only wires exports for a well-formed handler) — it does
- * **not** invoke the handler. Throwing top-level code propagates to the caller
- * (in the worker that becomes a 500; the loader avoids this path by static-
- * parsing `name` instead of evaluating).
+ * Evaluate a CJS module string and return its **raw exports**. Runs the module's
+ * top-level code (throwing top-level code propagates to the caller). Generic —
+ * shared by {@link loadHandlerFromCode} (api handlers) and the emitter-def
+ * scanner's worker path (S4), which picks the default export's data fields. The
+ * `@app/runtime` shim + cwd-anchored real `require` are the module's only import
+ * surface (a def's type-only `@lmthing/core` imports are erased by esbuild).
  */
-export function loadHandlerFromCode(code: string): LoadedHandlerModule {
+export function loadModuleExports(code: string): Record<string, unknown> {
   const shimRequire = (id: string): unknown => {
     if (id === '@app/runtime') return APP_RUNTIME_MODULE;
     return realRequire(id);
@@ -53,8 +54,18 @@ export function loadHandlerFromCode(code: string): LoadedHandlerModule {
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const fn = new Function('module', 'exports', 'require', code);
   fn(moduleObj, moduleObj.exports, shimRequire);
+  return moduleObj.exports as Record<string, unknown>;
+}
 
-  const exp = moduleObj.exports as Record<string, unknown>;
+/**
+ * Evaluate a CJS handler-module string and return its exports. Runs the module's
+ * top-level code (which only wires exports for a well-formed handler) — it does
+ * **not** invoke the handler. Throwing top-level code propagates to the caller
+ * (in the worker that becomes a 500; the loader avoids this path by static-
+ * parsing `name` instead of evaluating).
+ */
+export function loadHandlerFromCode(code: string): LoadedHandlerModule {
+  const exp = loadModuleExports(code);
   return {
     name: typeof exp.name === 'string' ? exp.name : undefined,
     description: typeof exp.description === 'string' ? exp.description : undefined,

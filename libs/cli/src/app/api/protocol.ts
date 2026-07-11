@@ -26,6 +26,30 @@ export interface WorkerJob {
   input: unknown;
 }
 
+/**
+ * A generic **load-module** job (the emitter-def scanner, S4) — reuses the same
+ * crash-isolated worker as an api handler, but along a proxy-less path: the
+ * worker `eval`s the transpiled module and posts back ONLY the picked DATA
+ * fields of its default export (functions elided). No `ctx`, no db/spawn/apiCall.
+ *
+ * Store-downloaded emitter defs (`events/*.ts`) MUST be extracted this way — the
+ * worker is the crash + timeout boundary, so a hostile def (a top-level infinite
+ * loop, an fs probe) is contained in this thread and terminated main-side on
+ * timeout, never touching the pod process. The def's `emit` function is
+ * deliberately NOT extracted (functions don't survive `postMessage`); later
+ * steps re-load the def from its file path to run `emit` inside a worker.
+ *
+ * The discriminant is the `loadModule: true` marker — a {@link WorkerJob} lacks
+ * it, so the worker branches on its presence.
+ */
+export interface LoadModuleJob {
+  loadModule: true;
+  /** The esbuild-transpiled (CJS) source of the module to load. */
+  code: string;
+  /** The default-export field names to serialize back (data only; functions elided). */
+  pick: string[];
+}
+
 /** Which main-process capability a proxy request targets. */
 export type ProxyKind = 'db' | 'spawn' | 'apiCall';
 

@@ -160,7 +160,7 @@ function webhookEnvRefs(w: WebhookDescriptor): string[] {
  * replacement for a reserved-name denylist: it needs no list to maintain and
  * auto-protects any future system env var (as long as it isn't `INTEGRATION_…`).
  */
-function namespacePrefix(spaceId: string): string | null {
+export function namespacePrefix(spaceId: string): string | null {
   if (!/^integration-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(spaceId)) return null;
   return spaceId.toUpperCase().replace(/-/g, '_') + '_';
 }
