@@ -54,7 +54,12 @@ type StoreHandler = (
 
 /** One space entry in the store's static catalog manifest (`/projects/manifest.json`
  *  `spaces[]`). `files` is the full download list (every file under the space dir,
- *  relative path, `/`-joined). */
+ *  relative path, `/`-joined). The `events`/`functions`/`agents`/`inbound` fields
+ *  (S12) are the space's LIFTED producer/consumer surface — the store gen script
+ *  (`store/scripts/gen-apps-manifest.mjs`) transpiles each `events/*.ts` emitter
+ *  def + statically parses `functions/`/`agents/` at build time, so `system-store`
+ *  (S11) can fit-check an install from catalog data alone. Optional (older
+ *  manifests / plain spaces omit them). */
 export interface CatalogSpace {
   id: string;
   title: string;
@@ -63,6 +68,15 @@ export interface CatalogSpace {
   tags: string[];
   kind: string | null;
   settings: unknown | null;
+  /** Union of every `events/*.ts` def's `emits` (event name → `{ payload }`,
+   *  field → typeString) — the events this space produces. */
+  events?: Record<string, { payload: Record<string, string> }>;
+  /** Exposed space functions (name + leading-comment summary + declaration sig). */
+  functions?: { name: string; summary?: string; signature?: string }[];
+  /** Each agent's frontmatter surface (slug + declared actions + trigger kinds). */
+  agents?: { slug: string; actions?: string[]; triggers?: string[] }[];
+  /** Public inbound path(s) of any `webhook` emitter def + its verify kind. */
+  inbound?: { path: string; verify: string }[];
   files: string[];
 }
 
