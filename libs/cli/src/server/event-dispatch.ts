@@ -31,6 +31,7 @@ import { validateOutput, type Emitted, type EmitsSchema } from '@lmthing/core';
 
 import { loadAllHooks, type EventHookDef, type LoadedHook } from '../app/hooks/index.js';
 import { getOrCreateThreadSession } from './webhook-threads.js';
+import { emitInternalSignal } from './internal-signals.js';
 import { runHook, type Hook, type HookBudget, type HookManager } from './routes/hooks.js';
 
 /** The manager surface event dispatch needs: `runHeadless` + `getProjectDb` (both
@@ -70,6 +71,15 @@ export interface DispatchEmittedEventsArgs {
   manager: EventDispatchManager;
   /** Optional thread-session resolver override (tests). */
   threading?: ThreadSessionResolver;
+  /** Loop protection (S8, additive): how many hook firings already sit in this
+   *  dispatch's causal chain (absent/0 = a fresh external/inbound event). Rides
+   *  into each fired hook so ITS `hook.fired` internal signal carries depth+1 —
+   *  the signal sink drops the cascade at `HOOK_DEPTH_CAP`. */
+  hookDepth?: number;
+  /** Loop protection (S8, additive): a subscribing hook with THIS slug is
+   *  skipped — a `hook.fired`-derived event must never re-trigger the very hook
+   *  whose run originated it (self-trigger suppression). */
+  skipHookSlug?: string;
 }
 
 /** Parse `space/agent#action` → the pieces a headless run wants (local copy —
@@ -173,16 +183,34 @@ export async function dispatchEmittedEvents(args: DispatchEmittedEventsArgs): Pr
     const address = `${sourceScope}/${ev.event}`;
     const subs = matchEventHooks(hooks, address);
     for (const hook of subs) {
+      // Self-trigger suppression (S8): an event derived from THIS hook's own
+      // `hook.fired` signal must not fire it again.
+      if (args.skipHookSlug !== undefined && hook.slug === args.skipHookSlug) {
+        console.warn(
+          `[event-dispatch] suppressing hook "${hook.slug}" for "${address}": its own run originated this event`,
+        );
+        continue;
+      }
       const def = hook.def as EventHookDef;
       try {
         if (typeof def.trigger === 'string') {
+          // S8 instrumentation: TRIGGER event hooks don't funnel through runHook
+          // (they go straight to a headless run), so their `hook.fired` signal is
+          // emitted here — with the same origin+depth meta runHook stamps.
+          emitInternalSignal(
+            'hook.fired',
+            { projectId, slug: hook.slug, hookType: 'event' },
+            { originatingHookSlug: hook.slug, hookDepth: (args.hookDepth ?? 0) + 1 },
+          );
           await runTriggerHook(manager, projectRoot, projectId, hook, def, address, ev, resolveThread);
         } else {
           // handler → runHook with the emitted event as ctx.input. The declared
           // `connections:` gate + (space hooks) worker isolation apply inside runHook.
+          // `hookDepth` threads the S8 cascade depth into runHook's own `hook.fired`.
           // TODO(S6): route through the unified HookDispatcher instead of a direct call.
           await runHook(manager, root, projectId, toRunHook(hook), undefined, {
             input: { event: ev.event, payload: ev.payload, ...(ev.threadKey ? { threadKey: ev.threadKey } : {}) },
+            ...(args.hookDepth !== undefined ? { hookDepth: args.hookDepth } : {}),
           });
         }
       } catch (err) {

@@ -37,6 +37,8 @@ import { buildProjectPages } from '../app/build/pages.js';
 import { createHookRunHandler, bootCatchUpAndSchedule } from './routes/hooks.js';
 import { createInboundHandler } from './routes/webhooks.js';
 import { republishAll, buildRepublishDeps } from './republish.js';
+import { emitInternalSignal, installInternalSignalSink } from './internal-signals.js';
+import type { EventDispatchManager } from './event-dispatch.js';
 import {
   handleAppManifest, handleGetAppFile, handlePutAppFile,
   handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild,
@@ -262,13 +264,17 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   router.add(
     'POST',
     '/api/store/spaces/install',
-    handleInstallStoreSpace(effectiveLmthingRoot, undefined, (projectId) => {
+    handleInstallStoreSpace(effectiveLmthingRoot, undefined, (projectId, spaceId?: string) => {
       pageBuildCache.delete(projectId);
       // Republish-on-write (S9): a freshly installed space may add webhook/cron
       // emitter defs + `events/*.ts` — regenerate the manifest + crontab and drop
       // the emitter scan cache so they go live without a pod restart. Fire-and-forget
       // (the install response never blocks on it); no-op until boot wires it.
       void manager.republish();
+      // S8 instrumentation: space installed into a project. The install route's
+      // callback contract currently passes only `projectId`; `spaceId` rides along
+      // once the route forwards it (this callback already accepts it — additive).
+      emitInternalSignal('space.installed', { projectId, ...(spaceId ? { spaceId } : {}) });
     }),
   );
 
@@ -392,6 +398,19 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   let hookTick: NodeJS.Timeout | undefined;
   let selfIdleTimer: NodeJS.Timeout | undefined;
   if (effectiveLmthingRoot) {
+    // Internal-signal sink (S8): route fire-and-forget runtime signals (session /
+    // hook / install / document / project lifecycle) to `internal`-type emitter
+    // defs → subscribing event hooks. Installed SYNCHRONOUSLY (not in the async
+    // boot block below) so signals from the very first request are routed;
+    // anything fired before this line is dropped by design (fire-and-forget bus).
+    installInternalSignalSink({
+      root: effectiveLmthingRoot,
+      // The concrete SessionManager satisfies EventDispatchManager structurally
+      // (runHeadless/runHeadlessThreaded/getProjectDb/runTasklistHeadless).
+      manager: manager as EventDispatchManager,
+      listProjectIds: async () =>
+        (await listProjects(effectiveLmthingRoot)).map((p) => p.id).filter((id) => id !== 'system'),
+    });
     // Run all boot-time app/cron work OFF the readiness path. The HTTP server is
     // already listening (above), so the K8s startup probe (`GET /api/sessions`)
     // must NOT be blocked by the synchronous better-sqlite3 opens/reconciles in the

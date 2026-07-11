@@ -8,6 +8,7 @@ import { Session, saveSnapshot, loadSpace, loadProjectFunctions, ForkEngine, run
 import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
 import { createCodeNodeCtxFactory } from './tasklist-runner.js';
+import { emitInternalSignal } from './internal-signals.js';
 import { integrationStatusFor } from './routes/store-spaces.js';
 import type { PluginRegistry } from '@lmthing/openclaw-compat';
 import { transcribeAudio } from '../providers/transcribe.js';
@@ -444,6 +445,10 @@ export class SessionManager {
    *  `opts.input` rides into the kickoff seed, `opts.message` overrides the text). */
   private codeNodeDelegate(projectId: string, spaceRef: string, action?: string, opts?: unknown): Promise<unknown> {
     const agentSlug = spaceRef.split('/').pop() ?? spaceRef;
+    // S8 instrumentation: server-side delegation seam (code nodes + tasklist
+    // delegateRunner funnel here). In-session `delegate()` yields are separate
+    // (core yield-router) and are NOT instrumented in this step.
+    emitInternalSignal('agent.delegated', { projectId, from: 'code-node', to: spaceRef + (action ? `#${action}` : '') });
     const dopts = opts as { input?: unknown; message?: string } | undefined;
     const base = `Code-node delegate to "${spaceRef}"` + (action ? ` — "${action}".` : '.');
     const message =
@@ -1209,17 +1214,23 @@ export class SessionManager {
 
     entry.status = 'running';
     entry.lastActivity = Date.now();
+    // S8 instrumentation: top-level (interactive) turn lifecycle — one guarded
+    // fire-and-forget line per edge; emitInternalSignal itself never throws.
+    const turnStartedAt = Date.now();
+    emitInternalSignal('session.started', { ...(entry.projectId ? { projectId: entry.projectId } : {}), agent: entry.agentSlug, sessionId: id });
     run
       .then(() => {
         entry.status = 'idle';
         entry.lastActivity = Date.now();
         entry.renderHost.emit({ type: 'done' });
+        emitInternalSignal('session.completed', { ...(entry.projectId ? { projectId: entry.projectId } : {}), agent: entry.agentSlug, sessionId: id, ok: true, durationMs: Date.now() - turnStartedAt });
         void this.persistSession(entry);
       })
       .catch((err: unknown) => {
         entry.status = 'error';
         entry.lastActivity = Date.now();
         entry.renderHost.emit({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+        emitInternalSignal('session.completed', { ...(entry.projectId ? { projectId: entry.projectId } : {}), agent: entry.agentSlug, sessionId: id, ok: false, durationMs: Date.now() - turnStartedAt });
         void this.persistSession(entry);
       });
   }
@@ -1276,6 +1287,10 @@ export class SessionManager {
     const sessionId = randomUUID();
     let session: Session | undefined;
     const displays: unknown[] = [];
+    // S8 instrumentation: headless run lifecycle (hooks/triggers/spawns/delegates
+    // all enter here) — guarded fire-and-forget lines, never throw/slow the run.
+    const headlessStartedAt = Date.now();
+    emitInternalSignal('session.started', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId });
     try {
       const args = await this.buildProjectSessionArgs(opts);
       session = this.buildSessionFn(args);
@@ -1297,8 +1312,10 @@ export class SessionManager {
         const history = session.getHistory();
         result = history.length ? history[history.length - 1]?.content : undefined;
       }
+      emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId, ok: true, durationMs: Date.now() - headlessStartedAt });
       return { ok: true, result, sessionId };
     } catch (err) {
+      emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId, ok: false, durationMs: Date.now() - headlessStartedAt });
       return { ok: false, error: err instanceof Error ? err.message : String(err), sessionId };
     } finally {
       try {
@@ -1445,6 +1462,9 @@ export class SessionManager {
     return this.runExclusive(opts.sessionId, async () => {
       let session: Session | undefined;
       const displays: unknown[] = [];
+      // S8 instrumentation: threaded headless turn lifecycle (mirrors runHeadless).
+      const threadedStartedAt = Date.now();
+      emitInternalSignal('session.started', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId: opts.sessionId });
       try {
         const root = this.lmthingRoot;
         if (!root) {
@@ -1513,8 +1533,10 @@ export class SessionManager {
           const history = session.getHistory();
           result = history.length ? history[history.length - 1]?.content : undefined;
         }
+        emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId: opts.sessionId, ok: true, durationMs: Date.now() - threadedStartedAt });
         return { ok: true, result, sessionId: opts.sessionId };
       } catch (err) {
+        emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId: opts.sessionId, ok: false, durationMs: Date.now() - threadedStartedAt });
         return { ok: false, error: err instanceof Error ? err.message : String(err), sessionId: opts.sessionId };
       } finally {
         try {
@@ -1705,7 +1727,10 @@ export class SessionManager {
         break;
       }
     }
-    return scaffoldProject(root, id, name.trim());
+    const meta = await scaffoldProject(root, id, name.trim());
+    // S8 instrumentation: server-side project creation (guarded one-liner).
+    emitInternalSignal('project.created', { projectId: meta.id });
+    return meta;
   }
 
   /**
@@ -1754,6 +1779,10 @@ export class SessionManager {
     const safeName = safeDocumentName(name);
     if (!safeName) throw new Error(`invalid document name: ${name}`);
     await addDocument(root, safeId, safeName, content);
+    // S8 instrumentation: the project-DOCUMENT write choke point (the documents
+    // route + any internal caller land here). Generic fs writes (PUT
+    // /api/fs/write) are NOT classified as project documents — see S8 notes.
+    emitInternalSignal('document.written', { projectId: safeId, path: `documents/${safeName}` });
   }
 
   /**

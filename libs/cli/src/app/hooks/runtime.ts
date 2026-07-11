@@ -89,6 +89,10 @@ export class ProjectHookRuntime {
           const row = Array.isArray(entry.event.rows) ? entry.event.rows[0] : undefined;
           const outcome = await runHook(this.manager, this.lmthingRoot, this.projectId, toFlat(hook), row, {
             tasklistRunner: makeHookTasklistRunner(this.manager, this.lmthingRoot, this.projectId),
+            // S8: thread the db cascade depth into runHook so the fire's
+            // `hook.fired` internal signal carries the REAL depth (+1), keeping
+            // signal-derived cascades on the same bounded ladder as db cascades.
+            hookDepth: entry.event.hookDepth,
           });
           if (outcome.queued) return { budgetExhausted: true };
         } finally {

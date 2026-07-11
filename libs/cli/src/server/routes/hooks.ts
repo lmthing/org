@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import type { ConnectionRequest, ConnectionResponse, ConnectionResolver } from '@lmthing/core';
 import { sendJson } from './utils.js';
 import { createConnectionResolver } from '../connections.js';
+import { emitInternalSignal } from '../internal-signals.js';
 import { makeHookTasklistRunner, type TasklistRunnerManager } from '../tasklist-runner.js';
 // ── 6A (concurrent) — imported by production path; see file header. ───────────
 import {
@@ -112,6 +113,11 @@ export interface RunHookOpts {
   connectionResolver?: ConnectionResolver;
   tasklistRunner?: TasklistRunner;
   input?: unknown;
+  /** S8 loop protection: how many hook firings already sit in this run's causal
+   *  chain (absent/0 = a fresh cron/manual/inbound fire). The run's own
+   *  `hook.fired` internal signal carries this + 1, so signal-derived cascades
+   *  stay bounded by the shared depth cap. */
+  hookDepth?: number;
 }
 
 /** Flatten 6A's `LoadedHook { slug, def }` into the flat fields 6C dispatches on
@@ -221,6 +227,8 @@ function buildHookCtx(
 ): HookHandlerCtx {
   const delegate: HookHandlerCtx['delegate'] = async (spaceRef, action, dopts) => {
     const agentSlug = spaceRef.split('/').pop() ?? spaceRef;
+    // S8 instrumentation: a hook handler delegating into an agent (guarded one-liner).
+    emitInternalSignal('agent.delegated', { projectId, from: `hook:${hook.slug}`, to: spaceRef + (action ? `#${action}` : '') });
     const base = `Hook "${hook.slug}" delegate` + (action ? ` — "${action}".` : '.');
     const message =
       (dopts?.message ?? base) +
@@ -294,6 +302,17 @@ export async function runHook(
   row?: unknown,
   opts: RunHookOpts = {},
 ): Promise<HookRunResult> {
+  // S8 instrumentation: EVERY actual hook dispatch (cron endpoint, db runtime,
+  // event handler hooks) funnels through here — one guarded fire-and-forget
+  // line. meta stamps the origin slug + incremented cascade depth so a
+  // `hook.fired`-derived event can never re-trigger this same hook and deep
+  // cascades are cut at the shared depth cap (see server/internal-signals.ts).
+  // (Trigger-style EVENT hooks bypass runHook — event-dispatch.ts emits theirs.)
+  emitInternalSignal(
+    'hook.fired',
+    { projectId, slug: hook.slug, hookType: hook.type ?? 'unknown' },
+    { originatingHookSlug: hook.slug, hookDepth: (opts.hookDepth ?? 0) + 1 },
+  );
   try {
     if (typeof hook.trigger === 'string') {
       const { spaceRef, agentSlug, action } = parseTrigger(hook.trigger);
