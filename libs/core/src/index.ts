@@ -100,6 +100,9 @@ export type {
 } from './spaces/load.js';
 export { getAgentFunctions, resolveDirectDeps } from './spaces/agent.js';
 export type { ResolvedDep } from './spaces/agent.js';
+export { loadFunctionsFromDir } from './spaces/load.js';
+export { loadProjectFunctions, scopeProjectFunctions } from './spaces/project-functions-load.js';
+export type { ProjectFunctions } from './spaces/project-functions-load.js';
 export {
   loadSystemSpaces,
   mergeSystemInto,
@@ -114,6 +117,31 @@ export { resolveKnowledge } from './spaces/knowledge.js';
 export { parseFrontmatter } from './spaces/frontmatter.js';
 export { loadTasklist, loadTasklistFromSpace } from './spaces/tasklist-load.js';
 export type { TaskNode } from './spaces/tasklist-load.js';
+export { isValidVerifySpec } from './spaces/verify-spec.js';
+export type {
+  SignedPart,
+  VerifySpec,
+  PreflightSpec,
+  ChallengeSpec,
+  ThreadSpec,
+} from './spaces/verify-spec.js';
+export { validateEmitterDef, collectDeclaredEvents, buildEventPayloadsDts } from './spaces/emitter-load.js';
+export type {
+  Emitted,
+  EmitsSchema,
+  EmitterDef,
+  LoadedEmitter,
+  WebhookEmitterDef,
+  WebhookInbound,
+  WebhookVerify,
+  CronEmitterDef,
+  CronEmitterCtx,
+  DbEmitterDef,
+  DbEmitterEvent,
+  DbEmitterRow,
+  InternalEmitterDef,
+  InternalSignal,
+} from './spaces/emitter-def.js';
 
 // Session
 export { Session } from './session/session.js';

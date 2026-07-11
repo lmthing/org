@@ -14,84 +14,12 @@
  * runs pod-side against these specs; the space never ships a verifier.
  */
 
-/**
- * One piece of the byte string a signature is computed over, concatenated in
- * order. `'body'` = the raw request body; `{header}` = a request header value
- * (empty string if absent); `{literal}` = a fixed string (e.g. Slack's `v0:`).
- * Defaults to `['body']` when a spec omits `signed`.
- */
-export type SignedPart = 'body' | { header: string } | { literal: string };
-
-/**
- * How to authenticate an inbound request. The resolved secret (from the
- * descriptor's `secretEnv`, see {@link WebhookDescriptor}) is passed to the
- * engine as key material — the signing secret for `hmac`/`header-equals`/
- * `body-token`, the app public key (hex) for `ed25519`, the auth token for
- * `twilio`.
- */
-export type VerifySpec =
-  /** No verification (unauthenticated ingress — same posture as `generic`). */
-  | { type: 'none' }
-  /** Constant-time compare a header value against the secret (Telegram's
-   *  `x-telegram-bot-api-secret-token`). */
-  | { type: 'header-equals'; header: string }
-  /** Constant-time compare a body field against the secret (Mattermost /
-   *  Synology outgoing-webhook shared `token`). `bodyType` picks the decoder. */
-  | { type: 'body-token'; field: string; bodyType?: 'form' | 'json' | 'auto' }
-  /** HMAC over `signed` (default `['body']`), compared to `header` after an
-   *  optional `prefix` (GitHub/WhatsApp `sha256=`, Slack `v0=`). `skewHeader`+
-   *  `maxSkewSeconds` add a replay window (Slack). */
-  | {
-      type: 'hmac';
-      algo: 'sha1' | 'sha256';
-      encoding: 'hex' | 'base64';
-      header: string;
-      prefix?: string;
-      signed?: SignedPart[];
-      skewHeader?: string;
-      maxSkewSeconds?: number;
-    }
-  /** Ed25519 over `signed` (default `[{header:tsHeader},'body']` when `tsHeader`
-   *  is set, else `['body']`); the secret is the app's hex public key (Discord). */
-  | { type: 'ed25519'; sigHeader: string; tsHeader?: string; signed?: SignedPart[] }
-  /** Twilio's bespoke scheme: base64 HMAC-SHA1 over the forwarded public URL
-   *  (`x-lmthing-inbound-url`) + form params sorted by key, concatenated. */
-  | { type: 'twilio' };
-
-/**
- * A synchronous setup handshake answered BEFORE any agent wakes. `json-echo`
- * matches a JSON body field and returns either a fixed `respond` object
- * (Discord PING → `{type:1}`) or echoes a field back (`respondEcho`).
- */
-export interface PreflightSpec {
-  type: 'json-echo';
-  when: { field: string; equals: unknown };
-  respond?: unknown;
-  respondEcho?: { field: string };
-}
-
-/**
- * A GET subscription-verification echo (WhatsApp / Meta): on `GET`, if the
- * `tokenParam` query value equals `process.env[verifyTokenEnv]`, echo the
- * `challengeParam` query value back as plain text. Params default to Meta's
- * `hub.mode` / `hub.verify_token` / `hub.challenge`.
- */
-export interface ChallengeSpec {
-  type: 'hub-challenge';
-  verifyTokenEnv: string;
-  modeParam?: string;
-  tokenParam?: string;
-  challengeParam?: string;
-}
-
-/**
- * How to derive a stable conversation thread key (for multi-turn continuity).
- * Omit ⇒ every event is a one-shot run. The key is `<prefix>:<value>`.
- */
-export type ThreadSpec =
-  | { from: 'body'; path: string; prefix?: string }
-  | { from: 'form'; field: string; prefix?: string }
-  | { from: 'header'; header: string; prefix?: string };
+// The declarative verify/preflight/challenge/thread SPEC TYPES now live in
+// `@lmthing/core` (`spaces/verify-spec.ts`) so the legacy descriptor here and
+// the new `events/*.ts` emitter defs share ONE union + ONE validator
+// (`isValidVerifySpec`). Re-exported here for back-compat with existing importers.
+export type { SignedPart, VerifySpec, PreflightSpec, ChallengeSpec, ThreadSpec } from '@lmthing/core';
+import type { VerifySpec, PreflightSpec, ChallengeSpec, ThreadSpec } from '@lmthing/core';
 
 /** The `lmthing.webhook` block an integration space carries in its package.json. */
 export interface WebhookDescriptor {

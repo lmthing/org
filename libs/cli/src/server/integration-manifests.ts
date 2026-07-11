@@ -17,6 +17,7 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { isValidVerifySpec } from '@lmthing/core';
 import type { ProviderConfig } from './providers/types.js';
 import type { WebhookDescriptor } from './webhook-descriptor.js';
 
@@ -83,27 +84,6 @@ function parseConnection(raw: unknown): ConnectionDescriptor | undefined {
     apiBase: apiBase as ConnectionDescriptor['apiBase'],
     auth: c['auth'] as ConnectionDescriptor['auth'],
   };
-}
-
-/** Known verify-spec types + the allowed hmac params. A descriptor carrying an
- *  unknown type / weak-or-bogus hmac config is rejected outright (fail-closed)
- *  rather than reaching the crypto engine as an unvalidated `unknown`. */
-const VERIFY_TYPES = new Set(['none', 'header-equals', 'body-token', 'hmac', 'ed25519', 'twilio']);
-const HMAC_ALGOS = new Set(['sha1', 'sha256']);
-const HMAC_ENCODINGS = new Set(['hex', 'base64']);
-
-function isValidVerifySpec(verify: Record<string, unknown>): boolean {
-  const type = verify['type'];
-  if (typeof type !== 'string' || !VERIFY_TYPES.has(type)) return false;
-  if (type === 'hmac') {
-    if (!HMAC_ALGOS.has(String(verify['algo']))) return false;
-    if (!HMAC_ENCODINGS.has(String(verify['encoding']))) return false;
-    if (typeof verify['header'] !== 'string' || !verify['header']) return false;
-  }
-  if (type === 'header-equals' && (typeof verify['header'] !== 'string' || !verify['header'])) return false;
-  if (type === 'body-token' && (typeof verify['field'] !== 'string' || !verify['field'])) return false;
-  if (type === 'ed25519' && (typeof verify['sigHeader'] !== 'string' || !verify['sigHeader'])) return false;
-  return true;
 }
 
 /** Validate a raw `lmthing.webhook` block. Returns undefined if it lacks a
