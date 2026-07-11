@@ -23,17 +23,33 @@ import { basename, join } from 'node:path';
 import { loadSpace } from '@lmthing/core';
 import { loadHooks, loadSpaceHooks, type LoadedHook, type WebhookHookDef } from '../app/hooks/index.js';
 import { listProjectSpaceDirs } from './projects.js';
+import { scanEmitterDefs, type EmitterScanResult } from './emitter-manifests.js';
 
 /** One inbound-webhook binding in the published manifest. */
 export interface WebhookBinding {
   projectId: string;
   /** URL-safe path segment — globally unique per pod (the routing key). */
   path: string;
-  /** Verifier/adapter id (defaults to 'generic'). */
+  /** Verifier/adapter id (defaults to 'generic'; `'emitter'` for a webhook
+   *  emitter def, whose verify is carried by the def itself). */
   provider: string;
-  /** `space/agent#action` to run for each event (the hook's `trigger`). */
+  /** `space/agent#action` to run for each event (the hook's `trigger`), or — for
+   *  an emitter binding — the marker `<scope>/<defName>` (no agent trigger). */
   agentRef: string;
+  /** The binding SOURCE: a legacy `triggers:`/webhook-hook binding, or a WEBHOOK
+   *  EMITTER DEF (`events/*.ts`, the S4 producer side). Absent ⇒ `'legacy'`. */
+  kind?: 'legacy' | 'emitter';
 }
+
+/**
+ * What {@link resolveBinding} hands the inbound dispatcher. A LEGACY binding runs
+ * one agent `trigger`; an EMITTER binding drives the S5 emitter pipeline (verify →
+ * pure `emit(inbound)` → typed events → subscribing event hooks). The two flows in
+ * `routes/webhooks.ts` branch on `kind`.
+ */
+export type ResolvedBinding =
+  | { kind: 'legacy'; projectId: string; agentRef: string; provider: string; budget?: unknown }
+  | { kind: 'emitter'; projectId: string; scope: string; defFile: string; defName: string };
 
 /**
  * Scan every space under `<root>/<projectId>/spaces/` for agents declaring a
@@ -102,14 +118,52 @@ async function scanSpaceHookWebhooks(root: string, projectId: string): Promise<W
 }
 
 /**
+ * Scan a project's WEBHOOK EMITTER DEFS (`events/*.ts` of type `webhook`, across
+ * the project + every space scope — {@link scanEmitterDefs}, S4) and return one
+ * {@link WebhookBinding} per def. These are the PRODUCER side of the event
+ * pipeline: each claims its own `path`, so it participates in the same global
+ * path-uniqueness check as legacy bindings. The scan is worker-isolated and
+ * fail-soft-per-project (a scan error skips the project, mirroring the hook loop).
+ */
+async function scanEmitterWebhookBindings(root: string, projectId: string): Promise<WebhookBinding[]> {
+  const bindings: WebhookBinding[] = [];
+  let result: EmitterScanResult;
+  try {
+    result = await scanEmitterDefs(root, projectId);
+  } catch {
+    return bindings;
+  }
+  for (const [scope, s] of Object.entries(result.scopes)) {
+    for (const d of s.defs) {
+      if (d.def.type !== 'webhook') continue;
+      bindings.push({
+        projectId,
+        path: d.def.path,
+        provider: 'emitter',
+        agentRef: `${scope}/${d.name}`, // marker only — an emitter has no agent trigger
+        kind: 'emitter',
+      });
+    }
+  }
+  return bindings;
+}
+
+/**
  * Build the webhook manifest across `projects` from disk — project-app
- * `hooks/*.ts` webhook defs, SPACE `hooks/*.ts` webhook defs, AND space-agent
- * `triggers:` frontmatter. A
- * project whose hooks fail to load, or a space that fails to load, is
- * skipped. Fail-loud on a duplicate `path` across ANY two bindings — hook or
- * space-trigger, same or different project — since a webhook path must be
- * globally unique on this pod (the gateway routes on `path` alone and cannot
- * otherwise disambiguate the target).
+ * `hooks/*.ts` webhook defs, SPACE `hooks/*.ts` webhook defs, space-agent
+ * `triggers:` frontmatter, AND WEBHOOK EMITTER DEFS (`events/*.ts`). A project
+ * whose hooks fail to load, or a space that fails to load, is skipped. Fail-loud
+ * on a duplicate `path` — since a webhook path must be globally unique on this
+ * pod (the gateway routes on `path` alone and cannot otherwise disambiguate the
+ * target).
+ *
+ * Collision policy: an EMITTER def's path colliding with ANY other binding (a
+ * legacy trigger/hook OR another emitter), in the SAME or a different project, is
+ * FATAL. NO-BACK-COMPAT: we deliberately do NOT build a same-path sharing
+ * relaxation — S15's space migration removes the legacy binding a migrated
+ * space's emitter supersedes, so a live emitter-vs-legacy collision is a bug, not
+ * a config to reconcile. Two LEGACY bindings keep the prior rule (cross-project
+ * fatal; same-project sharing tolerated until S15).
  */
 export async function buildWebhookManifest(root: string, projects: string[]): Promise<WebhookBinding[]> {
   const bindings: WebhookBinding[] = [];
@@ -133,17 +187,31 @@ export async function buildWebhookManifest(root: string, projects: string[]): Pr
     }
     bindings.push(...(await scanSpaceHookWebhooks(root, projectId)));
     bindings.push(...(await scanSpaceTriggers(root, projectId)));
+    bindings.push(...(await scanEmitterWebhookBindings(root, projectId)));
   }
 
-  const ownerByPath = new Map<string, { projectId: string; agentRef: string }>();
+  const ownerByPath = new Map<string, { projectId: string; agentRef: string; kind: 'legacy' | 'emitter' }>();
   for (const binding of bindings) {
+    const kind = binding.kind ?? 'legacy';
     const owner = ownerByPath.get(binding.path);
-    if (owner !== undefined && owner.projectId !== binding.projectId) {
-      throw new Error(
-        `[webhook-manifest] duplicate webhook path "${binding.path}": owned by project "${owner.projectId}" (${owner.agentRef}) and project "${binding.projectId}" (${binding.agentRef}) — paths must be globally unique per pod`,
-      );
+    if (owner !== undefined) {
+      // Any emitter involved in a same-path collision (either side) is fatal, in
+      // any project — emitter paths are strictly unique (no same-path sharing).
+      if (kind === 'emitter' || owner.kind === 'emitter') {
+        throw new Error(
+          `[webhook-manifest] webhook path "${binding.path}" is claimed by an emitter def and another binding — ` +
+            `"${owner.projectId}" (${owner.agentRef}) vs "${binding.projectId}" (${binding.agentRef}); ` +
+            `emitter paths must be globally unique per pod (no same-path sharing)`,
+        );
+      }
+      // Two legacy bindings: cross-project remains fatal (unchanged behavior).
+      if (owner.projectId !== binding.projectId) {
+        throw new Error(
+          `[webhook-manifest] duplicate webhook path "${binding.path}": owned by project "${owner.projectId}" (${owner.agentRef}) and project "${binding.projectId}" (${binding.agentRef}) — paths must be globally unique per pod`,
+        );
+      }
     }
-    ownerByPath.set(binding.path, { projectId: binding.projectId, agentRef: binding.agentRef });
+    ownerByPath.set(binding.path, { projectId: binding.projectId, agentRef: binding.agentRef, kind });
   }
 
   return bindings;
@@ -182,16 +250,16 @@ export async function publishWebhookManifest(
 /**
  * Find the binding for `path` (across all `projects`) and resolve it into
  * what the inbound dispatcher needs to run it. Checks project-app webhook
- * hooks first (cheap, no space loading), then falls back to space-agent
- * `triggers:` frontmatter. Returns `null` when neither declares that `path`.
- * (`buildWebhookManifest` already fails loud at boot on a path colliding
- * across the two kinds, so in practice they never both match.)
+ * hooks first (cheap), then space-agent `triggers:` / space webhook hooks, then
+ * WEBHOOK EMITTER DEFS. Returns `null` when nothing declares that `path`.
+ * (`buildWebhookManifest` already fails loud at boot on a path colliding across
+ * kinds, so at most one source ever matches a given `path`.)
  */
 export async function resolveBinding(
   root: string,
   projects: string[],
   path: string,
-): Promise<{ projectId: string; agentRef: string; provider: string; budget?: unknown } | null> {
+): Promise<ResolvedBinding | null> {
   for (const projectId of projects) {
     const projectRoot = join(root, projectId);
     let loaded;
@@ -204,6 +272,7 @@ export async function resolveBinding(
     if (hit) {
       const def = hit.def as WebhookHookDef;
       return {
+        kind: 'legacy',
         projectId,
         agentRef: def.trigger,
         provider: def.provider ?? 'generic',
@@ -216,17 +285,29 @@ export async function resolveBinding(
     const spaceHookBindings = await scanSpaceHookWebhooks(root, projectId);
     const hookHit = spaceHookBindings.find((b) => b.path === path);
     if (hookHit) {
-      return { projectId, agentRef: hookHit.agentRef, provider: hookHit.provider, budget: undefined };
+      return { kind: 'legacy', projectId, agentRef: hookHit.agentRef, provider: hookHit.provider, budget: undefined };
     }
     const spaceBindings = await scanSpaceTriggers(root, projectId);
     const hit = spaceBindings.find((b) => b.path === path);
     if (hit) {
-      return {
-        projectId,
-        agentRef: hit.agentRef,
-        provider: hit.provider,
-        budget: undefined,
-      };
+      return { kind: 'legacy', projectId, agentRef: hit.agentRef, provider: hit.provider, budget: undefined };
+    }
+  }
+
+  // WEBHOOK EMITTER DEFS (S4/S5) — resolve to a descriptor carrying the def file
+  // (later re-loaded to run `emit` worker-isolated) + its owning scope + name.
+  for (const projectId of projects) {
+    let result: EmitterScanResult;
+    try {
+      result = await scanEmitterDefs(root, projectId);
+    } catch {
+      continue;
+    }
+    for (const [scope, s] of Object.entries(result.scopes)) {
+      const hit = s.defs.find((d) => d.def.type === 'webhook' && (d.def as { path: string }).path === path);
+      if (hit) {
+        return { kind: 'emitter', projectId, scope, defFile: hit.file, defName: hit.name };
+      }
     }
   }
 

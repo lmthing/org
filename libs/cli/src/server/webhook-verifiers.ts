@@ -21,6 +21,7 @@
  * the raw body.
  */
 import { createHmac } from 'node:crypto';
+import type { WebhookEmitterDef } from '@lmthing/core';
 import { safeEqual, tryParseJson, formDecode, verifyEd25519, type WebhookAdapter } from './webhook-crypto.js';
 import type {
   WebhookDescriptor,
@@ -374,6 +375,70 @@ export function buildAdapterFromDescriptor(desc: WebhookDescriptor): WebhookAdap
 export function getAdapter(provider: string, descriptor?: WebhookDescriptor): WebhookAdapter {
   if (descriptor) return buildAdapterFromDescriptor(descriptor);
   return WEBHOOK_ADAPTERS[provider] ?? generic;
+}
+
+// ── webhook EMITTER DEF adapter (S5) ─────────────────────────────────────────
+
+/** A webhook emitter def's DATA fields — the {@link WebhookEmitterDef} minus its
+ *  pure `emit` (which runs worker-isolated at dispatch, never in the verify path).
+ *  This is the `SerializedEmitterDef` (emitter-manifests.ts) narrowed to the
+ *  webhook kind. */
+export type WebhookEmitterFields = Omit<WebhookEmitterDef, 'emit'>;
+
+/** Everything `routes/webhooks.ts` needs to authenticate a webhook emitter def's
+ *  inbound: the verify/preflight {@link WebhookAdapter}, the resolved signing
+ *  `secret`, and a GET subscription-verification `challenge` answerer. */
+export interface EmitterWebhookAdapter {
+  adapter: WebhookAdapter;
+  /** Resolved signing secret / public key / auth token (or `undefined`). */
+  secret: string | undefined;
+  /** Answer a GET `hub-challenge` handshake from the def's `challenge` spec, or
+   *  null (descriptor-style only — the builtin shorthand uses a POST preflight). */
+  challenge(query: URLSearchParams): { status: number; body: string } | null;
+}
+
+/**
+ * Resolve a webhook emitter def's verification into the SAME {@link WebhookAdapter}
+ * surface the legacy descriptor/builtin path uses — so the inbound route runs ONE
+ * verify → preflight → challenge gate for both binding kinds.
+ *
+ *   - `verify: { type:'builtin', provider }` → the shipped inline slack/github
+ *     adapter (Slack's clock-skew guard + `url_verification` preflight; GitHub's
+ *     HMAC), with its provider-standard secret env. These schemes are NOT
+ *     expressible in the declarative union, so they stay code.
+ *   - a declarative {@link VerifySpec} → {@link buildAdapterFromDescriptor}, fed a
+ *     descriptor synthesized from the def's own `verify`/`secretEnv`/`challenge`.
+ *     An emitter def carries no `preflight`/`thread` (its pure `emit` replaces
+ *     thread extraction + rendering), so only the GET `hub-challenge` echo applies.
+ *
+ * Secret precedence is IDENTICAL to the legacy path ({@link resolveWebhookSecret}):
+ * per-path override → def `secretEnv` → builtin provider env.
+ */
+export function adapterForEmitterDef(def: WebhookEmitterFields): EmitterWebhookAdapter {
+  if (def.verify.type === 'builtin') {
+    const provider = def.verify.provider; // 'slack' | 'github'
+    return {
+      adapter: WEBHOOK_ADAPTERS[provider] ?? generic,
+      secret: resolveWebhookSecret(def.path, provider, undefined),
+      // Builtin providers handshake via a POST preflight (Slack `url_verification`),
+      // never a GET hub-challenge — so there is nothing to answer on GET.
+      challenge: () => null,
+    };
+  }
+  // Descriptor-style: synthesize a WebhookDescriptor from the def's own fields.
+  // `provider` feeds only descriptorRender (unused in emitter dispatch — we run the
+  // def's pure `emit`, never renderMessage); a fixed label keeps the shape honest.
+  const descriptor: WebhookDescriptor = {
+    provider: 'emitter',
+    ...(def.secretEnv ? { secretEnv: def.secretEnv } : {}),
+    verify: def.verify,
+    ...(def.challenge ? { challenge: def.challenge } : {}),
+  };
+  return {
+    adapter: buildAdapterFromDescriptor(descriptor),
+    secret: resolveWebhookSecret(def.path, 'emitter', descriptor),
+    challenge: (query) => resolveChallenge(descriptor, query),
+  };
 }
 
 /**

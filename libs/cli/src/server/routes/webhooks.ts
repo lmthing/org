@@ -20,11 +20,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { readBody, sendJson } from './utils.js';
-import { resolveBinding } from '../webhook-manifest.js';
+import { resolveBinding, type ResolvedBinding } from '../webhook-manifest.js';
 import { getOrCreateThreadSession } from '../webhook-threads.js';
-import { getAdapter, resolveWebhookSecret, resolveChallenge } from '../webhook-verifiers.js';
+import { getAdapter, resolveWebhookSecret, resolveChallenge, adapterForEmitterDef } from '../webhook-verifiers.js';
+import { tryParseJson } from '../webhook-crypto.js';
 import { scanIntegrationDescriptors } from '../integration-manifests.js';
+import { scanEmitterDefs } from '../emitter-manifests.js';
 import { isDuplicateInbound } from '../webhook-dedupe.js';
+import { dispatchEmittedEvents, validateEmitted, type EventDispatchManager } from '../event-dispatch.js';
+import { invokeDefaultFnInWorker } from '../../app/worker-load.js';
 import type { OpenClawRouteTable } from '../openclaw-host.js';
 import type { CompatHttpRequest } from '@lmthing/openclaw-compat';
 
@@ -59,6 +63,10 @@ export interface InboundManager {
     budget?: InboundBudget;
   }): Promise<unknown>;
   listProjects(): Promise<Array<{ id: string }>>;
+  /** The project's async data API — needed only by the EMITTER dispatch path
+   *  (handler event hooks build a ctx from it). Optional here (legacy-webhook
+   *  callers/test doubles omit it); the concrete `SessionManager` provides it. */
+  getProjectDb?(root: string, projectId: string): Promise<{ async: unknown } | null>;
 }
 
 /** Parse `space/agent#action` → the pieces `runHeadless` wants (copy of
@@ -150,6 +158,14 @@ export function createInboundHandler(
       return;
     }
 
+    // WEBHOOK EMITTER DEF path (S5): verify → pure `emit(inbound)` → typed events →
+    // subscribing event hooks. A separate, self-contained flow from the legacy
+    // agent-`trigger` path below (which stays functional until S15 migrates spaces).
+    if (binding.kind === 'emitter') {
+      await handleEmitterInbound(manager, lmthingRoot, binding, req, res, path, rawBody, headers);
+      return;
+    }
+
     // The owning space's declarative `lmthing.webhook` descriptor (self-contained
     // integrations). Absent for built-in providers (slack/github) and project-app
     // hooks — those fall back to the built-in adapter map inside getAdapter.
@@ -209,4 +225,116 @@ export function createInboundHandler(
 
     sendJson(res, 200, out);
   };
+}
+
+/** The default wall-clock ceiling for one webhook emitter's `emit(inbound)` run
+ *  (env-tunable). A hung/hostile emit is terminated at this bound. */
+const EMIT_TIMEOUT_MS = Number(process.env['LMTHING_EMITTER_EMIT_TIMEOUT_MS']) || 5000;
+
+/**
+ * Handle an inbound `POST`/`GET` bound to a WEBHOOK EMITTER DEF (S5). Re-loads the
+ * def's DATA (from the worker-isolated {@link scanEmitterDefs} cache), resolves its
+ * verify/preflight/challenge via {@link adapterForEmitterDef}, then:
+ *
+ *   GET  → answer the def's `hub-challenge` handshake (no emit, no agent).
+ *   POST → verify → preflight → dedupe → run the def's PURE `emit(inbound)`
+ *          worker-isolated (NO ctx handlers — a webhook emit does no i/o),
+ *          validate every emitted event against the def's `emits` (drop-with-warn),
+ *          and fire-and-forget {@link dispatchEmittedEvents} to the subscribing
+ *          event hooks. Responds `200 { ok, events }` WITHOUT awaiting the agent
+ *          runs — a provider gets a fast ack, exactly like the legacy path.
+ *
+ * Security ordering is identical to the legacy path and deliberate: verify BEFORE
+ * preflight (a forged handshake is rejected like any forged event), verify BEFORE
+ * dedupe (the dedupe set can't be poisoned by forgeries), and BOTH before `emit`
+ * ever runs (store code touches the request only after it's proven authentic).
+ */
+async function handleEmitterInbound(
+  manager: InboundManager,
+  lmthingRoot: string,
+  binding: Extract<ResolvedBinding, { kind: 'emitter' }>,
+  req: IncomingMessage,
+  res: ServerResponse,
+  path: string,
+  rawBody: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  // Re-load the def's data from the (cached) worker-isolated scan — never in-proc.
+  const scan = await scanEmitterDefs(lmthingRoot, binding.projectId);
+  const extracted = scan.scopes[binding.scope]?.defs.find((d) => d.name === binding.defName);
+  if (!extracted || extracted.def.type !== 'webhook') {
+    sendJson(res, 404, {
+      error: { status: 404, message: `emitter def "${binding.scope}/${binding.defName}" not found or not a webhook` },
+    });
+    return;
+  }
+  const def = extracted.def; // Omit<WebhookEmitterDef, 'emit'>
+  const { adapter, secret, challenge } = adapterForEmitterDef(def);
+
+  // GET = a subscription-verification handshake (`hub.challenge`) — no agent, no emit.
+  if ((req.method ?? 'POST').toUpperCase() === 'GET') {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    const answered = challenge(url.searchParams);
+    if (answered) {
+      res.writeHead(answered.status, { 'Content-Type': 'text/plain' });
+      res.end(answered.body);
+      return;
+    }
+    sendJson(res, 403, { error: { status: 403, message: 'challenge verification failed' } });
+    return;
+  }
+
+  if (!adapter.verify(rawBody, headers, secret)) {
+    sendJson(res, 401, { error: { status: 401, message: 'signature verification failed' } });
+    return;
+  }
+
+  const pf = adapter.preflight?.(rawBody, headers) ?? null;
+  if (pf) {
+    sendJson(res, pf.status, pf.body);
+    return;
+  }
+
+  // Replay / idempotency guard (AFTER verify, so forgeries can't poison it).
+  if (isDuplicateInbound(path, rawBody)) {
+    sendJson(res, 200, { ok: true, deduped: true });
+    return;
+  }
+
+  // Run the def's PURE `emit(inbound)` worker-isolated. NO capability handlers are
+  // wired (a webhook emit is pure — the worker's db/delegate/callConnection proxies
+  // have no backing and reject if the def tries to call them), timeout-bounded.
+  const inbound = { json: tryParseJson(rawBody) ?? null, raw: rawBody, headers, path };
+  let emittedRaw: unknown;
+  try {
+    emittedRaw = await invokeDefaultFnInWorker(binding.defFile, 'emit', inbound, {}, { timeoutMs: EMIT_TIMEOUT_MS });
+  } catch (err) {
+    sendJson(res, 500, {
+      error: { status: 500, message: `emit failed: ${err instanceof Error ? err.message : String(err)}` },
+    });
+    return;
+  }
+
+  // Validate each emitted event against the def's declared `emits` — an undeclared
+  // event name or a payload that doesn't fit its schema is dropped-with-warn.
+  const events = validateEmitted(def.emits, emittedRaw, `${binding.scope}/${binding.defName}`);
+
+  // Fire-and-forget the dispatch to subscribing event hooks — agent runs may be
+  // slow; ack the provider immediately (mirrors the legacy path's fast response).
+  // The concrete SessionManager satisfies EventDispatchManager (getProjectDb +
+  // runHeadlessThreaded); InboundManager is a structural subset, so assert it here.
+  const dispatchManager = manager as unknown as EventDispatchManager;
+  void dispatchEmittedEvents({
+    root: lmthingRoot,
+    projectId: binding.projectId,
+    sourceScope: binding.scope,
+    emitted: events,
+    manager: dispatchManager,
+  }).catch((err) => {
+    console.warn(
+      `[webhooks] emitter dispatch failed for "${path}": ` + (err instanceof Error ? err.message : String(err)),
+    );
+  });
+
+  sendJson(res, 200, { ok: true, events: events.length });
 }
