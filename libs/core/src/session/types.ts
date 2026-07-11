@@ -3,6 +3,7 @@ import type { BudgetLimits } from '../eval/budget.js';
 import type { RoleModelConfig } from '../fork/roles.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
 import type { DocumentResolver } from '../globals/read-document.js';
+import type { IntegrationStatusResolver } from '../globals/integration-status.js';
 
 export interface RenderHost {
   display(descriptor: unknown): void;
@@ -83,6 +84,12 @@ export interface SessionOpts {
    *  forks. Project-independent (NOT an app-global): absent ⇒ a readDocument yield
    *  rejects with a clear "no document resolver configured" error. */
   documentResolver?: DocumentResolver;
+  /** Host resolver for the `integrationStatus` global — reports presence-only config
+   *  status (names of missing required env vars, never their values) for an installed
+   *  integration space in this project. Supplied by libs/cli (knows the project root +
+   *  `process.env`); threaded into the project-rooted session. Absent ⇒ an
+   *  `integrationStatus` yield rejects with a clear "no project scope" error. */
+  integrationStatusResolver?: IntegrationStatusResolver;
 }
 
 export interface SessionDeps {

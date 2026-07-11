@@ -1,6 +1,7 @@
 import type { YieldRequest } from './yield.js';
 import type { ApiCallFn, ConnectionResolver } from '../db/types.js';
 import type { DocumentResolver } from '../globals/read-document.js';
+import type { IntegrationStatusResolver } from '../globals/integration-status.js';
 import type { Clock } from '../session/types.js';
 import type { Space } from '../spaces/load.js';
 import type { ForkEngine, ForkTask } from '../fork/fork.js';
@@ -84,6 +85,12 @@ export interface YieldRouterContext {
    *  pod/CLI with an uploads dir; a `readDocument` yield then rejects with a clear
    *  error. Not an app-global (project-independent) — threaded from SessionOpts. */
   documentResolver?: DocumentResolver;
+  /** Resolve an `integrationStatus()` yield — report presence-only config status
+   *  (names of missing required env vars, never their values) for an installed
+   *  integration space in the current project. Host-supplied by libs/cli (knows the
+   *  project root + `process.env`). Absent outside a project-rooted session; an
+   *  `integrationStatus` yield then rejects with a clear error. */
+  integrationStatusResolver?: IntegrationStatusResolver;
 }
 
 export type RouteResult =
@@ -192,6 +199,19 @@ export async function routeCommonYield(
       }
       const [attachmentId, opts] = req.args as [string, { maxChars?: number } | undefined];
       const value = await ctx.documentResolver(attachmentId, opts);
+      return { handled: true, value };
+    }
+    case 'integrationStatus': {
+      // Presence-only config status of an installed integration in the current
+      // project (missing REQUIRED env-var names — never their values). A missing
+      // resolver means this context has no project scope (e.g. a fork leaf / bare
+      // unit test) — throw an actionable, retryable error rather than binding
+      // undefined.
+      if (!ctx.integrationStatusResolver) {
+        throw new Error('integrationStatus is not available here: no project scope configured');
+      }
+      const [spaceId] = req.args as [string];
+      const value = await ctx.integrationStatusResolver(spaceId);
       return { handled: true, value };
     }
     case 'loadKnowledge': {

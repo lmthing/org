@@ -357,6 +357,54 @@ export interface InstalledIntegration {
   settings: unknown | null;
   /** The space's bundled `README.md` (setup instructions), `''` if none. */
   readme: string;
+  /** Settings-schema `required` env-var NAMES not yet set (absent/empty) in the pod's
+   *  `process.env`. NAMES ONLY — never any secret VALUES (which never leave the pod). */
+  missingRequired: string[];
+  /** Convenience for the UI: `missingRequired.length === 0` (all required keys set). */
+  configured: boolean;
+}
+
+/** Required env-var NAMES declared by an integration's settings JSON Schema
+ *  (`required[]`). The schema's property keys ARE pod env-var names, per contract. */
+function requiredEnvKeys(settings: unknown): string[] {
+  const s = settings as { required?: unknown } | null | undefined;
+  return Array.isArray(s?.required) ? s.required.filter((k): k is string => typeof k === 'string') : [];
+}
+
+/** Of `required` env-var NAMES, those absent or empty in `process.env`. Returns
+ *  NAMES ONLY — the secret values themselves are never read out or surfaced. */
+function missingRequiredEnv(required: string[]): string[] {
+  return required.filter((k) => {
+    const v = process.env[k];
+    return v === undefined || v === '';
+  });
+}
+
+/**
+ * Presence-only config status for the agent-facing `integrationStatus(spaceId)`
+ * global (S13): read the installed integration space's settings-schema `required`
+ * keys and report which are unset in `process.env` (NAMES only). `ready` is false
+ * when `spaceId` isn't an installed integration or any required key is unset. Shares
+ * the exact `required`→`process.env` logic the `/integrations` route uses, so the
+ * agent's view and the UI's badge never diverge.
+ */
+export async function integrationStatusFor(
+  projectDir: string,
+  spaceId: string,
+): Promise<{ ready: boolean; missingRequired: string[] }> {
+  if (!safeProjectId(spaceId)) return { ready: false, missingRequired: [] };
+  let pkg: { lmthing?: LmthingPackageBlock };
+  try {
+    pkg = JSON.parse(await readFile(join(projectDir, 'spaces', spaceId, 'package.json'), 'utf8')) as {
+      lmthing?: LmthingPackageBlock;
+    };
+  } catch {
+    return { ready: false, missingRequired: [] };
+  }
+  const lm = pkg.lmthing;
+  if (!lm || lm.kind !== 'integration') return { ready: false, missingRequired: [] };
+  const missingRequired = missingRequiredEnv(requiredEnvKeys(lm.settings));
+  return { ready: missingRequired.length === 0, missingRequired };
 }
 
 interface LmthingPackageBlock {
@@ -409,6 +457,9 @@ export function handleListProjectIntegrations(lmthingRoot: string | undefined): 
       } catch {
         readme = '';
       }
+      // Which REQUIRED keys are still unset (names only — never the secret values,
+      // which never leave the pod, so the LLM context stays clean).
+      const missingRequired = missingRequiredEnv(requiredEnvKeys(lm.settings));
       integrations.push({
         spaceId: entry.name,
         title: typeof lm.title === 'string' && lm.title.length > 0 ? lm.title : entry.name,
@@ -416,6 +467,8 @@ export function handleListProjectIntegrations(lmthingRoot: string | undefined): 
         tags: Array.isArray(lm.tags) ? lm.tags.filter((t): t is string => typeof t === 'string') : [],
         settings: lm.settings ?? null,
         readme,
+        missingRequired,
+        configured: missingRequired.length === 0,
       });
     }
     integrations.sort((a, b) => a.spaceId.localeCompare(b.spaceId));

@@ -878,6 +878,7 @@ export class Session {
       connectionResolver: this.opts.appGlobals?.callConnection,
       toolResolver: this.opts.appGlobals?.tool,
       documentResolver: this.opts.documentResolver,
+      integrationStatusResolver: this.opts.integrationStatusResolver,
       getForkEngine: () => this.getForkEngine(),
       // Runs host-side with the space dir as cwd, so a checker (tests / tsc) sees
       // files written by attempt forks.

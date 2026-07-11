@@ -45,6 +45,8 @@ export { createDelegateGlobal } from './globals/delegate.js';
 export type { DelegateOpts } from './globals/delegate.js';
 export { createReadDocumentGlobal } from './globals/read-document.js';
 export type { ReadDocumentResult, DocumentResolver } from './globals/read-document.js';
+export { createIntegrationStatusGlobal } from './globals/integration-status.js';
+export type { IntegrationStatus, IntegrationStatusResolver } from './globals/integration-status.js';
 export { createTasklistGlobal } from './globals/tasklist.js';
 export { createRegisterSpaceGlobal } from './globals/register-space.js';
 export type { RegisterSpaceResult } from './globals/register-space.js';

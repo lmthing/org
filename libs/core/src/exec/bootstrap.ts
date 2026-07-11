@@ -15,6 +15,7 @@ import { createApiCallGlobal } from '../globals/api-call.js';
 import { createCallConnectionGlobal } from '../globals/call-connection.js';
 import { createToolGlobal } from '../globals/tool.js';
 import { createReadDocumentGlobal } from '../globals/read-document.js';
+import { createIntegrationStatusGlobal } from '../globals/integration-status.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
@@ -175,6 +176,12 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   // yield router (toolResolver); the per-grant typed DTS (buildAppCapabilityDts/composeToolDts)
   // restricts `name` to the granted allow-list.
   if (caps.app['tools:use']) injectGlobal(ctx, 'tool', createToolGlobal(pushYield) as AnyFn);
+  // integrationStatus: presence-only config check for an installed integration space,
+  // injected for any project-rooted session (THING) — it carries no secrets (only the
+  // names of missing required env vars), so there is no clean capability seam yet; S10
+  // may re-gate it. The host resolver is threaded via the yield router
+  // (integrationStatusResolver); absent ⇒ a clear "no project scope" error.
+  if (opts.projectRoot) injectGlobal(ctx, 'integrationStatus', createIntegrationStatusGlobal(pushYield) as AnyFn);
   if (caps.registerSpace) injectGlobal(ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
   if (caps.setSessionMeta) injectGlobal(ctx, 'setSessionMeta', createSetSessionMetaGlobal(pushYield) as AnyFn);
 

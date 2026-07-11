@@ -21,6 +21,17 @@ export function AppShell({ singleSession }: AppShellProps) {
   const mode = useStore(s => s.mode);
   const running = useStore(s => Object.values(s.model.nodes).filter(n => n.status === 'running').length);
   const done = useStore(s => s.done);
+  const noteUser = useStore(s => s.noteUserMessage);
+
+  // Post the resume nudge into the ACTIVE chat after an Integrations-tab save (the
+  // pod has already been confirmed back by the tab). Show it in the transcript
+  // (noteUser) AND hand it to the live session socket so THING continues. The tab
+  // only calls this once the socket is open, so the send is never a silent drop.
+  const onIntegrationConfigured = React.useCallback((_spaceId: string, message: string) => {
+    noteUser(message);
+    const send = (window as unknown as { __LM_SEND__?: (m: unknown) => void }).__LM_SEND__;
+    send?.({ type: 'sendMessage', content: message });
+  }, [noteUser]);
 
   const [projectSettings, setProjectSettings] = React.useState<{ id: string; name: string } | null>(null);
   const [isMobile, setIsMobile] = React.useState(false);
@@ -166,6 +177,7 @@ export function AppShell({ singleSession }: AppShellProps) {
           onClose={() => setProjectSettings(null)}
           projectId={projectSettings.id}
           projectName={projectSettings.name}
+          onIntegrationConfigured={onIntegrationConfigured}
         />
       )}
     </div>

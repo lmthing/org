@@ -19,6 +19,7 @@ import {
   handleListStoreSpaces,
   handleInstallStoreSpace,
   handleListProjectIntegrations,
+  integrationStatusFor,
   type CatalogSpace,
 } from './routes/store-spaces.js';
 import { DEFAULT_PROJECT_ID, scaffoldProject } from './projects.js';
@@ -363,6 +364,7 @@ describe('handleListProjectIntegrations', () => {
       integrations: Array<{
         spaceId: string; title: string; icon: string | null;
         tags: string[]; settings: unknown; readme: string;
+        missingRequired: string[]; configured: boolean;
       }>;
     };
     expect(body.integrations.map((i) => i.spaceId)).toEqual([SPACE]);
@@ -373,6 +375,27 @@ describe('handleListProjectIntegrations', () => {
     expect(demo.settings).toEqual(SPACE_SETTINGS_SCHEMA);
     // The bundled README is materialized on install and surfaced verbatim.
     expect(demo.readme).toBe(DEMO_README);
+    // DEMO_TOKEN is a required key and unset in this env → surfaced as missing
+    // (NAME only), so the UI shows a "needs setup" badge and THING knows what to ask.
+    expect(demo.missingRequired).toEqual(['DEMO_TOKEN']);
+    expect(demo.configured).toBe(false);
+  });
+
+  it('reports configured=true (no missingRequired) once the required env var is set', async () => {
+    process.env['DEMO_TOKEN'] = 'sk-live-xyz';
+    try {
+      const { res, captured } = mockRes();
+      const handler = handleListProjectIntegrations(lmthingRoot);
+      await handler(mockReq(), res, { projectId: DEFAULT_PROJECT_ID });
+      const body = captured.body as {
+        integrations: Array<{ spaceId: string; missingRequired: string[]; configured: boolean }>;
+      };
+      const demo = body.integrations.find((i) => i.spaceId === SPACE)!;
+      expect(demo.missingRequired).toEqual([]);
+      expect(demo.configured).toBe(true);
+    } finally {
+      delete process.env['DEMO_TOKEN'];
+    }
   });
 
   it('returns [] for a project with no installed spaces', async () => {
@@ -390,5 +413,43 @@ describe('handleListProjectIntegrations', () => {
     const handler = handleListProjectIntegrations(lmthingRoot);
     await handler(mockReq(), res, { projectId: '../x' });
     expect(captured.status).toBe(400);
+  });
+});
+
+// ── integrationStatusFor (agent-facing `integrationStatus` resolver) ────────────
+
+describe('integrationStatusFor', () => {
+  const projectDir = () => join(lmthingRoot, DEFAULT_PROJECT_ID);
+
+  it('reports missing required keys (names only) for an installed integration', async () => {
+    delete process.env['DEMO_TOKEN'];
+    const status = await integrationStatusFor(projectDir(), SPACE);
+    expect(status).toEqual({ ready: false, missingRequired: ['DEMO_TOKEN'] });
+  });
+
+  it('reports ready once the required env var is set', async () => {
+    process.env['DEMO_TOKEN'] = 'sk-live-xyz';
+    try {
+      const status = await integrationStatusFor(projectDir(), SPACE);
+      expect(status).toEqual({ ready: true, missingRequired: [] });
+    } finally {
+      delete process.env['DEMO_TOKEN'];
+    }
+  });
+
+  it('returns ready:false, [] for a space that is not an installed integration', async () => {
+    // PLAIN_SPACE was installed above but carries no `lmthing.kind === 'integration'`.
+    const status = await integrationStatusFor(projectDir(), PLAIN_SPACE);
+    expect(status).toEqual({ ready: false, missingRequired: [] });
+  });
+
+  it('returns ready:false, [] for an unknown / uninstalled space', async () => {
+    const status = await integrationStatusFor(projectDir(), 'nope-not-installed');
+    expect(status).toEqual({ ready: false, missingRequired: [] });
+  });
+
+  it('rejects an unsafe spaceId without throwing', async () => {
+    const status = await integrationStatusFor(projectDir(), '../../etc');
+    expect(status).toEqual({ ready: false, missingRequired: [] });
   });
 });

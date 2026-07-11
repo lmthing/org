@@ -7,6 +7,7 @@ import { dirname } from 'node:path';
 import { Session, saveSnapshot, loadSpace, loadProjectFunctions } from '@lmthing/core';
 import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
+import { integrationStatusFor } from './routes/store-spaces.js';
 import type { PluginRegistry } from '@lmthing/openclaw-compat';
 import { transcribeAudio } from '../providers/transcribe.js';
 import {
@@ -385,6 +386,12 @@ export class SessionManager {
         appGlobals: this.withTools(this.withConnections(args.appGlobals, args.projectRoot)),
         appDts: args.appDts,
         documentResolver: (id, opts) => this.resolveDocument(id, opts),
+        // Presence-only integration config status (S13) — reads the installed space's
+        // required env-var NAMES vs `process.env`, never any secret values. Only a
+        // project-rooted session (THING) gets it; absent ⇒ the yield errors clearly.
+        integrationStatusResolver: args.projectRoot
+          ? (spaceId: string) => integrationStatusFor(args.projectRoot as string, spaceId)
+          : undefined,
       },
       { streamFn: this.streamFn },
     );

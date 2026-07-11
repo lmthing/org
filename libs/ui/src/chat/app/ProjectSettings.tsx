@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button.js';
 import { Spinner } from '../components/ui/Spinner.js';
 import { Tabs } from '../components/ui/Tabs.js';
 import { authHeaders } from './auth.js';
+import { IntegrationsTab } from './IntegrationsTab.js';
 
 async function apiGet<T>(path: string): Promise<T> {
   const r = await fetch(path, { headers: authHeaders() }); if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
@@ -189,14 +190,19 @@ interface ProjectSettingsProps {
   onClose: () => void;
   projectId: string;
   projectName?: string;
+  /** Post the "integration configured — continue" nudge into the active chat after
+   *  a save from the Integrations tab (once the pod is back). Lifted from the chat
+   *  shell, which owns the message-send machinery. */
+  onIntegrationConfigured?: (spaceId: string, message: string) => void;
 }
 
-export function ProjectSettings({ open, onClose, projectId, projectName }: ProjectSettingsProps) {
+export function ProjectSettings({ open, onClose, projectId, projectName, onIntegrationConfigured }: ProjectSettingsProps) {
   const [tab, setTab] = React.useState('instructions');
   const tabs = [
     { id: 'instructions', label: 'Instructions' },
     { id: 'documents', label: 'Documents' },
     { id: 'spaces', label: 'Spaces' },
+    { id: 'integrations', label: 'Integrations' },
     { id: 'env', label: 'Env' },
   ];
 
@@ -206,6 +212,7 @@ export function ProjectSettings({ open, onClose, projectId, projectName }: Proje
       {tab === 'instructions' && <InstructionsTab projectId={projectId} />}
       {tab === 'documents' && <DocumentsTab projectId={projectId} />}
       {tab === 'spaces' && <SpacesTab projectId={projectId} />}
+      {tab === 'integrations' && <IntegrationsTab projectId={projectId} onConfigured={onIntegrationConfigured} />}
       {tab === 'env' && <EnvTab />}
     </Drawer>
   );
