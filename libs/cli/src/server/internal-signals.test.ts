@@ -161,8 +161,10 @@ describe('internal-signals (S8)', () => {
     emitInternalSignal('session.completed', { projectId: 'p1', ok: true, agent: 'thing', sessionId: 'sX' });
     await flushInternalSignals();
 
+    // ctx.input IS the emitted payload (uniform with the db-write path); the handler
+    // already knows its event name from `on:{event}`.
     expect(globalThis.__s8sink).toEqual([
-      { tag: 'on-ish', input: { event: 'lmthing_ish', payload: { projectId: 'p1', ok: true } } },
+      { tag: 'on-ish', input: { projectId: 'p1', ok: true } },
     ]);
   }, 60_000);
 

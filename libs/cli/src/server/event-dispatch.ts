@@ -205,13 +205,17 @@ export async function dispatchEmittedEvents(args: DispatchEmittedEventsArgs): Pr
           );
           await runTriggerHook(manager, projectRoot, projectId, hook, def, address, ev, resolveThread);
         } else {
-          // handler → runHook with the emitted event as ctx.input. The declared
-          // `connections:` gate + (space hooks) worker isolation apply inside runHook.
-          // `hookDepth` threads the S8 cascade depth into runHook's own `hook.fired`.
-          // Direct (not queued): a webhook/cron/internal event arrives singly from an
-          // external edge, so it needs no post-commit coalescing (db writes do — S6).
+          // handler → runHook with the emitted event's PAYLOAD as ctx.input — the
+          // SAME shape the db-write path delivers (`input = row`, runtime.ts), so a
+          // handler reads `ctx.input` uniformly whether it subscribes to
+          // `project/db.<table>.<event>` or `<space>/<event>` (it already knows the
+          // event name from its own `on:{event}`). The declared `connections:` gate +
+          // (space hooks) worker isolation apply inside runHook. `hookDepth` threads
+          // the S8 cascade depth into runHook's own `hook.fired`. Direct (not queued):
+          // a webhook/cron/internal event arrives singly from an external edge, so it
+          // needs no post-commit coalescing (db writes do — S6).
           await runHook(manager, root, projectId, toRunHook(hook), undefined, {
-            input: { event: ev.event, payload: ev.payload, ...(ev.threadKey ? { threadKey: ev.threadKey } : {}) },
+            input: ev.payload,
             ...(args.hookDepth !== undefined ? { hookDepth: args.hookDepth } : {}),
           });
         }

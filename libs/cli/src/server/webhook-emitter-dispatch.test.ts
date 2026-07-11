@@ -184,9 +184,9 @@ describe('emitter dispatch — descriptor verify → handler hook', () => {
     expect(sink).toHaveLength(1);
     const call = sink[0]!;
     expect(call).toMatchObject({ kind: 'runHeadless', projectId: 'crm', spaceRef: 'fulfil/agent', agentSlug: 'agent' });
-    // The typed payload rode ctx.input into the handler, then into the delegate message.
+    // ctx.input IS the typed payload (same shape as the db-write path's row) — the
+    // handler knows its event from `on:{event}`, so the name isn't in `input`.
     const msg = String(call['message']);
-    expect(msg).toContain('order.created');
     expect(msg).toContain('"id":"42"');
     expect(msg).toContain('"total":99');
   });
