@@ -226,7 +226,7 @@ then reply. This takes priority over the triage paths below when attachments are
    writes the project's event hook (subscribing to the space's event) and any emitter def:
    ```typescript
    const auto = await delegate('system-appbuilder', 'automator', {
-     query: 'When <event, e.g. integration-slack/message.posted> happens, <do Y>. Available events: '
+     query: 'When <event, e.g. integration-slack/message.received> happens, <do Y>. Available events: '
        + (rec.emits ?? []).join(', ') + '; available actions: ' + (rec.actions ?? []).join(', '),
    });
    display(JSON.stringify(auto, null, 2));

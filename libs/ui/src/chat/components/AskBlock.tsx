@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ConsentCard, isConsentDescriptor, consentPropsFromDescriptor } from './ConsentCard.js';
 
 interface JSXDescriptor {
   type: string;
@@ -138,6 +139,18 @@ function renderFormField(
 
 export function AskBlock({ id, descriptor, onSubmit, onCancel }: AskBlockProps): React.ReactElement {
   const [formData, setFormData] = useState<Record<string, unknown>>({});
+
+  // Host-enforced consent: render an Approve/Deny card. Both choices resolve the
+  // ask (approve → `true`, deny → `false`), so the agent never hangs.
+  if (isConsentDescriptor(descriptor)) {
+    return (
+      <ConsentCard
+        {...consentPropsFromDescriptor(descriptor)}
+        onApprove={() => onSubmit(id, true)}
+        onDeny={() => onSubmit(id, false)}
+      />
+    );
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

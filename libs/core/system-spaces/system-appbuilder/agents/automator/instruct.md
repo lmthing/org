@@ -33,7 +33,7 @@ imperative `handler` (real code — the handler IS the filter, no rule DSL):
 const src = [
   "export default {",
   "  type: 'event',",
-  "  on: { event: 'integration-slack/message.posted' },",
+  "  on: { event: 'integration-slack/message.received' },",
   "  connections: ['slack'],",                     // gates ctx.callConnection to these providers
   "  handler: async ({ input, delegate, callConnection }) => {",
   "    const msg = input as { text: string; channel: string };",

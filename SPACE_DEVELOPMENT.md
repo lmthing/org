@@ -144,6 +144,37 @@ End by calling:
 currentTask.resolve({ resultFlag: true })
 ```
 
+**Code nodes.** A sibling `NN-<id>.ts` (instead of `.md`) is a **code node** — deterministic host-run
+code, no model. It exports a `node` metadata object (`{ id?, dependsOn?, condition?, forEach?, output? }`,
+statically AST-extracted — core never executes it) plus `run(ctx, inputs)`, run **worker-isolated** by
+the CLI. `ctx` exposes `db`, `delegate` (returns the result), and `callConnection` locked to the
+tasklist's `connections:` (frontmatter of `tasklists/<slug>/index.md`) **∩ the space's own provider(s)**.
+Output feeds the DAG identically to an agent node. Tasklists are **space-only**; a hook handler reaches
+one headless via `ctx.tasklist.run('<spaceId>/<slug>', seed)`. Full guide → repo-root
+`@lmthing:.claude/skills/events-and-hooks.md`.
+
+### Events (`events/*.ts`) — emitter defs
+The PRODUCER side of the unified event pipeline. A named `.ts` file default-exports a typed
+`EmitterDef` (`webhook` | `cron` | `db` | `internal`) declaring the events this scope produces, with an
+inline `emits` payload schema (typeStrings, `?` = optional). **This is how an integration space becomes
+an event SOURCE**: e.g. `integration-slack/events/messages.ts` emits a `message.received` webhook event
+a project hook subscribes to (superseding the old handler-agent `triggers:` bridge). Store-space defs
+run worker-isolated, and any secret env ref must sit in the space's `INTEGRATION_<ID>_` namespace.
+```ts
+// events/inbound.ts
+import type { Emitted, WebhookEmitterDef, WebhookInbound } from '@lmthing/core';
+const def: WebhookEmitterDef = {
+  type: 'webhook',
+  path: 'my-hook',                                  // its own inbound URL (URL-safe, globally unique)
+  verify: { type: 'builtin', provider: 'slack' },   // or a declarative VerifySpec descriptor
+  emits: { 'message.received': { payload: { text: 'string', chatId: 'string', threadKey: 'string?' } } },
+  emit(inbound: WebhookInbound): Emitted[] { /* PURE: verified request → events */ return []; },
+};
+export default def;
+```
+Full authoring (all four kinds, `emits`/`?`, verify union, `@consent`, security) → repo-root
+`@lmthing:.claude/skills/events-and-hooks.md`.
+
 ### Components (`components/`)
 Components give agents rich interactive capabilities.
 - **View components (`components/view/*.tsx`)**: Simple React elements for displaying data visually using `display()`.
@@ -410,17 +441,30 @@ tokens only — the same hard token gate as every other web surface. A page may 
 **`<Chat agent="space/agent" />`** (from `@app/runtime`) for a live, full-capability conversation
 with a project agent — the one place the catalog descriptor renderer lives inside an app.
 
-### `hooks/<slug>.ts` — unified triggers
+### `hooks/<slug>.ts` — unified triggers (the CONSUMER side)
 
-A default-exported hook object, `type: 'cron'` (`every: '<n>(m|h|d)'`, clamped ≥5m, or `daily:
-'HH:MM'`) or `type: 'database'` (`on: { table, event: 'insert'|'update'|'remove' }`), each either
-**declarative** (`trigger: 'space/agent#action'`) or **imperative** (`handler: async ({ row, db,
-delegate }) => {...}`). `database` dispatch is **in-process and decoupled from the write** — a
-`db.*` write enqueues matching hooks and returns immediately; the queue drains on the event loop
-after the current eval unwinds (never re-entrant). `cron` rides the pod's native crond in
-production (regenerated on boot) and an in-process 60s tick in local dev. A host-enforced **loop
-guard** (depth cap, self-write exclusion, per-hook cooldown/coalesce) applies regardless of what an
-agent authors.
+A default-exported hook object, one of three types — each either **declarative** (`trigger:
+'space/agent#action'`, delegate to an agent) or **imperative** (`handler: async ({ input, db,
+delegate, callConnection, tasklist }) => {...}` — the handler IS the filter, no DSL):
+
+- `type: 'event'` — subscribe to a **source-qualified** event address `on: { event: '<sourceId>/<name>' }`
+  (`project/<event>`, `project/db.<table>.<insert|update|remove>`, or `<spaceId>/<event>`). This is the
+  primary consumer for the events pipeline above.
+- `type: 'cron'` — `every: '<n>(m|h|d)'` (clamped ≥5m) or `daily: 'HH:MM'`; rides the pod's native
+  crond in production (regenerated on boot) and an in-process 60s tick in local dev.
+- `type: 'webhook'` — LEGACY declarative inbound binding (`path` + `trigger`); prefer an `events/`
+  webhook emitter def + an `event` hook.
+
+**Database hooks are REMOVED (no compat).** `{type:'database'}` no longer exists; a project-db write
+auto-emits the synthetic event `project/db.<table>.<event>` (payload IS the written row), so subscribe
+with an `event` hook — `{ type:'event', on:{ event:'project/db.posts.insert' }, handler }` where
+`ctx.input` is the row. `ctx.input` is uniform across every event kind. Db-write dispatch is
+**in-process and decoupled from the write** — a `db.*` write enqueues and returns immediately; the
+coalescing queue drains on the event loop after the eval unwinds (never re-entrant). The handler ctx's
+`delegate` passes structured input AND returns the result; `callConnection` needs the hook's declared
+`connections:`. A host-enforced **loop guard** (depth cap, self-write/self-trigger exclusion, per-hook
+cooldown/coalesce) applies regardless of what an agent authors. Full guide → repo-root
+`@lmthing:.claude/skills/events-and-hooks.md`.
 
 ### The capability model gates every surface
 
@@ -439,7 +483,7 @@ THING never authors an app directly — it **delegates** to the system space `sy
 | `data-modeler` | `db:schema`, `db:read` | designs/evolves tables |
 | `page-builder` | `pages:write`, `db:read` | authors pages |
 | `api-author` | `api:write`, `db:read` | authors named typed endpoints |
-| `automator` | `hooks:write` | wires cron/db hooks |
+| `automator` | `hooks:write` | wires project event/cron hooks + emitter defs into the LIVE project (`writeProjectHook`/`writeProjectEvent`) |
 
 Its `build_app` tasklist decomposes a request into `design → create_project → build_table[] →
 build_api[] → build_page[] → build_hook[] → finalize` — one authoring call per file, the same

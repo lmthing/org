@@ -4,6 +4,7 @@ export { ReplRpcClient } from './client/rpc-client.js';
 export type { ReplClientConfig } from './client/rpc-client.js';
 export { DisplayBlock } from './components/DisplayBlock.js';
 export { AskBlock } from './components/AskBlock.js';
+export { ConsentCard, isConsentDescriptor, consentPropsFromDescriptor } from './components/ConsentCard.js';
 export { VariablesBlock } from './components/VariablesBlock.js';
 export type { ReplBlock } from './client/useReplSession.js';
 export { AgentChatPanel } from './components/AgentChatPanel.js';

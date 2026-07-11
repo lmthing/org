@@ -6,6 +6,7 @@ import type { ConvoBlock } from '../store/model.js';
 import type { TraceAttachment } from '@lmthing/core';
 import { preview } from './common.js';
 import { CatalogForm } from '../components/forms/CatalogForm.js';
+import { ConsentCard, isConsentDescriptor, consentPropsFromDescriptor } from '../components/ConsentCard.js';
 import { renderDescriptor, isDescriptor } from '../components/render-descriptor.js';
 import type { Descriptor } from '../components/render-descriptor.js';
 import { ActivityStrip } from './ActivityStrip.js';
@@ -56,7 +57,14 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
         <div className="text-xs text-muted-foreground font-mono mb-2">cancelled</div>
       )}
       <div style={inert ? { pointerEvents: 'none' } : undefined}>
-        {Comp ? (
+        {d && isConsentDescriptor(d) ? (
+          <ConsentCard
+            {...consentPropsFromDescriptor(d)}
+            inert={inert}
+            onApprove={() => onSubmit(true)}
+            onDeny={() => onSubmit(false)}
+          />
+        ) : Comp ? (
           <Comp {...(d!.props ?? {})} onSubmit={onSubmit} />
         ) : d && isFormDescriptor(d) ? (
           <CatalogForm descriptor={d} onSubmit={onSubmit} />

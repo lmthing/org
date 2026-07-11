@@ -15,6 +15,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
+import { Badge } from '@lmthing/ui/elements/content/badge'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,35 @@ export default function untitled(): void {
 
 function functionNameFromPath(path: string): string {
   return path.split('/').pop()?.replace(/\.ts$/, '') ?? path
+}
+
+/**
+ * Does a function's source opt into host-enforced consent? True when a LEADING
+ * comment (JSDoc block or `//` line, before any code) carries the `@consent`
+ * pragma. Browser-safe mirror of core's `functionRequiresConsent`
+ * (`globals/consent.ts`) — that module pulls in `node:crypto`, so we can't import
+ * it into the web bundle. Keep the two in sync.
+ */
+function functionRequiresConsent(source: string): boolean {
+  let i = 0
+  const n = source.length
+  while (i < n) {
+    while (i < n && /\s/.test(source[i]!)) i++
+    if (source.startsWith('//', i)) {
+      const end = source.indexOf('\n', i)
+      const line = end === -1 ? source.slice(i) : source.slice(i, end)
+      if (/@consent\b/.test(line)) return true
+      i = end === -1 ? n : end + 1
+    } else if (source.startsWith('/*', i)) {
+      const end = source.indexOf('*/', i)
+      const block = end === -1 ? source.slice(i) : source.slice(i, end)
+      if (/@consent\b/.test(block)) return true
+      i = end === -1 ? n : end + 2
+    } else {
+      break
+    }
+  }
+  return false
 }
 
 // ── FunctionListItem ──────────────────────────────────────────────────────────
@@ -44,6 +74,8 @@ function FunctionListItem({ name, isActive, onSelect, onDelete, onRename }: Func
   const [renaming, setRenaming] = useUIState(`fn-item.${name}.renaming`, false)
   const [renameValue, setRenameValue] = useUIState(`fn-item.${name}.rename-value`, name)
   const inputRef = useRef<HTMLInputElement>(null)
+  const source = useFile(P.functionFile(name))
+  const requiresConsent = typeof source === 'string' && functionRequiresConsent(source)
 
   useEffect(() => {
     if (renaming) {
@@ -77,7 +109,14 @@ function FunctionListItem({ name, isActive, onSelect, onDelete, onRename }: Func
           style={{ flex: 1 }}
         />
       ) : (
-        <span className="functions-editor__list-item-name">{name}.ts</span>
+        <span className="functions-editor__list-item-name">
+          {name}.ts
+          {requiresConsent && (
+            <Badge variant="primary" title="Runs only after the user approves a consent card (@consent)" style={{ marginLeft: 6 }}>
+              consent
+            </Badge>
+          )}
+        </span>
       )}
 
       <div className="functions-editor__list-item-actions" onClick={e => e.stopPropagation()}>

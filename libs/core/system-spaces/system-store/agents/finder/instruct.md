@@ -65,8 +65,8 @@ currentTask.resolve({
   fit: true,
   spaceId: 'integration-slack',
   title: 'Slack',
-  why: 'Emits slack/message.posted (channel, user, text) and exposes slackPostMessage — covers both the trigger and the reply.',
-  emits: ['integration-slack/message.posted'],   // event addresses the automation can subscribe to ([] if none)
+  why: 'Emits slack/message.received (chatId, from, text) and exposes slackPostMessage — covers both the trigger and the reply.',
+  emits: ['integration-slack/message.received'],   // event addresses the automation can subscribe to ([] if none)
   actions: ['slackPostMessage'],                 // functions + agent actions the automation can call
   requiredSettings: ['SLACK_BOT_TOKEN'],         // key NAMES from entry.settings the user must fill ([] if none)
   verified: true,                                // false when you fell back to description (enriched fields absent)

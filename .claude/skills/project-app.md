@@ -23,7 +23,13 @@ project share one database and one page bundle.
 | **db** | `database/<table>.json` (one file per table; table + every column/relation needs a `description`) | SQLite in the pod, one file per project | `libs/core/src/db/` (`schema.ts`, `types.ts`) |
 | **api** | `api/<route>/<METHOD>.ts` (dir = route, filename = HTTP method) | **Node, worker-isolated** — crash boundary, not a security boundary | `libs/cli/src/app/` (runtime), `libs/core/src/app/build/contracts.ts` |
 | **pages** | `pages/*.tsx` (file-based routing; `_app.tsx`/`_layout.tsx` are non-route wrappers) | **client-side React** (no pod-side loader); data via `@app/runtime` (`useApi`/`useApiMutation`/`apiCall`) | `libs/core/src/app/build/pages.ts`, `libs/cli/src/app/pages-serve.ts` |
-| **hooks** | `hooks/<slug>.ts` (`type: 'cron'` or `type: 'database'`; declarative `trigger:` or imperative `handler:`) | cron rides the pod crond (prod) / 60s tick (dev); `database` dispatch is **in-proc, decoupled from the write** (enqueue → drain after the eval, never re-entrant) | app runtime in `libs/cli/src/app/` |
+| **hooks** | `hooks/<slug>.ts` (`type: 'cron'` or `type: 'event'`; declarative `trigger:` or imperative `handler:`) — plus `events/<name>.ts` emitter defs | cron rides the pod crond (prod) / 60s tick (dev); db-write dispatch is **in-proc, decoupled from the write** (enqueue → drain after the eval, never re-entrant) | app runtime in `libs/cli/src/app/` |
+
+**Hooks are event hooks now.** `{type:'database'}` was REMOVED — a project-db write auto-emits the
+synthetic event `project/db.<table>.<insert|update|remove>` (payload IS the row), so react with
+`{ type:'event', on:{ event:'project/db.<table>.<event>' }, handler }` where `ctx.input` is the row.
+Optionally add an `events/<name>.ts` **db emitter def** to turn a raw write into a curated typed event.
+Full events/hooks authoring → repo-root `@lmthing:.claude/skills/events-and-hooks.md`.
 
 Full file-format detail is in **SPACE_DEVELOPMENT.md §7** — don't duplicate it; read it before authoring.
 
@@ -33,7 +39,8 @@ Nothing about the app layer is ambient. An agent can touch a surface **only** wh
 `capabilities:` frontmatter grants the matching id — even THING holds none of its own.
 
 - Ids (`libs/core/src/spaces/capabilities.ts`, `CapabilityId`): `db:read`, `db:write`, `db:schema`,
-  `pages:write`, `api:write`, `hooks:write`, `api:call`, `project:manage`.
+  `pages:write`, `api:write`, `hooks:write`, `api:call`, `connections:use`, `tools:use`,
+  `project:manage`, and the event/store caps `store:read`, `store:install`, `events:emit`.
 - **Enforced at injection, not by prose.** `libs/core/src/exec/app-globals.ts` injects each global
   only when the agent holds the capability, and scopes every call (e.g. table access). The matching
   DTS fragment (`libs/core/src/typecheck/library-dts.ts` — `PAGES_WRITE_DTS`, `API_WRITE_DTS`,
@@ -68,7 +75,7 @@ Five least-privilege agents (each `functions: []`, `knowledge: app_building/mode
 | `data-modeler` | `db:schema`, `db:read` | designs/evolves tables (`writeTableSchema`) |
 | `page-builder` | `pages:write`, `db:read` | authors pages (`writePage`) |
 | `api-author` | `api:write`, `db:read` | authors named typed endpoints (`writeApi`) |
-| `automator` | `hooks:write` | wires cron/db hooks (`writeHook`) |
+| `automator` | `hooks:write` | wires project event/cron hooks + emitter defs into the LIVE project (`writeProjectHook`/`writeProjectEvent`) |
 
 Its `build_app` tasklist decomposes to `design → create_project → build_table[] → build_api[] →
 build_page[] → build_hook[] → finalize`. Knowledge lives under `knowledge/app_building/model/`.
