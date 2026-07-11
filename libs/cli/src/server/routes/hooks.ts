@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import type { ConnectionRequest, ConnectionResponse, ConnectionResolver } from '@lmthing/core';
 import { sendJson } from './utils.js';
 import { createConnectionResolver } from '../connections.js';
+import { makeHookTasklistRunner, type TasklistRunnerManager } from '../tasklist-runner.js';
 // ── 6A (concurrent) — imported by production path; see file header. ───────────
 import {
   loadHooks,
@@ -144,7 +145,7 @@ export interface HookRunResult {
 
 /** Minimal manager surface 6C needs (satisfied structurally by `SessionManager`
  *  once 6B lands `runHeadless`; `getProjectDb` already exists). */
-export interface HookManager {
+export interface HookManager extends TasklistRunnerManager {
   runHeadless(args: {
     projectId: string;
     spaceRef: string;
@@ -378,7 +379,12 @@ export function createHookRunHandler(
       return;
     }
 
-    const outcome = await runHook(manager, lmthingRoot, projectId, hook);
+    // Inject the real SPACE-tasklist runner (S9) so a hook handler's
+    // `ctx.tasklist.run('<spaceId>/<slug>', seed)` runs headless against this
+    // project. Composition point: every cron/manual/boot run funnels through here.
+    const outcome = await runHook(manager, lmthingRoot, projectId, hook, undefined, {
+      tasklistRunner: makeHookTasklistRunner(manager, lmthingRoot, projectId),
+    });
 
     const now = Date.now();
     const state = await loadHooksState(projectRoot);

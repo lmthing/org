@@ -16,6 +16,14 @@ export type WorkerLoadJob =
       code: string;
       /** Which function on the default export to call (e.g. `handler`). */
       fnKey: string;
+      /** When set, the fn is a NAMED module export (`exports.<namedFn>`) called as
+       *  `fn(ctx, ...extraArgs)` — used for tasklist code nodes whose module exports
+       *  `run(ctx, inputs)` at top level (no default export). When absent, the legacy
+       *  `default.<fnKey>(ctx)` shape is used (space hooks/emitters). */
+      namedFn?: string;
+      /** Serializable positional args appended AFTER `ctx` (e.g. a code node's
+       *  `inputs`). Only meaningful with `namedFn`. */
+      extraArgs?: unknown[];
       /** Serializable ctx fields merged into the invoked fn's ctx (e.g. `row`, `input`, `payload`). */
       ctxSeed: Record<string, unknown>;
       /** The db method names exposed as ctx.db proxies (mirrors `AsyncDbApi`). */

@@ -4,6 +4,7 @@ import type { RoleModelConfig } from '../fork/roles.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
 import type { DocumentResolver } from '../globals/read-document.js';
 import type { IntegrationStatusResolver } from '../globals/integration-status.js';
+import type { CodeNodeCtxFactory } from '../tasklist/orchestrator.js';
 
 export interface RenderHost {
   display(descriptor: unknown): void;
@@ -90,6 +91,15 @@ export interface SessionOpts {
    *  `process.env`); threaded into the project-rooted session. Absent ⇒ an
    *  `integrationStatus` yield rejects with a clear "no project scope" error. */
   integrationStatusResolver?: IntegrationStatusResolver;
+  /** Host-built factory for `kind:'code'` tasklist nodes (plan S9). Threaded into
+   *  the session's yield-router context so a `tasklist()` yield whose SPACE tasklist
+   *  contains code nodes can run them: for each node the CLI/pod loads its
+   *  `run(ctx, inputs)` module in a Node worker with a ctx (db + delegate +
+   *  callConnection locked to the space/tasklist `connections:`) serviced
+   *  main-side. Absent for legacy/non-project sessions (and bare unit tests) — a
+   *  code node then fails with a clear required-task error (core never executes
+   *  the node module itself). Built by libs/cli's `createCodeNodeCtxFactory`. */
+  codeNodeCtxFactory?: CodeNodeCtxFactory;
 }
 
 export interface SessionDeps {

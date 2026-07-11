@@ -1,6 +1,7 @@
 import type { ProjectDb, WriteListener } from '../store.js';
 import { HookDispatcher, matchDatabaseHooks, type LoadedHook, type WriteEvent } from './index.js';
 import { runHook, type HookManager, type Hook } from '../../server/routes/hooks.js';
+import { makeHookTasklistRunner } from '../../server/tasklist-runner.js';
 
 /** How long a db hook is coalesced after firing (loop-guard cooldown). */
 const HOOK_COOLDOWN_MS = 5_000;
@@ -86,7 +87,9 @@ export class ProjectHookRuntime {
         this.currentSlug = entry.slug;
         try {
           const row = Array.isArray(entry.event.rows) ? entry.event.rows[0] : undefined;
-          const outcome = await runHook(this.manager, this.lmthingRoot, this.projectId, toFlat(hook), row);
+          const outcome = await runHook(this.manager, this.lmthingRoot, this.projectId, toFlat(hook), row, {
+            tasklistRunner: makeHookTasklistRunner(this.manager, this.lmthingRoot, this.projectId),
+          });
           if (outcome.queued) return { budgetExhausted: true };
         } finally {
           this.currentDepth = prevDepth;

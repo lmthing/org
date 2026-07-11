@@ -139,6 +139,38 @@ export async function invokeDefaultFnInWorker(
   throw new Error(`worker-load: unexpected result invoking "${fnKey}" in "${file}"`);
 }
 
+/**
+ * Evaluate `file`'s module in a worker and invoke a top-level NAMED export
+ * `fnName(ctx, ...args)`. Unlike {@link invokeDefaultFnInWorker} (which targets a
+ * method on the module's `default` export object), this calls a function exported
+ * at module top level and passes extra positional `args` AFTER the proxied ctx —
+ * the shape a tasklist code node uses (`export async function run(ctx, inputs)`;
+ * no default export). The ctx's `db`/`delegate`/`callConnection` proxies are
+ * serviced by `handlers` in the main process, exactly as for the default path.
+ * Returns the fn's serializable result.
+ */
+export async function invokeNamedFnInWorker(
+  file: string,
+  fnName: string,
+  args: unknown[],
+  handlers: WorkerInvokeHandlers,
+  opts: { timeoutMs?: number } = {},
+): Promise<unknown> {
+  const code = await transpileFile(file);
+  const job: WorkerLoadJob = {
+    mode: 'invoke',
+    code,
+    fnKey: fnName,
+    namedFn: fnName,
+    extraArgs: args,
+    ctxSeed: {},
+    dbMethods: DB_METHODS,
+  };
+  const result = await runWorker(job, handlers, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  if (result.type === 'result') return result.value;
+  throw new Error(`worker-load: unexpected result invoking "${fnName}" in "${file}"`);
+}
+
 // ── Worker lifecycle + proxy servicing ────────────────────────────────────────
 
 /** Launch one worker for `job`, service its proxies against `handlers`, and

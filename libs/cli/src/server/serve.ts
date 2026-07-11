@@ -36,7 +36,7 @@ import { createPageServeHandler } from '../app/pages-serve.js';
 import { buildProjectPages } from '../app/build/pages.js';
 import { createHookRunHandler, bootCatchUpAndSchedule } from './routes/hooks.js';
 import { createInboundHandler } from './routes/webhooks.js';
-import { buildWebhookManifest, publishWebhookManifest } from './webhook-manifest.js';
+import { republishAll, buildRepublishDeps } from './republish.js';
 import {
   handleAppManifest, handleGetAppFile, handlePutAppFile,
   handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild,
@@ -264,6 +264,11 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     '/api/store/spaces/install',
     handleInstallStoreSpace(effectiveLmthingRoot, undefined, (projectId) => {
       pageBuildCache.delete(projectId);
+      // Republish-on-write (S9): a freshly installed space may add webhook/cron
+      // emitter defs + `events/*.ts` — regenerate the manifest + crontab and drop
+      // the emitter scan cache so they go live without a pod restart. Fire-and-forget
+      // (the install response never blocks on it); no-op until boot wires it.
+      void manager.republish();
     }),
   );
 
@@ -437,15 +442,26 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       };
       await publishManifestIfChanged();
 
-      // Publish the inbound-webhook bindings (Phase 1) so the gateway can route
-      // `<gateway>/webhooks/<path>` to this pod (waking it if asleep). Best-effort,
-      // same gating as the cron manifest above — inert without gateway env.
-      try {
-        const bindings = await buildWebhookManifest(root, projects);
-        if (gatewayUrl && computeJwt) await publishWebhookManifest(gatewayUrl, computeJwt, bindings);
-      } catch (err) {
-        console.warn('[webhook-manifest] build/publish failed:', err instanceof Error ? err.message : err);
-      }
+      // Republish-on-write callable (S9): rebuild+publish the inbound-webhook
+      // manifest (so the gateway can route `<gateway>/webhooks/<path>` here, waking
+      // the pod), regenerate the crontab, and drop the emitter scan cache. The SAME
+      // callable is reused after installs (serve.ts store-install callback) and
+      // authoring writes (S11, via `manager.republish()`). Wire it now that the
+      // server port + gateway config are known, then run it once at boot (this
+      // replaces the former inline webhook-manifest publish). Gateway publish is
+      // inert without gateway env — same gating as the cron manifest above.
+      const republish = (): Promise<void> =>
+        republishAll(
+          buildRepublishDeps({
+            root,
+            listProjectIds: async () =>
+              (await listProjects(root)).map((p) => p.id).filter((id) => id !== 'system'),
+            serverPort: actualPort,
+            gateway: gatewayUrl && computeJwt ? { url: gatewayUrl, jwt: computeJwt } : undefined,
+          }),
+        );
+      manager.setRepublish(republish);
+      await republish();
 
       // OpenClaw plugins (pod-only increment) — best-effort: no `.openclaw-plugins/` dir
       // ⇒ no-op, so existing pods are completely unaffected. Every loaded plugin's

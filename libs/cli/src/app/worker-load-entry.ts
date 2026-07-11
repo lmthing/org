@@ -97,13 +97,23 @@ function main(): void {
       return;
     }
 
-    // invoke — build a proxied ctx and call default.<fnKey>(ctx).
-    if (def === null || typeof def !== 'object') {
-      throw new Error('worker-load: module default export is not an object');
-    }
-    const fn = (def as Record<string, unknown>)[job.fnKey];
-    if (typeof fn !== 'function') {
-      throw new Error(`worker-load: default export has no function "${job.fnKey}"`);
+    // invoke — build a proxied ctx and call the target fn.
+    //   default.<fnKey>(ctx)          — space hooks/emitters (default export object)
+    //   exports.<namedFn>(ctx, ...args) — tasklist code nodes (top-level `run(ctx, inputs)`)
+    let fn: unknown;
+    if (job.namedFn) {
+      fn = exp[job.namedFn];
+      if (typeof fn !== 'function') {
+        throw new Error(`worker-load: module has no exported function "${job.namedFn}"`);
+      }
+    } else {
+      if (def === null || typeof def !== 'object') {
+        throw new Error('worker-load: module default export is not an object');
+      }
+      fn = (def as Record<string, unknown>)[job.fnKey];
+      if (typeof fn !== 'function') {
+        throw new Error(`worker-load: default export has no function "${job.fnKey}"`);
+      }
     }
 
     const db: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
@@ -120,7 +130,7 @@ function main(): void {
       tasklist: { run: (ref: string, seed?: unknown) => rpc('tasklist', { ref, seed }) },
     };
 
-    const value = await (fn as (c: unknown) => unknown)(ctx);
+    const value = await (fn as (c: unknown, ...rest: unknown[]) => unknown)(ctx, ...(job.extraArgs ?? []));
     post({ type: 'result', value });
   })().catch((err: unknown) => {
     post({ type: 'error', message: err instanceof Error ? err.message : String(err) });

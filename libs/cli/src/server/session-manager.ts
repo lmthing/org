@@ -4,9 +4,10 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
-import { Session, saveSnapshot, loadSpace, loadProjectFunctions } from '@lmthing/core';
-import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions } from '@lmthing/core';
+import { Session, saveSnapshot, loadSpace, loadProjectFunctions, ForkEngine, runTasklist, Tracer } from '@lmthing/core';
+import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
+import { createCodeNodeCtxFactory } from './tasklist-runner.js';
 import { integrationStatusFor } from './routes/store-spaces.js';
 import type { PluginRegistry } from '@lmthing/openclaw-compat';
 import { transcribeAudio } from '../providers/transcribe.js';
@@ -269,6 +270,11 @@ export class SessionManager {
    *  clear "no tool registry configured" error. Project-independent (attached
    *  to EVERY session), same as the connection resolver above. */
   private toolRegistry?: PluginRegistry;
+  /** Republish-on-write callable (S9), injected by `serve.ts` at boot once it knows
+   *  the server port + gateway config. Invoked after installs (serve.ts callback) and
+   *  authoring writes (S11 calls {@link republish}). Absent under bare `lmthing serve`
+   *  wiring that never sets it — then {@link republish} is a no-op. */
+  private republishFn?: () => Promise<void>;
   private reaper: ReturnType<typeof setInterval> | null = null;
   /** Absolute path to `<cwd>/.lmthing` — set when running in project mode. */
   readonly lmthingRoot?: string;
@@ -337,6 +343,19 @@ export class SessionManager {
     this.toolRegistry = registry;
   }
 
+  /** Wire the republish-on-write callable (S9). Called once from `serve.ts` at boot. */
+  setRepublish(fn: () => Promise<void>): void {
+    this.republishFn = fn;
+  }
+
+  /** Re-derive the pod's runtime-published artifacts (webhook manifest + crontab +
+   *  emitter scan cache) after an authoring write. No-op when no republish callable
+   *  was wired. TODO(S11): the automator/engineer authoring globals call this after
+   *  writing a project hook/event/function so the change goes live without a restart. */
+  async republish(): Promise<void> {
+    if (this.republishFn) await this.republishFn();
+  }
+
   /** Resolve a `tool()` yield by dispatching to the loaded `PluginRegistry` —
    *  mirrors the agent-facing `apiCall` contract: an unknown tool name throws
    *  (fail loud), a registered tool's `execute(callId, params)` result is
@@ -392,9 +411,44 @@ export class SessionManager {
         integrationStatusResolver: args.projectRoot
           ? (spaceId: string) => integrationStatusFor(args.projectRoot as string, spaceId)
           : undefined,
+        // Code-node runner (S9) so a project agent's `tasklist()` yield can run a
+        // SPACE tasklist that contains `kind:'code'` nodes. Session-wide; the
+        // factory derives each node's connection gate from its module path, so it
+        // works for whichever tasklist the agent runs. Only project-rooted sessions
+        // get it — a legacy/bare session leaves it unset (code nodes fail clearly).
+        codeNodeCtxFactory:
+          args.projectRoot && args.projectId && this.lmthingRoot
+            ? this.buildCodeNodeCtxFactory(this.lmthingRoot, args.projectId, args.projectRoot)
+            : undefined,
       },
       { streamFn: this.streamFn },
     );
+  }
+
+  /** Build the {@link createCodeNodeCtxFactory} deps for a project — shared by the
+   *  interactive session path ({@link defaultBuildSession}) and the headless runner
+   *  ({@link runTasklistHeadless}). db resolves lazily (a session may be built
+   *  before its db boots); `delegate` runs a headless agent; `callConnection` is
+   *  gated inside the factory by the tasklist's declared connections ∩ the space's
+   *  own provider(s). */
+  private buildCodeNodeCtxFactory(root: string, projectId: string, projectRoot: string): ReturnType<typeof createCodeNodeCtxFactory> {
+    return createCodeNodeCtxFactory({
+      getDb: () => this.getProjectDb(root, projectId),
+      delegate: (spaceRef, action, opts) => this.codeNodeDelegate(projectId, spaceRef, action, opts),
+      connectionResolver: this.getConnectionResolver(projectRoot),
+    });
+  }
+
+  /** A code node's `ctx.delegate(spaceRef, action?, opts?)` — run a headless agent
+   *  and return its {@link runHeadless} result (mirrors the hook ctx delegate:
+   *  `opts.input` rides into the kickoff seed, `opts.message` overrides the text). */
+  private codeNodeDelegate(projectId: string, spaceRef: string, action?: string, opts?: unknown): Promise<unknown> {
+    const agentSlug = spaceRef.split('/').pop() ?? spaceRef;
+    const dopts = opts as { input?: unknown; message?: string } | undefined;
+    const base = `Code-node delegate to "${spaceRef}"` + (action ? ` — "${action}".` : '.');
+    const message =
+      (dopts?.message ?? base) + (dopts?.input !== undefined ? `\nInput: ${safeStringify(dopts.input)}` : '');
+    return this.runHeadless({ projectId, spaceRef, agentSlug, message });
   }
 
   /** Per-project app-db cache. Lazily boots (restore→open→reconcile, fail-loud on
@@ -1470,6 +1524,138 @@ export class SessionManager {
         }
       }
     });
+  }
+
+  /**
+   * Run a SPACE tasklist **headless** (plan S9) — the seam a hook handler's
+   * `ctx.tasklist.run('<spaceId>/<slug>', seed)` and an agent's out-of-session
+   * automation reach. Resolves the installed space
+   * (`<root>/<projectId>/spaces/<spaceId>`), builds a real {@link ForkEngine} the
+   * way the interactive path does (agent nodes run model forks) plus the
+   * {@link createCodeNodeCtxFactory} code-node runner (worker-isolated, provider-
+   * locked), runs the DAG via core's {@link runTasklist}, and RECORDS the run as a
+   * headless session under the space's sessions dir so its orchestration trace is
+   * inspectable in chat. Returns the tasklist's {@link TaskEnvelope} (same value an
+   * in-session `tasklist()` yields); a hard failure throws.
+   *
+   * Project-mode only (requires `lmthingRoot`). The run is NEVER registered in
+   * `this.sessions` — like `runHeadless`, it doesn't count against `maxSessions`.
+   */
+  async runTasklistHeadless(args: {
+    projectId: string;
+    spaceId: string;
+    slug: string;
+    seed?: Record<string, unknown>;
+    budget?: BuildSessionArgs['budget'];
+  }): Promise<TaskEnvelope> {
+    const root = this.requireRoot();
+    const { projectId, spaceId, slug } = args;
+    const projectRoot = join(root, projectId);
+    const spaceDir = projectSpaceDir(root, projectId, spaceId);
+
+    const space = await loadSpace(spaceDir, { requireAgents: false });
+    if (!space.tasklists[slug]) {
+      throw new Error(`tasklist "${slug}" not found in space "${spaceId}" of project "${projectId}"`);
+    }
+
+    const sessionId = randomUUID();
+    const createdAt = Date.now();
+    const renderHost = new WebRenderHost();
+    const hub = new TraceHub();
+    const tracer = new Tracer(null);
+    // Collect the orchestration trace so the run is inspectable as a session.
+    const unsubscribe = tracer.subscribe((e) => hub.push(e));
+
+    const parentAgentSlug = Object.keys(space.agents)[0] ?? 'main';
+    const appGlobals = this.withConnections(
+      await this.getProjectAppGlobals(root, projectId),
+      projectRoot,
+    );
+
+    // A real ForkEngine so agent nodes run model forks (à la runHeadless). Only
+    // the essential parent context is wired; the rest keep their engine defaults.
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4,
+      parentHistory: [],
+      parentSpaceDir: spaceDir,
+      parentAgentSlug,
+      parentAgentCharter: space.agents[parentAgentSlug]?.charterBody,
+      renderHost,
+      streamFn: this.streamFn,
+      tracer,
+      agentFunctions: space.functions,
+      agentFunctionsBundled: space.functionsBundled,
+      defaultModel: this.defaultModelAlias,
+      budgetLimits: args.budget,
+      projectRoot,
+      projectId,
+      projectSpacesDir: join(projectRoot, 'spaces'),
+      appGlobals,
+      dynamicSpaces: new Map(),
+      documentResolver: (id, opts) => this.resolveDocument(id, opts),
+      // A task node that opts into delegation runs a headless agent.
+      delegateRunner: (packageName, agentName, action, delegateOpts) =>
+        this.codeNodeDelegate(projectId, `${packageName}/${agentName}`, action, delegateOpts),
+    });
+
+    const codeNodeCtxFactory = this.buildCodeNodeCtxFactory(root, projectId, projectRoot);
+
+    const rootScope = tracer.root(sessionId);
+    let envelope: TaskEnvelope | undefined;
+    let error: unknown;
+    try {
+      envelope = await runTasklist({
+        name: slug,
+        space,
+        forkEngine: engine,
+        seed: args.seed,
+        tracer,
+        parentScope: rootScope,
+        codeNodeCtxFactory,
+      });
+    } catch (err) {
+      error = err;
+    } finally {
+      unsubscribe();
+    }
+
+    // Record the run as a headless session (empty chat history — the value is the
+    // orchestration trace tree). Best-effort: a persistence failure never masks the
+    // tasklist result/throw.
+    try {
+      const dir = join(spaceSessionsDir(root, projectId, spaceId), sessionId);
+      await mkdir(dir, { recursive: true });
+      await saveSnapshot(dir, {
+        sessionId,
+        agentSlug: parentAgentSlug,
+        spaceDir,
+        history: [],
+        scope: {},
+        createdAt,
+      });
+      const meta: PersistedSessionMeta = {
+        sessionId,
+        projectId,
+        agentSlug: parentAgentSlug,
+        spaceDir,
+        spaceId,
+        title: `Tasklist ${spaceId}/${slug}`,
+        createdAt,
+        lastActivity: Date.now(),
+        messageCount: 0,
+        status: error ? 'error' : 'idle',
+      };
+      await writeFile(join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');
+      await writeFile(join(dir, 'trace.json'), JSON.stringify(hub.snapshot().events), 'utf8');
+    } catch (persistErr) {
+      console.warn(
+        `[tasklist-runner] failed to record run ${sessionId}: ` +
+          (persistErr instanceof Error ? persistErr.message : String(persistErr)),
+      );
+    }
+
+    if (error) throw error instanceof Error ? error : new Error(String(error));
+    return envelope as TaskEnvelope;
   }
 
   // ─── Project lifecycle (only meaningful when lmthingRoot is set) ──────────
