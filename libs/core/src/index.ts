@@ -154,6 +154,7 @@ export { validateDag, topoSort, findReadyTasks, resolveGoalTask } from './taskli
 export { validateOutput, validateInput } from './tasklist/schema.js';
 export { evaluateCondition } from './tasklist/condition-dsl.js';
 export { runTasklist } from './tasklist/orchestrator.js';
+export type { RunTasklistOptions, CodeNodeContext, CodeNodeCtxFactory } from './tasklist/orchestrator.js';
 
 // Fork
 export { ForkEngine } from './fork/fork.js';

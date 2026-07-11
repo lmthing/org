@@ -73,6 +73,12 @@ export interface YieldRouterContext {
    *  via `libs/cli`'s loaded `PluginRegistry`). Absent outside a pod with loaded
    *  plugin tools; a `tool` yield then rejects with a clear error. */
   toolResolver?: (name: string, input: unknown) => Promise<unknown>;
+  /** Build a per-node execution context for a `kind:'code'` tasklist node
+   *  (db + callConnection locked to the space/tasklist `connections:` + delegate).
+   *  Threaded into `runTasklist`. Absent until the CLI/pod wires a runner (plan
+   *  step S9); a code node then fails with a clear required-task error. Core
+   *  never imports/executes the node module. */
+  codeNodeCtxFactory?: import('../tasklist/orchestrator.js').CodeNodeCtxFactory;
   /** Resolve a `readDocument()` yield — extract a stored upload's text host-side
    *  (host-supplied by libs/cli, where the uploads dir is known). Absent outside a
    *  pod/CLI with an uploads dir; a `readDocument` yield then rejects with a clear
@@ -121,7 +127,7 @@ export async function routeCommonYield(
       const seed = req.args[1] as Record<string, unknown> | undefined;
       const engine = await ctx.getForkEngine();
       const { runTasklist } = await import('../tasklist/orchestrator.js');
-      const result = await runTasklist({ name, space: ctx.space, forkEngine: engine, seed, tracer: ctx.tracer, parentScope: ctx.scope });
+      const result = await runTasklist({ name, space: ctx.space, forkEngine: engine, seed, tracer: ctx.tracer, parentScope: ctx.scope, codeNodeCtxFactory: ctx.codeNodeCtxFactory });
       ctx.onTasklistResult?.(name, result);
       return { handled: true, value: result };
     }

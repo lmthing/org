@@ -20,6 +20,43 @@ function resolveForEachItems(ref: string, allOutputs: Record<string, unknown>): 
 }
 
 /**
+ * Execution context for ONE `kind:'code'` tasklist node, built by the host
+ * (CLI/pod) — never by core. `runCodeNode` loads + runs the node module's
+ * `run(ctx, inputs)` in a Node worker with a `ctx` gated by the space/tasklist
+ * `connections:` (db, callConnection, delegate). `inputs` is the SAME data an
+ * agent fork of this node would receive: the seed-filtered tasklist input merged
+ * with upstream task outputs (keyed by dependency id), plus `item`/`index` for a
+ * forEach element. The returned object feeds `allOutputs`/`TaskEnvelope` exactly
+ * like an agent node's output.
+ */
+export interface CodeNodeContext {
+  runCodeNode(inputs: Record<string, unknown>): Promise<Record<string, unknown>>;
+}
+
+/**
+ * Maps a code node to its {@link CodeNodeContext}. Injected via
+ * {@link RunTasklistOptions} by the CLI/pod (the headless tasklist runner, plan
+ * step S9); the in-session yield-router threads one built from the session's
+ * project scope when available. When ABSENT, encountering a code node fails that
+ * task with a clear error (required-task-failure semantics) — core cannot
+ * execute node modules itself. Called once per code node (before any forEach
+ * fan-out), so the host can build per-node state up front.
+ */
+export type CodeNodeCtxFactory = (node: TaskNode) => CodeNodeContext;
+
+export interface RunTasklistOptions {
+  name: string;
+  space: Space;
+  forkEngine: ForkEngine;
+  seed?: Record<string, unknown>;
+  tracer?: Tracer;
+  parentScope?: TraceScope;
+  /** Host-provided runner for `kind:'code'` nodes (see {@link CodeNodeCtxFactory}).
+   *  Omit outside a CLI/pod context — code nodes then fail as required-task errors. */
+  codeNodeCtxFactory?: CodeNodeCtxFactory;
+}
+
+/**
  * Run a tasklist DAG and return a `TaskEnvelope` wrapping the goal task's output.
  *
  * Task→task UPSTREAM outputs stay RAW schema data (task files keep referencing
@@ -27,15 +64,8 @@ function resolveForEachItems(ref: string, allOutputs: Record<string, unknown>): 
  * variable values. Only the tasklist BOUNDARY result is enveloped:
  * `{ ok, degraded, data, reason?, degradedTasks? }`.
  */
-export async function runTasklist(opts: {
-  name: string;
-  space: Space;
-  forkEngine: ForkEngine;
-  seed?: Record<string, unknown>;
-  tracer?: Tracer;
-  parentScope?: TraceScope;
-}): Promise<TaskEnvelope> {
-  const { name, space, forkEngine, seed, tracer, parentScope } = opts;
+export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelope> {
+  const { name, space, forkEngine, seed, tracer, parentScope, codeNodeCtxFactory } = opts;
 
   const tasklistDir = space.tasklists[name];
   if (!tasklistDir) {
@@ -157,6 +187,45 @@ export async function runTasklist(opts: {
           taskScopes.set(task.id, taskScope);
 
           const upstream = Object.keys(upstreamOutputs).length > 0 ? upstreamOutputs : undefined;
+
+          // CODE NODE: the host runs the node module's `run(ctx, inputs)` via the
+          // injected factory (core stays free of any transpile/worker runtime).
+          // Inputs mirror exactly what an agent fork of this node would see —
+          // the seed-filtered tasklist input merged with upstream outputs (keyed
+          // by dependency id), plus `item`/`index` for a forEach element. Output
+          // feeds allOutputs/TaskEnvelope identically to an agent node. A code
+          // node has no salvage path: `run` either returns (success) or throws
+          // (→ required-task failure below, or skip when optional). forEach can
+          // fan out over a code node, and a code node can be a forEach body.
+          if (task.kind === 'code') {
+            if (!codeNodeCtxFactory) {
+              throw new Error(
+                `Code node "${task.id}" cannot run here: no codeNodeCtxFactory was provided to ` +
+                  `runTasklist. The CLI/pod injects one (headless tasklist runner); an in-session ` +
+                  `run needs that runner wired. Core does not execute code-node modules itself.`,
+              );
+            }
+            const codeCtx = codeNodeCtxFactory(task);
+            const baseInputs: Record<string, unknown> = { ...(taskSeed ?? {}), ...upstreamOutputs };
+            if (task.forEach) {
+              const items = resolveForEachItems(task.forEach, allOutputs);
+              const output = await Promise.all(
+                items.map((item, index) => {
+                  const elemScope = tracer && taskScope
+                    ? tracer.child(taskScope, 'task', `code:${task.id}[${index}]`, { tasklist: name, forEachIndex: index })
+                    : undefined;
+                  return codeCtx.runCodeNode({ ...baseInputs, item, index }).then((val) => {
+                    if (tracer && elemScope) tracer.end(elemScope, 'done', { result: val });
+                    return val;
+                  });
+                }),
+              );
+              return { task, output };
+            }
+            const output = await codeCtx.runCodeNode(baseInputs);
+            return { task, output };
+          }
+
           // forkWithMeta: same execution path as fork(), plus typed degradation
           // metadata so salvage becomes a control-plane signal (→ TaskEnvelope),
           // not prose inside the data.

@@ -90,11 +90,18 @@ export interface AgentConfig {
 
 export interface TasklistDir {
   slug: string;
-  files: string[]; // sorted absolute paths to .md files (NN-<id>.md only — index.md excluded)
+  /** Sorted absolute paths to the tasklist's node files — `NN-<id>.md` (agent
+   *  nodes) and `NN-<id>.ts` (code nodes) interleaved by NN prefix; `index.md`
+   *  excluded. */
+  files: string[];
   /** Body of tasklists/<name>/index.md, when present. */
   description?: string;
   /** Input schema declared in tasklists/<name>/index.md frontmatter (field name -> type string). */
   input?: Record<string, string>;
+  /** Tasklist-level connection gate declared in `index.md` frontmatter
+   *  (`connections: [<provider>, …]`). Typed data only — core does not enforce
+   *  it; the CLI/pod locks a code node's `callConnection` to these providers. */
+  connections?: string[];
 }
 
 export interface KnowledgeTree {
@@ -146,7 +153,19 @@ async function listDir(dir: string): Promise<string[]> {
   }
 }
 
-async function loadFunctions(
+/**
+ * Load the `functions/` directory under `dir` — the shared function-loading
+ * primitive. Returns the original TS source for every `.ts`/`.tsx` (keyed by
+ * basename) and, when `nodeModulesDir` is set (the owning scope shipped
+ * installed deps), the esbuild-bundled ESM so a function can `import` a
+ * dependency at runtime.
+ *
+ * Exported so the PROJECT function scope (`spaces/project-functions-load.ts`,
+ * `<projectRoot>/functions/`) reuses the identical loader — including the bundled
+ * variant — instead of copying the esbuild wiring. Behavior + signature are
+ * unchanged from the original private `loadFunctions`; only the name/visibility.
+ */
+export async function loadFunctionsFromDir(
   dir: string,
   nodeModulesDir?: string,
 ): Promise<{ functions: Record<string, string>; functionsBundled: Record<string, string> }> {
@@ -344,13 +363,20 @@ async function loadTasklists(dir: string): Promise<Record<string, TasklistDir>> 
     const tlDir = join(tasklistsDir, slug);
     if (!(await dirExists(tlDir))) continue;
 
+    // Node files are `NN-<id>.md` (agent nodes) OR `NN-<id>.ts` (code nodes),
+    // sorted together so the NN prefix drives DAG file order across both kinds.
+    // `index.md` is the tasklist header (not a node); `.d.ts` is never a node.
     const files = await listDir(tlDir);
-    const mdFiles = files
-      .filter((f) => f.endsWith('.md') && f !== 'index.md')
+    const nodeFiles = files
+      .filter(
+        (f) =>
+          (f.endsWith('.md') && f !== 'index.md') ||
+          (f.endsWith('.ts') && !f.endsWith('.d.ts')),
+      )
       .sort()
       .map((f) => join(tlDir, f));
 
-    const tasklist: TasklistDir = { slug, files: mdFiles };
+    const tasklist: TasklistDir = { slug, files: nodeFiles };
 
     const indexPath = join(tlDir, 'index.md');
     if (await fileExists(indexPath)) {
@@ -363,6 +389,11 @@ async function loadTasklists(dir: string): Promise<Record<string, TasklistDir>> 
           input[k] = String(v);
         }
         tasklist.input = input;
+      }
+      // Tasklist-level connection gate (typed data only; enforcement is the
+      // CLI/pod's job — core just records what the tasklist declared).
+      if (Array.isArray(data['connections'])) {
+        tasklist.connections = data['connections'].map(String);
       }
     }
 
@@ -639,7 +670,7 @@ export async function loadSpace(dir: string, opts: LoadSpaceOpts = {}): Promise<
   }
 
   // Load functions (original TS source always; bundled JS when node_modules available)
-  const { functions, functionsBundled } = await loadFunctions(dir, nodeModulesDir);
+  const { functions, functionsBundled } = await loadFunctionsFromDir(dir, nodeModulesDir);
 
   // Load components
   const components = await loadComponents(dir);
