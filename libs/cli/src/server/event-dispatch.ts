@@ -20,19 +20,29 @@
  *     gate + (for space hooks) worker isolation + own-provider lock all apply as
  *     S7 built them — this module just supplies the structured input.
  *
- * DIRECT dispatch: async + sequential per event, NOT routed through the unified
- * `app/hooks/dispatcher.ts` queue. TODO(S6): fold this into the HookDispatcher so
- * depth/cooldown/coalesce bounds cover emitted events alongside db/cron/internal.
+ * DIRECT dispatch: async + sequential per event. This is the RIGHT path for
+ * webhook/cron/internal-originated events — they arrive one-at-a-time from an
+ * external edge (an inbound POST, a cron tick, a runtime signal) and need no
+ * post-commit coalescing. Only DB-write-originated dispatch routes through the
+ * unified `app/hooks/dispatcher.ts` queue (S6): a burst of same-table writes made
+ * during one eval must collapse to a single non-re-entrant fire, which is exactly
+ * what the coalescing queue + snapshot-drain provide. Both paths share ONE event
+ * matcher ({@link matchEventHooks}, re-exported from `app/hooks/loop-guard.ts`)
+ * and ONE depth cap, so the loop-guard bounds are uniform across event kinds.
  */
 
 import { join } from 'node:path';
 
 import { validateOutput, type Emitted, type EmitsSchema } from '@lmthing/core';
 
-import { loadAllHooks, type EventHookDef, type LoadedHook } from '../app/hooks/index.js';
+import { loadAllHooks, matchEventHooks, type EventHookDef, type LoadedHook } from '../app/hooks/index.js';
 import { getOrCreateThreadSession } from './webhook-threads.js';
 import { emitInternalSignal } from './internal-signals.js';
 import { runHook, type Hook, type HookBudget, type HookManager } from './routes/hooks.js';
+
+// The pure event matcher is shared with the db-coalesced queue — re-exported so
+// existing importers of `event-dispatch.matchEventHooks` keep working.
+export { matchEventHooks };
 
 /** The manager surface event dispatch needs: `runHeadless` + `getProjectDb` (both
  *  from {@link HookManager}, for trigger runs and handler-hook ctx) plus threaded
@@ -100,15 +110,6 @@ function safeStringify(v: unknown): string {
   } catch {
     return String(v);
   }
-}
-
-/**
- * The subscribing event hooks for a source-qualified `address` — every loaded
- * `event`-type hook whose `on.event` equals it. Pure (no i/o) so it's directly
- * unit-testable against a fixed hook list.
- */
-export function matchEventHooks(hooks: LoadedHook[], address: string): LoadedHook[] {
-  return hooks.filter((h) => h.def.type === 'event' && (h.def as EventHookDef).on.event === address);
 }
 
 /** Flatten a {@link LoadedHook} into the flat {@link Hook} shape {@link runHook}
@@ -207,7 +208,8 @@ export async function dispatchEmittedEvents(args: DispatchEmittedEventsArgs): Pr
           // handler → runHook with the emitted event as ctx.input. The declared
           // `connections:` gate + (space hooks) worker isolation apply inside runHook.
           // `hookDepth` threads the S8 cascade depth into runHook's own `hook.fired`.
-          // TODO(S6): route through the unified HookDispatcher instead of a direct call.
+          // Direct (not queued): a webhook/cron/internal event arrives singly from an
+          // external edge, so it needs no post-commit coalescing (db writes do — S6).
           await runHook(manager, root, projectId, toRunHook(hook), undefined, {
             input: { event: ev.event, payload: ev.payload, ...(ev.threadKey ? { threadKey: ev.threadKey } : {}) },
             ...(args.hookDepth !== undefined ? { hookDepth: args.hookDepth } : {}),

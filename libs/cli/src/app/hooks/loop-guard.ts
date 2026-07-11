@@ -1,46 +1,65 @@
 /**
- * Hook **loop guard** (Phase 6, 6A) — the PURE decision layer.
+ * Hook **loop guard** (Phase 6, 6A) — the PURE decision + matching layer.
  *
  * These functions carry no I/O, no clock, and no state of their own — the clock
  * (`now`), the cooldown window, the last-fired map, and the cascade depth are all
  * *injected* — so the whole firing policy is exhaustively unit-testable.
  *
- * The policy has three guards (parent plan §Safety):
- *   1. **Depth cap** — a write already `HOOK_DEPTH_CAP` levels deep in a hook
+ * Since S6 the queue drains the unified EVENT pipeline (db-emitter events +
+ * synthetic raw-table events + any emitted event), not just db writes, so the
+ * queue's payload is the {@link DispatchEvent} superset and the matcher is
+ * {@link matchEventHooks} (source-qualified `on.event` address). The three
+ * firing guards are unchanged and cover EVERY event kind:
+ *   1. **Depth cap** — an event already `HOOK_DEPTH_CAP` levels deep in a hook
  *      cascade stops firing further hooks (bounds runaway cascades).
- *   2. **Self-write exclusion** — a database hook never fires on a write made by
- *      its OWN triggered session (`event.originatingHookSlug === hook.slug`), so a
- *      hook that writes the very table it watches does not re-trigger itself.
+ *   2. **Self-write exclusion** — a hook never fires on an event produced by its
+ *      OWN triggered session (`originatingHookSlug === hook.slug`), so a hook that
+ *      writes the very table it subscribes to does not re-trigger itself.
  *   3. **Cooldown / coalesce** — a hook fires at most once per `cooldownMs`; a
- *      burst of same-table writes inside that window collapses to a single fire.
+ *      burst of same-address events inside that window collapses to a single fire.
  */
 
-import type { LoadedHook, WriteEventKind } from './loader.js';
+import type { LoadedHook, EventHookDef } from './loader.js';
 
-/** A committed database write, offered to the dispatcher post-commit. */
-export interface WriteEvent {
-  table: string;
-  event: WriteEventKind;
-  /** The written rows (each becomes a `row` for an imperative handler). */
-  rows: unknown[];
-  /** How deep this write already sits in a hook cascade (0 = user/api write). */
+/** The three project-db write kinds (matches core's `DbEmitterEvent`) — used to
+ *  name a synthetic `project/db.<table>.<event>` address in the app runtime. */
+export type { WriteEventKind } from './loader.js';
+
+/**
+ * A dispatchable event offered to the {@link HookDispatcher} queue — the
+ * superset of a raw db write and any emitted event. Replaces the S6-predecessor
+ * `WriteEvent` (table+event only): an event now carries its source-qualified
+ * `address` (`<scope>/<name>`) and a serializable `payload`, so ONE queue drains
+ * db-emitter events, synthetic raw-table events, and any emitted event under the
+ * same coalesce/cooldown/depth guards.
+ */
+export interface DispatchEvent {
+  /** Source-qualified event address subscribing event hooks match on
+   *  (`project/db.raw_items.insert`, `integration-slack/message.posted`). */
+  address: string;
+  /** The event payload — handed to a subscribing handler hook as `ctx.input`,
+   *  serialized into a trigger hook's kickoff seed. */
+  payload: Record<string, unknown>;
+  /** How deep this event already sits in a hook cascade (0 = a user/api write). */
   hookDepth: number;
-  /** The slug of the hook whose session made this write, if any. */
+  /** The slug of the hook whose triggered run produced this event, if any. */
   originatingHookSlug?: string;
+  /** Optional external thread key → a stable multi-turn session for triggers. */
+  threadKey?: string;
 }
 
-/** Depth at/after which cascaded writes stop firing hooks. */
+/** Depth at/after which cascaded events stop firing hooks. */
 export const HOOK_DEPTH_CAP = 3;
 
 /**
  * The injected context a {@link shouldFireHook} decision reads. `hookDepth` /
- * `originatingHookSlug` mirror the triggering {@link WriteEvent}; they are also
- * on the ctx so a caller may override them independently of the event.
+ * `originatingHookSlug` mirror the triggering {@link DispatchEvent}; they are on
+ * the ctx (not read off the event) so each guard can be exercised in isolation.
  */
 export interface ShouldFireCtx {
-  /** Cascade depth of the triggering write (defaults to `event.hookDepth`). */
+  /** Cascade depth of the triggering event. */
   hookDepth: number;
-  /** The hook whose session made the triggering write, if any. */
+  /** The hook whose session produced the triggering event, if any. */
   originatingHookSlug?: string;
   /** Last-fired epoch-ms per hook slug (cooldown source). */
   lastFiredAt: Record<string, number>;
@@ -58,17 +77,15 @@ export interface FireDecision {
 }
 
 /**
- * Decide whether `hook` should fire for `event`, per the injected `ctx`. Pure.
- * The depth + originating-hook signals come from `ctx` (which the dispatcher
- * seeds from the event), so the three guards can be exercised in isolation.
+ * Decide whether `hook` should fire, per the injected `ctx`. Pure. The depth +
+ * originating-hook signals come from `ctx` (which the dispatcher seeds from the
+ * event), so the three guards can be exercised in isolation.
  */
-export function shouldFireHook(hook: LoadedHook, event: WriteEvent, ctx: ShouldFireCtx): FireDecision {
-  void event; // event identity is matched upstream; the guards read ctx
-
-  // 1. Depth cap — a write already at/beyond the cap fires no more hooks.
+export function shouldFireHook(hook: LoadedHook, ctx: ShouldFireCtx): FireDecision {
+  // 1. Depth cap — an event already at/beyond the cap fires no more hooks.
   if (ctx.hookDepth >= HOOK_DEPTH_CAP) return { fire: false, reason: 'depth-cap' };
 
-  // 2. Self-write exclusion — the hook's own triggered write never re-fires it.
+  // 2. Self-write exclusion — the hook's own triggered event never re-fires it.
   if (ctx.originatingHookSlug !== undefined && ctx.originatingHookSlug === hook.slug) {
     return { fire: false, reason: 'self-write' };
   }
@@ -83,13 +100,12 @@ export function shouldFireHook(hook: LoadedHook, event: WriteEvent, ctx: ShouldF
 }
 
 /**
- * The database hooks whose `on.table`/`on.event` match `event`. Pure.
+ * The subscribing event hooks for a source-qualified `address` — every loaded
+ * `event`-type hook whose `on.event` equals it. Pure (no i/o) so it's directly
+ * unit-testable against a fixed hook list. This is the SINGLE event matcher —
+ * `server/event-dispatch.ts` re-exports it, so db-coalesced dispatch and direct
+ * (webhook/cron/internal) dispatch share one matching rule.
  */
-export function matchDatabaseHooks(hooks: LoadedHook[], event: WriteEvent): LoadedHook[] {
-  return hooks.filter(
-    (h) =>
-      h.def.type === 'database' &&
-      h.def.on.table === event.table &&
-      h.def.on.event === event.event,
-  );
+export function matchEventHooks(hooks: LoadedHook[], address: string): LoadedHook[] {
+  return hooks.filter((h) => h.def.type === 'event' && (h.def as EventHookDef).on.event === address);
 }

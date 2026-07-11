@@ -22,20 +22,28 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ConnectionRequest, ConnectionResponse, ConnectionResolver } from '@lmthing/core';
+import type { ConnectionRequest, ConnectionResponse, ConnectionResolver, CronEmitterDef } from '@lmthing/core';
 import { sendJson } from './utils.js';
 import { createConnectionResolver } from '../connections.js';
 import { emitInternalSignal } from '../internal-signals.js';
 import { makeHookTasklistRunner, type TasklistRunnerManager } from '../tasklist-runner.js';
+import { scanEmitterDefs, type EmitterScanResult, type ExtractedEmitterDef } from '../emitter-manifests.js';
+import { scanIntegrationDescriptors } from '../integration-manifests.js';
+import { makeEmitterStateStore, type EmitterStateStore } from '../emitter-state.js';
+import { invokeDefaultFnInWorker } from '../../app/worker-load.js';
+import { dispatchEmittedEvents, validateEmitted, type EventDispatchManager } from '../event-dispatch.js';
 // ── 6A (concurrent) — imported by production path; see file header. ───────────
 import {
   loadHooks,
   dueCronHooks,
   nextCrontabLines,
+  crontabSchedule,
+  nextRunAt,
   loadHooksState,
   saveHooksState,
   type LoadedHook,
   type HooksState,
+  type CronHookDef,
 } from '../../app/hooks/index.js';
 
 // ── Structural contracts (decoupled from concurrent 6A/6B exact types) ────────
@@ -383,6 +391,15 @@ export function createHookRunHandler(
       return;
     }
 
+    // A `@emitter:<scope>:<name>` pseudo-slug (crontab / tick for a cron EMITTER
+    // def) routes to the emitter run path — it is not a hook.
+    const emitterRef = parseEmitterSlug(slug);
+    if (emitterRef) {
+      await runNamedCronEmitter(manager as unknown as EventDispatchManager, lmthingRoot, projectId, emitterRef);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     const projectRoot = join(lmthingRoot, projectId);
     let hooks: Hook[];
     try {
@@ -455,23 +472,52 @@ export async function regenerateCrontab(
     return;
   }
 
+  const lines = await buildCrontabLines(root, projects, serverPort);
+  const text = lines.length ? lines.join('\n') + '\n' : '';
+  await writeCrontab(text);
+}
+
+/**
+ * Build every crontab line for the pod — one per cron HOOK **and** one per
+ * `{type:'cron'}` emitter DEF (project + space scopes), each firing a `curl` POST
+ * to the local hook-run endpoint. Emitter defs have no hook slug, so they use the
+ * reserved pseudo-slug `@emitter:<scope>:<name>` on the SAME endpoint (the run
+ * handler routes it to {@link runCronEmitter} instead of a hook). Pure of the
+ * crontab guard — exported so it is testable without touching a real crontab.
+ */
+export async function buildCrontabLines(root: string, projects: string[], serverPort: number): Promise<string[]> {
   const lines: string[] = [];
   for (const projectId of projects) {
-    let loaded: LoadedHook[];
-    try {
-      loaded = await loadHooks(join(root, projectId));
-    } catch {
-      continue;
-    }
     // nextCrontabLines emits `<schedule> <template>`, so the template must be the FULL
     // command (a `curl` POST), not a bare URL — else cron tries to exec the URL and fails.
     const urlTemplate = `curl -fsS -X POST http://localhost:${serverPort}/api/projects/${projectId}/hooks/{slug}/run`;
-    const projectLines = nextCrontabLines(loaded, urlTemplate);
-    lines.push(...projectLines);
+    try {
+      lines.push(...nextCrontabLines(await loadHooks(join(root, projectId)), urlTemplate));
+    } catch {
+      /* skip a project whose hooks fail to load */
+    }
+    // Cron EMITTER defs — one line each, keyed by the `@emitter:` pseudo-slug.
+    try {
+      const { scopes } = await scanEmitterDefs(root, projectId);
+      for (const [scope, scopeDefs] of Object.entries(scopes)) {
+        for (const def of scopeDefs.defs) {
+          if (def.def.type !== 'cron') continue;
+          const schedule = crontabSchedule(asCronHookDef(def.def));
+          const slug = emitterPseudoSlug(scope, def.name);
+          lines.push(`${schedule} ${expandSlug(urlTemplate, slug)}`);
+        }
+      }
+    } catch {
+      /* skip a project whose emitter scan fails */
+    }
   }
+  return lines;
+}
 
-  const text = lines.length ? lines.join('\n') + '\n' : '';
-  await writeCrontab(text);
+/** Expand the `{slug}` placeholder in the curl template (mirrors cron.ts's
+ *  private `expandTemplate`, kept local so the emitter path doesn't re-export it). */
+function expandSlug(template: string, slug: string): string {
+  return template.replace(/\{slug\}/g, slug);
 }
 
 /** Minimal structural view of the spawned child — self-typed to stay independent
@@ -494,6 +540,230 @@ function writeCrontab(text: string): Promise<void> {
     );
     child.stdin?.end(text);
   });
+}
+
+// ── 2b. Cron EMITTER defs (S6) — poll on schedule, emit → dispatch ────────────
+
+/** The reserved pseudo-slug prefix a cron EMITTER def uses on the hook-run
+ *  endpoint (it has no hook slug). `@` can't start a real hook/space slug, so
+ *  this never collides. Format: `@emitter:<scope>:<defName>`. */
+const EMITTER_SLUG_PREFIX = '@emitter:';
+
+/** Build the run pseudo-slug for a cron emitter def. */
+function emitterPseudoSlug(scope: string, name: string): string {
+  return `${EMITTER_SLUG_PREFIX}${scope}:${name}`;
+}
+
+/** Parse an `@emitter:<scope>:<name>` pseudo-slug, or `undefined` when it isn't one. */
+function parseEmitterSlug(slug: string): { scope: string; name: string } | undefined {
+  if (!slug.startsWith(EMITTER_SLUG_PREFIX)) return undefined;
+  const rest = slug.slice(EMITTER_SLUG_PREFIX.length);
+  const colon = rest.indexOf(':');
+  if (colon <= 0 || colon >= rest.length - 1) return undefined;
+  return { scope: rest.slice(0, colon), name: rest.slice(colon + 1) };
+}
+
+/** Adapt a scanned cron emitter def's DATA into the `CronHookDef` shape that
+ *  cron.ts's `crontabSchedule`/`nextRunAt` read (they only touch `every`/`daily`). */
+function asCronHookDef(def: Omit<CronEmitterDef, 'emit'>): CronHookDef {
+  return {
+    type: 'cron',
+    ...(def.every ? { every: def.every } : {}),
+    ...(def.daily ? { daily: def.daily } : {}),
+  } as CronHookDef;
+}
+
+/** Compute the providers a cron emitter def's `ctx.callConnection` may reach.
+ *  PROJECT defs: declared ∩ the project's INSTALLED integration providers.
+ *  SPACE defs: declared ∩ the owning space's OWN provider(s) (locked, so a space
+ *  can never reach beyond what it itself declares + owns) — mirrors the space-hook
+ *  gate ({@link allowedProviders}) and the tasklist code-node gate. */
+function allowedEmitterProviders(
+  scope: string,
+  declared: string[],
+  projectRoot: string,
+  installed: Set<string>,
+): Set<string> {
+  if (scope === 'project') return new Set(declared.filter((p) => installed.has(p)));
+  const own = new Set(spaceOwnProviders(projectRoot, scope));
+  return new Set(declared.filter((p) => own.has(p)));
+}
+
+/** Injectable seams for the cron-emitter run path (default to the real
+ *  implementations; tests override to avoid real workers / dispatch). */
+export interface CronEmitterDeps {
+  /** Scan a project's emitter defs (defaults to {@link scanEmitterDefs}). */
+  scan?: (root: string, projectId: string) => Promise<EmitterScanResult>;
+  /** Worker-isolated `emit(ctx)` runner (defaults to {@link invokeDefaultFnInWorker}). */
+  invokeEmit?: (
+    file: string,
+    ctxSeed: Record<string, unknown>,
+    handlers: {
+      callConnection: (provider: string, req?: unknown) => Promise<unknown>;
+      state: EmitterStateStore;
+    },
+    timeoutMs: number,
+  ) => Promise<unknown>;
+  /** Emitted-event dispatcher (defaults to {@link dispatchEmittedEvents}). */
+  dispatch?: typeof dispatchEmittedEvents;
+  /** Per-def state store factory (defaults to {@link makeEmitterStateStore}). */
+  makeStateStore?: (projectRoot: string, scope: string, name: string) => EmitterStateStore;
+  /** Project connection resolver factory (defaults to {@link createConnectionResolver}). */
+  connectionResolver?: (projectRoot: string) => ConnectionResolver;
+  /** The project's installed integration providers (defaults to the descriptor scan). */
+  installedProviders?: (projectRoot: string) => Set<string>;
+  /** Per-emit worker wall-clock ceiling. */
+  timeoutMs?: number;
+}
+
+/** Wall-clock ceiling for one worker-isolated cron `emit(ctx)` (shared env knob). */
+const EMIT_TIMEOUT_MS = Number(process.env['LMTHING_EMITTER_EMIT_TIMEOUT_MS']) || 5000;
+
+/**
+ * Run ONE cron emitter def: build its gated ctx (per-def `state` KV +
+ * own-provider/declared-locked `callConnection`), run its `emit(ctx)`
+ * worker-isolated + timeout-bounded, validate the output against the def's
+ * `emits` schema (drop-with-warn), and dispatch the surviving events to
+ * subscribing event hooks. Never throws — a failure is logged.
+ */
+export async function runCronEmitter(
+  manager: EventDispatchManager,
+  root: string,
+  projectId: string,
+  scope: string,
+  def: ExtractedEmitterDef,
+  deps: CronEmitterDeps = {},
+): Promise<void> {
+  if (def.def.type !== 'cron') return;
+  const projectRoot = join(root, projectId);
+  const installed = (deps.installedProviders ?? defaultInstalledProviders)(projectRoot);
+  const allowed = allowedEmitterProviders(scope, def.def.connections ?? [], projectRoot, installed);
+  const resolver = (deps.connectionResolver ?? createConnectionResolver)(projectRoot);
+  const callConnection = (provider: string, req?: unknown): Promise<unknown> => {
+    if (!allowed.has(provider)) {
+      return Promise.reject(
+        new Error(
+          `callConnection("${provider}"): not allowed for cron emitter "${scope}/${def.name}"` +
+            (allowed.size ? ` (allowed: ${[...allowed].sort().join(', ')})` : ' (none declared/owned)'),
+        ),
+      );
+    }
+    return resolver(provider, req as ConnectionRequest);
+  };
+  const state = (deps.makeStateStore ?? makeEmitterStateStore)(projectRoot, scope, def.name);
+  const invokeEmit =
+    deps.invokeEmit ??
+    ((file, ctxSeed, handlers, timeoutMs) => invokeDefaultFnInWorker(file, 'emit', ctxSeed, handlers, { timeoutMs }));
+
+  let raw: unknown;
+  try {
+    raw = await invokeEmit(def.file, {}, { callConnection, state }, deps.timeoutMs ?? EMIT_TIMEOUT_MS);
+  } catch (err) {
+    console.warn(
+      `[hooks] cron emitter "${scope}/${def.name}" emit failed: ` +
+        (err instanceof Error ? err.message : String(err)),
+    );
+    return;
+  }
+  const emitted = validateEmitted(def.def.emits, raw, `${scope}/${def.name}`);
+  if (emitted.length === 0) return;
+  const dispatch = deps.dispatch ?? dispatchEmittedEvents;
+  await dispatch({ root, projectId, sourceScope: scope, emitted, manager });
+}
+
+/** Default installed-integration provider set for a project (descriptor scan). */
+function defaultInstalledProviders(projectRoot: string): Set<string> {
+  return new Set(Object.keys(scanIntegrationDescriptors(projectRoot).connections));
+}
+
+/** Resolve `{scope,name}` to a scanned cron emitter def and run it once (the
+ *  crontab / manual endpoint path), then stamp its `lastRunAt` so the boot
+ *  catch-up won't double-fire it. Never throws. */
+async function runNamedCronEmitter(
+  manager: EventDispatchManager,
+  root: string,
+  projectId: string,
+  ref: { scope: string; name: string },
+): Promise<void> {
+  const projectRoot = join(root, projectId);
+  let result: EmitterScanResult;
+  try {
+    result = await scanEmitterDefs(root, projectId);
+  } catch {
+    return;
+  }
+  const def = result.scopes[ref.scope]?.defs.find((d) => d.name === ref.name && d.def.type === 'cron');
+  if (!def) {
+    console.warn(`[hooks] cron emitter "${ref.scope}/${ref.name}" not found in "${projectId}"`);
+    return;
+  }
+  await runCronEmitter(manager, root, projectId, ref.scope, def);
+  const slug = emitterPseudoSlug(ref.scope, ref.name);
+  const now = Date.now();
+  const state = await loadHooksState(projectRoot);
+  state.lastFiredAt[slug] = now;
+  state.cron[slug] = { lastRunAt: now };
+  await saveHooksState(projectRoot, state);
+}
+
+/**
+ * Run every DUE cron emitter def once, coalesced + dedup-safe — the emitter twin
+ * of {@link runDueCronHooks}. Dueness is tracked in the SAME `hooks-state.json`
+ * `cron` map under the `@emitter:<scope>:<name>` pseudo-slug (via cron.ts's
+ * {@link nextRunAt}), so a window missed while the pod was down runs once on boot.
+ * Fail-soft per project; this is BOTH the boot catch-up and the in-process tick
+ * body for emitters.
+ */
+export async function runDueCronEmitters(
+  manager: EventDispatchManager,
+  root: string,
+  projects: string[],
+  now: number,
+  deps: CronEmitterDeps = {},
+): Promise<void> {
+  const scan = deps.scan ?? scanEmitterDefs;
+  for (const projectId of projects) {
+    const projectRoot = join(root, projectId);
+    let result: EmitterScanResult;
+    try {
+      result = await scan(root, projectId);
+    } catch {
+      continue;
+    }
+    // Gather the project's due cron emitter defs against persisted lastRunAt.
+    const state = await loadHooksState(projectRoot);
+    const due: Array<{ scope: string; def: ExtractedEmitterDef; slug: string }> = [];
+    for (const [scope, scopeDefs] of Object.entries(result.scopes)) {
+      for (const def of scopeDefs.defs) {
+        if (def.def.type !== 'cron') continue;
+        const slug = emitterPseudoSlug(scope, def.name);
+        const lastRunAt = state.cron[slug]?.lastRunAt ?? 0;
+        if (now >= nextRunAt(asCronHookDef(def.def), lastRunAt)) due.push({ scope, def, slug });
+      }
+    }
+    if (due.length === 0) continue;
+
+    const fired: string[] = [];
+    for (const { scope, def, slug } of due) {
+      try {
+        await runCronEmitter(manager, root, projectId, scope, def, deps);
+      } catch (err) {
+        console.warn(
+          `[hooks] cron emitter catch-up failed for ${projectId}/${slug}: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
+      fired.push(slug); // dedup wins over retry-storming a broken emitter every tick
+    }
+    // Re-load (a dispatch may have written hook state) and stamp lastRunAt so an
+    // immediate re-check sees these emitters as no longer due.
+    const fresh = await loadHooksState(projectRoot);
+    for (const slug of fired) {
+      fresh.lastFiredAt[slug] = now;
+      fresh.cron[slug] = { lastRunAt: now };
+    }
+    await saveHooksState(projectRoot, fresh);
+  }
 }
 
 // ── 3. Boot catch-up + in-process fallback tick ───────────────────────────────
@@ -560,16 +830,19 @@ export async function runDueCronHooks(
 const TICK_INTERVAL_MS = 60_000;
 
 /**
- * Boot step 6+7: (a) regenerate the crontab (guarded), (b) boot catch-up — run
- * each overdue cron hook once, (c) when there is no crond, start an in-process
- * 60s tick driving the same {@link runDueCronHooks} path. Returns the interval
+ * Boot step 6+7: (a) regenerate the crontab (guarded — cron HOOKS + cron EMITTER
+ * defs), (b) boot catch-up — run each overdue cron hook AND cron emitter once,
+ * (c) when there is no crond, start an in-process 60s tick driving the same
+ * {@link runDueCronHooks} + {@link runDueCronEmitters} paths. Returns the interval
  * handle so `serve` can clear it on shutdown.
  *
  * `runHookFn` is injected (the integrator passes a fn that invokes the run
- * endpoint logic) so boot is HTTP-free and testable.
+ * endpoint logic) so boot is HTTP-free and testable. Cron emitters run in-process
+ * (they need `manager` for dispatch, not an HTTP round-trip); in prod (crond
+ * enabled) the crontab lines drive them via the `@emitter:` run endpoint.
  */
 export async function bootCatchUpAndSchedule(
-  _manager: HookManager,
+  manager: HookManager,
   root: string,
   projects: string[],
   port: number,
@@ -577,20 +850,29 @@ export async function bootCatchUpAndSchedule(
   opts: { now?: () => number; intervalMs?: number } = {},
 ): Promise<{ tick?: NodeJS.Timeout }> {
   const now = opts.now ?? Date.now;
+  const eventManager = manager as unknown as EventDispatchManager;
 
-  // (a) crontab (guarded; NO-OPs in local dev).
+  // (a) crontab (guarded; NO-OPs in local dev) — includes cron emitter lines.
   await regenerateCrontab(root, projects, port);
 
-  // (b) boot catch-up — coalesced, dedup-safe.
+  // (b) boot catch-up — coalesced, dedup-safe (hooks + emitters).
   await runDueCronHooks(root, projects, runHookFn, now());
+  await runDueCronEmitters(eventManager, root, projects, now()).catch((err) => {
+    console.warn('[hooks] boot cron-emitter catch-up failed: ' + (err instanceof Error ? err.message : String(err)));
+  });
 
-  // (c) no crond ⇒ in-process fallback tick.
+  // (c) no crond ⇒ in-process fallback tick (hooks + emitters).
   let tick: NodeJS.Timeout | undefined;
   if (crontabUnavailable()) {
     tick = setInterval(() => {
       void runDueCronHooks(root, projects, runHookFn, Date.now()).catch((err) => {
         console.warn(
           '[hooks] in-process tick failed: ' + (err instanceof Error ? err.message : String(err)),
+        );
+      });
+      void runDueCronEmitters(eventManager, root, projects, Date.now()).catch((err) => {
+        console.warn(
+          '[hooks] in-process cron-emitter tick failed: ' + (err instanceof Error ? err.message : String(err)),
         );
       });
     }, opts.intervalMs ?? TICK_INTERVAL_MS);

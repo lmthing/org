@@ -128,6 +128,13 @@ function main(): void {
         rpc('delegate', { spaceRef, action, opts }),
       callConnection: (provider: string, req?: unknown) => rpc('callConnection', { provider, req }),
       tasklist: { run: (ref: string, seed?: unknown) => rpc('tasklist', { ref, seed }) },
+      // Cron-emitter per-def JSON KV scratchpad (persisted main-side). A def that
+      // never touches `ctx.state` is unaffected; a `get`/`set` from any other
+      // context rejects (no `state` handler serviced → main-side throws).
+      state: {
+        get: (key: string) => rpc('state', { op: 'get', key }),
+        set: (key: string, value: unknown) => rpc('state', { op: 'set', key, value }),
+      },
     };
 
     const value = await (fn as (c: unknown, ...rest: unknown[]) => unknown)(ctx, ...(job.extraArgs ?? []));

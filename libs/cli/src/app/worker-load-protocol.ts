@@ -5,8 +5,10 @@
  * main-process helper's imports into the worker.
  */
 
-/** Which main-process capability a worker proxy request targets. */
-export type ProxyKind = 'db' | 'delegate' | 'callConnection' | 'tasklist';
+/** Which main-process capability a worker proxy request targets. `state` is the
+ *  cron-emitter per-def JSON KV scratchpad (get/set), serviced main-side by
+ *  `server/emitter-state.ts`. */
+export type ProxyKind = 'db' | 'delegate' | 'callConnection' | 'tasklist' | 'state';
 
 /** The `workerData` handed to the worker entry. */
 export type WorkerLoadJob =

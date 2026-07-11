@@ -1,39 +1,27 @@
 /**
- * Loop-guard tests ({@link ./loop-guard.ts}) — the PURE firing policy.
+ * Loop-guard tests ({@link ./loop-guard.ts}) — the PURE firing + matching policy.
  *
- * Covers: `matchDatabaseHooks` (table + event filter, cron ignored); the three
- * `shouldFireHook` guards — depth cap stops at `HOOK_DEPTH_CAP`, self-write
- * exclusion (own slug excluded, a DIFFERENT hook still fires within cap),
- * cooldown coalesces rapid same-table writes to one fire.
+ * Covers: `matchEventHooks` (source-qualified address filter, non-event hooks
+ * ignored); the three `shouldFireHook` guards — depth cap stops at
+ * `HOOK_DEPTH_CAP`, self-write exclusion (own slug excluded, a DIFFERENT hook
+ * still fires within cap), cooldown coalesces rapid same-address events to one
+ * fire. (S6 generalized the queue from db writes to the event superset, so the
+ * matcher is now `matchEventHooks` and the decision is event-shape-agnostic.)
  */
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  HOOK_DEPTH_CAP,
-  matchDatabaseHooks,
-  shouldFireHook,
-  type ShouldFireCtx,
-  type WriteEvent,
-} from './loop-guard.js';
+import { HOOK_DEPTH_CAP, matchEventHooks, shouldFireHook, type ShouldFireCtx } from './loop-guard.js';
 import type { LoadedHook } from './loader.js';
 
-const dbHook = (slug: string, table: string, event: 'insert' | 'update' | 'remove'): LoadedHook => ({
+const eventHook = (slug: string, event: string): LoadedHook => ({
   slug,
-  def: { type: 'database', on: { table, event }, trigger: `x/${slug}#run` },
+  def: { type: 'event', on: { event }, trigger: `x/${slug}#run` },
 });
 
 const cronHook = (slug: string): LoadedHook => ({
   slug,
   def: { type: 'cron', every: '30m', trigger: `x/${slug}#run` },
-});
-
-const write = (over: Partial<WriteEvent> = {}): WriteEvent => ({
-  table: 'raw_items',
-  event: 'insert',
-  rows: [{ id: '1' }],
-  hookDepth: 0,
-  ...over,
 });
 
 const ctx = (over: Partial<ShouldFireCtx> = {}): ShouldFireCtx => ({
@@ -44,38 +32,38 @@ const ctx = (over: Partial<ShouldFireCtx> = {}): ShouldFireCtx => ({
   ...over,
 });
 
-describe('matchDatabaseHooks', () => {
-  it('matches on table + event, ignoring non-matching and cron hooks', () => {
+describe('matchEventHooks', () => {
+  it('matches on the source-qualified address, ignoring non-matching + non-event hooks', () => {
     const hooks = [
-      dbHook('a', 'raw_items', 'insert'),
-      dbHook('b', 'raw_items', 'update'), // wrong event
-      dbHook('c', 'other', 'insert'), // wrong table
-      dbHook('d', 'raw_items', 'insert'),
-      cronHook('e'),
+      eventHook('a', 'project/db.raw_items.insert'),
+      eventHook('b', 'project/db.raw_items.update'), // wrong address
+      eventHook('c', 'integration-x/message.posted'), // wrong address
+      eventHook('d', 'project/db.raw_items.insert'),
+      cronHook('e'), // not an event hook
     ];
-    const matched = matchDatabaseHooks(hooks, write());
+    const matched = matchEventHooks(hooks, 'project/db.raw_items.insert');
     expect(matched.map((h) => h.slug)).toEqual(['a', 'd']);
   });
 
-  it('matches update / remove events distinctly', () => {
-    const hooks = [dbHook('u', 't', 'update'), dbHook('r', 't', 'remove')];
-    expect(matchDatabaseHooks(hooks, write({ table: 't', event: 'update' })).map((h) => h.slug)).toEqual(['u']);
-    expect(matchDatabaseHooks(hooks, write({ table: 't', event: 'remove' })).map((h) => h.slug)).toEqual(['r']);
+  it('matches distinct addresses distinctly', () => {
+    const hooks = [eventHook('u', 'project/db.t.update'), eventHook('r', 'integration-x/message.posted')];
+    expect(matchEventHooks(hooks, 'project/db.t.update').map((h) => h.slug)).toEqual(['u']);
+    expect(matchEventHooks(hooks, 'integration-x/message.posted').map((h) => h.slug)).toEqual(['r']);
   });
 });
 
 describe('shouldFireHook — depth cap', () => {
-  const hook = dbHook('a', 'raw_items', 'insert');
+  const hook = eventHook('a', 'project/db.raw_items.insert');
 
   it('fires below the cap', () => {
     for (let d = 0; d < HOOK_DEPTH_CAP; d++) {
-      expect(shouldFireHook(hook, write({ hookDepth: d }), ctx({ hookDepth: d })).fire).toBe(true);
+      expect(shouldFireHook(hook, ctx({ hookDepth: d })).fire).toBe(true);
     }
   });
 
   it('stops firing at and beyond the cap', () => {
     for (const d of [HOOK_DEPTH_CAP, HOOK_DEPTH_CAP + 1, 10]) {
-      const decision = shouldFireHook(hook, write({ hookDepth: d }), ctx({ hookDepth: d }));
+      const decision = shouldFireHook(hook, ctx({ hookDepth: d }));
       expect(decision.fire).toBe(false);
       expect(decision.reason).toBe('depth-cap');
     }
@@ -83,35 +71,33 @@ describe('shouldFireHook — depth cap', () => {
 });
 
 describe('shouldFireHook — self-write exclusion', () => {
-  it("does not refire the hook that made the write, but a DIFFERENT hook does (within cap)", () => {
-    const a = dbHook('a', 'raw_items', 'insert');
-    const b = dbHook('b', 'raw_items', 'insert');
-    // A write made by hook "a"'s own session, one level deep.
-    const e = write({ hookDepth: 1, originatingHookSlug: 'a' });
+  it('does not refire the hook that produced the event, but a DIFFERENT hook does (within cap)', () => {
+    const a = eventHook('a', 'project/db.raw_items.insert');
+    const b = eventHook('b', 'project/db.raw_items.insert');
+    // An event produced by hook "a"'s own session, one level deep.
     const c = ctx({ hookDepth: 1, originatingHookSlug: 'a' });
 
-    const selfDecision = shouldFireHook(a, e, c);
+    const selfDecision = shouldFireHook(a, c);
     expect(selfDecision.fire).toBe(false);
     expect(selfDecision.reason).toBe('self-write');
 
-    expect(shouldFireHook(b, e, c).fire).toBe(true); // different hook still fires
+    expect(shouldFireHook(b, c).fire).toBe(true); // different hook still fires
   });
 
   it('still respects the depth cap for the different hook', () => {
-    const b = dbHook('b', 'raw_items', 'insert');
-    const e = write({ hookDepth: HOOK_DEPTH_CAP, originatingHookSlug: 'a' });
+    const b = eventHook('b', 'project/db.raw_items.insert');
     const c = ctx({ hookDepth: HOOK_DEPTH_CAP, originatingHookSlug: 'a' });
-    expect(shouldFireHook(b, e, c).reason).toBe('depth-cap');
+    expect(shouldFireHook(b, c).reason).toBe('depth-cap');
   });
 });
 
 describe('shouldFireHook — cooldown / coalesce', () => {
-  const hook = dbHook('a', 'raw_items', 'insert');
+  const hook = eventHook('a', 'project/db.raw_items.insert');
 
-  it('blocks a second fire inside the cooldown window (rapid same-table writes coalesce)', () => {
+  it('blocks a second fire inside the cooldown window (rapid same-address events coalesce)', () => {
     const now = 1_000_000;
     const c = ctx({ now, cooldownMs: 10_000, lastFiredAt: { a: now - 500 } });
-    const decision = shouldFireHook(hook, write(), c);
+    const decision = shouldFireHook(hook, c);
     expect(decision.fire).toBe(false);
     expect(decision.reason).toBe('cooldown');
   });
@@ -119,10 +105,10 @@ describe('shouldFireHook — cooldown / coalesce', () => {
   it('allows a fire once the window has elapsed', () => {
     const now = 1_000_000;
     const c = ctx({ now, cooldownMs: 10_000, lastFiredAt: { a: now - 10_000 } });
-    expect(shouldFireHook(hook, write(), c).fire).toBe(true);
+    expect(shouldFireHook(hook, c).fire).toBe(true);
   });
 
   it('fires the first time (no prior lastFiredAt)', () => {
-    expect(shouldFireHook(hook, write(), ctx()).fire).toBe(true);
+    expect(shouldFireHook(hook, ctx()).fire).toBe(true);
   });
 });

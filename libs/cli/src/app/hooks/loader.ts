@@ -4,9 +4,9 @@
  * Walks `<projectRoot>/hooks/` (the PROJECT scope) AND each installed space's
  * `<projectRoot>/spaces/<id>/hooks/` and loads each `*.ts` file as one hook. A
  * hook is a **default-exported object** — a **cron** trigger (time-based), a
- * **database** trigger (fires on a table write), a **webhook** trigger (fires on
- * an external inbound POST), or an **event** trigger (the consumer side of the
- * unified event pipeline, subscribing to a source-qualified `<sourceId>/<name>`):
+ * **webhook** trigger (fires on an external inbound POST), or an **event**
+ * trigger (the consumer side of the unified event pipeline, subscribing to a
+ * source-qualified `<sourceId>/<name>`):
  *
  *   // hooks/refresh-sources.ts — cron, declarative
  *   export default {
@@ -15,11 +15,13 @@
  *     budget: { maxEpisodes: 20, maxWallClockMs: 600000 },
  *   }
  *
- *   // hooks/synthesize-new.ts — database, imperative
+ *   // hooks/synthesize-new.ts — event, imperative (REPLACES the old
+ *   // `{type:'database'}` hook: subscribe to the synthetic raw-table event
+ *   // `project/db.<table>.<event>` — its `ctx.input` IS the written row).
  *   export default {
- *     type: 'database', on: { table: 'raw_items', event: 'insert' },
+ *     type: 'event', on: { event: 'project/db.raw_items.insert' },
  *     budget: { maxEpisodes: 10 },
- *     handler: async ({ row, delegate }) => { … },
+ *     handler: async ({ input, delegate }) => { … },  // input = the inserted row
  *   }
  *
  *   // hooks/incoming.ts — webhook, declarative
@@ -38,11 +40,17 @@
  * in a **worker** and its handler is invoked worker-isolated (see
  * {@link loadSpaceHooks} / `../worker-load.ts`). Validation is **fail-loud**:
  *   - a cron hook needs exactly one of `every`/`daily`, plus a `trigger`;
- *   - a database hook needs `on: { table, event }` and **exactly one** of
+ *   - an event hook needs a source-qualified `on.event` and **exactly one** of
  *     `trigger` / `handler`;
  *   - a webhook hook needs a URL-safe `path` and a `trigger` (`path` is the
  *     public binding key — global uniqueness across projects is enforced by
  *     the manifest builder, not here).
+ *
+ * **NO-BACK-COMPAT (S6):** `{type:'database'}` hooks were REMOVED — they are
+ * replaced by db-emitter defs + event hooks subscribing to
+ * `project/db.<table>.<event>`. A file still declaring `{type:'database'}` is
+ * DROPPED with a clear migration error (the rest of the project still loads);
+ * store apps are rewritten in S15.
  */
 
 import { readdir, readFile } from 'node:fs/promises';
@@ -66,12 +74,14 @@ export interface HookBudget {
  *  is the structural view the loader/space-hook-shim needs. */
 export interface HookHandlerArgs {
   /**
-   * The written row (for `remove`, the row as it was before deletion). Present on
-   * a `database` hook; **`undefined` on a `cron` hook** (there is no triggering
-   * row — a scheduled handler self-queries what it needs).
+   * The written row — legacy field retained for the space-hook worker shim's ctx
+   * seed. Since S6, db-write-originated dispatch flows as an EVENT hook whose
+   * `ctx.input` carries the row (the synthetic `project/db.*` event's payload IS
+   * the row); prefer `input`. **`undefined` on a `cron` hook.**
    */
   row?: Record<string, unknown>;
-  /** Structured event input for an `event` hook (the emitted payload / envelope). */
+  /** Structured event input for an `event` hook (the emitted payload / envelope;
+   *  for a synthetic `project/db.<table>.<event>` subscription this is the row). */
   input?: unknown;
   /** The project's async data API (a triggered-session write path). */
   db: unknown;
@@ -83,10 +93,8 @@ export interface HookHandlerArgs {
   tasklist?: { run: (ref: string, seed?: unknown) => Promise<unknown> };
 }
 
-/** An imperative hook handler (database or cron). */
+/** An imperative hook handler (cron or event). */
 export type HookHandler = (args: HookHandlerArgs) => unknown | Promise<unknown>;
-/** @deprecated Use {@link HookHandler}. Retained for existing imports. */
-export type DatabaseHookHandler = HookHandler;
 
 /**
  * A time-based hook — fires on a cron schedule and either runs a declarative
@@ -109,21 +117,10 @@ export interface CronHookDef {
   budget?: HookBudget;
 }
 
-/** The three write events a database hook may subscribe to. */
+/** The three project-db write kinds (matches core's `DbEmitterEvent`). A db
+ *  write auto-emits the synthetic event `project/db.<table>.<kind>`; an event
+ *  hook subscribes to it (the S6 replacement for the removed `database` hook). */
 export type WriteEventKind = 'insert' | 'update' | 'remove';
-
-/** A write-triggered hook — fires when `on.table`/`on.event` is written. */
-export interface DatabaseHookDef {
-  type: 'database';
-  on: { table: string; event: WriteEventKind };
-  /** Declarative `space/agent#action` (mutually exclusive with `handler`). */
-  trigger?: string;
-  /** Imperative handler (mutually exclusive with `trigger`). */
-  handler?: DatabaseHookHandler;
-  /** Providers `ctx.callConnection` may reach (gated at call time; see routes/hooks.ts). */
-  connections?: string[];
-  budget?: HookBudget;
-}
 
 /**
  * An event-triggered hook — the CONSUMER side of the unified event pipeline
@@ -165,7 +162,7 @@ export interface WebhookHookDef {
 }
 
 /** A hook definition — the default export of a `hooks/<slug>.ts` file. */
-export type HookDef = CronHookDef | DatabaseHookDef | WebhookHookDef | EventHookDef;
+export type HookDef = CronHookDef | WebhookHookDef | EventHookDef;
 
 /**
  * A discovered, validated hook. Hooks load from a PROJECT's `hooks/` dir (owner
@@ -219,6 +216,13 @@ export async function loadHooks(projectRoot: string): Promise<LoadedHook[]> {
     seen.add(slug);
     const file = join(hooksDir, name);
     const raw = await importDefault(file);
+    // NO-BACK-COMPAT (S6): a removed `{type:'database'}` hook is DROPPED with a
+    // clear migration error so the rest of the project still loads (fail-loud only
+    // for genuinely-invalid shapes below).
+    if (isRemovedDatabaseHook(raw)) {
+      console.warn(databaseHookRemovedMessage(file, slug));
+      continue;
+    }
     const def = validateHook(slug, file, raw);
     out.push({ slug, owner: 'project', file, def });
   }
@@ -260,6 +264,12 @@ export async function loadSpaceHooks(projectRoot: string, spaceId: string): Prom
     const file = join(hooksDir, name);
     // Extract the def DATA in a worker — the module (store code) never runs in-proc.
     const { data, functionKeys } = await loadDefaultInWorker(file);
+    // NO-BACK-COMPAT (S6): drop a removed `{type:'database'}` space hook with a
+    // clear migration error; the rest of the space's hooks still load.
+    if (isRemovedDatabaseHook(data)) {
+      console.warn(databaseHookRemovedMessage(file, slug));
+      continue;
+    }
     const raw: Record<string, unknown> = { ...data };
     // The handler can't cross the worker boundary; stand in a placeholder so
     // `validateHook`'s trigger|handler check sees it, then swap in the real shim.
@@ -388,26 +398,9 @@ export function validateHook(slug: string, file: string, raw: unknown): HookDef 
   }
 
   if (obj.type === 'database') {
-    const on = obj.on as Record<string, unknown> | undefined;
-    if (!on || typeof on.table !== 'string' || !on.table) {
-      throw new Error(`${where}: a database hook needs \`on: { table, event }\``);
-    }
-    if (on.event !== 'insert' && on.event !== 'update' && on.event !== 'remove') {
-      throw new Error(`${where}: \`on.event\` must be 'insert' | 'update' | 'remove'`);
-    }
-    const hasTrigger = typeof obj.trigger === 'string' && (obj.trigger as string).length > 0;
-    const hasHandler = typeof obj.handler === 'function';
-    if (hasTrigger === hasHandler) {
-      throw new Error(`${where}: a database hook needs exactly one of \`trigger\` or \`handler\``);
-    }
-    return {
-      type: 'database',
-      on: { table: on.table, event: on.event },
-      ...(hasTrigger ? { trigger: obj.trigger as string } : {}),
-      ...(hasHandler ? { handler: obj.handler as DatabaseHookHandler } : {}),
-      ...connectionsField(where, obj.connections),
-      budget: validateBudget(where, obj.budget),
-    };
+    // Should be intercepted (drop-with-warn) by the loaders BEFORE validation.
+    // Fail loud here as a backstop so a `database` hook can never sneak through.
+    throw new Error(databaseHookRemovedMessage(file, slug));
   }
 
   if (obj.type === 'event') {
@@ -460,7 +453,23 @@ export function validateHook(slug: string, file: string, raw: unknown): HookDef 
   }
 
   throw new Error(
-    `${where}: \`type\` must be 'cron' | 'database' | 'webhook' | 'event' (got ${JSON.stringify(obj.type)})`,
+    `${where}: \`type\` must be 'cron' | 'webhook' | 'event' (got ${JSON.stringify(obj.type)})`,
+  );
+}
+
+/** True when a raw default export is a removed `{type:'database'}` hook. */
+export function isRemovedDatabaseHook(raw: unknown): boolean {
+  return raw !== null && typeof raw === 'object' && (raw as { type?: unknown }).type === 'database';
+}
+
+/** The clear migration error naming the S6 replacement (shared by the loaders'
+ *  drop-with-warn and the validateHook backstop). */
+export function databaseHookRemovedMessage(file: string, slug: string): string {
+  return (
+    `[hook-loader] ${file} (hook "${slug}"): database hooks were replaced by event hooks — ` +
+    `subscribe to the synthetic event 'project/db.<table>.<event>' via ` +
+    `{ type: 'event', on: { event: 'project/db.<table>.<insert|update|remove>' }, handler } ` +
+    `(ctx.input is the written row). Migrate this hook (see S15).`
   );
 }
 

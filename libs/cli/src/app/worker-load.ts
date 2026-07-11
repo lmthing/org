@@ -102,6 +102,10 @@ export interface WorkerInvokeHandlers {
   delegate?: (spaceRef: string, action?: string, opts?: unknown) => Promise<unknown>;
   callConnection?: (provider: string, req?: unknown) => Promise<unknown>;
   tasklistRun?: (ref: string, seed?: unknown) => Promise<unknown>;
+  /** Cron-emitter per-def JSON KV scratchpad (`ctx.state.get`/`set`), serviced
+   *  main-side by `server/emitter-state.ts`. Omitted for hooks/code nodes (a
+   *  `ctx.state` call then rejects). */
+  state?: { get: (key: string) => Promise<unknown>; set: (key: string, value: unknown) => Promise<void> };
 }
 
 /**
@@ -243,6 +247,11 @@ async function serviceProxy(
       if (!handlers.callConnection) throw new Error('callConnection is not available to this hook');
       const { provider, req } = msg.payload as { provider: string; req?: unknown };
       result = await handlers.callConnection(provider, req);
+    } else if (msg.kind === 'state') {
+      if (!handlers.state) throw new Error('ctx.state is not available here (cron emitters only)');
+      const { op, key, value } = msg.payload as { op: 'get' | 'set'; key: string; value?: unknown };
+      if (op === 'get') result = await handlers.state.get(key);
+      else result = await handlers.state.set(key, value);
     } else {
       if (!handlers.tasklistRun) throw new Error('tasklist runner not available yet');
       const { ref, seed } = msg.payload as { ref: string; seed?: unknown };

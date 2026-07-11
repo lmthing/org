@@ -1,20 +1,21 @@
 /**
  * Loader tests ({@link ./loader.ts}) — discovery + fail-loud validation.
  *
- * Covers: no `hooks/` dir → `[]`; a cron hook (declarative) and a database hook
+ * Covers: no `hooks/` dir → `[]`; a cron hook (declarative) and an event hook
  * with an imperative `handler` (really imported + callable); slug = basename,
  * duplicate-slug throw; validation throws — cron without `every`/`daily`, cron
- * with both, database without `on`, database with neither/both of
- * `trigger`/`handler`, bad `type`, bad `budget`.
+ * with both, event without `on`, event with neither/both of `trigger`/`handler`,
+ * bad `type`, bad `budget`; a removed `{type:'database'}` hook is DROPPED with a
+ * clear migration error (the rest of the project still loads).
  */
 
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadHooks, validateHook, type DatabaseHookDef } from './loader.js';
+import { loadHooks, validateHook, type EventHookDef } from './loader.js';
 
 let root: string;
 
@@ -36,14 +37,14 @@ describe('loadHooks — discovery', () => {
     expect(await loadHooks(root)).toEqual([]);
   });
 
-  it('loads a cron hook and a database hook, keyed by basename slug', async () => {
+  it('loads a cron hook and an event hook, keyed by basename slug', async () => {
     writeHook(
       'refresh-sources.ts',
       `export default { type: 'cron', every: '30m', trigger: 'newsroom/fetcher#refresh', budget: { maxEpisodes: 20, maxWallClockMs: 600000 } }`,
     );
     writeHook(
       'synthesize-new.ts',
-      `export default { type: 'database', on: { table: 'raw_items', event: 'insert' }, budget: { maxEpisodes: 10 }, handler: async ({ row }) => ({ got: row.id }) }`,
+      `export default { type: 'event', on: { event: 'project/db.raw_items.insert' }, budget: { maxEpisodes: 10 }, handler: async ({ input }) => ({ got: input.id }) }`,
     );
     const hooks = await loadHooks(root);
     expect(hooks.map((h) => h.slug)).toEqual(['refresh-sources', 'synthesize-new']);
@@ -53,16 +54,30 @@ describe('loadHooks — discovery', () => {
     expect(cron.def.budget).toEqual({ maxEpisodes: 20, maxWallClockMs: 600000 });
   });
 
-  it('really imports an imperative handler (it is callable)', async () => {
+  it('really imports an imperative event handler (it is callable, row arrives as ctx.input)', async () => {
     writeHook(
       'synth.ts',
-      `export default { type: 'database', on: { table: 't', event: 'insert' }, handler: async ({ row }) => ({ doubled: row.n * 2 }) }`,
+      `export default { type: 'event', on: { event: 'project/db.t.insert' }, handler: async ({ input }) => ({ doubled: input.n * 2 }) }`,
     );
     const [hook] = await loadHooks(root);
-    const def = hook.def as DatabaseHookDef;
+    const def = hook.def as EventHookDef;
     expect(typeof def.handler).toBe('function');
-    const out = await def.handler!({ row: { n: 21 }, db: {}, delegate: async () => undefined });
+    const out = await def.handler!({ input: { n: 21 }, db: {}, delegate: async () => undefined });
     expect(out).toEqual({ doubled: 42 });
+  });
+
+  it('DROPS a removed {type:database} hook with a clear migration error, still loading the rest', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    writeHook('ok-cron.ts', `export default { type: 'cron', every: '30m', trigger: 'x/y#z' }`);
+    writeHook(
+      'legacy-db.ts',
+      `export default { type: 'database', on: { table: 'posts', event: 'insert' }, handler: async () => {} }`,
+    );
+    const hooks = await loadHooks(root);
+    // The database hook is dropped; the cron hook still loads.
+    expect(hooks.map((h) => h.slug)).toEqual(['ok-cron']);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/database hooks were replaced by event hooks/));
+    warn.mockRestore();
   });
 
   it('throws on a duplicate slug', async () => {
@@ -115,25 +130,9 @@ describe('validateHook — fail-loud', () => {
     expect(bad({ type: 'cron', daily: '25:00', trigger: 't' })).toThrow(/daily/);
   });
 
-  it('accepts a database hook with exactly one of trigger | handler', () => {
-    expect(ok({ type: 'database', on: { table: 't', event: 'insert' }, trigger: 'x/y#z' })).toMatchObject({
-      type: 'database',
-      on: { table: 't', event: 'insert' },
-    });
-    expect(ok({ type: 'database', on: { table: 't', event: 'update' }, handler: () => {} })).toMatchObject({
-      type: 'database',
-    });
-  });
-
-  it('rejects a database hook without on:{table,event} or with a bad event', () => {
-    expect(bad({ type: 'database', trigger: 't' })).toThrow(/on:/);
-    expect(bad({ type: 'database', on: { table: 't', event: 'nope' }, trigger: 't' })).toThrow(/on\.event/);
-  });
-
-  it('rejects a database hook with neither / both of trigger|handler', () => {
-    expect(bad({ type: 'database', on: { table: 't', event: 'insert' } })).toThrow(/exactly one of/);
-    expect(bad({ type: 'database', on: { table: 't', event: 'insert' }, trigger: 't', handler: () => {} })).toThrow(
-      /exactly one of/,
+  it('rejects a removed {type:database} hook with the migration message (validation backstop)', () => {
+    expect(bad({ type: 'database', on: { table: 't', event: 'insert' }, trigger: 'x/y#z' })).toThrow(
+      /database hooks were replaced by event hooks/,
     );
   });
 

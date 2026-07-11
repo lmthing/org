@@ -80,9 +80,9 @@ describe('dueCronHooks — boot catch-up', () => {
     expect(dueCronHooks(hooks, recent, now)).toEqual([]);
   });
 
-  it('ignores database hooks', () => {
-    const dbHook: LoadedHook = { slug: 'db', def: { type: 'database', on: { table: 't', event: 'insert' }, trigger: 'x/y#z' } };
-    expect(dueCronHooks([dbHook], emptyHooksState(), now)).toEqual([]);
+  it('ignores non-cron (event) hooks', () => {
+    const evHook: LoadedHook = { slug: 'ev', def: { type: 'event', on: { event: 'project/db.t.insert' }, trigger: 'x/y#z' } };
+    expect(dueCronHooks([evHook], emptyHooksState(), now)).toEqual([]);
   });
 });
 
@@ -150,10 +150,10 @@ describe('nextCrontabLines', () => {
     ]);
   });
 
-  it('supports a `:slug` placeholder and skips database hooks', () => {
+  it('supports a `:slug` placeholder and skips non-cron (event) hooks', () => {
     const hooks: LoadedHook[] = [
       cronHook('a', { every: '2h' }),
-      { slug: 'db', def: { type: 'database', on: { table: 't', event: 'insert' }, trigger: 'x/y#z' } },
+      { slug: 'ev', def: { type: 'event', on: { event: 'project/db.t.insert' }, trigger: 'x/y#z' } },
     ];
     const lines = nextCrontabLines(hooks, 'hit /hooks/:slug/run');
     expect(lines).toEqual(['0 */2 * * * hit /hooks/a/run']);

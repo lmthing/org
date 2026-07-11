@@ -1,31 +1,38 @@
 /**
- * Hook **dispatch queue** (Phase 6, 6A) — the decoupled post-commit queue.
+ * Hook **dispatch queue** (Phase 6, 6A; generalized in S6) — the decoupled
+ * post-commit queue for **db-write-originated** event dispatch.
  *
  * The write path is **in-process and decoupled**: after a database write commits,
- * the integrator calls {@link HookDispatcher.enqueue} with a {@link WriteEvent}.
- * `enqueue` synchronously computes which hooks match + should fire and pushes one
- * queue entry each, then **returns immediately** — it never runs a hook. The
- * queue drains on the next event-loop tick, AFTER the current eval unwinds, when
- * the integrator calls {@link HookDispatcher.drain}. This is what keeps hook
- * dispatch non-re-entrant: a write made *by* a running hook enqueues into the
- * NEXT drain cycle, not the one in flight.
+ * the app runtime turns it into events (db-emitter events + a synthetic
+ * `project/db.<table>.<event>` event) and calls {@link HookDispatcher.enqueue}
+ * with each {@link DispatchEvent}. `enqueue` synchronously computes which event
+ * hooks subscribe + should fire and pushes one queue entry each, then **returns
+ * immediately** — it never runs a hook. The queue drains on the next event-loop
+ * tick, AFTER the current eval unwinds, when the integrator calls
+ * {@link HookDispatcher.drain}. This is what keeps dispatch non-re-entrant: a
+ * write made *by* a running hook enqueues into the NEXT drain cycle, not the one
+ * in flight. (Webhook/cron/internal-originated events don't need this
+ * coalescing — they dispatch directly via `server/event-dispatch.ts`.)
  *
  * Two coalescing rules keep the loop bounded (parent plan §Safety):
- *   - **Queue coalesce** — at most one queued entry per hook slug; a later write
- *     replaces the earlier entry with the latest event (one drain → one fire).
+ *   - **Queue coalesce** — at most one queued entry per hook slug; a later event
+ *     replaces the earlier entry (one drain → one fire), so two different events
+ *     (a db-emitter event + the synthetic event) that happen to hit the SAME hook
+ *     still fire it once, while distinct hooks keep independent slugs.
  *   - **Budget-exhaustion queue** — when `run` reports a hook ran out of budget,
  *     ≤1 pending entry per slug is kept and retried on the next drain (once the
  *     budget window rolls).
  *
- * The firing *decision* lives in {@link loop-guard} (pure); this class owns the
- * queue mechanics + the injected clock and last-fired map (cooldown state).
+ * The firing *decision* + the event matcher live in {@link loop-guard} (pure);
+ * this class owns the queue mechanics + the injected clock and last-fired map
+ * (cooldown state).
  */
 
 import {
-  matchDatabaseHooks,
+  matchEventHooks,
   shouldFireHook,
   type ShouldFireCtx,
-  type WriteEvent,
+  type DispatchEvent,
 } from './loop-guard.js';
 import type { LoadedHook } from './loader.js';
 
@@ -33,9 +40,9 @@ import type { LoadedHook } from './loader.js';
 export interface QueueEntry {
   /** The hook to run. */
   slug: string;
-  /** The write that triggered it (the latest, after coalescing). */
-  event: WriteEvent;
-  /** The cascade depth a write made by THIS firing will carry (`event+1`). */
+  /** The event that triggered it (the latest, after coalescing). */
+  event: DispatchEvent;
+  /** The cascade depth an event produced by THIS firing will carry (`event+1`). */
   hookDepth: number;
   /** When this entry was (last) enqueued (injected clock). */
   enqueuedAt: number;
@@ -52,7 +59,7 @@ export type RunFn = (entry: QueueEntry) => Promise<RunOutcome | void>;
 
 /** Constructor options for {@link HookDispatcher}. */
 export interface HookDispatcherOpts {
-  /** The project's loaded hooks (database hooks are the ones dispatched). */
+  /** The project's loaded EVENT hooks (the subscribers matched per event address). */
   hooks: LoadedHook[];
   /** The per-hook cooldown / coalesce window (ms). */
   cooldownMs: number;
@@ -84,14 +91,14 @@ export class HookDispatcher {
   }
 
   /**
-   * Synchronously queue every matching hook that should fire for `event`, then
-   * return. **Never runs a hook.** Returns the entries it enqueued (for tests /
-   * diagnostics). Coalesces onto ≤1 entry per slug (latest event wins).
+   * Synchronously queue every subscribing event hook that should fire for
+   * `event`, then return. **Never runs a hook.** Returns the entries it enqueued
+   * (for tests / diagnostics). Coalesces onto ≤1 entry per slug (latest event wins).
    */
-  enqueue(event: WriteEvent): QueueEntry[] {
+  enqueue(event: DispatchEvent): QueueEntry[] {
     const now = this.now();
     const enqueued: QueueEntry[] = [];
-    for (const hook of matchDatabaseHooks(this.hooks, event)) {
+    for (const hook of matchEventHooks(this.hooks, event.address)) {
       const ctx: ShouldFireCtx = {
         hookDepth: event.hookDepth,
         originatingHookSlug: event.originatingHookSlug,
@@ -99,7 +106,7 @@ export class HookDispatcher {
         now,
         cooldownMs: this.cooldownMs,
       };
-      if (!shouldFireHook(hook, event, ctx).fire) continue;
+      if (!shouldFireHook(hook, ctx).fire) continue;
       const entry: QueueEntry = {
         slug: hook.slug,
         event,
