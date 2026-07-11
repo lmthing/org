@@ -29,7 +29,7 @@ import {
 import { bootProjectApp } from '../app/boot.js';
 import { createApiRuntime, type ApiRuntime } from '../app/api/runtime.js';
 import type { ProjectDb } from '../app/store.js';
-import { createAppAuthoringGlobals, resolveCatalogRoot, type AppAuthoringGlobals } from '../app/authoring/index.js';
+import { createAppAuthoringGlobals, createProjectAuthoringGlobals, resolveCatalogRoot, type AppAuthoringGlobals } from '../app/authoring/index.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
 import { loadAllHooks } from '../app/hooks/index.js';
 import { ProjectHookRuntime } from '../app/hooks/runtime.js';
@@ -564,6 +564,21 @@ export class SessionManager {
     const db = await this.getProjectDb(root, projectId);
     const authoring = this.getAuthoringGlobals();
     const apiRt = await this.getApiRuntime(root, projectId);
+    // LIVE-PROJECT authoring writers (S11) — bound to THIS project's own dir (not the
+    // catalog), republishing after each write so the new event hook / emitter def /
+    // crontab goes live without a pod restart. Injected only on `hooks:write` (core's
+    // injectAppGlobals), so THING/ordinary agents never see them; the automator writes
+    // hooks+events, the engineer writes functions.
+    const projectAuthoring = createProjectAuthoringGlobals({
+      projectRoot: join(root, projectId),
+      republish: () => {
+        // Fire-and-forget from the synchronous writer; a republish failure never fails
+        // the write (the file already landed — the next boot picks it up regardless).
+        void this.republish().catch((err) =>
+          console.warn(`[authoring] republish after project write failed: ${err instanceof Error ? err.message : String(err)}`),
+        );
+      },
+    });
     return {
       ...(db ? { db: db.db } : undefined),
       // Agent-facing apiCall — re-enter the project's OWN api endpoints by name
@@ -576,6 +591,9 @@ export class SessionManager {
       writeTableSchema: authoring.writeTableSchema,
       createProject: authoring.createProject,
       selectProject: authoring.selectProject,
+      writeProjectHook: projectAuthoring.writeProjectHook,
+      writeProjectEvent: projectAuthoring.writeProjectEvent,
+      writeProjectFunction: projectAuthoring.writeProjectFunction,
     };
   }
 

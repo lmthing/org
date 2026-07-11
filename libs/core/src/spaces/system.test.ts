@@ -50,12 +50,13 @@ describe('system spaces', () => {
   it('defaultSystemSpaceDirs points under libs/core/system-spaces', () => {
     const dirs = defaultSystemSpaceDirs();
     expect(dirs.some((d) => d.endsWith('system-spaces/system-global'))).toBe(true);
-    expect(dirs.length).toBe(9);
+    expect(dirs.length).toBe(10);
     expect(dirs.some((d) => d.endsWith('system-spaces/solver'))).toBe(false);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-research'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-appbuilder'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-vision'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-files'))).toBe(true);
+    expect(dirs.some((d) => d.endsWith('system-spaces/system-store'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/integration-google'))).toBe(false);
     expect(dirs.some((d) => d.endsWith('system-spaces/integration-slack'))).toBe(false);
     expect(dirs.some((d) => d.endsWith('system-spaces/integration-github'))).toBe(false);

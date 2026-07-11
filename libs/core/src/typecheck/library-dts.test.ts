@@ -10,6 +10,7 @@ import {
   PAGES_WRITE_DTS,
   API_WRITE_DTS,
   HOOKS_WRITE_DTS,
+  PROJECT_AUTHORING_DTS,
   PROJECT_MANAGE_DTS,
   WRITE_TABLE_SCHEMA_DTS,
   STORE_READ_DTS,
@@ -109,7 +110,7 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
       'api:call': API_CALL_DTS,
       'pages:write': PAGES_WRITE_DTS,
       'api:write': API_WRITE_DTS,
-      'hooks:write': HOOKS_WRITE_DTS,
+      'hooks:write': [HOOKS_WRITE_DTS, PROJECT_AUTHORING_DTS].join('\n'),
       'project:manage': PROJECT_MANAGE_DTS,
       'store:read': STORE_READ_DTS,
       'store:install': STORE_INSTALL_DTS,
@@ -120,6 +121,15 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     // so it is deliberately NOT a flat-map entry.
     expect(CAPABILITY_DTS_FRAGMENTS['db:read']).toBeUndefined();
     expect(CAPABILITY_DTS_FRAGMENTS['db:schema']).toBeUndefined();
+  });
+
+  it('PROJECT_AUTHORING_DTS declares the three live-project writers under hooks:write', () => {
+    expect(PROJECT_AUTHORING_DTS).toContain('writeProjectHook(');
+    expect(PROJECT_AUTHORING_DTS).toContain('writeProjectEvent(');
+    expect(PROJECT_AUTHORING_DTS).toContain('writeProjectFunction(');
+    // hooks:write earns BOTH the catalog writeHook and the live-project writers.
+    expect(CAPABILITY_DTS_FRAGMENTS['hooks:write']).toContain('writeHook(');
+    expect(CAPABILITY_DTS_FRAGMENTS['hooks:write']).toContain('writeProjectHook(');
   });
 
   it('PROJECT_MANAGE_DTS declares createProject + selectProject; WRITE_TABLE_SCHEMA_DTS declares writeTableSchema', () => {

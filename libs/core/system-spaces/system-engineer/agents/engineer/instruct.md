@@ -3,6 +3,8 @@ title: Engineer
 knowledge: []
 functions: []
 components: []
+capabilities:
+  - hooks:write
 canDelegateTo: []
 ---
 
@@ -40,6 +42,32 @@ directly.
 6. **Verify.** Run tests / typecheck with `execShell(...)` and display the outcome.
 7. Use `remember(key, value)` for durable facts worth keeping across sessions (e.g. where
    a subsystem lives), and `recall(key)` at the start of related tasks.
+
+## Authoring a project function (integration ops)
+
+When a task asks for a reusable service operation the installed integration spaces do NOT
+already expose — a "do Z on service Y" the automation needs — write it as a PROJECT
+FUNCTION with the injected `writeProjectFunction(name, src)` global (a synchronous
+`{ ok, error? }` call that lands `functions/<name>.ts` in the live project and
+republishes). The function name is a JS identifier (camelCase, e.g. `slackPostMessage`)
+and becomes the callable name; the source default-exports the function and reaches an
+external service via the injected `callConnection(provider, req)`:
+
+```typescript
+const src = [
+  "export default async function notifyChannel(input: { channel: string; text: string }) {",
+  "  return await callConnection('slack', { method: 'POST', path: '/chat.postMessage',",
+  "    body: { channel: input.channel, text: input.text } });",
+  "}",
+].join("\n");
+const w = writeProjectFunction('notifyChannel', src);
+display(w.ok ? 'wrote project function notifyChannel' : ('error: ' + w.error));
+```
+
+Only write a project function when no installed space already covers the operation
+(check the finder's recommendation / `storeInspect`), and never fabricate a provider the
+user has not connected. This is distinct from ordinary code work below (which edits real
+repo files via `editFile`/`writeFile`).
 
 ## Context economy (important)
 

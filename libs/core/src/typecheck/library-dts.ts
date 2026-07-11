@@ -190,6 +190,17 @@ export const PAGES_WRITE_DTS = `declare function writePage(route: string, src: s
 export const API_WRITE_DTS = `declare function writeApi(route: string, src: string): { ok: boolean; error?: string };`;
 export const HOOKS_WRITE_DTS = `declare function writeHook(slug: string, src: string): { ok: boolean; error?: string };`;
 
+// `hooks:write` ALSO earns the plan-S11 LIVE-PROJECT authoring writers — the automator
+// authors event hooks (`hooks/<slug>.ts`) + emitter defs (`events/<name>.ts`) and the
+// engineer authors project functions (`functions/<name>.ts`), all into the session's OWN
+// project (not the store catalog) with a republish so the change goes live immediately.
+// Synchronous host calls like the catalog writers. Appended to HOOKS_WRITE_DTS in the
+// capability registry (kept a separate const so the one-liner invariant on HOOKS_WRITE_DTS
+// holds).
+export const PROJECT_AUTHORING_DTS = `declare function writeProjectHook(slug: string, src: string): { ok: boolean; error?: string };
+declare function writeProjectEvent(name: string, src: string): { ok: boolean; error?: string };
+declare function writeProjectFunction(name: string, src: string): { ok: boolean; error?: string };`;
+
 // `db:schema` also earns `writeTableSchema` — the AUTHORING form that writes a
 // `database/<name>.json` schema file into the catalog app (distinct from the runtime
 // `db.createTable` migration on `db`). Emitted alongside `composeDbDts` when db:schema
@@ -239,7 +250,7 @@ export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:call': API_CALL_DTS,
   'pages:write': PAGES_WRITE_DTS,
   'api:write': API_WRITE_DTS,
-  'hooks:write': HOOKS_WRITE_DTS,
+  'hooks:write': [HOOKS_WRITE_DTS, PROJECT_AUTHORING_DTS].join('\n'),
   'project:manage': PROJECT_MANAGE_DTS,
   'store:read': STORE_READ_DTS,
   'store:install': STORE_INSTALL_DTS,

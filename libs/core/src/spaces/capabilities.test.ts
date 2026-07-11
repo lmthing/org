@@ -118,11 +118,19 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     expect(dirs.length).toBeGreaterThan(0);
     const spaces = await loadSystemSpaces(dirs);
     expect(spaces.length).toBe(dirs.length);
-    // Two families of system agents declare capabilities: system-appbuilder's agents
-    // (the project-authoring grants) and the integration-* spaces (connections:use).
-    // Every other system agent parses to {}.
+    // System agents that declare capabilities: system-appbuilder's agents (project +
+    // authoring grants), the integration-* spaces (connections:use), and the plan-S11
+    // trio — system-engineer/engineer (hooks:write → writeProjectFunction),
+    // system-store/finder (store:read), and user-thing/thing (store:install). Every
+    // other system agent parses to {}.
+    const capBearing = (dir: string): boolean =>
+      dir.endsWith('system-appbuilder') ||
+      dir.includes('integration-') ||
+      dir.endsWith('system-engineer') ||
+      dir.endsWith('system-store') ||
+      dir.endsWith('user-thing');
     for (const space of spaces) {
-      const hasCaps = space.dir.endsWith('system-appbuilder') || space.dir.includes('integration-');
+      const hasCaps = capBearing(space.dir);
       for (const agent of Object.values(space.agents)) {
         if (hasCaps) {
           expect(Object.keys(agent.capabilities ?? {}).length).toBeGreaterThan(0);

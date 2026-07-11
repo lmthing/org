@@ -72,6 +72,17 @@ export interface AppGlobalImpls {
   writeTableSchema?: (name: string, schema: unknown) => AuthoringResult;
   createProject?: (id: string, opts?: { title?: string }) => ProjectResult;
   selectProject?: (id: string) => ProjectResult;
+  /** Plan S11 LIVE-PROJECT authoring globals — unlike the catalog writers above
+   *  (which target `store/projects/<id>/` templates), these write into the SESSION'S
+   *  OWN live project (`<lmthingRoot>/<projectId>/{hooks,events,functions}/`) and
+   *  republish so the change goes live without a pod restart. Provided by libs/cli
+   *  (`createProjectAuthoringGlobals`), bound to the session's project root, and
+   *  injected purely on the `hooks:write` grant (see {@link injectAppGlobals}):
+   *  the automator authors event hooks + emitter defs, the engineer authors
+   *  project functions. */
+  writeProjectHook?: (slug: string, src: string) => AuthoringResult;
+  writeProjectEvent?: (name: string, src: string) => AuthoringResult;
+  writeProjectFunction?: (name: string, src: string) => AuthoringResult;
 }
 
 /** Throw the host error shape (naming the allowed tables, like the canDelegateTo
@@ -176,6 +187,13 @@ export function injectAppGlobals(
   if (app['pages:write'] && impls.writePage) injectGlobal(ctx, 'writePage', impls.writePage as (...a: unknown[]) => unknown);
   if (app['api:write'] && impls.writeApi) injectGlobal(ctx, 'writeApi', impls.writeApi as (...a: unknown[]) => unknown);
   if (app['hooks:write'] && impls.writeHook) injectGlobal(ctx, 'writeHook', impls.writeHook as (...a: unknown[]) => unknown);
+  // Live-project authoring (S11) — same `hooks:write` grant, but these write into the
+  // session's OWN project (not the catalog) and republish. Present only when the host
+  // supplies them (a project-rooted session); a catalog-only appbuilder session leaves
+  // them absent, so a stray call there fails typecheck rather than mis-targeting.
+  if (app['hooks:write'] && impls.writeProjectHook) injectGlobal(ctx, 'writeProjectHook', impls.writeProjectHook as (...a: unknown[]) => unknown);
+  if (app['hooks:write'] && impls.writeProjectEvent) injectGlobal(ctx, 'writeProjectEvent', impls.writeProjectEvent as (...a: unknown[]) => unknown);
+  if (app['hooks:write'] && impls.writeProjectFunction) injectGlobal(ctx, 'writeProjectFunction', impls.writeProjectFunction as (...a: unknown[]) => unknown);
   if (app['db:schema'] && impls.writeTableSchema) injectGlobal(ctx, 'writeTableSchema', impls.writeTableSchema as (...a: unknown[]) => unknown);
   if (app['project:manage']) {
     if (impls.createProject) injectGlobal(ctx, 'createProject', impls.createProject as (...a: unknown[]) => unknown);

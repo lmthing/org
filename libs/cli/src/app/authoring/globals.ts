@@ -44,6 +44,11 @@ const SLUG_RE = /^[a-z][a-z0-9-]*$/;
  *  required. Still traversal-safe (no dots/slashes). */
 const TABLE_NAME_RE = /^[a-z][a-z0-9_]*$/;
 
+/** Function names are JS identifiers (camelCase like `slackPostMessage`), not
+ *  kebab-slugs — the file basename becomes the function's callable name. Still
+ *  traversal-safe (no dots/slashes). */
+const FUNCTION_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
 /** A single page/api path segment: letters/digits/hyphen/underscore, optionally
  *  wrapped in `[...]` for a dynamic route segment (e.g. `[id]`). */
 const SEGMENT_RE = /^\[?[a-zA-Z0-9_-]+\]?$/;
@@ -231,4 +236,88 @@ export function createAppAuthoringGlobals(opts: { catalogRoot: string }): AppAut
     selectProject,
     currentApp: () => current,
   };
+}
+
+/** The plan-S11 LIVE-PROJECT authoring writers — the `hooks:write`-gated globals that
+ *  the automator (event hooks + emitter defs) and engineer (project functions) call. */
+export interface ProjectAuthoringGlobals {
+  /** Write `<projectRoot>/hooks/<slug>.ts` (an event/cron hook def). */
+  writeProjectHook: (slug: string, src: string) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/events/<name>.ts` (an emitter def). */
+  writeProjectEvent: (name: string, src: string) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/functions/<name>.ts` (a project function). */
+  writeProjectFunction: (name: string, src: string) => { ok: boolean; error?: string };
+}
+
+/**
+ * Build the LIVE-PROJECT authoring writers (plan S11). Unlike
+ * {@link createAppAuthoringGlobals} — which targets `store/projects/<id>/` catalog
+ * TEMPLATES and carries a mutable createProject/selectProject "current app" — these
+ * are bound to ONE fixed live project root (`<lmthingRoot>/<projectId>`) and write
+ * directly into the running project's `hooks/`, `events/`, and `functions/` dirs.
+ *
+ * After a successful write each calls `republish` (fire-and-forget — the writers are
+ * SYNCHRONOUS host globals, so they cannot await the async re-publish) so the new
+ * event hook / emitter def / crontab entry goes live WITHOUT a pod restart. The write
+ * itself has already landed on disk when the writer returns `{ ok: true }`; the
+ * republish only re-derives the pod's published artifacts (webhook manifest + crontab
+ * + emitter scan cache) from that source.
+ *
+ * Path safety reuses the same slug/name validation + `safeResolve` traversal guard as
+ * the catalog writers (names are a kebab-slug — no dots, no slashes — and the resolved
+ * path must stay under the project root).
+ */
+export function createProjectAuthoringGlobals(opts: {
+  projectRoot: string;
+  republish?: () => void;
+}): ProjectAuthoringGlobals {
+  const { projectRoot, republish } = opts;
+
+  /** Write `rel` under the project root, then fire the republish (best-effort). */
+  function writeUnder(rel: string, src: string): { ok: boolean; error?: string } {
+    try {
+      const target = safeResolve(projectRoot, rel);
+      writeFile(target, src);
+      // Fire-and-forget: a republish failure must not fail the write (the file is
+      // already on disk; the next boot picks it up even if the live re-derive throws).
+      try {
+        republish?.();
+      } catch {
+        /* best-effort — the write itself succeeded */
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+  }
+
+  function writeProjectHook(slug: string, src: string): { ok: boolean; error?: string } {
+    try {
+      assertSlug('hook slug', slug);
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    return writeUnder(join('hooks', `${slug}.ts`), src);
+  }
+
+  function writeProjectEvent(name: string, src: string): { ok: boolean; error?: string } {
+    try {
+      assertSlug('event name', name);
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    return writeUnder(join('events', `${name}.ts`), src);
+  }
+
+  function writeProjectFunction(name: string, src: string): { ok: boolean; error?: string } {
+    if (!FUNCTION_NAME_RE.test(name)) {
+      return {
+        ok: false,
+        error: `function name "${name}" is not a valid identifier (expected /${FUNCTION_NAME_RE.source}/)`,
+      };
+    }
+    return writeUnder(join('functions', `${name}.ts`), src);
+  }
+
+  return { writeProjectHook, writeProjectEvent, writeProjectFunction };
 }

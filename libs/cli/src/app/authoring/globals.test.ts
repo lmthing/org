@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TableSchema } from '@lmthing/core';
 
-import { createAppAuthoringGlobals, type AppAuthoringGlobals } from './globals.js';
+import { createAppAuthoringGlobals, createProjectAuthoringGlobals, type AppAuthoringGlobals } from './globals.js';
 
 let catalogRoot: string;
 let authoring: AppAuthoringGlobals;
@@ -223,5 +223,101 @@ describe('writeHook', () => {
   it('fails when no project is selected', () => {
     const res = authoring.writeHook('nightly-digest', 'x');
     expect(res.ok).toBe(false);
+  });
+});
+
+// ── Live-project authoring globals (plan S11) ──────────────────────────────────
+
+describe('createProjectAuthoringGlobals', () => {
+  let projectRoot: string;
+  let republishCalls: number;
+
+  beforeEach(() => {
+    // A LIVE project root distinct from the catalog root — proves the writers target
+    // the live project, not `store/projects/`.
+    projectRoot = mkdtempSync(join(tmpdir(), 'lm-live-project-'));
+    republishCalls = 0;
+  });
+
+  afterEach(() => {
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  function make() {
+    return createProjectAuthoringGlobals({
+      projectRoot,
+      republish: () => {
+        republishCalls += 1;
+      },
+    });
+  }
+
+  it('writeProjectHook lands hooks/<slug>.ts in the LIVE project (not the catalog) and republishes', () => {
+    const pa = make();
+    const src = "export default { type: 'event', on: { event: 'integration-slack/message.posted' } };";
+    const res = pa.writeProjectHook('slack-watch', src);
+    expect(res.ok).toBe(true);
+    const target = join(projectRoot, 'hooks', 'slack-watch.ts');
+    expect(existsSync(target)).toBe(true);
+    expect(readFileSync(target, 'utf8')).toBe(src);
+    // Republish fired exactly once after the successful write (goes live, no restart).
+    expect(republishCalls).toBe(1);
+    // Nothing leaked into a catalogRoot-shaped path.
+    expect(existsSync(join(projectRoot, 'store'))).toBe(false);
+  });
+
+  it('writeProjectEvent lands events/<name>.ts and republishes', () => {
+    const pa = make();
+    const src =
+      "export default { type: 'db', on: { table: 'feed_items', event: 'insert' }, emits: {}, emit: () => [] };";
+    const res = pa.writeProjectEvent('feed-writes', src);
+    expect(res.ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'events', 'feed-writes.ts'))).toBe(true);
+    expect(republishCalls).toBe(1);
+  });
+
+  it('writeProjectFunction lands functions/<name>.ts under a camelCase identifier name', () => {
+    const pa = make();
+    const src = 'export default async function slackPostMessage(i: unknown) { return i; }';
+    const res = pa.writeProjectFunction('slackPostMessage', src);
+    expect(res.ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'functions', 'slackPostMessage.ts'))).toBe(true);
+    expect(republishCalls).toBe(1);
+  });
+
+  it('rejects path traversal in every writer and does NOT republish on failure', () => {
+    const pa = make();
+    expect(pa.writeProjectHook('../../evil', 'x').ok).toBe(false);
+    expect(pa.writeProjectEvent('../../evil', 'x').ok).toBe(false);
+    // A camelCase-only regex already blocks a slash/dot in a function name.
+    expect(pa.writeProjectFunction('../evil', 'x').ok).toBe(false);
+    expect(republishCalls).toBe(0);
+    // Nothing escaped the project root.
+    expect(existsSync(join(projectRoot, '..', 'evil.ts'))).toBe(false);
+  });
+
+  it('rejects an invalid hook slug (uppercase/leading digit) — kebab only', () => {
+    const pa = make();
+    expect(pa.writeProjectHook('Slack', 'x').ok).toBe(false);
+    expect(pa.writeProjectHook('1watch', 'x').ok).toBe(false);
+    expect(republishCalls).toBe(0);
+  });
+
+  it('rejects a non-identifier function name but accepts camelCase', () => {
+    const pa = make();
+    expect(pa.writeProjectFunction('bad-name', 'x').ok).toBe(false); // hyphen is not an identifier
+    expect(pa.writeProjectFunction('goodName', 'export default 1;').ok).toBe(true);
+  });
+
+  it('a throwing republish never fails the write (fire-and-forget)', () => {
+    const pa = createProjectAuthoringGlobals({
+      projectRoot,
+      republish: () => {
+        throw new Error('republish boom');
+      },
+    });
+    const res = pa.writeProjectHook('resilient', 'export default {};');
+    expect(res.ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'hooks', 'resilient.ts'))).toBe(true);
   });
 });
