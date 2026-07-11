@@ -143,4 +143,33 @@ describe('validateHook — fail-loud', () => {
     expect(bad(42)).toThrow(/hook object/);
     expect(bad({ type: 'cron', every: '30m', trigger: 't', budget: { maxEpisodes: -1 } })).toThrow(/maxEpisodes/);
   });
+
+  it('accepts an event hook with a source-qualified address + exactly one of trigger|handler', () => {
+    expect(ok({ type: 'event', on: { event: 'integration-slack/message.posted' }, trigger: 'x/y#z' })).toMatchObject({
+      type: 'event',
+      on: { event: 'integration-slack/message.posted' },
+      trigger: 'x/y#z',
+    });
+    expect(ok({ type: 'event', on: { event: 'project/db.items.insert' }, handler: () => {} })).toMatchObject({
+      type: 'event',
+      on: { event: 'project/db.items.insert' },
+    });
+  });
+
+  it('rejects an event hook without on.event, with a bad address, or neither/both of trigger|handler', () => {
+    expect(bad({ type: 'event', trigger: 't' })).toThrow(/on: \{ event/);
+    expect(bad({ type: 'event', on: { event: 'no-slash' }, trigger: 't' })).toThrow(/source-qualified/);
+    expect(bad({ type: 'event', on: { event: 'a/b' } })).toThrow(/exactly one of/);
+    expect(bad({ type: 'event', on: { event: 'a/b' }, trigger: 't', handler: () => {} })).toThrow(/exactly one of/);
+  });
+
+  it('accepts a `connections` list and rejects a malformed one', () => {
+    expect(
+      ok({ type: 'event', on: { event: 'a/b' }, handler: () => {}, connections: ['slack'] }),
+    ).toMatchObject({ connections: ['slack'] });
+    expect(bad({ type: 'event', on: { event: 'a/b' }, handler: () => {}, connections: 'slack' })).toThrow(
+      /connections/,
+    );
+    expect(bad({ type: 'cron', every: '30m', handler: () => {}, connections: [''] })).toThrow(/connections/);
+  });
 });

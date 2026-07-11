@@ -20,8 +20,11 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ConnectionRequest, ConnectionResponse, ConnectionResolver } from '@lmthing/core';
 import { sendJson } from './utils.js';
+import { createConnectionResolver } from '../connections.js';
 // ── 6A (concurrent) — imported by production path; see file header. ───────────
 import {
   loadHooks,
@@ -47,29 +50,88 @@ export interface HookBudget {
 }
 
 export interface Hook {
-  /** Slug = the hook file's basename (e.g. `daily-digest`). Matched against `:slug`. */
+  /** Slug = the hook file's basename (e.g. `daily-digest`), namespaced `<spaceId>:<base>`
+   *  for a space hook. Matched against `:slug`. */
   slug: string;
-  type?: 'cron' | 'database' | string;
+  type?: 'cron' | 'database' | 'event' | 'webhook' | string;
+  /** The owning scope: `'project'` (in-proc handler) or a spaceId (worker-isolated,
+   *  own-provider-locked). Absent ⇒ treated as `'project'`. */
+  owner?: string;
   /** Declarative cron target `space/agent#action`. Present ⇒ delegate to an agent. */
   trigger?: string;
   /** Imperative hook body. Present ⇒ invoke directly with a ctx. */
   handler?: (ctx: HookHandlerCtx) => unknown | Promise<unknown>;
+  /** Providers `ctx.callConnection` may reach — the gate list (project: declared;
+   *  space: additionally locked to the space's own provider(s)). */
+  connections?: string[];
   /** Budget caps forwarded verbatim to `runHeadless`/`delegate`. */
   budget?: HookBudget;
 }
 
-/** ctx passed to an imperative `handler` hook. */
+/** The result a hook `ctx.delegate` returns — the headless agent run's outcome
+ *  (mirrors `SessionManager.runHeadless`). `result` is the agent's final display
+ *  descriptor / message content; `sessionId` identifies the run. */
+export interface DelegateResult {
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+  sessionId?: string;
+}
+
+/**
+ * ctx passed to an imperative `handler` hook. `db` is the project's async data
+ * API (unchanged). `delegate` threads structured input INTO the headless run and
+ * RETURNS its {@link DelegateResult} (no longer fire-and-forget). `callConnection`
+ * is gated by the hook def's `connections:` (a provider not in the allow-list
+ * throws). `tasklist.run` is a SEAM — it throws until a runner is injected (S9).
+ */
 export interface HookHandlerCtx {
   db: unknown;
-  delegate: (spaceRef: string, action?: string, opts?: unknown) => Promise<unknown>;
+  /** Delegate into `space/agent`; `opts.input` is serialized into the run's seed
+   *  message, `opts.message` overrides the default kickoff text. Returns the run result. */
+  delegate: (spaceRef: string, action?: string, opts?: { input?: unknown; message?: string }) => Promise<DelegateResult>;
+  /** Call an installed connection provider (gated by the hook's `connections:`). */
+  callConnection: (provider: string, req: ConnectionRequest) => Promise<ConnectionResponse>;
+  /** Run a SPACE tasklist headless: `run('<spaceId>/<slug>', seed)`. Throws
+   *  `'tasklist runner not available yet'` until S9 injects the real runner. */
+  tasklist: { run: (ref: string, seed?: unknown) => Promise<unknown> };
+  /** The triggering db row (database hooks). */
   row?: unknown;
+  /** The structured event input (event hooks). */
+  input?: unknown;
+}
+
+/** Seam S9 plugs into: run a SPACE tasklist headless from a hook handler. */
+export type TasklistRunner = (ref: string, seed?: unknown) => Promise<unknown>;
+
+/** Optional injection for {@link runHook}: the connection resolver (defaults to a
+ *  project-scoped `createConnectionResolver`), the S9 tasklist runner, and the
+ *  structured `input` an event hook's ctx carries. */
+export interface RunHookOpts {
+  connectionResolver?: ConnectionResolver;
+  tasklistRunner?: TasklistRunner;
+  input?: unknown;
 }
 
 /** Flatten 6A's `LoadedHook { slug, def }` into the flat fields 6C dispatches on
  *  (`trigger`/`handler`/`budget`). 6A's schedule/state fns keep taking `LoadedHook[]`. */
 function toFlat(l: LoadedHook): Hook {
-  const d = l.def as { type?: string; trigger?: string; handler?: Hook['handler']; budget?: Hook['budget'] };
-  return { slug: l.slug, type: d.type, trigger: d.trigger, handler: d.handler, budget: d.budget };
+  const d = l.def as {
+    type?: string;
+    trigger?: string;
+    handler?: Hook['handler'];
+    connections?: string[];
+    budget?: Hook['budget'];
+  };
+  return {
+    slug: l.slug,
+    type: d.type,
+    owner: (l as { owner?: string }).owner,
+    trigger: d.trigger,
+    handler: d.handler,
+    connections: d.connections,
+    budget: d.budget,
+  };
 }
 
 /** The result of dispatching one hook. */
@@ -104,6 +166,105 @@ function parseTrigger(trigger: string): { spaceRef: string; agentSlug: string; a
   return { spaceRef, agentSlug, action };
 }
 
+/** Best-effort JSON for embedding structured `delegate` input into the kickoff
+ *  message (mirrors session-manager's spawn-input serialization). */
+function safeStringify(v: unknown): string {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+/** The connection providers a SPACE declares itself (its own `lmthing.connection`
+ *  block). A space hook's `callConnection` is locked to these — it can never reach
+ *  another space's or a builtin provider it didn't declare. Best-effort read; a
+ *  missing/malformed package.json ⇒ no own providers (all calls will throw). */
+function spaceOwnProviders(projectRoot: string, spaceId: string): string[] {
+  try {
+    const pkg = JSON.parse(
+      readFileSync(join(projectRoot, 'spaces', spaceId, 'package.json'), 'utf8'),
+    ) as { lmthing?: { connection?: { provider?: unknown } } };
+    const provider = pkg.lmthing?.connection?.provider;
+    return typeof provider === 'string' && provider ? [provider] : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Compute the providers a hook's `ctx.callConnection` may reach. Project hooks:
+ *  exactly their declared `connections:`. Space hooks: declared ∩ the space's OWN
+ *  providers (locked so a space can never reach beyond what it itself declares). */
+function allowedProviders(hook: Hook, projectRoot: string): Set<string> {
+  const declared = hook.connections ?? [];
+  const owner = hook.owner ?? 'project';
+  if (owner === 'project') return new Set(declared);
+  const own = new Set(spaceOwnProviders(projectRoot, owner));
+  return new Set(declared.filter((p) => own.has(p)));
+}
+
+/**
+ * Build the upgraded {@link HookHandlerCtx} for an imperative hook. `delegate`
+ * threads structured input into the headless run and returns its result;
+ * `callConnection` is gated by {@link allowedProviders}; `tasklist.run` throws
+ * until S9 injects a runner. Shared by every handler-hook dispatch.
+ */
+function buildHookCtx(
+  manager: HookManager,
+  projectId: string,
+  projectRoot: string,
+  hook: Hook,
+  db: unknown,
+  row: unknown,
+  opts: RunHookOpts,
+): HookHandlerCtx {
+  const delegate: HookHandlerCtx['delegate'] = async (spaceRef, action, dopts) => {
+    const agentSlug = spaceRef.split('/').pop() ?? spaceRef;
+    const base = `Hook "${hook.slug}" delegate` + (action ? ` — "${action}".` : '.');
+    const message =
+      (dopts?.message ?? base) +
+      (dopts?.input !== undefined ? `\nInput: ${safeStringify(dopts.input)}` : '');
+    const out = (await manager.runHeadless({
+      projectId,
+      spaceRef,
+      agentSlug,
+      message,
+      budget: hook.budget,
+    })) as DelegateResult;
+    // Normalize a bare/tagged return into the documented DelegateResult shape.
+    if (out && typeof out === 'object' && 'ok' in out) return out;
+    return { ok: true, result: out };
+  };
+
+  const allowed = allowedProviders(hook, projectRoot);
+  const resolver = opts.connectionResolver ?? createConnectionResolver(projectRoot);
+  const callConnection: HookHandlerCtx['callConnection'] = (provider, req) => {
+    if (!allowed.has(provider)) {
+      throw new Error(
+        `callConnection("${provider}"): not in hook "${hook.slug}"'s declared connections` +
+          (allowed.size ? ` (allowed: ${[...allowed].sort().join(', ')})` : ' (none declared)'),
+      );
+    }
+    return resolver(provider, req);
+  };
+
+  const tasklist: HookHandlerCtx['tasklist'] = {
+    run: (ref, seed) => {
+      if (!opts.tasklistRunner) throw new Error('tasklist runner not available yet');
+      return opts.tasklistRunner(ref, seed);
+    },
+  };
+
+  return {
+    db,
+    delegate,
+    callConnection,
+    tasklist,
+    ...(row !== undefined ? { row } : {}),
+    ...(opts.input !== undefined ? { input: opts.input } : {}),
+  };
+}
+
 /** Recognize a budget-exhaustion signal from 6B's `runHeadless` (seam: 6B may
  *  throw `BudgetExceededError`/`code:'BUDGET_EXHAUSTED'`, or return a tagged
  *  object). Tolerant so 6C stays decoupled from 6B's exact convention. */
@@ -130,13 +291,16 @@ export async function runHook(
   projectId: string,
   hook: Hook,
   row?: unknown,
+  opts: RunHookOpts = {},
 ): Promise<HookRunResult> {
   try {
     if (typeof hook.trigger === 'string') {
       const { spaceRef, agentSlug, action } = parseTrigger(hook.trigger);
-      const message =
+      const base =
         `Scheduled hook "${hook.slug}" fired` +
         (action ? ` — perform the "${action}" action.` : '.');
+      // An event hook threads its structured payload into the run's kickoff seed.
+      const message = base + (opts.input !== undefined ? `\nInput: ${safeStringify(opts.input)}` : '');
       const result = await manager.runHeadless({
         projectId,
         spaceRef,
@@ -149,26 +313,15 @@ export async function runHook(
     }
 
     if (typeof hook.handler === 'function') {
+      const projectRoot = join(lmthingRoot, projectId);
       const projectDb = await manager.getProjectDb(lmthingRoot, projectId);
-      const delegate = (spaceRef: string, action?: string, opts?: unknown): Promise<unknown> => {
-        const agentSlug = spaceRef.split('/').pop() ?? spaceRef;
-        const message =
-          `Hook "${hook.slug}" delegate` + (action ? ` — "${action}".` : '.');
-        void opts; // 6B carries structured input on its own args; opts reserved.
-        return manager.runHeadless({
-          projectId,
-          spaceRef,
-          agentSlug,
-          message,
-          budget: hook.budget,
-        });
-      };
-      const result = await hook.handler({ db: projectDb?.async, delegate, row });
+      const ctx = buildHookCtx(manager, projectId, projectRoot, hook, projectDb?.async, row, opts);
+      const result = await hook.handler(ctx);
       if (isBudgetExhausted(result)) return { queued: true };
       return { queued: false, result };
     }
 
-    throw new Error(`hook "${hook.slug}" has neither a cron trigger nor a handler`);
+    throw new Error(`hook "${hook.slug}" has neither a trigger nor a handler`);
   } catch (err) {
     if (isBudgetExhausted(err)) return { queued: true };
     throw err;

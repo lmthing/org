@@ -21,7 +21,7 @@
  */
 import { basename, join } from 'node:path';
 import { loadSpace } from '@lmthing/core';
-import { loadHooks, type LoadedHook, type WebhookHookDef } from '../app/hooks/index.js';
+import { loadHooks, loadSpaceHooks, type LoadedHook, type WebhookHookDef } from '../app/hooks/index.js';
 import { listProjectSpaceDirs } from './projects.js';
 
 /** One inbound-webhook binding in the published manifest. */
@@ -69,8 +69,42 @@ async function scanSpaceTriggers(root: string, projectId: string): Promise<Webho
 }
 
 /**
+ * Scan every installed space's `hooks/*.ts` (`<projectRoot>/spaces/<id>/hooks/`)
+ * for `webhook`-type hooks and return one {@link WebhookBinding} per hook. Space
+ * hooks are store-downloaded code, so {@link loadSpaceHooks} extracts each def in
+ * a worker (never in-proc). A space whose hooks fail to load is skipped — same
+ * fail-soft-per-space posture as {@link scanSpaceTriggers}.
+ */
+async function scanSpaceHookWebhooks(root: string, projectId: string): Promise<WebhookBinding[]> {
+  const bindings: WebhookBinding[] = [];
+  const spaceDirs = await listProjectSpaceDirs(root, projectId);
+  const projectRoot = join(root, projectId);
+  for (const dir of spaceDirs) {
+    const spaceId = basename(dir);
+    let hooks: LoadedHook[];
+    try {
+      hooks = await loadSpaceHooks(projectRoot, spaceId);
+    } catch {
+      continue;
+    }
+    for (const h of hooks) {
+      if (h.def.type !== 'webhook') continue;
+      const def = h.def as WebhookHookDef;
+      bindings.push({
+        projectId,
+        path: def.path,
+        provider: def.provider ?? 'generic',
+        agentRef: def.trigger,
+      });
+    }
+  }
+  return bindings;
+}
+
+/**
  * Build the webhook manifest across `projects` from disk — project-app
- * `hooks/*.ts` webhook defs AND space-agent `triggers:` frontmatter. A
+ * `hooks/*.ts` webhook defs, SPACE `hooks/*.ts` webhook defs, AND space-agent
+ * `triggers:` frontmatter. A
  * project whose hooks fail to load, or a space that fails to load, is
  * skipped. Fail-loud on a duplicate `path` across ANY two bindings — hook or
  * space-trigger, same or different project — since a webhook path must be
@@ -97,6 +131,7 @@ export async function buildWebhookManifest(root: string, projects: string[]): Pr
         agentRef: def.trigger,
       });
     }
+    bindings.push(...(await scanSpaceHookWebhooks(root, projectId)));
     bindings.push(...(await scanSpaceTriggers(root, projectId)));
   }
 
@@ -178,6 +213,11 @@ export async function resolveBinding(
   }
 
   for (const projectId of projects) {
+    const spaceHookBindings = await scanSpaceHookWebhooks(root, projectId);
+    const hookHit = spaceHookBindings.find((b) => b.path === path);
+    if (hookHit) {
+      return { projectId, agentRef: hookHit.agentRef, provider: hookHit.provider, budget: undefined };
+    }
     const spaceBindings = await scanSpaceTriggers(root, projectId);
     const hit = spaceBindings.find((b) => b.path === path);
     if (hit) {
