@@ -3,11 +3,17 @@
  * string describing the problem, or `undefined` when the value is fine.
  */
 function checkField(field: string, type: string, obj: Record<string, unknown>): string | undefined {
-  if (!(field in obj)) return `missing required field "${field}" (expected ${type})`;
+  // A trailing `?` marks the field optional: absent (or explicitly `undefined`)
+  // is fine; a present non-undefined value is checked against the base type.
+  const optional = type.endsWith('?');
+  const base = optional ? type.slice(0, -1) : type;
+  if (!(field in obj) || obj[field] === undefined) {
+    return optional ? undefined : `missing required field "${field}" (expected ${type})`;
+  }
 
   const fieldValue = obj[field];
 
-  switch (type) {
+  switch (base) {
     case 'string':
       if (typeof fieldValue !== 'string') return `field "${field}" must be a string (got ${describe(fieldValue)})`;
       break;
@@ -74,11 +80,17 @@ export function validateOutput(output: Record<string, string>, value: unknown): 
   const obj = value as Record<string, unknown>;
 
   for (const [field, type] of Object.entries(output)) {
-    if (!(field in obj)) return false;
+    // A trailing `?` marks the field optional (absent / `undefined` is allowed).
+    const optional = type.endsWith('?');
+    const base = optional ? type.slice(0, -1) : type;
+    if (!(field in obj) || obj[field] === undefined) {
+      if (optional) continue;
+      return false;
+    }
 
     const fieldValue = obj[field];
 
-    switch (type) {
+    switch (base) {
       case 'string':
         if (typeof fieldValue !== 'string') return false;
         break;

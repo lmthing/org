@@ -213,4 +213,42 @@ describe('buildEventPayloadsDts', () => {
   it('handles an empty union', () => {
     expect(buildEventPayloadsDts({})).toBe('declare interface EventPayloads {\n}');
   });
+
+  it('emits optional members for `?`-suffixed typeStrings', () => {
+    const dts = buildEventPayloadsDts({
+      'message.received': { payload: { text: 'string', threadKey: 'string?', userName: 'string?' } },
+    });
+    // required field: non-optional; optional fields: `?:` with the base type
+    expect(dts).toContain('"text": string');
+    expect(dts).toContain('"threadKey"?: string');
+    expect(dts).toContain('"userName"?: string');
+  });
+});
+
+describe('optional (`?`) payload typeStrings', () => {
+  const base = {
+    name: 'integration-x',
+    lmthing: { kind: 'integration', title: 'X' },
+  };
+  it('accepts a payload field with a trailing `?`', () => {
+    const def = {
+      type: 'webhook',
+      path: 'x',
+      verify: { type: 'builtin', provider: 'slack' },
+      emits: { 'message.received': { payload: { text: 'string', threadKey: 'string?', userName: 'string?' } } },
+      emit: () => [],
+    };
+    expect(() => validateEmitterDef(def, 'integration-x/events/messages.ts')).not.toThrow();
+  });
+  it('still rejects an unknown base type even with `?`', () => {
+    const def = {
+      type: 'webhook',
+      path: 'x',
+      verify: { type: 'builtin', provider: 'slack' },
+      emits: { 'message.received': { payload: { text: 'weird?' } } },
+      emit: () => [],
+    };
+    expect(() => validateEmitterDef(def, 'integration-x/events/messages.ts')).toThrow(/invalid typeString/);
+  });
+  void base;
 });

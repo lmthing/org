@@ -63,10 +63,15 @@ function validateEmits(where: string, raw: unknown): EmitsSchema {
     }
     const fields: Record<string, string> = {};
     for (const [field, type] of Object.entries(payload as Record<string, unknown>)) {
-      if (typeof type !== 'string' || !TYPESTRINGS.has(type)) {
+      // A trailing `?` marks the field optional (`'string?'`); the base type must
+      // still be a known typeString. The `?` is preserved in the stored schema so
+      // the DTS generator emits an optional member and runtime validation tolerates
+      // its absence.
+      const base = typeof type === 'string' && type.endsWith('?') ? type.slice(0, -1) : type;
+      if (typeof type !== 'string' || typeof base !== 'string' || !TYPESTRINGS.has(base)) {
         throw new Error(
           `${where}: event "${event}" field "${field}" has an invalid typeString ${JSON.stringify(type)} ` +
-            `(expected ${[...TYPESTRINGS].join(' | ')})`,
+            `(expected ${[...TYPESTRINGS].join(' | ')}, optionally suffixed with '?')`,
         );
       }
       fields[field] = type;
@@ -220,9 +225,12 @@ export function collectDeclaredEvents(defs: LoadedEmitter[]): EmitsSchema {
   return union;
 }
 
-/** Map a payload typeString to its TS type for the generated DTS. */
+/** Map a payload typeString to its TS type for the generated DTS. A trailing `?`
+ *  (optional marker) is stripped here; optionality is applied to the MEMBER
+ *  (`"field"?: T`) by the caller. */
 function tsType(typeString: string): string {
-  switch (typeString) {
+  const base = typeString.endsWith('?') ? typeString.slice(0, -1) : typeString;
+  switch (base) {
     case 'string':
       return 'string';
     case 'number':
@@ -252,7 +260,10 @@ export function buildEventPayloadsDts(emitsUnion: EmitsSchema): string {
     const fields = emitsUnion[event]!.payload;
     const members = Object.keys(fields)
       .sort()
-      .map((f) => `${JSON.stringify(f)}: ${tsType(fields[f]!)}`)
+      .map((f) => {
+        const opt = fields[f]!.endsWith('?') ? '?' : '';
+        return `${JSON.stringify(f)}${opt}: ${tsType(fields[f]!)}`;
+      })
       .join('; ');
     lines.push(`  ${JSON.stringify(event)}: { ${members} };`);
   }
