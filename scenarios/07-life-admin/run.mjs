@@ -263,9 +263,11 @@ if (ACTS.includes(3)) {
   acc(await thing.send('Add an "add a policy" form to the vault app: a page where I paste the raw details of a new policy as free text and submit it, and an agent automatically files it as a structured policy row (classify the fields from my text). Wire it through a db-insert event hook, not ctx.spawn.', { timeoutMs: 1_500_000 }));
   await pod.appBuild(PROJECT).catch(() => {});
   const manifest = await pod.appManifest(PROJECT).catch(() => ({}));
-  const apis = (manifest?.apis ?? manifest?.api ?? []).map((a) => (typeof a === 'string' ? a : a.route ?? a.name ?? a.path));
-  const formApi = apis.find((a) => /policy|submission|add|create|intake/i.test(a));
-  report.check('the form API route exists on the app', !!formApi, `apis: ${apis.join(', ') || '(none)'}`);
+  // manifest.endpoints = [{ name, method, routePath, ... }] — pick the POST intake route.
+  const endpoints = manifest?.endpoints ?? [];
+  const formEp = endpoints.find((e) => /post/i.test(e.method ?? '') && /policy|submission|add|create|intake|file/i.test(`${e.name} ${e.routePath}`));
+  const formApi = formEp ? (formEp.routePath ?? formEp.name).replace(/^\//, '') : null;
+  report.check('the form API route (POST) exists on the app', !!formApi, `endpoints: ${endpoints.map((e) => `${e.method} ${e.routePath}`).join(', ') || '(none)'}`);
   const namesBefore = await tableNames(pod, PROJECT);
   const before = await dbBlob(pod, PROJECT, namesBefore);
   const NEW_TOKEN = 'PET-INS-XR44-2026';
@@ -292,20 +294,22 @@ if (ACTS.includes(3)) {
 if (ACTS.includes(4)) {
   report.step('Act IV — Cron agent turn → DB', 'a cron hook exists (GET /api/hooks); running it produces an agent turn that writes a recommendations/alerts row');
   // Ensure a renewal scan exists (the "never miss a renewal" promise → a scheduled scan).
-  acc(await thing.send('Set up a monthly renewal scan that runs on its own: it reads the renewals in the vault, finds anything due in the next 60 days, and writes a recommendation/alert row I can see in the app. Use a cron event hook.', { timeoutMs: 1_500_000 }));
+  acc(await thing.send('Set up a monthly renewal scan that runs on its own: it reads the renewals in the vault, finds anything due in the next 60 days, and writes a recommendation/alert row I can see in the app. Use a cron event hook that triggers an agent.', { timeoutMs: 1_500_000 }));
   await sleep(3_000);
-  const hooks = await pod.listHooks().catch(() => ({ hooks: [] }));
-  const list = hooks.hooks ?? hooks ?? [];
-  const cronHook = (Array.isArray(list) ? list : []).find((h) => /cron/i.test(JSON.stringify(h)) && new RegExp(PROJECT).test(JSON.stringify(h)));
-  report.check('a cron hook exists for the project', !!cronHook, JSON.stringify(cronHook ?? list).slice(0, 200));
+  // The project's own hooks are in the app manifest (loadHookSummaries: {slug,type,every,trigger}).
+  const manifest = await pod.appManifest(PROJECT).catch(() => ({}));
+  const projHooks = manifest?.hooks ?? [];
+  let cronHook = projHooks.find((h) => h.type === 'cron');
+  // Cross-check the global hook list too (GET /api/hooks) for the report.
+  const globalHooks = (await pod.listHooks().catch(() => ({ hooks: [] }))).hooks ?? [];
+  report.check('a cron hook exists for the project', !!cronHook, cronHook ? JSON.stringify(cronHook).slice(0, 200) : `project hooks: ${projHooks.map((h) => `${h.slug}(${h.type})`).join(', ') || '(none)'}`);
   const names = await tableNames(pod, PROJECT);
   const recTable = names.find((n) => /recommend|alert|renewal|scan/i.test(n));
   const before = await dbBlob(pod, PROJECT, names);
   // Trigger it via the authoritative hook-run path.
   let ran = { status: 0 };
   if (cronHook) {
-    const slug = cronHook.slug ?? cronHook.id ?? cronHook.name;
-    ran = await pod.runHook(PROJECT, slug).then((b) => ({ status: 200, body: b })).catch((e) => ({ status: e?.status ?? 0, body: String(e) }));
+    ran = await pod.runHook(PROJECT, cronHook.slug).then((b) => ({ status: 200, body: b })).catch((e) => ({ status: e?.status ?? 0, body: String(e) }));
   }
   report.check('cron hook run accepted', ran.status >= 200 && ran.status < 300, `status ${ran.status}`);
   let wrote = false;
