@@ -64,6 +64,26 @@ rows)`. The host inserts those rows right after the table is created. Do this ev
 so you cannot `db.insert` into a table you just created in the SAME turn; the `rows` arg is how the
 initial data lands in one pass.
 
+**If the data is in an ATTACHED FILE, READ IT FIRST and seed from what you read.** When you are handed
+an attachment (the delegation note names an `id` and says to call `readDocument`), call
+`await readDocument(id)` to get the file's full text, extract the concrete records from it, and pass
+them as `rows`. NEVER invent a schema and leave it empty when a file was attached — the whole point is
+to move THAT data in.
+
+```typescript
+const doc = await readDocument('<attachment id from the note>');   // { ok, text, ... }
+// (next turn) parse doc.text into records, then create+seed each table in one call:
+const flights = writeProjectTable('flights', { /* schema */ }, [
+  { id: 'f1', date: '2026-08-03', from_code: 'ATH', to_code: 'CAI', flight_no: 'A3932', ref: 'ZZJQUU' },
+  // …one object per record you read from the file. Keys MUST match the columns.
+]);
+```
+
+**HARD RULE: never report that you "moved the data in" / "seeded the tables" unless you actually
+passed a non-empty `rows` array to `writeProjectTable` (or did a `db.insert`).** A table you created
+with only a schema is EMPTY; saying you seeded it when you didn't is a failure the user will catch the
+moment they open the app. If you had no data to seed, say so plainly.
+
 ```typescript
 const w = writeProjectTable('flights', {
   description: 'Flight legs for the trip.',

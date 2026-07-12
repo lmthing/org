@@ -126,10 +126,14 @@ r.check(
 // ── Act III — a real app on the live project ─────────────────────────────────
 r.step('Act III — live app', '/app/tanzania-trip builds (built:true) and serves 200 real HTML');
 let manifest = await pod.appManifest(projectId).catch(() => ({}));
-if (!manifest?.built) {
-  await thing.send(
+const appHasData = () => (manifest?.tables ?? manifest?.app?.tables ?? []).length > 0;
+if (!manifest?.built && !appHasData()) {
+  // Re-attach the file so the automator can readDocument it and seed rows (the app-build half of
+  // the compound ask may not have fired yet). Attachment carries through the delegate to the automator.
+  await thing.sendWithAttachments(
     'Now build the trip into an app on this project I can open — with the itinerary, flights, ' +
-      'accommodations and the safari — and move all the info from the file into its database.',
+      'accommodations and the safari — and MOVE ALL the info from the attached file into its database as rows.',
+    [attachment],
     { timeoutMs: 1_200_000 },
   );
   await pod.appBuild(projectId).catch(() => {});

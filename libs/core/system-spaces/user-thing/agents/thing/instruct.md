@@ -233,20 +233,22 @@ contents for every part — the spaces' knowledge AND the app's seed rows.
    then serves at `/app/<project>/` — no catalog template, no install step, and their existing data
    moves straight in. Pass the request verbatim; if the data came from an attached file, include the
    extracted facts so the automator can seed them.
-   Put any data to move in INSIDE the `query` string — `delegate`'s opts take `{ query }` (no other
-   fields; a stray `data:`/`rows:` key fails typecheck). Give the automator the concrete facts so it
-   can seed them as rows:
+   **If the data to move in came from an ATTACHED FILE, hand the file to the automator directly** via
+   `attachmentIds` — do NOT retype the data into the query (you only have a summary of it, so
+   retyping loses rows). The automator reads the full file itself (`readDocument`) and seeds every
+   row. Pass the SAME attachment id(s) the user sent you:
    ```typescript
    const app = await delegate('system-appbuilder', 'automator', {
-     query: [
-       '<the user request, verbatim>. Build this into an app IN this live project and SEED the data below as table rows.',
-       'DATA TO MOVE IN:',
-       '<the structured facts you extracted from the file/conversation — a compact list the automator can turn into rows, e.g. "flights: ATH→CAI A3932 2026-08-03 ref ZZJQUU; …" and "hotels: Eileen Hotel Cairo 2026-08-03→05; …">',
-     ].join('\n'),
+     query: '<the user request, verbatim>. Build this into an app IN this live project. Read the '
+       + 'attached file and MOVE ALL of its data into the app database as seeded table rows.',
+     attachmentIds: [/* the id(s) of the file(s) the user attached */],
    });
    display(JSON.stringify(app, null, 2));
    ```
-   Tell the user what was built and that they can open it at `/app/<project>/` right now.
+   When there is NO file — the data is only in your conversation — put the concrete facts in the
+   `query` string instead (`delegate`'s opts take only `{ query, attachmentIds }`; a stray
+   `data:`/`rows:` key fails typecheck). Either way, tell the user what was built and that they can
+   open it at `/app/<project>/` now.
 
    **4b — a NEW, standalone/installable app template** — ONLY when the user explicitly wants a fresh,
    shareable app UNRELATED to the current project's own data ("build me a reading-list app I can
