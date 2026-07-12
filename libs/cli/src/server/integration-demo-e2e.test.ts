@@ -88,8 +88,11 @@ beforeEach(() => {
   process.env['LMTHING_ALLOW_INTERNAL_CONNECTIONS'] = '1';
 });
 
-/** Temp lmthingRoot with the REAL integration-demo space installed into `demo-proj`. */
-async function makeRootWithDemoSpace(): Promise<string> {
+/** Temp lmthingRoot with the REAL integration-demo space installed into `demo-proj`.
+ *  `withReplyHook` also plants a PROJECT event hook subscribing to the space's
+ *  `message.received` emitter event and delegating to the handler agent — the
+ *  events-pipeline replacement for the retired legacy `triggers:` binding. */
+async function makeRootWithDemoSpace({ withReplyHook = false } = {}): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lmthing-demo-e2e-'));
   tmpDirs.push(root);
   const dest = join(root, 'demo-proj', 'spaces', 'integration-demo');
@@ -98,7 +101,23 @@ async function makeRootWithDemoSpace(): Promise<string> {
   // A real project has a project.json — listProjects (used by the dispatcher to
   // enumerate projects) skips dirs without one.
   await writeFile(join(root, 'demo-proj', 'project.json'), JSON.stringify({ id: 'demo-proj', name: 'Demo', createdAt: 0 }), 'utf8');
+  if (withReplyHook) {
+    const hooksDir = join(root, 'demo-proj', 'hooks');
+    await mkdir(hooksDir, { recursive: true });
+    await writeFile(
+      join(hooksDir, 'reply.ts'),
+      `export default { type: 'event', on: { event: 'integration-demo/message.received' }, trigger: 'integration-demo/handler#handle' };\n`,
+      'utf8',
+    );
+  }
   return root;
+}
+
+/** Poll until `pred()` holds or the deadline passes (the emitter dispatch is
+ *  fire-and-forget — the inbound handler returns 200 BEFORE the agent runs). */
+async function waitFor(pred: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!pred() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 25));
 }
 
 /** Fake IncomingMessage: async-iterable body + headers/method/url. */
@@ -126,8 +145,11 @@ function fakeRes(): { res: ServerResponse; get: () => { status: number } } {
 }
 
 describe('integration-demo — full contained loop against a mock provider (keyless)', () => {
-  it('verifies a signed inbound, runs the handler agent, and posts the reply outbound via callConnection', async () => {
-    const root = await makeRootWithDemoSpace();
+  it('verifies a signed inbound, emits message.received, runs the delegated handler agent, and posts the reply outbound via callConnection', async () => {
+    // The events-pipeline path: inbound → HMAC verify → the space's webhook EMITTER
+    // def `emit()` → `integration-demo/message.received` → a PROJECT event hook whose
+    // `trigger` delegates to the handler agent → demoSendMessage → callConnection → out.
+    const root = await makeRootWithDemoSpace({ withReplyHook: true });
     process.env['INTEGRATION_DEMO_BASE_URL'] = providerBase;
     process.env['INTEGRATION_DEMO_API_TOKEN'] = DEMO_BASE_TOKEN;
     process.env['INTEGRATION_DEMO_WEBHOOK_SECRET'] = DEMO_WEBHOOK_SECRET;
@@ -173,7 +195,8 @@ describe('integration-demo — full contained loop against a mock provider (keyl
     const handler = createInboundHandler(manager, root);
     const { res, get } = fakeRes();
 
-    const body = JSON.stringify({ message: { chat: { id: 'c1' }, text: 'hello there' } });
+    // A valid demo message: the emitter drops any payload without a non-bot `from.id`.
+    const body = JSON.stringify({ message: { message_id: 1, chat: { id: 'c1' }, from: { id: 'u1', username: 'ada' }, text: 'hello there' } });
     const sig = 'sha256=' + createHmac('sha256', DEMO_WEBHOOK_SECRET).update(body, 'utf8').digest('hex');
 
     await handler(
@@ -182,11 +205,15 @@ describe('integration-demo — full contained loop against a mock provider (keyl
       { path: 'demo' },
     );
 
-    // Inbound verified + dispatched.
+    // Inbound verified + the emitter produced exactly one event (fast 200 ack).
     expect(get().status).toBe(200);
-    // The raw payload reached the handler agent (passthrough render).
+
+    // The dispatch to the event hook + the agent run are fire-and-forget — wait them out.
+    await waitFor(() => received.length >= 1);
+
+    // The message payload reached the delegated handler agent (event trigger seed).
     expect(capturedPrompt).toContain('hello there');
-    expect(capturedPrompt).toContain('[inbound-context]');
+    expect(capturedPrompt).toContain('message.received');
 
     // The OUTBOUND callConnection landed on the mock provider, host-pinned to
     // DEMO_BASE_URL, Bearer DEMO_API_TOKEN attached, with the agent's reply body.
