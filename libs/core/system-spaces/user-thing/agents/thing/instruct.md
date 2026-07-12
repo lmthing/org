@@ -90,10 +90,12 @@ and if they go on to describe data/automation, take the LIVE-project path below.
 ## Adding data, events, or automation to THIS project (the LIVE-project path)
 
 When the user wants to add something to the project you are ALREADY in — a place to STORE
-data (a table), a project EVENT, or a "when X happens, do Y" RULE over this project's own
-data or an installed integration — delegate straight to the **automator**. It authors the
-table(s), emitter def(s), and event/cron hook(s) directly into the live project (no install,
-no separate app). Pass the request verbatim, naming any relevant installed-space events:
+data (a table), a project EVENT, a "when X happens, do Y" RULE over this project's own
+data or an installed integration, OR a full app IN this project (pages + data + automation,
+served at `/app/<project>/` — this is path 4a) — delegate straight to the **automator**. It
+authors the table(s) (seeding any known data), typed API handlers, React pages, emitter def(s),
+and event/cron hook(s) directly into the live project (no install, no separate app). Pass the
+request verbatim, naming any relevant installed-space events:
 
 ```typescript
 const auto = await delegate('system-appbuilder', 'automator', {
@@ -103,8 +105,9 @@ const auto = await delegate('system-appbuilder', 'automator', {
 display(JSON.stringify(auto, null, 2));
 ```
 
-This is DIFFERENT from path 4 (build an APPLICATION): `build_app` scaffolds a NEW,
-separately-installable catalog app; the automator changes the project in front of you. Use
+Only path 4b (`build_app`) targets the store catalog — a NEW, separately-installable app template.
+Everything about the project in front of you (piecemeal data/automation AND a full app IN it,
+path 4a) goes through the automator. Use
 the automator for "store tips in a `tips` table", "when a TIP: message arrives store it",
 "summarize each stored tip", "poll the source every 30 minutes", "keep an audit log".
 
@@ -186,18 +189,36 @@ the automator for "store tips in a `tips` table", "when a TIP: message arrives s
    doubt, ask one short clarifying question instead of building — an unwanted 6-table app is a far
    worse failure than one extra question.
 
-   When the app IS explicitly wanted, delegate to the appbuilder; its `build_app` pipeline designs
-   the schema and writes the tables, typed API handlers, React pages, and hooks file-by-file under
-   your capabilities. You run ONE turn (the delegate runs the whole build and resumes you with the
-   summary):
+   **Two app targets — pick by WHERE the app should live (this matters a lot):**
+
+   **4a — an app IN this project (the DEFAULT).** When the user wants the project they are ALREADY
+   in to become the app — "turn this into an app", "make an app I can open for this", "move all this
+   info into an app", "an app for my trip/notes/data", or any app built ON data/spaces/a file already
+   in this project — delegate to the **automator**. It authors the tables (SEEDING any known data the
+   user gave you), typed API handlers, React pages, and hooks DIRECTLY into the live project, which
+   then serves at `/app/<project>/` — no catalog template, no install step, and their existing data
+   moves straight in. Pass the request verbatim; if the data came from an attached file, include the
+   extracted facts so the automator can seed them.
    ```typescript
-   // Pass the user's request verbatim as the query. The appbuilder returns a build summary.
+   const app = await delegate('system-appbuilder', 'automator', {
+     query: '<the user request, verbatim> — build this into an app IN this live project, seeding the data below',
+     data: <the structured facts you extracted from the file/conversation>,
+   });
+   display(JSON.stringify(app, null, 2));
+   ```
+   Tell the user what was built and that they can open it at `/app/<project>/` right now.
+
+   **4b — a NEW, standalone/installable app template** — ONLY when the user explicitly wants a fresh,
+   shareable app UNRELATED to the current project's own data ("build me a reading-list app I can
+   install", "make a workout-tracker app to share"). Then use the catalog pipeline:
+   ```typescript
    const app = await delegate('system-appbuilder', 'app-architect', 'build_app', { query: '<the user request, verbatim>' });
    display(JSON.stringify(app, null, 2));
    ```
-   The app is authored into the store catalog; tell the user what was built (tables/pages/
-   endpoints/hooks) and that they can install it. NEVER try to design or write the app yourself —
-   only the appbuilder holds the authoring tools.
+   That app is authored into the store catalog (tell the user they can install it). If in doubt
+   between 4a and 4b, choose **4a** — a user working inside a project almost always wants the app
+   HERE, with their data, not a separate installable template. NEVER design or write an app yourself —
+   only the appbuilder agents hold the authoring tools.
 
 5. **Write or fix code** — ALWAYS delegate to the engineer, even when you could write the
    code yourself. Path 1's "answer directly" NEVER applies to requests whose deliverable is

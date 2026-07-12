@@ -349,6 +349,34 @@ describe('createProjectAuthoringGlobals', () => {
     expect(schemaWrites).toEqual(['tips']);
   });
 
+  it('writeProjectTable forwards seed rows to onSchemaWrite (move known data into the app in one pass)', () => {
+    const seeds: Array<{ table: string; rows: unknown[] | undefined }> = [];
+    const pa = createProjectAuthoringGlobals({
+      projectRoot,
+      republish: () => {},
+      onSchemaWrite: (t, rows) => seeds.push({ table: t, rows }),
+    });
+    const rows = [
+      { id: 'f1', headline: 'ATH→CAI A3932' },
+      { id: 'f2', headline: 'CAI→DAR EgyptAir' },
+    ];
+    const res = pa.writeProjectTable('tips', TIPS_SCHEMA, rows);
+    expect(res.ok).toBe(true);
+    // The schema landed AND the rows rode through to the host seeder.
+    expect(seeds).toEqual([{ table: 'tips', rows }]);
+    // No rows → onSchemaWrite still fires (re-derive) but with undefined rows.
+    pa.writeProjectTable('notes', { ...TIPS_SCHEMA, title: 'Notes' } as unknown as TableSchema);
+    expect(seeds[1]).toEqual({ table: 'notes', rows: undefined });
+  });
+
+  it('writeProjectTable rejects a non-array rows arg', () => {
+    const pa = make();
+    const res = pa.writeProjectTable('tips', TIPS_SCHEMA, { nope: true } as unknown as unknown[]);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/rows must be an array/);
+    expect(existsSync(join(projectRoot, 'database', 'tips.json'))).toBe(false);
+  });
+
   it('writeProjectTable rejects an invalid schema (missing description) and does NOT re-derive', () => {
     let schemaWrites = 0;
     const pa = createProjectAuthoringGlobals({

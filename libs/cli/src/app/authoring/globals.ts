@@ -269,8 +269,12 @@ export interface ProjectAuthoringGlobals {
   /** Write `<projectRoot>/functions/<name>.ts` (a project function). */
   writeProjectFunction: (name: string, src: string) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/database/<name>.json` (a table schema) — the LIVE-project
-   *  counterpart of the catalog's `writeTableSchema`. */
-  writeProjectTable: (name: string, schema: unknown) => { ok: boolean; error?: string };
+   *  counterpart of the catalog's `writeTableSchema`. Optionally SEED initial `rows` at
+   *  the same time (host-side insert after the db re-derives), so KNOWN data the user
+   *  gave you to "move into the app" lands in one authoring pass — the `db` global is not
+   *  injected until a table already exists, so an agent could not otherwise insert into a
+   *  table it just created. */
+  writeProjectTable: (name: string, schema: unknown, rows?: unknown[]) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/pages/<route>.tsx` (a React page) — the LIVE-project
    *  counterpart of the catalog's `writePage`. */
   writeProjectPage: (route: string, src: string) => { ok: boolean; error?: string };
@@ -302,8 +306,11 @@ export function createProjectAuthoringGlobals(opts: {
   republish?: () => void;
   /** Called after a successful `writeProjectTable` — the host re-derives the project's
    *  db from `database/*.json` (a project with no tables has NO db at all, so the first
-   *  table is what brings one into existence). Fire-and-forget, like `republish`. */
-  onSchemaWrite?: (table: string) => void;
+   *  table is what brings one into existence). When `rows` is passed, the host ALSO seeds
+   *  those rows into the freshly-derived table (a project-authoring agent can't insert into
+   *  a table it just created — `db` isn't injected until a table exists — so seeding is done
+   *  host-side here). Fire-and-forget, like `republish`. */
+  onSchemaWrite?: (table: string, rows?: unknown[]) => void;
   /** Called after a successful `writeProjectPage`/`writeProjectApi` — the host rebuilds
    *  the project's pages (so `/app/<id>/` serves the new UI) and drops any cached page-build
    *  or endpoint-contract state. Fire-and-forget, like `republish`. */
@@ -374,17 +381,26 @@ export function createProjectAuthoringGlobals(opts: {
    * with no `database/*.json` — so "store every tip in a `tips` table" had nowhere to land
    * and every downstream hook had no `db` to write to. Found live in scenario 01.
    */
-  function writeProjectTable(name: string, schema: unknown): { ok: boolean; error?: string } {
+  function writeProjectTable(
+    name: string,
+    schema: unknown,
+    rows?: unknown[],
+  ): { ok: boolean; error?: string } {
     try {
       assertTableName(name);
       validateTableSchema(name, schema as TableSchema);
     } catch (e) {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
+    if (rows !== undefined && !Array.isArray(rows)) {
+      return { ok: false, error: 'rows must be an array of row objects' };
+    }
     const out = writeUnder(join('database', `${name}.json`), JSON.stringify(schema, null, 2) + '\n');
     if (out.ok) {
       try {
-        onSchemaWrite?.(name);
+        // Pass the seed rows through: the host re-derives the db AND inserts them (the agent
+        // can't — `db` isn't injected until a table exists). Undefined/empty rows just re-derive.
+        onSchemaWrite?.(name, rows && rows.length ? rows : undefined);
       } catch {
         /* best-effort — the schema file already landed */
       }

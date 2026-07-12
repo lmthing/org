@@ -580,13 +580,18 @@ export class SessionManager {
           console.warn(`[authoring] hook refresh failed: ${err instanceof Error ? err.message : String(err)}`),
         );
       },
-      onSchemaWrite: () => {
+      onSchemaWrite: (table, rows) => {
         // A project with no `database/*.json` boots NO db at all (bootProjectApp → null),
         // and that `null` is CACHED. The first authored table must drop the cached "no db"
-        // so the next getProjectDb() actually boots one.
-        void this.reloadProjectDb(root, projectId).catch((err) =>
-          console.warn(`[authoring] project db reload failed: ${err instanceof Error ? err.message : String(err)}`),
-        );
+        // so the next getProjectDb() actually boots one. When the authoring agent passed seed
+        // `rows` (moving KNOWN data into the app — e.g. a trip's flights/hotels from a file it
+        // was given), insert them AFTER the reload: the agent itself cannot, because `db` is not
+        // injected into its session until a table already exists.
+        void this.reloadProjectDb(root, projectId)
+          .then(() => (rows && rows.length ? this.seedProjectTable(root, projectId, table, rows) : undefined))
+          .catch((err) =>
+            console.warn(`[authoring] project db reload/seed failed: ${err instanceof Error ? err.message : String(err)}`),
+          );
       },
       onAppWrite: (kind) => {
         // A live page/api write must invalidate the caches derived from `api/` + `pages/`:
@@ -657,6 +662,46 @@ export class SessionManager {
     }
     this.projectDbs.delete(projectId);
     await this.getProjectDb(root, projectId);
+  }
+
+  /**
+   * Seed rows into a just-authored project table (the `rows` arg of `writeProjectTable`).
+   *
+   * This is the ONLY host-side data-in path for the authoring agent: it holds `db:schema`
+   * (create tables) but the `db` global — through which it would insert — is not injected into
+   * its session until the project already has a table, so it cannot insert into a table it just
+   * created in the same turn. When the user hands the agent KNOWN data to "move into the app"
+   * (a trip's flights + hotels from an attached file), the agent passes that data as
+   * `writeProjectTable(name, schema, rows)` and the host inserts it here, after the db re-derives.
+   *
+   * Best-effort per row: a malformed row is skipped-with-warn rather than failing the whole
+   * authoring turn (the schema + the good rows already landed). Uses the same main-process async
+   * db API the app's api/ handlers use, so every insert also emits `project/db.<table>.insert`.
+   */
+  private async seedProjectTable(
+    root: string,
+    projectId: string,
+    table: string,
+    rows: unknown[],
+  ): Promise<void> {
+    const projectDb = await this.getProjectDb(root, projectId);
+    if (!projectDb) {
+      console.warn(`[authoring] seed skipped: project "${projectId}" has no db after authoring ${table}`);
+      return;
+    }
+    let ok = 0;
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      try {
+        await projectDb.async.insert(table, row as Record<string, unknown>);
+        ok++;
+      } catch (err) {
+        console.warn(
+          `[authoring] seed row into "${table}" failed (skipped): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    console.log(`[authoring] seeded ${ok}/${rows.length} row(s) into ${projectId}/${table}`);
   }
 
   /** Per-project api runtime (main-process), cached. Backs BOTH the browser-facing

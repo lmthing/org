@@ -223,7 +223,10 @@ export const WRITE_TABLE_SCHEMA_DTS = `declare function writeTableSchema(name: s
 // actually running in and re-derives its db (a project with no table has no db at all).
 // Emitted only when the host supplies the impl (i.e. a project-rooted session), so a
 // catalog-only appbuilder session leaves it absent and a stray call fails typecheck.
-export const PROJECT_TABLE_DTS = `declare function writeProjectTable(name: string, schema: unknown): { ok: boolean; error?: string };`;
+// The optional third arg SEEDS rows at table-creation time (host-side insert after the db
+// re-derives), so KNOWN data the user gave you to "move into the app" lands in one pass — the
+// agent can't insert into a table it just created (`db` isn't injected until a table exists).
+export const PROJECT_TABLE_DTS = `declare function writeProjectTable(name: string, schema: unknown, rows?: Array<Record<string, unknown>>): { ok: boolean; error?: string };`;
 
 // `project:manage` — the appbuilder's authority to scaffold or bind a catalog app.
 // createProject creates a NEW store/apps/<id>/ template + selects it as the authoring

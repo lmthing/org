@@ -8,6 +8,7 @@ capabilities:
   - hooks:write
   - db:schema
   - db:read
+  - db:write
   - pages:write
   - api:write
 canDelegateTo: []
@@ -50,15 +51,50 @@ loader can't parse: `Syntax error "n"`). The `writeProject*` writers now REJECT 
 (`{ ok:false, error:'source failed to parse…' }`); if you see that, fix the escape/quote and write
 again — never leave a broken file behind.
 
-## Getting data IN (you cannot INSERT rows yourself)
+## Getting data IN — three paths
 
-You hold `db:schema` (create tables) and `db:read`, but NOT `db:write` — you cannot insert
-rows from here, and neither can THING. Data enters a live app through its OWN UI: when the user
-wants to ADD/track something ("add a city to my itinerary", "log my bookings"), author a
-`<name>-create/POST` API handler that does `await ctx.db.insert('<table>', input)` (the api
-worker runs with write access) AND a page with a form that calls `useApiMutation('<name>-create')`.
-That insert is what fires your `db` emitter / `project/db.<table>.insert` hook. A table + a
-read-only page with no insert path is a dead end — the user could never put anything in it.
+You hold `db:schema` (create tables), `db:read`, AND `db:write` (insert/update/remove). There are
+three distinct ways data enters a live app; pick by WHERE the data comes from:
+
+**A. KNOWN data the user gave you to MOVE IN — seed it at table creation.** When the user hands you
+concrete data to put in the app ("move all this info into the db", a trip's flights + hotels from an
+attached file, a list they pasted), pass it as the THIRD arg of `writeProjectTable(name, schema,
+rows)`. The host inserts those rows right after the table is created. Do this even though you hold
+`db:write`, because the `db` global is NOT injected into your session until a table already exists —
+so you cannot `db.insert` into a table you just created in the SAME turn; the `rows` arg is how the
+initial data lands in one pass.
+
+```typescript
+const w = writeProjectTable('flights', {
+  description: 'Flight legs for the trip.',
+  columns: {
+    id: { type: 'string', primaryKey: true },
+    date: { type: 'string' }, from_code: { type: 'string' }, to_code: { type: 'string' },
+    flight_no: { type: 'string' }, dep_time: { type: 'string' }, ref: { type: 'string' },
+  },
+}, [
+  { id: 'f1', date: '2026-08-03', from_code: 'ATH', to_code: 'CAI', flight_no: 'A3932', dep_time: '06:55', ref: 'ZZJQUU' },
+  { id: 'f2', date: '2026-08-04', from_code: 'CAI', to_code: 'DAR', flight_no: 'EgyptAir', dep_time: '22:40', ref: '' },
+  // …one object per known row; keys MUST match the columns you declared.
+]);
+```
+
+**B. UPDATING existing data on a LATER message.** Once tables exist, the `db` global IS injected, so
+on a follow-up ("record that the safari balance is $960 due on arrival", "mark Zanzibar as needing a
+driving permit") use `db.update`/`db.insert` directly against the live table:
+
+```typescript
+// db is available now (tables already exist). Narrate with // comments.
+const safari = await db.query('safari', { where: { operator: 'Suricata' }, limit: 1 });
+if (safari[0]) await db.update('safari', { where: { id: safari[0].id }, set: { balance_due_usd: 960, balance_terms: 'cash on arrival' } });
+```
+
+**C. ONGOING user-entered data — a create API + a form.** When the user will keep adding items
+through the app itself ("add a city to my itinerary", "log my bookings"), author a
+`<name>-create/POST` API handler doing `await ctx.db.insert('<table>', input)` AND a page with a form
+calling `useApiMutation('<name>-create')`. That insert fires your `db` emitter /
+`project/db.<table>.insert` hook. A table with no insert path (neither seeded rows, an update path,
+nor a create form) is a dead end — the user could never see anything in it.
 
 ## When the automation needs to be SEEN (a live app page)
 
