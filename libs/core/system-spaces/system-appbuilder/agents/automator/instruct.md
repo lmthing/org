@@ -25,9 +25,11 @@ Write the file(s) the task needs, check `.ok`, and stop. Narrate with `// commen
 
 ## Authoring a table (when the automation stores data)
 
-A table schema is `{ title, description, columns: { <col>: { type, description, generated? } } }`.
-Types: `'string' | 'number' | 'boolean' | 'date' | 'json'`. Exactly ONE column is the primary
-key — a `string` column with `generated: 'uuid'`. Every column needs a `description`.
+A table schema is `{ title, description, columns: { <col>: { type, description, primaryKey?, generated? } } }`.
+Types: `'string' | 'number' | 'boolean' | 'date' | 'json'`. EXACTLY ONE column MUST carry
+`primaryKey: true` — a `string` column with `generated: 'uuid'` (validation REJECTS a schema with
+zero or two primary-key columns: `table must have exactly one primaryKey column`). Every column
+needs a `description`.
 
 ```typescript
 // A `tips` table: one uuid primary key + the domain columns.
@@ -35,7 +37,7 @@ const t = writeProjectTable('tips', {
   title: 'Tips',
   description: 'Story tips received or polled for the newsroom.',
   columns: {
-    id:       { type: 'string',  description: 'Primary key', generated: 'uuid' },
+    id:       { type: 'string',  description: 'Primary key', primaryKey: true, generated: 'uuid' },
     headline: { type: 'string',  description: 'Short headline' },
     body:     { type: 'string',  description: 'Full tip text' },
     source:   { type: 'string',  description: 'Where the tip came from' },
@@ -43,11 +45,19 @@ const t = writeProjectTable('tips', {
     summary:  { type: 'string',  description: 'One-line agent summary (filled in later)' },
   },
 });
-display(t.ok ? 'wrote tips table' : ('table error: ' + t.error));
+display(t.ok ? 'wrote tips table' : ('table error: ' + t.error));   // check .ok — a bad schema returns { ok:false, error }
 ```
 
 Once a table exists, a committed write to it auto-emits `project/db.<table>.<insert|update|remove>`
 (payload = the row), and you can add a `{type:'db'}` emitter def for a curated domain event.
+
+**Never declare the SAME event name from two defs in one project.** Every `emits` event name must
+be UNIQUE across the whole project scope — a duplicate (e.g. two defs both declaring `tip.added`)
+fails the ENTIRE project emitter scope to load, silently disabling every project emitter and every
+`project/<event>` hook. Before adding an emitter, check the existing `events/` defs (`listDir('events')`
++ read them). If a `db` emitter on `tips` already emits `tip.added`, do NOT re-emit `tip.added`
+elsewhere: a cron poller that fills the same table should just `db.insert` the rows via a paired
+hook (that insert re-fires the db emitter's `tip.added` for free), or emit a DIFFERENT event name.
 Ground every hook in a REAL event and a REAL action — never fabricate an event address,
 table, or agent action that the installed spaces do not declare. Read what an installed
 space emits from the store finder's recommendation (`emits`/`actions`) or via
