@@ -28,20 +28,33 @@ Each scenario directory holds a `run.mjs` (the executable spec) and writes
 `sdk/org/scenarios/results/<id>-report.md` plus a raw trace JSON. The **Actual results** section of
 each scenario `.md` is pasted back from that report, so the document is both the plan and the record.
 
-## Repeating this on something else — the workflow
+## Authoring a new scenario — the format + the workflow
 
-The end-to-end process — **write a resumable live runner → run it Act by Act against prod → triage
-each failure → fix it IN THE PRODUCT with a test → rebuild the image → verify live → report
-honestly** — is captured as a reusable playbook, distilled from scenario 05:
+Two complementary references, plus a copy-and-fill template:
 
-- **[PLAYBOOK.md](./PLAYBOOK.md)** — the meta-process: the hardened harness patterns (checkpointing,
-  keepalive, resume-on-restart, scripted asks, trace-based assertions), the product-fix + image-
-  rebuild-verify loop (7-char image tags, pod upgrade, hot-patching a system-space prompt, the
-  concurrency + CI-rebase gotchas), the re-wake discipline for babysitting a multi-hour run, and the
+- **[SCENARIO-FORMAT.md](./SCENARIO-FORMAT.md)** — the canonical **format** for a scenario: the exact
+  six-section document structure, the **feature catalog** (everything a scenario can/should exercise —
+  THING routing, spaces, the four emitter kinds + hooks + code nodes, consent + capabilities, store +
+  integrations, project-apps + the seed/update writers, attachments, pod lifecycle), the **validation
+  process** (assert on the trace + real state, not prose; harness-bug vs product-bug triage; recovered
+  vs fatal errors), the **harness API**, and the definition of done.
+- **[PLAYBOOK.md](./PLAYBOOK.md)** — the **process** of running one and fixing what it finds: the
+  product-fix + image-rebuild-verify loop (7-char tags, pod upgrade, hot-patching a system-space
+  prompt, CI-rebase gotchas), the re-wake discipline for babysitting a multi-hour run, and the
   reporting template.
-- **[`_template/run.mjs`](./_template/run.mjs)** — a runner scaffold with every hardening pattern
-  pre-wired. To start a new subject: `cp _template/run.mjs <new-id>/run.mjs`, replace the
-  `SCENARIO_*` config, and write the Acts.
+- **[`_template/`](./_template/)** — `cp -r _template <NN-slug>`, then fill **`scenario.md`** (→
+  `../NN-<slug>.md`, the six-section spec with a feature checklist) and **`run.mjs`** (the runner
+  scaffold — checkpoint/resume, keepalive, resilient send, scripted asks, and attachment + live-app +
+  signed-inbound helpers all pre-wired; replace the `SCENARIO_*` config and write the Acts).
+
+To start: `cp -r _template 07-myscenario && mv 07-myscenario/scenario.md 07-myscenario-slug.md`.
+
+**Quick start:**
+```bash
+cd sdk/org/scenarios/harness
+node smoke.mjs                       # prove the harness + prod are healthy (≈1 min)
+node ../07-myscenario/run.mjs        # run it; writes results/07-myscenario-report.md
+```
 
 ## The harness
 

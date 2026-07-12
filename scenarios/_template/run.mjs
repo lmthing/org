@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 /**
  * Scenario runner TEMPLATE — copy this to `sdk/org/scenarios/<id>/run.mjs` and fill in the Acts.
- * It bakes in every hardening pattern the campaigns learned the hard way (see ../PLAYBOOK.md §1):
- * per-Act checkpointing + resume, a keepalive pinger, a resilient `send` that survives pod
- * restarts, a scripted ask answerer, and trace-based assertions.
+ * It bakes in every hardening pattern the campaigns learned the hard way (see ../PLAYBOOK.md §1 and
+ * ../SCENARIO-FORMAT.md §4): per-Act checkpointing + resume, a keepalive pinger, a resilient `send`
+ * that survives a full pod restart, a scripted ask answerer, attachment + live-app + inbound helpers,
+ * and trace-based assertions.
+ *
+ * NOTE: `ThingSession` now self-heals SESSION EVICTION natively (a long turn's sub-sessions can push
+ * a small pod past MAX_SESSIONS): pullEvents treats a post-work 404 as turn-complete, and it
+ * re-establishes an evicted session before the next send. The `thing.send` wrapper below is the extra
+ * belt for a FULL pod roll/restart. For a session-heavy scenario, also raise the cap on the test pod:
+ *   ssh … 'kubectl set env deployment/lmthing MAX_SESSIONS=25 -n user-<id>'
  *
  *   cd sdk/org/scenarios/harness && node ../<id>/run.mjs [--acts=1,2,3] [--fresh]
  *
@@ -61,6 +68,28 @@ function signedInbound(pod, path, body, secret, header = 'x-demo-signature') {
   const raw = typeof body === 'string' ? body : JSON.stringify(body);
   const sig = 'sha256=' + createHmac('sha256', secret).update(raw).digest('hex');
   return pod.inbound(path, raw, { [header]: sig });
+}
+
+// ── project-app assertion helper (build + read real rows) ────────────────────────
+// A real live-project app: compile it and confirm real assets came out, then read its DB rows.
+// (`built` lives at manifest.build.built and only reflects the LAST compile — so build explicitly
+//  and read the POST result, which carries assetManifest + routes. See SCENARIO-FORMAT §4 gotchas.)
+async function assertLiveApp(report, pod, projectId, { minRowTables = {} } = {}) {
+  const build = await pod.appBuild(projectId).catch((e) => ({ built: false, error: String(e) }));
+  const assets = build?.assetManifest ?? [];
+  report.check('app compiles (built:true) with real JS assets', build?.built === true && assets.some((a) => /\.js$/.test(a)), JSON.stringify({ built: build?.built, assets }).slice(0, 200));
+  report.check('app serves ≥1 page route', (build?.routes?.length ?? 0) >= 1, (build?.routes ?? []).map((x) => x.routePath).join(', '));
+  const page = await pod.appPage(projectId).catch((e) => ({ status: 0, body: String(e) }));
+  report.check(`/app/${projectId}/ serves 200 HTML`, page.status === 200 && String(page.body).includes('<!doctype'), `status ${page.status}, ${String(page.body).length} bytes`);
+  // minRowTables: { <table-regex>: <min rows> } — assert real data landed (moved into the db).
+  const manifest = await pod.appManifest(projectId).catch(() => ({}));
+  const names = (manifest?.tables ?? []).map((t) => (typeof t === 'string' ? t : t.name));
+  for (const [rx, min] of Object.entries(minRowTables)) {
+    const t = names.find((n) => new RegExp(rx, 'i').test(n));
+    const rows = t ? (await pod.appData(projectId, t).catch(() => ({ rows: [] }))).rows ?? [] : [];
+    report.check(`table /${rx}/ has ≥${min} rows`, rows.length >= min, `${t ?? '(none)'}: ${rows.length} rows`);
+  }
+  return build;
 }
 
 // ── main ────────────────────────────────────────────────────────────────────────
@@ -130,6 +159,26 @@ if (ACTS.includes(1)) {
 
 // ═══ ACT II / III / IV — same shape; gate each on ACTS.includes(n) + checkpoint ═══
 // (Toggle scripted consent for a deny branch: thing.onAsk = scriptedOnAsk(false); ... reset to true.)
+//
+// ── Example: a file attachment → a live app with the data seeded in (the S06 pattern) ──
+// const attachment = await pod.upload(`${SDK_ORG}/scenarios/${ID}/fixtures/notes.md`);
+// report.check('file uploaded (kind=file)', attachment.kind === 'file', attachment.mediaType);
+// // Attachments ride the WS path (HTTP /message drops them). THING hands the file to a specialist
+// // via attachmentIds; the automator readDocument()s it and seeds rows via writeProjectTable(...,rows).
+// const t = acc(await thing.sendWithAttachments('<the user message>', [attachment], { timeoutMs: 1_500_000 }));
+// report.check('read the file (system-files)', thing.didDelegate('system-files'), t.delegates.join(', '));
+// await assertLiveApp(report, pod, PROJECT, { minRowTables: { 'flight|itinerary': 5, 'accommodation|hotel': 6 } });
+//
+// ── Example: a LATER update changes the db (use a NEW fact NOT already in any seed) ──
+// const before = JSON.stringify(await pod.appData(PROJECT, '<table>').catch(() => ({})));
+// acc(await thing.send('Mark X as done and record confirmation "NEW-TOKEN-123".', { timeoutMs: 900_000 }));
+// await sleep(4_000);
+// const after = JSON.stringify(await pod.appData(PROJECT, '<table>').catch(() => ({})));
+// report.check('the NEW fact landed in the db', !before.includes('new-token-123') && after.toLowerCase().includes('new-token-123'), 'before/after diff');
+//
+// ── Example: a signed inbound webhook fires a code-handler hook (0 LLM) ──
+// const res = await signedInbound(pod, 'demo', { message: { message_id: 1, text: 'TIP: hello', chat: { id: 'c1' }, from: { id: 'u1' } } }, POD_ENV.INTEGRATION_DEMO_WEBHOOK_SECRET);
+// report.check('inbound accepted (verify→emit)', res.status === 200 && res.body?.events >= 1, JSON.stringify(res.body));
 
 // ═══ verdict ══════════════════════════════════════════════════════════════════
 const stats = thing.stats();
