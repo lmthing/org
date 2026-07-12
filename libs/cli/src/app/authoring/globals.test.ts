@@ -371,4 +371,55 @@ describe('createProjectAuthoringGlobals', () => {
     expect(pa.writeProjectTable('Tips', TIPS_SCHEMA).ok).toBe(false); // uppercase not allowed
     expect(existsSync(join(projectRoot, 'database'))).toBe(false);
   });
+
+  it('writeProjectPage lands pages/<route>.tsx in the LIVE project and fires onAppWrite(page)', () => {
+    const appWrites: Array<[string, string]> = [];
+    const pa = createProjectAuthoringGlobals({
+      projectRoot,
+      republish: () => {
+        republishCalls += 1;
+      },
+      onAppWrite: (kind, route) => appWrites.push([kind, route]),
+    });
+    const src = "import { useApi } from '@app/runtime';\nexport default function Home() { return <div/>; }";
+    const res = pa.writeProjectPage('index', src);
+    expect(res.ok).toBe(true);
+    const target = join(projectRoot, 'pages', 'index.tsx');
+    expect(existsSync(target)).toBe(true);
+    expect(readFileSync(target, 'utf8')).toBe(src);
+    expect(republishCalls).toBe(1);
+    expect(appWrites).toEqual([['page', 'index']]);
+    // A dynamic nested route keeps its path and gains the .tsx suffix.
+    expect(pa.writeProjectPage('bookings/[id]', 'export default () => null;').ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'pages', 'bookings', '[id].tsx'))).toBe(true);
+  });
+
+  it('writeProjectApi lands api/<path>/<METHOD>.ts and fires onAppWrite(api)', () => {
+    const appWrites: Array<[string, string]> = [];
+    const pa = createProjectAuthoringGlobals({
+      projectRoot,
+      republish: () => {},
+      onAppWrite: (kind, route) => appWrites.push([kind, route]),
+    });
+    const res = pa.writeProjectApi('bookings-list/GET', 'export default async () => ({ items: [] });');
+    expect(res.ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'api', 'bookings-list', 'GET.ts'))).toBe(true);
+    expect(appWrites).toEqual([['api', 'bookings-list/GET']]);
+  });
+
+  it('writeProjectApi rejects an invalid method and a traversal route (no onAppWrite)', () => {
+    let appWrites = 0;
+    const pa = createProjectAuthoringGlobals({
+      projectRoot,
+      republish: () => {},
+      onAppWrite: () => {
+        appWrites += 1;
+      },
+    });
+    expect(pa.writeProjectApi('bookings/FETCH', 'x').ok).toBe(false); // not a real HTTP method
+    expect(pa.writeProjectApi('../evil/GET', 'x').ok).toBe(false); // traversal
+    expect(pa.writeProjectPage('../../evil', 'x').ok).toBe(false);
+    expect(appWrites).toBe(0);
+    expect(existsSync(join(projectRoot, 'api'))).toBe(false);
+  });
 });

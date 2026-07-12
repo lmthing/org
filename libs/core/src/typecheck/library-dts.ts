@@ -190,6 +190,15 @@ export const PAGES_WRITE_DTS = `declare function writePage(route: string, src: s
 export const API_WRITE_DTS = `declare function writeApi(route: string, src: string): { ok: boolean; error?: string };`;
 export const HOOKS_WRITE_DTS = `declare function writeHook(slug: string, src: string): { ok: boolean; error?: string };`;
 
+// `pages:write`/`api:write` ALSO earn the plan-S11 LIVE-PROJECT twins — `writeProjectPage`
+// (`pages/<route>.tsx`) and `writeProjectApi` (`api/<path>/<METHOD>.ts`) — which write the UI
+// into the session's OWN project (not the store catalog) and rebuild the served app, so "turn
+// this into an app I can open" produces a real page-serving app in the live project rather than
+// dead-ending (the automator had only writeProjectTable — scenario 05). Appended to the catalog
+// writers in the capability registry; the one-liner invariant on the base consts is preserved.
+export const PROJECT_PAGE_DTS = `declare function writeProjectPage(route: string, src: string): { ok: boolean; error?: string };`;
+export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, src: string): { ok: boolean; error?: string };`;
+
 // `hooks:write` ALSO earns the plan-S11 LIVE-PROJECT authoring writers — the automator
 // authors event hooks (`hooks/<slug>.ts`) + emitter defs (`events/<name>.ts`) and the
 // engineer authors project functions (`functions/<name>.ts`), all into the session's OWN
@@ -256,8 +265,8 @@ declare function emitEvent(name: string, payload: Record<string, unknown>): Prom
  */
 export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:call': API_CALL_DTS,
-  'pages:write': PAGES_WRITE_DTS,
-  'api:write': API_WRITE_DTS,
+  'pages:write': [PAGES_WRITE_DTS, PROJECT_PAGE_DTS].join('\n'),
+  'api:write': [API_WRITE_DTS, PROJECT_API_DTS].join('\n'),
   'hooks:write': [HOOKS_WRITE_DTS, PROJECT_AUTHORING_DTS].join('\n'),
   'project:manage': PROJECT_MANAGE_DTS,
   'store:read': STORE_READ_DTS,

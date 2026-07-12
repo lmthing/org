@@ -88,6 +88,12 @@ export interface AppGlobalImpls {
    *  live project can never gain a data model — `writeTableSchema` only targets a catalog
    *  template, and a project with no `database/*.json` boots NO db at all. */
   writeProjectTable?: (name: string, schema: unknown) => AuthoringResult;
+  /** LIVE-project page/API writers (the `pages:write`/`api:write` twins): write
+   *  `<projectRoot>/pages/<route>.tsx` / `<projectRoot>/api/<path>/<METHOD>.ts` and
+   *  rebuild the served app. Without them a live project can gain a data model +
+   *  automation but never a UI — "turn this into an app I can open" dead-ends (scenario 05). */
+  writeProjectPage?: (route: string, src: string) => AuthoringResult;
+  writeProjectApi?: (route: string, src: string) => AuthoringResult;
 }
 
 /** Throw the host error shape (naming the allowed tables, like the canDelegateTo
@@ -191,6 +197,12 @@ export function injectAppGlobals(
   // Authoring/management globals — capability-gated only (project-independent).
   if (app['pages:write'] && impls.writePage) injectGlobal(ctx, 'writePage', impls.writePage as (...a: unknown[]) => unknown);
   if (app['api:write'] && impls.writeApi) injectGlobal(ctx, 'writeApi', impls.writeApi as (...a: unknown[]) => unknown);
+  // Live-project page/API authoring (S11) — same `pages:write`/`api:write` grant, but these
+  // write into the session's OWN project (not the catalog) and rebuild the served app. Present
+  // only when the host supplies them (a project-rooted session); a catalog-only appbuilder
+  // session leaves them absent, so a stray call there fails typecheck rather than mis-targeting.
+  if (app['pages:write'] && impls.writeProjectPage) injectGlobal(ctx, 'writeProjectPage', impls.writeProjectPage as (...a: unknown[]) => unknown);
+  if (app['api:write'] && impls.writeProjectApi) injectGlobal(ctx, 'writeProjectApi', impls.writeProjectApi as (...a: unknown[]) => unknown);
   if (app['hooks:write'] && impls.writeHook) injectGlobal(ctx, 'writeHook', impls.writeHook as (...a: unknown[]) => unknown);
   // Live-project authoring (S11) — same `hooks:write` grant, but these write into the
   // session's OWN project (not the catalog) and republish. Present only when the host

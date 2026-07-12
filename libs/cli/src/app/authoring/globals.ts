@@ -250,6 +250,12 @@ export interface ProjectAuthoringGlobals {
   /** Write `<projectRoot>/database/<name>.json` (a table schema) — the LIVE-project
    *  counterpart of the catalog's `writeTableSchema`. */
   writeProjectTable: (name: string, schema: unknown) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/pages/<route>.tsx` (a React page) — the LIVE-project
+   *  counterpart of the catalog's `writePage`. */
+  writeProjectPage: (route: string, src: string) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/api/<path>/<METHOD>.ts` (a typed API handler) — the
+   *  LIVE-project counterpart of the catalog's `writeApi`. */
+  writeProjectApi: (route: string, src: string) => { ok: boolean; error?: string };
 }
 
 /**
@@ -277,8 +283,12 @@ export function createProjectAuthoringGlobals(opts: {
    *  db from `database/*.json` (a project with no tables has NO db at all, so the first
    *  table is what brings one into existence). Fire-and-forget, like `republish`. */
   onSchemaWrite?: (table: string) => void;
+  /** Called after a successful `writeProjectPage`/`writeProjectApi` — the host rebuilds
+   *  the project's pages (so `/app/<id>/` serves the new UI) and drops any cached page-build
+   *  or endpoint-contract state. Fire-and-forget, like `republish`. */
+  onAppWrite?: (kind: 'page' | 'api', route: string) => void;
 }): ProjectAuthoringGlobals {
-  const { projectRoot, republish, onSchemaWrite } = opts;
+  const { projectRoot, republish, onSchemaWrite, onAppWrite } = opts;
 
   /** Write `rel` under the project root, then fire the republish (best-effort). */
   function writeUnder(rel: string, src: string): { ok: boolean; error?: string } {
@@ -354,5 +364,73 @@ export function createProjectAuthoringGlobals(opts: {
     return out;
   }
 
-  return { writeProjectHook, writeProjectEvent, writeProjectFunction, writeProjectTable };
+  /**
+   * Write a React page into the LIVE project (`pages/<route>.tsx`) and tell the host to
+   * rebuild the project's pages. The live twin of the catalog `writePage`: without it a
+   * project the user is actually working in can gain a data model + automation
+   * (writeProjectTable/Hook) but never a UI — "turn this into an app I can open" would
+   * dead-end because the automator has only `writeProjectTable`, and an attempt to call a
+   * page writer fails typecheck (found live in scenario 05: `Cannot find name
+   * 'writeProjectPage'`). Route validation + `.tsx` normalization mirror the catalog writer.
+   */
+  function writeProjectPage(route: string, src: string): { ok: boolean; error?: string } {
+    let rel: string;
+    try {
+      rel = assertPathSegments('page route', route);
+      if (!rel.endsWith('.tsx')) rel = `${rel}.tsx`;
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    const out = writeUnder(join('pages', rel), src);
+    if (out.ok) {
+      try {
+        onAppWrite?.('page', route);
+      } catch {
+        /* best-effort — the page file already landed */
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Write a typed API handler into the LIVE project (`api/<path>/<METHOD>.ts`) and tell the
+   * host to drop its cached endpoint contracts. The live twin of the catalog `writeApi`;
+   * the route encodes its HTTP method last (`items-list/GET`). Path + method validation
+   * mirror the catalog writer.
+   */
+  function writeProjectApi(route: string, src: string): { ok: boolean; error?: string } {
+    let target: string;
+    try {
+      const rel = assertPathSegments('api route', route);
+      const segments = rel.split('/');
+      const method = segments.pop() as string;
+      if (!METHODS.has(method)) {
+        throw new Error(`api route "${route}" has an invalid method "${method}" (expected one of ${[...METHODS].join(', ')})`);
+      }
+      if (segments.length === 0) {
+        throw new Error(`api route "${route}" is missing an endpoint path before the method`);
+      }
+      target = join('api', ...segments, `${method}.ts`);
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    const out = writeUnder(target, src);
+    if (out.ok) {
+      try {
+        onAppWrite?.('api', route);
+      } catch {
+        /* best-effort — the handler file already landed */
+      }
+    }
+    return out;
+  }
+
+  return {
+    writeProjectHook,
+    writeProjectEvent,
+    writeProjectFunction,
+    writeProjectTable,
+    writeProjectPage,
+    writeProjectApi,
+  };
 }

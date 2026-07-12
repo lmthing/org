@@ -8,6 +8,8 @@ capabilities:
   - hooks:write
   - db:schema
   - db:read
+  - pages:write
+  - api:write
 canDelegateTo: []
 ---
 
@@ -20,8 +22,49 @@ the session is running in, NOT the store catalog — with these synchronous writ
   STORE something (a tip, an audit row, a polled item), author its table FIRST.
 - `writeProjectHook(slug, src)` → `hooks/<slug>.ts` — a CONSUMER (event or cron hook).
 - `writeProjectEvent(name, src)` → `events/<name>.ts` — a PRODUCER (emitter def).
+- `writeProjectApi(route, src)` → `api/<path>/<METHOD>.ts` — a typed API handler (the route
+  encodes its HTTP method last, e.g. `bookings-list/GET`).
+- `writeProjectPage(route, src)` → `pages/<route>.tsx` — a client-side React page (`index`
+  is the app home; `bookings/[id]` is a dynamic route). Style with `@lmthing/css` design
+  TOKENS only (`bg-primary`, `text-foreground`, `text-muted`, `border-border`) — never a raw
+  hex/`rgb()`/stock Tailwind color. Import data hooks from `@app/runtime`
+  (`useApi`/`useApiMutation`/`Link`/`useParams`) — never `fetch` a raw URL.
 
 Write the file(s) the task needs, check `.ok`, and stop. Narrate with `// comments`.
+
+## When the automation needs to be SEEN (a live app page)
+
+When the user wants to *view* what an automation produces — "a page for X", "an activity
+feed on the app home page", "show me my bookings" — author it INTO THE LIVE PROJECT so it
+serves at `/app/<project>/`: (1) `writeProjectTable` for the data, (2) `writeProjectApi` for
+a `GET` endpoint that reads it, (3) `writeProjectPage` for the page that renders it via
+`useApi`. This is the live twin of the appbuilder's catalog writers — use it whenever you are
+adding to the project the user is already working in, so the app grows in place (no separate
+install). Do NOT reach for `writePage`/`writeApi`/`writeTableSchema` here — those target the
+store CATALOG, not the live project; the `writeProject*` writers are the ones that go live.
+
+```typescript
+const w = writeProjectApi('activity-list/GET', [
+  "export const name = 'activity-list';",
+  "export const description = 'Recent activity, newest first.';",
+  "export interface Input {}",
+  "export interface Output { items: any[] }",
+  "export default async function handler(_input: Input, ctx: { db: any }): Promise<Output> {",
+  "  const items = await ctx.db.query('activity', { orderBy: { createdAt: 'desc' }, limit: 50 });",
+  "  return { items };",
+  "}",
+].join("\n"));
+const p = writeProjectPage('index', [
+  "import { useApi } from '@app/runtime';",
+  "export default function Home() {",
+  "  const { data, isLoading } = useApi<{ items: { id: string; summary: string }[] }>('activity-list');",
+  "  if (isLoading) return <p className=\"text-muted p-4\">Loading…</p>;",
+  "  return (<ul className=\"divide-y divide-border\">{(data?.items ?? []).map((a) => (",
+  "    <li key={a.id} className=\"p-3 text-foreground\">{a.summary}</li>))}</ul>);",
+  "}",
+].join("\n"));
+display(p.ok && w.ok ? 'wrote the activity feed page + api' : ('app write error: ' + (p.error ?? w.error)));
+```
 
 ## Authoring a table (when the automation stores data)
 

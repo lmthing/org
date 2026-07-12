@@ -592,6 +592,25 @@ export class SessionManager {
           console.warn(`[authoring] project db reload failed: ${err instanceof Error ? err.message : String(err)}`),
         );
       },
+      onAppWrite: (kind) => {
+        // A live page/api write must invalidate the caches derived from `api/` + `pages/`:
+        // the typed endpoint contracts (feed the manifest + apiCall DTS) and the per-project
+        // api runtime (loads the handlers). Dropping them makes the next manifest/apiCall
+        // re-derive from the new files. Page COMPILATION (→ the served out dir) is done by the
+        // explicit `POST /app/build` the caller runs after authoring; this keeps the write
+        // synchronous + cheap. (`kind` is 'api' | 'page'; both invalidate the same caches.)
+        void kind;
+        this.projectContracts.delete(projectId);
+        const rt = this.apiRuntimes.get(projectId);
+        if (rt) {
+          try {
+            rt.dispose();
+          } catch {
+            /* best-effort */
+          }
+        }
+        this.apiRuntimes.delete(projectId);
+      },
     });
     return {
       ...(db ? { db: db.db } : undefined),
@@ -609,6 +628,8 @@ export class SessionManager {
       writeProjectEvent: projectAuthoring.writeProjectEvent,
       writeProjectFunction: projectAuthoring.writeProjectFunction,
       writeProjectTable: projectAuthoring.writeProjectTable,
+      writeProjectPage: projectAuthoring.writeProjectPage,
+      writeProjectApi: projectAuthoring.writeProjectApi,
     };
   }
 
