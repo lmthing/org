@@ -90,9 +90,25 @@ describe('loadHooks — discovery', () => {
     expect(hooks.map((h) => h.slug)).toEqual(['a', 'b']);
   });
 
-  it('propagates a validation error with the hook slug', async () => {
-    writeHook('broken.ts', `export default { type: 'cron', trigger: 'x/y#z' }`); // no every/daily
-    await expect(loadHooks(root)).rejects.toThrow(/broken/);
+  it('ISOLATES a validation error to the offending hook — the rest of the project still loads', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    writeHook('good.ts', `export default { type: 'cron', every: '30m', trigger: 'x/y#z' }`);
+    writeHook('broken.ts', `export default { type: 'cron', trigger: 'x/y#z' }`); // no every/daily → invalid
+    const hooks = await loadHooks(root);
+    expect(hooks.map((h) => h.slug)).toEqual(['good']); // the broken hook is skipped, good survives
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/skipping hook "broken"/));
+    warn.mockRestore();
+  });
+
+  it('ISOLATES a syntax error / broken import — one bad file never sinks the whole project', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    writeHook('healthy.ts', `export default { type: 'cron', every: '30m', trigger: 'x/y#z' }`);
+    // A hook file authored with literal backslash-n (seen live in scenario 01) is a syntax error.
+    writeHook('mangled.ts', `const A = 'x';\\nconst B = 1;\\nexport default { type: 'cron', every: '1h', trigger: 'x/y#z' };`);
+    const hooks = await loadHooks(root);
+    expect(hooks.map((h) => h.slug)).toEqual(['healthy']);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/skipping hook "mangled"/));
+    warn.mockRestore();
   });
 });
 

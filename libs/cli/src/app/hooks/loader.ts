@@ -215,16 +215,30 @@ export async function loadHooks(projectRoot: string): Promise<LoadedHook[]> {
     }
     seen.add(slug);
     const file = join(hooksDir, name);
-    const raw = await importDefault(file);
-    // NO-BACK-COMPAT (S6): a removed `{type:'database'}` hook is DROPPED with a
-    // clear migration error so the rest of the project still loads (fail-loud only
-    // for genuinely-invalid shapes below).
-    if (isRemovedDatabaseHook(raw)) {
-      console.warn(databaseHookRemovedMessage(file, slug));
-      continue;
+    // Per-file ISOLATION: a single broken hook (a syntax error, a bad import, an
+    // invalid shape) must NOT sink every other hook in the project — otherwise one
+    // malformed file silently disables ALL of a project's automation. Skip-with-warn
+    // the offender and keep loading the rest (this is also the Step 8 spec contract:
+    // "load fails for that hook; the rest of the project still loads"). Found live in
+    // scenario 01: an authored hook written with literal `\n` broke the WHOLE project's
+    // hook load, so a correct sibling intake hook never ran and stored nothing.
+    try {
+      const raw = await importDefault(file);
+      // NO-BACK-COMPAT (S6): a removed `{type:'database'}` hook is DROPPED with a
+      // clear migration error so the rest of the project still loads (fail-loud only
+      // for genuinely-invalid shapes below).
+      if (isRemovedDatabaseHook(raw)) {
+        console.warn(databaseHookRemovedMessage(file, slug));
+        continue;
+      }
+      const def = validateHook(slug, file, raw);
+      out.push({ slug, owner: 'project', file, def });
+    } catch (err) {
+      console.warn(
+        `[hook-loader] skipping hook "${slug}" (${file}): ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
     }
-    const def = validateHook(slug, file, raw);
-    out.push({ slug, owner: 'project', file, def });
   }
   return out;
 }
