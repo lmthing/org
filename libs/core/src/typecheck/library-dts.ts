@@ -100,7 +100,6 @@ declare function readDocument(attachmentId: string, opts?: { maxChars?: number }
 // NAMES (never values) of required env vars not yet set; ready = all required set.
 declare function integrationStatus(spaceId: string): Promise<{ ready: boolean; missingRequired: string[] }>;
 declare const process: { env: Record<string, string | undefined>; exit(code?: number): never };
-declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };
 declare function typecheckSource(src: string): { ok: boolean; errors: string[] };
 declare function spacePath(...parts: string[]): string;
 declare function resolveSpaceDir(space: string): string;
@@ -108,13 +107,29 @@ declare function progress(): { episodes: number; toolCalls: number; elapsedMs: n
 ` + '\n' + catalogDts();
 
 /**
- * Write primitives — split out of COMMON_DTS so they are only appended where the
- * host actually injects them (under `allowWrite`). Declaring them unconditionally
- * inside COMMON_DTS made a stray `writeFileRaw`/`execShell` pass typecheck in a
- * read-only VM and throw at runtime; gating the DTS fragment fixes that.
+ * Raw fs/shell primitives. These are NO LONGER emitted in any agent's model
+ * ambient DTS by default — `readFileRaw`/`writeFileRaw` are internal-only host
+ * primitives (memory/todos + the architect builder functions call them in their
+ * bodies, which are NOT typechecked against the model DTS), and `execShell` is
+ * emitted ONLY for the engineer's `fs:scratch` sandbox (where it is the
+ * scratch-rooted variant). They stay bundled into `LIBRARY_DTS`/`LIBRARY_DTS_NO_ASK`
+ * below solely so `typecheckSource` (host-tools.ts) keeps the FULL global set when
+ * it checks a standalone space-function source. See exec/bootstrap.ts buildAmbientDts.
  */
 export const EXEC_SHELL_DTS = `declare function execShell(cmd: string, opts?: { timeout?: number }): { ok: boolean; stdout: string; stderr: string; exitCode: number };`;
 export const WRITE_FILE_RAW_DTS = `declare function writeFileRaw(path: string, content: string): { ok: boolean; bytes: number; error?: string };`;
+export const READ_FILE_RAW_DTS = `declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };`;
+
+/**
+ * `fs:scratch` earns `createScratch` — the engineer creates a throwaway
+ * `.lmthing/scratch/<random>` sandbox and returns its path; all of the engineer's
+ * generic fs (its `readFile`/`writeFile`/`editFile`/`listDir`/`glob`/`grep` wrapper
+ * functions + a scratch-rooted `execShell`) resolve inside it. Emitted alongside
+ * `EXEC_SHELL_DTS` only when `caps.scratchFs`; the six wrapper signatures arrive via
+ * the source-extracted overlay.
+ */
+export const SCRATCH_DTS = `/** Create (once) a throwaway scratch directory and return its absolute path. Call before any file/shell op. */
+declare function createScratch(): string;`;
 
 /**
  * App-capability globals (project-as-application). Each fragment is emitted ONLY
@@ -198,6 +213,10 @@ export const HOOKS_WRITE_DTS = `declare function writeHook(slug: string, src: st
 // writers in the capability registry; the one-liner invariant on the base consts is preserved.
 export const PROJECT_PAGE_DTS = `declare function writeProjectPage(route: string, src: string): { ok: boolean; error?: string };`;
 export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, src: string): { ok: boolean; error?: string };`;
+// `pages:write` ALSO earns the shared-component writer — `writeProjectComponent` writes
+// `components/<Name>.tsx` (PascalCase) into the live project so a page can import it. The
+// typed surface for shared UI (there is no space-rooted fs writer for components anymore).
+export const PROJECT_COMPONENT_DTS = `declare function writeProjectComponent(name: string, src: string): { ok: boolean; error?: string };`;
 
 // `hooks:write` ALSO earns the plan-S11 LIVE-PROJECT authoring writers — the automator
 // authors event hooks (`hooks/<slug>.ts`) + emitter defs (`events/<name>.ts`) and the
@@ -278,7 +297,7 @@ declare function emitEvent(name: string, payload: Record<string, unknown>): Prom
  */
 export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:call': API_CALL_DTS,
-  'pages:write': [PAGES_WRITE_DTS, PROJECT_PAGE_DTS].join('\n'),
+  'pages:write': [PAGES_WRITE_DTS, PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS].join('\n'),
   'api:write': [API_WRITE_DTS, PROJECT_API_DTS].join('\n'),
   'hooks:write': [HOOKS_WRITE_DTS, PROJECT_AUTHORING_DTS].join('\n'),
   'project:manage': PROJECT_MANAGE_DTS,
@@ -287,11 +306,12 @@ export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'events:emit': EVENTS_EMIT_DTS,
 };
 
-// Write primitives, appended to the full-DTS bundles below. `host-tools.ts`'s
-// `typecheckSource` needs the FULL global set (incl. execShell/writeFileRaw), so the
-// LIBRARY_DTS bundles re-append these two fragments to stay byte-equivalent to the
-// pre-split COMMON_DTS.
-const WRITE_PRIMITIVES_DTS = [EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS].join('\n');
+// Raw fs/shell primitives, appended to the full-DTS bundles below. `host-tools.ts`'s
+// `typecheckSource` needs the FULL global set (incl. execShell/writeFileRaw/readFileRaw
+// — the architect builder functions reference them in their bodies), so the LIBRARY_DTS
+// bundles re-append these fragments even though the per-agent model DTS (buildAmbientDts)
+// no longer emits them by default.
+const WRITE_PRIMITIVES_DTS = [EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, READ_FILE_RAW_DTS].join('\n');
 
 /** Full library DTS for the top-level session VM (all globals, incl. `ask`). */
 export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS].join('\n');

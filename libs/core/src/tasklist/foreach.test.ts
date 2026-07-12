@@ -121,7 +121,7 @@ describe('charter + tasklist goal injection into task forks', () => {
 });
 
 describe('per-task role + functions scoping', () => {
-  it('withholds the writeFileRaw prompt line from a read-only task (write cap is DTS-gated)', async () => {
+  it('withholds all generic-fs prompt lines from a non-scratch task (fs is off every fork)', async () => {
     const dir = await makeTasklistSpace({
       '01-probe.md': `---\nid: probe\nrole: explore\ngoal: true\noutput:\n  ok: boolean\n---\n\nPROBE_T: read-only probe.`,
     });
@@ -145,10 +145,12 @@ describe('per-task role + functions scoping', () => {
     });
     const goal = (await runTasklist({ name: 'flow', space, forkEngine: engine })).data as { ok: boolean };
     expect(goal.ok).toBe(true);
-    // Prompt gate: a read-only task's system prompt is NOT told about writeFileRaw
-    // and IS told it is read-only.
-    expect(systemSeen).not.toMatch(/writeFileRaw\(path, content\)/);
-    expect(systemSeen).toMatch(/READ-ONLY/);
+    // Prompt gate: a non-scratch fork's system prompt does NOT advertise the write
+    // primitives (writeFileRaw/readFileRaw are gone entirely) and explicitly tells the
+    // fork there is no filesystem and execShell is unavailable.
+    expect(systemSeen).not.toMatch(/writeFileRaw|readFileRaw/);
+    expect(systemSeen).toMatch(/NO filesystem/i);
+    expect(systemSeen).toMatch(/execShell is unavailable/);
   });
 
   it('injects + advertises only the allowlisted functions', async () => {

@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createVM, type VM } from '../sandbox/quickjs.js';
 import { injectHostTools } from '../globals/host-tools.js';
+import { createScratchTools } from '../globals/scratch.js';
 import { injectGlobal } from '../sandbox/host-bridge.js';
 import { loadSystemSpaces } from './system.js';
 import { transpileStatement } from '../typecheck/transpile.js';
@@ -104,16 +105,25 @@ describe('system/memory functions (round-trip through host primitives)', () => {
   });
 });
 
-describe('system/fs readFile function', () => {
+describe('engineer scratch fs (readFile/writeFile/editFile/grep, jailed to a scratch dir)', () => {
   let vm: VM;
   let dir: string;
+  let scratchDir: string;
 
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), 'sysfs-'));
     vm = await createVM();
     injectHostTools(vm, { renderHost: host, spaceDir: dir });
-    const [fs] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'system-global')]);
-    injectFunctions(vm, fs!.functions);
+    // The engineer's fs wrappers call the scratch primitives, not readFileRaw/execShell.
+    const scratch = createScratchTools({ projectRoot: dir, spaceDir: dir, renderHost: host });
+    injectGlobal(vm.ctx, 'createScratch', scratch.createScratch as (...a: unknown[]) => unknown);
+    injectGlobal(vm.ctx, 'scratchReadRaw', scratch.scratchReadRaw as (...a: unknown[]) => unknown);
+    injectGlobal(vm.ctx, 'scratchWriteRaw', scratch.scratchWriteRaw as (...a: unknown[]) => unknown);
+    injectGlobal(vm.ctx, 'scratchExec', scratch.scratchExec as (...a: unknown[]) => unknown);
+    const [eng] = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'system-engineer')]);
+    injectFunctions(vm, eng!.functions);
+    // The engineer must create its scratch dir before any fs op works.
+    scratchDir = evalDump(vm, 'createScratch()') as string;
   });
 
   afterEach(() => {
@@ -121,53 +131,78 @@ describe('system/fs readFile function', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('raw contains unmodified file content (no line numbers)', () => {
-    const path = join(dir, 'data.json');
-    require('node:fs').writeFileSync(path, '{"x":1}');
-    const r = evalDump(vm, `readFile(${JSON.stringify(path)})`) as { ok: boolean; content: string; raw: string };
+  it('createScratch returns a .lmthing/scratch/<random> dir under the project root', () => {
+    expect(scratchDir.startsWith(join(dir, '.lmthing', 'scratch'))).toBe(true);
+    expect(existsSync(scratchDir)).toBe(true);
+  });
+
+  it('writeFile → readFile round-trips inside the scratch dir (relative paths)', () => {
+    const w = evalDump(vm, `writeFile("data.json", '{"x":1}')`) as { ok: boolean };
+    expect(w.ok).toBe(true);
+    const r = evalDump(vm, `readFile("data.json")`) as { ok: boolean; content: string; raw: string };
     expect(r.ok).toBe(true);
     expect(r.raw).toBe('{"x":1}');
     expect(JSON.parse(r.raw)).toEqual({ x: 1 });
   });
 
   it('content has 1-based line numbers; raw does not', () => {
-    const path = join(dir, 'multi.txt');
-    require('node:fs').writeFileSync(path, 'alpha\nbeta\ngamma');
-    const r = evalDump(vm, `readFile(${JSON.stringify(path)})`) as { ok: boolean; content: string; raw: string };
+    evalDump(vm, `writeFile("multi.txt", "alpha\\nbeta\\ngamma")`);
+    const r = evalDump(vm, `readFile("multi.txt")`) as { ok: boolean; content: string; raw: string };
     expect(r.ok).toBe(true);
     expect(r.raw).toBe('alpha\nbeta\ngamma');
     expect(r.content).toContain('1\talpha');
     expect(r.content).toContain('2\tbeta');
     expect(r.content).toContain('3\tgamma');
-    expect(r.content).not.toContain('{"');
   });
 
-  it('grep returns matches when path is a single file', () => {
-    const path = join(dir, 'target.ts');
-    require('node:fs').writeFileSync(path, 'export function foo() {}\nexport function bar() {}\n');
-    const r = evalDump(vm, `grep("function", { path: ${JSON.stringify(path)} })`) as {
+  it('a path escaping the scratch sandbox (absolute / ..) is rejected', () => {
+    require('node:fs').writeFileSync(join(dir, 'outside.txt'), 'secret');
+    const abs = evalDump(vm, `readFile(${JSON.stringify(join(dir, 'outside.txt'))})`) as { ok: boolean; error?: string };
+    expect(abs.ok).toBe(false);
+    expect(abs.error).toMatch(/escapes the scratch sandbox/);
+    const up = evalDump(vm, `readFile("../../outside.txt")`) as { ok: boolean; error?: string };
+    expect(up.ok).toBe(false);
+    expect(up.error).toMatch(/escapes the scratch sandbox/);
+  });
+
+  it('grep returns matches for a scratch file (path relative to scratch)', () => {
+    evalDump(vm, `writeFile("target.ts", "export function foo() {}\\nexport function bar() {}\\n")`);
+    const r = evalDump(vm, `grep("function", { path: "target.ts" })`) as {
       ok: boolean; matches: Array<{ file: string; line: number; text: string }>
     };
     expect(r.ok).toBe(true);
     expect(r.matches.length).toBe(2);
-    expect(r.matches[0]!.file).toBe(path);
     expect(r.matches[0]!.line).toBe(1);
     expect(r.matches[1]!.line).toBe(2);
   });
 
   it('grep distinguishes a nonexistent path from "no matches"', () => {
-    const missing = join(dir, 'no-such-dir', 'nope');
-    const r = evalDump(vm, `grep("anything", { path: ${JSON.stringify(missing)} })`) as {
+    const r = evalDump(vm, `grep("anything", { path: "no-such-file" })`) as {
       ok: boolean; matches: unknown[]; error?: string
     };
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/path not found/);
     // Contrast: an existing file with no match is ok:true, empty matches.
-    const path = join(dir, 'empty.txt');
-    require('node:fs').writeFileSync(path, 'nothing here\n');
-    const r2 = evalDump(vm, `grep("zzzzz", { path: ${JSON.stringify(path)} })`) as { ok: boolean; matches: unknown[] };
+    evalDump(vm, `writeFile("empty.txt", "nothing here\\n")`);
+    const r2 = evalDump(vm, `grep("zzzzz", { path: "empty.txt" })`) as { ok: boolean; matches: unknown[] };
     expect(r2.ok).toBe(true);
     expect(r2.matches.length).toBe(0);
+  });
+
+  it('scratchExec exposes a non-zero exitCode', () => {
+    const r = evalDump(vm, `scratchExec("exit 5")`) as { ok: boolean; exitCode: number };
+    expect(r.exitCode).toBe(5);
+  });
+
+  it('before createScratch(), the scratch primitives error clearly', async () => {
+    // A fresh VM with scratch tools but no createScratch() call yet.
+    const vm2 = await createVM();
+    const scratch2 = createScratchTools({ projectRoot: dir, spaceDir: dir, renderHost: host });
+    injectGlobal(vm2.ctx, 'scratchReadRaw', scratch2.scratchReadRaw as (...a: unknown[]) => unknown);
+    const r = evalDump(vm2, `scratchReadRaw("x")`) as { ok: boolean; error?: string };
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/create a scratch dir first/);
+    vm2.dispose();
   });
 });
 

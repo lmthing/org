@@ -42,7 +42,79 @@ const READ_BYTE_CAP = 256 * 1024;
 const BINARY_SCAN_BYTES = 8192;
 // Default execShell timeout. Generous so first-run `npm install` / `npx <pkg>`
 // (which download on first use) are not killed; callers can override per call.
-const DEFAULT_EXEC_TIMEOUT_MS = 120_000;
+export const DEFAULT_EXEC_TIMEOUT_MS = 120_000;
+
+export interface ReadFileResult {
+  ok: boolean; content: string; lines: number; truncated: boolean; error?: string;
+}
+export interface WriteFileResult { ok: boolean; bytes: number; error?: string; }
+export interface ShellResult { ok: boolean; stdout: string; stderr: string; exitCode: number; }
+
+/**
+ * Binary-safe file read against a fully-resolved absolute path. The rooting
+ * decision (space-root vs scratch-sandbox) belongs to the caller — this helper
+ * only reads. Shared by `readFileRaw` (host-tools, space-rooted) and the
+ * engineer scratch sandbox (`globals/scratch.ts`, scratch-rooted + guarded).
+ */
+export function readFileRawAt(absPath: string, readOpts?: { offset?: number; limit?: number }): ReadFileResult {
+  try {
+    const buf = readFileSync(absPath);
+    const scan = buf.subarray(0, BINARY_SCAN_BYTES);
+    for (let i = 0; i < scan.length; i++) {
+      if (scan[i] === 0) {
+        return { ok: false, content: '', lines: 0, truncated: false, error: 'binary file' };
+      }
+    }
+    let content = buf.toString('utf8');
+    let truncated = false;
+    if (readOpts?.offset !== undefined || readOpts?.limit !== undefined) {
+      const allLines = content.split('\n');
+      const start = Math.max(0, readOpts?.offset ?? 0);
+      const end = readOpts?.limit !== undefined ? start + readOpts.limit : allLines.length;
+      content = allLines.slice(start, end).join('\n');
+    }
+    if (content.length > READ_BYTE_CAP) {
+      content = content.slice(0, READ_BYTE_CAP);
+      truncated = true;
+    }
+    const lines = content.length === 0 ? 0 : content.split('\n').length;
+    return { ok: true, content, lines, truncated };
+  } catch (e) {
+    return { ok: false, content: '', lines: 0, truncated: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** File write (creates parent dirs) against a fully-resolved absolute path. Caller owns rooting. */
+export function writeFileRawAt(absPath: string, content: string): WriteFileResult {
+  try {
+    mkdirSync(dirname(absPath), { recursive: true });
+    writeFileSync(absPath, String(content), 'utf8');
+    return { ok: true, bytes: Buffer.byteLength(String(content), 'utf8') };
+  } catch (e) {
+    return { ok: false, bytes: 0, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Synchronous shell execution in `cwd`, returning the model-facing {ok,stdout,stderr,exitCode}
+ *  shape. The read-only command gate is the caller's concern (host-tools applies it under a
+ *  read-only profile; the engineer scratch sandbox does not — it is already jailed to scratch). */
+export function runShell(cmd: string, opts: { cwd: string; timeout?: number }, renderHost: RenderHost): ShellResult {
+  const timeout = opts.timeout ?? DEFAULT_EXEC_TIMEOUT_MS;
+  try {
+    const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout, cwd: opts.cwd });
+    return { ok: true, stdout: result.toString(), stderr: '', exitCode: 0 };
+  } catch (e: unknown) {
+    const err = e as { message?: string; stdout?: Buffer; stderr?: Buffer; status?: number | null };
+    renderHost.log(`[execShell error] ${err.message ?? String(e)}`);
+    return {
+      ok: false,
+      stdout: err.stdout?.toString() ?? '',
+      stderr: err.stderr?.toString() ?? String(e),
+      // execSync sets `status` to the exit code (null on signal/timeout → 1).
+      exitCode: typeof err.status === 'number' ? err.status : 1,
+    };
+  }
+}
 
 /** First token of a shell command, used by the read-only execShell guard. */
 function commandHead(cmd: string): string {
@@ -115,21 +187,7 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
     if (!allowWrite && !isReadOnlyCommand(cmd)) {
       return { ok: false, stdout: '', stderr: `read-only role: command "${commandHead(cmd)}" is blocked`, exitCode: 126 };
     }
-    const timeout = execOpts?.timeout ?? DEFAULT_EXEC_TIMEOUT_MS;
-    try {
-      const result = execSync(cmd, { maxBuffer: 8 * 1024 * 1024, timeout, cwd: spaceRoot });
-      return { ok: true, stdout: result.toString(), stderr: '', exitCode: 0 };
-    } catch (e: unknown) {
-      const err = e as { message?: string; stdout?: Buffer; stderr?: Buffer; status?: number | null };
-      renderHost.log(`[execShell error] ${err.message ?? String(e)}`);
-      return {
-        ok: false,
-        stdout: err.stdout?.toString() ?? '',
-        stderr: err.stderr?.toString() ?? String(e),
-        // execSync sets `status` to the exit code (null on signal/timeout → 1).
-        exitCode: typeof err.status === 'number' ? err.status : 1,
-      };
-    }
+    return runShell(cmd, { cwd: spaceRoot, timeout: execOpts?.timeout }, renderHost);
   });
 
   // process.env + process.exit — read-only env shim with LMTHING_SPACE_DIR injected
@@ -152,33 +210,8 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
   // (session.ts/delegate.ts/fork.ts), not here.
 
   // readFileRaw — binary-safe file read via Node fs (no shell quoting hazards)
-  setGlobal('readFileRaw', (path: string, readOpts?: { offset?: number; limit?: number }) => {
-    try {
-      const buf = readFileSync(inSpace(path));
-      const scan = buf.subarray(0, BINARY_SCAN_BYTES);
-      for (let i = 0; i < scan.length; i++) {
-        if (scan[i] === 0) {
-          return { ok: false, content: '', lines: 0, truncated: false, error: 'binary file' };
-        }
-      }
-      let content = buf.toString('utf8');
-      let truncated = false;
-      if (readOpts?.offset !== undefined || readOpts?.limit !== undefined) {
-        const allLines = content.split('\n');
-        const start = Math.max(0, readOpts?.offset ?? 0);
-        const end = readOpts?.limit !== undefined ? start + readOpts.limit : allLines.length;
-        content = allLines.slice(start, end).join('\n');
-      }
-      if (content.length > READ_BYTE_CAP) {
-        content = content.slice(0, READ_BYTE_CAP);
-        truncated = true;
-      }
-      const lines = content.length === 0 ? 0 : content.split('\n').length;
-      return { ok: true, content, lines, truncated };
-    } catch (e) {
-      return { ok: false, content: '', lines: 0, truncated: false, error: e instanceof Error ? e.message : String(e) };
-    }
-  });
+  setGlobal('readFileRaw', (path: string, readOpts?: { offset?: number; limit?: number }) =>
+    readFileRawAt(inSpace(path), readOpts));
 
   // progress — read-only view of the run's budget counters ("complexity factor").
   // Returns a fresh snapshot each call; the VM cannot write back through it.
@@ -192,14 +225,7 @@ export function injectHostTools(vm: VM, opts: HostToolsOpts): void {
     if (!allowWrite) {
       return { ok: false, bytes: 0, error: 'read-only role: writeFileRaw is blocked' };
     }
-    try {
-      const target = inSpace(path);
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, String(content), 'utf8');
-      return { ok: true, bytes: Buffer.byteLength(String(content), 'utf8') };
-    } catch (e) {
-      return { ok: false, bytes: 0, error: e instanceof Error ? e.message : String(e) };
-    }
+    return writeFileRawAt(inSpace(path), content);
   });
 
   // spacePath — join path segments with '/'. Replaces node:path.join inside the

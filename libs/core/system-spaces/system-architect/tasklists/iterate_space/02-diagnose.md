@@ -16,8 +16,8 @@ space directly (you cannot write here), then resolve the diagnosis.
 The space dir is `load.dir`, the agent slug `load.agentSlug`, and the user's request is the seed
 `feedback`. Read the current files and decide concrete per-file changes. Code:
 
-const instruct = readFileRaw(load.dir + "/agents/" + load.agentSlug + "/instruct.md");
-const tasks = listDir(load.dir + "/tasklists");
+const instruct = readSpaceFile(load.dir, "agents/" + load.agentSlug + "/instruct.md");
+const tasks = listSpaceDir(load.dir, "tasklists");
 // Identify specific issues (wrong system prompt, missing/incorrect functions, bad tasklist
 // structure, missing knowledge) and propose CONCRETE PER-FILE CHANGES — e.g. "rewrite
 // instruct.md systemPrompt to X", "add knowledge option dogs/breeds/terriers", "add function F",

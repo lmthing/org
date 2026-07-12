@@ -339,6 +339,7 @@ export class ForkEngine {
           capabilities,
           overlay: functionsOverlay,
           currentTask: true,
+          projectRoot: !!this.opts.projectRoot,
           extraDecls: [upstreamDts, seedDts].filter(Boolean),
         });
 
@@ -365,19 +366,23 @@ export class ForkEngine {
           ? `# Tasklist (overall goal — your task is one step in it)\n${task.tasklistDescription.trim()}\n`
           : '';
 
-        // The capability profile gates which host primitives actually exist in this VM
-        // (read-only roles have write withheld at injection). Advertise ONLY what is available,
-        // so a read-only task is never told about writeFileRaw and then errors on it.
-        const allowWrite = capabilities.allowWrite;
-        const ioLine = allowWrite
-          ? '- readFileRaw(path) → { ok, content } / writeFileRaw(path, content) → { ok } — binary-safe file I/O (relative paths resolve against the space dir)'
-          : '- readFileRaw(path) → { ok, content } — binary-safe file read (relative paths resolve against the space dir). You are READ-ONLY: writeFileRaw and mutating shell commands are unavailable.';
-        const shellLine = allowWrite
-          ? '- execShell(cmd: string) → { ok, stdout, stderr } — run a shell command / subprocess. This is the ONLY way to run a program (e.g. tests): `const { ok, stdout } = execShell("npx tsx test.ts");`'
-          : '- execShell(cmd: string) → { ok, stdout, stderr } — run a READ-ONLY shell command (ls, cat, grep…); mutating commands (rm/mv/git/npm…) are blocked.';
-        const noRuntimeLine = allowWrite
-          ? 'There is NO Node/Bun/Deno runtime: `require`, `import("child_process")`, `Bun`, `Deno`, `process.cwd()`, `TextDecoder`, and `Buffer` are NOT available. Use `execShell` to run anything and `fetch`/`readFileRaw`/`writeFileRaw` for I/O.'
-          : 'There is NO Node/Bun/Deno runtime: `require`, `import("child_process")`, `Bun`, `Deno`, `process.cwd()`, `TextDecoder`, and `Buffer` are NOT available. Use `execShell` (read-only) / `fetch` / `readFileRaw` for I/O.';
+        // Generic filesystem/shell exists ONLY in the engineer's `fs:scratch` sandbox. A fork
+        // inherits it only when the parent agent has it (an engineer general fork). Every other
+        // fork has no fs/shell at all — advertise only what the VM actually carries, so a fork is
+        // never told about execShell and then errors on it. A fork needing to run code returns the
+        // code to its delegator; persistence goes through the delegator's typed writers.
+        const scratchFs = capabilities.scratchFs;
+        const ioLine = scratchFs
+          ? '- createScratch() → string: create your throwaway scratch dir FIRST, then readFile(path)/writeFile(path, content)/editFile(...) operate inside it (jailed to scratch).'
+          : '- There is NO filesystem here — you cannot read or write files. Work from your seed/inputs; if a task needs files persisted, return the content to your delegator (only the engineer persists code, via the delegator\'s typed writers).';
+        const shellLine = scratchFs
+          ? '- execShell(cmd) → { ok, stdout, stderr }: run a command INSIDE your scratch dir (e.g. `execShell("npx tsc --noEmit x.ts")`). Jailed to scratch.'
+          : '- There is NO shell/subprocess — execShell is unavailable. To run or test code, return it to your delegator so the engineer can run it.';
+        const noRuntimeLine =
+          'There is NO Node/Bun/Deno runtime: `require`, `import("child_process")`, `Bun`, `Deno`, `process.cwd()`, `TextDecoder`, and `Buffer` are NOT available.' +
+          (scratchFs
+            ? ' Use `execShell` (scratch-jailed) to run anything and `fetch` for HTTP.'
+            : ' Use `fetch` for HTTP; there is no local file or subprocess access in this context.');
 
         const systemBlock = [
           // Shared statement-emission rules (single source: exec/preamble.ts).
@@ -483,6 +488,7 @@ export class ForkEngine {
             capabilities,
             overlay: functionsOverlay,
             currentTask: false,
+            projectRoot: !!this.opts.projectRoot,
             extraDecls: [upstreamDts, seedDts].filter(Boolean),
           });
           const prelude = await runPrelude({

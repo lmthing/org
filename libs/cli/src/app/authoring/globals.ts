@@ -70,6 +70,10 @@ const TABLE_NAME_RE = /^[a-z][a-z0-9_]*$/;
  *  traversal-safe (no dots/slashes). */
 const FUNCTION_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
+/** Component names are PascalCase (`TripCard`, `FlightRow`) — the file basename is
+ *  `<Name>.tsx` and the name is what a page imports/renders. Traversal-safe. */
+const COMPONENT_NAME_RE = /^[A-Z][A-Za-z0-9]*$/;
+
 /** A single page/api path segment: letters/digits/hyphen/underscore, optionally
  *  wrapped in `[...]` for a dynamic route segment (e.g. `[id]`). */
 const SEGMENT_RE = /^\[?[a-zA-Z0-9_-]+\]?$/;
@@ -278,6 +282,10 @@ export interface ProjectAuthoringGlobals {
   /** Write `<projectRoot>/pages/<route>.tsx` (a React page) — the LIVE-project
    *  counterpart of the catalog's `writePage`. */
   writeProjectPage: (route: string, src: string) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/components/<Name>.tsx` (a shared React component a page imports).
+   *  Name is PascalCase. There is no space-rooted fs writer for this — the typed writer IS
+   *  the surface, so an app can gain shared components without any generic filesystem access. */
+  writeProjectComponent: (name: string, src: string) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/api/<path>/<METHOD>.ts` (a typed API handler) — the
    *  LIVE-project counterpart of the catalog's `writeApi`. */
   writeProjectApi: (route: string, src: string) => { ok: boolean; error?: string };
@@ -321,7 +329,7 @@ export function createProjectAuthoringGlobals(opts: {
   /** Called after a successful `writeProjectPage`/`writeProjectApi` — the host rebuilds
    *  the project's pages (so `/app/<id>/` serves the new UI) and drops any cached page-build
    *  or endpoint-contract state. Fire-and-forget, like `republish`. */
-  onAppWrite?: (kind: 'page' | 'api', route: string) => void;
+  onAppWrite?: (kind: 'page' | 'api' | 'component', route: string) => void;
 }): ProjectAuthoringGlobals {
   const { projectRoot, republish, onSchemaWrite, onAppWrite } = opts;
 
@@ -478,6 +486,33 @@ export function createProjectAuthoringGlobals(opts: {
     return out;
   }
 
+  /**
+   * Write a shared React component into the LIVE project (`components/<Name>.tsx`) and tell the
+   * host to rebuild the project's pages (a page may now import it). The typed twin of a page
+   * writer for shared UI: without it an app-authoring agent that wants a reusable `<TripCard>`
+   * had no typed writer and would have reached for the (now removed) space-rooted `writeFile`,
+   * which mis-roots. `<Name>` is PascalCase; `.tsx` is enforced.
+   */
+  function writeProjectComponent(name: string, src: string): { ok: boolean; error?: string } {
+    try {
+      if (!COMPONENT_NAME_RE.test(name)) {
+        throw new Error(`component name "${name}" is not PascalCase (expected /${COMPONENT_NAME_RE.source}/)`);
+      }
+      assertSourceParses(src, 'tsx');
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    const out = writeUnder(join('components', `${name}.tsx`), src);
+    if (out.ok) {
+      try {
+        onAppWrite?.('component', name);
+      } catch {
+        /* best-effort — the component file already landed */
+      }
+    }
+    return out;
+  }
+
   /** List `<projectRoot>/<dir>` — project-rooted introspection (the read twin of the writers).
    *  A missing dir returns `entries: []` (not an error) so an agent can safely check "what tables
    *  exist?" on a fresh project. `safeResolve` keeps it inside the project (no traversal). */
@@ -509,6 +544,7 @@ export function createProjectAuthoringGlobals(opts: {
     writeProjectFunction,
     writeProjectTable,
     writeProjectPage,
+    writeProjectComponent,
     writeProjectApi,
     listProjectDir,
     readProjectFile,

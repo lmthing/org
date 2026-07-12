@@ -1,4 +1,4 @@
-/** Search file contents for a pattern. Uses ripgrep, falling back to grep -rn. Returns file/line/text matches. */
+/** Search scratch-sandbox file contents for a pattern. Uses ripgrep, falling back to grep -rn. Returns file/line/text matches. */
 export function grep(
   pattern: string,
   opts?: { path?: string; glob?: string; ignoreCase?: boolean; maxMatches?: number },
@@ -11,16 +11,16 @@ export function grep(
 
   // Distinguish "path doesn't exist" from "no matches": the `|| true` guards below
   // swallow rg/grep's "No such file" error, so probe the path up front.
-  const probe = execShell(`test -e ${JSON.stringify(path)} && echo __OK__ || true`);
+  const probe = scratchExec(`test -e ${JSON.stringify(path)} && echo __OK__ || true`);
   if (!probe.stdout.includes('__OK__')) {
     return { ok: false, matches: [], truncated: false, error: `path not found: ${path}` };
   }
 
   // Prefer ripgrep when available. Probe with `|| true` so a missing binary or a
   // no-match exit code never surfaces as an execShell error in the output.
-  const hasRg = execShell('command -v rg || true').stdout.trim().length > 0;
+  const hasRg = scratchExec('command -v rg || true').stdout.trim().length > 0;
   const rg = hasRg
-    ? execShell(`rg --json ${ic}${globArg}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)} || true`)
+    ? scratchExec(`rg --json ${ic}${globArg}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)} || true`)
     : { ok: false, stdout: '', stderr: '' };
   if (rg.stdout.trim()) {
     for (const line of rg.stdout.split('\n')) {
@@ -45,7 +45,7 @@ export function grep(
   // Fallback: grep -rn (also handles "rg not installed"). `|| true` keeps a
   // no-match (exit 1) from being logged as an error.
   const grepFlags = opts?.glob ? `--include=${JSON.stringify(opts.glob)} ` : '';
-  const gr = execShell(`grep -rnH ${ic}${grepFlags}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)} || true`);
+  const gr = scratchExec(`grep -rnH ${ic}${grepFlags}-e ${JSON.stringify(pattern)} ${JSON.stringify(path)} || true`);
   if (gr.stdout.trim()) {
     for (const line of gr.stdout.split('\n')) {
       const m = line.match(/^([^:]+):(\d+):(.*)$/);

@@ -36,7 +36,8 @@ export type CapabilityId =
   | 'project:manage'
   | 'store:read'
   | 'store:install'
-  | 'events:emit';
+  | 'events:emit'
+  | 'fs:scratch';
 
 /** Every recognized capability id. Unknown ids fail the space load. */
 export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
@@ -53,6 +54,7 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'store:read',
   'store:install',
   'events:emit',
+  'fs:scratch',
 ]);
 
 /** The three db verbs whose (optional) config narrows scope to `{ tables: [...] }`. */
@@ -71,6 +73,7 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
   'store:read',
   'store:install',
   'events:emit',
+  'fs:scratch',
 ]);
 
 /**
@@ -87,6 +90,11 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
  *   - store:install  → `true` (bare; grants the consent-marked installSpace)
  *   - events:emit    → `true` (bare; grants emitEvent — publish the OWN scope's
  *                      declared events into the hook pipeline)
+ *   - fs:scratch     → `true` (bare; grants createScratch + a sandboxed generic
+ *                      fs/shell surface rooted at a throwaway .lmthing/scratch dir —
+ *                      the engineer's code sandbox. The ONLY grant that earns any
+ *                      generic filesystem access; every other agent persists via the
+ *                      typed writeProject* / architect builder functions.)
  */
 export interface AppCapabilities {
   'db:read'?: { tables?: string[] };
@@ -102,6 +110,7 @@ export interface AppCapabilities {
   'store:read'?: true;
   'store:install'?: true;
   'events:emit'?: true;
+  'fs:scratch'?: true;
 }
 
 export interface ParseCapabilitiesCtx {

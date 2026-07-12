@@ -411,7 +411,10 @@ describe('harness — fork()', () => {
     await expect(readFile(probe, 'utf8')).rejects.toThrow();
   });
 
-  it('a general fork CAN write — the same op succeeds with the full toolkit', async () => {
+  it('a general fork ALSO cannot writeFileRaw — generic fs is off every fork (only fs:scratch earns it)', async () => {
+    // writeFileRaw is absent from a general fork's DTS (no fs:scratch), so the statement
+    // fails typecheck and never writes — same as the explore case above. A fork needing to
+    // persist code returns it to its delegator.
     const probe = join(await makeSpace(), 'general-probe.txt');
     let sessionStep = 0;
     const m = mockMatch(
@@ -431,9 +434,8 @@ describe('harness — fork()', () => {
       },
     );
     const r = await runSession({ streamFn: m, message: 'go' });
-    expect(r.error).toBeUndefined();
-    expect(r.displays).toContain('wrote=true');
-    expect(await readFile(probe, 'utf8')).toBe('ok');
+    expect(r.displays).not.toContain('wrote=true');
+    await expect(readFile(probe, 'utf8')).rejects.toThrow();
   });
 });
 
@@ -742,64 +744,10 @@ describe('harness — registerSpace()', () => {
 // System spaces — always merged in (fs / memory / todo)
 // ---------------------------------------------------------------------------
 
-describe('harness — system spaces (fs)', () => {
-  it('writeFile → readFile round-trips through the fs system space', async () => {
-    const m = createMockStreamFn((_o, { callIndex }) => {
-      if (callIndex === 0) {
-        return (
-          `const dir = process.env.LMTHING_SPACE_DIR ?? ".";\n` +
-          `const w = writeFile(dir + "/note.txt", "hello fs");\n` +
-          `const r = readFile(dir + "/note.txt");\n` +
-          `display("wrote=" + w.ok + " read=" + r.raw);`
-        );
-      }
-      return '';
-    });
-    const r = await runSession({ streamFn: m, message: 'go', systemSpaceDirs: [fsSpace] });
-    expect(r.error).toBeUndefined();
-    expect(r.displays).toContain('wrote=true read=hello fs');
-  });
-
-  it('glob and listDir see files written into the space dir', async () => {
-    const m = createMockStreamFn((_o, { callIndex }) => {
-      if (callIndex === 0) {
-        return (
-          `const dir = process.env.LMTHING_SPACE_DIR ?? ".";\n` +
-          `writeFile(dir + "/a.txt", "1");\n` +
-          `writeFile(dir + "/b.txt", "2");\n` +
-          `const g = glob("*.txt", { cwd: dir });\n` +
-          `const l = listDir(dir);\n` +
-          `display("globs=" + g.paths.length + " hasA=" + l.entries.includes("a.txt"));`
-        );
-      }
-      return '';
-    });
-    const r = await runSession({ streamFn: m, message: 'go', systemSpaceDirs: [fsSpace] });
-    expect(r.error).toBeUndefined();
-    const out = String(r.displays[0]);
-    expect(out).toContain('globs=2');
-    expect(out).toContain('hasA=true');
-  });
-
-  it('editFile replaces an exact string in place', async () => {
-    const m = createMockStreamFn((_o, { callIndex }) => {
-      if (callIndex === 0) {
-        return (
-          `const dir = process.env.LMTHING_SPACE_DIR ?? ".";\n` +
-          `const p = dir + "/edit.txt";\n` +
-          `writeFile(p, "the quick brown fox");\n` +
-          `const e = editFile(p, "quick", "slow");\n` +
-          `const r = readFile(p);\n` +
-          `display("rep=" + e.replacements + " body=" + r.raw);`
-        );
-      }
-      return '';
-    });
-    const r = await runSession({ streamFn: m, message: 'go', systemSpaceDirs: [fsSpace] });
-    expect(r.error).toBeUndefined();
-    expect(r.displays).toContain('rep=1 body=the slow brown fox');
-  });
-});
+// NOTE: the universal fs wrappers (writeFile/readFile/glob/listDir/editFile) were REMOVED
+// from system-global — they are now engineer-scoped and jailed to a scratch sandbox. Their
+// behavior is unit-tested in spaces/system-functions.test.ts ("engineer scratch fs …"), so
+// there is no longer a universal-fs-through-a-session harness test here.
 
 describe('harness — system spaces (memory)', () => {
   it('remember → recall persists a fact across turns', async () => {

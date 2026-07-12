@@ -9,6 +9,11 @@ functions:
   - writeKnowledgeOption
   - writeFunctionFile
   - writeComponentFile
+  - writeEventFile
+  - writeHookFile
+  - writeManifest
+  - readSpaceFile
+  - listSpaceDir
   - validateSpace
   - listScaffoldedSpaces
 components: []

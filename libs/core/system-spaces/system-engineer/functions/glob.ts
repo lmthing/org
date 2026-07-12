@@ -1,7 +1,7 @@
-/** Find files matching a glob pattern (supports ** and *). Skips node_modules and .git. */
+/** Find files matching a glob pattern (supports ** and *) in your scratch sandbox. Skips node_modules and .git. */
 export function glob(pattern: string, opts?: { cwd?: string }): { ok: boolean; paths: string[]; error?: string } {
   const cwd = opts?.cwd ?? '.';
-  const r = execShell(
+  const r = scratchExec(
     `find ${JSON.stringify(cwd)} -type f -not -path '*/node_modules/*' -not -path '*/.git/*'`,
   );
   if (!r.ok) return { ok: false, paths: [], error: r.stderr };

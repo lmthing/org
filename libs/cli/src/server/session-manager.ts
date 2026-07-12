@@ -630,6 +630,7 @@ export class SessionManager {
       writeProjectFunction: projectAuthoring.writeProjectFunction,
       writeProjectTable: projectAuthoring.writeProjectTable,
       writeProjectPage: projectAuthoring.writeProjectPage,
+      writeProjectComponent: projectAuthoring.writeProjectComponent,
       writeProjectApi: projectAuthoring.writeProjectApi,
       listProjectDir: projectAuthoring.listProjectDir,
       readProjectFile: projectAuthoring.readProjectFile,

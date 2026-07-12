@@ -275,7 +275,7 @@ export class Session {
       this.opts.renderHost.log(`[warn] ${name}: ${message}`);
     });
     this.appCapabilities = agent.capabilities ?? {};
-    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts });
+    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot });
     this.systemBlock = systemBlock;
     this.ambientDts = ambientDts;
     this.agentFunctions = agentFunctions;
@@ -408,7 +408,7 @@ export class Session {
       this.opts.renderHost.log(`[warn] ${name}: ${message}`);
     });
     this.appCapabilities = agent.capabilities ?? {};
-    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts });
+    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot });
     return { agentSlug: resolvedSlug, systemBlock, ambientDts };
   }
 
@@ -469,7 +469,7 @@ export class Session {
       this.opts.renderHost.log(`[warn] ${name}: ${message2}`);
     });
     this.appCapabilities = agent.capabilities ?? {};
-    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts });
+    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot });
     this.agentFunctions = agentFunctions;
     this.agentFunctionsBundled = agentFunctionsBundled;
     this.forkEngine = null; // agent functions changed — rebuild on next fork yield

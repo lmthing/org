@@ -14,58 +14,40 @@ function declNames(dts: string): string[] {
 }
 
 const OVERLAY = 'declare function myFn(a: string): { ok: boolean };';
-const FORK_SEED_DECLS = ['declare const upstreamTask: any;', 'declare const seedVar: any;'];
 const DELEGATE_SEED_DECLS = ['declare const query: string;\ndeclare const context: Record<string, any>;'];
 
-describe('buildAmbientDts — declaration-set equivalence with the pre-unification assembly', () => {
-  it('session context ≡ old `LIBRARY_DTS + overlay`', () => {
-    const oldDts = LIBRARY_DTS + '\n' + OVERLAY;
-    const newDts = buildAmbientDts({ capabilities: sessionCapabilities(), overlay: OVERLAY });
-    expect(declNames(newDts)).toEqual(declNames(oldDts));
+describe('buildAmbientDts — generic fs is removed from the model surface (only fs:scratch earns it)', () => {
+  const session = buildAmbientDts({ capabilities: sessionCapabilities(), overlay: OVERLAY });
+  const delegate = buildAmbientDts({ capabilities: delegateCapabilities(), overlay: OVERLAY, currentTask: true, extraDecls: DELEGATE_SEED_DECLS });
+  const forkGeneral = buildAmbientDts({ capabilities: forkCapabilities('general', true), overlay: OVERLAY, currentTask: true });
+
+  it('no non-scratch context declares readFileRaw/writeFileRaw/execShell/createScratch', () => {
+    for (const [label, dts] of [['session', session], ['delegate', delegate], ['general fork', forkGeneral]] as const) {
+      const names = declNames(dts);
+      for (const gone of ['readFileRaw', 'writeFileRaw', 'execShell', 'createScratch']) {
+        expect(names, `${label} must not declare ${gone}`).not.toContain(gone);
+      }
+    }
   });
 
-  it('delegate context ≡ old `LIBRARY_DTS_NO_ASK + overlay + currentTask + seed`', () => {
-    const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
-    const seedDts = `declare const query: string;\ndeclare const context: Record<string, any>;`;
-    const oldDts = LIBRARY_DTS_NO_ASK + '\n' + OVERLAY + '\n' + currentTaskDts + '\n' + seedDts;
-    const newDts = buildAmbientDts({
-      capabilities: delegateCapabilities(),
-      overlay: OVERLAY,
-      currentTask: true,
-      extraDecls: DELEGATE_SEED_DECLS,
-    });
-    expect(declNames(newDts)).toEqual(declNames(oldDts));
+  it('an fs:scratch agent declares execShell + createScratch (its sandbox), but NEVER writeFileRaw/readFileRaw', () => {
+    const scratch = buildAmbientDts({ capabilities: delegateCapabilities(true, { 'fs:scratch': true }), currentTask: true });
+    const names = declNames(scratch);
+    expect(names).toContain('execShell');
+    expect(names).toContain('createScratch');
+    expect(names).not.toContain('writeFileRaw');
+    expect(names).not.toContain('readFileRaw');
   });
 
-  it('fork context (no canDelegateTo) ≡ old regex-stripped LIBRARY_DTS_NO_ASK assembly', () => {
-    // Replicates the deleted fork.ts string surgery exactly.
-    const forkBaseDts = LIBRARY_DTS_NO_ASK.replace(/^declare function (tasklist|fork|delegate)\b.*\r?\n/gm, '');
-    const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
-    const oldDts = [forkBaseDts, '', OVERLAY, currentTaskDts, 'declare const upstreamTask: any;', 'declare const seedVar: any;']
-      .filter(Boolean)
-      .join('\n');
-    const newDts = buildAmbientDts({
-      capabilities: forkCapabilities('general', false),
-      overlay: OVERLAY,
-      currentTask: true,
-      extraDecls: FORK_SEED_DECLS,
-    });
-    expect(declNames(newDts)).toEqual(declNames(oldDts));
-  });
-
-  it('fork context WITH canDelegateTo ≡ old assembly with the delegate overloads added back', () => {
-    const forkBaseDts = LIBRARY_DTS_NO_ASK.replace(/^declare function (tasklist|fork|delegate)\b.*\r?\n/gm, '');
-    const delegateDts =
-      'declare function delegate(packageName: string, agentName: string, opts?: DelegateOpts): Promise<any>;\n'
-      + 'declare function delegate(packageName: string, agentName: string, action?: string, opts?: DelegateOpts): Promise<any>;';
-    const currentTaskDts = `declare const currentTask: { resolve: (value: unknown) => void };`;
-    const oldDts = [forkBaseDts, delegateDts, OVERLAY, currentTaskDts].filter(Boolean).join('\n');
-    const newDts = buildAmbientDts({
-      capabilities: forkCapabilities('general', true),
-      overlay: OVERLAY,
-      currentTask: true,
-    });
-    expect(declNames(newDts)).toEqual(declNames(oldDts));
+  it('LIBRARY_DTS bundles keep the full raw-primitive set (for typecheckSource), even though no context emits them by default', () => {
+    // host-tools.ts typecheckSource checks standalone space-function sources against
+    // LIBRARY_DTS, which must still know readFileRaw/writeFileRaw/execShell (architect
+    // builder bodies call them) — that is DISTINCT from the per-agent ambient DTS above.
+    for (const bundle of [LIBRARY_DTS, LIBRARY_DTS_NO_ASK]) {
+      expect(bundle).toContain('declare function execShell(');
+      expect(bundle).toContain('declare function writeFileRaw(');
+      expect(bundle).toContain('declare function readFileRaw(');
+    }
   });
 });
 
@@ -85,24 +67,24 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     expect(names).not.toContain('currentTask');
   });
 
-  it('read-only fork (explore) declares NONE of ask/tasklist/fork/delegate NOR the write primitives, but keeps the read-only common globals + currentTask', () => {
+  it('read-only fork (explore) declares NONE of ask/tasklist/fork/delegate NOR any generic fs, but keeps the read-only common globals + currentTask', () => {
     const names = declNames(forkPlain);
-    // Orchestration/session globals absent (headless leaf) AND the write primitives
-    // absent — the fix for the old unconditional COMMON_DTS declaration: a read-only
-    // role (allowWrite:false) no longer DECLARES execShell/writeFileRaw, so a stray
-    // write call fails typecheck instead of silently returning a runtime error.
-    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw']) {
+    // Orchestration/session globals absent (headless leaf) AND the generic fs primitives
+    // absent — the whole family (readFileRaw/writeFileRaw/execShell/createScratch) is off the
+    // model surface unless the agent holds fs:scratch, which a fork role does not.
+    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw', 'readFileRaw', 'createScratch']) {
       expect(names, `read-only fork DTS must not declare ${absent}`).not.toContain(absent);
     }
-    for (const present of ['display', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'fetch', 'readFileRaw', 'currentTask']) {
+    for (const present of ['display', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'fetch', 'currentTask']) {
       expect(names).toContain(present);
     }
   });
 
-  it('write-capable fork (general) DOES declare the write primitives (allowWrite gate)', () => {
-    const names = declNames(forkDelegating); // general role → allowWrite:true
-    expect(names).toContain('execShell');
-    expect(names).toContain('writeFileRaw');
+  it('a general fork does NOT declare the generic fs primitives (no fs:scratch grant)', () => {
+    const names = declNames(forkDelegating); // general role → allowWrite:true, but scratchFs:false
+    for (const gone of ['execShell', 'writeFileRaw', 'readFileRaw', 'createScratch']) {
+      expect(names).not.toContain(gone);
+    }
   });
 
   it('fork WITH canDelegateTo gets exactly the delegate overloads back — still no ask/tasklist/fork', () => {

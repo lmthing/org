@@ -29,9 +29,11 @@ which of `spaces` to iterate on.
 
 **Step 2 — Read the agent header**
 
-Read `agents/<slug>/instruct.md` (use `listDir`/`readFileRaw` to find the agent slug from the
-`agents/` dir). Extract the agent slug, its first action id (the `- id:` under `actions:`), and a
-one-line summary of the current systemPrompt + actions for the diagnose step.
+Read `agents/<slug>/instruct.md` (use `listSpaceDir(dir, 'agents')` to find the agent slug, then
+`readSpaceFile(dir, 'agents/<slug>/instruct.md')`). Extract the agent slug, its first action id (the
+`- id:` under `actions:`), and a one-line summary of the current systemPrompt + actions for the
+diagnose step. `listSpaceDir`/`readSpaceFile` are SPACE-ROOTED (they take the space `dir` explicitly),
+never your own source tree.
 
 Resolve with:
 - `dir`: the space directory path

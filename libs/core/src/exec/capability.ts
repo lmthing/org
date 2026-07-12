@@ -69,6 +69,13 @@ export interface CapabilityProfile {
   setSessionMeta: boolean;
   /** Host write access: writeFileRaw + mutating shell commands (host-tools profile). */
   allowWrite: boolean;
+  /** `createScratch()` + a sandboxed generic fs/shell surface (the engineer's code
+   *  sandbox). Derived from the `fs:scratch` app grant. When true, `createChildVM`
+   *  injects the scratch primitives and overrides `execShell` with the scratch-rooted
+   *  one, and `buildAmbientDts` emits `SCRATCH_DTS` + `EXEC_SHELL_DTS`. When false —
+   *  every non-engineer agent — the generic fs surface is neither injected as a
+   *  callable model global nor declared, so a stray call fails typecheck. */
+  scratchFs: boolean;
   /** Project-app capability grants (`capabilities:` frontmatter → parsed `AppCapabilities`).
    *  Drives BOTH which app globals `createChildVM` injects (`db.*`/`apiCall`/`writePage`/…)
    *  AND which capability fragments `buildAmbientDts` emits — kept in lockstep exactly like
@@ -82,7 +89,7 @@ export interface CapabilityProfile {
  *  `canDelegate` comes from the session agent's `canDelegateTo` policy
  *  (`evaluateDelegatePolicy(...).mode !== 'none'`); defaults to true. */
 export function sessionCapabilities(canDelegate = true, app: AppCapabilities = {}): CapabilityProfile {
-  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: true, setSessionMeta: true, allowWrite: true, app };
+  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: true, setSessionMeta: true, allowWrite: true, scratchFs: !!app['fs:scratch'], app };
 }
 
 /**
@@ -93,7 +100,8 @@ export function sessionCapabilities(canDelegate = true, app: AppCapabilities = {
  */
 export function forkCapabilities(role: string | undefined, canDelegate: boolean, app: AppCapabilities = {}): CapabilityProfile {
   const allowWrite = roleProfile(role).allowWrite !== false;
-  return { kind: 'fork', ask: false, orchestrate: false, delegate: canDelegate, registerSpace: allowWrite, setSessionMeta: false, allowWrite, app: intersectAppCaps(app, allowWrite) };
+  const forkApp = intersectAppCaps(app, allowWrite);
+  return { kind: 'fork', ask: false, orchestrate: false, delegate: canDelegate, registerSpace: allowWrite, setSessionMeta: false, allowWrite, scratchFs: !!forkApp['fs:scratch'], app: forkApp };
 }
 
 /**
@@ -104,5 +112,5 @@ export function forkCapabilities(role: string | undefined, canDelegate: boolean,
  * are registered by the session or by write-capable forks).
  */
 export function delegateCapabilities(canDelegate = true, app: AppCapabilities = {}): CapabilityProfile {
-  return { kind: 'delegate', ask: false, orchestrate: true, delegate: canDelegate, registerSpace: false, setSessionMeta: false, allowWrite: true, app };
+  return { kind: 'delegate', ask: false, orchestrate: true, delegate: canDelegate, registerSpace: false, setSessionMeta: false, allowWrite: true, scratchFs: !!app['fs:scratch'], app };
 }

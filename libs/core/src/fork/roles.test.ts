@@ -120,8 +120,12 @@ describe('fork roles', () => {
     expect(seen).toContain('azure:cheap');
   });
 
-  it('a general fork CAN write', async () => {
-    const target = join(tmpdir(), 'lmthing_general_can_write.txt');
+  it('a general fork ALSO cannot write via writeFileRaw — generic fs is off every fork (only fs:scratch earns it)', async () => {
+    // The redesign removed generic fs from the model surface everywhere except an fs:scratch
+    // agent's scratch sandbox. A general fork has allowWrite but NOT fs:scratch, so writeFileRaw
+    // is absent from its DTS and a stray call fails typecheck and never runs. A fork needing to
+    // run/persist code returns it to its delegator (only the engineer has scratch fs).
+    const target = join(tmpdir(), 'lmthing_general_should_not_write.txt');
     rmSync(target, { force: true });
     const engine = makeEngine(
       `const w = writeFileRaw(${JSON.stringify(target)}, "data");\ncurrentTask.resolve({ wrote: w.ok });\n`,
@@ -131,8 +135,7 @@ describe('fork roles', () => {
       output: { wrote: 'boolean' },
       role: 'general',
     });
-    expect(result.wrote).toBe(true);
-    expect(existsSync(target)).toBe(true);
-    rmSync(target, { force: true });
+    expect(result.wrote).not.toBe(true);
+    expect(existsSync(target)).toBe(false);
   });
 });

@@ -21,18 +21,23 @@ describe('system spaces', () => {
     const spaces = await loadSystemSpaces([GLOBAL_DIR]);
     expect(spaces.length).toBe(1);
     const global = spaces[0]!;
+    // The generic fs wrappers (readFile/writeFile/editFile/listDir/glob/grep) were REMOVED
+    // from system-global (they mis-rooted at the caller's space dir). They now live only in
+    // system-engineer/functions, scoped to the engineer + jailed to a scratch sandbox.
     expect(Object.keys(global.functions).sort()).toEqual([
-      'editFile', 'forget', 'glob', 'grep', 'listDir', 'readFile', 'recall',
-      'recallAll', 'remember', 'todoRead', 'todoWrite', 'webFetch', 'webSearch', 'writeFile',
+      'forget', 'recall', 'recallAll', 'remember',
+      'todoRead', 'todoWrite', 'webFetch', 'webSearch',
     ]);
   });
 
   it('exposes system-global function names universally', async () => {
     const spaces = await loadSystemSpaces([GLOBAL_DIR]);
     const names = systemFunctionNames(spaces);
-    expect(names.has('readFile')).toBe(true);
-    expect(names.has('grep')).toBe(true);
     expect(names.has('webSearch')).toBe(true);
+    expect(names.has('remember')).toBe(true);
+    // the generic fs wrappers are no longer universal — they moved to system-engineer.
+    expect(names.has('readFile')).toBe(false);
+    expect(names.has('grep')).toBe(false);
   });
 
   it('ONLY system-global functions are universal — agent-bearing spaces stay scoped', async () => {
@@ -40,8 +45,10 @@ describe('system spaces', () => {
     // the architect's own functions are NOT (they reach the architect via its frontmatter).
     const spaces = await loadSystemSpaces([GLOBAL_DIR, ARCHITECT_DIR]);
     const universal = systemFunctionSources(spaces);
-    expect('readFile' in universal).toBe(true);
     expect('webSearch' in universal).toBe(true);
+    expect('remember' in universal).toBe(true);
+    // fs wrappers are engineer-scoped now, not universal.
+    expect('readFile' in universal).toBe(false);
     expect('writeTaskFile' in universal).toBe(false);
     expect('writeAgentFile' in universal).toBe(false);
     expect('validateSpace' in universal).toBe(false);

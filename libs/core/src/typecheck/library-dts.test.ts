@@ -5,11 +5,14 @@ import {
   LIBRARY_DTS_NO_ASK,
   EXEC_SHELL_DTS,
   WRITE_FILE_RAW_DTS,
+  READ_FILE_RAW_DTS,
+  SCRATCH_DTS,
   composeDbDts,
   API_CALL_DTS,
   PAGES_WRITE_DTS,
   API_WRITE_DTS,
   PROJECT_PAGE_DTS,
+  PROJECT_COMPONENT_DTS,
   PROJECT_API_DTS,
   HOOKS_WRITE_DTS,
   PROJECT_AUTHORING_DTS,
@@ -24,25 +27,32 @@ import {
 } from './library-dts.js';
 
 describe('library-dts write primitives are gated', () => {
-  it('COMMON_DTS no longer declares execShell/writeFileRaw', () => {
+  it('COMMON_DTS declares NONE of the generic fs primitives (execShell/writeFileRaw/readFileRaw)', () => {
     expect(COMMON_DTS).not.toContain('execShell');
     expect(COMMON_DTS).not.toContain('writeFileRaw');
+    // readFileRaw moved OUT of COMMON_DTS (it was the last always-declared raw primitive) —
+    // it is internal-only now, present only in the LIBRARY_DTS bundle for typecheckSource.
+    expect(COMMON_DTS).not.toContain('readFileRaw');
   });
 
-  it('LIBRARY_DTS still includes both write primitives via fragments', () => {
+  it('LIBRARY_DTS still includes all three raw primitives via fragments (for typecheckSource)', () => {
     expect(LIBRARY_DTS).toContain('declare function execShell(');
     expect(LIBRARY_DTS).toContain('declare function writeFileRaw(');
+    expect(LIBRARY_DTS).toContain('declare function readFileRaw(');
   });
 
-  it('LIBRARY_DTS_NO_ASK also includes both write primitives but not ask', () => {
+  it('LIBRARY_DTS_NO_ASK also includes all three raw primitives but not ask', () => {
     expect(LIBRARY_DTS_NO_ASK).toContain('declare function execShell(');
     expect(LIBRARY_DTS_NO_ASK).toContain('declare function writeFileRaw(');
+    expect(LIBRARY_DTS_NO_ASK).toContain('declare function readFileRaw(');
     expect(LIBRARY_DTS_NO_ASK).not.toContain('declare function ask');
   });
 
   it('the split fragments carry the verbatim signatures', () => {
     expect(EXEC_SHELL_DTS).toContain('execShell(cmd: string');
     expect(WRITE_FILE_RAW_DTS).toContain('writeFileRaw(path: string, content: string)');
+    expect(READ_FILE_RAW_DTS).toContain('readFileRaw(path: string');
+    expect(SCRATCH_DTS).toContain('createScratch()');
   });
 });
 
@@ -111,7 +121,7 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
   it('maps the standalone capability ids and omits the db trio', () => {
     expect(CAPABILITY_DTS_FRAGMENTS).toEqual({
       'api:call': API_CALL_DTS,
-      'pages:write': [PAGES_WRITE_DTS, PROJECT_PAGE_DTS].join('\n'),
+      'pages:write': [PAGES_WRITE_DTS, PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS].join('\n'),
       'api:write': [API_WRITE_DTS, PROJECT_API_DTS].join('\n'),
       'hooks:write': [HOOKS_WRITE_DTS, PROJECT_AUTHORING_DTS].join('\n'),
       'project:manage': PROJECT_MANAGE_DTS,

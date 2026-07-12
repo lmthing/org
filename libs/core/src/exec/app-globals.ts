@@ -94,6 +94,10 @@ export interface AppGlobalImpls {
    *  automation but never a UI — "turn this into an app I can open" dead-ends (scenario 05). */
   writeProjectPage?: (route: string, src: string) => AuthoringResult;
   writeProjectApi?: (route: string, src: string) => AuthoringResult;
+  /** LIVE-project shared-component writer (the `pages:write` twin of `writeProjectPage`):
+   *  writes `<projectRoot>/components/<Name>.tsx` and rebuilds the served app. The typed
+   *  surface for shared UI — there is no space-rooted fs writer for it anymore. */
+  writeProjectComponent?: (name: string, src: string) => AuthoringResult;
   /** LIVE-project INTROSPECTION reads (the read-side twins of the `writeProject*` writers):
    *  `listProjectDir(dir)` lists the files under `<projectRoot>/<dir>` (e.g. 'database',
    *  'hooks', 'events', 'pages', 'api') and `readProjectFile(path)` reads a project file's
@@ -212,6 +216,7 @@ export function injectAppGlobals(
   // only when the host supplies them (a project-rooted session); a catalog-only appbuilder
   // session leaves them absent, so a stray call there fails typecheck rather than mis-targeting.
   if (app['pages:write'] && impls.writeProjectPage) injectGlobal(ctx, 'writeProjectPage', impls.writeProjectPage as (...a: unknown[]) => unknown);
+  if (app['pages:write'] && impls.writeProjectComponent) injectGlobal(ctx, 'writeProjectComponent', impls.writeProjectComponent as (...a: unknown[]) => unknown);
   if (app['api:write'] && impls.writeProjectApi) injectGlobal(ctx, 'writeProjectApi', impls.writeProjectApi as (...a: unknown[]) => unknown);
   if (app['hooks:write'] && impls.writeHook) injectGlobal(ctx, 'writeHook', impls.writeHook as (...a: unknown[]) => unknown);
   // Live-project authoring (S11) — same `hooks:write` grant, but these write into the
@@ -232,10 +237,11 @@ export function injectAppGlobals(
   }
 
   // LIVE-project introspection reads — the read-side twins of the writeProject* writers. Gated on
-  // a live project (projectRoot) + any db grant (whoever can touch the project's data may see its
-  // shape). These root at projectRoot, so a delegated system-space agent can correctly inspect the
-  // PROJECT's database/hooks/events instead of mis-rooting at its own space source dir.
-  if (opts.projectRoot && dbGranted) {
+  // a live project (projectRoot) ALONE — no db grant required. These are the ONLY way any agent
+  // reads project files now that the space-rooted `readFile`/`listDir` wrappers are gone, so THING
+  // (which holds no db grant) reads `instructions.md`/`documents/` through them. They root at
+  // projectRoot, so a delegated system-space agent inspects the PROJECT, never its own source dir.
+  if (opts.projectRoot) {
     if (impls.listProjectDir) injectGlobal(ctx, 'listProjectDir', impls.listProjectDir as (...a: unknown[]) => unknown);
     if (impls.readProjectFile) injectGlobal(ctx, 'readProjectFile', impls.readProjectFile as (...a: unknown[]) => unknown);
   }

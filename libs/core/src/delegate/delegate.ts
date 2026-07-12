@@ -259,6 +259,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       capabilities,
       overlay,
       currentTask: true,
+      projectRoot: !!opts.projectRoot,
       extraDecls: [`declare const query: string;\ndeclare const context: Record<string, any>;`],
     });
 

@@ -3,6 +3,7 @@ import { createVM, type VM } from '../sandbox/quickjs.js';
 import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { injectHostTools } from '../globals/host-tools.js';
+import { createScratchTools } from '../globals/scratch.js';
 import { createAskGlobal } from '../globals/ask.js';
 import { createDisplayGlobal } from '../globals/display.js';
 import { createInspectGlobal } from '../globals/inspect.js';
@@ -25,7 +26,7 @@ import { createConsentRequestGlobal } from '../globals/consent.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
-  EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
+  EXEC_SHELL_DTS, SCRATCH_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
   WRITE_TABLE_SCHEMA_DTS, PROJECT_TABLE_DTS, PROJECT_READ_DTS, composeConnectionsDts, composeToolDts,
 } from '../typecheck/library-dts.js';
 import { injectAppGlobals, type AppGlobalImpls } from './app-globals.js';
@@ -142,6 +143,29 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   //     (no projectRoot) receives none — the backward-compat invariant.
   injectAppGlobals(vm, { app: caps.app, projectRoot: opts.projectRoot, appGlobals: opts.appGlobals });
 
+  // 4c. Engineer scratch sandbox (`fs:scratch` grant only). Injects `createScratch`
+  //     (model-facing) + the internal scratchReadRaw/scratchWriteRaw/scratchExec the
+  //     engineer's six wrapper functions call, and OVERRIDES `execShell` with the
+  //     scratch-rooted one so the model's "run tests/typecheck" line is jailed to
+  //     scratch. Every path is safeResolve'd against the throwaway scratch dir — the
+  //     ONLY generic fs in the runtime. Non-scratch agents never reach this block, so
+  //     their generic-fs calls fail typecheck (absent from the DTS) — persistence goes
+  //     through the typed writeProject*/architect builder functions instead.
+  if (caps.scratchFs) {
+    const scratch = createScratchTools({
+      projectRoot: opts.projectRoot,
+      spaceDir: opts.spaceDir,
+      renderHost: opts.renderHost,
+    });
+    injectGlobal(ctx, 'createScratch', scratch.createScratch as (...a: unknown[]) => unknown);
+    injectGlobal(ctx, 'scratchReadRaw', scratch.scratchReadRaw as (...a: unknown[]) => unknown);
+    injectGlobal(ctx, 'scratchWriteRaw', scratch.scratchWriteRaw as (...a: unknown[]) => unknown);
+    injectGlobal(ctx, 'scratchExec', scratch.scratchExec as (...a: unknown[]) => unknown);
+    // Override the space-rooted execShell injected by injectHostTools with the
+    // scratch-rooted one — for the engineer, `execShell` IS scratchExec.
+    injectGlobal(ctx, 'execShell', scratch.scratchExec as (...a: unknown[]) => unknown);
+  }
+
   // 5. Yielding globals, gated by the capability profile.
   //    - ask: top-level session only (headless contexts must not prompt).
   //    - fork/tasklist: orchestrating contexts only (never fork leaves).
@@ -255,11 +279,12 @@ export const CURRENT_TASK_DTS = `declare const currentTask: { resolve: (value: u
  */
 export interface AmbientDtsOpts {
   /** Which orchestration + write + app-capability globals are declared. `registerSpace`
-   *  and everything left in COMMON_DTS are declared unconditionally; `execShell`/
-   *  `writeFileRaw` are now gated on `allowWrite` (they were split OUT of COMMON_DTS —
-   *  fixing the old unconditional-declaration bug), and the project-app globals are
-   *  gated on the `app` grants. Pass the full CapabilityProfile (it satisfies this Pick). */
-  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta' | 'allowWrite' | 'app'>;
+   *  and everything left in COMMON_DTS are declared unconditionally; the generic fs/shell
+   *  primitives are NO LONGER emitted by `allowWrite` — `readFileRaw`/`writeFileRaw` are
+   *  internal-only, and `execShell` + `createScratch` are emitted ONLY under `scratchFs`
+   *  (the engineer's sandbox). The project-app globals are gated on the `app` grants. Pass
+   *  the full CapabilityProfile (it satisfies this Pick). */
+  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta' | 'allowWrite' | 'scratchFs' | 'app'>;
   /** Function/component overlay (buildOverlay output). Empty/omitted → none. */
   overlay?: string;
   /** Declare the `currentTask` capture global (fork + delegate contexts). */
@@ -269,6 +294,10 @@ export interface AmbientDtsOpts {
   /** Project-generated typed `apiCall` overloads (Phase 4). When present AND the agent
    *  holds `api:call`, these REPLACE the generic apiCall fragment so calls are strictly typed. */
   appDts?: string;
+  /** Whether this VM is project-rooted (has a projectRoot). Gates the project-read DTS
+   *  (`listProjectDir`/`readProjectFile`) so it is declared exactly where the impls are
+   *  injected (injectAppGlobals gates the same globals on projectRoot alone). */
+  projectRoot?: boolean;
 }
 
 /**
@@ -279,7 +308,7 @@ export interface AmbientDtsOpts {
  * the DTS, so a stray call fails typecheck — the same "not listed ⇒ not injected AND
  * absent from the DTS" invariant the boolean flags enforce for ask/fork/delegate.
  */
-function buildAppCapabilityDts(app: AppCapabilities, appDts?: string): string {
+function buildAppCapabilityDts(app: AppCapabilities, appDts?: string, projectRoot?: boolean): string {
   const parts: string[] = [
     composeDbDts({ read: !!app['db:read'], write: !!app['db:write'], schema: !!app['db:schema'] }),
   ];
@@ -289,10 +318,11 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string): string {
   // …and, for a project-rooted session, the LIVE-project twin `writeProjectTable`
   // (writes `database/<name>.json` into the running project and re-derives its db).
   if (app['db:schema']) parts.push(WRITE_TABLE_SCHEMA_DTS, PROJECT_TABLE_DTS);
-  // Any db grant ALSO earns the project-rooted introspection reads (listProjectDir/readProjectFile) —
-  // the correct way for a project-authoring agent to see the project's database/hooks/events, instead
-  // of the space-rooted execShell('ls')/readFileRaw that mis-root at the agent's own space dir.
-  if (app['db:read'] || app['db:write'] || app['db:schema']) parts.push(PROJECT_READ_DTS);
+  // The project-rooted introspection reads (listProjectDir/readProjectFile) are emitted for ANY
+  // project-rooted session (projectRoot) — no db grant required. They are the only way to read
+  // project files now that the space-rooted readFile/listDir wrappers are gone (THING reads its
+  // instructions.md/documents/ through them), and they root at projectRoot, never the space dir.
+  if (projectRoot) parts.push(PROJECT_READ_DTS);
   // api:call — when the caller supplies project-generated typed overloads (Phase 4:
   // `apiCall('markRead', { id: string }): { ok: boolean }` + a generic fallback), use
   // those so a malformed call fails the agent's typecheck; otherwise the generic fragment.
@@ -321,13 +351,15 @@ export function buildAmbientDts(opts: AmbientDtsOpts): string {
     caps.orchestrate ? FORK_DTS : '',
     caps.delegate ? DELEGATE_DTS : '',
     COMMON_DTS,
-    // execShell/writeFileRaw are injected by injectHostTools always, but a read-only
-    // role's impl no-ops/blocks them — so their DECLARATION is gated on allowWrite,
-    // making a stray write call in a read-only role fail typecheck instead of silently
-    // failing at runtime (the fix for the old unconditional COMMON_DTS declaration).
-    caps.allowWrite ? EXEC_SHELL_DTS : '',
-    caps.allowWrite ? WRITE_FILE_RAW_DTS : '',
-    buildAppCapabilityDts(caps.app, opts.appDts),
+    // Generic fs/shell is NOT part of any agent's model surface. readFileRaw/writeFileRaw
+    // are internal-only (memory/todos + architect builders call them in un-typechecked
+    // bodies), so they are never declared here. execShell + createScratch are declared ONLY
+    // for the engineer's `fs:scratch` sandbox — where execShell is the scratch-rooted variant
+    // (bootstrap step 4c). Every other agent persists through the typed writeProject*/architect
+    // builder functions, so a stray readFile/writeFile/execShell call fails typecheck.
+    caps.scratchFs ? EXEC_SHELL_DTS : '',
+    caps.scratchFs ? SCRATCH_DTS : '',
+    buildAppCapabilityDts(caps.app, opts.appDts, opts.projectRoot),
     opts.overlay ?? '',
     opts.currentTask ? CURRENT_TASK_DTS : '',
     ...(opts.extraDecls ?? []),

@@ -31,13 +31,15 @@ conversation, load the project's standing instructions and see what documents th
 has uploaded:
 
 ```typescript
-const instr = readFile('instructions.md');
-const docs = listDir('documents');
+const instr = readProjectFile('instructions.md');
+const docs = listProjectDir('documents');
 ```
 
 Treat `instructions.md` (when present) as standing guidance for this project. When a
-request relates to the user's uploaded material, `grep`/`readFile` under `documents/`.
-These relative paths resolve against the project directory.
+request relates to the user's uploaded material, `listProjectDir('documents')` then
+`readProjectFile('documents/<file>')`. `listProjectDir(dir)`/`readProjectFile(path)` are
+PROJECT-ROOTED (they resolve against the project directory, never a space dir) and are the
+only way to read project files — there is no generic `readFile`/`listDir`/`grep`.
 
 ## Name the conversation (once, early)
 
@@ -266,10 +268,20 @@ contents for every part — the spaces' knowledge AND the app's seed rows.
    code yourself. Path 1's "answer directly" NEVER applies to requests whose deliverable is
    code (a function, script, module, tests, a bug fix): your session is a conversation
    surface, not a code workspace — multi-statement code inline here is fragile and pollutes
-   your context. The engineer writes, runs, and verifies code in its own isolated context:
+   your context. The engineer drafts, runs, and verifies code in its own scratch sandbox and
+   RETURNS it — it never persists to the project itself. Its result is
+   `{ ok, kind, code, suggestedName?, notes? }`:
    ```typescript
    const out = await delegate('system-engineer', 'engineer', { query: '<the coding task>' });
-   display(JSON.stringify(out, null, 2));
+   // For a plain code deliverable (kind:'code'), show it to the user:
+   if (out.ok) display(out.code);
+   ```
+   If the code is meant to become a persisted **project function** (`kind:'projectFunction'` —
+   e.g. a service operation an automation needs, per path 7e), hand it to the automator to
+   commit with `writeProjectFunction` (you do NOT hold that writer):
+   ```typescript
+   await delegate('system-appbuilder', 'automator',
+     { query: 'Persist this engineer-authored project function', context: { name: out.suggestedName, code: out.code } });
    ```
 
 6. **Remember something about the user** — whenever the user states a durable preference,
@@ -363,7 +375,10 @@ contents for every part — the spaces' knowledge AND the app's seed rows.
    ```
 
    **(e) Missing operations.** If the automation needs a service call the installed space
-   does NOT expose, delegate to the engineer to author a project function for it (path 5).
+   does NOT expose, delegate to the engineer to WRITE the project function (path 5) — it
+   returns `{ kind:'projectFunction', code, suggestedName }` — then hand that result to the
+   automator to persist with `writeProjectFunction` (the engineer cannot persist; only the
+   automator holds `hooks:write`).
 
 ## Rules
 

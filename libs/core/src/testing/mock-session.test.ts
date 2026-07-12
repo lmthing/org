@@ -115,8 +115,9 @@ describe('Session.buildSystemPrompt (keyless prompt dump)', () => {
     expect(agentSlug).toBe('main'); // 'default' resolves to the sole agent
     expect(systemBlock).toContain('# Available Globals');
     // System functions present as signatures-only "Built-in Tools" when system spaces are loaded.
+    // (The generic fs wrappers are gone from system-global; webSearch/remember remain universal.)
     expect(systemBlock).toContain('# Built-in Tools');
-    expect(systemBlock).toContain('readFile');
+    expect(systemBlock).toContain('webSearch');
     expect(ambientDts).toContain('declare function ask');
   });
 
@@ -399,26 +400,17 @@ describe('mock-driven Session — bug fixes', () => {
     expect(r.displays).toContain('parsed is undefined');
   });
 
-  it('execShell exposes a non-zero exitCode (and it type-checks)', async () => {
+  it('a default (non-scratch) agent cannot call execShell — it is off the model DTS (only fs:scratch earns it)', async () => {
+    // The generic shell was removed from every agent's surface except the engineer's scratch
+    // sandbox. A default agent calling execShell fails typecheck (Cannot find name 'execShell'),
+    // so the statement never runs. (execShell's own {ok,stdout,stderr,exitCode} shape + the
+    // scratch round-trip are unit-tested in spaces/system-functions.test.ts.)
     const m = createMockStreamFn((_o, { callIndex }) =>
       callIndex === 0 ? `const r = execShell("exit 5");\ndisplay("exit=" + r.exitCode);` : '',
     );
     const r = await runMockSession({ streamFn: m, message: 'go' });
-    expect(r.trace.some((e) => e.type === 'typecheck_error')).toBe(false);
-    expect(r.displays).toContain('exit=5');
-  });
-
-  it('grep distinguishes a missing path from "no matches"', async () => {
-    const m = createMockStreamFn((_o, { callIndex }) =>
-      callIndex === 0
-        ? `const g = grep("x", { path: "/tmp/no-such-dir-xyz-12345" });\ndisplay("ok=" + g.ok + " err=" + (g.error || ""));`
-        : '',
-    );
-    // grep is a system function — enable the fs system space for this run.
-    const r = await runMockSession({ streamFn: m, message: 'go', systemSpaceDirs: [join(SYSTEM_SPACES_ROOT, 'system-global')] });
-    expect(r.trace.some((e) => e.type === 'typecheck_error')).toBe(false);
-    expect(String(r.displays[0])).toContain('ok=false');
-    expect(String(r.displays[0])).toContain('path not found');
+    expect(r.trace.some((e) => e.type === 'typecheck_error')).toBe(true);
+    expect(r.displays).not.toContain('exit=5');
   });
 
   it('a variable bound before a mid-turn error survives into the retry', async () => {

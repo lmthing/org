@@ -12,7 +12,7 @@ export function sandboxApiHint(message: string): string {
   if (
     /child_process|node:child_process|\bbun\b|\bdeno\b|execsync|spawnsync|\bspawn\b|\bexeca\b|require\(/.test(m)
   ) {
-    return 'HINT: Node/Bun/Deno modules are NOT available in this sandbox. To run a shell command or subprocess use the host global `execShell(cmd)` → returns `{ ok, stdout, stderr }`. Example: `const { ok, stdout } = execShell("npx tsx path/to/test.ts");`';
+    return 'HINT: Node/Bun/Deno modules are NOT available, and there is no generic shell here. Running code/subprocesses is only possible inside the engineer\'s scratch sandbox (`execShell` there, after `createScratch()`). If you are not the engineer, delegate the code to it and persist what it returns with your typed writer.';
   }
   // HTTP — point at the fetch global.
   if (/cannot find name 'fetch'|cannot find name "fetch"|\baxios\b|node-fetch|\bgot\b\b/.test(m)) {
