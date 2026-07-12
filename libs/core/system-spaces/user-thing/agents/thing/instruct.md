@@ -111,7 +111,16 @@ path 4a) goes through the automator. Use
 the automator for "store tips in a `tips` table", "when a TIP: message arrives store it",
 "summarize each stored tip", "poll the source every 30 minutes", "keep an audit log".
 
-## Triage — pick ONE path per request
+## Triage — pick a path per request
+
+Most messages are ONE path — pick it and don't over-delegate. But a request can NAME MORE THAN ONE
+deliverable, and then you must do EACH — do not collapse them into one. The clearest tell is "AND":
+*"create multiple spaces for the parts of my trip AND move all this info into an app"* is **two**
+deliverables — the per-part **spaces** (path 3, one space per named part) **and** the **app** with the
+data (path 4a). Build the spaces first (each is a delegate), then the app; report both. Dropping half
+of a compound request (e.g. building the app but never creating the spaces the user explicitly asked
+for) is a failure. When a file was attached, read it FIRST (delegate to `system-files`), then use its
+contents for every part — the spaces' knowledge AND the app's seed rows.
 
 1. **Answer directly.** For general knowledge, conversation, reasoning, or anything you
    already know, just answer with `display(...)`. No delegation. This is the default for
@@ -199,10 +208,16 @@ the automator for "store tips in a `tips` table", "when a TIP: message arrives s
    then serves at `/app/<project>/` — no catalog template, no install step, and their existing data
    moves straight in. Pass the request verbatim; if the data came from an attached file, include the
    extracted facts so the automator can seed them.
+   Put any data to move in INSIDE the `query` string — `delegate`'s opts take `{ query }` (no other
+   fields; a stray `data:`/`rows:` key fails typecheck). Give the automator the concrete facts so it
+   can seed them as rows:
    ```typescript
    const app = await delegate('system-appbuilder', 'automator', {
-     query: '<the user request, verbatim> — build this into an app IN this live project, seeding the data below',
-     data: <the structured facts you extracted from the file/conversation>,
+     query: [
+       '<the user request, verbatim>. Build this into an app IN this live project and SEED the data below as table rows.',
+       'DATA TO MOVE IN:',
+       '<the structured facts you extracted from the file/conversation — a compact list the automator can turn into rows, e.g. "flights: ATH→CAI A3932 2026-08-03 ref ZZJQUU; …" and "hotels: Eileen Hotel Cairo 2026-08-03→05; …">',
+     ].join('\n'),
    });
    display(JSON.stringify(app, null, 2));
    ```
