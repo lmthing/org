@@ -14,7 +14,7 @@ import { mkdtemp, mkdir, writeFile, rm, stat, readFile } from 'node:fs/promises'
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { buildProjectPages } from './pages.js';
+import { buildProjectPages, uiElementsDirResolve } from './pages.js';
 
 const tmpDirs: string[] = [];
 async function scratchProject(): Promise<string> {
@@ -162,4 +162,40 @@ export default function Index() { return <Chat agent="space/agent" />; }
     expect(res.built).toBe(true);
     expect(res.assetManifest.length).toBeGreaterThan(0);
   }, 60_000);
+
+  // Regression (scenario 05): esbuild resolves a package's `"exports"` subpaths EXACTLY —
+  // no directory `index` fallback. `@lmthing/ui` maps `"./elements/*": "./src/elements/*"`
+  // (directories with `index.tsx`), so `@lmthing/ui/elements/forms/input` failed to resolve
+  // in the compute image's project-app build (Vite/workspace resolution had masked it),
+  // breaking EVERY project-app page build the moment `<Chat>` pulled the studio
+  // `SettingsSchemaForm` in. `uiElementsDirResolve` rewrites such a directory import to its
+  // concrete `index.*`. Unit-tested directly because the pod's strict resolution isn't
+  // reproducible under vitest's symlinked-workspace resolution.
+  it('uiElementsDirResolve rewrites a bare elements dir import to its index file', async () => {
+    const uiSrc = await mkdtemp(join(tmpdir(), 'lm-uisrc-'));
+    tmpDirs.push(uiSrc);
+    await mkdir(join(uiSrc, 'elements', 'forms', 'input'), { recursive: true });
+    const indexFile = join(uiSrc, 'elements', 'forms', 'input', 'index.tsx');
+    await writeFile(indexFile, 'export const Input = () => null;');
+
+    const plugin = uiElementsDirResolve(uiSrc);
+    let resolved: { path: string } | undefined;
+    const build = {
+      onResolve: (_opts: unknown, cb: (a: { path: string }) => { path: string } | undefined) => {
+        resolved = cb({ path: '@lmthing/ui/elements/forms/input' }) ?? undefined;
+      },
+    };
+    plugin.setup(build as unknown as Parameters<typeof plugin.setup>[0]);
+    expect(resolved?.path).toBe(indexFile);
+
+    // A specifier with no matching index directory is left for esbuild (returns undefined).
+    let untouched: unknown = 'sentinel';
+    const build2 = {
+      onResolve: (_o: unknown, cb: (a: { path: string }) => unknown) => {
+        untouched = cb({ path: '@lmthing/ui/elements/does/not-exist' });
+      },
+    };
+    plugin.setup(build2 as unknown as Parameters<typeof plugin.setup>[0]);
+    expect(untouched).toBeUndefined();
+  });
 });

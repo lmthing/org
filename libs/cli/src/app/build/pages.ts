@@ -220,7 +220,7 @@ async function runBuild(
   const { endpoints } = await generateAppTypes(projectRoot);
   const manifest = endpointManifest(endpoints);
 
-  const { aliases, nodePaths, designSystem } = resolveEnv(projectRoot);
+  const { aliases, nodePaths, designSystem, uiSrcDir } = resolveEnv(projectRoot);
 
   // Generate the client entry in a scratch build dir (never the repo tree).
   const buildDir = join(projectRoot, BUILD_SUBDIR);
@@ -269,7 +269,10 @@ async function runBuild(
     loader: { '.css': 'css', '.png': 'file', '.svg': 'file', '.jpg': 'file' },
     alias: aliases,
     nodePaths,
-    plugins: [tailwindCssPlugin()],
+    plugins: [
+      ...(uiSrcDir ? [uiElementsDirResolve(uiSrcDir)] : []),
+      tailwindCssPlugin(),
+    ],
     logLevel: 'silent',
   };
 
@@ -448,6 +451,9 @@ function resolveEnv(projectRoot: string): {
   aliases: Record<string, string>;
   nodePaths: string[];
   designSystem: DesignSystem;
+  /** `<@lmthing/ui>/src` — used by {@link uiElementsDirResolve} to fix esbuild's
+   *  exact (no-index) resolution of the package's `./elements/*` directory exports. */
+  uiSrcDir?: string;
 } {
   const here = dirname(fileURLToPath(import.meta.url)); // src/app/build OR dist/…
   const cliRoot = findCliRoot(here);
@@ -486,7 +492,43 @@ function resolveEnv(projectRoot: string): {
   const nodePaths = [...nodeModulesUpward(cliRoot), join(projectRoot, 'node_modules')].filter((p) =>
     existsSync(p),
   );
-  return { aliases, nodePaths, designSystem: resolveDesignSystem(req) };
+  let uiSrcDir: string | undefined;
+  try {
+    uiSrcDir = dirname(req.resolve('@lmthing/ui')); // `.` export is `src/index.ts` → `<ui>/src`
+  } catch {
+    /* ui not resolvable — the plugin simply never matches */
+  }
+  return { aliases, nodePaths, designSystem: resolveDesignSystem(req), uiSrcDir };
+}
+
+/**
+ * esbuild resolves subpaths through a package's `"exports"` map EXACTLY — no directory
+ * `index` fallback and no extension probing (matching Node's exports semantics). `@lmthing/ui`
+ * maps `"./elements/*": "./src/elements/*"`, and every element is a DIRECTORY with an
+ * `index.tsx` (`@lmthing/ui/elements/forms/input` → `src/elements/forms/input/index.tsx`), so
+ * the bare directory target fails to resolve ("Could not resolve @lmthing/ui/elements/forms/input").
+ * Vite (studio/chat) resolves it fine, so it went unnoticed until a project-app page pulled the
+ * chat UI in (`@app/runtime` → `Chat` → `@lmthing/ui/chat` → `IntegrationsTab` → `SettingsSchemaForm`)
+ * — which broke EVERY project-app page build. This plugin (project-app build ONLY, zero blast
+ * radius on the Vite surfaces) rewrites such a directory import to its concrete `index.*` file;
+ * a specifier that already resolves is left untouched (the plugin returns nothing and esbuild
+ * proceeds normally).
+ */
+export function uiElementsDirResolve(uiSrcDir: string): Plugin {
+  const prefix = '@lmthing/ui/elements/';
+  return {
+    name: 'lmthing-ui-elements-dir-resolve',
+    setup(build) {
+      build.onResolve({ filter: /^@lmthing\/ui\/elements\// }, (args) => {
+        const rest = args.path.slice(prefix.length); // e.g. "forms/input"
+        for (const ext of ['index.tsx', 'index.ts', 'index.jsx', 'index.js']) {
+          const candidate = join(uiSrcDir, 'elements', rest, ext);
+          if (existsSync(candidate)) return { path: candidate };
+        }
+        return undefined; // not a directory-with-index — let esbuild resolve normally
+      });
+    },
+  };
 }
 
 /** Resolved design-system assets for the Tailwind CSS build. */
