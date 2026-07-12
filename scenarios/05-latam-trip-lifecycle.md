@@ -216,6 +216,7 @@ progressively fixed in the product (see Issues).
 | Act III.7 — cheap path stays cheap | ✅ A non-matching inbound message costs **0 LLM calls** (no agent session woken) — the code-handler filter works. Webhook verify+emit fires (`{ok:true,events:1}`). |
 | Act III.7 — cron | ✅ Cron hooks author and fire (`forced cron run succeeds`). |
 | Live data model (my fix) | ✅ FIXED. With `writeProjectPage`/`writeProjectApi` + automator hardening, a vague "activity feed on the home page" ask now authors an `activity` table + `activity-create`/`activity-list` APIs + a page with **0 typecheck errors** (was 3 errors + no tables). Manifest shows 3 live tables + endpoints + page. |
+| Act III.6 — `/app/latam/` serves a real built app (my fix) | ✅ FIXED on image `7a2a3a1`. `POST …/app/build` → `built:true`, asset manifest `[assets/entry-*.js, assets/entry-*.css, index.html]`, route `/` → `pages/index.tsx`; `GET /app/latam/` = 200 referencing the built bundle. Was an empty 200 shell (`built:false`, 0 pages) until the `@lmthing/ui/elements/*` esbuild-resolution fix landed. |
 
 ### Where THING broke down (the honest narrative)
 
