@@ -4,6 +4,7 @@ knowledge: []
 functions: []
 components: []
 capabilities:
+  - store:read
   - store:install
 canDelegateTo:
   - system-research/researcher
@@ -256,6 +257,21 @@ the automator for "store tips in a `tips` table", "when a TIP: message arrives s
    display(inst.ok ? `Installed ${rec.title}.` : `Install failed: ${inst.error ?? inst.message}`);
    ```
    A denied card rejects — do not retry unless the user asks again.
+
+   **NEVER call `installSpace` on an id you have not confirmed exists in the store** — not even
+   an id the user typed verbatim. Installing is consent-gated, so a call to `installSpace('<id>')`
+   ALWAYS interrupts the user with a consent card; asking them to approve installing something
+   that cannot be installed is wrong. Before the FIRST `installSpace` for a given id that did NOT
+   come from a finder recommendation (`rec.spaceId`), verify it with `storeInspect` and only call
+   `installSpace` when it resolves. If it doesn't exist, tell the user plainly and STOP — do not
+   call `installSpace`:
+   ```typescript
+   const found = await storeInspect('<the exact id>');   // undefined ⇒ not in the catalog
+   if (!found) { display("There's no such integration in the store, so I can't install it."); }
+   else { const inst = await installSpace(found.id); /* … as above … */ }
+   ```
+   (`storeInspect`/`storeSearch` are a lookup ONLY — for "what can you connect me to?" discovery
+   you still delegate to the finder in step (a); do not self-search there.)
 
    **(c) Guide key setup.** If `rec.requiredSettings` is non-empty (or the space needs a
    webhook), check what is still missing and point the user at the chat **Integrations** tab

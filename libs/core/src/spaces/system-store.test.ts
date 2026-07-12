@@ -17,6 +17,12 @@ function systemStoreDir(): string {
   return dir;
 }
 
+function userThingDir(): string {
+  const dir = defaultSystemSpaceDirs().find((d) => d.endsWith(join('system-spaces', 'user-thing')));
+  if (!dir) throw new Error('user-thing not in defaultSystemSpaceDirs()');
+  return dir;
+}
+
 describe('system-store space', () => {
   it('is a registered system space', () => {
     expect(SYSTEM_SPACE_NAMES).toContain('system-store');
@@ -32,5 +38,22 @@ describe('system-store space', () => {
     expect(finder!.capabilities?.['store:install']).toBeUndefined();
     // It has a real instruct body (not an empty placeholder that would be shadowed).
     expect(finder!.instructBody?.trim().length).toBeGreaterThan(0);
+  });
+});
+
+describe('user-thing (THING) store capabilities', () => {
+  // Regression (scenario 02): THING must carry BOTH store:read and store:install. store:install
+  // grants the consent-gated installSpace; store:read grants storeInspect, which THING uses to
+  // confirm a specific store id EXISTS before calling installSpace — so the user is never shown a
+  // consent card for an install that cannot happen (an id not in the catalog). Dropping store:read
+  // regresses THING into prompting for non-existent installs.
+  it('THING has store:read AND store:install', async () => {
+    const space = await loadSpace(userThingDir(), { requireAgents: false });
+    const thing = space.agents['thing'];
+    expect(thing).toBeDefined();
+    expect(thing!.capabilities?.['store:read']).toBe(true);
+    expect(thing!.capabilities?.['store:install']).toBe(true);
+    // The pre-install existence check must be documented, not just capable.
+    expect(thing!.instructBody).toMatch(/storeInspect/);
   });
 });
