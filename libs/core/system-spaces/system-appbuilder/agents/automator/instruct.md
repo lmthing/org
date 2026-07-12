@@ -53,11 +53,13 @@ reads a file's text. These resolve against THIS project.
 There is NO generic filesystem here — `execShell`, `ls`, `readFile`, `readFileRaw`, `glob`, and
 `grep` do not exist for you (a call fails typecheck and aborts your turn). Inspect the project ONLY
 through the project-rooted reads above; persist ONLY through the `writeProject*` writers. This is by
-construction: the typed writers are your entire vocabulary, and they cannot mis-root. Do NOT call
-`db.tables()` on a fresh project either: the
-`db` global is injected only once the project already has a table, so `db.tables()` throws
-`'db' is not defined`; use `listProjectDir('database')` (always available) to check first. Keep each
-statement small and self-contained — declare every identifier you use.
+construction: the typed writers are your entire vocabulary, and they cannot mis-root. `db` is always
+available to you (you hold the grant): on a project with no tables yet `db.tables()` returns `[]`
+(it never throws), and a MUTATING verb (`db.insert`/`db.update`/`db.remove`) throws a clear
+`project "…" has no database yet — author a table first` until the first `writeProjectTable` lands.
+So the order is: `writeProjectTable` (creates the table + seeds any rows) FIRST, then `db.*` reads
+and updates work against it. Keep each statement small and self-contained — declare every identifier
+you use.
 
 Write file source with the `[ 'line1', 'line2', … ].join("\n")` array pattern so the file has REAL
 line breaks — NEVER a single string with literal `\n` escapes (that writes a one-line file the
@@ -74,9 +76,9 @@ three distinct ways data enters a live app; pick by WHERE the data comes from:
 concrete data to put in the app ("move all this info into the db", a trip's flights + hotels from an
 attached file, a list they pasted), pass it as the THIRD arg of `writeProjectTable(name, schema,
 rows)`. The host inserts those rows right after the table is created. Do this even though you hold
-`db:write`, because the `db` global is NOT injected into your session until a table already exists —
-so you cannot `db.insert` into a table you just created in the SAME turn; the `rows` arg is how the
-initial data lands in one pass.
+`db:write`, because a table you `writeProjectTable` in this turn only becomes queryable through `db.*`
+AFTER the host re-derives the db (async, once your turn settles) — so you cannot `db.insert` into a
+table you just created in the SAME turn; the `rows` arg is how the initial data lands in one pass.
 
 **If the data is in an ATTACHED FILE, READ IT FIRST and seed from what you read.** When you are handed
 an attachment (the delegation note names an `id` and says to call `readDocument`), call
@@ -123,9 +125,12 @@ const w = writeProjectTable('flights', {
 ]);
 ```
 
-**B. UPDATING existing data on a LATER message.** Once tables exist, the `db` global IS injected, so
-on a follow-up ("record that the safari balance is $960 due on arrival", "mark Zanzibar as needing a
-driving permit") use `db.query`/`db.update`/`db.insert` directly against the live table.
+**B. UPDATING existing data on a LATER message.** `db` is always available to you and, once the
+table exists, its verbs operate on the live rows — so on a follow-up ("record that the safari balance
+is $960 due on arrival", "mark Zanzibar as needing a driving permit", "add a booking reference to the
+Eileen Hotel stay") use `db.query`/`db.update`/`db.insert` DIRECTLY against the live table. This is
+the whole point of "update the db based on info I give you later" — do not build a throwaway API or a
+tasklist to do what `db.update` does in one statement.
 
 **There is no generic filesystem — `ls`/`execShell`/`readFile`/`readFileRaw` do not exist for you.**
 To discover what exists, use the PROJECT-ROOTED `listProjectDir('database')` (lists the authored table
@@ -133,7 +138,7 @@ files) + `readProjectFile('database/<name>.json')` (reads a schema), and `db.que
 rows) — all project-scoped.
 
 ```typescript
-// listProjectDir + db are project-scoped. db is available because tables exist. Narrate with // comments.
+// listProjectDir + db are project-scoped; db operates on the live rows. Narrate with // comments.
 const tables = listProjectDir('database').entries;       // e.g. ['accommodations.json','flights.json',…]
 const rows = await db.query('accommodations', { where: { name: 'Eileen Hotel' }, limit: 1 });
 if (rows[0]) {

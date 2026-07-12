@@ -556,8 +556,60 @@ export class SessionManager {
     return this.authoringGlobals;
   }
 
+  /** Stable, per-project `db` handles that forward every verb to whatever db is
+   *  CURRENTLY booted for the project (the {@link projectDbs} cache) — see
+   *  {@link liveProjectDb}. */
+  private liveDbProxies = new Map<string, ProjectDb['db']>();
+
+  /**
+   * A STABLE `db` handle bound to a project, forwarding each verb to whatever db is
+   * booted for it AT CALL TIME (the {@link projectDbs} cache).
+   *
+   * This is what lets a long-lived INTERACTIVE session (THING) expose a working `db`
+   * to its DELEGATES. THING's `appGlobals` is built ONCE — at project open, when the
+   * app usually has no tables yet, so {@link getProjectDb} returns `null`. A delegate
+   * (e.g. the automator) inherits the parent's `appGlobals` and injects `db` at
+   * child-VM creation, reading `impls.db` THEN. A static `db.db` snapshot would freeze
+   * that `null`, so an automator delegated AFTER the first table was authored (which
+   * reboots the cached db) would still find no `db` and fail a row update with
+   * `'db' is not defined` (S06 Act V). A forwarder read at injection time always
+   * reflects the live db. It is also why `db` is now injected on the CAPABILITY grant
+   * alone (matching the DTS, which declares `db` from `db:*` regardless of tables) —
+   * `impls.db` is always present; the verbs throw a clear error, not a ReferenceError,
+   * when the project genuinely has no database yet.
+   */
+  private liveProjectDb(projectId: string): ProjectDb['db'] {
+    const existing = this.liveDbProxies.get(projectId);
+    if (existing) return existing;
+    const live = (): ProjectDb['db'] => {
+      const pdb = this.projectDbs.get(projectId);
+      if (!pdb) {
+        throw new Error(
+          `project "${projectId}" has no database yet — author a table first ` +
+            `(writeProjectTable), then the db verbs become available`,
+        );
+      }
+      return pdb.db;
+    };
+    const proxy: ProjectDb['db'] = {
+      query: (t, o) => live().query(t, o),
+      // The natural "what exists?" probe: answer [] for a db-less project rather than
+      // throw, so a caller can branch on it safely (never a ReferenceError).
+      tables: () => this.projectDbs.get(projectId)?.db.tables() ?? [],
+      insert: (t, v) => live().insert(t, v),
+      update: (t, o) => live().update(t, o),
+      remove: (t, o) => live().remove(t, o),
+      createTable: (s) => live().createTable(s),
+      addColumn: (t, n, c) => live().addColumn(t, n, c),
+    };
+    this.liveDbProxies.set(projectId, proxy);
+    return proxy;
+  }
+
   private async getProjectAppGlobals(root: string, projectId: string): Promise<AppGlobalImpls | undefined> {
-    const db = await this.getProjectDb(root, projectId);
+    // Warm the db cache + wire the db-write→event dispatch runtime (side effects). The
+    // returned `db` is the live forwarder, not this snapshot — see {@link liveProjectDb}.
+    await this.getProjectDb(root, projectId);
     const authoring = this.getAuthoringGlobals();
     const apiRt = await this.getApiRuntime(root, projectId);
     // LIVE-PROJECT authoring writers (S11) — bound to THIS project's own dir (not the
@@ -614,7 +666,10 @@ export class SessionManager {
       },
     });
     return {
-      ...(db ? { db: db.db } : undefined),
+      // Live forwarder (NOT a build-time snapshot): reflects whatever db is booted for
+      // the project when a session/delegate injects it. Present on the CAPABILITY grant
+      // alone — matching the DTS — so a db-granted delegate always finds `db`.
+      db: this.liveProjectDb(projectId),
       // Agent-facing apiCall — re-enter the project's OWN api endpoints by name
       // (same runtime the browser + hooks use). Only present when the project has
       // an `api/` dir; the yield router rejects apiCall() otherwise.
