@@ -28,6 +28,21 @@ Each scenario directory holds a `run.mjs` (the executable spec) and writes
 `sdk/org/scenarios/results/<id>-report.md` plus a raw trace JSON. The **Actual results** section of
 each scenario `.md` is pasted back from that report, so the document is both the plan and the record.
 
+## Repeating this on something else — the workflow
+
+The end-to-end process — **write a resumable live runner → run it Act by Act against prod → triage
+each failure → fix it IN THE PRODUCT with a test → rebuild the image → verify live → report
+honestly** — is captured as a reusable playbook, distilled from scenario 05:
+
+- **[PLAYBOOK.md](./PLAYBOOK.md)** — the meta-process: the hardened harness patterns (checkpointing,
+  keepalive, resume-on-restart, scripted asks, trace-based assertions), the product-fix + image-
+  rebuild-verify loop (7-char image tags, pod upgrade, hot-patching a system-space prompt, the
+  concurrency + CI-rebase gotchas), the re-wake discipline for babysitting a multi-hour run, and the
+  reporting template.
+- **[`_template/run.mjs`](./_template/run.mjs)** — a runner scaffold with every hardening pattern
+  pre-wired. To start a new subject: `cp _template/run.mjs <new-id>/run.mjs`, replace the
+  `SCENARIO_*` config, and write the Acts.
+
 ## The harness
 
 `harness/` is zero-dependency Node ESM. It drives the pod's HTTP API directly — no browser needed —
