@@ -23,7 +23,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConnectionRequest, ConnectionResponse, ConnectionResolver, CronEmitterDef } from '@lmthing/core';
-import { sendJson } from './utils.js';
+import { sendJson, readBody } from './utils.js';
+import { listProjects } from '../projects.js';
 import { createConnectionResolver } from '../connections.js';
 import { emitInternalSignal } from '../internal-signals.js';
 import { makeHookTasklistRunner, type TasklistRunnerManager } from '../tasklist-runner.js';
@@ -35,12 +36,14 @@ import { dispatchEmittedEvents, validateEmitted, type EventDispatchManager } fro
 // ── 6A (concurrent) — imported by production path; see file header. ───────────
 import {
   loadHooks,
+  loadAllHooks,
   dueCronHooks,
   nextCrontabLines,
   crontabSchedule,
   nextRunAt,
   loadHooksState,
   saveHooksState,
+  effectiveDisabled,
   type LoadedHook,
   type HooksState,
   type CronHookDef,
@@ -76,6 +79,9 @@ export interface Hook {
   connections?: string[];
   /** Budget caps forwarded verbatim to `runHeadless`/`delegate`. */
   budget?: HookBudget;
+  /** When true, the hook's export marks it inert. Effective-disabled ALSO folds in
+   *  the per-project state overlay — check via `effectiveDisabled(loaded, state)`. */
+  disabled?: boolean;
 }
 
 /** The result a hook `ctx.delegate` returns — the headless agent run's outcome
@@ -137,6 +143,7 @@ function toFlat(l: LoadedHook): Hook {
     handler?: Hook['handler'];
     connections?: string[];
     budget?: Hook['budget'];
+    disabled?: boolean;
   };
   return {
     slug: l.slug,
@@ -146,6 +153,7 @@ function toFlat(l: LoadedHook): Hook {
     handler: d.handler,
     connections: d.connections,
     budget: d.budget,
+    ...(d.disabled === true ? { disabled: true } : {}),
   };
 }
 
@@ -169,6 +177,10 @@ export interface HookManager extends TasklistRunnerManager {
     origin?: { source: string };
   }): Promise<unknown>;
   getProjectDb(root: string, projectId: string): Promise<{ async: unknown } | null>;
+  /** Re-derive the pod's published artifacts (crontab + webhook manifest + emitter
+   *  cache). Optional — absent under bare `serve` wiring; the disable toggle calls
+   *  it so a disabled cron/webhook drops from the schedule/manifest live. */
+  republish?: () => Promise<void>;
 }
 
 // ── Dispatch ──────────────────────────────────────────────────────────────────
@@ -312,6 +324,10 @@ export async function runHook(
   row?: unknown,
   opts: RunHookOpts = {},
 ): Promise<HookRunResult> {
+  // Disabled hooks are inert — never dispatch, never emit a fired signal. Callers
+  // fold the per-project overlay into `hook.disabled` (effective-disabled) before
+  // calling; this is the shared backstop that also honors an export-level `disabled`.
+  if (hook.disabled === true) return { queued: false };
   // S8 instrumentation: EVERY actual hook dispatch (cron endpoint, db runtime,
   // event handler hooks) funnels through here — one guarded fire-and-forget
   // line. meta stamps the origin slug + incremented cascade depth so a
@@ -418,6 +434,11 @@ export function createHookRunHandler(
       return;
     }
 
+    // Fold the per-project disable overlay into the flat hook so a stale crontab
+    // line (or a manual run) for a disabled hook no-ops in runHook's guard.
+    const state = await loadHooksState(projectRoot);
+    if (state.disabled.includes(slug)) hook.disabled = true;
+
     // Inject the real SPACE-tasklist runner (S9) so a hook handler's
     // `ctx.tasklist.run('<spaceId>/<slug>', seed)` runs headless against this
     // project. Composition point: every cron/manual/boot run funnels through here.
@@ -426,12 +447,130 @@ export function createHookRunHandler(
     });
 
     const now = Date.now();
-    const state = await loadHooksState(projectRoot);
     if (outcome.queued) markPending(state, slug, now);
     else markFired(state, slug, now);
     await saveHooksState(projectRoot, state);
 
     sendJson(res, 200, outcome.queued ? { queued: true } : { ok: true, result: outcome.result });
+  };
+}
+
+// ── 1b. Hooks list + enable/disable (settings UI) ─────────────────────────────
+
+/** One row in the settings hooks list — a projected, non-executing view of a
+ *  loaded hook def plus its effective-disabled state. */
+export interface HookSummary {
+  projectId: string;
+  slug: string;
+  owner: string;
+  type: string;
+  on?: string;
+  every?: string;
+  daily?: string;
+  path?: string;
+  provider?: string;
+  trigger?: string;
+  hasHandler: boolean;
+  disabled: boolean;
+}
+
+/** Read-only projection of a hook def's list-relevant fields (never executes). */
+type HookDefView = {
+  type?: string;
+  on?: { event?: string };
+  every?: string;
+  daily?: string;
+  path?: string;
+  provider?: string;
+  trigger?: string;
+  handler?: unknown;
+};
+
+/**
+ * GET /api/hooks — the pod-global list of every automated hook (project + every
+ * installed space), each with its effective-disabled state. Backs the settings
+ * Hooks tab (grouped by type client-side). A project whose hooks fail to load is
+ * skipped (fail-soft). Pod-global (no projectId) — enumerates all projects.
+ */
+export function createHooksListHandler(
+  root: string | undefined,
+): (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void> {
+  return async (_req, res) => {
+    if (!root) {
+      sendJson(res, 200, { hooks: [] });
+      return;
+    }
+    const projectIds = (await listProjects(root)).map((p) => p.id).filter((id) => id !== 'system');
+    const hooks: HookSummary[] = [];
+    for (const projectId of projectIds) {
+      const projectRoot = join(root, projectId);
+      let loaded: LoadedHook[];
+      try {
+        loaded = await loadAllHooks(projectRoot);
+      } catch {
+        continue; // a project whose hooks fail to load is skipped
+      }
+      const state = await loadHooksState(projectRoot);
+      for (const h of loaded) {
+        const def = h.def as HookDefView;
+        hooks.push({
+          projectId,
+          slug: h.slug,
+          owner: h.owner ?? 'project',
+          type: def.type ?? 'unknown',
+          ...(def.on?.event ? { on: def.on.event } : {}),
+          ...(def.every ? { every: def.every } : {}),
+          ...(def.daily ? { daily: def.daily } : {}),
+          ...(def.path ? { path: def.path } : {}),
+          ...(def.provider ? { provider: def.provider } : {}),
+          ...(def.trigger ? { trigger: def.trigger } : {}),
+          hasHandler: typeof def.handler === 'function',
+          disabled: effectiveDisabled(h, state),
+        });
+      }
+    }
+    sendJson(res, 200, { hooks });
+  };
+}
+
+/**
+ * POST /api/projects/:projectId/hooks/:slug/disabled — body `{ disabled: boolean }`.
+ * Records/clears the slug in the project's `.data/hooks-state.json` disable overlay
+ * (no source rewrite), then republishes so a disabled cron/webhook drops from the
+ * crontab + webhook manifest live. Event hooks honor the overlay at fire time.
+ */
+export function createHookDisableHandler(
+  manager: HookManager,
+  root: string | undefined,
+): (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void> {
+  return async (req, res, params) => {
+    const projectId = params['projectId']!;
+    const slug = params['slug']!;
+    if (!root) {
+      sendJson(res, 404, { error: { status: 404, message: 'no project root configured' } });
+      return;
+    }
+    let body: { disabled?: unknown };
+    try {
+      body = JSON.parse((await readBody(req)) || '{}');
+    } catch {
+      body = {};
+    }
+    const disabled = body.disabled === true;
+    const projectRoot = join(root, projectId);
+    const state = await loadHooksState(projectRoot);
+    const set = new Set(state.disabled);
+    if (disabled) set.add(slug);
+    else set.delete(slug);
+    state.disabled = [...set];
+    await saveHooksState(projectRoot, state);
+    // Re-derive crontab + webhook manifest so a disabled cron/webhook drops live.
+    try {
+      await manager.republish?.();
+    } catch {
+      /* best-effort — the gate itself already honors the overlay */
+    }
+    sendJson(res, 200, { ok: true, slug, disabled });
   };
 }
 
@@ -495,7 +634,10 @@ export async function buildCrontabLines(root: string, projects: string[], server
     // command (a `curl` POST), not a bare URL — else cron tries to exec the URL and fails.
     const urlTemplate = `curl -fsS -X POST http://localhost:${serverPort}/api/projects/${projectId}/hooks/{slug}/run`;
     try {
-      lines.push(...nextCrontabLines(await loadHooks(join(root, projectId)), urlTemplate));
+      const projectRoot = join(root, projectId);
+      const [hooks, state] = await Promise.all([loadHooks(projectRoot), loadHooksState(projectRoot)]);
+      // A disabled cron hook gets no crontab line (drops from the schedule live on republish).
+      lines.push(...nextCrontabLines(hooks.filter((h) => !effectiveDisabled(h, state)), urlTemplate));
     } catch {
       /* skip a project whose hooks fail to load */
     }

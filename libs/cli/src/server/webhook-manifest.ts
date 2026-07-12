@@ -21,7 +21,7 @@
  */
 import { basename, join } from 'node:path';
 import { loadSpace } from '@lmthing/core';
-import { loadHooks, loadSpaceHooks, type LoadedHook, type WebhookHookDef } from '../app/hooks/index.js';
+import { loadHooks, loadSpaceHooks, loadHooksState, effectiveDisabled, type LoadedHook, type WebhookHookDef } from '../app/hooks/index.js';
 import { listProjectSpaceDirs } from './projects.js';
 import { scanEmitterDefs, type EmitterScanResult } from './emitter-manifests.js';
 
@@ -95,6 +95,7 @@ async function scanSpaceHookWebhooks(root: string, projectId: string): Promise<W
   const bindings: WebhookBinding[] = [];
   const spaceDirs = await listProjectSpaceDirs(root, projectId);
   const projectRoot = join(root, projectId);
+  const state = await loadHooksState(projectRoot);
   for (const dir of spaceDirs) {
     const spaceId = basename(dir);
     let hooks: LoadedHook[];
@@ -104,7 +105,7 @@ async function scanSpaceHookWebhooks(root: string, projectId: string): Promise<W
       continue;
     }
     for (const h of hooks) {
-      if (h.def.type !== 'webhook') continue;
+      if (h.def.type !== 'webhook' || effectiveDisabled(h, state)) continue;
       const def = h.def as WebhookHookDef;
       bindings.push({
         projectId,
@@ -175,7 +176,8 @@ export async function buildWebhookManifest(root: string, projects: string[]): Pr
     } catch {
       loaded = [];
     }
-    const webhookHooks = loaded.filter((h) => h.def.type === 'webhook');
+    const state = await loadHooksState(projectRoot);
+    const webhookHooks = loaded.filter((h) => h.def.type === 'webhook' && !effectiveDisabled(h, state));
     for (const h of webhookHooks) {
       const def = h.def as WebhookHookDef;
       bindings.push({
@@ -268,7 +270,10 @@ export async function resolveBinding(
     } catch {
       continue;
     }
-    const hit = loaded.find((h) => h.def.type === 'webhook' && (h.def as WebhookHookDef).path === path);
+    const state = await loadHooksState(projectRoot);
+    const hit = loaded.find(
+      (h) => h.def.type === 'webhook' && (h.def as WebhookHookDef).path === path && !effectiveDisabled(h, state),
+    );
     if (hit) {
       const def = hit.def as WebhookHookDef;
       return {

@@ -115,6 +115,9 @@ export interface CronHookDef {
   /** Providers `ctx.callConnection` may reach (gated at call time; see routes/hooks.ts). */
   connections?: string[];
   budget?: HookBudget;
+  /** When true, this hook is inert — never scheduled/dispatched. Honored from the
+   *  export AND OR'd with the per-project state overlay (see {@link effectiveDisabled}). */
+  disabled?: boolean;
 }
 
 /** The three project-db write kinds (matches core's `DbEmitterEvent`). A db
@@ -142,6 +145,8 @@ export interface EventHookDef {
   /** Providers `ctx.callConnection` may reach (gated at call time; see routes/hooks.ts). */
   connections?: string[];
   budget?: HookBudget;
+  /** When true, this hook is inert — never scheduled/dispatched. See {@link effectiveDisabled}. */
+  disabled?: boolean;
 }
 
 /**
@@ -159,6 +164,8 @@ export interface WebhookHookDef {
   /** `space/agent#action` agent to run for each event (like cron's `trigger`). */
   trigger: string;
   budget?: HookBudget;
+  /** When true, this hook is inert — never scheduled/dispatched. See {@link effectiveDisabled}. */
+  disabled?: boolean;
 }
 
 /** A hook definition — the default export of a `hooks/<slug>.ts` file. */
@@ -408,6 +415,7 @@ export function validateHook(slug: string, file: string, raw: unknown): HookDef 
       ...(hasHandler ? { handler: obj.handler as HookHandler } : {}),
       ...connectionsField(where, obj.connections),
       budget: validateBudget(where, obj.budget),
+      ...(obj.disabled === true ? { disabled: true } : {}),
     };
   }
 
@@ -441,6 +449,7 @@ export function validateHook(slug: string, file: string, raw: unknown): HookDef 
       ...(hasHandler ? { handler: obj.handler as HookHandler } : {}),
       ...connectionsField(where, obj.connections),
       budget: validateBudget(where, obj.budget),
+      ...(obj.disabled === true ? { disabled: true } : {}),
     };
   }
 
@@ -463,6 +472,7 @@ export function validateHook(slug: string, file: string, raw: unknown): HookDef 
       ...(typeof obj.provider === 'string' ? { provider: obj.provider } : {}),
       trigger: obj.trigger,
       budget: validateBudget(where, obj.budget),
+      ...(obj.disabled === true ? { disabled: true } : {}),
     };
   }
 

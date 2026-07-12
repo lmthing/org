@@ -74,8 +74,8 @@ vi.mock('../../app/hooks/index.js', async () => {
     return out;
   }
 
-  function normalize(s: any): { lastFiredAt: Record<string, number>; cron: Record<string, { lastRunAt: number }>; pending: string[] } {
-    return { lastFiredAt: s?.lastFiredAt ?? {}, cron: s?.cron ?? {}, pending: Array.isArray(s?.pending) ? s.pending : [] };
+  function normalize(s: any): { lastFiredAt: Record<string, number>; cron: Record<string, { lastRunAt: number }>; pending: string[]; disabled: string[] } {
+    return { lastFiredAt: s?.lastFiredAt ?? {}, cron: s?.cron ?? {}, pending: Array.isArray(s?.pending) ? s.pending : [], disabled: Array.isArray(s?.disabled) ? s.disabled : [] };
   }
 
   async function loadHooksState(projectRoot: string): Promise<unknown> {

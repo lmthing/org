@@ -35,7 +35,7 @@ import { handleReportBug } from './routes/report-bug.js';
 import { createAppApiHandler } from './routes/app-api.js';
 import { createPageServeHandler } from '../app/pages-serve.js';
 import { buildProjectPages } from '../app/build/pages.js';
-import { createHookRunHandler, bootCatchUpAndSchedule } from './routes/hooks.js';
+import { createHookRunHandler, createHooksListHandler, createHookDisableHandler, bootCatchUpAndSchedule } from './routes/hooks.js';
 import { createInboundHandler } from './routes/webhooks.js';
 import { republishAll, buildRepublishDeps } from './republish.js';
 import { emitInternalSignal, installInternalSignalSink } from './internal-signals.js';
@@ -220,6 +220,10 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // Hook-run endpoint (Phase 6) — the ONE authoritative run path that Studio's manual
   // run, the pod crond, and the boot catch-up/tick all funnel through. Reserved `/api/`.
   router.add('POST', '/api/projects/:projectId/hooks/:slug/run', createHookRunHandler(manager, effectiveLmthingRoot));
+
+  // Hooks list + enable/disable (settings UI)
+  router.add('GET', '/api/hooks', createHooksListHandler(effectiveLmthingRoot));
+  router.add('POST', '/api/projects/:projectId/hooks/:slug/disabled', createHookDisableHandler(manager, effectiveLmthingRoot));
 
   // Inbound-webhook dispatcher (Phase 1) — external `POST /api/inbound/:path` fires the
   // project's `webhook` hook bound to `:path` (globally unique per pod). Reserved `/api/`.

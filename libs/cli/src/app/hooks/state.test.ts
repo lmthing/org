@@ -39,6 +39,7 @@ describe('load / save', () => {
       lastFiredAt: { a: 111 },
       cron: { refresh: { lastRunAt: 222 } },
       pending: ['synth'],
+      disabled: ['old-cron'],
     };
     await saveHooksState(root, state);
     expect(await loadHooksState(root)).toEqual(state);
@@ -57,11 +58,13 @@ describe('normalizeHooksState', () => {
       lastFiredAt: { a: 5, b: 'nope' },
       cron: { c: { lastRunAt: 9 }, d: { lastRunAt: 'x' }, e: null },
       pending: ['ok', 42, null],
+      disabled: ['keep', 7, null],
     });
     expect(normalised).toEqual({
       lastFiredAt: { a: 5 },
       cron: { c: { lastRunAt: 9 } },
       pending: ['ok'],
+      disabled: ['keep'],
     });
   });
 

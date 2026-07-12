@@ -13,6 +13,7 @@
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 /** The on-disk hook state. */
@@ -23,11 +24,14 @@ export interface HooksState {
   cron: Record<string, { lastRunAt: number }>;
   /** Budget-exhausted retry slugs. */
   pending: string[];
+  /** Slugs disabled from the settings UI — the overlay OR'd with a hook's own
+   *  `def.disabled` to decide whether it is inert (see {@link effectiveDisabled}). */
+  disabled: string[];
 }
 
 /** A fresh, empty state. */
 export function emptyHooksState(): HooksState {
-  return { lastFiredAt: {}, cron: {}, pending: [] };
+  return { lastFiredAt: {}, cron: {}, pending: [], disabled: [] };
 }
 
 /** The canonical on-disk path for a project's hook state. */
@@ -83,5 +87,35 @@ export function normalizeHooksState(raw: unknown): HooksState {
   if (Array.isArray(obj.pending)) {
     state.pending = obj.pending.filter((s): s is string => typeof s === 'string');
   }
+  if (Array.isArray(obj.disabled)) {
+    state.disabled = obj.disabled.filter((s): s is string => typeof s === 'string');
+  }
   return state;
+}
+
+/**
+ * The disabled-slug overlay, read **synchronously** (best-effort; `[]` on any
+ * missing/corrupt file). Used on the hot event-dispatch drain path where adding an
+ * `await` would perturb the drain's microtask ordering — a sync read keeps timing
+ * identical while still honoring a live UI toggle.
+ */
+export function disabledSlugsSync(projectRoot: string): string[] {
+  try {
+    const raw = JSON.parse(readFileSync(hooksStatePath(projectRoot), 'utf8')) as { disabled?: unknown };
+    return Array.isArray(raw.disabled) ? raw.disabled.filter((s): s is string => typeof s === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Effective-disabled = a hook is inert when EITHER its export sets `disabled: true`
+ * OR the settings-UI overlay ({@link HooksState.disabled}) lists its slug. Every
+ * activation/registration site skips a hook for which this returns true.
+ */
+export function effectiveDisabled(
+  hook: { slug: string; def?: { disabled?: boolean } },
+  state: HooksState,
+): boolean {
+  return hook.def?.disabled === true || state.disabled.includes(hook.slug);
 }

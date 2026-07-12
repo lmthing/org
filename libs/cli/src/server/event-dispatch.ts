@@ -35,7 +35,7 @@ import { join } from 'node:path';
 
 import { validateOutput, type Emitted, type EmitsSchema } from '@lmthing/core';
 
-import { loadAllHooks, matchEventHooks, type EventHookDef, type LoadedHook } from '../app/hooks/index.js';
+import { loadAllHooks, loadHooksState, effectiveDisabled, matchEventHooks, type EventHookDef, type LoadedHook } from '../app/hooks/index.js';
 import { getOrCreateThreadSession } from './webhook-threads.js';
 import { emitInternalSignal } from './internal-signals.js';
 import { runHook, type Hook, type HookBudget, type HookManager } from './routes/hooks.js';
@@ -178,12 +178,15 @@ export async function dispatchEmittedEvents(args: DispatchEmittedEventsArgs): Pr
   } catch {
     hooks = [];
   }
+  const state = await loadHooksState(projectRoot);
 
   for (const ev of emitted) {
     // Source-qualify: the project scope is literally 'project', a space scope its id.
     const address = `${sourceScope}/${ev.event}`;
     const subs = matchEventHooks(hooks, address);
     for (const hook of subs) {
+      // Disabled (export flag or UI overlay) → inert, for both trigger + handler branches.
+      if (effectiveDisabled(hook, state)) continue;
       // Self-trigger suppression (S8): an event derived from THIS hook's own
       // `hook.fired` signal must not fire it again.
       if (args.skipHookSlug !== undefined && hook.slug === args.skipHookSlug) {

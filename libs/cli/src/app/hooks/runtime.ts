@@ -1,5 +1,6 @@
+import { join } from 'node:path';
 import type { ProjectDb, WriteListener } from '../store.js';
-import { HookDispatcher, matchEventHooks, type DispatchEvent, type LoadedHook } from './index.js';
+import { HookDispatcher, matchEventHooks, disabledSlugsSync, type DispatchEvent, type LoadedHook } from './index.js';
 import { runHook, type HookManager, type Hook } from '../../server/routes/hooks.js';
 import { makeHookTasklistRunner } from '../../server/tasklist-runner.js';
 import { scanEmitterDefs } from '../../server/emitter-manifests.js';
@@ -92,7 +93,11 @@ export class ProjectHookRuntime {
   private setHooks(hooks: LoadedHook[]): void {
     this.eventHooks.length = 0;
     for (const h of hooks) {
-      if ((h.def as { type?: string }).type === 'event') this.eventHooks.push(h);
+      // An export-disabled event hook never joins the subscriber set. The state
+      // overlay (togglable live, without a reload) is checked at drain time.
+      if ((h.def as { type?: string }).type === 'event' && (h.def as { disabled?: boolean }).disabled !== true) {
+        this.eventHooks.push(h);
+      }
     }
   }
 
@@ -208,9 +213,14 @@ export class ProjectHookRuntime {
     if (this.draining) return;
     this.draining = true;
     try {
+      // Read the disable overlay SYNCHRONOUSLY (no extra await — keeps the drain's
+      // microtask ordering intact) so a UI toggle takes effect live without a
+      // runtime reload. Export-disabled event hooks are already dropped in setHooks.
+      const disabledSet = new Set(disabledSlugsSync(join(this.lmthingRoot, this.projectId)));
       await this.dispatcher.drain(async (entry) => {
         const hook = this.eventHooks.find((h) => h.slug === entry.slug);
         if (!hook) return;
+        if (disabledSet.has(hook.slug)) return;
         const prevDepth = this.currentDepth;
         const prevSlug = this.currentSlug;
         this.currentDepth = entry.hookDepth;

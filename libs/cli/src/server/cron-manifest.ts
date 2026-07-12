@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import {
   loadHooks,
   loadHooksState,
+  effectiveDisabled,
   cronIntervalMs,
   nextRunAt,
   crontabSchedule,
@@ -49,9 +50,10 @@ export async function buildCronManifest(
     } catch {
       continue;
     }
-    const cronHooks = loaded.filter((h) => h.def.type === 'cron');
-    if (cronHooks.length === 0) continue;
     const state = await loadHooksState(projectRoot);
+    // A disabled cron hook is not published to the gateway wake manifest.
+    const cronHooks = loaded.filter((h) => h.def.type === 'cron' && !effectiveDisabled(h, state));
+    if (cronHooks.length === 0) continue;
     for (const h of cronHooks) {
       const def = h.def as CronHookDef;
       const lastRunAt = state.cron[h.slug]?.lastRunAt ?? 0;

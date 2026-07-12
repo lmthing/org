@@ -16,7 +16,7 @@
  */
 
 import type { CronHookDef, LoadedHook } from './loader.js';
-import type { HooksState } from './state.js';
+import { effectiveDisabled, type HooksState } from './state.js';
 
 /** The minimum cron granularity — 5 minutes. */
 export const MIN_CRON_INTERVAL_MS = 5 * 60_000;
@@ -85,6 +85,7 @@ export function nextRunAt(def: CronHookDef, fromMs: number): number {
 export function dueCronHooks(hooks: LoadedHook[], state: HooksState, now: number): LoadedHook[] {
   return hooks.filter((h) => {
     if (h.def.type !== 'cron') return false;
+    if (effectiveDisabled(h, state)) return false; // a disabled cron never comes due
     const lastRunAt = state.cron[h.slug]?.lastRunAt ?? 0;
     return now >= nextRunAt(h.def, lastRunAt);
   });
