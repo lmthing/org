@@ -127,6 +127,36 @@ export class Pod {
     }
   }
 
+  // ── uploads (chat attachments) ──────────────────────────────────────────
+  /**
+   * Upload a local file as a chat attachment (the UI's "load a file" action).
+   * `POST /api/uploads` takes base64 + mediaType and returns an AttachmentRef
+   * (`{id, kind, mediaType, filename?, url}`) that a message then references by id.
+   * Pair with `ThingSession.sendWithAttachments()` (WS path — HTTP /message drops attachments).
+   */
+  async upload(filePath, { mediaType, filename } = {}) {
+    const { readFileSync } = await import('node:fs');
+    const { basename, extname } = await import('node:path');
+    const bytes = readFileSync(filePath);
+    const ext = extname(filePath).toLowerCase();
+    const mt =
+      mediaType ??
+      (ext === '.md'
+        ? 'text/markdown'
+        : ext === '.txt'
+          ? 'text/plain'
+          : ext === '.pdf'
+            ? 'application/pdf'
+            : ext === '.csv'
+              ? 'text/csv'
+              : 'application/octet-stream');
+    return this.req('POST', '/api/uploads', {
+      filename: filename ?? basename(filePath),
+      mediaType: mt,
+      data: bytes.toString('base64'),
+    });
+  }
+
   // ── env / lifecycle ─────────────────────────────────────────────────────
   getEnv = () => this.req('GET', '/api/env');
   /** Restart the pod process (used by the auto-resume scenario). Pod exits ~100ms later. */

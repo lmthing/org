@@ -135,11 +135,73 @@ export class ThingSession {
    * A turn blocked on an unanswered ask never goes idle, so an un-handled consent card surfaces as
    * a timeout with the ask still open (which the scenario can assert on).
    */
-  async send(content, { timeoutMs = 600_000, quietMs = 4_000, pollMs = 1_500 } = {}) {
+  async send(content, opts = {}) {
+    return this.#dispatchAndWait(
+      () => this.pod.req('POST', `/api/sessions/${this.sessionId}/message`, { content }),
+      content,
+      opts,
+    );
+  }
+
+  /**
+   * Send a user message WITH attachments (the file-upload path the real UI uses).
+   *
+   * The HTTP `POST /message` route is content-only — it silently drops attachments
+   * (`sessions.ts` wires `sendMessage: (content) => manager.sendMessage(id, content)`, no third
+   * arg). Only the WebSocket path carries `attachmentIds` (`ws/agent.ts` →
+   * `msg.attachments.map(a => a.id)`). So to attach a file we open the same `/api/ws` socket the
+   * `/chat` SPA uses, send one `{type:'sendMessage', content, attachments}` frame, then fall back to
+   * the normal HTTP trace-poll to await the turn (the socket also streams the trace, but reusing the
+   * HTTP settle-loop keeps one code path for "turn finished").
+   *
+   * @param {string} content
+   * @param {Array<{id:string,kind:string,mediaType:string,url?:string,filename?:string}>} attachments
+   *        AttachmentRefs from `pod.upload()`. The server trusts only `id` (re-reads bytes by id).
+   */
+  async sendWithAttachments(content, attachments, opts = {}) {
+    const refs = attachments.map((a) => ({
+      id: a.id,
+      kind: a.kind,
+      mediaType: a.mediaType,
+      url: a.url ?? `/api/uploads/${a.id}`,
+      ...(a.filename ? { filename: a.filename } : {}),
+    }));
+    return this.#dispatchAndWait(
+      () => this.#wsSend({ type: 'sendMessage', content, attachments: refs }),
+      `${content}  [+${refs.length} attachment(s)]`,
+      opts,
+    );
+  }
+
+  /** Open the pod's chat WebSocket, send one frame, resolve when it's flushed, then close. */
+  #wsSend(frame) {
+    const wsBase = this.pod.base.replace(/^http/, 'ws');
+    const tokenQ = this.pod.token ? `&access_token=${encodeURIComponent(this.pod.token)}` : '';
+    const url = `${wsBase}/api/ws?sessionId=${this.sessionId}${tokenQ}`;
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(url); // Node ≥22 global WebSocket — zero-dep
+      const fail = (e) => reject(e instanceof Error ? e : new Error(`ws error: ${JSON.stringify(e)}`));
+      ws.addEventListener('open', () => {
+        ws.send(JSON.stringify(frame));
+        // Give the frame a beat to flush, then close; the turn is awaited over HTTP.
+        setTimeout(() => {
+          try {
+            ws.close();
+          } catch {
+            /* ignore */
+          }
+          resolve();
+        }, 750);
+      });
+      ws.addEventListener('error', fail);
+    });
+  }
+
+  async #dispatchAndWait(dispatch, logLine, { timeoutMs = 600_000, quietMs = 4_000, pollMs = 1_500 } = {}) {
     const startSeq = this.events.length;
     const t0 = Date.now();
-    await this.pod.req('POST', `/api/sessions/${this.sessionId}/message`, { content });
-    this.log('→', content.slice(0, 120));
+    await dispatch();
+    this.log('→', logLine.slice(0, 140));
 
     let lastChange = Date.now();
     let sawWork = false;
