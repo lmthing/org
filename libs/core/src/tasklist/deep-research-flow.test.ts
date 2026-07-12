@@ -12,8 +12,9 @@ import type { StreamOpts } from '../eval/stream-types.js';
 
 /**
  * End-to-end coverage for the `plan -> investigate (forEach) -> synthesize` shape
- * that `system-research`'s `deep_research` tasklist uses — the gap DEVELOPMENT.md
- * flagged ("no dedicated tests for deep_research tasklist logic"). Mirrors the real
+ * that `system-research`'s `deep_research` tasklist uses — a gap the system-space
+ * authoring notes flagged ("no dedicated tests for deep_research tasklist logic").
+ * Mirrors the real
  * tasklist's structure with a stand-in `fetcher` space function that, like
  * `webSearch`/`webFetch`, internally `await fetch(...)`s — a yield NESTED inside
  * another async function. `fetcher`'s return value (`{ tag, status }`) is shaped

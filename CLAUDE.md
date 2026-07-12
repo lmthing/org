@@ -126,12 +126,12 @@ Source of truth is the `org/docs` page. Skills (`@.claude/skills/*`) are local *
 | the on-disk format of a **project** (`database/ api/ pages/ hooks/ events/ spaces/`) | [org/docs/format/project/](../../org/docs/format/project/README.md) |
 | **project-as-application** — how an app is built, served and executed | [org/docs/app/](../../org/docs/app/README.md) · procedure: `@.claude/skills/project-app.md` |
 | the `lmthing` CLI, the pod server, session persistence, `.lmthing/` | [org/docs/cli-api/](../../org/docs/cli-api/README.md) · [rest/](../../org/docs/cli-api/rest/README.md) · procedure: `@.claude/skills/project-server.md` |
-| the shipped system spaces (THING, appbuilder, architect, engineer, store, …) | [org/docs/system-spaces/](../../org/docs/system-spaces/README.md) · authoring notes: [libs/core/system-spaces/DEVELOPMENT.md](./libs/core/system-spaces/DEVELOPMENT.md) |
+| the shipped system spaces (THING, appbuilder, architect, engineer, store, …) | [org/docs/system-spaces/](../../org/docs/system-spaces/README.md) · procedure: `@.claude/skills/system-spaces.md` |
 | **the unified event pipeline** — `events/*` emitter defs, event hooks, `@consent`, store globals | `@lmthing:.claude/skills/events-and-hooks.md` (repo-root skill) · [org/docs/format/space/events/](../../org/docs/format/space/events/README.md) |
 | adding an AI provider | [org/docs/contributing/add-a-provider.md](../../org/docs/contributing/add-a-provider.md) |
 | writing / running tests | [org/docs/contributing/testing.md](../../org/docs/contributing/testing.md) |
 | debugging the eval/yield pipeline | [org/docs/contributing/debugging.md](../../org/docs/contributing/debugging.md) |
-| the design system (tokens, theme, component CSS) | [org/docs/design-system/](../../org/docs/design-system/README.md) · canonical spec: [libs/css/DESIGN.md](./libs/css/DESIGN.md) |
+| the design system (tokens, theme, component CSS) | [org/docs/design-system/](../../org/docs/design-system/README.md) · generated CSS-class catalog: [libs/css/COMPONENTS.md](./libs/css/COMPONENTS.md) |
 | the shared libs' public APIs (`state`, `ui`, `css`, `auth`, `openclaw-compat`) | [org/docs/libs/](../../org/docs/libs/README.md) |
 | the `/chat`, `/studio`, `/computer` surfaces | [chat/](../../org/docs/chat/README.md) · [studio/](../../org/docs/studio/README.md) · [computer/](../../org/docs/computer/README.md) |
 | the whole system (domains, pod model, data flow) | [org/docs/architecture.md](../../org/docs/architecture.md) |

@@ -18,7 +18,7 @@ export interface FetchResult {
  * turn and resumes once the host's actual `fetch()` (see `eval/fetch-yield.ts`)
  * settles. Replaces the old `execSync(curl ...)` primitive, which blocked the
  * single Node thread for the duration of every request (see
- * `system-spaces/DEVELOPMENT.md` §5 — "the big one").
+ * org/docs/system-spaces/README.md — this was "the big one").
  */
 export function createFetchGlobal(
   pushYield: (req: YieldRequest) => void,

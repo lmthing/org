@@ -8,7 +8,7 @@
  *      in @apply directives or className strings
  *
  * Use a design token instead: var(--foreground), bg-primary, text-agent, etc.
- * See @lmthing/css DESIGN.md + tokens.manifest.json for the full palette.
+ * See org/docs/design-system/tokens.md + tokens.manifest.json for the full palette.
  *
  * Legitimately allowed (not flagged):
  *   - Color functions built from tokens: rgb/hsl(var(--…))
@@ -126,6 +126,6 @@ for (const f of findings) {
   console.log(`${f.file}:${f.line}:${f.col}  ${f.kind}  ${f.text}`);
 }
 console.error(
-  `\n[lint-design-tokens] ✗ ${findings.length} violation(s). Use a design token (var(--…) or a token-backed utility like bg-primary). See @lmthing/css DESIGN.md. Escape with a \`ds-lint-ok\` comment when truly necessary.`,
+  `\n[lint-design-tokens] ✗ ${findings.length} violation(s). Use a design token (var(--…) or a token-backed utility like bg-primary). See org/docs/design-system/. Escape with a \`ds-lint-ok\` comment when truly necessary.`,
 );
 process.exit(1);

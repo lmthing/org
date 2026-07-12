@@ -8,7 +8,7 @@
  * A `defineBundledChannelEntry(...)`-style descriptor (identifiable by a
  * `plugin.specifier` field — OpenClaw's own bundled-channel packaging) is
  * detected and rejected with {@link UnsupportedCompatError}; loading those is
- * a later increment (see `../COMPAT.md`).
+ * a later increment (see `org/docs/libs/openclaw-compat.md`).
  *
  * The transpile step reuses the esbuild-transform-then-`new Function`-eval
  * approach from `@lmthing/cli`'s hook loader
@@ -103,7 +103,7 @@ export async function loadPlugin(dir: string, api: unknown, opts?: LoadPluginOpt
   // the same way `defineBundledChannelEntry`'s generated `register` would:
   // record the channel + run its webhook-mode `registerFull` hook. The
   // socket/native runtime behind `plugin.specifier` is NOT loaded (deferred —
-  // Socket-Mode / warm-pod; see COMPAT.md).
+  // Socket-Mode / warm-pod; see org/docs/libs/openclaw-compat.md).
   if (isBundledChannelDescriptor(entry)) {
     await applyBundledChannelDescriptor(entry as unknown as BundledChannelDescriptor, api);
     return { id };

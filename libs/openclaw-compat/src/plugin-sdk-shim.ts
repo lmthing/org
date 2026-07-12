@@ -4,7 +4,7 @@
  * without depending on the real `openclaw` npm package (this host has no
  * npm-registry egress). Wired in as {@link loadPlugin}'s builtin module shims.
  *
- * See `../COMPAT.md` § "Loading a real extension".
+ * See `org/docs/libs/openclaw-compat.md` § "Loading a real extension".
  */
 
 /**
@@ -73,7 +73,7 @@ export async function applyBundledChannelDescriptor(descriptor: BundledChannelDe
   } else {
     a.log?.(
       `[openclaw-compat] bundled channel "${descriptor.id}" has no registerFull (webhook-mode) hook — ` +
-        'recorded only; its Socket-Mode runtime is not loaded (see COMPAT.md)',
+        'recorded only; its Socket-Mode runtime is not loaded (see org/docs/libs/openclaw-compat.md)',
     );
   }
 }

@@ -5,161 +5,54 @@ description: Load when creating or modifying a space (agents, functions, compone
 
 # Skill: Creating or Modifying a Space
 
-A **space** is a directory that bundles agents, tasklists, functions, components, and knowledge. Loaded by `loadSpace(dir)` in `libs/core/src/spaces/load.ts`.
+Applies when you are authoring or editing a **space** — a directory bundling `agents/` plus the
+tooling they reference (`functions/`, `knowledge/`, `tasklists/`, `components/`, `events/`, `hooks/`)
+— whether it is a project space, a shipped system space, a store integration, or a runtime-registered
+one. This file holds **no** format knowledge: the loader rules, the frontmatter allow-list, the
+capability ids and every per-file spec live in `org/docs` and are cited to code there.
 
-## Minimal Space Layout
+## Read first
 
-```
-my-space/
-  agents/
-    my-agent/
-      instruct.md       ← required (frontmatter = all config, body = system prompt)
-  functions/
-    myFn.ts             ← TypeScript, export function myFn(...)
-  components/
-    form/
-      MyForm.tsx        ← Single TSX form component (catalog components only)
-    view/
-      MyView.tsx        ← React view component (web only; terminal gets plain text)
-  tasklists/
-    my-tasklist/
-      01-first-task.md
-      02-second-task.md
-  knowledge/
-    domain/
-      field/
-        index.md        ← frontmatter: type, variable, default; body = OVERVIEW (covers all aspects, surfaced to the agent)
-        aspect-a.md     ← one aspect, loaded on demand via loadKnowledge(domain, field, 'aspect-a.md')
-        aspect-b.md     ← ≥2 aspects per field; do NOT use a single "overview.md"
-```
+- `org/docs/contributing/add-a-space.md` — **the procedure**: which kind of space you're adding, what
+  to scaffold, every way `loadSpace` fails loud, and how to register/install each kind.
+- `org/docs/format/space/README.md` — the on-disk format, the directory layout, how an agent wires up
+  to its tooling.
+- Per file kind: `org/docs/format/space/agents/` (charter + instruct + `frontmatter.md` +
+  `capabilities.md` + `delegation.md`) · `functions/` · `components/` · `tasklists/` · `knowledge/` ·
+  `events/` · `hooks/` · `package.json.md` (store spaces).
+- `org/docs/runtime/spaces-loading.md` — loader/merge internals, system-space merge + collision rules.
+- `org/docs/system-spaces/README.md` — the shipped spaces. To add/modify one, also load
+  `@.claude/skills/system-spaces.md`.
+- `org/docs/runtime-globals/store-and-consent.md` — `installSpace` and the consent gate.
 
-The field's `index.md` body is captured as `KnowledgeField.description` (`load.ts`) and
-rendered in the agent's system prompt, so the overview is always available without a
-`loadKnowledge` call; option files hold the per-aspect detail.
+## Procedure
 
-## `agents/<slug>/instruct.md`
+1. **Pick the kind** — it decides discovery, not the file contents
+   (`org/docs/contributing/add-a-space.md` §0).
+2. **Scaffold** only the dirs you need; every loader but `agents/` returns empty when absent. Write
+   both agent files: `agents/<slug>/charter.md` (fork-safe identity — injected into every fork) and
+   `agents/<slug>/instruct.md` (frontmatter = all config, body = operating instructions).
+3. **Author the tooling the agent names.** Every `functions`/`components`/`knowledge`/
+   `actions[].tasklist` reference is resolved against the sibling directory at load — a dangling ref
+   throws.
+4. **Prefer the catalog before writing a component**, and **never forbid a tool in prose** — scope it
+   in tasklist frontmatter (`role`, `functions:`, `canDelegateTo`); the host enforces it.
+5. **Register it** per kind — project space: drop it in and it is auto-scanned. System space: create
+   the dir **and** add its name to `SYSTEM_SPACE_NAMES`. Store space: add the `lmthing` block to
+   `package.json`, then regenerate the catalog:
+   ```bash
+   pnpm --dir store gen:apps-manifest     # store/projects/manifest.json is GENERATED, never hand-edited
+   ```
+6. **Verify it loads**, then run it:
+   ```bash
+   cd sdk/org && pnpm test libs/core/src/spaces      # loader + system-space DAG/charter guards
+   cd sdk/org && pnpm typecheck
+   node sdk/org/libs/cli/dist/cli/bin.js --space ./my-space "<message>"   # add --mock <file> to run keyless
+   ```
+   A space that threw is silently skipped from pod listings — if it "vanished" from Studio, load it
+   directly and read the throw.
 
-All agent configuration lives in a single frontmatter block. The body is the system prompt.
+## Keep the docs true
 
-```markdown
----
-title: My Agent
-knowledge: []
-functions:
-  - myFn
-  - otherFn
-components:
-  - MyForm
-  - MyView
-actions:
-  - id: do_thing
-    label: Do Thing
-    description: Runs the thing tasklist
-    tasklist: my-tasklist
-canDelegateTo:
-  - other-space/other-agent
----
-
-You are a helpful assistant that...
-
-(Detailed instructions in markdown. This becomes the "Agent Instructions" section of the system prompt.)
-```
-
-- `functions` and `components` scope what is injected into the VM and DTS overlay.
-- `canDelegateTo` entries are eager-loaded; their action summaries appear in the system block under "Delegatable Agents".
-
-## Functions (`functions/*.ts`)
-
-Must export a named function matching the filename (without extension):
-
-```typescript
-export function myFn(arg: string): void {
-  console.log(arg);
-}
-```
-
-The function is transpiled (TypeScript → JS) and eval'd as a script in the VM, with `globalThis['myFn'] = myFn` appended. Use `console.log/warn/error` freely — they route to `renderHost.log`.
-
-For async functions that return values, they can `await` normally inside the VM context. They cannot call value-yielding globals (`ask`, `sleep`, etc.) — those belong in model-generated code only.
-
-## Form Components (`components/form/<Name>.tsx`)
-
-A **single** TSX file (default export) built from catalog components only, exactly like a view component. The former `web.tsx`/`ink.tsx` two-file split has been removed.
-
-Must define a `Props` interface (or inline type) and export a default React component:
-
-```tsx
-import { Slider } from '@lmthing/ui';
-
-interface Props {
-  label?: string;
-  onSubmit?: (value: number) => void;  // ← mark callbacks optional; runtime injects them
-  requiredProp: string;                // ← data props stay required
-}
-
-export default function MyForm({ label, requiredProp }: Props) { ... }
-```
-
-**Mark all callback props optional** (`onSubmit?`, `onChange?`). The runtime injects the submission handler — the model should never pass callbacks. Data props can stay required.
-
-The overlay DTS generator (`overlay.ts`) automatically makes function-typed props optional in the ambient declaration so the model can write `<MyForm requiredProp="x" />` without providing `onSubmit`.
-
-### Prefer the design system before authoring components
-
-A cross-platform **design-system catalog** (`libs/core/src/ui/catalog.ts`) ships ~30 display + ~33 form components that render on **both** terminal and web with **no per-space files**. Reach for these first:
-
-- **Display** — `display(<Stack><Heading>…</Heading><Table columns={…} rows={…}/><Callout variant="success">…</Callout></Stack>)`. Both renderers (`ink-renderer.tsx`, `conversation.tsx`) interpret the catalog; type names are case-insensitive.
-- **Forms** — `const v = await ask(<Form><TextField name="title"/><Select name="env" options={["dev","prod"]}/></Form>)`. A `<Form>` resolves to an object keyed by field `name`; a bare control (`ask(<Select .../>)`) resolves to the single value. Terminal renders an interactive Ink form (`ink-form.tsx`, sequential field stepping); web renders themed controls (`CatalogForm.tsx`). Flattening/coercion is shared via `flattenForm`/`coerceValue` (`libs/core/src/ui/form.ts`).
-
-Only write `components/form/<Name>` when you need custom UI beyond the catalog.
-
-### Theming (web)
-
-Web output is themeable. Components consume `--lm-*` CSS variables (palette + `--radius-lm-*`); the DevTools header toggles light/dark (`libs/ui/src/theme/theme.ts`). A space may ship a `theme.json` (`{ "accent": "#ff8800", "bg": "#101418", … }`) at its root — `serve.ts` injects it as `:root` var overrides.
-
-## Tasklist Files (`tasklists/<name>/<N>-<id>.md`)
-
-```markdown
----
-id: boil_water
-output:
-  water_ready: boolean
-dependsOn: []
-optional: false
-goal: false
----
-
-Boil the water. Confirm when the pot is at a full rolling boil.
-```
-
-- Files are sorted by numeric prefix (`01-`, `02-`, ...).
-- At most one task may have `goal: true` — this is the tasklist's return value. If none is set, the last task (by file order) is the goal.
-- `dependsOn` references other task IDs in the same tasklist.
-- `condition` (optional): a condition-DSL expression evaluated against upstream outputs, e.g. `garnish.done == true`.
-- `optional: true` means failure is non-blocking.
-- `role` (`explore`/`plan` read-only, `general` full), `functions: [...]` (allowlist; `[]` = none), `forEach: "<task>.<field>"` (host fan-out) and `canDelegateTo` (per-task delegation allowlist; `["*"]` unrestricted, `"registered:*"` = runtime-registered spaces) scope the task's fork — enforced by the host, never by prose.
-- `prelude:` (YAML block scalar of TS statements) — the HOST executes these in the fork VM before the model's first turn (yields like `webSearch`/`webFetch`/`delegate` allowed; a failing statement binds its names `undefined` and is noted, never kills the fork). Put every statement that needs zero model judgment here; the model only synthesizes + resolves.
-- Do NOT restate runtime protocol ("plain TypeScript", "no fences", flat-yield rules) in instructs or task bodies — the harness injects `STATEMENT_PROTOCOL` into every context already.
-
-### Calling a tasklist
-
-- `tasklists/<name>/index.md` frontmatter declares the `input:` schema; the body is the overall goal (injected into every task fork). The input schema is a **hard filter**: forks receive ONLY the declared seed keys — declare every key a task legitimately reads.
-- `tasklist(name, seed)` resolves to a `TaskEnvelope` `{ ok, degraded, data, reason?, degradedTasks? }` — branch on `.ok`/`.degraded`; the goal payload is `.data`. Salvaged fields are neutral empties (`""`/`0`/`false`/`[]`/`{}`), never prose.
-
-## Validation Errors
-
-`loadSpace(dir)` throws on:
-- Missing `agents/` directory
-- Zero agents
-- An action's `tasklist` not found in `tasklists/`
-- A `config.functions` entry with no matching file in `functions/`
-
-Fix: check filenames and frontmatter match exactly (case-sensitive).
-
-`loadSpace(dir, { requireAgents: false })` relaxes the first two — used for function-only **system spaces** (see below).
-
-## System spaces (always-on toolkit)
-
-Every user space is automatically merged with the **system spaces** in `libs/core/system-spaces/` (`system-global`, `system-engineer`, `system-architect`, `system-research`, `user-memory`, `user-thing`). The `system-global` space's functions are universally injected into every agent — `readFile`/`writeFile`/`editFile`/`glob`/`grep`/`listDir`, `webSearch`/`webFetch`, `remember`/`recall`/`recallAll`/`forget`, and `todoWrite`/`todoRead` — you do NOT declare them in the agent's `functions:` list, and you should not re-implement them. They appear in the system prompt under `# Built-in Tools`.
-
-The user space **wins on name collisions**, so you can override a system tool by defining a function of the same name. To add/modify a system space or a `fork({ role })`, see `@.claude/skills/system-spaces.md`.
+GROUND TRUTH IS THE CODE. If you change the implementation, update the matching org/docs page in the
+same change (see `org/docs/SYNC.md`).

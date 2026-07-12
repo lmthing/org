@@ -5,142 +5,77 @@ description: Load when debugging the eval/yield pipeline, the turn loop, stateme
 
 # Skill: Debugging the Eval / Yield Pipeline
 
-## Reading the Log Output
+Use this when a run misbehaves inside the runtime itself: the model's statement failed to
+split/typecheck/eval, a variable is "not defined", a yield never resolved or came back bound to the
+wrong value, a fork/delegate/tasklist node ended in error, or the trace output doesn't say what you
+expect. This skill is the **procedure**; the grounded explanation of every symptom and every tool
+lives in `org/docs`.
 
-The CLI logs each step. A healthy session looks like:
+## Read first (this is where the knowledge is)
 
-```
-[turn 1] streaming...
-[stmt] const dish = await ask(<ConfirmDish dish="pasta" />);   ← statement detected + typechecked + evaled
-[model response]
-const dish = await ask(<ConfirmDish dish="pasta" />);           ← full model output
-[/model response]
-Input                                                           ← Ink form rendered
-> yes
-[variables] dish                                                ← yield resolved, VARIABLES appended
-[turn 1] streaming...                                           ← attempt resets to 0, new turn
-```
+- `org/docs/contributing/debugging.md` — the one event spine (`Tracer`) and its five readers.
+  §1 every log line and what emits it · §2 the `--trace` NDJSON file + jq recipes · §3 the DevTools
+  HTTP API (no browser) · §4 the browser DevPanel · §5 deterministic repro with `--mock` ·
+  **§6 the failure playbook** (`X is not defined`, `unexpected token '<'`, `React is not defined`,
+  space function not injected, component-props typecheck errors, `BudgetExceededError`, VM teardown) ·
+  §7 a session on disk · §8 scenarios · §9 a live user pod.
+- `org/docs/runtime/turn-loop.md` — what a yield *is* (§4) and **how it is serviced and bound** (§5:
+  sequential batches, `MAX_SEQUENTIAL_YIELDS`, parallel `Promise.all` per batch, host-side
+  `bindYieldResults`, `vm.getVar` winning over the raw resolved value), the yield router (§6),
+  budgets/episodes (§7), error handling and retries (§8), the trace events emitted (§11), gotchas (§13).
+- `org/docs/runtime/typecheck.md` — the per-statement gate: DTS composition, the function/component
+  overlay, transpile, retry-on-type-error, forward-reference repair.
+- `sdk/org/libs/cli/src/web/AGENT.md` — the agent-facing quickstart for the DevTools HTTP API.
 
-Error paths:
-- `[error] Cannot find name 'X'` — typecheck failure; model retries
-- `[error] X is not defined` — VM runtime error; variable missing from globalThis
-- `[error] [object Object]` — VM error not properly formatted (check `quickjs.ts` error extraction)
-- `[warn] failed to inject function "X"` — space function transpile/eval failed
+## Procedure
 
-## Common Issues
+**1. Reproduce with a trace.** Run the CLI headless and write the NDJSON spine:
 
-### "X is not defined" on a variable from a previous statement
-
-`const x = foo(); bar(x);` — two separate module evals. `x` in module A is invisible to module B.
-
-**Fix in turn-loop.ts**: after each successful `evalStatement`, the code appends `globalThis['x'] = x` to the same module eval. This is driven by `extractBindingNames(stmt)`. If the variable name isn't being extracted (e.g. destructuring pattern), extend `extractBindingNames` in `context/variables.ts`.
-
-### "X is not defined" on a yield-resolved variable in the next turn
-
-`const x = await ask(...)` yields. Next turn: `use(x)` → "x is not defined".
-
-**Cause**: `accumulatedContext` was inside the while loop and reset on every iteration. **Fix**: `accumulatedContext` must be declared outside the while loop in `turn-loop.ts`.
-
-After a yield, the turn loop:
-1. Calls `vm.setVar('x', resolved)` → injects into VM globalThis
-2. Adds the yielding statement to `accumulatedContext` → typechecker sees `const x = await ask(...)`
-3. Sets `attempt = 0; continue` → loops, using the preserved `accumulatedContext`
-
-### JSX "unexpected token '<'"
-
-The VM received raw JSX. The turn loop must call `transpileStatement(stmt)` before `vm.evalStatement(jsCode)`.
-
-`transpileStatement` uses `ts.transpileModule` with `jsx: React, jsxFactory: React.createElement`. The output is plain JS with `React.createElement(...)` calls.
-
-### `React is not defined` / `ComponentName is not defined`
-
-The React shim and component stubs must be injected into the VM before any model code runs.
-
-In `session.ts`:
-- `injectJSXRuntime(componentNames)` sets `globalThis.React = { createElement: ... }` and `globalThis.ComponentName = { displayName: 'ComponentName' }` for each space component.
-- This runs after `createVM()` and `injectGlobals()`, once the agent's components are known.
-
-### Space function not available
-
-`session.ts:injectSpaceFunctions(agentFunctions)` is called after `getAgentFunctions(space, agent)`. Check:
-1. The function name is listed in `agents/<slug>/instruct.md` frontmatter under `functions:`.
-2. The file `functions/<name>.ts` exists and exports a function with the exact same name.
-3. The `[warn] failed to inject function` log message — it will show the actual transpile error.
-
-### Typecheck error on a component's props
-
-The DTS overlay (`overlay.ts`) extracts `interface Props` from the component source and renames it to `<ComponentName>Props`. All function-typed members are made optional (callbacks are injected by the runtime).
-
-If a required data prop is missing, the typecheck error is correct — the model should pass it. If all props are being flagged as missing, check that the component source has an `interface Props` declaration (not a `type Props = ...`).
-
-## Debugging Tools
-
-**Print the generated overlay DTS:**
-```typescript
-import { buildOverlay } from '@repl/core';
-import { getAgentFunctions, getAgentComponents, loadSpace } from '@repl/core';
-
-const space = await loadSpace('./fixtures/cooking');
-const agent = space.agents['chef']!;
-const fns = getAgentFunctions(space, agent);
-const comps = getAgentComponents(space, agent);
-console.log(buildOverlay(fns, comps));
-```
-
-**Print transpiled JS for a statement:**
-```typescript
-import { transpileStatement } from '@repl/core';
-console.log(transpileStatement('const x = await ask(<ConfirmDish dish="pasta" />);'));
-```
-
-**Inspect VM state after an eval:**
-Add temporary `console.log(vm.getScope())` calls in `turn-loop.ts` after `evalStatement`.
-
-## Live observability (the fastest way to debug a real run)
-
-Every run emits a hierarchical trace spine (`sandbox/trace.ts`): each scope
-(session→run→fork→delegate→tasklist→task) is a node with `nodeId`/`parentId`,
-and per-node statements / LLM requests+responses (with retry `attempt`) / yields /
-variables / errors. Two ways to read it:
-
-**Headless via the web agent API** — `--web <port>` then `curl` (no browser):
 ```bash
-node libs/cli/dist/cli/bin.js --space ./fixtures/architect --agent architect \
-  --model M --claude --web 3480 --trace /tmp/run.jsonl &
-curl -s -X POST localhost:3480/api/message -d '{"content":"…"}' -H 'content-type: application/json'
-curl -s localhost:3480/api/state                              # ASCII tree: status/duration/retries
-curl -s "localhost:3480/api/node/<forkId>?tab=statements"     # the exact code a failing fork emitted
-curl -s "localhost:3480/api/node/<forkId>?tab=llm"            # its raw model responses per attempt
-curl -s "localhost:3480/api/events?since=<seq>"               # incremental tail
+cd sdk/org
+node libs/cli/dist/cli/bin.js --space <spaceDir> --agent <slug> \
+  --claude --trace /tmp/run.jsonl "<message>"
 ```
-This is the quickest way to see WHY a fork failed (e.g. "no resolve called" → open its
-`statements`/`llm` tab to find the model wrote prose, or a multi-line `function` decl that
-the boundary detector split into "Function implementation is missing"). Full API: `libs/cli/src/web/AGENT.md`.
 
-**From a `--trace` file with jq** (or replay it in the browser at `?trace=/trace.jsonl`):
+**2. Read the spine.** Histogram first, then the errored nodes — recipes in
+`org/docs/contributing/debugging.md` §2:
+
 ```bash
-jq -r '.type' /tmp/run.jsonl | sort | uniq -c                                  # event histogram
-jq -rc 'select(.type=="llm_response" and (.context|test("fork:"))) | {attempt, text: .text[0:200]}' /tmp/run.jsonl
+jq -r '.type' /tmp/run.jsonl | sort | uniq -c
 jq -c 'select(.type=="node_end" and .status=="error") | {nodeId, error}' /tmp/run.jsonl
 ```
-Note: `llm_progress` is subscriber-only (never written to the file). `buildTraceTree(events)`
-(`@repl/core`) rebuilds the whole tree from a parsed trace array for programmatic inspection.
 
-## The Yield Protocol Step-by-Step
+**3. For anything deep in a tree** (a fork/delegate/tasklist that failed), run with `--web [port]`
+(default 3000) and drive the HTTP API instead — `GET /api/help` is self-describing; `GET /api/state`
+prints the ASCII execution tree, then `GET /api/node/<id>?tab=statements|llm` shows exactly what that
+node wrote and what the model returned per attempt. Routes → debugging.md §3. Note: `lmthing serve`
+writes **no** trace file — on a server/pod the spine is in-memory and read over HTTP.
 
-1. Model outputs: `const x = await ask(<Foo />);`
-2. BoundaryDetector yields the statement as complete.
-3. `runTsc(...)` validates the statement (JSX type, arg shape). If error → retry.
-4. `transpileStatement(stmt)` → `const x = await ask(React.createElement(Foo, {}));` + `globalThis['x'] = x;`
-5. `vm.evalStatement(jsCode)` — sync eval. The module dispatches, hits `await ask(...)`.
-6. `ask(...)` calls `pushYield({ kind: 'ask', args: [id, descriptor], deferred: { resolve, reject } })`.
-7. `drivePendingJobs()` runs — sees `pendingYields.length > 0`, returns immediately.
-8. `evalStatement` returns `{ ok: true }`.
-9. Turn loop detects `pendingYields.length > 0` → sets `pendingYield`, aborts stream.
-10. `processYield(yieldReq)` calls `renderHost.ask(id, descriptor)` → awaits user input.
-11. `yieldReq.deferred.resolve(userValue)` → VM promise resolves (microtask).
-12. `await Promise.resolve()` — flushes microtask queue.
-13. `vm.drivePendingJobs()` — runs VM continuation. The `globalThis['x'] = x` line executes, binding `x`.
-14. `vm.setVar('x', userValue)` — also sets it directly for safety.
-15. `emitVariables({ x: userValue })` → appends VARIABLES block to history.
-16. `attempt = 0; continue` → new turn with `accumulatedContext` containing the yield statement.
+**4. Match the symptom to the playbook** (debugging.md §6) before reading code. Nearly every eval/yield
+failure is one of the entries there, each cited to the file and line that causes it.
+
+**5. Pin it down deterministically** with `--mock <file>` / `LM_MOCK=<file>` (scripted `streamFn`, no
+API key, no nondeterminism) → debugging.md §5. When hunting a genuine QuickJS handle leak, set
+`LM_QJS_DEBUG=1` to load the assertion-tracking debug WASM.
+
+**6. Inspect the generated artifacts** when the failure is in the typecheck gate:
+
+```ts
+// print the per-agent overlay DTS the model is checked against
+import { loadSpace, getAgentFunctions, getAgentComponents, buildOverlay } from '@lmthing/core';
+const space = await loadSpace('<spaceDir>');
+const agent = space.agents['<slug>']!;
+console.log(buildOverlay(getAgentFunctions(space, agent), getAgentComponents(space, agent)));
+```
+
+`transpileStatement` (JSX → `React.createElement`) is **not** re-exported from the package index —
+import it from `sdk/org/libs/core/src/typecheck/transpile.ts` if you need to print transpiled JS.
+To see VM state after an eval, add a temporary `console.log(vm.getScope())` in `turn-loop.ts`.
+
+**7. Write the test.** No fix is done until a test would have caught it →
+`org/docs/contributing/testing.md`. Run from `sdk/org` (`pnpm test <path>`), never the repo root.
+
+## Keep the docs true
+
+GROUND TRUTH IS THE CODE. If you change the implementation, update the matching org/docs page in the
+same change (see `org/docs/SYNC.md`).

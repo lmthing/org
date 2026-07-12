@@ -1,7 +1,7 @@
 /**
  * `@lmthing/openclaw-compat` — foundation for a pod-side host that can run
  * OpenClaw plugins (Phase 5, "OpenClaw messaging extensions as-is"). See
- * `../COMPAT.md` for the feasibility/gap report against real OpenClaw
+ * `org/docs/libs/openclaw-compat.md` for the feasibility/gap report against real OpenClaw
  * plugins.
  */
 

@@ -5,173 +5,60 @@ description: Load when writing or running core tests (vitest patterns, mock prov
 
 # Skill: Writing Tests
 
-Tests are co-located with source files: `libs/core/src/**/*.test.ts`. Run with `pnpm test`.
+Load this when you are adding, running or debugging tests for `sdk/org` — the runtime suite
+(`libs/*/src/**/*.test.ts`), the keyless mock-LLM harness, the subprocess CLI suites, or the live
+prod scenario runner under `sdk/org/scenarios/`.
 
-## Test Setup
+## Read first — the grounded truth lives in org/docs
 
-```typescript
-import { describe, it, expect, vi } from 'vitest';
+- **`org/docs/contributing/testing.md`** — the whole picture: the two overlapping pnpm workspaces and
+  which commands silently do nothing, the vitest configs (what is included, what is excluded and
+  therefore orphaned), the mock-provider builders (`createMockStreamFn` / `mockScript` / `mockMatch`)
+  and their contracts, what lives in `libs/core/src/testing/` and `libs/cli/src/testing/` (incl.
+  which suites are quarantined and why), the `scenarios/` live-prod harness API, and the rules that
+  bite when writing a test.
+- `org/docs/contributing/debugging.md` — tracing the eval/yield pipeline (`--trace`, the NDJSON
+  events you assert on).
+- `org/docs/runtime/turn-loop.md` — the yield protocol a mock test scripts against; why yield-result
+  binding is the turn loop's job, not the VM's.
+- `org/docs/cli-api/commands.md` — every CLI flag, incl. `--mock`, `--trace`, `--web`, `--request`.
+- `org/docs/contributing/README.md` — the contributing index and the hard CI gates.
+
+## Procedure — commands that actually work
+
+```bash
+cd sdk/org                                      # NOT the repo root: root has no `test` script
+pnpm test                                       # whole runtime suite (vitest run)
+pnpm test libs/core/src/tasklist                # one directory (positional arg = path substring)
+pnpm test libs/core/src/tasklist/condition-dsl  # one file
+
+# subprocess CLI suites need the built binary first
+pnpm build
+
+# real-model suite (Azure keys from sdk/org/.env)
+pnpm build && LM_LIVE=1 pnpm exec vitest run libs/cli/src/testing/live-llm.test.ts
+
+# live prod scenarios — run the smoke check before burning time on a scenario
+cd sdk/org/scenarios/harness && node smoke.mjs
+node ../01-newsroom/run.mjs
 ```
 
-No global setup file. Each test file is self-contained.
+**Never use `pnpm --filter <pkg> test`.** `@lmthing/core`, `cli`, `auth`, `utils` and `ui` declare no
+`test` script, so a filtered run exits 0 having run nothing. Use the path filter above.
 
-## Existing Test Patterns
+## Order of operations when adding a test
 
-### BoundaryDetector (`boundary.test.ts`)
-Tests that the streaming statement splitter correctly identifies complete TypeScript statements vs. incomplete fragments. Pattern: call `detector.feed(chunk)` and assert the returned statements array.
+1. Co-locate it: `libs/<pkg>/src/<area>/<thing>.test.ts`. No setup file — import
+   `describe/it/expect/vi` from `vitest` directly.
+2. Reach the model only through a scripted `streamFn` — prefer the shipped builders in
+   `libs/core/src/testing/mock-provider.ts` over hand-rolling one.
+3. Assert on the **trace** (`yield` / `yield_resolved` / `llm_request`) and on host effects, not on
+   model prose.
+4. Run the suite before you push — **no CI workflow runs the tests**; the only hard automated gate is
+   the design-token lint.
+5. **Always test every fix.** No fix is done until a test would have caught it.
 
-### Serializer (`serialize.test.ts`)
-Tests truncation at various sizes, array sampling, depth limits, and each `inspect` query operator (`path`, `slice`, `keys`, `count`, `search`, `filter`). Pattern: call `serialize(value)` and assert the output string.
+## Keep the docs true
 
-### Condition DSL (`condition-dsl.test.ts`)
-Tests boolean expression evaluation against task output maps. Pattern: call `evaluateCondition(expr, outputs)` and assert `true`/`false`.
-
-### TSC Runner (`tsc.test.ts`)
-Tests that the incremental typechecker catches errors and passes valid code. Pattern: call `runTsc({ ambientDts, sessionContext, statement })` and assert `result.ok`.
-
-### Host tools / system spaces / fork roles
-`globals/host-tools.test.ts` (file I/O round-trip, binary refusal, read-only profile), `spaces/system.test.ts` (loader/merge precedence), `spaces/system-functions.test.ts` (memory/todo through host primitives), `fork/roles.test.ts` (read-only enforcement via a real fork), `eval/turn-loop-yield.test.ts` (parallel/destructured yield binding), `context/summarize.test.ts` (history digest).
-
-## Testing the Yield Protocol
-
-A yielding global pushes a `YieldRequest`; assert its `kind`/`args` and that resolving the deferred settles the VM promise:
-
-```typescript
-import { createVM } from '@repl/core';
-import { createAskGlobal } from '../../globals/ask.js';
-import { injectGlobal } from '../../sandbox/host-bridge.js';
-
-it('ask() pushes a yield', async () => {
-  const vm = await createVM();
-  const yields: YieldRequest[] = [];
-  injectGlobal(vm.ctx, 'ask', createAskGlobal((r) => yields.push(r), { ask: vi.fn(), display: vi.fn(), log: vi.fn() }));
-  vm.evalStatement(`const x = ask({ type: 'div', props: {}, children: [] });`);
-  expect(yields).toHaveLength(1);
-  expect(yields[0]!.kind).toBe('ask');
-});
-```
-
-**Do NOT assert that `drivePendingJobs()` binds the variable into scope** — the QuickJS post-`await` continuation does not re-run in this sync model. Variable binding from a resolved yield is the **turn loop's** job (`extractBindingPattern` + `vm.setVar`). To test binding end-to-end (incl. `Promise.all` of multiple yields and object destructuring), drive `runTurnLoop` with a scripted stream and assert the emitted VARIABLES block / VM globals — see `eval/turn-loop-yield.test.ts`.
-
-## Testing host primitives (`host-tools.ts`)
-
-Inject into a bare VM, `evalCode` a call, and dump the returned object:
-
-```typescript
-import { createVM } from '../sandbox/quickjs.js';
-import { injectHostTools } from '../globals/host-tools.js';
-
-const vm = await createVM();
-injectHostTools(vm, { renderHost: silentHost, spaceDir: tmpDir });
-const res = vm.ctx.evalCode(`readFileRaw(${JSON.stringify(path)})`);
-const value = vm.ctx.dump(res.value); res.value.dispose();
-expect(value).toMatchObject({ ok: true });
-```
-
-Pass `profile: { allowWrite: false }` to assert read-only enforcement (e.g. `writeFileRaw` returns `{ ok: false }`). See `globals/host-tools.test.ts`.
-
-## Testing system spaces & their functions
-
-```typescript
-import { loadSystemSpaces, mergeSystemInto } from './system.js';
-const [fs] = await loadSystemSpaces([FS_DIR]);          // function-only space, no agents/
-expect(Object.keys(fs.functions)).toContain('readFile');
-```
-
-To exercise a system function's behavior, inject it like `Session` does (transpile + `evalScript`) over a VM with `injectHostTools`, then `evalCode` calls — see `spaces/system-functions.test.ts` (memory/todo round-trips). Read-only fork enforcement: `fork/roles.test.ts`.
-
-## Testing Space Loading
-
-```typescript
-import { loadSpace } from '@repl/core';
-import { join } from 'node:path';
-
-it('loads cooking fixture space', async () => {
-  const space = await loadSpace(join(process.cwd(), 'fixtures/cooking'));
-  expect(space.agents['chef']).toBeDefined();
-  expect(space.agents['chef']!.config.functions).toContain('addIngredient');
-});
-```
-
-## Mock Clock for sleep()
-
-```typescript
-import type { Clock } from '@repl/core';
-
-function createMockClock() {
-  const pending: Array<{ fn: () => void; at: number }> = [];
-  let now = 0;
-  const clock: Clock = {
-    setTimeout: (fn, ms) => {
-      pending.push({ fn, at: now + ms });
-      return 0 as unknown as ReturnType<typeof setTimeout>;
-    },
-    clearTimeout: () => {},
-  };
-  const advance = (ms: number) => {
-    now += ms;
-    for (const p of pending.splice(0).filter((p) => p.at <= now)) p.fn();
-  };
-  return { clock, advance };
-}
-```
-
-Pass `clock` to `SessionOpts` or `createSleepGlobal` to control time in tests.
-
-## Snapshot / Integration Tests
-
-For full session tests, use a `MockStreamFn` that returns a fixed list of statements:
-
-```typescript
-const mockStreamFn = (stmts: string[]): StreamFn => async () => {
-  let i = 0;
-  return {
-    textStream: (async function* () {
-      for (const s of stmts) yield s + '\n';
-    })(),
-    abort: () => {},
-  };
-};
-```
-
-Then run `new Session(opts, { streamFn }).start(message)` and assert on render host calls.
-
-### Reusable mock provider (`@repl/core` `testing/`)
-
-Prefer the shipped builders over a hand-rolled `mockStreamFn` — they are multi-turn,
-fork/delegate-aware, and honor `abort()`:
-
-```typescript
-import { mockScript, mockMatch, createMockStreamFn } from '@repl/core';
-
-// Sequential queue — turn N emits turns[N]; '' ends the loop.
-const streamFn = mockScript(['display("a");', 'display("b");']);
-
-// First-matching-rule-wins — route forks vs. the orchestrator. A fork's prompt
-// instructs it to call currentTask.resolve(...) — a reliable fork-only marker.
-const streamFn2 = mockMatch(
-  [{ when: /currentTask/, respond: () => 'currentTask.resolve({ ok: true });' }],
-  () => 'const r = await delegate(/* ... */);', // fallback = the session/orchestrator
-);
-```
-
-The same builders drive the CLI via `--mock <file>` (a `.mjs` whose default export is a
-`MockHandler` or `string[]`), so a full keyless run is just
-`bin.js --space … --mock fixtures/<space>/mock.mjs`. See
-`libs/core/src/testing/mock-provider.ts` and `scripts/live-test.sh`.
-
-## Fixtures (reference spaces)
-
-`fixtures/` holds reference spaces for end-to-end testing:
-
-- `fixtures/cooking/` — chef agent with form components, view components, space functions, tasklist DAG. `mock-ask.mjs` = keyless mock that fires an `ask(<ConfirmDish/>)`, used by `web-api.test.ts` to verify space-form rendering + submit in the web UI.
-- `fixtures/sommelier/` — pairing agent with delegation target.
-- `fixtures/research/` — research analyst with simulated web search functions.
-- `fixtures/deep_research/` — deep research with real Tavily API (requires `TAVILY_API_KEY`).
-- `fixtures/browser_use/` — browser agent using chromium headless + Google search.
-- `fixtures/data_analyst/` — CSV analysis with statistics, grouping, and filtering.
-- `fixtures/engineer/` — mock harness for engineer agent CLI tests (agent content lives in `system-spaces/system-engineer`).
-- `fixtures/architect/` — placeholder for architect agent CLI tests (agent content lives in `system-spaces/system-architect`).
-- `fixtures/solver/` — scripted mock providers (`mock*.mjs`). NOTE: the `solver` system space and `solve()` global have been removed; this fixture/test set is pending removal.
-- `fixtures/sauce_master/` — global sauce technique specialist synthesized by the architect; knowledge files for 10 world cuisines; action: `recommend_sauce`.
-- `fixtures/cursor_ci/` — competitive intelligence analyst synthesized by the architect; knowledge files for 5 AI code editors (Cursor, Copilot, Windsurf, Aider, Codeium); action: `analyze`.
+GROUND TRUTH IS THE CODE. If you change the implementation, update the matching org/docs page in the
+same change (see `org/docs/SYNC.md`).

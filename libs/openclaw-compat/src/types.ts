@@ -8,7 +8,7 @@
  * de-risking slice of that surface (`registerTool`, `registerHttpRoute`,
  * `registerChannel`, `runtime.subagent.run`, `log`/`logVerbose`) and make
  * everything else throw {@link UnsupportedCompatError} instead of silently
- * doing nothing or crashing with an opaque `TypeError`. See `../COMPAT.md`
+ * doing nothing or crashing with an opaque `TypeError`. See `org/docs/libs/openclaw-compat.md`
  * for the full gap analysis and the plan for closing it.
  */
 
@@ -102,7 +102,7 @@ export interface RegisteredHttpRoute {
  * A channel registered via `api.registerChannel(...)`. This foundation only
  * *records* the registration (and extracts an inbound/send pair when the
  * shape is recognizable) — actual channel routing (webhook binding, Socket
- * Mode, etc.) is a later increment. See `../COMPAT.md`.
+ * Mode, etc.) is a later increment. See `org/docs/libs/openclaw-compat.md`.
  */
 export interface RegisteredChannel {
   id?: string;
@@ -118,7 +118,7 @@ export interface RegisteredChannel {
  * methods (`registerWebSearchProvider`, `registerProvider`,
  * `registerEmbeddingProvider`, `registerWebFetchProvider`). This foundation
  * only *records* the registration — it does not wire the provider into any
- * lmthing model/search/embedding pipeline (see `../COMPAT.md`).
+ * lmthing model/search/embedding pipeline (see `org/docs/libs/openclaw-compat.md`).
  */
 export interface RegisteredProvider {
   /** Which `register*Provider` method recorded this. */

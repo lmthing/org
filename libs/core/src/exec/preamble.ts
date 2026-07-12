@@ -7,7 +7,8 @@
  * drifted apart: `context/system-block.ts` RUNTIME_PREAMBLE (session +
  * delegate), the fork system-prompt builder in `fork/fork.ts`, and the SCOPE
  * paragraph of `fork/roles.ts` FIREWALL_TAIL — plus the canonical prose in
- * `system-spaces/DEVELOPMENT.md` §5. The harness now injects this string ONCE
+ * the system-space authoring notes (now org/docs/system-spaces/README.md). The
+ * harness now injects this string ONCE
  * per context (via `buildSystemBlock` for session/delegate and the fork
  * builder); role preambles and context-specific sections add only what is
  * genuinely context-specific.

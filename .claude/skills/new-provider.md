@@ -5,53 +5,67 @@ description: Load when adding a new AI provider (azure/anthropic/openai/google/m
 
 # Skill: Adding a New AI Provider
 
-Providers are resolved in `libs/cli/src/providers/resolve.ts`. Each provider maps to a Vercel AI SDK adapter.
+Load this when you need the runtime to reach a new model or vendor. "Provider" means three
+different things in lmthing, wired in three different places — **identify which one you need
+before touching code**, then follow the grounded steps in the doc:
 
-## Steps
+| You want to… | Doc section |
+|---|---|
+| Offer a new model on the managed `lmthing.cloud` proxy (what user pods call by default) | `org/docs/contributing/add-a-provider.md` §A |
+| Call a new LLM vendor directly with its own API key (a `case` in `resolve.ts`) | `org/docs/contributing/add-a-provider.md` §B |
+| Add a web-search backend for the agent `webSearch()` global | `org/docs/contributing/add-a-provider.md` §C |
 
-### 1. Install the SDK adapter
+## Read first
 
-```bash
-pnpm --filter @repl/cli add @ai-sdk/<provider>
-```
+- `org/docs/contributing/add-a-provider.md` — the three paths, every step, every file + line cite.
+- `org/docs/cloud/litellm.md` — LiteLLM architecture, `model_list`, `ENABLED_MODELS`, pricing/markup.
+- `org/docs/cloud/billing-and-tiers.md` — tier key allowlists and budget impact of a new model.
+- `org/docs/cli-api/commands.md` — `--model`, model aliases, provider env vars.
 
-### 2. Add a `case` in `libs/cli/src/providers/resolve.ts`
+## Procedure
 
-```typescript
-case '<provider>': {
-  const { createProvider } = await import('@ai-sdk/<provider>');
-  const client = createProvider({
-    apiKey: process.env['PROVIDER_API_KEY'],
-    // other config from env
-  });
-  return client(modelId);
-}
-```
-
-The `provider` and `modelId` strings come from splitting the alias on `:` — e.g. `azure:DeepSeek-V4-Flash` → `provider = 'azure'`, `modelId = 'DeepSeek-V4-Flash'`.
-
-### 3. Add model aliases to `.env`
+**Managed model (§A)** — after editing `ENABLED_MODELS` (gateway + pricing generator, they must
+match) and adding prices to `sdk/org/libs/cli/prices/azure.json`:
 
 ```bash
-LM_MODEL_XS=<provider>:<modelId>
+cd cloud && pnpm litellm:generate-models     # prints the model_list block
+# paste into devops/argocd/core/litellm.yaml, then:
+kubectl rollout restart deploy/litellm -n lmthing   # ConfigMap changes do NOT roll pods
+```
+
+**Raw AI-SDK provider (§B)** — add the adapter, then a `case` in
+`sdk/org/libs/cli/src/providers/resolve.ts`:
+
+```bash
+pnpm --filter @lmthing/cli add @ai-sdk/<provider>
+```
+
+Copy the conventions from the existing cases (lazy `await import`, `.chat(modelId)` on
+OpenAI-compatible surfaces, `as unknown as LanguageModel`, throw on missing creds) and update
+the `default` error string. Audio? The transcription path is a **separate** switch in
+`providers/transcribe.ts`.
+
+Point an alias at it with **no code change** — `resolveAlias` reads `LM_MODEL_<NAME>` generically:
+
+```bash
 LM_MODEL_M=<provider>:<modelId>
 ```
 
-### 4. Test it
+Test:
 
 ```bash
-node libs/cli/dist/cli/bin.js --model <provider>:<modelId> --space ./fixtures/cooking "hello"
+node sdk/org/libs/cli/dist/cli/bin.js --model <provider>:<modelId> --space ./fixtures/cooking "hello"
 ```
 
-## Azure specifics
+**Search provider (§C)** — unit tests stub `fetch`:
 
-Azure requires `AZURE_RESOURCE_NAME` and `AZURE_API_KEY`. The model ID is the deployment name (not the canonical model name).
+```bash
+cd sdk/org && pnpm test libs/core/src/spaces/system-functions
+```
 
-## Alias resolution
+## Keep the docs true
 
-Aliases live in `libs/cli/src/providers/aliases.ts`. The `resolveAlias(str)` function:
-1. Checks if `str` matches a known single-letter alias (XS, S, M, L, L_R, M_R)
-2. Reads `process.env['LM_MODEL_' + alias]` for the full provider:modelId
-3. Falls through to return `str` as-is if not an alias
-
-To add a new alias letter, extend the union type and the env var map in `aliases.ts`.
+GROUND TRUTH IS THE CODE. If you change the implementation, update the matching org/docs page in
+the same change (see `org/docs/SYNC.md`). After adding a provider: §A → `org/docs/cloud/litellm.md`;
+§B → `org/docs/contributing/add-a-provider.md` (its list of implemented cases) + `org/docs/runtime/`;
+§C → `org/docs/cloud/render.md`.

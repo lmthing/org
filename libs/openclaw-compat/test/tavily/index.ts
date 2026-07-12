@@ -3,7 +3,7 @@
 // repos/openclaw/openclaw/contents/extensions/tavily/index.ts`). Not
 // modified — this is the real Tavily plugin entry, run unmodified against
 // this package's compat `api` (via `loadPlugin`'s `moduleOverrides`, see
-// `../../src/tavily-load.test.ts`). See `../../COMPAT.md` § "Loading a real
+// `../../src/tavily-load.test.ts`). See `org/docs/libs/openclaw-compat.md` § "Loading a real
 // extension (Tavily) — proven".
 
 // Tavily plugin entrypoint registers its OpenClaw integration.

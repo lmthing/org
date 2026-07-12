@@ -8,7 +8,7 @@
 // (no npm-registry egress), so this stub reproduces only the real function's
 // EXPORT SIGNATURE closely enough to exercise
 // `@lmthing/openclaw-compat`'s `registerWebSearchProvider` recording. See
-// ../../../COMPAT.md.
+// org/docs/libs/openclaw-compat.md.
 //
 // Real signature: `export function createTavilyWebSearchProvider(): WebSearchProviderPlugin`.
 

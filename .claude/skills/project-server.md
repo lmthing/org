@@ -3,63 +3,46 @@ name: project-server
 description: Load when working on the lmthing project server, session persistence, the .lmthing/ layout, the project/session/space HTTP APIs, or space discovery.
 ---
 
-# Skill: Projects & the `lmthing` Server
+# Skill: Projects & the `lmthing` pod server
 
-`lmthing` is the user-facing entry point: a project-aware multi-session web server where users chat with **THING**, create projects, and upload documents/instructions. State lives in a cwd-rooted `.lmthing/` tree:
+Use this when you are editing `sdk/org/libs/cli/src/{cli,server}/**` — the `lmthing` binary, the one-process/one-port pod server (SPA catch-all + `/api/*` REST + WS + the served project-app), the `.lmthing/` root and system-space materialization, session persistence/resume, or project & space discovery.
 
+## Read first (the grounded truth)
+
+Do not trust anything you remember about these routes or files — read the page.
+
+| Need | Page |
+|---|---|
+| the CLI + pod server overview: one process/one origin, the `.lmthing/` root layout, system-space reconciliation, boot order, ports | `org/docs/cli-api/README.md` |
+| every flag, subcommand, env var (`serve`, `init`, `--request`, `--mock`, `--web`, `--adopt-system-spaces`, …) | `org/docs/cli-api/commands.md` |
+| the full route table (registration order = precedence), auth/gating conventions, WS upgrades, per-session sub-routes | `org/docs/cli-api/rest/README.md` |
+| a specific route group | `org/docs/cli-api/rest/{projects,sessions,spaces,store-spaces,apps,hooks,webhooks,env,fs,uploads,budget,misc}.md` |
+| the served project-app: what boots, page build, api runtime, the two mounts, CSP, `@app/runtime`, contracts | `org/docs/app/README.md` · `org/docs/app/{routes,views,features}.md` |
+| session snapshots, resume, history summarization, tracing (the `Session` API itself) | `org/docs/runtime/sessions.md` |
+| what the shipped system spaces are | `org/docs/system-spaces/README.md` |
+
+## Procedures
+
+**Run the server locally**
+
+```bash
+cd sdk/org
+pnpm thing                                  # CLI + web app on one port, both hot-reloading
+node libs/cli/dist/cli/bin.js serve         # or: the built binary (default :8080)
+pnpm test libs/cli/src/server               # server tests
 ```
-<cwd>/.lmthing/
-  system/{system-global,system-engineer,system-architect,system-research,user-memory,user-thing}/   ← materialized by `lmthing init`
-  user/                       ← default project
-    spaces/                   ← architect-synthesized spaces for this project
-    documents/  instructions.md  project.json
-  <project>/                  ← additional projects (same shape)
-```
 
-## Commands
+**Add or change a REST route**
 
-- **`lmthing init`** (keyless) copies the bundled system spaces into `.lmthing/system/` and scaffolds the default `user` project. Code: `materializeRuntime` in `libs/cli/src/cli/runtime-init.ts` (uses `cpSync` + `defaultSystemSpaceDirs()`), which also writes a per-space shipped-hash manifest (`.lmthing/system/.shipped.json`).
-- **On every boot** `ensureRuntime` → `syncSystemSpaces` reconciles materialized system spaces against the shipped source: a PRISTINE copy (matching the recorded hash) auto-adopts a source/image update; a locally-modified copy is held back (adopt with `--adopt-system-spaces` / `LM_ADOPT_SYSTEM_SPACES=1`, which backs it up first). So source edits and image upgrades flow in without a stale-copy surprise.
-- **`lmthing`** (no args) launches the multi-session server (`libs/cli/src/server/{serve.ts,session-manager.ts,projects.ts}`). A provider/API key is required. A project session sets `spaceDir = .lmthing/<project>/` (loaded permissively — `requireAgents:false` — since the `thing` agent comes from the merged system spaces), `agentSlug = 'thing'`, `systemSpaceDirs = .lmthing/system/*`, `preloadSpaceDirs = .lmthing/<project>/spaces/*`, and `projectSpacesDir = .lmthing/<project>/spaces`.
-- **`lmthing --request "<message>"`** — headless single-shot mode. Materializes the runtime if needed, runs the THING agent against `--space` (or `process.cwd()` by default), streams output to stdout with no TUI, then exits. Pipe-safe (`InkRenderHost` plain mode). Combine with `--agent`, `--model`, `--mock`, `--trace`, and other single-run flags.
+1. Write the handler in `sdk/org/libs/cli/src/server/routes/<group>.ts` — signature `(req, res, params, ctx) => Promise<void>`; use `readBody`/`sendJson` from `routes/utils.ts`.
+2. Register it in `startSessionServer` (`sdk/org/libs/cli/src/server/serve.ts`). **Registration order is precedence** (first match wins): literal `/api/*` and `/app/*` routes must stay registered before the `:projectId` root mounts, and specific sub-routes before their bare parent.
+3. Add a co-located test; run `cd sdk/org && pnpm test libs/cli/src/server`.
+4. Update the row in `org/docs/cli-api/rest/README.md`'s route table **and** the owning sub-page in the same change.
 
-  ```bash
-  lmthing --request "Research TypeScript decorators and create a space about them."
-  lmthing --space ./my-project --request "Summarize the documents folder."
-  lmthing --mock fixtures/mock.ts --request "What is 2+2?"  # keyless
-  echo | lmthing --request "One-liner answer only."          # fully piped
-  ```
+**Add a worker-run seam** (space emitter, space hook handler, code node): also add its entry to `sdk/org/libs/cli/tsup.config.ts`. Unit tests run from `src/` and will not catch a missing dist entry — the image ships broken.
 
-## HTTP API
+**Change the `.lmthing/` layout or the system spaces**: touch `sdk/org/libs/cli/src/cli/runtime-init.ts` (`materializeRuntime` / `syncSystemSpaces` / `runtimeNeedsInit`) and update `org/docs/cli-api/README.md`'s "The pod root" section.
 
-Beyond the existing session/ws routes:
+## Keep the docs true
 
-- `GET/POST /api/projects`, `DELETE /api/projects/:id`, `GET/PUT /api/projects/:id/instructions`, `GET/POST /api/projects/:id/documents`
-- `GET /api/projects/:id/sessions` (list persisted sessions)
-- `GET /api/projects/:id/spaces` (list spaces created under the project — `listProjectSpaces`)
-- `POST /api/sessions` accepts `{ projectId }` (default `user`) and an optional `resumeId` to rehydrate a persisted session.
-- `POST /api/spaces { name, files }` writes an edited space to disk and returns its `spaceDir`.
-
-## Session persistence
-
-`SessionManager` (`libs/cli/src/server/session-manager.ts`) snapshots each project session to `<root>/<project>/sessions/<sessionId>/`:
-
-- `snapshot.json` — VM scope + history, via `Session`'s `saveSnapshot`.
-- `meta.json` — title/createdAt/messageCount.
-- `trace.json` — the hub's buffered trace events.
-
-`persistSession` runs (best-effort) after each message and on dispose. Creating a session with `resumeId` loads the snapshot dir, marks `needsResume`, and the next `sendMessage` calls `session.resume(...)`; the persisted trace is replayed into the hub so the WS `trace_snapshot` rebuilds the full execution tree (fixes the "tree collapsed to one row after restore" bug).
-
-## Web UI shell
-
-The web UI is the unified SPA in `apps/web/` — three product surfaces as TanStack Router client-side routes. The `/` route redirects to `/studio`, `/computer`, or `/chat` based on the request hostname (or `/studio` for unknown hosts, including localhost).
-
-- **`/chat`** — mounts `ChatShell` from `libs/ui/src/chat/app/ChatShell.tsx`. That component wraps `AppShell` (`AppShell.tsx`) with its sidebar, chat transcript, doc/instructions editor, and toggleable DevPanel; `main.tsx`-style boot logic is encapsulated in `ChatShell`.
-- **`/studio`**, **`/studio/$projectId`** — Studio IDE surface (space/project browser + always-on THING chat dock).
-- **`/computer`**, **`/computer/dashboard`** — Computer autonomous-use surface.
-
-`lmthing serve` (the bare `lmthing` command) calls `createStaticApps(resolveAppDist())` and serves the built SPA as a catch-all for all non-`/api` paths (`LM_APP_DIST` overrides the dist location).
-
-## Space discovery
-
-Preloaded project spaces are delegatable (in the registry); the server also enumerates them via `GET /api/projects/:id/spaces` (`listProjectSpaceDirs`), so the UI can list a project's synthesized spaces across sessions.
+GROUND TRUTH IS THE CODE. If you change the implementation, update the matching org/docs page in the same change (see `org/docs/SYNC.md`).

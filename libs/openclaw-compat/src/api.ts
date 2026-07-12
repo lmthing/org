@@ -189,7 +189,7 @@ function exposeProviderAsTool(
   }
 }
 
-/** Record a `register*Provider(...)` call into the registry (never throws — see COMPAT.md). */
+/** Record a `register*Provider(...)` call into the registry (never throws — see org/docs/libs/openclaw-compat.md). */
 function recordProvider(
   registry: PluginRegistry,
   host: CompatHost,
@@ -204,7 +204,7 @@ function recordProvider(
   const id = (provider as Record<string, unknown>).id;
   host.log(
     `[openclaw-compat] registered ${kind} provider "${typeof id === 'string' ? id : '(unnamed)'}" ` +
-      '(recorded; search/fetch providers are also exposed as tools — see COMPAT.md)',
+      '(recorded; search/fetch providers are also exposed as tools — see org/docs/libs/openclaw-compat.md)',
   );
   exposeProviderAsTool(registry, host, kind, provider as Record<string, unknown>);
   return registered;
@@ -301,7 +301,7 @@ export function createCompatApi(
       registry.addChannel(channel);
       host.log(
         `[openclaw-compat] registered channel "${channel.id ?? channel.name ?? '(unnamed)'}" ` +
-          '(recorded only — channel routing is not implemented in this foundation, see COMPAT.md)',
+          '(recorded only — channel routing is not implemented in this foundation, see org/docs/libs/openclaw-compat.md)',
       );
       return channel;
     },

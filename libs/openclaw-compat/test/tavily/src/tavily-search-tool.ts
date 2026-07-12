@@ -8,7 +8,7 @@
 // reproduces only the real function's EXPORT SIGNATURE and return SHAPE
 // (`{ name, description, parameters, execute(toolCallId, params) }`) closely
 // enough to exercise `@lmthing/openclaw-compat`'s factory-form
-// `registerTool` wiring end-to-end. See ../../../COMPAT.md.
+// `registerTool` wiring end-to-end. See org/docs/libs/openclaw-compat.md.
 //
 // Real signature: `export function createTavilySearchTool(api: OpenClawPluginApi, ctx?: TavilyToolConfigContext)`.
 

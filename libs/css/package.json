@@ -17,7 +17,6 @@
     "src",
     "scripts",
     "tokens.manifest.json",
-    "DESIGN.md",
     "COMPONENTS.md"
   ],
   "sideEffects": [

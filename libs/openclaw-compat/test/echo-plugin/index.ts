@@ -12,7 +12,7 @@
 //     register(api) { ... },
 //   });
 //
-// See ../../COMPAT.md for what wiring up the real `openclaw/plugin-sdk/*`
+// See org/docs/libs/openclaw-compat.md for what wiring up the real `openclaw/plugin-sdk/*`
 // subpaths requires.
 
 function definePluginEntryLocal<T extends { id: string; register: (api: unknown) => unknown }>(entry: T): T {

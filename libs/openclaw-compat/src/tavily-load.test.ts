@@ -4,7 +4,7 @@
  * runs its actual `register(api)` call sequence against this package's
  * compat `api` — proving the loader + api can carry a real extension, not
  * just the synthetic `echo-plugin` fixture in `loader.test.ts`. See
- * `../COMPAT.md` § "Loading a real extension (Tavily) — proven".
+ * `org/docs/libs/openclaw-compat.md` § "Loading a real extension (Tavily) — proven".
  *
  * What's real: the entry file's source (verbatim from GitHub), the
  * `definePluginEntry` → `.register(api)` call sequence, `registerTool`'s

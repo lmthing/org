@@ -5,117 +5,67 @@ description: Load when building or modifying a project-as-application — a proj
 
 # Skill: Project-as-application
 
-A **project** can own a full **application**, not just spaces. Alongside `spaces/`, a project root
-holds `database/ pages/ api/ hooks/` (siblings of `spaces/`, not inside any one space). Spaces stay
-the reusable agent-capability layer; the project is the app + its data, and several spaces in one
-project share one database and one page bundle.
+Load this when you are touching a **project's app layer** — the `database/ api/ pages/ components/
+hooks/ events/` pillars that sit as siblings of `spaces/` in a project root — or the machinery around
+it: the capability-gated authoring globals, the `system-appbuilder` space, the pod's app serving, or
+the store install path.
 
-- **Full design** (serving/domains, Studio admin/dev, safety, boot sequence, phases): [`project-as-application.md`](../../project-as-application.md)
-- **Phased build plan** (how it was implemented, DoD gate, push protocol): [`project-as-application-implementation.md`](../../project-as-application-implementation.md)
-- **Quick authoring reference** (file formats, worked examples): [`SPACE_DEVELOPMENT.md`](../../SPACE_DEVELOPMENT.md) §7
-- **Worked examples** (one concrete app each): `blog-application.md`, `health-application.md`, `kitchen-application.md`, `trips-application.md`
-- **Shipped catalog apps**: `store/projects/{blog,health,kitchen,trips,demo-feed}/` (monorepo), indexed by `store/projects/manifest.json`
+This file holds **no knowledge**. Everything factual about the format, the runtime and the globals
+lives in `org/docs/` and is cited to code there.
 
-## The layer, and where each piece lives
+## Read first
 
-| Surface | On disk | Runtime | Code |
-|---|---|---|---|
-| **db** | `database/<table>.json` (one file per table; table + every column/relation needs a `description`) | SQLite in the pod, one file per project | `libs/core/src/db/` (`schema.ts`, `types.ts`) |
-| **api** | `api/<route>/<METHOD>.ts` (dir = route, filename = HTTP method) | **Node, worker-isolated** — crash boundary, not a security boundary | `libs/cli/src/app/` (runtime), `libs/core/src/app/build/contracts.ts` |
-| **pages** | `pages/*.tsx` (file-based routing; `_app.tsx`/`_layout.tsx` are non-route wrappers) | **client-side React** (no pod-side loader); data via `@app/runtime` (`useApi`/`useApiMutation`/`apiCall`) | `libs/core/src/app/build/pages.ts`, `libs/cli/src/app/pages-serve.ts` |
-| **hooks** | `hooks/<slug>.ts` (`type: 'cron'` or `type: 'event'`; declarative `trigger:` or imperative `handler:`) — plus `events/<name>.ts` emitter defs | cron rides the pod crond (prod) / 60s tick (dev); db-write dispatch is **in-proc, decoupled from the write** (enqueue → drain after the eval, never re-entrant) | app runtime in `libs/cli/src/app/` |
+| You are touching… | Read |
+|---|---|
+| the **on-disk format** you author (the pillars, the descriptor files, the capability gate) | `org/docs/format/project/README.md` |
+| a specific pillar | `org/docs/format/project/database/README.md` · `api/README.md` · `pages/README.md` (+ `pages/app-file.md`, `pages/layout-file.md`) · `components/README.md` · `hooks/README.md` (+ `cron.md`, `event.md`, `database.md`) · `events/README.md` · `spaces/README.md` |
+| the **served app** — boot, page build, serving/CSP, the api runtime, typed contracts, the auth boundary | `org/docs/app/README.md` · `org/docs/app/routes.md` · `org/docs/app/views.md` · `org/docs/app/features.md` |
+| the **authoring globals** — `writeTableSchema`/`writeApi`/`writePage`/`writeHook`, the `writeProject*` live twins, `createProject`/`selectProject`, `apiCall`, and exactly what gates each | `org/docs/runtime-globals/app-authoring.md` |
+| the `db` global itself | `org/docs/runtime-globals/data-db.md` |
+| the `capabilities:` frontmatter grammar | `org/docs/format/space/agents/capabilities.md` |
+| the event/hook pipeline the live writers republish into | `org/docs/runtime-globals/events-and-integrations.md` · repo-root skill `@lmthing:.claude/skills/events-and-hooks.md` |
+| the admin/build/install REST endpoints | `org/docs/cli-api/rest/projects.md` · `org/docs/cli-api/rest/apps.md` |
+| the `system-appbuilder` space | `org/docs/system-spaces/README.md` · the source of truth for its agents is their frontmatter: `libs/core/system-spaces/system-appbuilder/agents/*/instruct.md` |
+| styling inside `pages/`/`components/` (mandatory) | `org/docs/design-system/README.md` |
 
-**Hooks are event hooks now.** `{type:'database'}` was REMOVED — a project-db write auto-emits the
-synthetic event `project/db.<table>.<insert|update|remove>` (payload IS the row), so react with
-`{ type:'event', on:{ event:'project/db.<table>.<event>' }, handler }` where `ctx.input` is the row.
-Optionally add an `events/<name>.ts` **db emitter def** to turn a raw write into a curated typed event.
-Full events/hooks authoring → repo-root `@lmthing:.claude/skills/events-and-hooks.md`.
+## Procedure
 
-Full file-format detail is in **SPACE_DEVELOPMENT.md §7** — don't duplicate it; read it before authoring.
+**Authoring an app**
 
-## The capability model (this is the core invariant)
+1. **Do not author an app inline.** THING delegates to `system-appbuilder`'s `app-architect`, which
+   fans out to the specialist agents. Change the *space* (its agents' `capabilities:`, instructions,
+   `build_app` tasklist), not the caller.
+2. **One authoring call per file.** Never a single giant scaffold call — same incremental discipline
+   `system-architect` uses for spaces.
+3. Pick the right writer family: **catalog** writers (`writePage`/`writeApi`/…) target a
+   `store/projects/<id>/` template and require `createProject`/`selectProject` first; **live-project**
+   writers (`writeProject*`) target the running project and apply the change. The difference is
+   spelled out in `org/docs/runtime-globals/app-authoring.md`.
+4. **After a live `writeProjectPage`/`writeProjectApi`/`writeProjectComponent`, the page bundle is NOT
+   rebuilt for you** — `POST /api/projects/:projectId/app/build` before expecting the served app to
+   change (`org/docs/cli-api/rest/projects.md`).
+5. Every writer **returns** `{ ok, error? }` — check it; failures are returned, not thrown.
 
-Nothing about the app layer is ambient. An agent can touch a surface **only** when its
-`capabilities:` frontmatter grants the matching id — even THING holds none of its own.
+**Changing a capability or a global**
 
-- Ids (`libs/core/src/spaces/capabilities.ts`, `CapabilityId`): `db:read`, `db:write`, `db:schema`,
-  `pages:write`, `api:write`, `hooks:write`, `api:call`, `connections:use`, `tools:use`,
-  `project:manage`, and the event/store caps `store:read`, `store:install`, `events:emit`.
-- **Enforced at injection, not by prose.** `libs/core/src/exec/app-globals.ts` injects each global
-  only when the agent holds the capability, and scopes every call (e.g. table access). The matching
-  DTS fragment (`libs/core/src/typecheck/library-dts.ts` — `PAGES_WRITE_DTS`, `API_WRITE_DTS`,
-  `HOOKS_WRITE_DTS`, `composeDbDts`, `CAPABILITY_DTS_FRAGMENTS`) is overlaid so a call the agent
-  can't make fails **typecheck**, not at runtime. Registry: `libs/core/src/exec/capability.ts`,
-  `bootstrap.ts`.
-- **Two db surfaces, one schema.** In the agent sandbox `db.*` is **synchronous** (execShell-class
-  host call, no turn boundary). In `api/`/`hooks/` Node handlers the identical method set is
-  `AsyncDbApi` — `Promise`-returning, a cross-thread proxy; every write still lands in the **main**
-  process (that's what keeps hook dispatch + the loop guard sound). The worker is a crash boundary.
+- Injection and the DTS overlay must move together (not granted ⇒ not injected ⇒ not declared).
+  Follow `@.claude/skills/new-global.md`, and read `org/docs/runtime-globals/app-authoring.md` for the
+  existing gate table before adding to it.
 
-## Authoring globals (capability-gated)
+**Testing**
 
-`db`, `writeTableSchema`, `writePage`, `writeApi`, `writeHook`, `createProject`, `selectProject` —
-declared in `libs/core/src/exec/app-globals.ts` (`AppGlobalImpls`), resolved against **`projectRoot`**
-(never `LMTHING_SPACE_DIR`; a session with no `projectRoot` gets none of them). Host-side writers
-that validate slug/table/segment names and write files live in
-`libs/cli/src/app/authoring/globals.ts` (`createAppAuthoringGlobals`); catalog root is resolved by
-`libs/cli/src/app/authoring/catalog-root.ts`.
+```bash
+cd sdk/org
+pnpm test libs/cli/src/app          # app runtime, boot, page serve, authoring globals
+pnpm test libs/core/src/exec        # capability injection
+pnpm test libs/core/src/typecheck   # DTS gating
+```
 
-**One authoring call per file** — the same incremental scaffolding discipline `system-architect`
-uses for spaces. Never one giant scaffold call.
+- **Always live-test** a prompt / globals / space-format change against the real model, then read the
+  `--trace <file>` NDJSON — unit tests do not catch a model that cannot use the surface.
+- Prod install→serve runbook: repo-root skill `@lmthing:.claude/skills/test-app-install-prod.md`.
 
-## The `system-appbuilder` space (the expertise; THING delegates)
+## Keep the docs true
 
-`libs/core/system-spaces/system-appbuilder/` — THING never authors an app directly; it delegates.
-Five least-privilege agents (each `functions: []`, `knowledge: app_building/model`):
-
-| Agent | Capabilities | Role |
-|---|---|---|
-| `app-architect` | `project:manage` + full authoring set + delegation to the other four | binds/creates the project, plans, fans out (`defaultAction: build_app`) |
-| `data-modeler` | `db:schema`, `db:read` | designs/evolves tables (`writeTableSchema`) |
-| `page-builder` | `pages:write`, `db:read` | authors pages (`writePage`) |
-| `api-author` | `api:write`, `db:read` | authors named typed endpoints (`writeApi`) |
-| `automator` | `hooks:write` | wires project event/cron hooks + emitter defs into the LIVE project (`writeProjectHook`/`writeProjectEvent`) |
-
-Its `build_app` tasklist decomposes to `design → create_project → build_table[] → build_api[] →
-build_page[] → build_hook[] → finalize`. Knowledge lives under `knowledge/app_building/model/`.
-
-## Serving & store distribution
-
-- **Serving**: the pod serves an installed app's SPA at `/app/<project>/` —
-  `libs/cli/src/app/pages-serve.ts` injects `<base href="/app/<project>/">` so relative assets
-  resolve at any route depth; static assets via `libs/cli/src/server/static-apps.ts`.
-- **Install/list endpoints** (`libs/cli/src/server/routes/apps.ts`, mounted in `server/serve.ts`):
-  `GET /api/apps` fetches the **public** store catalog (`${STORE_URL}/projects/manifest.json`);
-  `POST /api/apps/install {appId, projectId?, force?}` downloads the template, materializes it into
-  `<lmthingRoot>/<projectId>/`, boots (`app/boot.ts`), generates contracts
-  (`app/build/contracts.ts`), builds pages (`app/build/pages.ts`). Install-tracking manifest at
-  `<dest>/.data/.installed.json` (pristine-vs-edited re-sync); `.data/`/`types/` are never copied.
-- **Catalog** (monorepo `store/`): apps are templates under `store/projects/<id>/`; the browse index
-  `store/projects/manifest.json` is generated by `store/scripts/gen-apps-manifest.mjs` (via the Vite
-  plugin in `store/vite.config.ts`). The static store only browses (`store/src/routes/projects/`,
-  `store/src/lib/apps-manifest.ts`); the install hand-off is `store/src/lib/pod-api.ts` →
-  lmthing.app → the pod endpoint above.
-
-## Gotchas
-
-- **`projectRoot`, not `LMTHING_SPACE_DIR`** — every project-app global is project-rooted; no
-  `projectRoot` ⇒ none injected.
-- **Contracts are TS + JSDoc → JSON Schema** (`ts-json-schema-generator`), driving ajv request
-  validation, the calling agent's typed `apiCall` overload, and the client's typed `useApi`. `name`
-  is unique per project (fail-loud on a duplicate).
-- **A project-app agent's chat history** persists under `<project>/spaces/<spaceId>/sessions/`, not
-  `<project>/sessions/`.
-- **Schema evolution is additive-lenient only** — new tables/columns via `createTable`/`addColumn`;
-  a rename/drop/type-change diverging from the live schema fails loud at boot.
-- **Design tokens still mandatory** in `pages/` — `@lmthing/css` tokens only, same hard gate as
-  every web surface.
-
-## Testing
-
-- App runtime + serving: `libs/cli/src/app/*.test.ts` (e.g. `pages-serve.test.ts` asserts the
-  `<base href>` injection).
-- Capability injection/DTS gating: `libs/core/src/exec/*` + `typecheck/` tests.
-- **Always live-test** prompt/globals/space-format changes against the real model (see
-  `project-as-application-implementation.md` §0.2) and inspect the `--trace` NDJSON.
-- Prod install→app runbook: `@lmthing:.claude/skills/test-app-install-prod.md` (monorepo).
+GROUND TRUTH IS THE CODE. If you change the implementation, update the matching org/docs page in the
+same change (see `org/docs/SYNC.md`).
