@@ -247,6 +247,9 @@ export interface ProjectAuthoringGlobals {
   writeProjectEvent: (name: string, src: string) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/functions/<name>.ts` (a project function). */
   writeProjectFunction: (name: string, src: string) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/database/<name>.json` (a table schema) — the LIVE-project
+   *  counterpart of the catalog's `writeTableSchema`. */
+  writeProjectTable: (name: string, schema: unknown) => { ok: boolean; error?: string };
 }
 
 /**
@@ -270,8 +273,12 @@ export interface ProjectAuthoringGlobals {
 export function createProjectAuthoringGlobals(opts: {
   projectRoot: string;
   republish?: () => void;
+  /** Called after a successful `writeProjectTable` — the host re-derives the project's
+   *  db from `database/*.json` (a project with no tables has NO db at all, so the first
+   *  table is what brings one into existence). Fire-and-forget, like `republish`. */
+  onSchemaWrite?: (table: string) => void;
 }): ProjectAuthoringGlobals {
-  const { projectRoot, republish } = opts;
+  const { projectRoot, republish, onSchemaWrite } = opts;
 
   /** Write `rel` under the project root, then fire the republish (best-effort). */
   function writeUnder(rel: string, src: string): { ok: boolean; error?: string } {
@@ -319,5 +326,33 @@ export function createProjectAuthoringGlobals(opts: {
     return writeUnder(join('functions', `${name}.ts`), src);
   }
 
-  return { writeProjectHook, writeProjectEvent, writeProjectFunction };
+  /**
+   * Write a table schema into the LIVE project (`database/<name>.json`) and tell the
+   * host to re-derive the project db.
+   *
+   * This is the live twin of the catalog `writeTableSchema`. Without it a project the
+   * user is actually working in can never gain a data model: the catalog writer targets
+   * `store/projects/<id>/` TEMPLATES, and `bootProjectApp()` returns `null` for a project
+   * with no `database/*.json` — so "store every tip in a `tips` table" had nowhere to land
+   * and every downstream hook had no `db` to write to. Found live in scenario 01.
+   */
+  function writeProjectTable(name: string, schema: unknown): { ok: boolean; error?: string } {
+    try {
+      assertTableName(name);
+      validateTableSchema(name, schema as TableSchema);
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    const out = writeUnder(join('database', `${name}.json`), JSON.stringify(schema, null, 2) + '\n');
+    if (out.ok) {
+      try {
+        onSchemaWrite?.(name);
+      } catch {
+        /* best-effort — the schema file already landed */
+      }
+    }
+    return out;
+  }
+
+  return { writeProjectHook, writeProjectEvent, writeProjectFunction, writeProjectTable };
 }

@@ -208,6 +208,14 @@ declare function writeProjectFunction(name: string, src: string): { ok: boolean;
 // standalone global, not a member of the `db` object.
 export const WRITE_TABLE_SCHEMA_DTS = `declare function writeTableSchema(name: string, schema: unknown): { ok: boolean; error?: string };`;
 
+// `db:schema` ALSO earns the LIVE-PROJECT table writer, the twin of the S11 live hook/
+// event/function writers: `writeTableSchema` targets a store/projects/<id>/ TEMPLATE,
+// while `writeProjectTable` writes `database/<name>.json` into the project the session is
+// actually running in and re-derives its db (a project with no table has no db at all).
+// Emitted only when the host supplies the impl (i.e. a project-rooted session), so a
+// catalog-only appbuilder session leaves it absent and a stray call fails typecheck.
+export const PROJECT_TABLE_DTS = `declare function writeProjectTable(name: string, schema: unknown): { ok: boolean; error?: string };`;
+
 // `project:manage` — the appbuilder's authority to scaffold or bind a catalog app.
 // createProject creates a NEW store/apps/<id>/ template + selects it as the authoring
 // target; selectProject binds an existing one. Subsequent writePage/writeApi/... land

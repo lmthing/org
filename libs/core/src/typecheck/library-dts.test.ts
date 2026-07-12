@@ -13,6 +13,7 @@ import {
   PROJECT_AUTHORING_DTS,
   PROJECT_MANAGE_DTS,
   WRITE_TABLE_SCHEMA_DTS,
+  PROJECT_TABLE_DTS,
   STORE_READ_DTS,
   STORE_INSTALL_DTS,
   EVENTS_EMIT_DTS,
@@ -136,5 +137,9 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     expect(PROJECT_MANAGE_DTS).toContain('createProject(');
     expect(PROJECT_MANAGE_DTS).toContain('selectProject(');
     expect(WRITE_TABLE_SCHEMA_DTS).toContain('writeTableSchema(');
+  });
+
+  it('PROJECT_TABLE_DTS declares the live-project table writer (db:schema twin)', () => {
+    expect(PROJECT_TABLE_DTS).toContain('writeProjectTable(');
   });
 });

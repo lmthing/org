@@ -320,4 +320,55 @@ describe('createProjectAuthoringGlobals', () => {
     expect(res.ok).toBe(true);
     expect(existsSync(join(projectRoot, 'hooks', 'resilient.ts'))).toBe(true);
   });
+
+  const TIPS_SCHEMA = {
+    title: 'Tips',
+    description: 'Story tips',
+    columns: {
+      id: { type: 'string', description: 'pk', primaryKey: true, generated: 'uuid' },
+      headline: { type: 'string', description: 'short headline' },
+    },
+  } as unknown as TableSchema;
+
+  it('writeProjectTable lands database/<name>.json in the LIVE project and fires onSchemaWrite', () => {
+    let schemaWrites: string[] = [];
+    const pa = createProjectAuthoringGlobals({
+      projectRoot,
+      republish: () => {
+        republishCalls += 1;
+      },
+      onSchemaWrite: (t) => schemaWrites.push(t),
+    });
+    const res = pa.writeProjectTable('tips', TIPS_SCHEMA);
+    expect(res.ok).toBe(true);
+    const target = join(projectRoot, 'database', 'tips.json');
+    expect(existsSync(target)).toBe(true);
+    expect(JSON.parse(readFileSync(target, 'utf8')).columns.headline.type).toBe('string');
+    // The write goes live (republish) AND the db is re-derived (onSchemaWrite).
+    expect(republishCalls).toBe(1);
+    expect(schemaWrites).toEqual(['tips']);
+  });
+
+  it('writeProjectTable rejects an invalid schema (missing description) and does NOT re-derive', () => {
+    let schemaWrites = 0;
+    const pa = createProjectAuthoringGlobals({
+      projectRoot,
+      republish: () => {},
+      onSchemaWrite: () => {
+        schemaWrites += 1;
+      },
+    });
+    const bad = { title: 'X', columns: { id: { type: 'string', generated: 'uuid' } } };
+    const res = pa.writeProjectTable('tips', bad);
+    expect(res.ok).toBe(false);
+    expect(existsSync(join(projectRoot, 'database', 'tips.json'))).toBe(false);
+    expect(schemaWrites).toBe(0);
+  });
+
+  it('writeProjectTable rejects a non-snake_case table name (traversal-safe)', () => {
+    const pa = make();
+    expect(pa.writeProjectTable('../evil', TIPS_SCHEMA).ok).toBe(false);
+    expect(pa.writeProjectTable('Tips', TIPS_SCHEMA).ok).toBe(false); // uppercase not allowed
+    expect(existsSync(join(projectRoot, 'database'))).toBe(false);
+  });
 });

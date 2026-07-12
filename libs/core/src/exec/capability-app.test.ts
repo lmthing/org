@@ -78,13 +78,15 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
     expect(dtsFor({ 'hooks:write': true })).toContain('writeHook');
   });
 
-  it('db:schema ⇒ writeTableSchema authoring global in ADDITION to db.createTable', () => {
+  it('db:schema ⇒ writeTableSchema + writeProjectTable authoring globals in ADDITION to db.createTable', () => {
     const dts = dtsFor({ 'db:schema': {} });
     expect(dts).toContain('createTable('); // the db member
-    expect(dts).toContain('writeTableSchema'); // the standalone authoring global
-    // db:read/db:write alone must NOT earn writeTableSchema
+    expect(dts).toContain('writeTableSchema'); // the standalone catalog authoring global
+    expect(dts).toContain('writeProjectTable'); // the live-project authoring twin
+    // db:read/db:write alone must NOT earn either table-authoring global
     expect(dtsFor({ 'db:read': {} })).not.toContain('writeTableSchema');
-    expect(dtsFor({ 'db:write': {} })).not.toContain('writeTableSchema');
+    expect(dtsFor({ 'db:read': {} })).not.toContain('writeProjectTable');
+    expect(dtsFor({ 'db:write': {} })).not.toContain('writeProjectTable');
   });
 
   it('project:manage ⇒ createProject + selectProject declarations', () => {

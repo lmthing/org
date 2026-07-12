@@ -63,8 +63,11 @@ function toRunHook(l: LoadedHook): Hook {
  */
 export class ProjectHookRuntime {
   private dispatcher: HookDispatcher;
-  /** The project's EVENT hooks (subscribers matched per event address). */
-  private eventHooks: LoadedHook[];
+  /** The project's EVENT hooks (subscribers matched per event address). MUTATED IN
+   *  PLACE by {@link reload} — the dispatcher holds this same array reference, so a
+   *  newly authored hook joins the subscriber set without rebuilding (and therefore
+   *  without dropping) the live queue. */
+  private readonly eventHooks: LoadedHook[] = [];
   private draining = false;
   private drainScheduled = false;
   // Ambient context of the currently-running hook (0 = a user/agent write, not a hook).
@@ -78,10 +81,28 @@ export class ProjectHookRuntime {
     private readonly projectDb: ProjectDb,
     hooks: LoadedHook[],
   ) {
-    this.eventHooks = hooks.filter((h) => (h.def as { type?: string }).type === 'event');
+    this.setHooks(hooks);
     this.dispatcher = new HookDispatcher({ hooks: this.eventHooks, cooldownMs: HOOK_COOLDOWN_MS });
     const listener: WriteListener = (e) => this.onDbWrite(e);
     projectDb.setOnWrite(listener);
+  }
+
+  private setHooks(hooks: LoadedHook[]): void {
+    this.eventHooks.length = 0;
+    for (const h of hooks) {
+      if ((h.def as { type?: string }).type === 'event') this.eventHooks.push(h);
+    }
+  }
+
+  /**
+   * Adopt a freshly loaded hook set (after a live-project authoring write). The db-write
+   * → event dispatch is wired ONCE, when the project's db first boots; without this a
+   * hook the automator authors AFTERWARDS would never fire on a db write until the pod
+   * restarted (found live in scenario 01 — "whenever a tip is stored, summarize it" is
+   * authored after the table that booted the db).
+   */
+  reload(hooks: LoadedHook[]): void {
+    this.setHooks(hooks);
   }
 
   /** Detach the write listener (server shutdown / project reload). */

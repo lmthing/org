@@ -26,7 +26,7 @@ import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
   EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
-  WRITE_TABLE_SCHEMA_DTS, composeConnectionsDts, composeToolDts,
+  WRITE_TABLE_SCHEMA_DTS, PROJECT_TABLE_DTS, composeConnectionsDts, composeToolDts,
 } from '../typecheck/library-dts.js';
 import { injectAppGlobals, type AppGlobalImpls } from './app-globals.js';
 import type { RenderHost, Clock } from '../session/types.js';
@@ -286,7 +286,9 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string): string {
   // db:schema earns the standalone authoring global `writeTableSchema` (writes a
   // catalog `database/<name>.json`) in ADDITION to the `db.createTable`/`addColumn`
   // members composeDbDts put on the `db` object.
-  if (app['db:schema']) parts.push(WRITE_TABLE_SCHEMA_DTS);
+  // …and, for a project-rooted session, the LIVE-project twin `writeProjectTable`
+  // (writes `database/<name>.json` into the running project and re-derives its db).
+  if (app['db:schema']) parts.push(WRITE_TABLE_SCHEMA_DTS, PROJECT_TABLE_DTS);
   // api:call — when the caller supplies project-generated typed overloads (Phase 4:
   // `apiCall('markRead', { id: string }): { ok: boolean }` + a generic fallback), use
   // those so a malformed call fails the agent's typecheck; otherwise the generic fragment.

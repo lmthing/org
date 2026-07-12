@@ -577,6 +577,20 @@ export class SessionManager {
         void this.republish().catch((err) =>
           console.warn(`[authoring] republish after project write failed: ${err instanceof Error ? err.message : String(err)}`),
         );
+        // A newly authored hook must ALSO join the live db-write dispatch set. That wiring
+        // happens once, when the project's db first boots — so without this refresh a hook
+        // written AFTER the db booted never fires on a db write until the pod restarts.
+        void this.refreshProjectHooks(root, projectId).catch((err) =>
+          console.warn(`[authoring] hook refresh failed: ${err instanceof Error ? err.message : String(err)}`),
+        );
+      },
+      onSchemaWrite: () => {
+        // A project with no `database/*.json` boots NO db at all (bootProjectApp → null),
+        // and that `null` is CACHED. The first authored table must drop the cached "no db"
+        // so the next getProjectDb() actually boots one.
+        void this.reloadProjectDb(root, projectId).catch((err) =>
+          console.warn(`[authoring] project db reload failed: ${err instanceof Error ? err.message : String(err)}`),
+        );
       },
     });
     return {
@@ -594,7 +608,38 @@ export class SessionManager {
       writeProjectHook: projectAuthoring.writeProjectHook,
       writeProjectEvent: projectAuthoring.writeProjectEvent,
       writeProjectFunction: projectAuthoring.writeProjectFunction,
+      writeProjectTable: projectAuthoring.writeProjectTable,
     };
+  }
+
+  /**
+   * Re-read the project's hooks into its live db-write dispatch runtime (after an
+   * authoring write). No-op when the project has no db yet — the runtime is then wired
+   * from scratch, with the current hook set, the moment {@link getProjectDb} boots one.
+   */
+  private async refreshProjectHooks(root: string, projectId: string): Promise<void> {
+    const rt = this.projectHookRuntimes.get(projectId);
+    if (!rt) return;
+    rt.reload(await loadAllHooks(join(root, projectId)));
+  }
+
+  /**
+   * Drop the cached project db (and its hook runtime) so the NEXT {@link getProjectDb}
+   * re-derives both from `database/*.json`. Called after a live table write: the very
+   * first table is what brings a db into existence for a project that had none (the
+   * cached value is `null`), and boot's reconcile picks up an added table additively.
+   *
+   * An OPEN db handle is left open and simply re-booted around: `bootProjectApp` opens
+   * the same file and reconciles, and the api runtime's handle stays valid.
+   */
+  private async reloadProjectDb(root: string, projectId: string): Promise<void> {
+    const rt = this.projectHookRuntimes.get(projectId);
+    if (rt) {
+      rt.dispose();
+      this.projectHookRuntimes.delete(projectId);
+    }
+    this.projectDbs.delete(projectId);
+    await this.getProjectDb(root, projectId);
   }
 
   /** Per-project api runtime (main-process), cached. Backs BOTH the browser-facing

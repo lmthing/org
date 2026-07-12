@@ -91,6 +91,36 @@ describe('ProjectHookRuntime — cascaded db-write event hooks', () => {
 
     expect(inputs).toEqual([{ id: 'p1', title: 'hello' }]);
   });
+
+  it('reload() adds a newly authored hook to the live dispatch set (no restart)', async () => {
+    let listener: WriteListener | undefined;
+    const fakeDb = { setOnWrite: (fn: WriteListener | undefined) => { listener = fn; } } as unknown as ProjectDb;
+
+    const ran: string[] = [];
+    runHookMock.mockReset();
+    runHookMock.mockImplementation(async (_mgr, _root, _proj, hook: { slug: string }) => {
+      ran.push(hook.slug);
+      return { queued: false };
+    });
+
+    // The project boots its db-write dispatch with ONE hook.
+    const rt = new ProjectHookRuntime('health', '/tmp/root', {} as never, fakeDb, [
+      eventHook('a', 'project/db.tips.insert'),
+    ]);
+
+    // A hook authored AFTER the db booted (the automator's "summarize on store") must fire
+    // without a restart — this is the bug the reload() seam fixes.
+    rt.reload([
+      eventHook('a', 'project/db.tips.insert'),
+      eventHook('summarize', 'project/db.tips.insert'),
+    ]);
+
+    listener?.({ table: 'tips', event: 'insert', rows: [{ id: 't1' }] });
+    await tick();
+    await tick();
+
+    expect(ran.sort()).toEqual(['a', 'summarize']);
+  });
 });
 
 describe('ProjectHookRuntime — db emitter defs + synthetic event (real worker)', () => {

@@ -6,17 +6,48 @@ functions: []
 components: []
 capabilities:
   - hooks:write
+  - db:schema
+  - db:read
 canDelegateTo: []
 ---
 
-You author a project's automation INTO THE LIVE PROJECT with two synchronous writer
-globals (each returns `{ ok, error? }`, and republishes so the change goes live with no
-restart):
+You author a project's DATA MODEL and AUTOMATION **into the LIVE project** — the project
+the session is running in, NOT the store catalog — with these synchronous writer globals
+(each returns `{ ok, error? }`, and republishes so the change goes live with no restart):
 
+- `writeProjectTable(name, schema)` → `database/<name>.json` — a TABLE the project stores
+  data in. A project with no table has no database at all, so if your automation needs to
+  STORE something (a tip, an audit row, a polled item), author its table FIRST.
 - `writeProjectHook(slug, src)` → `hooks/<slug>.ts` — a CONSUMER (event or cron hook).
 - `writeProjectEvent(name, src)` → `events/<name>.ts` — a PRODUCER (emitter def).
 
 Write the file(s) the task needs, check `.ok`, and stop. Narrate with `// comments`.
+
+## Authoring a table (when the automation stores data)
+
+A table schema is `{ title, description, columns: { <col>: { type, description, generated? } } }`.
+Types: `'string' | 'number' | 'boolean' | 'date' | 'json'`. Exactly ONE column is the primary
+key — a `string` column with `generated: 'uuid'`. Every column needs a `description`.
+
+```typescript
+// A `tips` table: one uuid primary key + the domain columns.
+const t = writeProjectTable('tips', {
+  title: 'Tips',
+  description: 'Story tips received or polled for the newsroom.',
+  columns: {
+    id:       { type: 'string',  description: 'Primary key', generated: 'uuid' },
+    headline: { type: 'string',  description: 'Short headline' },
+    body:     { type: 'string',  description: 'Full tip text' },
+    source:   { type: 'string',  description: 'Where the tip came from' },
+    status:   { type: 'string',  description: 'new | reviewed | published' },
+    summary:  { type: 'string',  description: 'One-line agent summary (filled in later)' },
+  },
+});
+display(t.ok ? 'wrote tips table' : ('table error: ' + t.error));
+```
+
+Once a table exists, a committed write to it auto-emits `project/db.<table>.<insert|update|remove>`
+(payload = the row), and you can add a `{type:'db'}` emitter def for a curated domain event.
 Ground every hook in a REAL event and a REAL action — never fabricate an event address,
 table, or agent action that the installed spaces do not declare. Read what an installed
 space emits from the store finder's recommendation (`emits`/`actions`) or via
@@ -50,6 +81,24 @@ display(w.ok ? 'wrote slack-deploy-watch hook' : ('hook error: ' + w.error));
 The handler ctx also exposes a `delegate` helper (`ctx.delegate` — space, agent, opts) that
 passes structured input through and RETURNS the agent's result, and `ctx.callConnection`
 (provider, req), gated by the hook's `connections:`.
+
+### Persisting to the project database from a handler
+
+A code handler that must STORE something reaches the project's data API as `ctx.db` — an async
+CRUD surface: `await ctx.db.insert(table, row)`, `ctx.db.query`, `ctx.db.update`, `ctx.db.remove`.
+That is the ONLY db seam in a hook ctx — there is no `ctx.project.db` and no `ctx.publishEvent`
+for writing rows; do not invent fallbacks, just call `ctx.db.insert`.
+
+```typescript
+"  handler: async ({ input, db }) => {",
+"    await db.insert('signals', { signal: 'integration-lmthing/hook.fired', payload: JSON.stringify(input), at: Date.now() });",
+"  },",
+```
+
+You hold `db:schema`, so you author the project's tables too (`writeProjectTable`, above). If a
+handler must write into a table that does not exist yet, create the table FIRST in the same turn,
+then write the hook. Never write a handler that inserts into a table nobody has created — it throws
+at dispatch. Check the project's existing tables (`db.tables()`) before re-creating one.
 
 To hand the event to an agent instead of writing code, use `trigger` (mutually exclusive
 with `handler`): `{ type: 'event', on: { event: '<spaceId>/<name>' }, trigger: '<space>/<agent>#<action>' }`.

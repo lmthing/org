@@ -83,6 +83,11 @@ export interface AppGlobalImpls {
   writeProjectHook?: (slug: string, src: string) => AuthoringResult;
   writeProjectEvent?: (name: string, src: string) => AuthoringResult;
   writeProjectFunction?: (name: string, src: string) => AuthoringResult;
+  /** LIVE-project table writer (the `db:schema` twin of the three above): writes
+   *  `<projectRoot>/database/<name>.json` and re-derives the project's db. Without it a
+   *  live project can never gain a data model — `writeTableSchema` only targets a catalog
+   *  template, and a project with no `database/*.json` boots NO db at all. */
+  writeProjectTable?: (name: string, schema: unknown) => AuthoringResult;
 }
 
 /** Throw the host error shape (naming the allowed tables, like the canDelegateTo
@@ -195,6 +200,10 @@ export function injectAppGlobals(
   if (app['hooks:write'] && impls.writeProjectEvent) injectGlobal(ctx, 'writeProjectEvent', impls.writeProjectEvent as (...a: unknown[]) => unknown);
   if (app['hooks:write'] && impls.writeProjectFunction) injectGlobal(ctx, 'writeProjectFunction', impls.writeProjectFunction as (...a: unknown[]) => unknown);
   if (app['db:schema'] && impls.writeTableSchema) injectGlobal(ctx, 'writeTableSchema', impls.writeTableSchema as (...a: unknown[]) => unknown);
+  // The LIVE-project table writer — same `db:schema` grant, but it targets the session's
+  // OWN project (not the catalog). Present only when the host supplies it (a project-rooted
+  // session); a catalog-only appbuilder session leaves it absent.
+  if (app['db:schema'] && impls.writeProjectTable) injectGlobal(ctx, 'writeProjectTable', impls.writeProjectTable as (...a: unknown[]) => unknown);
   if (app['project:manage']) {
     if (impls.createProject) injectGlobal(ctx, 'createProject', impls.createProject as (...a: unknown[]) => unknown);
     if (impls.selectProject) injectGlobal(ctx, 'selectProject', impls.selectProject as (...a: unknown[]) => unknown);
