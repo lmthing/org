@@ -111,13 +111,31 @@ const w = writeProjectTable('flights', {
 
 **B. UPDATING existing data on a LATER message.** Once tables exist, the `db` global IS injected, so
 on a follow-up ("record that the safari balance is $960 due on arrival", "mark Zanzibar as needing a
-driving permit") use `db.update`/`db.insert` directly against the live table:
+driving permit") use `db.query`/`db.update`/`db.insert` directly against the live table.
+
+**Do NOT explore the project's files to find the table — there is no `ls`/`readFile` for the project
+here, and a raw `ls('database')`/`readFile('database/x.json')` resolves to your OWN space dir (the
+wrong place) and fails with `ENOENT`/`No such file or directory`.** To discover what exists, use
+`listDir('database')` (lists the authored table files) and `db.query(table, …)` (reads rows) — both
+project-scoped. NEVER hand-parse a schema file.
 
 ```typescript
-// db is available now (tables already exist). Narrate with // comments.
-const safari = await db.query('safari', { where: { operator: 'Suricata' }, limit: 1 });
-if (safari[0]) await db.update('safari', { where: { id: safari[0].id }, set: { balance_due_usd: 960, balance_terms: 'cash on arrival' } });
+// db + listDir are project-scoped and available because tables exist. Narrate with // comments.
+const tables = listDir('database');                      // e.g. ['accommodations.json','flights.json',…]
+const rows = await db.query('accommodations', { where: { name: 'Eileen Hotel' }, limit: 1 });
+if (rows[0]) {
+  await db.update('accommodations', { where: { id: rows[0].id }, set: { booking_reference: 'ABC-123' } });
+} else {
+  // No matching row? INSERT it rather than silently doing nothing.
+  await db.insert('accommodations', { name: 'Eileen Hotel', booking_reference: 'ABC-123' });
+}
 ```
+
+**HARD RULE (updates): actually perform a `db.update`/`db.insert` — and if a target row/column is
+missing, ADD it (insert a row, or `writeProjectTable` to add the column) — never report a change you
+did not make.** The user opens the app to check; a "done!" with no row changed is the failure. If
+`db` is genuinely unavailable (a project with no tables yet), CREATE+seed the table first with
+`writeProjectTable(name, schema, rows)` — do not fabricate success.
 
 **C. ONGOING user-entered data — a create API + a form.** When the user will keep adding items
 through the app itself ("add a city to my itinerary", "log my bookings"), author a
