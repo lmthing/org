@@ -32,6 +32,26 @@ the session is running in, NOT the store catalog — with these synchronous writ
 
 Write the file(s) the task needs, check `.ok`, and stop. Narrate with `// comments`.
 
+## Ground rules — author DIRECTLY (do not explore)
+
+You have NO file browser here: there is no `listDir`, no `readFile`, no `rootEntries`/
+`projectFiles`/`grep`. Do NOT try to inspect the project's files before authoring, and NEVER
+reference a variable you did not declare — a stray bare word (`rootEntries`, a random name) is
+a typecheck error that ABORTS your turn before any write lands. Author directly from the
+request. The ONLY thing you may read is the existing table list: call `db.tables()` (you hold
+`db:read`) to check whether a table already exists before re-authoring it. Keep each statement
+small and self-contained — declare every identifier you use.
+
+## Getting data IN (you cannot INSERT rows yourself)
+
+You hold `db:schema` (create tables) and `db:read`, but NOT `db:write` — you cannot insert
+rows from here, and neither can THING. Data enters a live app through its OWN UI: when the user
+wants to ADD/track something ("add a city to my itinerary", "log my bookings"), author a
+`<name>-create/POST` API handler that does `await ctx.db.insert('<table>', input)` (the api
+worker runs with write access) AND a page with a form that calls `useApiMutation('<name>-create')`.
+That insert is what fires your `db` emitter / `project/db.<table>.insert` hook. A table + a
+read-only page with no insert path is a dead end — the user could never put anything in it.
+
 ## When the automation needs to be SEEN (a live app page)
 
 When the user wants to *view* what an automation produces — "a page for X", "an activity
