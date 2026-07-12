@@ -103,6 +103,43 @@ at dispatch. Check the project's existing tables (`db.tables()`) before re-creat
 To hand the event to an agent instead of writing code, use `trigger` (mutually exclusive
 with `handler`): `{ type: 'event', on: { event: '<spaceId>/<name>' }, trigger: '<space>/<agent>#<action>' }`.
 
+### When the rule needs a MODEL, not a filter
+
+A code `handler` runs plain TypeScript with NO model — it can filter, reshape, and write
+rows, but it CANNOT reason, summarize, classify, draft, or decide. When the user explicitly
+asks for an AGENT to do something ("have an agent write a one-line summary", "classify each
+item", "draft a reply"), you must actually invoke a model — never hand-roll a fake summary
+in string code (that silently produces garbage). Use `ctx.delegate` from a handler: it runs
+an agent headless, passes structured input, and RETURNS the result, which you write back with
+`ctx.db.update`. Delegate to a project/space agent when one fits; otherwise `user-thing/thing`
+is the always-available general agent:
+
+```typescript
+// Fires on project/db.tips.insert (payload = the row). A MODEL writes the summary.
+const src = [
+  "export default {",
+  "  type: 'event',",
+  "  on: { event: 'project/db.tips.insert' },",
+  "  handler: async ({ input, delegate, db }) => {",
+  "    const tip = input as { id: string; headline?: string; body?: string; summary?: string };",
+  "    if (tip.summary && tip.summary.trim()) return;",     // idempotent: skip if already summarized
+  "    const r = await delegate('user-thing/thing', undefined, {",  // ctx.delegate(spaceRef, action?, opts) — agent = last path segment
+  "      message: 'Write a single one-line summary (max 15 words) of this story tip. Reply with ONLY the summary line.',",
+  "      input: { headline: tip.headline, body: tip.body },",
+  "    });",
+  "    const summary = String((r && r.result) ?? '').trim().split('\\n')[0].slice(0, 200);",
+  "    if (summary) await db.update('tips', { where: { id: tip.id }, set: { summary } });",
+  "  },",
+  "};",
+].join("\n");
+writeProjectHook('summarize-tip', src);
+```
+
+The handler writing `tips.summary` back does NOT re-fire itself — the loop guard excludes a
+hook's own writes (self-write exclusion), and the early `if (tip.summary) return` is a second
+guard. (You may equally use a `trigger` to a project/space agent when one already exists; the
+`ctx.delegate` form is preferred here because it lets you write the result back to the exact row.)
+
 ## Database changes are events now
 
 There is NO `{ type: 'database' }` hook. A project-db write is delivered as the event
@@ -138,6 +175,8 @@ writeProjectHook('daily-refresh', cron);
 Guidelines:
 
 - Prefer a code `handler` over a `trigger` when the reaction is a simple filter/relay — no
-  agent, no LLM cost.
+  agent, no LLM cost. But when the rule needs genuine reasoning (summarize/classify/draft/
+  decide), you MUST invoke a model — a `trigger` to an agent, or `ctx.delegate` from a
+  handler (see "When the rule needs a MODEL"). Never fake it with hand-written string logic.
 - Only list a provider in `connections:` that the user has installed; an unlisted provider
   throws at call time.

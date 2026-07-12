@@ -13,28 +13,40 @@ export class Pod {
   }
 
   async req(method, path, body, { raw = false } = {}) {
-    const res = await fetch(`${this.base}${path}`, {
-      method,
-      headers: {
-        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-        ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
-    const text = await res.text();
-    let parsed = text;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      /* raw text (e.g. an ASCII state tree) */
+    // A scaled-to-zero pod answers with `504 {waking:true}` while the Envoy activator boots
+    // it; that is a transient, not the endpoint's verdict. Retry idempotent-ish calls until
+    // the pod is warm (bounded), so a read that lands on a cold pod self-heals instead of
+    // throwing a spurious failure mid-scenario.
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(`${this.base}${path}`, {
+        method,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
+      const text = await res.text();
+      let parsed = text;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        /* raw text (e.g. an ASCII state tree) */
+      }
+      const waking =
+        res.status === 504 || (parsed && typeof parsed === 'object' && parsed.waking === true);
+      if (waking && attempt < 20) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      if (!res.ok && !raw) {
+        const err = new Error(`${method} ${path} → ${res.status}: ${text.slice(0, 400)}`);
+        err.status = res.status;
+        err.body = parsed;
+        throw err;
+      }
+      return raw ? { status: res.status, body: parsed } : parsed;
     }
-    if (!res.ok && !raw) {
-      const err = new Error(`${method} ${path} → ${res.status}: ${text.slice(0, 400)}`);
-      err.status = res.status;
-      err.body = parsed;
-      throw err;
-    }
-    return raw ? { status: res.status, body: parsed } : parsed;
   }
 
   // ── projects ────────────────────────────────────────────────────────────
@@ -86,23 +98,33 @@ export class Pod {
    * itself does no auth: verification is the provider signature, exactly as in production.
    */
   async inbound(path, body, headers = {}) {
-    const res = await fetch(`${this.base}/api/inbound/${path}`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
-        ...headers,
-      },
-      body: typeof body === 'string' ? body : JSON.stringify(body),
-    });
-    const text = await res.text();
-    let parsed = text;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      /* raw */
+    const payload = typeof body === 'string' ? body : JSON.stringify(body);
+    // A scaled-to-zero pod answers the FIRST hit with `504 {waking:true}` (the Envoy
+    // instant-wake activator) while it boots — that is not the def's real verdict. Retry
+    // the exact same signed bytes until the woken pod actually runs verify→emit. The body
+    // is byte-identical, but inbound dedupe only kicks in AFTER a successful verify, so a
+    // retry of a request the pod never processed is not deduped.
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(`${this.base}/api/inbound/${path}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+          ...headers,
+        },
+        body: payload,
+      });
+      const text = await res.text();
+      let parsed = text;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        /* raw */
+      }
+      const waking = res.status === 504 || (parsed && typeof parsed === 'object' && parsed.waking === true);
+      if (!waking || attempt >= 20) return { status: res.status, body: parsed };
+      await new Promise((r) => setTimeout(r, 3000));
     }
-    return { status: res.status, body: parsed };
   }
 
   // ── env / lifecycle ─────────────────────────────────────────────────────
