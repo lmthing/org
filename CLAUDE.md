@@ -1,144 +1,132 @@
-# LMThing — Core Runtime Developer Guide
+# LMThing — Core Runtime Developer Guide (`sdk/org`)
 
-LLM agent runtime where models drive programs by writing TypeScript. The model streams TS statements; the host evaluates them one at a time in a QuickJS WASM sandbox. Value-yielding calls (`ask`, `sleep`, `tasklist`, `fork`, `delegate`, `inspect`, `loadKnowledge`, `registerSpace`) abort the stream, hand control to the host, and resume the next turn with resolved values injected as a VARIABLES block.
+The agent runtime and everything built directly on it: `@lmthing/core` (QuickJS WASM sandbox, streaming
+statement pipeline, yield protocol, spaces/forks/delegates/tasklists, typecheck, budgets), `@lmthing/cli`
+(the `lmthing` binary + pod server), the shared libs, and the unified web SPA (`apps/web`).
 
-This file is an **orientation index** — load detail from the **Task Index** below only when a task needs it.
+The model does not call tools — **the model writes TypeScript**, one statement at a time, and the host
+evaluates each statement as it streams in. A value-yielding call suspends the VM, aborts the stream, is
+resolved host-side, and the results come back as a `VARIABLES` block on the next turn.
+
+## Source of truth — read this first
+
+> **[`org/docs/`](../../org/docs/README.md) (published at lmthing.org) is the single source of truth for
+> this codebase.** Every factual sentence there carries a `path:Lstart-Lend` citation to the code that
+> makes it true. When this file disagrees with `org/docs`, `org/docs` wins. When `org/docs` disagrees
+> with the **code**, the code wins and `org/docs` is fixed.
+>
+> **A change to code is not done until the matching `org/docs` page is updated in the same change.**
+> The rule, the grounding convention, and the "which doc moves with my change?" table →
+> [`org/docs/SYNC.md`](../../org/docs/SYNC.md).
+
+This file is an **orientation index**: what lives here, how to run it, and where the real answer is.
+Knowledge does not live here.
 
 ## Workspace
 
 ```bash
-pnpm install          # from lockfile
-pnpm build            # build all packages → dist/
-pnpm typecheck        # tsc --noEmit across all packages (strict)
-pnpm test             # vitest run (co-located tests)
-pnpm dev              # watch + rebuild all packages
-# Single package: pnpm --filter @lmthing/core {build|test}
-# CLI: node libs/cli/dist/cli/bin.js --space ./fixtures/cooking "make pasta"
+cd sdk/org
+pnpm install                       # from lockfile
+pnpm build                         # turbo run build → dist/
+pnpm typecheck                     # tsc --noEmit across all packages (strict)
+pnpm test                          # vitest run (co-located tests) — run from sdk/org, NOT the repo root
+pnpm test libs/core/src/tasklist   # one directory / substring filter
+pnpm dev                           # turbo run dev --parallel (watch + rebuild)
+pnpm thing                         # CLI + web app on ONE port, both hot-reloading (scripts/thing-dev.mjs)
 ```
 
-Testing without keys: `--mock <file>` / `LM_MOCK=<file>` (scripted streamFn, no credentials). REPL: `--repl`. Programmatic/automated: `--claude`. Web DevTools UI: `--web <port>`. Headless single-shot: `--request "<msg>"` (runs THING agent, streams to stdout, exits — no TUI, no server). Full testing guide → `@.claude/skills/writing-tests.md`.
+Running the CLI: `node libs/cli/dist/cli/bin.js --space <dir> "<message>"`. Keyless testing:
+`--mock <file>` / `LM_MOCK=<file>` (scripted `streamFn`). `--repl` interactive · `--claude`
+programmatic · `--web <port>` DevTools UI · `--request "<msg>"` headless single-shot · `--trace <file>`
+NDJSON trace.
 
-## Packages
+- Every flag, subcommand and env var (model aliases, providers) → [`org/docs/cli-api/commands.md`](../../org/docs/cli-api/commands.md)
+- Test runners, the two-workspace trap, the mock harness, live scenarios → [`org/docs/contributing/testing.md`](../../org/docs/contributing/testing.md)
+- Debugging the eval/yield pipeline → [`org/docs/contributing/debugging.md`](../../org/docs/contributing/debugging.md)
 
-| Package | Entry | Purpose |
-|---------|-------|---------|
-| `@lmthing/core` | `libs/core/src/index.ts` | Runtime — sandbox, eval loop, globals, spaces. No renderer/provider. |
-| `@lmthing/cli` | `libs/cli/src/cli/bin.ts` | Terminal (Ink), WS server, AI provider wiring, `lmthing serve`. Serves the unified SPA (studio/computer/chat) as a catch-all for non-`/api` requests. |
-| `@lmthing/web-app` | `apps/web/` | Unified Vite SPA — three product surfaces as client-side routes, served by `lmthing serve` and deployed as separate nginx K8s images per domain. See **App Surfaces** below. |
+`.env` is read from `process.cwd()` only (`libs/cli/src/cli/bin.ts:L18`). In Claude Code web sessions
+keys are decrypted from `.env.encrypted` by `.claude/hooks/session-start.sh` — **if `TAVILY_API_KEY` or
+another secret is missing, ask for `ENV_DECRYPT_KEY` before proceeding.**
 
-`@lmthing/core` never imports from `cli` or `ui`. It emits events and accepts a `RenderHost` interface.
+## Layout
 
-## App Surfaces (`apps/web/`)
+`libs/{core,cli,ui,css,state,auth,utils,config,openclaw-compat}` · `libs/core/system-spaces/*` (the
+shipped system + user spaces) · `apps/web` (the unified SPA — `/chat`, `/studio`, `/computer` as
+client-side routes) · `scenarios/` (live prod scenario runner).
 
-The unified SPA (`@lmthing/web-app`) exposes three product surfaces as TanStack Router client-side routes. The CLI's `serve.ts` wires `createStaticApps(resolveAppDist())` as a catch-all for all non-`/api` requests (`LM_APP_DIST` overrides the dist path). The same build is deployed as separate nginx images (`lmthingacr.azurecr.io/{studio,computer,chat}`) — one K8s Deployment per domain, different Envoy JWT+Lua routing per domain.
+`@lmthing/core` never imports from `cli` or `ui` — it emits events and accepts a `RenderHost`.
 
-| Route | Domain | Product |
-|-------|--------|---------|
-| `/chat` | lmthing.chat | **Chat** — the primary conversational interface to the THING agent. Users write to the agent, the agent streams TypeScript statements that run in their compute pod's QuickJS sandbox. Projects and spaces are visible as a side panel. |
-| `/studio`, `/studio/$projectId` | lmthing.studio | **Studio** — project and space management IDE. Users browse their pod's PVC projects and spaces, author space definitions (knowledge, personas, tools), and run agents within a project context. The always-on THING chat dock is present on the right side. |
-| `/computer`, `/computer/dashboard` | lmthing.computer | **Computer** — autonomous computer-use surface. The agent controls a browser/desktop environment running inside the user's compute pod. Users describe a task; the agent executes it with screen captures streamed back in real time. |
+Package-by-package detail → [`org/docs/libs/README.md`](../../org/docs/libs/README.md) · the surfaces →
+[`chat/`](../../org/docs/chat/README.md) · [`studio/`](../../org/docs/studio/README.md) ·
+[`computer/`](../../org/docs/computer/README.md).
 
-## Directory map (top level)
+## Gotchas that bite while editing this code
 
-`libs/core/src/{sandbox,eval,typecheck,globals,spaces,tasklist,fork,delegate,context,session}` · `libs/core/src/{db,exec,app}` (project-app db/capability-globals/build layer) · `system-spaces/{system-global,system-engineer,system-architect,system-research,system-appbuilder,user-memory,user-thing}` · `libs/cli/src/{providers,stream,render,rpc,web,cli,server,app}` · `libs/ui/src/{app,store,client,components,compat,lib,theme}` · `apps/web/{src,public}` (unified SPA). Full subsystem detail lives in `@.claude/arch/*` (see Task Index). Project-app authoring/serving → `@.claude/skills/project-app.md`.
+Each is one line; the grounded explanation is behind the link.
 
-## Top gotchas
-
-One-liners — full explanations are in the linked file.
-
-- **Variables don't persist between evals** — propagated via `globalThis['x'] = x` appended after each statement. → `@.claude/arch/turn-loop.md`
-- **System spaces always merged; only `system-global` functions are universal** — all system agents are universally delegatable; user space wins on collisions (except empty placeholders). → `@.claude/arch/spaces.md` · `@.claude/skills/system-spaces.md`
-- **Yield-result binding is host-side**, not the QuickJS post-`await` continuation — `Promise.all` / destructured binds work via `extractBindingPattern` + `vm.setVar`, falling back to the VM's own computed value (`vm.getVar`) when a yield is nested inside another async function (e.g. `webSearch()` awaiting `fetch()` internally) — see DEVELOPMENT.md §5. → `@.claude/arch/turn-loop.md`
-- **A bridged host-function promise must not be disposed before it settles** — `sandbox/host-bridge.ts` used to dispose the QuickJS promise deferred immediately on creation; `resolve()`/`reject()` are no-ops after `dispose()` (quickjs-emscripten), so a yield nested inside another async function could never resume. Fixed by disposing on settle, with an `alive`-guard + per-context pending-deferred registry so a VM torn down mid-flight (budget cap, timeout) doesn't leave a live handle blocking `ctx.dispose()`.
-- **VM teardown must never throw** — `vm.dispose()` (`sandbox/quickjs.ts`) drains pending jobs then swallows QuickJS's `list_empty(&rt->gc_obj_list)` abort. That assertion fires when a stray GC object survives teardown (deep fork/delegate nesting with many nested `fetch` yields); it is CATCHABLE and does NOT poison the shared WASM module, but if it propagated out of `dispose()` the fork error-path would reject an **already-resolved** fork — silently turning a successful result into a failure and cascading up (`investigate` fails → `deep_research` returns undefined → architect gets nothing). Set `LM_QJS_DEBUG=1` to load the assertion-tracking debug WASM variant when hunting a real handle leak.
-- **Forks always salvage a value unless hard-capped** — `BudgetExceededError` propagates; an explicit `timeout` rejects; orchestrator/delegate forks (no timeout) always salvage. → `@.claude/arch/fork-tasklist.md`
-- **Yield errors surface to the model** (retryable), not silent `undefined`; hard caps still short-circuit. → `@.claude/arch/turn-loop.md`
-- **`delegate()`'s `action` is optional** — omit for model-driven delegation; auto-captures tasklist results. → `@.claude/arch/delegate.md`
-- **`ask` is top-level-session-only** — NOT injected in forks/delegates (they're autonomous/headless) and absent from their DTS (`LIBRARY_DTS_NO_ASK`); a stray `ask()` there fails typecheck. → `@.claude/arch/delegate.md` · `@.claude/arch/fork-tasklist.md`
-- **`tasklist`/`delegate`/`loadKnowledge` return `any`**, and a space function with no explicit return type is declared `any` — so `result.field` reads without a cast. Narrate via `// comments`, never bare prose. → `@.claude/arch/typecheck.md`
-- **Transient stream errors retry** (a dropped/"terminated" connection isn't mistaken for "done"). → `@.claude/arch/turn-loop.md`
-- **Knowledge: overview in `index.md`, multiple aspect options** — the field `index.md` body is the overview (surfaced to the agent); each field has ≥2 `<aspect>.md` files (no single `overview.md`), loaded on demand. → `@.claude/skills/new-space.md`
-- **System spaces auto-adopt source/image updates** — a pristine materialized copy re-syncs from `defaultSystemSpaceDirs()` on boot; locally-edited ones hold back (adopt with `--adopt-system-spaces`). → `libs/cli/src/cli/runtime-init.ts`
-- **The server exposes system/user spaces as a synthetic `system` project** — `listProjects` (`libs/cli/src/server/projects.ts`) prepends `{id:'system'}` when `<root>/system/spaces/` is non-empty, so Studio can list/view/edit them through the normal `/api/projects/system/spaces/...` routes (`<root>/system/spaces/<id>` matches the generic `<root>/<projectId>/spaces/<id>` shape). `system` is reserved (can't be created/deleted as a project).
-- **`execShell` / `readFileRaw` / `writeFileRaw` rooted at `LMTHING_SPACE_DIR`**, not `process.cwd()`. → `@.claude/skills/system-spaces.md`
-- **JSX in model output** is transpiled to `React.createElement`; the JSX runtime is injected into every VM (sessions, forks, delegates). → `@.claude/arch/typecheck.md`
-- **Per-task capability is declared in tasklist frontmatter, enforced by the host** — `role` (`explore`/`plan` = read-only, `general` = write), `functions: [...]` (allowlist; **`[]` = no functions at all, incl. `webSearch`/`webFetch`**; omit = all), `forEach: "<task>.<field>"` (fan-out), `canDelegateTo` (delegation allowlist). **Never forbid a tool in prose — disable it in frontmatter.** → `libs/core/system-spaces/DEVELOPMENT.md`
-- **`forEach` map node** — the host runs the task once per element of an upstream array (parallel, within the fork cap), injects the element as `item`/`index`, and collects results into an array for dependents; the model never writes the loop. → `tasklist/orchestrator.ts` · DEVELOPMENT.md §3
-- **`charter.md` vs `instruct.md`** — `agents/<slug>/charter.md` (short, fork-safe identity/guardrails, no ask/delegate/UI prose) is injected into the top-level prompt **and every fork**; `instruct.md` (orchestration/routing) is top-level only. Forks also receive the tasklist `index.md` goal as standing context. → DEVELOPMENT.md §1
-- **Tasks have no `tasklist`/`fork`/`ask` and no `delegate` unless they opt in** — these are **stripped from the fork DTS** (stray calls fail typecheck, not at runtime). A task adds `delegate` back, allowlisted to `space/agent#action`, via frontmatter `canDelegateTo`; routed through `delegateRunner` wired at BOTH ForkEngine sites (`session.ts`, `delegate.ts` — the architect runs as a delegatee). → `fork/fork.ts` `resolveTaskDelegate` · DEVELOPMENT.md §3a
-- **Soft todos** — open `.lmthing/todos.json` items (`todoWrite`/`todoRead`) are re-injected into every top-level turn (non-blocking) so the agent doesn't forget them. → `session.ts readTodoReminder`
-- **Per-stream idle watchdog** — a no-token model-stream stall (`streamIdleMs`, default 60s) is retried as a transient error. **Caveat:** it cannot fire while a synchronous call (e.g. `execShell`) blocks the Node event loop. `fetch` is no longer in this category — it's a real, non-blocking yield (`globals/fetch.ts`), not `execSync(curl)`. → `eval/turn-loop.ts` · DEVELOPMENT.md §5
-- **Project-app globals resolve against `projectRoot`, never `LMTHING_SPACE_DIR`** — `db`, `writePage`/`writeApi`/`writeHook`, and `createProject`/`selectProject` are project-rooted (a session with no `projectRoot` gets none of them injected); the agent's `db.*` is a **synchronous** host call while `api/`/`hooks/` Node handlers get the same methods as `AsyncDbApi` (`Promise`-returning, cross-thread proxy — every write still lands in the main process). → `org/runtime-globals/app-authoring.md` · `org/format/project/`
-- **`api/` runs Node-worker-isolated** (crash boundary, not a security boundary — the pod is), **`pages/` are real client-side React** (no pod-side loader); a project-app agent's chat history persists under `<project>/spaces/<spaceId>/sessions/`, **not** `<project>/sessions/`. → `org/app/features.md`
-- **Emitter defs are the PRODUCER side of one unified event pipeline** — `events/<name>.ts` in a space or project default-exports a typed `EmitterDef` (`webhook`/`cron`/`db`/`internal`; `spaces/emitter-def.ts`, validated by `emitter-load.ts`, scanned by `cli/server/emitter-manifests.ts`). Consumers are event hooks (`hooks/<slug>.ts` `{type:'event'}`, `app/hooks/loader.ts`). Full guide → `@.claude/skills/events-and-hooks.md`.
-- **Database hooks are GONE — replaced by event hooks (no compat).** `{type:'database'}` is removed (dropped-with-warn + a migration error, `app/hooks/loader.ts`). A committed db write auto-emits the synthetic event `project/db.<table>.<insert|update|remove>` whose payload IS the row; subscribe with `{type:'event', on:{event:'project/db.<table>.<event>'}, handler}`. `ctx.input` carries the payload **uniformly** across every kind (row for db events, the event payload for space/webhook/cron/internal). Db-write dispatch keeps the coalescing `HookDispatcher` queue (`app/hooks/runtime.ts`); other kinds dispatch directly (`server/event-dispatch.ts`). Hook `delegate` now passes structured input AND returns the result (was a drop/discard bug).
-- **The `?` optional-typeString convention** — an `emits` payload field typed `'string?'` (trailing `?`) is optional: the DTS generator emits an optional member and runtime validation tolerates its absence (`emitter-load.ts` `validateEmits`/`buildEventPayloadsDts`). Earlier the validator rejected `'string?'` and broke the migrated messaging spaces — a shipped fix (core `9145023`). Same typeString vocab as tasklist `output` (`string|number|boolean|object|array|any`).
-- **Code nodes in SPACE tasklists** — an `NN-<id>.ts` sibling of the `.md` nodes exports `const node = {…}` (statically AST-extracted — core never executes it) + `run(ctx, inputs)` (worker-isolated via the CLI's `codeNodeCtxFactory`, `server/tasklist-runner.ts`); `ctx.callConnection` is locked to the tasklist `connections:` ∩ the space's own provider(s). Tasklists stay space-only; hook handlers reach one via `ctx.tasklist.run('<spaceId>/<slug>', seed)`. → `@.claude/skills/events-and-hooks.md`
-- **Project functions are a THIRD function scope** — `<project>/functions/*.ts` (`spaces/project-functions-load.ts`), a direct mirror of space functions, loaded ONLY for project-rooted sessions (and in that session's DTS); usable by project agents + hook handlers/code nodes; authored by `system-engineer`.
-- **Consent is generic + host-enforced** — a `consent`-marked function yields to a host consent card BEFORE executing, unbypassable by the model, **fails closed** in non-interactive contexts (headless/fork/delegate/hook). Mark a GLOBAL via `CONSENT_MARKED_YIELD_KINDS` (`globals/consent.ts`; today just `installSpace`), or a SPACE FUNCTION via the `@consent` pragma in its leading comment. Store/event globals `storeSearch`/`storeInspect` (`store:read`), `installSpace` (`store:install`, consent-marked), `emitEvent` (`events:emit`) — new bare capabilities in `spaces/capabilities.ts`.
-- **`worker-load-entry` must be a tsup entry (dist-entry gotcha)** — store code (space emitters, space hook handlers, code nodes) is worker-isolated via a bundled worker entry; if `worker-load-entry.js` is missing from the cli's tsup `entry` list, the compiled image ships without it and every emitter scan / space-hook dispatch fails on the pod (a real prod bug caught in S14, sdk/org `e814088`/`f4091820`). Adding a worker-run seam ⇒ add its entry to the tsup config.
-
-## Session API (`libs/core/src/session/session.ts`)
-
-- `start(message)` — load space, create VM, inject globals, run the turn loop from a fresh user message.
-- `continue(message)` — append a user message to existing history + VM/scope; re-run the turn loop. Auto-summarizes past `maxHistoryTurns*2` messages.
-- `resume(snapshotDir, message)` — rehydrate a persisted session on a fresh VM (powers server-side session persistence; see `@.claude/skills/project-server.md`).
-- `dispose()` — tear down the VM.
-
-Notable `SessionOpts`: `systemSpaceDirs`, `maxHistoryTurns`, `preloadSpaceDirs`, `projectSpacesDir`. `registerSpace(dir)` is a value-yielding global that loads a space into `Session.dynamicSpaces` (a shared `Map` reference, visible to subsequent `delegate()` calls and to forks).
-
-## Tracing
-
-`Tracer` (`sandbox/trace.ts`) is the single event spine: writes NDJSON to `--trace <file>` **and** fans out to in-process `subscribe()`rs. Threaded through session→run→fork→delegate→tasklist, each scope minting a `nodeId`/`parentId` via `tracer.child()/end()` (the `context` label is preserved verbatim so existing jq recipes keep working). `buildTraceTree(events)` (`sandbox/trace-tree.ts`, browser-safe) reconstructs the tree. Pass `NULL_TRACER` to disable.
-
-## Environment & Secrets
-
-```bash
-# .env at repo root (or wherever you run the CLI)
-AZURE_API_KEY=... · AZURE_RESOURCE_NAME=...
-LM_MODEL_M=azure:DeepSeek-V4-Flash   # model alias (LM_MODEL_<ALIAS>)
-LM_MODEL=M                           # default model when --model omitted
-```
-
-Providers: `azure`, `anthropic`, `openai`, `google`, `mistral` (format `provider:modelId`). `.env` loads from `process.cwd()` only.
-
-Secrets (Claude Code web): API keys stored encrypted in `.env.encrypted` (AES-256-CBC), decrypted by `.claude/hooks/session-start.sh`. **If `TAVILY_API_KEY` (or other secrets) are missing in a web session, ask for `ENV_DECRYPT_KEY` before proceeding.**
-
-## Known issues
-
-See `.issues/`. When all are resolved this section is empty.
-
-- `delegate-writes-resolve-against-system-space-dir.md` — a delegate's relative `writeFile` resolves against the delegated agent's OWN space dir; in workspace runs that is the SOURCE system-spaces tree, so a writing delegate (engineer) pollutes the installed system space instead of the project (found live in E4, 2026-07-02).
+- **Variables do not persist between evals** — each statement is its own module; the loop appends
+  `globalThis['x'] = x` for every bound name. → [runtime/turn-loop](../../org/docs/runtime/turn-loop.md)
+- **Yield-result binding is host-side**, not the QuickJS post-`await` continuation — it maps results onto
+  the binding pattern but prefers `vm.getVar(name)` where they diverge (which is what recovers a yield
+  nested inside another async function). → [runtime/turn-loop](../../org/docs/runtime/turn-loop.md)
+- **A bridged host promise is disposed on settle, never on creation** — `resolve()`/`reject()` are no-ops
+  after `dispose()`, so eager disposal permanently neuters a nested `await`. And **`vm.dispose()` must
+  never throw**: it swallows QuickJS's `list_empty(&rt->gc_obj_list)` abort, which is catchable and
+  benign — propagating it turns an already-produced fork result into a spurious rejection. `LM_QJS_DEBUG=1`
+  loads the assertion-tracking debug WASM when hunting a real handle leak. → [runtime/](../../org/docs/runtime/README.md)
+- **Not granted ⇒ not injected AND absent from the DTS** — one `CapabilityProfile` drives both, so a call
+  the context cannot make fails typecheck (retryable) instead of throwing. This is why `ask`/`fork`/
+  `tasklist` in a fork or delegate is a *typecheck* error. → [runtime/typecheck](../../org/docs/runtime/typecheck.md)
+- **Never forbid a tool in prose — disable it in tasklist frontmatter** (`role`, `functions: [...]`,
+  `canDelegateTo`); the host enforces it, prose does not.
+  → [runtime/fork-and-tasklists](../../org/docs/runtime/fork-and-tasklists.md) · [format/space/tasklists](../../org/docs/format/space/tasklists/README.md)
+- **`execShell` / `readFileRaw` / `writeFileRaw` are rooted at `LMTHING_SPACE_DIR`**, not `process.cwd()`
+  and not the project root — a live footgun for project-authoring agents (`.issues/fs-globals-space-rooted-footgun-for-project-agents.md`).
+  Project-app globals (`db`, `writePage`/`writeApi`/`writeHook`) resolve against `projectRoot` instead.
+  → [runtime-globals/](../../org/docs/runtime-globals/README.md)
+- **Adding a worker-run seam ⇒ add its tsup entry.** Store code (space emitters, space hook handlers, code
+  nodes) resolves its worker entry as a sibling of the bundled module; a missing `worker-load-entry` in
+  `libs/cli/tsup.config.ts` ships an image where every emitter scan and space-hook dispatch fails in prod
+  (unit tests run from `src/` and miss it). → [`libs/cli/tsup.config.ts`](./libs/cli/tsup.config.ts)
+- **System spaces auto-adopt source/image updates** — a pristine materialized copy re-syncs on boot;
+  locally-edited ones hold back (adopt with `--adopt-system-spaces`). → [`libs/cli/src/cli/runtime-init.ts`](./libs/cli/src/cli/runtime-init.ts) · [system-spaces/](../../org/docs/system-spaces/README.md)
+- **`pnpm --filter @lmthing/core test` is a silent no-op** — core has no `test` script. Use
+  `cd sdk/org && pnpm test <path>`. → [contributing/testing](../../org/docs/contributing/testing.md)
 
 ## Rules
 
 - **Always test every fix.** No fix is done until a test would have caught it.
-- **Issue lifecycle.** File a `.issues/` entry when a bug is found; delete it (and its Known issues entry) when fixed and tested.
-- **No issue file = no known bugs.** Keep `.issues/` empty by fixing things, not ignoring them.
-- **Design system is mandatory.** Any web styling uses `@lmthing/css` tokens — never a raw color (no hex, no literal `rgb()/hsl()`, no stock Tailwind colors like `gray-*`/`blue-*`/`green-500`); use `var(--foreground)`, `bg-primary`, `text-agent`, etc. Change colors only via `libs/css/src/tokens/tokens.json` + `pnpm --filter @lmthing/css generate` (never hand-edit `theme.css`). Enforced by `lint:tokens` (hard CI gate). → `@.claude/skills/visual-design-system.md` · `libs/css/DESIGN.md`.
+- **Update the doc in the same change.** See [`org/docs/SYNC.md`](../../org/docs/SYNC.md). If you catch
+  yourself explaining behaviour *here*, it belongs in `org/docs` — put it there and link it.
+- **Issue lifecycle.** File a `.issues/` entry when a bug is found; delete it when fixed and tested.
+  No issue file = no known bugs. (`.issues/` is the live list — do not mirror it here.)
+- **Design system is mandatory.** Any web styling uses `@lmthing/css` tokens — never a raw color. Change
+  colors only via `libs/css/src/tokens/tokens.json` + `pnpm --filter @lmthing/css generate` (never
+  hand-edit `theme.css`). Enforced by `lint:tokens` (hard CI gate). → [design-system/](../../org/docs/design-system/README.md)
 
 ## Task Index
 
-Load the matching file when working on:
+Source of truth is the `org/docs` page. Skills (`@.claude/skills/*`) are local *procedures* only.
 
-| Working on… | Load |
+| Working on… | Read |
 |---|---|
-| the `lmthing` project server / session persistence / `.lmthing/` layout | `@.claude/skills/project-server.md` |
-| **project-as-application** — a project's `database/ pages/ api/ hooks/` app, capability globals, `system-appbuilder`, store install/serve | `@.claude/skills/project-app.md` (format: [org/format/project/](../../org/format/project/README.md) · full design: [org/app/](../../org/app/README.md)) |
-| **the unified event pipeline** — `events/<name>.ts` emitter defs (webhook/cron/db/internal), event hooks (`hooks/<slug>.ts` `{type:'event'}`), code nodes in tasklists, project functions, `@consent`, `installSpace`/store globals | `@lmthing:.claude/skills/events-and-hooks.md` (repo-root skill) |
-| terminal+web UI design system (catalog, renderers, theming) | `@.claude/skills/ui-design-system.md` |
-| **visual** design system — brand palette, CSS design tokens, Tailwind theme, dark mode, component CSS (web SPAs) | `@.claude/skills/visual-design-system.md` (source: `libs/css/DESIGN.md` + `tokens.json`) |
-| system spaces / host primitives / fork roles | `@.claude/skills/system-spaces.md` |
-| **developing the system spaces** (role/functions/forEach, charter split, architect/research pipelines, live-test commands, gotchas) | [./libs/core/system-spaces/DEVELOPMENT.md](./libs/core/system-spaces/DEVELOPMENT.md) |
-| creating or modifying a space | `@.claude/skills/new-space.md` |
-| adding a value-yielding global | `@.claude/skills/new-global.md` |
-| adding an AI provider | `@.claude/skills/new-provider.md` |
-| debugging the eval/yield pipeline | `@.claude/skills/debug-eval.md` |
-| writing/running core tests | `@.claude/skills/writing-tests.md` |
-| turn-loop / yield protocol / budget / prose-drop | `@.claude/arch/turn-loop.md` |
-| typecheck / DTS overlay / transpile / JSX runtime | `@.claude/arch/typecheck.md` |
-| fork + tasklist orchestration / salvage | `@.claude/arch/fork-tasklist.md` |
-| delegate + registry / auto-capture / `defaultAction` | `@.claude/arch/delegate.md` |
-| space loading / merge rules | `@.claude/arch/spaces.md` |
-| space authoring (on-disk format) | [org/format/space/](../../org/format/space/README.md) |
-| runtime globals · CLI + pod REST API | [org/runtime-globals/](../../org/runtime-globals/README.md) · [org/cli-api/](../../org/cli-api/README.md) |
+| the turn loop / yield protocol / budgets / retries / prose-drop | [org/docs/runtime/turn-loop.md](../../org/docs/runtime/turn-loop.md) |
+| typecheck / the DTS overlay / transpile / the JSX runtime | [org/docs/runtime/typecheck.md](../../org/docs/runtime/typecheck.md) |
+| forks + tasklist orchestration / roles / `forEach` / salvage / code nodes | [org/docs/runtime/fork-and-tasklists.md](../../org/docs/runtime/fork-and-tasklists.md) |
+| `delegate()` / the registry / `canDelegateTo` / actions / auto-capture | [org/docs/runtime/delegation.md](../../org/docs/runtime/delegation.md) |
+| space loading / system-space merge rules / project functions | [org/docs/runtime/spaces-loading.md](../../org/docs/runtime/spaces-loading.md) |
+| the `Session` API / snapshots + resume / history summarization / tracing | [org/docs/runtime/sessions.md](../../org/docs/runtime/sessions.md) |
+| a runtime global, or the capability that gates it | [org/docs/runtime-globals/](../../org/docs/runtime-globals/README.md) · procedure: `@.claude/skills/new-global.md` |
+| the on-disk format of a **space** (agents, tasklists, knowledge, functions, components, events) | [org/docs/format/space/](../../org/docs/format/space/README.md) · procedure: `@.claude/skills/new-space.md` |
+| the on-disk format of a **project** (`database/ api/ pages/ hooks/ events/ spaces/`) | [org/docs/format/project/](../../org/docs/format/project/README.md) |
+| **project-as-application** — how an app is built, served and executed | [org/docs/app/](../../org/docs/app/README.md) · procedure: `@.claude/skills/project-app.md` |
+| the `lmthing` CLI, the pod server, session persistence, `.lmthing/` | [org/docs/cli-api/](../../org/docs/cli-api/README.md) · [rest/](../../org/docs/cli-api/rest/README.md) · procedure: `@.claude/skills/project-server.md` |
+| the shipped system spaces (THING, appbuilder, architect, engineer, store, …) | [org/docs/system-spaces/](../../org/docs/system-spaces/README.md) · authoring notes: [libs/core/system-spaces/DEVELOPMENT.md](./libs/core/system-spaces/DEVELOPMENT.md) |
+| **the unified event pipeline** — `events/*` emitter defs, event hooks, `@consent`, store globals | `@lmthing:.claude/skills/events-and-hooks.md` (repo-root skill) · [org/docs/format/space/events/](../../org/docs/format/space/events/README.md) |
+| adding an AI provider | [org/docs/contributing/add-a-provider.md](../../org/docs/contributing/add-a-provider.md) |
+| writing / running tests | [org/docs/contributing/testing.md](../../org/docs/contributing/testing.md) |
+| debugging the eval/yield pipeline | [org/docs/contributing/debugging.md](../../org/docs/contributing/debugging.md) |
+| the design system (tokens, theme, component CSS) | [org/docs/design-system/](../../org/docs/design-system/README.md) · canonical spec: [libs/css/DESIGN.md](./libs/css/DESIGN.md) |
+| the shared libs' public APIs (`state`, `ui`, `css`, `auth`, `openclaw-compat`) | [org/docs/libs/](../../org/docs/libs/README.md) |
+| the `/chat`, `/studio`, `/computer` surfaces | [chat/](../../org/docs/chat/README.md) · [studio/](../../org/docs/studio/README.md) · [computer/](../../org/docs/computer/README.md) |
+| the whole system (domains, pod model, data flow) | [org/docs/architecture.md](../../org/docs/architecture.md) |
