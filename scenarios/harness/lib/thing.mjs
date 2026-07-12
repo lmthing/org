@@ -72,11 +72,27 @@ export class ThingSession {
     return this.start({ resumeSessionId: sessionId });
   }
 
+  /**
+   * Pull new trace events since `lastSeq`.
+   *
+   * A long turn can spawn many delegate/headless sub-sessions; on a small pod (`maxSessions`) the
+   * session manager may EVICT this top-level session shortly after its turn completes, so a poll
+   * then 404s ("unknown session"). That is not a turn failure — the work already landed (assert it
+   * on real pod state). So a 404 is surfaced as a soft signal (`this.sessionGone = true`) rather
+   * than thrown; the settle loop treats it as turn-end once work has been seen.
+   */
   async pullEvents() {
-    const { events, lastSeq } = await this.pod.req(
-      'GET',
-      `/api/sessions/${this.sessionId}/events?since=${this.lastSeq}&format=json`,
-    );
+    let res;
+    try {
+      res = await this.pod.req('GET', `/api/sessions/${this.sessionId}/events?since=${this.lastSeq}&format=json`);
+    } catch (err) {
+      if (err?.status === 404) {
+        this.sessionGone = true;
+        return [];
+      }
+      throw err;
+    }
+    const { events, lastSeq } = res;
     for (const e of events ?? []) {
       this.events.push(e.event);
       if (this.verbose) this.#logEvent(e.event);
@@ -135,7 +151,31 @@ export class ThingSession {
    * A turn blocked on an unanswered ask never goes idle, so an un-handled consent card surfaces as
    * a timeout with the ask still open (which the scenario can assert on).
    */
+  /**
+   * Ensure `this.sessionId` still exists; if it was evicted (`maxSessions` on a small pod), start a
+   * fresh session — resuming the old id when the pod still has its snapshot, else a clean new one.
+   * The project (its spaces, app, db) persists on disk regardless, so a re-established session still
+   * sees everything built so far; only in-VM conversation memory is lost (acceptable — the scenario
+   * drives self-contained follow-ups).
+   */
+  async #ensureAlive() {
+    if (!this.sessionId) return;
+    const list = await this.pod.req('GET', '/api/sessions').catch(() => ({ sessions: [] }));
+    const alive = (list.sessions ?? []).some((s) => s.sessionId === this.sessionId);
+    if (alive) return;
+    this.log('session evicted — re-establishing');
+    const prev = this.sessionId;
+    try {
+      await this.start({ resumeSessionId: prev });
+    } catch {
+      await this.start();
+    }
+    this.lastSeq = 0;
+    this.sessionGone = false;
+  }
+
   async send(content, opts = {}) {
+    await this.#ensureAlive();
     return this.#dispatchAndWait(
       () => this.pod.req('POST', `/api/sessions/${this.sessionId}/message`, { content }),
       content,
@@ -166,6 +206,7 @@ export class ThingSession {
       url: a.url ?? `/api/uploads/${a.id}`,
       ...(a.filename ? { filename: a.filename } : {}),
     }));
+    await this.#ensureAlive();
     return this.#dispatchAndWait(
       () => this.#wsSend({ type: 'sendMessage', content, attachments: refs }),
       `${content}  [+${refs.length} attachment(s)]`,
@@ -206,6 +247,7 @@ export class ThingSession {
     let lastChange = Date.now();
     let sawWork = false;
     let quietSince = null;
+    this.sessionGone = false;
 
     while (Date.now() - t0 < timeoutMs) {
       const fresh = await this.pullEvents();
@@ -215,13 +257,22 @@ export class ThingSession {
         quietSince = null;
       }
 
+      // If the session was evicted AFTER we saw the turn's work (a long turn's many sub-sessions
+      // can push a small pod past `maxSessions`), the turn is effectively done — stop cleanly and
+      // let the scenario assert on real pod state. If it vanished BEFORE any work, that's a real
+      // failure (e.g. a mid-init pod restart), so surface it.
+      if (this.sessionGone) {
+        if (sawWork) return this.turn(startSeq, Date.now() - t0);
+        throw new Error(`session ${this.sessionId} disappeared before doing any work (pod restart mid-init?)`);
+      }
+
       // Drain asks (consent cards, forms) — an unanswered ask stalls the turn forever.
-      for (const ask of await this.openAsks()) {
+      for (const ask of await this.openAsks().catch(() => [])) {
         if (this.asks.some((a) => a.id === ask.id)) continue;
         const answer = this.onAsk ? this.onAsk(ask.descriptor, ask) : undefined;
         this.asks.push({ id: ask.id, descriptor: ask.descriptor, answered: answer });
         if (answer !== undefined) {
-          await this.answerAsk(ask.id, answer);
+          await this.answerAsk(ask.id, answer).catch(() => {});
           lastChange = Date.now();
         }
       }
@@ -232,6 +283,10 @@ export class ThingSession {
       if (me?.status === 'error') {
         await this.pullEvents();
         throw new Error(`session entered error state: ${JSON.stringify(me)}`);
+      }
+      // Session no longer listed but we saw work → treat as completed (same eviction case).
+      if (sawWork && !me && this.events.length > startSeq) {
+        return this.turn(startSeq, Date.now() - t0);
       }
 
       if (sawWork && idle && Date.now() - lastChange >= quietMs) {
