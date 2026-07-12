@@ -47,7 +47,7 @@ recommendations; "renting the flat" / "started a side-gig" grow new sections.
 spaces). **Gap closed/exposed:** deep-research→knowledge+DB; the `ctx.spawn` form gap (working path is
 db:insert→hook); mid-life table+page addition to a built app.
 
-### 08 — Small-shop back office that reorders itself
+### 08 — Small-shop back office that reorders itself  *(authored → `08-small-shop/scenario.md`)*
 **Persona:** Yuki, ceramics Etsy shop; hates stockouts and spreadsheets.
 **Request:** *"Materials/products/suppliers spreadsheet attached, plus 3 months of sales and photos of
 my pieces. Build me a stock tracker — when something's low, draft the reorder email to my supplier but
@@ -60,7 +60,7 @@ sections.
 **Gap:** same three as 07, stressed from the db-emitter angle. Fixtures already at
 `08-small-shop/fixtures/` (`inventory.csv`, `product-photo.png`).
 
-### 09 — Home renovation command center
+### 09 — Home renovation command center  *(authored → `09-home-renovation/scenario.md`)*
 **Persona:** A couple mid-renovation; quotes, photos, and receipts everywhere.
 **Request:** *"Quotes, receipts, a budget Excel, photos of every room, and a voice memo from the site.
 Build me a reno tracker by room with a budget I can actually see, and warn me before I blow it."*
@@ -71,7 +71,7 @@ is researched knowledge).
 **Leads with:** vision (before/after gallery) + budget db-emitter + phased physical evolution.
 **Gap:** mid-life evolution across physical phases; pdf quote ingest.
 
-### 10 — Podcast research desk
+### 11 — Podcast research desk
 **Persona:** Anna, weekly interview show; prep eats her week.
 **Request:** *"Guest list for two months with LinkedIn/bios, my past-episode notes, and a voice memo of
 angle ideas. Build me a research desk — one briefing per guest — refreshed two days before each
@@ -83,7 +83,7 @@ and marks it prep-ready; "adding a sponsored series" / "turn episodes into artic
 **Gap:** does researched material land in a space's knowledge and get cited later?; cron-driven
 authoring turns that update a space.
 
-### 11 — Family recipe book → meal planner
+### 10 — Family recipe book → meal planner  *(authored → `10-family-recipes/scenario.md`)*
 **Persona:** Vasilis (mixes Greek/English); his mother's recipes are disappearing.
 **Request:** *"Σου στέλνω τις συνταγές της μάνας μου — φωτογραφίες χειρόγραφων, συνταγές από το
 ίντερνετ, και ένα ηχητικό. Φτιάξε βιβλίο ανά κουζίνα, και κάθε Κυριακή φτιάξε τα φαγητά της βδομάδας

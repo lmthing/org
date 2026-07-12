@@ -78,6 +78,11 @@ export class Pod {
     this.req('GET', `/app/${projectId}/${path}`, undefined, { raw: true });
 
   // ── hooks & events ──────────────────────────────────────────────────────
+  /** List every loaded hook across projects (`GET /api/hooks`). */
+  listHooks = () => this.req('GET', '/api/hooks');
+  /** POST to an app's own API route (`/app/<id>/api/<route>`) — the form-submit path. */
+  appApi = (projectId, route, body, method = 'POST') =>
+    this.req(method, `/app/${projectId}/api/${route}`, body, { raw: true });
   /** The one authoritative hook-run path (crond, boot catch-up and Studio all use it).
    *  The slug is a single path segment and may contain `:`/`@` (space hooks are
    *  `<spaceId>:<base>`; emitters are `@emitter:<scope>:<name>`) — encode it. */

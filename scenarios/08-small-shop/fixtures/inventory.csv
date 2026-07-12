@@ -1,0 +1,18 @@
+section,sku,name,detail,qty,reorder_at,supplier,cost_eur,price_eur,last_sold
+material,CLAY-W12,Sibelco Whiteware clay,12.5kg bag,8,3,Sibelco NL,22.00,,
+material,GLZ-CLR,Clear glossy glaze,1L,4,2,Sibelco NL,14.00,,
+material,GLZ-BLUE,Cobalt blue glaze,1L,2,2,Ceramica IT,16.50,,
+material,STN-MEL,Mel's stoneware body,10kg,0,3,Sibelco NL,19.00,,
+product,MM-01,Mori Mug,matte grey 300ml,6,2,,8.50,28.00,2026-07-09
+product,MM-02,Mori Mug,matte blue 300ml,3,2,,8.50,28.00,2026-07-09
+product,DON-01,Donabe pot,2-person clay pot,2,1,,22.00,78.00,2026-07-08
+product,BOW-04,Noodle bowl,undulating rim,9,3,,6.00,24.00,2026-07-10
+product,VSE-01,Vase slim,tall 35cm,1,2,,14.00,62.00,2026-07-06
+product,PLT-02,Side plate,22cm speckled,11,4,,5.50,22.00,2026-07-10
+supplier,SUP-01,Sibelco NL,Breda NL,,,,,,
+supplier,SUP-02,Ceramica IT,Faenza IT,,,,,,
+sale,ORD-1041,Mori Mug x2,,1,,,56.00,,2026-07-09
+sale,ORD-1042,Donabe pot x1,,1,,,78.00,,2026-07-08
+sale,ORD-1043,Noodle bowl x4,,1,,,96.00,,2026-07-10
+sale,ORD-1044,Side plate x6,,1,,,132.00,,2026-07-10
+sale,ORD-1045,Vase slim x1,,1,,,62.00,,2026-07-06
