@@ -334,4 +334,67 @@ describe('internal-signals (S8)', () => {
     const projectIds = runs.map((r) => r['projectId']).sort();
     expect(projectIds).toEqual(['pa', 'pb']);
   });
+
+  // REGRESSION (scenario 04): `project.created` names the BRAND-NEW project in
+  // `data.projectId`. Routing on that id delivers the signal to the one project
+  // that cannot possibly subscribe (it was scaffolded a millisecond ago and has
+  // no defs/hooks), so no `integration-lmthing` mirror ever saw a project being
+  // created. `meta.fanOutAll` routes it to every project instead — while the def
+  // still receives the new project's id as payload data.
+  it('fans a fanOutAll signal (project.created) out to every project, not just its subject', async () => {
+    const root = await newRoot('s8-created-');
+    const triggerHook = `export default {
+      type: 'event',
+      on: { event: 'project/created_ev' },
+      trigger: 'ops/notifier#notify',
+    };`;
+    await writeHook(root, 'pa', 'notify', triggerHook);
+    await writeHook(root, 'pb', 'notify', triggerHook);
+
+    const runs: RunCall[] = [];
+    const seen: unknown[] = [];
+    installInternalSignalSink({
+      root,
+      manager: makeManager(runs),
+      listProjectIds: async () => ['pa', 'pb'],
+      scan: cannedScan('project.created', 'created_ev'),
+      invokeEmit: async (_file, signal) => {
+        seen.push(signal.data); // what the def's pure emit received (the SUBJECT project id)
+        return [{ event: 'created_ev', payload: { slug: String(signal.data['projectId']) } }];
+      },
+    });
+
+    // The subject project ('pnew') is NOT in the audience list — without
+    // fanOutAll this routes to 'pnew' alone and fires nothing.
+    emitInternalSignal('project.created', { projectId: 'pnew' }, { fanOutAll: true });
+    await flushInternalSignals();
+
+    expect(runs.map((r) => r['projectId']).sort()).toEqual(['pa', 'pb']);
+    expect(seen).toEqual([{ projectId: 'pnew' }, { projectId: 'pnew' }]); // payload keeps the subject
+  });
+
+  it('still scopes a normal projectId-carrying signal to that one project', async () => {
+    const root = await newRoot('s8-scoped-');
+    const triggerHook = `export default {
+      type: 'event',
+      on: { event: 'project/installed_ev' },
+      trigger: 'ops/notifier#notify',
+    };`;
+    await writeHook(root, 'pa', 'notify', triggerHook);
+    await writeHook(root, 'pb', 'notify', triggerHook);
+
+    const runs: RunCall[] = [];
+    installInternalSignalSink({
+      root,
+      manager: makeManager(runs),
+      listProjectIds: async () => ['pa', 'pb'],
+      scan: cannedScan('space.installed', 'installed_ev'),
+      invokeEmit: async () => [{ event: 'installed_ev', payload: { slug: 's' } }],
+    });
+
+    emitInternalSignal('space.installed', { projectId: 'pb' });
+    await flushInternalSignals();
+
+    expect(runs.map((r) => r['projectId'])).toEqual(['pb']);
+  });
 });

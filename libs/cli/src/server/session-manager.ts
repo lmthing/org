@@ -1809,7 +1809,11 @@ export class SessionManager {
     }
     const meta = await scaffoldProject(root, id, name.trim());
     // S8 instrumentation: server-side project creation (guarded one-liner).
-    emitInternalSignal('project.created', { projectId: meta.id });
+    // `fanOutAll`: the new project's id is the signal's SUBJECT, not its audience —
+    // a just-scaffolded project has no emitter defs or hooks, so the default
+    // projectId-scoped fan-out would deliver it to the one project that cannot
+    // possibly subscribe. Every project holding an `integration-lmthing` def wants it.
+    emitInternalSignal('project.created', { projectId: meta.id }, { fanOutAll: true });
     return meta;
   }
 

@@ -25,8 +25,10 @@
  *   hook.fired         { projectId, slug, hookType }
  *   document.written   { projectId, path }
  *   project.created    { projectId }
- * `data.projectId` scopes the fan-out to that one project; a signal without it
- * fans out to EVERY project the sink can list.
+ * `data.projectId` scopes the fan-out to that one project; a signal without it —
+ * or one whose `meta.fanOutAll` is set (`project.created`, whose projectId names
+ * the brand-new SUBJECT project, not the audience) — fans out to EVERY project
+ * the sink can list.
  *
  * ── Loop protection ──────────────────────────────────────────────────────────
  * A signal may originate from hook-triggered work (`hook.fired` carries
@@ -70,6 +72,19 @@ export interface InternalSignalMeta {
   /** The hook whose run produced this signal — its derived events never
    *  re-trigger that same slug (threaded as `skipHookSlug` into dispatch). */
   originatingHookSlug?: string;
+  /**
+   * Route to EVERY project instead of the one named by `data.projectId`.
+   *
+   * The default fan-out rule reads `data.projectId` as the AUDIENCE (the project
+   * whose defs/hooks should see the signal). For a signal whose `projectId` is
+   * the SUBJECT rather than the audience — `project.created`, where the named
+   * project is brand new and by construction has no emitter defs or hooks yet —
+   * that rule routes the signal to the one project guaranteed not to care, and
+   * NO subscriber ever fires. Such a signal sets `fanOutAll` so the sink ignores
+   * `data.projectId` for routing while still handing it to the def as payload
+   * data (found live in scenario 04).
+   */
+  fanOutAll?: boolean;
 }
 
 /** The payload of one signal. `projectId` (when present) scopes the fan-out. */
@@ -226,8 +241,13 @@ async function routeSignal(s: QueuedSignal): Promise<void> {
     return;
   }
 
-  // 2. Fan-out scope: the signal's own project, else every project.
-  const explicit = typeof s.data['projectId'] === 'string' && s.data['projectId'] ? [s.data['projectId']] : undefined;
+  // 2. Fan-out scope: the signal's own project, else every project. `fanOutAll`
+  //    (project.created) forces the every-project path — its `projectId` names
+  //    the SUBJECT, not the audience (see InternalSignalMeta.fanOutAll).
+  const explicit =
+    !s.meta?.fanOutAll && typeof s.data['projectId'] === 'string' && s.data['projectId']
+      ? [s.data['projectId']]
+      : undefined;
   const projectIds = explicit ?? (await cfg.listProjectIds());
 
   const scan = cfg.scan ?? scanEmitterDefs;
