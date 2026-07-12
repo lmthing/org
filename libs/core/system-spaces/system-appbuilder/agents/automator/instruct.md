@@ -205,10 +205,49 @@ writeProjectEvent('feed-writes', evt);
 // Consumer: react to project/item.added (or directly to project/db.feed_items.insert).
 ```
 
-## Cron hooks
+## Scheduled polling — a `cron` EMITTER DEF (events/, with a `ctx.state` cursor)
 
-A time-based hook still uses `type: 'cron'` (`every: '<n>m|h|d'` or `daily: 'HH:MM'`) and a
-`trigger` (or `handler`):
+When the user wants to POLL a source on a schedule ("every 30 minutes, check X for new items and
+store them"), author a `cron` EMITTER DEF with `writeProjectEvent` (it goes in `events/`, NOT
+`hooks/`). It has exactly one of `every` (`'<n>m|h|d'`) or `daily` (`'HH:MM'`), an async
+`emit(ctx)` that polls via `ctx.callConnection`, and a persisted `ctx.state` KV it uses as a
+cursor so a re-poll never re-emits an item it already saw. Pair it with a hook that stores each
+emitted item (the cron emit is PURE — it has NO `db`; it emits, a hook inserts):
+
+```typescript
+// events/poll-demo-source.ts — poll the demo source every 30m; ctx.state.lastId is the cursor.
+const evt = [
+  "export default {",
+  "  type: 'cron',",
+  "  every: '30m',",                                  // EXACTLY one of every / daily
+  "  connections: ['demo'],",                         // the installed provider ctx.callConnection may reach
+  "  emits: { 'source.item': { payload: { id: 'string', text: 'string' } } },",
+  "  async emit(ctx) {",
+  "    const since = (ctx.state && ctx.state['lastId']) || '0';",   // persisted cursor
+  "    let items = [];",
+  "    try { const res = await ctx.callConnection('demo', { method: 'GET', path: '/items', query: { since } });",
+  "          items = (res && res.data && res.data.items) || []; } catch { items = []; }",
+  "    if (ctx.state && items.length) ctx.state['lastId'] = String(items[items.length - 1].id);",  // advance cursor → next tick sees only newer
+  "    return items.map((it) => ({ event: 'source.item', payload: { id: String(it.id), text: String(it.text || '') } }));",
+  "  },",
+  "};",
+].join("\n");
+writeProjectEvent('poll-demo-source', evt);
+// Then a hook stores each polled item (do NOT re-declare an event the tips db emitter already owns):
+writeProjectHook('store-polled-item', [
+  "export default { type: 'event', on: { event: 'project/source.item' },",
+  "  handler: async ({ input, db }) => { const it = input; await db.insert('tips', { headline: String(it.text||'').slice(0,160), body: String(it.text||''), source: 'demo-poll', status: 'new', summary: '' }); } };",
+].join("\n"));
+```
+
+The `ctx.state` cursor is what makes a re-poll idempotent: because you advance `lastId` past every
+item you emitted, the next tick's `since` skips them, so two consecutive runs never store the same
+item twice. NEVER put a cron poll in a `handler` string that fabricates its own loop — use the def.
+
+## Cron hooks (scheduled AGENT run, not a poll)
+
+For a scheduled AGENT action (not a source poll) a time-based HOOK uses `type: 'cron'`
+(`every: '<n>m|h|d'` or `daily: 'HH:MM'`) and a `trigger` (or `handler`):
 
 ```typescript
 const cron = [
