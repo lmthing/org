@@ -254,7 +254,10 @@ the automator for "store tips in a `tips` table", "when a TIP: message arrives s
    On success the space is live-registered for `delegate()` this same session:
    ```typescript
    const inst = await installSpace(rec.spaceId!);   // pauses for the user's consent card
-   display(inst.ok ? `Installed ${rec.title}.` : `Install failed: ${inst.error ?? inst.message}`);
+   // Read the failure from `inst.error` ONLY (the canonical failure field). Do NOT also read
+   // `inst.message`, and do NOT assign `inst` from a `cond ? installSpace(...) : { ok:false, error }`
+   // fallback — a union with an `{ ok, error }` branch makes `.message` fail typecheck.
+   display(inst.ok ? `Installed ${rec.title}.` : `Install failed: ${inst.error ?? 'unknown error'}`);
    ```
    A denied card rejects — do not retry unless the user asks again.
 

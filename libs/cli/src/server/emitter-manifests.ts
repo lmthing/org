@@ -355,20 +355,42 @@ async function loadScope(scope: string, dir: string, timeoutMs: number): Promise
     .sort(); // deterministic order — a duplicate event names the LATER file
   if (files.length === 0) return undefined;
 
-  const defs: ExtractedEmitterDef[] = [];
+  const allDefs: ExtractedEmitterDef[] = [];
   for (const f of files) {
     const loaded = await loadDef(scope, join(dir, f), timeoutMs);
-    if (loaded) defs.push(loaded);
+    if (loaded) allDefs.push(loaded);
   }
 
-  // 3. Per-scope duplicate-event guard. `collectDeclaredEvents` throws on a
-  //    collision — we fail the WHOLE scope (drop all its defs) so the authoring
-  //    error is unmissable rather than silently honoring an arbitrary winner.
+  // 3. Per-scope duplicate-event guard — ISOLATED, not scope-fatal. When two defs
+  //    declare the same event, keep the FIRST (deterministic sorted order) and DROP
+  //    only the later offender with a warn, instead of dropping EVERY emitter in the
+  //    scope. Failing the whole scope meant one redundant def (e.g. the authoring agent
+  //    writing a second `tip.added` db emitter) silently disabled ALL of a project's
+  //    emitters — so `project/<event>` never fired and every agent-trigger hook on it
+  //    went dead. Found live in scenario 01 (the summary-on-tip.added path). The kept
+  //    def's emit still runs; the dropped def's would only have re-emitted the same
+  //    event name. (`collectDeclaredEvents` still throws on the survivors as a backstop.)
+  const owned = new Map<string, string>(); // event name → owning def name
+  const defs: ExtractedEmitterDef[] = [];
+  for (const d of allDefs) {
+    const collision = Object.keys(d.def.emits).find((ev) => owned.has(ev));
+    if (collision !== undefined) {
+      console.warn(
+        `[emitter-manifests] scope "${scope}" in "${dir}": dropping def "${d.name}" — it re-declares event ` +
+          `"${collision}" already declared by "${owned.get(collision)}" (kept). Event names must be unique per scope.`,
+      );
+      continue;
+    }
+    for (const ev of Object.keys(d.def.emits)) owned.set(ev, d.name);
+    defs.push(d);
+  }
+
   const loadedEmitters: LoadedEmitter[] = defs.map((d) => ({ name: d.name, def: { ...d.def, emit: NOOP_EMIT } as EmitterDef }));
   let declaredEvents: EmitsSchema;
   try {
     declaredEvents = collectDeclaredEvents(loadedEmitters);
   } catch (err) {
+    // Backstop — should be unreachable now that duplicates are pre-dropped above.
     console.warn(
       `[emitter-manifests] failing scope "${scope}" in "${dir}": ${err instanceof Error ? err.message : String(err)}`,
     );

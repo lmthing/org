@@ -160,15 +160,31 @@ describe('scanEmitterDefs — env containment', () => {
   });
 });
 
-describe('scanEmitterDefs — duplicate events fail the scope', () => {
-  it('drops ALL defs of a scope that declares a duplicate event name, with a warn', async () => {
+describe('scanEmitterDefs — a duplicate event is ISOLATED, not scope-fatal', () => {
+  it('keeps the FIRST def and drops only the later duplicate, with a warn (the scope stays alive)', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Deterministic sorted order: "one" < "two" → "one" is kept, "two" dropped.
     writeEvent('integration-dup', 'one', webhookDef('dup-a', 'dup.event'));
     writeEvent('integration-dup', 'two', webhookDef('dup-b', 'dup.event'));
     const { scopes } = await scanEmitterDefs(root, PROJECT);
-    expect(scopes['integration-dup']!.defs).toHaveLength(0);
-    expect(scopes['integration-dup']!.declaredEvents).toEqual({});
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/duplicate event "dup\.event"/));
+    // The scope is NOT wiped — the first def survives and its declared event stays live.
+    expect(scopes['integration-dup']!.defs.map((d) => d.name)).toEqual(['one']);
+    expect(scopes['integration-dup']!.declaredEvents).toHaveProperty('dup.event');
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/dropping def "two".*re-declares event "dup\.event".*"one"/));
+  });
+
+  it('a redundant second db emitter never disables the first — the project event still fires', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const dbDef = (name: string) =>
+      `export default { type: 'db', on: { table: 'tips', event: 'insert' }, emits: { 'tip.added': { payload: { id: 'string' } } }, emit(row) { return [{ event: 'tip.added', payload: { id: String(row.row.id) } }]; } };`;
+    writeEvent('project', 'a-tip-writes', dbDef('a-tip-writes'));
+    writeEvent('project', 'b-tips-db-events', dbDef('b-tips-db-events'));
+    const { scopes } = await scanEmitterDefs(root, PROJECT);
+    // Scenario 01 regression: the project scope keeps ONE tip.added emitter (the first),
+    // so project/tip.added still fires and the summary agent-trigger hook stays reachable.
+    expect(scopes['project']!.defs.map((d) => d.name)).toEqual(['a-tip-writes']);
+    expect(scopes['project']!.declaredEvents).toHaveProperty('tip.added');
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/dropping def "b-tips-db-events"/));
   });
 });
 
