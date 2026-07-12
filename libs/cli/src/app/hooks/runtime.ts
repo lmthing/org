@@ -70,6 +70,8 @@ export class ProjectHookRuntime {
   private readonly eventHooks: LoadedHook[] = [];
   private draining = false;
   private drainScheduled = false;
+  /** Single armed timer for the deferred (cooldown trailing-edge) drain. */
+  private deferredTimer: ReturnType<typeof setTimeout> | undefined = undefined;
   // Ambient context of the currently-running hook (0 = a user/agent write, not a hook).
   private currentDepth = 0;
   private currentSlug: string | undefined = undefined;
@@ -108,6 +110,10 @@ export class ProjectHookRuntime {
   /** Detach the write listener (server shutdown / project reload). */
   dispose(): void {
     this.projectDb.setOnWrite(undefined);
+    if (this.deferredTimer) {
+      clearTimeout(this.deferredTimer);
+      this.deferredTimer = undefined;
+    }
   }
 
   private onDbWrite(e: { table: string; event: 'insert' | 'update' | 'remove'; rows: unknown[] }): void {
@@ -234,5 +240,28 @@ export class ProjectHookRuntime {
     // Re-arm a fresh drain tick so the cascade continues on the next tick — still
     // non-re-entrant, and bounded by the loop guard's depth cap (3), so it terminates.
     if (this.dispatcher.queued.length > 0) this.scheduleDrain();
+
+    // Trailing edge of the coalesce: events suppressed by the per-hook cooldown during
+    // this window are deferred, not dropped. Arm ONE delayed drain to fire them once the
+    // window elapses, so a burst's final events are still processed (else the last rows
+    // of a burst are never seen — found live in scenario 03). Bounded: each trailing fire
+    // re-arms its own cooldown, so a still-arriving burst converges without a busy loop.
+    this.scheduleDeferredDrain();
+  }
+
+  /** Arm a single timer to promote cooldown-deferred entries into the queue and drain
+   *  them, `nextDeferredDelay` ms out. A no-op when nothing is deferred or a timer is
+   *  already armed. */
+  private scheduleDeferredDrain(): void {
+    if (this.deferredTimer) return;
+    const delay = this.dispatcher.nextDeferredDelay();
+    if (delay === null) return;
+    this.deferredTimer = setTimeout(() => {
+      this.deferredTimer = undefined;
+      this.dispatcher.promoteDeferred();
+      if (this.dispatcher.queued.length > 0) void this.drain();
+      else this.scheduleDeferredDrain(); // still-cooling entries — re-arm
+    }, delay + 5);
+    this.deferredTimer.unref?.();
   }
 }

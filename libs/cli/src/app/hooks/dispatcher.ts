@@ -80,6 +80,12 @@ export class HookDispatcher {
   private readonly queue = new Map<string, QueueEntry>();
   /** Budget-exhausted retries, ≤1 per slug. */
   private readonly pending = new Map<string, QueueEntry>();
+  /** Coalesce **trailing edge**: events suppressed by the cooldown window are not
+   *  dropped — the latest one per slug is kept here and promoted into the queue
+   *  once the window elapses, so a burst's final events still fire exactly once
+   *  (debounce trailing edge). ≤1 per slug. Depth-cap / self-write suppressions are
+   *  NEVER deferred (they are real stops, not rate-limits). */
+  private readonly deferred = new Map<string, QueueEntry>();
   /** Re-entrancy guard so a nested drain is a no-op. */
   private draining = false;
 
@@ -106,17 +112,66 @@ export class HookDispatcher {
         now,
         cooldownMs: this.cooldownMs,
       };
-      if (!shouldFireHook(hook, ctx).fire) continue;
+      const decision = shouldFireHook(hook, ctx);
       const entry: QueueEntry = {
         slug: hook.slug,
         event,
         hookDepth: event.hookDepth + 1,
         enqueuedAt: now,
       };
+      if (!decision.fire) {
+        // A COOLDOWN suppression is a coalesce, not a drop: remember the latest
+        // event so it fires once the window elapses (trailing edge). Depth-cap and
+        // self-write are real stops — those events are dropped, never deferred.
+        if (decision.reason === 'cooldown') this.deferred.set(hook.slug, entry);
+        continue;
+      }
       this.queue.set(hook.slug, entry); // coalesce
+      this.deferred.delete(hook.slug); // an immediate fire supersedes any deferred one
       enqueued.push(entry);
     }
     return enqueued;
+  }
+
+  /**
+   * Ms until the earliest deferred (cooldown-suppressed) entry becomes eligible to
+   * fire — `null` when nothing is deferred. The integrator arms a single delayed
+   * drain for this long so a burst's trailing events fire exactly once after the
+   * window, without a busy poll.
+   */
+  nextDeferredDelay(now: number = this.now()): number | null {
+    let min: number | null = null;
+    for (const slug of this.deferred.keys()) {
+      const eligibleAt = (this.lastFiredAt[slug] ?? 0) + this.cooldownMs;
+      const d = Math.max(0, eligibleAt - now);
+      if (min === null || d < min) min = d;
+    }
+    return min;
+  }
+
+  /**
+   * Promote every deferred entry whose cooldown window has elapsed into the live
+   * queue (coalescing onto any newer queued entry, which wins). Returns how many
+   * were promoted. The subsequent {@link drain} fires each exactly once and re-arms
+   * its cooldown — so a still-arriving burst re-defers and converges, bounded by the
+   * cooldown (never a busy loop). Self-write / depth-cap events were never deferred,
+   * so this can never resurrect a runaway cascade.
+   */
+  promoteDeferred(now: number = this.now()): number {
+    let moved = 0;
+    for (const [slug, entry] of [...this.deferred]) {
+      const eligibleAt = (this.lastFiredAt[slug] ?? 0) + this.cooldownMs;
+      if (now < eligibleAt) continue;
+      this.deferred.delete(slug);
+      if (!this.queue.has(slug)) this.queue.set(slug, { ...entry, enqueuedAt: now });
+      moved++;
+    }
+    return moved;
+  }
+
+  /** The deferred (cooldown-trailing) slugs — test/diagnostic view. */
+  get deferredSlugs(): string[] {
+    return [...this.deferred.keys()];
   }
 
   /**

@@ -149,6 +149,71 @@ describe('drain — runs entries, non-re-entrant', () => {
   });
 });
 
+describe('cooldown trailing edge (deferred coalesce)', () => {
+  it('defers a cooldown-suppressed event instead of dropping it, and promotes it once the window elapses', async () => {
+    const c = clock();
+    const d = new HookDispatcher({ hooks: [eventHook('a')], cooldownMs: 10_000, now: c.now });
+
+    // First fire arms the cooldown.
+    d.enqueue(ev({ payload: { id: '1' } }));
+    await d.drain(async () => {});
+    expect(d.lastFiredAt.a).toBe(c.now());
+
+    // An event DURING the cooldown is suppressed from the queue…
+    c.advance(500);
+    expect(d.enqueue(ev({ payload: { id: '2' } }))).toHaveLength(0);
+    // …but NOT dropped — it is deferred, with a delay until the window elapses.
+    expect(d.deferredSlugs).toEqual(['a']);
+    expect(d.nextDeferredDelay()).toBe(9_500);
+    // Not yet eligible → promoting now moves nothing.
+    expect(d.promoteDeferred()).toBe(0);
+    expect(d.queued).toHaveLength(0);
+
+    // Once the window passes, the deferred entry promotes into the queue and fires ONCE.
+    c.advance(9_500);
+    expect(d.nextDeferredDelay()).toBe(0);
+    expect(d.promoteDeferred()).toBe(1);
+    expect(d.queued.map((e) => e.slug)).toEqual(['a']);
+    expect(d.deferredSlugs).toEqual([]);
+    const run = vi.fn(async (_entry: QueueEntry) => {});
+    await d.drain(run);
+    expect(run).toHaveBeenCalledTimes(1);
+    // The LATEST suppressed event wins (trailing-edge coalesce keeps the newest payload).
+    expect(run.mock.calls[0]![0].event.payload).toEqual({ id: '2' });
+  });
+
+  it('coalesces a burst of cooldown-suppressed events to ONE deferred entry (latest wins)', () => {
+    const c = clock();
+    const d = new HookDispatcher({ hooks: [eventHook('a')], cooldownMs: 10_000, now: c.now, lastFiredAt: { a: c.now() } });
+    for (let i = 0; i < 30; i++) {
+      c.advance(1);
+      expect(d.enqueue(ev({ payload: { id: String(i) } }))).toHaveLength(0);
+    }
+    expect(d.deferredSlugs).toEqual(['a']); // 30 suppressed → ONE deferred entry
+  });
+
+  it('an immediate fire supersedes a deferred entry for the same slug', async () => {
+    const c = clock();
+    const d = new HookDispatcher({ hooks: [eventHook('a')], cooldownMs: 10_000, now: c.now, lastFiredAt: { a: c.now() } });
+    c.advance(500);
+    d.enqueue(ev({ payload: { id: 'deferred' } })); // suppressed → deferred
+    expect(d.deferredSlugs).toEqual(['a']);
+    c.advance(10_000); // window elapsed → next enqueue fires immediately
+    expect(d.enqueue(ev({ payload: { id: 'live' } }))).toHaveLength(1);
+    expect(d.deferredSlugs).toEqual([]); // the live fire dropped the stale deferred entry
+  });
+
+  it('NEVER defers a depth-cap or self-write suppression (those are real stops)', () => {
+    const d = new HookDispatcher({ hooks: [eventHook('a')], cooldownMs: 10_000 });
+    // Depth cap.
+    expect(d.enqueue(ev({ hookDepth: 3 }))).toHaveLength(0);
+    expect(d.deferredSlugs).toEqual([]);
+    // Self-write.
+    expect(d.enqueue(ev({ originatingHookSlug: 'a' }))).toHaveLength(0);
+    expect(d.deferredSlugs).toEqual([]);
+  });
+});
+
 describe('budget-exhaustion queue', () => {
   it('keeps ≤1 coalesced pending entry per slug and retries on the next drain', async () => {
     const c = clock();
