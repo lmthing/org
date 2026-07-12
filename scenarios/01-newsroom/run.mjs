@@ -242,9 +242,10 @@ const hasTable = files.includes('database/tips.json');
 r.check('LIVE project gained database/tips.json', hasTable, files.filter((f) => f.startsWith('database/')).join(', ') || '(none)');
 
 let defs = await emitterDefs();
-const dbDef = defs.find((d) => d.type === 'db');
-r.check('a {type:"db"} emitter def exists', !!dbDef, defs.map((d) => `${d.name}:${d.type}`).join(', ') || '(none)');
-r.check("the db def emits 'tip.added'", !!dbDef && /tip\.added/.test(dbDef.src), dbDef?.src?.slice(0, 200) ?? '—');
+const dbDefs = defs.filter((d) => d.type === 'db');
+r.check('a {type:"db"} emitter def exists', dbDefs.length > 0, defs.map((d) => `${d.name}:${d.type}`).join(', ') || '(none)');
+const tipAddedDef = dbDefs.find((d) => /tip\.added/.test(d.src));
+r.check("a db emitter emits 'tip.added'", !!tipAddedDef, tipAddedDef ? tipAddedDef.name : dbDefs.map((d) => d.name).join(', '));
 r.check('no eval errors', t3.errors.length === 0, JSON.stringify(t3.errors).slice(0, 300));
 if (!hasTable) {
   r.issue(

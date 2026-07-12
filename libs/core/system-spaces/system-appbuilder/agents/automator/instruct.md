@@ -88,6 +88,41 @@ const w = writeProjectHook('slack-deploy-watch', src);
 display(w.ok ? 'wrote slack-deploy-watch hook' : ('hook error: ' + w.error));
 ```
 
+### "When <message> arrives, store it" — ONE hook, DIRECT insert (do not over-build)
+
+The overwhelmingly common shape is: an inbound event → filter in code → `db.insert` into the
+project table. Write exactly ONE event hook on the REAL source event whose handler filters and
+inserts DIRECTLY. Keep it minimal.
+
+```typescript
+// "When a demo chat message starts with TIP:, store it in `tips`." ONE hook, direct insert.
+const src = [
+  "export default {",
+  "  type: 'event',",
+  "  on: { event: 'integration-demo/message.received' },",   // the REAL event integration-demo declares
+  "  handler: async ({ input, db }) => {",
+  "    const m = input as { text?: string; chatId?: string; from?: string };",
+  "    const text = String(m.text ?? '');",
+  "    if (!/^\\s*TIP:/i.test(text)) return;",                // the filter — ignore non-tips, no agent wakes
+  "    const body = text.replace(/^\\s*TIP:\\s*/i, '').trim();",
+  "    await db.insert('tips', { headline: body.slice(0, 160), body, source: 'integration-demo', status: 'new', summary: '' });",
+  "  },",
+  "};",
+].join("\n");
+writeProjectHook('store-demo-tips', src);
+```
+
+**Do NOT over-build this.** Three real failures seen in the wild — avoid them:
+
+- **Never invent an intermediate event.** A handler must not `emitEvent`/relay to a made-up address
+  like `story-tip/demo-message` and store from a SECOND hook: only events a REAL installed space or
+  YOUR project's own declared `events/*.ts` defs emit ever fire. A hook on a fabricated address loads
+  but NEVER fires (silent dead end). One inbound event → one handler → `db.insert`. Done.
+- **Reuse ONE table.** If the user said "a `tips` table", store into `tips` — do not also create
+  `story_tips`/`inbound_tips` and split writes across them. Check `db.tables()` first.
+- **Filter, don't wake an agent, unless asked.** "store it / ignore chatter" = a code handler. Only
+  reach for a model (`ctx.delegate`) when the user explicitly asks an agent to reason (see below).
+
 The handler ctx also exposes a `delegate` helper (`ctx.delegate` — space, agent, opts) that
 passes structured input through and RETURNS the agent's result, and `ctx.callConnection`
 (provider, req), gated by the hook's `connections:`.
