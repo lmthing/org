@@ -80,9 +80,14 @@ Each is one line; the grounded explanation is behind the link.
 - **Never forbid a tool in prose — disable it in tasklist frontmatter** (`role`, `functions: [...]`,
   `canDelegateTo`); the host enforces it, prose does not.
   → [runtime/fork-and-tasklists](../../org/docs/runtime/fork-and-tasklists.md) · [format/space/tasklists](../../org/docs/format/space/tasklists/README.md)
-- **`execShell` / `readFileRaw` / `writeFileRaw` are rooted at `LMTHING_SPACE_DIR`**, not `process.cwd()`
-  and not the project root — a live footgun for project-authoring agents (`.issues/fs-globals-space-rooted-footgun-for-project-agents.md`).
-  Project-app globals (`db`, `writePage`/`writeApi`/`writeHook`) resolve against `projectRoot` instead.
+- **There is NO generic filesystem on the model surface** — `readFile`/`writeFile`/`editFile`/`listDir`/
+  `glob`/`grep` and raw `execShell`/`readFileRaw`/`writeFileRaw` are absent from every agent's DTS.
+  Persistence goes ONLY through typed, root-scoped writers (`writeProject*`, the architect builder
+  functions); reads through `listProjectDir`/`readProjectFile` (project) or `listSpaceDir`/`readSpaceFile`
+  (space). The ONE exception is the **engineer**, which holds `fs:scratch`: it keeps the generic fs/shell
+  jailed to a `.lmthing/scratch/<random>` dir it must `createScratch()` first, and RETURNS code for its
+  caller to persist. `readFileRaw`/`writeFileRaw` survive only as internal host primitives (memory/todos +
+  architect builder bodies, which aren't typechecked against the model DTS).
   → [runtime-globals/](../../org/docs/runtime-globals/README.md)
 - **Adding a worker-run seam ⇒ add its tsup entry.** Store code (space emitters, space hook handlers, code
   nodes) resolves its worker entry as a sibling of the bundled module; a missing `worker-load-entry` in

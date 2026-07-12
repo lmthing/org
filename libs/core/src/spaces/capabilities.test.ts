@@ -120,7 +120,7 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     expect(spaces.length).toBe(dirs.length);
     // System agents that declare capabilities: system-appbuilder's agents (project +
     // authoring grants), the integration-* spaces (connections:use), and the plan-S11
-    // trio — system-engineer/engineer (hooks:write → writeProjectFunction),
+    // trio — system-engineer/engineer (fs:scratch → its scratch sandbox),
     // system-store/finder (store:read), and user-thing/thing (store:install). Every
     // other system agent parses to {}.
     const capBearing = (dir: string): boolean =>
