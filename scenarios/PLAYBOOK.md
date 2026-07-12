@@ -36,7 +36,7 @@ broke down**, not a green checkmark.
 Copy `sdk/org/scenarios/_template/run.mjs`. The patterns that made S05 survivable — **do not skip
 them**, every one was learned from a real mid-run failure:
 
-- **Checkpoint after every Act** to `results/<id>-checkpoint.json` (label, project, sessionId, acts
+- **Checkpoint after every Act** to `<id>/results/checkpoint.json` (label, project, sessionId, acts
   passed). A 3-hour run must resume from the last good Act, not restart. Support `--acts=3,4`.
 - **Keepalive pinger** — a free-tier pod scales to zero on idle, which kills the in-memory session
   and 404s your next poll. `setInterval(() => pod.req('POST','/api/keepalive',{}), 30_000)`.
@@ -150,7 +150,7 @@ tools, and "I'll wait for X" do NOT — a stopped agent parked on them stalls fo
 - **The honest narrative** — where it lost the thread, where it needed telling twice, where the
   abstraction leaked into the user's face. Do not smooth this over.
 - Paste the "Actual results" back into the scenario `.md` (plan + record in one file); save
-  `results/<id>-report.md` + the raw trace.
+  `<id>/results/report.md` + the raw trace.
 
 ---
 
@@ -166,4 +166,4 @@ found and fixed: THING over-scaffolding on a vague opener; no live page/API writ
 writing hooks with literal `\n`; and an impossible request handled by refusal not a fake form. The
 open frontier: the automator's model-authoring reliability on loosely-phrased compound asks (it
 authors tables/pages/events cleanly but botched every hook in one run). Full record:
-[`05-latam-trip-lifecycle.md`](./05-latam-trip-lifecycle.md) → *Actual results*.
+[`05-latam/scenario.md`](./05-latam/scenario.md) → *Actual results*.

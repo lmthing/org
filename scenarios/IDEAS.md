@@ -1,7 +1,7 @@
-# Scenario ideas — candidates beyond 01–07
+# Scenario ideas — candidates beyond 05–07
 
 A scratchpad of live-prod scenario candidates, the selection bar they must meet, and the product
-gap each one is meant to expose. The authored scenarios live in `01-…` through `07-life-admin/`
+gap each one is meant to expose. The authored scenarios live in `05-latam/` through `07-life-admin/`
 (see the [README](./README.md) table and [SCENARIO-FORMAT.md](./SCENARIO-FORMAT.md) for the format).
 Everything below is **not yet authored** — pick one, `cp -r _template <NN-slug>`, and fill it.
 

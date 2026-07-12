@@ -13,15 +13,15 @@ finds) — this file defines the *artifact*.
 Every scenario is TWO files plus its results:
 
 ```
-NN-<slug>.md              # the SPEC + the recorded results (the document, this format)
+NN-<slug>/scenario.md     # the SPEC + the recorded results (the document, this format)
 NN-<slug>/run.mjs         # the executable runner (from _template/run.mjs)
 NN-<slug>/fixtures/…      # any input files (attachments, seed data) — self-contained
-results/NN-<slug>-report.md          # generated: the Actual-results table
-results/NN-<slug>-trace.json         # generated: the full execution trace (evidence)
-results/NN-<slug>-checkpoint.json    # generated: per-Act resume state
+NN-<slug>/results/report.md     # generated: the Actual-results table
+NN-<slug>/results/trace.json    # generated: the full execution trace (evidence)
+NN-<slug>/results/checkpoint.json  # generated: per-Act resume state
 ```
 
-New scenario? `cp -r _template <NN-slug>`, fill `scenario.md` → `NN-<slug>.md`, fill `run.mjs`.
+New scenario? `cp -r _template <NN-slug>`, fill `<NN-slug>/scenario.md`, fill `run.mjs`.
 
 ---
 
@@ -51,7 +51,7 @@ the structure scenario 06 uses and the one `_template/scenario.md` ships:
 
 Then two trailing sections the runner/author fill:
 - **What this scenario is really testing** — the feature(s) under test and any known gap it closes.
-- **Actual results** — pasted from `results/NN-<slug>-report.md` after a run (verdict + per-Act
+- **Actual results** — pasted from `NN-<slug>/results/report.md` after a run (verdict + per-Act
   table + issues + perf). The document is both the plan and the record.
 
 ---
@@ -206,7 +206,7 @@ await pod.inbound('demo', signedBody, { 'x-demo-signature': sig })  // deliver a
 
 const r = new Report('my-scn', 'title');
 r.step('Act I — …', 'expected'); r.check('label', pass, actual); r.metric('turn', s, 's');
-r.save('results/my-scn-report.md'); r.saveTrace('results/my-scn-trace.json', thing);
+r.save('my-scn/results/report.md'); r.saveTrace('my-scn/results/trace.json', thing);
 ```
 
 ### Resilience built into `ThingSession` (do not re-solve these)
@@ -239,5 +239,5 @@ A scenario is done when:
 - [ ] every assertion reads the trace or real state (no prose grading);
 - [ ] it **runs e2e live against prod** and reaches a verdict (fixes made for every product bug found,
       each with a test);
-- [ ] `results/` has the report + trace; the `.md` Actual-results section is filled;
+- [ ] `<scenario>/results/` has the report + trace; the `.md` Actual-results section is filled;
 - [ ] the report carries the honest narrative and every fix's commit sha.

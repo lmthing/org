@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * Scenario 06 — Tanzania trip: a file attachment becomes spaces + a live, updatable app.
- * Spec: sdk/org/scenarios/06-tanzania-trip-attachment-to-app.md
+ * Spec: sdk/org/scenarios/06-tanzania/scenario.md
  *
  * Reproduces the literal user action: create the `tanzania-trip` project, attach
  * `tanzaniamemories.md`, and send the one compound message. Then drives the follow-ups the spec's
  * Acts require and asserts against REAL pod state (spaces on disk, the served app, db rows), not the
  * model's prose.
  *
- * Resumable: checkpoints per Act to results/06-tanzania-checkpoint.json.
+ * Resumable: checkpoints per Act to results/checkpoint.json.
  *
  *   node 06-tanzania/run.mjs            # fresh
  *   node 06-tanzania/run.mjs --reuse    # reuse the cached tanzania user + project
@@ -22,9 +22,9 @@ import { ThingSession, approveAllConsent } from '../harness/lib/thing.mjs';
 import { Report } from '../harness/lib/report.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const RESULTS = resolve(HERE, '..', 'results');
+const RESULTS = resolve(HERE, 'results');
 const FIXTURE = resolve(HERE, 'fixtures', 'tanzaniamemories.md');
-const CKPT = resolve(RESULTS, '06-tanzania-checkpoint.json');
+const CKPT = resolve(RESULTS, 'checkpoint.json');
 const PROJECT = 'tanzania-trip';
 
 const USER_MESSAGE =
@@ -255,8 +255,8 @@ r.metric('total LLM calls', stats.llmCalls);
 r.metric('total tokens', `${stats.tokens.in}/${stats.tokens.out}`);
 r.metric('delegates', stats.delegates.length);
 
-r.save(resolve(RESULTS, '06-tanzania-report.md'));
-r.saveTrace(resolve(RESULTS, '06-tanzania-trace.json'), thing);
+r.save(resolve(RESULTS, 'report.md'));
+r.saveTrace(resolve(RESULTS, 'trace.json'), thing);
 ckpt.done = true;
 ckpt.summary = r.summary();
 saveCkpt();

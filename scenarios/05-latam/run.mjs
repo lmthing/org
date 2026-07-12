@@ -9,7 +9,7 @@
  * integration, a project app (database/api/pages/hooks) served at /app/latam/, all four emitter
  * kinds, code nodes — with no file ever hand-edited by the user. Everything goes through THING.
  *
- * Checkpointing: after every act we write results/05-latam-checkpoint.json (user label, project,
+ * Checkpointing: after every act we write results/checkpoint.json (user label, project,
  * session id, acts passed). A re-run resumes the SAME user + project + session, so a failure in
  * act IV doesn't cost the 3 hours that produced acts I–III. `--acts=3,4` runs only those.
  */
@@ -25,8 +25,8 @@ import { SDK_ORG } from '../harness/lib/paths.mjs';
 // ── config ────────────────────────────────────────────────────────────────────
 const LABEL = 'latam';
 const PROJECT = 'latam';
-const RESULTS = `${SDK_ORG}/scenarios/results`;
-const CHECKPOINT = `${RESULTS}/05-latam-checkpoint.json`;
+const RESULTS = `${SDK_ORG}/scenarios/05-latam/results`;
+const CHECKPOINT = `${RESULTS}/checkpoint.json`;
 const DEMO_SECRET = 'latam-demo-hmac-secret-2026';
 /** A public echo sink — the demo integration's outbound `callConnection('demo')` target.
  *  POST {base}/messages → 200 JSON. No account needed, so the scenario is self-contained. */
@@ -647,8 +647,8 @@ report.metric('total tokens (in/out)', `${metrics.tokens.in} / ${metrics.tokens.
 report.metric('llm calls', stats.llmCalls);
 for (const [c, ms] of metrics.spaceMs) report.metric(`space: ${c}`, Math.round(ms / 1000), 's');
 
-report.save(`${RESULTS}/05-latam-report.md`);
-report.saveTrace(`${RESULTS}/05-latam-trace.json`, thing);
+report.save(`${RESULTS}/report.md`);
+report.saveTrace(`${RESULTS}/trace.json`, thing);
 cp.done = true;
 cp.summary = report.summary();
 saveCheckpoint(cp);

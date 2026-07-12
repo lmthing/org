@@ -34,7 +34,7 @@ cd sdk/org/scenarios/harness && node ../05-latam/run.mjs
 ```
 
 Long-running (target ≤ 4 h). The runner checkpoints after every act to
-`results/05-latam-checkpoint.json`, so a failure late in the trip doesn't cost the whole run — it
+`results/checkpoint.json`, so a failure late in the trip doesn't cost the whole run — it
 can resume from the last good act against the same user and project.
 
 ---
@@ -197,8 +197,8 @@ silently writing nothing.
 
 _Live prod run, 2026-07-12, disposable user `latam-mrh4xr6i` (namespace `user-381387982222943882`).
 Run across compute images `b4542e0` → `22e7e54` → `6c9f34f` → `02435e7` (each carrying successive
-fixes made DURING the run). Raw report: `sdk/org/scenarios/results/05-latam-report.md`; trace:
-`…/05-latam-trace.json`._
+fixes made DURING the run). Raw report: `sdk/org/scenarios/05-latam/results/report.md`; trace:
+`…/05-latam/results/trace.json`._
 
 **Verdict: CONDITIONAL PASS.** The full lifecycle — creation → incremental growth → consented
 integration → **a real app that builds and serves at `/app/latam/`** → emitters firing — works end

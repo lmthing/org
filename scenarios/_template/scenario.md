@@ -1,6 +1,6 @@
 # Scenario NN — <Title>: <the promise in a phrase>
 
-> Copy this file to `../NN-<slug>.md` and fill every section. Structure + rules:
+> Keep this file as `<NN-slug>/scenario.md` and fill every section. Structure + rules:
 > [../SCENARIO-FORMAT.md](../SCENARIO-FORMAT.md). Delete these quote lines when done.
 
 > **One line.** <What the user is trying to do, in a sentence. The whole scenario serves this.>
@@ -115,10 +115,10 @@ scenario earns its keep.>
 ```bash
 cd sdk/org/scenarios/harness
 node smoke.mjs                    # prove harness + prod healthy first
-node ../NN-<slug>/run.mjs         # fresh; writes results/NN-<slug>-report.md
+node ../NN-<slug>/run.mjs         # fresh; writes NN-<slug>/results/report.md
 node ../NN-<slug>/run.mjs --reuse # reuse the cached user + project
 ```
 
 ## Actual results
 
-_Filled in by the runner — paste from `results/NN-<slug>-report.md` after a run._
+_Filled in by the runner — paste from `results/report.md` after a run._

@@ -1,6 +1,6 @@
 # Live prod scenarios
 
-Five high-complexity, end-to-end scenarios that exercise the **system spaces** (`system-appbuilder`,
+Two high-complexity, end-to-end scenarios that exercise the **system spaces** (`system-appbuilder`,
 `system-architect`, `system-research`, `system-store`, `system-engineer`) and the **unified event
 pipeline** through the **THING agent**, against the **live production cluster and a live LLM**.
 
@@ -10,23 +10,21 @@ production — not in a unit test.
 
 | # | Scenario | Covers |
 |---|---|---|
-| [01](./01-newsroom-multispace-events.md) | **Newsroom** — one project, three installed spaces, all four emitter kinds | new project + multi-space install; `webhook`/`cron`/`db`/`internal` emitter defs; code-handler vs agent-`trigger` hooks |
-| [02](./02-consent-and-store.md) | **Consent & Store** — discovery, the consent card, and everything that must NOT happen | `system-store/finder`; `installSpace` consent approve **and** deny; `@consent` space functions; fail-closed in headless paths; store error edges |
-| [03](./03-resilience-storm-loops-resume.md) | **Resilience** — storms, cycles, and a pod restart mid-flight | high-frequency event bursts; coalescing, depth cap, cooldown, self-trigger exclusion; pod restart → auto-resume + system message |
-| [04](./04-signals-and-code-nodes.md) | **Signals & Code nodes** — the runtime observing itself | `integration-lmthing` internal signals; `emitEvent`; multi-tasklist DAG with **code nodes**, `dependsOn`/`forEach` output flow |
-| [05](./05-latam-trip-lifecycle.md) | **Latin America** — six months, nine countries, one growing project | the full lifecycle: incremental space growth, integrations, a THING-controlled **project app** automating bookings/transport/notifications, live in the project web app |
+| [05](./05-latam/scenario.md) | **Latin America** — six months, nine countries, one growing project | the full lifecycle: incremental space growth, integrations, a THING-controlled **project app** automating bookings/transport/notifications, live in the project web app |
+| [06](./06-tanzania/scenario.md) | **Tanzania trip** — one attachment becomes spaces + a live, updatable app | file ingest (`system-files`); per-leg spaces; live-project app (`writeProjectTable`/`Page`/`Api` + rows seed); `db:write` later-update; compound + multilingual ask |
 
 ## Running one
 
 ```bash
 cd sdk/org/scenarios/harness
 node smoke.mjs                 # prove the harness + prod are healthy first (≈1 min)
-node ../01-newsroom/run.mjs    # a scenario's runner writes its own report
+node ../05-latam/run.mjs        # a scenario's runner writes its own report
 ```
 
-Each scenario directory holds a `run.mjs` (the executable spec) and writes
-`sdk/org/scenarios/results/<id>-report.md` plus a raw trace JSON. The **Actual results** section of
-each scenario `.md` is pasted back from that report, so the document is both the plan and the record.
+Each scenario directory holds a `scenario.md` (the spec) and a `run.mjs` (the executable spec), and
+writes `sdk/org/scenarios/<id>/results/report.md` plus a raw trace JSON. The **Actual results**
+section of `scenario.md` is pasted back from that report, so the document is both the plan and the
+record.
 
 ## Authoring a new scenario — the format + the workflow
 
@@ -42,18 +40,18 @@ Two complementary references, plus a copy-and-fill template:
   product-fix + image-rebuild-verify loop (7-char tags, pod upgrade, hot-patching a system-space
   prompt, CI-rebase gotchas), the re-wake discipline for babysitting a multi-hour run, and the
   reporting template.
-- **[`_template/`](./_template/)** — `cp -r _template <NN-slug>`, then fill **`scenario.md`** (→
-  `../NN-<slug>.md`, the six-section spec with a feature checklist) and **`run.mjs`** (the runner
+- **[`_template/`](./_template/)** — `cp -r _template <NN-slug>`, then fill **`<NN-slug>/scenario.md`**
+  (the six-section spec with a feature checklist) and **`run.mjs`** (the runner
   scaffold — checkpoint/resume, keepalive, resilient send, scripted asks, and attachment + live-app +
   signed-inbound helpers all pre-wired; replace the `SCENARIO_*` config and write the Acts).
 
-To start: `cp -r _template 07-myscenario && mv 07-myscenario/scenario.md 07-myscenario-slug.md`.
+To start: `cp -r _template 07-myscenario`, then fill `07-myscenario/scenario.md` and `run.mjs`.
 
 **Quick start:**
 ```bash
 cd sdk/org/scenarios/harness
 node smoke.mjs                       # prove the harness + prod are healthy (≈1 min)
-node ../07-myscenario/run.mjs        # run it; writes results/07-myscenario-report.md
+node ../07-myscenario/run.mjs        # run it; writes 07-myscenario/results/report.md
 ```
 
 ## The harness
@@ -91,7 +89,7 @@ is broken.
 
 - **Consent needs an interactive session.** The consent prompter is only wired when
   `POST /api/sessions` created the session. Headless paths (hooks, delegates, webhook dispatch) have
-  no prompter and **fail closed** — that is the designed behaviour and scenario 02 asserts it.
+  no prompter and **fail closed** — that is the designed behaviour (a scenario should assert it, not work around it).
 - **`PUT /api/compute/env` rolls the pod, and sessions are in-memory.** A session created against
   the old replica dies with it (`404 unknown session`). `provisionUser()` therefore loads env
   *before* the first turn, skips the PUT when nothing changed, and then proves a session survives

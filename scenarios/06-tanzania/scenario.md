@@ -205,14 +205,14 @@ is the point of scenario 06.
 ```bash
 cd sdk/org/scenarios/harness
 node smoke.mjs                     # prove the harness + prod are healthy (≈1 min)
-node ../06-tanzania/run.mjs        # fresh run; writes results/06-tanzania-report.md
+node ../06-tanzania/run.mjs        # fresh run; writes results/report.md
 node ../06-tanzania/run.mjs --reuse   # reuse the cached tanzania user + project
 ```
 
 The runner provisions a disposable prod user, creates `tanzania-trip`, uploads
 `06-tanzania/fixtures/tanzaniamemories.md` (a copy of the user's real file, so the scenario is
 self-contained), sends the message with the attachment over the WebSocket path, drives the follow-ups,
-and checkpoints per Act to `results/06-tanzania-checkpoint.json`.
+and checkpoints per Act to `results/checkpoint.json`.
 
 ## Actual results
 

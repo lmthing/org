@@ -1,0 +1,6 @@
+# Each scenario's run output lives in <scenario>/results/. Keep the human-readable report.md
+# (it mirrors the spec's "Actual results"); ignore the heavy/ephemeral machine artifacts —
+# multi-MB traces, resume checkpoints, and run logs.
+*/results/trace.json
+*/results/checkpoint*.json
+*/results/*.log

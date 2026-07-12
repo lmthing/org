@@ -37,8 +37,8 @@ const POD_ENV = {
   // INTEGRATION_DEMO_WEBHOOK_SECRET: 'demo-hmac-secret',
 };
 
-const RESULTS = `${SDK_ORG}/scenarios/results`;
-const CHECKPOINT = `${RESULTS}/${ID}-checkpoint.json`;
+const RESULTS = `${SDK_ORG}/scenarios/${ID}/results`;
+const CHECKPOINT = `${RESULTS}/checkpoint.json`;
 const argActs = (process.argv.find((a) => a.startsWith('--acts=')) ?? '').slice(7);
 const ACTS = argActs ? argActs.split(',').map(Number) : [1, 2, 3, 4];
 const FRESH = process.argv.includes('--fresh');
@@ -187,8 +187,8 @@ report.check('zero eval/typecheck errors across the session', stats.errors === 0
 report.metric('wall clock', ((now() - t0) / 60_000).toFixed(1), ' min');
 report.metric('total tokens (in/out)', `${metrics.tokens.in} / ${metrics.tokens.out}`);
 
-report.save(`${RESULTS}/${ID}-report.md`);
-report.saveTrace(`${RESULTS}/${ID}-trace.json`, thing);
+report.save(`${RESULTS}/report.md`);
+report.saveTrace(`${RESULTS}/trace.json`, thing);
 cp.done = true; cp.summary = report.summary(); saveCheckpoint(cp);
 console.log(JSON.stringify(report.summary(), null, 2));
 process.exit(report.passed ? 0 : 1);
