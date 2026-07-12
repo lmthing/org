@@ -227,7 +227,7 @@ async function loadComponents(dir: string): Promise<Space['components']> {
     }
   }
 
-  // Form components — one `<Name>.tsx` file each (SPACE-SPEC: the legacy
+  // Form components — one `<Name>.tsx` file each (org/format/space/components: the legacy
   // `<Name>/{web,ink}.tsx` split is removed). A directory entry that still holds
   // the old layout is read defensively (prefer web.tsx) so not-yet-migrated
   // on-disk spaces keep loading.

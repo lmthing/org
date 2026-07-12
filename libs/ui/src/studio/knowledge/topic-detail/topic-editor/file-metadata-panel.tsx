@@ -21,7 +21,7 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
   const spaceFS = useSpaceFS()
   const rawContent = useFile(topicPath)
 
-  // Per SPACE-SPEC: knowledge option frontmatter only allows description, icon, color, label.
+  // Per org/format/space/knowledge/aspect-file.md: knowledge option frontmatter only allows description, icon, color, label.
   // description is REQUIRED when frontmatter is present.
   const [description, setDescription] = useUIState<string>('file-metadata-panel.description', '')
   const [icon, setIcon] = useUIState<string>('file-metadata-panel.icon', '')

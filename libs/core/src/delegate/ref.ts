@@ -1,6 +1,6 @@
 /**
  * Shared delegate-ref grammar parser. Parses the six forms documented in
- * SPACE-SPEC for `AgentDef.canDelegateTo` entries (and delegate-call targets
+ * org/format/space/agents/delegation.md for `AgentDef.canDelegateTo` entries (and delegate-call targets
  * built from them):
  *
  *   agent                 -> { scope: 'self',    agent }

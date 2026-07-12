@@ -1,7 +1,7 @@
 // src/lib/fs/parsers/knowledge-option.ts
 //
 // Parser/serializer for knowledge/<domain>/<field>/<slug>.md — Wave-1.
-// Per SPACE-SPEC the ONLY allowed frontmatter keys are:
+// Per org/format/space/knowledge/aspect-file.md the ONLY allowed frontmatter keys are:
 //   description (REQUIRED when frontmatter is present), icon, color, label.
 // The body is plain markdown.
 

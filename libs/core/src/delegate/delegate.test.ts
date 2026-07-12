@@ -169,7 +169,7 @@ describe('runDelegate forced-resolve nudge (E4 live finding)', () => {
 });
 
 /**
- * Action-restriction enforcement (WP-3 / SPACE-SPEC). A `canDelegateTo` entry with
+ * Action-restriction enforcement (WP-3 / org/format/space/agents/delegation.md). A `canDelegateTo` entry with
  * a `#action` suffix (e.g. "helper#greet") resolves to a `ResolvedDep` whose
  * `allowedActions` gates which action ids may be delegated. `runDelegate` is the
  * enforcement point: it rejects a disallowed action up front (before loading the

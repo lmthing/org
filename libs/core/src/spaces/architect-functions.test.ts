@@ -114,7 +114,7 @@ describe('per-file builders smoke', () => {
     expect(fm).toContain('defaultAction: go');
     expect(fm).toContain('canDelegateTo:');
     expect(fm).toContain('- other-space/helper#run');
-    expect(fm).not.toContain('dependencies:'); // SPACE-SPEC: canDelegateTo replaces dependencies
+    expect(fm).not.toContain('dependencies:'); // org/format/space/agents/frontmatter.md: canDelegateTo replaces dependencies
   });
 });
 

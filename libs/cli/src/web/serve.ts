@@ -81,7 +81,7 @@ async function buildBundle(space: Space, agentSlug: string, wsUrl: string, appTs
   const compEntries: string[] = [];
   for (const name of componentNames) {
     if (space.components.form[name]) {
-      // Single-file `<Name>.tsx` (SPACE-SPEC); fall back to the legacy
+      // Single-file `<Name>.tsx` (org/format/space/components); fall back to the legacy
       // `<Name>/web.tsx` for not-yet-migrated on-disk spaces.
       const single = resolve(space.dir, 'components', 'form', `${name}.tsx`);
       const formPath = existsSync(single) ? single : resolve(space.dir, 'components', 'form', name, 'web.tsx');

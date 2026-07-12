@@ -2,7 +2,7 @@
 
 An LLM agent runtime where the model drives programs by writing TypeScript, executed one statement at a time in a QuickJS WASM sandbox. The user-facing surface is **THING** — an orchestrator agent that talks to you and routes each request to the right specialist (research, coding, a brand-new agent it builds on demand, or a full **app** it builds for a project — see [Project-as-application](#project-as-application) below).
 
-For the runtime internals (turn loop, spaces, forks, delegation, system spaces) see [CLAUDE.md](./CLAUDE.md). For authoring Spaces and the `@lmthing/core`/`@lmthing/cli` APIs see [SPACE_DEVELOPMENT.md](./SPACE_DEVELOPMENT.md).
+For the runtime internals (turn loop, spaces, forks, delegation, system spaces) see [CLAUDE.md](./CLAUDE.md). For the on-disk space/project format see [org/format/](../../org/format/README.md); for the runtime globals and CLI/REST APIs see [org/runtime-globals/](../../org/runtime-globals/README.md) and [org/cli-api/](../../org/cli-api/README.md).
 
 ## Prerequisites
 
@@ -113,8 +113,8 @@ Finished apps are served by the pod at `/app/<project>/` and distributed through
 `GET /api/apps` + `POST /api/apps/install`. Five ship today: `blog`, `health`, `kitchen`, `trips`,
 `demo-feed`.
 
-- Quick authoring reference → [SPACE_DEVELOPMENT.md](./SPACE_DEVELOPMENT.md) §7 · skill `.claude/skills/project-app.md`
-- Full design (serving/domains, Studio admin, safety, boot sequence) → [project-as-application.md](./project-as-application.md)
+- Quick authoring reference → [org/format/project/](../../org/format/project/README.md) · skill `.claude/skills/project-app.md`
+- Full design (serving/domains, safety, boot sequence) → [org/app/](../../org/app/README.md)
 - Concrete worked examples → `blog-application.md`, `health-application.md`, `kitchen-application.md`, `trips-application.md`
 
 ## Other ways to run (development)

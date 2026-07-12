@@ -17,7 +17,7 @@ interface FieldIndexPanelProps {
 
 /**
  * `fieldType` is a UI hint for how to render/ask for this field — the value
- * must name a control available in the catalog (see SPACE-SPEC "Built-in
+ * must name a control available in the catalog (see org/format/space/components "Built-in
  * catalog components", Form section). Field-level `renderAs` was removed —
  * rendering is inferred from `fieldType`.
  */

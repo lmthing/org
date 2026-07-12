@@ -371,7 +371,7 @@ describe('useFile', () => {
 
 ## Recent additions (2026-06)
 
-New parsers/hooks added so Studio can view+edit everything in SPACE-SPEC:
+New parsers/hooks added so Studio can view+edit everything in org/format/space/:
 
 - **`parsers/tasklist.ts`** — now **block-YAML aware** (the shared
   `parseFrontmatter` flattens nested maps, which dropped `input`/`output`).

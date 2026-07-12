@@ -10,7 +10,7 @@ function stripExt(name: string): string {
  *  - kind 'form' → `components/form/<name>.tsx` (single file, used with ask()).
  *
  * Both are a single default-export TSX built from catalog components (the legacy
- * form `web.tsx`/`ink.tsx` split is removed — see SPACE-SPEC). Uses only writeFileRaw.
+ * form `web.tsx`/`ink.tsx` split is removed — see org/format/space/components/form.md). Uses only writeFileRaw.
  * No imports.
  *
  * @returns { ok, path, error? }

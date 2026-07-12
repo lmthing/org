@@ -27,7 +27,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
  *   connect-src 'self'; img-src 'self' data: https:; base-uri 'self';
  *   frame-ancestors 'self'
  *
- * Rationale (see project-as-application.md §Safety): LLM-authored pages render
+ * Rationale (see org/app/features.md (safety)): LLM-authored pages render
  * fetched third-party content, an XSS surface. We therefore:
  *   • `script-src 'self'` and NO `'unsafe-inline'` for scripts — a poisoned news
  *     item can carry markup but cannot execute inline/injected script.
