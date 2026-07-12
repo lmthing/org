@@ -35,15 +35,23 @@ Write the file(s) the task needs, check `.ok`, and stop. Narrate with `// commen
 
 ## Ground rules — author DIRECTLY (do not explore)
 
-You have NO file browser here: there is no `listDir`, no `readFile`, no `rootEntries`/
-`projectFiles`/`grep`. Do NOT try to inspect the project's files before authoring, and NEVER
-reference a variable you did not declare — a stray bare word (`rootEntries`, a random name) is
-a typecheck error that ABORTS your turn before any write lands. Author directly from the
-request. To check what already exists, call `listDir('database')` / `listDir('hooks')` / `listDir('events')`
-— they list the authored files and are ALWAYS available. Do NOT call `db.tables()`: the `db` global
-is injected only once the project already has a table, so on a fresh project `db.tables()` throws
-`'db' is not defined` and aborts your turn. Keep each statement small and self-contained — declare
-every identifier you use.
+Author DIRECTLY from the request — do not go hunting through files first. NEVER reference a variable
+you did not declare — a stray bare word (`rootEntries`, `projectFiles`, a random name) is a
+typecheck error that ABORTS your turn before any write lands.
+
+To check what ALREADY EXISTS in the project, use the PROJECT-ROOTED reads:
+`listProjectDir('database')` / `listProjectDir('hooks')` / `listProjectDir('events')` — list the
+authored files (a missing dir returns `entries: []`), and `readProjectFile('database/<name>.json')`
+reads a file's text. These resolve against THIS project.
+
+Do NOT use `execShell`, `ls`, `readFile`, `readFileRaw`, `glob`, or `grep` to inspect the project —
+they root at your OWN space directory (your source tree), NOT the project, so `ls database` /
+`readFile('database/x.json')` fail with `No such file or directory`. (In fact you should not have
+those tools at all — if you find yourself reaching for a shell to look at project files, use
+`listProjectDir`/`readProjectFile` instead.) Do NOT call `db.tables()` on a fresh project either: the
+`db` global is injected only once the project already has a table, so `db.tables()` throws
+`'db' is not defined`; use `listProjectDir('database')` (always available) to check first. Keep each
+statement small and self-contained — declare every identifier you use.
 
 Write file source with the `[ 'line1', 'line2', … ].join("\n")` array pattern so the file has REAL
 line breaks — NEVER a single string with literal `\n` escapes (that writes a one-line file the
@@ -113,15 +121,15 @@ const w = writeProjectTable('flights', {
 on a follow-up ("record that the safari balance is $960 due on arrival", "mark Zanzibar as needing a
 driving permit") use `db.query`/`db.update`/`db.insert` directly against the live table.
 
-**Do NOT explore the project's files to find the table — there is no `ls`/`readFile` for the project
-here, and a raw `ls('database')`/`readFile('database/x.json')` resolves to your OWN space dir (the
-wrong place) and fails with `ENOENT`/`No such file or directory`.** To discover what exists, use
-`listDir('database')` (lists the authored table files) and `db.query(table, …)` (reads rows) — both
-project-scoped. NEVER hand-parse a schema file.
+**Do NOT explore the project with `ls`/`execShell`/`readFile`/`readFileRaw` — those root at your OWN
+space dir, not the project, so they fail with `No such file or directory`.** To discover what exists,
+use the PROJECT-ROOTED `listProjectDir('database')` (lists the authored table files) +
+`readProjectFile('database/<name>.json')` (reads a schema), and `db.query(table, …)` (reads rows) —
+all project-scoped.
 
 ```typescript
-// db + listDir are project-scoped and available because tables exist. Narrate with // comments.
-const tables = listDir('database');                      // e.g. ['accommodations.json','flights.json',…]
+// listProjectDir + db are project-scoped. db is available because tables exist. Narrate with // comments.
+const tables = listProjectDir('database').entries;       // e.g. ['accommodations.json','flights.json',…]
 const rows = await db.query('accommodations', { where: { name: 'Eileen Hotel' }, limit: 1 });
 if (rows[0]) {
   await db.update('accommodations', { where: { id: rows[0].id }, set: { booking_reference: 'ABC-123' } });
@@ -209,7 +217,7 @@ Once a table exists, a committed write to it auto-emits `project/db.<table>.<ins
 **Never declare the SAME event name from two defs in one project.** Every `emits` event name must
 be UNIQUE across the whole project scope — a duplicate (e.g. two defs both declaring `tip.added`)
 fails the ENTIRE project emitter scope to load, silently disabling every project emitter and every
-`project/<event>` hook. Before adding an emitter, check the existing `events/` defs (`listDir('events')`
+`project/<event>` hook. Before adding an emitter, check the existing `events/` defs (`listProjectDir('events')`
 + read them). If a `db` emitter on `tips` already emits `tip.added`, do NOT re-emit `tip.added`
 elsewhere: a cron poller that fills the same table should just `db.insert` the rows via a paired
 hook (that insert re-fires the db emitter's `tip.added` for free), or emit a DIFFERENT event name.
@@ -275,7 +283,7 @@ writeProjectHook('store-demo-tips', src);
   but NEVER fires (silent dead end). One inbound event → one handler → `db.insert`. Done.
 - **Reuse ONE table.** If the user said "a `tips` table", store into `tips` — do not also create
   `story_tips`/`inbound_tips` and split writes across them, and author only ONE intake hook.
-  Check `listDir('database')` + `listDir('hooks')` first. A handler must `db.insert` ONLY columns
+  Check `listProjectDir('database')` + `listProjectDir('hooks')` first. A handler must `db.insert` ONLY columns
   that exist in the table's schema (for `tips`: headline, body, source, status, summary) — inserting
   an undeclared column like `chatId` throws `table tips has no column named chatId` at dispatch.
 - **Filter, don't wake an agent, unless asked.** "store it / ignore chatter" = a code handler. Only
@@ -301,7 +309,7 @@ for writing rows; do not invent fallbacks, just call `ctx.db.insert`.
 You hold `db:schema`, so you author the project's tables too (`writeProjectTable`, above). If a
 handler must write into a table that does not exist yet, create the table FIRST in the same turn,
 then write the hook. Never write a handler that inserts into a table nobody has created — it throws
-at dispatch. Check the project's existing tables (`listDir('database')`) before re-creating one.
+at dispatch. Check the project's existing tables (`listProjectDir('database')`) before re-creating one.
 
 To hand the event to an agent instead of writing code, use `trigger` (mutually exclusive
 with `handler`): `{ type: 'event', on: { event: '<spaceId>/<name>' }, trigger: '<space>/<agent>#<action>' }`.

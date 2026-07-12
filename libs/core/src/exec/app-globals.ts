@@ -94,6 +94,16 @@ export interface AppGlobalImpls {
    *  automation but never a UI — "turn this into an app I can open" dead-ends (scenario 05). */
   writeProjectPage?: (route: string, src: string) => AuthoringResult;
   writeProjectApi?: (route: string, src: string) => AuthoringResult;
+  /** LIVE-project INTROSPECTION reads (the read-side twins of the `writeProject*` writers):
+   *  `listProjectDir(dir)` lists the files under `<projectRoot>/<dir>` (e.g. 'database',
+   *  'hooks', 'events', 'pages', 'api') and `readProjectFile(path)` reads a project file's
+   *  text. These resolve against `projectRoot` — NOT the agent's own `LMTHING_SPACE_DIR`
+   *  (which is where the space-authoring `execShell`/`readFileRaw`/`listDir` wrappers root,
+   *  a footgun for a delegated system-space agent whose space dir is its SOURCE tree; see
+   *  .issues/delegate-fs-globals-root-at-space-not-project.md). A project-authoring agent
+   *  (the automator) uses THESE to see what already exists, never the space-rooted tools. */
+  listProjectDir?: (dir: string) => { ok: boolean; entries: string[]; error?: string };
+  readProjectFile?: (path: string) => { ok: boolean; content: string; error?: string };
 }
 
 /** Throw the host error shape (naming the allowed tables, like the canDelegateTo
@@ -219,5 +229,14 @@ export function injectAppGlobals(
   if (app['project:manage']) {
     if (impls.createProject) injectGlobal(ctx, 'createProject', impls.createProject as (...a: unknown[]) => unknown);
     if (impls.selectProject) injectGlobal(ctx, 'selectProject', impls.selectProject as (...a: unknown[]) => unknown);
+  }
+
+  // LIVE-project introspection reads — the read-side twins of the writeProject* writers. Gated on
+  // a live project (projectRoot) + any db grant (whoever can touch the project's data may see its
+  // shape). These root at projectRoot, so a delegated system-space agent can correctly inspect the
+  // PROJECT's database/hooks/events instead of mis-rooting at its own space source dir.
+  if (opts.projectRoot && dbGranted) {
+    if (impls.listProjectDir) injectGlobal(ctx, 'listProjectDir', impls.listProjectDir as (...a: unknown[]) => unknown);
+    if (impls.readProjectFile) injectGlobal(ctx, 'readProjectFile', impls.readProjectFile as (...a: unknown[]) => unknown);
   }
 }

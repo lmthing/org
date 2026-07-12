@@ -17,7 +17,7 @@
  * it is simply never exposed to a capability-less agent.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { transformSync } from 'esbuild';
 import { validateTableSchema, type TableSchema } from '@lmthing/core';
@@ -281,6 +281,13 @@ export interface ProjectAuthoringGlobals {
   /** Write `<projectRoot>/api/<path>/<METHOD>.ts` (a typed API handler) — the
    *  LIVE-project counterpart of the catalog's `writeApi`. */
   writeProjectApi: (route: string, src: string) => { ok: boolean; error?: string };
+  /** List the files under `<projectRoot>/<dir>` (e.g. 'database', 'hooks', 'events') — the
+   *  read-side twin of the writers. Project-rooted (NOT the space dir), so a delegated
+   *  system-space agent can see the PROJECT's contents. Returns `entries: []` for a missing dir. */
+  listProjectDir: (dir: string) => { ok: boolean; entries: string[]; error?: string };
+  /** Read a project file's text (`<projectRoot>/<path>`). Project-rooted; the read twin of the
+   *  writers, for inspecting an existing table schema / page / hook before editing it. */
+  readProjectFile: (path: string) => { ok: boolean; content: string; error?: string };
 }
 
 /**
@@ -471,6 +478,31 @@ export function createProjectAuthoringGlobals(opts: {
     return out;
   }
 
+  /** List `<projectRoot>/<dir>` — project-rooted introspection (the read twin of the writers).
+   *  A missing dir returns `entries: []` (not an error) so an agent can safely check "what tables
+   *  exist?" on a fresh project. `safeResolve` keeps it inside the project (no traversal). */
+  function listProjectDir(dir: string): { ok: boolean; entries: string[]; error?: string } {
+    try {
+      const target = safeResolve(projectRoot, dir || '.');
+      if (!existsSync(target)) return { ok: true, entries: [] };
+      if (!statSync(target).isDirectory()) return { ok: false, entries: [], error: `not a directory: ${dir}` };
+      return { ok: true, entries: readdirSync(target).sort() };
+    } catch (e) {
+      return { ok: false, entries: [], error: String(e instanceof Error ? e.message : e) };
+    }
+  }
+
+  /** Read `<projectRoot>/<path>` as UTF-8 text — project-rooted (the read twin of the writers). */
+  function readProjectFile(path: string): { ok: boolean; content: string; error?: string } {
+    try {
+      const target = safeResolve(projectRoot, path);
+      if (!existsSync(target)) return { ok: false, content: '', error: `no such file: ${path}` };
+      return { ok: true, content: readFileSync(target, 'utf8') };
+    } catch (e) {
+      return { ok: false, content: '', error: String(e instanceof Error ? e.message : e) };
+    }
+  }
+
   return {
     writeProjectHook,
     writeProjectEvent,
@@ -478,5 +510,7 @@ export function createProjectAuthoringGlobals(opts: {
     writeProjectTable,
     writeProjectPage,
     writeProjectApi,
+    listProjectDir,
+    readProjectFile,
   };
 }

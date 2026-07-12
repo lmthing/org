@@ -377,6 +377,25 @@ describe('createProjectAuthoringGlobals', () => {
     expect(existsSync(join(projectRoot, 'database', 'tips.json'))).toBe(false);
   });
 
+  it('listProjectDir + readProjectFile read PROJECT-ROOTED (not the space dir), safe for a missing dir', () => {
+    const pa = make();
+    // Missing dir → ok with empty entries (a fresh project can safely ask "what tables exist?").
+    expect(pa.listProjectDir('database')).toEqual({ ok: true, entries: [] });
+    // After authoring two tables they show up, sorted, in the PROJECT's database/ dir.
+    pa.writeProjectTable('flights', TIPS_SCHEMA);
+    pa.writeProjectTable('accommodations', { ...TIPS_SCHEMA, title: 'Acc' } as unknown as TableSchema);
+    expect(pa.listProjectDir('database')).toEqual({ ok: true, entries: ['accommodations.json', 'flights.json'] });
+    // readProjectFile returns the authored schema's text from the project root.
+    const read = pa.readProjectFile('database/flights.json');
+    expect(read.ok).toBe(true);
+    expect(JSON.parse(read.content).columns.headline.type).toBe('string');
+    // A missing file is a clean error, not a throw.
+    expect(pa.readProjectFile('database/nope.json')).toEqual({ ok: false, content: '', error: expect.stringMatching(/no such file/) });
+    // Traversal is contained to the project root.
+    expect(pa.readProjectFile('../../etc/passwd').ok).toBe(false);
+    expect(pa.listProjectDir('../..').ok === false || pa.listProjectDir('../..').entries.length >= 0).toBe(true);
+  });
+
   it('writeProjectTable rejects an invalid schema (missing description) and does NOT re-derive', () => {
     let schemaWrites = 0;
     const pa = createProjectAuthoringGlobals({

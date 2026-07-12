@@ -228,6 +228,16 @@ export const WRITE_TABLE_SCHEMA_DTS = `declare function writeTableSchema(name: s
 // agent can't insert into a table it just created (`db` isn't injected until a table exists).
 export const PROJECT_TABLE_DTS = `declare function writeProjectTable(name: string, schema: unknown, rows?: Array<Record<string, unknown>>): { ok: boolean; error?: string };`;
 
+// The read-side twins of the writeProject* writers — PROJECT-ROOTED introspection. `listProjectDir`
+// lists the files under `<projectRoot>/<dir>` (a missing dir returns `entries: []`); `readProjectFile`
+// reads a project file's text. These resolve against the PROJECT, unlike the space-rooted
+// `execShell`/`readFileRaw` (+ the `listDir`/`readFile` system-global wrappers), which root at the
+// agent's OWN `LMTHING_SPACE_DIR` — a footgun for a delegated system-space agent whose space dir is
+// its source tree. A project-authoring agent uses THESE to see what already exists in the project.
+// Emitted on any db grant + a project-rooted session (see buildAppCapabilityDts / injectAppGlobals).
+export const PROJECT_READ_DTS = `declare function listProjectDir(dir: string): { ok: boolean; entries: string[]; error?: string };
+declare function readProjectFile(path: string): { ok: boolean; content: string; error?: string };`;
+
 // `project:manage` — the appbuilder's authority to scaffold or bind a catalog app.
 // createProject creates a NEW store/apps/<id>/ template + selects it as the authoring
 // target; selectProject binds an existing one. Subsequent writePage/writeApi/... land

@@ -26,7 +26,7 @@ import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
   EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
-  WRITE_TABLE_SCHEMA_DTS, PROJECT_TABLE_DTS, composeConnectionsDts, composeToolDts,
+  WRITE_TABLE_SCHEMA_DTS, PROJECT_TABLE_DTS, PROJECT_READ_DTS, composeConnectionsDts, composeToolDts,
 } from '../typecheck/library-dts.js';
 import { injectAppGlobals, type AppGlobalImpls } from './app-globals.js';
 import type { RenderHost, Clock } from '../session/types.js';
@@ -289,6 +289,10 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string): string {
   // …and, for a project-rooted session, the LIVE-project twin `writeProjectTable`
   // (writes `database/<name>.json` into the running project and re-derives its db).
   if (app['db:schema']) parts.push(WRITE_TABLE_SCHEMA_DTS, PROJECT_TABLE_DTS);
+  // Any db grant ALSO earns the project-rooted introspection reads (listProjectDir/readProjectFile) —
+  // the correct way for a project-authoring agent to see the project's database/hooks/events, instead
+  // of the space-rooted execShell('ls')/readFileRaw that mis-root at the agent's own space dir.
+  if (app['db:read'] || app['db:write'] || app['db:schema']) parts.push(PROJECT_READ_DTS);
   // api:call — when the caller supplies project-generated typed overloads (Phase 4:
   // `apiCall('markRead', { id: string }): { ok: boolean }` + a generic fallback), use
   // those so a malformed call fails the agent's typecheck; otherwise the generic fragment.
