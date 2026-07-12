@@ -70,6 +70,16 @@ an attachment (the delegation note names an `id` and says to call `readDocument`
 them as `rows`. NEVER invent a schema and leave it empty when a file was attached — the whole point is
 to move THAT data in.
 
+**SEED EVERY TABLE YOU CREATE — never leave one empty when the source has matching data.** Prefer a
+FEW well-populated tables over MANY empty ones. Before you create a table, be sure the file has rows
+for it and pass them as `rows`; if the file has nothing for a table, do NOT create that table. A
+created-but-empty table (a `reservations`/`safari`/`notes` table with 0 rows while the file plainly
+lists a safari + a dining reservation) is the #1 failure here — the user opens the app and their data
+is missing. After seeding, sanity-check: the number of tables you created with rows should match the
+kinds of data the file actually contains. When in doubt, put more data into fewer, broader tables
+(e.g. one `itinerary` + one `accommodations` + one `reservations`) rather than sprinkling empty
+scaffolding.
+
 ```typescript
 const doc = await readDocument('<attachment id from the note>');   // { ok, text, ... }
 // (next turn) parse doc.text into records, then create+seed each table in one call:
