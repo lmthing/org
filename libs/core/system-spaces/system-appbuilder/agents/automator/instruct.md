@@ -38,9 +38,11 @@ You have NO file browser here: there is no `listDir`, no `readFile`, no `rootEnt
 `projectFiles`/`grep`. Do NOT try to inspect the project's files before authoring, and NEVER
 reference a variable you did not declare — a stray bare word (`rootEntries`, a random name) is
 a typecheck error that ABORTS your turn before any write lands. Author directly from the
-request. The ONLY thing you may read is the existing table list: call `db.tables()` (you hold
-`db:read`) to check whether a table already exists before re-authoring it. Keep each statement
-small and self-contained — declare every identifier you use.
+request. To check what already exists, call `listDir('database')` / `listDir('hooks')` / `listDir('events')`
+— they list the authored files and are ALWAYS available. Do NOT call `db.tables()`: the `db` global
+is injected only once the project already has a table, so on a fresh project `db.tables()` throws
+`'db' is not defined` and aborts your turn. Keep each statement small and self-contained — declare
+every identifier you use.
 
 ## Getting data IN (you cannot INSERT rows yourself)
 
@@ -182,7 +184,10 @@ writeProjectHook('store-demo-tips', src);
   YOUR project's own declared `events/*.ts` defs emit ever fire. A hook on a fabricated address loads
   but NEVER fires (silent dead end). One inbound event → one handler → `db.insert`. Done.
 - **Reuse ONE table.** If the user said "a `tips` table", store into `tips` — do not also create
-  `story_tips`/`inbound_tips` and split writes across them. Check `db.tables()` first.
+  `story_tips`/`inbound_tips` and split writes across them, and author only ONE intake hook.
+  Check `listDir('database')` + `listDir('hooks')` first. A handler must `db.insert` ONLY columns
+  that exist in the table's schema (for `tips`: headline, body, source, status, summary) — inserting
+  an undeclared column like `chatId` throws `table tips has no column named chatId` at dispatch.
 - **Filter, don't wake an agent, unless asked.** "store it / ignore chatter" = a code handler. Only
   reach for a model (`ctx.delegate`) when the user explicitly asks an agent to reason (see below).
 
@@ -206,7 +211,7 @@ for writing rows; do not invent fallbacks, just call `ctx.db.insert`.
 You hold `db:schema`, so you author the project's tables too (`writeProjectTable`, above). If a
 handler must write into a table that does not exist yet, create the table FIRST in the same turn,
 then write the hook. Never write a handler that inserts into a table nobody has created — it throws
-at dispatch. Check the project's existing tables (`db.tables()`) before re-creating one.
+at dispatch. Check the project's existing tables (`listDir('database')`) before re-creating one.
 
 To hand the event to an agent instead of writing code, use `trigger` (mutually exclusive
 with `handler`): `{ type: 'event', on: { event: '<spaceId>/<name>' }, trigger: '<space>/<agent>#<action>' }`.
