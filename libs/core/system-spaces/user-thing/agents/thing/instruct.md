@@ -179,6 +179,31 @@ contents for every part — the spaces' knowledge AND the app's seed rows.
    note to the user that it was built with limited research (the research pass was degraded).
    The new space stays registered under this project for later requests.
 
+   **When the material is ALREADY PROVIDED (a file was attached, or the info is in the
+   conversation), DO NOT run `build_specialist`/deep research** — that pipeline is for building an
+   expert on a NEW domain from scratch, and re-researching what the user already handed you is both
+   wrong and far too slow (running it per-part times out). Instead build each space DIRECTLY from the
+   provided content by delegating to the architect with that content seeded as `context.research`
+   (the architect does NOT re-research when handed a report — it builds straight from it):
+   ```typescript
+   // One space per part, grounded in the file — no web research. `research` MUST be a JSON string.
+   const built = await delegate('system-architect', 'architect', 'synthesize_and_run', {
+     query: 'Build a specialist space for the <part> part of this trip.',
+     context: {
+       topic: '<part> (e.g. "Cairo stopovers")',
+       goal: 'Answer questions about this part of the trip from the provided details.',
+       research: JSON.stringify({
+         topic: '<part>',
+         executive_summary: '<one-line summary of this part>',
+         findings: [{ heading: '<facet>', detail: '<the relevant facts from the file, verbatim>' }],
+         conclusion: '', sources: [],
+       }),
+     },
+   });
+   ```
+   This is dramatically cheaper than `build_specialist` (no research fork per part), so creating
+   several parts in one go is fast. Build the parts you were asked for, then continue to the app.
+
    **App vs specialist:** path 3 builds an *expert agent* (knowledge + reasoning). If the user
    wants an **application** — something with its own stored DATA plus a web UI and/or automation
    (a feed, tracker, dashboard, list/CRUD tool, "an app that lets me …", "build me something to

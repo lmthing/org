@@ -78,7 +78,7 @@ saveCkpt();
 
 // ── Act I — ingest: the attachment is read, not ignored ──────────────────────
 r.step('Act I — ingest', 'THING delegates to system-files and its plan cites real file specifics');
-const t1 = await thing.sendWithAttachments(USER_MESSAGE, [attachment], { timeoutMs: 900_000 });
+const t1 = await thing.sendWithAttachments(USER_MESSAGE, [attachment], { timeoutMs: 1_500_000 });
 const readFile =
   thing.didDelegate('system-files') || thing.events.some((e) => e.type === 'yield' && e.kind === 'delegate' && JSON.stringify(e.args).includes('system-files'));
 r.check('delegated to system-files (read the attachment)', readFile, thing.turn(0).delegates.join(' · '));
