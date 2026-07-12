@@ -173,7 +173,7 @@ Everything above is authored by the model into the user's own project — no eng
 
 ---
 
-## 5. Feature coverage (tick what this scenario exercises — see SCENARIO-FORMAT §2)
+## 5. Feature coverage (tick what this scenario exercises — see the feature catalog in the campaign prompt)
 
 - THING routing: [x] answer [x] research [x] build space [x] app-4a (automator) [ ] app-4b (build_app)
   [ ] code (engineer) [ ] memory [x] install+automate [x] compound request [x] provided-info shortcut

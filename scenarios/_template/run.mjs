@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Scenario runner TEMPLATE — copy this to `sdk/org/scenarios/<id>/run.mjs` and fill in the Acts.
- * It bakes in every hardening pattern the campaigns learned the hard way (see ../PLAYBOOK.md §1 and
- * ../SCENARIO-FORMAT.md §4): per-Act checkpointing + resume, a keepalive pinger, a resilient `send`
+ * It bakes in every hardening pattern the campaigns learned the hard way (see the harness API +
+ * hardening patterns in automation/instances/scenario-campaign/prompt.common.md): per-Act
+ * checkpointing + resume, a keepalive pinger, a resilient `send`
  * that survives a full pod restart, a scripted ask answerer, attachment + live-app + inbound helpers,
  * and trace-based assertions.
  *
@@ -73,7 +74,7 @@ function signedInbound(pod, path, body, secret, header = 'x-demo-signature') {
 // ── project-app assertion helper (build + read real rows) ────────────────────────
 // A real live-project app: compile it and confirm real assets came out, then read its DB rows.
 // (`built` lives at manifest.build.built and only reflects the LAST compile — so build explicitly
-//  and read the POST result, which carries assetManifest + routes. See SCENARIO-FORMAT §4 gotchas.)
+//  and read the POST result, which carries assetManifest + routes — see the harness gotchas in the campaign prompt.)
 async function assertLiveApp(report, pod, projectId, { minRowTables = {} } = {}) {
   const build = await pod.appBuild(projectId).catch((e) => ({ built: false, error: String(e) }));
   const assets = build?.assetManifest ?? [];

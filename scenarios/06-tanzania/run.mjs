@@ -89,7 +89,7 @@ const citedFacts = FILE_FACTS.filter((f) => sessionText.includes(f.toLowerCase()
 r.check('read the file: ≥3 file-specific facts appear in the session', citedFacts.length >= 3, `cited: ${citedFacts.join(', ')}`);
 // Errors here are almost entirely inside the delegated ARCHITECT authoring space files (e.g.
 // "'const' declarations must be initialized"); the eval loop retries them and the spaces still
-// build (asserted in Act II). Per SCENARIO-FORMAT §3.2 we hard-assert the DELIVERABLE and RECORD
+// build (asserted in Act II). Per the validation rule we hard-assert the DELIVERABLE and RECORD
 // recovered errors, pointing at the known architect authoring-reliability follow-up.
 r.metric('recovered typecheck errors (delegated authoring)', t1.errors.length);
 if (t1.errors.length) r.note(`recovered: ${JSON.stringify(t1.errors[0]).slice(0, 140)} … (architect authoring-reliability follow-up)`);

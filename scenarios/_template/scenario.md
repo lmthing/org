@@ -1,7 +1,7 @@
 # Scenario NN — <Title>: <the promise in a phrase>
 
 > Keep this file as `<NN-slug>/scenario.md` and fill every section. Structure + rules:
-> [../SCENARIO-FORMAT.md](../SCENARIO-FORMAT.md). Delete these quote lines when done.
+> `automation/instances/scenario-campaign/prompt.common.md`. Delete these quote lines when done.
 
 > **One line.** <What the user is trying to do, in a sentence. The whole scenario serves this.>
 
@@ -65,7 +65,7 @@ Name the moving parts (agents, globals, routes) so a reader learns where each st
 
 ---
 
-## 5. Feature coverage (tick what this scenario exercises — see SCENARIO-FORMAT §2)
+## 5. Feature coverage (tick what this scenario exercises — see the feature catalog in the campaign prompt)
 
 - THING routing: [ ] answer [ ] research [ ] build space [ ] app-4a (automator) [ ] app-4b (build_app)
   [ ] code (engineer) [ ] memory [ ] install+automate [ ] compound request [ ] provided-info shortcut

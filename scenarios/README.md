@@ -28,18 +28,15 @@ record.
 
 ## Authoring a new scenario — the format + the workflow
 
-Two complementary references, plus a copy-and-fill template:
+The full **format** (the six-section `scenario.md` structure, the feature catalog, the validation
+process, the harness API) and the **workflow** (run → triage → fix-in-product-with-a-test →
+verify-live → report, plus the image-rebuild loop and multi-hour babysitting discipline) now live,
+self-contained, in the automation instance that drives this campaign:
+[`automation/instances/scenario-campaign/prompt.common.md`](../../../automation/instances/scenario-campaign/prompt.common.md)
+(run it with `node automation/lmauto.mjs run scenario-campaign`).
 
-- **[SCENARIO-FORMAT.md](./SCENARIO-FORMAT.md)** — the canonical **format** for a scenario: the exact
-  six-section document structure, the **feature catalog** (everything a scenario can/should exercise —
-  THING routing, spaces, the four emitter kinds + hooks + code nodes, consent + capabilities, store +
-  integrations, project-apps + the seed/update writers, attachments, pod lifecycle), the **validation
-  process** (assert on the trace + real state, not prose; harness-bug vs product-bug triage; recovered
-  vs fatal errors), the **harness API**, and the definition of done.
-- **[PLAYBOOK.md](./PLAYBOOK.md)** — the **process** of running one and fixing what it finds: the
-  product-fix + image-rebuild-verify loop (7-char tags, pod upgrade, hot-patching a system-space
-  prompt, CI-rebase gotchas), the re-wake discipline for babysitting a multi-hour run, and the
-  reporting template.
+To author one by hand, copy the template:
+
 - **[`_template/`](./_template/)** — `cp -r _template <NN-slug>`, then fill **`<NN-slug>/scenario.md`**
   (the six-section spec with a feature checklist) and **`run.mjs`** (the runner
   scaffold — checkpoint/resume, keepalive, resilient send, scripted asks, and attachment + live-app +
