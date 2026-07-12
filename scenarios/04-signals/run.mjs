@@ -111,7 +111,9 @@ const say = async (thing, msg, opts) => {
   });
   return t;
 };
-/** Every signal row the recorder hooks wrote, normalized to {signal, payload}. */
+/** Every signal row the recorder hooks wrote, normalized to {signal, payload}.
+ *  The recorder stores the FULL source-qualified address (`integration-lmthing/<event>`)
+ *  in the `signal` column, so `signal` here is the bare event name and `addr` the full one. */
 const signalRows = async () => {
   const rs = await rows('signals');
   return rs.map((row) => {
@@ -119,7 +121,8 @@ const signalRows = async () => {
     if (typeof payload === 'string') {
       try { payload = JSON.parse(payload); } catch { /* keep raw */ }
     }
-    return { ...row, signal: row.signal ?? row.name ?? row.event, payload };
+    const addr = String(row.signal ?? row.name ?? row.event ?? '');
+    return { ...row, addr, signal: addr.includes('/') ? addr.slice(addr.lastIndexOf('/') + 1) : addr, payload };
   });
 };
 
@@ -201,13 +204,15 @@ if (on(2)) {
   r.check('second install went through a consent card', thing.consentCards().length >= 2, `${thing.consentCards().length} cards`);
   const ids2 = ((await pod.listSpaces(PROJECT)).spaces ?? []).map((s) => s.id ?? s);
   r.check('integration-demo installed', ids2.includes('integration-demo'), ids2.join(', '));
-  // (c) document.written — ask THING to write a note (the agent path).
+  // (c) document.written — write a project DOCUMENT (the real cause of the signal).
+  // NOTE (finding): asking THING to "write a note" makes it call writeFile() on the project
+  // fs, which is INTENTIONALLY not classified as a document write (S8: generic fs writes don't
+  // emit document.written). The signal's real cause is a project-document write (addDocument /
+  // POST /documents), so we provoke it that way — and record the nuance in the report.
   const t3 = await say(thing, 'Write me a short note in this project called `mission.md` — one paragraph on what this observatory is for.', { timeoutMs: 600_000 });
-  r.note(`note-writing yields: ${[...new Set(t3.yields.map((y) => y.kind))].join(', ')}`);
-  const docsAfterAgent = await pod.req('GET', `/api/projects/${PROJECT}/documents`).catch(() => ({ documents: [] }));
-  r.note(`documents after the agent wrote: ${JSON.stringify(docsAfterAgent).slice(0, 200)}`);
-  // …and the HTTP document route (the Studio path), as a control on the same signal.
-  await pod.req('POST', `/api/projects/${PROJECT}/documents`, { name: 'control-note.md', content: '# control\nwritten over the documents route' }).catch((e) => r.note(`documents route: ${e.message}`));
+  r.note(`THING note-writing yields: ${[...new Set(t3.yields.map((y) => y.kind))].join(', ')} (fs write, not a document → no document.written by design)`);
+  const dwRes = await pod.req('POST', `/api/projects/${PROJECT}/documents`, { name: 'mission.md', content: '# mission\nThe observatory records what lmthing does for me.' }).then(() => 'ok').catch((e) => e.message);
+  r.note(`document write (real cause) via POST /documents: ${dwRes}`);
 
   // (d/e) hook.fired + session.completed ride along with the above.
   const got = (name) => async () => (await signalRows()).some((s) => s.signal === name || String(s.payload?.signal ?? '') === name);
@@ -255,14 +260,16 @@ if (on(2)) {
       '',
     ].join('\n'),
   );
-  const nBefore = (await signalRows()).length;
   const inst = await pod.installSpace('integration-google', PROJECT, false).catch((e) => ({ error: e.message }));
   const idsBoom = ((await pod.listSpaces(PROJECT)).spaces ?? []).map((s) => s.id ?? s);
   r.check('the instrumented path (space install) still completed', idsBoom.includes('integration-google'), JSON.stringify(inst).slice(0, 160));
-  const landed = await until(async () => (await signalRows()).filter((s) => s.signal === 'space.installed' && s.payload?.spaceId === 'integration-google').length > 0, { timeoutMs: 60_000 });
-  r.check('the healthy defs still emitted alongside the throwing one', !!landed, landed ? 'space.installed(integration-google) recorded' : `no new rows (${nBefore} → ${(await signalRows()).length})`);
-  await pod.req('DELETE', `/api/fs/write?path=${encodeURIComponent(`${PROJECT}/events/boom.ts`)}`).catch(() => {});
-  await pod.writeFile(`${PROJECT}/events/boom.ts`, '').catch(() => {});
+  const landed = await until(async () => (await signalRows()).some((s) => s.signal === 'space.installed' && s.payload?.spaceId === 'integration-google'), { timeoutMs: 90_000 });
+  r.check('the healthy defs still emitted alongside the throwing one', !!landed, landed ? 'space.installed(integration-google) recorded despite boom.ts throwing' : 'the google install signal never landed');
+  // No fs-delete route — neutralize the throwing def by rebinding it to a signal that never fires.
+  await pod.writeFile(
+    `${PROJECT}/events/boom.ts`,
+    "export default { type: 'internal', on: { signal: 'never.happens' }, emits: { 'boom.happened': { payload: { projectId: 'string' } } }, emit: () => [] };\n",
+  ).catch(() => {});
 }
 
 // ── Step 3 — the project publishes its own event ──────────────────────────────

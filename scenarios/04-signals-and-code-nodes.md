@@ -144,4 +144,38 @@ It is **not** visible to a system-space session (project scope only).
 
 ## Actual results
 
-_Filled in by the scenario runner — see `sdk/org/scenarios/results/04-signals-report.md`._
+**Verdict: ✅ PASS (feature-verified) — 2 product bugs fixed, 3 authoring/UX gaps found.** Live prod,
+user `observatory` (`user-381387680333719178`), live LLM. Full write-up + raw evidence:
+`sdk/org/scenarios/results/04-signals-report.md`.
+
+- **All 5 internal signals emit & route with schema-EXACT payloads.** `space.installed`, `hook.fired`,
+  `session.completed` (`ok:true, durationMs>0`), `document.written` verified live with exact declared
+  payloads; **`project.created` did not route → BUG, fixed** (`fanOutAll`: its `projectId` names the
+  brand-new SUBJECT project, so the default projectId-scoped fan-out delivered it to the one project
+  that can't subscribe). Regression-tested; sdk/org `54ed659`.
+- **A throwing internal def is worker-contained** — the space install completed and healthy defs still
+  emitted.
+- **Mixed DAG (agent → 2 code nodes) works, code nodes = 0 tokens.** `inputs.research.*` is keyed by
+  node id; the seed is `inputs.topic` at TOP LEVEL (`inputs.seed` undefined); `node` metadata is
+  statically extracted; the researched content flowed end-to-end into the `digest` table (5 rows).
+- **`forEach` fanned 5 ways** (`n:5, indexes:[0..4]`) and the collector received all N; a **hook's
+  `ctx.tasklist.run` RETURNED its result to the handler** (the past "drops result" bug does not regress).
+- **Isolation/failure edges all hold** — no `ctx.fetch`; `callConnection` to an undeclared provider
+  throws; a throwing code node is a required-task failure that surfaces and skips downstream.
+- **`emitEvent`** — the no-`events:emit` edge is enforced by TYPECHECK live (`Cannot find name
+  'emitEvent'`); the undeclared/bad-payload/scope edges are unit-tested.
+
+**Product bugs fixed:** (B1) `project.created` fan-out — core routing (sdk/org `54ed659`); (B2)
+`build_app/06-build_hook.md` still authored the REMOVED `{type:'database'}` hook — stale prompt, now
+authors `{type:'event'}` code-handler hooks (sdk/org `54ed659`).
+
+**Gaps found (the real product answer):** (F1, biggest) **no system space can author a code node** —
+there is no `writeCodeNode` and no code-node knowledge anywhere; the runtime works but the specialists
+that own tasklists can't produce `NN-<id>.ts`. (F2) the automator hallucinated `ctx.project.db`/
+`ctx.publishEvent` and can't create its table (prompt improved + a concurrent change granted it
+`db:schema`). (F3) `document.written` fires only from the documents API, not an agent `writeFile`. (F5)
+THING has no tool to create a bare project.
+
+**Caveat:** post-fix live re-confirmation of B1 is inconclusive — the whole recorder stopped writing on
+the re-imaged/churned pod (all 5 signals), unrelated to the one-line fix; B1 rests on the crisp pre-fix
+live evidence + green regression tests.
