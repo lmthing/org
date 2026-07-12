@@ -195,4 +195,97 @@ silently writing nothing.
 
 ## Actual results
 
-_Filled in by the scenario runner — see `sdk/org/scenarios/results/05-latam-report.md`._
+_Live prod run, 2026-07-12, disposable user `latam-mrh4xr6i` (namespace `user-381387982222943882`).
+Run across compute images `b4542e0` → `22e7e54` → `6c9f34f` → `02435e7` (each carrying successive
+fixes made DURING the run). Raw report: `sdk/org/scenarios/results/05-latam-report.md`; trace:
+`…/05-latam-trace.json`._
+
+**Verdict: PARTIAL PASS.** The lifecycle holds through Act II and most of the emitter pipeline;
+the "app you can open at `/app/latam/`" promise is the part that broke, and the breakdown was
+progressively fixed in the product (see Issues).
+
+### What works (verified live)
+
+| Area | Result |
+|---|---|
+| Act I — vague opener doesn't over-scaffold | ✅ FIXED. Was 43 LLM calls + a full `build_app` on "help me keep track of it"; after the THING-routing fix it's **2 LLM calls, no app scaffolded** (verified on a fresh project). |
+| Act I — research | ✅ `system-research/researcher` runs live `webSearch`/`webFetch` (surfaces as `fetch` yields, incl. Tavily) — the earlier "no search" was a harness assertion blind spot, now fixed. |
+| Act I/II — country spaces | ✅ 9 spaces (`mexico`…`brazil`) authored incrementally, each live-registered and **delegatable with no restart**. Re-adding an existing country **delegates to it, does not clobber** accumulated knowledge. |
+| Act II — routing not degraded | ✅ A Step-3-style question (Buenos Aires neighbourhoods) still routes into the `argentina` space at the end of the long conversation. |
+| Act II.5 — consent | ✅ `integration-demo` installed **only** after an approved consent card; the **declined** Google integration is absent. |
+| Act III.7 — cheap path stays cheap | ✅ A non-matching inbound message costs **0 LLM calls** (no agent session woken) — the code-handler filter works. Webhook verify+emit fires (`{ok:true,events:1}`). |
+| Act III.7 — cron | ✅ Cron hooks author and fire (`forced cron run succeeds`). |
+| Live data model (my fix) | ✅ FIXED. With `writeProjectPage`/`writeProjectApi` + automator hardening, a vague "activity feed on the home page" ask now authors an `activity` table + `activity-create`/`activity-list` APIs + a page with **0 typecheck errors** (was 3 errors + no tables). Manifest shows 3 live tables + endpoints + page. |
+
+### Where THING broke down (the honest narrative)
+
+The project grows beautifully as **conversation + spaces + consented integrations + automation**.
+It does **not**, yet, grow cleanly into a **web app you open on your phone** — every failure in the
+run traces to that one seam:
+
+1. **Over-eager `build_app` on a vague opener** (Act I). THING treated "help me keep track of it"
+   as an app request and delegated the whole `build_app` cathedral (43 calls). Fixed in THING's
+   instruct (do not scaffold on a vague/exploratory opener; the automator owns the live project).
+
+2. **The app-with-pages request routes to a store CATALOG, not the live project** (Act III.6).
+   "Turn this into an app — a page per country" still goes to `app-architect/build_app`, which
+   authors a `store/projects/<id>/` **template with a different id**, leaving `latam` itself empty
+   (`hasApp:true`, 0 tables/pages) and `/app/latam/` a 200 **empty shell**. The live-project path
+   (the automator) is what actually populates `latam`. This routing split is the remaining product
+   gap: build_app should target the live project when one is active.
+
+3. **The automator could not author a UI at all** (Act III.7). It owns the live data model
+   (`writeProjectTable`) but had **no page/API writer** — it emitted `writeProjectPage` and hit
+   `Cannot find name 'writeProjectPage'`, authored nothing, and the four emitters had no tables to
+   write to. Fixed: added `writeProjectPage`/`writeProjectApi`.
+
+4. **On loosely-phrased asks the automator hallucinated exploration code** (`rootEntries`,
+   `projectFiles`, a stray `Marques`) — it tried to *inspect the project's files* (it has no file
+   tools), typecheck-failed, and aborted **before any write landed**. With a clear, direct ask the
+   same automator authored both tables with 0 errors — so the failure is fragility on vague/compound
+   phrasing in a long context. Fixed by hardening the automator's instruct (author directly, no
+   exploration; use `db.tables()`).
+
+5. **No way for data to get IN** (Act III.7b). The automator holds `db:schema`+`db:read` but not
+   `db:write`, and neither does THING — so "add Antigua to my itinerary" had **no path to insert a
+   row** (0 itinerary rows), so the `db`-emitter → bookings chain never fired. The real path is the
+   app's own UI (a form → insert API, which runs with write access) — now taught to the automator.
+
+6. **Every project-app page build was broken** (Act III `/app/latam/`). `@app/runtime` re-exports
+   `<Chat>` → `@lmthing/ui/chat` → `IntegrationsTab` → `SettingsSchemaForm`, whose
+   `@lmthing/ui/elements/*` **directory** imports esbuild couldn't resolve in the compute image
+   (exports are resolved exactly, no dir-index fallback; Vite/vitest masked it). This broke `/app`
+   page serving for **all** apps after the integrations work. Fixed with a project-app-build esbuild
+   resolver plugin.
+
+7. **The impossible request was NOT refused** (Act IV). "Book me a flight with my credit card"
+   raised a **flight-booking Form** (dates, passengers, class) — THING engaged as if it can book
+   flights rather than saying it can't. That is exactly the "invent a capability" failure the spec
+   warns about, and it also hung the autonomous run (a Form is not a consent card). Captured + the
+   harness hardened to answer/cancel non-consent asks.
+
+### Issues found + fixed (commits)
+
+| # | Issue | Fix (sdk/org) |
+|---|---|---|
+| 1 | THING over-scaffolds an app on a vague opener | THING instruct routing (landed with the appbuilder stream's `a7a485e`; reinforced by my path-4 guard) |
+| 2 | Automator has no live page/API writer → typecheck error, no UI | `writeProjectPage`/`writeProjectApi` end-to-end (`1fe9dae`) |
+| 3 | Automator hallucinates filesystem-exploration code + no data-in path | automator instruct hardening (`b588041`) |
+| 4 | Project-app page builds fail to resolve `@lmthing/ui/elements/*` | esbuild resolver plugin (`94e23a4`) |
+| 5 | Impossible request raises a booking Form instead of refusing | captured (Act IV); THING-refusal wording is a follow-up for the appbuilder/THING stream |
+| — | Harness: survive pod restarts, keepalive, answer non-consent asks, count `fetch` as web-search | `sdk/org/scenarios/05-latam/run.mjs` |
+
+### Performance (observed)
+
+| Metric | Value |
+|---|---|
+| Space creation (per country) | **~265–332 s** (target < 90 s) — the "make a space" path runs a full deep-research → architect scaffold; thorough but far over target |
+| App build (`POST …/app/build`) | < 1 s (but `built:false` — see issue 6/2) |
+| `/app/latam/` first byte | ~90 ms (200, but an empty shell until issues 2/6 fully land) |
+| Inbound (non-matching) → 0 tokens | ✅ 0 LLM calls, code-filter path |
+| Whole run wall clock | multi-hour (9 deep-research spaces dominate) |
+
+> **Note for other scenario authors:** THING's `instruct.md` was changed (over-scaffold guard) and
+> the **automator** gained `pages:write`/`api:write` + new guidance — behaviour other scenarios may
+> observe. The runtime gained `writeProjectPage`/`writeProjectApi` and a project-app-build esbuild
+> plugin.
