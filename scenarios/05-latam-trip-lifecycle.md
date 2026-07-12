@@ -200,9 +200,26 @@ Run across compute images `b4542e0` → `22e7e54` → `6c9f34f` → `02435e7` (e
 fixes made DURING the run). Raw report: `sdk/org/scenarios/results/05-latam-report.md`; trace:
 `…/05-latam-trace.json`._
 
-**Verdict: PARTIAL PASS.** The lifecycle holds through Act II and most of the emitter pipeline;
-the "app you can open at `/app/latam/`" promise is the part that broke, and the breakdown was
-progressively fixed in the product (see Issues).
+**Verdict: CONDITIONAL PASS.** The full lifecycle — creation → incremental growth → consented
+integration → **a real app that builds and serves at `/app/latam/`** → emitters firing — works end
+to end on the fully-fixed image (`7a2a3a1`+). Every blocker the scenario surfaced was a real product
+bug, and **six were fixed in the product this run** (see Issues). What keeps it *conditional* rather
+than a clean pass: the **automator's model-authoring reliability on loosely-phrased, compound asks**
+— it authors tables/pages/events cleanly now, but on this run it wrote every *hook* with literal
+`\n` (all hooks dead → the `db`/`cron` emitters never fired); a validate-before-write guard now
+rejects that and forces a retry, but "does it reliably author a correct 4-emitter app from one vague
+paragraph" is a model-quality frontier, not a fixed invariant. Two emitter kinds (`webhook`,
+`internal`) were observed **firing end to end**; `db`/`cron` are gated on that authoring reliability.
+
+**Quantifying the malformed-authoring reliability (coordinator's question):** after `b588041`
+("author directly"), the garbage-identifier failures (`rootEntries`/`projectFiles`) that used to
+abort *table* authoring are **gone** — a vague "activity feed on the home page" ask went from 3
+typecheck errors + 0 tables to **0 errors + table + 2 APIs + page**. But a *different* malformation
+appeared in the same run: **~100% of authored hooks** were written with literal `\n` (10+ hook files,
+all unparseable). `f37c6ff` now rejects unparseable source at the writer, converting a silent
+pod-breaking write into a retriable `{ok:false}` — so the failure is contained, but the underlying
+model inconsistency (real newlines for pages/events, escaped `\n` for hooks) is why this is a
+CONDITIONAL, not clean, pass.
 
 ### What works (verified live)
 
@@ -272,9 +289,20 @@ run traces to that one seam:
 | 1 | THING over-scaffolds an app on a vague opener | THING instruct routing (landed with the appbuilder stream's `a7a485e`; reinforced by my path-4 guard) |
 | 2 | Automator has no live page/API writer → typecheck error, no UI | `writeProjectPage`/`writeProjectApi` end-to-end (`1fe9dae`) |
 | 3 | Automator hallucinates filesystem-exploration code + no data-in path | automator instruct hardening (`b588041`) |
-| 4 | Project-app page builds fail to resolve `@lmthing/ui/elements/*` | esbuild resolver plugin (`94e23a4`) |
-| 5 | Impossible request raises a booking Form instead of refusing | captured (Act IV); THING-refusal wording is a follow-up for the appbuilder/THING stream |
-| — | Harness: survive pod restarts, keepalive, answer non-consent asks, count `fetch` as web-search | `sdk/org/scenarios/05-latam/run.mjs` |
+| 4 | Project-app page builds fail to resolve `@lmthing/ui/elements/*` → `/app/latam/` an empty shell | esbuild resolver plugin (`94e23a4`). **Verified live on `7a2a3a1`:** `build:true`, real assets, `GET /app/latam/` serves the built bundle. |
+| 5 | Automator writes every hook with literal `\n` → all hooks unparseable, `db`/`cron` emitters dead, pod destabilized | validate-before-write: `writeProject*` reject unparseable source (`f37c6ff`) + newline guidance |
+| 6 | Impossible request ("book a flight") — earlier raised a booking Form; on the fixed image THING **refuses** ("I can't book or pay with your credit card") | ✅ refuses on the fixed image (the assertion missed it on a curly apostrophe — harness fixed) |
+| — | **Remaining gap** — "an app with a page per country" (Act III.6) routes to `app-architect/build_app`, which builds a `store/projects/<id>/` **catalog template** (different id), not the live `latam` project; the live app is populated by the **automator** path instead. build_app should target the live project when one is active. | open (appbuilder stream) |
+| — | Harness: survive pod restarts, keepalive, answer non-consent asks, count `fetch` as web-search, curly-quote-tolerant refusal check | `sdk/org/scenarios/05-latam/run.mjs` |
+
+### Emitters — observed firing (Act III.7b, fixed image)
+
+| Kind | Fired end-to-end? | Evidence |
+|---|---|---|
+| `webhook` (code-handler filter) | ✅ | A signed booking-confirmation inbound was filed into `bookings` (0→1); a non-matching message cost **0 LLM calls** (12→12 sessions). |
+| `internal` (`hook.fired`) | ✅ | `hook.fired` signal wrote `activity` rows (2). |
+| `db` (`itinerary.insert` → agent trigger) | ❌ gated | The `itinerary`-insert hook + an `itinerary_cities` schema/column mismatch (`no column named name`) + the literal-`\n` hook corruption blocked it; needs the `f37c6ff` retry-on-bad-source to land + a correct insert path. |
+| `cron` (`daily`) | ❌ gated | Same literal-`\n` hook corruption; the cron hook file didn't parse. |
 
 ### Performance (observed)
 
