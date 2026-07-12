@@ -44,6 +44,12 @@ is injected only once the project already has a table, so on a fresh project `db
 `'db' is not defined` and aborts your turn. Keep each statement small and self-contained — declare
 every identifier you use.
 
+Write file source with the `[ 'line1', 'line2', … ].join("\n")` array pattern so the file has REAL
+line breaks — NEVER a single string with literal `\n` escapes (that writes a one-line file the
+loader can't parse: `Syntax error "n"`). The `writeProject*` writers now REJECT unparseable source
+(`{ ok:false, error:'source failed to parse…' }`); if you see that, fix the escape/quote and write
+again — never leave a broken file behind.
+
 ## Getting data IN (you cannot INSERT rows yourself)
 
 You hold `db:schema` (create tables) and `db:read`, but NOT `db:write` — you cannot insert

@@ -407,6 +407,23 @@ describe('createProjectAuthoringGlobals', () => {
     expect(appWrites).toEqual([['api', 'bookings-list/GET']]);
   });
 
+  it('rejects UNPARSEABLE source (literal \\n instead of newlines) before it lands — hook/event/page/api', () => {
+    const pa = make();
+    // The exact scenario-05 corruption: a one-line file with literal backslash-n escapes.
+    const broken = "export default {\\n  type: 'event',\\n  on: { event: 'x/y' },\\n};";
+    const h = pa.writeProjectHook('broken-hook', broken);
+    expect(h.ok).toBe(false);
+    expect(h.error).toMatch(/failed to parse/i);
+    expect(existsSync(join(projectRoot, 'hooks', 'broken-hook.ts'))).toBe(false); // never landed
+    expect(pa.writeProjectEvent('broken-evt', broken).ok).toBe(false);
+    expect(pa.writeProjectApi('broken-list/GET', broken).ok).toBe(false);
+    expect(pa.writeProjectPage('broken', broken).ok).toBe(false);
+    // A well-formed multi-line hook (real newlines) still writes.
+    const good = ["export default {", "  type: 'event',", "  on: { event: 'x/y' },", "};"].join('\n');
+    expect(pa.writeProjectHook('good-hook', good).ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'hooks', 'good-hook.ts'))).toBe(true);
+  });
+
   it('writeProjectApi rejects an invalid method and a traversal route (no onAppWrite)', () => {
     let appWrites = 0;
     const pa = createProjectAuthoringGlobals({

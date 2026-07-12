@@ -19,7 +19,28 @@
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
+import { transformSync } from 'esbuild';
 import { validateTableSchema, type TableSchema } from '@lmthing/core';
+
+/**
+ * Reject source that does not PARSE before it lands on disk. A live-project hook/event/api/page
+ * write goes straight into the running project — an unparseable file (e.g. a model that emitted
+ * literal `\n` escape sequences instead of newlines, so `hooks/<slug>.ts` is one line the loader
+ * chokes on with `Syntax error "n"`) silently breaks the whole automation pipeline and can
+ * destabilize the pod on the next load. Validating here turns that into an immediate `{ ok:false }`
+ * the authoring agent SEES and retries — the same contract `writeProjectTable` already has via
+ * `validateTableSchema`. Syntax-only (esbuild transform); undefined-identifier errors are a
+ * typecheck concern, not a parse one. Found live in scenario 05 (every automator-authored hook
+ * written with literal `\n`).
+ */
+function assertSourceParses(src: string, loader: 'ts' | 'tsx'): void {
+  try {
+    transformSync(src, { loader, format: 'esm', logLevel: 'silent' });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`source failed to parse (write rejected — fix and retry): ${msg.split('\n')[0]}`);
+  }
+}
 
 export interface AppAuthoringGlobals {
   writePage: (route: string, src: string) => { ok: boolean; error?: string };
@@ -311,6 +332,7 @@ export function createProjectAuthoringGlobals(opts: {
   function writeProjectHook(slug: string, src: string): { ok: boolean; error?: string } {
     try {
       assertSlug('hook slug', slug);
+      assertSourceParses(src, 'ts');
     } catch (e) {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
@@ -320,6 +342,7 @@ export function createProjectAuthoringGlobals(opts: {
   function writeProjectEvent(name: string, src: string): { ok: boolean; error?: string } {
     try {
       assertSlug('event name', name);
+      assertSourceParses(src, 'ts');
     } catch (e) {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
@@ -332,6 +355,11 @@ export function createProjectAuthoringGlobals(opts: {
         ok: false,
         error: `function name "${name}" is not a valid identifier (expected /${FUNCTION_NAME_RE.source}/)`,
       };
+    }
+    try {
+      assertSourceParses(src, 'ts');
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
     return writeUnder(join('functions', `${name}.ts`), src);
   }
@@ -378,6 +406,7 @@ export function createProjectAuthoringGlobals(opts: {
     try {
       rel = assertPathSegments('page route', route);
       if (!rel.endsWith('.tsx')) rel = `${rel}.tsx`;
+      assertSourceParses(src, 'tsx');
     } catch (e) {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
@@ -410,6 +439,7 @@ export function createProjectAuthoringGlobals(opts: {
       if (segments.length === 0) {
         throw new Error(`api route "${route}" is missing an endpoint path before the method`);
       }
+      assertSourceParses(src, 'ts');
       target = join('api', ...segments, `${method}.ts`);
     } catch (e) {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
