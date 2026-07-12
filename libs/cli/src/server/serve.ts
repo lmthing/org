@@ -13,6 +13,7 @@ import { applyEnvContent, handleEnvGet, handleEnvPut } from './routes/env.js';
 import { handlePricesAzure } from './routes/prices.js';
 import { handleBudget } from './routes/budget.js';
 import { handleCreateSession, handleListSessions, handleDeleteSession, handleSessionSubRoute } from './routes/sessions.js';
+import { handleListSessionLedger } from './routes/session-ledger.js';
 import {
   handleListProjects, handleCreateProject, handleDeleteProject,
   handleGetProjectInstructions, handlePutProjectInstructions,
@@ -162,6 +163,9 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // Sessions (collection-level)
   router.add('POST', '/api/sessions', handleCreateSession);
   router.add('GET', '/api/sessions', handleListSessions);
+
+  // Session/delegate ledger (settings UI)
+  router.add('GET', '/api/session-ledger', handleListSessionLedger);
 
   // Projects
   router.add('GET', '/api/projects', handleListProjects);

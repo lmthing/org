@@ -6,6 +6,7 @@ import type { StreamSession } from '../eval/stream-types.js';
 import type { Space, AgentDef } from '../spaces/load.js';
 import { loadSystemSpaces, defaultSystemSpaceDirs } from '../spaces/system.js';
 import { createMockStreamFn } from '../testing/mock-provider.js';
+import { Tracer, type TraceEvent } from '../sandbox/trace.js';
 
 /**
  * Delegate depth guard. runDelegate refuses to recurse past maxDepth — the check
@@ -91,6 +92,43 @@ describe('runDelegate exposes the global toolkit to declared-functionless agents
     })) as { ok: boolean; isObject: boolean } | undefined;
 
     expect(result).toEqual({ ok: true, isObject: true });
+  });
+});
+
+/**
+ * A delegation's inputs are recorded on its trace node so a downstream ledger can
+ * report "with what inputs" it was made. runDelegate writes a truncated preview of
+ * `delegateOpts.query` into the delegate `node_start` detail.
+ */
+describe('runDelegate records the query input on its trace node', () => {
+  it('the delegate node_start detail carries the query preview', async () => {
+    const systemSpaces = await loadSystemSpaces(defaultSystemSpaceDirs());
+    const memory = systemSpaces.find((s) => s.dir.endsWith('/user-memory'));
+    expect(memory).toBeTruthy();
+    const registry = new DelegateRegistry(new Map([[memory!.dir, memory!]]));
+    const streamFn = createMockStreamFn(() => `currentTask.resolve({ ok: true });`);
+
+    const tracer = new Tracer(null);
+    const starts: Extract<TraceEvent, { type: 'node_start' }>[] = [];
+    tracer.subscribe((e) => { if (e.type === 'node_start' && e.kind === 'delegate') starts.push(e); });
+
+    await runDelegate({
+      packageName: memory!.dir,
+      agentName: 'memory',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+      systemSpaces,
+      tracer,
+      delegateOpts: { query: 'remember my birthday' },
+    });
+
+    expect(starts).toHaveLength(1);
+    expect(starts[0]!.detail?.query).toBe('remember my birthday');
+    expect(starts[0]!.detail?.agent).toBe('memory');
   });
 });
 

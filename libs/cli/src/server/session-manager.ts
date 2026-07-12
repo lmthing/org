@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { join, basename } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
+import { existsSync } from 'node:fs';
 import { Session, saveSnapshot, loadSpace, loadProjectFunctions, ForkEngine, runTasklist, Tracer, createAskConsentPrompter } from '@lmthing/core';
 import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
 import { createCodeNodeCtxFactory } from './tasklist-runner.js';
+import { loadAzurePrices, computeTurnCost, type ModelPricing } from './pricing.js';
+import { SessionLedger } from './session-ledger.js';
 import { emitInternalSignal } from './internal-signals.js';
 import { integrationStatusFor } from './routes/store-spaces.js';
 import { createStoreResolver } from './store-resolver.js';
@@ -194,29 +194,6 @@ export interface SessionManagerOpts {
   defaultModelAlias?: string;
 }
 
-interface ModelPricing { inputPer1K: number; outputPer1K: number }
-
-function loadAzurePrices(): Record<string, ModelPricing> {
-  try {
-    const pricesPath = join(dirname(fileURLToPath(import.meta.url)), '../prices/azure.json');
-    return JSON.parse(readFileSync(pricesPath, 'utf8')) as Record<string, ModelPricing>;
-  } catch {
-    return {};
-  }
-}
-
-function computeTurnCost(
-  prices: Record<string, ModelPricing>,
-  model: string | undefined,
-  inputTokens: number,
-  outputTokens: number,
-): number {
-  if (!model) return 0;
-  const modelId = model.includes(':') ? model.split(':').slice(1).join(':') : model;
-  const p = prices[modelId];
-  if (!p) return 0;
-  return (inputTokens / 1000) * p.inputPer1K + (outputTokens / 1000) * p.outputPer1K;
-}
 
 /** Parse a `space/agent#action` spawn ref → the pieces `runHeadless` wants
  *  (mirrors the hook `parseTrigger`). No `#` ⇒ the whole ref is the space, no action. */
@@ -289,6 +266,10 @@ export class SessionManager {
   readonly lmthingRoot?: string;
   /** Per-model pricing loaded from prices/azure.json at startup. */
   private prices: Record<string, ModelPricing> = loadAzurePrices();
+  /** Pod-global ledger of every session (chat + hook/code-node) and its delegates,
+   *  with token/cost accounting. Persisted to `<lmthingRoot>/sessions-ledger.jsonl`
+   *  when project-mode; file-less (in-memory) otherwise. */
+  private sessionLedger: SessionLedger;
 
   constructor(opts: SessionManagerOpts) {
     this.streamFn = opts.streamFn;
@@ -299,11 +280,26 @@ export class SessionManager {
     this.idleTtlMs = opts.idleTtlMs ?? Number(process.env['IDLE_TTL_MINUTES'] ?? 15) * 60000;
     this.buildSessionFn = opts.buildSession ?? this.defaultBuildSession.bind(this);
     this.lmthingRoot = opts.lmthingRoot;
+    this.sessionLedger = new SessionLedger(
+      this.lmthingRoot ? join(this.lmthingRoot, 'sessions-ledger.jsonl') : null,
+      this.prices,
+    );
+  }
+
+  /** Newest-first snapshot of the session/delegate ledger (for the settings UI). */
+  listSessionLedger(limit = 200): ReturnType<SessionLedger['list']> {
+    return this.sessionLedger.list(limit);
   }
 
   /** Subscribe a session's tracer to its hub AND cost accumulation. */
   private wireTracer(session: Session, entry: SessionEntry): void {
     if (typeof session.getTracer !== 'function') return;
+    // Record this chat session + its delegates in the pod-global ledger.
+    this.sessionLedger.trackTracer(session.getTracer(), {
+      source: 'chat',
+      sessionId: entry.sessionId,
+      ...(entry.projectId !== undefined ? { projectId: entry.projectId } : {}),
+    });
     session.getTracer().subscribe((e) => {
       entry.hub.push(e);
       if (
@@ -501,7 +497,7 @@ export class SessionManager {
     const base = `Code-node delegate to "${spaceRef}"` + (action ? ` — "${action}".` : '.');
     const message =
       (dopts?.message ?? base) + (dopts?.input !== undefined ? `\nInput: ${safeStringify(dopts.input)}` : '');
-    return this.runHeadless({ projectId, spaceRef, agentSlug, message });
+    return this.runHeadless({ projectId, spaceRef, agentSlug, message, origin: { source: 'code-node' } });
   }
 
   /** Per-project app-db cache. Lazily boots (restore→open→reconcile, fail-loud on
@@ -811,6 +807,7 @@ export class SessionManager {
     // persist + dispose in the background.
     const evicted = victim;
     this.sessions.delete(evicted.sessionId);
+    this.sessionLedger.finalize(evicted.sessionId, 'done');
     console.warn(`[session-manager] evicted idle session ${evicted.sessionId} (persist-first)`);
     void (async () => {
       try { await this.persistSession(evicted); } catch { /* best-effort */ }
@@ -1392,6 +1389,7 @@ export class SessionManager {
       /* best-effort */
     }
     this.sessions.delete(id);
+    this.sessionLedger.finalize(id, 'done');
     return true;
   }
 
@@ -1429,6 +1427,9 @@ export class SessionManager {
     message: string;
     budget?: BuildSessionArgs['budget'];
     traceFile?: string;
+    /** Where this headless run came from — recorded as the ledger session `source`
+     *  (`hook:<slug>` / `code-node`). Defaults to `headless`. */
+    origin?: { source: string };
   }): Promise<{ ok: boolean; result?: unknown; error?: string; sessionId: string }> {
     const sessionId = randomUUID();
     let session: Session | undefined;
@@ -1448,6 +1449,12 @@ export class SessionManager {
         session.getTracer().subscribe((e) => {
           if (e.type === 'display') displays.push(e.descriptor);
         });
+        // Record this hook/code-node session + its delegates in the ledger.
+        this.sessionLedger.trackTracer(session.getTracer(), {
+          source: opts.origin?.source ?? 'headless',
+          sessionId,
+          projectId: opts.projectId ?? DEFAULT_PROJECT_ID,
+        });
       }
 
       await session.start(opts.message);
@@ -1459,9 +1466,11 @@ export class SessionManager {
         result = history.length ? history[history.length - 1]?.content : undefined;
       }
       emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId, ok: true, durationMs: Date.now() - headlessStartedAt });
+      this.sessionLedger.finalize(sessionId, 'done');
       return { ok: true, result, sessionId };
     } catch (err) {
       emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId, ok: false, durationMs: Date.now() - headlessStartedAt });
+      this.sessionLedger.finalize(sessionId, 'error');
       return { ok: false, error: err instanceof Error ? err.message : String(err), sessionId };
     } finally {
       try {

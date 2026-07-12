@@ -124,11 +124,16 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   const tracer = opts.tracer ?? NULL_TRACER;
   const delegateLabel = `delegate:${opts.packageName}/${opts.agentName}/${opts.action ?? '(model-driven)'}`;
   // Mint a delegate scope for full observability; end() in finally below
+  const queryPreview =
+    typeof opts.delegateOpts?.query === 'string'
+      ? opts.delegateOpts.query.slice(0, 500)
+      : undefined;
   const delegateScope = tracer.child(opts.scope, 'delegate', delegateLabel, {
     pkg: opts.packageName,
     agent: opts.agentName,
     action: opts.action,
     depth: opts.depth,
+    ...(queryPreview !== undefined ? { query: queryPreview } : {}),
   });
 
   // Unified canDelegateTo semantics: the DELEGATED agent's own policy decides

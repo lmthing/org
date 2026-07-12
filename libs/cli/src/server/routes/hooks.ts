@@ -166,6 +166,7 @@ export interface HookManager extends TasklistRunnerManager {
     agentSlug: string;
     message: string;
     budget?: HookBudget;
+    origin?: { source: string };
   }): Promise<unknown>;
   getProjectDb(root: string, projectId: string): Promise<{ async: unknown } | null>;
 }
@@ -247,6 +248,7 @@ function buildHookCtx(
       agentSlug,
       message,
       budget: hook.budget,
+      origin: { source: `hook:${hook.slug}` },
     })) as DelegateResult;
     // Normalize a bare/tagged return into the documented DelegateResult shape.
     if (out && typeof out === 'object' && 'ok' in out) return out;
@@ -335,6 +337,7 @@ export async function runHook(
         agentSlug,
         message,
         budget: hook.budget,
+        origin: { source: `hook:${hook.slug}` },
       });
       if (isBudgetExhausted(result)) return { queued: true };
       return { queued: false, result };

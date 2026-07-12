@@ -28,6 +28,9 @@ export interface NodeDetail {
   agent?: string;
   action?: string;
   depth?: number;
+  /** Truncated preview of the delegate's `query` input — so a downstream ledger
+   *  can record "with what inputs" a delegation was made without re-plumbing opts. */
+  query?: string;
   // tasklist / task
   tasklist?: string;
   dependsOn?: string[];

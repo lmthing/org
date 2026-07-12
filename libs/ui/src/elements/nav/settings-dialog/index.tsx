@@ -1,6 +1,6 @@
 import '@lmthing/css/elements/nav/settings-dialog/index.css'
 import * as React from 'react'
-import { User, Cpu, Terminal, CreditCard, GitBranch, Webhook, type LucideIcon } from 'lucide-react'
+import { User, Cpu, Terminal, CreditCard, GitBranch, Webhook, Share2, type LucideIcon } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,7 @@ import { EnvVars } from '../../settings/env-vars'
 import { Billing } from '../../settings/billing'
 import { WorkspaceBackup } from '../../settings/backup'
 import { Triggers } from '../../settings/triggers'
+import { Sessions } from '../../settings/sessions'
 
 interface TabDef {
   id: string
@@ -65,6 +66,14 @@ const TABS: TabDef[] = [
     title: 'Triggers',
     description: 'Inbound webhook URLs that trigger your agents.',
     render: () => <Triggers />,
+  },
+  {
+    id: 'sessions',
+    label: 'Sessions',
+    icon: Share2,
+    title: 'Sessions & delegations',
+    description: 'Every chat and hook session — its delegates, inputs, and token cost.',
+    render: () => <Sessions />,
   },
   {
     id: 'backup',
