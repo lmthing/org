@@ -216,4 +216,96 @@ and checkpoints per Act to `results/06-tanzania-checkpoint.json`.
 
 ## Actual results
 
-_Filled in by the scenario runner — see `sdk/org/scenarios/results/06-tanzania-report.md`._
+## Actual results — run 2026-07-12T16:23:33.384Z
+
+**Verdict: ✅ PASS** · 22/22 checks · 0 issue(s) found · 8.5 min wall clock
+
+### setup
+
+*Expected:* fresh prod user; the tanzania-trip project created (UI action); file uploaded
+
+| Check | Result | Actual |
+|---|---|---|
+| user provisioned | ✅ | tanzania-mrhqmmwh@lmthing.test (user-381449106234566282) |
+| tanzania-trip project exists | ✅ | tanzania-trip-9 |
+| file uploaded as an attachment | ✅ | file text/markdown id=db926f00-65f5-485e-b040-3091e317fa55 |
+| classified as a readable file | ✅ | file |
+
+### Act I — ingest
+
+*Expected:* THING delegates to system-files and its plan cites real file specifics
+
+| Check | Result | Actual |
+|---|---|---|
+| delegated to system-files (read the attachment) | ✅ | system-files/dispatch · system-files/reader · system-architect/architect/synthesize_and_run · system-architect/architect/synthesize_and_run · system-architect/architect/synthesize_and_run · system-architect/architect/synthesize_and_run · system-architect/architect/synthesize_and_run · system-architect/architect/synthesize_and_run · system-architect/architect/synthesize_and_run · system-architect/architect/synthesize_and_run · system-architect/architect/synthesize_and_run · system-architect/archi |
+| read the file: ≥3 file-specific facts appear in the session | ✅ | cited: Suricata, The Rock, A3932, Ngorongoro, Zanzibar, Eileen |
+
+> recovered: {"type":"typecheck_error","message":"'const' declarations must be initialized.","statement":"const functions: { name: string; purpose: strin … (architect authoring-reliability follow-up)
+
+### Act II — spaces
+
+*Expected:* ≥4 leg spaces (Cairo/Safari/Zanzibar/Dar), each delegatable
+
+| Check | Result | Actual |
+|---|---|---|
+| ≥4 spaces created (multiple parts) | ✅ | air-itinerary-tracker, cairo-stopover, cairo-stopover-logistics, dar-es-salaam-stay, suricata-safari-manager, travel-documents-tracker, trip-context-manager, trip-lodging-tracker, trip-payment-tracker, trip-resource-hub, zanzibar-planner |
+| spaces represent the trip parts (Cairo + Zanzibar + Tanzania mainland) | ✅ | {"cairo":true,"zanzibar":true,"mainland":true} — spaces: air-itinerary-tracker, cairo-stopover, cairo-stopover-logistics, dar-es-salaam-stay, suricata-safari-manager, travel-documents-tracker, trip-context-manager, trip-lodging-tracker, trip-payment-tracker, trip-resource-hub, zanzibar-planner |
+| a leg question routes INTO the Zanzibar space (not answered from thin air) | ✅ | delegated to the zanzibar space |
+
+### Act III — live app
+
+*Expected:* /app/tanzania-trip builds (built:true) and serves 200 real HTML
+
+| Check | Result | Actual |
+|---|---|---|
+| app declares tables | ✅ | [{"name":"bookings_reservations","schema":{"title":"Bookings and Reservations","description":"Confirmed bookings and special reservations that are not already represented as flights or lodging.","colu |
+| app declares ≥1 page | ✅ | [{"routePath":"/","file":"pages/index.tsx"}] |
+| app compiles (built:true) with real JS/CSS assets | ✅ | {"built":true,"assets":["assets/entry-B56FBJYO.js","assets/entry-J5PFTTK6.css","index.html"]} |
+| app has ≥1 page route | ✅ | / |
+| /app/tanzania-trip/ serves 200 HTML | ✅ | status 200, 2832 bytes |
+
+### Act IV — data in db
+
+*Expected:* the file's flights/accommodations/safari are ROWS, matching the file
+
+| Check | Result | Actual |
+|---|---|---|
+| a flights/itinerary table has rows | ✅ | flights: 6 rows |
+| flights include ≥5 legs from the file | ✅ | 6 rows |
+| an accommodations table has rows | ✅ | lodging: 10 rows |
+| accommodations include ≥6 stays from the file | ✅ | 10 rows |
+| rows contain real file content (Eileen / Suricata / Ngorongoro / A3932) | ✅ | [[{"id":"flight-2026-08-03-ath-cai","part_id":"cairo-stopover-1","travelers":"vasileios kefallinos + athina mari","date":"2026-08-03","from_code":"ath","from_city":"athens","to_code":"cai","to_city":" |
+
+### Act V — later update
+
+*Expected:* a later message with NEW info changes a db row; the app reflects it
+
+| Check | Result | Actual |
+|---|---|---|
+| a db row changed after the follow-up | ✅ | changed |
+| the NEW fact landed in the db (absent before, present after) | ✅ | new booking reference present after update |
+
+> before contains the new token? false
+
+### invariants
+
+*Expected:* THING's own turns are clean; deliverables all succeeded (recovered specialist errors are noted)
+
+| Check | Result | Actual |
+|---|---|---|
+| deliverables all succeeded (spaces + built app + seeded data + live update) | ✅ | asserted in Acts II–V |
+
+> 19 recovered typecheck error(s), all inside delegated architect space-authoring (e.g. "'const' declarations must be initialized.") — the spaces still built, so these are the known architect authoring-reliability follow-up, not an S06 regression.
+
+### Performance
+
+| Metric | Value |
+|---|---|
+| recovered typecheck errors (delegated authoring) | 12 |
+| Act I ingest | 422s |
+| Act I tokens | 432541/68364 |
+| /app first byte | 200 (2832 bytes, 3 assets) |
+| recovered typecheck errors in delegated builds | 19 |
+| total LLM calls | 211 |
+| total tokens | 572640/81795 |
+| delegates | 33 |
