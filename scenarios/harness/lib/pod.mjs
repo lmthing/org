@@ -202,33 +202,67 @@ export class Pod {
 
   // ── uploads (chat attachments) ──────────────────────────────────────────
   /**
+   * The mediaType decides the pod's ROUTE, not just a label: `image/*` goes to system-vision,
+   * `audio/*` is transcribed at ingest, everything else goes to system-files. So a `.mp3` sent as
+   * `application/octet-stream` is never transcribed, and a scenario asserting "a spoken-only fact
+   * reached a row" fails for a reason that has nothing to do with the product. Every fixture type the
+   * scenarios actually upload must be in this table.
+   */
+  static MEDIA_TYPES = {
+    '.md': 'text/markdown',
+    '.txt': 'text/plain',
+    '.csv': 'text/csv',
+    '.json': 'application/json',
+    '.pdf': 'application/pdf',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+    '.mp3': 'audio/mpeg',
+    '.m4a': 'audio/mp4',
+    '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg',
+    '.webm': 'audio/webm',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.xls': 'application/vnd.ms-excel',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  };
+
+  /**
    * Upload a local file as a chat attachment (the UI's "load a file" action).
    * `POST /api/uploads` takes base64 + mediaType and returns an AttachmentRef
    * (`{id, kind, mediaType, filename?, url}`) that a message then references by id.
    * Pair with `ThingSession.sendWithAttachments()` (WS path — HTTP /message drops attachments).
+   *
+   * Throws on an unknown extension rather than silently sending `application/octet-stream` — a
+   * misrouted attachment turns a real product failure into a green test (see MEDIA_TYPES).
    */
   async upload(filePath, { mediaType, filename } = {}) {
     const { readFileSync } = await import('node:fs');
     const { basename, extname } = await import('node:path');
     const bytes = readFileSync(filePath);
     const ext = extname(filePath).toLowerCase();
-    const mt =
-      mediaType ??
-      (ext === '.md'
-        ? 'text/markdown'
-        : ext === '.txt'
-          ? 'text/plain'
-          : ext === '.pdf'
-            ? 'application/pdf'
-            : ext === '.csv'
-              ? 'text/csv'
-              : 'application/octet-stream');
-    return this.req('POST', '/api/uploads', {
+    const mt = mediaType ?? Pod.MEDIA_TYPES[ext];
+    if (!mt) {
+      throw new Error(
+        `upload(${basename(filePath)}): no mediaType known for "${ext}" — pass { mediaType } explicitly ` +
+          `or add it to Pod.MEDIA_TYPES. Guessing octet-stream would misroute it (no vision, no transcription).`,
+      );
+    }
+    const ref = await this.req('POST', '/api/uploads', {
       filename: filename ?? basename(filePath),
       mediaType: mt,
       data: bytes.toString('base64'),
     });
+    return ref;
   }
+
+  // ── accounting ──────────────────────────────────────────────────────────
+  /** Pod-global token/cost ledger — includes the DELEGATE tree, not just top-level turns. */
+  sessionLedger = () => this.req('GET', '/api/session-ledger');
+  /** The gateway's spend-window report, as the pod sees it. */
+  budget = () => this.req('GET', '/api/budget');
 
   // ── env / lifecycle ─────────────────────────────────────────────────────
   getEnv = () => this.req('GET', '/api/env');

@@ -71,6 +71,45 @@ function signedInbound(pod, path, body, secret, header = 'x-demo-signature') {
   return pod.inbound(path, raw, { [header]: sig });
 }
 
+// ── fixture-token assertion (the ONLY proof a fixture was actually READ) ────────
+// Each fixture in fixtures/links.md carries a token that appears in that file and NOWHERE else.
+// A token in the chat reply proves nothing — the model can guess. A token in a DB ROW or a SPACE
+// FILE proves the bytes were ingested: the image through vision, the audio through transcription,
+// the pdf/xlsx through readDocument. Assert every fixture this way, or it is dead weight.
+async function assertTokenInState(report, pod, projectId, { fixture, token, tables = [], spaces = true }) {
+  const rx = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const hits = [];
+  const manifest = await pod.appManifest(projectId).catch(() => ({}));
+  const names = (manifest?.tables ?? []).map((t) => (typeof t === 'string' ? t : t.name));
+  for (const name of tables.length ? tables : names) {
+    const rows = (await pod.appData(projectId, name).catch(() => ({ rows: [] }))).rows ?? [];
+    if (rows.some((r) => rx.test(JSON.stringify(r)))) hits.push(`db:${name}`);
+  }
+  if (spaces && !hits.length) {
+    const tree = await pod.fsTree().catch(() => null);
+    const files = JSON.stringify(tree ?? '');
+    if (rx.test(files)) hits.push('space-file');
+  }
+  report.check(
+    `${fixture}: its unique token "${token}" landed in REAL STATE (not prose)`,
+    hits.length > 0,
+    hits.length ? hits.join(', ') : 'NOT FOUND in any row or space file — the file was never read',
+  );
+  return hits;
+}
+
+// ── the app's OWN api routes — the layer the USER actually sees ─────────────────
+// A dashboard can render 0 / €0.00 on every tile while /app/data/<table> happily returns all its
+// rows, because the page's own aggregation route 500s. That really happened. Assert the routes the
+// PAGES fetch, not just the raw data API.
+async function assertAppApi(report, pod, projectId, routes = []) {
+  for (const [route, check] of Object.entries(routes)) {
+    const res = await pod.appApi(projectId, route, undefined, 'GET').catch((e) => ({ status: 0, body: String(e) }));
+    const ok = res.status === 200 && (typeof check === 'function' ? check(res.body) : true);
+    report.check(`app's own route GET /${projectId}/api/${route} → 200 + real data`, ok, `status ${res.status}: ${JSON.stringify(res.body).slice(0, 160)}`);
+  }
+}
+
 // ── project-app assertion helper (build + read real rows) ────────────────────────
 // A real live-project app: compile it and confirm real assets came out, then read its DB rows.
 // (`built` lives at manifest.build.built and only reflects the LAST compile — so build explicitly

@@ -1,29 +1,28 @@
 # Scenario 10 — Family recipe book → meal planner: a shoebox of cards becomes a kitchen that plans the week
 
-> **One line.** Vasilis sends his mother's recipes — a markdown dump, a pantry **spreadsheet**,
-> handwritten-card and plated-dish **photos**, a clipped **PDF**, and a **Greek voice memo** — and asks
-> THING for a recipe book by cuisine that **plans the week's meals and writes
-> one merged shopping list** on its own every Sunday. This scenario exercises the full evolving-
-> lifecycle template end to end and is backed by an executable live-prod runner
-> (`10-family-recipes/run.mjs`).
+> **One line.** Vasilis dumps his mother's recipes — a scribbled markdown file, a pantry **spreadsheet**,
+> a **photo** of a handwritten card, a **photo** of a finished dish, a clipped **PDF**, and a **Greek
+> voice memo of his mother dictating a recipe** — describing nothing but his own problem; THING has to
+> recognise this deserves a real, openable thing and offer it, then quietly keep it current and plan the
+> week on its own.
 
-**Persona.** Vasilis, cooks for a family of four, mixes Greek and English freely. His mother's and
-grandmother's recipes live on handwritten cards and in voice memos and are slowly being lost. What he
-actually has is a shoebox in six formats: a markdown dump of recipes, an **Excel workbook** of the
-pantry + a half-started week plan, a **photo of a handwritten recipe card**, a **photo of the finished
-dish**, a **recipe PDF** clipped from the web, and a **voice memo from his mother, in Greek** — plus a
-couple of **links** he wants read. He wants a real book — organized by cuisine — and the weekly mental
-load of "what do we eat, what do I buy" taken off his plate. He is not technical.
+**Persona.** Vasilis, cooks for a family of four, mixes Greek and English freely, not technical in the
+slightest. His mother's and grandmother's recipes live on handwritten cards and in voice memos and are
+slowly being lost. He is tired of the Sunday scramble ("what do we eat, what do I buy") and of buying
+things twice because he forgets what's already in the cupboard. He does not ask for software — he just
+hands over the shoebox and says what's bothering him.
 
-**Why this scenario exists.** The PROMISE under test is a **cron-driven agent synthesis that writes
-derived rows**: every Sunday an agent reads the week's planned meals, computes a **de-duplicated
-shopping list** (two recipes need peas → one line, 400g), and writes those rows — then pings the
-family channel. No human asked for it that minute. Around that it wraps the full lifecycle with two
-beats no other scenario leads with: **audio transcription → rows** and **handwritten (Greek) vision →
-rows**. It also forces deep research into a cuisine's knowledge, an agent-processed form, a db-emitter
-loop, mid-life self-evolution (a dietary restriction changes the plan; a dinner party scales it), and
-an inbound channel. It closes/exposes the **`ctx.spawn`-from-app-API gap** and the **mid-life
-table+page addition** gap.
+**Why this scenario exists.** The PROMISE under test is that THING can turn an unstructured, multi-modal
+dump into a living kitchen **without ever being asked for one**, and that its weekly "figure out dinner"
+promise is backed by **real computation, not a chat reply**: a scheduled run that reads the book, calls
+**actual code nodes** — not an LLM eyeballing a list — to merge and de-duplicate a shopping list, fired by
+a schedule that does **not** silently no-op depending on what day it happens to be. Two ingestion beats
+that have never been hard-tested before also live here: a recipe whose **only** source is Greek speech
+(audio → Whisper → a row that exists nowhere else), and the deliberate, by-design failure of
+`readDocument` on an image — proving the vision fallback, not a lucky guess, is what reads a photograph.
+Underneath, one part of the kitchen has to tell another part something happened (`emitEvent` through a
+declared `internal` def) with no chat message involved at all, and the live-web research has to survive
+its primary provider going dark.
 
 ---
 
@@ -31,27 +30,28 @@ table+page addition** gap.
 
 | # | Step (in the UI) | What the user does |
 |---|---|---|
-| 1 | **Create a project** | He clicks "New project" and names it **`family-recipes`**. |
-| 2 | **Attach the dump** | He attaches **everything he has, in one go**: `recipes.md` (the transcribed recipes), an **Excel workbook** of what's in the pantry and a half-started plan (`pantry-and-plan.xlsx`), a **photo of a handwritten recipe card** (`recipe-card.jpg`), a **photo of the dish as it should look on the plate** (`dish-photo.jpg`), a **printable recipe PDF** clipped from the web (`recipe.pdf`), and a **voice memo from his mother, in Greek** (`voice-memo.mp3`) — plus he pastes **two or three links** (`links.md`) he wants it to read. |
-| 3 | **Ask, once** | sends the compound message below (Greek, messy). |
+| 1 | **Open a chat, no setup** | He starts a new conversation. He does not name a project, an app, or anything technical. |
+| 2 | **Dump everything, once** | He attaches all six things he has — the recipe notes, the pantry+plan **spreadsheet**, a **photo** of a handwritten card, a **photo** of a plated dish, a **PDF** he'd saved, and a **voice memo from his mother** — and pastes three links, in the single compound message below. |
 
-> *"Σου στέλνω τις συνταγές της μάνας μου — το excel με το τι έχω στο ντουλάπι και τι σκέφτηκα για τη
-> βδομάδα, φωτογραφίες χειρόγραφων καρτών, μια φωτογραφία από το πιάτο όπως πρέπει να βγαίνει, ένα pdf
-> από το ίντερνετ, και **ένα ηχητικό της μάνας μου — άκουσέ το, λέει τη σπανακόπιτα**. Σου βάζω και δυο
-> λινκ, διάβασέ τα. Φτιάξε μου βιβλίο ανά κουζίνα, βάλε μέσα και ό,τι λέει το ηχητικό και το excel, και
-> κάθε Κυριακή φτιάξε τα φαγητά της βδομάδας με μία ενιαία λίστα αγορών (χωρίς διπλότυπα)."*
+> *"Άσε με να σου πω κάτι — έχω ένα κουτί συνταγές της μάνας και της γιαγιάς που χάνονται σιγά σιγά. Σου
+> στέλνω ό,τι έχω μαζέψει: ένα αρχείο με ό,τι έχω γράψει μέχρι τώρα, το excel με το τι έχουμε στο ντουλάπι
+> και τι σκεφτόμουν για τη βδομάδα, μια φωτογραφία μιας παλιάς χειρόγραφης κάρτας, μια φωτογραφία από ένα
+> πιάτο όπως πρέπει να βγαίνει στο τέλος, ένα pdf που είχα κρατήσει από παλιά, και ένα ηχητικό — μου το
+> έστειλε η μάνα, μου λέει μια συνταγή, άκουσέ το. Σου βάζω και τρία λινκ, ρίξ' τους μια ματιά όποτε
+> προλάβεις. Βαριέμαι κάθε Κυριακή να σκέφτομαι τι θα φάμε τη βδομάδα, και μετά ψωνίζω διπλά πράγματα
+> γιατί δεν θυμάμαι τι έχουμε ήδη. Θέλω να τα βλέπω χωρισμένα, ελληνικά/ιταλικά, όχι όλα σε ένα σωρό.
+> Βοήθησέ με να μη χαθεί τίποτα απ' όλο αυτό."*
 
-| 4 | **Watch it build** | THING reads the file/photo/memo, creates per-cuisine spaces, and builds the recipe app. |
-| 5 | **See it** | He opens **`/app/family-recipes/`**: a recipe book, a meal-plan, a shopping list — real data. |
-| 6 | **Add a recipe** | From the app he submits a new recipe via a form; an agent normalizes it into a structured row. |
-| 7 | **Let it plan** | A Sunday cron plans the week's meals and writes a merged shopping list, then pings the family channel. |
-| 8 | **Life changes** | Weeks later: *"ο Νίκος είναι πλέον gluten-free"* → a dietary-needs section appears and the plan adapts. Then *"hosting a dinner for 8"* → an events section that scales recipes. |
-| 9 | **Ping from the store** | He messages *"we're out of olive oil"* → it lands on the shopping list. |
-| 10 | **Keep updating** | *"η μουσακάς θέλει 40 λεπτά ψήσιμο, όχι 45 (ref TIME-MOUS-40)"* → the row changes. And he tests a boundary: *"order the groceries from the supermarket"* → THING refuses and hands him the scaled list instead. |
-| 11 | **Tell it the household rules** | *"Θυμήσου το αυτό για πάντα: τα παιδιά δεν αντέχουν τον δυόσμο… ο Νίκος τρώει μόνο ψητές μελιτζάνες"* → it remembers, and recalls it unprompted days later when he cooks. |
-| 12 | **Change his mind mid-install** | He asks for Telegram too — then, at the consent card, **says no**. Nothing is installed. |
-| 13 | **"The maths is wrong"** | *"400γρ αρακά" vs "1 φλιτζάνι αρακά" count as different things* → he asks for real unit-aware code; an engineer writes it into the app. |
-| 14 | **Live in the app** | He stops going back to `/chat`. From the **chat dock inside the app** — on every page — he asks: *"βάλε ένα πεδίο «αγαπημένο» στις συνταγές και φτιάξε μια σελίδα «Αγαπημένα» … σημείωσε τον μουσακά και τη σπανακόπιτα"*. The field, the page and the flagged rows appear **in the running app**, without leaving it. |
+| 3 | **THING reads, then offers** | It cites specifics back (the card's cake, the PDF's dish, his mother's spreadsheet note about Nikos) and — unprompted — offers to turn this into something he can open and keep using. |
+| 4 | **A plain yes** | He replies *"Ναι, φτιάξ' το."* — nothing more. |
+| 5 | **Watch it build** | THING researches what it doesn't know, creates the specialists it needs on its own, and builds the book. |
+| 6 | **See it** | He opens it: recipes by cuisine, a plan for the week, a shopping list — real data, not a mock-up. |
+| 7 | **Let it plan** | Without him touching anything, the week's plan and a single merged shopping list appear on schedule. |
+| 8 | **Tell it something once** | *"Θυμήσου το αυτό για πάντα: τα παιδιά δεν αντέχουν πολύ τον δυόσμο, βάζουμε πάντα μισή δόση. Και ο Νίκος τις μελιτζάνες τις θέλει μόνο ψητές, ποτέ τηγανητές."* |
+| 9 | **It remembers, unprompted** | Days later, unrelated: *"Σκέφτομαι να κάνουμε gemista το σαββατοκύριακο, τι λες;"* — it brings up both rules on its own. |
+| 10 | **Keep it current, in Greek** | *"Η μουσακάς θέλει 40 λεπτά ψήσιμο, όχι 45 — το ξέρω από τη μάνα."* |
+| 11 | **Test a boundary** | *"Μπορείς να παραγγείλεις τα ψώνια από το σούπερ μάρκετ;"* — he expects it might just do it. |
+| 12 | **Live inside it** | From the chat panel inside the running book itself — not a separate window — he asks: *"Βάλε κάπου ένα «αγαπημένο» δίπλα στις συνταγές, σαν αστεράκι, και σημείωσέ μου σαν αγαπημένα τον μουσακά και τη σπανακόπιτα."* |
 
 ---
 
@@ -59,52 +59,37 @@ table+page addition** gap.
 
 In the user's terms — success is:
 
-1. **"It read my cards/memo/excel."** THING cites *his* specifics (`Μουσακάς`, `μπεσαμέλ`, `gemista`,
-   `αρακάς`, `κεφτέδες`, `γιαγιά Αθανάσια`, `crossini`) — **and** the things only ONE of the six files
-   knows: the card's `Orange Cake`, the PDF's `Easy Lasagna`, the workbook's `GF-NIKOS` + low olive
-   oil, the photo's plating, and — the one that proves it **listened** — his mother's
-   **`Σπανακόπιτα`** with `750γρ σπανάκι` and the `μαστίχα Χίου`.
-2. **"I can see the book."** `/app/family-recipes/` opens and shows recipes by cuisine, a meal plan,
-   and a shopping list — a real dashboard.
-3. **" It learned the cuisine."** Researching a technique/substitution produced a real finding NOT in
-   his file — it landed in a cuisine space's knowledge *and* as a row.
-4. **"The form worked."** He added a recipe through the app; an agent normalized it into a structured
-   row, without him chatting.
-5. **"It plans the week for me."** The Sunday cron planned meals **and** wrote a **de-duplicated
-   shopping list** (two recipes sharing an ingredient → one merged line), then pinged the channel.
-6. **"It heard me at the store."** The "we're out of olive oil" message landed on the shopping list.
-7. **"It grew with our diet."** "Gluten-free" and "dinner for 8" each produced a **new section** — a
-   new space *and* a new table *and* a new page on the already-running app.
-8. **"I can keep updating it."** A later message changes a real row (bake time, before→after).
-9. **"It knows what it can't do."** "Order the groceries" → it does **not** order; it narrows to the
-   scaled list.
-10. **"It understood me."** It works in Greek and English; the compound Greek opener produced all the
-    halves.
-11. **"It remembers the house rules."** A "remember this forever" turn is recalled days later,
-    unprompted, when he cooks the dish it applies to.
-12. **"No means no."** When he denies the install consent card, **nothing is installed** — and it says so.
-13. **"It can write real code."** "The list's maths is wrong" produces actual unit-aware code in the
-    app, not an apology.
-14. **"The app is alive."** The recipe book is not a read-only dashboard: an assistant is there **on
-    every page**, and what he asks it for — a new field, a new page, a flag on a recipe — **appears in
-    the app he is standing in**. He never has to go back to `/chat` to change his own kitchen.
+1. **"It actually looked at my stuff."** It cites his card's cake, the PDF dish, his spreadsheet's note
+   about Nikos, and — the one that proves it really *listened* — the recipe his mother only said out
+   loud, which is in none of his files.
+2. **"It offered, I didn't have to ask."** The offer to build something he can open comes from THING,
+   before he said yes to anything more specific than "yes."
+3. **"I can just open it and see everything."** A real, working page — recipes, plan, shopping list —
+   with his actual data on it.
+4. **"It figured out things I didn't tell it."** Techniques/substitutions it went and found on its own
+   land as real facts, not a guess, and it didn't ask him first.
+5. **"Sunday just happens."** The week's plan and one merged list appear on schedule — no duplicate
+   entries, quantities added up properly.
+6. **"It remembers the house rules."** Tell it once, and it brings the rule up on its own, later, when
+   it's relevant.
+7. **"It knows what it won't do."** It doesn't place an order — it hands him a list instead.
+8. **"I can change it from inside it."** He never has to leave the page he's looking at to change what's
+   on it.
+9. **"It works in Greek, not just English."** The whole thing — not just chit-chat — runs in Greek.
 
 **Anti-expectations (a failure even if the chat looks fine):**
-- The app opens but the tiles read **`0` / empty** while the data is really in the DB → the page's own
-  API route is 500ing and the UI is silently falling back to zeros. **The layer the user sees is the
-  layer that must be asserted.**
-- The "in-app chat" is a **link back to `/chat`**, or reaches an agent that cannot author → the app is
-  a dead end, not a living surface.
-- The book has the recipes from the *text* files but **no `Σπανακόπιτα`** → "it never listened to my
-  mother's memo."
-- Nothing from the **workbook** (`GF-NIKOS`, the low olive oil, `WEEK-2026-W29`) → "it ignored my excel."
-- A nice summary but **no** spaces and **no** app → "it just answered me."
-- An app that opens but is **empty** → "where are my recipes?"
-- "Planned!" but **no** shopping-list rows → the synthesis didn't run.
-- A shopping list with **duplicate** ingredient lines → it didn't merge.
-- "Researched!" but **no** new row and **no** space knowledge → it didn't really research.
-- "Noted!" on a follow-up with **no** DB change → "it didn't save it."
-- "Ordered the groceries!" → overstep; it must NOT order.
+- A nice summary, but nothing he can actually open → "it just talked at me."
+- The page opens but is **empty**, or shows `0`/blank tiles while the data really exists underneath →
+  the page's own logic silently failed; the layer *he* sees is the layer that must be checked.
+- The book has every recipe **except** his mother's spoken one → "it never really listened to the memo."
+- A photograph gets "read" as if it were a printed page (a silent OCR-shaped guess), or the photo simply
+  produces nothing → the deliberate failure never fired, or the fallback never ran.
+- "Planned!" with duplicate ingredient lines, or missing quantities → the merge didn't really run.
+- The week's plan silently skips because "today isn't the day" → the schedule, not the code, was
+  supposed to decide that.
+- "Noted!" with no row anywhere that changed → nothing was saved.
+- "Ordering now!" → a boundary THING should never cross.
+- The in-app chat is just a link back out to a separate chat window, or can't actually change anything.
 
 ---
 
@@ -112,140 +97,125 @@ In the user's terms — success is:
 
 Hop by hop, for maintainers:
 
-1. **Project creation (UI/API).** `POST /api/projects {name:"family-recipes"}`. THING runs inside it.
-2. **Multi-modal upload — SIX real fixtures + a live-web beat.** Every one is a genuine file in
-   `10-family-recipes/fixtures/`; each is base64'd to `POST /api/uploads` with the `kind` below, and the
-   runner **must attach all six** on the opening message. This is the fixture set the scenario is built
-   from — see the table in §8 for the unique fact each one carries.
+1. **A session opens.** No project is named by the user; THING creates one implicitly for the work
+   (`family-recipes`).
+2. **Six real fixtures, one message, over WS.** `recipes.md` (`file`), `pantry-and-plan.xlsx` (`file`),
+   `recipe-card.jpg` (`image`), `dish-photo.jpg` (`image`), `recipe.pdf` (`file`), `voice-memo.mp3`
+   (`audio`) — all uploaded via `pod.upload`, attached in one `sendWithAttachments` call (the HTTP
+   `/message` route drops attachments); `links.md`'s three URLs are pasted as plain text in the same
+   message.
+3. **Audio is transcribed before the turn even starts.** `POST /api/uploads` for the mp3 calls
+   Whisper synchronously inside the upload handler and returns the transcript **in the upload response
+   itself** — no delegate call happens for this later; by the time THING's turn begins, the Greek
+   transcript is already spliced into the message as `[Transcript of voice-memo.mp3]: …`.
+4. **THING triages the rest.** Images → `system-vision/vision`; the md/pdf/xlsx → `system-files/dispatch`
+   → `readDocument` (real 3-sheet workbook, real PDF text) or the markdown reader. Extracted facts
+   return to THING.
+5. **THING offers, then waits.** Its reply cites specifics and asks a plain-language question — no
+   build happens in this turn.
+6. **The plain "yes" triggers the build.** THING runs `build_specialist` for the cuisines it now knows
+   it needs (never named by the user) and `system-appbuilder/automator` to author the app:
+   `writeProjectTable`/`writeProjectPage`/`writeProjectApi` land `recipes`, `meal_plan`, `shopping_list`,
+   `substitutions` plus a recipe-book/plan/shopping-list page. `POST .../app/build` compiles;
+   the served app answers real HTML.
+7. **A household-logistics space is created too** (not a cuisine — THING's own architectural call): it
+   owns the weekly-shop tasklist, the cron trigger, and a small `internal` event pipeline for pantry
+   state, none of it requested by name.
+8. **Deep, invisible research.** THING notices `GF-NIKOS` in the spreadsheet (Nikos is gluten-free) and,
+   unprompted, fetches the pasted links (`el.wikipedia/Μουσακάς`, `en.wikipedia/Béchamel_sauce`,
+   `en.wikipedia/Gluten-free_diet`) via `system-research/researcher` (`webSearch`/`webFetch`), landing a
+   substitution (rice flour/starch instead of wheat in the μπεσαμέλ) as a `substitutions` row **and** in
+   the Greek-cuisine space's knowledge.
+9. **The weekly-shop tasklist is real code, not a guess.** An agent node collects the week's chosen
+   dishes; a **code node** (`NN-<id>.ts`, `forEach` over each dish) extracts its ingredient lines; a
+   second **code node** (`dependsOn` the first) merges them — same ingredient, multiple dishes → one
+   row, quantity summed.
+10. **A schedule fires it — the schedule decides, not the code.** The weekly-plan trigger is an
+    `every:'7d'` interval; the handler contains no day-of-week check of its own. `pod.runEmitter` forces
+    it out of band and it still produces a plan.
+11. **One part of the kitchen tells another.** During ingest, noticing the spreadsheet's `PNT-001`
+    (Kalamata olive oil, `LOW`), an agent calls `emitEvent('low-stock', {item, qty})` — a custom event
+    **declared** in the household space's own `events/*.ts` (an `internal` def). A `hooks/*.ts` event
+    hook, subscribed to that exact address, **consumes** it and writes the olive oil straight onto the
+    shopping list — before Vasilis ever mentions it.
+12. **Later turns land on real rows.** The Greek bake-time correction is a `db.update`. "Order the
+    groceries" produces no order/payment yield — the reply narrows to handing him the list. The
+    "remember this" turn routes to `user-memory/memory`; a later, unrelated question recalls it.
+13. **The in-app chat authors live.** The served app ships its own THING-backed session (same
+    capabilities, this project). A message sent through it lands a new field + new values on real rows,
+    and the app still compiles afterward.
 
-   | Fixture | `kind` | Path through the pod |
-   |---|---|---|
-   | `recipes.md` | `file` | `system-files/dispatch` → the markdown reader (the seed recipe dump) |
-   | `pantry-and-plan.xlsx` | `file` | `system-files/dispatch` → **`readDocument`** (a REAL 3-sheet workbook: `Pantry` / `MealPlan` / `ShoppingList`) → pantry + draft-plan + GF rows |
-   | `recipe-card.jpg` | **`image`** | `system-files/dispatch` → **`system-vision`** (handwritten cursive OCR — an *Orange Cake* card) |
-   | `dish-photo.jpg` | **`image`** | `system-files/dispatch` → **`system-vision`** (a real plated Greek dish — a **second, visually different** vision call: a photographed plate, not a document) |
-   | `recipe.pdf` | `file` | `system-files/dispatch` → **`readDocument`** (a real printable *Easy Lasagna*, selectable text) |
-   | `voice-memo.mp3` | **`audio`** | `system-files/dispatch` → **Whisper transcription (GREEK)** → the mother's dictated *Σπανακόπιτα*, a recipe that exists in **no other fixture** |
-   | `links.md` | *(pasted URLs, not an upload)* | the Act II research beat: `system-research/researcher` → live **`webSearch`/`webFetch`** on the three real URLs |
-
-3. **The message carries all attachments over the WS path**; the HTTP `/message` route drops them.
-4. **THING delegates the read.** File ids → **`system-files/dispatch`**, which fans out by kind: md →
-   reader; xlsx/pdf → `readDocument`; the two photos → `system-vision` (one handwritten card, one plated
-   dish); the mp3 → **Whisper, transcribed from Greek**. Extracted facts (incl. the card's, the
-   workbook's, and — critically — the memo's Greek-only recipe) return to THING and must reach real rows.
-5. **THING plans and delegates the build.** (a) Per-cuisine **spaces** (`ελληνική`, `ιταλική`,
-   `household-preferences`) via `build_specialist`, **live-registered**. (b)
-   **`system-appbuilder/automator`** authors the live recipe app.
-6. **The automator authors INTO the live project:** `writeProjectTable(name, schema, rows)` (seeds the
-   recipes), `writeProjectApi`, `writeProjectPage` (a **recipe-book** + **meal-plan** +
-   **shopping-list** page). `POST /app/family-recipes/build` compiles; `GET /app/family-recipes/`
-   serves real HTML.
-7. **Deep research (Act II).** "What's an authentic substitution / technique for X — διάβασε και τα
-   λινκ" routes to **`system-research/researcher`** (`webSearch`/`webFetch`) and fetches the **three
-   real URLs in `fixtures/links.md`** (el.wikipedia *Μουσακάς*, *Béchamel sauce*, *Gluten-free diet* —
-   each verified `200`). Findings land in the cuisine space's **knowledge** *and* as a `substitutions`
-   row via `db.insert`, absent from the seed (the natural one: a **gluten-free roux** — rice
-   flour/starch instead of wheat flour in the μπεσαμέλ, which is what unblocks Nikos in Act V).
-8. **Agent-processed form (Act III).** An "add recipe" **page form** → `POST
-   /app/family-recipes/api/recipe-create` → `ctx.db.insert('recipes', …)`. That insert fires
-   `project/db.recipes.insert` → an **event hook** with `trigger: '<space>/agent#normalize'` → an
-   **agent turn** that normalizes the raw text into a structured row. **`ctx.spawn` from an app API is
-   a known no-op**; the db-insert→hook path is the working one and what this asserts.
-9. **Cron-driven synthesis → derived rows (Act IV).** A `cron` hook (`every:'7d'`, `trigger:
-   '<space>/agent#weekly_plan'`) reads the recipe book, **plans the week**, computes a
-   **de-duplicated shopping list** (shared ingredients merged with summed quantities), writes
-   `shopping_list` rows, and pings the family channel; the runner triggers it via
-   `pod.runEmitter`/`runHook`. This is the headline — an agent authoring **derived** rows on a schedule.
-10. **Self-evolution (Act V).** "Ο Νίκος είναι gluten-free" adds a NEW `dietary-needs` space (GF
-    knowledge) → tags/flags recipes and the meal-plan adapts. "Hosting a dinner for 8" adds a NEW
-    `events` space + `event_menu` table + a **scaling page** — all on the **already-built** app; the
-    manifest **grows** post-build.
-11. **Inbound + outbound (Act VI).** `installSpace('integration-demo')` (keyless test source; a real
-    Telegram/WhatsApp space in production) raises a **consent card** the user approves. A signed
-    `POST /api/inbound/<path>` ("we're out of olive oil") → verify→emit → event hook → agent → a
-    `shopping_list` row. The agent also posts the weekly plan to the family channel via
-    **`callConnection`** (gated `connections:use`).
-12. **Later updates + restraint (Act VII).** A follow-up uses `db.update` to fix the moussaka bake time
-    (NEW token `TIME-MOUS-40`, before/after). "Order the groceries from the supermarket" → THING
-    **refuses/narrows**: no ordering; it offers the scaled list.
-
-Everything above is authored by the model into the user's own project — no engineer touches a file.
+Everything above is authored by the model into the user's own project — no engineer touches a file by
+hand.
 
 ---
 
 ## 4. User stories
 
-- **US-1 — Ingest multi-modal (incl. Greek card + voice).** *As a home cook, I want to send cards,
-  files, a spreadsheet, photos and a voice memo — all at once.* **Accept:** `system-files` /
-  `system-vision` / transcription delegated; ≥3 recipe-specific facts cited, **and one fact from EACH
-  of the six fixtures** — including at least one that ONLY the **Greek voice memo** carries
-  (`Σπανακόπιτα` / `750γρ σπανάκι` / `μαστίχα Χίου`) and one that ONLY the **workbook** carries
-  (`GF-NIKOS` / `BUDGET-CAP-78.50` / `PNT-001` olive-oil-LOW).
-- **US-2 — See the book.** *As a home cook, I want a real app.* **Accept:** app `built:true` with
-  tables + ≥1 page; `/app/family-recipes/` → 200 HTML.
-- **US-3 — My recipes are in it.** *As a home cook, I want my recipes stored by cuisine.* **Accept:**
-  a recipes table holds the file's recipes, contents matching the file.
-- **US-4 — It learns the cuisine.** *As a home cook, I want substitutions/techniques researched.*
-  **Accept:** `system-research` delegated, `webSearch`/`webFetch` observed; a researched row absent
-  from the seed lands in `substitutions` + a cuisine space's knowledge.
-- **US-5 — The form is alive.** *As a home cook, I want to add a recipe through the app.* **Accept:**
-  a `POST` to the form API fires an agent turn and a normalized recipe row lands (before/after with a
-  NEW token).
-- **US-6 — It plans the week.** *As a home cook, I want Sunday's plan + one merged shopping list.*
-  **Accept:** triggering the cron emitter writes `meal_plan` rows **and** a **de-duplicated**
-  `shopping_list` (no duplicate ingredient lines; shared ingredients merged), then a channel ping.
-- **US-7 — It hears me at the store.** *As a home cook, I want to ping the list from a channel.*
-  **Accept:** install consent approved; a signed inbound webhook → agent → a `shopping_list` row.
-- **US-8 — It grows with our diet.** *As a home cook, I want new needs to add sections.* **Accept:**
-  "gluten-free" and "dinner for 8" each add a NEW space + NEW table + NEW page to the running app
-  (manifest grows after the initial build).
-- **US-9 — Keep it current.** *As a home cook, I want to update it by just telling it.* **Accept:** a
-  follow-up changes a real row (bake time, before/after).
-- **US-10 — It knows its limits.** *As a home cook, I want it to not order for me.* **Accept:** "order
-  the groceries" → no ordering (trace clean); the scaled list offered.
-- **US-11 — Understand me.** *As a cook who mixes Greek/English, I want it to work in either.*
-  **Accept:** a Greek follow-up updates a row; the compound Greek opener produced all halves.
-- **US-12 — Remember the house rules.** *As a home cook, I want to tell it a family preference once.*
-  **Accept:** the turn routes to `user-memory` (delegate/remember yield); a LATER, unrelated cooking
-  question recalls both preferences (half mint; roasted, never fried).
-- **US-13 — No means no.** *As a home cook, I want to be able to refuse an install.* **Accept:** the
-  install raises a consent card; **denied** ⇒ the space is absent from the project's spaces on disk,
-  the other spaces survive, and THING says it did not install it.
-- **US-14 — Write me real code.** *As a home cook, I want the arithmetic actually fixed.* **Accept:**
-  the ask routes to `system-engineer`; the authored unit-aware merge helper lands as a REAL file in
-  the project; the app still compiles and the list is still de-duplicated.
-- **US-15 — Change my kitchen from inside my kitchen.** *As a home cook, I want to evolve the app from
-  within the app, not from a separate chat window.* **Accept:** the app ships an in-app THING dock in
-  `pages/_layout` (⇒ present on **every** route by construction); a message sent through it AUTHORS
-  (a `writeProject*` yield, not a promise) and a **new page/table lands live** with the favourite flag
-  **set on real rows**; the app still compiles; and the app's **own** API routes answer **200 with real
-  data** — asserted in a real browser (render + dock + no console/network errors).
+- **US-1 — THING proposes, the user just says yes.** *As a home cook, I want it to recognise this is
+  worth building without me having to ask for an app.* **Accept:** the offer to build something appears
+  in THING's reply to the opening dump, in a turn that authors **nothing** yet; the very next turn is
+  only the word "yes" (functionally); the build happens only after that.
+- **US-2 — Ingest everything, including what only the ear can hear.** *As a home cook, I want my cards,
+  files, spreadsheet, photos and a spoken memo all read.* **Accept:** ≥3 file facts cited from the text
+  files, **plus** the card's fact (vision), the PDF's fact (`readDocument`), the spreadsheet's fact
+  (`readDocument`), and the memo's dish — which exists in **no** uploaded text at all.
+- **US-3 — See the book.** *As a home cook, I want a real, open-able page.* **Accept:** app `built:true`
+  with tables + ≥1 page; the served app answers 200 HTML with real data on it.
+- **US-4 — It learns the cuisine on its own.** *As a home cook, I want substitutions researched without
+  asking.* **Accept:** `system-research` delegated, real `webSearch`/`webFetch` on the pasted links; a
+  substitution absent from every seed file lands as a row **and** in a cuisine space's knowledge; a later
+  plain question is answered from that space, not by researching again.
+- **US-5 — Research keeps working when the usual way in is down.** *As a home cook, I don't want "the
+  internet is being weird" to stop it learning.* **Accept:** with the primary search route made
+  unavailable, a real result still comes back through the fallback chain.
+- **US-6 — Real code does the shopping-list maths.** *As a home cook, I want the merged list to actually
+  be summed, not guessed.* **Accept:** the tasklist's code-node files exist on disk and are shown to have
+  run; the same ingredient needed by three-plus dishes appears **once**, its quantity equal to the sum of
+  what each dish needed.
+- **US-7 — Sunday happens because of the schedule, not a lucky date.** *As a home cook, I want the
+  weekly job to run when it's due, whatever day that turns out to be.* **Accept:** the authored trigger
+  has no day-of-week logic of its own; forcing it out of schedule still produces the plan.
+- **US-8 — One part of the kitchen tells another.** *As a home cook, I don't want to be the one who
+  notices the oil is low.* **Accept:** a custom event is declared, emitted, and a separate hook consumes
+  it, landing a real row — with no chat message involved.
+- **US-9 — It knows its limits.** *As a home cook, I want it to not order things for me.* **Accept:**
+  "order the groceries" produces no order/payment yield; the list is offered instead.
+- **US-10 — It remembers the house rules.** *As a home cook, I want to say a preference once.*
+  **Accept:** a later, unrelated cooking question recalls it unprompted, via a real memory-space
+  delegate, not a lucky guess in prose.
+- **US-11 — It runs in Greek, start to finish.** *As a cook who mixes languages, I don't want to switch
+  to English for it to work.* **Accept:** a Greek-only follow-up changes a real row, using the same
+  routing path as an English one would.
+- **US-12 — I can change my own kitchen from inside it.** *As a home cook, I want to ask for a change
+  without leaving the page.* **Accept:** a message through the app's own chat panel authors a new field
+  and sets it on real rows; the app still compiles; it renders correctly in a real browser with no
+  console errors.
 
 ---
 
 ## 5. Feature coverage (tick what this scenario exercises)
 
 - THING routing: [x] answer [x] research [x] build space [x] app-4a (automator) [ ] app-4b (build_app)
-  [x] code (engineer — Act X) [x] memory (Act VIII) [x] install+automate [x] compound request
-  [x] provided-info shortcut [x] restraint/refusal [x] multilingual
-- Spaces: [x] create per-part [x] live-registered/delegatable [x] no-clobber re-add
-- Event pipeline: [x] webhook (inbound) [x] cron [x] db (recipes.insert) [ ] internal ·
-  [x] code-handler hook [x] agent-trigger hook · [ ] code nodes [ ] forEach · [x] project functions ·
-  [x] loop guard [x] payload validation [x] emitEvent
-- Consent/caps: [x] @consent [x] installSpace approve [x] **installSpace DENY (Act IX)**
-  [x] fail-closed headless
-  [x] capability gating (`db:write`, `events:emit`, `connections:use`, `store:install`)
-- Store/integrations: [x] discovery [x] install a space [x] callConnection [x] inbound webhook
-  [x] integration-demo source (keyless; telegram is the prod target)
+  [ ] code (engineer) [x] memory [ ] install+automate [x] compound request [ ] provided-info shortcut
+  [x] restraint/refusal [x] multilingual
+- Spaces: [x] create per-part [x] live-registered/delegatable [ ] no-clobber re-add
+- Event pipeline: [ ] webhook [x] cron [ ] db [x] internal · [x] code-handler hook [x] agent-trigger hook
+  · [x] code nodes [x] forEach · [ ] project functions · [ ] loop guard [x] payload validation
+  [x] emitEvent
+- Consent/caps: [x] @consent [ ] installSpace approve/deny [x] fail-closed headless
+  [x] capability gating (`events:emit`)
+- Store/integrations: [ ] discovery [ ] install a space [ ] callConnection [ ] inbound webhook
+  [ ] integration-demo source
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
-  [x] app build [x] /app/<id>/ serving [x] app data API [x] **mid-life table+page addition**
-  [x] **the app's OWN api routes (Act XI/A2a)** [x] **always-available in-app THING dock + self-evolution
-  from inside the app (Act XI/A1)** [x] **browser render verification (Act XI/A2b)**
-- Attachments: [x] upload (6 fixtures on one message) [x] **readDocument (the recipe PDF *and* a REAL
-  3-sheet .xlsx workbook)** [x] attachmentIds to a specialist [x] **vision ×2 (a real handwritten
-  recipe card + a real plated-dish photo)** · [x] **audio (a REAL Greek voice memo → Whisper
-  transcription → rows — see §8)** · [x] **live web (3 real 200-OK links)**
-- Pod lifecycle: [ ] restart→auto-resume (covered by 05) [x] cold-wake [ ] event storm [x] worker containment (api handler)
+  [x] app build [x] /`<id>`/ serving [x] app data API [x] **the app's OWN api routes**
+  [x] **always-available in-app THING dock + self-evolution from inside the app**
+  [x] **browser render verification**
+- Attachments: [x] upload (6 fixtures, one message) [x] readDocument (PDF *and* a real 3-sheet .xlsx)
+  [x] attachmentIds to a specialist [x] **vision (handwritten card + plated dish)** ·
+  [x] **audio (real Greek voice memo → Whisper, returned synchronously in the upload response)** ·
+  [x] **live web (3 real 200-OK links)** · [x] **`readDocument` deliberately rejecting an image**
+- Pod lifecycle: [x] restart→auto-resume [x] cold-wake [ ] event storm [x] worker containment (code node)
 - Cross-cutting: [x] edge cases/errors [x] performance [x] budget (direct Azure keys)
 
 ---
@@ -253,69 +223,69 @@ Everything above is authored by the model into the user's own project — no eng
 ## 6. Acceptance criteria (the Acts)
 
 The runner (`10-family-recipes/run.mjs`) drives these and asserts on the **trace + real pod state**.
-Acts here match the runner 1:1.
+Acts here must match the runner 1:1.
 
 | Act | Asserts (trace + real state) | Stories |
 |---|---|---|
-| **I — Ingest & build** | all **six** fixtures uploaded on ONE message; `system-files`/`system-vision`/transcription delegated; ≥3 recipe facts cited **+ ≥1 fact only the handwritten card carries** (vision→content) **+ ≥1 fact only the PDF carries** (`readDocument`) **+ ≥1 fact only the .xlsx carries** (`readDocument`→spreadsheet) **+ ≥1 fact only the dish photo carries** (2nd vision call) **+ ≥1 fact only the GREEK voice memo carries** (audio→Whisper); ≥2 per-cuisine spaces; app `built:true` with tables + ≥1 page; `/app/family-recipes/` → 200 HTML; a recipes table with ≥4 rows whose content tokens match the file — **and a row for the memo's `Σπανακόπιτα`**, which exists in NO uploaded text (audio → rows) | US-1,2,3,11 |
-| **II — Deep research → knowledge + DB** | `system-research` delegated + `webSearch`/`webFetch` observed **on the three real URLs in `fixtures/links.md`** (each pre-verified 200); a researched substitution **absent from the seed** lands as a row in `substitutions` (the GF roux: rice flour/starch, not wheat); a cuisine space answers a follow-up from researched knowledge | US-4 |
-| **III — Agent-processed form** | the app has an "add recipe" form endpoint **and** a `db`-INSERT hook (the working path — **not** `ctx.spawn`); filing a raw recipe through the intake fires an **agent turn** that lands a **normalized** recipe row (ingredients broken out) with a NEW token — recipe count grows (before/after) | US-5 |
-| **IV — Cron synthesis → derived rows** | a `cron` hook exists; `runHook` produces an agent turn that writes `meal_plan` rows **and** a **de-duplicated** `shopping_list` (shared ingredients merged — **no duplicate ingredient lines**) | US-6 |
-| **V — Self-evolution** | "gluten-free" + "dinner for 8" each add a NEW space (live-registered) **and** the app manifest gains ≥1 NEW table and ≥1 NEW page beyond Act I's manifest (mid-life growth); the grown app still compiles | US-8 |
-| **VI — Inbound + outbound** | `installSpace` consent approved; a signed inbound webhook → `{events ≥1}` (bad signature → 401/0 events); an agent/hook writes a `shopping_list` row for the olive oil (before/after); posting the week's plan to the channel yields **`callConnection`** | US-7 |
-| **VII — Update + restraint + multilingual** | a Greek follow-up **changes a real row** (moussaka bake 45→40, ref `TIME-MOUS-40`, before/after); "order the groceries" → **no order/pay yield in the trace** + the list handed back instead | US-9,10,11 |
-| **VIII — Remember me** (NEW, r1) | a "remember forever" household rule routes to **`user-memory`** (delegate / remember yield); a LATER, unrelated cooking turn **recalls both preferences** (half mint; roasted not fried) | US-12 |
-| **IX — Consent denied** (NEW, r1) | asking for a 2nd integration raises a consent card; **denied** ⇒ `integration-telegram` is **absent from the project's spaces on disk**, the other spaces survive, and THING says it did not install it (**consent fails closed**) | US-13 |
-| **X — Engineer-authored code** (NEW, r1) | "the list's maths is wrong" routes to **`system-engineer`**; the authored unit-aware merge helper lands as a **REAL file** in the project (fs tree grew); the app still compiles and a re-run of the weekly cron still de-duplicates (no regression) | US-14 |
-| **XI — The app is a living surface** (NEW, r1 · the app contract A1+A2) | **A1:** the app ships an in-app THING dock in **`pages/_layout`** (⇒ on every route by construction, not page-by-page); a message sent through the dock's own session shape (`{agentSlug:'thing', projectId}`) **AUTHORS** (`writeProject*` yield) and a **NEW page/table lands live** that did not exist before, with the favourite flag **set on real rows** (μουσακάς/σπανακόπιτα); the app **still compiles** after, **and the entry asset the served `index.html` references is really served as JS** (a rebuild emits new hashed assets; a stale serving manifest turns the app into a **white screen** while `built:true` and `GET /` 200 both stay green). **A2a:** every one of the app's **OWN** API routes (`/<project>/api/<route>`, the ones its pages fetch) answers **200** with a **non-empty** payload — no silent 500 → zero-fallback. **A2b:** the app is opened in a **real browser** (chrome-devtools): real fixture data on screen, the dock present, **no console errors, no failed fetches** (evidence + screenshot in §Actual results) | US-15 |
-| **Edges** | idempotent re-ask doesn't clobber spaces; malformed inbound → 0 events; unknown inbound path → 404; recovered vs unrecovered eval/typecheck errors recorded | — |
+| **I — THING proposes, then builds** | Turn 1 (the compound Greek dump, all six fixtures + the three links, one `sendWithAttachments` call): `system-vision/vision` and `system-files/dispatch`→`readDocument` are delegated; the reply cites ≥3 recipe facts from `recipes.md` **and** the card's fact (`Orange Cake`/`crisco`/`400° for 40 min`) **and** the PDF's fact (`Easy Lasagna`/`12 oz. cottage cheese`) **and** the xlsx's fact (`GF-NIKOS`/`BUDGET-CAP-78.50`); the reply's own text contains an unmistakable offer to build something he can open (a plain-language "want me to?"); **no** `build_specialist`/automator/`writeProjectTable` yield appears anywhere in this turn's trace. Turn 2 is the plain "yes" (`Ναι, φτιάξ' το.`) — only after it does `pod.listSpaces` show ≥2 new per-cuisine spaces (never named by the user in any message so far), `pod.appBuild` return `built:true` with ≥1 page, and the served app answer 200 HTML | US-1,2,3 |
+| **II — The voice memo is the ONLY source of a dish** | Before driving any turn: `fixtures/recipes.md`, the extracted text of `fixtures/recipe.pdf`, and every cell of `fixtures/pantry-and-plan.xlsx` are grepped directly (static, off the fixtures — no pod involved) and contain **no** occurrence of `Σπανακόπιτα`/`Spanakopita`. Then `pod.upload('fixtures/voice-memo.mp3')`'s HTTP response carries a non-empty `transcript` field containing `Σπανακόπιτα`, `750`, `φέτα`, and `μαστίχα` — proof Whisper really transcribed the Greek speech, before any chat turn runs. After Act I's build, `pod.appData(id,'recipes')` has a row named `Σπανακόπιτα`/`Spanakopita` whose fields carry ≥3 of: `750` (γρ σπανάκι), `320` (γρ φέτα), `μαστίχα`, `τσίπουρο`, `Δέσποινα`/`Λευκάδα`, `190`/`55` (temp/time) — a row that could only exist if the audio, not any file, was read | US-2 |
+| **III — `readDocument` on an image fails on purpose; vision produces the fact** | The runner opens a SEPARATE session (`agentSlug:'system-files/dispatch'`, same project) and sends `dish-photo.jpg` with a plausible non-technical instruction to read it as if it were a document. Asserts on `turn.events` directly (not the `turn.yields` projection): a `yield_resolved` (or equivalent resolved-value event) for `kind==='readDocument'` referencing this attachment id, whose value is `{ok:false, kind:'unsupported', error: /vision/i}` — the rejection is unconditional and by design, not a fluke. The SAME probe (self-correcting per its own instructions) or an immediate follow-up shows `didDelegate('system-vision')` for that same attachment, and the returned description names ≥2 of: chopped parsley, a Greek salad (feta/kalamata olive/cucumber/red onion), a bulgur/tabbouleh side — the same plating facts already sitting in the Act I `recipes` row for this dish (cross-checked, not re-written); the row count for that dish is unchanged (the probe wrote nothing new) | US-2 |
+| **IV — Automatic research → per-cuisine knowledge + row** | `didDelegate('system-research')` with ≥1 real `webSearch`/`webFetch` yield citing one of the three `fixtures/links.md` domains (each pre-verified 200); a substitution **absent from `recipes.md`, the PDF, and the xlsx** (the GF roux: rice flour/starch, not wheat) lands as a row in `substitutions` **and** in the Greek-cuisine space's on-disk knowledge (`pod.listSpaceDir`/`readProjectFile`-equivalent read); a LATER plain question ("τι βάζω αντί για αλεύρι στη μπεσαμέλ για τον Νίκο;") is answered with the same substitution **and** produces **no new** `webSearch`/`webFetch` yield (answered from the space, not re-researched); no message in the whole run ever names a space | US-4 |
+| **V — `webSearch` falls back off a real provider outage** | The runner `GET`s the pod env, saves the current key, `PUT`s it back with `TAVILY_API_KEY` blanked (an explicit empty string — `PUT` replaces the whole var set), and waits for the rolled pod to settle. A fresh research turn (a technique not yet researched, e.g. the crossini dough) is driven; on `turn.events` the resolved `webSearch` value shows `ok:true` with a non-empty result set and a provider **other than** Tavily (Bing-via-render-service or DuckDuckGo), proving the auto chain really skipped the dead primary rather than failing closed. The finding still lands as a fact (row or knowledge), not just a reply. The runner restores the original `TAVILY_API_KEY` afterward and waits for settle again before continuing | US-5 |
+| **VI — Code nodes compute a de-duplicated shopping list** | `pod.readProjectFile` on the household space's two authored tasklist files (`spaces/<household-space>/tasklists/weekly-shop/NN-<id>.ts`) returns non-empty source: one exports a `node` with a `forEach` over the week's chosen dishes, the other a `node` with `dependsOn` the first — both statically declared, no generic fs used. Driving the weekly-plan trigger (Act VII's mechanism) produces `turn.nodes` entries for both node ids with `status:'done'`. In `pod.appData(id,'shopping_list')`, an ingredient needed by **three or more** of the week's chosen dishes (κρεμμύδι/onion — called for by Μουσακάς, Gemista, Κεφτέδες and Αυγολέμονο σούπα) appears **exactly once**, and its quantity equals the sum of that same ingredient's quantity independently read off those dishes' own `recipes` rows — real arithmetic, not a guess | US-6 |
+| **VII — The weekly trigger is not clock-gated** | `pod.readProjectFile` on the authored weekly-plan trigger's source shows an `every`/interval schedule (the period itself IS "weekly" — no `daily` + weekday check) and contains **no** `getDay()`/weekday conditional anywhere. `pod.runEmitter(id, scope, 'weekly_plan')` forced out of schedule (on whatever real day the run happens to execute) still produces `meal_plan` rows **and** the de-duplicated `shopping_list` from Act VI — proving the schedule, not an internal date check, is what gates it | US-7 |
+| **VIII — `emitEvent` + an `internal` def: declared, emitted, consumed** | `pod.readProjectFile` on the household space's `spaces/<household-space>/events/low-stock.ts` shows `type:'internal'` and `'low-stock'` present in its `emits` map. Somewhere in Act I's ingest turn, `turn.events` shows an `emitEvent` yield (`kind==='emitEvent'`) naming `low-stock` with a payload citing the Kalamata olive oil (`PNT-001`). `pod.appData(id,'shopping_list')` already carries an olive-oil row **before** Vasilis has said anything about it in chat — written by the separate `hooks/*.ts` event hook subscribed to that exact address, proving declare→emit→consume all really happened through the pipeline, not a coincidence in the seed data | US-8 |
+| **IX — Remember me** | The "remember this forever" household-rule turn shows a delegate/remember-kind yield into `user-memory/memory`. A LATER, unrelated cooking turn (the gemista question) recalls **both** preferences (half-dose mint; Nikos roasted-not-fried) — asserted via a real memory-space delegate in that turn's trace, corroborated by the reply's content, not the content alone | US-10 |
+| **X — Greek update + restraint + multilingual routing** | The Greek bake-time message changes the moussaka row's bake-time field (before/after, 45→40) via a real `db.update` — no English equivalent is sent anywhere in the run to "unlock" this, proving the routing isn't keyed off English. The "order the groceries" message produces **no** order/payment yield anywhere in that turn's trace; the reply hands back the current shopping list instead | US-9,11 |
+| **XI — The app is a living surface** | **A1:** through the served app's OWN chat session (`{agentSlug:'thing', projectId}`, reachable from the running app, not `/chat`), the favourite-field message produces a real schema-authoring yield; afterward `pod.appData(id,'recipes')` shows a NEW `favourite`-shaped field, **set true** on the moussaka and spanakopita rows specifically; `pod.appBuild` still succeeds after. **A2:** chrome-devtools opens the served app for real: the rendered DOM shows actual recipe names (Μουσακάς, Σπανακόπιτα) and non-zero data, the in-app chat panel is visibly present, **no console errors, no failed network requests**; `pod.appApi(id, <a route the page itself fetches>)` returns 200 with a non-empty payload (not a page silently rendering zeros while the raw table has rows) | US-12 |
+| **XII — Restart → auto-resume** | `pod.restart()` mid-run; the next `send()` observes the transient failure, waits for the pod, and resumes coherently (same or re-established session); `pod.listSpaces`, `pod.appData` for every table, and the served app all survive unchanged; a forced re-run of the weekly trigger (Act VII) still produces a plan afterward | — |
+| **Edges** | a malformed `emitEvent` payload (missing a required field the `emits` schema demands) is rejected before it reaches the hook (0 rows written); re-asking the same opening question a second time does not create duplicate per-cuisine spaces; recovered vs unrecovered `eval`/`typecheck` errors are recorded per Act; unrecovered count is 0 across the whole run | — |
+
+*Performance targets are **hang detectors, not SLOs**. Record the ACTUAL time as a metric on every
+Act; only FAIL when a ceiling below is breached — that means something is broken, not merely slow.*
 
 ### Performance targets
 | Metric | Target |
 |---|---|
-| Ingest → THING plan | < 90 s |
-| Whole build (spaces + app + seeded data) | < 15 min |
-| `/app/family-recipes/` first byte | < 3 s |
-| Research turn → substitution row | < 3 min |
-| Form POST → recipe row | < 90 s |
-| Cron trigger → meal_plan + shopping_list rows | < 3 min |
-| Later-update message → row changed | < 90 s |
-| Remember → recall (Act VIII) | < 60 s per turn |
-| Engineer code → file in the project (Act X) | < 5 min |
-| In-app dock message → change live in the app (Act XI) | < 5 min |
-| Eval/typecheck errors (unrecovered, on THING's own turns) | 0 |
+| Ingest → THING's offer (turn 1) | < 5 min |
+| "Yes" → whole build (spaces + app + seeded data) | < 45 min |
+| Served app first byte | < 5 s |
+| Research turn → substitution row | < 8 min |
+| Fallback-chain research turn (Act V, pod already settled) | < 8 min |
+| Code-node weekly-shop run (Act VI/VII) | < 15 s, 0 LLM calls |
+| Remember → recall (Act IX) | < 2 min per turn |
+| In-app dock message → change live in the app (Act XI) | < 10 min |
+| Pod settle after an env change (Act V, XII) | < 5 min |
+| Eval/typecheck errors (unrecovered, on THING's own turns) | **0** (hard fail) |
 
 ---
 
 ## 7. What this scenario is really testing (and the gaps it closes/exposes)
 
-This is the scenario that forces a **cron-driven agent synthesis writing derived rows** — the clearest
-"it does the weekly thinking for me" claim — and the only one that leads with **audio → rows** and
-**handwritten (Greek) vision → rows**. Three gaps are in play:
+Three things in this scenario have **never been hard-tested** in any prior run:
 
-1. **Cron → agent synthesis → derived rows.** A scheduled emitter must wake an agent that **reads the
-   book, plans, and authors new rows** (a de-duplicated shopping list), not merely ping. US-6 is the
-   headline; the de-duplication makes it a real synthesis, not a copy.
-2. **Agent-processed form (the `ctx.spawn` gap).** `ctx.spawn` from an app API is a **known no-op**;
-   the working path is a `db:insert` emitter → event hook with a `trigger`. US-5 asserts the working
-   path and documents the gap.
-3. **Mid-life self-evolution.** No prior scenario adds a **new table + page** to an **already-built**
-   app from a later turn. US-8 asserts the manifest grows after Act I — here driven by a dietary
-   change and an event, the natural shape of a living kitchen.
+1. **Audio as the sole source of a fact.** Every other ingestion beat in the catalog can, in principle,
+   be faked by a model that already knows the cuisine (it could guess a plausible μπεσαμέλ). It cannot
+   guess `Σπανακόπιτα` with `μαστίχα Χίου` and a named great-aunt from Lefkada — that sentence exists in
+   exactly one place, spoken. Because `POST /api/uploads` transcribes synchronously and returns the
+   transcript in its own response, this scenario can prove the audio was heard **before a single chat
+   turn runs**, then prove the fact reached a row afterward — a two-part proof no earlier scenario had
+   the shape for.
+2. **`readDocument`'s image rejection is a real, unconditional host guard** (`uploads.ts`), not a
+   convention the model happens to follow. Act III forces exactly the case the guard exists for — "an
+   image slipped through" — and checks the rejection value itself, then checks the self-correction
+   actually reads the photo rather than stalling.
+3. **Cron correctness under force-run.** The platform's only cron primitives are `every`/`daily` — there
+   is no weekday field — so "every Sunday" is only ever achievable two ways: a `daily` handler that
+   self-gates on `getDay()` (the anti-pattern a real shipped kitchen app already has, and which silently
+   no-ops on a forced run any day but Sunday), or an `every:'7d'` interval where the period itself IS the
+   week and the handler never checks the date. Act VII asserts the second, correct shape was authored —
+   and proves it behaviourally by forcing the run regardless of what day it happens to be.
 
-Also: **handwritten OCR → rows** is exercised for the first time with a real card photo — the runner
-hard-asserts a fact **only the photo carries** ("Orange Cake"/crisco/raisins), so a vision path that
-silently no-ops cannot pass. And **audio → rows** is now backed by a REAL fixture: `voice-memo.mp3` is
-~36s of **spoken Greek** in the mother's voice dictating a *Σπανακόπιτα* that appears in **no other
-fixture and no uploaded text** — so the only way a `Σπανακόπιτα` row (750γρ σπανάκι, μαστίχα Χίου) can
-exist is if the pod really transcribed Greek audio. That makes this the first scenario where
-**audio → transcription → structured rows** is hard-asserted rather than skipped. The six fixtures are
-mutually exclusive by design (§8): every one carries a token no other one has, so **no fixture's read
-can be faked from another's content.**
-
-The round-1 NEW Acts add three catalog capabilities this scenario did not reach: **memory** (VIII),
-the **denial** half of consent — the half that must fail closed (IX) — and the **engineer** writing
-real code into a living app (X).
+Two more close specific gaps: the code-node de-duplication (Act VI) proves the shopping list is **real
+arithmetic on real data**, not an LLM eyeballing a list and mostly getting it right; and the
+`emitEvent`/`internal`-def pipeline (Act VIII) proves one part of a project can signal another **with no
+chat message anywhere in the loop** — the event pipeline's actual job, distinct from a webhook or a cron.
 
 A recovered `typecheck_error`/`eval_error` inside a delegated specialist is the retry surface, not a
 failure: hard-assert the **deliverable**, record recovered errors as a metric + note.
@@ -331,32 +301,26 @@ node ../10-family-recipes/run.mjs      # fresh; writes 10-family-recipes/results
 node ../10-family-recipes/run.mjs --reuse # reuse the cached user + project
 ```
 
-The runner provisions a disposable prod user, creates `family-recipes`, uploads **all six fixtures on
-the one opening message** (over the WS path — the HTTP `/message` route drops attachments), pastes the
-`links.md` URLs on the research turn, drives the research / form / cron-plan / evolution / inbound /
-follow-up beats, and checkpoints per Act to `results/checkpoint.json`.
+The runner provisions a disposable prod user, opens a session with no project named, uploads **all six
+fixtures on the one opening message** (over the WS path — the HTTP `/message` route drops attachments),
+pastes the `links.md` URLs in the same message, drives the offer/consent/build/research/code-node/cron/
+memory/update/restraint/in-app-dock/restart beats in order, and checkpoints per Act to
+`results/checkpoint.json`. Act V (the provider-outage fallback) and Act XII (restart) both roll the pod —
+run them late, and re-settle before any Act that follows depends on a warm session.
 
 ### The fixtures (every one is REAL — and every one carries a token no other one has)
 
-| Fixture | What it is | `kind` | **Unique assertable fact** (a runner assertion must prove THIS landed in real state) |
+| Fixture | What it is | `kind` | **Unique assertable fact** |
 |---|---|---|---|
-| `fixtures/recipes.md` | the transcribed recipe dump, Greek+English (4.6 KB) | `file` | `Μουσακάς` · `μπεσαμέλ` · `gemista` · `αρακάς` · `κεφτέδες` · **`γιαγιά Αθανάσια`** · `crossini` — the seed tokens (do not edit without updating the runner's `FILE_FACTS`) |
-| `fixtures/pantry-and-plan.xlsx` | a REAL 3-sheet Excel workbook (10.6 KB; `Pantry` = 20 stock rows + a stock-take row · `MealPlan` = 14 rows across two weeks · `ShoppingList` = 15 rows + 2 note rows), 8 Greek+English columns each, quantities + units | `file` → `readDocument` | **`GF-NIKOS`** (Nikos is gluten-free — the dietary note that drives Act V) · **`BUDGET-CAP-78.50`** (weekly € cap) · **`PANTRY-REV-2026-07-12`** (stock-take id) · **`WEEK-2026-W29`** (the draft plan's week code) · **`MERGE-PEAS-400`** (2 recipes → one 400 g peas line — the de-dup beat, pre-stated) · `PNT-001` **Ελαιόλαδο Καλαμάτας 0.4 L = LOW** (sets up the "we're out of olive oil" inbound beat) · **`Παστίτσιο`** and **`Ψάρι πλακί`**, dishes in NO other fixture |
-| `fixtures/recipe-card.jpg` | a REAL photo of a **handwritten** (cursive English) recipe card, 1021×617, 205 KB | **`image`** → `system-vision` | **`Orange Cake`** · **`crisco`** · **`1 cup raisins`** · `sour cream` · **`Angel food cake tin`** · **`400° for 40 min`** — handwriting, OCR-only; in no text fixture |
-| `fixtures/dish-photo.jpg` | a REAL photo of a **plated Greek dish** — a slice of moussaka served with a Greek salad and a bulgur side, on a white plate on a wooden table (1280×960, 213 KB). Wikimedia Commons, **CC0** | **`image`** → `system-vision` | the **plating/serving** facts, which exist in NO other fixture: it is **served as a plated slice**, garnished with **chopped parsley**, alongside a **Greek salad (feta + a whole kalamata olive + cucumber + red onion)** and a **bulgur/tabbouleh side**, cutlery on a napkin. A 2nd, visually unlike vision call — a photographed *plate*, not a document, so an OCR-shaped shortcut cannot answer it |
-| `fixtures/recipe.pdf` | a REAL printable recipe PDF with selectable text (52 KB) | `file` → `readDocument` | **`Easy Lasagna`** · **`Cooking with Extension Cookbook, pg. 22`** · **`12 oz. cottage cheese`** · **`slow cooker … Low for about 6 hours`** — in no other fixture |
-| `fixtures/voice-memo.mp3` | **REAL Greek speech**, ~36 s, mono 24 kHz (695 KB) — the **mother dictating a family recipe**, first person. Generated with Azure TTS (`tts` deployment, voice `shimmer`); the exact spoken script is in **`fixtures/voice-memo.txt`** | **`audio`** → Whisper (Greek) | **`Σπανακόπιτα`** — a recipe that exists in **NO other fixture and no uploaded text** · **`750 γραμμάρια σπανάκι`** · **`320 γραμμάρια φέτα`** · the unusual ingredient **`μαστίχα Χίου`** · the family tip **`μια κουταλιά τσίπουρο στο φύλλο`** (for crisp phyllo) · **`θεία Δέσποινα από τη Λευκάδα`** · **`190 βαθμούς, 55 λεπτά`** · "**ποτέ αυγό στη γέμιση**". A `Σπανακόπιτα` row can ONLY exist if Greek audio was really transcribed |
-| `fixtures/links.md` | **3 real, publicly fetchable URLs** (each verified `200`): el.wikipedia *Μουσακάς* · en.wikipedia *Béchamel sauce* · en.wikipedia *Gluten-free diet* | *(pasted URLs)* → `webFetch`/`webSearch` | a **live-web** finding **absent from `recipes.md`** — canonically the **gluten-free roux** (rice flour/starch instead of wheat flour in the μπεσαμέλ) — must land in `substitutions` **and** a cuisine space's knowledge |
+| `fixtures/recipes.md` | the transcribed recipe dump, Greek+English (4.6 KB) | `file` | `Μουσακάς` · `μπεσαμέλ` · `gemista` · `αρακάς` · `κεφτέδες` · `γιαγιά Αθανάσια` · `crossini` |
+| `fixtures/pantry-and-plan.xlsx` | a real 3-sheet Excel workbook (`Pantry`/`MealPlan`/`ShoppingList`) | `file` → `readDocument` | `GF-NIKOS` (Nikos is gluten-free) · `BUDGET-CAP-78.50` · `PANTRY-REV-2026-07-12` · `WEEK-2026-W29` · `PNT-001` Kalamata olive oil `LOW` |
+| `fixtures/recipe-card.jpg` | a real photo of a handwritten (cursive English) recipe card | `image` → `system-vision` | `Orange Cake` · `crisco` · `1 cup raisins` · `Angel food cake tin` · `400° for 40 min` |
+| `fixtures/dish-photo.jpg` | a real photo of a plated Greek dish (moussaka slice + Greek salad + bulgur side), CC0 | `image` → `system-vision` | the plating facts: chopped parsley garnish, a Greek salad (feta/kalamata olive/cucumber/red onion), a bulgur/tabbouleh side — present in **no other fixture** |
+| `fixtures/recipe.pdf` | a real printable recipe PDF with selectable text | `file` → `readDocument` | `Easy Lasagna` · `Cooking with Extension Cookbook, pg. 22` · `12 oz. cottage cheese` · `slow cooker … Low for about 6 hours` |
+| `fixtures/voice-memo.mp3` | real Greek speech (~36s), the mother dictating a recipe, first person | `audio` → Whisper (synchronous, returned in the upload response) | `Σπανακόπιτα` — in **no other fixture** · `750 γραμμάρια σπανάκι` · `320 γραμμάρια φέτα` · `μαστίχα Χίου` · `μια κουταλιά τσίπουρο στο φύλλο` · `θεία Δέσποινα από τη Λευκάδα` · `190 βαθμούς, 55 λεπτά` · `ποτέ αυγό στη γέμιση` |
+| `fixtures/links.md` | 3 real, publicly fetchable URLs (each verified `200`): el.wikipedia *Μουσακάς*, en.wikipedia *Béchamel sauce*, en.wikipedia *Gluten-free diet* | *(pasted URLs)* → `webSearch`/`webFetch` | a live-web finding absent from every other fixture: the gluten-free roux (rice flour/starch instead of wheat) |
 
-> **Round-trip verified.** The mp3's Greek facts survive Whisper (`750 γραμμάρια σπανάκι`,
-> `320 γραμμάρια φέτα`, `μαστίχα χίου`, `τσίπουρο`, `190 βαθμούς, 55 λεπτά` all come back verbatim), the
-> `.xlsx` re-opens in openpyxl, every link returns 200, and `file` reports JPEG / MPEG-III / *Microsoft
-> Excel 2007+* respectively. `fixtures/recipe-card.png` is a leftover 1×1 placeholder — **superseded by
-> `recipe-card.jpg`; do not upload it.**
->
-> **One honest gap remains:** the handwritten card is cursive **English**, so "handwritten **Greek** OCR"
-> is still not backed by an image; Greek is instead exercised in the *voice memo* (real Greek speech →
-> Whisper), throughout the *conversation*, and in the *workbook*'s Greek columns.
+> `fixtures/recipe-card.png` is a leftover placeholder — superseded by `recipe-card.jpg`; do not upload it.
 
 ## Actual results
 

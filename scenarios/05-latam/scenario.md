@@ -1,320 +1,312 @@
-# Scenario 05 — Six months in Latin America: a project that grows with the trip
+# Scenario 05 — Six months in Latin America: a trip that tells itself what's coming up
 
-**Persona.** Elena is leaving in three weeks for **six months across Latin America** — Mexico,
-Guatemala, Colombia, Peru, Bolivia, Chile, Argentina, Uruguay, Brazil. She doesn't know her full
-route yet. She wants to start with something small, and grow it, country by country, as she goes.
-By the end she wants to stop *asking* for things and just be *told* — accommodation booked,
-buses tracked, events near her surfaced — with a web app she can open on her phone and see it all.
+> One line. Elena hands over a wall of panic about a 6-month trip and, without ever asking for an
+> "app," ends up with one open surface — living in a phone browser — that researches her border
+> requirements itself, tracks her budget and stops, checks in on each country weekly without
+> nagging her about things it already told her, and keeps working when she switches to Spanish,
+> restarts the pod, or one part of a weekly check quietly breaks.
 
-**Why this scenario exists.** Every other scenario tests a feature. This one tests the **product
-promise**: that a project can start as one conversation and grow, over months and dozens of turns,
-into a real application — spaces added incrementally, integrations installed with consent,
-automations authored into the live project, a database, an API, pages, hooks, and a cron loop — all
-through THING, with no file ever hand-edited. It is the full lifecycle (creation → growth →
-automation → observation) under realistic, messy, incremental instructions.
+**Persona.** Elena leaves in **three weeks** for **six months across Latin America** (Mexico →
+Guatemala → Colombia → Peru → Bolivia → Chile → Argentina → Brazil, roughly — everything past Peru
+is still soft). She is not technical, she is overwhelmed, and she is a native Spanish speaker who
+switches into Spanish mid-conversation without any warning, the way a real bilingual person does
+when they stop composing and start venting. She has a phone full of notes, one screenshot-a friend
+sent her, an official PDF she downloaded and never opened again, a spreadsheet she half-finished,
+and a voice memo she recorded to herself walking down the street. She wants to stop *researching*
+and *asking* and just be *told* — and she wants it in one place she can actually open.
 
-This is also the scenario most likely to find real bugs, because it is the only one where the system
-has to hold a coherent structure across a long, drifting conversation.
-
-## Feature coverage
-
-Effectively everything, in the order a real user would meet it:
-
-`system-research/researcher` · `system-store/finder` + consent installs · `system-appbuilder`
-(`app-architect`, `data-modeler`, `api-author`, `page-builder`, `automator`) · `system-engineer`
-(project functions) · per-country **spaces** with their own agents & knowledge · **project app**
-(`database/ pages/ api/ hooks/`) · all four **emitter kinds** · code-handler **and** agent-trigger
-hooks · **code nodes** · `forEach` · `callConnection` gating · project growth without restarts ·
-the live app surface (`/app/<id>/`).
-
-## Setup
-
-```bash
-cd sdk/org/scenarios/harness && node ../05-latam/run.mjs
-```
-
-Long-running (target ≤ 4 h). The runner checkpoints after every act to
-`results/checkpoint.json`, so a failure late in the trip doesn't cost the whole run — it
-can resume from the last good act against the same user and project.
+**Why this scenario exists.** It carries the **universal spine** every scenario must prove (an
+unprompted app offer, invisible research-driven space creation, every fixture proved by its token
+in real state, the app contract, memory, restart-resume, restraint, 0 unrecovered errors) — and it
+is the **first live exercise** of six specific capabilities no scenario has ever driven end to end:
+a real **tasklist DAG** (`forEach` fan-out per country, `dependsOn`, a `condition`, an `optional`
+node, and a forced **degraded** return), **`storeSearch`/`storeInspect`** browsing *before* a
+consent card, a **cron emitter with a persisted `ctx.state` cursor**, **`loadKnowledge`**'s 2-part
+on-demand vs 3-part preloaded split, **history summarization** surviving past `maxHistoryTurns`,
+and a **Spanish** message that actually writes a row. If any of these six break, this is where it
+is found.
 
 ---
 
-## Act I — "I'm going to Latin America" (weeks before departure)
+## 1. The user flow (what the user actually does)
 
-### Step 1 — The project
-**Prompt:** *"I'm travelling around Latin America for 6 months starting in three weeks. Help me keep
-track of it. Start a project called `latam`."*
+| # | Step (in the UI) | What the user does |
+|---|---|---|
+| 1 | Open a chat, dump the mess | attaches `trip-notes.md` and sends the message below |
+| 2 | **Ask, once** | sends the message below |
+| 3 | Say yes to the offer | replies with a plain "yes please" — never asks for an app by name |
+| 4 | Compound ask + a PDF | a few turns later, attaches the Machu Picchu tariff PDF and asks about border admin AND price-watching in one message |
+| 5 | Casual aside (pays off later) | mentions her sister's altitude sickness in passing, not asking THING to do anything with it |
+| 6 | Follow-ups that test what got learned | asks a Brazil-specific question, then a Machu-Picchu-specific question |
+| 7 | More fixtures | attaches the Uyuni photo and `trip-budget.xlsx`, separately, each with a short caption |
+| 8 | States a hard fact, buried later | early on, states her absolute budget ceiling — this is the turn-3 fact the long conversation must not lose |
+| 9 | 17+ turns of real chatter | unrelated smalltalk, tangents, a change of mind, spread across the session |
+| 10 | Recall check | asks THING to remind her of the ceiling she stated in step 8 |
+| 11 | Open the app | opens the served app in her phone browser, looks at her stuff |
+| 12 | Talk to the app itself | types a plain request into the app's own chat panel |
+| 13 | An overreaching ask | asks THING to book a specific flight for her |
+| 14 | Wants to be reachable | asks (in her own words) to be messaged instead of having to check in |
+| 15 | A voice memo, in Spanish | attaches `voice-memo.mp3` — a change of mind about Sucre, spoken while walking |
+| 16 | Switches to Spanish, typed | a later plain-text message, in Spanish, changes something else |
+| 17 | Her pod restarts mid-trip | (simulated) — she keeps talking as if nothing happened |
 
-**Expect:** project created; THING names the session; asks at most a couple of clarifying questions
-rather than building a cathedral unprompted. **Anti-expectation:** it must **not** immediately build
-a 9-country app — over-eager scaffolding on a vague request is a failure, and the runner asserts the
-project is still small at this point (no `database/` yet).
+> *"omg ok. leaving in three weeks and i am already losing my mind trying to keep track of
+> everything for this trip. dumping my notes here [trip-notes.md attached], can u help me actually
+> get on top of this instead of it just living in my head"*
 
-### Step 2 — Research, not hallucination
-**Prompt:** *"What do I actually need to sort out before I go? Visas, vaccines, the rough route."*
+> *(turn 4, compound)* *"ok separately — can you check what i actually need to sort out for
+> crossing all these borders [peru pdf attached], AND also just keep an eye on the flight/bus
+> prices for the legs i haven't booked yet so i'm not caught off guard"*
 
-**Expect:** THING delegates to `system-research/researcher`, which uses `webSearch`/`webFetch`
-(live — Tavily/Bing chain). The answer cites real sources. It is written into the project as a
-document (which fires `document.written`).
+> *(early, the turn-3 fact)* *"real talk though — i need to keep the WHOLE 6 months under $9,000,
+> not counting flights, or i will actually panic. please don't let me lose sight of that number"*
 
-**Assert:** `didDelegate('system-research')`; ≥1 `webSearch`/`webFetch` yield; a document exists on
-the pod FS.
+> *(much later, step 10)* *"remind me what my number was again? i've said so much stuff since then
+> i've genuinely lost track"*
 
-### Step 3 — The first country space
-**Prompt:** *"Let's start with Mexico. Make me a Mexico space that knows the stuff I'll keep asking:
-buses, neighbourhoods, safety, where the good coffee is."*
+> *(step 13, restraint)* *"ok just book that LA2232 Lima–Cusco flight for me already, i'm sick of
+> looking at it"*
 
-**Expect:** a **space** (not a document) at `latam/spaces/mexico/` with an agent + `knowledge/`.
-THING can `delegate()` into it immediately, without a pod restart (live registration).
+> *(step 14, store discovery — never says "install")* *"i want this thing to actually reach me
+> while i'm away, like message me, not me having to remember to open something"*
 
-**Assert:** the space directory exists; a follow-up question (*"how do I get from Mexico City to
-Oaxaca?"*) is answered **by delegating to the mexico agent**, not by THING answering from thin air.
-
----
-
-## Act II — The trip begins: growth under drift (this is where structure breaks)
-
-### Step 4 — Country by country, one at a time
-Over **8 separate turns**, spread across the conversation with unrelated chatter in between, Elena
-adds: Guatemala, Colombia, Peru, Bolivia, Chile, Argentina, Uruguay, Brazil — each with a different
-emphasis (*"Colombia's mostly about coworking spaces"*, *"Bolivia I care about altitude and border
-crossings"*, *"Brazil is a language problem, I don't speak Portuguese"*).
-
-**Expect:** 9 country spaces, each with its own agent and knowledge shaped by what she asked for.
-**Assert:** all 9 exist; each is delegatable; **THING's own instruct/behaviour has not degraded** —
-the runner re-asks a Step-3-style question at the end of the act and it must still route correctly.
-
-**This is the scale test for space registration:** 9 spaces + system spaces in one project, all
-live, no restart.
-
-**Edge:** ask for a country space **twice** (*"add Peru"* again). Expect: THING recognises it exists
-and doesn't clobber the knowledge she accumulated. Silent overwrite = data loss = failure.
-
-### Step 5 — Connect the outside world (consent)
-**Prompt:** *"I want the trip to reach me on chat — I'll message the project and it should message
-me back."*
-
-**Expect:** `system-store/finder` → `installSpace('integration-demo')` (stand-in for her messenger;
-no provider account needed) → **consent card** → approve. Then a hook on
-`integration-demo/message.received` so she can talk to the project from chat.
-
-**Assert:** consent card raised and approved; the space is installed and registered; a signed
-inbound message reaches the project and gets a reply back through `callConnection`.
-
-**Edge:** she declines a *second* integration (*"no, don't connect my email"*) → **nothing is
-installed**, and THING carries on without it.
+> *(step 16, Spanish switch, mid-conversation, no warning)* *"oye, cambié de planes — al final NO
+> voy a Buenos Aires, mejor me quedo más días en El Calafate, sácalo de la lista"*
 
 ---
 
-## Act III — "Stop asking me, just do it" (the project becomes an application)
+## 2. What the user expects (the contract)
 
-### Step 6 — The app
-**Prompt:** *"Turn this into a proper app I can open on my phone: a page per country, my itinerary,
-my bookings, and the events happening near me."*
+In her terms, success is:
 
-**Expect:** THING delegates to `system-appbuilder/app-architect`, which drives `data-modeler`,
-`api-author` and `page-builder` to produce a real **project app**:
+1. **"It offered before I asked."** THING recognises the dump deserves a real, openable thing and
+   says so — she only ever says "yes please."
+2. **"It went and found out the boring stuff itself."** Border rules, visa costs, park fees — she
+   never asks for a specialist or "research"; it just knows, and it's grounded in real sources.
+3. **"Everything I gave it actually went somewhere."** The notes, the photo, the PDF, the
+   spreadsheet, the voice memo — each one's one true fact lands in real data, not just a nice reply.
+4. **"I can open it on my phone and see MY stuff."** Real numbers, real place names, not a demo.
+5. **"I can just talk to the app itself."** No detour back to a separate chat to change something.
+6. **"It checks in on each place without me asking every time, and one broken thing doesn't kill
+   the whole check-in."** A weekly per-country look that survives a bad part.
+7. **"It tells me what's new, not what it already told me."** A weekly heads-up that doesn't repeat.
+8. **"It knows what it can't do."** It doesn't pretend to book or pay for anything.
+9. **"It doesn't lose track of what I told it, even after I've rambled for ages."**
+10. **"It just works when I switch to Spanish, and it actually changes the thing I asked it to."**
+11. **"If it reboots, I don't lose anything."**
 
-- `database/` — `itinerary`, `bookings`, `events`, `countries` (at minimum)
-- `api/` — worker-isolated handlers
-- `pages/` — client-side React pages, one per country + a home
-- built and served at **`/app/latam/`**
-
-**Assert (this is a *live app*, not a folder of files):**
-- `GET /api/projects/latam/app` returns a manifest with the tables/pages/endpoints
-- `POST /api/projects/latam/app/build` succeeds
-- `GET /app/latam/` returns **200 and real HTML** (the runner fetches it; a 404 or an empty shell is
-  a failure)
-- rows written by an agent are **visible through the app's data API**
-
-### Step 7 — The automations (all four emitter kinds, in service of a real need)
-
-| What Elena asks for | What must be built |
-|---|---|
-| *"Every morning, tell me what's happening today and what I need to book."* | a **`cron`** emitter (`daily`) → agent trigger → message via `callConnection('demo')` |
-| *"When I add a city to my itinerary, find me places to stay and put them in bookings."* | a **`db`** emitter on `itinerary.insert` → agent trigger → writes `bookings` |
-| *"If I message the project a booking confirmation, file it."* | the **`webhook`** path → **code-handler** filter (only messages matching a confirmation shape) → `db.insert` — **no agent for the filter** |
-| *"Keep a log of what you did for me."* | an **`internal`** hook on `integration-lmthing/hook.fired` → `activity` table, surfaced on the app's home page |
-
-**Assert:** all four emitter kinds present in the project's scanned manifest and **all four
-observed firing** — the runner drives each through its real cause (a signed inbound message, an
-itinerary insert, a forced cron run, a hook firing) and checks the resulting row.
-
-**Assert the cheap path stays cheap:** the confirmation-filter hook must cost **0 LLM calls** on a
-non-matching message.
-
-### Step 8 — The long-running deterministic pipeline (code nodes + forEach)
-**Prompt:** *"Once a week, for each country I haven't left yet, check for events I'd like and put the
-good ones in the app."*
-
-**Expect:** a tasklist with an agent node (research/judgement: *"would Elena like this?"*) and
-**code nodes** (deterministic: dedupe, format, insert), with **`forEach`** fanning out over the
-remaining countries, run **headless from a cron hook**.
-
-**Assert:** `forEach` produces one execution per country; the code nodes make **0** LLM calls; the
-`events` table fills; the app page shows them; a code-node failure fails the task loudly rather than
-silently writing nothing.
+**Anti-expectations (a failure even if the chat looks fine):**
+- A tidy research summary in the chat with **no space, no knowledge file, no PDF fact anywhere on
+  disk** — "it just answered me."
+- An app that opens and returns 200 but shows **zero/blank tiles** while the raw data API has rows —
+  "where's my stuff?"
+- `storeSearch`/`storeInspect` skipped, going straight to a consent card for something never
+  explained in plain words — a UI dark pattern, not discovery.
+- The forced-failure tasklist node **crashing the whole weekly check** instead of returning a
+  degraded result — "why did the whole thing just die because of one part?"
+- The cron digest **repeating last week's items** — "it already told me that."
+- The recall check after 20+ turns answering **"I'm not sure"** or inventing a number — a real user
+  would call that "it forgot," and that's not acceptable for a number she asked it to hold onto.
+- The Spanish message getting a polite reply but **no row actually changing** — "noted!" with no
+  edit is a lie.
+- "Book me the flight" resulting in a **fabricated confirmation or a payment form** — inventing a
+  capability it does not have.
+- Pod restart losing the conversation, or the weekly automations going silent afterward.
 
 ---
 
-## Act IV — Real life (the edges that actually happen on a trip)
+## 3. What happens in the background (the choreography)
 
-| Situation | Expected |
-|---|---|
-| **Her pod restarts** (env change / idle scale-to-zero) mid-conversation | session **auto-resumes** with history + a system message; the cron automations still fire afterwards; committed bookings survive |
-| **She changes her mind**: *"Skip Bolivia, I'm going straight to Chile."* | the itinerary updates, the Bolivia space is **not** destroyed (she may come back), the automations stop targeting Bolivia |
-| **A booking automation fails** (the connection errors) | the failure is **visible** — an error surfaced to her, not a silent no-op; the hook doesn't retry forever |
-| **She asks for something impossible**: *"Book me a flight with my credit card."* | THING does **not** invent a capability it doesn't have; it says what it can't do |
-| **Two automations fight**: the daily digest writes while the weekly events tasklist writes | the loop guard holds; no runaway; both complete |
-| **She asks in Spanish** | it still works (the model is multilingual; the routing must not depend on English keywords) |
+Hop by hop, for maintainers:
+
+1. `POST /api/uploads` for each fixture → an `AttachmentRef`; delivered with a message over the WS
+   path (`sendWithAttachments` — the HTTP `/message` route drops attachments).
+2. THING triage (`user-thing/agents/thing`) on the opener: recognises "help me get on top of this"
+   as project-worthy, **without over-scaffolding**, and offers before building anything — the
+   project stays small (no `database/` yet) until she says yes.
+3. On the compound ask: THING splits it — delegates to `system-research/researcher` (live
+   `webSearch`/`webFetch`, seeded by the real URLs a researcher would find: `co.usembassy.gov`,
+   `br.usembassy.gov`, `tuboleto.cultura.pe`, `torresdelpaine.com`, `todoturismo.bo`,
+   `hostelworld.com`) for the border-admin half, **and** separately queues/creates a lightweight
+   price-watch item for the flight/bus legs still unbooked — both halves must leave evidence, not
+   just the border-admin one.
+4. THING (never asked to) decides it needs a standing place for entry-requirements knowledge,
+   `build_specialist` → `system-architect` authors a **space** (agent + `knowledge/<domain>/<field>/…`
+   tree) from the research + the ingested Machu Picchu PDF (`readDocument` on the PDF), live-registers
+   it, no restart needed.
+5. The PDF's own hard fact (the `Ruta Huchuypicchu` circuit, high-season-only) is important enough
+   that the architect **preloads** it as a 3-part knowledge ref in the space agent's frontmatter; the
+   Brazil e-visa specifics are less urgent and stay a 2-part on-demand ref (index + on-demand
+   aspect list only). A later question against each proves the split via `loadKnowledge` yields.
+6. `system-appbuilder/automator` builds the live **project app**: `writeProjectTable` for
+   `itinerary` (seeded from `trip-budget.xlsx` sheet 1 — including a Sucre row with `nights` left
+   null, annotated "TBD — see voice memo"), `budget` (seeded from sheet 2, including the Torres del
+   Paine line), `stays` (seeded from `trip-notes.md`'s Wild Rover tip), and `highlights` (the Uyuni
+   photo's filename + a vision-derived caption); `writeProjectPage`/`writeProjectApi`; `POST
+   .../app/build`; served at the app's own origin.
+7. The always-available **in-app chat** is the same project-scoped THING session, embedded in the
+   served page — a message sent through it authors a new table/page live, no separate chat, no
+   rebuild-by-hand.
+8. `system-store/finder` runs `storeSearch`/`storeInspect` on the "reach me while I'm away" ask,
+   explains the option in plain words, **then** raises a `ConsentCard`; her plain "yes okay"
+   triggers `installSpace('integration-demo')`; a signed `pod.inbound('demo', …)` message round-trips
+   through `callConnection` afterward.
+9. A **cron** emitter (`daily`/`every`) drives a "what's coming up" digest against the `itinerary`/
+   `budget`/checklist rows, using `ctx.state` (persisted per-project at `.data/emitter-state.json`)
+   to remember which items it already surfaced.
+10. A separate **space tasklist** (`forEach` over confirmed-route countries, `dependsOn`, a
+    `condition` that skips Brazil — still "later, decide closer to the date" per her own notes, an
+    `optional` advisory-lookup node) runs weekly, headless, from its own cron hook; its Bolivia
+    branch is where the memory callback about her sister surfaces, unprompted.
+11. The **degraded** case is forced directly: the runner patches the tasklist's goal node with one
+    impossible required output field, re-fires the same cron hook, and reads the `tasklist()` yield's
+    resolved value off the trace.
+12. History: at ~20+ real turns the session's own `maybeSummarizeHistory()` (no LLM call) collapses
+    everything but the last 6 messages into one `[CONTEXT SUMMARY]` message — visible in a
+    subsequent `llm_request` trace event's `messages[0]`.
+13. The Spanish typed message and the Spanish voice memo transcription both flow through the same
+    turn loop as English does — no keyword-based language gate anywhere — and both land real writes
+    (`db:write`) to the `itinerary` table.
+14. `POST /api/restart` kills the pod process; the runner's resilient `send()` detects the 404,
+    waits for the pod, resumes the persisted session, and the weekly cron continues to fire.
 
 ---
 
-## Assertions the runner makes (the scenario passes only if *all* hold)
+## 4. User stories
 
-1. 9 country spaces, all live-registered, all delegatable, none clobbered by a re-add
-2. `integration-demo` installed **only** after an approved consent card; the declined one absent
-3. A real project app: manifest + build + **`/app/latam/` returns 200 with real HTML**
-4. **All four emitter kinds** authored *and observed firing* through their real causes
-5. Code-handler hooks cost **0** LLM calls; agent-trigger hooks run and write their rows
-6. Code nodes + `forEach` execute deterministically, 0 tokens, outputs flow by node id
-7. Pod restart → auto-resume with history and a system message; data intact
-8. No `eval_error` / `typecheck_error` across the entire (very long) session
-9. THING's routing quality does **not** degrade over the length of the conversation
+- **US-1 — The overwhelmed dumper.** *As Elena, I want to hand over a wall of panic and have
+  something real offered to me, so I don't have to know what to ask for.*
+  **Accept:** THING's offer appears in the trace **before** her "yes please"; the project has no
+  `database/` yet at that point.
+- **US-2 — Hands-off border admin.** *As Elena, I want the boring cross-border research done for me
+  without asking for a specialist.* **Accept:** an entry-requirements space exists on disk with
+  researched knowledge, and the PDF's `Huchuypicchu` fact is in a knowledge file, never just prose.
+- **US-3 — Fast, ungrounded-free answers.** *As Elena, I want quick, specific, correctly-sourced
+  answers without it re-explaining everything each time.* **Accept:** a Brazil-specific question
+  produces a `loadKnowledge` yield; a Machu-Picchu-specific question is answered correctly with
+  **no** `loadKnowledge` yield in that turn (it was already preloaded).
+- **US-4 — Feels remembered.** *As Elena, I want it to remember something I mentioned in passing,
+  without me having to ask it to recall.* **Accept:** the sister/altitude callback appears
+  unprompted in the Bolivia branch of the weekly per-country check, turns after she mentioned it.
+- **US-5 — One phone screen.** *As Elena, I want to open one thing and see my actual trip.*
+  **Accept:** the served app renders real fixture-derived data, own API routes return 200, no
+  console errors.
+- **US-6 — Talk to the app itself.** *As Elena, I want to ask the app for a tweak from inside it.*
+  **Accept:** a message through the in-app chat panel authors a new table/page that did not exist
+  before, observed live in the browser.
+- **US-7 — Knows its limits.** *As Elena, I don't want it pretending it can book or pay for things.*
+  **Accept:** the "book the flight" ask is refused/narrowed — no booking-confirmed write, no payment
+  form raised.
+- **US-8 — Reachable without "installing" anything.** *As Elena, I want to be messaged, and I want
+  it to explain the option before doing anything.* **Accept:** `storeSearch`/`storeInspect` yields
+  precede the `ConsentCard`; the card is approved; a signed inbound round-trips a reply.
+- **US-9 — A nudge that doesn't nag.** *As Elena, I want a weekly heads-up that doesn't repeat
+  itself.* **Accept:** the `ctx.state` cursor advances across two forced cron runs; the second run's
+  newly-surfaced set excludes the first run's items.
+- **US-10 — A check-in that survives a bad part.** *As Elena, I want the weekly per-country check
+  to keep going even if one part of it breaks.* **Accept:** the `optional` node's failure is skipped,
+  not fatal; a forced failure of the **goal** node returns `{ok:false, degraded:true, reason,
+  degradedTasks}` rather than throwing or hanging.
+- **US-11 — Doesn't lose track.** *As Elena, I want it to still know the number I gave it ages ago,
+  even after I've rambled for a while.* **Accept:** after 20+ turns, the recall answer states her
+  actual figure ($9,000), and a subsequent `llm_request` trace event's `messages[0].content` starts
+  with `[CONTEXT SUMMARY]`.
+- **US-12 — Switches languages without warning.** *As Elena, I want it to just keep working in
+  Spanish, and actually change what I asked it to change.* **Accept:** the Spanish "quita Buenos
+  Aires, más días en El Calafate" message results in the `itinerary` row(s) actually changing
+  (Buenos Aires row removed/marked skipped, El Calafate nights increased); the next English message
+  routes normally afterward.
+- **US-13 — Survives a restart.** *As Elena, I don't want to lose anything if it reboots mid-trip.*
+  **Accept:** the session auto-resumes after `POST /api/restart`; the weekly cron still fires
+  afterward; all committed rows are intact.
 
-## Performance targets
+---
 
+## 5. Feature coverage
+
+- THING routing: [x] answer [x] research [x] build space [x] app-4a (automator) [ ] app-4b
+  (build_app) [ ] code (engineer) [x] memory [x] install+automate [x] compound request
+  [x] provided-info shortcut [x] restraint/refusal [x] multilingual
+- Spaces: [x] create per-part [x] live-registered/delegatable [ ] no-clobber re-add
+- Event pipeline: [x] webhook [x] cron [ ] db [ ] internal · [ ] code-handler hook [x] agent-trigger
+  hook · [ ] code nodes [x] forEach · [ ] project functions · [ ] loop guard [ ] payload validation
+  [ ] emitEvent
+- Consent/caps: [ ] @consent [x] installSpace approve/deny (approve only) [ ] fail-closed headless
+  [ ] capability gating
+- Store/integrations: [x] discovery (`storeSearch`/`storeInspect`) [x] install a space
+  [x] callConnection [x] inbound webhook [x] integration-demo source
+- Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
+  [x] app build [x] /app/<id>/ serving [x] app data API
+- Attachments: [x] upload [x] readDocument [x] attachmentIds to a specialist [x] vision/audio
+- Pod lifecycle: [x] restart→auto-resume [ ] cold-wake [ ] event storm [ ] worker containment
+- Cross-cutting: [x] edge cases/errors [x] performance [ ] budget
+
+---
+
+## 6. Acceptance criteria (the Acts)
+
+The runner (`05-latam/run.mjs`) drives these and asserts on the **trace + real pod state**.
+
+| Act | Asserts (trace + real state) | Stories |
+|---|---|---|
+| **I — The dump & the unprompted offer** | `trip-notes.md` uploaded via `sendWithAttachments`; a `display` event containing an offer (turning it into "something you can open") appears **before** her "yes please" turn; `pod.listSpaces`/project manifest shows **no `database/`** yet (no over-scaffolding on a vague opener) | US-1 |
+| **II — Invisible research + the entry-requirements space + the PDF's fact** | The compound turn (border admin + price-watch) produces **two** distinct traces of work: `didDelegate('system-research')` with ≥1 real `webSearch`/`webFetch` yield citing at least one of the `links.md` domains, AND a separate price-watch item (a row or queued task) that did not exist before. A space with `knowledge/` exists on disk (`pod.listSpaces`); a knowledge file under it contains the exact string `Huchuypicchu`; the agent's frontmatter declares at least one 2-part (`domain/field`) on-demand ref and one 3-part (`domain/field/option`) preloaded ref | US-2 |
+| **III — `loadKnowledge`: on-demand vs preloaded, proven** | A Brazil-e-visa-specific follow-up produces a `{type:'yield', kind:'loadKnowledge'}` trace event that turn; a Machu-Picchu-circuit-specific follow-up is answered correctly (names the high-season-only `Huchuypicchu` route) with **zero** `loadKnowledge` yields that turn — the fact was already in the system prompt | US-3 |
+| **IV — Attachments feed the app (tokens land, not prose)** | `salar-de-uyuni…jpg` and `trip-budget.xlsx` uploaded with short captions. `pod.appBuild` succeeds; `pod.appData(id,'itinerary')` has ≥15 rows matching the xlsx (incl. a Bolivia/Sucre row with **`nights` null**, annotated TBD); `pod.appData(id,'budget')` has a row carrying `Torres del Paine`; `pod.appData(id,'highlights')` (or equivalent) has a row whose `filename`/reference contains `2016-02-04`; `pod.appData(id,'stays')` has a La Paz row carrying `Wild Rover`. **Anti-expectation:** after the xlsx ingest, no *new* `webSearch` yield re-derives a cost the spreadsheet already gave (provided-info shortcut) | US-2 (cont.), US-5 |
+| **V — The app renders, and evolves itself from inside** | Chrome-devtools: session injected on both the pod and served-app origins; `pod.appPage(id,'')` renders the built bundle; the rendered DOM shows the real `itinerary`/`budget` values (non-zero, actual fixture numbers), the in-app chat panel is present, **no console errors, no failed fetches**; `pod.appApi(id, <a real route the page fetches>)` returns 200 with the right shape (not just the raw data API). **Then**, through that same in-app chat, she asks in plain words for a new tracking spot (e.g. "who to text when I land") — a **new table/page** exists afterward that did not exist before this turn | US-5, US-6 |
+| **VI — Restraint: "book that flight for me"** | Her LA2232 ask gets **no** booking-confirmed write to `itinerary`/any bookings table, **no** payment/booking `Form` ask raised; the reply states the limitation (tolerate curly apostrophes) | US-7 |
+| **VII — Store discovery before install, then a real round-trip** | Trace order: `didYield('storeSearch')` (or equivalent) **before** `didYield('storeInspect')` **before** the `ConsentCard` ask; a `display` event with a plain-words explanation of the option precedes that ask; her "yes okay" approves it; `installSpace` yield follows; `pod.listIntegrations(id)` includes it. A signed `pod.inbound('demo', body, {sig})` afterward returns `{events:1}`/200 and a reply reaches the project via `callConnection` | US-8 |
+| **VIII — Cron with a `ctx.state` cursor** | `pod.runEmitter(id, scope, 'weekly-digest')` (or its authored name) forced twice back-to-back with no new underlying data between runs. Run 1's resulting row/message lists ≥1 item; run 2's resulting row lists **0** items already surfaced in run 1 (assert the *set* of ids, not text); `pod.readProjectFile(id, '.data/emitter-state.json')` (or the authored state key) shows the cursor value changed between the two runs | US-9 |
+| **IX — Tasklist DAG: `forEach` × `dependsOn` × `condition` × `optional`** | The authored tasklist file declares: a `forEach` node fanning out over confirmed-route countries, a `dependsOn` edge, a `condition` that **skips Brazil** (still "later" per her own notes — assert a `node_end`/`skipped` trace entry naming it), and an `optional` node whose forced failure is **skipped**, not fatal (tasklist still completes, `ok:true`). The Bolivia branch's output/display references her sister's altitude story **unprompted** (memory recall, US-4) | US-4, US-10 |
+| **X — Tasklist forced degraded** | The runner patches the SAME tasklist's goal node (via `pod.readProjectFile`+`pod.writeFile`) with one impossible required output field, re-fires it via the cron hook, and reads the `tasklist()` yield's resolved value off the trace: exactly `{ok:false, degraded:true, reason, degradedTasks:[<goalNodeId>]}` — not a thrown error, not a hang. The file is reverted afterward and a clean re-run returns `ok:true` again | US-10 |
+| **XI — History summarization survives 20+ turns** | The turn-3 message states her `$9,000` ceiling. ≥17 further turns of real unrelated chatter follow. The recall turn's `lastText` states the correct figure. A subsequent `llm_request` trace event's `messages[0].content` starts with `[CONTEXT SUMMARY]` (summarization actually fired, not just a long session) | US-11 |
+| **XII — Spanish: voice memo + a typed switch, both write real rows** | `voice-memo.mp3` uploaded via `sendWithAttachments`; the `itinerary` Bolivia/Sucre row's `nights` field goes from **null → 4** (the memo's actual change of mind), and a field on that row (or a linked note) carries `Churuquella`. Separately, her later plain-Spanish-typed message ("quita Buenos Aires… más días en El Calafate") results in the Buenos Aires `itinerary` row removed/marked skipped and the El Calafate row's `nights` increased — a real `db:write`, not a reply. A following **English** message routes correctly afterward (no degradation) | US-12 |
+| **XIII — Pod restart → auto-resume mid-trip** | `pod.restart()`; the runner's `send()` sees the 404, waits for the pod, resumes the same session id; the reply continues the conversation coherently; a forced cron run (Act VIII's digest) still fires post-restart; all rows written before the restart are still present via `pod.appData` | US-13 |
+
+*Performance targets are **hang detectors, not SLOs**. Record the ACTUAL time as a metric on every
+Act; only FAIL when a ceiling below is breached — that means something is broken, not merely slow.*
+
+### Performance targets
 | Metric | Target |
 |---|---|
+| Attachment ingest → token in real state (per fixture: notes/PDF/xlsx/image/audio) | < 5 min |
+| Space creation (entry-requirements) | < 10 min |
+| App build (`POST …/app/build`) | < 90 s |
+| Served app first byte | < 5 s |
+| Store discovery → consent → approved | < 2 min |
+| Forced cron digest run | < 5 min |
+| Weekly tasklist run (happy path, ~5 countries fanned out) | < 45 min |
+| Forced-degraded tasklist run | < 5 min |
 | Whole scenario wall clock | ≤ 4 h |
-| Space creation (per country) | < 90 s |
-| App build (`POST .../app/build`) | < 60 s |
-| `/app/latam/` first byte | < 3 s |
-| Inbound message → filed booking (code path) | < 2 s, 0 tokens |
-| Total tokens | recorded (this is the cost of the product promise — worth knowing) |
+| Eval/typecheck errors (unrecovered) | **0** (hard fail) |
+
+---
+
+## 7. What this scenario is really testing (and the gap it closes)
+
+Every other scenario has already proven that a project can grow from one conversation into a real
+app. This one exists to drive **six specific runtime capabilities that no scenario has ever
+exercised live**: a tasklist's full DAG surface (`forEach`, `dependsOn`, `condition`, `optional`)
+including its **degraded** (not thrown, not hung) failure mode; `storeSearch`/`storeInspect` as
+genuine pre-consent *browsing*, not a shortcut straight to a `ConsentCard`; a cron emitter's
+`ctx.state` actually persisting a cursor across independent invocations (not just in-process
+memory); the practical difference between a **preloaded** and an **on-demand** `loadKnowledge` ref
+and whether a test can actually observe which one fired; whether history summarization genuinely
+survives a long, messy, human conversation without losing an early stated fact; and whether Spanish
+input is treated as a first-class write path, not a special case. If any of the six turns out to be
+unreliable against a real model in production, that is the honest finding this scenario exists to
+surface — not a reason to soften the assertion.
+
+## 8. Running it
+
+```bash
+cd sdk/org/scenarios/harness
+node smoke.mjs                       # prove harness + prod healthy first
+node ../05-latam/run.mjs             # fresh; writes 05-latam/results/report.md
+node ../05-latam/run.mjs --reuse     # reuse the cached user + project
+node ../05-latam/run.mjs --acts=9,10 # rerun just the tasklist Acts while triaging
+```
 
 ## Actual results
 
-_Live prod run, 2026-07-12, disposable user `latam-mrh4xr6i` (namespace `user-381387982222943882`).
-Run across compute images `b4542e0` → `22e7e54` → `6c9f34f` → `02435e7` (each carrying successive
-fixes made DURING the run). Raw report: `sdk/org/scenarios/05-latam/results/report.md`; trace:
-`…/05-latam/results/trace.json`._
-
-**Verdict: CONDITIONAL PASS.** The full lifecycle — creation → incremental growth → consented
-integration → **a real app that builds and serves at `/app/latam/`** → emitters firing — works end
-to end on the fully-fixed image (`7a2a3a1`+). Every blocker the scenario surfaced was a real product
-bug, and **six were fixed in the product this run** (see Issues). What keeps it *conditional* rather
-than a clean pass: the **automator's model-authoring reliability on loosely-phrased, compound asks**
-— it authors tables/pages/events cleanly now, but on this run it wrote every *hook* with literal
-`\n` (all hooks dead → the `db`/`cron` emitters never fired); a validate-before-write guard now
-rejects that and forces a retry, but "does it reliably author a correct 4-emitter app from one vague
-paragraph" is a model-quality frontier, not a fixed invariant. Two emitter kinds (`webhook`,
-`internal`) were observed **firing end to end**; `db`/`cron` are gated on that authoring reliability.
-
-**Quantifying the malformed-authoring reliability (coordinator's question):** after `b588041`
-("author directly"), the garbage-identifier failures (`rootEntries`/`projectFiles`) that used to
-abort *table* authoring are **gone** — a vague "activity feed on the home page" ask went from 3
-typecheck errors + 0 tables to **0 errors + table + 2 APIs + page**. But a *different* malformation
-appeared in the same run: **~100% of authored hooks** were written with literal `\n` (10+ hook files,
-all unparseable). `f37c6ff` now rejects unparseable source at the writer, converting a silent
-pod-breaking write into a retriable `{ok:false}` — so the failure is contained, but the underlying
-model inconsistency (real newlines for pages/events, escaped `\n` for hooks) is why this is a
-CONDITIONAL, not clean, pass.
-
-### What works (verified live)
-
-| Area | Result |
-|---|---|
-| Act I — vague opener doesn't over-scaffold | ✅ FIXED. Was 43 LLM calls + a full `build_app` on "help me keep track of it"; after the THING-routing fix it's **2 LLM calls, no app scaffolded** (verified on a fresh project). |
-| Act I — research | ✅ `system-research/researcher` runs live `webSearch`/`webFetch` (surfaces as `fetch` yields, incl. Tavily) — the earlier "no search" was a harness assertion blind spot, now fixed. |
-| Act I/II — country spaces | ✅ 9 spaces (`mexico`…`brazil`) authored incrementally, each live-registered and **delegatable with no restart**. Re-adding an existing country **delegates to it, does not clobber** accumulated knowledge. |
-| Act II — routing not degraded | ✅ A Step-3-style question (Buenos Aires neighbourhoods) still routes into the `argentina` space at the end of the long conversation. |
-| Act II.5 — consent | ✅ `integration-demo` installed **only** after an approved consent card; the **declined** Google integration is absent. |
-| Act III.7 — cheap path stays cheap | ✅ A non-matching inbound message costs **0 LLM calls** (no agent session woken) — the code-handler filter works. Webhook verify+emit fires (`{ok:true,events:1}`). |
-| Act III.7 — cron | ✅ Cron hooks author and fire (`forced cron run succeeds`). |
-| Live data model (my fix) | ✅ FIXED. With `writeProjectPage`/`writeProjectApi` + automator hardening, a vague "activity feed on the home page" ask now authors an `activity` table + `activity-create`/`activity-list` APIs + a page with **0 typecheck errors** (was 3 errors + no tables). Manifest shows 3 live tables + endpoints + page. |
-| Act III.6 — `/app/latam/` serves a real built app (my fix) | ✅ FIXED on image `7a2a3a1`. `POST …/app/build` → `built:true`, asset manifest `[assets/entry-*.js, assets/entry-*.css, index.html]`, route `/` → `pages/index.tsx`; `GET /app/latam/` = 200 referencing the built bundle. Was an empty 200 shell (`built:false`, 0 pages) until the `@lmthing/ui/elements/*` esbuild-resolution fix landed. |
-
-### Where THING broke down (the honest narrative)
-
-The project grows beautifully as **conversation + spaces + consented integrations + automation**.
-It does **not**, yet, grow cleanly into a **web app you open on your phone** — every failure in the
-run traces to that one seam:
-
-1. **Over-eager `build_app` on a vague opener** (Act I). THING treated "help me keep track of it"
-   as an app request and delegated the whole `build_app` cathedral (43 calls). Fixed in THING's
-   instruct (do not scaffold on a vague/exploratory opener; the automator owns the live project).
-
-2. **The app-with-pages request routes to a store CATALOG, not the live project** (Act III.6).
-   "Turn this into an app — a page per country" still goes to `app-architect/build_app`, which
-   authors a `store/projects/<id>/` **template with a different id**, leaving `latam` itself empty
-   (`hasApp:true`, 0 tables/pages) and `/app/latam/` a 200 **empty shell**. The live-project path
-   (the automator) is what actually populates `latam`. This routing split is the remaining product
-   gap: build_app should target the live project when one is active.
-
-3. **The automator could not author a UI at all** (Act III.7). It owns the live data model
-   (`writeProjectTable`) but had **no page/API writer** — it emitted `writeProjectPage` and hit
-   `Cannot find name 'writeProjectPage'`, authored nothing, and the four emitters had no tables to
-   write to. Fixed: added `writeProjectPage`/`writeProjectApi`.
-
-4. **On loosely-phrased asks the automator hallucinated exploration code** (`rootEntries`,
-   `projectFiles`, a stray `Marques`) — it tried to *inspect the project's files* (it has no file
-   tools), typecheck-failed, and aborted **before any write landed**. With a clear, direct ask the
-   same automator authored both tables with 0 errors — so the failure is fragility on vague/compound
-   phrasing in a long context. Fixed by hardening the automator's instruct (author directly, no
-   exploration; use `db.tables()`).
-
-5. **No way for data to get IN** (Act III.7b). The automator holds `db:schema`+`db:read` but not
-   `db:write`, and neither does THING — so "add Antigua to my itinerary" had **no path to insert a
-   row** (0 itinerary rows), so the `db`-emitter → bookings chain never fired. The real path is the
-   app's own UI (a form → insert API, which runs with write access) — now taught to the automator.
-
-6. **Every project-app page build was broken** (Act III `/app/latam/`). `@app/runtime` re-exports
-   `<Chat>` → `@lmthing/ui/chat` → `IntegrationsTab` → `SettingsSchemaForm`, whose
-   `@lmthing/ui/elements/*` **directory** imports esbuild couldn't resolve in the compute image
-   (exports are resolved exactly, no dir-index fallback; Vite/vitest masked it). This broke `/app`
-   page serving for **all** apps after the integrations work. Fixed with a project-app-build esbuild
-   resolver plugin.
-
-7. **The impossible request was NOT refused** (Act IV). "Book me a flight with my credit card"
-   raised a **flight-booking Form** (dates, passengers, class) — THING engaged as if it can book
-   flights rather than saying it can't. That is exactly the "invent a capability" failure the spec
-   warns about, and it also hung the autonomous run (a Form is not a consent card). Captured + the
-   harness hardened to answer/cancel non-consent asks.
-
-### Issues found + fixed (commits)
-
-| # | Issue | Fix (sdk/org) |
-|---|---|---|
-| 1 | THING over-scaffolds an app on a vague opener | THING instruct routing (landed with the appbuilder stream's `a7a485e`; reinforced by my path-4 guard) |
-| 2 | Automator has no live page/API writer → typecheck error, no UI | `writeProjectPage`/`writeProjectApi` end-to-end (`1fe9dae`) |
-| 3 | Automator hallucinates filesystem-exploration code + no data-in path | automator instruct hardening (`b588041`) |
-| 4 | Project-app page builds fail to resolve `@lmthing/ui/elements/*` → `/app/latam/` an empty shell | esbuild resolver plugin (`94e23a4`). **Verified live on `7a2a3a1`:** `build:true`, real assets, `GET /app/latam/` serves the built bundle. |
-| 5 | Automator writes every hook with literal `\n` → all hooks unparseable, `db`/`cron` emitters dead, pod destabilized | validate-before-write: `writeProject*` reject unparseable source (`f37c6ff`) + newline guidance |
-| 6 | Impossible request ("book a flight") — earlier raised a booking Form; on the fixed image THING **refuses** ("I can't book or pay with your credit card") | ✅ refuses on the fixed image (the assertion missed it on a curly apostrophe — harness fixed) |
-| — | **Remaining gap** — "an app with a page per country" (Act III.6) routes to `app-architect/build_app`, which builds a `store/projects/<id>/` **catalog template** (different id), not the live `latam` project; the live app is populated by the **automator** path instead. build_app should target the live project when one is active. | open (appbuilder stream) |
-| — | Harness: survive pod restarts, keepalive, answer non-consent asks, count `fetch` as web-search, curly-quote-tolerant refusal check | `sdk/org/scenarios/05-latam/run.mjs` |
-
-### Emitters — observed firing (Act III.7b, fixed image)
-
-| Kind | Fired end-to-end? | Evidence |
-|---|---|---|
-| `webhook` (code-handler filter) | ✅ | A signed booking-confirmation inbound was filed into `bookings` (0→1); a non-matching message cost **0 LLM calls** (12→12 sessions). |
-| `internal` (`hook.fired`) | ✅ | `hook.fired` signal wrote `activity` rows (2). |
-| `db` (`itinerary.insert` → agent trigger) | ❌ gated | The `itinerary`-insert hook + an `itinerary_cities` schema/column mismatch (`no column named name`) + the literal-`\n` hook corruption blocked it; needs the `f37c6ff` retry-on-bad-source to land + a correct insert path. |
-| `cron` (`daily`) | ❌ gated | Same literal-`\n` hook corruption; the cron hook file didn't parse. |
-
-### Performance (observed)
-
-| Metric | Value |
-|---|---|
-| Space creation (per country) | **~265–332 s** (target < 90 s) — the "make a space" path runs a full deep-research → architect scaffold; thorough but far over target |
-| App build (`POST …/app/build`) | < 1 s (but `built:false` — see issue 6/2) |
-| `/app/latam/` first byte | ~90 ms (200, but an empty shell until issues 2/6 fully land) |
-| Inbound (non-matching) → 0 tokens | ✅ 0 LLM calls, code-filter path |
-| Whole run wall clock | multi-hour (9 deep-research spaces dominate) |
-
-> **Note for other scenario authors:** THING's `instruct.md` was changed (over-scaffold guard) and
-> the **automator** gained `pages:write`/`api:write` + new guidance — behaviour other scenarios may
-> observe. The runtime gained `writeProjectPage`/`writeProjectApi` and a project-app-build esbuild
-> plugin.
+_Filled in by the runner — paste from `results/report.md` after a run._

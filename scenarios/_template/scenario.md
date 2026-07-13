@@ -96,12 +96,32 @@ must match the runner 1:1.
 | **II — <name>** | … | US-2 |
 | … | | |
 
+*Performance targets are **hang detectors, not SLOs**. Record the ACTUAL time as a metric on every
+Act; only FAIL when a ceiling below is breached — that means something is broken, not merely slow.*
+
 ### Performance targets
+Keep only the rows this scenario has Acts for; add scenario-specific rows using the nearest value
+below. This is the full canonical default list:
+
 | Metric | Target |
 |---|---|
-| <e.g. ingest → plan> | < 90 s |
-| <e.g. whole build> | < 15 min |
-| Eval/typecheck errors (unrecovered) | 0 |
+| Multi-attachment ingest turn (upload + transcribe + vision + triage) → THING's offer | < 5 min |
+| A plain chat turn (no authoring, no research) | < 2 min |
+| A research turn (webSearch/webFetch → a researched row) | < 8 min |
+| Research → one new specialist space, live-registered | < 10 min |
+| The WHOLE build after "yes" (research + spaces + app + seeded rows) | < 45 min |
+| An authoring turn that adds a table / page / section | < 10 min |
+| App build (`POST …/app/build`) | < 90 s |
+| Served app first byte — warm pod | < 5 s |
+| Served app first byte — cold pod (scaled to zero) | < 2 min |
+| Forced agent-trigger hook / cron run (a real LLM turn) | < 5 min |
+| Code-`handler` hook run | < 15 s **and 0 LLM calls** |
+| Signed inbound webhook → row | < 2 min |
+| Event storm (15 signed webhooks) → all processed, none lost | < 5 min |
+| Pod restart → session auto-resumed | < 5 min |
+| In-app chat message → the change is live in the running app | < 10 min |
+| Whole scenario wall clock | ≤ 4 h |
+| Unrecovered eval/typecheck errors | **0** (hard fail) |
 
 ---
 

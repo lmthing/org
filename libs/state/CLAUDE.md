@@ -27,7 +27,7 @@ Tests are co-located next to the source they cover. Hooks need the provider stac
 | Working on… | Read |
 |---|---|
 | anything in this package — FS, events, globs, parsers, pod transport, contexts, hooks | [org/docs/libs/state.md](../../../../org/docs/libs/state.md) |
-| the other shared libs (`ui`, `css`, `auth`, `openclaw-compat`) | [org/docs/libs/](../../../../org/docs/libs/README.md) |
+| the other shared libs (`ui`, `css`, `auth`) | [org/docs/libs/](../../../../org/docs/libs/README.md) |
 | the on-disk shape this VFS mirrors | [org/docs/format/space/](../../../../org/docs/format/space/README.md) · [org/docs/format/project/](../../../../org/docs/format/project/README.md) |
 | the pod REST routes `PodTransport` calls | [org/docs/cli-api/](../../../../org/docs/cli-api/README.md) |
 | the Studio surface that consumes this package | [org/docs/studio/](../../../../org/docs/studio/README.md) |
