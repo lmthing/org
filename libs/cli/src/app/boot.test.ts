@@ -166,19 +166,54 @@ describe('bootProjectApp — fresh create + additive evolution', () => {
   });
 });
 
-describe('bootProjectApp — non-additive divergence fails loud', () => {
-  it('throws when a live column is removed from the schema', async () => {
+describe('bootProjectApp — a schema divergence never bricks the project', () => {
+  // A live scenario (09-home-renovation): the automator dropped the `label` column from
+  // budget_lines.json while the live sqlite kept it. reconcileTable threw, and because
+  // getProjectAppGlobals runs bootProjectApp at SESSION INIT, the whole project was bricked — every
+  // session errored with a fully-swallowed error and a non-technical user could not even open the app
+  // to ask THING to fix it. Dropping a column is harmless (SQLite keeps the orphan, the app reads only
+  // declared columns, no data is lost), so boot must tolerate it, not fail loud.
+  it('tolerates a dropped/orphaned live column and still boots (keeps the column, no data loss)', async () => {
     const root = await scratch();
     await writeSchema(
       root,
       'feed_items',
       feedItems({ ...BASE_COLS, extra: { type: 'string', description: 'to be dropped' } }),
     );
+    let pdb = await bootProjectApp(root);
+    pdb!.raw.prepare('INSERT INTO feed_items (id, title, extra) VALUES (?, ?, ?)').run('a', 'hi', 'keepme');
+    pdb!.close();
+
+    // Drop `extra` from the declared schema → the live column is now orphaned.
+    await writeSchema(root, 'feed_items', feedItems(BASE_COLS));
+    pdb = await bootProjectApp(root); // must NOT throw
+    expect(pdb).not.toBeNull();
+    // The orphaned column is kept (no destructive migration) and the pre-existing row survives.
+    expect(pdb!.tableColumns('feed_items')).toContain('extra');
+    expect(rowCount(pdb!, 'feed_items')).toBe(1);
+    pdb!.close();
+  });
+
+  it('isolates a genuinely dangerous divergence (type conflict) to that table — the app still boots', async () => {
+    const root = await scratch();
+    // Seed two tables; `feed_items.title` is text.
+    await writeSchema(root, 'feed_items', feedItems(BASE_COLS));
+    await writeSchema(root, 'other', feedItems(BASE_COLS));
     (await bootProjectApp(root))!.close();
 
-    // Drop `extra` from the declared schema → non-additive.
-    await writeSchema(root, 'feed_items', feedItems(BASE_COLS));
-    await expect(bootProjectApp(root)).rejects.toThrow(/non-additive/i);
+    // Re-declare feed_items.title as a NUMBER (text↔numeric conflict → reconcileTable throws for it).
+    await writeSchema(
+      root,
+      'feed_items',
+      feedItems({ ...BASE_COLS, title: { type: 'number', description: 'now numeric' } }),
+    );
+    const pdb = await bootProjectApp(root); // the bad table is skipped, boot still succeeds
+    expect(pdb).not.toBeNull();
+    // The healthy table is fully usable — the one divergent table did not brick the project.
+    expect(pdb!.listTables()).toEqual(expect.arrayContaining(['feed_items', 'other']));
+    pdb!.raw.prepare('INSERT INTO other (id, title) VALUES (?, ?)').run('x', 'still works');
+    expect(rowCount(pdb!, 'other')).toBe(1);
+    pdb!.close();
   });
 });
 

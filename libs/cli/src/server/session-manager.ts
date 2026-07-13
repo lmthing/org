@@ -1096,6 +1096,11 @@ export class SessionManager {
       // Async init: resolve dirs then build the session.
       void this._initProjectSession(placeholderEntry, root, projectId, opts).catch((err: unknown) => {
         placeholderEntry.status = 'error';
+        // Surface the init failure to the pod log — otherwise a session that dies during async init
+        // (e.g. an app-db reconcile throw) leaves NO trace: the WebRenderHost's hub is only wired by
+        // wireTracer AFTER buildSessionFn, so an error emitted here before that is swallowed entirely.
+        // eslint-disable-next-line no-console
+        console.error(`[session-init] session ${sessionId} (project "${projectId}") failed to initialize:`, err);
         renderHost.emit({
           type: 'error',
           message: err instanceof Error ? err.message : String(err),

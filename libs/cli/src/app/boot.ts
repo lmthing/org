@@ -67,23 +67,26 @@ export async function bootProjectApp(projectRoot: string): Promise<ProjectDb | n
   const pdb = openProjectDb(dbPath, { create: true, schemas: app.tables });
 
   // ── Step 3: reconcile schemas vs live tables ───────────────────────────────
-  try {
-    const live = new Set(pdb.listTables());
-    for (const { name, schema } of app.tables) {
+  // A reconcile problem must be ISOLATED to its one table — never abort the whole boot. Bricking the
+  // project db here bricks session init for the ENTIRE project (every session errors, silently), so a
+  // single divergent table would take down the whole app. A genuinely dangerous divergence (a type or
+  // primary-key change reconcileTable still throws on) quarantines just that table with a loud warning;
+  // the rest of the app boots so the user keeps access and can repair the schema through THING.
+  const live = new Set(pdb.listTables());
+  for (const { name, schema } of app.tables) {
+    try {
       if (!live.has(name)) {
         rawExec(pdb, schemaToCreateTableSql(name, schema));
         continue;
       }
       reconcileTable(pdb, name, schema);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[app-boot] table "${name}" failed to reconcile — skipping it (the app still boots): ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
     }
-  } catch (err) {
-    // Don't leak the open handle when reconcile fails loud.
-    try {
-      pdb.close();
-    } catch {
-      /* ignore secondary close error */
-    }
-    throw err;
   }
 
   return pdb;
@@ -91,9 +94,11 @@ export async function bootProjectApp(projectRoot: string): Promise<ProjectDb | n
 
 /**
  * Reconcile one existing table's live columns against its declared schema:
- * additive `ADD COLUMN` for a declared column missing live; **throw** on any
- * non-additive divergence (a live column absent from the schema, a PK move, or a
- * clear text↔numeric type conflict).
+ * additive `ADD COLUMN` for a declared column missing live; **warn and keep** an
+ * orphaned live column the schema no longer declares (a harmless drop/rename — no
+ * data loss, the app reads only declared columns); **throw** only on a genuinely
+ * dangerous divergence (a PK move or a clear text↔numeric type conflict), which
+ * `bootProjectApp` isolates to that one table so the rest of the app still boots.
  */
 function reconcileTable(pdb: ProjectDb, table: string, schema: TableSchema): void {
   const declared = schema.columns;
@@ -102,13 +107,18 @@ function reconcileTable(pdb: ProjectDb, table: string, schema: TableSchema): voi
   const liveNames = pdb.tableColumns(table);
   const liveSet = new Set(liveNames);
 
-  // Non-additive: a live column that the schema no longer declares (drop/rename).
+  // A live column the schema no longer declares (a column drop or rename). This is HARMLESS to boot:
+  // SQLite keeps the orphaned column, the app only ever reads/writes the columns it declares, and no
+  // data is lost. Dropping/renaming a column in the JSON is a normal schema evolution an authoring
+  // agent (or the user) will do, so this must NOT be fatal — throwing here would brick EVERY session
+  // in the project (getProjectAppGlobals runs at session init) and leave a non-technical user with a
+  // totally unopenable app they cannot even ask THING to repair. Warn and carry on.
   for (const live of liveNames) {
     if (!declaredSet.has(live)) {
-      throw new Error(
-        `[app-boot] Non-additive schema divergence in table "${table}": live column "${live}" is absent from ` +
-          `database/${table}.json (a column drop or rename is not an additive migration). Restore the column, or ` +
-          `migrate the data manually before removing it.`,
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[app-boot] table "${table}": live column "${live}" is absent from database/${table}.json ` +
+          `(a column drop or rename). Keeping the orphaned column; the app reads only declared columns.`,
       );
     }
   }
