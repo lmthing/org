@@ -57,6 +57,18 @@ export class Report {
     return this.steps.every((s) => s.checks.every((c) => c.pass));
   }
 
+  /**
+   * Did the step CURRENTLY being recorded pass?
+   *
+   * `passed` is the whole report; an Act's checkpoint must record the ACT. Writing
+   * `cp.acts.VIII = { passed: report.passed }` after a batch where Act VII failed marked Act VIII
+   * failed too — all three of its checks were green. A checkpoint that lies about which Act broke
+   * is worse than no checkpoint: the next run re-debugs the wrong Act.
+   */
+  get stepPassed() {
+    return (this.current?.checks ?? []).every((c) => c.pass);
+  }
+
   summary() {
     const all = this.steps.flatMap((s) => s.checks);
     return { total: all.length, passed: all.filter((c) => c.pass).length, issues: this.issues.length };

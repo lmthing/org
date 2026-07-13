@@ -320,7 +320,7 @@ if (ACTS.includes(1)) {
   const blobRows = await dbBlob(pod, PROJECT, names);
   const rowFacts = FILE_FACTS.filter((f) => blobRows.includes(f.toLowerCase()));
   report.check('≥1 table seeded with the file rows (content tokens present)', rowFacts.length >= 2, `row facts: ${rowFacts.join(', ')}`);
-  cp.acts.I = { passed: report.passed, spaces, tables: names, actIManifest: { tables: names, pages: await pageRoutes(pod, PROJECT) } };
+  cp.acts.I = { passed: report.stepPassed, spaces, tables: names, actIManifest: { tables: names, pages: await pageRoutes(pod, PROJECT) } };
   saveCheckpoint(cp);
 }
 
@@ -376,7 +376,7 @@ if (ACTS.includes(2)) {
       ? 'THING answers the follow-up from the saved cheaper quote'
       : 'THING reports the saved research HONESTLY (no cheaper option claimed when the saved row verified none)',
     consistent, `savedCheaper=${foundCheaper} claimsCheaper=${claimsCheaper} admitsNone=${admitsNone} · reply: ${q.lastText.slice(0, 200)}`);
-  cp.acts.II = { passed: report.passed, quotesTable, webYields, grewRows, researchedRows: researched.length, foundCheaper };
+  cp.acts.II = { passed: report.stepPassed, quotesTable, webYields, grewRows, researchedRows: researched.length, foundCheaper };
   saveCheckpoint(cp);
 }
 
@@ -423,7 +423,7 @@ if (ACTS.includes(3)) {
   }
   report.check('an agent processed the raw text into a structured row (NEW token present)', landed, landed ? `${NEW_TOKEN} present after` : 'NEW token NOT found — form may be a dead end (ctx.spawn gap)');
   if (!landed && formApi) report.note('FINDING: form POST accepted but no agent-processed row landed — the db.insert→hook path did not fire (documents the ctx.spawn-from-app-API gap).');
-  cp.acts.III = { passed: report.passed, formApi, postStatus: posted.status, landed };
+  cp.acts.III = { passed: report.stepPassed, formApi, postStatus: posted.status, landed };
   saveCheckpoint(cp);
 }
 
@@ -456,7 +456,7 @@ if (ACTS.includes(4)) {
     wrote = after.length > before.length || (recTable && after.includes('recommend'));
   }
   report.check('the scan wrote a recommendation/alert row (db grew, no human in the loop)', wrote, wrote ? 'db grew after scan' : 'no new row after scan');
-  cp.acts.IV = { passed: report.passed, cronHook: !!cronHook, wrote };
+  cp.acts.IV = { passed: report.stepPassed, cronHook: !!cronHook, wrote };
   saveCheckpoint(cp);
 }
 
@@ -488,7 +488,7 @@ if (ACTS.includes(5)) {
   report.check('app manifest gained ≥1 NEW page (mid-life growth)', newPages.length >= 1, `new: ${newPages.join(', ') || '(none)'} (was ${pagesBefore.length}→${pagesAfter.length})`);
   const build = await pod.appBuild(PROJECT).catch(() => ({ built: false }));
   report.check('the grown app still compiles', build?.built === true, JSON.stringify({ built: build?.built }).slice(0, 120));
-  cp.acts.V = { passed: report.passed, newSpaces, newTables, newPages };
+  cp.acts.V = { passed: report.stepPassed, newSpaces, newTables, newPages };
   saveCheckpoint(cp);
 }
 
@@ -519,7 +519,7 @@ if (ACTS.includes(6)) {
     logged = after.includes(`argos-${RUN}-checkin`.toLowerCase()) || after.length > before.length;
   }
   report.check('an agent/hook logged a booking row from the inbound message', logged, logged ? 'booking row present' : 'no booking row (inbound→agent path)');
-  cp.acts.VI = { passed: report.passed, consent: consent.length, installed, badRejected: bad.status === 401, goodEvents: good.body?.events, logged };
+  cp.acts.VI = { passed: report.stepPassed, consent: consent.length, installed, badRejected: bad.status === 401, goodEvents: good.body?.events, logged };
   saveCheckpoint(cp);
 }
 
@@ -567,7 +567,7 @@ if (ACTS.includes(7)) {
   // …and it must have taken the WRITE path, not the read-only one — assert the routing itself.
   const grToWriter = g.delegates.some((d) => /system-appbuilder/.test(d));
   report.check('the Greek update took the WRITE path (automator), not a space\'s read-only answer', grToWriter, `delegates: ${g.delegates.join(' · ').slice(0, 160) || '(none)'}`);
-  cp.acts.VII = { passed: report.passed, grLanded, grToWriter };
+  cp.acts.VII = { passed: report.stepPassed, grLanded, grToWriter };
   saveCheckpoint(cp);
 }
 
@@ -584,7 +584,7 @@ if (ACTS.includes(8)) {
   // Unknown inbound path → 404.
   const unknown = await pod.inbound('nope-not-a-path', JSON.stringify({ message: { text: 'x' } }), {});
   report.check('unknown inbound path → 404', unknown.status === 404, `status ${unknown.status}`);
-  cp.acts.VIII = { passed: report.passed };
+  cp.acts.VIII = { passed: report.stepPassed };
   saveCheckpoint(cp);
 }
 
@@ -620,7 +620,7 @@ if (ACTS.includes(9)) {
   report.check('a change asked for INSIDE the app landed in the running app (new table)', !!newTable, `tables ${tablesBefore.length}→${tablesAfter.length}: ${tablesAfter.filter((x) => !tablesBefore.includes(x)).join(', ') || '(none new)'}`);
   report.check('the in-app turn authored with full capability (writeProject* yield observed)', t.yields.some((y) => /writeProject/i.test(y.kind)) || !!newTable, t.yields.map((y) => y.kind).join(', ').slice(0, 120));
   report.metric('Act IX in-app turn', (t.durationMs / 1000).toFixed(0), 's');
-  cp.acts.IX = { passed: report.passed, dockOnEveryPage, newTable: !!newTable, pages: pagesAfter };
+  cp.acts.IX = { passed: report.stepPassed, dockOnEveryPage, newTable: !!newTable, pages: pagesAfter };
   saveCheckpoint(cp);
 }
 
@@ -674,7 +674,7 @@ if (ACTS.includes(10)) {
   report.check('no page the user already had disappeared', goneP.length === 0, goneP.length ? `LOST pages: ${goneP.join(', ')}` : `${pagesAfter.length} pages, all still there`);
   const build = await pod.appBuild(PROJECT).catch(() => ({ built: false }));
   report.check('the grown app still compiles', build?.built === true, JSON.stringify({ built: build?.built }));
-  cp.acts.X = { passed: report.passed, homeBefore, homeAfter, newTables, newPages, lost };
+  cp.acts.X = { passed: report.stepPassed, homeBefore, homeAfter, newTables, newPages, lost };
   saveCheckpoint(cp);
 }
 
@@ -700,7 +700,7 @@ if (ACTS.includes(11)) {
   const gotBroker = said.includes(BROKER);
   const gotDays = /\b45\b/.test(said);
   report.check('a brand-new session recalls the standing fact (broker + 45 days) — durable across sessions', gotBroker && gotDays, `broker=${gotBroker} days45=${gotDays} · ${said.slice(0, 180)}`);
-  cp.acts.XI = { passed: report.passed, toMemory, gotBroker, gotDays };
+  cp.acts.XI = { passed: report.stepPassed, toMemory, gotBroker, gotDays };
   saveCheckpoint(cp);
 }
 
@@ -761,7 +761,7 @@ if (ACTS.includes(12)) {
   }
   report.check('the invoices API returns the CORRECT VAT (24% of net = €240) and gross (€1240)', inv.vat === 240 && inv.gross === 1240, `status ${inv.status} · vat=${inv.vat} gross=${inv.gross} · ${inv.payload.slice(0, 200)}`);
   recordErrors('Act XII', t);
-  cp.acts.XII = { passed: report.passed, engineer, automator, functions: fnAfter, vat: inv.vat, gross: inv.gross };
+  cp.acts.XII = { passed: report.stepPassed, engineer, automator, functions: fnAfter, vat: inv.vat, gross: inv.gross };
   saveCheckpoint(cp);
 }
 
@@ -810,7 +810,7 @@ if (ACTS.includes(13)) {
   report.check('the served JS bundle contains the in-app chat (the dock ships to the browser)', /Message agent|Starting agent session|sessionId/.test(bundleSrc), `${js ?? '(no js)'}: ${bundleSrc.length}b`);
   report.check('the served app HTML is the real app (boot marker present)', String(home.body ?? '').includes('__APP_BASE__'), `${String(home.body ?? '').length} bytes from ${pod.appOrigin(PROJECT)}/`);
   report.note('A2 browser pass (chrome-devtools: rendered DOM, real values on screen, console/network clean, screenshot) is recorded in the scenario report.');
-  cp.acts.XIII = { passed: report.passed, pages: pages.map((p) => ({ route: p.route, fetches: p.fetches })), routes: results };
+  cp.acts.XIII = { passed: report.stepPassed, pages: pages.map((p) => ({ route: p.route, fetches: p.fetches })), routes: results };
   saveCheckpoint(cp);
 }
 
