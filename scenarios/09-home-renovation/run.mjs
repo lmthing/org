@@ -53,9 +53,9 @@ const now = () => Date.now();
 
 // The compound opener — VERBATIM from scenario.md §1.
 const OPENER =
-  'Attaching all our reno quotes, receipts, the budget, photos of every room, and a voice memo from ' +
-  'the site. Build me a tracker by room with a budget I can actually see, keep the contractors and ' +
-  'quotes in one place, and warn me BEFORE a trade pushes us over budget.';
+  'Attaching all our reno quotes, receipts, the budget, photos of every room, a voice memo from ' +
+  'the site, and a contractor\'s quote PDF. Build me a tracker by room with a budget I can actually ' +
+  'see, keep the contractors and quotes in one place, and warn me BEFORE a trade pushes us over budget.';
 
 // Facts that appear ONLY in reno-dump.md — prove THING actually read the attachment (not generic advice).
 const FILE_FACTS = [
@@ -246,9 +246,11 @@ if (ACTS.includes(1)) {
   const imgPath = existsSync(`${FIX}/site-photo.jpg`) ? `${FIX}/site-photo.jpg` : `${FIX}/site-photo.png`;
   const imgAtt = await pod.upload(imgPath, { mediaType: imgPath.endsWith('.jpg') ? 'image/jpeg' : 'image/png' });
   report.check('site photo uploaded (kind=image)', imgAtt.kind === 'image', `${imgAtt.kind} ${imgAtt.mediaType}`);
+  const pdfAtt = await pod.upload(`${FIX}/contractor-quote.pdf`, { mediaType: 'application/pdf' });
+  report.check('contractor-quote.pdf uploaded (kind=file)', pdfAtt.kind === 'file', `${pdfAtt.kind} ${pdfAtt.mediaType}`);
   report.note('no voice-memo fixture present → audio/transcription path skipped (drop fixtures/voice-memo.m4a to exercise it; the memo text is inlined in reno-dump.md)');
 
-  const t = acc(await thing.sendWithAttachments(OPENER, [fileAtt, imgAtt], { timeoutMs: 1_800_000 }));
+  const t = acc(await thing.sendWithAttachments(OPENER, [fileAtt, imgAtt, pdfAtt], { timeoutMs: 1_800_000 }));
   const sessionText = JSON.stringify(thing.events).toLowerCase();
   report.check('delegated to system-files (read the dump)', thing.didDelegate('system-files') || sessionText.includes('system-files'), thing.turn(0).delegates.join(' · ').slice(0, 200));
   const sawVision = thing.didDelegate('system-vision') || sessionText.includes('system-vision');

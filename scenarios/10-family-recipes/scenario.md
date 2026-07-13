@@ -29,7 +29,7 @@ table+page addition** gap.
 | # | Step (in the UI) | What the user does |
 |---|---|---|
 | 1 | **Create a project** | He clicks "New project" and names it **`family-recipes`**. |
-| 2 | **Attach the dump** | He attaches `recipes.md` (the transcribed recipes), a **photo of a handwritten recipe card** (`recipe-card.png`), and — if he has one — a **voice memo** from his mother. |
+| 2 | **Attach the dump** | He attaches `recipes.md` (the transcribed recipes), a **photo of a handwritten recipe card** (`recipe-card.jpg`), a **printable recipe PDF** clipped from the web (`recipe.pdf`), and — if he has one — a **voice memo** from his mother. |
 | 3 | **Ask, once** | sends the compound message below (Greek, messy). |
 
 > *"Σου στέλνω τις συνταγές της μάνας μου — φωτογραφίες χειρόγραφων, συνταγές από το ίντερνετ, και ένα
@@ -85,9 +85,9 @@ In the user's terms — success is:
 Hop by hop, for maintainers:
 
 1. **Project creation (UI/API).** `POST /api/projects {name:"family-recipes"}`. THING runs inside it.
-2. **Multi-modal upload.** `recipes.md` → `kind:'file'`; `recipe-card.png` → `kind:'image'` (handwritten
-   card → `system-vision`, Greek OCR); a voice memo → `kind:'audio'` (transcription). Base64
-   `POST /api/uploads`.
+2. **Multi-modal upload.** `recipes.md` → `kind:'file'`; `recipe-card.jpg` → `kind:'image'` (handwritten
+   card → `system-vision`, Greek OCR); `recipe.pdf` → `kind:'file'` (printable recipe, read via
+   `readDocument`); a voice memo → `kind:'audio'` (transcription). Base64 `POST /api/uploads`.
 3. **The message carries all attachments over the WS path**; the HTTP `/message` route drops them.
 4. **THING delegates the read.** File ids → **`system-files/dispatch`** (md → reader; handwritten image
    → `system-vision`; audio → transcription). Extracted facts (incl. from the card and memo) return to
@@ -247,16 +247,17 @@ node ../10-family-recipes/run.mjs --reuse # reuse the cached user + project
 ```
 
 The runner provisions a disposable prod user, creates `family-recipes`, uploads `fixtures/recipes.md`
-+ `fixtures/recipe-card.png` (+ a voice memo if `fixtures/voice-memo.m4a` is present — audio is
-otherwise skipped with a note), sends the compound Greek message over the WS path, drives the research
-/ form / cron-plan / evolution / inbound / follow-up beats, and checkpoints per Act to
-`results/checkpoint.json`.
++ `fixtures/recipe-card.jpg` + `fixtures/recipe.pdf` (+ a voice memo if `fixtures/voice-memo.m4a` is
+present — audio is otherwise skipped with a note), sends the compound Greek message over the WS path,
+drives the research / form / cron-plan / evolution / inbound / follow-up beats, and checkpoints per Act
+to `results/checkpoint.json`.
 
-> **Vision/audio honesty:** the shipped `recipe-card.png` is a minimal placeholder that exercises the
-> image-upload + `system-vision` *delegate path* and attachment classification. To assert **handwritten
-> Greek OCR → rows** and **audio transcription → rows**, drop a real photo of a handwritten recipe
-> card at `fixtures/recipe-card.png` (and a real `voice-memo.m4a`) before running. The runner asserts
-> the path always, and the content assertion when a real artifact is present.
+> **Vision/audio honesty:** `fixtures/recipe-card.jpg` is a real photo of a handwritten recipe card
+> (it supersedes the tiny `recipe-card.png` placeholder) and `fixtures/recipe.pdf` is a real printable
+> recipe with selectable text — together they exercise **handwritten Greek OCR → rows** (via
+> `system-vision`) and the **`readDocument` path**. To also assert **audio transcription → rows**, drop
+> a real `voice-memo.m4a` at `fixtures/` before running. The runner asserts the delegate path always,
+> and the content assertion when a real artifact is present.
 
 ## Actual results
 

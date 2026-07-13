@@ -27,12 +27,12 @@ and an inbound channel. It also closes/exposes the **`ctx.spawn`-from-app-API ga
 | # | Step (in the UI) | What the user does |
 |---|---|---|
 | 1 | **Create a project** | They click "New project" and name it **`home-renovation`**. |
-| 2 | **Attach the dump** | They attach `reno-dump.md` (quotes/budget/contractors/timeline), a **site photo** (`site-photo.png`), and — if they have one — a **voice memo** from the site. |
+| 2 | **Attach the dump** | They attach `reno-dump.md` (quotes/budget/contractors/timeline), a **site photo** (`site-photo.jpg`), a **contractor's quote PDF** (`contractor-quote.pdf`, labor/materials line items), and — if they have one — a **voice memo** from the site. |
 | 3 | **Ask, once** | sends the compound message below. |
 
-> *"Attaching all our reno quotes, receipts, the budget, photos of every room, and a voice memo from
-> the site. Build me a tracker by room with a budget I can actually see, keep the contractors and
-> quotes in one place, and warn me BEFORE a trade pushes us over budget."*
+> *"Attaching all our reno quotes, receipts, the budget, photos of every room, a voice memo from
+> the site, and a contractor's quote PDF. Build me a tracker by room with a budget I can actually see,
+> keep the contractors and quotes in one place, and warn me BEFORE a trade pushes us over budget."*
 
 | 4 | **Watch it build** | THING reads the file/photos/memo, creates per-area spaces, and builds the reno app — progress shows in chat. |
 | 5 | **See it** | They open **`/app/home-renovation/`**: a budget dashboard, a timeline, a before/after gallery — real data. |
@@ -85,8 +85,9 @@ In the user's terms — success is:
 Hop by hop, for maintainers:
 
 1. **Project creation (UI/API).** `POST /api/projects {name:"home-renovation"}`. THING runs inside it.
-2. **Multi-modal upload.** `reno-dump.md` → `kind:'file'`; `site-photo.png` → `kind:'image'` (→ a
-   gallery/before row via `system-vision`); a voice memo → `kind:'audio'`. Base64 `POST /api/uploads`.
+2. **Multi-modal upload.** `reno-dump.md` → `kind:'file'`; `site-photo.jpg` → `kind:'image'` (→ a
+   gallery/before row via `system-vision`); `contractor-quote.pdf` → `kind:'file'` (application/pdf,
+   labor/materials line items read via `readDocument`); a voice memo → `kind:'audio'`. Base64 `POST /api/uploads`.
 3. **The message carries all attachments over the WS path**; the HTTP `/message` route drops them.
 4. **THING delegates the read.** File ids → **`system-files/dispatch`** (md → reader; image →
    `system-vision`; audio → transcription). Extracted facts return to THING.
@@ -255,16 +256,16 @@ node ../09-home-renovation/run.mjs --reuse # reuse the cached user + project
 ```
 
 The runner provisions a disposable prod user, creates `home-renovation`, uploads `fixtures/reno-dump.md`
-+ `fixtures/site-photo.png` (+ a voice memo if `fixtures/voice-memo.m4a` is present — audio is
-otherwise skipped with a note), sends the compound message over the WS path, drives the research /
++ `fixtures/site-photo.jpg` + `fixtures/contractor-quote.pdf` (+ a voice memo if `fixtures/voice-memo.m4a`
+is present — audio is otherwise skipped with a note), sends the compound message over the WS path, drives the research /
 form / budget-alert / cron / evolution / inbound / follow-up beats, and checkpoints per Act to
 `results/checkpoint.json`.
 
-> **Vision/audio honesty:** the shipped `site-photo.png` is a minimal placeholder that exercises the
-> image-upload + `system-vision` *delegate path* and attachment classification. To assert **OCR'd
-> gallery/label rows from an image**, drop a real site photo at `fixtures/site-photo.png` (and a real
-> `voice-memo.m4a` for audio transcription) before running. The runner asserts the path always, and
-> the content assertion when a real artifact is present.
+> **Vision/audio honesty:** the shipped `site-photo.jpg` is a real renovation-interior photo and
+> `contractor-quote.pdf` a real construction cost-estimate PDF (selectable labor/materials line items),
+> exercising the image-upload + `system-vision` *delegate path*, PDF `readDocument`, and attachment
+> classification. For audio transcription, drop a real `voice-memo.m4a` before running. The runner
+> asserts the upload/classification path always, and the content assertion when a real artifact is present.
 
 ## Actual results
 

@@ -26,13 +26,13 @@ It also closes/exposes the **`ctx.spawn`-from-app-API gap** (the working form→
 | # | Step (in the UI) | What the user does |
 |---|---|---|
 | 1 | **Create a project** | In Studio/Chat she clicks "New project" and names it **`ceramics-shop`**. |
-| 2 | **Attach the dump** | She attaches `inventory.csv` (materials/products/suppliers/sales), a **product photo** (`product-photo.png`), and — if she has one — a **voice memo** counting stock. |
+| 2 | **Attach the dump** | She attaches `inventory.csv` (materials/products/suppliers/sales), a **product photo** (`product-photo.jpg`), a **supplier invoice PDF** (`supplier-invoice.pdf`), and — if she has one — a **voice memo** counting stock. |
 | 3 | **Ask, once** | sends the compound message below. |
 
 > *"Attaching my materials, products, suppliers, and 3 months of sales, plus a photo of one of my
-> pieces. Build me a stock tracker. When something drops below its reorder point, draft the reorder
-> email to my supplier but DON'T send it — just have it waiting. And every Sunday give me a short read
-> on what sold."*
+> pieces and a supplier invoice PDF. Build me a stock tracker. When something drops below its reorder
+> point, draft the reorder email to my supplier but DON'T send it — just have it waiting. And every
+> Sunday give me a short read on what sold."*
 
 | 4 | **Watch it build** | THING reads the CSV/photo/memo, creates per-line spaces, and builds the shop app — progress shows in chat. |
 | 5 | **See it** | She opens **`/app/ceramics-shop/`**: a stock dashboard, a sales chart, her products — real browsable data. |
@@ -88,13 +88,15 @@ In the user's terms — success is:
 Hop by hop, for maintainers:
 
 1. **Project creation (UI/API).** `POST /api/projects {name:"ceramics-shop"}`. THING runs inside it.
-2. **Multi-modal upload.** `inventory.csv` → `kind:'file'` (`text/csv`); `product-photo.png` →
-   `kind:'image'`; a voice memo → `kind:'audio'`. Each is a base64 `POST /api/uploads` → `AttachmentRef`.
+2. **Multi-modal upload.** `inventory.csv` → `kind:'file'` (`text/csv`); `product-photo.jpg` →
+   `kind:'image'`; `supplier-invoice.pdf` → `kind:'file'` (`application/pdf`, read via `readDocument`);
+   a voice memo → `kind:'audio'`. Each is a base64 `POST /api/uploads` → `AttachmentRef`.
 3. **The message carries all attachments over the WS path** (`{type:'sendMessage', content,
    attachments:[…]}`); the HTTP `/message` route drops attachments. The pod trusts only attachment `id`.
 4. **THING can't read files itself, so it delegates.** File ids go to **`system-files/dispatch`** → csv
-   to **`system-files/reader`**; the image to **`system-vision`** (→ a catalog/product row); audio to
-   transcription. Extracted facts return up the chain to THING.
+   and the `supplier-invoice.pdf` (read via `readDocument`) to **`system-files/reader`**; the image to
+   **`system-vision`** (→ a catalog/product row); audio to transcription. Extracted facts return up the
+   chain to THING.
 5. **THING plans and delegates the build.** (a) Per-line **spaces** (`catalog`, `suppliers`, `stock`,
    `sales`) via its `build_specialist` path, **live-registered** so each is delegatable immediately.
    (b) **`system-appbuilder/automator`** authors the live shop app.
@@ -264,16 +266,18 @@ node ../08-small-shop/run.mjs --reuse # reuse the cached ceramics-shop user + pr
 ```
 
 The runner provisions a disposable prod user, creates `ceramics-shop`, uploads `fixtures/inventory.csv`
-+ `fixtures/product-photo.png` (+ a voice memo if `fixtures/voice-memo.m4a` is present — audio is
-otherwise skipped with a note), sends the compound message over the WS path, drives the research /
++ `fixtures/product-photo.jpg` + `fixtures/supplier-invoice.pdf` (+ a voice memo if
+`fixtures/voice-memo.m4a` is present — audio is otherwise skipped with a note), sends the compound
+message over the WS path, drives the research /
 form / reorder / cron / evolution / inbound / follow-up beats, and checkpoints per Act to
 `results/checkpoint.json`.
 
-> **Vision/audio honesty:** the shipped `product-photo.png` is a minimal placeholder that exercises the
-> image-upload + `system-vision` *delegate path* and attachment classification. To assert **OCR'd
-> catalog rows from an image**, drop a real product photo at `fixtures/product-photo.png` (and a real
-> `voice-memo.m4a` for audio transcription) before running. The runner asserts the path always, and the
-> content assertion when a real artifact is present.
+> **Vision/audio honesty:** the shipped `product-photo.jpg` is a real ceramics photo and
+> `supplier-invoice.pdf` is a real sample invoice with selectable text, so the image-upload +
+> `system-vision` *delegate path*, the PDF `readDocument` path, and attachment classification are all
+> exercised on real artifacts. Audio (a `voice-memo.m4a`) is still optional — drop one in `fixtures/`
+> for the transcription path; it is otherwise skipped with a note. The runner asserts the upload/kind
+> path always, and the content assertion when a real artifact is present.
 
 ## Actual results
 
