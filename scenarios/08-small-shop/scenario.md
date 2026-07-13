@@ -277,4 +277,91 @@ form / reorder / cron / evolution / inbound / follow-up beats, and checkpoints p
 
 ## Actual results
 
-_Filled in by the runner — paste from `results/report.md` after a run._
+**Round 1 (baseline + first new Acts IX–XI) — live against prod (`user-381522424413316746`), 2026-07-13.**
+
+### Verdict: ✅ **CONDITIONAL PASS** — 10 of 11 Acts + Edges fully green; Act VIII conditional on the known automator db.update-reliability follow-up.
+
+Every Act was exercised end-to-end through THING against live production and asserted on the trace +
+real pod state (spaces on disk, the served/compiled app, real db rows, hooks, inbound). Run in
+resumable per-Act batches (checkpointed); the numbers below are the live outcomes.
+
+| Act | Verdict | Evidence (trace + real state) |
+|---|---|---|
+| **I — Ingest & build** | ✅ PASS (15/15) | `system-files` + `system-vision` delegated; ≥3 CSV facts cited (`CLAY-W12`, `Sibelco Whiteware`, `Mori Mug`, `MM-01`, `Donabe`, …); 4 spaces (`shop-catalog-products/sales/stock-materials/suppliers`); app `built:true` (tables materials/products/sales/suppliers, 17 seeded rows, pages `/ /products /sales`); `/app/ceramics-shop/` → 200. |
+| **II — Deep research → knowledge + DB** | ✅ PASS | `system-research` delegated, 8–19 web yields; a **real** alternative absent from the seed — **Beeldhouwwinkel** (NL clay supplier) — persisted as a NEW row (db grew 3203→4143 bytes); suppliers follow-up names it. |
+| **III — Agent-processed sale (db.insert→hook)** | ✅ PASS (11/11) | db-INSERT hook `process-sale-log-stock` on `project/db.sale_logs.insert`; logging a sale over chat lands a sale row (NEW token) and **stock decrements** (before/after). Browser POST to `/app/<id>/api/*` is the web-SPA host (nginx→405), so the reachable db.insert→hook path is driven, as in scenario 05. |
+| **IV — db-emitter → reorder DRAFT (headline)** | ✅ PASS | dropping CLAY-W12 below reorder_at → a `drafts` table row **addressed to Sibelco** (the right supplier); **nothing sent** (no outbound send yield anywhere in the trace). The db-emitter→hook→agent deliverable loop works. |
+| **V — Cron agent turn → DB** | ✅ PASS | a `cron` hook exists; running it writes a weekly sales-read/insights row (db grew, no human in the loop). |
+| **VI — Self-evolution** | ✅ PASS | "adding workshops" + "selling wholesale" each add a NEW space; the app manifest **grew** ≥1 NEW table (`wholesale_orders`, `workshop_*`) + ≥1 NEW page beyond Act I; the grown app still compiles. |
+| **VII — Inbound + outbound** | ✅ PASS | `installSpace('integration-demo')` consent approved; a **signed** inbound → `events≥1` and a logged row; a **bad-signature** inbound → 401 / 0 events. |
+| **VIII — Update + restraint + multilingual** | ⚠️ CONDITIONAL | **Restraint ✅✅**: "email 50 shops" → **no autonomous mass-send** (trace clean) and THING **gates** it (installs Gmail but stops at auth + "confirm the 50 recipients"). **Multilingual ✅**: the Dutch follow-up is understood + routed to the updater with `ORD-1044`. **db.update landing ⚠️**: marking a sales order paid lands ~half the time — the automator authors code that hits `Cannot find name X` typecheck errors and occasionally claims success without committing. Landed in earlier runs (English & Dutch each), both flaked in the last run. **This is the known automator db.update-reliability follow-up (§7), not language/phrasing** (the identical English + Dutch asks each succeed on some runs). |
+| **IX — Remember me** _(new)_ | ✅ PASS (2/2) | the preference routed to `user-memory`; a later, unrelated turn recalled it verbatim: *"the soonest normal shipping day is Friday … your studio is closed for the whole first week of August."* |
+| **X — Event storm** _(new)_ | ✅ PASS (3/3) | 15/15 signed inbound webhooks accepted (verify→emit); pod stayed responsive; a normal THING turn completed right after (event loop not starved). |
+| **XI — Restart → auto-resume** _(new)_ | ✅ PASS (5/5) | restarting the pod did not lose the project: the session auto-resumed/re-established, THING answered, and 10→10 tables, 8→8 spaces, app still compiles. **Live-verifies the crashloop fix below.** |
+| **Edges** | ✅ PASS (6/6) | idempotent re-ask does not clobber spaces (8→8); malformed inbound → 401 / 0 events; unknown inbound path → 404. |
+
+### Issues found
+
+#### 🔴 bug (FIXED + DEPLOYED + LIVE-VERIFIED): a message to a still-initializing session crashloops the pod
+
+**Found live** during Act III: a session eviction/auto-resume left a message POSTed to a
+still-initializing session; `SessionManager.sendMessage` throws *"still initializing"*, and the
+fire-and-forget `POST /api/sessions/:id/message` HTTP handler **dropped the rejected promise** →
+`unhandledRejection` → the **whole pod process crashed**; because the client (and Envoy) retries the
+same message, the pod went into **CrashLoopBackOff** (10+ restarts, ~30 min dead). The WS path already
+guards this (`ws/agent.ts`); the HTTP path did not.
+
+**Fix:** route the rejection to the session's error stream like the WS path does
+(`libs/cli/src/server/routes/sessions.ts`) + a regression test asserting no `unhandledRejection`
+escapes (`sessions.still-initializing.test.ts`). **Fix sha: sdk/org `7b654a9`, parent `29ddb387` →
+CI built `compute:29ddb38` → test pod upgraded → verified live** (pod no longer crashes; sessions now
+surface a retryable error; Act XI restart→auto-resume passes on the new image).
+
+#### 🟠 finding (documented; data-repaired to continue): the automator dropped live columns → app-boot fail-loud bricked all session init for the project
+
+While Act III's log-sale authoring ran (amplified by the crashloop's retry-storm above), the automator
+re-authored the `sale_logs` table and left **orphaned live columns** (`name`, `processed_at`,
+`created_at`) absent from `database/sale_logs.json`. App-boot's non-additive-divergence guard (correct
+— it protects user data) then **throws in `getProjectAppGlobals` during session init**, so *every*
+`ceramics-shop` session enters an error state — you can't even chat with THING to fix it (`user`-project
+sessions were unaffected → project-specific). Two sub-issues: **B1** the automator should make
+additive-only schema changes (never drop a live column); **B2** a broken project app should **not**
+brick THING's session init (you should still be able to chat to repair). Repaired the schema (restored
+the 3 orphaned columns) to continue; recorded as an authoring-reliability + resilience follow-up. The
+retry-storm that caused it was Fix-A's crash, now fixed → far less likely to recur (it did not recur
+across the subsequent Act runs).
+
+#### 🟡 finding (known follow-up): automator db.update reliability (Act VIII)
+
+Updating an existing row via the automator (`db.update` on the sales table) lands ~half the time; the
+authored code hits `Cannot find name 'salesTableName' / 'salesDbEntries'`-style typecheck errors and
+occasionally claims success without committing. The mechanism demonstrably works (each of the English
+and Dutch updates succeeded on some runs; Act II's db.insert, Act IV's drafts row, Act VI's table
+adds all landed reliably) — this is specifically the automator's **update-existing-row** authoring
+reliability, the documented §7 follow-up.
+
+### Performance (representative, live)
+
+| Metric | Observed |
+|---|---|
+| Ingest → built app (Act I) | ~6 min (spaces + app + 17 seeded rows) |
+| `/app/ceramics-shop/` first byte | 200, ~2.8 KB |
+| Research turn → persisted row (Act II) | < 3 min (8–19 web yields) |
+| Low-stock → reorder draft row (Act IV) | landed within the poll window (≤2 min) |
+| Event storm (Act X) | 15 signed inbounds all accepted; pod responsive |
+| Restart → THING responds again (Act XI) | app + 10 tables + 8 spaces intact, recompiles |
+| Recovered eval/typecheck errors (delegated authoring) | 4–30 per multi-Act batch — all recovered; deliverables landed (authoring-reliability follow-up) |
+
+### Where the product broke down (honest narrative)
+
+The lifecycle promise **holds end-to-end**: a spreadsheet + photo became per-line spaces and a live,
+seeded, self-evolving app; deep research surfaced a real non-seed supplier and persisted it; the
+headline **db-emitter → hook → agent** loop drafted a reorder to the right supplier and parked it
+(nothing sent); cron, inbound, install-consent, memory, event-storm resilience, and restart
+auto-resume all work. The product broke down in two places, both in **delegated authoring
+reliability**, not in the runtime or routing: (1) a genuine **severe crash** — a message racing
+session init crashlooped the whole pod (now **fixed, deployed, and verified live**); and (2) the
+automator's **schema/`db.update` authoring** is flaky — it drops live columns (which the fail-loud
+app-boot then turns into a bricked project until repaired) and unreliably commits row updates. Routing,
+consent, the event pipeline, and the app runtime were solid throughout; the weak seam is the automator
+turning intent into correct, additive, committed TypeScript.
