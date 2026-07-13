@@ -1,6 +1,6 @@
-## Actual results — run 2026-07-13T14:34:58.365Z
+## Actual results — run 2026-07-13T14:47:29.319Z
 
-**Verdict: ❌ FAIL** · 9/11 checks · 0 issue(s) found · 0.3 min wall clock
+**Verdict: ❌ FAIL** · 9/12 checks · 0 issue(s) found · 1.1 min wall clock
 
 ### setup
 
@@ -20,9 +20,10 @@
 | app compiles (built:true) with real JS assets | ✅ | {"built":true,"assets":["assets/entry-375DRMO4.css","assets/entry-NMWBFUEZ.js","index.html"]} |
 | app serves ≥1 page route | ✅ | /, /add-policy, /bookings, /car-insurance-market-checks, /invoices, /renewal-alerts, /utility-bills |
 | https://lmthing.app/life-admin/ serves the REAL app (200 + app boot marker, not the SPA shell) | ✅ | status 200, 463 bytes, appMarker=true |
-| the app declares ≥1 GET route its pages fetch | ✅ | /bookings-list, /car-insurance-market-checks, /invoices-list, /renewal-alerts-list, /utility-bills-list, /vault-dashboard |
-| every page GET route the app fetches returns 200 (no 500 behind a zeroed UI) | ❌ | bookings-list:200 · car-insurance-market-checks:200 · invoices-list:500 · renewal-alerts-list:200 · utility-bills-list:200 · vault-dashboard:200 |
-| those routes return REAL data (non-empty payload, not an empty shell) | ❌ | bookings-list:47b · car-insurance-market-checks:6652b · invoices-list:51b · renewal-alerts-list:2718b · utility-bills-list:12b · vault-dashboard:46747b |
+| the app declares ≥1 GET route its pages fetch | ❌ | (none) |
+| every page GET route the app fetches returns 200 (no 500 behind an empty page) | ❌ | — |
+| no route hides rows the db actually holds (the zeroed-dashboard failure) | ✅ | — |
+| the app home route serves substantive data | ❌ | {} |
 | the served JS bundle contains the in-app chat (the dock ships to the browser) | ✅ | assets/entry-NMWBFUEZ.js: 225378b |
 | the served app HTML is the real app (boot marker present) | ✅ | 463 bytes from https://lmthing.app/life-admin/ |
 
@@ -44,4 +45,4 @@
 | total LLM calls | 0 |
 | total tokens (in/out) | 0 / 0 |
 | delegates | 0 |
-| wall clock | 0.3 min |
+| wall clock | 1.1 min |
