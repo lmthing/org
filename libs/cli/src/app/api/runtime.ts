@@ -24,7 +24,7 @@ import { Worker as NodeWorker } from 'node:worker_threads';
 import { stat, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import { build, transform } from 'esbuild';
 import type { AsyncDbApi, ApiCallFn } from '@lmthing/core';
@@ -159,26 +159,77 @@ export function createApiRuntime(opts: ApiRuntimeOpts): ApiRuntime {
   const log = opts.logError ?? ((message: string, err?: unknown) => console.error(message, err ?? ''));
 
   let routeTable: Promise<RouteTable> | undefined;
-  const transpileCache = new Map<string, { mtimeMs: number; code: string }>();
+  /** Cached per entry file, keyed by the mtimes of EVERY source it bundled in (its deps). */
+  const transpileCache = new Map<string, { deps: Map<string, number>; code: string }>();
 
   function routes(): Promise<RouteTable> {
     if (!routeTable) routeTable = loadApiRoutes(projectRoot);
     return routeTable;
   }
 
-  /** Transpile a handler `.ts` → CJS, cached by file mtime. */
+  /** True when every source the cached bundle was built from is still untouched. */
+  async function depsUnchanged(deps: Map<string, number>): Promise<boolean> {
+    for (const [file, mtimeMs] of deps) {
+      const now = await stat(file).then((s) => s.mtimeMs).catch(() => -1);
+      if (now !== mtimeMs) return false;
+    }
+    return true;
+  }
+
+  /**
+   * BUNDLE a handler `.ts` → CJS, cached by the mtimes of every file that went into it.
+   *
+   * It bundles rather than merely transpiles because the handler runs from a **code string** in a
+   * worker (no file path → no module resolution base): a plain transpile leaves
+   * `require('../../functions/calculateGreekVat')` in the output and the worker dies with
+   * `Cannot find module`. That is not a corner case — it is the shape the automator is *told* to
+   * author ("persist the reusable helper as a project function, have the API use it"), so "put the
+   * VAT rule in one function so it can never drift" dead-ended in a 500 and the invoices page
+   * rendered "No invoices found" (scenario 07). Project-relative imports are now inlined.
+   *
+   * `packages: 'external'` keeps bare specifiers (`node:*`, npm deps) as `require()` in the worker,
+   * exactly as before. The `project-jail` plugin refuses a relative import that climbs OUT of the
+   * project — a handler may compose the project's own code, not read the pod's.
+   */
   async function transpile(file: string): Promise<string> {
-    const { mtimeMs } = await stat(file);
     const cached = transpileCache.get(file);
-    if (cached && cached.mtimeMs === mtimeMs) return cached.code;
-    const source = await readFile(file, 'utf8');
-    const { code } = await transform(source, {
-      loader: 'ts',
+    if (cached && (await depsUnchanged(cached.deps))) return cached.code;
+
+    const result = await build({
+      entryPoints: [file],
+      bundle: true,
+      write: false,
+      metafile: true,
       format: 'cjs',
+      platform: 'node',
       target: 'node18',
-      sourcefile: file,
+      packages: 'external',
+      logLevel: 'silent',
+      plugins: [
+        {
+          name: 'project-jail',
+          setup(b) {
+            b.onResolve({ filter: /^\.\.?\// }, (args) => {
+              const abs = resolve(dirname(args.importer), args.path);
+              if (abs !== projectRoot && !abs.startsWith(projectRoot + sep)) {
+                return { errors: [{ text: `import "${args.path}" escapes the project` }] };
+              }
+              return undefined; // let esbuild resolve it normally (extension, index, …)
+            });
+          },
+        },
+      ],
     });
-    transpileCache.set(file, { mtimeMs, code });
+
+    const code = result.outputFiles[0]!.text;
+    const deps = new Map<string, number>();
+    for (const input of Object.keys(result.metafile?.inputs ?? {})) {
+      const abs = resolve(process.cwd(), input);
+      const m = await stat(abs).then((s) => s.mtimeMs).catch(() => -1);
+      deps.set(abs, m);
+    }
+    if (deps.size === 0) deps.set(file, await stat(file).then((s) => s.mtimeMs).catch(() => -1));
+    transpileCache.set(file, { deps, code });
     return code;
   }
 
@@ -212,7 +263,16 @@ export function createApiRuntime(opts: ApiRuntimeOpts): ApiRuntime {
     const validated = validate(assembled);
     if (!validated.ok) return { status: 400, body: toErrorBody(400, 'invalid input', validated.details) };
 
-    const code = await transpile(endpoint.file);
+    // A handler that cannot be built (a bad import, a syntax error, an import that escapes the
+    // project) is a 500 for THAT route — never a rejected promise that takes the request pipeline
+    // down with it. The real reason goes to the log, not to the client.
+    let code: string;
+    try {
+      code = await transpile(endpoint.file);
+    } catch (err) {
+      log(`[api] handler build error: ${endpoint.name}`, err);
+      return { status: 500, body: toErrorBody(500, 'internal error') };
+    }
     return runWorker(code, method, validated.value);
   }
 

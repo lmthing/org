@@ -118,12 +118,43 @@ export default async function handler(input, ctx) {
   return { runId, rowId: row.id }
 }
 `,
+  // The shape the automator is TOLD to author: put the rule in one reusable project function
+  // (`writeProjectFunction` → functions/<name>.ts) and have the API import it. The handler runs
+  // from a code string in a worker, so a plain transpile left this `require` unresolvable and the
+  // route 500'd with `Cannot find module` — the invoices page rendered "No invoices found" while
+  // the db held the row (scenario 07).
+  'vat/GET.ts': `
+import { calculateVat } from '../../functions/calculateVat'
+export const name = 'vat'
+export const description = 'Applies the shared VAT rule.'
+export default async function handler() {
+  return calculateVat(1000)
+}
+`,
+  // A relative import that climbs OUT of the project is refused (the handler may compose the
+  // project's own code, not read the pod's).
+  'escape/GET.ts': `
+import { secret } from '../../../outside'
+export const name = 'escape'
+export const description = 'Tries to import from outside the project root.'
+export default async function handler() {
+  return { secret }
+}
+`,
 };
+
+const PROJECT_FUNCTION = `
+export function calculateVat(net: number) {
+  const vat = Math.round(net * 0.24 * 100) / 100;
+  return { net, vat, gross: net + vat };
+}
+`;
 
 interface Harness {
   runtime: ApiRuntime;
   project: ProjectDb;
   spawnCalls: Array<{ ref: string; input: unknown }>;
+  root: string;
 }
 
 async function makeHarness(): Promise<Harness> {
@@ -133,6 +164,10 @@ async function makeHarness(): Promise<Harness> {
     await mkdir(join(abs, '..'), { recursive: true });
     await writeFile(abs, src, 'utf8');
   }
+  await mkdir(join(root, 'functions'), { recursive: true });
+  await writeFile(join(root, 'functions', 'calculateVat.ts'), PROJECT_FUNCTION, 'utf8');
+  // The file `escape/GET.ts` reaches for — it exists, and must STILL not be bundled in.
+  await writeFile(join(root, '..', 'outside.ts'), `export const secret = 'pod-internals';\n`, 'utf8');
 
   const project = openProjectDb(join(root, '.data', 'app.db'), { schemas: SCHEMAS });
   dbs.push(project);
@@ -156,7 +191,7 @@ async function makeHarness(): Promise<Harness> {
     spawnRunner,
     logError: () => {}, // silence the expected 500 logs
   });
-  return { runtime, project, spawnCalls };
+  return { runtime, project, spawnCalls, root };
 }
 
 describe('createApiRuntime — routing, db proxy, path params', () => {
@@ -181,6 +216,35 @@ describe('createApiRuntime — routing, db proxy, path params', () => {
     // The write landed in the main-process db.
     const [row] = project.db.query('feed_items', { where: { id: seeded.id } }) as Array<{ read: boolean }>;
     expect(row.read).toBe(true);
+  });
+
+  // "Put the VAT rule in ONE function so it can never drift" is the thing a user actually asks
+  // for, and the automator's own instructions tell it to persist that as a project function. The
+  // API must be able to import it.
+  it('a handler can import a PROJECT FUNCTION (functions/*.ts) — the bundle inlines it', async () => {
+    const { runtime } = await makeHarness();
+    const res = await runtime.handle('GET', '/vat');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ net: 1000, vat: 240, gross: 1240 });
+  });
+
+  it('re-bundles when the imported project function changes (the entry file did not)', async () => {
+    const { runtime, root } = await makeHarness();
+    expect((await runtime.handle('GET', '/vat')).body).toEqual({ net: 1000, vat: 240, gross: 1240 });
+    await new Promise((r) => setTimeout(r, 10)); // ensure a distinct mtime
+    await writeFile(
+      join(root, 'functions', 'calculateVat.ts'),
+      `export function calculateVat(net: number) { return { net, vat: 0, gross: net }; }\n`,
+      'utf8',
+    );
+    expect((await runtime.handle('GET', '/vat')).body).toEqual({ net: 1000, vat: 0, gross: 1000 });
+  });
+
+  it('refuses a relative import that escapes the project root', async () => {
+    const { runtime } = await makeHarness();
+    const res = await runtime.handle('GET', '/escape');
+    expect(res.status).toBe(500);
+    expect(JSON.stringify(res.body)).not.toContain('pod-internals');
   });
 
   it('callByName routes the agent-facing path', async () => {

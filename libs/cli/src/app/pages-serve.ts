@@ -148,9 +148,27 @@ export function createPageServeHandler(
       return;
     }
 
+    // A request for an ASSET that the build never emitted is a 404 — not the SPA shell.
+    // Handing back `index.html` (200, `text/html`) for a missing `.js`/`.css`/`.ico` is how a
+    // stale bundle turns into "Unexpected token '<'" and how every app page logged a CSP console
+    // error for its favicon: the browser asked for an icon and got HTML (scenario 07's browser
+    // pass). Only extensions we actually serve count as an asset ask, so a dynamic route param
+    // that merely contains a dot (`/items/my.v2.id`) still reaches the client router.
+    if (rest !== '' && isAssetRequest(rest)) {
+      sendText(res, 404, 'not found');
+      return;
+    }
+
     // Asset-manifest SPA fallback: not a known asset → the client router owns it.
     await serveIndex(res, outDir, appBase);
   };
+}
+
+/** A sub-path whose extension is one this server serves — i.e. the browser is asking for a
+ *  build artifact, not a client route. `.html` is excluded: it is the SPA shell's own path. */
+function isAssetRequest(rest: string): boolean {
+  const ext = extname(rest).toLowerCase();
+  return ext !== '' && ext !== '.html' && ext in MIME;
 }
 
 /**

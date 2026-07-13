@@ -80,6 +80,20 @@ describe('createPageServeHandler', () => {
     expect(out.body.toString()).toContain('id="root"');
   });
 
+  // Handing the SPA shell back for a MISSING asset is how a stale bundle becomes "Unexpected
+  // token '<'" (the browser executes index.html as a module) and how every served app logged a
+  // CSP console error for its favicon — it asked for an icon and got HTML (scenario 07's browser
+  // pass). A missing asset is a 404.
+  it('404s a missing ASSET (favicon.ico / a stale .js) instead of serving the SPA shell as HTML', async () => {
+    const handler = handlerFor({ outDir, assetManifest });
+    for (const rest of ['favicon.ico', 'assets/gone-deadbeef.js', 'styles/old.css']) {
+      const { res, out } = makeRes();
+      await handler(fakeReq, res, { projectId: 'p1', rest });
+      expect(out.statusCode, rest).toBe(404);
+      expect(out.headers['content-type'], rest).not.toContain('text/html');
+    }
+  });
+
   it('serves index.html for the bundle root (empty rest)', async () => {
     const handler = handlerFor({ outDir, assetManifest });
     const { res, out } = makeRes();
