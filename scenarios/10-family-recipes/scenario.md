@@ -43,6 +43,9 @@ table+page addition** gap.
 | 8 | **Life changes** | Weeks later: *"ο Νίκος είναι πλέον gluten-free"* → a dietary-needs section appears and the plan adapts. Then *"hosting a dinner for 8"* → an events section that scales recipes. |
 | 9 | **Ping from the store** | He messages *"we're out of olive oil"* → it lands on the shopping list. |
 | 10 | **Keep updating** | *"η μουσακάς θέλει 40 λεπτά ψήσιμο, όχι 45 (ref TIME-MOUS-40)"* → the row changes. And he tests a boundary: *"order the groceries from the supermarket"* → THING refuses and hands him the scaled list instead. |
+| 11 | **Tell it the household rules** | *"Θυμήσου το αυτό για πάντα: τα παιδιά δεν αντέχουν τον δυόσμο… ο Νίκος τρώει μόνο ψητές μελιτζάνες"* → it remembers, and recalls it unprompted days later when he cooks. |
+| 12 | **Change his mind mid-install** | He asks for Telegram too — then, at the consent card, **says no**. Nothing is installed. |
+| 13 | **"The maths is wrong"** | *"400γρ αρακά" vs "1 φλιτζάνι αρακά" count as different things* → he asks for real unit-aware code; an engineer writes it into the app. |
 
 ---
 
@@ -68,6 +71,11 @@ In the user's terms — success is:
    scaled list.
 10. **"It understood me."** It works in Greek and English; the compound Greek opener produced all the
     halves.
+11. **"It remembers the house rules."** A "remember this forever" turn is recalled days later,
+    unprompted, when he cooks the dish it applies to.
+12. **"No means no."** When he denies the install consent card, **nothing is installed** — and it says so.
+13. **"It can write real code."** "The list's maths is wrong" produces actual unit-aware code in the
+    app, not an apology.
 
 **Anti-expectations (a failure even if the chat looks fine):**
 - A nice summary but **no** spaces and **no** app → "it just answered me."
@@ -85,9 +93,10 @@ In the user's terms — success is:
 Hop by hop, for maintainers:
 
 1. **Project creation (UI/API).** `POST /api/projects {name:"family-recipes"}`. THING runs inside it.
-2. **Multi-modal upload.** `recipes.md` → `kind:'file'`; `recipe-card.jpg` → `kind:'image'` (handwritten
-   card → `system-vision`, Greek OCR); `recipe.pdf` → `kind:'file'` (printable recipe, read via
-   `readDocument`); a voice memo → `kind:'audio'` (transcription). Base64 `POST /api/uploads`.
+2. **Multi-modal upload.** `recipes.md` → `kind:'file'`; `recipe-card.jpg` → `kind:'image'` (a real
+   handwritten recipe card — cursive "Orange Cake" — → `system-vision`, OCR); `recipe.pdf` →
+   `kind:'file'` (a real printable "Easy Lasagna", read via `readDocument`); a voice memo →
+   `kind:'audio'` (transcription — no fixture yet, §8). Base64 `POST /api/uploads`.
 3. **The message carries all attachments over the WS path**; the HTTP `/message` route drops them.
 4. **THING delegates the read.** File ids → **`system-files/dispatch`** (md → reader; handwritten image
    → `system-vision`; audio → transcription). Extracted facts (incl. from the card and memo) return to
@@ -158,25 +167,36 @@ Everything above is authored by the model into the user's own project — no eng
   the groceries" → no ordering (trace clean); the scaled list offered.
 - **US-11 — Understand me.** *As a cook who mixes Greek/English, I want it to work in either.*
   **Accept:** a Greek follow-up updates a row; the compound Greek opener produced all halves.
+- **US-12 — Remember the house rules.** *As a home cook, I want to tell it a family preference once.*
+  **Accept:** the turn routes to `user-memory` (delegate/remember yield); a LATER, unrelated cooking
+  question recalls both preferences (half mint; roasted, never fried).
+- **US-13 — No means no.** *As a home cook, I want to be able to refuse an install.* **Accept:** the
+  install raises a consent card; **denied** ⇒ the space is absent from the project's spaces on disk,
+  the other spaces survive, and THING says it did not install it.
+- **US-14 — Write me real code.** *As a home cook, I want the arithmetic actually fixed.* **Accept:**
+  the ask routes to `system-engineer`; the authored unit-aware merge helper lands as a REAL file in
+  the project; the app still compiles and the list is still de-duplicated.
 
 ---
 
 ## 5. Feature coverage (tick what this scenario exercises)
 
 - THING routing: [x] answer [x] research [x] build space [x] app-4a (automator) [ ] app-4b (build_app)
-  [ ] code (engineer) [ ] memory [x] install+automate [x] compound request [x] provided-info shortcut
-  [x] restraint/refusal [x] multilingual
+  [x] code (engineer — Act X) [x] memory (Act VIII) [x] install+automate [x] compound request
+  [x] provided-info shortcut [x] restraint/refusal [x] multilingual
 - Spaces: [x] create per-part [x] live-registered/delegatable [x] no-clobber re-add
 - Event pipeline: [x] webhook (inbound) [x] cron [x] db (recipes.insert) [ ] internal ·
   [x] code-handler hook [x] agent-trigger hook · [ ] code nodes [ ] forEach · [x] project functions ·
   [x] loop guard [x] payload validation [x] emitEvent
-- Consent/caps: [x] @consent [x] installSpace approve [x] fail-closed headless
+- Consent/caps: [x] @consent [x] installSpace approve [x] **installSpace DENY (Act IX)**
+  [x] fail-closed headless
   [x] capability gating (`db:write`, `events:emit`, `connections:use`, `store:install`)
 - Store/integrations: [x] discovery [x] install a space [x] callConnection [x] inbound webhook
   [x] integration-demo source (keyless; telegram is the prod target)
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
   [x] app build [x] /app/<id>/ serving [x] app data API [x] **mid-life table+page addition**
-- Attachments: [x] upload [x] readDocument [x] attachmentIds to a specialist [x] **vision (handwritten Greek)** / **audio**
+- Attachments: [x] upload [x] readDocument (the recipe PDF) [x] attachmentIds to a specialist
+  [x] **vision (a real handwritten recipe card)** · [ ] audio (no voice-memo fixture — see §8)
 - Pod lifecycle: [ ] restart→auto-resume (covered by 05) [x] cold-wake [ ] event storm [x] worker containment (api handler)
 - Cross-cutting: [x] edge cases/errors [x] performance [x] budget (direct Azure keys)
 
@@ -189,14 +209,17 @@ Acts here match the runner 1:1.
 
 | Act | Asserts (trace + real state) | Stories |
 |---|---|---|
-| **I — Ingest & build** | `system-files`/`system-vision` delegated; ≥3 recipe facts cited; ≥2 per-cuisine spaces; app `built:true` with tables + ≥1 page; `/app/family-recipes/` → 200 HTML; a recipes table seeded with file rows (content tokens match) | US-1,2,3,11 |
+| **I — Ingest & build** | `system-files`/`system-vision` delegated; ≥3 recipe facts cited **+ ≥1 fact only the handwritten card carries** (vision→content) **+ ≥1 fact only the PDF carries** (`readDocument`→content); ≥2 per-cuisine spaces; app `built:true` with tables + ≥1 page; `/app/family-recipes/` → 200 HTML; a recipes table with ≥4 rows whose content tokens match the file | US-1,2,3,11 |
 | **II — Deep research → knowledge + DB** | `system-research` delegated + `webSearch`/`webFetch` observed; a researched substitution **absent from the seed** lands as a row in `substitutions`; a cuisine space answers a follow-up from researched knowledge | US-4 |
-| **III — Agent-processed form** | a `POST` to `/app/family-recipes/api/<form>` returns ≥202; an **agent turn fires** (via `db.insert`→emitter→hook, not `ctx.spawn`); a normalized recipe row with a NEW token lands (before/after) | US-5 |
-| **IV — Cron synthesis → derived rows** | a `cron` hook exists; `runEmitter`/`runHook` produces an agent turn that writes `meal_plan` rows **and** a **de-duplicated** `shopping_list` (shared ingredients merged — no duplicate ingredient lines); a channel ping (callConnection yield) observed | US-6 |
-| **V — Self-evolution** | "gluten-free" + "dinner for 8" each add a NEW space (live-registered) **and** the app manifest gains ≥1 NEW table and ≥1 NEW page beyond Act I's manifest (mid-life growth) | US-8 |
-| **VI — Inbound + outbound** | `installSpace` consent approved; a signed inbound webhook → `{events ≥1}` (bad signature → 401/0 events); an agent/hook writes a `shopping_list` row (before/after); a `callConnection` yield observed | US-7 |
-| **VII — Update + restraint + multilingual** | a Greek follow-up changes a real row (bake time `TIME-MOUS-40`, before/after); "order the groceries" → no ordering (trace clean) + the scaled list offered | US-9,10,11 |
-| **Edges** | idempotent re-ask doesn't clobber spaces; malformed inbound → 0 events; a failing automation surfaces its error; zero unrecovered eval/typecheck errors on THING's own turns | — |
+| **III — Agent-processed form** | the app has an "add recipe" form endpoint **and** a `db`-INSERT hook (the working path — **not** `ctx.spawn`); filing a raw recipe through the intake fires an **agent turn** that lands a **normalized** recipe row (ingredients broken out) with a NEW token — recipe count grows (before/after) | US-5 |
+| **IV — Cron synthesis → derived rows** | a `cron` hook exists; `runHook` produces an agent turn that writes `meal_plan` rows **and** a **de-duplicated** `shopping_list` (shared ingredients merged — **no duplicate ingredient lines**) | US-6 |
+| **V — Self-evolution** | "gluten-free" + "dinner for 8" each add a NEW space (live-registered) **and** the app manifest gains ≥1 NEW table and ≥1 NEW page beyond Act I's manifest (mid-life growth); the grown app still compiles | US-8 |
+| **VI — Inbound + outbound** | `installSpace` consent approved; a signed inbound webhook → `{events ≥1}` (bad signature → 401/0 events); an agent/hook writes a `shopping_list` row for the olive oil (before/after); posting the week's plan to the channel yields **`callConnection`** | US-7 |
+| **VII — Update + restraint + multilingual** | a Greek follow-up **changes a real row** (moussaka bake 45→40, ref `TIME-MOUS-40`, before/after); "order the groceries" → **no order/pay yield in the trace** + the list handed back instead | US-9,10,11 |
+| **VIII — Remember me** (NEW, r1) | a "remember forever" household rule routes to **`user-memory`** (delegate / remember yield); a LATER, unrelated cooking turn **recalls both preferences** (half mint; roasted not fried) | US-12 |
+| **IX — Consent denied** (NEW, r1) | asking for a 2nd integration raises a consent card; **denied** ⇒ `integration-telegram` is **absent from the project's spaces on disk**, the other spaces survive, and THING says it did not install it (**consent fails closed**) | US-13 |
+| **X — Engineer-authored code** (NEW, r1) | "the list's maths is wrong" routes to **`system-engineer`**; the authored unit-aware merge helper lands as a **REAL file** in the project (fs tree grew); the app still compiles and a re-run of the weekly cron still de-duplicates (no regression) | US-14 |
+| **Edges** | idempotent re-ask doesn't clobber spaces; malformed inbound → 0 events; unknown inbound path → 404; recovered vs unrecovered eval/typecheck errors recorded | — |
 
 ### Performance targets
 | Metric | Target |
@@ -208,6 +231,8 @@ Acts here match the runner 1:1.
 | Form POST → recipe row | < 90 s |
 | Cron trigger → meal_plan + shopping_list rows | < 3 min |
 | Later-update message → row changed | < 90 s |
+| Remember → recall (Act VIII) | < 60 s per turn |
+| Engineer code → file in the project (Act X) | < 5 min |
 | Eval/typecheck errors (unrecovered, on THING's own turns) | 0 |
 
 ---
@@ -228,9 +253,14 @@ This is the scenario that forces a **cron-driven agent synthesis writing derived
    app from a later turn. US-8 asserts the manifest grows after Act I — here driven by a dietary
    change and an event, the natural shape of a living kitchen.
 
-Also: **audio transcription** and **handwritten Greek OCR** are exercised for the first time — the
-runner proves the path always, and the content assertion when a real voice memo / real card photo is
-present.
+Also: **handwritten OCR → rows** is exercised for the first time with a real card photo — the runner
+hard-asserts a fact **only the photo carries** ("Orange Cake"/crisco/raisins), so a vision path that
+silently no-ops cannot pass. **Audio transcription** is the one promise still unbacked: there is no
+voice-memo fixture, so the runner skips it with an explicit note rather than pretending (§8).
+
+The round-1 NEW Acts add three catalog capabilities this scenario did not reach: **memory** (VIII),
+the **denial** half of consent — the half that must fail closed (IX) — and the **engineer** writing
+real code into a living app (X).
 
 A recovered `typecheck_error`/`eval_error` inside a delegated specialist is the retry surface, not a
 failure: hard-assert the **deliverable**, record recovered errors as a metric + note.
@@ -252,12 +282,15 @@ present — audio is otherwise skipped with a note), sends the compound Greek me
 drives the research / form / cron-plan / evolution / inbound / follow-up beats, and checkpoints per Act
 to `results/checkpoint.json`.
 
-> **Vision/audio honesty:** `fixtures/recipe-card.jpg` is a real photo of a handwritten recipe card
-> (it supersedes the tiny `recipe-card.png` placeholder) and `fixtures/recipe.pdf` is a real printable
-> recipe with selectable text — together they exercise **handwritten Greek OCR → rows** (via
-> `system-vision`) and the **`readDocument` path**. To also assert **audio transcription → rows**, drop
-> a real `voice-memo.m4a` at `fixtures/` before running. The runner asserts the delegate path always,
-> and the content assertion when a real artifact is present.
+> **Vision/audio honesty:** `fixtures/recipe-card.jpg` is a **real photo of a handwritten recipe card**
+> (cursive English — an *Orange Cake*; it supersedes the tiny `recipe-card.png` placeholder) and
+> `fixtures/recipe.pdf` is a **real printable recipe** with selectable text (*Easy Lasagna*). The
+> runner hard-asserts a token only each of them carries, so **handwritten OCR → rows** (via
+> `system-vision`) and the **`readDocument` path** cannot silently no-op. The card is not in Greek —
+> Greek is exercised throughout the *conversation* instead, so "handwritten **Greek** OCR" is a claim
+> this fixture set does **not** yet back. **Audio transcription → rows** is likewise **not** exercised:
+> there is no `voice-memo.m4a`, so the runner skips it with a note (drop a real one at `fixtures/` to
+> turn the beat on; its content is inlined in `recipes.md` so the flow still reads as written).
 
 ## Actual results
 
