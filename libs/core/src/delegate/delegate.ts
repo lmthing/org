@@ -345,7 +345,6 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             scope: delegateScope,
             apiCallResolver: opts.appGlobals?.apiCall,
             connectionResolver: opts.appGlobals?.callConnection,
-            toolResolver: opts.appGlobals?.tool,
             documentResolver: opts.documentResolver,
             // Store search/inspect + manual emits work in delegates (system-store
             // runs AS a delegate of THING); consent-marked kinds (installSpace)

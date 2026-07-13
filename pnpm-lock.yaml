@@ -232,9 +232,6 @@ importers:
       '@lmthing/css':
         specifier: workspace:*
         version: link:../css
-      '@lmthing/openclaw-compat':
-        specifier: workspace:*
-        version: link:../openclaw-compat
       '@lmthing/ui':
         specifier: workspace:*
         version: link:../ui
@@ -388,28 +385,6 @@ importers:
       eslint:
         specifier: ^9.0.0
         version: 9.39.4(jiti@2.7.0)
-
-  libs/openclaw-compat:
-    dependencies:
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-    devDependencies:
-      '@lmthing/config':
-        specifier: workspace:*
-        version: link:../config
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.41
-      eslint:
-        specifier: ^9.0.0
-        version: 9.39.4(jiti@2.7.0)
-      tsup:
-        specifier: ^8.1.0
-        version: 8.5.1(jiti@2.7.0)(postcss@8.5.15)(typescript@5.9.3)(yaml@2.9.0)
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
 
   libs/state:
     devDependencies:

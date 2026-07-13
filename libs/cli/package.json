@@ -29,7 +29,6 @@
     "@ai-sdk/openai": "^2.0.0",
     "@ai-sdk/provider-utils": "^3.0.0",
     "@lmthing/core": "workspace:*",
-    "@lmthing/openclaw-compat": "workspace:*",
     "ai": "^5.0.0",
     "zod": "3.25.76",
     "esbuild": "^0.28.0",

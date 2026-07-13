@@ -438,7 +438,6 @@ export class ForkEngine {
           dynamicSpaces: this.opts.dynamicSpaces,
           apiCallResolver: this.opts.appGlobals?.apiCall,
           connectionResolver: this.opts.appGlobals?.callConnection,
-          toolResolver: this.opts.appGlobals?.tool,
           documentResolver: this.opts.documentResolver,
           // Store discovery + manual emits follow the (role-intersected) app
           // grants into forks; consent-marked kinds (installSpace) FAIL CLOSED —

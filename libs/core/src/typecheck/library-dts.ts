@@ -187,20 +187,6 @@ export function composeConnectionsDts(providers: string[]): string {
   return `declare function callConnection(provider: ${union}, req: { method: string; path: string; query?: Record<string, string>; body?: unknown; headers?: Record<string, string> }): Promise<{ ok: boolean; status: number; data: any }>;`;
 }
 
-/**
- * `tools:use` earns `tool` — a value-yielding (Promise) call into a
- * host-registered tool (an OpenClaw plugin tool loaded via
- * `@lmthing/openclaw-compat`). The `name` parameter is typed to the UNION of
- * the granted `allow` list (built per-grant in `buildAppCapabilityDts`), so a
- * call to a tool the agent didn't declare fails typecheck — mirroring
- * `composeConnectionsDts`'s `provider` narrowing. `input`/the return value are
- * `any` by convention (the tool's own shape is host-defined). Emitted only
- * when the grant is present.
- */
-export function composeToolDts(allow: string[]): string {
-  const union = allow.length ? allow.map((n) => `'${n}'`).join(' | ') : 'string';
-  return `declare function tool(name: ${union}, input?: any): Promise<any>;`;
-}
 export const PAGES_WRITE_DTS = `declare function writePage(route: string, src: string): { ok: boolean; error?: string };`;
 export const API_WRITE_DTS = `declare function writeApi(route: string, src: string): { ok: boolean; error?: string };`;
 export const HOOKS_WRITE_DTS = `declare function writeHook(slug: string, src: string): { ok: boolean; error?: string };`;

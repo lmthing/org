@@ -139,18 +139,6 @@ export type AsyncDbApi = {
 export type ApiCallFn = (name: string, input?: unknown) => Promise<unknown>;
 
 /**
- * Dispatch a `tool()` yield to a host-registered tool by name (specifically:
- * an OpenClaw plugin tool loaded via `@lmthing/openclaw-compat`). Gated by the
- * `tools:use` allowlist. Host-supplied (libs/cli, from the loaded
- * `PluginRegistry`); absent outside a pod with loaded plugin tools, in which
- * case a `tool` yield rejects with a clear, retryable error.
- * @param name  The tool name from the `tools:use` allowlist.
- * @param input The tool's input payload.
- * @returns The tool's result.
- */
-export type ToolCallFn = (name: string, input?: unknown) => Promise<unknown>;
-
-/**
  * A single authenticated request to a connected external service, made through
  * the gateway egress proxy. `path` is ALWAYS relative to the provider's API base
  * (the gateway pins the host and rejects absolute URLs); the OAuth token is

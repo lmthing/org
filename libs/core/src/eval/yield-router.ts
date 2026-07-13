@@ -78,11 +78,6 @@ export interface YieldRouterContext {
    *  scoped connections JWT). Absent outside a pod with a configured connections
    *  gateway; a `callConnection` yield then rejects with a clear error. */
   connectionResolver?: ConnectionResolver;
-  /** Resolve a `tool()` yield — dispatch to a host-registered tool (specifically:
-   *  an OpenClaw plugin tool loaded via `@lmthing/openclaw-compat`, host-supplied
-   *  via `libs/cli`'s loaded `PluginRegistry`). Absent outside a pod with loaded
-   *  plugin tools; a `tool` yield then rejects with a clear error. */
-  toolResolver?: (name: string, input: unknown) => Promise<unknown>;
   /** Build a per-node execution context for a `kind:'code'` tasklist node
    *  (db + callConnection locked to the space/tasklist `connections:` + delegate).
    *  Threaded into `runTasklist`. Absent until the CLI/pod wires a runner (plan
@@ -209,17 +204,6 @@ export async function routeCommonYield(
       }
       const [provider, request] = req.args as [string, import('../db/types.js').ConnectionRequest];
       const value = await ctx.connectionResolver(provider, request);
-      return { handled: true, value };
-    }
-    case 'tool': {
-      // Dispatch to a host-registered tool by name (agent-facing `tool()`). A
-      // missing resolver means this context has no tool registry — throw an
-      // actionable, retryable error rather than binding undefined.
-      if (!ctx.toolResolver) {
-        throw new Error('tool() is not available here: no tool registry configured');
-      }
-      const [name, input] = req.args as [string, unknown];
-      const value = await ctx.toolResolver(name, input);
       return { handled: true, value };
     }
     case 'readDocument': {

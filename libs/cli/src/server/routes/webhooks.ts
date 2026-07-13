@@ -29,8 +29,6 @@ import { scanEmitterDefs } from '../emitter-manifests.js';
 import { isDuplicateInbound } from '../webhook-dedupe.js';
 import { dispatchEmittedEvents, validateEmitted, type EventDispatchManager } from '../event-dispatch.js';
 import { invokeDefaultFnInWorker } from '../../app/worker-load.js';
-import type { OpenClawRouteTable } from '../openclaw-host.js';
-import type { CompatHttpRequest } from '@lmthing/openclaw-compat';
 
 /** Host-enforced budget forwarded verbatim to `runHeadless` (same shape as
  *  `routes/hooks.ts`'s `HookBudget`, kept structural to avoid a cross-import). */
@@ -98,20 +96,10 @@ function parseTrigger(trigger: string): { spaceRef: string; agentSlug: string; a
  * handshake still passes through to `preflight` right after. This keeps ONE
  * verification gate ahead of every different kind of response instead of
  * special-casing preflight as pre-auth.
- *
- * `pluginRoutes` (optional — `../openclaw-host.js`'s shared route table) is
- * this SAME `:path` ingress's fallback for a loaded OpenClaw plugin's
- * `registerHttpRoute(...)`-mounted routes: when no webhook-hook/space-trigger
- * `binding` matches, but `pluginRoutes` has an entry for `path`, the raw
- * request is normalized into a `CompatHttpRequest` and handed to the
- * plugin's handler (which typically calls back into `host.runAgent(...)` —
- * see `../openclaw-host.js`) instead of 404ing. Bindings always win first;
- * a plugin can't shadow a real webhook-hook/space-trigger path.
  */
 export function createInboundHandler(
   manager: InboundManager,
   lmthingRoot: string | undefined,
-  pluginRoutes?: OpenClawRouteTable,
 ): (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void> {
   return async (req, res, params) => {
     const path = params['path']!;
@@ -131,29 +119,6 @@ export function createInboundHandler(
     const projects = (await manager.listProjects()).map((p) => p.id).filter((id) => id !== 'system');
     const binding = await resolveBinding(lmthingRoot, projects, path);
     if (!binding) {
-      const pluginRoute = pluginRoutes?.get(path);
-      if (pluginRoute) {
-        const url = new URL(req.url ?? '/', 'http://localhost');
-        const query: Record<string, string | string[] | undefined> = {};
-        for (const key of url.searchParams.keys()) {
-          const values = url.searchParams.getAll(key);
-          query[key] = values.length > 1 ? values : values[0];
-        }
-        const compatReq: CompatHttpRequest = {
-          method: (req.method ?? 'GET').toUpperCase(),
-          path,
-          headers,
-          body: rawBody,
-          query,
-        };
-        try {
-          const out = await pluginRoute.handler(compatReq);
-          sendJson(res, out.status ?? 200, out.body);
-        } catch (err) {
-          sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
-        }
-        return;
-      }
       sendJson(res, 404, { error: { status: 404, message: `no webhook binding for "${path}"` } });
       return;
     }

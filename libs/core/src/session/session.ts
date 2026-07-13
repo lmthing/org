@@ -876,7 +876,6 @@ export class Session {
       scope: this.currentScope ?? undefined,
       apiCallResolver: this.opts.appGlobals?.apiCall,
       connectionResolver: this.opts.appGlobals?.callConnection,
-      toolResolver: this.opts.appGlobals?.tool,
       documentResolver: this.opts.documentResolver,
       integrationStatusResolver: this.opts.integrationStatusResolver,
       // Store + manual-emit resolvers (plan S10) ride appGlobals like callConnection.

@@ -9,7 +9,7 @@ This submodule holds the runtime and everything built directly on it:
 
 - `libs/core` — the sandbox, turn/eval loop, yield protocol, spaces, forks, delegation, tasklists, typecheck
 - `libs/cli` — the `lmthing` binary + the pod server (REST/WS API)
-- `libs/{ui,css,state,auth,utils,config,openclaw-compat}` — shared libraries
+- `libs/{ui,css,state,auth,utils,config}` — shared libraries
 - `libs/core/system-spaces/` — the shipped system + user spaces
 - `apps/web` — the unified Vite SPA; `/chat`, `/studio`, `/computer` are client-side routes
 - `scenarios/` — live production scenario runner

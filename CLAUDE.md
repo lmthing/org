@@ -52,7 +52,7 @@ another secret is missing, ask for `ENV_DECRYPT_KEY` before proceeding.**
 
 ## Layout
 
-`libs/{core,cli,ui,css,state,auth,utils,config,openclaw-compat}` · `libs/core/system-spaces/*` (the
+`libs/{core,cli,ui,css,state,auth,utils,config}` · `libs/core/system-spaces/*` (the
 shipped system + user spaces) · `apps/web` (the unified SPA — `/chat`, `/studio`, `/computer` as
 client-side routes) · `scenarios/` (live prod scenario runner).
 
@@ -134,6 +134,6 @@ Source of truth is the `org/docs` page. Skills (`@.claude/skills/*`) are local *
 | writing / running tests | [org/docs/contributing/testing.md](../../org/docs/contributing/testing.md) |
 | debugging the eval/yield pipeline | [org/docs/contributing/debugging.md](../../org/docs/contributing/debugging.md) |
 | the design system (tokens, theme, component CSS) | [org/docs/design-system/](../../org/docs/design-system/README.md) · generated CSS-class catalog: [libs/css/COMPONENTS.md](./libs/css/COMPONENTS.md) |
-| the shared libs' public APIs (`state`, `ui`, `css`, `auth`, `openclaw-compat`) | [org/docs/libs/](../../org/docs/libs/README.md) |
+| the shared libs' public APIs (`state`, `ui`, `css`, `auth`) | [org/docs/libs/](../../org/docs/libs/README.md) |
 | the `/chat`, `/studio`, `/computer` surfaces | [chat/](../../org/docs/chat/README.md) · [studio/](../../org/docs/studio/README.md) · [computer/](../../org/docs/computer/README.md) |
 | the whole system (domains, pod model, data flow) | [org/docs/architecture.md](../../org/docs/architecture.md) |

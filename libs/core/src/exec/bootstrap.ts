@@ -15,7 +15,6 @@ import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
 import { createApiCallGlobal } from '../globals/api-call.js';
 import { createCallConnectionGlobal } from '../globals/call-connection.js';
-import { createToolGlobal } from '../globals/tool.js';
 import { createReadDocumentGlobal } from '../globals/read-document.js';
 import { createIntegrationStatusGlobal } from '../globals/integration-status.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
@@ -27,7 +26,7 @@ import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
   EXEC_SHELL_DTS, SCRATCH_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
-  WRITE_TABLE_SCHEMA_DTS, PROJECT_TABLE_DTS, PROJECT_READ_DTS, composeConnectionsDts, composeToolDts,
+  WRITE_TABLE_SCHEMA_DTS, PROJECT_TABLE_DTS, PROJECT_READ_DTS, composeConnectionsDts,
 } from '../typecheck/library-dts.js';
 import { injectAppGlobals, type AppGlobalImpls } from './app-globals.js';
 import type { RenderHost, Clock } from '../session/types.js';
@@ -199,11 +198,6 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   // `connections:use` grant. Resolver threaded via the yield router (connectionResolver); the
   // per-grant typed DTS (buildAppCapabilityDts) restricts `provider` to the granted providers.
   if (caps.app['connections:use']) injectGlobal(ctx, 'callConnection', createCallConnectionGlobal(pushYield) as AnyFn);
-  // tool: value-yielding entry to a host-registered tool (OpenClaw plugin tool via
-  // @lmthing/openclaw-compat), gated on the `tools:use` grant. Resolver threaded via the
-  // yield router (toolResolver); the per-grant typed DTS (buildAppCapabilityDts/composeToolDts)
-  // restricts `name` to the granted allow-list.
-  if (caps.app['tools:use']) injectGlobal(ctx, 'tool', createToolGlobal(pushYield) as AnyFn);
   // integrationStatus: presence-only config check for an installed integration space,
   // injected for any project-rooted session (THING) — it carries no secrets (only the
   // names of missing required env vars), so there is no clean capability seam yet; S10
@@ -330,9 +324,6 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string, projectRoo
   // connections:use — emit the typed `callConnection` with `provider` narrowed to the
   // granted providers (union), so a stray provider fails the agent's typecheck.
   if (app['connections:use']) parts.push(composeConnectionsDts(app['connections:use'].providers));
-  // tools:use — emit the typed `tool` with `name` narrowed to the granted allow-list
-  // (union), so a stray tool name fails the agent's typecheck.
-  if (app['tools:use']) parts.push(composeToolDts(app['tools:use'].allow));
   // Standalone authoring/management/store/event globals: writePage/writeApi/
   // writeHook + createProject/selectProject (Phase 9), storeSearch/storeInspect +
   // installSpace + emitEvent (plan S10). Each emitted only when its grant is present.

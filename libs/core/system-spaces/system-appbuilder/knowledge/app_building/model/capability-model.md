@@ -18,13 +18,12 @@ reaching the engine. This is least-privilege: give an agent exactly the caps its
 | `hooks:write` | `writeHook` | bare |
 | `api:call` | `apiCall(name, input)` | required `{ allow: [...] }` |
 | `connections:use` | `callConnection`, `integrationStatus` | optional `{ providers: [...] }` |
-| `tools:use` | the OpenClaw `tool()` global | optional `{ allow: [...] }` |
 | `store:read` | `storeSearch`, `storeInspect` | bare |
 | `store:install` | `installSpace` (consent-gated) | bare |
 | `events:emit` | `emitEvent` | bare |
 | `fs:scratch` | scratch-dir file access | bare |
 
-That is the complete set of recognized ids — 14 in all; an unknown id fails the space load.
+That is the complete set of recognized ids — 13 in all; an unknown id fails the space load.
 
 ## Declaring capabilities
 

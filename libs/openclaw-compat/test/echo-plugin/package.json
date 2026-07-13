@@ -1,8 +1,0 @@
-{
-  "name": "echo-plugin-fixture",
-  "private": true,
-  "version": "0.0.0",
-  "openclaw": {
-    "extensions": ["./index.ts"]
-  }
-}
