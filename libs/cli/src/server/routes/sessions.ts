@@ -78,7 +78,17 @@ export const handleSessionSubRoute: RouteHandler = async (
   if (!entry) { sendJson(res, 404, { error: `unknown session "${id}"` }); return; }
   const pathOverride = `/api${rest}`;
   const agentCtx = agentApiContextFromEntry(entry, {
-    sendMessage: (content) => ctx.manager.sendMessage(id, content),
+    // `sendMessage` is fire-and-forget (POST /message returns 202 while the turn runs).
+    // Its promise CAN reject before the run promise exists — a message POSTed to a
+    // still-initializing/resuming session throws "still initializing", and attachment
+    // assembly can fail — so a dropped rejection here becomes an unhandledRejection that
+    // crashes the whole pod process and, because the client retries, CRASHLOOPS it. Catch
+    // it and route it to the session's error stream, exactly as the WS path does
+    // (ws/agent.ts), so the client sees a retryable error instead of a dead pod.
+    sendMessage: (content) =>
+      void ctx.manager.sendMessage(id, content).catch((err) => {
+        entry.renderHost.emit({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+      }),
     broadcastUiControl: ctx.broadcastUiControl(entry),
   });
   const handled = await handleAgentApi(req, res, agentCtx, { pathOverride });
