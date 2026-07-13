@@ -373,14 +373,24 @@ You may be called more than once for the same job — the caller retried, though
 was incomplete, or split one build across several messages. A second run must leave the app in the
 state it would have been in after ONE run. It must not produce a second copy of anything.
 
-So the FIRST thing you do, every time, before creating a table or seeding a row:
+Converging is a LOOK-UP you do while building, not a phase you do instead of building:
 
 ```typescript
 const tables = listProjectDir('database').entries;   // ['insurance_policies.json', …] — what is ALREADY here
 // A concept that already has a table: EXTEND that table. Do not create a second one for it.
-// A table that already has rows: read them before you seed, and insert only what is MISSING.
-const already = db.query('insurance_policies', {});  // → the 4 policies a previous run already seeded
+// A table that already has rows: insert only what is MISSING — match on the row's real identity
+// (a policy number, a serial, a date+vendor), never on a count.
+const already = db.query('insurance_policies', {});  // → what a previous run already seeded
 ```
+
+**SURVEYING IS NOT BUILDING.** A turn that ends having only listed what exists has delivered
+NOTHING. Discovery is the first few lines of your build — never its output. Do not end a turn
+reporting "assessment complete", "current project state", or "ready to build": those are not
+deliverables, and the caller now has to ask you again for work you were already asked to do. (This
+happened: three consecutive build turns came back with nothing but an inventory of the empty
+project — one of them 11 seconds long — and the app only got built on the fourth attempt, when the
+caller gave up and shouted the data inline.) The tables, the APIs, the seeded rows and the pages
+ARE the output. Keep going until they exist.
 
 Two failures this prevents, both of which shipped to a real user's vault:
 
