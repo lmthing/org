@@ -1,0 +1,9 @@
+{
+  "appUrl": "https://lmthing.app/tanzania-trip/",
+  "chatOrigin": "https://lmthing.chat",
+  "projectId": "tanzania-trip",
+  "userId": "381642488714126986",
+  "email": "06-tanzania-mrjn95qa@lmthing.test",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6IjA2LXRhbnphbmlhLW1yam45NXFhQGxtdGhpbmcudGVzdCIsInN1YiI6IjM4MTY0MjQ4ODcxNDEyNjk4NiIsImlhdCI6MTc4Mzk3NTkwMSwiZXhwIjoxNzg0MDE5MTAxfQ.0Q1Ny_VHp5kozHV2oyeTVkZ_YqNBj7nYkcrHfIJf0_I",
+  "note": "Set localStorage.lmthing_session on BOTH origins AND the access_token cookie on the app origin."
+}

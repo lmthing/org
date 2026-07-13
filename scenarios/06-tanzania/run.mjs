@@ -804,22 +804,63 @@ if (ACTS.includes(14)) {
   );
   const manifest = await pod.appManifest(PROJECT).catch(() => ({}));
   const endpoints = (manifest?.endpoints ?? manifest?.api ?? []).filter(Boolean);
+  // The manifest's field is `routePath` (`/cost-list`), NOT `pattern`. Reading the wrong key
+  // silently yielded route='' → every probe hit `/api/` → the SPA fallback answered 200 with the
+  // HTML shell → and a `body.length > 20` check called that "real data". Two ways to fake a pass
+  // in one assertion; both are the exact failure this Act exists to catch.
   const getRoutes = endpoints
-    .map((e) => (typeof e === 'string' ? { pattern: e, method: 'GET' } : e))
-    .filter((e) => (e.method ?? 'GET') === 'GET' && !/_scenario|:/.test(e.pattern ?? ''));
-  report.check('the app declares ≥1 of its OWN GET routes (what its pages fetch)', getRoutes.length >= 1, getRoutes.map((e) => e.pattern).join(', ') || 'none');
+    .map((e) => (typeof e === 'string' ? { routePath: e, method: 'GET', name: e } : e))
+    .filter((e) => (e.method ?? 'GET') === 'GET' && !/_scenario|:/.test(e.routePath ?? e.name ?? ''));
+  report.check(
+    'the app declares ≥1 of its OWN GET routes (what its pages fetch)',
+    getRoutes.length >= 1,
+    getRoutes.map((e) => e.routePath ?? e.name).join(', ') || 'none',
+  );
+
+  /** A page fetches JSON. An HTML shell with status 200 is a BROKEN route, not a passing one. */
+  const isRealJson = (res) => {
+    if (res.status !== 200) return false;
+    const raw = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? '');
+    if (/^\s*<!doctype|^\s*<html/i.test(raw)) return false; // the SPA fallback answered, not the app
+    if (typeof res.body !== 'object' || res.body === null) return false;
+    return JSON.stringify(res.body).length > 20;
+  };
 
   let realData = 0;
   for (const e of getRoutes.slice(0, 6)) {
-    const route = String(e.pattern ?? '').replace(/^\//, '');
+    const route = String(e.routePath ?? e.name ?? '').replace(/^\//, '');
+    if (!route) continue;
     const res = await pod.appApi(PROJECT, route, undefined, 'GET').catch((err) => ({ status: 0, body: String(err) }));
-    const body = JSON.stringify(res.body ?? '');
-    const nonEmpty = res.status === 200 && body.length > 20 && !/^\{"(rows|items|data)":\[\]\}$/.test(body);
-    if (nonEmpty) realData++;
-    report.check(`the app's own route GET /${PROJECT}/api/${route} → 200 with real data`, nonEmpty, `status ${res.status}: ${body.slice(0, 140)}`);
+    const raw = typeof res.body === 'string' ? res.body : JSON.stringify(res.body ?? '');
+    const ok = isRealJson(res);
+    if (ok) realData++;
+    report.check(
+      `the app's own route GET /${PROJECT}/api/${route} → 200 with real JSON (the layer the PAGE fetches)`,
+      ok,
+      `status ${res.status}: ${/^\s*<!doctype/i.test(raw) ? 'HTML SHELL — the app API is not served at this URL' : raw.slice(0, 140)}`,
+    );
   }
   const page = await pod.appPage(PROJECT).catch(() => ({ status: 0, body: '' }));
-  report.check('the served page is real HTML (200 + a mounted root)', page.status === 200 && /<!doctype/i.test(String(page.body)), `status ${page.status}, ${String(page.body).length} bytes`);
+  const html = String(page.body ?? '');
+  report.check('the served page is real HTML (200 + a mounted root)', page.status === 200 && /<!doctype/i.test(html), `status ${page.status}, ${html.length} bytes`);
+  // …and its bundle must actually RESOLVE. A shell whose <script src> 404s renders a blank page,
+  // which is an anti-expectation — and it is invisible to every check that stops at "200 + doctype".
+  const assetRefs = [...html.matchAll(/(?:src|href)="([^"]*assets\/[^"]+)"/g)].map((m) => m[1]);
+  const assetChecks = [];
+  const pageUrl = `${pod.appOrigin(PROJECT)}/`;
+  for (const ref of assetRefs.slice(0, 4)) {
+    // Resolve EXACTLY as the browser does against the page URL: a root-absolute `/assets/x.js`
+    // resolves against the ORIGIN (dropping the `/<project>/` mount), a relative `./assets/x.js`
+    // against the app's directory. Rebasing it under the project by hand is what hides the bug.
+    const url = new URL(ref, pageUrl).toString();
+    const r = await pod.reqAbs('GET', url).catch(() => ({ status: 0 }));
+    assetChecks.push({ ref, url, status: r.status });
+  }
+  report.check(
+    "the served shell's own bundle RESOLVES as a BROWSER resolves it (a 404 here = a blank app)",
+    assetChecks.length > 0 && assetChecks.every((a) => a.status === 200),
+    assetChecks.map((a) => `${a.ref} → ${new URL(a.url).pathname} → ${a.status}`).join(' · ') || 'no asset refs in the shell',
+  );
 
   // Hand the browser pass everything it needs (chrome-devtools MCP, driven outside the runner).
   const target = {
