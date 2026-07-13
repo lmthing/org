@@ -73,6 +73,26 @@ export class ThingSession {
   }
 
   /**
+   * Fast-forward past a RESUMED session's existing trace without attributing it to the next turn.
+   *
+   * A scenario that runs Act-by-Act (`--acts=`) resumes the same session from a FRESH process, where
+   * `lastSeq` starts at 0 — so the first `pullEvents()` replays the WHOLE session history and
+   * `turn(startSeq)` folds it into the first turn's slice. Any assertion over that slice then reads
+   * *earlier Acts'* displays: scenario 10 saw a restraint check "pass" on a build summary printed
+   * two Acts ago. Call this right after `start()`/`resume()` so a turn's events are only its own.
+   */
+  async syncToTail() {
+    for (let i = 0; i < 30; i++) {
+      const before = this.lastSeq;
+      await this.pullEvents();
+      if (this.lastSeq === before) break;
+      await sleep(200);
+    }
+    this.events.length = 0; // replayed history is not the next turn's work
+    return this.lastSeq;
+  }
+
+  /**
    * Pull new trace events since `lastSeq`.
    *
    * A long turn can spawn many delegate/headless sub-sessions; on a small pod (`maxSessions`) the
