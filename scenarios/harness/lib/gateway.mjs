@@ -12,6 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { SDK_ORG } from './paths.mjs';
 import { mintSession } from './jwt.mjs';
+import { fetchResilient } from './pod.mjs';
 
 export const GATEWAY = process.env.LM_GATEWAY ?? 'https://lmthing.cloud';
 
@@ -24,7 +25,7 @@ class HttpError extends Error {
 }
 
 async function req(method, path, { token, body, base = GATEWAY } = {}) {
-  const res = await fetch(`${base}${path}`, {
+  const res = await fetchResilient(`${base}${path}`, {
     method,
     headers: {
       ...(body ? { 'content-type': 'application/json' } : {}),

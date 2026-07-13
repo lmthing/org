@@ -13,6 +13,10 @@ export default defineConfig({
       // resolution, host→surface routing. DOM/component tests live in libs/ui;
       // keep only node-safe suites matched here.
       'apps/web/src/**/*.test.ts',
+      // The live-scenario harness is plain Node ESM (zero-dep, no build step). It had NO
+      // coverage at all, so a transport regression in it only ever surfaced as a dead
+      // multi-hour prod run. Its pure units (retry/backoff policy) are node-safe.
+      'scenarios/harness/**/*.test.mjs',
     ],
     // libs/state has its OWN vitest config (jsdom + React transforms), so it is
     // excluded here and run by its own `test` script.

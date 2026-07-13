@@ -6,6 +6,29 @@
  * talks to the chat origin. Locally (`lmthing serve`) pass base=http://localhost:8080 and no token.
  */
 
+/**
+ * A pod that is scaling from zero, rolling a new image, or sitting behind a blipping gateway does
+ * not always answer with a *response* — the connection itself fails (undici's 10s
+ * `ConnectTimeoutError`, `ECONNRESET`, `socket hang up`, a DNS `EAI_AGAIN`). Those surface as a
+ * bare `TypeError: fetch failed`, which is NOT an HTTP status and so slipped past every
+ * `{waking:true}`/504 retry below — one connect timeout to lmthing.chat killed a multi-hour run
+ * with an uncaught exception. Treat a transient transport fault exactly like a `waking` answer:
+ * back off and retry. A non-transient error (a bad URL, an aborted body) still throws at once.
+ */
+const TRANSIENT = /fetch failed|ConnectTimeout|UND_ERR|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|network|terminated|other side closed/i;
+
+export async function fetchResilient(url, init, { tries = 40, waitMs = 3000 } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (e) {
+      const msg = `${e?.message ?? e} ${e?.cause?.code ?? ''} ${e?.cause?.message ?? ''}`;
+      if (!TRANSIENT.test(msg) || attempt >= tries) throw e;
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+}
+
 export class Pod {
   /**
    * @param {object} o
@@ -36,7 +59,7 @@ export class Pod {
   /** Absolute-URL variant of `req` (the served app is on a different origin than /api/*). */
   async reqAbs(method, url, body) {
     for (let attempt = 0; ; attempt++) {
-      const res = await fetch(url, {
+      const res = await fetchResilient(url, {
         method,
         headers: {
           ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
@@ -74,7 +97,7 @@ export class Pod {
     // minute — the old 20×3s ≈ 60s gave up and threw `POST /api/sessions → 503 {waking:true}`,
     // killing a multi-hour run over a transient the harness was written to absorb.
     for (let attempt = 0; ; attempt++) {
-      const res = await fetch(`${this.base}${path}`, {
+      const res = await fetchResilient(`${this.base}${path}`, {
         method,
         headers: {
           ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
@@ -178,7 +201,7 @@ export class Pod {
     // is byte-identical, but inbound dedupe only kicks in AFTER a successful verify, so a
     // retry of a request the pod never processed is not deduped.
     for (let attempt = 0; ; attempt++) {
-      const res = await fetch(`${this.base}/api/inbound/${path}`, {
+      const res = await fetchResilient(`${this.base}/api/inbound/${path}`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
