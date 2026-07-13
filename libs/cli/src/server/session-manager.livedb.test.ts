@@ -90,3 +90,80 @@ describe('SessionManager — live db forwarder (appGlobals.db reflects the curre
     await mgr.closeProjectDbs?.();
   });
 });
+
+/**
+ * Regression (scenario 07, live): seeding the SAME known data twice must not double it.
+ *
+ * THING delegated one build to the automator three times (it judged the first answers
+ * incomplete), and each run re-issued `writeProjectTable(name, schema, rows)` with the same
+ * policies. `seedProjectTable` inserted blindly, so the household opened its vault to EIGHT
+ * insurance policies instead of four — and the duplicate copy silently disagreed with the
+ * original (a €180/month premium came back as `2160`). Every count and total the app rendered
+ * was then wrong, with no way for the user to tell which figure was true.
+ *
+ * A re-seed must CONVERGE: rows already present are skipped, genuinely new ones still land.
+ */
+const POLICY_SCHEMA = {
+  title: 'Policies',
+  description: 'insurance policies',
+  columns: {
+    id: { type: 'string', description: 'pk', primaryKey: true, generated: 'uuid' },
+    name: { type: 'string', description: 'policy name' },
+    policy_number: { type: 'string', description: 'the policy number' },
+    premium: { type: 'number', description: 'premium' },
+  },
+};
+
+describe('SessionManager — writeProjectTable seeding is idempotent', () => {
+  it('re-seeding the same rows does not duplicate them, and a genuinely new row still lands', async () => {
+    const projectId = 'vault';
+    const root = await makeRoot(projectId);
+    const mgr = new SessionManager({ streamFn: createMockStreamFn(() => ''), lmthingRoot: root });
+
+    const ag = (await (
+      mgr as unknown as { getProjectAppGlobals: (r: string, p: string) => Promise<AppGlobalImpls> }
+    ).getProjectAppGlobals(root, projectId)) as AppGlobalImpls & {
+      db: import('../app/store.js').ProjectDb['db'];
+      writeProjectTable: (name: string, schema: unknown, rows?: unknown[]) => { ok: boolean; error?: string };
+    };
+
+    const seed = [
+      { name: 'Car Insurance', policy_number: 'AX-1', premium: 642 },
+      { name: 'Home Insurance', policy_number: 'PIR-2', premium: 311 },
+    ];
+
+    /** The seed is fire-and-forget off the schema write — poll the live db for it. */
+    const waitForRows = async (n: number): Promise<Record<string, unknown>[]> => {
+      let rows: Record<string, unknown>[] = [];
+      for (let i = 0; i < 100; i++) {
+        rows = ag.db.tables().includes('policies') ? ag.db.query('policies') : [];
+        if (rows.length >= n) break;
+        await sleep(20);
+      }
+      return rows;
+    };
+
+    expect(ag.writeProjectTable('policies', POLICY_SCHEMA, seed).ok).toBe(true);
+    expect((await waitForRows(2)).length).toBe(2);
+
+    // The retry: the very same build, issued again. This is what tripled the automator live.
+    expect(ag.writeProjectTable('policies', POLICY_SCHEMA, seed).ok).toBe(true);
+    await sleep(300); // give a (wrongly) re-seeding write time to actually land the duplicates
+    const afterRetry = ag.db.query('policies');
+    expect(afterRetry.length).toBe(2); // NOT 4
+    expect(afterRetry.filter((r) => r.policy_number === 'AX-1').length).toBe(1);
+
+    // …and the guard is not a wall: a row that is genuinely new still gets in.
+    expect(
+      ag.writeProjectTable('policies', POLICY_SCHEMA, [
+        ...seed,
+        { name: 'Health Insurance', policy_number: 'MET-3', premium: 0 },
+      ]).ok,
+    ).toBe(true);
+    const grown = await waitForRows(3);
+    expect(grown.length).toBe(3);
+    expect(grown.map((r) => r.policy_number).sort()).toEqual(['AX-1', 'MET-3', 'PIR-2']);
+
+    await mgr.closeProjectDbs?.();
+  });
+});

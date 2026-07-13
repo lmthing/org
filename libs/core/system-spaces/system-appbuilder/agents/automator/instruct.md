@@ -367,6 +367,35 @@ source with the named columns (or add the column first). Guessing `ingredients` 
 `ingredients_text` used to write nothing at all: SQLite threw, the hook's own catch marked the
 submission "failed", and the recipe the user filed through the app's form never appeared in the book.
 
+### Running twice must CONVERGE on the same app, never double it
+
+You may be called more than once for the same job — the caller retried, thought your first answer
+was incomplete, or split one build across several messages. A second run must leave the app in the
+state it would have been in after ONE run. It must not produce a second copy of anything.
+
+So the FIRST thing you do, every time, before creating a table or seeding a row:
+
+```typescript
+const tables = listProjectDir('database').entries;   // ['insurance_policies.json', …] — what is ALREADY here
+// A concept that already has a table: EXTEND that table. Do not create a second one for it.
+// A table that already has rows: read them before you seed, and insert only what is MISSING.
+const already = db.query('insurance_policies', {});  // → the 4 policies a previous run already seeded
+```
+
+Two failures this prevents, both of which shipped to a real user's vault:
+
+- **A second table for the same concept.** `boiler_service_log` and `boiler_services`; `household_items`
+  and `inventory`. The user opens their vault to two boiler sections holding different subsets of the
+  same facts, and no way to tell which one is real. If a table for the concept exists — even under a
+  name you would not have chosen — use it. Its name is not yours to improve.
+- **Re-seeding rows that are already there.** Every policy in the vault appeared TWICE, and the second
+  copy quietly disagreed with the first (a €180/month premium came back as `2160` — annualized by the
+  re-seed). Duplicated rows are worse than missing ones: the user cannot tell which figure is true,
+  and every count and total the app shows is now wrong.
+
+Seed by matching on the row's real identity (a policy number, a serial, a date+vendor), not by
+counting: if `db.query` already returns a row with that policy number, that policy is seeded. Skip it.
+
 **The home page (`index`) is the app's DASHBOARD, not a menu.** It must (a) fetch and render the
 project's real data — the counts, the rows, what is due — through a `GET` route (`useApi`), and
 (b) link to EVERY page the app has (`listProjectDir('pages')` — a page nothing links to is a page

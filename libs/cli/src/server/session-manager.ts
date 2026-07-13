@@ -745,6 +745,20 @@ export class SessionManager {
    * Best-effort per row: a malformed row is skipped-with-warn rather than failing the whole
    * authoring turn (the schema + the good rows already landed). Uses the same main-process async
    * db API the app's api/ handlers use, so every insert also emits `project/db.<table>.insert`.
+   *
+   * **Seeding is IDEMPOTENT.** An authoring agent can legitimately be asked for the same job more
+   * than once — the caller retried, judged the first answer incomplete, or split one build across
+   * several messages — and each run re-issues `writeProjectTable(name, schema, rows)` with the same
+   * known data. Inserting blindly turned a household's four insurance policies into eight, and the
+   * duplicate copy silently disagreed with the original (a €180/month premium came back annualized
+   * as 2160). Duplicated rows are worse than missing ones: every count and total the app shows is
+   * then wrong, and the user cannot tell which figure is true.
+   *
+   * So a row already in the table is SKIPPED. "Already there" means every column this seed row
+   * supplies already matches an existing row — the `id` and any defaults the seed did not supply
+   * are ignored, so a row seeded by an earlier run still matches. Rows accumulate as we go, so a
+   * list that repeats a row within one call collapses too. This is a seed path (moving KNOWN data
+   * in), not a log: two rows identical in every column the caller supplied are the same fact.
    */
   private async seedProjectTable(
     root: string,
@@ -757,11 +771,31 @@ export class SessionManager {
       console.warn(`[authoring] seed skipped: project "${projectId}" has no db after authoring ${table}`);
       return;
     }
+    /** Compare the way a person would: "€180" and 180 are the same premium. */
+    const norm = (v: unknown): string =>
+      v === null || v === undefined ? '' : String(v).trim().toLowerCase();
+    /** Does `existing` already carry every column this seed row supplies? */
+    const alreadyThere = (existing: Record<string, unknown>, seed: Record<string, unknown>): boolean =>
+      Object.entries(seed).every(([col, val]) => norm(existing[col]) === norm(val));
+
+    const present = (await projectDb.async
+      .query(table, {})
+      .catch(() => [] as Record<string, unknown>[])) as Record<string, unknown>[];
+
     let ok = 0;
+    let skipped = 0;
     for (const row of rows) {
       if (!row || typeof row !== 'object') continue;
+      const seed = row as Record<string, unknown>;
+      // An empty row would match every existing row — it carries no facts, so it seeds nothing.
+      if (Object.keys(seed).length === 0) continue;
+      if (present.some((e) => alreadyThere(e, seed))) {
+        skipped++;
+        continue;
+      }
       try {
-        await projectDb.async.insert(table, row as Record<string, unknown>);
+        await projectDb.async.insert(table, seed);
+        present.push(seed);
         ok++;
       } catch (err) {
         console.warn(
@@ -769,7 +803,10 @@ export class SessionManager {
         );
       }
     }
-    console.log(`[authoring] seeded ${ok}/${rows.length} row(s) into ${projectId}/${table}`);
+    console.log(
+      `[authoring] seeded ${ok}/${rows.length} row(s) into ${projectId}/${table}` +
+        (skipped ? ` (${skipped} already present — re-seed skipped)` : ''),
+    );
   }
 
   /** Per-project api runtime (main-process), cached. Backs BOTH the browser-facing
