@@ -40,7 +40,7 @@ const FIX = `${SDK_ORG}/scenarios/${ID}/fixtures`;
 const RESULTS = `${SDK_ORG}/scenarios/${ID}/results`;
 const CHECKPOINT = `${RESULTS}/checkpoint.json`;
 const argActs = (process.argv.find((a) => a.startsWith('--acts=')) ?? '').slice(7);
-const ACTS = argActs ? argActs.split(',').map(Number) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const ACTS = argActs ? argActs.split(',').map(Number) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
 const FRESH = process.argv.includes('--fresh');
 const REUSE = process.argv.includes('--reuse');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -162,6 +162,39 @@ async function dbBlob(pod, projectId, names) {
   const all = await Promise.all((names ?? []).map((t) => pod.appData(projectId, t).catch(() => ({ rows: [] }))));
   return JSON.stringify(all).toLowerCase();
 }
+
+/**
+ * What each PAGE actually fetches — parsed from the page's own source, not from the manifest.
+ *
+ * This is the assertion whose absence let a broken app go green: the runner asked the app which
+ * routes it DECLARED (six, all 200) and never asked whether any page fetched them. The vault's
+ * home page had been silently re-authored into a stub — no `useApi` at all — while
+ * `/vault-dashboard` happily served the whole household to nobody. A `@app/runtime` page reaches
+ * the db ONLY through useApi/useApiMutation/apiCall, so a page that fetches nothing renders
+ * nothing, no matter how healthy the API layer is.
+ *
+ * → [{ route:'/', file:'pages/index.tsx', fetches:['vault-dashboard'] }, …]
+ */
+async function pageFetches(pod, projectId) {
+  const m = await pod.appManifest(projectId).catch(() => ({}));
+  const out = [];
+  for (const p of m?.pages ?? []) {
+    const file = p.file ?? `pages${p.routePath}.tsx`;
+    const src = await pod.readProjectFile(projectId, file.replace(/^pages\//, 'pages/')).catch(() => '');
+    const fetches = new Set();
+    for (const mm of src.matchAll(/\b(?:useApi|useApiMutation|apiCall)\b/g)) {
+      const tail = src.slice(mm.index + mm[0].length, mm.index + mm[0].length + 400);
+      const open = tail.indexOf('(');
+      if (open < 0) continue;
+      const lit = /^\(\s*['"`]([^'"`]+)['"`]/.exec(tail.slice(open));
+      if (lit) fetches.add(lit[1]);
+    }
+    out.push({ route: p.routePath ?? p, file, fetches: [...fetches], bytes: src.length });
+  }
+  return out;
+}
+/** The routes the HOME page fetches (`/` → pages/index.tsx). An empty list = an empty vault. */
+const homeFetches = (pages) => pages.find((p) => p.route === '/')?.fetches ?? [];
 
 // ── main ────────────────────────────────────────────────────────────────────────
 const report = new Report(ID, TITLE);
@@ -566,42 +599,165 @@ if (ACTS.includes(9)) {
   saveCheckpoint(cp);
 }
 
-// ═══ ACT X — The app RENDERS (A2): its own API routes, not just the data API ══
-// The layer the user actually sees is the page's OWN api route. A dashboard can render zeros for
-// every tile while `app/data/<table>` happily returns all its rows — the page fetches its
-// aggregation route, and that route 500s. Assert what the page fetches. The browser pass
-// (chrome-devtools: rendered DOM, console errors, screenshot) is recorded in the report.
+// ═══ ACT X — Growth must not DELETE (the app the user already has) ════════════
+// The scenario's headline promise is a vault that GROWS. Live, it grew by demolition: a later
+// "add an invoices section" turn re-authored pages/index.tsx from scratch, and the household
+// dashboard — renewals, policies, accounts — came back as `Home · [Invoices]`. Nothing looked
+// broken (the app built; every route 200'd; `/vault-dashboard` still served the whole household)
+// and the user opened their vault to an empty page. So: repair the home page the way the user
+// would ask, then grow the app again — and assert the growth KEPT what was there.
 if (ACTS.includes(10)) {
-  report.step('Act X — The app renders for real (A2)', "the served app is the REAL app (boot marker, app host); EVERY GET route the pages fetch returns 200 with a non-empty, correctly-shaped payload; no route 500s behind a zeroed-out UI");
-  const build = await assertLiveApp(report, pod, PROJECT, {});
-  const manifest = await pod.appManifest(PROJECT).catch(() => ({}));
-  const gets = (manifest?.endpoints ?? []).filter((e) => /get/i.test(e.method ?? ''));
-  report.check('the app declares ≥1 GET route its pages fetch', gets.length >= 1, gets.map((e) => e.routePath).join(', ') || '(none)');
+  report.step('Act X — Growth must not delete', 'the home page is a real dashboard (it FETCHES data, not just links); a later "add a section" turn adds a page and the home page still fetches every route it fetched before (no clobber)');
 
-  // The zeroed-dashboard failure is precise: `app/data/<table>` HAS the rows, but the route the
-  // page fetches doesn't serve them (it 500s, or answers an empty shell) — so the UI shows 0 while
-  // the data is right there. Assert each route against the rows its own table actually holds.
+  // 1. The home page must be a dashboard. (The user opens the app and says what he sees.)
+  let pages = await pageFetches(pod, PROJECT);
+  if (homeFetches(pages).length === 0) {
+    report.note(`home page fetched NOTHING before this Act (${pages.find((p) => p.route === '/')?.bytes ?? 0}b) — the clobbered-dashboard bug; asking for it back as the user would`);
+    acc(await thing.send('I opened the vault on my phone and the home page is basically empty — just a heading and one link. It should be my dashboard: what is renewing soon, my policies, my accounts, the totals — with links to every section of the vault.', { timeoutMs: 1_200_000 }));
+    await pod.appBuild(PROJECT).catch(() => {});
+    await sleep(3_000);
+    pages = await pageFetches(pod, PROJECT);
+  }
+  const homeBefore = homeFetches(pages);
+  const pageRoutesBefore = pages.map((p) => p.route);
+  report.check('the home page FETCHES the vault\'s data (a dashboard, not a menu)', homeBefore.length >= 1, `pages/index.tsx fetches: ${homeBefore.join(', ') || '(NOTHING — the app opens empty)'}`);
+  // …and what it fetches must actually serve rows (a dashboard bound to a 500 renders zeros).
+  const homeData = [];
+  for (const r of homeBefore) {
+    const res = await pod.appApi(PROJECT, r, undefined, 'GET').catch((e) => ({ status: e?.status ?? 0, body: null }));
+    homeData.push({ route: r, status: res.status, objects: JSON.stringify(res.body ?? {}).match(/\{/g)?.length ?? 0 });
+  }
+  report.check('every route the home page fetches returns 200 with real rows', homeData.length >= 1 && homeData.every((d) => d.status === 200 && d.objects >= 1), homeData.map((d) => `${d.route}:${d.status}→${d.objects} objs`).join(' · ') || '(none)');
+
+  // 2. Now GROW it — a new life event, a new section (the same shape of ask that demolished it).
+  const tablesBefore = await tableNames(pod, PROJECT);
+  acc(await thing.send('We just got a dog, Argos. Add a pets section to the vault: a pets table (name, vet, microchip number, insurance policy, next vaccination) and a page for it in the app.', { timeoutMs: 1_500_000 }));
+  await pod.appBuild(PROJECT).catch(() => {});
+  await sleep(3_000);
+  const tablesAfter = await tableNames(pod, PROJECT);
+  const pagesAfter = await pageFetches(pod, PROJECT);
+  const homeAfter = homeFetches(pagesAfter);
+  const newPages = pagesAfter.map((p) => p.route).filter((r) => !pageRoutesBefore.includes(r));
+  const newTables = tablesAfter.filter((t) => !tablesBefore.includes(t));
+
+  report.check('the vault GREW (a new table + a new page for the new section)', newTables.length >= 1 && newPages.length >= 1, `+tables: ${newTables.join(', ') || '(none)'} · +pages: ${newPages.join(', ') || '(none)'}`);
+  // THE regression: the home page must still fetch everything it fetched before.
+  const lost = homeBefore.filter((r) => !homeAfter.includes(r));
+  report.check('growing the app did NOT delete the home dashboard (it still fetches every route it had)', lost.length === 0, `before: [${homeBefore.join(', ')}] → after: [${homeAfter.join(', ') || 'NOTHING'}]${lost.length ? ` · LOST: ${lost.join(', ')}` : ''}`);
+  // …and no page the user had is orphaned (every earlier page route still exists).
+  const goneP = pageRoutesBefore.filter((r) => !pagesAfter.map((p) => p.route).includes(r));
+  report.check('no page the user already had disappeared', goneP.length === 0, goneP.length ? `LOST pages: ${goneP.join(', ')}` : `${pagesAfter.length} pages, all still there`);
+  const build = await pod.appBuild(PROJECT).catch(() => ({ built: false }));
+  report.check('the grown app still compiles', build?.built === true, JSON.stringify({ built: build?.built }));
+  cp.acts.X = { passed: report.passed, homeBefore, homeAfter, newTables, newPages, lost };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XI — It remembers me (user-memory, across sessions) ══════════════════
+// A standing instruction is not a chat message — it must outlive the session. Assert the delegate
+// to `user-memory` AND that a session with NO history (the only channel is the durable store)
+// gives the fact back.
+if (ACTS.includes(11)) {
+  report.step('Act XI — It remembers me', 'a standing preference is delegated to user-memory (remember yield); a BRAND-NEW session with no history recalls it (durable, cross-session)');
+  const BROKER = `Nikoleta-${RUN}`;
+  const t = acc(await thing.send(`Remember this about me, for good: my insurance broker is ${BROKER} at Asfalia Pros, and I want renewal reminders 45 days ahead — not 30.`, { timeoutMs: 900_000 }));
+  const toMemory = thing.didDelegate('user-memory') || JSON.stringify(t.events).toLowerCase().includes('user-memory');
+  report.check('delegated the standing fact to user-memory', toMemory, t.delegates.join(' · ').slice(0, 160) || '(no delegate)');
+  const remembered = t.yields.some((y) => /remember/i.test(y.kind)) || toMemory;
+  report.check('a remember() landed (the fact was written to the durable store)', remembered, t.yields.map((y) => y.kind).join(', ').slice(0, 120) || '(no yields)');
+
+  // A FRESH session — no history, no context. If the fact comes back, it came from the store.
+  const fresh = new ThingSession(pod, { projectId: PROJECT, onAsk: scriptedOnAsk(true), verbose: true });
+  await fresh.start();
+  const q = await fresh.send('Who is my insurance broker, and how many days ahead do I want renewal reminders? Answer from what you remember about me.', { timeoutMs: 900_000 });
+  metrics.tokens.in += q.tokens.in; metrics.tokens.out += q.tokens.out;
+  const said = q.lastText;
+  const gotBroker = said.includes(BROKER);
+  const gotDays = /\b45\b/.test(said);
+  report.check('a brand-new session recalls the standing fact (broker + 45 days) — durable across sessions', gotBroker && gotDays, `broker=${gotBroker} days45=${gotDays} · ${said.slice(0, 180)}`);
+  cp.acts.XI = { passed: report.passed, toMemory, gotBroker, gotDays };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XII — It fixes its own code (system-engineer → a project function) ═══
+// The one THING route this scenario never took: "the code is wrong — fix it". The engineer holds
+// `fs:scratch` and RETURNS code; the automator persists it. Assert the delegate, the persisted
+// project function on disk, and — the only thing the user cares about — that the number is right.
+if (ACTS.includes(12)) {
+  report.step('Act XII — It fixes the code', 'a wrong VAT calculation is delegated to system-engineer; the fix is PERSISTED as a project function (functions/*.ts on disk) and the invoices API returns the correct 24% VAT + gross for a real row');
+  const NET = 1000;
+  const CLIENT = `ACME-${RUN}`;
+  acc(await thing.send(`Log a consulting invoice in the vault: client ${CLIENT}, net amount €${NET}, issued today, not yet paid.`, { timeoutMs: 900_000 }));
+  await sleep(3_000);
+  const invTable = (await tableNames(pod, PROJECT)).find((n) => /invoice/i.test(n));
+  const invRows = invTable ? ((await pod.appData(PROJECT, invTable).catch(() => ({ rows: [] }))).rows ?? []) : [];
+  const mine = invRows.find((r) => JSON.stringify(r).includes(CLIENT));
+  report.check('the invoice row landed (the data the code operates on is real)', !!mine, mine ? JSON.stringify(mine).slice(0, 160) : `${invTable ?? '(no invoices table)'}: ${invRows.length} rows`);
+
+  const fnBefore = (await pod.fsTree().catch(() => ({ files: [] }))).files.filter((f) => f.startsWith(`${PROJECT}/functions/`));
+  const t = acc(await thing.send(`The VAT on my consulting invoices is being computed wrong. Greek VAT is 24%: for a net amount the VAT is 24% of the net and the gross is net + VAT. Fix the code — I want the calculation in one reusable function the invoices API uses, so it can never drift again — and make the invoices page show net, VAT and gross.`, { timeoutMs: 1_500_000 }));
+  // Assert the DELEGATE, not a substring of the session blob (a plan that merely *names* the
+  // engineer would have passed that). Either code specialist is a legitimate route: the engineer
+  // writes code but cannot persist it, the automator holds the writers — record which one THING chose.
+  const engineer = thing.didDelegate('system-engineer');
+  const automator = thing.didDelegate('system-appbuilder');
+  report.check('the code fix went to a code specialist (system-engineer or the automator that holds the writers)', engineer || automator, `delegates: ${t.delegates.join(' · ').slice(0, 160) || '(none)'}`);
+  report.note(`code-fix routing: ${engineer ? 'system-engineer' : ''}${engineer && automator ? ' + ' : ''}${automator ? 'system-appbuilder/automator' : ''} — THING routes "fix the code in my app" to the writer-holder, not the engineer`);
+  await pod.appBuild(PROJECT).catch(() => {});
+  await sleep(3_000);
+  const fnAfter = (await pod.fsTree().catch(() => ({ files: [] }))).files.filter((f) => f.startsWith(`${PROJECT}/functions/`));
+  const newFns = fnAfter.filter((f) => !fnBefore.includes(f));
+  report.check('the engineer-authored code was PERSISTED as a project function (functions/*.ts on disk)', fnAfter.length >= 1, `functions/: ${fnAfter.map((f) => f.split('/').pop()).join(', ') || '(none)'}${newFns.length ? ` (new: ${newFns.length})` : ''}`);
+
+  // The only assertion the user would make: is the number right?
+  const invApi = (await pod.appManifest(PROJECT).catch(() => ({})))?.endpoints?.find((e) => /get/i.test(e.method) && /invoice/i.test(e.routePath ?? e.name));
+  const res = invApi ? await pod.appApi(PROJECT, String(invApi.routePath).replace(/^\//, ''), undefined, 'GET').catch((e) => ({ status: e?.status ?? 0, body: null })) : { status: 0, body: null };
+  const payload = JSON.stringify(res.body ?? {});
+  const row = (res.body?.invoices ?? res.body?.items ?? []).find?.((r) => JSON.stringify(r).includes(CLIENT));
+  const vat = Number(row?.vat ?? row?.vat_amount ?? row?.vatAmount ?? NaN);
+  const gross = Number(row?.gross ?? row?.total ?? row?.gross_amount ?? row?.grossAmount ?? NaN);
+  report.check('the invoices API returns the CORRECT VAT (24% of net = €240) and gross (€1240)', vat === 240 && gross === 1240, `status ${res.status} · vat=${vat} gross=${gross} · ${payload.slice(0, 200)}`);
+  recordErrors('Act XII', t);
+  cp.acts.XII = { passed: report.passed, toEngineer, functions: fnAfter, vat, gross };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XIII — The app RENDERS (A2): what the PAGES fetch, not what the app declares ══
+// Runs LAST — it renders the finished, evolved vault. The layer the user actually sees is the
+// page's OWN api route, and the page's own `useApi` call. A dashboard can render zeros for every
+// tile while `app/data/<table>` returns all its rows (the page's aggregation route 500s) — and a
+// page can render NOTHING at all while every declared route is green (the page fetches none of
+// them: the clobbered home page). Assert both. The browser pass (chrome-devtools: rendered DOM,
+// console errors, screenshot) is recorded in the report.
+if (ACTS.includes(13)) {
+  report.step('Act XIII — The app renders for real (A2)', 'the served app is the REAL app (boot marker, app host); EVERY page fetches ≥1 route (no page that renders nothing) and EVERY route a page fetches returns 200 with real rows; no route hides rows the db holds');
+  const build = await assertLiveApp(report, pod, PROJECT, {});
+  const pages = await pageFetches(pod, PROJECT);
   const tables = await tableNames(pod, PROJECT);
   const rowCount = {};
   for (const t of tables) rowCount[t] = ((await pod.appData(PROJECT, t).catch(() => ({ rows: [] }))).rows ?? []).length;
 
+  // A page that fetches nothing renders nothing — the failure the old assertion could not see.
+  const dead = pages.filter((p) => p.fetches.length === 0);
+  report.check('every page fetches ≥1 API route (no page that renders nothing)', dead.length === 0, dead.length ? `DEAD pages: ${dead.map((p) => `${p.route}(${p.bytes}b)`).join(', ')}` : pages.map((p) => `${p.route}→${p.fetches.join('+')}`).join(' · '));
+  report.check('the HOME page fetches the vault\'s data (the dashboard the user opens)', homeFetches(pages).length >= 1, `/ → ${homeFetches(pages).join(', ') || '(NOTHING — an empty vault)'}`);
+
+  // Every route a page actually fetches must 200 with a substantive payload, and must not hide
+  // rows its table really holds (the zeroed-dashboard failure).
+  const fetched = [...new Set(pages.flatMap((p) => p.fetches))];
   const results = [];
-  for (const ep of gets) {
-    const route = String(ep.routePath ?? ep.name).replace(/^\//, '');
+  for (const route of fetched) {
+    if (/create|submit|add|update|delete/.test(route)) continue; // a mutation route is POSTed (Act III), not fetched on render
     const r = await pod.appApi(PROJECT, route, undefined, 'GET').catch((e) => ({ status: e?.status ?? 0, body: String(e) }));
     const payload = r.body && typeof r.body === 'object' ? r.body : {};
-    const served = JSON.stringify(payload).match(/\{/g)?.length ?? 0; // objects in the payload ≈ rows served
-    // The table this route reads (by name) — if it has rows, the route MUST serve them.
+    const served = JSON.stringify(payload).match(/\{/g)?.length ?? 0;
     const table = tables.find((t) => t.replace(/_/g, '-') === route.replace(/-list$|-view$/, '').replace(/_/g, '-'));
     const owes = table ? rowCount[table] : 0;
     results.push({ route, status: r.status, table, owes, served, hidesData: owes > 0 && served < 1 });
   }
-  report.check("every page GET route the app fetches returns 200 (no 500 behind an empty page)", results.every((r) => r.status === 200) && results.length > 0,
-    results.map((r) => `${r.route}:${r.status}`).join(' · '));
-  report.check('no route hides rows the db actually holds (the zeroed-dashboard failure)', results.every((r) => !r.hidesData),
-    results.map((r) => `${r.route}[${r.table ?? '—'} ${r.owes} rows]→${r.served}`).join(' · '));
-  report.check('the app home route serves substantive data', (results.find((r) => /dashboard|home|index|vault/.test(r.route))?.served ?? 0) > 5,
-    JSON.stringify(results.find((r) => /dashboard|home|index|vault/.test(r.route)) ?? {}));
+  report.check('every route the PAGES fetch returns 200 (no 500 behind an empty page)', results.length > 0 && results.every((r) => r.status === 200), results.map((r) => `${r.route}:${r.status}`).join(' · ') || '(no fetched routes)');
+  report.check('no route hides rows the db actually holds (the zeroed-dashboard failure)', results.every((r) => !r.hidesData), results.map((r) => `${r.route}[${r.table ?? '—'} ${r.owes} rows]→${r.served}`).join(' · '));
+  report.check('the home page\'s own route serves substantive data', (results.find((r) => homeFetches(pages).includes(r.route))?.served ?? 0) > 5, JSON.stringify(results.find((r) => homeFetches(pages).includes(r.route)) ?? {}));
 
   // The rendered page must carry the app's real content, and the dock must be in the served bundle.
   const home = await pod.appPage(PROJECT).catch(() => ({ status: 0, body: '' }));
@@ -611,7 +767,7 @@ if (ACTS.includes(10)) {
   report.check('the served JS bundle contains the in-app chat (the dock ships to the browser)', /Message agent|Starting agent session|sessionId/.test(bundleSrc), `${js ?? '(no js)'}: ${bundleSrc.length}b`);
   report.check('the served app HTML is the real app (boot marker present)', String(home.body ?? '').includes('__APP_BASE__'), `${String(home.body ?? '').length} bytes from ${pod.appOrigin(PROJECT)}/`);
   report.note('A2 browser pass (chrome-devtools: rendered DOM, real values on screen, console/network clean, screenshot) is recorded in the scenario report.');
-  cp.acts.X = { passed: report.passed, routes: results };
+  cp.acts.XIII = { passed: report.passed, pages: pages.map((p) => ({ route: p.route, fetches: p.fetches })), routes: results };
   saveCheckpoint(cp);
 }
 
