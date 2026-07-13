@@ -218,6 +218,45 @@ const p = writeProjectPage('index', [
 display(p.ok && w.ok ? 'wrote the activity feed page + api' : ('app write error: ' + (p.error ?? w.error)));
 ```
 
+## EVERY app ships the assistant dock (mandatory, on every page)
+
+An app is a LIVING surface, not a static dashboard: from inside it the user must be able to ask
+for a new table, a new page, a new section — and get it, without going back to `/chat`. So every
+app you build carries a persistent chat dock, on EVERY page. `@app/runtime` exports `<Chat>`;
+`agent="thing"` (a bare slug — NOT `space/agent`) opens a real session with the project's own
+THING, the same agent with the same authoring power, scoped to this project.
+
+Write it ONCE into `pages/_layout` — the persistent chrome the router wraps every page in — so it
+is there on every route by construction (never page-by-page, which forgets a page):
+
+```typescript
+const l = writeProjectPage('_layout', [
+  "import React, { useState } from 'react';",
+  "import { Chat } from '@app/runtime';",
+  "export default function Layout({ children }: { children: React.ReactNode }) {",
+  "  const [open, setOpen] = useState(false);",
+  "  return (<>",
+  "    {children}",
+  "    {open ? (",
+  "      <div className=\"fixed bottom-5 right-5 z-40 flex h-[32rem] w-96 flex-col rounded-lg border border-border bg-background shadow-xl\">",
+  "        <div className=\"flex items-center justify-between border-b border-border px-3 py-2\">",
+  "          <span className=\"text-sm font-medium text-foreground\">Assistant</span>",
+  "          <button onClick={() => setOpen(false)} aria-label=\"Close the assistant\" className=\"text-muted\">×</button>",
+  "        </div>",
+  "        <Chat agent=\"thing\" className=\"flex-1\" />",
+  "      </div>",
+  "    ) : (",
+  "      <button onClick={() => setOpen(true)} aria-label=\"Open the assistant\"",
+  "        className=\"fixed bottom-5 right-5 z-40 rounded-full bg-primary px-4 py-3 text-sm text-primary-foreground shadow-lg\">Ask</button>",
+  "    )}",
+  "  </>);",
+  "}",
+].join("\n"));
+```
+
+Never link back to `/chat` instead — a link is not a dock. An app with no `_layout` dock is not
+finished.
+
 ## Authoring a table (when the automation stores data)
 
 A table schema is `{ title, description, columns: { <col>: { type, description, primaryKey?, generated? } } }`.

@@ -53,10 +53,20 @@ describe('resolveProjectId', () => {
 });
 
 describe('sessionCreateBody', () => {
-  it('is the Phase 7A { spaceRef, projectId } shape', () => {
+  it('is the Phase 7A { spaceRef, projectId } shape for a project space agent', () => {
     expect(sessionCreateBody('cooking/chef', 'feed')).toEqual({
       spaceRef: 'cooking/chef',
       projectId: 'feed',
+    });
+  });
+
+  // A bare slug is the project's OWN top-level agent (THING), not a project space — the sessions
+  // route resolves it by `agentSlug`. Sending it as a `spaceRef` would look for a project space
+  // named "thing" and fail, so an app-embedded chat could never reach the authoring agent.
+  it('is the { agentSlug, projectId } shape for the project agent (in-app THING)', () => {
+    expect(sessionCreateBody('thing', 'life-admin')).toEqual({
+      agentSlug: 'thing',
+      projectId: 'life-admin',
     });
   });
 });

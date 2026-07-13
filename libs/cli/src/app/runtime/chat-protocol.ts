@@ -22,12 +22,25 @@ export function resolveProjectId(pathname: string, override?: string): string {
   return base.split('/').filter(Boolean).pop() ?? '';
 }
 
-/** The `POST /api/sessions` body Phase 7A expects: `{ spaceRef, projectId }`. */
+/**
+ * The `POST /api/sessions` body for an in-app chat.
+ *
+ * Two shapes, both accepted by the sessions route (`routes/sessions.ts:L20-L35`):
+ *
+ * - `"space/agent"` → `{ spaceRef, projectId }` — a PROJECT space's agent, resolved under
+ *   `<project>/spaces/<space>` (a concierge, a curator: an agent the app itself owns).
+ * - `"thing"` (any bare slug, no `/`) → `{ agentSlug, projectId }` — the project's own
+ *   top-level agent. This is the ONE that makes an app a living surface: it is the SAME
+ *   THING the `/chat` surface talks to, scoped to this project, with its full authoring
+ *   capability — so from inside the app the user can ask for a new table, page, space or
+ *   integration and it lands live. A `spaceRef` cannot express that (THING is not a project
+ *   space), which is why an app-embedded chat could previously only reach a lesser agent.
+ */
 export function sessionCreateBody(
   agent: string,
   projectId: string,
-): { spaceRef: string; projectId: string } {
-  return { spaceRef: agent, projectId };
+): { spaceRef: string; projectId: string } | { agentSlug: string; projectId: string } {
+  return agent.includes('/') ? { spaceRef: agent, projectId } : { agentSlug: agent, projectId };
 }
 
 /**
