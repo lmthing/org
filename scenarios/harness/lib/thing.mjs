@@ -31,6 +31,8 @@ export class ThingSession {
    * @param {object} opts
    * @param {string} [opts.projectId='user']   project to run in ('user' = the default project)
    * @param {string} [opts.agentSlug='thing']  THING is the default agent
+   * @param {string} [opts.spaceRef]           bind to a project SPACE's agent (`<space>/<agent>`)
+   *        instead of THING — the only way to exercise that specialist's OWN capability profile.
    * @param {(descriptor:object)=>unknown} [opts.onAsk]  answer asks (consent cards, forms).
    *        Return `undefined` to leave the ask open (the scenario answers it manually).
    * @param {boolean} [opts.verbose=false]     stream a live log to stdout
@@ -39,6 +41,7 @@ export class ThingSession {
     this.pod = pod;
     this.projectId = opts.projectId ?? 'user';
     this.agentSlug = opts.agentSlug ?? 'thing';
+    this.spaceRef = opts.spaceRef;
     this.onAsk = opts.onAsk;
     this.verbose = opts.verbose ?? false;
     this.sessionId = null;
@@ -54,10 +57,15 @@ export class ThingSession {
   }
 
   /** Create the session. Init is async pod-side — `send()` waits it out. */
-  async start({ resumeSessionId, budget } = {}) {
+  async start({ resumeSessionId, budget, spaceRef = this.spaceRef } = {}) {
     const body = {
       projectId: this.projectId,
       agentSlug: this.agentSlug,
+      // Bind the session to a PROJECT SPACE's own agent (`<space>/<agent>`) instead of THING
+      // (session-manager `_initProjectSession` → `parseSpaceRef`). This is what lets a scenario
+      // probe one specialist's real capability profile directly, rather than inferring it from
+      // what THING chose to delegate.
+      ...(spaceRef ? { spaceRef } : {}),
       ...(resumeSessionId ? { resumeSessionId } : {}),
       ...(budget ? { budget } : {}),
     };
