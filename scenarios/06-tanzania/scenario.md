@@ -424,8 +424,23 @@ counterweight telling it to propose**. The user never asks — they don't know a
 | **VIII — Throwing route / crash boundary** | **FAIL (blocked)** | The probe route returned **200 HTML**, not an `HttpError`. Not the boundary's fault: **the app's own API is unreachable over HTTP** at every candidate URL (see the issue below) — so the Act could not reach the handler at all. ✓ the pod survived and kept serving (35 rows) throughout. |
 | **IX — `@app/types` + shared component** | **PARTIAL** | ✓ `types/generated.d.ts` (6837 B) exists and declares the row type; ✓ the app compiles. ✗ **not one `components/<Name>.tsx`**, though the automator holds `writeProjectComponent`. |
 | **X — A1: in-app chat evolves the app** | **FAIL** | ✓ the `<Chat>` dock IS on every page (`_layout.tsx`). ✗ the in-app request added **nothing** (tables 7→7, pages 6→6) in **8 seconds**: in a fresh session THING ran its orientation read and **displayed the project structure as JSON** instead of routing the request. |
-| **XI–XIII — Greek / restraint / memory / restart** | see `results/report.md` | Run completed after the fixes above; results recorded in the report. |
-| **XIV — A2: it actually renders** | **FAIL — the app opens BLANK** | Driven in a real browser (chrome-devtools, session on both origins). The served HTML requests its bundle at **root-absolute** `/assets/index-*.js` → **404**, while the same asset exists at `/tanzania-trip/assets/index-*.js` → **200**. JS and CSS both 404, React never mounts, `<div id="root">` stays empty. **An app that opens empty is an anti-expectation → FAIL.** |
+| **XI — Greek + restraint** | **PARTIAL** | ✓ **the Greek message changed a REAL row** (`ZNZ-PERMIT-77` absent before, in the db after — multilingual routing works, 106s). ✓ **no payment side-effect** and ✓ **no fabricated "sent!"**. ✗ but the refusal never reached him: THING's final reply was **`## Todos`** — its own todo list where the answer should be. |
+| **XII — It remembers him** | **PARTIAL** | ✗ the `user-memory` delegate never fired (it used the `remember` global instead — the assertion is narrower than the promise). ✓ **a brand-new, historyless session still recalled the standing preference** — the user-facing promise holds. |
+| **XIII — Restart → auto-resume** | **PASS** | ✓ the conversation carried on after `pod.restart()` (36s), ✓ **his spaces survived** (2→2), ✓ **his data survived** (97→97 rows), ✓ the app still compiles. |
+| **XIV — A2: it actually renders** | **FAIL — the app opens BLANK** | Driven in a real browser (chrome-devtools, session on both origins). The served HTML requests its bundle at **root-absolute** `/assets/index-*.js` → **404**, while the same asset exists at `/tanzania-trip/assets/index-*.js` → **200**. JS and CSS both 404, React never mounts, `<div id="root">` stays empty. All five of the app's **own** routes return the **HTML shell**, not JSON. **An app that opens empty is an anti-expectation → FAIL.** |
+
+### The Act meant to catch this was faking its own pass
+
+Act XIV exists precisely to check *the layer the user sees* rather than the raw data API — and it was
+doing the opposite. It read `e.pattern` from the manifest (the field is **`routePath`**), so every
+probe collapsed to `/api/` — which the SPA fallback answers — and then accepted that answer as "real
+data" because the body was longer than 20 characters. The body was the HTML shell. Two ways to fake a
+pass in one assertion, in the one Act that exists to prevent exactly that.
+
+Fixed: probe the real `routePath` and require an actual JSON object (an HTML shell with status 200 is
+a **broken** route, not a passing one), and resolve the shell's `<script src>` **exactly as a browser
+does** against the page URL — a root-absolute `/assets/x.js` resolves against the ORIGIN, dropping the
+`/<project>/` mount. The runner now reproduces the blank app on its own, with no browser needed.
 
 ### The answer key was in the agent's prompt (the finding that matters most)
 
