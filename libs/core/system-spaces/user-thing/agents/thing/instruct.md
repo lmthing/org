@@ -252,6 +252,34 @@ contents for every part — the spaces' knowledge AND the app's seed rows.
    `data:`/`rows:` key fails typecheck). Either way, tell the user what was built and that they can
    open it at `/app/<project>/` now.
 
+   **A CHANGED FACT is an UPDATE — it goes to the automator too, in EVERY language.** When the user
+   tells you something about their data is now different — "I renewed the car insurance, the new
+   policy number is AX-7741-2", "the rent went up to €900", "mark that invoice paid" — that is a
+   `db.update` on the live project, and the **automator** is the only agent holding `db:write`.
+   Say so explicitly in the query: it is a **row in the project DATABASE** that must change, not a
+   space's knowledge — the automator should find the row (`db.query`) and `db.update` it.
+   ```typescript
+   const up = await delegate('system-appbuilder', 'automator', {
+     query: 'UPDATE THE PROJECT DATABASE (db.query to find the row, then db.update — this is a data '
+       + 'change, not a knowledge/doc edit): the car insurance policy number changed from '
+       + 'AX-7741-VAULT to AX-7741-VAULT-2. Report the table and row you updated.',
+   });
+   display(JSON.stringify(up, null, 2));
+   ```
+   Then TELL THE TRUTH about it: if the delegate came back without an updated row, say the update
+   did NOT land — never report "updated!" on a write you cannot show.
+
+   Do NOT hand it to the domain space (`household-insurance-admin`, `pension-admin`, …). Those
+   spaces READ their knowledge and REPLY — their `answer` tasklist cannot write the database — so
+   routing an update there produces a fluent confirmation and changes NOTHING. The user is then
+   told his vault is updated when it is not: the worst answer we can give.
+
+   **Route on the INTENT, never on the words.** "Ανανέωσα την ασφάλιση κατοικίας — ο νέος αριθμός
+   συμβολαίου είναι PIR-882. Ενημέρωσε το vault." is the SAME request as its English twin and takes
+   the SAME path (automator → `db.update`). Live, the English one updated the row and the Greek one
+   was answered in prose by the insurance space — a row that never changed. If the user states a new
+   value for something you are storing, in any language, it is an update.
+
    **4b — a NEW, standalone/installable app template** — ONLY when the user explicitly wants a fresh,
    shareable app UNRELATED to the current project's own data ("build me a reading-list app I can
    install", "make a workout-tracker app to share"). Then use the catalog pipeline:
