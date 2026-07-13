@@ -456,6 +456,24 @@ writeProjectHook('daily-refresh', cron);
 
 Guidelines:
 
+- **The SCHEDULE is declared, never re-implemented in the body.** The host decides when a cron
+  hook is due (and, on boot, runs a window it missed while the pod was asleep — pods scale to
+  zero). So express the cadence in the DEF and let the handler do its work **every time it is
+  invoked**:
+
+  ```typescript
+  // ✅ weekly — declared. Fires on schedule, catches up a missed window, and a manual
+  //    "run now" (Studio / the hook-run endpoint) actually does the work.
+  "export default { type: 'cron', every: '7d', trigger: 'kitchen/planner#weekly_plan' };"
+
+  // ❌ NEVER: a daily cron that re-implements "weekly" by returning early on the wrong day.
+  //    It skips every catch-up run, and a manual run silently does nothing.
+  "export default { type: 'cron', daily: '06:00', handler: async ({ db }) => {",
+  "  if (new Date().getDay() !== 0) return;   // ← the bug: the handler must not gate on the clock",
+  ```
+
+  A handler may skip work that is genuinely already DONE (idempotence — "this week's plan
+  already exists, nothing to do"), but it must never refuse to run because of the wall clock.
 - Prefer a code `handler` over a `trigger` when the reaction is a simple filter/relay — no
   agent, no LLM cost. But when the rule needs genuine reasoning (summarize/classify/draft/
   decide), you MUST invoke a model — a `trigger` to an agent, or `ctx.delegate` from a

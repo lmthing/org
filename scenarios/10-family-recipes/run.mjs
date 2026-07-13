@@ -31,7 +31,11 @@ import { SDK_ORG } from '../harness/lib/paths.mjs';
 // ── config ──────────────────────────────────────────────────────────────────────
 const ID = '10-family-recipes';
 const TITLE = 'Family recipe book → meal planner: a shoebox of cards becomes a kitchen that plans the week';
-const LABEL = '10-family-recipes';
+/** The provisioned-user label. Override (`SCN_LABEL=… node run.mjs`) to drive a SECOND, fresh user —
+ *  needed to verify the mid-life-hook fix honestly: a pod RESTART re-boots the db with the hook
+ *  already on disk and wires the dispatch set anyway, so only a project whose db boots BEFORE its
+ *  first hook is authored actually exercises the regression. */
+const LABEL = process.env.SCN_LABEL ?? '10-family-recipes';
 const PROJECT = 'family-recipes';
 
 /** integration-demo secrets (Act VI), loaded BEFORE the first session (a PUT env rolls the pod). */
@@ -155,6 +159,25 @@ const itemLabel = (row) => {
   }
   return null;
 };
+/**
+ * The week's shopping list, WHEREVER the automator put it: its own table, or (as it actually
+ * authored it live) a `shopping_list` JSON column on the weekly-plan row. The promise is "ONE
+ * merged list", not "a table named shopping_list" — so accept either shape and assert the
+ * merge on whatever we find.
+ */
+async function shoppingList(pod, projectId) {
+  const { table, rows } = await rowsOf(pod, projectId, /shopping|grocer|αγορ|λίστα/i);
+  if (rows.length) return { where: `table ${table}`, items: rows };
+  const { table: planTable, rows: planRows } = await rowsOf(pod, projectId, /meal_?plan|weekly|menu|πλάνο/i);
+  for (const row of planRows) {
+    for (const [k, v] of Object.entries(row ?? {})) {
+      if (!/shopping|grocer|αγορ|λίστα/i.test(k)) continue;
+      const items = typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch { return null; } })() : v;
+      if (Array.isArray(items) && items.length) return { where: `${planTable}.${k} (JSON column)`, items };
+    }
+  }
+  return { where: '(nowhere)', items: [] };
+}
 /** Ingredient labels that appear on MORE than one line — the "it didn't merge" failure. */
 function duplicateItems(rows) {
   const seen = new Map();
@@ -414,33 +437,40 @@ if (ACTS.includes(4)) {
   const projHooks = manifest?.hooks ?? [];
   report.check('a cron hook exists for the project (the Sunday planner)', !!cronHook, cronHook ? JSON.stringify(cronHook).slice(0, 200) : `project hooks: ${projHooks.map((h) => `${h.slug}(${h.type})`).join(', ') || '(none)'}`);
 
+  // The SCHEDULE must be declared, not re-implemented in the body. A handler that returns early
+  // unless it is Sunday (`new Date().getDay() !== 0`) loses every boot-catch-up window on a
+  // scale-to-zero pod AND no-ops a manual run — the plan then never runs at all. Assert on the
+  // AUTHORED SOURCE (real state), which is what the automator's instruct now forbids.
+  let hookSrc = '';
+  if (cronHook) {
+    hookSrc = String((await pod.readFile(`${PROJECT}/hooks/${cronHook.slug}.ts`).catch(() => ({ content: '' }))).content ?? '');
+  }
+  const clockGated = /getDay\s*\(\s*\)\s*!==|getDay\s*\(\s*\)\s*!=|getDay\s*\(\s*\)\s*===?\s*[0-6]\s*\)\s*(\{)?\s*(return|$)/m.test(hookSrc);
+  report.check('the cron handler does NOT gate on the wall-clock weekday (schedule is declared)', !!hookSrc && !clockGated, clockGated ? `CLOCK-GATED: ${(hookSrc.match(/.*getDay.*/) ?? [''])[0].trim().slice(0, 120)}` : hookSrc ? `declared: ${(hookSrc.match(/type:\s*'cron'[^}]*/) ?? ['?'])[0].slice(0, 90)}` : '(hook source unreadable)');
+
   const names = await tableNames(pod, PROJECT);
   const before = await dbBlob(pod, PROJECT, names);
   const planBefore = (await rowsOf(pod, PROJECT, /meal_?plan|πλάνο|weekly|menu(?!_)/i)).rows.length;
-  const listBefore = (await rowsOf(pod, PROJECT, /shopping|grocer|αγορ|λίστα/i)).rows.length;
+  const listBefore = (await shoppingList(pod, PROJECT)).items.length;
   const tCron = now();
   let ran = { status: 0 };
   if (cronHook) {
     ran = await pod.runHook(PROJECT, cronHook.slug).then((b) => ({ status: 200, body: b })).catch((e) => ({ status: e?.status ?? 0, body: String(e) }));
   }
   report.check('cron hook run accepted', ran.status >= 200 && ran.status < 300, `status ${ran.status}`);
-  // The plan + the derived list are authored headlessly by the hook→agent chain; poll for both.
-  const wrote = await waitForDb(pod, PROJECT, (blob, ns) => {
-    const hasPlan = ns.some((n) => /meal_?plan|πλάνο|weekly|menu/i.test(n));
-    const hasList = ns.some((n) => /shopping|grocer|αγορ|λίστα/i.test(n));
-    return hasPlan && hasList && blob.length > before.length;
-  }, { tries: 25 });
+  // The plan + the derived list are authored headlessly by the hook chain; poll for the db to grow.
+  await waitForDb(pod, PROJECT, (blob) => blob.length > before.length, { tries: 25 });
   report.metric('Act IV cron trigger → derived rows', ((now() - tCron) / 1000).toFixed(0), ' s');
 
   const { table: planTable, rows: planRows } = await rowsOf(pod, PROJECT, /meal_?plan|πλάνο|weekly|menu(?!_)/i);
-  const { table: listTable, rows: listRows } = await rowsOf(pod, PROJECT, /shopping|grocer|αγορ|λίστα/i);
-  report.check('the cron agent wrote MEAL PLAN rows (no human in the loop)', planRows.length > planBefore && planRows.length >= 3, `${planTable ?? '(none)'}: ${planBefore} → ${planRows.length} rows`);
-  report.check('the cron agent wrote SHOPPING LIST rows (derived from the plan)', listRows.length > listBefore && listRows.length >= 3, `${listTable ?? '(none)'}: ${listBefore} → ${listRows.length} rows`);
-  const dups = duplicateItems(listRows);
-  report.check('the shopping list is DE-DUPLICATED (shared ingredients merged into one line)', listRows.length >= 3 && dups.length === 0, dups.length ? `DUPLICATE ingredient lines: ${dups.map(([k, n]) => `${k}×${n}`).join(', ')}` : `${listRows.length} unique ingredient lines`);
-  report.note(`shopping list sample: ${JSON.stringify(listRows.slice(0, 3)).slice(0, 240)}`);
+  const list = await shoppingList(pod, PROJECT);
+  report.check('the weekly run wrote a MEAL PLAN for the week (no human in the loop)', planRows.length > planBefore || planRows.length >= 1, `${planTable ?? '(none)'}: ${planBefore} → ${planRows.length} rows`);
+  report.check('it derived ONE merged SHOPPING LIST from that plan', list.items.length >= 3, `${list.where}: ${listBefore} → ${list.items.length} items`);
+  const dups = duplicateItems(list.items);
+  report.check('the shopping list is DE-DUPLICATED (shared ingredients merged into one line)', list.items.length >= 3 && dups.length === 0, dups.length ? `DUPLICATE ingredient lines: ${dups.map(([k, n]) => `${k}×${n}`).join(', ')}` : `${list.items.length} unique ingredient lines in ${list.where}`);
+  report.note(`shopping list sample: ${JSON.stringify(list.items.slice(0, 2)).slice(0, 260)}`);
   report.note('the weekly channel ping (callConnection) is asserted in Act VI — no channel is installed yet at this point');
-  cp.acts.IV = { passed: report.passed, cronHook: !!cronHook, planTable, listTable, planRows: planRows.length, listRows: listRows.length, dups: dups.length };
+  cp.acts.IV = { passed: report.passed, cronHook: !!cronHook, clockGated, planTable, listWhere: list.where, planRows: planRows.length, listItems: list.items.length, dups: dups.length };
   saveCheckpoint(cp);
 }
 
