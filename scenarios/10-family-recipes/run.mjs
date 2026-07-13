@@ -3,11 +3,19 @@
  * Scenario 10 — Family recipe book → meal planner: a shoebox of cards becomes a kitchen that plans the week.
  * Spec: sdk/org/scenarios/10-family-recipes/scenario.md  (Acts here match its Acts table 1:1).
  *
- * Reproduces the literal user flow: create the `family-recipes` project, attach `recipes.md` +
- * a photo of a handwritten recipe card + a printable recipe PDF, send the one compound Greek message,
- * then drive the research / recipe-form / weekly-cron / self-evolution / inbound / follow-up beats —
- * plus the round-1 NEW Acts (memory, consent DENIED, engineer-authored code). Every assertion reads
- * the TRACE or REAL pod state (spaces on disk, the served app, db rows, hooks) — never the model's prose.
+ * Reproduces the literal user flow: create the `family-recipes` project, attach ALL SIX real fixtures on
+ * the ONE opening message — `recipes.md`, the 3-sheet `pantry-and-plan.xlsx`, the handwritten
+ * `recipe-card.jpg`, the plated `dish-photo.jpg`, the printable `recipe.pdf` and the mother's GREEK
+ * `voice-memo.mp3` — plus the three real URLs in `fixtures/links.md` on the research turn; then drive the
+ * research / recipe-form / weekly-cron / self-evolution / inbound / follow-up beats — plus the round-1 NEW
+ * Acts (memory, consent DENIED, engineer-authored code). Every assertion reads the TRACE or REAL pod state
+ * (spaces on disk, the served app, db rows, hooks) — never the model's prose.
+ *
+ * The fixtures are mutually exclusive by design (scenario.md §8): each carries a token NO other one has,
+ * so no fixture's read can be faked from another's content. The two that are hard-asserted into REAL
+ * state are the ones that cannot be shortcut: the GREEK memo (`Σπανακόπιτα`, `μαστίχα Χίου` — a recipe in
+ * no uploaded text ⇒ only Whisper could have produced it) and the workbook (`GF-NIKOS`, `MERGE-PEAS-400`
+ * — only `readDocument` over a real .xlsx could have).
  *
  * The headline promise under test is the **cron-driven agent synthesis writing DERIVED rows**: every
  * Sunday an agent reads the book, plans the week, and authors a **de-duplicated** shopping list (two
@@ -55,14 +63,24 @@ const REUSE = process.argv.includes('--reuse');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const now = () => Date.now();
 
-// The compound opener — VERBATIM from scenario.md §1 (Greek, messy, one message, two halves).
+// The compound opener — VERBATIM from scenario.md §1 (Greek, messy, one message: six attachments + links).
 const OPENER =
-  'Σου στέλνω τις συνταγές της μάνας μου — φωτογραφίες χειρόγραφων, συνταγές από το ίντερνετ, και ένα ' +
-  'ηχητικό. Φτιάξε μου βιβλίο ανά κουζίνα, και κάθε Κυριακή φτιάξε τα φαγητά της βδομάδας με μία ενιαία ' +
-  'λίστα αγορών (χωρίς διπλότυπα).';
+  'Σου στέλνω τις συνταγές της μάνας μου — το excel με το τι έχω στο ντουλάπι και τι σκέφτηκα για τη ' +
+  'βδομάδα, φωτογραφίες χειρόγραφων καρτών, μια φωτογραφία από το πιάτο όπως πρέπει να βγαίνει, ένα pdf ' +
+  'από το ίντερνετ, και ένα ηχητικό της μάνας μου — άκουσέ το, λέει τη σπανακόπιτα. Σου βάζω και δυο ' +
+  'λινκ, διάβασέ τα. Φτιάξε μου βιβλίο ανά κουζίνα, βάλε μέσα και ό,τι λέει το ηχητικό και το excel, και ' +
+  'κάθε Κυριακή φτιάξε τα φαγητά της βδομάδας με μία ενιαία λίστα αγορών (χωρίς διπλότυπα).';
 
 /** Greek/English matching must survive accents, final sigma and NFC/NFD — compare on stems. */
 const norm = (s) => String(s).normalize('NFC').toLowerCase();
+/**
+ * LOOSE normalization for fixture-fact matching: strip accents (NFD → drop combining marks) and every
+ * non-alphanumeric character. Whisper drops the hyphens inside spoken codes and renders numerals its own
+ * way, and an agent re-writing a fact into a row re-accents/re-punctuates it freely — so a fixture fact is
+ * matched against a blob that has neither ("GF-NIKOS" → `gfnikos`, "μαστίχα Χίου" → `μαστιχαχιου`).
+ */
+const loose = (s) =>
+  String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
 // Facts that appear ONLY in recipes.md — prove THING actually read the attachment (not generic advice).
 // Stems (not whole words) so a declined/inflected mention still counts: "του μουσακά", "τα γεμιστά".
@@ -71,6 +89,27 @@ const FILE_FACTS = ['μουσακ', 'μπεσαμ', 'gemista', 'γεμιστ', '
 const CARD_FACTS = ['orange cake', 'crisco', 'raisin', 'sour cream', 'angel food', 'πορτοκαλ'];
 // Facts carried ONLY by the printable PDF → prove the readDocument path really read it.
 const PDF_FACTS = ['lasagna', 'cottage cheese', 'mozzarella', 'λαζ'];
+// Facts carried ONLY by pantry-and-plan.xlsx (3 sheets: Pantry / MealPlan / ShoppingList) — none of these
+// tokens exists in recipes.md, the card, the dish photo, the PDF or the memo, so citing/persisting one
+// proves the WORKBOOK was really parsed (readDocument → spreadsheet). Matched LOOSE (hyphens/dots die).
+const XLSX_FACTS = [
+  'GF-NIKOS', 'BUDGET-CAP-78.50', 'PANTRY-REV-2026-07-12', 'WEEK-2026-W29', 'MERGE-PEAS-400',
+  'PNT-001', 'Παστίτσιο', 'Ψάρι πλακί',
+];
+// Facts SPOKEN ONLY in voice-memo.mp3 (script: fixtures/voice-memo.txt). They exist in NO other fixture
+// and in no uploaded text — a `Σπανακόπιτα` in real state can ONLY come from Greek audio → Whisper.
+// Matched LOOSE: whisper's accents/spacing are not the agent's when it re-writes the fact into a row.
+const AUDIO_FACTS = [
+  'σπανακόπιτ', 'σπανάκι', 'μαστίχα Χίου', 'μαστίχα', 'τσίπουρο', 'Δέσποινα', 'Λευκάδα',
+  '750 γραμμάρια σπανάκι', '320 γραμμάρια φέτα',
+];
+// Facts carried ONLY by dish-photo.jpg — the PLATING of the finished dish (a photographed plate, not a
+// document): a 2nd, visually unlike vision call that an OCR-shaped shortcut cannot answer. Deliberately
+// excludes anything recipes.md already says (e.g. μαϊντανό), so this cannot be faked from the text dump.
+const DISH_FACTS = [
+  'greek salad', 'χωριάτικη', 'tabbouleh', 'ταμπουλέ', 'bulgur', 'πλιγούρι', 'kalamata', 'καλαμών',
+  'cucumber', 'αγγούρ', 'napkin', 'πετσέτα', 'wooden table', 'ξύλινο τραπέζι', 'garnish', 'γαρνιρ',
+];
 
 // A forbidden outbound side-effect (an actual grocery ORDER / payment) shows up as one of these yields.
 const ORDER_YIELDS = /callconnection|sendemail|slackpost|sendmessage|postmessage|smtp|mailto|order|checkout|pay|purchase|charge/i;
@@ -148,6 +187,33 @@ async function rowsOf(pod, projectId, rx, exact) {
 async function dbBlob(pod, projectId, names) {
   const all = await Promise.all((names ?? []).map((t) => pod.appData(projectId, t).catch(() => ({ rows: [] }))));
   return norm(JSON.stringify(all));
+}
+/**
+ * REAL state: every app table's rows PLUS the text of every file the agents wrote under the project's
+ * spaces (knowledge/agents/instruct/…). A fact that shows up HERE was persisted by the pod — it is not
+ * the model's prose. Returned both NFC-lowercased (stems) and LOOSE (accent/punctuation-free), because a
+ * fact spoken in a Greek memo and re-written into a row survives neither its accents nor its hyphens.
+ */
+async function realStateBlob(pod, projectId) {
+  const names = await tableNames(pod, projectId);
+  const db = await dbBlob(pod, projectId, names);
+  const tree = JSON.stringify(await pod.fsTree().catch(() => ({})));
+  const paths = [...tree.matchAll(/"([^"]*spaces\/[^"]+\.(?:md|json|ts))"/g)].map((m) => m[1]).slice(0, 60);
+  const files = await Promise.all(
+    paths.map((p) => pod.readFile(p).then((r) => String(r?.content ?? '')).catch(() => '')),
+  );
+  const blob = `${db}\n${files.join('\n')}`;
+  return { blob, norm: norm(blob), loose: loose(blob), names };
+}
+/** Poll REAL state (db rows + space files) until `pred(looseBlob, normBlob, names)` holds. */
+async function waitForRealState(pod, projectId, pred, { tries = 12, ms = 6_000 } = {}) {
+  let last = { blob: '', norm: '', loose: '', names: [] };
+  for (let i = 0; i < tries; i++) {
+    last = await realStateBlob(pod, projectId);
+    if (pred(last.loose, last.norm, last.names)) return { hit: true, ...last };
+    await sleep(ms);
+  }
+  return { hit: false, ...last };
 }
 /** Poll for a predicate over the current db blob to become true (headless hook→agent chains are async). */
 async function waitForDb(pod, projectId, pred, { tries = 20, ms = 6_000 } = {}) {
@@ -315,30 +381,44 @@ const recordErrors = (label, turn) => {
 
 // ═══ ACT I — Ingest & build ═══════════════════════════════════════════════════
 if (ACTS.includes(1)) {
-  report.step('Act I — Ingest & build', 'system-files/vision delegated; ≥3 file facts + the handwritten card + the PDF actually read; ≥2 per-cuisine spaces; app built w/ tables + page; /app/ 200; a recipes table seeded from the file');
+  report.step('Act I — Ingest & build', 'ALL SIX fixtures on ONE message; system-files/vision/transcription delegated; ≥3 file facts + ≥1 fact only the handwritten card / the PDF / the .xlsx / the dish photo / the GREEK voice memo carries; ≥2 per-cuisine spaces; app built w/ tables + page; /app/ 200; a recipes table seeded from the file — AND a Σπανακόπιτα row that exists in NO uploaded text (audio → rows)');
   const fileAtt = await pod.upload(`${FIX}/recipes.md`, { mediaType: 'text/markdown' });
   report.check('recipes.md uploaded (kind=file)', fileAtt.kind === 'file', `${fileAtt.kind} ${fileAtt.mediaType}`);
-  const cardPath = existsSync(`${FIX}/recipe-card.jpg`) ? `${FIX}/recipe-card.jpg` : `${FIX}/recipe-card.png`;
-  const cardAtt = await pod.upload(cardPath, { mediaType: cardPath.endsWith('.jpg') ? 'image/jpeg' : 'image/png' });
+  const xlsxAtt = await pod.upload(`${FIX}/pantry-and-plan.xlsx`, {
+    mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  report.check('pantry-and-plan.xlsx uploaded (kind=file → readDocument)', xlsxAtt.kind === 'file', `${xlsxAtt.kind} ${xlsxAtt.mediaType}`);
+  // NOTE: fixtures/recipe-card.png is a leftover 1×1 PLACEHOLDER (scenario.md §8) — never upload it.
+  const cardAtt = await pod.upload(`${FIX}/recipe-card.jpg`, { mediaType: 'image/jpeg' });
   report.check('handwritten recipe card uploaded (kind=image)', cardAtt.kind === 'image', `${cardAtt.kind} ${cardAtt.mediaType}`);
+  const dishAtt = await pod.upload(`${FIX}/dish-photo.jpg`, { mediaType: 'image/jpeg' });
+  report.check('plated-dish photo uploaded (kind=image — the 2nd vision call)', dishAtt.kind === 'image', `${dishAtt.kind} ${dishAtt.mediaType}`);
   const pdfAtt = await pod.upload(`${FIX}/recipe.pdf`, { mediaType: 'application/pdf' });
   report.check('printable recipe PDF uploaded (kind=file)', pdfAtt.kind === 'file', `${pdfAtt.kind} ${pdfAtt.mediaType}`);
-  const memo = existsSync(`${FIX}/voice-memo.m4a`);
-  if (!memo) report.note('no voice-memo fixture present → audio/transcription path SKIPPED (drop fixtures/voice-memo.m4a to exercise it; the memo\'s content is inlined in recipes.md so the flow still reads as written)');
-  const atts = [fileAtt, cardAtt, pdfAtt];
-  if (memo) atts.push(await pod.upload(`${FIX}/voice-memo.m4a`, { mediaType: 'audio/mp4' }));
+  const memoAtt = await pod.upload(`${FIX}/voice-memo.mp3`, { mediaType: 'audio/mpeg' });
+  report.check('the mother\'s GREEK voice memo uploaded (kind=audio → Whisper)', memoAtt.kind === 'audio', `${memoAtt.kind} ${memoAtt.mediaType}`);
 
+  // All six ride the ONE opening message — over the WS path (the HTTP /message route drops attachments).
+  const atts = [fileAtt, xlsxAtt, cardAtt, dishAtt, pdfAtt, memoAtt];
+  report.check('all SIX fixtures attached to the ONE opening message', atts.length === 6 && atts.every((a) => a?.id ?? a?.attachmentId ?? a), `${atts.length} attachments: md, xlsx, card.jpg, dish.jpg, pdf, mp3`);
   const t = acc(await thing.sendWithAttachments(OPENER, atts, { timeoutMs: 1_800_000 }));
   const sessionText = norm(JSON.stringify(thing.events));
+  const sessionLoose = loose(JSON.stringify(thing.events));
   report.check('delegated to system-files (read the dump)', thing.didDelegate('system-files') || sessionText.includes('system-files'), thing.turn(0).delegates.join(' · ').slice(0, 200));
   const sawVision = thing.didDelegate('system-vision') || sessionText.includes('system-vision');
-  report.check('the card image was handed to system-vision (delegate path)', sawVision, sawVision ? 'delegated' : 'NOT delegated (image path)');
+  report.check('the photos were handed to system-vision (delegate path)', sawVision, sawVision ? 'delegated' : 'NOT delegated (image path)');
   const cited = FILE_FACTS.filter((f) => sessionText.includes(f));
   report.check('read the file: ≥3 recipe-specific facts appear in the session', cited.length >= 3, `cited: ${cited.join(', ')}`);
   const cardCited = CARD_FACTS.filter((f) => sessionText.includes(f));
   report.check('read the HANDWRITTEN CARD: ≥1 fact only the photo carries (vision → content)', cardCited.length >= 1, `card facts: ${cardCited.join(', ') || '(none — the card was not actually read)'}`);
   const pdfCited = PDF_FACTS.filter((f) => sessionText.includes(f));
   report.check('read the PDF: ≥1 fact only the PDF carries (readDocument → content)', pdfCited.length >= 1, `pdf facts: ${pdfCited.join(', ') || '(none — the PDF was not actually read)'}`);
+  const xlsxCited = XLSX_FACTS.filter((f) => sessionLoose.includes(loose(f)));
+  report.check('read the WORKBOOK: ≥1 fact only pantry-and-plan.xlsx carries (readDocument → spreadsheet)', xlsxCited.length >= 1, `xlsx facts: ${xlsxCited.join(', ') || '(none — the .xlsx was not parsed)'}`);
+  const dishCited = DISH_FACTS.filter((f) => sessionLoose.includes(loose(f)));
+  report.check('read the DISH PHOTO: ≥1 plating fact only that photo carries (a 2nd, non-document vision call)', dishCited.length >= 1, `dish facts: ${dishCited.join(', ') || '(none — the plated-dish photo was not actually looked at)'}`);
+  const audioCited = AUDIO_FACTS.filter((f) => sessionLoose.includes(loose(f)));
+  report.check('LISTENED to the GREEK memo: ≥1 spoken-only fact appears in the session (audio → Whisper)', audioCited.length >= 1, `spoken facts: ${audioCited.join(', ') || '(none — the Greek audio was not transcribed)'}`);
   recordErrors('Act I', t);
   report.metric('Act I ingest→build', (t.durationMs / 1000).toFixed(0), ' s');
   report.metric('Act I tokens', `${t.tokens.in}/${t.tokens.out}`);
@@ -358,7 +438,7 @@ if (ACTS.includes(1)) {
   // App — nudge the build if the automator half didn't fire.
   let names = await tableNames(pod, PROJECT);
   if (names.length === 0) {
-    acc(await thing.sendWithAttachments('Τώρα φτιάξε μου την εφαρμογή του βιβλίου συνταγών πάνω σε αυτό το project — μια σελίδα με τις συνταγές ανά κουζίνα, μια σελίδα με το πλάνο της βδομάδας, και μια σελίδα με τη λίστα αγορών — και ΒΑΛΕ ΜΕΣΑ ΣΤΗ ΒΑΣΗ όλες τις συνταγές από το αρχείο ως γραμμές (recipes table: όνομα, κουζίνα, υλικά, εκτέλεση, χρόνος ψησίματος).', [fileAtt], { timeoutMs: 1_500_000 }));
+    acc(await thing.sendWithAttachments('Τώρα φτιάξε μου την εφαρμογή του βιβλίου συνταγών πάνω σε αυτό το project — μια σελίδα με τις συνταγές ανά κουζίνα, μια σελίδα με το πλάνο της βδομάδας, και μια σελίδα με τη λίστα αγορών — και ΒΑΛΕ ΜΕΣΑ ΣΤΗ ΒΑΣΗ όλες τις συνταγές ως γραμμές (recipes table: όνομα, κουζίνα, υλικά, εκτέλεση, χρόνος ψησίματος): και αυτές από το αρχείο, ΚΑΙ τη σπανακόπιτα που λέει το ηχητικό της μάνας μου, ΚΑΙ ό,τι λέει το excel (ντουλάπι, πλάνο βδομάδας, διατροφικές σημειώσεις).', [fileAtt, xlsxAtt, memoAtt], { timeoutMs: 1_500_000 }));
     names = await tableNames(pod, PROJECT);
   }
   await assertLiveApp(report, pod, PROJECT);
@@ -368,44 +448,100 @@ if (ACTS.includes(1)) {
   const blobRows = await dbBlob(pod, PROJECT, names);
   const rowFacts = FILE_FACTS.filter((f) => blobRows.includes(f));
   report.check('the recipe rows are MY recipes (≥3 file content tokens in the db)', rowFacts.length >= 3, `row facts: ${rowFacts.join(', ')}`);
-  cp.acts.I = { passed: report.passed, spaces, tables: names, recipesTable, actIManifest: { tables: names, pages: await pageRoutes(pod, PROJECT) } };
+
+  // ── per-FIXTURE facts in REAL STATE — each file must have been READ, not merely uploaded. Cited prose
+  // is not enough: the fact has to be persisted (a db row or a file under the project's spaces).
+  // The memo's recipe exists in NO uploaded text (scenario.md §8), so a spoken-only fact in real state is
+  // proof the pod actually transcribed GREEK audio; the workbook's tokens exist in no other fixture, so an
+  // xlsx-only fact in real state is proof it actually parsed the spreadsheet.
+  const persisted = await waitForRealState(pod, PROJECT, (lz) => AUDIO_FACTS.some((f) => lz.includes(loose(f))));
+  const audioPersisted = AUDIO_FACTS.filter((f) => persisted.loose.includes(loose(f)));
+  report.check(
+    'the GREEK voice memo landed in REAL state (a spoken-ONLY fact — Σπανακόπιτα / μαστίχα Χίου / τσίπουρο — is in a db row or a space)',
+    persisted.hit,
+    audioPersisted.length ? `spoken-only facts persisted: ${audioPersisted.join(', ')}` : 'NO spoken-only fact in db rows or spaces (the transcription never reached state)',
+  );
+  const xlsxPersisted = XLSX_FACTS.filter((f) => persisted.loose.includes(loose(f)));
+  report.check(
+    'the WORKBOOK landed in REAL state (an xlsx-ONLY fact — GF-NIKOS / MERGE-PEAS-400 / WEEK-2026-W29 — is in a db row or a space)',
+    xlsxPersisted.length >= 1,
+    xlsxPersisted.length ? `xlsx-only facts persisted: ${xlsxPersisted.join(', ')}` : 'NO xlsx-only fact in db rows or spaces (the spreadsheet never reached state)',
+  );
+  // The headline of the audio beat: the memo's dish is a ROW in the book (audio → transcription → rows).
+  const spanakopita = recipeRows.find((r) => loose(JSON.stringify(r)).includes(loose('σπανακόπιτ')));
+  report.check(
+    'a Σπανακόπιτα row is in the recipe book (it exists in NO uploaded text — audio → rows)',
+    !!spanakopita,
+    spanakopita ? JSON.stringify(spanakopita).slice(0, 200) : `no Σπανακόπιτα row in ${recipesTable ?? '(no recipes table)'} (${recipeRows.length} rows)`,
+  );
+  cp.acts.I = {
+    passed: report.passed, spaces, tables: names, recipesTable,
+    fixtures: {
+      fileFacts: rowFacts.length, cardCited: cardCited.length, pdfCited: pdfCited.length,
+      xlsxCited: xlsxCited.length, dishCited: dishCited.length, audioCited: audioCited.length,
+      audioPersisted: audioPersisted.length, xlsxPersisted: xlsxPersisted.length, spanakopitaRow: !!spanakopita,
+    },
+    actIManifest: { tables: names, pages: await pageRoutes(pod, PROJECT) },
+  };
   saveCheckpoint(cp);
 }
 
 // ═══ ACT II — Deep research → knowledge + DB ══════════════════════════════════
 if (ACTS.includes(2)) {
-  report.step('Act II — Deep research → knowledge + DB', 'system-research delegated + webSearch/webFetch; a researched substitution ABSENT from the seed lands as a substitutions row; the cuisine space answers a follow-up from the researched knowledge');
+  report.step('Act II — Deep research → knowledge + DB', 'system-research delegated + webSearch/webFetch ON THE THREE REAL URLs in fixtures/links.md (each pre-verified 200); a researched substitution ABSENT from the seed (the GF roux — rice flour/starch, not wheat) lands as a substitutions row; the cuisine space answers a follow-up from the researched knowledge');
   const namesBefore = await tableNames(pod, PROJECT);
   const before = await dbBlob(pod, PROJECT, namesBefore);
-  const t = acc(await thing.send('Ο Νίκος δεν τρώει βούτυρο. Ψάξε στο ίντερνετ πώς φτιάχνεις αυθεντική μπεσαμέλ χωρίς βούτυρο (τι χρησιμοποιούν στην Ελλάδα, τι δουλεύει πραγματικά και γιατί) και ΠΡΟΣΘΕΣΕ ό,τι βρεις ως ΝΕΑ γραμμή σε έναν πίνακα substitutions στην εφαρμογή (τι αντικαθιστά τι, αναλογία, γιατί δουλεύει, πηγή) ΚΑΙ σώσε τη γνώση στο space της ελληνικής κουζίνας. Θέλω πραγματική πηγή, όχι placeholder.', { timeoutMs: 1_200_000 }));
+  // fixtures/links.md holds the three real, publicly fetchable pages Vasilis pastes (each verified 200) —
+  // hand them to the research beat so webFetch runs against LIVE pages, not a hallucinated URL.
+  const LINKS = existsSync(`${FIX}/links.md`) ? readFileSync(`${FIX}/links.md`, 'utf8') : '';
+  const linkUrls = [...LINKS.matchAll(/https?:\/\/\S+/g)].map((m) => m[0]);
+  report.check('fixtures/links.md provides the 3 real research URLs', linkUrls.length >= 3, linkUrls.join(' , ') || '(links.md missing)');
+  const linkHint = linkUrls.length
+    ? ` Σου βάζω και τα λινκ που σου έλεγα — διάβασέ τα: ${linkUrls.slice(0, 3).join(' , ')} — και μετά ψάξε και παραπέρα.`
+    : '';
+  const t = acc(await thing.send(`Ο Νίκος είναι gluten-free (το λέει και το excel: GF-NIKOS), οπότε η μπεσαμέλ με το αλεύρι σιταριού δεν κάνει. Ψάξε στο ίντερνετ πώς φτιάχνεται πραγματικά μπεσαμέλ χωρίς γλουτένη — τι μπαίνει αντί για το σιταρένιο αλεύρι στο ρου, σε τι αναλογία, και γιατί δουλεύει.${linkHint} ΠΡΟΣΘΕΣΕ ό,τι βρεις ως ΝΕΑ γραμμή σε έναν πίνακα substitutions στην εφαρμογή (τι αντικαθιστά τι, αναλογία, γιατί δουλεύει, πηγή) ΚΑΙ σώσε τη γνώση στο space της ελληνικής κουζίνας. Θέλω πραγματική πηγή (URL), όχι placeholder.`, { timeoutMs: 1_200_000 }));
   const research = thing.didDelegate('system-research') || norm(JSON.stringify(t.events)).includes('system-research');
   report.check('delegated to system-research', research, t.delegates.join(' · ').slice(0, 200));
-  const webYields = t.yields.filter((y) => /websearch|webfetch|fetch/i.test(y.kind)).length;
+  const webCalls = t.yields.filter((y) => /websearch|webfetch|fetch/i.test(y.kind));
+  const webYields = webCalls.length;
   report.check('live web research observed (webSearch/webFetch/fetch yields)', webYields >= 1, `${webYields} web yields`);
+  // Which of the three pasted (real, 200-OK) links the research actually pulled. Recorded, not hard-
+  // asserted: a fetched URL can come back percent-encoded, and the count above is the load-bearing proof.
+  const webArgs = JSON.stringify(webCalls);
+  const webArgsLoose = loose(webArgs);
+  const touched = linkUrls.filter((u) => {
+    const stem = loose(decodeURIComponent(u).split('/').pop() ?? '');
+    return webArgs.includes(u) || webArgs.includes(encodeURI(u)) || (stem.length >= 4 && webArgsLoose.includes(stem));
+  });
+  report.note(`links.md URLs actually fetched by the research turn: ${touched.join(' , ') || '(none matched by URL — the researcher searched rather than fetched the pasted pages)'}`);
   const grew = await waitForDb(pod, PROJECT, (blob) => blob.length > before.length, { tries: 12 });
   const subsTable = grew.names.find((n) => /substitut|αντικατ|swap|alternativ/i.test(n));
   report.check('a substitutions table exists', !!subsTable, grew.names.join(', '));
   report.check('a NEW researched substitution row landed (db grew, absent from the seed)', grew.hit, `${before.length}→${grew.blob.length} bytes`);
 
-  // The row must be REAL research, not a placeholder: it names an actual substitute for butter AND
-  // carries a live source URL. (Grading the reply's prose would pass on any confident paragraph —
-  // and did, on a build summary, in the first live run. Assert the ROW, then require the reply to
-  // name what the ROW says.)
+  // The row must be REAL research, not a placeholder: it names an actual gluten-free replacement for the
+  // wheat flour in the roux (scenario.md §3.7 — rice flour / starch) AND carries a live source URL.
+  // (Grading the reply's prose would pass on any confident paragraph — and did, on a build summary, in the
+  // first live run. Assert the ROW, then require the reply to name what the ROW says.)
   const { rows: subRows } = await rowsOf(pod, PROJECT, /substitut|αντικατ|swap|alternativ/i);
   const subBlob = norm(JSON.stringify(subRows));
-  const KNOWN_SUBS = ['ελαιόλαδο', 'ελαιολ', 'olive oil', 'μαργαρίν', 'margarine', 'ταχίν', 'tahini', 'λάδι'];
+  const KNOWN_SUBS = [
+    'ρυζάλευρ', 'αλεύρι ρυζιού', 'rice flour', 'κορν φλάουρ', 'corn flour', 'cornflour', 'cornstarch',
+    'corn starch', 'άμυλο', 'starch', 'καλαμποκάλευρ', 'ταπιόκα', 'tapioca', 'gluten-free flour',
+    'αλεύρι χωρίς γλουτένη',
+  ];
   const namedSub = KNOWN_SUBS.find((s) => subBlob.includes(norm(s)));
   const hasSource = /https?:\/\/[^\s"']+/.test(JSON.stringify(subRows));
-  report.check('the substitution row names a REAL butter substitute (not a placeholder)', !!namedSub, namedSub ? `substitute: ${namedSub}` : JSON.stringify(subRows).slice(0, 200) || '(no rows)');
+  report.check('the substitution row names a REAL gluten-free roux substitute (rice flour/starch — not a placeholder)', !!namedSub, namedSub ? `substitute: ${namedSub}` : JSON.stringify(subRows).slice(0, 200) || '(no rows)');
   report.check('the substitution row cites a REAL source URL (it actually researched)', hasSource, (JSON.stringify(subRows).match(/https?:\/\/[^\s"']+/) ?? ['(none)'])[0]);
   recordErrors('Act II', t);
 
-  const q = acc(await thing.send('Τι βρήκες για τη μπεσαμέλ χωρίς βούτυρο; Πες μου ΜΟΝΟ τι χρησιμοποιώ αντί για βούτυρο και σε τι αναλογία — απάντησε αποκλειστικά από τη γραμμή που έσωσες στα substitutions.', { timeoutMs: 600_000 }));
+  const q = acc(await thing.send('Τι βρήκες για τη μπεσαμέλ χωρίς γλουτένη; Πες μου ΜΟΝΟ τι χρησιμοποιώ αντί για το σιταρένιο αλεύρι και σε τι αναλογία — απάντησε αποκλειστικά από τη γραμμή που έσωσες στα substitutions.', { timeoutMs: 600_000 }));
   const couldntFind = /δεν (βρήκα|έχω|υπάρχ)|couldn['’]?t find|do not include|does not include|not saved|don['’]?t have|no saved/i.test(q.text);
   // Grounded, not prose-graded: the answer must name the substitute that is actually IN the row.
   const answersFromRow = !!namedSub && norm(q.lastText || q.text).includes(norm(namedSub));
   report.check('the follow-up answers FROM the saved row (names the substitute the row holds)', answersFromRow && !couldntFind, `named "${namedSub}"? ${answersFromRow} — ${q.text.slice(0, 160)}`);
-  cp.acts.II = { passed: report.passed, subsTable, webYields, grewRows: grew.hit, namedSub, hasSource, answersFromRow };
+  cp.acts.II = { passed: report.passed, subsTable, webYields, linkUrls, touched, grewRows: grew.hit, namedSub, hasSource, answersFromRow };
   saveCheckpoint(cp);
 }
 
