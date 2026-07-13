@@ -42,6 +42,53 @@ function assertSourceParses(src: string, loader: 'ts' | 'tsx'): void {
   }
 }
 
+/**
+ * The API routes a page source actually FETCHES — every `useApi('x')` / `useApiMutation('x')` /
+ * `apiCall('x')` whose route is a literal first argument. This is the page's data: a page that
+ * fetches nothing renders nothing (a `@app/runtime` page has no other way to reach the db).
+ */
+function fetchedRoutes(src: string): string[] {
+  const out = new Set<string>();
+  for (const m of src.matchAll(/\b(?:useApi|useApiMutation|apiCall)\b/g)) {
+    // Skip the generic (`useApi<{ items: Row[] }>(…)`) and take the first literal argument.
+    const tail = src.slice(m.index + m[0].length, m.index + m[0].length + 400);
+    const open = tail.indexOf('(');
+    if (open < 0) continue;
+    const lit = /^\(\s*['"`]([^'"`]+)['"`]/.exec(tail.slice(open));
+    if (lit) out.add(lit[1]!);
+  }
+  return [...out];
+}
+
+/**
+ * Guard a page OVERWRITE that would drop the page's data. Returns an error message when
+ * `file` already exists, already fetches ≥1 API route, and `src` fetches none of them —
+ * i.e. the replacement deletes every section the user could see. Returns `undefined`
+ * (allowed) for a new page, for a page that fetched nothing anyway, or for a rewrite that
+ * keeps at least one of the routes it had (a genuine edit/refactor, not a wipe).
+ */
+function wouldDropData(file: string, src: string): string | undefined {
+  if (!existsSync(file)) return undefined;
+  let before: string;
+  try {
+    before = readFileSync(file, 'utf8');
+  } catch {
+    return undefined;
+  }
+  const had = fetchedRoutes(before);
+  if (had.length === 0) return undefined;
+  const now = fetchedRoutes(src);
+  if (had.some((r) => now.includes(r))) return undefined;
+  const rel = file.split(`${sep}pages${sep}`).pop() ?? file;
+  return (
+    `refusing to overwrite pages/${rel}: the page you are replacing fetches ${had.join(', ')} and the ` +
+    `new source fetches ${now.length ? now.join(', ') : 'nothing'} — this DELETES the section(s) the user ` +
+    `already has (they open the app to an empty page). Read it first — readProjectFile('pages/${rel}').content — ` +
+    `and EXTEND it (keep its existing sections and ADD yours). Pass { replace: true } only if the user ` +
+    `explicitly asked you to remove those sections.`
+  );
+}
+
 export interface AppAuthoringGlobals {
   writePage: (route: string, src: string) => { ok: boolean; error?: string };
   writeApi: (route: string, src: string) => { ok: boolean; error?: string };
@@ -281,7 +328,7 @@ export interface ProjectAuthoringGlobals {
   writeProjectTable: (name: string, schema: unknown, rows?: unknown[]) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/pages/<route>.tsx` (a React page) — the LIVE-project
    *  counterpart of the catalog's `writePage`. */
-  writeProjectPage: (route: string, src: string) => { ok: boolean; error?: string };
+  writeProjectPage: (route: string, src: string, opts?: { replace?: boolean }) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/components/<Name>.tsx` (a shared React component a page imports).
    *  Name is PascalCase. There is no space-rooted fs writer for this — the typed writer IS
    *  the surface, so an app can gain shared components without any generic filesystem access. */
@@ -431,8 +478,21 @@ export function createProjectAuthoringGlobals(opts: {
    * dead-end because the automator has only `writeProjectTable`, and an attempt to call a
    * page writer fails typecheck (found live in scenario 05: `Cannot find name
    * 'writeProjectPage'`). Route validation + `.tsx` normalization mirror the catalog writer.
+   *
+   * **Overwrites are guarded** (see {@link fetchedRoutes}). An app grows over its life: a
+   * later "add an invoices section" turn that re-authors `pages/index.tsx` from scratch
+   * silently DELETES the dashboard the user already had — the app still builds, every route
+   * still 200s, and the user opens their vault to an empty page. Found live in scenario 07:
+   * the home page came back as a stub linking to the newest section while `/vault-dashboard`
+   * (which nothing fetched any more) still served the whole household. So: replacing a page
+   * that fetches data with one that fetches NONE of it is rejected — the agent reads it and
+   * extends it, or says it means it with `{ replace: true }`.
    */
-  function writeProjectPage(route: string, src: string): { ok: boolean; error?: string } {
+  function writeProjectPage(
+    route: string,
+    src: string,
+    opts?: { replace?: boolean },
+  ): { ok: boolean; error?: string } {
     let rel: string;
     try {
       rel = assertPathSegments('page route', route);
@@ -440,6 +500,10 @@ export function createProjectAuthoringGlobals(opts: {
       assertSourceParses(src, 'tsx');
     } catch (e) {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    if (!opts?.replace) {
+      const clobbered = wouldDropData(join(projectRoot, 'pages', rel), src);
+      if (clobbered) return { ok: false, error: clobbered };
     }
     const out = writeUnder(join('pages', rel), src);
     if (out.ok) {

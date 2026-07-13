@@ -92,7 +92,7 @@ export interface AppGlobalImpls {
    *  `<projectRoot>/pages/<route>.tsx` / `<projectRoot>/api/<path>/<METHOD>.ts` and
    *  rebuild the served app. Without them a live project can gain a data model +
    *  automation but never a UI — "turn this into an app I can open" dead-ends (scenario 05). */
-  writeProjectPage?: (route: string, src: string) => AuthoringResult;
+  writeProjectPage?: (route: string, src: string, opts?: { replace?: boolean }) => AuthoringResult;
   writeProjectApi?: (route: string, src: string) => AuthoringResult;
   /** LIVE-project shared-component writer (the `pages:write` twin of `writeProjectPage`):
    *  writes `<projectRoot>/components/<Name>.tsx` and rebuilds the served app. The typed

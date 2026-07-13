@@ -177,6 +177,34 @@ describe('handleAppManifest', () => {
     expect(m.build).toEqual({ built: false, assetCount: 0, stale: true });
   });
 
+  // "This app has no API routes" and "we could not read this app's API routes" are different
+  // facts, and the manifest used to tell the same lie for both — the catch returned []. An app
+  // whose api/ handlers all work then reads as endpoint-less: Studio shows nothing, and a caller
+  // concludes the pages fetch nothing (scenario 07 saw exactly this, one run apart from a run
+  // that listed six routes).
+  it('surfaces a contract-generation failure as endpointsError instead of reporting zero routes', async () => {
+    const broken: AppAdminManager = {
+      getProjectDb: manager.getProjectDb,
+      getProjectContracts: async () => {
+        throw new Error('tsc exploded');
+      },
+    };
+    const { res, captured } = mockRes();
+    await handleAppManifest(broken, root)(mockReq(), res, { projectId: APP });
+
+    expect(captured.status).toBe(200);
+    const m = captured.body as { hasApp: boolean; endpoints: unknown[]; endpointsError?: string };
+    expect(m.hasApp).toBe(true);
+    expect(m.endpoints).toEqual([]);
+    expect(m.endpointsError).toMatch(/tsc exploded/);
+  });
+
+  it('omits endpointsError when the contracts generate fine', async () => {
+    const { res, captured } = mockRes();
+    await handleAppManifest(manager, root)(mockReq(), res, { projectId: APP });
+    expect((captured.body as { endpointsError?: string }).endpointsError).toBeUndefined();
+  });
+
   it('reports hasApp:false for a spaces-only project', async () => {
     const { res, captured } = mockRes();
     await handleAppManifest(manager, root)(mockReq(), res, { projectId: SPACES_ONLY });

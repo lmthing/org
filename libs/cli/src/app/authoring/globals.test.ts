@@ -441,6 +441,59 @@ describe('createProjectAuthoringGlobals', () => {
     expect(existsSync(join(projectRoot, 'pages', 'bookings', '[id].tsx'))).toBe(true);
   });
 
+  // The mid-life clobber (scenario 07): a later "add an invoices section" turn re-authored
+  // pages/index.tsx from scratch. The app still built, every route still 200'd — and the user
+  // opened their vault to a stub linking to Invoices, the dashboard gone, `/vault-dashboard`
+  // still serving the whole household to nobody. A page rewrite that drops the page's data is a
+  // deletion, and the writer now says so.
+  describe('writeProjectPage — overwrite guard (do not silently delete the page the user has)', () => {
+    const DASHBOARD = [
+      "import { useApi } from '@app/runtime';",
+      "export default function Home() {",
+      "  const { data } = useApi<{ items: unknown[] }>('vault-dashboard');",
+      "  return <div>{(data?.items ?? []).length}</div>;",
+      "}",
+    ].join('\n');
+    const STUB = [
+      "import { Link } from '@app/runtime';",
+      "export default function Home() { return <Link href=\"/invoices\">Invoices</Link>; }",
+    ].join('\n');
+
+    it('rejects a replacement that fetches NONE of the routes the existing page fetched', () => {
+      const pa = make();
+      expect(pa.writeProjectPage('index', DASHBOARD).ok).toBe(true);
+      const res = pa.writeProjectPage('index', STUB);
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/vault-dashboard/);
+      expect(res.error).toMatch(/readProjectFile/);
+      // and the user's dashboard is still on disk, untouched
+      expect(readFileSync(join(projectRoot, 'pages', 'index.tsx'), 'utf8')).toBe(DASHBOARD);
+    });
+
+    it('allows the growth that SHOULD happen: the same page keeping its data and adding a section', () => {
+      const pa = make();
+      expect(pa.writeProjectPage('index', DASHBOARD).ok).toBe(true);
+      const grown = DASHBOARD.replace(
+        "  return <div>{(data?.items ?? []).length}</div>;",
+        [
+          "  const inv = useApi<{ invoices: unknown[] }>('invoices-list');",
+          "  return <div>{(data?.items ?? []).length}{(inv.data?.invoices ?? []).length}</div>;",
+        ].join('\n'),
+      );
+      expect(pa.writeProjectPage('index', grown).ok).toBe(true);
+      expect(readFileSync(join(projectRoot, 'pages', 'index.tsx'), 'utf8')).toBe(grown);
+    });
+
+    it('allows a first write, a page that never fetched anything, and an explicit { replace: true }', () => {
+      const pa = make();
+      expect(pa.writeProjectPage('about', STUB).ok).toBe(true); // new page — nothing to lose
+      expect(pa.writeProjectPage('about', STUB).ok).toBe(true); // it fetched nothing anyway
+      expect(pa.writeProjectPage('index', DASHBOARD).ok).toBe(true);
+      expect(pa.writeProjectPage('index', STUB, { replace: true }).ok).toBe(true); // "yes, delete it"
+      expect(readFileSync(join(projectRoot, 'pages', 'index.tsx'), 'utf8')).toBe(STUB);
+    });
+  });
+
   it('writeProjectApi lands api/<path>/<METHOD>.ts and fires onAppWrite(api)', () => {
     const appWrites: Array<[string, string]> = [];
     const pa = createProjectAuthoringGlobals({

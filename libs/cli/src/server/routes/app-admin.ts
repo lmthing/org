@@ -154,9 +154,11 @@ export function handleAppManifest(manager: AppAdminManager, lmthingRoot: string 
       return;
     }
 
-    const [pages, endpoints, hooks, build] = await Promise.all([
+    const [pages, api, hooks, build] = await Promise.all([
       app.hasPages ? discoverPageRoutes(projectRoot) : Promise.resolve([]),
-      app.hasApi ? loadEndpoints(manager, lmthingRoot, projectId, projectRoot) : Promise.resolve([]),
+      app.hasApi
+        ? loadEndpoints(manager, lmthingRoot, projectId, projectRoot)
+        : Promise.resolve<Awaited<ReturnType<typeof loadEndpoints>>>({ endpoints: [] }),
       app.hasHooks ? loadHookSummaries(projectRoot) : Promise.resolve([]),
       pagesBuildInfo(projectRoot),
     ]);
@@ -166,7 +168,10 @@ export function handleAppManifest(manager: AppAdminManager, lmthingRoot: string 
       hasApp: true,
       tables,
       pages,
-      endpoints,
+      endpoints: api.endpoints,
+      // Present ONLY when the app HAS api handlers whose contracts could not be generated —
+      // "zero endpoints" and "we failed to read your endpoints" are different facts.
+      ...(api.error ? { endpointsError: api.error } : {}),
       hooks,
       build: { built: build.built, assetCount: build.assetCount, stale: build.stale },
     });
@@ -174,29 +179,44 @@ export function handleAppManifest(manager: AppAdminManager, lmthingRoot: string 
 }
 
 /** Endpoint contracts, projected to the manifest shape. Prefers the manager's cached
- *  contracts; falls back to a guarded {@link generateProjectContracts}. */
+ *  contracts; falls back to a guarded {@link generateProjectContracts}.
+ *
+ *  When contract generation FAILS this must not read as "the app has no API routes". It used to:
+ *  the catch swallowed the error and returned `[]`, so an app whose `api/` dir is full of working
+ *  handlers reported zero endpoints with a 200 — Studio shows no routes and a caller concludes the
+ *  pages fetch nothing (seen live in scenario 07, one run apart from a run that listed six). The
+ *  failure now travels with the manifest as `endpointsError`. */
 async function loadEndpoints(
   manager: AppAdminManager,
   root: string,
   projectId: string,
   projectRoot: string,
-): Promise<Array<{ name: string; method: string; routePath: string; inputSchema: unknown; outputSchema: unknown }>> {
+): Promise<{
+  endpoints: Array<{ name: string; method: string; routePath: string; inputSchema: unknown; outputSchema: unknown }>;
+  error?: string;
+}> {
   let contracts: EndpointContract[] = [];
+  let error: string | undefined;
   try {
     const cached = manager.getProjectContracts
       ? await manager.getProjectContracts(root, projectId)
       : null;
     contracts = cached?.endpoints ?? (await generateProjectContracts(projectRoot)).endpoints;
-  } catch {
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+    console.warn(`[app-manifest] ${projectId}: endpoint contracts failed to generate — ${error}`);
     contracts = [];
   }
-  return contracts.map((e) => ({
-    name: e.name,
-    method: e.method,
-    routePath: e.routePath,
-    inputSchema: e.inputSchema,
-    outputSchema: e.outputSchema,
-  }));
+  return {
+    endpoints: contracts.map((e) => ({
+      name: e.name,
+      method: e.method,
+      routePath: e.routePath,
+      inputSchema: e.inputSchema,
+      outputSchema: e.outputSchema,
+    })),
+    ...(error ? { error } : {}),
+  };
 }
 
 /** Hooks + their last-run state, projected to the manifest shape. */

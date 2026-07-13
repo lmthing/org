@@ -211,7 +211,11 @@ export const HOOKS_WRITE_DTS = `declare function writeHook(slug: string, src: st
 // this into an app I can open" produces a real page-serving app in the live project rather than
 // dead-ending (the automator had only writeProjectTable — scenario 05). Appended to the catalog
 // writers in the capability registry; the one-liner invariant on the base consts is preserved.
-export const PROJECT_PAGE_DTS = `declare function writeProjectPage(route: string, src: string): { ok: boolean; error?: string };`;
+// Overwriting an existing page is GUARDED: a replacement that fetches none of the API routes the
+// page it replaces fetched is rejected (it would delete the sections the user already has — the
+// app still builds and every route still 200s, but the user opens it to an empty page; scenario
+// 07). Read the page and extend it; `{ replace: true }` says the deletion is what the user asked for.
+export const PROJECT_PAGE_DTS = `declare function writeProjectPage(route: string, src: string, opts?: { replace?: boolean }): { ok: boolean; error?: string };`;
 export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, src: string): { ok: boolean; error?: string };`;
 // `pages:write` ALSO earns the shared-component writer — `writeProjectComponent` writes
 // `components/<Name>.tsx` (PascalCase) into the live project so a page can import it. The

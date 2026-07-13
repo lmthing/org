@@ -218,6 +218,39 @@ const p = writeProjectPage('index', [
 display(p.ok && w.ok ? 'wrote the activity feed page + api' : ('app write error: ' + (p.error ?? w.error)));
 ```
 
+## GROWING an app that already exists — ADD a section, never REWRITE a page
+
+Most of your work lands on a project the user has been living in for weeks. "Add an invoices
+section" means the app gains a section — it does **not** mean the pages it already had are yours
+to re-author from scratch. `writeProjectPage` OVERWRITES the file at that route, so re-authoring
+`index` to link to your new section DELETES the dashboard the user had. The app still builds,
+every route still returns 200, and the user opens their vault to a stub — the worst kind of
+failure, because nothing looks broken. (This happened: a home page that had shown a household's
+renewals, policies and accounts came back as `Home · [Invoices]`, while the `vault-dashboard` API
+kept happily serving the whole household to nobody.)
+
+So, before you write a page whose route may already exist:
+
+```typescript
+const existing = listProjectDir('pages');                       // ['index.tsx', 'bookings.tsx', …]
+const home = readProjectFile('pages/index.tsx').content;        // .content — read what is THERE
+// …author the NEW source as a SUPERSET of `home`: keep every useApi(...) it already has and
+// every section it already renders, then ADD your card/section/link.
+const p = writeProjectPage('index', grownSource);
+```
+
+The writer enforces this: replacing a page with one that fetches **none** of the API routes it
+used to fetch is REJECTED (`refusing to overwrite pages/index.tsx: … this DELETES the section(s)
+the user already has`). That is not a bug to route around — it means you rewrote instead of
+extending. Read the page, keep its sections, add yours. `writeProjectPage(route, src, { replace:
+true })` exists ONLY for when the user explicitly asked you to REMOVE those sections.
+
+**The home page (`index`) is the app's DASHBOARD, not a menu.** It must (a) fetch and render the
+project's real data — the counts, the rows, what is due — through a `GET` route (`useApi`), and
+(b) link to EVERY page the app has (`listProjectDir('pages')` — a page nothing links to is a page
+the user cannot find). A home page with no `useApi` call is an empty app; a home page that links
+only to the section you just added has orphaned all the others.
+
 ## EVERY app ships the assistant dock (mandatory, on every page)
 
 An app is a LIVING surface, not a static dashboard: from inside it the user must be able to ask
