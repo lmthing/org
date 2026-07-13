@@ -324,11 +324,26 @@ if (ACTS.includes(2)) {
   const subsTable = grew.names.find((n) => /substitut|αντικατ|swap|alternativ/i.test(n));
   report.check('a substitutions table exists', !!subsTable, grew.names.join(', '));
   report.check('a NEW researched substitution row landed (db grew, absent from the seed)', grew.hit, `${before.length}→${grew.blob.length} bytes`);
+
+  // The row must be REAL research, not a placeholder: it names an actual substitute for butter AND
+  // carries a live source URL. (Grading the reply's prose would pass on any confident paragraph —
+  // and did, on a build summary, in the first live run. Assert the ROW, then require the reply to
+  // name what the ROW says.)
+  const { rows: subRows } = await rowsOf(pod, PROJECT, /substitut|αντικατ|swap|alternativ/i);
+  const subBlob = norm(JSON.stringify(subRows));
+  const KNOWN_SUBS = ['ελαιόλαδο', 'ελαιολ', 'olive oil', 'μαργαρίν', 'margarine', 'ταχίν', 'tahini', 'λάδι'];
+  const namedSub = KNOWN_SUBS.find((s) => subBlob.includes(norm(s)));
+  const hasSource = /https?:\/\/[^\s"']+/.test(JSON.stringify(subRows));
+  report.check('the substitution row names a REAL butter substitute (not a placeholder)', !!namedSub, namedSub ? `substitute: ${namedSub}` : JSON.stringify(subRows).slice(0, 200) || '(no rows)');
+  report.check('the substitution row cites a REAL source URL (it actually researched)', hasSource, (JSON.stringify(subRows).match(/https?:\/\/[^\s"']+/) ?? ['(none)'])[0]);
   recordErrors('Act II', t);
-  const q = acc(await thing.send('Τι βρήκες για τη μπεσαμέλ χωρίς βούτυρο; Πες μου τι χρησιμοποιώ αντί για βούτυρο και σε τι αναλογία — απάντησε μόνο από ό,τι έσωσες.', { timeoutMs: 600_000 }));
+
+  const q = acc(await thing.send('Τι βρήκες για τη μπεσαμέλ χωρίς βούτυρο; Πες μου ΜΟΝΟ τι χρησιμοποιώ αντί για βούτυρο και σε τι αναλογία — απάντησε αποκλειστικά από τη γραμμή που έσωσες στα substitutions.', { timeoutMs: 600_000 }));
   const couldntFind = /δεν (βρήκα|έχω|υπάρχ)|couldn['’]?t find|do not include|does not include|not saved|don['’]?t have|no saved/i.test(q.text);
-  report.check('the follow-up names the saved substitution (not "couldn\'t find")', q.text.length > 40 && !couldntFind, q.text.slice(0, 200));
-  cp.acts.II = { passed: report.passed, subsTable, webYields, grewRows: grew.hit };
+  // Grounded, not prose-graded: the answer must name the substitute that is actually IN the row.
+  const answersFromRow = !!namedSub && norm(q.text).includes(norm(namedSub));
+  report.check('the follow-up answers FROM the saved row (names the substitute the row holds)', answersFromRow && !couldntFind, `named "${namedSub}"? ${answersFromRow} — ${q.text.slice(0, 160)}`);
+  cp.acts.II = { passed: report.passed, subsTable, webYields, grewRows: grew.hit, namedSub, hasSource, answersFromRow };
   saveCheckpoint(cp);
 }
 

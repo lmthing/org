@@ -517,31 +517,50 @@ export class SessionManager {
     if (db === undefined) {
       db = await bootProjectApp(join(root, projectId));
       this.projectDbs.set(projectId, db);
-      // Wire the project's DB-write → EVENT dispatch to the db's onWrite seam
-      // (Phase 6; unified in S6). Once per project, when the db first boots. A db
-      // write produces the synthetic `project/db.*` event (consumed by EVENT hooks)
-      // plus any `{type:'db'}` emitter def's events, so we wire the runtime when the
-      // project has EVENT hooks (project OR space) OR any db emitter def.
-      if (db && !this.projectHookRuntimes.has(projectId)) {
-        try {
-          const hooks = await loadAllHooks(join(root, projectId));
-          const hasEventHook = hooks.some((h) => (h.def as { type?: string }).type === 'event');
-          let hasDbEmitter = false;
-          try {
-            const { scopes } = await scanEmitterDefs(root, projectId);
-            hasDbEmitter = Object.values(scopes).some((s) => s.defs.some((d) => d.def.type === 'db'));
-          } catch {
-            /* scan failure ⇒ treat as no db emitters (fail-soft) */
-          }
-          if (hasEventHook || hasDbEmitter) {
-            this.projectHookRuntimes.set(projectId, new ProjectHookRuntime(projectId, root, this, db, hooks));
-          }
-        } catch (err) {
-          console.warn(`[hooks] failed to wire db-write event dispatch for "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
+      if (db) await this.ensureProjectHookRuntime(root, projectId, db);
     }
     return db;
+  }
+
+  /**
+   * Wire (once) the project's DB-write → EVENT dispatch onto the db's `onWrite` seam. A db
+   * write produces the synthetic `project/db.<table>.<event>` event (consumed by EVENT hooks)
+   * plus any `{type:'db'}` emitter def's events, so the runtime is only worth wiring when the
+   * project HAS an event hook (project or space) or a db emitter def.
+   *
+   * Called at db boot AND from {@link refreshProjectHooks} after an authoring write. Both are
+   * needed: an app's db boots when its FIRST TABLE is authored, which is necessarily before
+   * its first hook exists — so wiring only at boot would leave a later-authored hook dead
+   * until the pod restarted (the S10 Act III "the form is alive" failure: the intake row
+   * landed, `normalize-recipe-intake` never ran, and the normalized recipe never appeared).
+   */
+  private async ensureProjectHookRuntime(
+    root: string,
+    projectId: string,
+    db: ProjectDb,
+  ): Promise<ProjectHookRuntime | undefined> {
+    const existing = this.projectHookRuntimes.get(projectId);
+    if (existing) return existing;
+    try {
+      const hooks = await loadAllHooks(join(root, projectId));
+      const hasEventHook = hooks.some((h) => (h.def as { type?: string }).type === 'event');
+      let hasDbEmitter = false;
+      try {
+        const { scopes } = await scanEmitterDefs(root, projectId);
+        hasDbEmitter = Object.values(scopes).some((s) => s.defs.some((d) => d.def.type === 'db'));
+      } catch {
+        /* scan failure ⇒ treat as no db emitters (fail-soft) */
+      }
+      if (!hasEventHook && !hasDbEmitter) return undefined;
+      const rt = new ProjectHookRuntime(projectId, root, this, db, hooks);
+      this.projectHookRuntimes.set(projectId, rt);
+      return rt;
+    } catch (err) {
+      console.warn(
+        `[hooks] failed to wire db-write event dispatch for "${projectId}": ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return undefined;
+    }
   }
 
   /** One authoring-globals instance per SessionManager (lazy singleton), so
@@ -694,12 +713,21 @@ export class SessionManager {
 
   /**
    * Re-read the project's hooks into its live db-write dispatch runtime (after an
-   * authoring write). No-op when the project has no db yet — the runtime is then wired
-   * from scratch, with the current hook set, the moment {@link getProjectDb} boots one.
+   * authoring write).
+   *
+   * When no runtime exists yet, WIRE one rather than no-op: the db boots with the project's
+   * first table — always before its first hook is authored — so the boot-time wiring finds
+   * nothing to subscribe and skips. Without wiring here, the hook the agent just wrote would
+   * never see a db write until the pod restarted. No-op only while the project has no db at
+   * all (a table write reloads it via {@link reloadProjectDb}, which re-wires from scratch).
    */
   private async refreshProjectHooks(root: string, projectId: string): Promise<void> {
     const rt = this.projectHookRuntimes.get(projectId);
-    if (!rt) return;
+    if (!rt) {
+      const db = this.projectDbs.get(projectId);
+      if (db) await this.ensureProjectHookRuntime(root, projectId, db);
+      return;
+    }
     rt.reload(await loadAllHooks(join(root, projectId)));
   }
 
