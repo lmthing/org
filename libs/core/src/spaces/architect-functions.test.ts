@@ -88,6 +88,40 @@ describe('per-file builders smoke', () => {
     expect(t.error).toMatch(/placeholder/i);
   });
 
+  // A knowledge-grounded task that is told only to "answer, grounded in the knowledge" has no rule
+  // for the case that matters: the knowledge is SILENT on the question. Live, a generated insurance
+  // agent then answered a market-check question from its (unrelated) car-policy note and told the
+  // user there was a cheaper option — naming their own current insurer. Every task that loads
+  // knowledge must carry the grounding rule, whatever prose the architect's model wrote.
+  it('appends the grounding rule to every task that loads knowledge (never answer past the knowledge)', () => {
+    const dir = join(baseDir, 'sG'); const D = JSON.stringify(dir);
+    evalDump(vm, `writeAgentFile(${D}, ${JSON.stringify({ agentSlug: 'g', agentTitle: 'G', systemPrompt: 'x', actions: [{ id: 'answer', label: 'A', description: 'd', tasklist: 'answer' }] })})`);
+
+    const grounded = evalDump(vm, `writeTaskFile(${D}, "answer", ${JSON.stringify({
+      id: 'reply',
+      instruction: "Answer `query`. Code:\nconst k = await loadKnowledge('insurance','car','policy.md');\ncurrentTask.resolve({ answer: 'md' });",
+      output: { answer: 'string' }, goal: true,
+    })})`);
+    expect(grounded.ok).toBe(true);
+    const body = readFileSync(grounded.path, 'utf8');
+    expect(body).toMatch(/does not answer/i);
+    expect(body).toMatch(/never infer, guess, or present a conclusion the knowledge does not state/i);
+
+    // Already stated in the model's own words → not duplicated.
+    const already = evalDump(vm, `writeTaskFile(${D}, "answer", ${JSON.stringify({
+      id: 'own',
+      instruction: "await loadKnowledge('insurance','car','policy.md'); If the notes don't cover it, say so — never invent.",
+      output: { answer: 'string' },
+    })})`);
+    expect(readFileSync(already.path, 'utf8')).not.toMatch(/never infer, guess, or present/i);
+
+    // A task that loads NO knowledge is left exactly as authored.
+    const plain = evalDump(vm, `writeTaskFile(${D}, "answer", ${JSON.stringify({
+      id: 'plain', instruction: 'Compute the total. currentTask.resolve({ answer: "42" });', output: { answer: 'string' },
+    })})`);
+    expect(readFileSync(plain.path, 'utf8')).not.toMatch(/never infer/i);
+  });
+
   it('rejects a function with a syntax error (typecheck on write)', () => {
     const dir = join(baseDir, 's2'); const D = JSON.stringify(dir);
     const fn = evalDump(vm, `writeFunctionFile(${D}, "broken", ${JSON.stringify('export function broken( { return 1 }')})`);

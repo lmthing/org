@@ -276,13 +276,18 @@ if (ACTS.includes(2)) {
   const foundCheaper = /"cheaper_option_found"\s*:\s*true/.test(rowBlob) || /verified cheaper|cheaper option found/.test(rowBlob);
   const q = acc(await thing.send('What did your market check on the car insurance conclude — is there a cheaper option saved in the vault, and who is it with? Answer only from what you saved.', { timeoutMs: 600_000 }));
   const reply = q.lastText.toLowerCase();
-  const namesAnInsurer = /(allianz|ergo|generali|interamerican|groupama|anytime|hellas direct|eurolife|nn |mapfre)/.test(reply);
-  const consistent = foundCheaper ? reply.length > 40 : !namesAnInsurer;
+  // The failure this caught live was NOT "it named some other insurer" — the built insurance space
+  // answered from a stale car-policy note and claimed there WAS a cheaper option, naming the user's
+  // OWN current insurer. So the check is on the CLAIM, not on the name: asserting a positive finding
+  // the saved row denies is the bug.
+  const claimsCheaper = /(there (is|'s) a cheaper|found a cheaper|cheaper option (is|saved|available|found)|yes[,.]? there is)/.test(reply);
+  const admitsNone = /(no (verified |genuinely )?cheaper|did not find|didn't find|none (was |were )?(found|verified)|not cover|no verified)/.test(reply);
+  const consistent = foundCheaper ? reply.length > 40 : (!claimsCheaper && admitsNone);
   report.check(
     foundCheaper
       ? 'THING answers the follow-up from the saved cheaper quote'
-      : 'THING does NOT fabricate a cheaper insurer when the saved research found none',
-    consistent, `savedCheaper=${foundCheaper} · reply: ${q.lastText.slice(0, 160)}`);
+      : 'THING reports the saved research HONESTLY (no cheaper option claimed when the saved row verified none)',
+    consistent, `savedCheaper=${foundCheaper} claimsCheaper=${claimsCheaper} admitsNone=${admitsNone} · reply: ${q.lastText.slice(0, 200)}`);
   cp.acts.II = { passed: report.passed, quotesTable, webYields, grewRows, researchedRows: researched.length, foundCheaper };
   saveCheckpoint(cp);
 }

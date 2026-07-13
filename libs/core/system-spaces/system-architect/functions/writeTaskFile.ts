@@ -24,6 +24,31 @@ interface TaskFileSpec {
 }
 
 /**
+ * The grounding rule every knowledge-grounded task carries (appended by `writeTaskFile` when the
+ * instruction loads knowledge and does not already say it).
+ *
+ * A task told only to "answer the query, grounded in the knowledge" has no rule for the case that
+ * matters most: the knowledge does NOT cover the question. A small fork model then answers from
+ * the nearest note it did load. Live: a household-insurance space asked "what did your market
+ * check conclude — is there a cheaper option?" loaded its `car-policy` note (which knows only the
+ * current AXA policy), and told the user there **was** a cheaper option — "with AXA Hull", their
+ * existing €642 insurer — while the saved research row said `verified_cheaper_quote_found: false`.
+ * The knowledge was silent, so the model invented. Enforced at the writer (not just in the
+ * architect's prompt template) so it survives the model paraphrasing that template.
+ */
+const GROUNDING_RULE =
+  "Ground every claim in the knowledge you loaded: state ONLY what it supports. If the loaded " +
+  "knowledge does not answer `query`, say so plainly in your answer and state what you DO know — " +
+  'never infer, guess, or present a conclusion the knowledge does not state.';
+
+/** Does this instruction already carry a grounding rule (in any phrasing)? */
+function hasGroundingRule(instruction: string): boolean {
+  return /does not (answer|cover)|doesn't (answer|cover)|never (infer|guess|fabricate|invent)/i.test(
+    instruction,
+  );
+}
+
+/**
  * Write a single tasklist task file `tasklists/<tasklist>/NN-<id>.md`. The ordinal is
  * derived automatically: if a file already ends in `-<id>.md`, its ordinal is reused
  * (so re-writing a task is idempotent); otherwise the task is appended after the
@@ -31,6 +56,9 @@ interface TaskFileSpec {
  *
  * Exactly one task per tasklist should set `goal: true` (the task whose output is the
  * final answer); `validateSpace` enforces this. Uses execShell (ls) + writeFileRaw. No imports.
+ *
+ * A task whose instruction calls `loadKnowledge(...)` gets `GROUNDING_RULE` appended unless it
+ * already states one — so a generated agent says "my notes don't cover that" instead of inventing.
  *
  * @returns { ok, path, error? }
  */
@@ -55,6 +83,11 @@ export function writeTaskFile(
   if (/loadKnowledge\([^)]*<[A-Za-z]/.test(spec.instruction)) {
     return { ok: false, path: '', error: "writeTaskFile: instruction contains a placeholder loadKnowledge(...) call with <…> angle-brackets. Replace every <domain>/<field>/<aspect> with the REAL slugs (e.g. loadKnowledge('chania_guide','beaches','elafonissi.md'))." };
   }
+
+  // A knowledge-grounded task must never answer past its knowledge (see GROUNDING_RULE).
+  const instruction = /loadKnowledge\s*\(/.test(spec.instruction) && !hasGroundingRule(spec.instruction)
+    ? `${spec.instruction.trim()}\n\n${GROUNDING_RULE}`
+    : spec.instruction;
 
   const id = String(spec.id).replace(/^\d+[-_]?/, '').replace(/\.md$/i, '') || 'task';
   const tlDir = spacePath(dir, 'tasklists', tasklist);
@@ -100,7 +133,7 @@ export function writeTaskFile(
     ...(spec.condition ? [`condition: "${String(spec.condition).replace(/"/g, '\\"')}"`] : []),
     '---',
     '',
-    spec.instruction,
+    instruction,
   ];
 
   const path = spacePath(tlDir, `${num}-${id}.md`);
