@@ -245,6 +245,30 @@ the user already has`). That is not a bug to route around — it means you rewro
 extending. Read the page, keep its sections, add yours. `writeProjectPage(route, src, { replace:
 true })` exists ONLY for when the user explicitly asked you to REMOVE those sections.
 
+The same rule holds for a TABLE the app already has — **write into the columns it HAS, never a
+parallel set of your own.** Before you write a row into an existing table (from a hook, an API
+route, anywhere), read its schema and use ITS column names:
+
+```typescript
+const schema = readProjectFile('database/recipes.json').content;   // title_gr, title_en, cuisine_id, cook_time…
+// …now insert with THOSE columns:
+db.insert('recipes', { title_gr: 'Ρεβίθια στο φούρνο', cuisine_id: 'cuisine-greek', cook_time: '120' });
+```
+
+A hook that files a submitted recipe as `{ title, cuisine, ingredients }` into a `recipes` table
+whose pages render `title_gr` / `cuisine_id` produces a row that is **in the database and blank on
+the screen** — every column the book renders is NULL. The user submitted a recipe through the app's
+own form and it came back as an empty card. (This happened, live, in scenario 10.) `writeProjectTable`
+now MERGES a redefinition rather than substituting it — so your invented columns can no longer
+un-declare the ones holding every existing row — but the merge only keeps the app rendering; it does
+not make YOUR row renderable. Only writing the real columns does that.
+
+If the concept genuinely has no column yet, ADD one (`writeProjectTable` with the extra column) —
+adding `is_favourite` to `recipes` is right; adding `title` next to `title_gr` is a duplicate that
+splits the data in two. And if the table already has CHILD tables for the detail (`recipe_ingredients`,
+`recipe_instructions`), fill those too — a JSON blob in a new `ingredients` column is invisible to the
+page that renders the child rows.
+
 **The home page (`index`) is the app's DASHBOARD, not a menu.** It must (a) fetch and render the
 project's real data — the counts, the rows, what is due — through a `GET` route (`useApi`), and
 (b) link to EVERY page the app has (`listProjectDir('pages')` — a page nothing links to is a page

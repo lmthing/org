@@ -434,6 +434,39 @@ export function createProjectAuthoringGlobals(opts: {
   }
 
   /**
+   * Merge an incoming schema for an EXISTING table with the one already on disk: the
+   * declared columns are the UNION (the incoming definition wins for a same-named column,
+   * and every other top-level key of the incoming schema replaces the old one).
+   *
+   * A redefinition must never DROP a declared column, because the live table cannot drop
+   * one either: `reconcileTable` only ever ADDs columns to the running SQLite table. So a
+   * `writeProjectTable('recipes', <9 new columns>)` over a 13-column table used to leave
+   * `database/recipes.json` describing a table the runtime does not have — the 13 original
+   * columns stayed physically in SQLite, holding all the existing rows' data, while the
+   * declared schema no longer mentioned them. Everything downstream reads the DECLARATION,
+   * so those columns silently left the DTS, the marshalling and the pages: the app kept
+   * serving rows whose real content had become unaddressable.
+   *
+   * Found live in scenario 10: a mid-life "add a recipe form" feature redefined `recipes`
+   * with the intake's own shape (`title`, `cuisine`, `ingredients`), so every recipe the
+   * book page renders by `title_gr`/`cuisine_id` fell out of the schema, and the recipe the
+   * form itself submitted rendered as a blank card. Merging keeps the declaration honest;
+   * a genuinely new table is unaffected (nothing on disk to merge with).
+   */
+  function mergeWithExistingTable(name: string, schema: TableSchema): TableSchema {
+    let existing: TableSchema | undefined;
+    try {
+      const path = safeResolve(projectRoot, join('database', `${name}.json`));
+      if (!existsSync(path)) return schema;
+      existing = JSON.parse(readFileSync(path, 'utf8')) as TableSchema;
+    } catch {
+      return schema; // unreadable/corrupt declaration — the incoming one is strictly better
+    }
+    if (!existing?.columns || typeof existing.columns !== 'object') return schema;
+    return { ...existing, ...schema, columns: { ...existing.columns, ...schema.columns } };
+  }
+
+  /**
    * Write a table schema into the LIVE project (`database/<name>.json`) and tell the
    * host to re-derive the project db.
    *
@@ -442,6 +475,9 @@ export function createProjectAuthoringGlobals(opts: {
    * `store/projects/<id>/` TEMPLATES, and `bootProjectApp()` returns `null` for a project
    * with no `database/*.json` — so "store every tip in a `tips` table" had nowhere to land
    * and every downstream hook had no `db` to write to. Found live in scenario 01.
+   *
+   * On a table that ALREADY exists the incoming schema is MERGED, never substituted — see
+   * {@link mergeWithExistingTable}.
    */
   function writeProjectTable(
     name: string,
@@ -457,7 +493,8 @@ export function createProjectAuthoringGlobals(opts: {
     if (rows !== undefined && !Array.isArray(rows)) {
       return { ok: false, error: 'rows must be an array of row objects' };
     }
-    const out = writeUnder(join('database', `${name}.json`), JSON.stringify(schema, null, 2) + '\n');
+    const merged = mergeWithExistingTable(name, schema as TableSchema);
+    const out = writeUnder(join('database', `${name}.json`), JSON.stringify(merged, null, 2) + '\n');
     if (out.ok) {
       try {
         // Pass the seed rows through: the host re-derives the db AND inserts them (the agent

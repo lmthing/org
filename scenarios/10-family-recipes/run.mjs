@@ -594,7 +594,33 @@ if (ACTS.includes(3)) {
     /ingredient|υλικ/i.test(k) && ((Array.isArray(v) && v.length >= 3) || (typeof v === 'string' && v.split(/[,\n;]/).filter(Boolean).length >= 3)));
   report.check('an AGENT normalized it into a structured recipe row (ingredients broken out)', !!structured, normalized ? JSON.stringify(normalized).slice(0, 220) : 'no normalized recipe row');
   report.check('the recipe count grew (a real new row, before/after)', recipesAfterRows.length > recipesBefore, `${recipesBefore} → ${recipesAfterRows.length} recipe rows`);
-  cp.acts.III = { passed: report.passed, dbHook: !!dbHook, formEp: !!formEp, landed: landed.hit, structured: !!structured };
+  /**
+   * …and the new row must be RENDERABLE, not merely present. "A row appeared" was all this Act used
+   * to ask, and it passed while the app showed a BLANK CARD: the intake hook invented its own columns
+   * (`title`, `cuisine`, `ingredients`) on a `recipes` table whose pages render `title_gr`/`cuisine_id`,
+   * so every column the book displays was NULL — and the redefinition had un-declared those columns
+   * for every OTHER recipe too. Assert the row speaks the schema the rest of the book speaks: the
+   * columns the SEED rows carry are the columns the NEW row must carry.
+   */
+  const seedRow = recipesAfterRows.find((r) => r !== normalized && norm(JSON.stringify(r)).includes('μουσακ')) ?? recipesAfterRows[0];
+  const filled = (r) => Object.entries(r ?? {}).filter(([k, v]) => k !== 'id' && v !== null && v !== undefined && v !== '').map(([k]) => k);
+  const seedCols = filled(seedRow);
+  const newCols = filled(normalized);
+  const shared = seedCols.filter((c) => newCols.includes(c));
+  // The display columns the book page actually renders (title_gr/title_en/cuisine_id) — a row with
+  // none of them populated is invisible on screen no matter how many rows the data API returns.
+  const displayCols = seedCols.filter((c) => /^title|name|cuisine/i.test(c));
+  const renderable = displayCols.length === 0 || displayCols.some((c) => newCols.includes(c));
+  report.check('the normalized row is RENDERABLE — it fills the SAME display columns the book renders, not a parallel set',
+    renderable && shared.length >= 2,
+    JSON.stringify({ seedFills: seedCols.slice(0, 8), newFills: newCols.slice(0, 8), sharedWithSeed: shared.length, displayColsFilled: displayCols.filter((c) => newCols.includes(c)) }).slice(0, 260));
+  // The declared schema must still describe the table the app renders (no column silently un-declared).
+  const declared = await pod.readProjectFile(PROJECT, 'database/recipes.json').then((s) => { try { return Object.keys(JSON.parse(String(s)).columns ?? {}); } catch { return []; } }).catch(() => []);
+  const lostCols = seedCols.filter((c) => declared.length && !declared.includes(c));
+  report.check('the recipes SCHEMA still declares every column the existing rows use (a feature did not un-declare the book)',
+    declared.length >= 1 && lostCols.length === 0,
+    lostCols.length ? `columns holding real data but NO LONGER DECLARED: ${lostCols.join(', ')}` : `${declared.length} columns declared, all seed columns present`);
+  cp.acts.III = { passed: report.passed, dbHook: !!dbHook, formEp: !!formEp, landed: landed.hit, structured: !!structured, renderable, lostCols };
   saveCheckpoint(cp);
 }
 

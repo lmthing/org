@@ -349,6 +349,58 @@ describe('createProjectAuthoringGlobals', () => {
     expect(schemaWrites).toEqual(['tips']);
   });
 
+  it('writeProjectTable MERGES a redefinition of an existing table — a column is never dropped from the declaration', () => {
+    const pa = make();
+    // The app's real recipe book: the pages render `title_gr`/`cuisine_id`.
+    expect(
+      pa.writeProjectTable('recipes', {
+        title: 'Recipes',
+        description: 'The family recipe book',
+        columns: {
+          id: { type: 'string', description: 'pk', primaryKey: true, generated: 'uuid' },
+          title_gr: { type: 'string', description: 'greek title' },
+          cuisine_id: { type: 'string', description: 'cuisine' },
+        },
+      } as unknown as TableSchema).ok,
+    ).toBe(true);
+
+    // Mid-life, a feature (the "add a recipe" intake hook) redefines `recipes` with ITS OWN
+    // shape. reconcileTable can only ADD columns to the live SQLite table, so honouring this
+    // as a substitution would leave the declaration describing a table that does not exist:
+    // title_gr/cuisine_id would still physically hold every recipe, but nothing downstream —
+    // DTS, marshalling, the book page — would know they were there.
+    expect(
+      pa.writeProjectTable('recipes', {
+        title: 'Recipes',
+        description: 'Recipes (intake shape)',
+        columns: {
+          id: { type: 'string', description: 'pk', primaryKey: true, generated: 'uuid' },
+          title: { type: 'string', description: 'title' },
+          ingredients: { type: 'json', description: 'ingredient list' },
+        },
+      } as unknown as TableSchema).ok,
+    ).toBe(true);
+
+    const declared = JSON.parse(readFileSync(join(projectRoot, 'database', 'recipes.json'), 'utf8'));
+    // The union: the new columns arrived and the old ones SURVIVED.
+    expect(Object.keys(declared.columns).sort()).toEqual([
+      'cuisine_id',
+      'id',
+      'ingredients',
+      'title',
+      'title_gr',
+    ]);
+    // A same-named column takes the incoming definition (a redefinition still redefines).
+    expect(declared.columns.id.primaryKey).toBe(true);
+  });
+
+  it('writeProjectTable does not merge a table that does not exist yet (a new table is exactly what was asked for)', () => {
+    const pa = make();
+    expect(pa.writeProjectTable('tips', TIPS_SCHEMA).ok).toBe(true);
+    const declared = JSON.parse(readFileSync(join(projectRoot, 'database', 'tips.json'), 'utf8'));
+    expect(Object.keys(declared.columns)).toEqual(Object.keys(TIPS_SCHEMA.columns));
+  });
+
   it('writeProjectTable forwards seed rows to onSchemaWrite (move known data into the app in one pass)', () => {
     const seeds: Array<{ table: string; rows: unknown[] | undefined }> = [];
     const pa = createProjectAuthoringGlobals({
