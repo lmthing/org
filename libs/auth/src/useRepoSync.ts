@@ -11,7 +11,9 @@ export interface RepoSyncState {
 export interface RepoSyncOptions {
   session: AuthSession | null
   isAuthenticated: boolean
-  /** The GitHub access token (from GithubContext device flow or Supabase provider token) */
+  /** The GitHub access token. Supplied by the caller; the only caller today
+   *  (`apps/web` `/computer` route's `RepoSyncGate`) reads it from
+   *  `localStorage.github_token`. */
   githubToken: string | null
   /** Callback invoked with the flat file map from the repo */
   onFilesLoaded: (files: Record<string, string>) => void

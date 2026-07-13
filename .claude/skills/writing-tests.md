@@ -40,7 +40,7 @@ pnpm build && LM_LIVE=1 pnpm exec vitest run libs/cli/src/testing/live-llm.test.
 
 # live prod scenarios — run the smoke check before burning time on a scenario
 cd sdk/org/scenarios/harness && node smoke.mjs
-node ../01-newsroom/run.mjs
+node ../05-latam/run.mjs        # any scenario dir: 05-latam 06-tanzania 07-life-admin 08-small-shop 09-home-renovation 10-family-recipes
 ```
 
 **Never use `pnpm --filter <pkg> test`.** `@lmthing/core`, `cli`, `auth`, `utils` and `ui` declare no

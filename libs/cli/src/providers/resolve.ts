@@ -2,8 +2,8 @@ import type { LanguageModel } from 'ai';
 
 /**
  * Parse a "provider:modelId" spec and lazy-load the appropriate @ai-sdk/* provider.
- * Supported: openai, anthropic, google, mistral, azure, lmthingcloud, groq, cohere,
- * bedrock, openai-compatible
+ * Supported: openai, anthropic, google, mistral, azure, lmthingcloud
+ * (anything else throws "Unsupported provider").
  *
  * Azure requires AZURE_API_KEY and AZURE_RESOURCE_NAME env vars.
  * azure:modelId maps to the deployment name on the configured Azure resource.

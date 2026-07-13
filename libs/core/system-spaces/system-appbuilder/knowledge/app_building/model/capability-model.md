@@ -13,10 +13,18 @@ reaching the engine. This is least-privilege: give an agent exactly the caps its
 | `db:schema` | `writeTableSchema`, `db.createTable`/`db.addColumn` | optional `{ tables: [...] }` |
 | `db:read` | `db.query`, `db.tables` | optional `{ tables: [...] }` |
 | `db:write` | `db.insert`, `db.update`, `db.remove` | optional `{ tables: [...] }` |
-| `pages:write` | `writePage` | bare |
-| `api:write` | `writeApi` | bare |
+| `pages:write` | `writePage`, `writeProjectPage` | bare |
+| `api:write` | `writeApi`, `writeProjectApi` | bare |
 | `hooks:write` | `writeHook` | bare |
 | `api:call` | `apiCall(name, input)` | required `{ allow: [...] }` |
+| `connections:use` | `callConnection`, `integrationStatus` | optional `{ providers: [...] }` |
+| `tools:use` | the OpenClaw `tool()` global | optional `{ allow: [...] }` |
+| `store:read` | `storeSearch`, `storeInspect` | bare |
+| `store:install` | `installSpace` (consent-gated) | bare |
+| `events:emit` | `emitEvent` | bare |
+| `fs:scratch` | scratch-dir file access | bare |
+
+That is the complete set of recognized ids — 14 in all; an unknown id fails the space load.
 
 ## Declaring capabilities
 
@@ -42,7 +50,9 @@ capabilities:
 
 The `app-architect` orchestrator holds the full authoring set (it builds every file kind). The
 specialist agents hold only their slice: `data-modeler` = `db:schema`+`db:read`; `page-builder` =
-`pages:write`+`db:read`; `api-author` = `api:write`+`db:read`; `automator` = `hooks:write`. A page
+`pages:write`+`db:read`; `api-author` = `api:write`+`db:read`. The `automator` is the broad one — it
+authors the LIVE project (data model + automation + UI) and so holds six grants:
+`hooks:write`, `db:schema`, `db:read`, `db:write`, `pages:write`, `api:write`. A page
 builder cannot write a table; a data modeler cannot write a page. The build_app tasklist runs its
 per-file steps with role `general` under the app-architect's own grants, so every write global is
 callable in those task bodies without any extra delegation.

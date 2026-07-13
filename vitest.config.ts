@@ -10,12 +10,16 @@ export default defineConfig({
       'libs/*/src/**/*.test.ts',
       'libs/*/src/**/*.test.tsx',
       // apps/web has a handful of pure (node-safe) unit tests — origin
-      // resolution, host→surface routing. DOM/component tests live in libs/ui
-      // (its own jsdom config); keep only node-safe suites matched here.
+      // resolution, host→surface routing. DOM/component tests live in libs/ui;
+      // keep only node-safe suites matched here.
       'apps/web/src/**/*.test.ts',
     ],
-    // libs/state and libs/ui have their own vitest configs (jsdom + React
-    // transforms); exclude them from the root node runner to avoid conflicts.
+    // libs/state has its OWN vitest config (jsdom + React transforms), so it is
+    // excluded here and run by its own `test` script.
+    // libs/ui is excluded because its DOM/component suites need jsdom + React
+    // transforms this node runner does not provide — but note it has NO vitest
+    // config and NO `test` script of its own, so its test files currently run
+    // NOWHERE. Giving libs/ui a jsdom config + test script would fix that.
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

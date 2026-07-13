@@ -7,7 +7,11 @@ import { PodEnsureGate } from '@/lib/gates'
 import { useCallback, useEffect, useState } from 'react'
 import { COMPUTER_BASE_URL } from '@/lib/config'
 
-/** Sync the user's GitHub repo into the pod filesystem when authenticated. */
+/**
+ * Fetch the user's GitHub repo into memory when authenticated (see `useRepoSync`).
+ * The files are NOT written to the pod filesystem — the callback only logs the
+ * file count; wiring them into the pod is still TODO.
+ */
 function RepoSyncGate({ children }: { children: React.ReactNode }) {
   const { session, isAuthenticated } = useAuth()
   const githubToken = typeof window !== 'undefined' ? localStorage.getItem('github_token') : null

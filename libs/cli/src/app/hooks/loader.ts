@@ -38,7 +38,10 @@
  * in-proc in a fresh module scope. For a SPACE hook (store-downloaded code) that
  * would run store code with the pod's privileges, so instead the def is extracted
  * in a **worker** and its handler is invoked worker-isolated (see
- * {@link loadSpaceHooks} / `../worker-load.ts`). Validation is **fail-loud**:
+ * {@link loadSpaceHooks} / `../worker-load.ts`). For a PROJECT hook, validation is
+ * **fail-soft per file**: a hook that fails to import or validate is skipped with a
+ * `console.warn` so one bad file can't blank the whole project's hooks (a duplicate
+ * slug is the one exception — that still throws). What a valid hook must satisfy:
  *   - a cron hook needs exactly one of `every`/`daily`, plus a `trigger`;
  *   - an event hook needs a source-qualified `on.event` and **exactly one** of
  *     `trigger` / `handler`;
@@ -202,8 +205,9 @@ const realRequire = createRequire(join(process.cwd(), 'lmthing-hook.cjs'));
 
 /**
  * Discover + load every hook under `<projectRoot>/hooks/` (the PROJECT scope).
- * Returns `[]` when there is no `hooks/` dir. Throws fail-loud on a duplicate
- * slug or an invalid hook shape.
+ * Returns `[]` when there is no `hooks/` dir. Fail-soft per file: a hook that
+ * fails to import or validate is skipped with a `console.warn` so one bad file
+ * can't blank the project's hooks. A duplicate slug still throws.
  *
  * Project hooks are USER code in the user's trust domain — their imperative
  * handlers are `require()`d and run **in-proc** (like today). SPACE hooks are
@@ -309,7 +313,8 @@ export async function loadSpaceHooks(projectRoot: string, spaceId: string): Prom
  * isolated) into one flat list. Space hooks are namespaced so their slugs never
  * collide with a project hook or another space. A single space that fails to
  * load its hooks is skipped (fail-soft-per-space) — a broken store space must
- * not blank the whole project's hooks; the project's own hooks still fail loud.
+ * not blank the whole project's hooks. Project hooks are likewise fail-soft per
+ * FILE (an invalid hook is skipped with a warning; only a duplicate slug throws).
  */
 export async function loadAllHooks(projectRoot: string): Promise<LoadedHook[]> {
   const out = await loadHooks(projectRoot);

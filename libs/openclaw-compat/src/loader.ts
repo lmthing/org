@@ -3,12 +3,15 @@
  * (`openclaw.extensions[0]`) and `openclaw.plugin.json` (`id`), transpiles +
  * evaluates the entry file, and calls its `register(api)`.
  *
- * Only the simple `definePluginEntry({ id, register })` shape is supported
- * (an entry whose default export is, or resolves to, `{ id, register }`).
- * A `defineBundledChannelEntry(...)`-style descriptor (identifiable by a
- * `plugin.specifier` field — OpenClaw's own bundled-channel packaging) is
- * detected and rejected with {@link UnsupportedCompatError}; loading those is
- * a later increment (see `org/docs/libs/openclaw-compat.md`).
+ * Two entry shapes load. The simple `definePluginEntry({ id, register })` shape
+ * (an entry whose default export is, or resolves to, `{ id, register }`), and
+ * `defineBundledChannelEntry(...)` — OpenClaw's own bundled-channel packaging,
+ * identifiable by a `plugin.specifier` field. Bundled-channel entries built
+ * against our shim (see `BUILTIN_SHIMS`) already come back as `{ id, register }`;
+ * a RAW descriptor (built against the real SDK, so no `register`) is applied by
+ * {@link applyBundledChannelDescriptor}. Either way the channel is recorded and
+ * its webhook-mode hook runs; the socket/native runtime behind
+ * `plugin.specifier` is NOT loaded (see `org/docs/libs/openclaw-compat.md`).
  *
  * The transpile step reuses the esbuild-transform-then-`new Function`-eval
  * approach from `@lmthing/cli`'s hook loader

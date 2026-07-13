@@ -45,11 +45,16 @@ jq -r '.type' /tmp/run.jsonl | sort | uniq -c
 jq -c 'select(.type=="node_end" and .status=="error") | {nodeId, error}' /tmp/run.jsonl
 ```
 
-**3. For anything deep in a tree** (a fork/delegate/tasklist that failed), run with `--web [port]`
-(default 3000) and drive the HTTP API instead — `GET /api/help` is self-describing; `GET /api/state`
-prints the ASCII execution tree, then `GET /api/node/<id>?tab=statements|llm` shows exactly what that
-node wrote and what the model returned per attempt. Routes → debugging.md §3. Note: `lmthing serve`
-writes **no** trace file — on a server/pod the spine is in-memory and read over HTTP.
+**3. For anything deep in a tree** (a fork/delegate/tasklist that failed), drive the HTTP API —
+`GET /api/help` is self-describing; `GET /api/state` prints the ASCII execution tree, then
+`GET /api/node/<id>?tab=statements|llm` shows exactly what that node wrote and what the model returned
+per attempt. Routes → debugging.md §3. Note: `lmthing serve` writes **no** trace file — on a server/pod
+the spine is in-memory and read over HTTP.
+
+> **`--web <port>` does not work today.** Its asset resolver calls
+> `require.resolve('@lmthing/ui/package.json')`, a subpath the `exports` map does not expose, and its
+> bundle entry `src/chat/app/main.tsx` was deleted. Use `lmthing serve` (or `pnpm thing`) to get the
+> same routes. → [contributing/debugging](../../../org/docs/contributing/debugging.md)
 
 **4. Match the symptom to the playbook** (debugging.md §6) before reading code. Nearly every eval/yield
 failure is one of the entries there, each cited to the file and line that causes it.

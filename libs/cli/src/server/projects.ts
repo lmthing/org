@@ -135,7 +135,7 @@ function assertUnder(base: string, subPath: string): string {
 // ─── System spaces ────────────────────────────────────────────────────────────
 
 /**
- * List absolute paths for each immediate sub-directory of `<root>/system/`.
+ * List absolute paths for each immediate sub-directory of `<root>/system/spaces/`.
  * Returns [] if the directory doesn't exist.
  */
 export async function listSystemSpaceDirs(root: string): Promise<string[]> {
