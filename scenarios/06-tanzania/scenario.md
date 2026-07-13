@@ -391,4 +391,90 @@ the live source the Zanzibar-insurance research question is expected to reach.
 
 ## Actual results
 
-_Filled in by the runner — paste from `results/report.md` after a run._
+**Round 1 (2026-07-13) — verdict: FAIL (honest).** Baseline established, `run.mjs` implemented 1:1
+with the Acts table, run end-to-end against live prod. **Act I passes after a fix; Acts II–XIV expose
+real product bugs.** Seven were fixed in the product (each with a test); the two biggest are recorded
+as open issues because their fix is not verifiable in this round's budget. This is the honest
+narrative, not a green checkmark.
+
+### The baseline was worse than a failing test — it was silence
+
+Handed all five files and *"I don't trust myself to keep it straight… can you help me get on top of
+it?"*, THING **read every file correctly** (`system-vision` + `system-files/dispatch` → `reader` +
+`sheet`, `readDocument` ×3, no premature authoring) — and then **did nothing at all**. No offer, no
+spaces, no app. A bare **"Yes please." (23s)** and even an explicit nudge (*"Is it ready? Can I open
+it yet?"*, 33s) produced **0 tables and 0 spaces**. Its final reply to the user was
+`display("24872")` — a bare character count — after hitting `Cannot find name 'fullSummary'`.
+
+That is the propose/consent contract failing end to end, and it was **entirely a prompt bug**: THING's
+instruct taught RESTRAINT (*"only reach for path 4 LATER, when the user actually asks"*) with **no
+counterweight telling it to propose**. The user never asks — they don't know an app is on the menu.
+
+### Per-Act results
+
+| Act | Verdict | What actually happened |
+|---|---|---|
+| **I — The offer** | **PASS** (after fix) | Before: `offered=false`, **0** specifics, reply `"24872"`. After: **offered=true**, cites **4** of his own specifics, still **zero** authoring before consent, all 5 attachments classified right (`image/jpeg`→vision, `audio/mpeg`→transcription, xlsx→SheetJS). 154s. |
+| **II — Ingest & provided-info shortcut** | **PARTIAL** | From **0 tables/0 spaces** → **7 tables, 96 seeded rows** (itinerary 35, cost_items 22, costs 14, park_fees 11, field_notes 10, contacts 2, photos 2), **6 pages, 6 endpoints**, `_layout.tsx` **with the `<Chat>` dock**. Provided-info shortcut **holds** (1 incidental web yield — it did NOT re-research what it was handed). 0 unrecovered errors. Build turn 534s. **Still fails ≥3 spaces**: only 2 (`tanzania-safari-qa`, `zanzibar-advisor`) — Cairo and Dar were skipped. |
+| **III — Fixture tokens in real state** | **PARTIAL** | ✓ `ZZJQUU` (md), ✓ `Emmanuel` and ✓ the 5,000-shilling ranger tip (**audio transcription proven** — db row *and* space file). ✗ the xlsx's computed total `3344.2` and ✗ the PDF's hotline never persisted — **though both files were demonstrably read** (36 cost rows, 11 park-fee rows). See "the answer key" below: this Act was also **compromised** by an overfit prompt. |
+| **IV — Live app + the `include` relation** | **FAIL** | App compiles (`built:true`), serves **200 real HTML**, 6 routes. But **not one `relations` block across 7 tables** → `db.query({include})` had nothing to expand. The relation-expanding probe never ran. |
+| **V — A question the files don't answer** | **FAIL** | **0 web yields.** THING routed the Zanzibar-insurance question to the `zanzibar-advisor` space **it had just built from those same files** — which cannot possibly know the answer. The user got a confident guess. Nothing landed in real state. |
+| **VI — `apiCall` for consistency** | **FAIL** | **0 `apiCall` yields.** Root cause found *before* the Act ran: `api:call` was granted to **no shipped agent**, so the global was dead code in prod — and its `{allow:[…]}` list, documented as *the* security boundary, was **never enforced at the call site**. Both fixed; THING now holds the grant. It still chose not to call the route (prompt strength, not capability). |
+| **VII — fork roles, output schema, concurrency cap** | **PARTIAL** | ✗ THING never delegated the maths complaint to `system-engineer` → **0** `explore`/`plan` forks. **✓ the cap and the queue hold** — **70 `fork_queue` events, `max=4`, over-cap=0, peak `queued`=1** (a coverage-audit capability no scenario had ever exercised). ✓ no runtime write-failure inside any read-only fork (the capability intersection held). |
+| **VIII — Throwing route / crash boundary** | **FAIL (blocked)** | The probe route returned **200 HTML**, not an `HttpError`. Not the boundary's fault: **the app's own API is unreachable over HTTP** at every candidate URL (see the issue below) — so the Act could not reach the handler at all. ✓ the pod survived and kept serving (35 rows) throughout. |
+| **IX — `@app/types` + shared component** | **PARTIAL** | ✓ `types/generated.d.ts` (6837 B) exists and declares the row type; ✓ the app compiles. ✗ **not one `components/<Name>.tsx`**, though the automator holds `writeProjectComponent`. |
+| **X — A1: in-app chat evolves the app** | **FAIL** | ✓ the `<Chat>` dock IS on every page (`_layout.tsx`). ✗ the in-app request added **nothing** (tables 7→7, pages 6→6) in **8 seconds**: in a fresh session THING ran its orientation read and **displayed the project structure as JSON** instead of routing the request. |
+| **XI–XIII — Greek / restraint / memory / restart** | see `results/report.md` | Run completed after the fixes above; results recorded in the report. |
+| **XIV — A2: it actually renders** | **FAIL — the app opens BLANK** | Driven in a real browser (chrome-devtools, session on both origins). The served HTML requests its bundle at **root-absolute** `/assets/index-*.js` → **404**, while the same asset exists at `/tanzania-trip/assets/index-*.js` → **200**. JS and CSS both 404, React never mounts, `<div id="root">` stays empty. **An app that opens empty is an anti-expectation → FAIL.** |
+
+### The answer key was in the agent's prompt (the finding that matters most)
+
+`system-appbuilder/agents/automator/instruct.md` shipped with **this scenario's own fixture data in
+its worked examples** — the booking reference **`ZZJQUU`**, flight `A3932`, "Eileen Hotel", the `$960`
+balance. Act III asserts *"`ZZJQUU` landed in a db row"* **precisely to prove THING actually read the
+attached file** — but an agent carrying `ZZJQUU` in its own system prompt can emit it having read
+nothing at all. A previous round taught the agent the answers to this exam, which quietly invalidated
+the exam. Every token is scrubbed (examples are now domain-neutral), and a CI guard now walks **every**
+shipped agent for scenario fixture tokens (verified it FAILS against the pre-scrub prompt).
+
+### Issues fixed in the product (each with a test)
+
+| # | Bug (found live) | Fix |
+|---|---|---|
+| 1 | THING never proposes; the user is never asked, because they don't know an app exists | `user-thing` instruct: offer→wait; a bare "yes" to its OWN offer IS consent (restraint kept intact) — sdk/org `11a9396` |
+| 2 | A turn ended on a raw artifact (`display("24872")`) | "your LAST `display()` is the only thing the user reads" — `11a9396` |
+| 3 | THING dragged whole documents into its context, then lost the binding between statements | "read to ORIENT, not to COPY" — carry a summary, pass the attachment id — `0a99b59` |
+| 4 | `api:call` granted to **no** agent (dead code); its `allow` list **never enforced** | enforce at the yield router (resolver never runs for a refused endpoint); add the documented `["*"]` wildcard; grant THING the capability + "ask the app, don't re-derive" — `0a99b59`, docs in parent `5a41ea4e` |
+| 5 | Scenario fixture data (the exam's answer key) embedded in a shipped prompt | scrubbed + a CI guard over every agent — `ca816f7` |
+| 6 | Zero declared relations; zero shared components | automator + data-modeler: declare the relation when rows belong to a parent; factor repeated UI — `ca816f7` |
+| 7 | The source's own stated total and its emergency hotline were dropped as "derivable" | "keep the figures and contacts the source STATES" — `bb5f623` |
+| 8 | A space built from the user's material was asked what it could not know → a guess | "was this in what they gave me?" → research; escalate when a space says it doesn't know; KEEP the finding — `e1620bd` |
+| 9 | Orienting mistaken for answering (project structure dumped as the reply) | "orienting is NOT answering" — load, then do what they asked in the same turn — `e1620bd` |
+
+### Open issues (NOT fixed — recorded honestly)
+
+- **[`served-app-renders-blank-asset-404.md`](../../../.issues/served-app-renders-blank-asset-404.md)** —
+  **high**. Every project app served on the clean URL renders **blank** (root-absolute asset URLs 404),
+  and the app's **own API routes are unreachable at every URL** (`/<project>/api/…` returns the HTML
+  shell; `/api/…` 404s), because `resolveAppBase` finds no `/app/<id>/` segment on the clean-URL host
+  and the documented `__APP_BASE__` escape hatch is not injected. The raw data API is green the whole
+  time — which is exactly the trap this campaign warns about.
+
+### Harness bug fixed
+
+Act III's vision check read `thing.events` (in-memory), but Acts III+ run in a **new process** that
+resumes the session and never streamed Act I's turn → `didDelegate('system-vision')` was a permanent
+false negative. It now asserts the photo's description **in real state** (db rows + space files) —
+strictly stronger: a text model cannot describe a picture it never saw.
+
+### Performance (actual)
+
+| Metric | Actual |
+|---|---|
+| Attachment ingest → THING's offer | **154s** (target < 5 min) ✓ |
+| Whole build after "yes" | **534s** (target < 45 min) ✓ |
+| Served app first byte | < 1s ✓ |
+| Research turn | 142s — but **0 web yields** (it never researched) |
+| Unrecovered eval/typecheck errors | **0** across the whole session ✓ (hard check) |
+| Recovered errors (retry surface) | 7 (metric) |
+| Whole run | 127 LLM calls · 13 delegates · 380k in / 53k out tokens |
