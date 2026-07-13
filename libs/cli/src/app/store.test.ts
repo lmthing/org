@@ -253,6 +253,15 @@ describe('query', () => {
   it('treats an orderBy naming no column as no ordering (never crashes the handler)', () => {
     expect(pdb.db.query('feed_items', { orderBy: {} as never })).toHaveLength(3);
   });
+
+  // Live (scenario 07): the automator wrote `orderBy: { issued_date: 'desc' }` against its own
+  // table whose column is `issue_date`. SQLite threw "no such column" → 500 → the invoices page
+  // showed the user nothing. One mis-guessed column name must not cost the whole page its data.
+  it('serves the rows unsorted when orderBy names a column the table does not have', () => {
+    const rows = pdb.db.query('feed_items', { orderBy: { issued_date: 'desc' } as never });
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => (r as Record<string, unknown>).title).sort()).toEqual(['high', 'low', 'mid']);
+  });
 });
 
 describe('include (relation expansion)', () => {

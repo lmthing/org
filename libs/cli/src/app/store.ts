@@ -451,8 +451,16 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
   function query(table: string, opts: QueryOpts = {}): Row[] {
     const { clause, binds } = buildWhere(table, opts.where);
     let sql = `SELECT * FROM ${ident(table)}${clause}`;
+    // Sorting is presentation, not data: an agent that mis-guesses ONE column name (it wrote
+    // `issued_date`, its own schema says `issue_date`) must not 500 the whole page and show the
+    // user an empty list. Order by it when it exists, warn and serve the rows unsorted when it
+    // doesn't — the `where` clause, which changes WHICH rows you get, still fails loudly.
     const order = normalizeOrderBy(opts.orderBy);
-    if (order) sql += ` ORDER BY ${ident(order.col)} ${order.dir}`;
+    if (order && !columnTypes(table).has(order.col)) {
+      console.warn(`[store] query("${table}"): no column "${order.col}" to order by — returning rows unsorted`);
+    } else if (order) {
+      sql += ` ORDER BY ${ident(order.col)} ${order.dir}`;
+    }
     if (opts.limit !== undefined) sql += ` LIMIT ${Number(opts.limit)}`;
     if (opts.offset !== undefined) {
       // SQLite requires a LIMIT before OFFSET.

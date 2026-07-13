@@ -578,20 +578,30 @@ if (ACTS.includes(10)) {
   const gets = (manifest?.endpoints ?? []).filter((e) => /get/i.test(e.method ?? ''));
   report.check('the app declares ≥1 GET route its pages fetch', gets.length >= 1, gets.map((e) => e.routePath).join(', ') || '(none)');
 
+  // The zeroed-dashboard failure is precise: `app/data/<table>` HAS the rows, but the route the
+  // page fetches doesn't serve them (it 500s, or answers an empty shell) — so the UI shows 0 while
+  // the data is right there. Assert each route against the rows its own table actually holds.
+  const tables = await tableNames(pod, PROJECT);
+  const rowCount = {};
+  for (const t of tables) rowCount[t] = ((await pod.appData(PROJECT, t).catch(() => ({ rows: [] }))).rows ?? []).length;
+
   const results = [];
   for (const ep of gets) {
     const route = String(ep.routePath ?? ep.name).replace(/^\//, '');
     const r = await pod.appApi(PROJECT, route, undefined, 'GET').catch((e) => ({ status: e?.status ?? 0, body: String(e) }));
     const payload = r.body && typeof r.body === 'object' ? r.body : {};
-    // "200 with an empty object" is the zeroed-dashboard failure: the page renders 0 / €0.00.
-    const substantive = JSON.stringify(payload).length > 20;
-    results.push({ route, status: r.status, substantive, bytes: JSON.stringify(payload).length });
+    const served = JSON.stringify(payload).match(/\{/g)?.length ?? 0; // objects in the payload ≈ rows served
+    // The table this route reads (by name) — if it has rows, the route MUST serve them.
+    const table = tables.find((t) => t.replace(/_/g, '-') === route.replace(/-list$|-view$/, '').replace(/_/g, '-'));
+    const owes = table ? rowCount[table] : 0;
+    results.push({ route, status: r.status, table, owes, served, hidesData: owes > 0 && served < 1 });
   }
-  const ok200 = results.filter((r) => r.status === 200);
-  report.check("every page GET route the app fetches returns 200 (no 500 behind a zeroed UI)", ok200.length === results.length && results.length > 0,
+  report.check("every page GET route the app fetches returns 200 (no 500 behind an empty page)", results.every((r) => r.status === 200) && results.length > 0,
     results.map((r) => `${r.route}:${r.status}`).join(' · '));
-  report.check('those routes return REAL data (non-empty payload, not an empty shell)', results.every((r) => r.substantive) && results.length > 0,
-    results.map((r) => `${r.route}:${r.bytes}b`).join(' · '));
+  report.check('no route hides rows the db actually holds (the zeroed-dashboard failure)', results.every((r) => !r.hidesData),
+    results.map((r) => `${r.route}[${r.table ?? '—'} ${r.owes} rows]→${r.served}`).join(' · '));
+  report.check('the app home route serves substantive data', (results.find((r) => /dashboard|home|index|vault/.test(r.route))?.served ?? 0) > 5,
+    JSON.stringify(results.find((r) => /dashboard|home|index|vault/.test(r.route)) ?? {}));
 
   // The rendered page must carry the app's real content, and the dock must be in the served bundle.
   const home = await pod.appPage(PROJECT).catch(() => ({ status: 0, body: '' }));
