@@ -40,7 +40,7 @@ const FIX = `${SDK_ORG}/scenarios/${ID}/fixtures`;
 const RESULTS = `${SDK_ORG}/scenarios/${ID}/results`;
 const CHECKPOINT = `${RESULTS}/checkpoint.json`;
 const argActs = (process.argv.find((a) => a.startsWith('--acts=')) ?? '').slice(7);
-const ACTS = argActs ? argActs.split(',').map(Number) : [1, 2, 3, 4, 5, 6, 7, 8];
+const ACTS = argActs ? argActs.split(',').map(Number) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const FRESH = process.argv.includes('--fresh');
 const REUSE = process.argv.includes('--reuse');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -55,6 +55,12 @@ const OPENER =
 
 // Facts that appear ONLY in policies.md — prove THING actually read the attachment (not generic advice).
 const FILE_FACTS = ['AX-7741-VAULT', 'GR-VAULT-002', 'MetLife Silver', '642', '2026-09-15', 'IBX-4471', 'Filolaou'];
+
+// Every "did a NEW value land?" assertion is before/after on a token that must NOT already exist.
+// A fixed token makes an Act unrepeatable: the vault is a LIVE project reused across Act batches,
+// so the second run of Act VII already had `AX-7741-VAULT-2` in the db from the first and the
+// before/after check could never pass again. Mint them per run.
+const RUN = Date.now().toString(36).slice(-4).toUpperCase();
 
 // ── checkpoint ────────────────────────────────────────────────────────────────
 function loadCheckpoint() {
@@ -359,7 +365,7 @@ if (ACTS.includes(3)) {
   report.check('a db-INSERT event hook wires the form to an agent (not ctx.spawn)', !!dbHook, dbHook ? `${dbHook.slug} ← ${dbHook.on.event}` : `hooks: ${(manifest?.hooks ?? []).map((h) => h.slug).join(', ') || '(none)'}`);
   const namesBefore = await tableNames(pod, PROJECT);
   const before = await dbBlob(pod, PROJECT, namesBefore);
-  const NEW_TOKEN = 'PET-INS-XR44-2026';
+  const NEW_TOKEN = `PET-INS-XR44-${RUN}`;
   report.note(`before contains NEW token? ${before.includes(NEW_TOKEN.toLowerCase())}`);
   const RAW = `New pet insurance policy, provider PetPlan, policy number ${NEW_TOKEN}, premium €18/month, renews 2027-04-01, covers our dog Argos.`;
   // The agent names the field (raw_text / raw / text / body / …), so the runner must submit what
@@ -464,13 +470,13 @@ if (ACTS.includes(6)) {
   const bad = await pod.inbound('demo', JSON.stringify({ message: { message_id: 9, text: 'guest checks in Friday', chat: { id: 'c1' }, from: { id: 'u1', username: 'dimitris' } } }), { 'x-demo-signature': 'sha256=deadbeef' });
   report.check('bad-signature inbound rejected (401, no emit)', bad.status === 401 || bad.body?.events === 0, `status ${bad.status} ${JSON.stringify(bad.body).slice(0, 80)}`);
   // Good signature → verify→emit → event hook → agent → bookings row.
-  const good = await signedInbound(pod, 'demo', { message: { message_id: 10, text: 'Guest ARGOS-2026-CHECKIN checks in Friday for 3 nights, €270', chat: { id: 'c1' }, from: { id: 'u1', username: 'dimitris' } } }, secret);
+  const good = await signedInbound(pod, 'demo', { message: { message_id: 10, text: `Guest ARGOS-${RUN}-CHECKIN checks in Friday for 3 nights, €270`, chat: { id: 'c1' }, from: { id: 'u1', username: 'dimitris' } } }, secret);
   report.check('signed inbound accepted (verify→emit, events≥1)', good.status === 200 && (good.body?.events ?? 0) >= 1, `status ${good.status} ${JSON.stringify(good.body).slice(0, 80)}`);
   let logged = false;
   for (let i = 0; i < 15 && !logged; i++) {
     await sleep(6_000);
     const after = await dbBlob(pod, PROJECT, await tableNames(pod, PROJECT));
-    logged = after.includes('argos-2026-checkin') || after.length > before.length;
+    logged = after.includes(`argos-${RUN}-checkin`.toLowerCase()) || after.length > before.length;
   }
   report.check('an agent/hook logged a booking row from the inbound message', logged, logged ? 'booking row present' : 'no booking row (inbound→agent path)');
   cp.acts.VI = { passed: report.passed, consent: consent.length, installed, badRejected: bad.status === 401, goodEvents: good.body?.events, logged };
@@ -481,7 +487,7 @@ if (ACTS.includes(6)) {
 if (ACTS.includes(7)) {
   report.step('Act VII — Update + restraint + Greek', 'a follow-up changes a real row (NEW policy token); "switch me/file taxes" → no autonomous purchase/filing + a draft; a Greek follow-up updates a row');
   const names = await tableNames(pod, PROJECT);
-  const NEW_TOKEN = 'AX-7741-VAULT-2';
+  const NEW_TOKEN = `AX-7741-VAULT-2-${RUN}`;
   const before = await dbBlob(pod, PROJECT, names);
   report.note(`before contains NEW token? ${before.includes(NEW_TOKEN.toLowerCase())}`);
   acc(await thing.send(`I renewed the car insurance — the new policy number is ${NEW_TOKEN}. Update the vault so the car policy shows the new number.`, { timeoutMs: 900_000 }));
@@ -497,7 +503,7 @@ if (ACTS.includes(7)) {
   report.check('restraint: THING narrows to a draft/report (prose offers the narrowed action)', narrowed, r.text.slice(0, 200));
 
   // Greek follow-up must still update a row.
-  const GR_TOKEN = 'PIR-HOME-882-GR';
+  const GR_TOKEN = `PIR-HOME-882-GR-${RUN}`;
   const beforeGr = await dbBlob(pod, PROJECT, await tableNames(pod, PROJECT));
   acc(await thing.send(`Ανανέωσα την ασφάλιση κατοικίας — ο νέος αριθμός συμβολαίου είναι ${GR_TOKEN}. Ενημέρωσε το vault.`, { timeoutMs: 900_000 }));
   await sleep(4_000);
@@ -521,6 +527,81 @@ if (ACTS.includes(8)) {
   const unknown = await pod.inbound('nope-not-a-path', JSON.stringify({ message: { text: 'x' } }), {});
   report.check('unknown inbound path → 404', unknown.status === 404, `status ${unknown.status}`);
   cp.acts.VIII = { passed: report.passed };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT IX — The app is a living surface: its OWN chat evolves it ════════════
+// The app contract's A1: an always-available in-app THING, on every page, that can CHANGE the
+// running app from inside it. The runner opens the session exactly as the embedded `<Chat>` does
+// — `POST /api/sessions { agentSlug:'thing', projectId }` (chat-protocol.ts#sessionCreateBody for
+// a bare slug) — so what it drives IS the in-app agent, not a privileged side door.
+if (ACTS.includes(9)) {
+  report.step('Act IX — In-app chat evolves the app (A1)', 'the app ships an always-available assistant dock (pages/_layout renders <Chat agent="thing">); a message sent THROUGH that in-app session lands a real change (new table) in the running app');
+  // The vault predates the dock → ask for it the way the user would, then assert the real file.
+  acc(await thing.send('Put an assistant into the vault app itself: a chat dock I can open from every page, wired to you, so I can ask for changes without leaving the app.', { timeoutMs: 1_200_000 }));
+  await pod.appBuild(PROJECT).catch(() => {});
+  const layout = await pod.readProjectFile(PROJECT, 'pages/_layout.tsx').catch(() => '');
+  const dockOnEveryPage = /<Chat\b/.test(layout) && /agent=["']thing["']/.test(layout);
+  report.check('the app ships the assistant dock in pages/_layout (every page, agent="thing")', dockOnEveryPage, layout ? `_layout.tsx (${layout.length}b): Chat=${/<Chat\b/.test(layout)} agent-thing=${/agent=["']thing["']/.test(layout)}` : 'no pages/_layout.tsx');
+
+  // Now TALK to it — the in-app session, created with the widget's own body shape.
+  const inApp = new ThingSession(pod, { projectId: PROJECT, agentSlug: 'thing', onAsk: scriptedOnAsk(true), verbose: true });
+  await inApp.start();
+  await inApp.syncToTail();
+  report.check('the in-app chat opens a REAL project-scoped THING session', !!inApp.sessionId, `sessionId ${String(inApp.sessionId).slice(0, 8)}…`);
+
+  const tablesBefore = await tableNames(pod, PROJECT);
+  const IN_APP_TABLE = `utility_bills`;
+  const t = await inApp.send(`Add a ${IN_APP_TABLE} table to this vault (provider, month, amount, due date, paid) and show it on a page at /utility-bills — I'm asking from inside the app.`, { timeoutMs: 1_200_000 });
+  metrics.tokens.in += t.tokens.in; metrics.tokens.out += t.tokens.out;
+  await pod.appBuild(PROJECT).catch(() => {});
+  await sleep(3_000);
+  const tablesAfter = await tableNames(pod, PROJECT);
+  const pagesAfter = await pageRoutes(pod, PROJECT);
+  const newTable = tablesAfter.find((n) => new RegExp(IN_APP_TABLE, 'i').test(n)) && !tablesBefore.some((n) => new RegExp(IN_APP_TABLE, 'i').test(n));
+  report.check('a change asked for INSIDE the app landed in the running app (new table)', !!newTable, `tables ${tablesBefore.length}→${tablesAfter.length}: ${tablesAfter.filter((x) => !tablesBefore.includes(x)).join(', ') || '(none new)'}`);
+  report.check('the in-app turn authored with full capability (writeProject* yield observed)', t.yields.some((y) => /writeProject/i.test(y.kind)) || !!newTable, t.yields.map((y) => y.kind).join(', ').slice(0, 120));
+  report.metric('Act IX in-app turn', (t.durationMs / 1000).toFixed(0), 's');
+  cp.acts.IX = { passed: report.passed, dockOnEveryPage, newTable: !!newTable, pages: pagesAfter };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT X — The app RENDERS (A2): its own API routes, not just the data API ══
+// The layer the user actually sees is the page's OWN api route. A dashboard can render zeros for
+// every tile while `app/data/<table>` happily returns all its rows — the page fetches its
+// aggregation route, and that route 500s. Assert what the page fetches. The browser pass
+// (chrome-devtools: rendered DOM, console errors, screenshot) is recorded in the report.
+if (ACTS.includes(10)) {
+  report.step('Act X — The app renders for real (A2)', "the served app is the REAL app (boot marker, app host); EVERY GET route the pages fetch returns 200 with a non-empty, correctly-shaped payload; no route 500s behind a zeroed-out UI");
+  const build = await assertLiveApp(report, pod, PROJECT, {});
+  const manifest = await pod.appManifest(PROJECT).catch(() => ({}));
+  const gets = (manifest?.endpoints ?? []).filter((e) => /get/i.test(e.method ?? ''));
+  report.check('the app declares ≥1 GET route its pages fetch', gets.length >= 1, gets.map((e) => e.routePath).join(', ') || '(none)');
+
+  const results = [];
+  for (const ep of gets) {
+    const route = String(ep.routePath ?? ep.name).replace(/^\//, '');
+    const r = await pod.appApi(PROJECT, route, undefined, 'GET').catch((e) => ({ status: e?.status ?? 0, body: String(e) }));
+    const payload = r.body && typeof r.body === 'object' ? r.body : {};
+    // "200 with an empty object" is the zeroed-dashboard failure: the page renders 0 / €0.00.
+    const substantive = JSON.stringify(payload).length > 20;
+    results.push({ route, status: r.status, substantive, bytes: JSON.stringify(payload).length });
+  }
+  const ok200 = results.filter((r) => r.status === 200);
+  report.check("every page GET route the app fetches returns 200 (no 500 behind a zeroed UI)", ok200.length === results.length && results.length > 0,
+    results.map((r) => `${r.route}:${r.status}`).join(' · '));
+  report.check('those routes return REAL data (non-empty payload, not an empty shell)', results.every((r) => r.substantive) && results.length > 0,
+    results.map((r) => `${r.route}:${r.bytes}b`).join(' · '));
+
+  // The rendered page must carry the app's real content, and the dock must be in the served bundle.
+  const home = await pod.appPage(PROJECT).catch(() => ({ status: 0, body: '' }));
+  const js = (build?.assetManifest ?? []).find((a) => /\.js$/.test(a));
+  const bundle = js ? await pod.reqAbs('GET', `${pod.appOrigin(PROJECT)}/${js}`).catch(() => ({ status: 0, body: '' })) : { status: 0, body: '' };
+  const bundleSrc = String(bundle.body ?? '');
+  report.check('the served JS bundle contains the in-app chat (the dock ships to the browser)', /Message agent|Starting agent session|sessionId/.test(bundleSrc), `${js ?? '(no js)'}: ${bundleSrc.length}b`);
+  report.check('the served app HTML is the real app (boot marker present)', String(home.body ?? '').includes('__APP_BASE__'), `${String(home.body ?? '').length} bytes from ${pod.appOrigin(PROJECT)}/`);
+  report.note('A2 browser pass (chrome-devtools: rendered DOM, real values on screen, console/network clean, screenshot) is recorded in the scenario report.');
+  cp.acts.X = { passed: report.passed, routes: results };
   saveCheckpoint(cp);
 }
 

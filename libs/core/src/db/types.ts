@@ -21,8 +21,16 @@ export interface QueryOpts {
   where?: Record<string, unknown>;
   /** Named relations to expand inline (a join under the hood, e.g. `['comments']`). */
   include?: string[];
-  /** Sort order — a column name, or a column plus direction (default `asc`). */
-  orderBy?: string | { column: string; dir?: 'asc' | 'desc' };
+  /**
+   * Sort order. Three accepted shapes:
+   * - `'issued_date'` — a column name (ascending).
+   * - `{ column: 'issued_date', dir: 'desc' }` — explicit column + direction.
+   * - `{ issued_date: 'desc' }` — the column→direction MAP. Every agent writes this shape (it is
+   *   what the appbuilder's own instruct teaches), so the runtime must honour it: before, it fell
+   *   through to `opts.orderBy.column === undefined` and every authored list route answered 500
+   *   while the raw `app/data/<table>` API — which passes no `orderBy` — looked perfectly healthy.
+   */
+  orderBy?: string | { column: string; dir?: 'asc' | 'desc' } | Record<string, 'asc' | 'desc'>;
   /** Maximum number of rows to return. */
   limit?: number;
   /** Number of leading rows to skip (for pagination). */

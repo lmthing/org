@@ -172,7 +172,31 @@ function sqlLiteral(value: unknown): string {
 
 /** Quote a SQL identifier (table/column name). */
 function ident(name: string): string {
+  // Fail LOUDLY on a non-string: an undefined column used to surface as the opaque
+  // "Cannot read properties of undefined (reading 'replace')" inside a 500, which tells the
+  // agent that authored the handler nothing about what it got wrong.
+  if (typeof name !== 'string' || name === '') {
+    throw new Error(`store: invalid SQL identifier ${JSON.stringify(name)} (expected a column/table name)`);
+  }
   return `"${name.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Normalize every accepted `orderBy` shape to `{ col, dir }` (see {@link QueryOpts.orderBy}).
+ *
+ * The column→direction MAP (`{ issued_date: 'desc' }`) is the shape agents actually write — it is
+ * what the appbuilder's instruct teaches — so it must work, not 500.
+ */
+function normalizeOrderBy(orderBy: QueryOpts['orderBy']): { col: string; dir: 'ASC' | 'DESC' } | null {
+  if (!orderBy) return null;
+  const up = (d: unknown): 'ASC' | 'DESC' => (String(d).toUpperCase() === 'DESC' ? 'DESC' : 'ASC');
+  if (typeof orderBy === 'string') return { col: orderBy, dir: 'ASC' };
+  if (typeof (orderBy as { column?: unknown }).column === 'string') {
+    const o = orderBy as { column: string; dir?: string };
+    return { col: o.column, dir: up(o.dir ?? 'asc') };
+  }
+  const [col, dir] = Object.entries(orderBy as Record<string, unknown>)[0] ?? [];
+  return typeof col === 'string' && col !== '' ? { col, dir: up(dir) } : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -427,11 +451,8 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
   function query(table: string, opts: QueryOpts = {}): Row[] {
     const { clause, binds } = buildWhere(table, opts.where);
     let sql = `SELECT * FROM ${ident(table)}${clause}`;
-    if (opts.orderBy) {
-      const col = typeof opts.orderBy === 'string' ? opts.orderBy : opts.orderBy.column;
-      const dir = typeof opts.orderBy === 'string' ? 'asc' : opts.orderBy.dir ?? 'asc';
-      sql += ` ORDER BY ${ident(col)} ${dir.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'}`;
-    }
+    const order = normalizeOrderBy(opts.orderBy);
+    if (order) sql += ` ORDER BY ${ident(order.col)} ${order.dir}`;
     if (opts.limit !== undefined) sql += ` LIMIT ${Number(opts.limit)}`;
     if (opts.offset !== undefined) {
       // SQLite requires a LIMIT before OFFSET.

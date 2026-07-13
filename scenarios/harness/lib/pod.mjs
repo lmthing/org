@@ -110,6 +110,12 @@ export class Pod {
   readFile = (path) => this.req('GET', `/api/fs/read?path=${encodeURIComponent(path)}`);
   writeFile = (path, content) => this.req('PUT', '/api/fs/write', { path, content });
 
+  /** Read one authored file of a project (`<project>/pages/_layout.tsx`, `api/…`) — assert what the agent WROTE. */
+  async readProjectFile(projectId, rel) {
+    const r = await this.readFile(`${projectId}/${rel}`).catch(() => null);
+    return typeof r === 'string' ? r : (r?.content ?? '');
+  }
+
   // ── store ───────────────────────────────────────────────────────────────
   storeSpaces = () => this.req('GET', '/api/store/spaces');
   installSpace = (spaceId, projectId = 'user', force = false) =>

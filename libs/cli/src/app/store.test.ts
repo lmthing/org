@@ -233,6 +233,26 @@ describe('query', () => {
     });
     expect((skip1[0] as Record<string, unknown>).title).toBe('mid');
   });
+
+  // The shape agents actually write — `{ column: 'desc' }` — is what the appbuilder's own instruct
+  // teaches. It used to read `orderBy.column` (undefined) and blow up inside `ident()` with
+  // "Cannot read properties of undefined (reading 'replace')", so EVERY authored list route
+  // answered 500 while `app/data/<table>` (which passes no orderBy) looked healthy. Found live in
+  // scenario 07: 5 of 6 page routes 500ing behind a dashboard that rendered fine.
+  it('sorts with the column→direction MAP shape agents write ({ score: "desc" })', () => {
+    const top = pdb.db.query('feed_items', { orderBy: { score: 'desc' }, limit: 2 });
+    expect(top.map((r) => (r as Record<string, unknown>).title)).toEqual(['high', 'mid']);
+
+    const asc = pdb.db.query('feed_items', { orderBy: { score: 'asc' } });
+    expect(asc.map((r) => (r as Record<string, unknown>).title)).toEqual(['low', 'mid', 'high']);
+  });
+
+  // An orderBy object that names no column used to reach `ident(undefined)` and throw
+  // "Cannot read properties of undefined (reading 'replace')" — a 500 for the page fetching it.
+  // It must simply mean "no ordering".
+  it('treats an orderBy naming no column as no ordering (never crashes the handler)', () => {
+    expect(pdb.db.query('feed_items', { orderBy: {} as never })).toHaveLength(3);
+  });
 });
 
 describe('include (relation expansion)', () => {

@@ -45,6 +45,8 @@ hook, not `ctx.spawn`).
 | 9 | **Life changes** | Weeks later: *"I'm renting out the flat short-term"* → the vault grows a rental section on its own. Then *"I started a consulting side-gig"* → a business-admin section. |
 | 10 | **Ping from his phone** | He connects Telegram and messages *"guest checks in Friday"* → the vault logs a booking. |
 | 11 | **Keep updating** | *"renewed the car insurance, new policy number AX-7741-VAULT-2"* → the row changes. And he tests a boundary: *"switch me to the cheaper insurer"* → THING refuses and hands him a draft instead. |
+| 12 | **Ask from inside the vault** | He wants the assistant *in* the app: *"Put an assistant into the vault app itself: a chat dock I can open from every page, wired to you, so I can ask for changes without leaving the app."* Then, from that dock — never leaving the app — *"Add a utility_bills table to this vault (provider, month, amount, due date, paid) and show it on a page at /utility-bills — I'm asking from inside the app."* The table and page appear in the app he is looking at. |
+| 13 | **Open it like a user** | He opens the vault in a real browser on his phone/laptop (`lmthing.app/life-admin/`): his renewals, policies and accounts are on screen with real values, the assistant dock is there, nothing is broken. |
 
 ---
 
@@ -170,6 +172,13 @@ Everything above is authored by the model into the user's own project — no eng
   **Accept:** "switch me / file my taxes" → no autonomous purchase/filing; a draft or report offered.
 - **US-11 — Understand me.** *As a homeowner who mixes Greek, I want it to work in either language.*
   **Accept:** a Greek follow-up updates a row; the compound opener produced all halves.
+- **US-12 — Change it from inside it.** *As a homeowner, I want to ask for a change while I'm looking
+  at the vault — not go back to a separate chat.* **Accept:** every page of the app carries an
+  assistant dock (`pages/_layout.tsx` → `<Chat agent="thing">`), and a message sent through that
+  in-app session adds a real table/page to the running app (before/after).
+- **US-13 — It actually looks right.** *As a homeowner, I want the vault to OPEN and show my things —
+  not an empty shell.* **Accept:** the app is served from the app host and renders my real values in
+  a browser, its own API routes return 200 with real data, and the console/network are clean.
 
 ---
 
@@ -187,7 +196,10 @@ Everything above is authored by the model into the user's own project — no eng
 - Store/integrations: [x] discovery [x] install a space [x] callConnection [x] inbound webhook
   [x] integration-demo source (keyless; telegram is the prod target)
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
-  [x] app build [x] /app/<id>/ serving [x] app data API [x] **mid-life table+page addition**
+  [x] app build [x] serving on the app host (`lmthing.app/<id>/`) [x] app data API
+  [x] **the app's OWN api routes** (the ones its pages fetch) [x] **mid-life table+page addition**
+  [x] **A1 always-available in-app chat + self-evolution from inside the app**
+  [x] **A2 browser render verification (chrome-devtools)**
 - Attachments: [x] upload [x] readDocument [x] attachmentIds to a specialist [x] vision/audio
 - Pod lifecycle: [ ] restart→auto-resume (covered by 03) [x] cold-wake [ ] event storm [x] worker containment (api handler)
 - Cross-cutting: [x] edge cases/errors [x] performance [x] budget (direct Azure keys)
@@ -209,6 +221,8 @@ Acts here match the runner 1:1.
 | **VI — Inbound + outbound** | `installSpace` consent approved; a signed inbound webhook → `{events ≥1}` (bad signature → 401/0 events); an agent/hook writes a `bookings` row (before/after); a `callConnection` yield observed OR a drafts row | US-8 |
 | **VII — Update + restraint + Greek** | a follow-up changes a real row (NEW policy token, before/after); "switch me / file my taxes" → no autonomous purchase/filing (trace clean) + a draft/report offered; a Greek follow-up updates a row | US-9,10,11 |
 | **Edges** | idempotent re-ask doesn't clobber spaces; malformed inbound → 0 events; a failing automation surfaces its error; zero unrecovered eval/typecheck errors on THING's own turns | — |
+| **IX — In-app chat evolves the app (A1)** | the app ships an always-available assistant dock — `pages/_layout.tsx` renders `<Chat agent="thing">`, so it is on EVERY page by construction; a message sent **through that in-app session** (`POST /api/sessions {agentSlug:'thing', projectId}` — the widget's own body shape) lands a **real change in the running app** (a new `utility_bills` table, before/after), authored with full capability | US-12 |
+| **X — The app renders for real (A2)** | the served app is the REAL app on the app host (`lmthing.app/<project>/`, boot marker — not the chat host's SPA shell); **every GET route the pages actually fetch** returns 200 with a substantive payload (a page whose own aggregation route 500s renders zeros while `app/data/<table>` looks fine); the served JS bundle carries the chat dock. Completed by a **chrome-devtools browser pass** — rendered DOM shows real fixture values, in-app chat present, no console errors / failed fetches — whose evidence + screenshot are recorded in the report | US-13 |
 
 ### Performance targets
 | Metric | Target |
