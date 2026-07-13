@@ -94,6 +94,45 @@ describe('routeCommonYield', () => {
     );
   });
 
+  // The `api:call: { allow: [...] }` grant is the security claim ("there is no calling
+  // anything"). It was parsed and validated at space load — and then never checked at the
+  // call site, so ANY holder could enter ANY endpoint. These pin the gate shut.
+  it('apiCall REFUSES an endpoint outside the agent\'s allowlist (and names what IS allowed)', async () => {
+    let entered = false;
+    await expect(
+      routeCommonYield(
+        req('apiCall', ['deleteEverything', {}]),
+        baseCtx({
+          apiCallAllow: ['markRead', 'tripSummary'],
+          apiCallResolver: async () => {
+            entered = true;
+            return { ok: true };
+          },
+        }),
+      ),
+    ).rejects.toThrow(/not permitted.*markRead, tripSummary/s);
+    expect(entered, 'the resolver must never run for a refused endpoint').toBe(false);
+  });
+
+  it('apiCall ALLOWS an endpoint on the allowlist', async () => {
+    const r = await routeCommonYield(
+      req('apiCall', ['tripSummary', {}]),
+      baseCtx({
+        apiCallAllow: ['markRead', 'tripSummary'],
+        apiCallResolver: async () => ({ total: 42 }),
+      }),
+    );
+    expect(r).toEqual({ handled: true, value: { total: 42 } });
+  });
+
+  it('apiCall with the ["*"] wildcard allows any endpoint the project declares', async () => {
+    const r = await routeCommonYield(
+      req('apiCall', ['somethingAuthoredAtRuntime', {}]),
+      baseCtx({ apiCallAllow: ['*'], apiCallResolver: async () => ({ ok: true }) }),
+    );
+    expect(r).toEqual({ handled: true, value: { ok: true } });
+  });
+
   it('routes callConnection through the connectionResolver with (provider, request)', async () => {
     const calls: unknown[] = [];
     const request = { method: 'GET', path: '/gmail/v1/users/me/messages' };

@@ -182,9 +182,15 @@ function parseApiCallConfig(config: unknown, ctx: ParseCapabilitiesCtx): { allow
   const rawAllow = config['allow'];
   if (!Array.isArray(rawAllow) || rawAllow.length === 0 || rawAllow.some((a) => typeof a !== 'string')) {
     throw new Error(
-      `Agent "${ctx.agentId}" capability "api:call" requires a non-empty "allow" list of endpoint names (there is no "call anything")`,
+      `Agent "${ctx.agentId}" capability "api:call" requires a non-empty "allow" list of endpoint names, ` +
+        `or ["*"] for any endpoint the project declares`,
     );
   }
+  // `'*'` is the ONE wildcard: "any endpoint THIS project declares". It exists for agents that
+  // cannot know the endpoint names up front because they are authored per project at runtime —
+  // the user's own orchestrator (THING) inside the user's own project. It stays an explicit,
+  // opt-in declaration: the list is still required, and a named list still means ONLY those.
+  // The list is enforced where `apiCall` is resolved (eval/yield-router.ts).
   return { allow: rawAllow as string[] };
 }
 

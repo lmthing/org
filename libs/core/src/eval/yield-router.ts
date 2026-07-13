@@ -73,6 +73,11 @@ export interface YieldRouterContext {
    *  `name` (host-supplied via the project's app globals). Absent outside a
    *  project-app context; an `apiCall` yield then rejects with a clear error. */
   apiCallResolver?: ApiCallFn;
+  /** The running agent's `api:call: { allow: [...] }` grant — the endpoints it may
+   *  enter. Enforced in the `apiCall` yield (a name outside the list is refused with a
+   *  retryable error naming what IS allowed). `['*']` = any endpoint this project
+   *  declares. Absent ⇒ unenforced (a non-agent context, e.g. a bare unit test). */
+  apiCallAllow?: string[];
   /** Resolve a `callConnection()` yield — forward the request to the gateway's
    *  egress proxy for the named connected service (host-supplied via the pod's
    *  scoped connections JWT). Absent outside a pod with a configured connections
@@ -190,6 +195,16 @@ export async function routeCommonYield(
         throw new Error('apiCall is not available here: this session has no project api runtime');
       }
       const [name, input] = req.args as [string, unknown];
+      // ENFORCE the `api:call: { allow: [...] }` grant. Holding the capability is what
+      // injects the global; the allowlist is what says WHICH endpoints it may enter, and
+      // until now it was parsed, validated — and never checked, so any holder could call
+      // anything. `'*'` is the one wildcard (any endpoint THIS project declares).
+      const allow = ctx.apiCallAllow;
+      if (allow && !allow.includes('*') && !allow.includes(name)) {
+        throw new Error(
+          `apiCall("${name}") is not permitted: this agent's api:call allowlist is [${allow.join(', ')}]`,
+        );
+      }
       const value = await ctx.apiCallResolver(name, input);
       return { handled: true, value };
     }

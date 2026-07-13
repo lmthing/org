@@ -344,6 +344,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             tracer: opts.tracer,
             scope: delegateScope,
             apiCallResolver: opts.appGlobals?.apiCall,
+            apiCallAllow: capabilities.app['api:call']?.allow,
             connectionResolver: opts.appGlobals?.callConnection,
             documentResolver: opts.documentResolver,
             // Store search/inspect + manual emits work in delegates (system-store

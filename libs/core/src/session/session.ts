@@ -875,6 +875,7 @@ export class Session {
       tracer: this.tracer,
       scope: this.currentScope ?? undefined,
       apiCallResolver: this.opts.appGlobals?.apiCall,
+      apiCallAllow: this.appCapabilities['api:call']?.allow,
       connectionResolver: this.opts.appGlobals?.callConnection,
       documentResolver: this.opts.documentResolver,
       integrationStatusResolver: this.opts.integrationStatusResolver,
