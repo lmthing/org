@@ -18,6 +18,7 @@ import {
   handleListRows,
   handleUpdateRow,
   handleBuildStatus,
+  handleRebuild,
   type AppAdminManager,
 } from './app-admin.js';
 import type { ProjectDb } from '../../app/store.js';
@@ -361,5 +362,37 @@ describe('handleBuildStatus', () => {
     expect(b.built).toBe(false);
     expect(b.stale).toBe(true);
     expect(b.assetManifest).toEqual([]);
+  });
+});
+
+describe('handleRebuild', () => {
+  /**
+   * A rebuild emits NEW content-hashed assets. `serve.ts` caches the served bundle
+   * (outDir + assetManifest) for the server's LIFETIME, so unless the rebuild drops that
+   * cache, the app keeps serving a manifest that no longer contains the `entry-*.js` the
+   * freshly-written index.html asks for — the asset request falls through to the SPA shell,
+   * the browser gets `text/html` for a module script, and the app renders BLANK.
+   * Found live in scenario 10 (driving the in-app assistant in a real browser).
+   */
+  it('invalidates the cached page bundle after a build (new hashes ⇒ the old manifest is a blank app)', async () => {
+    const invalidated: string[] = [];
+    const { res, captured } = mockRes();
+    await handleRebuild(manager, root, (p) => invalidated.push(p))(mockReq({ method: 'POST' }), res, {
+      projectId: APP,
+    });
+    // The build itself may succeed or fail on this fixture — what must hold is that a
+    // SUCCESSFUL build never leaves the previous bundle cached.
+    if (captured.status === 200) expect(invalidated).toEqual([APP]);
+    else expect(invalidated).toEqual([]);
+  });
+
+  it('does not invalidate when the project id is rejected', async () => {
+    const invalidated: string[] = [];
+    const { res, captured } = mockRes();
+    await handleRebuild(manager, root, (p) => invalidated.push(p))(mockReq({ method: 'POST' }), res, {
+      projectId: '../escape',
+    });
+    expect(captured.status).toBe(400);
+    expect(invalidated).toEqual([]);
   });
 });

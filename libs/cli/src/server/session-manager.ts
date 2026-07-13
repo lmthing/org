@@ -12,7 +12,6 @@ import { emitInternalSignal } from './internal-signals.js';
 import { integrationStatusFor } from './routes/store-spaces.js';
 import { createStoreResolver } from './store-resolver.js';
 import { createEmitEventResolver, type ManualEmitDepth } from './emit-event.js';
-import type { PluginRegistry } from '@lmthing/openclaw-compat';
 import { transcribeAudio } from '../providers/transcribe.js';
 import {
   resolveUploadsDir,
@@ -249,18 +248,16 @@ export class SessionManager {
    *  (Settings → Integrations) and calls the provider directly; it throws a clear
    *  per-provider "not configured" error when a token env var is unset. */
   private connectionResolvers = new Map<string, ConnectionResolver>();
-  /** Pod-side registry of loaded OpenClaw-compat plugin tools (see
-   *  `server/openclaw-host.ts` `loadOpenClawPlugins`). Wired once at boot via
-   *  {@link setToolRegistry}; `undefined` when no `.openclaw-plugins/` dir was
-   *  loaded (or no plugin registered a tool) — the yield router then throws the
-   *  clear "no tool registry configured" error. Project-independent (attached
-   *  to EVERY session), same as the connection resolver above. */
-  private toolRegistry?: PluginRegistry;
   /** Republish-on-write callable (S9), injected by `serve.ts` at boot once it knows
    *  the server port + gateway config. Invoked after installs (serve.ts callback) and
    *  authoring writes (S11 calls {@link republish}). Absent under bare `lmthing serve`
    *  wiring that never sets it — then {@link republish} is a no-op. */
   private republishFn?: () => Promise<void>;
+  /** Drop `serve.ts`'s cached page bundle for a project (injected at boot, like
+   *  {@link republishFn}). The served bundle is cached for the server's LIFETIME, so an
+   *  authored page/api write must invalidate it or the app keeps serving the old build —
+   *  see {@link onAppWrite}. */
+  private invalidatePageBuildFn?: (projectId: string) => void;
   private reaper: ReturnType<typeof setInterval> | null = null;
   /** Absolute path to `<cwd>/.lmthing` — set when running in project mode. */
   readonly lmthingRoot?: string;
@@ -340,17 +337,15 @@ export class SessionManager {
     return { ...appGlobals, callConnection: appGlobals?.callConnection ?? resolver };
   }
 
-  /** Wire a loaded OpenClaw `PluginRegistry` so agent `tool()` calls can dispatch
-   *  to its registered tools. Called once from `serve.ts` after
-   *  `loadOpenClawPlugins` resolves (best-effort — a pod with no
-   *  `.openclaw-plugins/` dir never calls this, so `tool()` stays unavailable). */
-  setToolRegistry(registry: PluginRegistry): void {
-    this.toolRegistry = registry;
-  }
-
   /** Wire the republish-on-write callable (S9). Called once from `serve.ts` at boot. */
   setRepublish(fn: () => Promise<void>): void {
     this.republishFn = fn;
+  }
+
+  /** Wire the page-build cache invalidator. Called once from `serve.ts` at boot (it owns
+   *  the cache). No-op under wiring that never sets it. */
+  setInvalidatePageBuild(fn: (projectId: string) => void): void {
+    this.invalidatePageBuildFn = fn;
   }
 
   /** Re-derive the pod's runtime-published artifacts (webhook manifest + crontab +
@@ -361,26 +356,6 @@ export class SessionManager {
     if (this.republishFn) await this.republishFn();
   }
 
-  /** Resolve a `tool()` yield by dispatching to the loaded `PluginRegistry` —
-   *  mirrors the agent-facing `apiCall` contract: an unknown tool name throws
-   *  (fail loud), a registered tool's `execute(callId, params)` result is
-   *  returned verbatim (the `{ content: [...] }` shape). */
-  private async resolveTool(name: string, input?: unknown): Promise<unknown> {
-    const tool = this.toolRegistry?.getTool(name);
-    if (!tool) {
-      throw new Error(`tool("${name}") not found: no OpenClaw plugin registered a tool with that name`);
-    }
-    return tool.execute(randomUUID(), (input as Record<string, unknown>) ?? {});
-  }
-
-  /** Fold the project-independent `tool` resolver into a session's app globals so
-   *  EVERY session (when granted `tools:use`) can dispatch to a loaded OpenClaw
-   *  plugin tool. When no registry is set, the field is left absent so the router
-   *  emits the clear "no tool registry configured" error. */
-  private withTools(appGlobals?: AppGlobalImpls): AppGlobalImpls | undefined {
-    if (!this.toolRegistry) return appGlobals;
-    return { ...appGlobals, tool: appGlobals?.tool ?? ((name: string, input?: unknown) => this.resolveTool(name, input)) };
-  }
 
   /** Pod-side resolver for the universal `readDocument` global — extract a stored
    *  upload's content Node-side (see {@link resolveUploadDocument}). Attached to
@@ -442,7 +417,7 @@ export class SessionManager {
         projectFunctionsBundled: args.projectFunctionsBundled,
         projectId: args.projectId,
         projectRoot: args.projectRoot,
-        appGlobals: this.withStore(this.withTools(this.withConnections(args.appGlobals, args.projectRoot)), args.projectId),
+        appGlobals: this.withStore(this.withConnections(args.appGlobals, args.projectRoot), args.projectId),
         appDts: args.appDts,
         documentResolver: (id, opts) => this.resolveDocument(id, opts),
         // Consent gate (plan S10): ONLY interactive sessions get a prompter (the
@@ -668,9 +643,7 @@ export class SessionManager {
         // A live page/api write must invalidate the caches derived from `api/` + `pages/`:
         // the typed endpoint contracts (feed the manifest + apiCall DTS) and the per-project
         // api runtime (loads the handlers). Dropping them makes the next manifest/apiCall
-        // re-derive from the new files. Page COMPILATION (→ the served out dir) is done by the
-        // explicit `POST /app/build` the caller runs after authoring; this keeps the write
-        // synchronous + cheap. (`kind` is 'api' | 'page'; both invalidate the same caches.)
+        // re-derive from the new files. (`kind` is 'api' | 'page'; both invalidate the same.)
         void kind;
         this.projectContracts.delete(projectId);
         const rt = this.apiRuntimes.get(projectId);
@@ -682,6 +655,15 @@ export class SessionManager {
           }
         }
         this.apiRuntimes.delete(projectId);
+        // …AND the SERVED bundle, which is cached for the server's lifetime (serve.ts's
+        // `pageBuildCache`). Without this the app keeps serving the pre-write build: the user
+        // asks the in-app assistant for a new page, the agent writes it, and the running app
+        // shows "No page for /favorites" — the self-evolution never lands. Worse, once anything
+        // DOES rebuild (the automator's `POST /app/build`), the fresh index.html references a
+        // new hashed entry that the STALE manifest does not contain, so the asset request falls
+        // through to the SPA shell and the app goes BLANK. Found live in scenario 10, driving
+        // the in-app dock in a real browser. The next page request re-derives the bundle.
+        this.invalidatePageBuildFn?.(projectId);
       },
     });
     return {

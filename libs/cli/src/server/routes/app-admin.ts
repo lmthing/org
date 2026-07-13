@@ -452,7 +452,15 @@ export function handleBuildStatus(_manager: AppAdminManager, lmthingRoot: string
  * `POST /api/projects/:projectId/app/build` — force a page rebuild
  * ({@link buildProjectPages} with `force:true`) and return its result.
  */
-export function handleRebuild(_manager: AppAdminManager, lmthingRoot: string | undefined): AppHandler {
+export function handleRebuild(
+  _manager: AppAdminManager,
+  lmthingRoot: string | undefined,
+  /** Drop the server's cached page bundle for this project. A forced rebuild emits NEW
+   *  content-hashed assets, so any bundle cached from the previous build is stale: its manifest
+   *  no longer contains the `entry-*.js` the fresh index.html asks for, the asset request falls
+   *  through to the SPA shell (`text/html`), and the app renders BLANK. */
+  onBuilt?: (projectId: string) => void,
+): AppHandler {
   return async (_req, res, params) => {
     const projectId = params['projectId']!;
     if (!safeProjectId(projectId)) {
@@ -466,6 +474,7 @@ export function handleRebuild(_manager: AppAdminManager, lmthingRoot: string | u
     const projectRoot = join(lmthingRoot, projectId);
     try {
       const result = await buildProjectPages(projectRoot, { force: true });
+      onBuilt?.(projectId);
       sendJson(res, 200, {
         built: result.built,
         assetManifest: result.assetManifest,
