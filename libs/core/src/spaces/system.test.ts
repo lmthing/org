@@ -162,4 +162,21 @@ describe('system spaces', () => {
     // an app onto a vague opener. Losing this would trade one failure mode for the other.
     expect(instruct).toMatch(/Do NOT scaffold an app on a vague or exploratory request/);
   });
+
+  // Live-prod evidence (scenario 06, Act V): asked a question his own files did NOT answer (how
+  // long a policy actually covers him for), THING delegated it to the domain space it had just
+  // built FROM THOSE SAME FILES — zero web yields. The space cannot know what was never in the
+  // material, so the user got a confident guess and could not tell. Routing-by-topic silently
+  // beat routing-by-what-is-knowable.
+  it('THING is told a space built from the user\'s material cannot answer beyond it — research instead', async () => {
+    const spaces = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'user-thing')]);
+    const instruct = spaces[0]!.agents['thing']!.instructBody;
+
+    expect(instruct).toMatch(/A space you built from the user's own material knows ONLY that material/);
+    // The decision rule, and the escalation when the space itself admits the gap.
+    expect(instruct).toMatch(/was this in what they gave me\?/);
+    expect(instruct).toMatch(/believe it, and\s+escalate\./);
+    // …and the finding must be kept, not left in one chat reply.
+    expect(instruct).toMatch(/Then KEEP what you found/);
+  });
 });
