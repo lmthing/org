@@ -67,10 +67,45 @@ function saveCheckpoint(cp) {
   console.log(`\n💾 checkpoint → ${CHECKPOINT}`);
 }
 
-// ── scripted asks: approve/deny consent, settle any other ask (Form) with {} so a run never hangs ──
+// ── scripted asks ───────────────────────────────────────────────────────────────
+// Consent per branch; every OTHER ask (a Form / TextField) is answered as DIMITRIS would, from
+// the persona's own facts. Settling a Form with `{}` is not "autonomous" — it is a user who says
+// nothing: live, THING asked for the flat's location before building the rental section, got `{}`
+// three times, and gave up ("the form didn't return a location"), so the Act asserted against a
+// section that was never built. Answer the fields it actually asked for.
+const PERSONA = [
+  [/location|address|city|where|borough|area|flat|property/i, 'Filolaou 41, 11537 Athens, Greece'],
+  [/name|who|owner|host/i, 'Dimitris K.'],
+  [/email/i, 'dimitris@lmthing.test'],
+  [/phone|mobile|tel/i, '+30 210 555 1182'],
+  [/price|rate|nightly|income|amount|cost|eur|€/i, '90'],
+  [/date|when|start|from/i, '2026-08-01'],
+  [/nights|guests|people|count|number/i, '2'],
+];
+const personaValue = (label) => (PERSONA.find(([rx]) => rx.test(label))?.[1] ?? 'yes, go ahead');
+
+/** Walk a descriptor tree and answer every field it declares (Form → object; bare field → value). */
+const answerAsk = (d) => {
+  const fields = [];
+  const walk = (n) => {
+    if (!n || typeof n !== 'object') return;
+    const p = n.props ?? {};
+    if (/Field|Input|Select|Textarea|Radio|Checkbox/i.test(String(n.type ?? '')) && (p.name || p.label)) {
+      fields.push({ name: String(p.name ?? p.label), label: `${p.name ?? ''} ${p.label ?? ''} ${p.help ?? ''}` });
+    }
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(d);
+  if (/Form/i.test(String(d?.type ?? '')) || fields.length > 1) {
+    return Object.fromEntries(fields.map((f) => [f.name, personaValue(f.label)]));
+  }
+  if (fields.length === 1) return personaValue(fields[0].label);
+  return personaValue(JSON.stringify(d?.props ?? {}));
+};
+
 const scriptedOnAsk = (consent) => (d) => {
   if (d?.type === 'ConsentCard') return consent;
-  if (d?.type) return {};
+  if (d?.type) return answerAsk(d);
   return undefined;
 };
 
@@ -165,7 +200,21 @@ keepalive.unref?.();
 const _send = thing.send.bind(thing);
 thing.send = async (content, opts = {}) => {
   for (let attempt = 0; ; attempt++) {
-    try { return await _send(content, opts); }
+    try {
+      const turn = await _send(content, opts);
+      // The pod rolled / woke from scale-to-zero mid-turn and took the in-memory session (and the
+      // in-flight build) with it. The work is NOT done — re-send once the pod is back, or the Act
+      // asserts against a project the killed turn never wrote to.
+      if (turn.interrupted && attempt < 2) {
+        console.log('[run] turn was cut off mid-flight (pod rolled/woke) — re-sending after settle');
+        await waitPodReady(user.token).catch(() => {});
+        await waitPodSettled(user.token).catch(() => {});
+        try { await thing.resume(cp.sessionId); } catch { cp.sessionId = await thing.start(); saveCheckpoint(cp); }
+        await thing.syncToTail();
+        continue;
+      }
+      return turn;
+    }
     catch (e) {
       const msg = String(e?.body?.error ?? e?.message ?? '');
       const lost = e?.status === 404 || /unknown session|404/.test(msg);

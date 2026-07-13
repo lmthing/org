@@ -277,12 +277,14 @@ export class ThingSession {
         quietSince = null;
       }
 
-      // If the session was evicted AFTER we saw the turn's work (a long turn's many sub-sessions
-      // can push a small pod past `maxSessions`), the turn is effectively done — stop cleanly and
-      // let the scenario assert on real pod state. If it vanished BEFORE any work, that's a real
-      // failure (e.g. a mid-init pod restart), so surface it.
+      // The session vanished mid-turn (evicted past `maxSessions`, or the pod rolled/woke from
+      // scale-to-zero under us — sessions are in-memory). We saw work, but we do NOT know the turn
+      // FINISHED: a long build (build_specialist → deep_research → architect) can be cut off with
+      // nothing durable written. Returning silently here reports a killed turn as a completed one —
+      // that is how scenario 07's Act V "built" two sections and produced no space, table or page.
+      // So flag it: `turn.interrupted` lets the caller re-send once the pod is back (see run.mjs).
       if (this.sessionGone) {
-        if (sawWork) return this.turn(startSeq, Date.now() - t0);
+        if (sawWork) return { ...this.turn(startSeq, Date.now() - t0), interrupted: true };
         throw new Error(`session ${this.sessionId} disappeared before doing any work (pod restart mid-init?)`);
       }
 
