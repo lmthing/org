@@ -1,0 +1,35 @@
+# voice-memo.mp3 — the exact spoken script
+
+Yuki walking her studio, counting stock (Azure TTS `tts-1`, voice `nova`, ~45s, mono 24kHz mp3).
+This is the VERBATIM text that was synthesized:
+
+> Hey, it's Yuki. Tuesday evening, doing the studio count before I lock up. Top shelf: I've got four
+> tubs of my tenmoku glaze left. That's the one I code GLZ-TEN-07, and it is going fast, two more
+> firings and it's gone. Under the wedging table, three bags of speckled buff clay. That's the new clay
+> I've been getting from Kiln and Clay Rotterdam, not from my usual supplier. Drying rack, eleven bisque
+> mugs waiting on their second firing. And the big one, my kiln element cracked on Sunday. The
+> replacement is on order, reference KLN-EL-88, and nothing fires until that arrives. Okay, that's the
+> count.
+
+## Expected facts (ALL are unique to this memo — none appear in inventory.csv, sales-ledger.xlsx or supplier-invoice.pdf)
+
+| Fact | Spoken form | Notes |
+|---|---|---|
+| Tenmoku glaze, **4 tubs** left | "four tubs of my tenmoku glaze" | `tenmoku` is the strongest single token |
+| Glaze code **GLZ-TEN-07** | "the one I code GLZ-TEN-07" | Whisper renders the hyphens away → `GLZ1007` / `GLZTEN07` — assert **normalized** (alphanumeric-only), never on the literal hyphenated string |
+| **Speckled buff** clay, **3 bags** | "three bags of speckled buff clay" | a material absent from every other fixture |
+| Supplier **Kiln and Clay Rotterdam** | "getting from Kiln and Clay Rotterdam" | a supplier absent from every other fixture |
+| **11 bisque mugs** on the drying rack | "eleven bisque mugs" | |
+| Kiln element on order, ref **KLN-EL-88** | "reference KLN-EL-88" | Whisper → `KLNEL88`; normalize before asserting |
+
+## Verified round-trip (Azure `whisper`, 2026-07-13)
+
+> "Hey, it's Yuki, Tuesday evening, doing the studio count before I lock up. Top shelf, I've got four
+> tubs of my Tenmoku glaze left. That's the one I code GLZ1007, and it is going fast. Two more firings,
+> and it's gone. Under the wedging table, three bags of speckled buff clay. That's the new clay I've
+> been getting from Kiln and Clay Rotterdam, not from my usual supplier. Drying rack, 11 bisque mugs
+> waiting on their second firing. And the big one, my kiln element cracked on Sunday. The replacement is
+> on order, reference KLNEL88, and nothing fires until that arrives. OK, that's the count."
+
+Every fact survives transcription; only the *hyphens* inside the two codes are dropped — which is why
+`run.mjs` asserts the memo's facts on an **alphanumeric-normalized** blob.

@@ -27,12 +27,14 @@ and an inbound channel. It also closes/exposes the **`ctx.spawn`-from-app-API ga
 | # | Step (in the UI) | What the user does |
 |---|---|---|
 | 1 | **Create a project** | They click "New project" and name it **`home-renovation`**. |
-| 2 | **Attach the dump** | They attach `reno-dump.md` (quotes/budget/contractors/timeline), a **site photo** (`site-photo.jpg`), a **contractor's quote PDF** (`contractor-quote.pdf`, labor/materials line items), and — if they have one — a **voice memo** from the site. |
+| 2 | **Attach the dump** | They attach everything, in one go: `reno-dump.md` (quotes/budget/contractors/timeline), their **budget spreadsheet** (`reno-budget.xlsx` — sheets `Budget`/`Quotes`/`Expenses`/`Contractors`), **two room photos** (`site-photo.jpg`, the kitchen wall stripped back; `bathroom-photo.jpg`, the bathroom mid-gut), the **contractor's quote PDF** (`contractor-quote.pdf`, labor/materials line items), and the **voice memo Niko recorded on site** (`voice-memo.mp3`). Their reading list (`links.md`) is what the research beat chases. |
 | 3 | **Ask, once** | sends the compound message below. |
 
-> *"Attaching all our reno quotes, receipts, the budget, photos of every room, a voice memo from
-> the site, and a contractor's quote PDF. Build me a tracker by room with a budget I can actually see,
-> keep the contractors and quotes in one place, and warn me BEFORE a trade pushes us over budget."*
+> *"Attaching everything we have: our reno notes (quotes, receipts, budget, contractors), our budget
+> spreadsheet, photos of the kitchen and of the bathroom mid-strip, a voice memo I recorded on site
+> today, and the contractor's quote PDF. Build me a tracker by room with a budget I can actually see,
+> keep the contractors and quotes in one place, and warn me BEFORE a trade pushes us over budget. The
+> voice memo has costs that are in none of the other files — capture those too."*
 
 | 4 | **Watch it build** | THING reads the file/photos/memo, creates per-area spaces, and builds the reno app — progress shows in chat. |
 | 5 | **See it** | They open **`/app/home-renovation/`**: a budget dashboard, a timeline, a before/after gallery — real data. |
@@ -85,12 +87,19 @@ In the user's terms — success is:
 Hop by hop, for maintainers:
 
 1. **Project creation (UI/API).** `POST /api/projects {name:"home-renovation"}`. THING runs inside it.
-2. **Multi-modal upload.** `reno-dump.md` → `kind:'file'`; `site-photo.jpg` → `kind:'image'` (→ a
-   gallery/before row via `system-vision`); `contractor-quote.pdf` → `kind:'file'` (application/pdf,
-   labor/materials line items read via `readDocument`); a voice memo → `kind:'audio'`. Base64 `POST /api/uploads`.
+2. **Multi-modal upload — six artifacts, one message.** `reno-dump.md` → `kind:'file'`;
+   `reno-budget.xlsx` → `kind:'file'` (SheetJS turns each sheet into CSV text for `readDocument`);
+   `site-photo.jpg` and `bathroom-photo.jpg` → `kind:'image'` (→ before/after gallery rows via
+   `system-vision`); `contractor-quote.pdf` → `kind:'file'` (application/pdf, labor/materials line items
+   read via `readDocument`); `voice-memo.mp3` → `kind:'audio'` (whisper transcription). Base64
+   `POST /api/uploads`. Every fixture carries tokens that appear in **no other fixture**, so each
+   modality can be proved to have been read on its own: the memo alone knows the **padstone**, the
+   **variation order** and **Delta Scaffolding** / the **artex + asbestos survey**; the workbook alone
+   knows `Q-2210-GLAZE` / `Q-2210-FLOOR` / `BL-*` budget lines / `CD-2026-XL7` / `XLS-RENO-V7`; the
+   markdown alone knows `Q-2207-KITCH` / `RC-0722-VA`.
 3. **The message carries all attachments over the WS path**; the HTTP `/message` route drops them.
-4. **THING delegates the read.** File ids → **`system-files/dispatch`** (md → reader; image →
-   `system-vision`; audio → transcription). Extracted facts return to THING.
+4. **THING delegates the read.** File ids → **`system-files/dispatch`** (md + xlsx + pdf → reader; the two
+   images → `system-vision`; the mp3 → transcription). Extracted facts return to THING.
 5. **THING plans and delegates the build.** (a) Per-area **spaces** (`kitchen`, `budget`,
    `contractors`, `bathroom`) via `build_specialist`, **live-registered**. (b)
    **`system-appbuilder/automator`** authors the live reno app.
@@ -99,7 +108,9 @@ Hop by hop, for maintainers:
    **budget dashboard** + **timeline** + **before/after gallery** page). `POST
    /app/home-renovation/build` compiles; `GET /app/home-renovation/` serves real HTML.
 7. **Deep research (Act II).** "Do we need a permit amendment for the wetroom? / best underfloor
-   heating" routes to **`system-research/researcher`** (`webSearch`/`webFetch`). Findings land in a
+   heating" routes to **`system-research/researcher`** (`webSearch`/`webFetch`) — the couple's own
+   reading list (`fixtures/links.md`: Planning Portal, underfloor heating, HSE asbestos essentials, the
+   Technical Chamber of Greece) is the live-fetchable beat behind it. Findings land in a
    `permits` space's **knowledge** *and* as a `permit_options`/`heating_options` row via `db.insert`,
    absent from the seed.
 8. **Agent-processed form + budget db-emitter→alert (Acts III–IV).** A "log expense" **page form** →
@@ -130,8 +141,13 @@ Everything above is authored by the model into the user's own project — no eng
 
 ## 4. User stories
 
-- **US-1 — Ingest multi-modal.** *As a homeowner, I want to hand over quotes, photos, and a voice
-  memo.* **Accept:** `system-files`/`system-vision` delegated; ≥3 file-specific facts cited.
+- **US-1 — Ingest multi-modal.** *As a homeowner, I want to hand over quotes, a spreadsheet, photos, a
+  PDF and a voice memo — all at once.* **Accept:** all six attachments classify correctly
+  (`file`/`file`/`image`/`image`/`file`/`audio`); `system-files`/`system-vision` delegated; ≥3
+  file-specific facts cited; a **spoken-only** fact from the memo (padstone / variation order / Delta
+  Scaffolding / artex / asbestos) and a **spreadsheet-only** fact from `reno-budget.xlsx` (`Q-2210-GLAZE`,
+  `BL-*`, `CD-2026-XL7`, …) each land in **real state** (a db row or a space file), proving the audio was
+  transcribed and the workbook parsed — not merely uploaded.
 - **US-2 — See the budget.** *As a homeowner, I want a real app, not a chat reply.*
   **Accept:** app `built:true` with tables + ≥1 dashboard page; `/app/home-renovation/` → 200 HTML.
 - **US-3 — My data is in it.** *As a homeowner, I want my quotes/expenses/contractors stored.*
@@ -185,7 +201,9 @@ Everything above is authored by the model into the user's own project — no eng
   [x] integration-demo source (keyless; telegram is the prod target)
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
   [x] app build [x] /app/<id>/ serving [x] app data API [x] **mid-life table+page addition**
-- Attachments: [x] upload [x] readDocument [x] attachmentIds to a specialist [x] vision/audio
+- Attachments: [x] upload [x] readDocument (md + **xlsx** + pdf) [x] attachmentIds to a specialist ·
+  [x] **vision** (2 real photos: `site-photo.jpg`, `bathroom-photo.jpg`) [x] **audio** (`voice-memo.mp3`,
+  a real recording → whisper transcription, asserted in real state) [x] live web research (`links.md`)
 - Pod lifecycle: [x] restart→auto-resume (Act XI, round 1) [x] cold-wake [x] event storm (Act X, round 1) [x] worker containment (api handler)
 - Cross-cutting: [x] edge cases/errors [x] performance [x] budget (direct Azure keys)
 
@@ -198,7 +216,7 @@ Acts here match the runner 1:1.
 
 | Act | Asserts (trace + real state) | Stories |
 |---|---|---|
-| **I — Ingest & build** | `system-files`/`system-vision` delegated; ≥3 file facts cited; ≥3 per-area spaces; app `built:true` with tables + ≥1 page; `/app/home-renovation/` → 200 HTML; ≥1 table seeded with file rows (content tokens match) | US-1,2,3,12 |
+| **I — Ingest & build** | all six fixtures upload and classify (`reno-dump.md`, `reno-budget.xlsx`, `contractor-quote.pdf` → `file`; `site-photo.jpg`, `bathroom-photo.jpg` → `image`; `voice-memo.mp3` → `audio`); `system-files`/`system-vision` delegated; ≥3 file facts cited; a **spoken-only** memo fact reaches the turn **and** lands in real state (db row / space file), and a **spreadsheet-only** fact from the `.xlsx` lands too; ≥3 per-area spaces; app `built:true` with tables + ≥1 page; `/app/home-renovation/` → 200 HTML; ≥1 table seeded with file rows (content tokens match) | US-1,2,3,12 |
 | **II — Deep research → knowledge + DB** | `system-research` delegated + `webSearch`/`webFetch` observed; a researched fact **absent from the seed** lands as a row in an options table; the permits/contractors space answers a follow-up from researched knowledge | US-4 |
 | **III — Agent-processed form** | a `POST` to `/app/home-renovation/api/<form>` returns ≥202; an **agent turn fires** (via `db.insert`→emitter→hook, not `ctx.spawn`); an expense row with a NEW token lands + budget changes (before/after) | US-5 |
 | **IV — db-emitter → budget alert** | after a trade's logged total crosses its budget line, a db emitter → hook → agent writes an **alert row** naming the trade; nothing destructive runs | US-6 |
@@ -255,17 +273,25 @@ node ../09-home-renovation/run.mjs    # fresh; writes 09-home-renovation/results
 node ../09-home-renovation/run.mjs --reuse # reuse the cached user + project
 ```
 
-The runner provisions a disposable prod user, creates `home-renovation`, uploads `fixtures/reno-dump.md`
-+ `fixtures/site-photo.jpg` + `fixtures/contractor-quote.pdf` (+ a voice memo if `fixtures/voice-memo.m4a`
-is present — audio is otherwise skipped with a note), sends the compound message over the WS path, drives the research /
-form / budget-alert / cron / evolution / inbound / follow-up beats, and checkpoints per Act to
-`results/checkpoint.json`.
+The runner provisions a disposable prod user, creates `home-renovation`, uploads **all six fixtures**
+(`fixtures/reno-dump.md`, `fixtures/reno-budget.xlsx`, `fixtures/site-photo.jpg`,
+`fixtures/bathroom-photo.jpg`, `fixtures/contractor-quote.pdf`, `fixtures/voice-memo.mp3`) on the one
+compound message over the WS path, then drives the research (`fixtures/links.md` — the couple's own
+reading list, every URL live) / form / budget-alert / cron / evolution / inbound / follow-up beats, and
+checkpoints per Act to `results/checkpoint.json`.
 
-> **Vision/audio honesty:** the shipped `site-photo.jpg` is a real renovation-interior photo and
-> `contractor-quote.pdf` a real construction cost-estimate PDF (selectable labor/materials line items),
-> exercising the image-upload + `system-vision` *delegate path*, PDF `readDocument`, and attachment
-> classification. For audio transcription, drop a real `voice-memo.m4a` before running. The runner
-> asserts the upload/classification path always, and the content assertion when a real artifact is present.
+> **Vision/audio honesty — every fixture is a real artifact, none is a placeholder.** `site-photo.jpg`
+> (kitchen wall stripped to the lath) and `bathroom-photo.jpg` (a bathroom mid-gut, brick back to the
+> wall — Wikimedia Commons, CC BY-SA 2.0) are real renovation photos of *different* rooms;
+> `contractor-quote.pdf` is a real construction cost-estimate PDF (selectable labor/materials line
+> items); `reno-budget.xlsx` is a genuine four-sheet workbook (`Budget`/`Quotes`/`Expenses`/
+> `Contractors`, ~50 rows) read via SheetJS; `voice-memo.mp3` is a **real ~45 s recording** (Niko relaying
+> what the builder just said), whose spoken script is kept verbatim in `fixtures/voice-memo.txt` and whose
+> facts are verified to survive a whisper round trip. Each fixture carries tokens present in **no other
+> fixture**, so Act I can prove — from db rows and space files, never from prose — that *that* file was
+> read: the memo alone knows the **padstone**, **variation order 114**, **Delta Scaffolding** and the
+> **artex / asbestos survey**; the workbook alone knows `Q-2210-GLAZE`, `BL-B05`, `CD-2026-XL7`,
+> `XLS-RENO-V7`.
 
 ## Actual results
 
@@ -334,6 +360,11 @@ authoring-reliability follow-up (scenario §7), recorded as a metric, never hidd
   run. The fix does not depend on either.
 - **Event-storm coalescing** is a feature, not a defect: a rapid same-source burst is intentionally
   coalesced; Act X asserts no event is *lost* (spaced re-delivery lands all 15).
+- **The fixture set grew AFTER this run.** That run ingested `reno-dump.md` + `site-photo.jpg` +
+  `contractor-quote.pdf` only (audio was skipped with a note). Act I now also ingests the real
+  `voice-memo.mp3`, `reno-budget.xlsx` and `bathroom-photo.jpg`, and hard-asserts a spoken-only and a
+  spreadsheet-only fact in real state — so the audio/transcription and spreadsheet paths, previously
+  unexercised, are live and **not yet re-verified against prod**. Re-run Act I to confirm them.
 
 ### Performance (indicative, from the live run)
 | Metric | Observed |

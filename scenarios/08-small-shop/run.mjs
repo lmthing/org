@@ -3,11 +3,14 @@
  * Scenario 08 — Small-shop back office: a spreadsheet becomes a shop that runs itself.
  * Spec: sdk/org/scenarios/08-small-shop/scenario.md  (Acts here match its Acts table 1:1).
  *
- * Reproduces the literal user flow: create the `ceramics-shop` project, attach `inventory.csv` +
- * a product photo, send the one compound message, then drive the research / form / reorder-draft /
- * cron / self-evolution / inbound / follow-up beats — plus the round-1 NEW Acts (memory, event
- * storm, restart→auto-resume). Every assertion reads the TRACE or REAL pod state (spaces on disk,
- * the served app, db rows, hooks) — never the model's prose.
+ * Reproduces the literal user flow: create the `ceramics-shop` project, attach the WHOLE dump —
+ * `inventory.csv`, `sales-ledger.xlsx` (3 sheets), `product-photo.jpg`, `studio-photo.jpg`,
+ * `supplier-invoice.pdf` and `voice-memo.mp3` (a real Azure-TTS memo of Yuki counting stock) — send
+ * the one compound message, then drive the research / form / reorder-draft / cron / self-evolution /
+ * inbound / follow-up beats — plus the round-1 NEW Acts (memory, event storm, restart→auto-resume).
+ * Every assertion reads the TRACE or REAL pod state (spaces on disk, the served app, db rows, hooks)
+ * — never the model's prose. Each fixture carries tokens that appear in NO other fixture, so a check
+ * can prove the agent read THAT file (CSV / xlsx / audio facts are asserted separately).
  *
  * The headline promise under test is the **db-emitter → hook → agent deliverable** loop: a sale
  * drops a material below its reorder point and an agent DRAFTS a reorder email (parked, not sent).
@@ -52,16 +55,37 @@ const now = () => Date.now();
 
 // The compound opener — VERBATIM from scenario.md §1.
 const OPENER =
-  'Attaching my materials, products, suppliers, and 3 months of sales, plus a photo of one of my ' +
-  'pieces and a supplier invoice PDF. Build me a stock tracker. When something drops below its ' +
-  "reorder point, draft the reorder email to my supplier but DON'T send it — just have it waiting. " +
-  'And every Sunday give me a short read on what sold.';
+  "Attaching everything I've got: my materials, products, suppliers and 3 months of sales as a CSV, " +
+  'my sales ledger spreadsheet (sales-ledger.xlsx — sales, materials and suppliers on separate ' +
+  'sheets), a photo of one of my pieces, a photo of my kiln, a supplier invoice PDF, and a voice memo ' +
+  'I recorded walking round the studio counting stock — take the counts in the memo as the truth and ' +
+  'put them in too. Build me a stock tracker. When something drops below its reorder point, draft the ' +
+  "reorder email to my supplier but DON'T send it — just have it waiting. And every Sunday give me a " +
+  'short read on what sold.';
 
 // Facts that appear ONLY in inventory.csv — prove THING actually read the attachment (not generic advice).
 const FILE_FACTS = [
   'CLAY-W12', 'Sibelco Whiteware', 'Mori Mug', 'MM-01', 'Donabe', 'GLZ-BLUE', 'Ceramica IT',
   'ORD-1043', 'Noodle bowl', 'Sibelco NL',
 ];
+
+// Facts that appear ONLY in sales-ledger.xlsx (3 sheets) — prove the SPREADSHEET was parsed, not just
+// the CSV. None of these tokens exist in inventory.csv, the PDF, or the voice memo.
+const XLSX_FACTS = [
+  'ETS-5507', 'WHL-0007', 'MKT-0042', 'Bloem & Vaas', 'De Kleine Keuken', 'PORC-LIM-05',
+  'GLZ-SHINO-3', 'THERMO-K26', 'Vingerling', 'Potterycrafts', 'Keramikos', 'CTR-VNG-2026-11',
+];
+
+// Facts SPOKEN ONLY in voice-memo.mp3 (see fixtures/voice-memo.txt) — they exist in no other fixture,
+// so finding one in real state proves the audio was actually transcribed and its contents used.
+// Whisper drops the hyphens inside spoken codes (GLZ-TEN-07 → "GLZ1007", KLN-EL-88 → "KLNEL88"), so
+// these are matched against an ALPHANUMERIC-NORMALIZED blob — never the literal hyphenated string.
+const VOICE_FACTS = [
+  'tenmoku', 'speckled buff', 'Kiln and Clay Rotterdam', 'kilnandclayrotterdam', 'bisque',
+  'glzten07', 'glz1007', 'klnel88',
+];
+/** Alphanumeric-only normalization — survives whisper's hyphen-dropping and any JSON quoting. */
+const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // A forbidden outbound side-effect would show up as one of these yields (the reorder must NOT send).
 const OUTBOUND_YIELDS = /callconnection|sendemail|slackpost|sendmessage|postmessage|smtp|mailto/i;
@@ -141,6 +165,32 @@ async function stockSum(pod, projectId, tables = ['materials', 'products', 'stoc
   }
   return sum;
 }
+/**
+ * REAL state, normalized: every db row PLUS the text of every file the agents wrote under the
+ * project's spaces (knowledge/instruct/etc). A fact that shows up here was persisted — it is not
+ * the model's prose. Alphanumeric-normalized so spoken codes survive transcription (see VOICE_FACTS).
+ */
+async function realStateBlob(pod, projectId) {
+  const names = await tableNames(pod, projectId);
+  let blob = await dbBlob(pod, projectId, names);
+  const tree = JSON.stringify(await pod.fsTree().catch(() => ({})));
+  const spaceFiles = [...tree.matchAll(/"([^"]*\/spaces\/[^"]+\.(?:md|ts|json))"/g)].map((m) => m[1]).slice(0, 60);
+  const contents = await Promise.all(
+    spaceFiles.map((p) => pod.readFile(p).then((r) => String(r?.content ?? '')).catch(() => '')),
+  );
+  blob += contents.join('\n');
+  return { blob, norm: norm(blob), names };
+}
+/** Poll real state (db rows + space files) until `pred(normalizedBlob)` holds. */
+async function waitForRealState(pod, projectId, pred, { tries = 12, ms = 6_000 } = {}) {
+  let last = { blob: '', norm: '', names: [] };
+  for (let i = 0; i < tries; i++) {
+    last = await realStateBlob(pod, projectId);
+    if (pred(last.norm, last.blob, last.names)) return { hit: true, ...last };
+    await sleep(ms);
+  }
+  return { hit: false, ...last };
+}
 /** Poll for a predicate over the current db blob to become true (headless hook→agent chains are async). */
 async function waitForDb(pod, projectId, pred, { tries = 20, ms = 6_000 } = {}) {
   for (let i = 0; i < tries; i++) {
@@ -218,23 +268,38 @@ const recordErrors = (label, turn) => {
 
 // ═══ ACT I — Ingest & build ═══════════════════════════════════════════════════
 if (ACTS.includes(1)) {
-  report.step('Act I — Ingest & build', 'system-files/vision delegated; ≥3 CSV facts; ≥3 per-line spaces; app built w/ tables + page; /app/ 200; ≥1 seeded table');
+  report.step('Act I — Ingest & build', 'the WHOLE dump (csv + xlsx + 2 images + pdf + voice memo) is ingested; system-files/vision delegated; ≥3 CSV facts + ≥1 xlsx-only fact cited; a spoken-only fact lands in REAL state; ≥3 per-line spaces; app built w/ tables + page; /app/ 200; ≥1 seeded table');
   const csvAtt = await pod.upload(`${FIX}/inventory.csv`, { mediaType: 'text/csv' });
   report.check('inventory.csv uploaded (kind=file)', csvAtt.kind === 'file', `${csvAtt.kind} ${csvAtt.mediaType}`);
+  const xlsxAtt = await pod.upload(`${FIX}/sales-ledger.xlsx`, {
+    mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  report.check('sales-ledger.xlsx uploaded (kind=file)', xlsxAtt.kind === 'file', `${xlsxAtt.kind} ${xlsxAtt.mediaType}`);
   const imgPath = existsSync(`${FIX}/product-photo.jpg`) ? `${FIX}/product-photo.jpg` : `${FIX}/product-photo.png`;
   const imgAtt = await pod.upload(imgPath, { mediaType: imgPath.endsWith('.jpg') ? 'image/jpeg' : 'image/png' });
   report.check('product photo uploaded (kind=image)', imgAtt.kind === 'image', `${imgAtt.kind} ${imgAtt.mediaType}`);
+  const studioAtt = await pod.upload(`${FIX}/studio-photo.jpg`, { mediaType: 'image/jpeg' });
+  report.check('studio-photo.jpg uploaded (kind=image)', studioAtt.kind === 'image', `${studioAtt.kind} ${studioAtt.mediaType}`);
   const pdfAtt = await pod.upload(`${FIX}/supplier-invoice.pdf`, { mediaType: 'application/pdf' });
   report.check('supplier-invoice.pdf uploaded (kind=file)', pdfAtt.kind === 'file', `${pdfAtt.kind} ${pdfAtt.mediaType}`);
-  report.note('no voice-memo fixture present → audio/transcription path skipped (drop fixtures/voice-memo.m4a to exercise it)');
+  const audioAtt = await pod.upload(`${FIX}/voice-memo.mp3`, { mediaType: 'audio/mpeg' });
+  report.check('voice-memo.mp3 uploaded (kind=audio)', audioAtt.kind === 'audio', `${audioAtt.kind} ${audioAtt.mediaType}`);
 
-  const t = acc(await thing.sendWithAttachments(OPENER, [csvAtt, imgAtt, pdfAtt], { timeoutMs: 1_800_000 }));
+  const t = acc(await thing.sendWithAttachments(OPENER, [csvAtt, xlsxAtt, imgAtt, studioAtt, pdfAtt, audioAtt], { timeoutMs: 1_800_000 }));
   const sessionText = JSON.stringify(thing.events).toLowerCase();
+  const sessionNorm = norm(sessionText);
   report.check('delegated to system-files (read the CSV)', thing.didDelegate('system-files') || sessionText.includes('system-files'), thing.turn(0).delegates.join(' · ').slice(0, 200));
   const sawVision = thing.didDelegate('system-vision') || sessionText.includes('system-vision');
   report.check('image handed to system-vision (delegate path)', sawVision, sawVision ? 'delegated' : 'NOT delegated (image path)');
   const cited = FILE_FACTS.filter((f) => sessionText.includes(f.toLowerCase()));
   report.check('read the file: ≥3 CSV-specific facts appear in the session', cited.length >= 3, `cited: ${cited.join(', ')}`);
+  // The xlsx carries tokens that exist in NO other fixture → citing one proves the SPREADSHEET was parsed.
+  const citedXlsx = XLSX_FACTS.filter((f) => sessionText.includes(f.toLowerCase()));
+  report.check('read the spreadsheet: ≥1 xlsx-ONLY fact appears in the session (sales-ledger.xlsx parsed)', citedXlsx.length >= 1, `cited: ${citedXlsx.join(', ') || '(none — xlsx not parsed)'}`);
+  // Audio is transcribed INLINE into the message (THING answers it itself — no delegate), so the
+  // transcript shows up in the trace; the REAL-state check below is the one that proves it was used.
+  const spokenInTrace = VOICE_FACTS.filter((f) => sessionNorm.includes(norm(f)));
+  report.check('voice memo transcribed (a spoken-only fact appears in the session trace)', spokenInTrace.length >= 1, `spoken facts in trace: ${spokenInTrace.join(', ') || '(none — transcription did not land)'}`);
   recordErrors('Act I', t);
   report.metric('Act I ingest→build', (t.durationMs / 1000).toFixed(0), 's');
   report.metric('Act I tokens', `${t.tokens.in}/${t.tokens.out}`);
@@ -263,16 +328,42 @@ if (ACTS.includes(1)) {
   const blobRows = await dbBlob(pod, PROJECT, names);
   const rowFacts = FILE_FACTS.filter((f) => blobRows.includes(f.toLowerCase()));
   report.check('≥1 table seeded with the CSV rows (content tokens present)', rowFacts.length >= 2, `row facts: ${rowFacts.join(', ')}`);
-  cp.acts.I = { passed: report.passed, spaces, tables: names, actIManifest: { tables: names, pages: await pageRoutes(pod, PROJECT) } };
+
+  // ── per-FILE facts in REAL state — each fixture must have actually been read, not just uploaded.
+  // The voice memo's facts are spoken NOWHERE else (see fixtures/voice-memo.txt), so one of them
+  // turning up in a db row or a space file is proof the audio was transcribed AND the contents used.
+  const voiceLanded = await waitForRealState(pod, PROJECT, (n) => VOICE_FACTS.some((f) => n.includes(norm(f))));
+  const voiceHits = VOICE_FACTS.filter((f) => voiceLanded.norm.includes(norm(f)));
+  report.check(
+    'the voice memo landed in REAL state (a spoken-ONLY fact — tenmoku / speckled buff / Kiln and Clay Rotterdam / GLZ-TEN-07 — is in a db row or a space)',
+    voiceLanded.hit,
+    voiceHits.length ? `spoken-only facts persisted: ${voiceHits.join(', ')}` : 'NO spoken-only fact in db rows or spaces (transcription did not reach state)',
+  );
+  // Same shape for the spreadsheet: an xlsx-ONLY token in real state proves the workbook was ingested.
+  const xlsxHits = XLSX_FACTS.filter((f) => voiceLanded.norm.includes(norm(f)));
+  report.check('the spreadsheet landed in REAL state (an xlsx-ONLY fact is in a db row or a space)', xlsxHits.length >= 1, xlsxHits.length ? `xlsx-only facts persisted: ${xlsxHits.join(', ')}` : 'NO xlsx-only fact in db rows or spaces');
+  cp.acts.I = {
+    passed: report.passed, spaces, tables: names,
+    fixtures: { csvFacts: rowFacts.length, xlsxCited: citedXlsx.length, xlsxPersisted: xlsxHits.length, voicePersisted: voiceHits.length },
+    actIManifest: { tables: names, pages: await pageRoutes(pod, PROJECT) },
+  };
   saveCheckpoint(cp);
 }
 
 // ═══ ACT II — Deep research → knowledge + DB ══════════════════════════════════
 if (ACTS.includes(2)) {
-  report.step('Act II — Deep research → knowledge + DB', 'system-research delegated + webSearch/webFetch; a researched supplier ABSENT from the seed lands in a supplier_options/alternatives table; the suppliers space answers from it');
+  report.step('Act II — Deep research → knowledge + DB', 'system-research delegated + webSearch/webFetch (incl. a REAL fetchable URL from fixtures/links.md); a researched supplier ABSENT from the seed lands in a supplier_options/alternatives table; the suppliers space answers from it');
   const namesBefore = await tableNames(pod, PROJECT);
   const before = await dbBlob(pod, PROJECT, namesBefore);
-  const t = acc(await thing.send('My whiteware clay comes from Sibelco NL at €22 a bag (SKU CLAY-W12). Research the live market and find me a genuinely cheaper or closer alternative supplier for stoneware/whiteware clay in the Netherlands or nearby. Then ADD the best alternative you find as a NEW row in the shop app — a supplier_options table (or my suppliers list) — with its name/country and why it is better, AND save the details in the suppliers section so I can see it. It must be a real supplier that is NOT already Sibelco or Ceramica IT.', { timeoutMs: 1_200_000 }));
+  // fixtures/links.md holds Yuki's real, publicly fetchable research links (each verified 200) — hand
+  // one to the research beat so webFetch runs against a live page, not a hallucinated URL.
+  const LINKS = existsSync(`${FIX}/links.md`) ? readFileSync(`${FIX}/links.md`, 'utf8') : '';
+  const linkUrls = [...LINKS.matchAll(/https?:\/\/\S+/g)].map((m) => m[0]);
+  report.check('fixtures/links.md provides ≥2 real research URLs', linkUrls.length >= 2, linkUrls.join(', ') || '(links.md missing)');
+  const linkHint = linkUrls.length
+    ? ` Start from the pages I keep bookmarked — ${linkUrls.slice(0, 3).join(' , ')} — read them, then go wider.`
+    : '';
+  const t = acc(await thing.send(`My whiteware clay comes from Sibelco NL at €22 a bag (SKU CLAY-W12). Research the live market and find me a genuinely cheaper or closer alternative supplier for stoneware/whiteware clay in the Netherlands or nearby.${linkHint} Then ADD the best alternative you find as a NEW row in the shop app — a supplier_options table (or my suppliers list) — with its name/country and why it is better, AND save the details in the suppliers section so I can see it. It must be a real supplier that is NOT already Sibelco or Ceramica IT.`, { timeoutMs: 1_200_000 }));
   const research = thing.didDelegate('system-research') || JSON.stringify(t.events).toLowerCase().includes('system-research');
   report.check('delegated to system-research', research, t.delegates.join(' · ').slice(0, 200));
   const webYields = t.yields.filter((y) => /websearch|webfetch|fetch/i.test(y.kind)).length;

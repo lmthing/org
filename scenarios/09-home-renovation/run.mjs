@@ -3,8 +3,11 @@
  * Scenario 09 — Home renovation command center: quotes and receipts become a budget that watches itself.
  * Spec: sdk/org/scenarios/09-home-renovation/scenario.md  (Acts here match its Acts table 1:1).
  *
- * Reproduces the literal user flow: create the `home-renovation` project, attach `reno-dump.md` +
- * a site photo, send the one compound message, then drive the research / expense-form / budget-alert /
+ * Reproduces the literal user flow: create the `home-renovation` project, attach the whole dump —
+ * `reno-dump.md`, `reno-budget.xlsx`, `site-photo.jpg`, `bathroom-photo.jpg`, `contractor-quote.pdf` and
+ * `voice-memo.mp3` (all real artifacts; the memo is a genuine TTS recording whose spoken facts appear in
+ * NO other fixture) — send the one compound message, then drive the research (`fixtures/links.md` is the
+ * couple's own reading list) / expense-form / budget-alert /
  * cron / self-evolution / inbound / follow-up beats — plus the round-1 NEW Acts (memory, event storm,
  * restart→auto-resume). Every assertion reads the TRACE or REAL pod state (spaces on disk, the served
  * app, db rows, hooks) — never the model's prose.
@@ -53,15 +56,27 @@ const now = () => Date.now();
 
 // The compound opener — VERBATIM from scenario.md §1.
 const OPENER =
-  'Attaching all our reno quotes, receipts, the budget, photos of every room, a voice memo from ' +
-  'the site, and a contractor\'s quote PDF. Build me a tracker by room with a budget I can actually ' +
-  'see, keep the contractors and quotes in one place, and warn me BEFORE a trade pushes us over budget.';
+  'Attaching everything we have: our reno notes (quotes, receipts, budget, contractors), our budget ' +
+  'spreadsheet, photos of the kitchen and of the bathroom mid-strip, a voice memo I recorded on site ' +
+  'today, and the contractor\'s quote PDF. Build me a tracker by room with a budget I can actually ' +
+  'see, keep the contractors and quotes in one place, and warn me BEFORE a trade pushes us over ' +
+  'budget. The voice memo has costs that are in none of the other files — capture those too.';
 
 // Facts that appear ONLY in reno-dump.md — prove THING actually read the attachment (not generic advice).
 const FILE_FACTS = [
   'Q-2207-KITCH', 'Hansson Tiling', 'Demetriou Plumbing', 'Voutos Cabinetry', '11,400', '2026-09-30',
   'Q-2207-CAB', 'Q-2207-TILE', 'Voltaris', 'StoneWorks', 'Stefanos', 'RC-0722-VA',
 ];
+
+// Facts SPOKEN ONLY in voice-memo.mp3 (script: fixtures/voice-memo.txt) — they appear in NO other
+// fixture, so finding one in REAL state (a db row / a space file) proves the audio was transcribed and
+// its content actually landed. Every token below survives the TTS→whisper round trip verbatim (verified
+// against the shipped mp3) and is a WORD, not a number — a bare amount like "340" would substring-match
+// an unrelated "3,400" in the seed and make this check lie.
+const VOICE_FACTS = ['padstone', 'artex', 'asbestos', 'delta scaffolding', 'variation order'];
+
+// Facts that appear ONLY in reno-budget.xlsx — prove the spreadsheet itself was parsed (not just the md).
+const XLSX_FACTS = ['Q-2210-GLAZE', 'Q-2210-FLOOR', 'Kanellos', 'Oikonomou', 'BL-K01', 'BL-B05', 'CD-2026-XL7', 'XLS-RENO-V7'];
 
 // A forbidden outbound side-effect / payment would show up as one of these yields.
 const OUTBOUND_YIELDS = /callconnection|sendemail|slackpost|sendmessage|postmessage|smtp|mailto|pay|transfer|charge/i;
@@ -141,6 +156,20 @@ async function spentSum(pod, projectId, tables) {
     }
   }
   return sum;
+}
+/**
+ * Everything the pod ACTUALLY persisted, as one lowercased blob: every app table's rows PLUS the text of
+ * every file under the project's spaces (knowledge/agents/…). Used to prove a fact from an attachment
+ * landed in REAL state — never in the model's prose.
+ */
+async function realStateBlob(pod, projectId) {
+  const db = await dbBlob(pod, projectId, await tableNames(pod, projectId));
+  const tree = JSON.stringify(await pod.fsTree().catch(() => ({})));
+  const paths = [...tree.matchAll(/"([^"]*spaces\/[^"]+\.(?:md|json|ts))"/g)].map((m) => m[1]).slice(0, 60);
+  const files = await Promise.all(
+    paths.map((p) => pod.readFile(p).then((r) => String(r?.content ?? '')).catch(() => '')),
+  );
+  return `${db}\n${files.join('\n')}`.toLowerCase();
 }
 /** Poll for a predicate over the current db blob to become true (headless hook→agent chains are async). */
 async function waitForDb(pod, projectId, pred, { tries = 20, ms = 6_000 } = {}) {
@@ -240,23 +269,33 @@ const recordErrors = (label, turn) => {
 
 // ═══ ACT I — Ingest & build ═══════════════════════════════════════════════════
 if (ACTS.includes(1)) {
-  report.step('Act I — Ingest & build', 'system-files/vision delegated; ≥3 file facts; ≥3 per-area spaces; app built w/ tables + page; /app/ 200; ≥1 seeded table');
+  report.step('Act I — Ingest & build', 'the whole dump (md + xlsx + 2 photos + pdf + voice memo) goes in at once: system-files/vision/audio delegated; ≥3 file facts; a SPOKEN-only fact lands in real state; ≥3 per-area spaces; app built w/ tables + page; /app/ 200; ≥1 seeded table');
   const fileAtt = await pod.upload(`${FIX}/reno-dump.md`, { mediaType: 'text/markdown' });
   report.check('reno-dump.md uploaded (kind=file)', fileAtt.kind === 'file', `${fileAtt.kind} ${fileAtt.mediaType}`);
+  const xlsxAtt = await pod.upload(`${FIX}/reno-budget.xlsx`, {
+    mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  report.check('reno-budget.xlsx uploaded (kind=file)', xlsxAtt.kind === 'file', `${xlsxAtt.kind} ${xlsxAtt.mediaType}`);
   const imgPath = existsSync(`${FIX}/site-photo.jpg`) ? `${FIX}/site-photo.jpg` : `${FIX}/site-photo.png`;
   const imgAtt = await pod.upload(imgPath, { mediaType: imgPath.endsWith('.jpg') ? 'image/jpeg' : 'image/png' });
   report.check('site photo uploaded (kind=image)', imgAtt.kind === 'image', `${imgAtt.kind} ${imgAtt.mediaType}`);
+  const bathAtt = await pod.upload(`${FIX}/bathroom-photo.jpg`, { mediaType: 'image/jpeg' });
+  report.check('bathroom-photo.jpg uploaded (kind=image)', bathAtt.kind === 'image', `${bathAtt.kind} ${bathAtt.mediaType}`);
   const pdfAtt = await pod.upload(`${FIX}/contractor-quote.pdf`, { mediaType: 'application/pdf' });
   report.check('contractor-quote.pdf uploaded (kind=file)', pdfAtt.kind === 'file', `${pdfAtt.kind} ${pdfAtt.mediaType}`);
-  report.note('no voice-memo fixture present → audio/transcription path skipped (drop fixtures/voice-memo.m4a to exercise it; the memo text is inlined in reno-dump.md)');
+  const audioAtt = await pod.upload(`${FIX}/voice-memo.mp3`, { mediaType: 'audio/mpeg' });
+  report.check('voice-memo.mp3 uploaded (kind=audio)', audioAtt.kind === 'audio', `${audioAtt.kind} ${audioAtt.mediaType}`);
 
-  const t = acc(await thing.sendWithAttachments(OPENER, [fileAtt, imgAtt, pdfAtt], { timeoutMs: 1_800_000 }));
+  const t = acc(await thing.sendWithAttachments(OPENER, [fileAtt, xlsxAtt, imgAtt, bathAtt, pdfAtt, audioAtt], { timeoutMs: 1_800_000 }));
   const sessionText = JSON.stringify(thing.events).toLowerCase();
   report.check('delegated to system-files (read the dump)', thing.didDelegate('system-files') || sessionText.includes('system-files'), thing.turn(0).delegates.join(' · ').slice(0, 200));
   const sawVision = thing.didDelegate('system-vision') || sessionText.includes('system-vision');
   report.check('image handed to system-vision (delegate path)', sawVision, sawVision ? 'delegated' : 'NOT delegated (image path)');
   const cited = FILE_FACTS.filter((f) => sessionText.includes(f.toLowerCase()));
   report.check('read the file: ≥3 file-specific facts appear in the session', cited.length >= 3, `cited: ${cited.join(', ')}`);
+  // Audio: the memo must be TRANSCRIBED, not just uploaded — a spoken-only fact has to reach the turn.
+  const heard = VOICE_FACTS.filter((f) => sessionText.includes(f.toLowerCase()));
+  report.check('the voice memo was transcribed (a SPOKEN-only fact reached the turn)', heard.length >= 1, `heard: ${heard.join(', ') || '(none — audio/transcription path did not run)'}`);
   recordErrors('Act I', t);
   report.metric('Act I ingest→build', (t.durationMs / 1000).toFixed(0), 's');
   report.metric('Act I tokens', `${t.tokens.in}/${t.tokens.out}`);
@@ -276,7 +315,7 @@ if (ACTS.includes(1)) {
   // App — nudge the build if the automator half didn't fire.
   let names = await tableNames(pod, PROJECT);
   if (names.length === 0) {
-    acc(await thing.sendWithAttachments('Now build this into a reno-tracker app on this project I can open — a budget dashboard (budget vs spent per trade), a timeline, and a before/after gallery — and MOVE all the data from the attached file into its database as rows (quotes, expenses/receipts, contractors, milestones).', [fileAtt], { timeoutMs: 1_500_000 }));
+    acc(await thing.sendWithAttachments('Now build this into a reno-tracker app on this project I can open — a budget dashboard (budget vs spent per trade), a timeline, and a before/after gallery — and MOVE all the data from the attached files into its database as rows (quotes, expenses/receipts, contractors, milestones), including the budget spreadsheet and the extra costs from my voice memo.', [fileAtt, xlsxAtt, audioAtt], { timeoutMs: 1_500_000 }));
     names = await tableNames(pod, PROJECT);
   }
   const build = await assertLiveApp(report, pod, PROJECT, {});
@@ -285,7 +324,20 @@ if (ACTS.includes(1)) {
   const blobRows = await dbBlob(pod, PROJECT, names);
   const rowFacts = FILE_FACTS.filter((f) => blobRows.includes(f.toLowerCase()));
   report.check('≥1 table seeded with the file rows (content tokens present)', rowFacts.length >= 2, `row facts: ${rowFacts.join(', ')}`);
-  cp.acts.I = { passed: report.passed, spaces, tables: names, actIManifest: { tables: names, pages: await pageRoutes(pod, PROJECT) } };
+
+  // The multi-modal payoff, asserted on REAL state only (db rows + space files — never prose):
+  // a fact that exists ONLY in the spoken memo, and one that exists ONLY in the spreadsheet, must have
+  // been persisted by the build. Poll — the seeding is authored by a delegated turn.
+  let state = await realStateBlob(pod, PROJECT);
+  for (let i = 0; i < 10 && !VOICE_FACTS.some((f) => state.includes(f.toLowerCase())); i++) {
+    await sleep(6_000);
+    state = await realStateBlob(pod, PROJECT);
+  }
+  const spokenLanded = VOICE_FACTS.filter((f) => state.includes(f.toLowerCase()));
+  report.check('a SPOKEN-only fact from the voice memo landed in REAL state (db row / space file)', spokenLanded.length >= 1, `landed: ${spokenLanded.join(', ') || '(none — the transcription never reached the tracker)'}`);
+  const xlsxLanded = XLSX_FACTS.filter((f) => state.includes(f.toLowerCase()));
+  report.check('a SPREADSHEET-only fact from reno-budget.xlsx landed in REAL state (the .xlsx was parsed, not just the .md)', xlsxLanded.length >= 1, `landed: ${xlsxLanded.join(', ') || '(none — the workbook was not read)'}`);
+  cp.acts.I = { passed: report.passed, spaces, tables: names, spokenLanded, xlsxLanded, actIManifest: { tables: names, pages: await pageRoutes(pod, PROJECT) } };
   saveCheckpoint(cp);
 }
 

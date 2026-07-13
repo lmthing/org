@@ -7,7 +7,8 @@
 
 **Persona.** Yuki, runs a one-person ceramics Etsy shop from her studio in Utrecht. She hates
 stockouts and spreadsheets in equal measure. She has a CSV of materials, products, suppliers, and
-three months of sales, plus a photo of one of her pieces, and a voice memo of an inventory count.
+three months of sales, an Excel sales ledger she keeps by hand, photos of a piece and of her kiln, a
+supplier invoice PDF, and a voice memo of an inventory count she recorded walking round the studio.
 She is not technical. She wants the boring part of the back office to stop being her problem.
 
 **Why this scenario exists.** The PROMISE under test is the **db-emitter → hook → agent deliverable**
@@ -26,15 +27,18 @@ It also closes/exposes the **`ctx.spawn`-from-app-API gap** (the working form→
 | # | Step (in the UI) | What the user does |
 |---|---|---|
 | 1 | **Create a project** | In Studio/Chat she clicks "New project" and names it **`ceramics-shop`**. |
-| 2 | **Attach the dump** | She attaches `inventory.csv` (materials/products/suppliers/sales), a **product photo** (`product-photo.jpg`), a **supplier invoice PDF** (`supplier-invoice.pdf`), and — if she has one — a **voice memo** counting stock. |
+| 2 | **Attach the dump** | She attaches the lot — all six are **real artifacts** in `fixtures/`: `inventory.csv` (materials/products/suppliers/sales), her hand-kept Excel ledger **`sales-ledger.xlsx`** (3 sheets: `Sales`/`Materials`/`Suppliers`), a **product photo** (`product-photo.jpg`), a **studio/kiln photo** (`studio-photo.jpg`), a **supplier invoice PDF** (`supplier-invoice.pdf`), and a **voice memo** counting stock (`voice-memo.mp3` — real speech; script + expected facts in `voice-memo.txt`). Her research bookmarks live in `links.md`. |
 | 3 | **Ask, once** | sends the compound message below. |
 
-> *"Attaching my materials, products, suppliers, and 3 months of sales, plus a photo of one of my
-> pieces and a supplier invoice PDF. Build me a stock tracker. When something drops below its reorder
-> point, draft the reorder email to my supplier but DON'T send it — just have it waiting. And every
-> Sunday give me a short read on what sold."*
+> *"Attaching everything I've got: my materials, products, suppliers and 3 months of sales as a CSV,
+> my sales ledger spreadsheet (sales-ledger.xlsx — sales, materials and suppliers on separate sheets),
+> a photo of one of my pieces, a photo of my kiln, a supplier invoice PDF, and a voice memo I recorded
+> walking round the studio counting stock — take the counts in the memo as the truth and put them in
+> too. Build me a stock tracker. When something drops below its reorder point, draft the reorder email
+> to my supplier but DON'T send it — just have it waiting. And every Sunday give me a short read on
+> what sold."*
 
-| 4 | **Watch it build** | THING reads the CSV/photo/memo, creates per-line spaces, and builds the shop app — progress shows in chat. |
+| 4 | **Watch it build** | THING reads the CSV, the spreadsheet, both photos, the PDF and the memo, creates per-line spaces, and builds the shop app — progress shows in chat. |
 | 5 | **See it** | She opens **`/app/ceramics-shop/`**: a stock dashboard, a sales chart, her products — real browsable data. |
 | 6 | **Log a sale** | From the app she submits a "log a sale" form; an agent processes it, stock drops, and a reorder draft appears. |
 | 7 | **Let it run itself** | A Sunday cron writes a weekly sales read into an insights space she didn't ask for that minute. |
@@ -88,15 +92,24 @@ In the user's terms — success is:
 Hop by hop, for maintainers:
 
 1. **Project creation (UI/API).** `POST /api/projects {name:"ceramics-shop"}`. THING runs inside it.
-2. **Multi-modal upload.** `inventory.csv` → `kind:'file'` (`text/csv`); `product-photo.jpg` →
-   `kind:'image'`; `supplier-invoice.pdf` → `kind:'file'` (`application/pdf`, read via `readDocument`);
-   a voice memo → `kind:'audio'`. Each is a base64 `POST /api/uploads` → `AttachmentRef`.
-3. **The message carries all attachments over the WS path** (`{type:'sendMessage', content,
+2. **Multi-modal upload — six real artifacts, one message.** `inventory.csv` → `kind:'file'`
+   (`text/csv`); `sales-ledger.xlsx` → `kind:'file'`
+   (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, read via `readDocument`);
+   `product-photo.jpg` **and** `studio-photo.jpg` → `kind:'image'`; `supplier-invoice.pdf` →
+   `kind:'file'` (`application/pdf`, read via `readDocument`); `voice-memo.mp3` → `kind:'audio'`. Each
+   is a base64 `POST /api/uploads` → `AttachmentRef`.
+3. **The message carries all six attachments over the WS path** (`{type:'sendMessage', content,
    attachments:[…]}`); the HTTP `/message` route drops attachments. The pod trusts only attachment `id`.
-4. **THING can't read files itself, so it delegates.** File ids go to **`system-files/dispatch`** → csv
-   and the `supplier-invoice.pdf` (read via `readDocument`) to **`system-files/reader`**; the image to
-   **`system-vision`** (→ a catalog/product row); audio to transcription. Extracted facts return up the
-   chain to THING.
+4. **THING can't read files itself, so it delegates — except audio.** File ids go to
+   **`system-files/dispatch`** → the csv, the **xlsx**, and the `supplier-invoice.pdf` (read via
+   `readDocument`) to **`system-files/reader`**; both images to **`system-vision`** (→ a catalog/product
+   row). **Audio is transcribed inline into the message** — THING reads the transcript itself and does
+   **not** delegate it (`user-thing/agents/thing/instruct.md`). Extracted facts return up the chain.
+   **Every fixture carries tokens that appear in no other fixture** (CSV: `CLAY-W12`, `Sibelco NL`,
+   `ORD-1043` · xlsx: `ETS-5507`, `WHL-0007`, `PORC-LIM-05`, `Vingerling`, `CTR-VNG-2026-11` · memo:
+   `tenmoku`, `speckled buff`, `Kiln and Clay Rotterdam`, `GLZ-TEN-07`, `KLN-EL-88`), so an assertion
+   can prove **which** file was actually read — the runner asserts CSV, xlsx **and** spoken-only facts
+   separately, in the trace *and* in real state.
 5. **THING plans and delegates the build.** (a) Per-line **spaces** (`catalog`, `suppliers`, `stock`,
    `sales`) via its `build_specialist` path, **live-registered** so each is delegatable immediately.
    (b) **`system-appbuilder/automator`** authors the live shop app.
@@ -138,9 +151,11 @@ Everything above is authored by the model into the user's own project — no eng
 
 ## 4. User stories
 
-- **US-1 — Ingest multi-modal.** *As a maker, I want to hand over my spreadsheet, a photo, and a voice
-  count, so I don't re-type anything.* **Accept:** `system-files`/`system-vision` delegated; ≥3
-  CSV-specific facts cited.
+- **US-1 — Ingest multi-modal.** *As a maker, I want to hand over my spreadsheets, my photos, my
+  invoice and a voice count, so I don't re-type anything.* **Accept:** `system-files`/`system-vision`
+  delegated; ≥3 CSV-specific facts cited; ≥1 **xlsx-only** fact cited (`sales-ledger.xlsx` really
+  parsed); ≥1 **spoken-only** fact from `voice-memo.mp3` lands in **real state** (a db row or a space)
+  — proof the audio was transcribed and used, not merely uploaded.
 - **US-2 — See the shop.** *As a maker, I want a real app, not a chat reply.*
   **Accept:** app `built:true` with tables + ≥1 dashboard page; `/app/ceramics-shop/` → 200 real HTML.
 - **US-3 — My data is in it.** *As a maker, I want my products/materials/sales actually stored.*
@@ -194,7 +209,11 @@ Everything above is authored by the model into the user's own project — no eng
   [x] integration-demo source (keyless; telegram is the prod target)
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
   [x] app build [x] /app/<id>/ serving [x] app data API [x] **mid-life table+page addition**
-- Attachments: [x] upload [x] readDocument [x] attachmentIds to a specialist [x] vision/audio
+- Attachments: [x] upload [x] readDocument (pdf + **xlsx**) [x] attachmentIds to a specialist
+  [x] **vision** (2 real photos → `system-vision`) [x] **audio** (real `voice-memo.mp3` → inline
+  transcription; a spoken-only fact asserted in real state) [x] 6 attachments in ONE message
+  [x] per-file fact provenance (CSV vs xlsx vs memo tokens are disjoint)
+- Live web: [x] webSearch [x] webFetch against **real, 200-verified URLs** (`fixtures/links.md`)
 - Pod lifecycle: [x] restart→auto-resume (Act XI) [x] cold-wake [x] event storm (Act X) [x] worker containment (api handler + storm)
 - Cross-cutting: [x] edge cases/errors [x] performance [x] budget (direct Azure keys)
 
@@ -207,8 +226,8 @@ here match the runner 1:1.
 
 | Act | Asserts (trace + real state) | Stories |
 |---|---|---|
-| **I — Ingest & build** | `system-files`/`system-vision` delegated; ≥3 CSV facts cited; ≥3 per-line spaces; app `built:true` with tables + ≥1 page; `/app/ceramics-shop/` → 200 HTML; ≥1 table seeded with CSV rows (content tokens match) | US-1,2,3,12 |
-| **II — Deep research → knowledge + DB** | `system-research` delegated + `webSearch`/`webFetch` yield observed; a researched supplier **absent from the seed** lands as a row in `supplier_options`; the suppliers space answers a follow-up from researched knowledge | US-4 |
+| **I — Ingest & build** | all **6 fixtures** upload with the right `kind` (csv/xlsx/pdf → `file`, both photos → `image`, `voice-memo.mp3` → **`audio`**) and ride ONE message; `system-files`/`system-vision` delegated; ≥3 CSV facts cited; **≥1 xlsx-only fact** cited (spreadsheet parsed) and ≥1 in real state; **≥1 spoken-only memo fact** (`tenmoku` / `speckled buff` / `Kiln and Clay Rotterdam` / `GLZ-TEN-07`) present in the trace **and in REAL state** (db row or space) — transcription actually landed; ≥3 per-line spaces; app `built:true` with tables + ≥1 page; `/app/ceramics-shop/` → 200 HTML; ≥1 table seeded with CSV rows (content tokens match) | US-1,2,3,12 |
+| **II — Deep research → knowledge + DB** | `system-research` delegated + `webSearch`/`webFetch` yield observed (seeded with the **real, 200-verified URLs** in `fixtures/links.md`); a researched supplier **absent from the seed** lands as a row in `supplier_options`; the suppliers space answers a follow-up from researched knowledge | US-4 |
 | **III — Agent-processed sale (db.insert→hook)** | the app has a "log a sale" form endpoint **and** a **db-INSERT** event hook (not `ctx.spawn`); logging a sale (agent `db.insert` into the sale-log intake — the **reachable** equivalent of the browser POST) fires the hook: a sale row with a NEW token lands **and stock decrements** (before/after). _Note: a browser POST to `/app/<id>/api/*` on the public pod host is served by the web SPA (nginx→405); the app's own API lives on the app host, so the db.insert→hook path is driven over chat, as in scenario 05._ | US-5 |
 | **IV — db-emitter → agent deliverable** | after stock drops below `reorder_at`, a db emitter → hook → agent writes a `drafts` row addressed to the right supplier; **nothing is sent** (no forbidden outbound side-effect in the trace) | US-6 |
 | **V — Cron agent turn → DB** | a `cron` hook exists; `runEmitter`/`runHook` produces an agent turn that writes an insights/sales-read row (before/after) | US-7 |
@@ -265,19 +284,34 @@ node ../08-small-shop/run.mjs        # fresh; writes 08-small-shop/results/repor
 node ../08-small-shop/run.mjs --reuse # reuse the cached ceramics-shop user + project
 ```
 
-The runner provisions a disposable prod user, creates `ceramics-shop`, uploads `fixtures/inventory.csv`
-+ `fixtures/product-photo.jpg` + `fixtures/supplier-invoice.pdf` (+ a voice memo if
-`fixtures/voice-memo.m4a` is present — audio is otherwise skipped with a note), sends the compound
-message over the WS path, drives the research /
-form / reorder / cron / evolution / inbound / follow-up beats, and checkpoints per Act to
-`results/checkpoint.json`.
+The runner provisions a disposable prod user, creates `ceramics-shop`, uploads **all six fixtures** —
+`fixtures/inventory.csv`, `fixtures/sales-ledger.xlsx`, `fixtures/product-photo.jpg`,
+`fixtures/studio-photo.jpg`, `fixtures/supplier-invoice.pdf` and `fixtures/voice-memo.mp3` — sends the
+compound message with every one of them attached over the WS path, drives the research (seeded with the
+real URLs in `fixtures/links.md`) / form / reorder / cron / evolution / inbound / follow-up beats, and
+checkpoints per Act to `results/checkpoint.json`.
 
-> **Vision/audio honesty:** the shipped `product-photo.jpg` is a real ceramics photo and
-> `supplier-invoice.pdf` is a real sample invoice with selectable text, so the image-upload +
-> `system-vision` *delegate path*, the PDF `readDocument` path, and attachment classification are all
-> exercised on real artifacts. Audio (a `voice-memo.m4a`) is still optional — drop one in `fixtures/`
-> for the transcription path; it is otherwise skipped with a note. The runner asserts the upload/kind
-> path always, and the content assertion when a real artifact is present.
+### The fixtures (all real; every token below is unique to its file)
+
+| Fixture | What it is | Facts only IT has |
+|---|---|---|
+| `inventory.csv` | materials/products/suppliers/sales dump | `CLAY-W12`, `Sibelco NL`, `Mori Mug`/`MM-01`, `Donabe`, `ORD-1043` |
+| `sales-ledger.xlsx` | a **genuine 3-sheet workbook** (`Sales` 18 rows · `Materials` 12 · `Suppliers` 4), openpyxl-authored, re-opens cleanly | `ETS-5507`, `WHL-0007`, `MKT-0042`, `Bloem & Vaas`, `PORC-LIM-05`, `GLZ-SHINO-3`, `THERMO-K26`, `Vingerling`, `CTR-VNG-2026-11` |
+| `product-photo.jpg` | real photo — a kintsugi-repaired blue bowl | the piece itself (vision) |
+| `studio-photo.jpg` | real photo — a **kiln packed with shelves of pots** (Wikimedia, CC BY-SA 2.0); visibly different from the product shot | the kiln/shelves (vision) |
+| `supplier-invoice.pdf` | real sample invoice, selectable text (`readDocument`) | invoice line items |
+| `voice-memo.mp3` | **real speech** (Azure TTS `tts-1`/`nova`, ~45s): Yuki counting stock; verbatim script + expected facts in `voice-memo.txt`; whisper round-trip verified | `tenmoku` (4 tubs), `GLZ-TEN-07`, `speckled buff` (3 bags), `Kiln and Clay Rotterdam`, 11 `bisque` mugs, `KLN-EL-88` |
+| `links.md` | 3 real, 200-verified research URLs (Digitalfire, Valentine Clays, Glazy) | feeds the live `webFetch`/`webSearch` beat |
+
+> **Vision/audio honesty:** nothing here is a placeholder. Both photos are real images (so the
+> image-upload + `system-vision` *delegate* path runs on real pixels), `supplier-invoice.pdf` and
+> `sales-ledger.xlsx` are real documents read via `readDocument`, and `voice-memo.mp3` is **real
+> synthesized speech** — the audio/transcription path is now **exercised, not skipped**. Because the
+> memo's facts (`tenmoku`, `speckled buff`, `Kiln and Clay Rotterdam`, `GLZ-TEN-07`) are spoken in
+> **no other fixture**, the runner can assert transcription actually landed: it requires one of them to
+> appear in **real state** (a db row or a space file), not merely in the model's prose. Whisper drops
+> the hyphens inside spoken codes (`GLZ-TEN-07` → `GLZ1007`), so those assertions run against an
+> alphanumeric-**normalized** blob.
 
 ## Actual results
 
