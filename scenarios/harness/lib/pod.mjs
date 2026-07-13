@@ -7,9 +7,57 @@
  */
 
 export class Pod {
-  constructor({ base, token }) {
+  /**
+   * @param {object} o
+   * @param {string} o.base      the pod/API origin (prod: https://lmthing.chat)
+   * @param {string} [o.token]   gateway JWT (Envoy routes on its `sub` claim)
+   * @param {string} [o.appBase] the SERVED-APP origin. In prod the app is NOT reachable under
+   *   `<chat>/app/<id>/` — Envoy hands `/app/*` on the chat host to the static web SPA (nginx),
+   *   which answers a GET with the SPA *shell* (a 200 `<!doctype>` that is not the app at all —
+   *   a scenario asserting only "200 + <!doctype" false-passes) and a POST with **405**. The app
+   *   is root-mounted on lmthing.app (`/<project>/`, `/<project>/api/<route>` — serve.ts's
+   *   "Project-app ROOT mount"). Locally there is no split host, so apps stay under `/app/<id>/`.
+   */
+  constructor({ base, token, appBase }) {
     this.base = base;
     this.token = token;
+    this.appBase = appBase ?? process.env.LM_APP_BASE ?? (/lmthing\.chat/.test(base) ? 'https://lmthing.app' : base);
+    /** true when the app has its own host → root mount (no `/app` prefix). */
+    this.appRootMounted = this.appBase !== this.base;
+  }
+
+  /** The origin+prefix the SERVED app actually lives at (see `appBase`). */
+  appOrigin(projectId) {
+    return this.appRootMounted
+      ? `${this.appBase}/${projectId}`
+      : `${this.base}/app/${projectId}`;
+  }
+
+  /** Absolute-URL variant of `req` (the served app is on a different origin than /api/*). */
+  async reqAbs(method, url, body) {
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetch(url, {
+        method,
+        headers: {
+          ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
+      const text = await res.text();
+      let parsed = text;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        /* html / raw */
+      }
+      const waking = res.status === 504 || (parsed && typeof parsed === 'object' && parsed.waking === true);
+      if (waking && attempt < 20) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      return { status: res.status, body: parsed };
+    }
   }
 
   async req(method, path, body, { raw = false } = {}) {
@@ -74,15 +122,19 @@ export class Pod {
   appManifest = (projectId) => this.req('GET', `/api/projects/${projectId}/app`);
   appBuild = (projectId) => this.req('POST', `/api/projects/${projectId}/app/build`);
   appData = (projectId, table) => this.req('GET', `/api/projects/${projectId}/app/data/${table}`);
-  appPage = (projectId, path = '') =>
-    this.req('GET', `/app/${projectId}/${path}`, undefined, { raw: true });
+  /** GET the SERVED app page — on its real origin (see `appBase`), not the SPA shell. */
+  appPage = (projectId, path = '') => this.reqAbs('GET', `${this.appOrigin(projectId)}/${path}`);
 
   // ── hooks & events ──────────────────────────────────────────────────────
   /** List every loaded hook across projects (`GET /api/hooks`). */
   listHooks = () => this.req('GET', '/api/hooks');
-  /** POST to an app's own API route (`/app/<id>/api/<route>`) — the form-submit path. */
+  /**
+   * Call an app's OWN API route — the routes its pages actually fetch, on the app's real origin
+   * (`<app-host>/<project>/api/<route>`). This is the layer the user sees: a page whose data API
+   * returns rows can still render zeros because its own aggregation route 500s.
+   */
   appApi = (projectId, route, body, method = 'POST') =>
-    this.req(method, `/app/${projectId}/api/${route}`, body, { raw: true });
+    this.reqAbs(method, `${this.appOrigin(projectId)}/api/${String(route).replace(/^\//, '')}`, body);
   /** The one authoritative hook-run path (crond, boot catch-up and Studio all use it).
    *  The slug is a single path segment and may contain `:`/`@` (space hooks are
    *  `<spaceId>:<base>`; emitters are `@emitter:<scope>:<name>`) — encode it. */

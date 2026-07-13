@@ -87,8 +87,13 @@ async function assertLiveApp(report, pod, projectId, { minRowTables = {} } = {})
   const assets = build?.assetManifest ?? [];
   report.check('app compiles (built:true) with real JS assets', build?.built === true && assets.some((a) => /\.js$/.test(a)), JSON.stringify({ built: build?.built, assets }).slice(0, 200));
   report.check('app serves ≥1 page route', (build?.routes?.length ?? 0) >= 1, (build?.routes ?? []).map((x) => x.routePath).join(', '));
+  // The served app lives on the APP host (`lmthing.app/<project>/`). Asserting only
+  // "200 + <!doctype" false-passes on the chat host's SPA *shell* — so require the app's
+  // own boot marker (`__APP_BASE__` / `<base href="/<project>/">`), which the shell lacks.
   const page = await pod.appPage(projectId).catch((e) => ({ status: 0, body: String(e) }));
-  report.check(`/app/${projectId}/ serves 200 HTML`, page.status === 200 && String(page.body).includes('<!doctype'), `status ${page.status}, ${String(page.body).length} bytes`);
+  const html = String(page.body ?? '');
+  const isRealApp = html.includes(`__APP_BASE__ = "/${projectId}"`) || html.includes(`<base href="/${projectId}/">`);
+  report.check(`${pod.appOrigin(projectId)}/ serves the REAL app (200 + app boot marker, not the SPA shell)`, page.status === 200 && isRealApp, `status ${page.status}, ${html.length} bytes, appMarker=${isRealApp}`);
   const manifest = await pod.appManifest(projectId).catch(() => ({}));
   const names = (manifest?.tables ?? []).map((t) => (typeof t === 'string' ? t : t.name));
   for (const [rx, min] of Object.entries(minRowTables)) {
@@ -145,6 +150,9 @@ if (cp.sessionId && !FRESH) {
 } else {
   cp.sessionId = await thing.start();
 }
+// A resumed session replays its whole trace on the first poll; without this the replayed history
+// is folded into the next turn's slice and an assertion "passes" on an earlier Act's display.
+await thing.syncToTail();
 saveCheckpoint(cp);
 
 // keepalive: a free-tier pod scales to zero on idle, killing the in-memory session
@@ -240,19 +248,42 @@ if (ACTS.includes(2)) {
   report.check('live web research observed (webSearch/webFetch/fetch yields)', webYields >= 1, `${webYields} web yields`);
   await sleep(4_000);
   const namesAfter = await tableNames(pod, PROJECT);
-  const quotesTable = namesAfter.find((n) => /quote|option|market|research/i.test(n));
-  report.check('a quotes/options table exists', !!quotesTable, namesAfter.join(', '));
+  const quotesTable = namesAfter.find((n) => /quote|option|market|research|compar/i.test(n));
+  report.check('a quotes/options/comparison table exists', !!quotesTable, namesAfter.join(', '));
   const after = await dbBlob(pod, PROJECT, namesAfter);
-  // A researched insurer name that is NOT AXA/MetLife/Piraeus (the seed insurers) → proves it shopped around.
-  const seedInsurers = /axa|metlife|piraeus/;
   const grewRows = after.length > before.length;
   report.check('a NEW researched row landed (db grew after research)', grewRows, `${before.length}→${after.length} bytes`);
   recordErrors('Act II', t);
-  // The insurance space should answer a follow-up from the researched knowledge.
-  const q = acc(await thing.send('What cheaper car-insurance option did you find, and who is it with? Answer from what you saved.', { timeoutMs: 600_000 }));
-  const answered = q.text.length > 40 && !/no (cheaper|option|quote)/i.test(q.text);
-  report.check('insurance follow-up answered from saved research', answered, q.text.slice(0, 160));
-  cp.acts.II = { passed: report.passed, quotesTable, webYields, grewRows };
+
+  // The researched row must carry RESEARCH PROVENANCE — content that is nowhere in the seed
+  // file. Grading the market outcome ("it must find a cheaper insurer") would grade the Greek
+  // insurance market, not the product; what the product owes is: it really researched, it wrote
+  // what it found into a row, and it did NOT invent a quote.
+  const seedText = readFileSync(`${FIX}/policies.md`, 'utf8').toLowerCase();
+  const qRows = quotesTable ? ((await pod.appData(PROJECT, quotesTable).catch(() => ({ rows: [] }))).rows ?? []) : [];
+  const researched = qRows.filter((r) => {
+    const s = JSON.stringify(r).toLowerCase();
+    return /checked_at|source|research|market/.test(s) && !/seed/.test(String(r.id ?? ''));
+  });
+  report.check('a research-provenance row (not a seed note) landed in it', researched.length >= 1,
+    researched.length ? JSON.stringify(researched[0]).slice(0, 180) : `${qRows.length} rows, all seed`);
+
+  // Anti-hallucination, asserted against REAL state: whatever THING now tells the user must agree
+  // with the row it saved. If the saved row found no verified cheaper quote, THING must NOT name a
+  // cheaper insurer — "no verified cheaper option found" is a CORRECT answer; a fabricated one is
+  // the failure. (The old check graded prose and passed on a reply that said the opposite.)
+  const rowBlob = JSON.stringify(researched).toLowerCase();
+  const foundCheaper = /"cheaper_option_found"\s*:\s*true/.test(rowBlob) || /verified cheaper|cheaper option found/.test(rowBlob);
+  const q = acc(await thing.send('What did your market check on the car insurance conclude — is there a cheaper option saved in the vault, and who is it with? Answer only from what you saved.', { timeoutMs: 600_000 }));
+  const reply = q.lastText.toLowerCase();
+  const namesAnInsurer = /(allianz|ergo|generali|interamerican|groupama|anytime|hellas direct|eurolife|nn |mapfre)/.test(reply);
+  const consistent = foundCheaper ? reply.length > 40 : !namesAnInsurer;
+  report.check(
+    foundCheaper
+      ? 'THING answers the follow-up from the saved cheaper quote'
+      : 'THING does NOT fabricate a cheaper insurer when the saved research found none',
+    consistent, `savedCheaper=${foundCheaper} · reply: ${q.lastText.slice(0, 160)}`);
+  cp.acts.II = { passed: report.passed, quotesTable, webYields, grewRows, researchedRows: researched.length, foundCheaper };
   saveCheckpoint(cp);
 }
 
@@ -268,15 +299,28 @@ if (ACTS.includes(3)) {
   const formEp = endpoints.find((e) => /post/i.test(e.method ?? '') && /policy|submission|add|create|intake|file/i.test(`${e.name} ${e.routePath}`));
   const formApi = formEp ? (formEp.routePath ?? formEp.name).replace(/^\//, '') : null;
   report.check('the form API route (POST) exists on the app', !!formApi, `endpoints: ${endpoints.map((e) => `${e.method} ${e.routePath}`).join(', ') || '(none)'}`);
+  // The WORKING path is a db-insert emitter → event hook with an agent trigger (ctx.spawn from an
+  // app-API handler is a known no-op) — assert the architecture, not just the outcome.
+  const dbHook = (manifest?.hooks ?? []).find((h) => /db\..*\.insert/.test(h?.on?.event ?? ''));
+  report.check('a db-INSERT event hook wires the form to an agent (not ctx.spawn)', !!dbHook, dbHook ? `${dbHook.slug} ← ${dbHook.on.event}` : `hooks: ${(manifest?.hooks ?? []).map((h) => h.slug).join(', ') || '(none)'}`);
   const namesBefore = await tableNames(pod, PROJECT);
   const before = await dbBlob(pod, PROJECT, namesBefore);
   const NEW_TOKEN = 'PET-INS-XR44-2026';
   report.note(`before contains NEW token? ${before.includes(NEW_TOKEN.toLowerCase())}`);
+  const RAW = `New pet insurance policy, provider PetPlan, policy number ${NEW_TOKEN}, premium €18/month, renews 2027-04-01, covers our dog Argos.`;
+  // The agent names the field (raw_text / raw / text / body / …), so the runner must submit what
+  // the app DECLARED, exactly as the app's own form page does — read the endpoint's inputSchema
+  // and put the raw text in its required string property. (Hardcoding `raw` produced a 400.)
+  const props = formEp?.inputSchema?.properties ?? {};
+  const required = formEp?.inputSchema?.required ?? Object.keys(props);
+  const rawField = required.find((k) => props[k]?.type === 'string') ?? required[0] ?? 'raw_text';
+  const payload = Object.fromEntries(required.map((k) => [k, k === rawField ? RAW : (props[k]?.type === 'string' ? RAW : null)]));
+  report.note(`form payload field (from the app's own inputSchema): ${rawField}`);
   let posted = { status: 0, body: null };
   if (formApi) {
-    posted = await pod.appApi(PROJECT, formApi, { raw: `New pet insurance policy, provider PetPlan, policy number ${NEW_TOKEN}, premium €18/month, renews 2027-04-01, covers our dog Argos.` }).catch((e) => ({ status: e?.status ?? 0, body: String(e) }));
+    posted = await pod.appApi(PROJECT, formApi, payload).catch((e) => ({ status: e?.status ?? 0, body: String(e) }));
   }
-  report.check('form POST returns ≥202 (accepted)', posted.status >= 200 && posted.status < 300, `status ${posted.status}`);
+  report.check("form POST to the app's OWN API returns 2xx (accepted)", posted.status >= 200 && posted.status < 300, `POST ${pod.appOrigin(PROJECT)}/api/${formApi} → ${posted.status} ${JSON.stringify(posted.body).slice(0, 120)}`);
   // Give the db.insert→emitter→hook→agent chain time to run headlessly.
   let landed = false;
   for (let i = 0; i < 20 && !landed; i++) {
