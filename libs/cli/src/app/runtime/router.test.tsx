@@ -10,7 +10,18 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { toHref, navigate, linkDest, clientPath, matchRoutes, type RouteEntry } from './router.js';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+import {
+  toHref,
+  navigate,
+  linkDest,
+  clientPath,
+  matchRoutes,
+  PageErrorBoundary,
+  type RouteEntry,
+} from './router.js';
 
 function setLocation(pathname: string, override?: string): void {
   vi.stubGlobal('window', { location: { pathname } });
@@ -110,5 +121,35 @@ describe('navigate → clientPath round-trip', () => {
     const cp = clientPath(pushed);
     expect(cp).toBe('/discover');
     expect(matchRoutes(routes, cp)?.entry.routePath).toBe('/discover');
+  });
+});
+
+// ── Page error boundary ───────────────────────────────────────────────────────
+// Pages are LLM-authored and bound to a live, drifting database, so one will eventually hit a null
+// it did not expect. Live (scenario 07): the invoices page did `row.vat_rate.toFixed(2)` on a row
+// whose column was NULL — every route 200'd, the data API was fine, and the user got a **blank
+// white page for the whole app**, dock included. React unmounts the entire tree on an uncaught
+// render error; the boundary contains the damage to the page that threw.
+describe('PageErrorBoundary', () => {
+  const BOOM = new TypeError("Cannot read properties of null (reading 'toFixed')");
+
+  it('renders its children when nothing throws', () => {
+    const b = new PageErrorBoundary({ children: 'the page' });
+    expect(b.render()).toBe('the page');
+  });
+
+  it('swaps in a fallback that names the failure and keeps the rest of the app usable', () => {
+    const b = new PageErrorBoundary({ children: 'the page' });
+    b.state = PageErrorBoundary.getDerivedStateFromError(BOOM);
+    const html = renderToStaticMarkup(b.render() as React.ReactElement);
+
+    expect(html).not.toContain('the page');
+    expect(html).toContain('This page failed to render');
+    expect(html).toContain('The rest of the app still works');
+    expect(html).toContain("reading &#x27;toFixed&#x27;"); // the real message, escaped
+  });
+
+  it('derives error state from any thrown error', () => {
+    expect(PageErrorBoundary.getDerivedStateFromError(BOOM)).toEqual({ error: BOOM });
   });
 });

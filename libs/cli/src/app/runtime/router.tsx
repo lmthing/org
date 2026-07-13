@@ -191,10 +191,12 @@ export function AppRoot({ routes, app, layout }: MountConfig): React.ReactElemen
 
   const match = useMemo(() => matchRoutes(routes, clientPath(path)), [routes, path]);
 
-  const page = match ? (
-    <match.entry.Component params={match.params} />
-  ) : (
-    <NotFound path={clientPath(path)} />
+  // `key` on the boundary: a new route is a new boundary, so a crash on one page does not stick
+  // when the user navigates away (and back).
+  const page = (
+    <PageErrorBoundary key={clientPath(path)}>
+      {match ? <match.entry.Component params={match.params} /> : <NotFound path={clientPath(path)} />}
+    </PageErrorBoundary>
   );
 
   return (
@@ -211,6 +213,49 @@ function NotFound({ path }: { path: string }): React.ReactElement {
       <p>No page for {path}</p>
     </div>
   );
+}
+
+/**
+ * Contain a page's render crash to THAT page.
+ *
+ * Pages here are LLM-authored and bound to a live, drifting database, so one of them will
+ * eventually hit a null it did not expect (`row.vat_rate.toFixed(2)` on a row where the column is
+ * NULL — scenario 07's invoices page). Without a boundary React unmounts the whole tree: every
+ * route 200s, the data API is fine, and the user gets a **blank white page** — for the entire app,
+ * including the pages that work and the assistant dock they would use to ask for a fix.
+ *
+ * So the boundary wraps the PAGE, inside `_layout`: the crash costs you that page's body, and
+ * nothing else. It resets on navigation (`key`), so clicking away and back is enough to retry.
+ */
+export class PageErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  override state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error): { error: Error } {
+    return { error };
+  }
+
+  override componentDidCatch(error: Error): void {
+    console.error('[app] page render failed:', error);
+  }
+
+  override render(): React.ReactNode {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    return (
+      <div className="p-4">
+        <p className="text-foreground font-medium">This page failed to render.</p>
+        <p className="text-muted mt-1 text-sm">
+          The rest of the app still works — ask the assistant to fix this page.
+        </p>
+        <pre className="text-muted border-border mt-3 overflow-auto rounded border p-3 text-xs">
+          {String(error.message || error)}
+        </pre>
+      </div>
+    );
+  }
 }
 
 /** Inject the endpoint manifest and mount {@link AppRoot} via `createRoot`. */
