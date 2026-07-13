@@ -405,6 +405,8 @@ export function createProjectAuthoringGlobals(opts: {
     } catch (e) {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
+    const cols = unknownColumnsIn(src);
+    if (cols) return { ok: false, error: cols };
     return writeUnder(join('hooks', `${slug}.ts`), src);
   }
 
@@ -431,6 +433,120 @@ export function createProjectAuthoringGlobals(opts: {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
     return writeUnder(join('functions', `${name}.ts`), src);
+  }
+
+  /** The declared columns of every table the project has (`database/*.json`). */
+  function declaredTables(): Map<string, string[]> {
+    const out = new Map<string, string[]>();
+    try {
+      const dir = safeResolve(projectRoot, 'database');
+      if (!existsSync(dir)) return out;
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith('.json')) continue;
+        try {
+          const schema = JSON.parse(readFileSync(join(dir, f), 'utf8')) as TableSchema;
+          if (schema?.columns && typeof schema.columns === 'object') {
+            out.set(f.replace(/\.json$/, ''), Object.keys(schema.columns));
+          }
+        } catch {
+          /* a corrupt schema file is not this check's business */
+        }
+      }
+    } catch {
+      /* no database dir — nothing to check against */
+    }
+    return out;
+  }
+
+  /**
+   * Reject authored source that writes a column its table does not have — the writer is the
+   * gate, so the agent RETRIES instead of leaving behind a hook that dies at runtime.
+   *
+   * Scenario 10, live: the intake hook the automator authored inserted into `recipes` with
+   * `{ title_gr, cuisine_id, ingredients, instructions, source, intake_id }`. Two of those
+   * columns were right and four were invented — the table declares `ingredients_text`,
+   * `instructions_text`, `source_summary`, `notes`. SQLite threw `table recipes has no column
+   * named ingredients`, the hook's own catch marked the submission `failed`, and the recipe the
+   * user filed through the app's form never appeared. Nothing failed loudly: the form said
+   * thanks, the book stayed empty. Prompting the agent to read the schema first helps (it got
+   * title_gr/cuisine_id right this time) but it does not make it reliable — so the write is
+   * checked against the schema that is actually on disk.
+   *
+   * Deliberately conservative: it only inspects `db.insert('<literal table>', { <literal keys> })`
+   * and `db.update('<literal table>', { … set: { <literal keys> } })`, skips any object carrying a
+   * spread (the keys are not knowable), and stays silent for a table with no declared schema.
+   * A false NEGATIVE just restores today's behaviour; a false positive would block a legal write.
+   */
+  function unknownColumnsIn(src: string): string | null {
+    const tables = declaredTables();
+    if (!tables.size) return null;
+    // `db.insert('t', {…})` / `db.update('t', {…})` — the object literal is brace-matched below.
+    const call = /\bdb\s*\.\s*(insert|update)\s*\(\s*['"`]([A-Za-z0-9_]+)['"`]\s*,\s*\{/g;
+    for (let m = call.exec(src); m; m = call.exec(src)) {
+      const [, op, table] = m;
+      const columns = tables.get(table);
+      if (!columns) continue; // unknown table — not this check's business
+      const body = braceBody(src, m.index + m[0].length - 1);
+      if (body === null) continue;
+      // `update` names its columns under `set: { … }`; `insert` names them at the top level.
+      const target = op === 'update' ? setBlock(body) : body;
+      if (target === null || /\.\.\./.test(target)) continue; // a spread hides the real keys
+      const keys = topLevelKeys(target);
+      const unknown = keys.filter((k) => !columns.includes(k));
+      if (unknown.length) {
+        const near = unknown
+          .map((u) => {
+            const guess = columns.find((c) => c.startsWith(u) || u.startsWith(c) || c.includes(u));
+            return guess ? `"${u}" (did you mean "${guess}"?)` : `"${u}"`;
+          })
+          .join(', ');
+        return (
+          `db.${op}('${table}', …) writes ${unknown.length === 1 ? 'a column' : 'columns'} the table does not have: ${near}. ` +
+          `The columns of "${table}" are: ${columns.join(', ')}. ` +
+          `Read database/${table}.json and write THOSE columns — a row in the wrong columns is a row the app cannot render. ` +
+          `If the concept is genuinely new, add the column with writeProjectTable first.`
+        );
+      }
+    }
+    return null;
+  }
+
+  /** The text inside the `{…}` whose opening brace is at `open` (null if unbalanced). */
+  function braceBody(src: string, open: number): string | null {
+    let depth = 0;
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) return src.slice(open + 1, i);
+    }
+    return null;
+  }
+
+  /** The `set: { … }` block of an update's options object. */
+  function setBlock(body: string): string | null {
+    const m = /\bset\s*:\s*\{/.exec(body);
+    return m ? braceBody(body, m.index + m[0].length - 1) : null;
+  }
+
+  /** Top-level `key:` names of an object-literal body (nested objects/arrays skipped). */
+  function topLevelKeys(body: string): string[] {
+    const keys: string[] = [];
+    let depth = 0;
+    let atKey = true;
+    for (let i = 0; i < body.length; i++) {
+      const c = body[i];
+      if (c === '{' || c === '[' || c === '(') depth++;
+      else if (c === '}' || c === ']' || c === ')') depth--;
+      else if (c === ',' && depth === 0) atKey = true;
+      else if (depth === 0 && atKey) {
+        const m = /^\s*(?:['"`]([A-Za-z0-9_]+)['"`]|([A-Za-z_$][\w$]*))\s*:/.exec(body.slice(i));
+        if (m) {
+          keys.push(m[1] ?? m[2]);
+          i += m[0].length - 1;
+          atKey = false;
+        } else if (!/\s/.test(c)) atKey = false;
+      }
+    }
+    return keys;
   }
 
   /**
@@ -576,6 +692,10 @@ export function createProjectAuthoringGlobals(opts: {
     } catch (e) {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
+    // An API route that writes the wrong columns fails exactly like a hook that does — the POST
+    // 500s (or worse, is caught) and the user's submission is silently gone. Same gate.
+    const cols = unknownColumnsIn(src);
+    if (cols) return { ok: false, error: cols };
     const out = writeUnder(target, src);
     if (out.ok) {
       try {

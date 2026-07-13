@@ -401,6 +401,118 @@ describe('createProjectAuthoringGlobals', () => {
     expect(Object.keys(declared.columns)).toEqual(Object.keys(TIPS_SCHEMA.columns));
   });
 
+  describe('writeProjectHook rejects a write into columns the table does not have', () => {
+    /** The real recipe book from scenario 10: the intake hook guessed 4 of its 6 columns. */
+    function withRecipes() {
+      const pa = make();
+      pa.writeProjectTable('recipes', {
+        title: 'Recipes',
+        description: 'The family recipe book',
+        columns: {
+          id: { type: 'string', description: 'pk', primaryKey: true, generated: 'uuid' },
+          title_gr: { type: 'string', description: 'greek title' },
+          cuisine_id: { type: 'string', description: 'cuisine' },
+          ingredients_text: { type: 'string', description: 'ingredients' },
+          instructions_text: { type: 'string', description: 'steps' },
+        },
+      } as unknown as TableSchema);
+      return pa;
+    }
+
+    it('rejects the live failure — db.insert naming `ingredients` on a table that has `ingredients_text`', () => {
+      const pa = withRecipes();
+      const res = pa.writeProjectHook(
+        'recipe-intake-normalizer',
+        `export default { type: 'event', on: { event: 'project/db.recipe_intake.insert' },
+           handler: async ({ input, db }) => {
+             await db.insert('recipes', {
+               title_gr: String(input.title),
+               cuisine_id: 'greek',
+               ingredients: JSON.stringify(input.ingredients),
+               instructions: JSON.stringify(input.steps),
+             });
+           } };`,
+      );
+      expect(res.ok).toBe(false);
+      // The error must NAME the bad columns, the real ones, and the near-miss — it is what the
+      // agent reads before retrying.
+      expect(res.error).toContain('"ingredients"');
+      expect(res.error).toContain('did you mean "ingredients_text"');
+      expect(res.error).toContain('title_gr, cuisine_id, ingredients_text');
+      // Nothing was left behind on disk: a rejected hook must not be a hook that dies at runtime.
+      expect(existsSync(join(projectRoot, 'hooks', 'recipe-intake-normalizer.ts'))).toBe(false);
+    });
+
+    it('rejects an update whose set: block names an unknown column', () => {
+      const pa = withRecipes();
+      const res = pa.writeProjectHook(
+        'touch',
+        `export default { type: 'event', on: { event: 'x' }, handler: async ({ db }) => {
+           await db.update('recipes', { where: { id: '1' }, set: { title: 'x' } });
+         } };`,
+      );
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain('did you mean "title_gr"');
+    });
+
+    it('accepts a hook that writes the REAL columns', () => {
+      const pa = withRecipes();
+      const res = pa.writeProjectHook(
+        'good',
+        `export default { type: 'event', on: { event: 'x' }, handler: async ({ input, db }) => {
+           await db.insert('recipes', { title_gr: input.t, cuisine_id: 'greek', ingredients_text: '…' });
+           await db.update('recipes', { where: { id: input.id }, set: { instructions_text: '…' } });
+         } };`,
+      );
+      expect(res.ok).toBe(true);
+      expect(existsSync(join(projectRoot, 'hooks', 'good.ts'))).toBe(true);
+    });
+
+    it('gates writeProjectApi the same way — a POST route that writes the wrong columns loses the submission', () => {
+      const pa = withRecipes();
+      const bad = pa.writeProjectApi(
+        'recipes-create/POST',
+        `export default async function handler({ body, db }: any) {
+           await db.insert('recipes', { title: body.title });
+           return { ok: true };
+         }`,
+      );
+      expect(bad.ok).toBe(false);
+      expect(bad.error).toContain('did you mean "title_gr"');
+      expect(
+        pa.writeProjectApi(
+          'recipes-create/POST',
+          `export default async function handler({ body, db }: any) {
+             await db.insert('recipes', { title_gr: body.title });
+             return { ok: true };
+           }`,
+        ).ok,
+      ).toBe(true);
+    });
+
+    it('stays out of the way when it cannot know the keys (a spread) or the table (no schema)', () => {
+      const pa = withRecipes();
+      // A spread hides the real keys — blocking here would be a false positive.
+      expect(
+        pa.writeProjectHook(
+          'spread',
+          `export default { type: 'event', on: { event: 'x' }, handler: async ({ input, db }) => {
+             await db.insert('recipes', { ...input, title_gr: 'x' });
+           } };`,
+        ).ok,
+      ).toBe(true);
+      // A table with no declared schema is not this check's business.
+      expect(
+        pa.writeProjectHook(
+          'other-table',
+          `export default { type: 'event', on: { event: 'x' }, handler: async ({ db }) => {
+             await db.insert('some_other_table', { whatever: 1 });
+           } };`,
+        ).ok,
+      ).toBe(true);
+    });
+  });
+
   it('writeProjectTable forwards seed rows to onSchemaWrite (move known data into the app in one pass)', () => {
     const seeds: Array<{ table: string; rows: unknown[] | undefined }> = [];
     const pa = createProjectAuthoringGlobals({

@@ -269,6 +269,18 @@ splits the data in two. And if the table already has CHILD tables for the detail
 `recipe_instructions`), fill those too — a JSON blob in a new `ingredients` column is invisible to the
 page that renders the child rows.
 
+`writeProjectHook`/`writeProjectApi` ENFORCE this: source whose `db.insert('t', {…})` or
+`db.update('t', { set: {…} })` names a column `t` does not have is REJECTED, with the table's real
+columns in the error:
+
+> `db.insert('recipes', …) writes a column the table does not have: "ingredients" (did you mean
+> "ingredients_text"?). The columns of "recipes" are: id, title_gr, cuisine_id, ingredients_text, …`
+
+That is not an obstacle to route around — it is the schema telling you what to write. Re-author the
+source with the named columns (or add the column first). Guessing `ingredients` at a table that has
+`ingredients_text` used to write nothing at all: SQLite threw, the hook's own catch marked the
+submission "failed", and the recipe the user filed through the app's form never appeared in the book.
+
 **The home page (`index`) is the app's DASHBOARD, not a menu.** It must (a) fetch and render the
 project's real data — the counts, the rows, what is due — through a `GET` route (`useApi`), and
 (b) link to EVERY page the app has (`listProjectDir('pages')` — a page nothing links to is a page
