@@ -90,6 +90,25 @@ async function grepFs(pod, contentRx, pathRx) {
   return hits;
 }
 
+/**
+ * The text the user ACTUALLY READS. A reply is a JSX descriptor tree (Stack/Heading/Callout/Table),
+ * so regexing its raw JSON both misses real prose (it lives in `children`/`props.rows`) and matches
+ * on structural keys that are not words anyone said. Flatten to the rendered strings instead.
+ */
+const flattenDescriptor = (d) =>
+  d == null ? '' :
+  typeof d === 'string' ? d :
+  Array.isArray(d) ? d.map(flattenDescriptor).join(' ') :
+  typeof d === 'object'
+    ? [d.props?.title, d.props?.text, d.props?.label,
+       JSON.stringify(d.props?.pairs ?? ''), JSON.stringify(d.props?.rows ?? ''),
+       flattenDescriptor(d.children)].filter(Boolean).join(' ')
+    : String(d);
+
+/** Everything the user saw this turn, as plain text. */
+const visibleText = (turn) =>
+  (turn.displays ?? []).map(flattenDescriptor).join('\n') || flattenDescriptor(turn.lastText ?? turn.text);
+
 /** All rows of every table the app declares, as one object. */
 async function allRows(pod, projectId) {
   const manifest = await pod.appManifest(projectId).catch(() => ({}));
@@ -327,14 +346,22 @@ if (ACTS.includes(1)) {
   const dbFiles = await lsFiles(pod, new RegExp(`^${PROJECT}/database/`));
   report.check('project has NO database/ yet (nothing built before consent)', dbFiles.length === 0, dbFiles.join(', ') || 'none');
 
-  // The OFFER itself: it must have said, in its own words, that it can turn this into something openable.
-  const offer = t1.lastText || t1.text;
-  const offered = /\b(build|make|create|set (?:it |this )?up|put (?:it |this )?together|turn (?:it|this|that))\b/i.test(offer)
-    && /\b(open|look at|check off|one place|dashboard|screen|see it|track)\b/i.test(offer);
+  // The OFFER itself: in its OWN words, it must PROPOSE turning this into something she can open —
+  // and it must ASK, not announce. Read the rendered text, never the descriptor's JSON (a Table's
+  // rows and a Callout's props are not prose, and the real sentence lives in `children`).
+  const offer = visibleText(t1);
+  const proposes = /\b(want me to|shall i|should i|would you like|do you want|i can (?:build|make|set|put|turn|create|give)|i could (?:build|make|set|put|turn|create)|let me (?:build|make|set|put|turn|create)|turn (?:it|this|that) into)\b/i.test(offer);
+  const openable = /\b(open|look at|check|one place|dashboard|screen|see it|track|app|phone)\b/i.test(offer);
   report.check(
     'THING OFFERED something openable, unprompted (she never asked for one)',
-    offered,
-    offer.slice(0, 220),
+    proposes && openable,
+    proposes ? `proposed: …${(offer.match(/.{0,80}(want me to|shall i|i can \w+|turn this into).{0,90}/i) ?? [''])[0]}…` : `NO PROPOSAL in ${offer.length} visible chars (a summary is not an offer)`,
+  );
+  // She must be able to answer it. An offer she cannot say "yes" to is an announcement.
+  report.check(
+    'the offer ASKS her (a question she can answer with a bare "yes")',
+    /\?/.test(offer) && proposes,
+    /\?/.test(offer) ? 'asked' : 'no question mark — it told her, it did not ask',
   );
   report.check('offer came BEFORE any authoring yield', authoredInOpener.length === 0 && !!offer, 'offer-first ordering');
   report.check('no eval/typecheck errors this turn', t1.errors.length === 0, JSON.stringify(t1.errors).slice(0, 200));
