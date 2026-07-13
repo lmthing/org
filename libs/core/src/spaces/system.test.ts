@@ -78,6 +78,53 @@ describe('system spaces', () => {
     expect(existsSync(dirs.find((d) => d.endsWith('system-spaces/system-architect'))!)).toBe(true);
   });
 
+  // ── The appbuilder's shipped judgment ────────────────────────────────────────────
+  //
+  // Live-prod evidence (scenario 06): the automator built 7 tables with 96 real seeded rows,
+  // 4 pages and 6 endpoints — and NOT ONE declared relation, so `db.query(t, {include})`
+  // (a shipped, documented feature) had nothing to expand and no page could fetch a parent
+  // with its children; and NOT ONE components/<Name>.tsx, though it holds the writer.
+  it('the automator + data-modeler are told to DECLARE RELATIONS and factor shared components', async () => {
+    const spaces = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'system-appbuilder')]);
+    const automator = spaces[0]?.agents['automator'];
+    const modeler = spaces[0]?.agents['data-modeler'];
+    expect(automator, 'system-appbuilder must ship an "automator"').toBeDefined();
+    expect(modeler, 'system-appbuilder must ship a "data-modeler"').toBeDefined();
+
+    // A child table with no declared relation is a modeling bug — both authors are told so.
+    expect(automator!.instructBody).toMatch(/DECLARE THE RELATION when one table's rows belong/);
+    expect(automator!.instructBody).toMatch(/include: \['items'\]/);
+    expect(modeler!.instructBody).toMatch(/declare the relation/i);
+
+    // Repeated UI becomes a named component (the writer exists; it was never used).
+    expect(automator!.instructBody).toMatch(/appears on more than one page is a COMPONENT/);
+    expect(automator!.instructBody).toMatch(/writeProjectComponent\('<Name>'/);
+  });
+
+  // ── No shipped prompt may carry a live scenario's fixture data ───────────────────
+  //
+  // A previous round taught the automator this scenario's ANSWERS: its examples contained the
+  // real booking reference (ZZJQUU), flight number and hotel name straight out of scenario 06's
+  // fixtures. That is overfitting, and it is worse than useless — scenario 06 Act III asserts
+  // that "ZZJQUU landed in a db row" PROVES the agent actually read the attached file, but an
+  // agent with ZZJQUU in its own system prompt can emit it having read nothing at all. A prompt
+  // that memorizes the exam invalidates the exam. Keep the shipped brains domain-neutral.
+  it('no system-space prompt contains a scenario fixture value (no overfitting to the exam)', async () => {
+    const spaces = await loadSystemSpaces(defaultSystemSpaceDirs());
+    // Tokens that exist ONLY inside sdk/org/scenarios/*/fixtures — never in a real user's project.
+    const FIXTURE_TOKENS = /\b(ZZJQUU|A3932|Eileen Hotel|Suricata|Kutoka|ZNZ-PERMIT-77)\b/;
+    for (const space of spaces) {
+      for (const [slug, agent] of Object.entries(space.agents)) {
+        const hit = FIXTURE_TOKENS.exec(agent.instructBody);
+        expect(
+          hit?.[0],
+          `${space.id}/${slug} embeds the scenario fixture value "${hit?.[0]}" — that is the exam's ` +
+            `answer key, and it makes the assertion that proves the file was READ meaningless`,
+        ).toBeUndefined();
+      }
+    }
+  });
+
   // ── THING's shipped judgment: the propose/consent contract ───────────────────────
   //
   // Live-prod evidence (scenario 06, baseline run): handed five documents and "I can't keep

@@ -106,11 +106,16 @@ scaffolding.
 ```typescript
 const doc = await readDocument('<attachment id from the note>');   // { ok, text, ... }
 // (next turn) parse doc.text into records, then create+seed each table in one call:
-const flights = writeProjectTable('flights', { /* schema */ }, [
-  { id: 'f1', date: '2026-08-03', from_code: 'ATH', to_code: 'CAI', flight_no: 'A3932', ref: 'ZZJQUU' },
+const orders = writeProjectTable('orders', { /* schema */ }, [
+  { id: 'o1', placed_on: '2026-03-14', supplier: '<from the file>', reference: '<from the file>' },
   // …one object per record you read from the file. Keys MUST match the columns.
 ]);
 ```
+
+Every value you seed comes from the MATERIAL IN FRONT OF YOU — the file, the sheet, the message.
+Never carry a value over from an example in these instructions, and never invent one to fill a
+column: an invented reference number or a guessed price is indistinguishable from a real one once
+it is a row, and the user will act on it.
 
 **HARD RULE: never report that you "moved the data in" / "seeded the tables" unless you actually
 passed a non-empty `rows` array to `writeProjectTable` (or did a `db.insert`).** A table you created
@@ -118,26 +123,59 @@ with only a schema is EMPTY; saying you seeded it when you didn't is a failure t
 moment they open the app. If you had no data to seed, say so plainly.
 
 ```typescript
-const w = writeProjectTable('flights', {
-  description: 'Flight legs for the trip.',
+const w = writeProjectTable('orders', {
+  description: 'One order the user placed.',
   columns: {
     id: { type: 'string', primaryKey: true },
-    date: { type: 'string' }, from_code: { type: 'string' }, to_code: { type: 'string' },
-    flight_no: { type: 'string' }, dep_time: { type: 'string' }, ref: { type: 'string' },
+    placed_on: { type: 'string' }, supplier: { type: 'string' },
+    reference: { type: 'string' }, total: { type: 'number' },
   },
 }, [
-  { id: 'f1', date: '2026-08-03', from_code: 'ATH', to_code: 'CAI', flight_no: 'A3932', dep_time: '06:55', ref: 'ZZJQUU' },
-  { id: 'f2', date: '2026-08-04', from_code: 'CAI', to_code: 'DAR', flight_no: 'EgyptAir', dep_time: '22:40', ref: '' },
-  // …one object per known row; keys MUST match the columns you declared.
+  // …one object per row you actually READ; keys MUST match the columns you declared.
+  { id: 'o1', placed_on: '<from the material>', supplier: '<from the material>', total: 0 },
 ]);
 ```
 
+### DECLARE THE RELATION when one table's rows belong to another's
+
+Real data is not a pile of flat lists: line items belong to an order, notes belong to a stop,
+readings belong to a device. When you author a table whose rows each hang off a row in ANOTHER
+table, say so in the schema — carry the parent's id in a column, and declare the relation on the
+PARENT with `hasMany` (or on the child with `belongsTo`), naming the FK column in `via`:
+
+```typescript
+writeProjectTable('order_items', {
+  description: 'A single line on an order.',
+  columns: {
+    id: { type: 'string', primaryKey: true },
+    order_id: { type: 'string', description: 'the order this line belongs to' },  // the FK
+    label: { type: 'string' }, amount: { type: 'number' },
+  },
+}, [/* rows */]);
+
+writeProjectTable('orders', {
+  description: 'One order the user placed.',
+  columns: { /* …as above… */ },
+  relations: {
+    items: { hasMany: 'order_items', via: 'order_id', description: 'the lines on this order' },
+  },
+}, [/* rows */]);
+```
+
+A declared relation is what lets ONE query return a parent WITH its children —
+`db.query('orders', { include: ['items'] })` hands back each order with its `items` array already
+attached — instead of fetching the parents and then looping a query per parent (slow, and easy to
+get subtly wrong). It is also what the generated `@app/types` expose to a page. If you leave it out,
+every consumer has to re-derive the link by hand from a raw column, and nobody can tell from the
+schema that the two tables are connected at all. So: whenever you create a child table, ask which
+row it belongs to — and declare it.
+
 **B. UPDATING existing data on a LATER message.** `db` is always available to you and, once the
-table exists, its verbs operate on the live rows — so on a follow-up ("record that the safari balance
-is $960 due on arrival", "mark Zanzibar as needing a driving permit", "add a booking reference to the
-Eileen Hotel stay") use `db.query`/`db.update`/`db.insert` DIRECTLY against the live table. This is
-the whole point of "update the db based on info I give you later" — do not build a throwaway API or a
-tasklist to do what `db.update` does in one statement.
+table exists, its verbs operate on the live rows — so on a follow-up ("record that the balance is due
+on arrival", "mark that one as needing a permit", "add the booking reference to that stay") use
+`db.query`/`db.update`/`db.insert` DIRECTLY against the live table. This is the whole point of
+"update the db based on info I give you later" — do not build a throwaway API or a tasklist to do
+what `db.update` does in one statement.
 
 **There is no generic filesystem — `ls`/`execShell`/`readFile`/`readFileRaw` do not exist for you.**
 To discover what exists, use the PROJECT-ROOTED `listProjectDir('database')` (lists the authored table
@@ -146,14 +184,14 @@ rows) — all project-scoped.
 
 ```typescript
 // listProjectDir + db are project-scoped; db operates on the live rows. Narrate with // comments.
-const tables = listProjectDir('database').entries;       // e.g. ['accommodations.json','flights.json',…]
-const schema = readProjectFile('database/accommodations.json').content;  // .content (NOT .text — that is readDocument)
-const rows = await db.query('accommodations', { where: { name: 'Eileen Hotel' }, limit: 1 });
+const tables = listProjectDir('database').entries;       // e.g. ['orders.json','order_items.json',…]
+const schema = readProjectFile('database/orders.json').content;  // .content (NOT .text — that is readDocument)
+const rows = await db.query('orders', { where: { reference: '<the one the user named>' }, limit: 1 });
 if (rows[0]) {
-  await db.update('accommodations', { where: { id: rows[0].id }, set: { booking_reference: 'ABC-123' } });
+  await db.update('orders', { where: { id: rows[0].id }, set: { status: '<the new value>' } });
 } else {
   // No matching row? INSERT it rather than silently doing nothing.
-  await db.insert('accommodations', { name: 'Eileen Hotel', booking_reference: 'ABC-123' });
+  await db.insert('orders', { reference: '<the one the user named>', status: '<the new value>' });
 }
 ```
 
@@ -231,6 +269,29 @@ const p = writeProjectPage('index', [
 ].join("\n"));
 display(p.ok && w.ok ? 'wrote the activity feed page + api' : ('app write error: ' + (p.error ?? w.error)));
 ```
+
+### The piece that appears on more than one page is a COMPONENT
+
+The moment the SAME piece of UI shows up on a second page — a row card, a status pill, a summary
+tile, an empty state — stop copying it and give it a name with `writeProjectComponent('<Name>',
+src)` (`components/<Name>.tsx`, PascalCase), then import it by relative path from each page that
+needs it. Type its props with the row type the app already generates rather than re-describing the
+shape by hand:
+
+```typescript
+const c = writeProjectComponent('ItemCard', [
+  "import type { Order } from '@app/types';",   // the generated row types — one source of truth
+  "export function ItemCard({ item }: { item: Order }) {",
+  "  return (<div className=\"rounded-lg border border-border p-3\">",
+  "    <p className=\"text-foreground font-medium\">{item.reference}</p>",
+  "  </div>);",
+  "}",
+].join("\n"));
+// …and in a page:  import { ItemCard } from '../components/ItemCard';
+```
+
+Copy-pasted markup is how two pages start disagreeing about the same thing: one gets the fix, the
+other keeps the bug. Two copies of a card is the point to factor it, not five.
 
 ## GROWING an app that already exists — ADD a section, never REWRITE a page
 

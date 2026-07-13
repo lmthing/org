@@ -28,3 +28,11 @@ const w = writeTableSchema('items', {
 });
 display(w.ok ? 'wrote items schema' : ('schema error: ' + w.error));
 ```
+
+**If the rows you are modeling BELONG to another table's rows, declare the relation** — do not leave
+two flat lists that only a human can tell are connected. Carry the parent's id in a column and name
+it in `via`: `relations: { comments: { hasMany: 'comments', via: 'itemId', description: '…' } }` on
+the parent (or `belongsTo` on the child, when the child holds the FK). That declaration is what lets
+one query return a parent WITH its children (`db.query('items', { include: ['comments'] })`) instead
+of a query per parent, and it is what the generated `@app/types` expose to a page. A child table
+authored with no relation is a modeling bug, even when every column is right.
