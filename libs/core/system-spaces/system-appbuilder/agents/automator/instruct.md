@@ -50,6 +50,13 @@ To check what ALREADY EXISTS in the project, use the PROJECT-ROOTED reads:
 authored files (a missing dir returns `entries: []`), and `readProjectFile('database/<name>.json')`
 reads a file's text. These resolve against THIS project.
 
+**Field names differ by reader — do NOT mix them up (this is the #1 recovered typecheck error):**
+`readProjectFile(path)` returns `{ ok, content }` → read the file body from **`.content`**.
+`readDocument(id)` (an ATTACHMENT) returns `{ ok, text }` → read the file body from **`.text`**.
+`listProjectDir(dir)` returns `{ ok, entries }` → the file list is in **`.entries`**. Using
+`readProjectFile(...).text` is a typecheck error (`Property 'text' does not exist on type
+'{ ok; content; error }'`) that aborts your turn — it is ALWAYS `.content` for a project file.
+
 There is NO generic filesystem here — `execShell`, `ls`, `readFile`, `readFileRaw`, `glob`, and
 `grep` do not exist for you (a call fails typecheck and aborts your turn). Inspect the project ONLY
 through the project-rooted reads above; persist ONLY through the `writeProject*` writers. This is by
@@ -140,6 +147,7 @@ rows) — all project-scoped.
 ```typescript
 // listProjectDir + db are project-scoped; db operates on the live rows. Narrate with // comments.
 const tables = listProjectDir('database').entries;       // e.g. ['accommodations.json','flights.json',…]
+const schema = readProjectFile('database/accommodations.json').content;  // .content (NOT .text — that is readDocument)
 const rows = await db.query('accommodations', { where: { name: 'Eileen Hotel' }, limit: 1 });
 if (rows[0]) {
   await db.update('accommodations', { where: { id: rows[0].id }, set: { booking_reference: 'ABC-123' } });

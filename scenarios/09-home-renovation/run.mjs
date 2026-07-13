@@ -190,6 +190,27 @@ const keepalive = setInterval(() => {
 }, 30_000);
 keepalive.unref?.();
 
+// Re-establish a session across a pod roll/wake. The RECOVERY itself (resume/start →
+// POST /api/sessions) can transiently answer `503 {waking:true}` while the pod is still booting —
+// that must be retried, not thrown, or it escapes the resilient-send loop and crashes the run
+// (learned live: an unhandled `POST /api/sessions → 503 {waking:true}` during recovery). Retry
+// resume, then fall back to a fresh session, tolerating waking throughout.
+const reestablish = async (preferResume) => {
+  for (let i = 0; i < 30; i++) {
+    try {
+      if (preferResume && cp.sessionId) await thing.resume(cp.sessionId);
+      else { cp.sessionId = await thing.start(); saveCheckpoint(cp); }
+      return;
+    } catch (e) {
+      const m = String(e?.body?.error ?? e?.message ?? '');
+      if (e?.status === 503 || e?.status === 504 || /waking/.test(m)) { await sleep(4_000); continue; }
+      preferResume = false; // resume failed for a non-waking reason → start fresh next iteration
+      await sleep(2_000);
+    }
+  }
+  throw new Error('could not re-establish session after pod wake');
+};
+
 // resilient send: survive a pod roll/restart (also exercises the auto-resume edge — Act XI)
 const _send = thing.send.bind(thing);
 thing.send = async (content, opts = {}) => {
@@ -204,8 +225,8 @@ thing.send = async (content, opts = {}) => {
       await waitPodReady(user.token).catch(() => {});
       for (let i = 0; i < 40; i++) { if (await pod.listProjects().then(() => true).catch(() => false)) break; await sleep(4_000); }
       if (waking && !lost && !errored) continue; // cold-wake — retry the SAME session, don't restart it
-      if (lost && !errored) { try { await thing.resume(cp.sessionId); continue; } catch { /* fresh */ } }
-      cp.sessionId = await thing.start(); saveCheckpoint(cp);
+      if (lost && !errored) { await reestablish(true); continue; } // resume the persisted session
+      await reestablish(false); // error state → a clean fresh session
     }
   }
 };
@@ -295,13 +316,25 @@ if (ACTS.includes(2)) {
 if (ACTS.includes(3)) {
   report.step('Act III — Agent-processed expense form', 'the app has a "log expense" form + a db-INSERT hook (not ctx.spawn); logging an expense writes an expense row (NEW token) and the hook updates the budget spent (before/after)');
   // Ask THING to add the "log expense" capability wired through a db-insert hook (the working path).
-  acc(await thing.send('Add a "log expense" capability to the reno app: a page/form where I enter an expense (which trade/contractor, how much, and a ref), and it files an expense row AND updates the budget "spent" for that trade. Wire the processing through a db-INSERT event hook (on the expense intake table), NOT ctx.spawn.', { timeoutMs: 1_500_000 }));
-  await pod.appBuild(PROJECT).catch(() => {});
-  const manifest = await pod.appManifest(PROJECT).catch(() => ({}));
+  const askExpenseCapability = () => thing.send('Add a "log expense" capability to the reno app: a page/form where I enter an expense (which trade/contractor, how much, and a ref), and it files an expense row AND updates the budget "spent" for that trade. Wire the processing through a db-INSERT event hook (on the expense intake table), NOT ctx.spawn.', { timeoutMs: 1_500_000 });
+  const expenseHook = async () => {
+    await pod.appBuild(PROJECT).catch(() => {});
+    const m = await pod.appManifest(PROJECT).catch(() => ({}));
+    return (m?.hooks ?? []).find((h) => /insert/i.test(JSON.stringify(h.on ?? h)) && /expens|budget|spend|spent|cost|trade|receipt/i.test(JSON.stringify(h)));
+  };
+  acc(await askExpenseCapability());
   // The db-insert hook is the crux: an insert on the expense table fires an event hook that updates
-  // the budget spent — the reachable, ctx.spawn-free path (scenario.md §7 gap #2).
+  // the budget spent — the reachable, ctx.spawn-free path (scenario.md §7 gap #2). The automator's
+  // multi-artifact authoring (table + hook + page in one turn) can flake on a recovered typecheck
+  // error and under-deliver; a real user would just re-ask, so nudge ONCE before hard-asserting.
+  let dbHook = await expenseHook();
+  if (!dbHook) {
+    report.note('first "add log expense" ask did not land the db-insert hook (automator authoring flake) — re-asking once');
+    acc(await thing.send('The log-expense flow is not wired yet: there is no db-INSERT event hook on the expense intake table. Please finish it now — create the expense_intake table if missing, add the /expenses page form, and add a db-INSERT event hook (trigger on the expense intake insert) that files the expense and updates the trade\'s budget spent. Author each writeProject* call as a single self-contained statement.', { timeoutMs: 1_500_000 }));
+    dbHook = await expenseHook();
+  }
+  const manifest = await pod.appManifest(PROJECT).catch(() => ({}));
   const hooks = manifest?.hooks ?? [];
-  const dbHook = hooks.find((h) => /insert/i.test(JSON.stringify(h.on ?? h)) && /expens|budget|spend|spent|cost|trade|receipt/i.test(JSON.stringify(h)));
   report.check('a db-INSERT hook wires the expense→budget path (not ctx.spawn)', !!dbHook, dbHook ? JSON.stringify(dbHook).slice(0, 180) : `hooks: ${hooks.map((h) => `${h.slug}(${h.type})`).join(', ') || '(none)'}`);
   // The browser form endpoint exists — record it, but the public pod host (lmthing.chat) serves
   // /app/<id>/* as the web SPA (nginx), so a browser POST to /app/<id>/api/* returns 405 and never

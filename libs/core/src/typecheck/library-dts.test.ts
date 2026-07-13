@@ -24,7 +24,11 @@ import {
   EVENTS_EMIT_DTS,
   CAPABILITY_DTS_FRAGMENTS,
   composeConnectionsDts,
+  PROJECT_READ_DTS,
 } from './library-dts.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 describe('library-dts write primitives are gated', () => {
   it('COMMON_DTS declares NONE of the generic fs primitives (execShell/writeFileRaw/readFileRaw)', () => {
@@ -162,5 +166,37 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     // api:write → writeApi (catalog) + writeProjectApi (live project)
     expect(CAPABILITY_DTS_FRAGMENTS['api:write']).toContain('writeApi(');
     expect(CAPABILITY_DTS_FRAGMENTS['api:write']).toContain('writeProjectApi(');
+  });
+});
+
+// A live scenario (09-home-renovation) repeatedly hit a RECOVERED typecheck error inside the
+// automator: `Property 'text' does not exist on type '{ ok; content; error }'` — the model read a
+// `readProjectFile()` result via `.text` (readDocument's field) instead of `.content`. The two
+// readers return DIFFERENT field names; the automator instruct must document `readProjectFile`'s
+// `.content` explicitly so the model has a correct example to copy. These tests lock both the DTS
+// shape and the instruct guidance that a fix like that depends on.
+describe('project-file reader field names are unambiguous (readProjectFile.content vs readDocument.text)', () => {
+  it('PROJECT_READ_DTS: readProjectFile returns .content (a project file body is content, not text)', () => {
+    expect(PROJECT_READ_DTS).toContain('readProjectFile(path: string): { ok: boolean; content: string');
+    // The field is content, never text — text belongs to readDocument (an attachment).
+    expect(PROJECT_READ_DTS).not.toMatch(/readProjectFile\([^)]*\):\s*{[^}]*\btext\b/);
+  });
+
+  it('the automator instruct shows readProjectFile(...).content and warns off .text', () => {
+    const instruct = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../system-spaces/system-appbuilder/agents/automator/instruct.md',
+      ),
+      'utf8',
+    );
+    // It must give the model a correct example to copy: reading a project file's body via .content.
+    expect(instruct).toMatch(/readProjectFile\([^)]*\)\.content/);
+    // It must NOT model the wrong pattern in a real CODE example — i.e. `readProjectFile('<path>').text`
+    // with a quoted path arg. (The prose warning uses the `readProjectFile(...)` placeholder, which is
+    // deliberately excluded so the guidance can name the mistake without tripping this guard.)
+    expect(instruct).not.toMatch(/readProjectFile\(\s*['"][^)]*\)\.text\b/);
+    // And it must explicitly disambiguate the two readers' fields.
+    expect(instruct).toMatch(/\.content\b.*NOT\s+\.text|NOT\s+\.text.*readDocument/is);
   });
 });
