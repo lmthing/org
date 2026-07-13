@@ -11,9 +11,11 @@ resolved host-side, and the results come back as a `VARIABLES` block on the next
 ## Source of truth — read this first
 
 > **[`org/docs/`](../../org/docs/README.md) (published at lmthing.org) is the single source of truth for
-> this codebase.** Every factual sentence there carries a `path:Lstart-Lend` citation to the code that
-> makes it true. When this file disagrees with `org/docs`, `org/docs` wins. When `org/docs` disagrees
-> with the **code**, the code wins and `org/docs` is fixed.
+> this codebase.** Every factual sentence there carries a citation to the code that makes it true — a
+> symbol anchor (`path#Symbol`) by preference, a line anchor (`path:Lstart-Lend`) where a symbol isn't
+> appropriate. `pnpm docs:check` resolves them all as a hard CI gate. When this file disagrees with
+> `org/docs`, `org/docs` wins. When `org/docs` disagrees with the **code**, the code wins and `org/docs`
+> is fixed.
 >
 > **A change to code is not done until the matching `org/docs` page is updated in the same change.**
 > The rule, the grounding convention, and the "which doc moves with my change?" table →
