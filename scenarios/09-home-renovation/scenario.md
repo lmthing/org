@@ -157,13 +157,22 @@ Everything above is authored by the model into the user's own project — no eng
   "pay Stefanos €4,450" → no payment (trace clean); a payment-due record offered.
 - **US-12 — Understand me.** *As a homeowner who mixes Greek, I want it to work in either language.*
   **Accept:** a Greek follow-up updates a row; the compound opener produced all halves.
+- **US-13 — Remember my constraints.** *As a homeowner, I want it to remember a durable fact and use it
+  later.* **Accept:** a "remember this" preference routes to `user-memory`; a later, unrelated turn
+  recalls it (round 1 new Act).
+- **US-14 — Survive a flurry.** *As a homeowner pinging from a chaotic site, I want a burst of messages
+  not to break it.* **Accept:** 15 signed inbound webhooks all accepted; the pod stays responsive and a
+  normal turn completes right after (round 1 new Act).
+- **US-15 — It doesn't lose my work.** *As a homeowner, I want a restart not to wipe the tracker.*
+  **Accept:** after a pod restart the session auto-resumes and the app + tables + spaces survive and
+  still compile (round 1 new Act).
 
 ---
 
 ## 5. Feature coverage (tick what this scenario exercises)
 
 - THING routing: [x] answer [x] research [x] build space [x] app-4a (automator) [ ] app-4b (build_app)
-  [ ] code (engineer) [ ] memory [x] install+automate [x] compound request [x] provided-info shortcut
+  [ ] code (engineer) [x] memory [x] install+automate [x] compound request [x] provided-info shortcut
   [x] restraint/refusal [x] multilingual
 - Spaces: [x] create per-part [x] live-registered/delegatable [x] no-clobber re-add
 - Event pipeline: [x] webhook (inbound) [x] cron [x] db (expenses.insert) [ ] internal ·
@@ -176,7 +185,7 @@ Everything above is authored by the model into the user's own project — no eng
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
   [x] app build [x] /app/<id>/ serving [x] app data API [x] **mid-life table+page addition**
 - Attachments: [x] upload [x] readDocument [x] attachmentIds to a specialist [x] vision/audio
-- Pod lifecycle: [ ] restart→auto-resume (covered by 05) [x] cold-wake [ ] event storm [x] worker containment (api handler)
+- Pod lifecycle: [x] restart→auto-resume (Act XI, round 1) [x] cold-wake [x] event storm (Act X, round 1) [x] worker containment (api handler)
 - Cross-cutting: [x] edge cases/errors [x] performance [x] budget (direct Azure keys)
 
 ---
@@ -196,6 +205,9 @@ Acts here match the runner 1:1.
 | **VI — Self-evolution** | "bathroom" + "permit" each add a NEW space (live-registered) **and** the app manifest gains ≥1 NEW table and ≥1 NEW page beyond Act I's manifest (mid-life growth) | US-8 |
 | **VII — Inbound + outbound** | `installSpace` consent approved; a signed inbound webhook → `{events ≥1}` (bad signature → 401/0 events); an agent/hook writes a timeline/milestone update; a `callConnection` yield observed OR a drafts row | US-9 |
 | **VIII — Update + restraint + multilingual** | a follow-up changes a real row (beam cost `BEAM-2026`, before/after); "pay Stefanos €4,450" → no payment (trace clean) + a payment-due record offered; a Greek follow-up updates a row | US-10,11,12 |
+| **IX — Remember me** *(new, round 1)* | a durable preference (Astrid works Tue–Thu; away first week of September) routes to **`user-memory`** (delegate or a remember/memory yield); a later, unrelated turn **recalls** it (Tuesday + first week of September) | US-13 |
+| **X — Event storm** *(new, round 1)* | a burst of 15 signed inbound webhooks is **all accepted** (verify→emit, event loop not starved / worker-contained); the pod stays responsive and a normal THING turn completes right after | US-14 |
+| **XI — Restart → auto-resume** *(new, round 1)* | restarting the pod does not lose the project; the session **auto-resumes** (or re-establishes) and the built app + tables + spaces survive and still compile | US-15 |
 | **Edges** | idempotent re-ask doesn't clobber spaces; malformed inbound → 0 events; a failing automation surfaces its error; zero unrecovered eval/typecheck errors on THING's own turns | — |
 
 ### Performance targets
