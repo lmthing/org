@@ -57,7 +57,7 @@ const FIX = `${SDK_ORG}/scenarios/${ID}/fixtures`;
 const RESULTS = `${SDK_ORG}/scenarios/${ID}/results`;
 const CHECKPOINT = `${RESULTS}/checkpoint.json`;
 const argActs = (process.argv.find((a) => a.startsWith('--acts=')) ?? '').slice(7);
-const ACTS = argActs ? argActs.split(',').map(Number) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const ACTS = argActs ? argActs.split(',').map(Number) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 const FRESH = process.argv.includes('--fresh');
 const REUSE = process.argv.includes('--reuse');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -811,6 +811,94 @@ if (ACTS.includes(10)) {
   const build = await pod.appBuild(PROJECT).catch(() => ({ built: false }));
   report.check('the app still compiles after the engineer\'s code landed', build?.built === true, JSON.stringify({ built: build?.built }).slice(0, 120));
   cp.acts.X = { passed: report.passed, engineered, codeLanded, dups: dups.length };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XI (NEW) — The app is a LIVING SURFACE (the app contract: A1 + A2) ════
+// A dashboard that returns 200 and has rows is not a working app. Three things must hold, and each
+// one has bitten a shipped scenario:
+//   A1 — an ALWAYS-AVAILABLE in-app THING: shipped in `pages/_layout` (the chrome the router wraps
+//        EVERY route in — page-by-page forgets a page) and reachable as the project's own agent, so
+//        the user can evolve the app from INSIDE it. Asserted by landing a REAL change through the
+//        dock's own session shape.
+//   A2a — the app's OWN API routes (the ones its pages actually fetch, on the app origin) answer 200
+//        with the right SHAPE. A sibling scenario went green while its dashboard rendered `0` for
+//        every tile: the raw data API served rows, but the page's aggregation route 500'd and the UI
+//        silently fell back to zeros. Assert the layer the user actually sees.
+//   A2b — it RENDERS in a real browser (chrome-devtools, out-of-band — evidence in scenario.md §Actual
+//        results): real fixture values on screen, dock present, no console errors, no failed fetches.
+if (ACTS.includes(11)) {
+  report.step('Act XI — The app is a living surface', 'the app ships an always-available in-app THING in pages/_layout; the app\'s OWN api routes answer 200 with real data (not a silent zero-fallback); and a change asked for from INSIDE the app lands live');
+
+  // ── A1: the dock is in the LAYOUT (on every route by construction, not page-by-page) ──
+  const tree = JSON.stringify(await pod.fsTree().catch(() => ({})));
+  const layoutRel = [`pages/_layout.tsx`, `pages/_layout.jsx`, `pages/_layout.ts`].find((r) => tree.includes('_layout'));
+  let layoutSrc = '';
+  for (const rel of [layoutRel, 'pages/_layout.tsx', 'pages/_layout.jsx'].filter(Boolean)) {
+    layoutSrc = await pod.readProjectFile(PROJECT, rel).then((f) => String(f?.content ?? f ?? '')).catch(() => '');
+    if (layoutSrc) break;
+  }
+  const dockInLayout = /<Chat\b/.test(layoutSrc) && /agent\s*=\s*["'{]?\s*['"]?thing/i.test(layoutSrc);
+  report.check('A1 — the app ships an in-app THING dock in pages/_layout (⇒ on EVERY route)', dockInLayout,
+    dockInLayout ? `_layout ships <Chat agent="thing">: ${(layoutSrc.match(/<Chat[^>]*>/) ?? [''])[0].slice(0, 90)}` : `_layout (${layoutSrc.length} bytes) has no <Chat agent="thing">`);
+
+  // ── A2a: the app's OWN api routes — on the APP origin, the ones the pages fetch ──
+  const eps = (await pod.appManifest(PROJECT).catch(() => ({})))?.endpoints ?? [];
+  const gets = eps.filter((e) => !e.method || /get/i.test(e.method));
+  const epResults = [];
+  for (const e of gets.slice(0, 8)) {
+    const route = String(e.routePath ?? e.name ?? '').replace(/^\/?(api\/)?/, '');
+    if (!route || /:/.test(route)) continue; // skip parameterized routes (no id to bind here)
+    const r = await pod.appApi(PROJECT, route, undefined, 'GET').catch((err) => ({ status: 0, body: String(err) }));
+    const ok = r.status === 200;
+    const payload = typeof r.body === 'string' ? r.body : JSON.stringify(r.body ?? {});
+    epResults.push({ route, status: r.status, ok, bytes: payload.length, empty: /^\s*(\{\}|\[\]|null|)\s*$/.test(payload) });
+  }
+  const broken = epResults.filter((r) => !r.ok);
+  report.check("A2a — every one of the app's OWN api routes answers 200 (no silent 500 → zero-fallback)",
+    epResults.length >= 1 && broken.length === 0,
+    epResults.length ? epResults.map((r) => `${r.route}:${r.status}${r.empty ? ' (EMPTY)' : ` ${r.bytes}b`}`).join(' · ') : 'the app declares no GET api routes');
+  const substantive = epResults.filter((r) => r.ok && !r.empty);
+  report.check("A2a — those routes return real DATA, not an empty shell", substantive.length >= 1,
+    substantive.length ? `${substantive.length}/${epResults.length} return a non-empty payload` : 'every app api route returned {} / [] / null');
+
+  // ── A1 (the real one): a change asked for from INSIDE the app must LAND LIVE ──
+  // The dock's session is EXACTLY `{agentSlug:'thing', projectId}` (chat-protocol.ts#sessionCreateBody):
+  // the same THING, scoped to this project, with full authoring capability. Drive that same shape.
+  const pagesBefore = await pageRoutes(pod, PROJECT);
+  const tablesBefore = await tableNames(pod, PROJECT);
+  const inApp = new ThingSession(pod, { projectId: PROJECT, onAsk: scriptedOnAsk(true), verbose: true });
+  await inApp.start();
+  const tInApp = now();
+  const t11 = await inApp.send(
+    'Το ανοίγω τώρα μέσα από την εφαρμογή. Θέλω να σημειώνω ποια φαγητά αγαπάει η οικογένεια: ' +
+    'βάλε ένα πεδίο «αγαπημένο» στις συνταγές και φτιάξε μου μια σελίδα «Αγαπημένα» που δείχνει μόνο αυτά. ' +
+    'Σημείωσε τον μουσακά και τη σπανακόπιτα σαν αγαπημένα.',
+    { timeoutMs: 1_500_000 },
+  );
+  metrics.tokens.in += t11.tokens.in; metrics.tokens.out += t11.tokens.out;
+  report.metric('Act XI in-app turn → change live', ((now() - tInApp) / 1000).toFixed(0), ' s');
+  await pod.appBuild(PROJECT).catch(() => {});
+  const pagesAfter = await pageRoutes(pod, PROJECT);
+  const tablesAfter = await tableNames(pod, PROJECT);
+  const newPages = pagesAfter.filter((p) => !pagesBefore.includes(p));
+  const newTables = tablesAfter.filter((t) => !tablesBefore.includes(t));
+  const wroteApp = t11.yields.some((y) => /writeproject(page|table|api)/i.test(String(y)));
+  report.check('A1 — the in-app turn AUTHORED (it called a project writer, it did not just reply)', wroteApp,
+    t11.yields.filter((y) => /writeproject/i.test(String(y))).join(', ').slice(0, 160) || t11.yields.join(', ').slice(0, 120));
+  const changeLanded = newPages.length >= 1 || newTables.length >= 1;
+  report.check('A1 — a REAL change landed from inside the app (a new page/table now exists that did not before)', changeLanded,
+    JSON.stringify({ newPages, newTables, pages: pagesAfter.length, tables: tablesAfter.length }).slice(0, 220));
+  // …and the favourites are real DATA, not a promise: the flag is set on real rows.
+  const favBlob = await dbBlob(pod, PROJECT, tablesAfter);
+  const favFlagged = /"?(αγαπημ|favou?rite|is_fav)[^,]{0,24}"?\s*:\s*(true|1|"?(ναι|yes|1|true)"?)/i.test(favBlob);
+  report.check('A1 — the favourites were actually SET on real rows (μουσακάς / σπανακόπιτα)', favFlagged && /μουσακ|σπανακ/i.test(favBlob),
+    favFlagged ? 'a truthy favourite flag is set on real rows' : 'no row carries a truthy favourite flag');
+  const buildAfter = await pod.appBuild(PROJECT).catch(() => ({ built: false }));
+  report.check('A1 — the app still compiles after the in-app change (it is live, not broken)', buildAfter?.built === true, JSON.stringify({ built: buildAfter?.built, routes: (buildAfter?.routes ?? []).length }).slice(0, 120));
+  report.note(`A2b — browser render (chrome-devtools) is asserted out-of-band and recorded in scenario.md §Actual results: what rendered, the dock, console/network errors, screenshot path.`);
+  recordErrors('Act XI', t11);
+  cp.acts.XI = { passed: report.passed, dockInLayout, appApis: epResults, newPages, newTables, favFlagged };
   saveCheckpoint(cp);
 }
 

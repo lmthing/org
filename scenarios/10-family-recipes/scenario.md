@@ -51,6 +51,7 @@ table+page addition** gap.
 | 11 | **Tell it the household rules** | *"Θυμήσου το αυτό για πάντα: τα παιδιά δεν αντέχουν τον δυόσμο… ο Νίκος τρώει μόνο ψητές μελιτζάνες"* → it remembers, and recalls it unprompted days later when he cooks. |
 | 12 | **Change his mind mid-install** | He asks for Telegram too — then, at the consent card, **says no**. Nothing is installed. |
 | 13 | **"The maths is wrong"** | *"400γρ αρακά" vs "1 φλιτζάνι αρακά" count as different things* → he asks for real unit-aware code; an engineer writes it into the app. |
+| 14 | **Live in the app** | He stops going back to `/chat`. From the **chat dock inside the app** — on every page — he asks: *"βάλε ένα πεδίο «αγαπημένο» στις συνταγές και φτιάξε μια σελίδα «Αγαπημένα» … σημείωσε τον μουσακά και τη σπανακόπιτα"*. The field, the page and the flagged rows appear **in the running app**, without leaving it. |
 
 ---
 
@@ -84,8 +85,16 @@ In the user's terms — success is:
 12. **"No means no."** When he denies the install consent card, **nothing is installed** — and it says so.
 13. **"It can write real code."** "The list's maths is wrong" produces actual unit-aware code in the
     app, not an apology.
+14. **"The app is alive."** The recipe book is not a read-only dashboard: an assistant is there **on
+    every page**, and what he asks it for — a new field, a new page, a flag on a recipe — **appears in
+    the app he is standing in**. He never has to go back to `/chat` to change his own kitchen.
 
 **Anti-expectations (a failure even if the chat looks fine):**
+- The app opens but the tiles read **`0` / empty** while the data is really in the DB → the page's own
+  API route is 500ing and the UI is silently falling back to zeros. **The layer the user sees is the
+  layer that must be asserted.**
+- The "in-app chat" is a **link back to `/chat`**, or reaches an agent that cannot author → the app is
+  a dead end, not a living surface.
 - The book has the recipes from the *text* files but **no `Σπανακόπιτα`** → "it never listened to my
   mother's memo."
 - Nothing from the **workbook** (`GF-NIKOS`, the low olive oil, `WEEK-2026-W29`) → "it ignored my excel."
@@ -205,6 +214,12 @@ Everything above is authored by the model into the user's own project — no eng
 - **US-14 — Write me real code.** *As a home cook, I want the arithmetic actually fixed.* **Accept:**
   the ask routes to `system-engineer`; the authored unit-aware merge helper lands as a REAL file in
   the project; the app still compiles and the list is still de-duplicated.
+- **US-15 — Change my kitchen from inside my kitchen.** *As a home cook, I want to evolve the app from
+  within the app, not from a separate chat window.* **Accept:** the app ships an in-app THING dock in
+  `pages/_layout` (⇒ present on **every** route by construction); a message sent through it AUTHORS
+  (a `writeProject*` yield, not a promise) and a **new page/table lands live** with the favourite flag
+  **set on real rows**; the app still compiles; and the app's **own** API routes answer **200 with real
+  data** — asserted in a real browser (render + dock + no console/network errors).
 
 ---
 
@@ -224,6 +239,8 @@ Everything above is authored by the model into the user's own project — no eng
   [x] integration-demo source (keyless; telegram is the prod target)
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
   [x] app build [x] /app/<id>/ serving [x] app data API [x] **mid-life table+page addition**
+  [x] **the app's OWN api routes (Act XI/A2a)** [x] **always-available in-app THING dock + self-evolution
+  from inside the app (Act XI/A1)** [x] **browser render verification (Act XI/A2b)**
 - Attachments: [x] upload (6 fixtures on one message) [x] **readDocument (the recipe PDF *and* a REAL
   3-sheet .xlsx workbook)** [x] attachmentIds to a specialist [x] **vision ×2 (a real handwritten
   recipe card + a real plated-dish photo)** · [x] **audio (a REAL Greek voice memo → Whisper
@@ -250,6 +267,7 @@ Acts here match the runner 1:1.
 | **VIII — Remember me** (NEW, r1) | a "remember forever" household rule routes to **`user-memory`** (delegate / remember yield); a LATER, unrelated cooking turn **recalls both preferences** (half mint; roasted not fried) | US-12 |
 | **IX — Consent denied** (NEW, r1) | asking for a 2nd integration raises a consent card; **denied** ⇒ `integration-telegram` is **absent from the project's spaces on disk**, the other spaces survive, and THING says it did not install it (**consent fails closed**) | US-13 |
 | **X — Engineer-authored code** (NEW, r1) | "the list's maths is wrong" routes to **`system-engineer`**; the authored unit-aware merge helper lands as a **REAL file** in the project (fs tree grew); the app still compiles and a re-run of the weekly cron still de-duplicates (no regression) | US-14 |
+| **XI — The app is a living surface** (NEW, r1 · the app contract A1+A2) | **A1:** the app ships an in-app THING dock in **`pages/_layout`** (⇒ on every route by construction, not page-by-page); a message sent through the dock's own session shape (`{agentSlug:'thing', projectId}`) **AUTHORS** (`writeProject*` yield) and a **NEW page/table lands live** that did not exist before, with the favourite flag **set on real rows** (μουσακάς/σπανακόπιτα); the app **still compiles** after. **A2a:** every one of the app's **OWN** API routes (`/<project>/api/<route>`, the ones its pages fetch) answers **200** with a **non-empty** payload — no silent 500 → zero-fallback. **A2b:** the app is opened in a **real browser** (chrome-devtools): real fixture data on screen, the dock present, **no console errors, no failed fetches** (evidence + screenshot in §Actual results) | US-15 |
 | **Edges** | idempotent re-ask doesn't clobber spaces; malformed inbound → 0 events; unknown inbound path → 404; recovered vs unrecovered eval/typecheck errors recorded | — |
 
 ### Performance targets
@@ -264,6 +282,7 @@ Acts here match the runner 1:1.
 | Later-update message → row changed | < 90 s |
 | Remember → recall (Act VIII) | < 60 s per turn |
 | Engineer code → file in the project (Act X) | < 5 min |
+| In-app dock message → change live in the app (Act XI) | < 5 min |
 | Eval/typecheck errors (unrecovered, on THING's own turns) | 0 |
 
 ---
