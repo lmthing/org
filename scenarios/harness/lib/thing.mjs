@@ -334,6 +334,10 @@ export class ThingSession {
       durationMs,
       events: evs,
       text: textOf(evs),
+      /** ONLY the turn's final display — the reply the user actually reads. `text` concatenates every
+       *  display in the slice, which on a RESUMED session can still include replayed history, so a
+       *  check about "what it answered" must read this, never `text`. */
+      lastText: lastTextOf(evs),
       yields: evs.filter((e) => e.type === 'yield').map((e) => ({ kind: e.kind, args: e.args })),
       delegates: evs
         .filter((e) => e.type === 'yield' && e.kind === 'delegate')
@@ -403,6 +407,22 @@ export function textOf(events) {
     }
   }
   return out.join('\n');
+}
+
+/** The LAST thing THING displayed — its final reply for this turn (see `turn().lastText`). */
+export function lastTextOf(events) {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.type !== 'display') continue;
+    const d = e.descriptor;
+    const s =
+      typeof d === 'string'
+        ? d
+        : (d?.props?.text ?? d?.props?.children ?? d?.props?.content ?? JSON.stringify(d));
+    const out = typeof s === 'string' ? s : JSON.stringify(s);
+    if (out && out.trim()) return out;
+  }
+  return '';
 }
 
 /** Approve every consent card; leave other asks for the scenario. */

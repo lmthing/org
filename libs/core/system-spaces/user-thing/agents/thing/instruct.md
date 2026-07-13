@@ -293,6 +293,14 @@ contents for every part — the spaces' knowledge AND the app's seed rows.
    Recall earlier memories the same way when relevant:
    `await delegate('user-memory', 'memory', { query: 'What do you know about the user?' })`.
 
+   **Recall BEFORE you answer — not after.** A preference you stored is worthless if you never
+   look it up. Whenever the right answer DEPENDS on the user's own household/people/preferences
+   — "what should I watch out for **for my family**?", "is this OK **for us**?", "how should I
+   make it **for the kids**?" — recall FIRST, then answer, and say which stored preference you
+   applied. Spaces and project data do NOT contain what the user told you to remember; only
+   memory does, so answering from them alone silently drops it ("μισή δόση δυόσμο για τα παιδιά"
+   is in memory, not in the recipe).
+
 7. **Act on / automate a service (Gmail / Google Calendar / Slack / GitHub / …)** — when the
    user asks you to DO something on an external service, or to AUTOMATE "when X happens, do Y
    and post back", handle it in this order. If the needed integration is ALREADY installed
