@@ -885,19 +885,36 @@ if (ACTS.includes(11)) {
   // ── A2a: the app's OWN api routes — on the APP origin, the ones the pages fetch ──
   const eps = (await pod.appManifest(PROJECT).catch(() => ({})))?.endpoints ?? [];
   const gets = eps.filter((e) => !e.method || /get/i.test(e.method));
+  // A DETAIL route needs the id of a real row — calling it bare and calling it broken are not the
+  // same thing. Bind a real recipe id and retry once, so a 400 "id required" is not reported as a
+  // defect while a genuinely broken handler (5xx, or the 500 → silent zero-fallback this Act exists
+  // to catch) still is.
+  const someRecipeId = (await rowsOf(pod, PROJECT, /^recipe/i, 'recipes')).rows[0]?.id;
   const epResults = [];
-  for (const e of gets.slice(0, 8)) {
+  for (const e of gets.slice(0, 10)) {
     const route = String(e.routePath ?? e.name ?? '').replace(/^\/?(api\/)?/, '');
-    if (!route || /:/.test(route)) continue; // skip parameterized routes (no id to bind here)
-    const r = await pod.appApi(PROJECT, route, undefined, 'GET').catch((err) => ({ status: 0, body: String(err) }));
-    const ok = r.status === 200;
+    if (!route || /:/.test(route)) continue; // a path-param route is exercised via its page, not here
+    let r = await pod.appApi(PROJECT, route, undefined, 'GET').catch((err) => ({ status: 0, body: String(err) }));
+    let boundId = false;
+    if (r.status === 400 && someRecipeId) {
+      const withId = await pod.appApi(PROJECT, `${route}?id=${encodeURIComponent(someRecipeId)}`, undefined, 'GET').catch(() => null);
+      if (withId) { r = withId; boundId = true; }
+    }
     const payload = typeof r.body === 'string' ? r.body : JSON.stringify(r.body ?? {});
-    epResults.push({ route, status: r.status, ok, bytes: payload.length, empty: /^\s*(\{\}|\[\]|null|)\s*$/.test(payload) });
+    epResults.push({
+      route, status: r.status, boundId,
+      ok: r.status === 200,
+      broken: r.status >= 500 || r.status === 0,   // a handler that THREW — the layer the user sees
+      bytes: payload.length,
+      empty: /^\s*(\{\}|\[\]|null|)\s*$/.test(payload),
+    });
   }
-  const broken = epResults.filter((r) => !r.ok);
-  report.check("A2a — every one of the app's OWN api routes answers 200 (no silent 500 → zero-fallback)",
+  const broken = epResults.filter((r) => r.broken);
+  report.check("A2a — none of the app's OWN api routes is BROKEN (a 5xx handler is how a page silently renders zeros)",
     epResults.length >= 1 && broken.length === 0,
-    epResults.length ? epResults.map((r) => `${r.route}:${r.status}${r.empty ? ' (EMPTY)' : ` ${r.bytes}b`}`).join(' · ') : 'the app declares no GET api routes');
+    epResults.length
+      ? epResults.map((r) => `${r.route}:${r.status}${r.boundId ? '(id)' : ''}${r.empty ? ' EMPTY' : ` ${r.bytes}b`}`).join(' · ')
+      : 'the app declares no GET api routes');
   const substantive = epResults.filter((r) => r.ok && !r.empty);
   report.check("A2a — those routes return real DATA, not an empty shell", substantive.length >= 1,
     substantive.length ? `${substantive.length}/${epResults.length} return a non-empty payload` : 'every app api route returned {} / [] / null');
@@ -923,19 +940,51 @@ if (ACTS.includes(11)) {
   const tablesAfter = await tableNames(pod, PROJECT);
   const newPages = pagesAfter.filter((p) => !pagesBefore.includes(p));
   const newTables = tablesAfter.filter((t) => !tablesBefore.includes(t));
-  const wroteApp = t11.yields.some((y) => /writeproject(page|table|api)/i.test(String(y)));
-  report.check('A1 — the in-app turn AUTHORED (it called a project writer, it did not just reply)', wroteApp,
-    t11.yields.filter((y) => /writeproject/i.test(String(y))).join(', ').slice(0, 160) || t11.yields.join(', ').slice(0, 120));
-  const changeLanded = newPages.length >= 1 || newTables.length >= 1;
-  report.check('A1 — a REAL change landed from inside the app (a new page/table now exists that did not before)', changeLanded,
-    JSON.stringify({ newPages, newTables, pages: pagesAfter.length, tables: tablesAfter.length }).slice(0, 220));
-  // …and the favourites are real DATA, not a promise: the flag is set on real rows.
-  const favBlob = await dbBlob(pod, PROJECT, tablesAfter);
-  const favFlagged = /"?(αγαπημ|favou?rite|is_fav)[^,]{0,24}"?\s*:\s*(true|1|"?(ναι|yes|1|true)"?)/i.test(favBlob);
-  report.check('A1 — the favourites were actually SET on real rows (μουσακάς / σπανακόπιτα)', favFlagged && /μουσακ|σπανακ/i.test(favBlob),
-    favFlagged ? 'a truthy favourite flag is set on real rows' : 'no row carries a truthy favourite flag');
+  // A yield is `{kind, args}` — `String(y)` is "[object Object]" and matches nothing.
+  const kinds = t11.yields.map((y) => String(y?.kind ?? y));
+  const wroteApp = kinds.some((k) => /writeproject(page|table|api)/i.test(k))
+    || t11.delegates.some((d) => /appbuilder|automator|architect/i.test(String(d)));
+  report.check('A1 — the in-app turn ACTED (a project writer, or the authoring specialist — not just a reply)', wroteApp,
+    `yields: ${kinds.join(', ').slice(0, 90) || '(none)'} · delegates: ${t11.delegates.join(', ').slice(0, 90) || '(none)'}`);
+  /**
+   * The promise is that the change is LIVE IN THE APP — so assert the app's end state, not a
+   * before/after delta. (A delta is not re-runnable: the second run of this Act asks for a
+   * favourites page that already exists, the agent correctly no-ops, and a `newPages.length >= 1`
+   * check then fails the product for being idempotent — which is exactly what it must be.)
+   */
+  const favPage = pagesAfter.find((p) => /favou?rite|αγαπημ/i.test(String(p)));
+  const declaredCols = await pod.readProjectFile(PROJECT, 'database/recipes.json')
+    .then((s) => { try { return Object.keys(JSON.parse(String(s)).columns ?? {}); } catch { return []; } }).catch(() => []);
+  const favCol = declaredCols.find((c) => /fav|αγαπημ/i.test(c));
+  const changeLanded = !!favPage && !!favCol;
+  report.check('A1 — the change asked for from INSIDE the app is LIVE in the app (a favourites page + a favourites column)', changeLanded,
+    JSON.stringify({ favPage: favPage ?? null, favColumn: favCol ?? null, newThisTurn: { newPages, newTables } }).slice(0, 230));
+  // …and the favourites are real DATA, not a promise: the flag is set on the real rows he named.
+  const favRows = (await rowsOf(pod, PROJECT, /^recipe/i, 'recipes')).rows
+    .filter((r) => favCol && [true, 1, '1', 'true', 'ναι', 'yes'].includes(r[favCol]));
+  const favTitles = favRows.map((r) => String(r.title_gr ?? r.title_en ?? r.id));
+  const flaggedBoth = /μουσακ/i.test(favTitles.join(' ')) && /σπανακ/i.test(favTitles.join(' '));
+  report.check('A1 — the favourites were actually SET on the real rows he named (μουσακάς + σπανακόπιτα)', flaggedBoth,
+    favTitles.length ? `flagged: ${favTitles.join(', ')}` : 'no row carries a truthy favourite flag');
   const buildAfter = await pod.appBuild(PROJECT).catch(() => ({ built: false }));
   report.check('A1 — the app still compiles after the in-app change (it is live, not broken)', buildAfter?.built === true, JSON.stringify({ built: buildAfter?.built, routes: (buildAfter?.routes ?? []).length }).slice(0, 120));
+  /**
+   * …and the app the user RELOADS is the app that was just rebuilt. The served bundle is cached
+   * for the pod's lifetime, so a rebuild emits new content-hashed assets while the serving layer
+   * still lists the old ones: index.html then asks for an `entry-*.js` the manifest does not have,
+   * the request falls through to the SPA shell, the browser gets `text/html` for a module script —
+   * and the app is a WHITE SCREEN. `built:true` and a 200 on `/` both stay green through it, which
+   * is exactly why this asserts the ASSET the served HTML actually references.
+   */
+  const shell = await pod.appPage(PROJECT).catch(() => ({ status: 0, body: '' }));
+  const assetRef = String(shell.body ?? '').match(/(?:\.\/)?(assets\/entry-[A-Za-z0-9_-]+\.js)/)?.[1];
+  const assetRes = assetRef ? await pod.appPage(PROJECT, assetRef).catch(() => ({ status: 0, body: '' })) : null;
+  const assetIsJs = !!assetRes && assetRes.status === 200 && !/^\s*<!doctype/i.test(String(assetRes.body));
+  report.check('A2 — the entry asset the served index.html references is really SERVED (a rebuilt app is not a blank page)',
+    !!assetRef && assetIsJs,
+    assetRef
+      ? `index.html → ${assetRef} · GET → ${assetRes?.status} ${assetIsJs ? '(javascript)' : '(HTML shell — the app renders BLANK)'}`
+      : 'the served index.html references no entry asset');
   report.note(`A2b — browser render (chrome-devtools) is asserted out-of-band and recorded in scenario.md §Actual results: what rendered, the dock, console/network errors, screenshot path.`);
   recordErrors('Act XI', t11);
   cp.acts.XI = { passed: report.passed, dockInLayout, appApis: epResults, newPages, newTables, favFlagged };

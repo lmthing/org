@@ -1,6 +1,6 @@
-## Actual results — run 2026-07-13T12:04:51.135Z
+## Actual results — run 2026-07-13T16:56:49.249Z
 
-**Verdict: ❌ FAIL** · 8/9 checks · 0 issue(s) found · 2.9 min wall clock
+**Verdict: ❌ FAIL** · 8/11 checks · 0 issue(s) found · 10.1 min wall clock
 
 ### setup
 
@@ -8,25 +8,27 @@
 
 | Check | Result | Actual |
 |---|---|---|
-| user provisioned | ✅ | 10-family-recipes-v2-mrj4x19y@lmthing.test (user-381590816767895178) |
+| user provisioned | ✅ | 10-family-recipes-v4-mrjf2rza@lmthing.test (user-381619445493163658) |
 | family-recipes project exists | ✅ | family-recipes |
 
-### Act IV — Cron synthesis → derived rows
+### Act XI — The app is a living surface
 
-*Expected:* a cron hook exists; running it produces an agent turn that writes meal_plan rows AND a DE-DUPLICATED shopping_list (shared ingredients merged — no duplicate ingredient lines)
+*Expected:* the app ships an always-available in-app THING in pages/_layout; the app's OWN api routes answer 200 with real data (not a silent zero-fallback); and a change asked for from INSIDE the app lands live
 
 | Check | Result | Actual |
 |---|---|---|
-| a cron hook exists for the project (the Sunday planner) | ✅ | {"slug":"sunday-generate-weekly-meals","type":"cron","every":"7d","lastRunAt":1783943402239,"lastFiredAt":1783943402239,"pending":false} |
-| the cron handler does NOT gate on the wall-clock weekday (schedule is declared) | ✅ | declared: type: 'cron',   every: '7d',   handler: async ({ db  |
-| cron hook run accepted | ✅ | status 200 |
-| the weekly run wrote a MEAL PLAN for the week (no human in the loop) | ✅ | weekly_meal_plans: 2 → 2 rows |
-| it derived ONE merged SHOPPING LIST from that plan | ✅ | shopping_lists[1] (list column): 57 → 57 items |
-| the shopping list is DE-DUPLICATED (shared ingredients merged into one line) | ❌ | DUPLICATE ingredient lines: item×57 |
+| A1 — the app ships an in-app THING dock in pages/_layout (⇒ on EVERY route) | ✅ | _layout ships <Chat agent="thing">: <Chat agent="thing" className="flex-1" /> |
+| A2a — every one of the app's OWN api routes answers 200 (no silent 500 → zero-fallback) | ❌ | automation-run-logs-list:200 12b · cuisines-list:200 878b · favorites:200 3358b · meal-plan-entries-list:200 19809b · pantry-items-list:200 4342b · recipe_intake-list:200 491b · recipe-detail:400 208b · recipes-list:200 14397b |
+| A2a — those routes return real DATA, not an empty shell | ✅ | 7/8 return a non-empty payload |
+| A1 — the in-app turn AUTHORED (it called a project writer, it did not just reply) | ❌ | [object Object], [object Object], [object Object], [object Object], [object Object], [object Object], [object Object], [ |
+| A1 — a REAL change landed from inside the app (a new page/table now exists that did not before) | ❌ | {"newPages":[],"newTables":[],"pages":8,"tables":10} |
+| A1 — the favourites were actually SET on real rows (μουσακάς / σπανακόπιτα) | ✅ | a truthy favourite flag is set on real rows |
+| A1 — the app still compiles after the in-app change (it is live, not broken) | ✅ | {"built":true,"routes":8} |
+| A2 — the entry asset the served index.html references is really SERVED (a rebuilt app is not a blank page) | ✅ | index.html → assets/entry-I3ZL5YYC.js · GET → 200 (javascript) |
 
-> shopping list sample: ["{\"item\":\"Wine\",\"quantity\":\"1 spoonful\",\"note\":\"in the meat sauce, from mother’s audio note\"}","{\"item\":\"Rice\",\"quantity\":\"as needed\"}"]
+> A2b — browser render (chrome-devtools) is asserted out-of-band and recorded in scenario.md §Actual results: what rendered, the dock, console/network errors, screenshot path.
 
-> the weekly channel ping (callConnection) is asserted in Act VI — no channel is installed yet at this point
+> recovered: {"type":"typecheck_error","message":"Cannot find name 'parsed'.; Cannot find name 'parsed'.; Cannot find name 'parsed'.","statement":"// I have the parsed schem … (architect/automator authoring-reliability follow-up)
 
 ### Whole-session invariants
 
@@ -40,9 +42,10 @@
 
 | Metric | Value |
 |---|---|
-| Act IV cron trigger → derived rows | 169 s |
+| Act XI in-app turn → change live | 147 s |
+| Act XI recovered errors (delegated authoring) | 5 |
 | recovered eval/typecheck errors across session | 0 |
 | total LLM calls | 0 |
-| total tokens (in/out) | 0 / 0 |
+| total tokens (in/out) | 131123 / 3381 |
 | delegates | 0 |
-| wall clock | 2.9 min |
+| wall clock | 10.1 min |
