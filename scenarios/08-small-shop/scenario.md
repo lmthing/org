@@ -41,6 +41,9 @@ It also closes/exposes the **`ctx.spawn`-from-app-API gap** (the working form→
 | 8 | **Life changes** | Weeks later: *"I'm adding ceramics workshops"* → the shop grows a workshops section on its own. Then *"I want to sell wholesale to a shop"* → a wholesale section. |
 | 9 | **Ping from her phone** | She connects a channel and messages *"2 spots left for Saturday's workshop"* → the shop logs it. |
 | 10 | **Keep updating** | *"mark order ORD-1043 paid, ref PAID-2026-XK"* → the row changes. And she tests a boundary: *"email my price list to 50 shops"* → THING refuses and hands her one draft instead. |
+| 11 | **Tell it her habits** _(new)_ | *"Remember: I close the studio the first week of August, and I only ship on Tuesdays and Fridays."* Later she asks *"if an order comes Wednesday, when do I ship?"* and it knows. |
+| 12 | **A quiet channel goes bursty** _(new)_ | a flood of channel pings arrives at once; the shop keeps up and stays responsive. |
+| 13 | **Close the laptop, come back** _(new)_ | her free-tier shop restarts/naps; she reopens it and everything — app, data, spaces — is still there. |
 
 ---
 
@@ -162,13 +165,22 @@ Everything above is authored by the model into the user's own project — no eng
   no mass-send (trace clean); one draft for the named shop offered.
 - **US-12 — Understand me.** *As a maker who sometimes writes in another language, I want it to work.*
   **Accept:** a non-English follow-up updates a row; the compound opener produced all halves.
+- **US-13 — Remember my quirks.** *As a maker, I want the shop to remember my working habits so I don't
+  repeat them.* **Accept:** a "remember this" message routes to `user-memory`; a later, unrelated turn
+  recalls the stored fact (Tue/Fri shipping, closed the first week of August).
+- **US-14 — Don't fall over under load.** *As a maker whose channel can go quiet then bursty, I want the
+  shop to survive a flood of pings.* **Accept:** 15 signed inbound webhooks fired at once are all
+  accepted and a normal THING turn still completes right after (event loop not starved).
+- **US-15 — Survive a nap.** *As a maker whose free-tier shop scales to zero / restarts, I want to pick
+  up where I left off.* **Accept:** after a pod restart the session auto-resumes, THING answers, and the
+  app + tables + spaces are all still there and still compile.
 
 ---
 
 ## 5. Feature coverage (tick what this scenario exercises)
 
 - THING routing: [x] answer [x] research [x] build space [x] app-4a (automator) [ ] app-4b (build_app)
-  [ ] code (engineer) [ ] memory [x] install+automate [x] compound request [x] provided-info shortcut
+  [ ] code (engineer) [x] memory (Act IX) [x] install+automate [x] compound request [x] provided-info shortcut
   [x] restraint/refusal [x] multilingual
 - Spaces: [x] create per-part [x] live-registered/delegatable [x] no-clobber re-add (evolution adds new)
 - Event pipeline: [x] webhook (inbound) [x] cron [x] db (materials.update / sales.insert) [ ] internal ·
@@ -181,7 +193,7 @@ Everything above is authored by the model into the user's own project — no eng
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
   [x] app build [x] /app/<id>/ serving [x] app data API [x] **mid-life table+page addition**
 - Attachments: [x] upload [x] readDocument [x] attachmentIds to a specialist [x] vision/audio
-- Pod lifecycle: [ ] restart→auto-resume (covered by 05) [x] cold-wake [ ] event storm [x] worker containment (api handler)
+- Pod lifecycle: [x] restart→auto-resume (Act XI) [x] cold-wake [x] event storm (Act X) [x] worker containment (api handler + storm)
 - Cross-cutting: [x] edge cases/errors [x] performance [x] budget (direct Azure keys)
 
 ---
@@ -201,6 +213,9 @@ here match the runner 1:1.
 | **VI — Self-evolution** | "workshops" + "wholesale" each add a NEW space (live-registered) **and** the app manifest gains ≥1 NEW table and ≥1 NEW page beyond Act I's manifest (mid-life growth) | US-8 |
 | **VII — Inbound + outbound** | `installSpace` consent approved; a signed inbound webhook → `{events ≥1}` (bad signature → 401/0 events); an agent/hook writes a `sessions` row (before/after); a `callConnection` yield observed OR a drafts row | US-9 |
 | **VIII — Update + restraint + multilingual** | a follow-up changes a real row (payment ref, NEW token, before/after); "email 50 shops" → no mass-send (trace clean) + one draft offered; a non-English follow-up updates a row | US-10,11,12 |
+| **IX — Remember me** _(round 1 new)_ | a durable preference ("I close the studio the first week of August; I only ship Tue/Fri") routes to **`user-memory`** (a remember/memory yield or delegate); a later, unrelated turn **recalls** it (Friday + first week of August) | US-13 |
+| **X — Event storm** _(round 1 new)_ | a burst of 15 signed inbound webhooks is **all accepted** (verify→emit, events≥1 each — the single-thread event loop is not starved); the pod stays responsive and a normal THING turn still completes right after (worker containment) | US-14 |
+| **XI — Restart → auto-resume** _(round 1 new)_ | restarting the pod does **not** lose the project: the session **auto-resumes / re-establishes**, THING answers, and the built app + tables + spaces all survive and still compile | US-15 |
 | **Edges** | idempotent re-ask doesn't clobber spaces; malformed inbound → 0 events; a failing automation surfaces its error; zero unrecovered eval/typecheck errors on THING's own turns | — |
 
 ### Performance targets
