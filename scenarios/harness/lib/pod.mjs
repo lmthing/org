@@ -51,8 +51,11 @@ export class Pod {
       } catch {
         /* html / raw */
       }
-      const waking = res.status === 504 || (parsed && typeof parsed === 'object' && parsed.waking === true);
-      if (waking && attempt < 20) {
+      // The activator MARKS its own response (`{waking:true}`) whatever status it uses (503/504),
+      // so key on that marker — never on a bare 503, which for an app route is a real verdict.
+      const waking =
+        res.status === 504 || (parsed && typeof parsed === 'object' && parsed.waking === true);
+      if (waking && attempt < 100) {
         await new Promise((r) => setTimeout(r, 3000));
         continue;
       }
@@ -65,6 +68,11 @@ export class Pod {
     // it; that is a transient, not the endpoint's verdict. Retry idempotent-ish calls until
     // the pod is warm (bounded), so a read that lands on a cold pod self-heals instead of
     // throwing a spurious failure mid-scenario.
+    //
+    // The budget is minutes, not seconds. A pod that is ROLLING (a new image) or whose single
+    // Node thread is stalled inside a long authoring turn keeps answering `waking` well past a
+    // minute — the old 20×3s ≈ 60s gave up and threw `POST /api/sessions → 503 {waking:true}`,
+    // killing a multi-hour run over a transient the harness was written to absorb.
     for (let attempt = 0; ; attempt++) {
       const res = await fetch(`${this.base}${path}`, {
         method,
@@ -81,9 +89,11 @@ export class Pod {
       } catch {
         /* raw text (e.g. an ASCII state tree) */
       }
+      // The activator MARKS its own response (`{waking:true}`) whatever status it uses (503/504),
+      // so key on that marker — never on a bare 503, which for an app route is a real verdict.
       const waking =
         res.status === 504 || (parsed && typeof parsed === 'object' && parsed.waking === true);
-      if (waking && attempt < 20) {
+      if (waking && attempt < 100) {
         await new Promise((r) => setTimeout(r, 3000));
         continue;
       }
@@ -185,7 +195,7 @@ export class Pod {
         /* raw */
       }
       const waking = res.status === 504 || (parsed && typeof parsed === 'object' && parsed.waking === true);
-      if (!waking || attempt >= 20) return { status: res.status, body: parsed };
+      if (!waking || attempt >= 100) return { status: res.status, body: parsed };
       await new Promise((r) => setTimeout(r, 3000));
     }
   }
