@@ -267,12 +267,27 @@ const keepalive = setInterval(() => {
 }, 30_000);
 keepalive.unref?.();
 
-// resilient send — survives a pod roll/restart (this IS the Act XII auto-resume edge)
+// resilient send — survives a pod roll/restart (this IS the Act XII auto-resume edge).
+//
+// It ALSO re-sends an INTERRUPTED turn. A turn whose session was dropped mid-flight (the shared
+// local server is restarted by whichever lane just rebuilt) comes back with `interrupted: true`:
+// work was seen, but the turn never finished. Marching on from there is how a "yes" gets sent to a
+// session that never made the offer — the whole Act then fails on a build that never happened.
+// Treat it as "did not happen" and say it again, exactly as a real user would.
 const _send = thing.send.bind(thing);
 const _sendAtt = thing.sendWithAttachments.bind(thing);
 const resilient = (fn) => async (...args) => {
   for (let attempt = 0; ; attempt++) {
-    try { return await fn(...args); }
+    try {
+      const turn = await fn(...args);
+      if (turn?.interrupted && attempt < 3) {
+        console.log('[run] turn was INTERRUPTED (session dropped mid-flight) — re-sending it');
+        for (let i = 0; i < 60; i++) { if (await pod.listProjects().then(() => true).catch(() => false)) break; await sleep(4_000); }
+        await sleep(3_000);
+        continue;
+      }
+      return turn;
+    }
     catch (e) {
       const msg = String(e?.body?.error ?? e?.message ?? '');
       const lost = e?.status === 404 || /unknown session|404/.test(msg);

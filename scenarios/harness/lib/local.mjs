@@ -111,7 +111,11 @@ export async function ensureLocalServer() {
     // `--adopt-system-spaces`: this pod-root is a throwaway we own, so always take the freshly
     // built system-space tree (dist/system-spaces) on restart — that's how an agent's system-space
     // prompt improvements land after `pnpm build && local-server.mjs restart`.
-    const child = spawn(process.execPath, [BIN, 'serve', '--port', String(LOCAL_PORT), '--adopt-system-spaces'], {
+    // `--max-sessions`: the default (8) is sized for ONE user's chat tabs. This server is shared by
+    // every scenario lane at once, and a single authoring turn adds a delegate sub-session per
+    // specialist it fans out to — so a handful of concurrent lanes blow past 8 easily, and the
+    // capacity gate then sheds sessions the lanes are still using.
+    const child = spawn(process.execPath, [BIN, 'serve', '--port', String(LOCAL_PORT), '--adopt-system-spaces', '--max-sessions', '40'], {
       cwd: SDK_ORG, // read sdk/org/.env → Azure keys credential the agents (budget-free direct Azure)
       env: { ...process.env, LMTHING_ROOT: join(POD_ROOT, '.lmthing') },
       detached: true, // own process group → survives the agent, killable as a tree

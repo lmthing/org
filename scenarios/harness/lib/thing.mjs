@@ -198,7 +198,20 @@ export class ThingSession {
     } catch {
       await this.start();
     }
+    // The re-established session replays its whole persisted trace from seq 0. We ALREADY hold those
+    // events, so appending the replay duplicates every past turn — and, worse, `turn(startSeq)` then
+    // slices a window full of REPLAYED history and asserts on it as if it were the turn we just sent
+    // (scenario 10 read a re-analysis of turn 1's images as the work of its "yes" turn). Drain the
+    // replay to re-sync `lastSeq`, then discard it: it is history we already have.
+    const held = this.events.length;
     this.lastSeq = 0;
+    for (let i = 0; i < 30; i++) {
+      const before = this.lastSeq;
+      await this.pullEvents();
+      if (this.lastSeq === before) break;
+      await sleep(200);
+    }
+    this.events.length = held;
     this.sessionGone = false;
   }
 
@@ -314,9 +327,15 @@ export class ThingSession {
         await this.pullEvents();
         throw new Error(`session entered error state: ${JSON.stringify(me)}`);
       }
-      // Session no longer listed but we saw work → treat as completed (same eviction case).
+      // The session is no longer LISTED, though we saw work. Same hazard as `sessionGone` above and
+      // it must be flagged the same way: "not resident any more" does NOT mean "the turn finished".
+      // A shared local server that a sibling lane restarts (or any drop of the in-memory session)
+      // vanishes the entry mid-flight, and a turn that had only just dispatched its delegates gets
+      // reported as a COMPLETED turn with no results. Scenario 10 then sent the user's "yes" into a
+      // session that had never made the offer it was agreeing to, and every downstream Act failed on
+      // a build that never happened. Flag it — `turn.interrupted` is the caller's cue to re-send.
       if (sawWork && !me && this.events.length > startSeq) {
-        return this.turn(startSeq, Date.now() - t0);
+        return { ...this.turn(startSeq, Date.now() - t0), interrupted: true };
       }
 
       if (sawWork && idle && Date.now() - lastChange >= quietMs) {
