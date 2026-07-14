@@ -352,9 +352,14 @@ export class ThingSession {
       delegates: evs
         .filter((e) => e.type === 'yield' && e.kind === 'delegate')
         .map((e) => delegateRef(e.args)),
+      // `attempt` is load-bearing: the turn loop retries a typecheck/eval error up to `maxRetries`
+      // (default 3); an error logged at attempt < 3 is RECOVERED (the loop kept going and reset the
+      // counter on the next success), one at attempt >= 3 made the loop give up (`return 'error'`).
+      // A scenario that must distinguish "recovered = metric" from "unrecovered = hard fail" (per the
+      // campaign's error policy) needs this — dropping it made every recovered slip look fatal.
       errors: evs
         .filter((e) => e.type === 'eval_error' || e.type === 'typecheck_error')
-        .map((e) => ({ type: e.type, message: e.message, statement: e.statement })),
+        .map((e) => ({ type: e.type, message: e.message, statement: e.statement, attempt: e.attempt })),
       tokens: evs.reduce(
         (acc, e) =>
           e.type === 'llm_response'
@@ -379,6 +384,14 @@ export class ThingSession {
   /** All consent cards raised this session. */
   consentCards = () => this.asks.filter((a) => a.descriptor?.type === 'ConsentCard');
 
+  /** The default `maxRetries` in the turn loop (core/src/eval/turn-loop.ts). An error logged at an
+   *  attempt >= this made the loop give up — it was NOT recovered. */
+  static MAX_RETRIES = 3;
+  /** Errors the turn loop could NOT recover from (attempt reached maxRetries). Recovered slips
+   *  (attempt < maxRetries) are a metric, not a failure — see the campaign error policy. */
+  unrecoveredErrors = () =>
+    this.turn(0, 0).errors.filter((e) => (e.attempt ?? 1) >= ThingSession.MAX_RETRIES);
+
   /** Full session totals — for the performance table in the scenario report. */
   stats() {
     const t = this.turn(0, 0);
@@ -387,6 +400,7 @@ export class ThingSession {
       llmCalls: t.llmCalls,
       tokens: t.tokens,
       errors: t.errors.length,
+      unrecoveredErrors: this.unrecoveredErrors().length,
       delegates: t.delegates,
       yieldKinds: [...new Set(t.yields.map((y) => y.kind))],
     };

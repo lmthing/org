@@ -152,6 +152,11 @@ async function setEnvLive(pod, vars) {
   return content;
 }
 
+/** Per the campaign error policy: an error the turn loop RECOVERED from (attempt < maxRetries) is a
+ *  metric; only an UNRECOVERED one (attempt reached maxRetries) fails the run. */
+const MAX_RETRIES = 3;
+const unrec = (...turns) => turns.flatMap((t) => (t?.errors ?? []).filter((e) => (e.attempt ?? 1) >= MAX_RETRIES));
+
 const yieldsOf = (evs, kind) => evs.filter((e) => e.type === 'yield' && e.kind === kind);
 const displaysOf = (evs) =>
   evs.filter((e) => e.type === 'display').map((e) => {
@@ -327,7 +332,8 @@ if (ACTS.includes(1)) {
   const blob = (JSON.stringify(rowsAll) + ' ' + (await readAllFiles(pod, new RegExp(`^${PROJECT}/spaces/`)))).toLowerCase();
   report.check('site-photo.jpg + bathroom-photo.jpg vision facts landed (gallery/notes)', /kitchen|lath|wall|strip|bathroom|gut|brick|tile|shower/.test(blob), 'vision descriptions grounded');
 
-  report.check('no eval/typecheck errors on THING turns in Act I', t1.errors.length === 0 && t2.errors.length === 0, JSON.stringify([...t1.errors, ...t2.errors]).slice(0, 240));
+  report.check('no UNRECOVERED eval/typecheck errors on THING turns in Act I', unrec(t1, t2).length === 0, JSON.stringify(unrec(t1, t2)).slice(0, 240));
+  report.metric('Act I — recovered eval/typecheck slips', (t1.errors.length + t2.errors.length) - unrec(t1, t2).length, '');
   cp.acts.I = { passed: report.stepPassed };
   saveCheckpoint(cp);
 }
@@ -370,7 +376,7 @@ if (ACTS.includes(3)) {
   report.check('a permits-ish space knowledge line captured the research', know.length >= 1, know.slice(0, 3).join(', ') || 'none');
   const t2 = acc(await timed('Act III — follow-up answered from knowledge', () => thing.send('remind me — what did you find about whether the wetroom needs paperwork?', { timeoutMs: TURN })));
   report.check('follow-up answered with a real finding (not a punt)', /permit|paperwork|wetroom|planning|regulation|approval|notify|not need|no permit|amendment/i.test(displaysOf(t2.events) + t2.lastText), (t2.lastText || '').slice(0, 160));
-  report.check('no eval/typecheck errors in Act III', t.errors.length === 0 && t2.errors.length === 0, JSON.stringify([...t.errors, ...t2.errors]).slice(0, 160));
+  report.check('no UNRECOVERED eval/typecheck errors in Act III', unrec(t, t2).length === 0, JSON.stringify(unrec(t, t2)).slice(0, 160));
   cp.acts.III = { passed: report.stepPassed };
   saveCheckpoint(cp);
 }
@@ -488,7 +494,7 @@ if (ACTS.includes(6)) {
   const bigDump = displaysOf(t.events).length > 12_000 || (displaysOf(t.events).match(/\n/g)?.length ?? 0) > 120;
   report.check('no display dumped anywhere near the full ~219-row table', !bigDump, `display chars=${displaysOf(t.events).length}, longest=${maxDisplay}`);
   report.check('the reply is a short labour/materials summary', /labou?r|material/i.test(t.lastText || '') && (t.lastText || '').length < 4_000, (t.lastText || '').slice(0, 160));
-  report.check('no eval/typecheck errors in Act VI', t.errors.length === 0, JSON.stringify(t.errors).slice(0, 160));
+  report.check('no UNRECOVERED eval/typecheck errors in Act VI', unrec(t).length === 0, JSON.stringify(unrec(t)).slice(0, 160));
   cp.acts.VI = { passed: report.stepPassed };
   saveCheckpoint(cp);
 }
@@ -597,7 +603,7 @@ if (ACTS.includes(10)) {
   report.check('≥1 NEW page on the already-built app', pagesAfter > pagesBefore, `${pagesBefore} → ${pagesAfter}`);
   const rebuilt = await pod.appBuild(PROJECT).catch(() => ({ built: false }));
   report.check('the app still compiles after the additions', rebuilt?.built === true, `built=${rebuilt?.built}`);
-  report.check('no eval/typecheck errors in Act X', t1.errors.length === 0 && t2.errors.length === 0, JSON.stringify([...t1.errors, ...t2.errors]).slice(0, 160));
+  report.check('no UNRECOVERED eval/typecheck errors in Act X', unrec(t1, t2).length === 0, JSON.stringify(unrec(t1, t2)).slice(0, 160));
   cp.acts.X = { passed: report.stepPassed };
   saveCheckpoint(cp);
 }
@@ -793,7 +799,8 @@ if (ACTS.includes(15)) {
 // ═══ verdict ════════════════════════════════════════════════════════════════════════
 const stats = thing.stats();
 report.step('Whole-session invariants (Edges)', 'zero UNRECOVERED eval/typecheck errors on THING\'s own turns (hard fail); idempotent re-ask doesn\'t clobber spaces; malformed inbound → 0 events');
-report.check('zero eval/typecheck errors across the THING session (hard fail)', stats.errors === 0, `${stats.errors} errors: ${JSON.stringify(stats).slice(0, 200)}`);
+report.check('zero UNRECOVERED eval/typecheck errors across the THING session (hard fail)', (stats.unrecoveredErrors ?? 0) === 0, `${stats.unrecoveredErrors} unrecovered of ${stats.errors} total`);
+report.metric('recovered eval/typecheck slips (session)', (stats.errors ?? 0) - (stats.unrecoveredErrors ?? 0), '');
 report.metric('wall clock', ((now() - t0) / 60_000).toFixed(1), ' min');
 report.metric('total tokens (in/out)', `${metrics.tokens.in} / ${metrics.tokens.out}`);
 
