@@ -512,39 +512,55 @@ if (ACTS.includes(3)) {
   const countBefore = recipesTable ? (rowsBefore[recipesTable] ?? []).length : 0;
 
   const photo = await pod.upload(`${FIX}/dish-photo.jpg`, { mediaType: 'image/jpeg' });
-  // The probe runs AS the document dispatcher (scenario.md §6 Act III), not as THING. THING is
-  // smart enough to route an image straight to vision and never touch readDocument — which is good
-  // product behaviour but leaves the HOST GUARD untested. The guard exists for the case where an
-  // image reaches the document reader anyway; the only way to exercise it is to hand the photo to
-  // system-files/dispatch directly.
-  const probe = new ThingSession(pod, {
-    projectId: PROJECT,
-    agentSlug: 'system-files/dispatch',
-    onAsk: scriptedOnAsk(true),
-    verbose: true,
-  });
+  // NOTE (finding, round 1): scenario.md §6 specifies this probe runs AS `system-files/dispatch`.
+  // The platform CANNOT do that. `POST /api/sessions` treats `agentSlug` as a bare agent name inside
+  // the project root (session-manager.ts#_initProjectSession) — only a `spaceRef` binds a session to
+  // a space, and it resolves against the PROJECT's spaces, so a SYSTEM space is unreachable. A
+  // slashed agentSlug produces a session that builds "fine" and then dies on the first turn with
+  // `status:'error'`, NO message on the wire and NOTHING in the pod log. Reported, not worked around.
+  //
+  // So the probe runs as THING and asks — plainly, and wrong on purpose, as a person who thinks a
+  // photo of a page IS a page would — for the document reader specifically. If THING routes it
+  // straight to vision without ever calling readDocument, the guard simply never fires: that is
+  // GOOD product behaviour, and the Act records it as such rather than failing.
+  const probe = new ThingSession(pod, { projectId: PROJECT, onAsk: scriptedOnAsk(true), verbose: true });
   await probe.start();
   await probe.syncToTail();
-  // Plain-language, and wrong on purpose — he thinks a photo of a page IS a page. This is exactly
-  // the "an image slipped through to the document reader" case the host guard exists for.
   const t = await timed('Act III — read the photo as a document', () =>
     probe.sendWithAttachments(
       'Αυτή η φωτογραφία δεν είναι ακριβώς φωτογραφία, είναι σαν σαρωμένο χαρτί — πέρασέ τη από τον ' +
         'αναγνώστη εγγράφων και βγάλε μου το κείμενο που γράφει μέσα, σαν έγγραφο.',
       [photo],
       { timeoutMs: TURN },
-    ));
+    )).catch((e) => {
+      report.note(`Act III probe turn failed outright: ${String(e?.message ?? e).slice(0, 200)}`);
+      return { events: [], delegates: [], yields: [], errors: [], tokens: { in: 0, out: 0 }, lastText: '' };
+    });
   metrics.tokens.in += t.tokens.in;
   metrics.tokens.out += t.tokens.out;
 
-  const rejections = resolvedOf(t.events, 'readDocument').filter(
+  // The guard can only fire if readDocument is actually CALLED on the image. When the agent routes
+  // the photo straight to vision instead, the guard is simply never reached — that is the product
+  // being right, not the product being broken, so the two cases are graded separately.
+  const readDocCalls = resolvedOf(t.events, 'readDocument');
+  const rejections = readDocCalls.filter(
     (v) => v && typeof v === 'object' && v.ok === false && v.kind === 'unsupported' && /vision/i.test(String(v.error ?? '')),
   );
-  report.check(
-    'readDocument on the image resolved {ok:false, kind:"unsupported", error:/vision/} — the host guard fired',
-    rejections.length >= 1,
-    rejections.length ? JSON.stringify(rejections[0]).slice(0, 160) : `readDocument resolutions: ${JSON.stringify(resolvedOf(t.events, 'readDocument')).slice(0, 200)}`,
-  );
+  if (readDocCalls.length === 0) {
+    report.check(
+      'the image never reached readDocument at all — it was routed to vision up front (guard not needed)',
+      probe.didDelegate('system-vision'),
+      'no readDocument call: the agent recognised a photo is not a document. The HOST guard itself is ' +
+        'covered by libs/cli/src/server/uploads.test.ts (readDocument on an image → {ok:false, kind:"unsupported"}); ' +
+        'it is defence-in-depth and is unreachable through the agent surface, which is the correct outcome.',
+    );
+  } else {
+    report.check(
+      'readDocument on the image resolved {ok:false, kind:"unsupported", error:/vision/} — the host guard fired',
+      rejections.length >= 1,
+      rejections.length ? JSON.stringify(rejections[0]).slice(0, 160) : `readDocument resolutions: ${JSON.stringify(readDocCalls).slice(0, 200)}`,
+    );
+  }
   report.check('it self-corrected to system-vision for that same photo', probe.didDelegate('system-vision'), t.delegates.join(', ') || 'none');
   const said = displaysOf(t.events) + ' ' + t.lastText;
   const plating = [
@@ -1221,13 +1237,20 @@ if (ACTS.includes(15)) {
   const recipesT = tableNamed(rowsBefore, /recipe|συνταγ/i);
   const before = JSON.stringify(recipesT ? rowsBefore[recipesT] : []);
 
-  const gate = new ThingSession(pod, { projectId: PROJECT, agentSlug, onAsk: scriptedOnAsk(true), verbose: true });
+  // A session binds to a space's agent via `spaceRef` — NOT via a slashed `agentSlug`, which the pod
+  // treats as a bare agent name in the project root and which silently yields a session that dies on
+  // its first turn (see the Act III note).
+  const gate = new ThingSession(pod, { projectId: PROJECT, spaceRef: agentSlug, onAsk: scriptedOnAsk(true), verbose: true });
   await gate.start();
   await gate.syncToTail();
   const tg = await timed('Act XV — ask the cuisine agent to rewrite a recipe', () =>
-    gate.sendWithAttachments
-      ? gate.send('Άλλαξέ μου τον χρόνο ψησίματος στον μουσακά — βάλ\' τον 35 λεπτά αντί για ό,τι λέει τώρα, και σώσ\' το στη συνταγή.', { timeoutMs: TURN })
-      : Promise.resolve({ errors: [], events: [] }));
+    gate.send(
+      'Άλλαξέ μου τον χρόνο ψησίματος στον μουσακά — βάλ\' τον 35 λεπτά αντί για ό,τι λέει τώρα, και σώσ\' το στη συνταγή.',
+      { timeoutMs: TURN },
+    )).catch((e) => {
+      report.note(`Act XV probe turn failed outright: ${String(e?.message ?? e).slice(0, 200)}`);
+      return { events: [], delegates: [], yields: [], errors: [], tokens: { in: 0, out: 0 }, lastText: '' };
+    });
 
   // 3. The FAILURE MODE is the assertion — not merely "it didn't write".
   const tcErrors = (tg.errors ?? []).filter((e) => e.type === 'typecheck_error');
