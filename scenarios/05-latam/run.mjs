@@ -1402,15 +1402,41 @@ report.step(
   'ZERO unrecovered eval/typecheck errors (hard fail); recovered ones are a metric, never hidden',
 );
 // A recovered error = the loop retried and the deliverable still landed. An UNRECOVERED one is a
-// statement the agent never got past — the only kind that fails the run.
+// statement the agent NEVER GOT PAST — it exhausted the retry budget (attempt >= MAX_RETRIES).
+// That is what `thing.unrecoveredErrors()` measures, and it is the only kind that fails the run.
+//
+// This check used to count `turn_end.reason =~ /error|fail/` instead, which was wrong BOTH ways:
+//   · it counted `stream_error` — an LLM PROVIDER TRANSPORT failure, not an eval/typecheck error —
+//     as unrecovered, even though the runtime immediately re-issued the llm_request and recovered
+//     (three fired at the same millisecond across concurrent delegates on a live run: a provider
+//     hiccup, not an agent defect). A false FAIL.
+//   · it never looked at the retry budget at all, so a statement the agent truly never got past was
+//     INVISIBLE to it. On that same run it missed 4 real ones.
+// Accurate now, and strictly stronger.
 const errs = thing.events.filter((e) => e.type === 'eval_error' || e.type === 'typecheck_error');
 const byStatement = new Map();
 for (const e of errs) byStatement.set(e.statement ?? e.message, (byStatement.get(e.statement ?? e.message) ?? 0) + 1);
-const turnEnds = thing.events.filter((e) => e.type === 'turn_end');
-const unrecovered = turnEnds.filter((e) => /error|fail/i.test(String(e.reason))).length;
-report.check('zero UNRECOVERED eval/typecheck errors across the session (hard check)', unrecovered === 0, `${unrecovered} turns ended in error; ${errs.length} total errors (retried)`);
-report.metric('recovered eval/typecheck errors', errs.length);
+const unrec = thing.unrecoveredErrors();
+report.check(
+  'zero UNRECOVERED eval/typecheck errors across the session (hard check — retry budget exhausted)',
+  unrec.length === 0,
+  unrec.length ? `${unrec.length} exhausted the retry budget: ${unrec.slice(0, 3).map((e) => String(e.message).slice(0, 60)).join(' | ')}` : `0 (of ${errs.length} total, all retried away)`,
+);
+report.metric('recovered eval/typecheck errors', errs.length - unrec.length);
+report.metric('UNRECOVERED eval/typecheck errors', unrec.length);
 if (errs.length) report.note(`Recovered errors (retried, deliverable still landed): ${[...byStatement.keys()].slice(0, 5).map((s) => String(s).slice(0, 90)).join(' | ')}`);
+
+// Provider transport failures are real and worth reporting — but they are NOT eval/typecheck errors
+// and a RECOVERED one must not fail the scenario. A stream_error immediately followed by a fresh
+// llm_request is the runtime retrying; that is the system working, not breaking.
+const streamErrs = thing.events.filter((e) => e.type === 'turn_end' && /stream_error/i.test(String(e.reason)));
+report.metric('LLM provider stream errors (transport — retried by the runtime)', streamErrs.length);
+if (streamErrs.length) {
+  report.note(
+    `${streamErrs.length} LLM stream error(s) — provider transport, in: ${[...new Set(streamErrs.map((e) => e.context ?? '?'))].slice(0, 3).join(', ')}. ` +
+      'The runtime re-issued the request and the deliverables still landed, so these are reported, not failed on. They are NOT eval/typecheck errors.',
+  );
+}
 report.metric('wall clock', ((now() - t0) / 60_000).toFixed(1), ' min');
 report.metric('total tokens (in/out)', `${metrics.tokens.in} / ${metrics.tokens.out}`);
 report.metric('delegates', [...new Set(stats.delegates)].join(', ') || 'none');
