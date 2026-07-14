@@ -25,7 +25,14 @@ const AMBIENT_FILE = '__ambient__.d.ts';
 const SESSION_FILE = '__session__.tsx'; // .tsx so JSX syntax is allowed
 
 export function runTsc(opts: TscOpts): TscResult {
-  const { ambientDts, sessionContext, statement } = opts;
+  const { ambientDts, statement } = opts;
+
+  // A statement is free to REBIND a name the context already bound: at runtime it is its own
+  // module, so its `const x = …` shadows the carried-over `globalThis.x`. Replaying the context
+  // as one concatenated scope would instead call that a redeclaration — and then refuse the
+  // reassignment too, leaving the model no legal move and burning every retry on a statement the
+  // runtime would have accepted. Shadow the prior declaration, exactly as the runtime does.
+  const { context: sessionContext, shadowedDts } = shadowRedeclared(opts.sessionContext, statement);
 
   // MODULE_HEADER makes the file a module so top-level await is allowed
   const MODULE_HEADER = 'export {};\n';
@@ -40,7 +47,7 @@ export function runTsc(opts: TscOpts): TscResult {
   const statementStartLine = headerLines + contextLineCount;
 
   const fileMap = new Map<string, string>([
-    [AMBIENT_FILE, ambientDts],
+    [AMBIENT_FILE, shadowedDts ? `${ambientDts}\n${shadowedDts}` : ambientDts],
     [SESSION_FILE, combined],
   ]);
 
@@ -94,6 +101,64 @@ export function runTsc(opts: TscOpts): TscResult {
   }
 
   return { ok: diagnostics.length === 0, diagnostics };
+}
+
+/** Every name a top-level declaration binds (`const x`, `const {a, b: c}`, `function f`, …). */
+function declaredNames(node: ts.Node): string[] {
+  const names: string[] = [];
+  const walkBinding = (name: ts.BindingName): void => {
+    if (ts.isIdentifier(name)) names.push(name.text);
+    else for (const el of name.elements) if (ts.isBindingElement(el)) walkBinding(el.name);
+  };
+  if (ts.isVariableStatement(node)) {
+    for (const d of node.declarationList.declarations) walkBinding(d.name);
+  } else if (
+    (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) &&
+    node.name
+  ) {
+    names.push(node.name.text);
+  }
+  return names;
+}
+
+/**
+ * Blank out any top-level declaration in `context` whose name `statement` re-declares, so the new
+ * declaration stands alone — the same shadowing the runtime gives it for free by evaluating each
+ * statement as its own module.
+ *
+ * Blanking preserves the newline count (diagnostic line numbers are computed off the context's line
+ * count, so the ranges must not move). A blanked declaration may also have bound names the new
+ * statement does NOT redeclare (`const {a, b} = …` where only `a` comes back); those would go from
+ * typed to unresolvable, so they are re-declared ambiently as `any` — resolvable, like any other
+ * carried-over binding whose precise type we cannot replay.
+ */
+function shadowRedeclared(context: string, statement: string): { context: string; shadowedDts: string } {
+  if (!context) return { context, shadowedDts: '' };
+  const stmtFile = ts.createSourceFile('__stmt__.tsx', statement, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
+  const rebound = new Set(stmtFile.statements.flatMap((s) => declaredNames(s)));
+  if (rebound.size === 0) return { context, shadowedDts: '' };
+
+  const ctxFile = ts.createSourceFile('__ctx__.tsx', context, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
+  const cuts: Array<{ start: number; end: number }> = [];
+  const orphaned = new Set<string>();
+  for (const s of ctxFile.statements) {
+    const names = declaredNames(s);
+    if (!names.some((n) => rebound.has(n))) continue;
+    cuts.push({ start: s.getStart(ctxFile), end: s.getEnd() });
+    for (const n of names) if (!rebound.has(n)) orphaned.add(n);
+  }
+  if (cuts.length === 0) return { context, shadowedDts: '' };
+
+  let out = '';
+  let cursor = 0;
+  for (const { start, end } of cuts) {
+    const cut = context.slice(start, end);
+    out += context.slice(cursor, start) + '\n'.repeat((cut.match(/\n/g) ?? []).length);
+    cursor = end;
+  }
+  out += context.slice(cursor);
+  const shadowedDts = [...orphaned].map((n) => `declare const ${n}: any;`).join('\n');
+  return { context: out, shadowedDts };
 }
 
 function createInMemoryHost(
