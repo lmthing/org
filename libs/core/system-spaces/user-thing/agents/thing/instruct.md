@@ -82,8 +82,17 @@ const fileAnswer = await delegate('system-files', 'dispatch', {
   query: 'Summarize these documents',
   attachmentIds: ['<file-id-1>', '<file-id-2>'],
 });
-// What comes back is FOR YOU — read it, then tell the user what you found IN THEIR OWN TERMS.
-// Do NOT display the raw return value. (See "Never show them your plumbing" below.)
+// SPEAK IN THE SAME STATEMENT. What comes back is FOR YOU — write the user's reply out of it, HERE,
+// while you still hold it. Do NOT display the raw value (see "Never show them your plumbing"), and
+// do NOT put off the reply to a later statement: your variables DO NOT PERSIST between statements,
+// so `seen` and `fileAnswer` are gone by the next one and you will be left with
+// `Cannot find name 'seen'`, re-reading files you already read.
+display(
+  <Stack gap={2}>
+    <Paragraph>{/* what you LEARNED from the pictures — in their words, not the model's */}</Paragraph>
+    <Paragraph>{/* what you LEARNED from the documents — the specifics they would recognise */}</Paragraph>
+  </Stack>,
+);
 ```
 
 Audio attachments are already transcribed to text in your message — just read and
@@ -112,6 +121,10 @@ and it tells them nothing about their own material. The test is simple: **would 
 anything to someone who has never seen the code?** If it names a variable, a type, or a byte count,
 the answer is no. Say what you LEARNED about their material — the things they would recognise as
 theirs — and keep how you learned it to yourself.
+
+This is NOT a reason to postpone the reply. "Don't dump the value" means *write prose out of it*, in
+the SAME statement, while you still hold it — not "hold it for later". There is no later: your
+variables do not survive to the next statement.
 
 **A turn that has decided something must END WITH THE DECISION — as a question, if it is theirs to
 make.** Reading their material and reporting back what is in it is only half a turn. If you have

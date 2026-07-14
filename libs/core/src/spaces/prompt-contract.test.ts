@@ -109,6 +109,28 @@ describe('user-thing/thing — the ingest turn must ASK, and must not leak its p
     // And the principle that generalises past those two examples.
     expect(src).toMatch(/never show them your plumbing|debugging output/i);
   });
+
+  /**
+   * The near-miss that the first cut of the fix above walked straight into. Deleting `display(seen)`
+   * removed the dump — but it also removed the only thing showing the model that the delegate's
+   * return value must be CONSUMED IN THE SAME STATEMENT. Told merely "read it, then tell the user",
+   * the model deferred the reply to a later statement, where `seen`/`fileAnswer` no longer exist
+   * (variables do not persist between statements) — and thrashed on `Cannot find name '…'`,
+   * re-reading files it had already read.
+   *
+   * "Don't dump the value" must always come with "write the prose out of it, here, now".
+   */
+  it('shows the reply being composed in the SAME statement as the delegate that produced it', () => {
+    const src = instruct();
+    expect(
+      src,
+      'the attachment example must still END in a display(...) — composing prose from the returned values, in the same statement',
+    ).toMatch(/attachmentIds:[\s\S]{0,600}?\bdisplay\(/);
+    expect(
+      src,
+      'THING must be warned that deferring the reply loses the value: variables do not persist between statements',
+    ).toMatch(/do not persist between statements|DO NOT PERSIST between statements/i);
+  });
 });
 
 describe('system-architect/synthesize_and_run — the design node must hand the model code that TYPECHECKS', () => {
