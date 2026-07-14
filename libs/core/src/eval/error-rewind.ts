@@ -1,6 +1,30 @@
 import { extractScopeNamesFromContext } from '../context/variables.js';
 
 /**
+ * Every statement in a session shares ONE persistent scope, so a name bound many turns
+ * ago is still bound now. Refining an earlier statement (a wider `slice`, one more field)
+ * by re-sending it with the same `const` is the natural move and it fails — TS2451 /
+ * TS2300. The generic "already declared" list in the error block grows to hundreds of
+ * names over a long session, so the model cannot scan it and re-sends the same
+ * declaration until the retry budget is gone. Naming the ONE colliding binding, and the
+ * two ways out of it, recovers that in a single attempt. Returns '' when nothing matches.
+ */
+export function redeclareHint(message: string): string {
+  const m = message.match(
+    /Cannot redeclare block-scoped variable '([^']+)'|Duplicate identifier '([^']+)'/,
+  );
+  if (!m) return '';
+  const name = m[1] ?? m[2]!;
+  return (
+    `HINT: \`${name}\` is ALREADY bound — every statement in this session shares one persistent scope, ` +
+    `so a name you bound in an EARLIER statement (even many turns ago) is still bound. Re-sending the ` +
+    `same \`const ${name} = …\` will fail identically. Either bind a NEW name (\`${name}2\`, ` +
+    `\`${name}Full\`, …) for the new value, or drop the keyword and reassign (\`${name} = …\`) if you ` +
+    `really mean to overwrite it.`
+  );
+}
+
+/**
  * Map a failure message that reaches for a sandbox-unavailable API to a concrete,
  * actionable hint. The model repeatedly tries Node/Bun/Deno subprocess APIs that do
  * not exist in the QuickJS VM and burns its whole retry budget — these hints redirect
@@ -55,7 +79,7 @@ export function buildErrorBlock(
     `// ${message}`,
   ];
 
-  const hint = sandboxApiHint(message);
+  const hint = redeclareHint(message) || sandboxApiHint(message);
   if (hint) {
     lines.push('');
     lines.push(`// ${hint}`);

@@ -92,7 +92,7 @@ async function lsFiles(pod, pathRx) {
  * `2016-02-04` against `snapshot.json` + `uploads/<id>`. Both were worthless. Excluding these makes
  * two green ticks go red — which is the point: they were lies.
  */
-const NOT_REAL_STATE = /(^|\/)(sessions|uploads)\/|\/(trace|snapshot)\.json$|^\.lmthing\//;
+const NOT_REAL_STATE = /(^|\/)(sessions|uploads)\/|\/(trace|snapshot)\.json$|^\.lmthing\/|sessions-ledger\.jsonl$/;
 
 /** Grep the CONTENT of the files whose path matches `pathRx`. The tree carries paths only, so a
  *  token check against the tree JSON proves nothing — the bytes must actually be read. */
@@ -1200,7 +1200,15 @@ if (ACTS.includes(14)) {
   // The only proof that survives a guessing model: the pixels-only token, in real state.
   await assertTokenInState(report, pod, PROJECT, { fixture: 'camila-whatsapp-uyuni.png', token: 'Red Planet Expedition' });
 
-  report.check('the turn ended clean (no unrecovered error)', thing.unrecoveredErrors().length === 0, `${t.errors.length} recovered error(s) this turn`);
+  // Scoped to THIS turn (see Act XVI): the session-wide invariant is asserted once, at the end.
+  const unrecoveredHere = (t.errors ?? []).filter((e) => (e.attempt ?? 1) >= ThingSession.MAX_RETRIES);
+  report.check(
+    'the turn ended clean (no unrecovered error)',
+    unrecoveredHere.length === 0,
+    unrecoveredHere.length === 0
+      ? `0 unrecovered (${t.errors.length} recovered)`
+      : unrecoveredHere.map((e) => e.message).join(' | '),
+  );
   cp.acts.XIV = { passed: report.stepPassed };
   saveCheckpoint(cp);
 }
@@ -1349,47 +1357,70 @@ if (ACTS.includes(16)) {
   );
   report.check('THING authored an event/hook for it (a write yield, not just a promise)', t.yields.some((y) => /writeProject(Hook|Event)|emitEvent/i.test(y.kind)) || t.delegates.some((d) => /appbuilder|automator/i.test(d)), `${t.yields.map((y) => y.kind).join(', ')} | ${t.delegates.join(', ')}`);
 
-  const itinTable = cp.facts.itinTable ?? tableNamed(await allRows(pod, PROJECT), /itinerar|leg|route|trip|destination|stop/i);
-
   // The hook must actually be in the self-trigger shape — otherwise the loop guard is never under
-  // test and a green tick here would be meaningless.
+  // test and a green tick below would be meaningless. Do NOT assume WHICH table: the agent picks it
+  // (it may well hang the auto-fill off the table that actually carries the costs, not the one the
+  // runner guessed). Read the watched table straight out of the hook's own event binding, then check
+  // the handler writes THAT SAME table. Table-agnostic, and a strictly stronger check.
   const hookFiles = await lsFiles(pod, new RegExp(`^${PROJECT}/(hooks|events)/`));
   let selfTrigger = null;
+  let watched = null;
   for (const f of hookFiles) {
     const raw = await pod.readFile(f).catch(() => null);
     const body = typeof raw === 'string' ? raw : (raw?.content ?? '');
-    if (!body || !itinTable) continue;
-    const listens = new RegExp(`db\\.${itinTable}\\.|['"\`]${itinTable}['"\`]`).test(body) && /insert|create|update|write|\.on|event|trigger/i.test(body);
-    const writes = new RegExp(`db\\.(update|insert|write)|writeProject|['"\`]${itinTable}['"\`]`).test(body);
-    if (listens && writes) selfTrigger = f;
+    if (!body) continue;
+    // `on: { event: 'project/db.<table>.<insert|update|delete>' }`
+    const on = /db\.([A-Za-z0-9_]+)\.(insert|update|delete|write)/.exec(body);
+    if (!on) continue;
+    const table = on[1];
+    const writesSame = new RegExp(`db\\.(update|insert|upsert)\\(\\s*['"\`]${table}['"\`]`).test(body);
+    if (writesSame) {
+      selfTrigger = f;
+      watched = table;
+      break;
+    }
   }
   report.check(
-    'the hook is in the SELF-TRIGGER shape (it listens to the itinerary table AND writes it) — the loop guard is genuinely under test',
+    'the hook is in the SELF-TRIGGER shape (it LISTENS to a table write AND WRITES that same table) — the loop guard is genuinely under test',
     !!selfTrigger,
-    selfTrigger ?? `no self-writing hook among: ${hookFiles.join(', ') || 'none'}`,
+    selfTrigger ? `${selfTrigger} — on db.${watched}.insert → db.update('${watched}')` : `no self-writing hook among: ${hookFiles.join(', ') || 'none'}`,
   );
+  cp.facts.loopHook = { file: selfTrigger, table: watched };
 
-  // Now add a real stop, in her own words, and watch what the hook does.
-  const rowsBefore = (await allRows(pod, PROJECT))[itinTable] ?? [];
+  // Trigger it through the table the hook ACTUALLY watches — otherwise the hook never fires and every
+  // "bounded" assertion below is vacuously true, which is worse than a failure (it is a fake pass).
+  const rowsBefore = watched ? ((await allRows(pod, PROJECT))[watched] ?? []) : [];
   const sessionsBefore = new Set(await sessionIds(pod));
 
   const tAdd = await timed('Act XVI — she adds a stop (the hook trigger)', () =>
-    thing.send("oh and i've decided to squeeze valparaiso in on the way up the chilean coast, 3 nights, stick it on the list", { timeoutMs: TURN }).then(acc),
+    thing
+      .send(
+        watched
+          ? `oh and i've decided to squeeze valparaiso in on the way up the chilean coast — 3 nights, book the hostel later, just get it written down with the rest of my ${watched}`
+          : "oh and i've decided to squeeze valparaiso in on the way up the chilean coast, 3 nights, stick it on the list",
+        { timeoutMs: TURN },
+      )
+      .then(acc),
   );
 
   // Let any cascade settle. If the loop guard is broken, THIS is where it runs away.
   await sleep(60_000);
 
-  const rowsAfter = (await allRows(pod, PROJECT))[itinTable] ?? [];
+  const rowsAfter = watched ? ((await allRows(pod, PROJECT))[watched] ?? []) : [];
   const sessionsAfter = (await sessionIds(pod)).filter((i) => !sessionsBefore.has(i));
 
+  // The hook FIRED — this is the precondition that makes the loop-guard assertion mean anything.
   const valpo = rowsAfter.find((r) => /valpara[ií]so/i.test(JSON.stringify(r)));
   const costKey = valpo ? Object.keys(valpo).find((k) => /cost|price|budget|amount|estimate|spend/i.test(k)) : null;
   const costFilled = valpo && costKey && valpo[costKey] !== null && valpo[costKey] !== undefined && valpo[costKey] !== '' && valpo[costKey] !== 0;
-  report.check('the new stop landed, and its cost was FILLED IN for her (the hook actually fired)', !!costFilled, valpo ? `${costKey ?? 'no cost column'} = ${JSON.stringify(valpo[costKey ?? ''])} · ${JSON.stringify(valpo).slice(0, 140)}` : 'no Valparaíso row');
+  report.check(
+    `the new row landed in the watched table (${watched ?? '?'}) and its cost was FILLED IN for her — i.e. the hook ACTUALLY FIRED (without this, "bounded" below proves nothing)`,
+    !!costFilled,
+    valpo ? `${costKey ?? 'no cost column'} = ${JSON.stringify(valpo[costKey ?? ''])} · ${JSON.stringify(valpo).slice(0, 140)}` : `no Valparaíso row in ${watched ?? '?'}`,
+  );
 
-  // THE loop-guard assertion. A hook that re-triggered itself would spawn a session per cascade
-  // level until the depth cap — and a BROKEN guard spawns them without end.
+  // THE loop-guard assertion. A hook that re-triggered itself would cascade — the guard's `self-write`
+  // rule (originatingHookSlug === hook.slug) is what stops it, backed by HOOK_DEPTH_CAP=3.
   const bounded = sessionsAfter.length <= 3; // HOOK_DEPTH_CAP
   report.check(
     'ANTI-EXPECTATION: the hook did NOT re-trigger itself — hook-triggered sessions stayed bounded (loop guard: self-write / HOOK_DEPTH_CAP=3)',
@@ -1398,7 +1429,7 @@ if (ACTS.includes(16)) {
   );
   const exploded = rowsAfter.length > rowsBefore.length + 3;
   report.check(
-    'the itinerary rows did not explode (no write storm from a self-triggering hook)',
+    `the ${watched ?? 'watched'} rows did not explode (no write storm from a self-triggering hook)`,
     !exploded,
     `${rowsBefore.length} → ${rowsAfter.length} rows`,
   );
@@ -1406,7 +1437,20 @@ if (ACTS.includes(16)) {
   report.check('the pod is still responsive afterwards (the cascade did not starve it)', alive, alive ? 'GET /api/projects → 200' : 'pod unreachable');
   report.metric('Act XVI — hook-triggered sessions after one insert', sessionsAfter.length);
 
-  report.check('no unrecovered errors across the auto-fill Act', thing.unrecoveredErrors().length === 0, `${tAdd.errors.length} recovered on the add turn`);
+  // Scoped to THIS Act's turns. It used to read thing.unrecoveredErrors() (whole-session) while
+  // printing tAdd's RECOVERED count — so it re-failed Act XVI for an error Act XV had caused, and
+  // its "actual" column disagreed with what it measured. The session-wide invariant is asserted
+  // once, at the end, where it belongs.
+  const unrecoveredHere = [t, tAdd]
+    .flatMap((x) => x.errors ?? [])
+    .filter((e) => (e.attempt ?? 1) >= ThingSession.MAX_RETRIES);
+  report.check(
+    'no unrecovered errors across the auto-fill Act',
+    unrecoveredHere.length === 0,
+    unrecoveredHere.length === 0
+      ? `0 unrecovered (${[t, tAdd].reduce((n, x) => n + (x.errors?.length ?? 0), 0)} recovered)`
+      : unrecoveredHere.map((e) => e.message).join(' | '),
+  );
   cp.acts.XVI = { passed: report.stepPassed };
   saveCheckpoint(cp);
 }

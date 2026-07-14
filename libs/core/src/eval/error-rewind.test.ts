@@ -1,5 +1,44 @@
 import { describe, it, expect } from 'vitest';
-import { buildErrorBlock, sandboxApiHint } from './error-rewind.js';
+import { buildErrorBlock, redeclareHint, sandboxApiHint } from './error-rewind.js';
+
+describe('redeclareHint', () => {
+  it('names the colliding binding and both ways out of it', () => {
+    const hint = redeclareHint("Cannot redeclare block-scoped variable 'schemas'.");
+    expect(hint).toContain('`schemas` is ALREADY bound');
+    expect(hint).toContain('one persistent scope'); // WHY it collided
+    expect(hint).toContain('schemas2'); // way out 1: a new name
+    expect(hint).toContain('schemas = …'); // way out 2: reassign without the keyword
+  });
+
+  it('covers the function/class shape of the same collision', () => {
+    expect(redeclareHint("Duplicate identifier 'buildRow'.")).toContain('`buildRow` is ALREADY bound');
+  });
+
+  it('stays silent on unrelated failures', () => {
+    expect(redeclareHint("Cannot find name 'listDir'.")).toBe('');
+  });
+
+  it('reaches the model: a redeclare error block carries the pointed remedy, not just the name list', () => {
+    // The live failure: three retries, three DIFFERENT names, budget gone. The generic
+    // "already declared" list was present the whole time and did not help — it is hundreds
+    // of names long by then. The block must name the ONE that collided.
+    const scope = Array.from({ length: 40 }, (_, i) => `const v${i} = ${i};`).join('\n');
+    const block = buildErrorBlock(
+      'const schemas = {};',
+      "Cannot redeclare block-scoped variable 'schemas'.",
+      1,
+      3,
+      scope,
+    );
+    expect(block).toContain('`schemas` is ALREADY bound');
+    expect(block).toContain('schemas2');
+  });
+
+  it('does not shadow a sandbox-API hint for an unrelated error', () => {
+    const block = buildErrorBlock('const x = require("fs");', "Cannot find module 'child_process'", 1);
+    expect(block).toContain('execShell');
+  });
+});
 
 describe('sandboxApiHint', () => {
   it('redirects subprocess attempts to execShell', () => {
