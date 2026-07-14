@@ -33,7 +33,12 @@ const RESULTS = `${DIR}/results`;
 const CHECKPOINT = `${RESULTS}/checkpoint.json`;
 
 const argActs = (process.argv.find((a) => a.startsWith('--acts=')) ?? '').slice(7);
-const ACTS = argActs ? argActs.split(',').map(Number) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+// Act XIV (the browser pass) is written LAST in this file on purpose: it must see the finished,
+// evolved app — including everything Acts XV–XVII add. The numbering is history; the file order
+// is the running order.
+const ACTS = argActs
+  ? argActs.split(',').map(Number)
+  : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 14];
 const FRESH = process.argv.includes('--fresh');
 const REUSE = process.argv.includes('--reuse');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -791,6 +796,191 @@ if (ACTS.includes(13)) {
   const build = await pod.appBuild(PROJECT).catch(() => ({ built: false }));
   report.check('the app still compiles after the restart', build?.built === true, `built:${build?.built}`);
   cp.acts.XIII = { passed: report.stepPassed };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XV — THE THING HE PHOTOGRAPHED (a scan: no text to read at all) ═══════
+if (ACTS.includes(15)) {
+  report.step(
+    'Act XV — he photographs something behind glass and sends it in',
+    'the museum scan is an image-only PDF: readDocument CANNOT read it (no text layer), so the only ' +
+      'way its words reach real state is if the page was actually LOOKED AT — assert the host ' +
+      'rasterized its pages, that vision was used, and that its token landed in a row/space file',
+  );
+  const before = await realState(pod, PROJECT);
+  report.check(
+    'the scan\'s token is absent before he sends it (clean baseline)',
+    !/unyanyembe|livingstone|chronometer/i.test(before.blob),
+    'clean baseline',
+  );
+
+  const scan = await pod.upload(`${FIX}/zanzibar-museum-receipt.pdf`, { mediaType: 'application/pdf' });
+  // The host must have turned the scan's page(s) into image uploads at save time. Without this the
+  // file is a DEAD END: it is routed as a document, so it carries no image part, so no model in the
+  // system can ever look at it — and the agent's only options are to give up or to invent contents.
+  report.check(
+    'the host rasterized the scan\'s page(s) into image attachments (a scan is a PICTURE of a document)',
+    Array.isArray(scan.pages) && scan.pages.length >= 1,
+    `pages: ${JSON.stringify(scan.pages ?? null)} · mediaType ${scan.mediaType}`,
+  );
+
+  const t = acc(
+    await thing.sendWithAttachments(
+      'Snapped this at the little museum in Stone Town — the old handwritten thing behind the glass. ' +
+        'Can you keep it with the Zanzibar day? I want to be able to find it later.',
+      [scan],
+      { timeoutMs: 1_200_000 },
+    ),
+  );
+  ceiling('Act XV — scan → vision → real state', t.durationMs, 12);
+
+  const sawVision = thing.didDelegate('system-vision') || t.delegates.some((d) => /vision/i.test(d));
+  report.check(
+    'it LOOKED at the page (system-vision) instead of giving up or guessing',
+    sawVision,
+    t.delegates.join(' · ').slice(0, 200) || 'no delegates on this turn',
+  );
+
+  await sleep(5_000);
+  const after = await realState(pod, PROJECT);
+  // THE proof. This PDF has NO text layer — `pdftotext` and the pod's own extractor both return 0
+  // characters — so a token from inside it cannot arrive by any text path. If it is in a row or a
+  // space file, the page was seen.
+  checkToken(report, after, {
+    fixture: 'zanzibar-museum-receipt.pdf (scan)',
+    token: 'Unyanyembe',
+    alt: ['Livingstone', 'chronometer', '1872'],
+  });
+  cp.acts.XV = { passed: report.stepPassed, pages: scan.pages ?? [], vision: sawVision };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XVI — "KEEP THE TOTAL RIGHT WITHOUT ME" (the loop guard) ══════════════
+if (ACTS.includes(16)) {
+  report.step(
+    'Act XVI — a rule that maintains itself, and does not eat the pod',
+    'he asks for a stop\'s total to stay right by itself → an event hook on the payments-like table ' +
+      'that WRITES a table it also listens to. The total must come out right, and the loop guard must ' +
+      'hold: no runaway re-firing, no wedged pod',
+  );
+  const hooksBefore = ((await pod.listHooks().catch(() => ({ hooks: [] })))?.hooks ?? []).length;
+  const tRule = acc(
+    await thing.send(
+      "One more thing: every time I put in what I actually paid at a stop, I want that stop's running " +
+        "total to just be right — I'm not adding it up myself on my phone at the end of a long day.",
+      { timeoutMs: 1_800_000 },
+    ),
+  );
+  ceiling('Act XVI — author the standing rule', tRule.durationMs, 30);
+
+  const hooks = ((await pod.listHooks().catch(() => ({ hooks: [] })))?.hooks ?? []).filter(
+    (h) => (h.projectId ?? h.project) === PROJECT || !h.projectId,
+  );
+  const dbHooks = hooks.filter((h) => /db\./.test(String(h.event ?? h.on ?? h.address ?? '')));
+  report.check(
+    'a standing rule now exists as a real event hook on a db write (not a promise to remember)',
+    hooks.length > hooksBefore && dbHooks.length >= 1,
+    `hooks ${hooksBefore} → ${hooks.length}; db-bound: ${dbHooks.map((h) => h.event ?? h.on ?? h.address ?? h.slug).join(', ') || 'none'}`,
+  );
+
+  // Now actually log a payment, the way he would — in his own words, no jargon.
+  const beforeRows = await allRows(pod, PROJECT);
+  const tPay = acc(
+    await thing.send('Paid the lodge balance in cash at Manyara just now — 180 dollars.', { timeoutMs: 900_000 }),
+  );
+  ceiling('Act XVI — log a payment → the rule fires', tPay.durationMs, 10);
+  await sleep(20_000); // let the hook cascade (or run away) before we look
+
+  const afterRows = await allRows(pod, PROJECT);
+  report.check(
+    'the payment he described landed as a REAL row',
+    /\b180\b/.test(afterRows.rows.blob) && !/\b180\b/.test(beforeRows.rows.blob) ||
+      JSON.stringify(afterRows.byTable).includes('180'),
+    `180 present in rows after: ${/\b180\b/.test(afterRows.rows.blob)}`,
+  );
+
+  // THE loop guard. The hook writes a table it also listens to — the canonical self-write cascade.
+  // If the guard (self-write exclusion / depth cap / cooldown) did not hold, the pod would keep
+  // re-firing forever: rows would keep changing, and the event loop would starve. Look twice.
+  const settleA = await allRows(pod, PROJECT);
+  const probeStart = now();
+  const alive = await pod.listProjects().then(() => true).catch(() => false);
+  const probeMs = now() - probeStart;
+  await sleep(30_000);
+  const settleB = await allRows(pod, PROJECT);
+  const stable = JSON.stringify(settleA.byTable) === JSON.stringify(settleB.byTable);
+  report.check(
+    'the self-writing rule SETTLED — it did not loop forever (rows identical 30s apart)',
+    stable,
+    stable ? 'state stable across 30s' : 'ROWS STILL CHANGING 30s after the write — the loop guard did not hold',
+  );
+  report.check(
+    '…and the pod is still responsive (a runaway cascade would starve the event loop)',
+    alive && probeMs < 5_000,
+    `probe ${probeMs}ms, alive=${alive}`,
+  );
+  report.metric('Act XVI — settle probe', secs(probeMs), 's');
+  cp.acts.XVI = { passed: report.stepPassed, hooks: hooks.length, stable };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XVII — THE LONG HAUL (history summarization; the rule survives it) ════
+if (ACTS.includes(17)) {
+  report.step(
+    'Act XVII — the conversation is now long, and he is chatting',
+    'past maxHistoryTurns the session COLLAPSES its history to a summary + the last 6 turns. Assert ' +
+      'the collapse actually happened (a [CONTEXT SUMMARY] message in a real llm_request), that the ' +
+      'standing rule given long BEFORE the boundary still holds (the total still comes from the ' +
+      "app's own route), and that a late change still lands in a real row (no routing degradation)",
+  );
+  // Unrelated chatter between the load-bearing turns — a promise that only holds on a scripted
+  // happy path is not kept. This is also what pushes the history past the summarization boundary.
+  const chatter = [
+    'Random, but is it worth taking binoculars or is that overkill for the crater?',
+    'Athina wants to know if we can get decent coffee in Stone Town or should we bring some.',
+    'Also is it going to be freezing at the rim in August or am I being dramatic?',
+  ];
+  for (const c of chatter) acc(await thing.send(c, { timeoutMs: 600_000 }));
+
+  const summarized = thing.events.filter(
+    (e) =>
+      e.type === 'llm_request' &&
+      (e.messages ?? []).some((m) => /\[CONTEXT SUMMARY\]/.test(String(m?.content ?? ''))),
+  );
+  const maxMsgs = Math.max(0, ...thing.events.filter((e) => e.type === 'llm_request').map((e) => (e.messages ?? []).length));
+  report.check(
+    'the long history was COLLAPSED into a summary + the recent turns (it did not just grow forever)',
+    summarized.length >= 1,
+    summarized.length >= 1
+      ? `${summarized.length} llm_requests carry a [CONTEXT SUMMARY] block (peak history: ${maxMsgs} messages)`
+      : `NO [CONTEXT SUMMARY] in any of ${thing.events.filter((e) => e.type === 'llm_request').length} llm_requests (peak history: ${maxMsgs} messages)`,
+  );
+
+  // The rule from Act VI was given MANY turns ago — before the collapse. Does it survive the summary?
+  const tTotal = acc(await thing.send("So where are we on money now — what's the total?", { timeoutMs: 900_000 }));
+  ceiling('Act XVII — the total, after the collapse', tTotal.durationMs, 4);
+  const apiCalls = tTotal.yields.filter((y) => y.kind === 'apiCall');
+  report.check(
+    "the standing rule SURVIVED the summary (it still asks the app for the number, as told long ago)",
+    apiCalls.length >= 1,
+    `${apiCalls.length} apiCall yields on the re-ask`,
+  );
+
+  // Routing degradation guard: a late, ordinary change must still land in real state.
+  const before = await realState(pod, PROJECT);
+  const tAdd = acc(
+    await thing.send('Oh — and the ferry over to Zanzibar was 30 dollars each, I forgot to put that in.', { timeoutMs: 900_000 }),
+  );
+  ceiling('Act XVII — a late change still lands', tAdd.durationMs, 10);
+  await sleep(5_000);
+  const after = await realState(pod, PROJECT);
+  const ferryLanded = /ferry/i.test(after.rows.blob) && !/ferry/i.test(before.rows.blob);
+  report.check(
+    'a late, ordinary addition STILL lands in a real row (no routing degradation at the end)',
+    ferryLanded || /ferry/i.test(after.rows.blob),
+    ferryLanded ? 'the ferry cost is in the db' : 'the ferry never reached a row',
+  );
+  cp.acts.XVII = { passed: report.stepPassed, summarized: summarized.length, apiCalls: apiCalls.length };
   saveCheckpoint(cp);
 }
 
