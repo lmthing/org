@@ -8,7 +8,12 @@
  *  (Bing rather than Google: Google serves datacenter IPs a consent/bot redirect loop that
  *  never renders, whereas Bing renders cleanly.) `topic: 'news'` + `timeRange` bias results
  *  toward recent coverage instead of evergreen pages (Tavily only) — use for "latest
- *  developments" angles instead of faking recency in the query text. */
+ *  developments" angles instead of faking recency in the query text.
+ *
+ *  The result always names the `provider` that actually answered — under `'auto'` that is
+ *  the one the fallback chain landed on, which is NOT knowable from the caller's request.
+ *  It is load-bearing, not decoration: only Tavily synthesizes an `answer`, so an empty
+ *  `answer` means "this came off a scraper", not "the web had nothing to say". */
 export async function webSearch(
   query: string,
   opts?: {
@@ -21,6 +26,8 @@ export async function webSearch(
 ): Promise<{
   ok: boolean;
   query: string;
+  /** The provider that actually served this result (under `'auto'`, where the chain landed). */
+  provider: 'tavily' | 'bing' | 'duckduckgo';
   answer: string;
   results: Array<{ title: string; url: string; snippet: string; score: number }>;
   error?: string;
@@ -49,7 +56,7 @@ export async function webSearch(
 
   // provider === 'tavily'
   if (!apiKey) {
-    return { ok: false, query, answer: '', results: [], error: 'TAVILY_API_KEY not set in environment' };
+    return { ok: false, query, provider: 'tavily', answer: '', results: [], error: 'TAVILY_API_KEY not set in environment' };
   }
   return webSearchTavily(query, opts, apiKey);
 }
@@ -57,6 +64,7 @@ export async function webSearch(
 type WebSearchResult = {
   ok: boolean;
   query: string;
+  provider: 'tavily' | 'bing' | 'duckduckgo';
   answer: string;
   results: Array<{ title: string; url: string; snippet: string; score: number }>;
   error?: string;
@@ -82,7 +90,7 @@ async function webSearchTavily(
     }),
   });
   if (!response.ok) {
-    return { ok: false, query, answer: '', results: [], error: `Tavily search failed: HTTP ${response.status}` };
+    return { ok: false, query, provider: 'tavily', answer: '', results: [], error: `Tavily search failed: HTTP ${response.status}` };
   }
   const data = response.json() as {
     query?: string;
@@ -92,6 +100,7 @@ async function webSearchTavily(
   return {
     ok: true,
     query: data.query ?? query,
+    provider: 'tavily',
     answer: data.answer ?? '',
     results: (data.results ?? []).map((r) => ({
       title: r.title,
@@ -112,7 +121,7 @@ async function webSearchTavily(
 async function webSearchBing(query: string, maxResults: number): Promise<WebSearchResult> {
   const base = process.env['RENDER_SERVICE_URL'];
   if (!base) {
-    return { ok: false, query, answer: '', results: [], error: 'RENDER_SERVICE_URL not set in environment' };
+    return { ok: false, query, provider: 'bing', answer: '', results: [], error: 'RENDER_SERVICE_URL not set in environment' };
   }
   const token = process.env['RENDER_SERVICE_TOKEN'] ?? '';
   const searchUrl =
@@ -128,10 +137,10 @@ async function webSearchBing(query: string, maxResults: number): Promise<WebSear
       body: JSON.stringify({ url: searchUrl, gotoOptions: { waitUntil: 'domcontentloaded', timeout: 15000 } }),
     });
   } catch (e) {
-    return { ok: false, query, answer: '', results: [], error: `Render service unreachable: ${String(e)}` };
+    return { ok: false, query, provider: 'bing', answer: '', results: [], error: `Render service unreachable: ${String(e)}` };
   }
   if (!response.ok) {
-    return { ok: false, query, answer: '', results: [], error: `Bing render failed: HTTP ${response.status}` };
+    return { ok: false, query, provider: 'bing', answer: '', results: [], error: `Bing render failed: HTTP ${response.status}` };
   }
   const html = response.text();
   const results: Array<{ title: string; url: string; snippet: string; score: number }> = [];
@@ -152,7 +161,7 @@ async function webSearchBing(query: string, maxResults: number): Promise<WebSear
     const snippet = pm ? decodeHtmlEntities(stripTags(pm[1]!)).replace(/\s+/g, ' ').trim().slice(0, 300) : '';
     results.push({ title, url, snippet, score: Math.max(0.1, 1 - results.length * 0.1) });
   }
-  return { ok: true, query, answer: '', results };
+  return { ok: true, query, provider: 'bing', answer: '', results };
 }
 
 /** Bing links every result through a `bing.com/ck/a?…&u=a1<base64url>` redirect — the real
@@ -204,7 +213,7 @@ async function webSearchDuckDuckGo(query: string, maxResults: number): Promise<W
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; lmthing-research/1.0)' },
   });
   if (!response.ok) {
-    return { ok: false, query, answer: '', results: [], error: `DuckDuckGo search failed: HTTP ${response.status}` };
+    return { ok: false, query, provider: 'duckduckgo', answer: '', results: [], error: `DuckDuckGo search failed: HTTP ${response.status}` };
   }
   const html = response.text();
   const results: Array<{ title: string; url: string; snippet: string; score: number }> = [];
@@ -220,7 +229,7 @@ async function webSearchDuckDuckGo(query: string, maxResults: number): Promise<W
     if (!url || !title) continue;
     results.push({ title, url, snippet, score: Math.max(0.1, 1 - results.length * 0.1) });
   }
-  return { ok: true, query, answer: '', results };
+  return { ok: true, query, provider: 'duckduckgo', answer: '', results };
 }
 
 function stripTags(s: string): string {

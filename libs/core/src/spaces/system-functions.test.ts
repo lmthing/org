@@ -508,6 +508,47 @@ describe('system/web webSearch function (DuckDuckGo fallback)', () => {
     expect(r.results[0]!.url).toBe('https://example.com/article'); // DDG fallback result
   });
 
+  // The whole point of the auto chain is that the caller does NOT choose the provider — so the
+  // result has to say who answered. Without it a fallback is indistinguishable from a primary
+  // hit: `answer` is empty for BOTH a scraper and a Tavily call that synthesized nothing, so an
+  // agent (and a scenario asserting the chain survived an outage) is left guessing.
+  it('names the provider that answered — and under "auto" that is the one the chain landed on', async () => {
+    injectGlobal(vm.ctx, 'process', { env: { TAVILY_API_KEY: 'test-key' } } as unknown as (...a: unknown[]) => unknown);
+    injectGlobal(vm.ctx, 'fetch', ((url: string) =>
+      Promise.resolve(
+        url.includes('api.tavily.com')
+          ? { ok: true, status: 200, text: () => '', json: () => ({ query: 'q', answer: 'tavily answer', results: [] }) }
+          : { ok: true, status: 200, text: () => DDG_HTML, json: () => ({}) },
+      )) as (...a: unknown[]) => unknown);
+
+    const r = await evalAwaitDump(vm, `webSearch("test query")`) as { ok: boolean; provider: string };
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('tavily');
+  });
+
+  it('provider: "auto" falls through a FAILING Tavily (a real outage, not a missing key) and reports the fallback provider', async () => {
+    // The key is present but the API is down — the branch a blank-key test never reaches. Tavily
+    // answers 500, Bing is unconfigured (no RENDER_SERVICE_URL), so DuckDuckGo must serve it AND
+    // the result must say so.
+    injectGlobal(vm.ctx, 'process', { env: { TAVILY_API_KEY: 'test-key' } } as unknown as (...a: unknown[]) => unknown);
+    let hitDdg = false;
+    injectGlobal(vm.ctx, 'fetch', ((url: string) => {
+      if (url.includes('api.tavily.com')) return Promise.resolve({ ok: false, status: 500, text: () => '', json: () => ({}) });
+      if (url.includes('duckduckgo')) hitDdg = true;
+      return Promise.resolve({ ok: true, status: 200, text: () => DDG_HTML, json: () => ({}) });
+    }) as (...a: unknown[]) => unknown);
+
+    const r = await evalAwaitDump(vm, `webSearch("test query")`) as {
+      ok: boolean;
+      provider: string;
+      results: Array<{ url: string }>;
+    };
+    expect(hitDdg).toBe(true);
+    expect(r.ok).toBe(true);
+    expect(r.provider).toBe('duckduckgo'); // NOT tavily — the chain really skipped the dead primary
+    expect(r.results[0]!.url).toBe('https://example.com/article');
+  });
+
   it('provider: "bing" returns ok:false when RENDER_SERVICE_URL is unset', async () => {
     injectGlobal(vm.ctx, 'process', { env: {} } as unknown as (...a: unknown[]) => unknown);
     injectGlobal(vm.ctx, 'fetch', (() =>
