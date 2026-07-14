@@ -12,17 +12,16 @@ slowly being lost. He is tired of the Sunday scramble ("what do we eat, what do 
 things twice because he forgets what's already in the cupboard. He does not ask for software — he just
 hands over the shoebox and says what's bothering him.
 
-**Why this scenario exists.** The PROMISE under test is that THING can turn an unstructured, multi-modal
+**Why this scenario exists.** The promise under test is that THING can turn an unstructured, multi-modal
 dump into a living kitchen **without ever being asked for one**, and that its weekly "figure out dinner"
-promise is backed by **real computation, not a chat reply**: a scheduled run that reads the book, calls
-**actual code nodes** — not an LLM eyeballing a list — to merge and de-duplicate a shopping list, fired by
-a schedule that does **not** silently no-op depending on what day it happens to be. Two ingestion beats
-that have never been hard-tested before also live here: a recipe whose **only** source is Greek speech
-(audio → Whisper → a row that exists nowhere else), and the deliberate, by-design failure of
-`readDocument` on an image — proving the vision fallback, not a lucky guess, is what reads a photograph.
-Underneath, one part of the kitchen has to tell another part something happened (`emitEvent` through a
-declared `internal` def) with no chat message involved at all, and the live-web research has to survive
-its primary provider going dark.
+promise is backed by **real computation, not a chat reply**: a scheduled run reads the book and calls
+**actual code nodes** — not an LLM eyeballing a list — to merge and de-duplicate a shopping list. The
+schedule must not silently no-op depending on what day the test happens to run. The ingestion proof
+includes a recipe whose **only** source is Greek speech (audio → Whisper → a row that exists nowhere
+else), plus `readDocument` deliberately rejecting an image so that vision, rather than a lucky guess,
+reads the photograph. One part of the kitchen must also tell another that something happened
+(`emitEvent` through a declared `internal` definition) with no chat message involved, and live-web
+research must survive its primary provider being unavailable.
 
 ---
 
@@ -223,10 +222,10 @@ hand.
   [x] emitEvent
 - Consent/caps: [x] @consent [ ] installSpace approve/deny [x] fail-closed headless
   [x] capability gating (`events:emit`) · [x] **capability gating AT TYPECHECK — a non-granted global
-  is ABSENT from the agent's DTS (Act XV, gap L)**
-- Data & typed surface: [x] **`db.query` `include` over a declared relation (Act XIV, gap L)**
+  is ABSENT from the agent's DTS (Act XV)**
+- Data & typed surface: [x] **`db.query` `include` over a declared relation (Act XIV)**
 - Long conversations: [x] **history summarization past `maxHistoryTurns` — a rule from an early turn
-  survives the digest (Act XIII, gap M)**
+  survives the digest (Act XIII)**
 - Store/integrations: [ ] discovery [ ] install a space [ ] callConnection [ ] inbound webhook
   [ ] integration-demo source
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
@@ -236,34 +235,33 @@ hand.
 - Attachments: [x] upload (6 fixtures, one message) [x] readDocument (PDF *and* a real 3-sheet .xlsx)
   [x] attachmentIds to a specialist [x] **vision (handwritten card + plated dish)** ·
   [x] **audio (real Greek voice memo → Whisper, returned synchronously in the upload response)** ·
-  [x] **live web (3 real 200-OK links)** · [x] **`readDocument` deliberately rejecting an image**
-- Pod lifecycle: [x] restart→auto-resume [x] cold-wake [ ] event storm [x] worker containment (code node)
-- Cross-cutting: [x] edge cases/errors [x] performance [x] budget (direct Azure keys)
+  [x] **live web (3 approved fixture links)** · [x] **`readDocument` deliberately rejecting an image**
+- Pod lifecycle: [x] restart→auto-resume
+- Cross-cutting: [x] edge cases/errors [x] performance [x] budget enforcement
 
 ---
 
 ## 6. Acceptance criteria (the Acts)
 
-The runner (`10-family-recipes/run.mjs`) drives these and asserts on the **trace + real pod state**.
-Acts here must match the runner 1:1.
+Each Act is asserted against the **trace + real pod state**, not against conversational prose alone.
 
 | Act | Asserts (trace + real state) | Stories |
 |---|---|---|
 | **I — THING proposes, then builds** | Turn 1 (the compound Greek dump, all six fixtures + the three links, one `sendWithAttachments` call): `system-vision/vision` and `system-files/dispatch`→`readDocument` are delegated; the reply cites ≥3 recipe facts from `recipes.md` **and** the card's fact (`Orange Cake`/`crisco`/`400° for 40 min`) **and** the PDF's fact (`Easy Lasagna`/`12 oz. cottage cheese`) **and** the xlsx's fact (`GF-NIKOS`/`BUDGET-CAP-78.50`); the reply's own text contains an unmistakable offer to build something he can open (a plain-language "want me to?"); **no** `build_specialist`/automator/`writeProjectTable` yield appears anywhere in this turn's trace. Turn 2 is the plain "yes" (`Ναι, φτιάξ' το.`) — only after it does `pod.listSpaces` show ≥2 new per-cuisine spaces (never named by the user in any message so far), `pod.appBuild` return `built:true` with ≥1 page, and the served app answer 200 HTML | US-1,2,3 |
-| **II — The voice memo is the ONLY source of the RECIPE** | Before driving any turn, a static disjointness grep runs directly over the fixtures (no pod involved): `fixtures/recipes.md`, the extracted text of `fixtures/recipe.pdf`, and every cell of `fixtures/pantry-and-plan.xlsx`. It establishes what is *actually* audio-only. **The dish NAME is not** — the workbook's MealPlan sheet already schedules `Σπανακόπιτα`/`Spanakopita` for Saturday, and its ShoppingList sheet already carries `Σπανάκι 750 g` + `Φέτα ΠΟΠ 320 g`; a row merely *named* Σπανακόπιτα therefore proves nothing and must never be the assertion. What only the ear can hear is the **recipe**: `μαστίχα` (Χίου), `τσίπουρο`, `Δέσποινα`, `Λευκάδα`, `πράσο`, `άνηθο`, "ποτέ αυγό στη γέμιση" — each grepped and confirmed present in the transcript and in **no other fixture** — plus `190`/`55` (the memo says them in words, so they appear nowhere in any fixture as digits). Then `pod.upload('fixtures/voice-memo.mp3')`'s HTTP response carries a non-empty `transcript` field containing `Σπανακόπιτα`, `φέτα`, `μαστίχα` and `τσίπουρο` — proof Whisper really transcribed the Greek speech, **before any chat turn runs**. After Act I's build, `pod.appData(id,'recipes')` has a row for that dish carrying **≥2 of the audio-only recipe tokens** — a row that could only exist if the audio, not any file, was read | US-2 |
-| **III — `readDocument` on an image fails on purpose; vision produces the fact** | The runner opens a SEPARATE session (`agentSlug:'system-files/dispatch'`, same project) and sends `dish-photo.jpg` with a plausible non-technical instruction to read it as if it were a document. Asserts on `turn.events` directly (not the `turn.yields` projection): a `yield_resolved` (or equivalent resolved-value event) for `kind==='readDocument'` referencing this attachment id, whose value is `{ok:false, kind:'unsupported', error: /vision/i}` — the rejection is unconditional and by design, not a fluke. The SAME probe (self-correcting per its own instructions) or an immediate follow-up shows `didDelegate('system-vision')` for that same attachment, and the returned description names ≥2 of: chopped parsley, a Greek salad (feta/kalamata olive/cucumber/red onion), a bulgur/tabbouleh side — the same plating facts already sitting in the Act I `recipes` row for this dish (cross-checked, not re-written); the row count for that dish is unchanged (the probe wrote nothing new) | US-2 |
-| **IV — Automatic research → per-cuisine knowledge + row** | `didDelegate('system-research')` with ≥1 real `webSearch`/`webFetch` yield citing one of the three `fixtures/links.md` domains (each pre-verified 200); a substitution **absent from `recipes.md`, the PDF, and the xlsx** (the GF roux: rice flour/starch, not wheat) lands as a row in `substitutions` **and** in the Greek-cuisine space's on-disk knowledge (`pod.listSpaceDir`/`readProjectFile`-equivalent read); a LATER plain question ("τι βάζω αντί για αλεύρι στη μπεσαμέλ για τον Νίκο;") is answered with the same substitution **and** produces **no new** `webSearch`/`webFetch` yield (answered from the space, not re-researched); no message in the whole run ever names a space | US-4 |
-| **V — `webSearch` falls back off a real provider outage** | The runner `GET`s the pod env, saves the current key, `PUT`s it back with `TAVILY_API_KEY` blanked (an explicit empty string — `PUT` replaces the whole var set), and waits for the rolled pod to settle. A fresh research turn (a technique not yet researched, e.g. the crossini dough) is driven; on `turn.events` the resolved `webSearch` value shows `ok:true` with a non-empty result set and a provider **other than** Tavily (Bing-via-render-service or DuckDuckGo), proving the auto chain really skipped the dead primary rather than failing closed. The finding still lands as a fact (row or knowledge), not just a reply. The runner restores the original `TAVILY_API_KEY` afterward and waits for settle again before continuing | US-5 |
+| **II — The voice memo is the ONLY source of the RECIPE** | Before any turn, compare `fixtures/recipes.md`, the extracted text of `fixtures/recipe.pdf`, and every cell of `fixtures/pantry-and-plan.xlsx` to establish what is *actually* audio-only. **The dish NAME is not** — the workbook's MealPlan sheet already schedules `Σπανακόπιτα`/`Spanakopita` for Saturday, and its ShoppingList sheet already carries `Σπανάκι 750 g` + `Φέτα ΠΟΠ 320 g`; a row merely *named* Σπανακόπιτα therefore proves nothing and must never be the assertion. What only the ear can hear is the **recipe**: `μαστίχα` (Χίου), `τσίπουρο`, `Δέσποινα`, `Λευκάδα`, `πράσο`, `άνηθο`, "ποτέ αυγό στη γέμιση" — each confirmed present in the transcript and in **no other fixture** — plus `190`/`55` (the memo says them in words, so they appear nowhere in any fixture as digits). The mp3 upload response carries a non-empty `transcript` field containing `Σπανακόπιτα`, `φέτα`, `μαστίχα` and `τσίπουρο` — proof Whisper transcribed the Greek speech **before any chat turn runs**. After Act I's build, the `recipes` data has a row for that dish carrying **≥2 of the audio-only recipe tokens** — a row that could only exist if the audio, not any file, was read | US-2 |
+| **III — `readDocument` on an image fails on purpose; vision produces the fact** | In a separate `system-files/dispatch` context for the same project, send `dish-photo.jpg` with a plausible non-technical instruction to read it as a document. The trace must contain a resolved `readDocument` event for that attachment whose value is `{ok:false, kind:'unsupported', error: /vision/i}` — the rejection is unconditional and by design. The same turn's self-correction or an immediate follow-up delegates the same attachment to `system-vision`; the description names ≥2 of chopped parsley, a Greek salad (feta/kalamata olive/cucumber/red onion), or a bulgur/tabbouleh side. Cross-check those plating facts against the existing Act I `recipes` row without rewriting it; the dish's row count remains unchanged | US-2 |
+| **IV — Automatic research → per-cuisine knowledge + row** | `system-research` delegates `webSearch` or `webFetch` to an approved, reachable fixture URL in `fixtures/links.md`; a substitution **absent from `recipes.md`, the PDF, and the xlsx** (the GF roux: rice flour/starch, not wheat) lands as a row in `substitutions` **and** in the Greek-cuisine space's knowledge; a later plain question ("τι βάζω αντί για αλεύρι στη μπεσαμέλ για τον Νίκο;") is answered with the same substitution without new research; no user message names a space | US-4 |
+| **V — `webSearch` falls back off a real provider outage** | Preserve the pod's environment, then blank `TAVILY_API_KEY` with an explicit empty string while retaining every other variable (`PUT` replaces the whole set), and wait for the rolled pod to settle. Drive a fresh research turn for a technique not yet researched, such as crossini dough. The resolved `webSearch` event shows `ok:true`, a non-empty result set, and a provider **other than** Tavily (Bing via the render service or DuckDuckGo), proving the auto chain skipped the unavailable primary rather than failing closed. The finding lands as a fact in a row or knowledge, not just a reply. Restore the original environment and wait for the pod to settle before continuing | US-5 |
 | **VI — Code nodes compute a de-duplicated shopping list** | `pod.readProjectFile` on the household space's two authored tasklist files (`spaces/<household-space>/tasklists/weekly-shop/NN-<id>.ts`) returns non-empty source: one exports a `node` with a `forEach` over the week's chosen dishes, the other a `node` with `dependsOn` the first — both statically declared, no generic fs used. Driving the weekly-plan trigger (Act VII's mechanism) produces `turn.nodes` entries for both node ids with `status:'done'`. In `pod.appData(id,'shopping_list')`, an ingredient needed by **three or more** of the week's chosen dishes (κρεμμύδι/onion — called for by Μουσακάς, Gemista, Κεφτέδες and Αυγολέμονο σούπα) appears **exactly once**, and its quantity equals the sum of that same ingredient's quantity independently read off those dishes' own `recipes` rows — real arithmetic, not a guess | US-6 |
 | **VII — The weekly trigger is not clock-gated** | `pod.readProjectFile` on the authored weekly-plan trigger's source shows an `every`/interval schedule (the period itself IS "weekly" — no `daily` + weekday check) and contains **no** `getDay()`/weekday conditional anywhere. `pod.runEmitter(id, scope, 'weekly_plan')` forced out of schedule (on whatever real day the run happens to execute) still produces `meal_plan` rows **and** the de-duplicated `shopping_list` from Act VI — proving the schedule, not an internal date check, is what gates it | US-7 |
 | **VIII — `emitEvent` + an `internal` def: declared, emitted, consumed** | `pod.readProjectFile` on the household space's `spaces/<household-space>/events/low-stock.ts` shows `type:'internal'` and `'low-stock'` present in its `emits` map. Somewhere in Act I's ingest turn, `turn.events` shows an `emitEvent` yield (`kind==='emitEvent'`) naming `low-stock` with a payload citing the Kalamata olive oil (`PNT-001`). `pod.appData(id,'shopping_list')` already carries an olive-oil row **before** Vasilis has said anything about it in chat — written by the separate `hooks/*.ts` event hook subscribed to that exact address, proving declare→emit→consume all really happened through the pipeline, not a coincidence in the seed data | US-8 |
 | **IX — Remember me** | The "remember this forever" household-rule turn shows a delegate/remember-kind yield into `user-memory/memory`. A LATER, unrelated cooking turn (the gemista question) recalls **both** preferences (half-dose mint; Nikos roasted-not-fried) — asserted via a real memory-space delegate in that turn's trace, corroborated by the reply's content, not the content alone | US-10 |
 | **X — Greek update + restraint + multilingual routing** | The Greek bake-time message changes the moussaka row's bake-time field (before/after, 45→40) via a real `db.update` — no English equivalent is sent anywhere in the run to "unlock" this, proving the routing isn't keyed off English. The "order the groceries" message produces **no** order/payment yield anywhere in that turn's trace; the reply hands back the current shopping list instead | US-9,11 |
-| **XI — The app is a living surface** | **A1:** through the served app's OWN chat session (`{agentSlug:'thing', projectId}`, reachable from the running app, not `/chat`), the favourite-field message produces a real schema-authoring yield; afterward `pod.appData(id,'recipes')` shows a NEW `favourite`-shaped field, **set true** on the moussaka and spanakopita rows specifically; `pod.appBuild` still succeeds after. **A2:** chrome-devtools opens the served app for real: the rendered DOM shows actual recipe names (Μουσακάς, Σπανακόπιτα) and non-zero data, the in-app chat panel is visibly present, **no console errors, no failed network requests**; `pod.appApi(id, <a route the page itself fetches>)` returns 200 with a non-empty payload (not a page silently rendering zeros while the raw table has rows) | US-12 |
-| **XII — Restart → auto-resume** | `pod.restart()` mid-run; the next `send()` observes the transient failure, waits for the pod, and resumes coherently (same or re-established session); `pod.listSpaces`, `pod.appData` for every table, and the served app all survive unchanged; a forced re-run of the weekly trigger (Act VII) still produces a plan afterward | — |
-| **XIII — The rule he mentioned in passing survives a long conversation** | *(gap **M** — history summarization past `maxHistoryTurns`; never exercised by any scenario.)* Mid-conversation, in one plain line and WITHOUT ever saying "remember this", Vasilis mentions a standing house rule (*"…ο πεθερός μου δεν αντέχει το σκόρδο, στα κυριακάτικα ποτέ σκόρδο"*). The runner then drives a long tail of ordinary, cheap kitchen chatter — enough turns that the pod's session (`maxHistoryTurns: 20`) crosses the `maxTurns*2` message threshold and the runtime COLLAPSES the old turns into a digest. Asserted on real state, not prose: the **persisted session file on disk** (`sessions/<id>.json`) shows the history was really summarized (a summary/digest message present AND the message count collapsed below the pre-summary peak — the rule's own turn is no longer verbatim in the window). Then a plain ask that requires the rule (*"τι μαγειρεύουμε την Κυριακή; βάλ' το στο πλάνο"*) must produce a **real `meal_plan` row** whose dish's own `recipes` row contains **no garlic** — the rule is proved by what it WROTE, never by what it said. A control assertion pins the mechanism honestly: the rule turn is confirmed absent from the verbatim tail, so a pass means the digest carried it, not that the raw turn was still in the window | US-13 |
-| **XIV — The plan is really JOINED to the recipes** | *(gap **L** — `db.query`'s `include` expanding a declared relation; never exercised.)* In his own words Vasilis asks to see the actual food under each day instead of a bare name. Asserts: a **declared relation** (`belongsTo`/`hasMany`) appears in the authored schema on disk (`database/*.json`) linking the plan rows to the recipe rows — not a loose text column; the authored API source the page fetches really calls `db.query` with an **`include`** (grepped in the route's own source, so a hand-rolled second query cannot pass); and `pod.appApi(id, <that route>)` returns **200 with the recipe NESTED inside the day** (a day object whose recipe child carries real fixture content — the audio-only tokens from Act II, so the join is proved against data that could only come from the memo). The served page renders it (no console errors) | US-14 |
-| **XV — The cuisine specialist CANNOT write to the book** | *(gap **L** — capability gating AT TYPECHECK, the security model's load-bearing claim; asserted by no scenario.)* First, on disk: the architect-built cuisine space's agent frontmatter grants it knowledge/read capabilities and **does NOT grant `db:write`** (an over-grant here is itself the failure). Then a session is opened directly AS that agent (`agentSlug:'<cuisine-space>/<agent>'`) and asked, in plain Greek, to change a recipe's bake time. The assertion is on the FAILURE MODE, not merely the outcome: the trace carries a **`typecheck_error`** naming the missing global (`Cannot find name 'db'`-shaped) — i.e. the capability it was not granted is **absent from its DTS**, so the call cannot even be written, rather than throwing at runtime after the model believed it would work. And the row is byte-identical afterwards: **0 writes**. (Recovered-vs-unrecovered accounting still applies — this typecheck error is the EXPECTED one and is excluded from the run's unrecovered-error gate by design, asserted explicitly.) | US-15 |
+| **XI — The app is a living surface** | through the served app's own chat session, the favourite-field message produces a real schema-authoring yield; afterward the `recipes` data has a new `favourite`-shaped field set true on the moussaka and spanakopita rows, and the app still builds. A browser render shows actual recipe names (Μουσακάς, Σπανακόπιτα) and non-zero data, a visible in-app chat panel, no console errors or failed network requests, and a page-fetched app API route returning 200 with a non-empty payload | US-12 |
+| **XII — Restart → auto-resume** | after a simulated pod restart, the persisted session can resume coherently; every space, table, and served app surface survives unchanged; an additional weekly-trigger invocation still produces a plan afterward | — |
+| **XIII — The rule he mentioned in passing survives a long conversation** | Mid-conversation, in one plain line and WITHOUT ever saying "remember this", Vasilis mentions a standing house rule (*"…ο πεθερός μου δεν αντέχει το σκόρδο, στα κυριακάτικα ποτέ σκόρδο"*). Continue with ordinary kitchen chatter until the pod's session (`maxHistoryTurns: 20`) crosses the `maxTurns*2` message threshold and the runtime collapses old turns into a digest. Assert on real state: the persisted session file (`sessions/<id>.json`) contains a summary/digest and its message count has collapsed below the pre-summary peak, with the rule's own turn no longer verbatim in the window. Then *"τι μαγειρεύουμε την Κυριακή; βάλ' το στο πλάνο"* must produce a real `meal_plan` row whose linked `recipes` row contains **no garlic**. The row, not a claim in the reply, proves the digest carried the rule | US-13 |
+| **XIV — The plan is really JOINED to the recipes** | In his own words Vasilis asks to see the actual food under each day instead of a bare name. A **declared relation** (`belongsTo`/`hasMany`) appears in the authored schema (`database/*.json`) linking plan rows to recipe rows, not a loose text column. The API source fetched by the page calls `db.query` with an **`include`**, so a hand-written second query cannot pass. That route returns **200 with the recipe NESTED inside the day**, and the recipe child carries audio-only content from Act II. The served page renders the nested data without console errors | US-14 |
+| **XV — The cuisine specialist CANNOT write to the book** | The architect-built cuisine agent's frontmatter grants knowledge/read capabilities and **does NOT grant `db:write`**; over-granting is a failure. Open a context directly as that agent and ask in plain Greek to change a recipe's bake time. The trace must carry a **`typecheck_error`** naming the unavailable global (`Cannot find name 'db'`-shaped): the capability is absent from its DTS, so the call cannot be written, rather than failing only at runtime. The row remains byte-identical with **0 writes**. This expected typecheck error is classified separately from unrecovered errors and does not weaken the zero-unrecovered-error gate | US-15 |
 | **Edges** | a malformed `emitEvent` payload (missing a required field the `emits` schema demands) is rejected before it reaches the hook (0 rows written); re-asking the same opening question a second time does not create duplicate per-cuisine spaces; recovered vs unrecovered `eval`/`typecheck` errors are recorded per Act; unrecovered count is 0 across the whole run | — |
 
 *Performance targets are **hang detectors, not SLOs**. Record the ACTUAL time as a metric on every
@@ -290,150 +288,50 @@ Act; only FAIL when a ceiling below is breached — that means something is brok
 
 ## 7. What this scenario is really testing (and the gaps it closes/exposes)
 
-Three things in this scenario have **never been hard-tested** in any prior run:
 
-1. **Audio as the sole source of a fact.** Every other ingestion beat in the catalog can, in principle,
-   be faked by a model that already knows the cuisine (it could guess a plausible μπεσαμέλ). It cannot
-   guess `Σπανακόπιτα` with `μαστίχα Χίου` and a named great-aunt from Lefkada — that sentence exists in
-   exactly one place, spoken. Because `POST /api/uploads` transcribes synchronously and returns the
-   transcript in its own response, this scenario can prove the audio was heard **before a single chat
-   turn runs**, then prove the fact reached a row afterward — a two-part proof no earlier scenario had
-   the shape for.
-2. **`readDocument`'s image rejection is a real, unconditional host guard** (`uploads.ts`), not a
-   convention the model happens to follow. Act III forces exactly the case the guard exists for — "an
-   image slipped through" — and checks the rejection value itself, then checks the self-correction
-   actually reads the photo rather than stalling.
-3. **Cron correctness under force-run.** The platform's only cron primitives are `every`/`daily` — there
-   is no weekday field — so "every Sunday" is only ever achievable two ways: a `daily` handler that
-   self-gates on `getDay()` (the anti-pattern a real shipped kitchen app already has, and which silently
-   no-ops on a forced run any day but Sunday), or an `every:'7d'` interval where the period itself IS the
-   week and the handler never checks the date. Act VII asserts the second, correct shape was authored —
-   and proves it behaviourally by forcing the run regardless of what day it happens to be.
+1. **Audio as the sole source of a fact.** Other cuisine facts could plausibly be guessed from general
+   knowledge; `Σπανακόπιτα` with `μαστίχα Χίου`, `τσίπουρο`, and a named great-aunt from Lefkada cannot.
+   Those details exist in exactly one place: the spoken memo. Because the upload transcribes
+   synchronously and returns the transcript in its own response, the scenario proves both that the audio
+   was heard before the chat turn and that its unique facts reached a row afterward.
+2. **Image/document routing and fallback.** `readDocument` must reject image input with an explicit
+   vision-directed unsupported result. The same attachment must then reach vision and yield the plated
+   dish's unique visual facts, without creating duplicate rows or silently treating a photograph as a
+   printed document.
+3. **Cron correctness under force-run.** The available schedule primitives are `every` and `daily`; there
+   is no weekday field. A weekly promise therefore uses `every:'7d'`. Its handler must not self-gate on
+   `getDay()` or another weekday conditional, because that would silently no-op when forced on a
+   different day.
+4. **Real computation and internal coordination.** Code-node de-duplication proves the shopping list is
+   arithmetic over real recipe data rather than an LLM approximation. The declared `internal` event and
+   consuming hook prove that project parts can coordinate without a chat message.
+5. **Durable state and least privilege.** A passing reply is insufficient: memory, multilingual edits,
+   in-app evolution, summarized-history rules, and researched facts must all be observable in rows,
+   schemas, knowledge, or rendered output. Cuisine specialists remain read-only; lack of `db:write` must
+   remove the write global from their type environment rather than merely reject a late runtime call.
+6. **Preservation and user-facing restraint.** Recipe attribution is content: `Θεία Δέσποινα από τη
+   Λευκάδα` must survive independently of the transport label "voice memo from mum." THING must not show
+   raw tool returns or internal plumbing. The opening turn ends with the plain-language offer and waits;
+   authoring begins only after the user's yes.
 
-Two more close specific gaps: the code-node de-duplication (Act VI) proves the shopping list is **real
-arithmetic on real data**, not an LLM eyeballing a list and mostly getting it right; and the
-`emitEvent`/`internal`-def pipeline (Act VIII) proves one part of a project can signal another **with no
-chat message anywhere in the loop** — the event pipeline's actual job, distinct from a webhook or a cron.
-
-A recovered `typecheck_error`/`eval_error` inside a delegated specialist is the retry surface, not a
-failure: hard-assert the **deliverable**, record recovered errors as a metric + note.
+A recovered `typecheck_error` or `eval_error` inside a delegated specialist is retry telemetry rather
+than an automatic scenario failure. The deliverable must still satisfy every Act, and unrecovered errors
+on THING's own turns remain a hard failure.
 
 ---
 
-## 8. Running it
+## 8. Fixtures
 
-```bash
-cd sdk/org/scenarios/harness
-node smoke.mjs                         # prove harness + prod healthy first
-node ../10-family-recipes/run.mjs      # fresh; writes 10-family-recipes/results/report.md
-node ../10-family-recipes/run.mjs --reuse # reuse the cached user + project
-```
-
-The runner provisions a disposable prod user, opens a session with no project named, uploads **all six
-fixtures on the one opening message** (over the WS path — the HTTP `/message` route drops attachments),
-pastes the `links.md` URLs in the same message, drives the offer/consent/build/research/code-node/cron/
-memory/update/restraint/in-app-dock/restart beats in order, and checkpoints per Act to
-`results/checkpoint.json`. Act V (the provider-outage fallback) and Act XII (restart) both roll the pod —
-run them late, and re-settle before any Act that follows depends on a warm session.
-
-### The fixtures (every one is REAL — and every one carries a token no other one has)
+All six attachments are sent in the single opening message, and the three URLs from `fixtures/links.md`
+are pasted as plain text in that message. Each fixture carries facts that support source-specific
+assertions.
 
 | Fixture | What it is | `kind` | **Unique assertable fact** |
 |---|---|---|---|
 | `fixtures/recipes.md` | the transcribed recipe dump, Greek+English (4.6 KB) | `file` | `Μουσακάς` · `μπεσαμέλ` · `gemista` · `αρακάς` · `κεφτέδες` · `γιαγιά Αθανάσια` · `crossini` |
 | `fixtures/pantry-and-plan.xlsx` | a real 3-sheet Excel workbook (`Pantry`/`MealPlan`/`ShoppingList`) | `file` → `readDocument` | `GF-NIKOS` (Nikos is gluten-free) · `BUDGET-CAP-78.50` · `PANTRY-REV-2026-07-12` · `WEEK-2026-W29` · `PNT-001` Kalamata olive oil `LOW` |
-| `fixtures/recipe-card.jpg` | a real photo of a handwritten (cursive English) recipe card | `image` → `system-vision` | `Orange Cake` · `crisco` · `1 cup raisins` · `Angel food cake tin` · `400° for 40 min` |
-| `fixtures/dish-photo.jpg` | a real photo of a plated Greek dish (moussaka slice + Greek salad + bulgur side), CC0 | `image` → `system-vision` | the plating facts: chopped parsley garnish, a Greek salad (feta/kalamata olive/cucumber/red onion), a bulgur/tabbouleh side — present in **no other fixture** |
+| `fixtures/recipe-card.jpg` | a real photo of a handwritten cursive-English recipe card | `image` → `system-vision` | `Orange Cake` · `crisco` · `1 cup raisins` · `Angel food cake tin` · `400° for 40 min` |
+| `fixtures/dish-photo.jpg` | a real CC0 photo of a plated Greek dish: moussaka slice, Greek salad, and bulgur side | `image` → `system-vision` | chopped parsley garnish; Greek salad with feta/kalamata olive/cucumber/red onion; bulgur/tabbouleh side — present in **no other fixture** |
 | `fixtures/recipe.pdf` | a real printable recipe PDF with selectable text | `file` → `readDocument` | `Easy Lasagna` · `Cooking with Extension Cookbook, pg. 22` · `12 oz. cottage cheese` · `slow cooker … Low for about 6 hours` |
-| `fixtures/voice-memo.mp3` | real Greek speech (~36s), the mother dictating a recipe, first person | `audio` → Whisper (synchronous, returned in the upload response) | **audio-only (verified disjoint):** `μαστίχα` (Χίου) · `τσίπουρο` · `θεία Δέσποινα` · `Λευκάδα` · `πράσο` · `άνηθο` · `ποτέ αυγό στη γέμιση` · `190°`/`55 λεπτά` (spoken as words — absent as digits from every fixture). **NOT unique, do not assert on these:** the dish name `Σπανακόπιτα`/`Spanakopita` and the quantities `750`/`320` all also appear in `pantry-and-plan.xlsx` (MealPlan Saturday; ShoppingList σπανάκι/φέτα lines) |
-| `fixtures/links.md` | 3 real, publicly fetchable URLs (each verified `200`): el.wikipedia *Μουσακάς*, en.wikipedia *Béchamel sauce*, en.wikipedia *Gluten-free diet* | *(pasted URLs)* → `webSearch`/`webFetch` | a live-web finding absent from every other fixture: the gluten-free roux (rice flour/starch instead of wheat) |
-
-> `fixtures/recipe-card.png` is a leftover placeholder — superseded by `recipe-card.jpg`; do not upload it.
-
-## Actual results
-
-### Round 1 (2026-07-14) — **FAIL**, and the failures are the point
-
-`run.mjs` implemented Act-for-Act from §6 and driven live against a local pod. Acts I–III ran; **Acts
-IV–XV have not yet been driven live** (the run is resumable from `results/checkpoint.json`). The
-verdict is an honest FAIL: the app the scenario exists to produce **did not build**. But the run paid
-for itself — it found the reason, and the reason was upstream of this scenario entirely.
-
-#### What held
-
-| Act | Result | Evidence |
-|---|---|---|
-| **I — ingest** | ✅ (the reading half) | All 6 fixtures ingested in ONE message. `system-vision` + `system-files`→`readDocument` delegated; the reply cited the card's `Orange Cake`/`400°`, the PDF's `Easy Lasagna`, the xlsx's `GF-NIKOS`/`BUDGET-CAP-78.50`/`PNT-001`, and ≥3 `recipes.md` facts. **Authored nothing before the "yes"** — the offer-gate held. |
-| **I — build** | ❌ | `built:false`, `routes:0`, `/app/family-recipes/` → **404**. Tables: `meal_plan, pantry, recipe_ingredients, recipe_steps` — **no `recipes` table and no `shopping_list`**. `recipe_ingredients.recipe_id` is a foreign key to a parent that was never created. A recipe book with no recipes: the anti-expectation, exactly. |
-| **II — audio is the only source** | ✅ | The mp3 upload **response** carried a real 486-char Whisper transcript **before any chat turn ran**. All six audio-only tokens verified disjoint against every other fixture by a static grep. The dish's record carries `μαστίχα · τσίπουρο · πράσο · άνηθο` — plus `190°C`/`55 λεπτά`, which the memo speaks *as words* and which therefore appear as digits in **no fixture at all**. Audio → Whisper → real row is **proved**. |
-| **III — `readDocument` vs an image** | ⚠️ re-graded | The guard **never fired — because it was never reached**: every agent correctly routes a photo to vision instead of the document reader. That is the product being *right*. The Act now grades that outcome as a pass and leans on `uploads.test.ts` for the host guard itself (see the finding below — the probe `scenario.md` specified is not something the platform can actually do). |
-
-#### The four bugs, all fixed in the product with a test
-
-1. **`system-architect` handed the model code that cannot compile** — `a4b5bc5`. **This is the one that
-   broke the app.** `synthesize_and_run/01-design.md` told the model to write `const functions = [];`
-   and then pass it to `currentTask.resolve({…, functions})`. A bare `[]` is an *evolving array*: push
-   to it and TS infers the element type, but **use** it before anything is pushed and the type can
-   never be determined. Reproduced against the repo's own `tsc --strict`: `TS7034` + `TS7005 —
-   Variable 'functions' implicitly has an 'any[]' type`, precisely the two errors in the live trace.
-   The model copies the example verbatim, so this fired on **every specialist build in every
-   scenario** — and the retry cascade from there is a **trap** (redeclaring → *"Cannot redeclare
-   block-scoped variable"*; assigning → *"Cannot assign to 'functions' because it is a constant"*).
-   The loop cannot escape, burns `maxRetries`, and the authoring turn dies with the app half-built.
-   The live trace shows the model commenting *"the previous attempt redeclared `functions`"* as it
-   thrashes. Fix: annotate the type. A prompt that hands the model uncompilable code is a bug in the
-   prompt.
-2. **The builder dropped the attribution** — `e127990`. It seeded the dish's record with every
-   operational detail and threw away *who the recipe came from*. It even chose a `source` column —
-   and filled it with the **channel** the material arrived on (*"a voice message from mum"*) rather
-   than the name the material itself states (*"Θεία Δέσποινα από τη Λευκάδα"*). The user's words were
-   *"help me not lose any of this"*. Generalised into `automator/instruct.md`: keep the attribution
-   material carries; **the transport is not the attribution**. **Live-confirmed: 4/6 → 6/6
-   audio-only tokens now reach real state**, `Δέσποινα` and `Λευκάδα` among them.
-3. **THING reported instead of offering, and dumped its plumbing** — `2b96f53` (⚠️ *touches THING's
-   shared triage brain*). Turn 1 ended with a `KeyValue` panel reading `"seenImages type":"string"`,
-   `"fileResults length":"11304"` — and **no question at all**. It had been *taught* to: THING's
-   `instruct.md` carried **eight** `display(JSON.stringify(<raw return>, null, 2))` examples. An
-   example in an agent's brain gets copied into real output, and these were, verbatim. All eight now
-   read the value and speak to the user; plus two general principles — *"never show them your
-   plumbing"* (would this line mean anything to someone who has never seen the code?) and *"a turn
-   that has decided something ends with the plain question — ask, then stop, then wait"*. The
-   authoring **gate** the offer depends on was right; nothing had told THING to still **ask**.
-4. **A session cannot be opened as a system-space agent, and fails silently** — `a151c56`. `POST
-   /api/sessions` treats `agentSlug` as a bare agent name in the project root; only `spaceRef` binds a
-   session to a space, and it resolves against the *project's* spaces. A slashed `agentSlug` builds a
-   session that then dies on its first turn with `status:'error'`, **no message on the wire and
-   nothing in the pod log**. Recorded, not worked around — the silent failure is the real bug here.
-
-#### New Acts added this round (goal 2) — all from the never-exercised list
-
-- **XIII — history summarization past `maxHistoryTurns`** (gap **M**). A house rule said once, in
-  passing, never as *"remember this"* — so `user-memory` is explicitly **not** the path under test.
-  ~16 turns of kitchen chatter push the session past `maxTurns*2`; the runtime's **deterministic**
-  digest (no `streamFn` — it keeps user task lines and drops every assistant reply) is the only thing
-  that could carry the rule. Asserted on the persisted session file, with a **control** that the
-  rule's own turn is gone from the verbatim tail, and proved by a **row**: no garlic in what it puts
-  on Sunday.
-- **XIV — `db.query`'s `include` over a declared relation** (gap **L**). Asserts the relation in the
-  on-disk schema, `include` in the **route's own source**, and the recipe returned **nested** —
-  cross-checked against the audio-only tokens, so the join is proved against data only the memo could
-  have supplied.
-- **XV — capability gating AT TYPECHECK** (gap **L**). The security model's load-bearing claim, which
-  **no scenario has ever asserted**: not granted ⇒ absent from the DTS ⇒ the call fails **typecheck**
-  rather than throwing at runtime. Asserts the *failure mode*, not merely that no write happened.
-
-#### The honest narrative
-
-The scenario did its job by failing. Every ingestion promise held — the six-file dump, the Greek
-speech that exists in no file, the disjointness proof — and then the thing the user actually wanted,
-*something I can open*, **404'd**. Chasing that down did not lead to a runtime bug at all: it led to a
-**prompt that hands the model code which cannot compile**, on every specialist build, in every
-scenario, with a retry cascade that traps the model into spending the whole authoring turn arguing
-with the typechecker. Three of the four bugs found this round live in agent *instructions*, not in
-code — which is exactly what this campaign predicts, and exactly why grading prose would have caught
-none of them. The app being empty is a fact only a real assertion on real state can see.
-
-**Not yet verified:** the architect fix's effect on a full build (the re-run was still in flight when
-the round ended — the trap errors are gone from the trace, but the app has not yet been observed
-building green). Acts IV–XV have never been driven live. Round 2 resumes from
-`results/checkpoint.json`.
+| `fixtures/voice-memo.mp3` | real Greek speech (~36s), the mother dictating a recipe in first person | `audio` → Whisper, synchronously returned in the upload response | **Audio-only:** `μαστίχα` (Χίου) · `τσίπουρο` · `θεία Δέσποινα` · `Λευκάδα` · `πράσο` · `άνηθο` · `ποτέ αυγό στη γέμιση` · `190°`/`55 λεπτά` (spoken as words and absent as digits from every fixture). **Not unique; do not assert on these:** `Σπανακόπιτα`/`Spanakopita` and `750`/`320`, which also appear in the workbook's Saturday MealPlan and spinach/feta ShoppingList lines |
+| `fixtures/links.md` | three publicly fetchable URLs: Greek Wikipedia *Μουσακάς*, English Wikipedia *Béchamel sauce*, and *Gluten-free diet* | pasted URLs → `webSearch`/`webFetch` | a live-web finding absent from every other fixture: gluten-free roux using rice flour/starch instead of wheat |

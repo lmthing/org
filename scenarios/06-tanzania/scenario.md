@@ -3,19 +3,16 @@
 > **One line.** A traveler dumps everything he has about his Tanzania trip — notes, a photo, a park-fee
 > PDF, a costs spreadsheet, a voice memo — into a fresh project and describes the problem in his own
 > words; **THING**, unasked, offers to turn it into something he can actually open, and a plain "yes" is
-> enough to get a real, updatable app. This scenario is backed by an executable live-prod runner
-> (`06-tanzania/run.mjs`).
+> enough to get a real, updatable app.
 
 **Persona.** Vasilis, traveling with Athina Mari: Cairo stopover → the northern Tanzania safari circuit
 (Tarangire, Lake Manyara, Ngorongoro) → Zanzibar → Dar es Salaam, Aug 3–20 2026. Everything is booked;
 nothing is organized. He is not technical, mixes Greek and English mid-conversation, and just wants the
 mess to stop being a mess before he's standing in an airport trying to remember a reference number.
 
-**Why this scenario exists.** This is the rewrite that retires the old "user asks for spaces and an app
-in one sentence" script (see the previous run's transcript at the bottom of this file's history) in
-favor of the real product claim: **the user never names the product**, THING recognizes the need and
-proposes it, and consent is a plain "yes." Layered on that spine, this scenario is the first to force
-five mechanisms no prior scenario has touched:
+**Why this scenario exists.** It tests the product claim that **the user never has to name the
+product**: THING recognizes the need and proposes it, and consent is a plain "yes." Layered on that
+spine, the scenario exercises five runtime mechanisms:
 
 1. **The provided-info shortcut** — everything needed to get the trip's legs right is already in the
    dump, so the first build turn must show THING *not* going off to research what it was already handed
@@ -28,16 +25,15 @@ five mechanisms no prior scenario has touched:
    concurrent forks past the engine's cap **queue**, they don't reject or silently run unbounded.
 3. **`db.query` with `include`** — the app must declare a real relation (the trip's legs to their costs
    and lodging) and a relation-expanding query must return the nested rows, not just the parent row.
-4. **`apiCall`** — an agent reaching for the app's *own* endpoint by name instead of re-deriving the
+4. **`apiCall`** — an agent reaches for the app's *own* endpoint by name instead of re-deriving the
    answer from a raw db query.
 5. **A throwing api route** — the worker-per-request crash boundary must hold: the pod does not go down,
    every other route keeps serving, and the failure surfaces as a proper `HttpError`-shaped response,
    never a hang.
 
-Around that: `@app/types` + a shared project component actually exist on disk and a page imports and
-builds against them, the always-available in-app chat (A1) evolves the running app, a real browser pass
-(A2) proves it isn't an empty shell, a durable memory survives a fresh session, and a pod restart
-auto-resumes — the universal spine every scenario in this campaign now carries.
+Around that: `@app/types` and a shared project component exist on disk and a page imports and builds
+against them, the always-available in-app chat evolves the running app, a real browser pass proves it
+isn't an empty shell, a durable memory survives a fresh session, and a pod restart auto-resumes.
 
 ---
 
@@ -121,19 +117,13 @@ In his own terms — success is:
 Hop by hop, for maintainers:
 
 1. **Project creation.** `POST /api/projects {name:"tanzania-trip"}`. THING runs inside it.
-2. **Five attachments, one message.** `tanzaniamemories.md` → `kind:'file'` (`text/markdown`, decoded
-   verbatim); `trip-costs.xlsx` → `kind:'file'`, but classified via `isSpreadsheet()` on media type
-   *or* filename (`sdk/org/libs/cli/src/server/uploads.ts:66-68`) so every sheet is rendered to CSV by
-   SheetJS (`extractSpreadsheetText`, same file `:76-90`) before a text model ever sees it —
-   `pod.upload()` must pass an explicit spreadsheet `mediaType` (its own extension table doesn't know
-   `.xlsx`, or it silently falls back to `application/octet-stream` and still gets picked up only via
-   the filename regex — pass the mediaType explicitly to be safe); `ngorongoro-conservation-area-tariffs.pdf`
-   → `kind:'file'`, text pulled via `unpdf` (`extractDocumentText`, `uploads.ts:44-57`); `stone-town-zanzibar.jpg`
-   → `kind:'image'` **only if** `pod.upload()` is called with an explicit `mediaType:'image/jpeg'` (the
-   helper's extension table has no `.jpg` entry and would default to `application/octet-stream` →
-   misclassified as `file`, silently skipping the vision path entirely); `voice-memo.mp3` → `kind:'audio'`,
-   same gotcha — pass `mediaType:'audio/mpeg'` explicitly. All five ride the WS `sendMessage` frame
-   (`ThingSession.sendWithAttachments`); the HTTP `/message` route drops attachments.
+2. **Five attachments, one message.** `tanzaniamemories.md` is a `kind:'file'` attachment
+   (`text/markdown`, decoded verbatim); `trip-costs.xlsx` is `kind:'file'`, classified as a spreadsheet
+   by media type or filename so every sheet is rendered to CSV by SheetJS before a text model sees it;
+   `ngorongoro-conservation-area-tariffs.pdf` is `kind:'file'`, with text extracted via `unpdf`;
+   `stone-town-zanzibar.jpg` is `kind:'image'` with media type `image/jpeg`; and `voice-memo.mp3` is
+   `kind:'audio'` with media type `audio/mpeg`. The spreadsheet must carry a spreadsheet media type.
+   All five travel with the same message over the attachment-capable WebSocket path.
 3. **THING reads before it offers.** File ids delegate to `system-files/dispatch` (markdown + xlsx-CSV +
    PDF-text → `system-files/reader`), the image to `system-vision`, the mp3 to transcription. THING's
    **first turn ends in an offer**, not a build — no `writeProjectTable`/`writeProjectPage` and no
@@ -174,33 +164,23 @@ Hop by hop, for maintainers:
    ambient DTS simply has no `db`/`writeProject*` declared, so a stray write attempt from inside it is a
    **typecheck error**, never a runtime throw. The fix is verified in the engineer's scratch sandbox and
    handed back for the automator to persist with the real writer.
-9. **Concurrency cap.** The engine's `maxConcurrentForks` defaults to 4
-   (`sdk/org/libs/core/src/session/session.ts:703,737,970`); every fork (whether a direct model `fork()`
-   call or a tasklist step running under the same `ForkEngine`) mints a `'queued'` trace scope before
-   `acquireSlot()` and emits a `type:'fork_queue' {active, queued, max}` event on every slot
-   transition (`sdk/org/libs/core/src/fork/fork.ts:144-189`). Building 4+ per-leg spaces together (each
-   running `build_specialist`'s `role:'explore'` research step) is the natural trigger; if the live run's
-   parallelism doesn't happen to exceed the cap, the runner falls back to one compound ask that fans out
-   ≥5 topics at once ("check the visa rules, the Zanzibar insurance, the driving permit, the ranger-tip
-   situation and the luggage limits, all together") to force it deterministically.
-10. **A throwing api route — harness-authored, not model-authored.** To test the crash boundary as an
-    infrastructure invariant rather than hope the model writes a bug, the **runner itself** writes one
-    small route directly (`pod.writeFile('tanzania-trip/api/_scenario-throw/GET.ts', src)`) whose handler
-    unconditionally `throw new HttpError(400, 'simulated failure')` (or a bare `throw new Error(...)` to
-    also cover the generic-500 path), then `pod.appBuild()`s and calls it via `pod.appApi()`. Each request
-    runs in its own one-shot `worker_threads` worker
-    (`sdk/org/libs/cli/src/app/api/runtime.ts` `runWorker`); a thrown `HttpError` is serialized across the
-    thread boundary and reconstructed into `{status, body:{error:{status,message,details?}}}`
-    (`sdk/org/libs/cli/src/app/api/errors.ts`); a bare throw / worker crash / non-zero exit is caught by
-    `worker.on('error'|'exit')` and mapped to a generic `500 {error:{status:500,message:'internal
-    error'}}` — the pod process itself never goes down, and the very next call to an existing, real
-    route (e.g. the legs listing) must still 200 with real rows.
-11. **`db.query` with `include`.** A second harness-authored probe route
-    (`api/_scenario-relation-check/GET.ts`) reads the actual declared relation name(s) off the legs
-    table's schema (`pod.readProjectFile(project, 'database/<legs>.json')`) and calls
-    `ctx.db.query(legsTable, { include: [...relationNames] })`
-    (`sdk/org/libs/cli/src/app/store.ts:448-477`); each returned leg row must carry its related
-    costs/lodging as nested arrays/objects with real content — not just the bare parent row.
+9. **Concurrency cap.** The engine's `maxConcurrentForks` is 4. Every fork, including tasklist steps
+   sharing the same `ForkEngine`, enters a queued trace scope before acquiring a slot and emits
+   `type:'fork_queue' {active, queued, max}` events on slot transitions. At least five fork tasks must be
+   put in flight together, naturally while building per-leg spaces or through the compound request
+   "check the visa rules, the Zanzibar insurance, the driving permit, the ranger-tip situation and the
+   luggage limits, all together." The trace must show queueing without rejection or over-cap execution.
+10. **A deliberately throwing api route.** A small `_scenario-throw` route unconditionally throws
+    `new HttpError(400, 'simulated failure')`; a bare `Error` variant may also cover the generic-500 path.
+    This route is deterministic scenario infrastructure, not an accidental model-authored bug. Each
+    request runs in its own one-shot `worker_threads` worker; a thrown `HttpError` crosses the thread
+    boundary as `{status, body:{error:{status,message,details?}}}`, while a bare throw, worker crash, or
+    non-zero exit maps to `500 {error:{status:500,message:'internal error'}}`. The pod process must remain
+    up, and the next call to a real route such as the legs listing must still return 200 with real rows.
+11. **`db.query` with `include`.** A deterministic `_scenario-relation-check` route reads the declared
+    relation names from the legs table schema and calls
+    `ctx.db.query(legsTable, { include: [...relationNames] })`. Each returned leg row must carry its
+    related costs/lodging as nested arrays or objects with real content, not just the bare parent row.
 12. **`@app/types` + a shared component.** The generated `types/generated.d.ts` (`generateAppTypes`,
     `sdk/org/libs/cli/src/app/build/schema.ts`) mirrors the legs/costs/lodging schemas, aliased as
     `@app/types` at build time (`sdk/org/libs/cli/src/app/build/pages.ts:249-250,472-473`); the automator
@@ -217,10 +197,10 @@ Hop by hop, for maintainers:
     first place; THING narrows to a payment-due note/draft, never a fabricated "sent."
 16. **Memory.** A durable preference delegates to `user-memory`; a **brand-new session with no history**
     still recalls it — the durable store is the only channel it could come from.
-17. **Restart → auto-resume.** `pod.restart()`; the session self-heals (or the harness re-establishes it),
+17. **Restart → auto-resume.** After a pod restart, the session self-heals or can be re-established,
     and the spaces/tables/pages already built still exist and the app still compiles.
-18. **A2 — real render.** `chrome-devtools` opens the served app: real fixture values on screen, the
-    chat dock present, no console errors, no failed fetches.
+18. **Real render.** A real browser opens the served app: real fixture values appear on screen, the chat
+    dock is present, and there are no console errors or failed fetches.
 
 ---
 
@@ -271,7 +251,7 @@ Hop by hop, for maintainers:
 - **US-14 — It remembers me.** *As a traveler, I want a standing preference to outlive the conversation.*
   **Accept:** a fresh, historyless session still recalls the preference.
 - **US-15 — A restart doesn't cost me anything.** *As a traveler, I never want to notice the plumbing.*
-  **Accept:** after `pod.restart()`, the session resumes (or re-establishes) and the built app/spaces
+  **Accept:** after a pod restart, the session resumes or can be re-established and the built app/spaces
   survive and still compile.
 - **US-17 — Something I can only photograph.** *As a traveler, I want to snap a piece of paper (or a
   thing behind glass) and have what it SAYS actually kept — not "sorry, couldn't read that".*
@@ -310,39 +290,39 @@ Hop by hop, for maintainers:
   by name** [x] **a throwing api route / worker crash boundary** [x] **`@app/types` + project components**
 - Attachments: [x] upload [x] readDocument (md + **xlsx** + pdf) [x] attachmentIds to a specialist
   [x] vision [x] audio
-- Pod lifecycle: [x] restart→auto-resume [x] cold-wake [ ] event storm [x] worker containment (api handler)
-- Cross-cutting: [x] edge cases/errors [x] performance [x] budget
+- Pod lifecycle: [x] restart→auto-resume
+- Cross-cutting: [x] edge cases/errors [x] performance [x] budget enforcement
 - Knowledge & long conversations: [x] `readDocument` failing on purpose on a scan → vision
   [x] history summarization past `maxHistoryTurns` (the rule from before the boundary survives)
 - Platform: [x] the **loop guard** (a hook that writes the table it listens to must settle, not loop)
-- **New this scenario:** [x] `fork()` used directly with `role` [x] read-only role → capability
-  intersection (typecheck, not runtime) [x] fork required output schema [x] fork concurrency-cap queueing
+- Forking: [x] `fork()` used directly with `role` [x] read-only role → capability intersection
+  (typecheck, not runtime) [x] fork required output schema [x] fork concurrency-cap queueing
 
 ---
 
 ## 6. Acceptance criteria (the Acts)
 
-The runner (`06-tanzania/run.mjs`) drives these and asserts on the **trace + real pod state**.
+Each Act is evaluated against the **trace + real pod state**.
 
 | Act | Asserts (trace + real state) | Stories |
 |---|---|---|
 | **I — The offer** | turn 1 (attachments + the dump message) ends with an offer in THING's own reply (matches an offer-shaped phrase citing ≥2 real specifics: a leg, a date, a cost, a name) **and** shows **no** space-creation delegate and **no** `writeProjectTable`/`writeProjectPage` yield yet; turn 2 is the literal, unspecific "Yes please." | US-1 |
-| **II — Ingest & the provided-info shortcut** | the build turn (after "yes") shows ≤1 incidental `webSearch`/`webFetch` yield; ≥3 per-topic spaces exist (`pod.listSpaces`), live-registered; the built legs match the file (dates, nights, lodging names); 0 unrecovered eval/typecheck errors on THING's own turns | US-1, US-2 |
-| **III — Every fixture proven by its token** | `ZZJQUU` lands in a flights/legs row; the xlsx's computed total `3344.2` lands in a costs-related row/summary (proving the SheetJS CSV path was read, not just uploaded); the PDF's `+255 27 253 7046` hotline lands in a park-fees row or a space knowledge file; the voice memo's **Emmanuel** + the 5,000-shilling ranger tip land in a row/knowledge file (audio was transcribed, not skipped); `system-vision` was delegated for the photo and its description references real Stone Town/Zanzibar visual content — **noted honestly**: `links.md`'s stated EXIF-camera-model token is not extractable by the current vision pipeline (no EXIF/metadata step exists in `uploads.ts`) and is not hard-asserted, only the vision-delegate + real-content check is | US-4 |
-| **IV — Live app + the legs⇄costs/lodging relation** | app `built:true` with tables + ≥1 page; `/tanzania-trip/` (or `/app/tanzania-trip/`) → 200 real HTML; the legs-like table's schema declares a `relations` block (`hasMany` to a costs- and/or lodging-like table with `via`+`description`); the harness-authored relation-check probe route returns leg rows each carrying nested cost/lodging arrays with real content, not just the bare parent | US-5 |
+| **II — Ingest & the provided-info shortcut** | the build turn (after "yes") shows ≤1 incidental `webSearch`/`webFetch` yield; ≥3 per-topic spaces exist and are live-registered; the built legs match the file (dates, nights, lodging names); 0 unrecovered eval/typecheck errors on THING's own turns | US-1, US-2 |
+| **III — Every fixture proven by its token** | `ZZJQUU` lands in a flights/legs row; the xlsx's computed total `3344.2` lands in a costs-related row/summary (proving the SheetJS CSV path was read, not just uploaded); the PDF's `+255 27 253 7046` hotline lands in a park-fees row or a space knowledge file; the voice memo's **Emmanuel** + the 5,000-shilling ranger tip land in a row/knowledge file (audio was transcribed, not skipped); the photo is delegated to `system-vision` and its description references real Stone Town/Zanzibar visual content. The EXIF camera-model token in `fixtures/links.md` is not an acceptance token because the vision path analyzes pixels and does not extract image metadata. | US-4 |
+| **IV — Live app + the legs⇄costs/lodging relation** | app `built:true` with tables + ≥1 page; `/tanzania-trip/` (or `/app/tanzania-trip/`) → 200 real HTML; the legs-like table's schema declares a `relations` block (`hasMany` to a costs- and/or lodging-like table with `via`+`description`); the deterministic relation-check route returns leg rows each carrying nested cost/lodging arrays with real content, not just the bare parent | US-5 |
 | **V — A question that genuinely needs the web** | the Zanzibar-insurance follow-up shows ≥1 real `webSearch`/`webFetch` yield (contrast with Act II); the ~92-day validity finding (absent from every fixture) lands as a row **and** in a space's knowledge file | US-3 |
 | **VI — `apiCall` for consistency** | after the "always show me the tracker's own number" instruction, the next "what's the total" turn shows a `type:'yield', kind:'apiCall'` trace event whose `name` matches a real declared api route — not merely more `db` reads | US-6 |
-| **VII — fork() read-only roles, output schema, concurrency cap** | the "check the maths" delegation to `system-engineer` shows ≥1 `fork` event with `role:'explore'` and ≥1 with `role:'plan'`, each carrying a non-trivial `output` schema in its args; any typecheck_error inside a role:'explore'/'plan' fork span whose message names a write-class global (`db`, `writeProjectTable`, `writeProjectPage`, `writeProjectApi`, `writeProjectHook`) is a `typecheck_error`, **never** an `eval_error`/runtime throw — a hard fail if it ever is; separately (from the multi-topic parallel research fallback if the organic build didn't trigger it), the trace's `fork_queue` events show `active` never exceeding `max` (4) and `queued > 0` at least once when ≥5 fork tasks are in flight together | US-8 |
-| **VIII — A throwing api route: the crash boundary holds** | the harness-authored `_scenario-throw` route returns an `HttpError`-shaped `{status,body:{error:{status,message}}}` (or a generic 500 for a bare throw); the very next call to a real, existing route (e.g. the legs listing) still returns 200 with real rows within the same run — the pod process did not go down and no other route degraded | US-9 |
-| **IX — `@app/types` + a shared component** | `types/generated.d.ts` exists (`pod.readProjectFile`) and declares an interface for the legs-like table; `components/<Name>.tsx` exists, is PascalCase-named, and is imported (by relative path) from a page; that page is among the routes the built manifest reports and compiles without error | US-10 |
-| **X — A1: the in-app chat evolves the app** | `pages/_layout.tsx` renders `<Chat agent="thing">` (present on every page by construction); a message sent through that in-app session lands a NEW table + NEW page on the already-running app (manifest grows: before/after) | US-11 |
+| **VII — fork() read-only roles, output schema, concurrency cap** | the "check the maths" delegation to `system-engineer` shows ≥1 `fork` event with `role:'explore'` and ≥1 with `role:'plan'`, each carrying a non-trivial `output` schema in its args; any typecheck_error inside a role:'explore'/'plan' fork span whose message names a write-class global (`db`, `writeProjectTable`, `writeProjectPage`, `writeProjectApi`, `writeProjectHook`) is a `typecheck_error`, **never** an `eval_error`/runtime throw — a hard fail if it ever is; separately, with ≥5 fork tasks in flight together, the trace's `fork_queue` events show `active` never exceeding `max` (4) and `queued > 0` at least once | US-8 |
+| **VIII — A throwing api route: the crash boundary holds** | the deterministic `_scenario-throw` route returns an `HttpError`-shaped `{status,body:{error:{status,message}}}` (or a generic 500 for a bare throw); the very next call to a real, existing route (e.g. the legs listing) still returns 200 with real rows — the pod process did not go down and no other route degraded | US-9 |
+| **IX — `@app/types` + a shared component** | `types/generated.d.ts` exists and declares an interface for the legs-like table; `components/<Name>.tsx` exists, is PascalCase-named, and is imported by relative path from a page; that page is among the routes the built manifest reports and compiles without error | US-10 |
+| **X — The in-app chat evolves the app** | `pages/_layout.tsx` renders `<Chat agent="thing">` on every page; a message sent through that in-app session adds a new table and page to the already-running app | US-11 |
 | **XI — Greek update + restraint** | the Greek message (`ZNZ-PERMIT-77`) changes a real row (before: absent: after: present); "send Richard $960" produces **no** payment-capable yield/side-effect in the trace and the reply offers a draft/payment-due note instead of a fabricated confirmation | US-12, US-13 |
-| **XII — It remembers her** | the durable preference (warm-layers reminders for cold destinations) delegates to `user-memory`; a **brand-new session with no history** recalls it (Ngorongoro / cold-weather framing) | US-14 |
-| **XIII — Restart → auto-resume** | `pod.restart()`; the session resumes (or the harness re-establishes it) and the spaces, the app's tables/pages, and prior data all still exist and the app still compiles | US-15 |
-| **XV — The thing he photographed (a scan)** | the museum scan is an **image-only PDF** (`pdftotext` and the pod's own `unpdf` extractor both return **0** characters), so `readDocument` cannot read it and no text path could ever produce its contents: assert the host **rasterized its page(s)** into image attachments (`meta.pages`), that the turn used **`system-vision`**, and that the scan's unique token (`Unyanyembe` / `Livingstone` / `chronometer`) landed in a **real row or space file**. Closes coverage gap **M** (`readDocument` failing on purpose → vision). | US-17, US-4 |
-| **XVI — A rule that maintains itself (the loop guard)** | "keep that stop's running total right by itself" → a real **event hook on a db write** appears (`pod.listHooks` grows, bound to `db.<table>.*`), which **writes a table it also listens to** — the canonical self-write cascade. The logged payment lands as a real row, and the **loop guard holds**: rows are **identical 30s apart** (it settled, it did not re-fire forever) and the pod still answers a probe in < 5s (a runaway cascade starves the single-threaded event loop). Closes coverage gap **P** (loop guard). | US-18 |
-| **XVII — The long haul (history summarization)** | after unrelated chatter pushes the session past `maxHistoryTurns`, a real `llm_request` in the trace carries a **`[CONTEXT SUMMARY]`** message (the history was collapsed, not grown forever); the standing rule given **long before** that boundary still governs — the re-asked total still yields an **`apiCall`** to the app's own route; and a late, ordinary addition still lands in a **real row** (no routing degradation at the end). Closes coverage gap **M** (history summarization). | US-19, US-6 |
-| **XIV — A2: it actually renders (chrome-devtools)** | *(runs last — the finished, evolved app)* the served app shows real fixture-derived values (a leg name, a cost, a lodging name) on screen, the in-app chat dock is present and opens, and there are **zero** console errors and **zero** failed network requests | US-16 |
+| **XII — It remembers him** | the durable preference (warm-layers reminders for cold destinations) is persisted through the durable memory path; a **brand-new session with no history** recalls it (Ngorongoro / cold-weather framing) | US-14 |
+| **XIII — Restart → auto-resume** | after a pod restart, the session resumes or can be re-established, and the spaces, the app's tables/pages, and prior data all still exist and the app still compiles | US-15 |
+| **XV — The thing he photographed (a scan)** | the museum scan is an **image-only PDF** (`pdftotext` and the pod's own `unpdf` extractor both return **0** characters), so `readDocument` cannot read it and no text path could ever produce its contents: the host rasterizes its pages into image attachments (`meta.pages`), the turn uses **`system-vision`**, and the scan's unique token (`Unyanyembe` / `Livingstone` / `chronometer`) lands in a **real row or space file** | US-17, US-4 |
+| **XVI — A rule that maintains itself (the loop guard)** | "keep that stop's running total right by itself" creates a real **event hook on a db write**, bound to `db.<table>.*`, which **writes a table it also listens to** — the canonical self-write cascade. The logged payment lands as a real row, and the **loop guard holds**: rows are **identical 30s apart** (it settled, it did not re-fire forever) and the pod still answers a probe in < 5s (a runaway cascade starves the single-threaded event loop). | US-18 |
+| **XVII — The long haul (history summarization)** | after unrelated chatter pushes the session past `maxHistoryTurns`, a real `llm_request` in the trace carries a **`[CONTEXT SUMMARY]`** message (the history was collapsed, not grown forever); the standing rule given **long before** that boundary still governs — the re-asked total still yields an **`apiCall`** to the app's own route; and a late, ordinary addition still lands in a **real row** (no routing degradation at the end) | US-19, US-6 |
+| **XIV — It actually renders** | as the final observable check of the finished, evolved app, a real browser shows fixture-derived values (a leg name, a cost, a lodging name), the in-app chat dock is present and opens, and there are **zero** console errors and **zero** failed network requests | US-16 |
 
 *Performance targets are **hang detectors, not SLOs**. Record the ACTUAL time as a metric on every
 Act; only FAIL when a ceiling below is breached — that means something is broken, not merely slow.*
@@ -367,155 +347,24 @@ Act; only FAIL when a ceiling below is breached — that means something is brok
 
 ---
 
-## 7. What this scenario is really testing (and the gap it closes)
+## 7. What this scenario is really testing
 
-Two things, layered. First, the **propose/consent contract** (rule 2 of this campaign): every prior
-version of this scenario had the user ask for spaces and an app in the same breath as the dump — a
-scripted button, not a product decision. This rewrite forces THING to notice unprompted and offer, and
-proves a plain "yes" is sufficient, with the build genuinely gated behind that consent (Act I asserts no
-authoring happened before it).
+Two requirements are layered. First is the **propose/consent contract**: the user does not ask for
+spaces, an app, or a tracker. THING must recognize that an organized, openable tool would help, offer
+one using specific facts from the attachments, wait for consent, and treat the plain "Yes please." as
+sufficient authorization. No authoring may happen before consent.
 
-Second, and the reason this scenario earns its slot in the campaign: **five runtime mechanisms this
-suite has never exercised together** — `fork()`'s role-gated read-only capability intersection (a
-typecheck-time guarantee, not a runtime one), a fork's required output schema and its concurrency-cap
-queueing, `db.query`'s relation-expanding `include`, `apiCall` as the "ask the app, don't re-derive it"
-pattern, and the api worker's per-request crash boundary. Every one of these is implemented and
-documented (see the choreography's citations) but none had a live-prod Act pinned to it before. The
-provided-info-shortcut contrast (Act II vs. Act V) is the other half of the headline: a system that
-researches everything indiscriminately is exactly as broken as one that never researches at all — this
-scenario is the first to assert **both directions** in the same run.
+Second is a set of runtime invariants that must be observable together: `fork()` has role-gated
+read-only capability intersection at typecheck time, fork calls require output schemas and obey the
+concurrency queue, `db.query` expands declared relations through `include`, `apiCall` lets an agent ask
+the app for its authoritative answer rather than recomputing it, and an API worker failure remains
+contained to one request.
 
-One honest, pre-declared gap: `links.md`'s stated unique token for the Stone Town photo (an EXIF camera
-model) is not extractable by the current vision pipeline — there is no EXIF/metadata extraction anywhere
-in `uploads.ts`, only a raw image part handed to a vision model, which sees pixels, not embedded file
-metadata. Act III does not hard-assert on it; it asserts the provable substitute (the vision delegate
-fired and its description references real Stone Town content) and records the gap rather than quietly
-dropping the fixture's hardest claim.
+The provided-info contrast is equally important: indiscriminate research is wrong in both directions.
+THING must use supplied facts without searching for them again, but must perform real research for the
+Zanzibar-insurance validity window because that answer is absent from the supplied fixtures.
 
----
-
-## 8. Running it
-
-```bash
-cd sdk/org/scenarios/harness
-node smoke.mjs                     # prove harness + prod healthy first
-node ../06-tanzania/run.mjs         # fresh; writes 06-tanzania/results/report.md
-node ../06-tanzania/run.mjs --reuse # reuse the cached user + project
-```
-
-The runner provisions a disposable prod user, creates `tanzania-trip`, uploads all five fixtures
-(`fixtures/tanzaniamemories.md`, `fixtures/stone-town-zanzibar.jpg`,
-`fixtures/ngorongoro-conservation-area-tariffs.pdf`, `fixtures/trip-costs.xlsx`,
-`fixtures/voice-memo.mp3`) on the one compound message over the WS path — **passing explicit
-`mediaType`s** (`image/jpeg`, `audio/mpeg`, and a spreadsheet mediaType for the `.xlsx`; `pod.upload()`'s
-built-in extension table does not know any of the three, so an unmodified call risks silent
-misclassification of the image/audio paths specifically). It waits for the offer, sends the plain "yes,"
-then drives the research / consistency / engineer-fix / fork-cap / throwing-route / relation-check /
-in-app-chat / Greek / restraint / memory / restart / browser beats in order, checkpointing per Act to
-`results/checkpoint.json`. `fixtures/links.md` is read by the runner (never uploaded) — its link #4 is
-the live source the Zanzibar-insurance research question is expected to reach.
-
-## Actual results
-
-**Round 1 (2026-07-13) — verdict: FAIL (honest).** Baseline established, `run.mjs` implemented 1:1
-with the Acts table, run end-to-end against live prod. **Act I passes after a fix; Acts II–XIV expose
-real product bugs.** Seven were fixed in the product (each with a test); the two biggest are recorded
-as open issues because their fix is not verifiable in this round's budget. This is the honest
-narrative, not a green checkmark.
-
-### The baseline was worse than a failing test — it was silence
-
-Handed all five files and *"I don't trust myself to keep it straight… can you help me get on top of
-it?"*, THING **read every file correctly** (`system-vision` + `system-files/dispatch` → `reader` +
-`sheet`, `readDocument` ×3, no premature authoring) — and then **did nothing at all**. No offer, no
-spaces, no app. A bare **"Yes please." (23s)** and even an explicit nudge (*"Is it ready? Can I open
-it yet?"*, 33s) produced **0 tables and 0 spaces**. Its final reply to the user was
-`display("24872")` — a bare character count — after hitting `Cannot find name 'fullSummary'`.
-
-That is the propose/consent contract failing end to end, and it was **entirely a prompt bug**: THING's
-instruct taught RESTRAINT (*"only reach for path 4 LATER, when the user actually asks"*) with **no
-counterweight telling it to propose**. The user never asks — they don't know an app is on the menu.
-
-### Per-Act results
-
-| Act | Verdict | What actually happened |
-|---|---|---|
-| **I — The offer** | **PASS** (after fix) | Before: `offered=false`, **0** specifics, reply `"24872"`. After: **offered=true**, cites **4** of his own specifics, still **zero** authoring before consent, all 5 attachments classified right (`image/jpeg`→vision, `audio/mpeg`→transcription, xlsx→SheetJS). 154s. |
-| **II — Ingest & provided-info shortcut** | **PARTIAL** | From **0 tables/0 spaces** → **7 tables, 96 seeded rows** (itinerary 35, cost_items 22, costs 14, park_fees 11, field_notes 10, contacts 2, photos 2), **6 pages, 6 endpoints**, `_layout.tsx` **with the `<Chat>` dock**. Provided-info shortcut **holds** (1 incidental web yield — it did NOT re-research what it was handed). 0 unrecovered errors. Build turn 534s. **Still fails ≥3 spaces**: only 2 (`tanzania-safari-qa`, `zanzibar-advisor`) — Cairo and Dar were skipped. |
-| **III — Fixture tokens in real state** | **PARTIAL** | ✓ `ZZJQUU` (md), ✓ `Emmanuel` and ✓ the 5,000-shilling ranger tip (**audio transcription proven** — db row *and* space file). ✗ the xlsx's computed total `3344.2` and ✗ the PDF's hotline never persisted — **though both files were demonstrably read** (36 cost rows, 11 park-fee rows). See "the answer key" below: this Act was also **compromised** by an overfit prompt. |
-| **IV — Live app + the `include` relation** | **FAIL** | App compiles (`built:true`), serves **200 real HTML**, 6 routes. But **not one `relations` block across 7 tables** → `db.query({include})` had nothing to expand. The relation-expanding probe never ran. |
-| **V — A question the files don't answer** | **FAIL** | **0 web yields.** THING routed the Zanzibar-insurance question to the `zanzibar-advisor` space **it had just built from those same files** — which cannot possibly know the answer. The user got a confident guess. Nothing landed in real state. |
-| **VI — `apiCall` for consistency** | **FAIL** | **0 `apiCall` yields.** Root cause found *before* the Act ran: `api:call` was granted to **no shipped agent**, so the global was dead code in prod — and its `{allow:[…]}` list, documented as *the* security boundary, was **never enforced at the call site**. Both fixed; THING now holds the grant. It still chose not to call the route (prompt strength, not capability). |
-| **VII — fork roles, output schema, concurrency cap** | **PARTIAL** | ✗ THING never delegated the maths complaint to `system-engineer` → **0** `explore`/`plan` forks. **✓ the cap and the queue hold** — **70 `fork_queue` events, `max=4`, over-cap=0, peak `queued`=1** (a coverage-audit capability no scenario had ever exercised). ✓ no runtime write-failure inside any read-only fork (the capability intersection held). |
-| **VIII — Throwing route / crash boundary** | **FAIL (blocked)** | The probe route returned **200 HTML**, not an `HttpError`. Not the boundary's fault: **the app's own API is unreachable over HTTP** at every candidate URL (see the issue below) — so the Act could not reach the handler at all. ✓ the pod survived and kept serving (35 rows) throughout. |
-| **IX — `@app/types` + shared component** | **PARTIAL** | ✓ `types/generated.d.ts` (6837 B) exists and declares the row type; ✓ the app compiles. ✗ **not one `components/<Name>.tsx`**, though the automator holds `writeProjectComponent`. |
-| **X — A1: in-app chat evolves the app** | **FAIL** | ✓ the `<Chat>` dock IS on every page (`_layout.tsx`). ✗ the in-app request added **nothing** (tables 7→7, pages 6→6) in **8 seconds**: in a fresh session THING ran its orientation read and **displayed the project structure as JSON** instead of routing the request. |
-| **XI — Greek + restraint** | **PARTIAL** | ✓ **the Greek message changed a REAL row** (`ZNZ-PERMIT-77` absent before, in the db after — multilingual routing works, 106s). ✓ **no payment side-effect** and ✓ **no fabricated "sent!"**. ✗ but the refusal never reached him: THING's final reply was **`## Todos`** — its own todo list where the answer should be. |
-| **XII — It remembers him** | **PARTIAL** | ✗ the `user-memory` delegate never fired (it used the `remember` global instead — the assertion is narrower than the promise). ✓ **a brand-new, historyless session still recalled the standing preference** — the user-facing promise holds. |
-| **XIII — Restart → auto-resume** | **PASS** | ✓ the conversation carried on after `pod.restart()` (36s), ✓ **his spaces survived** (2→2), ✓ **his data survived** (97→97 rows), ✓ the app still compiles. |
-| **XIV — A2: it actually renders** | **FAIL — the app opens BLANK** | Driven in a real browser (chrome-devtools, session on both origins). The served HTML requests its bundle at **root-absolute** `/assets/index-*.js` → **404**, while the same asset exists at `/tanzania-trip/assets/index-*.js` → **200**. JS and CSS both 404, React never mounts, `<div id="root">` stays empty. All five of the app's **own** routes return the **HTML shell**, not JSON. **An app that opens empty is an anti-expectation → FAIL.** |
-
-### The Act meant to catch this was faking its own pass
-
-Act XIV exists precisely to check *the layer the user sees* rather than the raw data API — and it was
-doing the opposite. It read `e.pattern` from the manifest (the field is **`routePath`**), so every
-probe collapsed to `/api/` — which the SPA fallback answers — and then accepted that answer as "real
-data" because the body was longer than 20 characters. The body was the HTML shell. Two ways to fake a
-pass in one assertion, in the one Act that exists to prevent exactly that.
-
-Fixed: probe the real `routePath` and require an actual JSON object (an HTML shell with status 200 is
-a **broken** route, not a passing one), and resolve the shell's `<script src>` **exactly as a browser
-does** against the page URL — a root-absolute `/assets/x.js` resolves against the ORIGIN, dropping the
-`/<project>/` mount. The runner now reproduces the blank app on its own, with no browser needed.
-
-### The answer key was in the agent's prompt (the finding that matters most)
-
-`system-appbuilder/agents/automator/instruct.md` shipped with **this scenario's own fixture data in
-its worked examples** — the booking reference **`ZZJQUU`**, flight `A3932`, "Eileen Hotel", the `$960`
-balance. Act III asserts *"`ZZJQUU` landed in a db row"* **precisely to prove THING actually read the
-attached file** — but an agent carrying `ZZJQUU` in its own system prompt can emit it having read
-nothing at all. A previous round taught the agent the answers to this exam, which quietly invalidated
-the exam. Every token is scrubbed (examples are now domain-neutral), and a CI guard now walks **every**
-shipped agent for scenario fixture tokens (verified it FAILS against the pre-scrub prompt).
-
-### Issues fixed in the product (each with a test)
-
-| # | Bug (found live) | Fix |
-|---|---|---|
-| 1 | THING never proposes; the user is never asked, because they don't know an app exists | `user-thing` instruct: offer→wait; a bare "yes" to its OWN offer IS consent (restraint kept intact) — sdk/org `11a9396` |
-| 2 | A turn ended on a raw artifact (`display("24872")`) | "your LAST `display()` is the only thing the user reads" — `11a9396` |
-| 3 | THING dragged whole documents into its context, then lost the binding between statements | "read to ORIENT, not to COPY" — carry a summary, pass the attachment id — `0a99b59` |
-| 4 | `api:call` granted to **no** agent (dead code); its `allow` list **never enforced** | enforce at the yield router (resolver never runs for a refused endpoint); add the documented `["*"]` wildcard; grant THING the capability + "ask the app, don't re-derive" — `0a99b59`, docs in parent `5a41ea4e` |
-| 5 | Scenario fixture data (the exam's answer key) embedded in a shipped prompt | scrubbed + a CI guard over every agent — `ca816f7` |
-| 6 | Zero declared relations; zero shared components | automator + data-modeler: declare the relation when rows belong to a parent; factor repeated UI — `ca816f7` |
-| 7 | The source's own stated total and its emergency hotline were dropped as "derivable" | "keep the figures and contacts the source STATES" — `bb5f623` |
-| 8 | A space built from the user's material was asked what it could not know → a guess | "was this in what they gave me?" → research; escalate when a space says it doesn't know; KEEP the finding — `e1620bd` |
-| 9 | Orienting mistaken for answering (project structure dumped as the reply) | "orienting is NOT answering" — load, then do what they asked in the same turn — `e1620bd` |
-
-### Open issues (NOT fixed — recorded honestly)
-
-- **[`served-app-renders-blank-asset-404.md`](../../../.issues/served-app-renders-blank-asset-404.md)** —
-  **high**. Every project app served on the clean URL renders **blank** (root-absolute asset URLs 404),
-  and the app's **own API routes are unreachable at every URL** (`/<project>/api/…` returns the HTML
-  shell; `/api/…` 404s), because `resolveAppBase` finds no `/app/<id>/` segment on the clean-URL host
-  and the documented `__APP_BASE__` escape hatch is not injected. The raw data API is green the whole
-  time — which is exactly the trap this campaign warns about.
-
-### Harness bug fixed
-
-Act III's vision check read `thing.events` (in-memory), but Acts III+ run in a **new process** that
-resumes the session and never streamed Act I's turn → `didDelegate('system-vision')` was a permanent
-false negative. It now asserts the photo's description **in real state** (db rows + space files) —
-strictly stronger: a text model cannot describe a picture it never saw.
-
-### Performance (actual)
-
-| Metric | Actual |
-|---|---|
-| Attachment ingest → THING's offer | **154s** (target < 5 min) ✓ |
-| Whole build after "yes" | **534s** (target < 45 min) ✓ |
-| Served app first byte | < 1s ✓ |
-| Research turn | 142s — but **0 web yields** (it never researched) |
-| Unrecovered eval/typecheck errors | **0** across the whole session ✓ (hard check) |
-| Recovered errors (retry surface) | 7 (metric) |
-| Whole run | 127 LLM calls · 13 delegates · 380k in / 53k out tokens |
+The Stone Town photo has one intentional acceptance constraint: the EXIF camera-model token mentioned
+in `fixtures/links.md` is not assertable because the vision path analyzes image pixels and does not
+extract embedded metadata. The observable requirement is therefore that `system-vision` handles the
+photo and persists a description grounded in its visible Stone Town/Zanzibar content.

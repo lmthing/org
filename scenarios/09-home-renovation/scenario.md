@@ -3,8 +3,7 @@
 > **One line.** A couple mid-renovation, not asked, dumps their quotes, a messy spreadsheet, site
 > photos and a voice memo while venting that the budget "quietly runs away and we never notice until
 > it's too late" — THING recognises this is more than a chat answer, **offers** to build them
-> something they can actually watch, and a plain "yes please" is all it takes. This scenario is backed
-> by an executable live-prod runner (`09-home-renovation/run.mjs`).
+> something they can actually watch, and a plain "yes please" is all it takes.
 
 **Persona.** Maria & Niko, renovating their Kallithea apartment (kitchen now, bathroom in a few
 weeks). Neither is technical. They have quotes from four trades, a spreadsheet Maria updates about
@@ -12,18 +11,16 @@ once a week, phone photos of every wall before it closes up, a voice memo Niko l
 kitchen, and a second quote from a rival tiler that Niko isn't sure even opens properly. They never
 ask for an "app" — they just want to stop losing track before it's too late.
 
-**Why this scenario exists.** The PROMISE under test is a **budget db-emitter → hook → agent alert**
-inside a real, self-evolving app — but this rewrite exists specifically to prove the parts every
-scenario must prove and this one had drifted from: **THING proposes**, not the user; the user's
-compound dump never says "build," "app," "table," or any product noun; research and per-topic spaces
-happen invisibly; and every one of the seven fixtures is proved by a token landing in **real state**,
-never in prose. Layered on top is this scenario's own assigned slice: a **space-authored custom
-`ask()` form and `display()` view**, a **cancelled ask resolving `null`** (and the agent coping), an
-**`inspect()`** pass over a genuinely large value (a 200+ line-item cost estimate) instead of dumping
-it into context, a **cron reconcile that names the offending trade** without anything destructive
-running, **non-additive schema drift failing loud** (isolated, not silently eating data) against an
-**additive change that's fine**, and `GET /api/session-ledger` **accounting for the delegate tree**,
-not just the top-level turn.
+**Why this scenario exists.** The core promise under test is a **budget db-emitter → hook → agent
+alert** inside a real, self-evolving app. **THING proposes**, not the user: the compound dump never
+says "build," "app," "table," or any product noun. Research and per-topic spaces happen invisibly,
+and every one of the seven fixtures is proved by a token landing in **real state**, never only in
+prose. The scenario also exercises a **space-authored custom `ask()` form and `display()` view**, a
+**cancelled ask resolving `null`** (and the agent coping), an **`inspect()`** pass over a genuinely
+large value (a 200+ line-item cost estimate) instead of dumping it into context, a **cron reconcile
+that names the offending trade** without anything destructive running, **non-additive schema drift
+failing loud** (isolated, not silently eating data) alongside an **additive change that succeeds**,
+and `GET /api/session-ledger` **accounting for the delegate tree**, not just the top-level turn.
 
 ---
 
@@ -126,20 +123,19 @@ In the user's terms — success is:
 Hop by hop, for maintainers:
 
 1. **Project creation (UI/API).** `POST /api/projects {name:"home-renovation"}`. THING runs inside it.
-2. **Multi-modal upload — seven artifacts, one message, over the WS path** (the HTTP `/message` route
-   drops attachments — `sendWithAttachments`). `reno-dump.md` → `kind:'file'`, `text/markdown`.
-   `reno-budget.xlsx` → `kind:'file'`, spreadsheet mediaType (SheetJS → `Budget`/`Quotes`/`Expenses`/
-   `Contractors` as parseable text for `readDocument`; the harness's default `pod.upload()` extension
-   table doesn't know `.xlsx`/`.jpg`/`.mp3` — the runner must pass `mediaType` explicitly for
-   `reno-budget.xlsx`, `site-photo.jpg`, `bathroom-photo.jpg`, `voice-memo.mp3`). `site-photo.jpg` and
-   `bathroom-photo.jpg` → `kind:'image'` (→ `system-vision`, a before/after gallery). `contractor-quote.pdf`
-   → `kind:'file'`, `application/pdf` (a genuine 38-page NPS-style Class A construction cost estimate —
-   real, extractable, 200+ WBS-coded line items; `readDocument`/`unpdf` reads it cleanly, ~81K chars,
-   under the 100K-char cap). `cq2.pdf` → `kind:'file'`, `application/pdf` — **a real second-hand scan
-   whose PDF structure is genuinely broken** (`unpdf`'s `getDocumentProxy` throws `Invalid PDF
-   structure`; the host never propagates that — `extractDocumentText` catches it and
-   `resolveUploadDocument` returns `{ok:false, kind:'unsupported', error:'no extractable text…'}`).
-   `voice-memo.mp3` → `kind:'audio'` (whisper transcription). Every fixture carries facts that appear
+2. **Multi-modal upload — seven artifacts, one message, with attachment IDs preserved.**
+   `reno-dump.md` → `kind:'file'`, `text/markdown`. `reno-budget.xlsx` → `kind:'file'`, spreadsheet
+   media type (SheetJS → `Budget`/`Quotes`/`Expenses`/`Contractors` as parseable text for
+   `readDocument`). `site-photo.jpg` and `bathroom-photo.jpg` → `kind:'image'` (→ `system-vision`, a
+   before/after gallery). `contractor-quote.pdf` → `kind:'file'`, `application/pdf` (a genuine 38-page
+   NPS-style Class A construction cost estimate — real, extractable, 200+ WBS-coded line items;
+   `readDocument`/`unpdf` reads it cleanly, ~81K chars, under the 100K-char cap). `cq2.pdf` →
+   `kind:'file'`, `application/pdf` — **a real second-hand scan whose PDF structure is genuinely
+   broken** (`unpdf`'s `getDocumentProxy` throws `Invalid PDF structure`; `extractDocumentText`
+   catches it and `resolveUploadDocument` returns `{ok:false, kind:'unsupported', error:'no
+   extractable text…'}`). `voice-memo.mp3` → `kind:'audio'` (whisper transcription). The upload path
+   must preserve the correct media types for `.xlsx`, `.jpg`, and `.mp3`, rather than treating them as
+   `application/octet-stream`. Every fixture carries facts that appear
    **in no other fixture**: the memo alone knows the **padstone**, **variation order 114**, **Delta
    Scaffolding** and **Aegean Environmental**'s asbestos survey; the workbook alone knows
    `Q-2210-GLAZE`, `BL-B05`, `CD-2026-XL7`, `XLS-RENO-V7`; the markdown alone knows `Q-2207-KITCH`,
@@ -178,7 +174,7 @@ Hop by hop, for maintainers:
    and writes an **alert row naming Hansson Tiling**. `ctx.spawn` from an app API is a known no-op —
    this db-insert→hook path is the one that works.
 10. **Cron-driven agent turn.** A `cron` hook (`every:'7d'`, `trigger: '<budget-space>/agent#weekly_reconcile'`)
-    reconciles paid-vs-quoted and writes a status row; the runner fires it via `pod.runEmitter`.
+    reconciles paid-vs-quoted and writes a status row when its emitter fires.
 11. **Self-evolution.** "Bathroom next" adds a NEW `bathroom` space + table + page; "maybe a permit"
     adds a NEW `permits` space (researched knowledge) + table + page — both onto the **already-built**
     app; the manifest grows post-Act-I.
@@ -189,14 +185,15 @@ Hop by hop, for maintainers:
     message logs the asbestos-survey booking (`Aegean Environmental`, €340) from the memo; "pay
     Stefanos €4,450" is refused/narrowed to a payment-due record; a durable preference ("Astrid Tue–Thu,
     away first week of September") routes to `user-memory` and is recalled unprompted later.
-14. **Schema drift.** The runner directly rewrites one table's schema file non-additively (moves the
-    primary key / changes a column's type) on disk, then starts/resumes a session in the same project
-    (session init runs `getProjectAppGlobals` → `bootProjectApp` → `reconcileTable`) — that ONE table's
-    reconcile throws and is isolated (`libs/cli/src/app/boot.ts`'s per-table `try/catch`); the session
-    still reaches `idle`, every OTHER table/page still serves, and the broken table's old rows are
-    untouched (just not reconciled). A separate additive change (a new nullable column on another
-    table) is rewritten the same way and boots clean with the new column live.
-15. **Pod lifecycle.** `pod.restart()`; the session auto-resumes; project/spaces/tables/app survive.
+14. **Schema drift.** One table's schema changes non-additively (moving the primary key or changing a
+    column's type), then a session starts/resumes in the same project. Session initialization runs
+    `getProjectAppGlobals` → `bootProjectApp` → `reconcileTable`; that one table's reconcile throws and
+    is isolated by the per-table failure boundary. The session still reaches `idle`, every other
+    table/page still serves, and the affected table's old rows remain untouched (the incompatible
+    schema is not reconciled). A separate additive change—a new nullable column on another table—boots
+    cleanly with the new column live.
+15. **Pod lifecycle.** After a simulated pod restart, the persisted session can resume, and the project,
+    spaces, tables, and app survive.
 
 Everything above is authored by the model into the user's own project — no engineer touches a file.
 
@@ -254,7 +251,8 @@ Everything above is authored by the model into the user's own project — no eng
   `GET /api/session-ledger`'s record for the build session has a non-empty `delegates[]` (their own
   tokens/cost/depth), folded into the session's totals.
 - **US-17 — Survive a restart.** *As a homeowner, I don't want a nap to wipe the tracker.* **Accept:**
-  after `pod.restart()` the session auto-resumes; app + tables + spaces survive and still compile.
+  after a simulated pod restart, the session can resume; the app, tables, and spaces survive and still
+  compile.
 
 ---
 
@@ -277,33 +275,33 @@ Everything above is authored by the model into the user's own project — no eng
 - Attachments: [x] upload [x] readDocument (md + xlsx + 2×pdf) [x] attachmentIds to a specialist ·
   [x] vision (2 real photos) [x] audio (real recording → whisper, asserted in real state)
   [x] live web research (`links.md`) [x] **honest failed extraction** (`cq2.pdf`)
-- Pod lifecycle: [x] restart→auto-resume [x] cold-wake [ ] event storm [x] worker containment
-- Cross-cutting: [x] edge cases/errors [x] performance [x] budget (direct Azure keys)
+- Pod lifecycle: [x] restart→auto-resume
+- Cross-cutting: [x] edge cases/errors [x] performance [x] budget enforcement
   [x] **`inspect()` on a large value** [x] **cancelled ask → null** [x] **session-ledger delegate tree**
 
 ---
 
 ## 6. Acceptance criteria (the Acts)
 
-The runner (`09-home-renovation/run.mjs`) drives these and asserts on the **trace + real pod state**.
+Acceptance is based on the **trace + real pod state**, not conversational claims alone.
 
 | Act | Asserts (trace + real state) | Stories |
 |---|---|---|
-| **I — Notice, don't ask; propose; a plain yes builds it** | before the "yes please" turn: `pod.listSpaces(projectId)` is empty and `pod.appManifest(projectId)` has no tables — nothing built yet; turn 1's `lastText` poses an offer (question-shaped, offering to build something) and cites ≥3 file facts (`Q-2207-KITCH`, `Hansson Tiling`, …); all seven attachments classify (`file`×4, `image`×2, `audio`×1 — mediaType overrides applied for `.xlsx`/`.jpg`/`.mp3`); `system-files`/`system-vision` delegated; the memo's spoken-only fact (`padstone` or `variation order 114` or `Delta Scaffolding` or `Aegean Environmental`), the workbook's spreadsheet-only fact (`Q-2210-GLAZE`/`BL-B05`/`CD-2026-XL7`/`XLS-RENO-V7`), and the estimate PDF's `"Septic King"` landmark each land in real state (a db row or space knowledge file); `cq2.pdf`'s upload/read resolves `{ok:false, kind:'unsupported'}` — observed in the trace, never fabricated into a number; after the "yes please" turn: ≥3 spaces exist on disk, app `built:true` with tables + ≥1 page, ≥1 table seeded with rows whose content tokens match the files | US-1, US-2, US-3 |
-| **II — Real render (A2)** | chrome-devtools MCP opens the served app's root page: rendered DOM shows non-zero, real fixture-matching figures (a trade budget/spent figure, `Hansson`/`Voutos`/`Demetriou` names, both room photos in a gallery); the always-available in-app chat box is present; zero console errors / zero failed fetches; `pod.appApi(projectId,'dashboard')` (or the equivalent aggregation route) returns numbers matching the sums in `pod.appData(projectId,'expenses'|'budget_lines')` — the page isn't rendering `€0.00` while the raw data API has rows | US-3 |
+| **I — Notice, don't ask; propose; a plain yes builds it** | before the "yes please" turn: no project space or app table exists — nothing built yet; turn 1 poses an offer (question-shaped, offering to build something) and cites ≥3 file facts (`Q-2207-KITCH`, `Hansson Tiling`, …); all seven attachments classify (`file`×4, `image`×2, `audio`×1, with correct media types for `.xlsx`/`.jpg`/`.mp3`); `system-files`/`system-vision` delegated; the memo's spoken-only fact (`padstone` or `variation order 114` or `Delta Scaffolding` or `Aegean Environmental`), the workbook's spreadsheet-only fact (`Q-2210-GLAZE`/`BL-B05`/`CD-2026-XL7`/`XLS-RENO-V7`), and the estimate PDF's `"Septic King"` landmark each land in real state (a db row or space knowledge file); `cq2.pdf`'s upload/read resolves `{ok:false, kind:'unsupported'}` — observed in the trace, never fabricated into a number; after the "yes please" turn: ≥3 spaces exist on disk, app `built:true` with tables + ≥1 page, ≥1 table seeded with rows whose content tokens match the files | US-1, US-2, US-3 |
+| **II — Real render (A2)** | the served app's root page renders non-zero, real fixture-matching figures (a trade budget/spent figure, `Hansson`/`Voutos`/`Demetriou` names, both room photos in a gallery); the always-available in-app chat box is present; zero console errors / zero failed fetches; the dashboard aggregation API returns numbers matching the sums in the underlying `expenses`/`budget_lines` data — the page isn't rendering `€0.00` while the raw data API has rows | US-3 |
 | **III — Automatic invisible research** | a plain worry message ("do we need paperwork for the wetroom, worth doing underfloor heating") never names "research" or a space; `didDelegate('system-research')` true, `webSearch`/`webFetch` yields observed against `fixtures/links.md`'s domains; a `permit_options`/`heating_options` row absent from every seed lands via `db.insert`; a `permits` (or similarly-named) space's knowledge file contains the finding; a later plain follow-up is answered with a delegate into that space | US-4 |
-| **IV — Space-authored custom ask() form + display() view** | `pod.readProjectFile`/`listSpaceDir` confirms `components/form/LogQuote.tsx` and `components/view/BudgetBurndown.tsx` exist on disk in the budget space, and the space's agent frontmatter lists both in `components:`; asking (via a session scoped to the built project — the in-app chat, proving A1) to log the second quote and see the burn-down produces an `ask` whose open descriptor's `type === 'LogQuote'` and a `display` event whose descriptor's `type === 'BudgetBurndown'` — not the generic fallback | US-5 |
+| **IV — Space-authored custom ask() form + display() view** | `components/form/LogQuote.tsx` and `components/view/BudgetBurndown.tsx` exist on disk in the budget space, and the space's agent frontmatter lists both in `components:`; asking through the built project's in-app chat to log the second quote and see the burn-down produces an `ask` whose open descriptor's `type === 'LogQuote'` and a `display` event whose descriptor's `type === 'BudgetBurndown'` — not the generic fallback | US-5 |
 | **V — Cancelled ask resolves null; the agent copes** | the open `LogQuote` ask from Act IV is cancelled via `DELETE /api/sessions/:id/ask/:askId` (resolves `null`) instead of answered; the turn settles within its timeout (does not hang); no new row appears in `quotes`/`expenses` for the second quote; `thing.lastText` does not claim a total was saved; an immediately-following ordinary turn (e.g. a plain question) completes normally, proving the session wasn't left wedged | US-6 |
 | **VI — `inspect()` on a large value, not a dump** | asking about the 38-page estimate's labour-vs-materials split produces ≥1 `inspect` yield whose `args[].query` includes `count`/`filter`/`search`/`slice`; no `display()` event in the turn contains anywhere close to the full ~219-row table (a length/row-count ceiling check); the reply is a short summary, not a transcript | US-7 |
-| **VII — Agent-processed cost form** | a direct `POST` to the app's own "log a cost" route (`pod.appApi`, not chat) for the tiling overage returns ≥202; an agent turn fires via `db.insert`→emitter→hook (never `ctx.spawn`); an expense row lands with a NEW token and combined tiling spend moves from €4,800 toward/over €6,200 (before/after via `pod.appData`) | US-8 |
+| **VII — Agent-processed cost form** | a direct `POST` to the app's own "log a cost" route, not chat, for the tiling overage returns ≥202; an agent turn fires via `db.insert`→emitter→hook (never `ctx.spawn`); an expense row lands with a NEW token and combined tiling spend moves from €4,800 toward/over €6,200, verified before and after in app data | US-8 |
 | **VIII — Budget alert names the trade; nothing destructive** | after Act VII's insert crosses the `Q-2207-TILE` €6,200 ceiling, a db emitter → hook → agent writes an alert row whose text/field names **`Hansson Tiling`**; the turn's `yields` contain no send/pay/`callConnection`-type call — nothing destructive ran | US-9 |
-| **IX — Cron reconcile → DB** | a `cron` hook (`every:'7d'`) exists (`pod.listHooks`); `pod.runEmitter(projectId, scope, 'weekly_reconcile')` produces an agent turn that writes a reconcile/status row (before/after) | US-10 |
+| **IX — Cron reconcile → DB** | a `cron` hook (`every:'7d'`) exists; firing `weekly_reconcile` produces an agent turn that writes a reconcile/status row, verified by before/after state | US-10 |
 | **X — Self-evolution mid-life** | "bathroom in a few weeks" and "maybe a permit" (plain, no product noun) each add a NEW space (live-registered) **and** the app manifest gains ≥1 NEW table and ≥1 NEW page beyond Act I's manifest, on the already-built app | US-11 |
-| **XI — Non-additive drift fails loud; additive is fine** | the runner rewrites one table's schema file (`pod.writeFile`) moving its primary key / changing a column's type (non-additive) directly on disk, then starts a fresh session in the project: the session reaches `idle` (not `error`); that table's OLD rows are unchanged in `pod.appData`; every OTHER table and `pod.appPage` still serve 200; separately, an additive column-add on a different table (rewritten the same way) boots clean with the new column live and old rows intact | US-15 |
+| **XI — Non-additive drift fails loud; additive is fine** | one table's schema changes directly on disk by moving its primary key or changing a column's type (non-additive), then a fresh project session reaches `idle` rather than `error`; that table's old rows are unchanged; every other table and page still serves; separately, adding a column to a different table boots cleanly with the new column live and old rows intact | US-15 |
 | **XII — `GET /api/session-ledger` includes the delegate tree** | the record for Act I's build session has a non-empty `delegates[]`, each entry carrying its own `inputTokens`/`outputTokens`/`costUsd`/`depth`; the session's `totalInputTokens`/`totalCostUsd` are consistent with folding in (not ignoring) those delegate figures | US-16 |
 | **XIII — Inbound + outbound** | `installSpace` consent approved; a signed inbound webhook ("Astrid says tiling's a week behind") → `{events:≥1}` (a bad-signature delivery → 401/0 events); an agent/hook writes a timeline update | US-12 |
 | **XIV — Update, restraint, Greek, memory** | the beam update (`BEAM-2026`) changes a real row (before/after); a Greek message ("Σημείωσε την επιθεώρηση αμιάντου…") logs the asbestos-survey booking (`Aegean Environmental`, €340) as a real row; "pay Stefanos the last €4,450" → no send/pay yield, a payment-due record offered instead; a durable preference (Astrid Tue–Thu; away first week of September) routes to `user-memory` and is correctly recalled by a later, unrelated turn | US-13, US-14 |
-| **XV — Restart → auto-resume** | `pod.restart()`; the session auto-resumes (or re-establishes); the built app + all tables + all spaces survive and the app still compiles | US-17 |
+| **XV — Restart → auto-resume** | after a pod restart, the session auto-resumes (or re-establishes); the built app + all tables + all spaces survive and the app still compiles | US-17 |
 | **Edges** | idempotent re-ask doesn't clobber spaces (count unchanged); malformed inbound → 401/0 events; zero unrecovered `eval_error`/`typecheck_error` on THING's own turns (recovered ones are a metric, not a failure) | — |
 
 *Performance targets are **hang detectors, not SLOs**. Record the ACTUAL time as a metric on every
@@ -327,85 +325,63 @@ Act; only FAIL when a ceiling below is breached — that means something is brok
 
 ---
 
-## 7. What this scenario is really testing (and the gaps it closes/exposes)
+## 7. Scenario-specific rationale and constraints
 
-First and foremost, this rewrite corrects a scenario that had quietly become a **feature test with a
-person-shaped wrapper**: the old version had the user explicitly ask THING to "build me a tracker,"
-which tests a scripted button, not a product that recognises a need. Act I is now the load-bearing
-assertion that THING's offer precedes any building and that a plain "yes" is a sufficient spec.
+Act I is load-bearing: THING must recognise that the user's mess deserves a durable, observable
+workspace, offer it before building anything, and treat a plain "yes" as sufficient permission. If
+the user must name an app or tracker, the intended proactive behavior has not occurred.
 
-Beyond that, five things are specifically on trial here that no other rewritten scenario in this
-round is assigned:
+Five additional behaviors need explicit observation:
 
-1. **Space-authored UI (`ask()` form / `display()` view).** Nothing in this codebase's live-prod
-   scenario history has exercised a space shipping its OWN `components/form/*.tsx` /
-   `components/view/*.tsx` and an agent opting into them via frontmatter. Act IV proves the descriptor
-   identity actually reflects the custom component, not a silent fallback.
-2. **A cancelled ask.** Every other consent/ask flow in this suite gets answered. Act V is the first to
-   dismiss one and demand the agent not hang, not invent, and not leave a dangling row.
-3. **`inspect()` earning its keep.** The 38-page, 200+ line-item cost estimate is a genuinely large
-   value — Act VI is the first Act in this scenario forcing a choice between summarizing via
-   `inspect()` and blowing the context budget on a raw dump.
-4. **Non-additive drift vs. additive safety, precisely.** Per the current `libs/cli/src/app/boot.ts`,
-   a **PK move or type conflict** throws and is isolated per-table (not a blanket "refuse"); a plain
-   drop/rename is tolerated as an orphaned column. Act XI is written against that actual behavior, not
-   an aspirational one — and pairs it with the additive case that must NOT be penalized.
-5. **`session-ledger`'s delegate tree.** Act XII is the first Act asserting that the ledger a human (or
-   an operator) reads to understand cost reflects what the specialists actually spent, not just the
-   top-level turn — otherwise a heavy multi-delegate build looks artificially cheap.
+1. **Space-authored UI (`ask()` form / `display()` view).** The budget space ships its own
+   `components/form/*.tsx` and `components/view/*.tsx`, with an agent opting into them via
+   frontmatter. Descriptor identity must reflect the custom component rather than a silent generic
+   fallback.
+2. **A cancelled ask.** Dismissing the form must resolve to `null`; the agent must neither hang nor
+   invent a value, and no dangling row may be left behind.
+3. **`inspect()` earning its keep.** The 38-page, 200+ line-item cost estimate is genuinely large.
+   The agent must summarize it through targeted inspection instead of consuming or displaying the
+   whole value.
+4. **Non-additive drift versus additive safety.** A primary-key move or type conflict throws and is
+   isolated per table, rather than causing a blanket application failure. A plain drop/rename may be
+   retained as an orphaned column, so the non-additive case must use a PK move or type conflict. An
+   additive nullable column must remain allowed.
+5. **`session-ledger` delegate accounting.** The ledger must include specialist tokens, cost, and
+   depth, folded into session totals; otherwise a multi-delegate build appears artificially cheap.
 
-The pre-existing headline (db-emitter → hook → agent alert naming a trade, `ctx.spawn`'s no-op gap,
-and phased mid-life self-evolution) remains intact in Acts VII–X.
+The budget alert depends on db insert → emitter → hook → agent. App-API `ctx.spawn` is not a substitute
+for that observable event path. The app must also evolve in place as new rooms and permit concerns
+arrive.
 
-A recovered `typecheck_error`/`eval_error` inside a delegated specialist is the retry surface, not a
-failure: hard-assert the **deliverable**, record recovered errors as a metric + note.
+A recovered `typecheck_error`/`eval_error` inside a delegated specialist is retry behavior rather than
+an automatic scenario failure. The deliverable and final state remain the hard assertions;
+unrecovered errors on THING's own turns fail the scenario.
 
 ---
 
-## 8. Running it
+## 8. Fixtures and implementation constraints
 
-```bash
-cd sdk/org/scenarios/harness
-node smoke.mjs                        # prove harness + prod healthy first
-node ../09-home-renovation/run.mjs    # fresh; writes 09-home-renovation/results/report.md
-node ../09-home-renovation/run.mjs --reuse # reuse the cached user + project
-```
+All seven fixtures must be uploaded on the single compound message with their attachment IDs
+preserved. Their media types must be explicit and correct: `reno-budget.xlsx` uses
+`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`; `site-photo.jpg` and
+`bathroom-photo.jpg` use `image/jpeg`; `voice-memo.mp3` uses `audio/mpeg`; and both PDFs use
+`application/pdf`. Sending `.xlsx`, `.jpg`, or `.mp3` as `application/octet-stream` is invalid because
+the host cannot dispatch them correctly.
 
-The runner provisions a disposable prod user, creates `home-renovation`, uploads **all seven
-fixtures** on the one compound message over the WS path (`ThingSession.sendWithAttachments`), then
-drives the propose→consent, research, form/view, cancelled-ask, inspect, cost-form/alert, cron,
-evolution, schema-drift, session-ledger, inbound, and restart beats, checkpointing per Act to
-`results/checkpoint.json`.
-
-**Upload gotcha (implementer note).** `Pod.upload()`'s default mediaType table only knows
-`.md/.txt/.pdf/.csv`; it does **not** know `.xlsx`, `.jpg`, or `.mp3` and will otherwise send
-`application/octet-stream`, which the host cannot dispatch correctly. Call `pod.upload(path, {
-mediaType })` explicitly for `reno-budget.xlsx`
-(`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`), `site-photo.jpg` /
-`bathroom-photo.jpg` (`image/jpeg`), and `voice-memo.mp3` (`audio/mpeg`). `contractor-quote.pdf` and
-`cq2.pdf` are covered by the default `.pdf` → `application/pdf` mapping.
-
-> **Fixture honesty — seven real artifacts, one of them genuinely broken (on purpose).**
+> **Fixture honesty — seven real artifacts, one of them genuinely broken on purpose.**
 > `site-photo.jpg` (kitchen wall stripped to the lath) and `bathroom-photo.jpg` (a bathroom mid-gut,
 > brick back to the wall) are real, different-room renovation photos. `contractor-quote.pdf` is a real
-> 38-page NPS-style Class A construction cost estimate — genuinely 200+ priced WBS line items,
-> `readDocument` extracts it cleanly (~81K chars, under the 100K cap) and it contains the exact
-> landmark string `"Septic King"`, verified against the actual `unpdf`/`pdfjs` extraction path the
-> host uses, not just `pdftotext`. `reno-budget.xlsx` is a genuine four-sheet workbook (`Budget`
+> 38-page NPS-style Class A construction cost estimate with 200+ priced WBS line items;
+> `readDocument` extracts it cleanly (~81K chars, under the 100K cap), and it contains the exact
+> landmark string `"Septic King"`. `reno-budget.xlsx` is a genuine four-sheet workbook (`Budget`
 > 19 lines / `Quotes` 13 / `Expenses` 12 / `Contractors` 10) read via SheetJS. `voice-memo.mp3` is a
-> real ~45s recording; its script is kept verbatim in `voice-memo.txt`. **`cq2.pdf` is also real, and
-> its PDF structure is genuinely corrupted** — verified directly against the host's own extraction call
-> (`unpdf`'s `getDocumentProxy` throws `Invalid PDF structure`; `extractDocumentText` catches it,
-> `resolveUploadDocument` returns `{ok:false, kind:'unsupported'}`, never an unhandled exception). This
-> is not a fixture bug to work around — it is exactly the kind of second-hand phone-scanned PDF a
-> non-technical contractor actually sends, and it is deliberately the trigger for Acts IV/V: THING must
-> not fabricate a quote total for a file it could not read; it must ask (via its own custom form), and
-> it must cope cleanly when that ask is dismissed rather than answered. Each fixture's fact is
-> independently checkable: the memo alone knows the **padstone**, **variation order 114**, **Delta
-> Scaffolding** and **Aegean Environmental**'s asbestos survey; the workbook alone knows
-> `Q-2210-GLAZE`, `BL-B05`, `CD-2026-XL7`, `XLS-RENO-V7`; the markdown alone knows `Q-2207-KITCH`,
-> `RC-0722-VA`.
-
-## Actual results
-
-_Filled in by the runner — paste from `results/report.md` after a run._
+> real ~45-second recording; its script is kept verbatim in `voice-memo.txt`. **`cq2.pdf` is also real,
+> and its PDF structure is genuinely corrupted**: `unpdf`'s `getDocumentProxy` throws `Invalid PDF
+> structure`; `extractDocumentText` catches it; and `resolveUploadDocument` returns `{ok:false,
+> kind:'unsupported'}` rather than an unhandled exception. This is not a fixture bug to work around.
+> It represents the kind of second-hand phone-scanned PDF a non-technical contractor sends and drives
+> Acts IV/V: THING must not fabricate a quote total for a file it could not read; it must ask through
+> its custom form and cope cleanly when that ask is dismissed. Each fixture's fact is independently
+> checkable: the memo alone knows the **padstone**, **variation order 114**, **Delta Scaffolding**, and
+> **Aegean Environmental**'s asbestos survey; the workbook alone knows `Q-2210-GLAZE`, `BL-B05`,
+> `CD-2026-XL7`, and `XLS-RENO-V7`; the markdown alone knows `Q-2207-KITCH` and `RC-0722-VA`.

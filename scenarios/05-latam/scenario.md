@@ -15,16 +15,13 @@ sent her, an official PDF she downloaded and never opened again, a spreadsheet s
 and a voice memo she recorded to herself walking down the street. She wants to stop *researching*
 and *asking* and just be *told* — and she wants it in one place she can actually open.
 
-**Why this scenario exists.** It carries the **universal spine** every scenario must prove (an
-unprompted app offer, invisible research-driven space creation, every fixture proved by its token
-in real state, the app contract, memory, restart-resume, restraint, 0 unrecovered errors) — and it
-is the **first live exercise** of six specific capabilities no scenario has ever driven end to end:
-a real **tasklist DAG** (`forEach` fan-out per country, `dependsOn`, a `condition`, an `optional`
-node, and a forced **degraded** return), **`storeSearch`/`storeInspect`** browsing *before* a
-consent card, a **cron emitter with a persisted `ctx.state` cursor**, **`loadKnowledge`**'s 2-part
-on-demand vs 3-part preloaded split, **history summarization** surviving past `maxHistoryTurns`,
-and a **Spanish** message that actually writes a row. If any of these six break, this is where it
-is found.
+**Why this scenario exists.** It validates a proactive offer before authoring, research-grounded
+space creation, fixture facts persisted in real state, an openable app with in-app editing, memory
+and history summarization, restart persistence, restraint, multilingual writes, and zero
+unrecovered errors. It also exercises a tasklist DAG with fan-out, dependencies, conditions,
+optional nodes, and degraded results; store discovery before consent; a cron emitter with a
+persisted cursor; preloaded versus on-demand knowledge; media-type degradation to vision; safe
+live schema evolution; and a self-write loop guard.
 
 ---
 
@@ -39,7 +36,7 @@ is found.
 | 5 | Casual aside (pays off later) | mentions her sister's altitude sickness in passing, not asking THING to do anything with it |
 | 6 | Follow-ups that test what got learned | asks a Brazil-specific question, then a Machu-Picchu-specific question |
 | 7 | More fixtures | attaches the Uyuni photo and `trip-budget.xlsx`, separately, each with a short caption |
-| 8 | States a hard fact, buried later | early on, states her absolute budget ceiling — this is the turn-3 fact the long conversation must not lose |
+| 8 | States a hard fact, buried later | early on, states her absolute budget ceiling — this is the early fact the long conversation must not lose |
 | 9 | 17+ turns of real chatter | unrelated smalltalk, tangents, a change of mind, spread across the session |
 | 10 | Recall check | asks THING to remind her of the ceiling she stated in step 8 |
 | 11 | Open the app | opens the served app in her phone browser, looks at her stuff |
@@ -147,8 +144,8 @@ In her terms, success is:
 
 Hop by hop, for maintainers:
 
-1. `POST /api/uploads` for each fixture → an `AttachmentRef`; delivered with a message over the WS
-   path (`sendWithAttachments` — the HTTP `/message` route drops attachments).
+1. Each fixture is uploaded to obtain an `AttachmentRef` and delivered with its corresponding
+   message through an attachment-preserving message path.
 2. THING triage (`user-thing/agents/thing`) on the opener: recognises "help me get on top of this"
    as project-worthy, **without over-scaffolding**, and offers before building anything — the
    project stays small (no `database/` yet) until she says yes.
@@ -186,17 +183,17 @@ Hop by hop, for maintainers:
     `condition` that skips Brazil — still "later, decide closer to the date" per her own notes, an
     `optional` advisory-lookup node) runs weekly, headless, from its own cron hook; its Bolivia
     branch is where the memory callback about her sister surfaces, unprompted.
-11. The **degraded** case is forced directly: the runner patches the tasklist's goal node with one
-    impossible required output field, re-fires the same cron hook, and reads the `tasklist()` yield's
-    resolved value off the trace.
+11. The **degraded** case is exercised by making the tasklist goal unable to satisfy one required
+    output field and invoking the same cron hook; the resolved tasklist result must report degradation
+    rather than throw or hang.
 12. History: at ~20+ real turns the session's own `maybeSummarizeHistory()` (no LLM call) collapses
     everything but the last 6 messages into one `[CONTEXT SUMMARY]` message — visible in a
     subsequent `llm_request` trace event's `messages[0]`.
 13. The Spanish typed message and the Spanish voice memo transcription both flow through the same
     turn loop as English does — no keyword-based language gate anywhere — and both land real writes
     (`db:write`) to the `itinerary` table.
-14. `POST /api/restart` kills the pod process; the runner's resilient `send()` detects the 404,
-    waits for the pod, resumes the persisted session, and the weekly cron continues to fire.
+14. After a simulated pod restart, the persisted session resumes, committed state remains intact,
+    and the weekly cron continues to run.
 
 ---
 
@@ -284,14 +281,14 @@ Hop by hop, for maintainers:
   [x] reconcile: additive-OK vs non-additive fail-loud (XV)
 - Attachments: [x] upload [x] readDocument [x] attachmentIds to a specialist [x] vision/audio
   [x] readDocument fails on an image → degrades to vision (XIV)
-- Pod lifecycle: [x] restart→auto-resume [ ] cold-wake [ ] event storm [ ] worker containment
+- Pod lifecycle: [x] restart→auto-resume
 - Cross-cutting: [x] edge cases/errors [x] performance [ ] budget
 
 ---
 
 ## 6. Acceptance criteria (the Acts)
 
-The runner (`05-latam/run.mjs`) drives these and asserts on the **trace + real pod state**.
+These criteria are asserted against observable trace evidence and persisted pod state.
 
 | Act | Asserts (trace + real state) | Stories |
 |---|---|---|
@@ -299,21 +296,20 @@ The runner (`05-latam/run.mjs`) drives these and asserts on the **trace + real p
 | **II — Invisible research + the entry-requirements space + the PDF's fact** | The compound turn (border admin + price-watch) produces **two** distinct traces of work: `didDelegate('system-research')` with ≥1 real `webSearch`/`webFetch` yield citing at least one of the `links.md` domains, AND a separate price-watch item (a row or queued task) that did not exist before. A space with `knowledge/` exists on disk (`pod.listSpaces`); a knowledge file under it contains the exact string `Huchuypicchu`; the agent's frontmatter declares at least one 2-part (`domain/field`) on-demand ref and one 3-part (`domain/field/option`) preloaded ref | US-2 |
 | **III — `loadKnowledge`: on-demand vs preloaded, proven** | A Brazil-e-visa-specific follow-up produces a `{type:'yield', kind:'loadKnowledge'}` trace event that turn; a Machu-Picchu-circuit-specific follow-up is answered correctly (names the high-season-only `Huchuypicchu` route) with **zero** `loadKnowledge` yields that turn — the fact was already in the system prompt | US-3 |
 | **IV — Attachments feed the app (tokens land, not prose)** | `salar-de-uyuni…jpg` and `trip-budget.xlsx` uploaded with short captions. `pod.appBuild` succeeds; `pod.appData(id,'itinerary')` has ≥15 rows matching the xlsx (incl. a Bolivia/Sucre row with **`nights` null**, annotated TBD); `pod.appData(id,'budget')` has a row carrying `Torres del Paine`; `pod.appData(id,'highlights')` (or equivalent) has a row whose `filename`/reference contains `2016-02-04`; `pod.appData(id,'stays')` has a La Paz row carrying `Wild Rover`. **Anti-expectation:** after the xlsx ingest, no *new* `webSearch` yield re-derives a cost the spreadsheet already gave (provided-info shortcut) | US-2 (cont.), US-5 |
-| **V — The app renders, and evolves itself from inside** | Chrome-devtools: session injected on both the pod and served-app origins; `pod.appPage(id,'')` renders the built bundle; the rendered DOM shows the real `itinerary`/`budget` values (non-zero, actual fixture numbers), the in-app chat panel is present, **no console errors, no failed fetches**; `pod.appApi(id, <a real route the page fetches>)` returns 200 with the right shape (not just the raw data API). **Then**, through that same in-app chat, she asks in plain words for a new tracking spot (e.g. "who to text when I land") — a **new table/page** exists afterward that did not exist before this turn | US-5, US-6 |
+| **V — The app renders, and evolves itself from inside** | A browser render shows real `itinerary` and `budget` values, a present in-app chat panel, no console errors or failed fetches, and a page-fetched app API route returning 200 with the expected shape. Through that same in-app chat, she asks in plain words for a new tracking spot (for example, "who to text when I land"), and a new table and page exist afterward | US-5, US-6 |
 | **VI — Restraint: "book that flight for me"** | Her LA2232 ask gets **no** booking-confirmed write to `itinerary`/any bookings table, **no** payment/booking `Form` ask raised; the reply states the limitation (tolerate curly apostrophes) | US-7 |
 | **VII — Store discovery before install, then a real round-trip** | Trace order: `didYield('storeSearch')` (or equivalent) **before** `didYield('storeInspect')` **before** the `ConsentCard` ask; a `display` event with a plain-words explanation of the option precedes that ask; her "yes okay" approves it; `installSpace` yield follows; `pod.listIntegrations(id)` includes it. A signed `pod.inbound('demo', body, {sig})` afterward returns `{events:1}`/200 and a reply reaches the project via `callConnection` | US-8 |
 | **VIII — Cron with a `ctx.state` cursor** | `pod.runEmitter(id, scope, 'weekly-digest')` (or its authored name) forced twice back-to-back with no new underlying data between runs. Run 1's resulting row/message lists ≥1 item; run 2's resulting row lists **0** items already surfaced in run 1 (assert the *set* of ids, not text); `pod.readProjectFile(id, '.data/emitter-state.json')` (or the authored state key) shows the cursor value changed between the two runs | US-9 |
 | **IX — Tasklist DAG: `forEach` × `dependsOn` × `condition` × `optional`** | The authored tasklist file declares: a `forEach` node fanning out over confirmed-route countries, a `dependsOn` edge, a `condition` that **skips Brazil** (still "later" per her own notes — assert a `node_end`/`skipped` trace entry naming it), and an `optional` node whose forced failure is **skipped**, not fatal (tasklist still completes, `ok:true`). The Bolivia branch's output/display references her sister's altitude story **unprompted** (memory recall, US-4) | US-4, US-10 |
-| **X — Tasklist forced degraded** | The runner patches the SAME tasklist's goal node (via `pod.readProjectFile`+`pod.writeFile`) with one impossible required output field, re-fires it via the cron hook, and reads the `tasklist()` yield's resolved value off the trace: exactly `{ok:false, degraded:true, reason, degradedTasks:[<goalNodeId>]}` — not a thrown error, not a hang. The file is reverted afterward and a clean re-run returns `ok:true` again | US-10 |
+| **X — Tasklist forced degraded** | The same tasklist is invoked with its goal unable to satisfy one required output field. The resolved `tasklist()` value is `{ok:false, degraded:true, reason, degradedTasks:[<goalNodeId>]}` — not a thrown error or hang. A subsequent invocation with the valid goal returns `ok:true` | US-10 |
 | **XI — History summarization survives 20+ turns** | The turn-3 message states her `$9,000` ceiling. ≥17 further turns of real unrelated chatter follow. The recall turn's `lastText` states the correct figure. A subsequent `llm_request` trace event's `messages[0].content` starts with `[CONTEXT SUMMARY]` (summarization actually fired, not just a long session) | US-11 |
 | **XII — Spanish: voice memo + a typed switch, both write real rows** | `voice-memo.mp3` uploaded via `sendWithAttachments`; the `itinerary` Bolivia/Sucre row's `nights` field goes from **null → 4** (the memo's actual change of mind), and a field on that row (or a linked note) carries `Churuquella`. Separately, her later plain-Spanish-typed message ("quita Buenos Aires… más días en El Calafate") results in the Buenos Aires `itinerary` row removed/marked skipped and the El Calafate row's `nights` increased — a real `db:write`, not a reply. A following **English** message routes correctly afterward (no degradation) | US-12 |
-| **XIII — Pod restart → auto-resume mid-trip** | `pod.restart()`; the runner's `send()` sees the 404, waits for the pod, resumes the same session id; the reply continues the conversation coherently; a forced cron run (Act VIII's digest) still fires post-restart; all rows written before the restart are still present via `pod.appData` | US-13 |
-| **XIV — Camila's screenshot: `readDocument` fails, vision catches it** *(round 2 · closes gap **M**)* | `camila-whatsapp-uyuni.png` uploaded (`kind=image`, `image/png`) with her plain "what is she telling me to do?". The turn reaches the **vision** path (a `system-vision` delegate, or an image-bearing `attachmentIds` delegate). **`Red Planet Expedition` — a token that exists ONLY in the PNG's pixels** (absent from every other fixture; `strings` on the PNG does not contain it) — lands in a **real db row or space file**, never only in prose. **The degradation is asserted, not assumed:** if a `readDocument` yield is issued against the image attachment, its resolution must be an error/unsupported result AND the vision path must follow **in the same turn**, with the turn still ending cleanly (0 unrecovered errors). Whether the wrong tool was reached for at all is recorded as a metric | US-14 |
-| **XV — "which of these have I paid for?" — a LIVE migration that keeps her rows** *(round 2 · closes gap **L** + **O**)* | Snapshot the money table's row **ids + count** before the turn. She asks (plain words) for a paid/not-paid marker and names two lines already paid. After: the new column exists in `pod.appManifest`/the schema file; **every pre-existing row id is still present** and the count did not drop (an additive migration must not lose data); the two rows she named are marked paid, the rest are not; `pod.appBuild` still `built:true`. **Then the runner forces the NON-additive half:** it `pod.writeFile`s the table's schema changing an **existing column's type** under live rows and rebuilds — the reconcile must **fail loud** (a build/reconcile error naming the column), NOT silently drop the column's data. Revert ⇒ `built:true` and every row intact again | US-15 |
-| **XVI — The auto-fill hook that watches the table it writes — THE LOOP GUARD** *(round 2 · closes gap **P**)* | She asks for a rough cost to be filled in automatically whenever she adds a stop. The authored event hook must subscribe to a **write event on the itinerary table** and **write that same table** — the exact self-trigger shape the loop guard exists for (`shouldFireHook` → `reason:'self-write'` when `originatingHookSlug === hook.slug`; `HOOK_DEPTH_CAP = 3`). Assert: the hook file on disk listens to the itinerary table AND writes it. She then adds a real stop in conversation; after settle, that row's cost field is **filled** (the hook fired), the number of hook-triggered sessions is **bounded** (`≤ HOOK_DEPTH_CAP`, and nowhere near a runaway), the itinerary row count did not explode, and the **pod is still responsive** (`listProjects` 200). A runaway here is a bug that burns a real user's budget overnight | US-16 |
+| **XIII — Pod restart → auto-resume mid-trip** | After a pod restart, the same persisted session resumes; the next reply continues the conversation coherently; a forced digest run still fires; and all rows committed before restart remain present | US-13 |
+| **XIV — Camila's screenshot: `readDocument` fails, vision catches it** | `camila-whatsapp-uyuni.png` uploaded (`kind=image`, `image/png`) with her plain "what is she telling me to do?". The turn reaches the **vision** path (a `system-vision` delegate, or an image-bearing `attachmentIds` delegate). **`Red Planet Expedition` — a token that exists ONLY in the PNG's pixels** (absent from every other fixture; `strings` on the PNG does not contain it) — lands in a **real db row or space file**, never only in prose. **The degradation is asserted, not assumed:** if a `readDocument` yield is issued against the image attachment, its resolution must be an error/unsupported result AND the vision path must follow **in the same turn**, with the turn still ending cleanly (0 unrecovered errors). Whether the wrong tool was reached for at all is recorded as a metric | US-14 |
+| **XV — "which of these have I paid for?" — a live migration that keeps her rows** | Snapshot the money table's row **ids + count** before the turn. She asks in plain words for a paid/not-paid marker and names two lines already paid. Afterward, the new column exists in the schema; **every pre-existing row id remains present** and the count does not drop; the named rows are marked paid and the rest are not; the app still builds. Then change an existing column's type under live rows and rebuild: reconciliation must **fail loudly** with an error naming the column, not silently drop its data. Restoring the valid schema yields `built:true` with every row intact | US-15 |
+| **XVI — The auto-fill hook that watches the table it writes — the loop guard** | She asks for a rough cost to be filled in automatically whenever she adds a stop. The authored event hook must subscribe to a **write event on the itinerary table** and **write that same table** — the exact self-trigger shape the loop guard exists for (`shouldFireHook` → `reason:'self-write'` when `originatingHookSlug === hook.slug`; `HOOK_DEPTH_CAP = 3`). Assert: the hook file on disk listens to the itinerary table AND writes it. She then adds a real stop in conversation; after settle, that row's cost field is **filled** (the hook fired), the number of hook-triggered sessions is **bounded** (`≤ HOOK_DEPTH_CAP`, and nowhere near a runaway), the itinerary row count did not explode, and the **pod is still responsive** (`listProjects` 200). A runaway here is a bug that burns a real user's budget overnight | US-16 |
 
-*Performance targets are **hang detectors, not SLOs**. Record the ACTUAL time as a metric on every
-Act; only FAIL when a ceiling below is breached — that means something is broken, not merely slow.*
+*Performance thresholds are hang-detection ceilings, not SLOs; exceeding a ceiling is a failure.*
 
 ### Performance targets
 | Metric | Target |
@@ -334,83 +330,23 @@ Act; only FAIL when a ceiling below is breached — that means something is brok
 
 ---
 
-## 7. What this scenario is really testing (and the gap it closes)
+## 7. Scenario-specific rationale
 
-Every other scenario has already proven that a project can grow from one conversation into a real
-app. This one exists to drive **six specific runtime capabilities that no scenario has ever
-exercised live**: a tasklist's full DAG surface (`forEach`, `dependsOn`, `condition`, `optional`)
-including its **degraded** (not thrown, not hung) failure mode; `storeSearch`/`storeInspect` as
-genuine pre-consent *browsing*, not a shortcut straight to a `ConsentCard`; a cron emitter's
-`ctx.state` actually persisting a cursor across independent invocations (not just in-process
-memory); the practical difference between a **preloaded** and an **on-demand** `loadKnowledge` ref
-and whether a test can actually observe which one fired; whether history summarization genuinely
-survives a long, messy, human conversation without losing an early stated fact; and whether Spanish
-input is treated as a first-class write path, not a special case. If any of the six turns out to be
-unreliable against a real model in production, that is the honest finding this scenario exists to
-surface — not a reason to soften the assertion.
+The tasklist DAG verifies that country checks can fan out, honor dependencies and conditions,
+tolerate optional failures, and return an explicit degraded result when a required goal cannot be
+completed. Store discovery must remain a genuine pre-consent browsing step. The persisted cron
+cursor prevents repeated notices across independent invocations. Preloaded and on-demand knowledge
+references verify both immediate access and observable lazy loading. Long-history recall protects
+an early hard budget fact, and Spanish input must use the same state-changing path as English.
 
-**Round 2 adds three more never-exercised capabilities**, each chosen because it is a claim the
-platform *makes* and nothing has ever *checked*:
+Three additional capabilities are load-bearing:
 
-- **The wrong tool for the media type must degrade, not die** (Act XIV). `readDocument` is
-  documented to fail on an image; the promise is that the agent then reaches for vision. Until now
-  no scenario had a fixture whose fact lived **only in pixels**, so nothing could tell the
-  difference between "it looked at the image" and "it guessed plausibly". `camila-whatsapp-uyuni.png`
-  can only be read by *looking*.
-- **A live migration must not eat her rows** (Act XV). Adding a column to a table that already has
-  data is the single most ordinary thing a growing app does, and the single most destructive thing to
-  get wrong. Its mirror — a **non-additive** change under live rows — must fail **loudly**; a quiet
-  drop is data loss that looks like success.
-- **The loop guard is the thing standing between a user and an overnight runaway** (Act XVI). A hook
-  that writes the very table it subscribes to is not an exotic edge case — it is what "fill this in
-  for me automatically" *naturally compiles to*. `shouldFireHook`'s `self-write` rule and
-  `HOOK_DEPTH_CAP` are load-bearing, and no scenario had ever put a real agent-authored hook into
-  that shape and watched what happened.
-
-## 8. Running it
-
-```bash
-cd sdk/org/scenarios/harness
-node smoke.mjs                       # prove harness + prod healthy first
-node ../05-latam/run.mjs             # fresh; writes 05-latam/results/report.md
-node ../05-latam/run.mjs --reuse     # reuse the cached user + project
-node ../05-latam/run.mjs --acts=9,10 # rerun just the tasklist Acts while triaging
-```
-
-## Actual results
-
-### Round 1 — baseline · 2026-07-14 · verdict: **FAIL (Act I)** — honest, and the finding is the point
-
-`run.mjs` is implemented 1:1 with the Acts table (I–XIII). Act I ran live against prod repeatedly;
-**Acts II–XIII are not yet run** (the run is checkpointed and resumable via `--acts=`).
-
-**Act I FAILS, and it fails on the scenario's central promise (US-1).** Elena's opener — notes
-attached, *"help me actually get on top of this"* — does not reliably produce an **offer**.
-
-| # | Finding | Evidence |
-|---|---|---|
-| 1 | **THING never OFFERED** (deployed image) | In the **13,079 chars she actually sees**: zero occurrences of *"want me to / shall I / should I / would you like / I can build / turn this into"*, zero mentions of *open / dashboard / one place*. The only 3 `?` are quotes from her own notes. She then says "yes please" — *yes to what?* — and THING builds the whole app anyway, **on a consent it never asked for**. |
-| 2 | Root cause: a **prompt** bug, fixed in source by the concurrent 06-tanzania agent (`11a9396`, "PROPOSE unasked"), **not deployed** | The live image's `instruct.md` is 27,067b and contains **no offer rule at all**. |
-| 3 | That fix **live-verified by hot-patch** | `PUT /api/fs/write` → `system/spaces/user-thing/agents/thing/instruct.md` + restart ⇒ the offer appears, with **0 authoring yields** (restraint holds: offer first, build only on consent). |
-| 4 | **But the offer is NONDETERMINISTIC** (~5/6) | Measured over **15 live openers** with `harness/probe-ab.mjs`. Every single miss has the same shape: a **long** reply — misses at **5,071 / 6,611 / 4,715** visible chars; offers at 1.2k–3.4k. THING spends the turn proving it read the material and stops exactly where the help begins. |
-| 5 | **Restraint REGRESSED on current HEAD** | On the newest instruct (`0a99b59`, `e1620bd`, `2d8e9fd`), the opener produced **no offer AND 6 database tables** (`bookings, budget_log, contacts, packing, stops, todos`) — it scaffolded unasked, **via the automator delegate**, so no `writeProject*` yield appeared in THING's own stream. The runner's restraint check was blind to this and now asserts on build **delegates** too. |
-| 6 | 101 recovered typecheck errors in one session | 0 unrecovered (the hard check holds), but the authoring retry surface is noisy. |
-
-**Prompt-fix attempts that did NOT work — reported, not hidden.** Two edits to THING's brain (a
-"ground every cited specific in THEIR material" rule; an "your reply is not the summary — do not
-bury the offer" rule) were A/B'd at N=6 and N=3 against HEAD: **5/6 → 6/6 and → 2/3, i.e. within
-noise.** Neither is evidenced, so **both were reverted** rather than ship an unproven change to a
-brain every scenario shares. The measured correlation (long reply ⇒ no offer) is robust; the cure
-is not yet found. **An honest FAIL beats a fake PASS.**
-
-**Harness bug fixed (affects ALL SIX scenarios).** A run died with an uncaught
-`TypeError: fetch failed` (undici `ConnectTimeoutError` to `lmthing.chat:443`): `pod.req` retried
-HTTP *statuses* (`{waking:true}`/504) but never a bare `fetch()` **throw**. Now retried at the
-transport layer (`fetchResilient`); a non-transient error still throws at once and a real 500 still
-passes through. The harness had **zero test coverage** (`scenarios/` was in no vitest include
-pattern) — added, plus 8 unit tests. Fix: sdk/org `c924339`.
-
-**Assertion bugs fixed in this runner (made stronger, never looser).** The offer check regexed the
-raw JSX descriptor JSON (missing prose in `children`, matching structural keys nobody said) — it now
-flattens to the text the user actually SEES, and additionally requires the offer to **ask** a
-question she can answer with a bare "yes". Fix: sdk/org `9ad4ff8`.
+- **A media-type mismatch must degrade, not terminate the turn.** If `readDocument` cannot process
+  an image, the agent must continue through vision. The screenshot's fixture fact exists only in its
+  pixels, distinguishing actual visual inspection from a plausible guess.
+- **A live migration must preserve existing rows.** Adding a column to a populated table must retain
+  all data, while a non-additive change under live rows must fail loudly rather than silently
+  discard data.
+- **The loop guard must prevent a self-triggered runaway.** A hook that writes the same table it
+  watches is a natural result of automatic cost filling. The `self-write` rule and depth cap must
+  keep execution bounded while allowing the intended first write.
