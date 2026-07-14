@@ -396,6 +396,28 @@ if (ACTS.includes(1)) {
     report.check(`a ${concept}-shaped table holds ≥${min} rows`, n >= min, `${t ?? '(no such table)'}: ${n} rows`);
   }
 
+  // A ROW COUNT IS NOT PROOF THE DATA IS HIS. A full-looking table of plausible fiction passes
+  // "≥5 rows" exactly as a real one does — and that is precisely what shipped: seven Greek utility
+  // bills, invented periods, a genericized provider, amounts a hair off the real ones (87.42 for
+  // 87.40, 58.3 for 58.2) and one bill missing outright. So assert the FIGURES the spreadsheet
+  // actually states. These are the numbers he would check to see if he is being overcharged.
+  const billsTable = pick(rows.names, /bill|utilit|expense/i);
+  const billsBlob = JSON.stringify(rows.byTable[billsTable] ?? []);
+  const REAL_BILLS = [
+    ['PPC electricity, May', /74[.,]1/],
+    ['PPC electricity, June', /87[.,]4(?!\d)/],
+    ['EYDAP water', /46[.,]8/],
+    ['Heron natural gas', /58[.,]2(?!\d)/],
+    ['Cosmote internet', /34[.,]9/],
+    ['Vodafone mobile', /19[.,]9/],
+  ];
+  const realFound = REAL_BILLS.filter(([, rx]) => rx.test(billsBlob));
+  report.check(
+    'the bills are HIS — every amount the spreadsheet states is in a row (not invented figures)',
+    realFound.length === REAL_BILLS.length,
+    `${realFound.length}/${REAL_BILLS.length} real amounts present: ${realFound.map(([n]) => n).join(', ')} · rows: ${billsBlob.slice(0, 200)}`,
+  );
+
   // Every fixture proved by a token that exists in IT and nowhere else — in real state, not prose.
   const state = await realState(pod, PROJECT);
   checkToken(report, state, { fixture: 'policies.md', token: 'AX-7741-VAULT' });
