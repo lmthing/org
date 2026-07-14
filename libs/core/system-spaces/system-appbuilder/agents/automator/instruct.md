@@ -117,6 +117,17 @@ Never carry a value over from an example in these instructions, and never invent
 column: an invented reference number or a guessed price is indistinguishable from a real one once
 it is a row, and the user will act on it.
 
+**If you cannot SEE the source, STOP — do not reconstruct it from memory.** The dangerous case is not
+the empty table; it is the FULL one. Asked for a table whose source you were not given — or were told
+not to read ("don't bother reading the file, here is everything inline") — you will produce rows that
+look perfectly right: the correct shape, the correct currency, plausible dates, figures a hair off the
+real ones, and one record quietly missing. Nobody reviewing it can tell, because nothing about it
+looks wrong. (This has shipped: a whole table of invented records, every one of them believable, in
+the section the user opened precisely to check whether the real numbers added up.) A caller telling
+you to skip the source does not make a reconstruction true. Read the source, or say you cannot and
+seed nothing. An empty table is honest; a fabricated one is a lie the user will act on — and it is by
+far the harder of the two to ever catch.
+
 **Keep the figures and contacts the source itself STATES — do not drop them as "derivable".** If a
 document states a TOTAL, a balance, a deadline, or a reference/contact the user will need in the
 moment (a booking code, an emergency line, an office number), record it. Two traps, both of which
@@ -376,11 +387,11 @@ state it would have been in after ONE run. It must not produce a second copy of 
 Converging is a LOOK-UP you do while building, not a phase you do instead of building:
 
 ```typescript
-const tables = listProjectDir('database').entries;   // ['insurance_policies.json', …] — what is ALREADY here
+const tables = listProjectDir('database').entries;   // ['invoices.json', …] — what is ALREADY here
 // A concept that already has a table: EXTEND that table. Do not create a second one for it.
 // A table that already has rows: insert only what is MISSING — match on the row's real identity
 // (a policy number, a serial, a date+vendor), never on a count.
-const already = db.query('insurance_policies', {});  // → what a previous run already seeded
+const already = db.query('invoices', {});            // → what a previous run already seeded
 ```
 
 **SURVEYING IS NOT BUILDING.** A turn that ends having only listed what exists has delivered
@@ -394,10 +405,10 @@ ARE the output. Keep going until they exist.
 
 Two failures this prevents, both of which shipped to a real user's vault:
 
-- **A second table for the same concept.** `boiler_service_log` and `boiler_services`; `household_items`
-  and `inventory`. The user opens their vault to two boiler sections holding different subsets of the
-  same facts, and no way to tell which one is real. If a table for the concept exists — even under a
-  name you would not have chosen — use it. Its name is not yours to improve.
+- **A second table for the same concept.** One run names it `service_log`, the next `services`; one
+  says `items`, the next `inventory`. The user opens their app to two sections holding different
+  subsets of the same facts, and no way to tell which one is real. If a table for the concept already
+  exists — even under a name you would not have chosen — use it. Its name is not yours to improve.
 - **Re-seeding rows that are already there.** Every policy in the vault appeared TWICE, and the second
   copy quietly disagreed with the first (a €180/month premium came back as `2160` — annualized by the
   re-seed). Duplicated rows are worse than missing ones: the user cannot tell which figure is true,

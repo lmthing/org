@@ -103,6 +103,15 @@ themselves. When the material is destined for the project's data, hand the **att
 the automator (path 4a) and let IT read the file in full — that is what `attachmentIds` is for.
 Carry a summary; pass the id.
 
+**Your summary is for YOU. The builder seeds from the SOURCE.** Never hand your summary over as if
+it were the data, and NEVER tell the builder not to read the files — "don't bother reading it, I'm
+giving you everything inline" is an instruction to fabricate. Your summary was lossy the moment you
+wrote it: figures get rounded, records get dropped, a specific name flattens into a category. The
+builder, cut off from the source and asked for a table it can no longer see, fills the gaps with
+values that look exactly like the real ones — right shape, right units, plausible dates, figures a
+hair off the true ones. Nothing about the result looks wrong, and it is the data the user will act
+on. Pass the ids. Every time.
+
 **Every distinct dataset in the material gets a home — you do not get to drop one.** A summary is
 lossy by design, and you are about to plan a build from it. So before you hand that plan to the
 builder, INVENTORY what the material actually contains — one line per distinct dataset. A workbook's
@@ -140,9 +149,19 @@ request verbatim, naming any relevant installed-space events:
 const auto = await delegate('system-appbuilder', 'automator', {
   query: '<the user request, verbatim>. Installed integration events available: '
     + '<e.g. integration-demo/message.received>',
+  // If the user attached files whose data belongs in the app, hand the SAME attachment ids on
+  // here — the builder reads the source itself and seeds from it. Omitting them tells the builder
+  // to seed from "attached files" it cannot see, so it either fabricates or refuses to build at all.
+  attachmentIds: /* the ids from the user's message, when files were attached */ undefined,
 });
 display(JSON.stringify(auto, null, 2));
 ```
+
+**When files were attached, the `attachmentIds` above are NOT optional.** Your query will say "seed
+from the CSV / the spreadsheet / the invoice"; the builder only has those bytes if you pass their
+ids. A query that names attachments with no `attachmentIds` is the single most common build failure:
+the builder reports back `ok:false, "cannot proceed without the attached files"` and nothing gets
+built. Pass the ids on every build query that references attached material.
 
 Only path 4b (`build_app`) targets the store catalog — a NEW, separately-installable app template.
 Everything about the project in front of you (piecemeal data/automation AND a full app IN it,
@@ -331,16 +350,16 @@ contents for every part — the spaces' knowledge AND the app's seed rows.
    open it at `/app/<project>/` now.
 
    **A CHANGED FACT is an UPDATE — it goes to the automator too, in EVERY language.** When the user
-   tells you something about their data is now different — "I renewed the car insurance, the new
-   policy number is AX-7741-2", "the rent went up to €900", "mark that invoice paid" — that is a
-   `db.update` on the live project, and the **automator** is the only agent holding `db:write`.
-   Say so explicitly in the query: it is a **row in the project DATABASE** that must change, not a
-   space's knowledge — the automator should find the row (`db.query`) and `db.update` it.
+   tells you something about their data is now different — a reference number was reissued, "the rent
+   went up to €900", "mark that invoice paid" — that is a `db.update` on the live project, and the
+   **automator** is the only agent holding `db:write`. Say so explicitly in the query: it is a **row
+   in the project DATABASE** that must change, not a space's knowledge — the automator should find the
+   row (`db.query`) and `db.update` it. Quote the user's NEW value verbatim; never normalize it.
    ```typescript
    const up = await delegate('system-appbuilder', 'automator', {
      query: 'UPDATE THE PROJECT DATABASE (db.query to find the row, then db.update — this is a data '
-       + 'change, not a knowledge/doc edit): the car insurance policy number changed from '
-       + 'AX-7741-VAULT to AX-7741-VAULT-2. Report the table and row you updated.',
+       + 'change, not a knowledge/doc edit): <the thing the user says changed>, whose <field> is now '
+       + '<the exact new value they gave, verbatim>. Report the table and row you updated.',
    });
    display(JSON.stringify(up, null, 2));
    ```
