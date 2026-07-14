@@ -352,4 +352,88 @@ run them late, and re-settle before any Act that follows depends on a warm sessi
 
 ## Actual results
 
-_Filled in by the runner — paste from `results/report.md` after a run._
+### Round 1 (2026-07-14) — **FAIL**, and the failures are the point
+
+`run.mjs` implemented Act-for-Act from §6 and driven live against a local pod. Acts I–III ran; **Acts
+IV–XV have not yet been driven live** (the run is resumable from `results/checkpoint.json`). The
+verdict is an honest FAIL: the app the scenario exists to produce **did not build**. But the run paid
+for itself — it found the reason, and the reason was upstream of this scenario entirely.
+
+#### What held
+
+| Act | Result | Evidence |
+|---|---|---|
+| **I — ingest** | ✅ (the reading half) | All 6 fixtures ingested in ONE message. `system-vision` + `system-files`→`readDocument` delegated; the reply cited the card's `Orange Cake`/`400°`, the PDF's `Easy Lasagna`, the xlsx's `GF-NIKOS`/`BUDGET-CAP-78.50`/`PNT-001`, and ≥3 `recipes.md` facts. **Authored nothing before the "yes"** — the offer-gate held. |
+| **I — build** | ❌ | `built:false`, `routes:0`, `/app/family-recipes/` → **404**. Tables: `meal_plan, pantry, recipe_ingredients, recipe_steps` — **no `recipes` table and no `shopping_list`**. `recipe_ingredients.recipe_id` is a foreign key to a parent that was never created. A recipe book with no recipes: the anti-expectation, exactly. |
+| **II — audio is the only source** | ✅ | The mp3 upload **response** carried a real 486-char Whisper transcript **before any chat turn ran**. All six audio-only tokens verified disjoint against every other fixture by a static grep. The dish's record carries `μαστίχα · τσίπουρο · πράσο · άνηθο` — plus `190°C`/`55 λεπτά`, which the memo speaks *as words* and which therefore appear as digits in **no fixture at all**. Audio → Whisper → real row is **proved**. |
+| **III — `readDocument` vs an image** | ⚠️ re-graded | The guard **never fired — because it was never reached**: every agent correctly routes a photo to vision instead of the document reader. That is the product being *right*. The Act now grades that outcome as a pass and leans on `uploads.test.ts` for the host guard itself (see the finding below — the probe `scenario.md` specified is not something the platform can actually do). |
+
+#### The four bugs, all fixed in the product with a test
+
+1. **`system-architect` handed the model code that cannot compile** — `a4b5bc5`. **This is the one that
+   broke the app.** `synthesize_and_run/01-design.md` told the model to write `const functions = [];`
+   and then pass it to `currentTask.resolve({…, functions})`. A bare `[]` is an *evolving array*: push
+   to it and TS infers the element type, but **use** it before anything is pushed and the type can
+   never be determined. Reproduced against the repo's own `tsc --strict`: `TS7034` + `TS7005 —
+   Variable 'functions' implicitly has an 'any[]' type`, precisely the two errors in the live trace.
+   The model copies the example verbatim, so this fired on **every specialist build in every
+   scenario** — and the retry cascade from there is a **trap** (redeclaring → *"Cannot redeclare
+   block-scoped variable"*; assigning → *"Cannot assign to 'functions' because it is a constant"*).
+   The loop cannot escape, burns `maxRetries`, and the authoring turn dies with the app half-built.
+   The live trace shows the model commenting *"the previous attempt redeclared `functions`"* as it
+   thrashes. Fix: annotate the type. A prompt that hands the model uncompilable code is a bug in the
+   prompt.
+2. **The builder dropped the attribution** — `e127990`. It seeded the dish's record with every
+   operational detail and threw away *who the recipe came from*. It even chose a `source` column —
+   and filled it with the **channel** the material arrived on (*"a voice message from mum"*) rather
+   than the name the material itself states (*"Θεία Δέσποινα από τη Λευκάδα"*). The user's words were
+   *"help me not lose any of this"*. Generalised into `automator/instruct.md`: keep the attribution
+   material carries; **the transport is not the attribution**. **Live-confirmed: 4/6 → 6/6
+   audio-only tokens now reach real state**, `Δέσποινα` and `Λευκάδα` among them.
+3. **THING reported instead of offering, and dumped its plumbing** — `2b96f53` (⚠️ *touches THING's
+   shared triage brain*). Turn 1 ended with a `KeyValue` panel reading `"seenImages type":"string"`,
+   `"fileResults length":"11304"` — and **no question at all**. It had been *taught* to: THING's
+   `instruct.md` carried **eight** `display(JSON.stringify(<raw return>, null, 2))` examples. An
+   example in an agent's brain gets copied into real output, and these were, verbatim. All eight now
+   read the value and speak to the user; plus two general principles — *"never show them your
+   plumbing"* (would this line mean anything to someone who has never seen the code?) and *"a turn
+   that has decided something ends with the plain question — ask, then stop, then wait"*. The
+   authoring **gate** the offer depends on was right; nothing had told THING to still **ask**.
+4. **A session cannot be opened as a system-space agent, and fails silently** — `a151c56`. `POST
+   /api/sessions` treats `agentSlug` as a bare agent name in the project root; only `spaceRef` binds a
+   session to a space, and it resolves against the *project's* spaces. A slashed `agentSlug` builds a
+   session that then dies on its first turn with `status:'error'`, **no message on the wire and
+   nothing in the pod log**. Recorded, not worked around — the silent failure is the real bug here.
+
+#### New Acts added this round (goal 2) — all from the never-exercised list
+
+- **XIII — history summarization past `maxHistoryTurns`** (gap **M**). A house rule said once, in
+  passing, never as *"remember this"* — so `user-memory` is explicitly **not** the path under test.
+  ~16 turns of kitchen chatter push the session past `maxTurns*2`; the runtime's **deterministic**
+  digest (no `streamFn` — it keeps user task lines and drops every assistant reply) is the only thing
+  that could carry the rule. Asserted on the persisted session file, with a **control** that the
+  rule's own turn is gone from the verbatim tail, and proved by a **row**: no garlic in what it puts
+  on Sunday.
+- **XIV — `db.query`'s `include` over a declared relation** (gap **L**). Asserts the relation in the
+  on-disk schema, `include` in the **route's own source**, and the recipe returned **nested** —
+  cross-checked against the audio-only tokens, so the join is proved against data only the memo could
+  have supplied.
+- **XV — capability gating AT TYPECHECK** (gap **L**). The security model's load-bearing claim, which
+  **no scenario has ever asserted**: not granted ⇒ absent from the DTS ⇒ the call fails **typecheck**
+  rather than throwing at runtime. Asserts the *failure mode*, not merely that no write happened.
+
+#### The honest narrative
+
+The scenario did its job by failing. Every ingestion promise held — the six-file dump, the Greek
+speech that exists in no file, the disjointness proof — and then the thing the user actually wanted,
+*something I can open*, **404'd**. Chasing that down did not lead to a runtime bug at all: it led to a
+**prompt that hands the model code which cannot compile**, on every specialist build, in every
+scenario, with a retry cascade that traps the model into spending the whole authoring turn arguing
+with the typechecker. Three of the four bugs found this round live in agent *instructions*, not in
+code — which is exactly what this campaign predicts, and exactly why grading prose would have caught
+none of them. The app being empty is a fact only a real assertion on real state can see.
+
+**Not yet verified:** the architect fix's effect on a full build (the re-run was still in flight when
+the round ended — the trap errors are gone from the trace, but the app has not yet been observed
+building green). Acts IV–XV have never been driven live. Round 2 resumes from
+`results/checkpoint.json`.

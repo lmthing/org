@@ -1,38 +1,40 @@
-## Actual results — run 2026-07-14T12:36:23.322Z
+## Actual results — run 2026-07-14T13:18:29.904Z
 
-**Verdict: ❌ FAIL** · 24/26 checks · 0 issue(s) found · 12.7 min wall clock
+**Verdict: ❌ FAIL** · 17/21 checks · 0 issue(s) found · 0.9 min wall clock
 
-### Act I — THING proposes, then builds
+### Act II — the voice memo is the ONLY source of the RECIPE
 
-*Expected:* turn 1 (the Greek compound dump: 6 fixtures + 3 links in ONE sendWithAttachments) delegates to system-vision AND system-files→readDocument, cites ≥3 recipes.md facts + the card's + the PDF's + the xlsx's, and OFFERS to build something openable — while authoring NOTHING (no build_specialist/automator/writeProject* anywhere in its trace). Only after the plain "Ναι, φτιάξ' το." do ≥2 per-cuisine spaces (never named by the user), a built app with ≥1 page, and a 200-HTML served app exist
+*Expected:* a STATIC disjointness grep over the fixtures themselves proves μαστίχα/τσίπουρο/Δέσποινα/Λευκάδα/πράσο/άνηθο appear in the memo and in NO other fixture (the dish NAME does not count — the workbook already schedules Σπανακόπιτα and already carries 750g/320g). The mp3 upload RESPONSE carries a Whisper transcript containing them, BEFORE any chat turn. After the build, a recipes row for that dish carries ≥2 of those audio-only tokens — a row that could only exist if the audio was heard
 
 | Check | Result | Actual |
 |---|---|---|
-| BEFORE the dump: no spaces exist | ✅ | 0 spaces |
-| BEFORE the dump: no app tables exist | ✅ | 0 tables |
-| all 6 fixtures uploaded with the right kinds (file×3, image×2, audio×1) | ✅ | file,file,image,image,file,audio |
-| the mp3 upload RESPONSE already carries a Whisper transcript (pre-turn) | ✅ | 486 chars |
-| the PDF upload RESPONSE already carries extracted text (unpdf) | ✅ | 3094 chars |
-| turn 1 read the images (system-vision) | ✅ | system-vision/vision, system-files/dispatch, system-files/reader, system-files/sheet |
-| turn 1 read the documents (system-files) | ✅ | system-vision/vision, system-files/dispatch, system-files/reader, system-files/sheet |
-| turn 1 called readDocument (the pdf + the xlsx) | ✅ | 6 readDocument yields |
-| turn 1 authored NOTHING (no writeProject* before the user said yes) | ✅ | setSessionMeta, delegate, delegate, fetch, fetch, fetch, delegate, delegate, loadKnowledge, loadKnowledge, loadKnowledge, readDocument, readDocument, readDocument, readDocument, readDocument, readDocument, inspect, inspect |
-| turn 1 built NO spaces/app (no architect/appbuilder/build_specialist) | ✅ | system-vision/vision, system-files/dispatch, system-files/reader, system-files/sheet |
-| the reply cites ≥3 facts from recipes.md | ✅ | Μουσακάς, μπεσαμέλ, gemista, γεμιστά, αρακάς, κεφτέδες, crossini |
-| the reply cites the CARD's fact (vision: Orange Cake/crisco/raisins/400°) | ✅ | Orange Cake, crisco, 400 |
-| the reply cites the PDF's fact (readDocument: Easy Lasagna/cottage cheese) | ✅ | Easy Lasagna, cottage cheese, slow cooker |
-| the reply cites the XLSX's fact (readDocument: GF-NIKOS/budget cap/Nikos) | ✅ | GF-NIKOS, BUDGET-CAP, 78.50, PNT-001, γλουτέν, gluten |
-| turn 1 OFFERS to build something he can open (he never asked for one) | ✅ | ις διπλά.","**Ξεχωριστούς ειδικούς** — έναν για την ελληνική κουζίνα και έναν για την ιταλική, που θα ξέρουν κάθε συνταγή και θα σε βοηθάνε όταν ρωτάς."]},"children":[]},{"type":"Paragraph","props":{},"children":["Θες να το φτιάξω; Αν ναι, ξεκινάω αμέσως."]}]} |
-| ≥2 per-cuisine spaces created — the user never named one | ✅ | greek-family-cuisine, italian-cuisine-advisor |
-| app compiles (built:true) with real JS assets | ✅ | {"built":true,"routes":4} |
-| app serves ≥1 page route | ✅ | /, /pantry, /recipes, /weekly-plan |
-| /app/family-recipes/ serves 200 HTML | ✅ | status 200, 498b |
-| ≥1 table seeded with his real data | ✅ | meal_plans:14, pantry_items:20, recipes:11, shopping_lists:15 |
-| recipes.md: unique token "Μουσακάς" landed in REAL STATE (not prose) | ✅ | db:meal_plans |
-| recipe-card.jpg (vision): unique token "Orange Cake" landed in REAL STATE (not prose) | ✅ | db:recipes |
-| recipe.pdf (readDocument): unique token "Lasagna" landed in REAL STATE (not prose) | ✅ | db:recipes |
-| pantry-and-plan.xlsx (readDocument): unique token "PNT-001" landed in REAL STATE (not prose) | ✅ | db:pantry_items |
-| no UNRECOVERED eval/typecheck errors in Act I | ❌ | [{"type":"typecheck_error","message":"Cannot assign to 'functions' because it is a constant.; Conversion of type 'never[]' to type '{ name: string; purpose: string; }' may be a mistake because neither type sufficiently overlaps with the oth |
+| the xlsx cell reader really read the workbook (sanity: it contains PNT-001) | ✅ | 6411 chars of cells |
+| the pdf text extraction is real (sanity: it contains Easy Lasagna) | ✅ | 3094 chars |
+| every audio-only token is DISJOINT — present in NO other fixture (else the proof is worthless) | ✅ | μαστίχα, τσίπουρο, Δέσποινα, Λευκάδα, πράσο, άνηθο |
+| the dish NAME is NOT audio-unique (it is in the workbook) — so it is never asserted on | ✅ | MealPlan schedules it on Saturday — a row merely named Σπανακόπιτα proves nothing |
+| POST /api/uploads returned a non-empty Whisper transcript (synchronous, pre-turn) | ✅ | 486 chars: «Παιδί μου, σου λέω τη σπανακόπιτα της οικογένειας, γράψε να μην χαθεί. Θέλει 750 γραμμάρι… |
+| the transcript contains Σπανακόπιτα + φέτα + μαστίχα + τσίπουρο (Greek speech really transcribed) | ✅ | heard: Σπανακόπιτα, φέτα, μαστίχα, τσίπουρο |
+| a recipes row exists for the dish the memo dictated | ✅ | recipes: 11 rows |
+| that row carries ≥2 AUDIO-ONLY recipe tokens (it could only exist if the memo was heard) | ✅ | μαστίχα, τσίπουρο, πράσο, άνηθο |
+| voice-memo.mp3 (audio-only): unique token "μαστίχα" landed in REAL STATE (not prose) | ✅ | db:recipes |
+| voice-memo.mp3 (audio-only): unique token "τσίπουρο" landed in REAL STATE (not prose) | ✅ | db:recipes |
+| voice-memo.mp3 (audio-only): unique token "Δέσποινα" landed in REAL STATE (not prose) | ❌ | NOT FOUND in any row or space file — the bytes were never read |
+| voice-memo.mp3 (audio-only): unique token "Λευκάδα" landed in REAL STATE (not prose) | ❌ | NOT FOUND in any row or space file — the bytes were never read |
+| voice-memo.mp3 (audio-only): unique token "πράσο" landed in REAL STATE (not prose) | ✅ | db:recipes |
+| voice-memo.mp3 (audio-only): unique token "άνηθο" landed in REAL STATE (not prose) | ✅ | db:recipes |
+| ≥2 audio-only facts reached real state (audio → Whisper → row/knowledge) | ✅ | μαστίχα, τσίπουρο, πράσο, άνηθο |
+
+### Act III — readDocument on an image fails on purpose; vision produces the fact
+
+*Expected:* a probe hands the plated-dish PHOTO over with a plain instruction to read it as if it were a scanned page. On turn.events (not the yields projection) a yield_resolved for readDocument on that attachment resolves {ok:false, kind:"unsupported", error:/vision/i} — the host guard, unconditional and by design. The self-correction then delegates to system-vision for the SAME attachment and names ≥2 plating facts (parsley / Greek salad / bulgur side). The probe writes NOTHING new — the recipes row count is unchanged
+
+| Check | Result | Actual |
+|---|---|---|
+| readDocument on the image resolved {ok:false, kind:"unsupported", error:/vision/} — the host guard fired | ❌ | readDocument resolutions: [] |
+| it self-corrected to system-vision for that same photo | ✅ | system-vision/vision, system-files/dispatch |
+| vision named ≥2 of the plating facts (parsley / Greek salad / bulgur side) | ❌ | 0/3 plating facts in the reply |
+| the probe wrote NOTHING new (recipes row count unchanged) | ✅ | 11 → 11 |
+| no UNRECOVERED eval/typecheck errors in Act III | ✅ | [] |
 
 ### Edges + whole-session invariants
 
@@ -40,15 +42,13 @@
 
 | Check | Result | Actual |
 |---|---|---|
-| zero UNRECOVERED eval/typecheck errors across the THING session (HARD) | ❌ | 2 unrecovered of 9 total |
+| zero UNRECOVERED eval/typecheck errors across the THING session (HARD) | ✅ | 0 unrecovered of 0 total |
 
 ### Performance
 
 | Metric | Value |
 |---|---|
-| Act I — ingest → offer (turn 1) | 200 s |
-| Act I — "Ναι, φτιάξ' το." → the whole build | 556 s |
-| Act I — recovered eval/typecheck slips | 7 |
-| recovered eval/typecheck slips (session) | 7 |
-| wall clock | 12.7 min |
-| total tokens (in/out) | 503407 / 44398 |
+| Act III — read the photo as a document | 52 s |
+| recovered eval/typecheck slips (session) | 0 |
+| wall clock | 0.9 min |
+| total tokens (in/out) | 28826 / 655 |
