@@ -79,11 +79,27 @@ async function lsFiles(pod, pathRx) {
   return (files ?? []).filter((f) => (pathRx ? pathRx.test(f) : true));
 }
 
+/**
+ * Paths that can NEVER count as proof a fixture was read.
+ *
+ * The session trace/snapshot is a verbatim record of the conversation — the model's own prose, the
+ * raw attachment text, every yield argument. A fixture's token appears there whether or not the file
+ * was ever understood, so "the token is in the trace" is EXACTLY the prose-grading this whole
+ * campaign exists to forbid. `uploads/` is the fixture's own bytes sitting on disk — even more
+ * circular.
+ *
+ * This was live: `Huchuypicchu` was scored a PASS against `latam/sessions/<id>/trace.json`, and
+ * `2016-02-04` against `snapshot.json` + `uploads/<id>`. Both were worthless. Excluding these makes
+ * two green ticks go red — which is the point: they were lies.
+ */
+const NOT_REAL_STATE = /(^|\/)(sessions|uploads)\/|\/(trace|snapshot)\.json$|^\.lmthing\//;
+
 /** Grep the CONTENT of the files whose path matches `pathRx`. The tree carries paths only, so a
  *  token check against the tree JSON proves nothing — the bytes must actually be read. */
 async function grepFs(pod, contentRx, pathRx) {
   const hits = [];
   for (const f of await lsFiles(pod, pathRx)) {
+    if (NOT_REAL_STATE.test(f)) continue; // a token in the trace proves nothing — see above
     const body = await pod.readFile(f).catch(() => null);
     const text = typeof body === 'string' ? body : (body?.content ?? '');
     if (text && contentRx.test(text)) hits.push(f);

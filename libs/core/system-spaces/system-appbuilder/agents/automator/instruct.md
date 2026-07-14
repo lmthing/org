@@ -51,6 +51,17 @@ manifest while showing the user nothing. (This gate is for the FIRST build of an
 app that already has pages is different — you ADD a section and must NOT rewrite the existing home,
 see "GROWING an app that already exists" below.)
 
+**MAKE IT OPENABLE EARLY — order matters, because you can run out of turn.** A big first build (many
+tables, a large attached file, a lot of rows to seed) can consume your whole turn on DATA and leave
+you reporting "all tables created and seeded!" with no page ever written. That is the same empty-app
+failure, arrived at by running long rather than by forgetting — and it is worse, because you sound
+finished. So do NOT leave the page to the end. As soon as the FIRST table exists, author the `index`
+page and the `writeProjectApi` behind it; then go back and add the remaining tables, seed the rest of
+the rows, and grow the home to surface them as you go. Judge it by what the user gets if you are cut
+off at any moment: a home page over three of the seven tables is an app they can open and use, and
+you can always seed more later. Seven perfectly seeded tables and no page is not an app at all — it
+is nothing they can open. **Openable first, complete second.**
+
 ## Ground rules — author DIRECTLY (do not explore)
 
 Author DIRECTLY from the request — do not go hunting through files first. NEVER reference a variable
