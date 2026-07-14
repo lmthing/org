@@ -72,3 +72,22 @@ across `fixtures/` before writing this file.
 | `trip-costs.xlsx` | computed grand total `3344.2` (`TOTAL (usd, excl. flights which are in EUR)`, `costs` sheet) | a derived sum that exists only as a spreadsheet cell |
 | `voice-memo.mp3` / `voice-memo.txt` | guide name **Emmanuel** and the 5,000-shilling ranger tip at the gate | invented in-scene detail from the day at the crater; not in the trip notes, the costs sheet, or the PDF |
 | `links.md` (this file) | the Zanzibar insurance policy's **92-day validity window** (see link #4) | a detail from the sourced insurance article that isn't repeated in `trip-costs.xlsx` (which only carries the $44 price) or `tanzaniamemories.md` |
+| `zanzibar-museum-receipt.pdf` | **Unyanyembe** (also `Livingstone` / `chronometer` / `1872`) | handwritten on the 1872 receipt in the scan; verified by `grep -ril` across `fixtures/` to appear in NO other fixture — and unreachable without vision, since the PDF has no text layer |
+
+## `zanzibar-museum-receipt.pdf` — a REAL SCAN (round 2's new fixture kind)
+
+Source (public domain, Wikimedia Commons):
+<https://commons.wikimedia.org/wiki/File:Pocket_chronometer_loan_receipt_by_David_Livingstone,_Consul_Inner_Africa,_at_Zanzibar_Museum_-_Unyanyembe,_February,_1872.jpg>
+— a photograph, taken at the **Zanzibar Museum**, of David Livingstone's handwritten receipt for the
+loan of a pocket chronometer (Unyanyembe, February 1872). Author: David Livingstone (1813-1873);
+licence: public domain.
+
+The downloaded JPEG was wrapped, unaltered, into a **single-page PDF with NO text layer** — which is
+exactly what a phone-photographed paper document is. That is the point of this fixture, and it is the
+one kind the scenario did not have: `pdftotext` returns **0 characters**, and so does the pod's own
+extractor (`unpdf` via `extractDocumentText`), so `readDocument` **cannot** read it. The ONLY way its
+contents can reach real state is if the page is actually LOOKED AT (vision). A model that guesses
+from the filename will not produce this fixture's token.
+
+In the story: he photographs the exhibit label/receipt in Stone Town and sends it in as "another thing
+to file", never saying it is a scan, never saying which specialist should handle it.

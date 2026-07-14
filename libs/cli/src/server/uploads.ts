@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { deflateSync } from 'node:zlib';
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import type { MediaPart, TraceAttachment, UserAttachment, ReadDocumentResult } from '@lmthing/core';
 
@@ -19,6 +20,13 @@ export interface UploadMeta {
    *  model can't ingest as a file part. Populated best-effort at upload time so
    *  the files agent reads real text instead of an unreadable binary part. */
   text?: string;
+  /** Derived page-image upload ids for a SCANNED PDF — one per page (capped).
+   *  A scan has no text layer, so `text` is empty and `readDocument` can only say
+   *  "unsupported": without these the file is a DEAD END, since it is routed as a
+   *  document and a document carries no image part for a vision model to look at.
+   *  Each page is stored as a real image upload, so it flows down the ordinary
+   *  image → vision path and can be handed to a specialist by id like any other. */
+  pages?: string[];
 }
 
 /** What the upload endpoint returns and the chat client sends back on
@@ -58,6 +66,92 @@ export async function extractDocumentText(mediaType: string, bytes: Uint8Array):
     // Corrupt/encrypted/unsupported PDF — fall back to the "unreadable" note.
     return undefined;
   }
+}
+
+/** Cap on how many pages of a scanned PDF are rasterized for vision. Each page becomes
+ *  a real image upload the model may look at, so this bounds both disk and tokens. */
+const MAX_SCANNED_PDF_PAGES = 5;
+/** Ignore embedded images smaller than this on a side — a logo/rule/artifact, not a page. */
+const MIN_PAGE_IMAGE_PX = 200;
+
+/** Encode raw pixels as a PNG. Zero-dependency: PNG is just zlib-deflated scanlines
+ *  (each prefixed with filter byte 0) wrapped in IHDR/IDAT/IEND chunks, and Node ships
+ *  zlib. This is what lets a scanned page reach a vision model without pulling a native
+ *  canvas/image codec into the pod image. */
+function encodePng(data: Uint8Array, width: number, height: number, channels: number): Uint8Array {
+  const colorType = channels === 1 ? 0 : channels === 4 ? 6 : 2; // gray | RGBA | RGB
+  const raw = Buffer.alloc((width * channels + 1) * height);
+  for (let y = 0; y < height; y++) {
+    const src = y * width * channels;
+    const dst = y * (width * channels + 1);
+    raw[dst] = 0; // filter: none
+    Buffer.from(data.buffer, data.byteOffset + src, width * channels).copy(raw, dst + 1);
+  }
+  const chunk = (type: string, body: Buffer): Buffer => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(body.length);
+    const typed = Buffer.concat([Buffer.from(type, 'ascii'), body]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(typed));
+    return Buffer.concat([len, typed, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = colorType;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(buf: Buffer): number {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]!) & 0xff]! ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Rasterize a SCANNED pdf's pages to PNGs. A scanned page is not "text we failed to
+ * read" — it is a photograph wrapped in a PDF, so the page content IS an embedded
+ * image and `extractImages` hands it straight back (no canvas renderer, no native dep).
+ * Returns [] for a PDF that is genuinely text (nothing to rasterize) or unreadable.
+ */
+export async function extractPdfPageImages(bytes: Uint8Array): Promise<Uint8Array[]> {
+  const out: Uint8Array[] = [];
+  try {
+    const { extractImages, getDocumentProxy } = await import('unpdf');
+    const pdf = await getDocumentProxy(new Uint8Array(bytes));
+    const pageCount = Math.min(pdf.numPages ?? 1, MAX_SCANNED_PDF_PAGES);
+    for (let p = 1; p <= pageCount; p++) {
+      const images = await extractImages(pdf, p).catch(() => []);
+      for (const img of images) {
+        const { data, width, height, channels } = img as unknown as {
+          data: Uint8Array; width: number; height: number; channels: number;
+        };
+        if (!data || width < MIN_PAGE_IMAGE_PX || height < MIN_PAGE_IMAGE_PX) continue;
+        if (data.length < width * height * channels) continue; // truncated/odd encoding — skip
+        out.push(encodePng(data, width, height, channels));
+        break; // one image per page: the page itself
+      }
+    }
+  } catch {
+    // Corrupt/encrypted PDF, or an encoding we cannot decode — the caller falls back
+    // to the "unsupported" note, exactly as before.
+  }
+  return out;
 }
 
 /** Spreadsheet-family media types / extensions SheetJS can parse (Excel, ODS, CSV,
@@ -143,7 +237,10 @@ export function uploadUrl(id: string): string {
 
 export async function saveUpload(
   uploadsDir: string,
-  input: { bytes: Uint8Array; mediaType: string; filename?: string; transcript?: string; text?: string },
+  input: {
+    bytes: Uint8Array; mediaType: string; filename?: string;
+    transcript?: string; text?: string; pages?: string[];
+  },
 ): Promise<UploadMeta> {
   await mkdir(uploadsDir, { recursive: true });
   const id = randomUUID();
@@ -154,6 +251,7 @@ export async function saveUpload(
     ...(input.filename ? { filename: input.filename } : {}),
     ...(input.transcript ? { transcript: input.transcript } : {}),
     ...(input.text ? { text: input.text } : {}),
+    ...(input.pages && input.pages.length > 0 ? { pages: input.pages } : {}),
   };
   await writeFile(join(uploadsDir, id), input.bytes);
   await writeFile(join(uploadsDir, `${id}.json`), JSON.stringify(meta), 'utf8');
@@ -242,7 +340,21 @@ export async function resolveUploadDocument(
       const text = extracted.slice(0, maxChars);
       return { ok: true, ...common, kind: 'text', text, ...(extracted.length > maxChars ? { truncated: true } : {}) };
     }
-    return { ok: false, ...common, kind: 'unsupported', error: 'no extractable text (likely a scanned/image-only PDF)' };
+    // A scan is a PHOTOGRAPH of a document: there is no text to extract, and saying
+    // only "unsupported" leaves the agent with nowhere to go. Its pages were stored as
+    // image attachments at upload time — name them, so the agent hands THOSE to the
+    // vision specialist instead of guessing at the contents or giving up.
+    const pages = meta.pages ?? [];
+    return {
+      ok: false,
+      ...common,
+      kind: 'unsupported',
+      error:
+        pages.length > 0
+          ? `scanned/image-only PDF — no text to extract. Its ${pages.length} page image(s) are attached: ` +
+            `${pages.join(', ')} — look at them with system-vision (pass the page id as an attachment).`
+          : 'no extractable text (likely a scanned/image-only PDF)',
+    };
   }
   // Office documents (Word/PowerPoint/OpenDocument text+presentation) → officeparser.
   if (isOfficeDocument(meta.mediaType, meta.filename)) {

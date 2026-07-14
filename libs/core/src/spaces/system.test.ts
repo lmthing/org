@@ -118,7 +118,7 @@ describe('system spaces', () => {
         const hit = FIXTURE_TOKENS.exec(agent.instructBody);
         expect(
           hit?.[0],
-          `${space.id}/${slug} embeds the scenario fixture value "${hit?.[0]}" — that is the exam's ` +
+          `${space.packageName ?? space.dir}/${slug} embeds the scenario fixture value "${hit?.[0]}" — that is the exam's ` +
             `answer key, and it makes the assertion that proves the file was READ meaningless`,
         ).toBeUndefined();
       }

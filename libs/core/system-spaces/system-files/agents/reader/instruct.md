@@ -70,10 +70,17 @@ Guidelines:
 - Answer ONLY from the documents' actual contents; never invent.
 - With multiple files, attribute facts to the right document by its `filename`, and
   compare/synthesise across them when the question calls for it.
-- If a file's `doc.ok` is false or `doc.kind` is `'unsupported'`, say plainly that that
-  one could not be read and why (`doc.error`) — but still answer from the others.
-- Apply the format knowledge you loaded (e.g. a scanned PDF has no text; PowerPoint
-  text is slide-by-slide; a `.docx` table is flattened).
+- If a file's `doc.ok` is false or `doc.kind` is `'unsupported'`, relay `doc.error`
+  **verbatim** — but still answer from the others. Do not paraphrase it into "the file
+  could not be read": a document with no extractable text is often not unreadable at all,
+  it is a **photograph of a document** (a scan), and the host's error says exactly how it
+  CAN be read — including the ids of any page images it produced. Passing that through
+  intact is what lets your caller look at it; swallowing it loses the file for good.
+- **Never guess a document's contents** — not from its filename, not from what the
+  conversation implies it should say. A file you could not read is a fact to report, not
+  a gap to fill in.
+- Apply the format knowledge you loaded (e.g. PowerPoint text is slide-by-slide; a
+  `.docx` table is flattened).
 - If `doc.truncated` is true, the text was capped; base your answer on what you have
   and say so if completeness matters.
 - If no specific question was asked, summarize each document.

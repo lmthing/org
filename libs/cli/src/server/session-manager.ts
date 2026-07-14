@@ -22,6 +22,7 @@ import {
   classifyKind,
   assembleParts,
   extractDocumentText,
+  extractPdfPageImages,
   resolveUploadDocument,
   type AttachmentRef,
 } from './uploads.js';
@@ -1433,7 +1434,35 @@ export class SessionManager {
         console.warn(`[uploads] text extraction failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
-    const meta = await saveUploadToDisk(this.uploadsDir, { ...input, ...(transcript ? { transcript } : {}), ...(text ? { text } : {}) });
+    // A PDF with NO text layer is a scan — a photograph of a document. Rasterize its
+    // pages to real image uploads now, so the file has a way through the system at all:
+    // as a plain document it carries no image part, so no vision model could ever see
+    // it and the agent is left guessing. Best-effort: a failure just leaves it textless.
+    let pages: string[] | undefined;
+    if (kind === 'file' && input.mediaType === 'application/pdf' && !text) {
+      try {
+        const pageImages = await extractPdfPageImages(input.bytes);
+        const saved = await Promise.all(
+          pageImages.map((png, i) =>
+            saveUploadToDisk(this.uploadsDir, {
+              bytes: png,
+              mediaType: 'image/png',
+              filename: `${input.filename ?? 'scan'} — page ${i + 1}`,
+            }),
+          ),
+        );
+        if (saved.length > 0) pages = saved.map((m) => m.id);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[uploads] scanned-PDF rasterization failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    const meta = await saveUploadToDisk(this.uploadsDir, {
+      ...input,
+      ...(transcript ? { transcript } : {}),
+      ...(text ? { text } : {}),
+      ...(pages ? { pages } : {}),
+    });
     return { ...meta, url: uploadUrl(meta.id) };
   }
 
@@ -1462,6 +1491,17 @@ export class SessionManager {
         return { meta, bytes };
       }),
     );
+    // A SCANNED pdf carries no text and, as a document, no image part — so on its own it
+    // is unreadable by every model in the system. Its pages were rasterized to image
+    // uploads at save time: attach those alongside it, and the ordinary image → vision
+    // path can simply look at the page.
+    for (const { meta } of [...items]) {
+      for (const pageId of meta?.pages ?? []) {
+        const pageMeta = await readUploadMeta(this.uploadsDir, pageId);
+        if (!pageMeta) continue;
+        items.push({ meta: pageMeta, bytes: await readUploadBytes(this.uploadsDir, pageId) });
+      }
+    }
     const { attachments, traceAttachments, transcripts } = assembleParts(items);
     // Audio transcripts fold into the text (handled by the text model directly);
     // image/file attachments ride as delegatable attachments (THING routes each

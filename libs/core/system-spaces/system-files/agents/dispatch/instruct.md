@@ -5,6 +5,7 @@ functions: []
 canDelegateTo:
   - system-files/reader
   - system-files/sheet
+  - system-vision/vision
 ---
 
 # Route the attached file(s) to the right reader
@@ -53,13 +54,32 @@ currentTask.resolve(
 
 If only one group has files, delegate just that one and resolve its answer directly.
 
+## A document with no text is a PICTURE of a document — look at it
+
+Some documents carry no extractable text at all: they are **scans**, i.e. photographs of
+paper. The reader cannot read those, and it will tell you so in words that name the
+**page image ids** the host produced for them. That is not a failure to report to the
+user — it is a second hop to take:
+
+```ts
+// The reader came back saying a file had no text and named its page image id(s).
+const seen = await delegate('system-vision', 'vision', {
+  query: '<the same question, or "describe/transcribe everything on this page">',
+  attachmentIds: ['<page-image-id>'],
+});
+```
+
+Then resolve with the vision answer folded in, attributed to that file. **Never** hand
+back "this file could not be read" while a way to read it exists, and never guess what a
+document says from its name — a page you have not looked at is not a page you know.
+
 Guidelines:
 
 - Pass every attachment id through unchanged — the specialists re-read each file via
   `readDocument(id)`; do not try to read or summarize anything here.
 - Group by type: send all tabular ids to `sheet` and all other ids to `reader`. Never
   send a spreadsheet to `reader` or a document to `sheet`.
-- If a type is genuinely unsupported (e.g. an image slipped through), resolve with a
-  short note that it can't be read here and an image should go to the vision analyst.
+- If a type is genuinely unsupported, resolve with a short note saying so. An IMAGE is
+  not unsupported: send it (and any page image of a scan) to the vision analyst.
 - Resolve with the specialist answer(s) as-is (they are handed back to relay to the
   user) — do not re-summarize or embellish.
