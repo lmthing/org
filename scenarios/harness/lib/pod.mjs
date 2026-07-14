@@ -5,6 +5,7 @@
  * `sub` claim to `lmthing.user-<id>.svc`. So every call here just carries the bearer token and
  * talks to the chat origin. Locally (`lmthing serve`) pass base=http://localhost:8080 and no token.
  */
+import { LOCAL, restartLocalServer } from './local.mjs';
 
 /**
  * A pod that is scaling from zero, rolling a new image, or sitting behind a blipping gateway does
@@ -289,6 +290,20 @@ export class Pod {
 
   // ── env / lifecycle ─────────────────────────────────────────────────────
   getEnv = () => this.req('GET', '/api/env');
-  /** Restart the pod process (used by the auto-resume scenario). Pod exits ~100ms later. */
-  restart = () => this.req('POST', '/api/restart', {}).catch(() => ({ ok: true }));
+  /**
+   * Restart the pod process (used by the auto-resume scenario). The pod exits ~100ms later.
+   *
+   * In prod, Kubernetes brings it straight back. LOCALLY, NOTHING DOES — `POST /api/restart` just
+   * kills the one shared `lmthing serve` and leaves it dead, hanging this lane AND every sibling
+   * lane on the same server (found the hard way: S06's Act XIII took the whole local pod down
+   * mid-run). So on the local target we must bring it back up ourselves — which is also the truer
+   * reproduction of the edge this Act exists to test: the process really does die and really does
+   * come back, and the session must survive it.
+   */
+  restart = async () => {
+    if (!LOCAL) return this.req('POST', '/api/restart', {}).catch(() => ({ ok: true }));
+    await this.req('POST', '/api/restart', {}).catch(() => ({ ok: true }));
+    await restartLocalServer();
+    return { ok: true, local: true };
+  };
 }
