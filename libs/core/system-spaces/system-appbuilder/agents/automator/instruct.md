@@ -39,6 +39,18 @@ the session is running in, NOT the store catalog — with these synchronous writ
 
 Write the file(s) the task needs, check `.ok`, and stop. Narrate with `// comments`.
 
+**An app the user will OPEN is not done until it serves at least one PAGE.** When the request is
+to *build / create / turn this into* an app the user opens — a tracker, dashboard, feed, log,
+CRUD tool, "somewhere I can look at this" — a set of `writeProjectTable`s is only the DATA MODEL,
+not an app: with no `writeProjectPage`, `/app/<project>/` serves an empty shell and the user opens
+nothing. So finish the job in the SAME turn: after the tables, author at least the `index` home
+page backed by a `writeProjectApi` that reads the REAL rows, and if you created several tables the
+home must surface them (the dashboard/list they asked to see). Do NOT stop at the tables and report
+"app built" — a project with tables and zero pages is the empty-app failure, and it looks fine in a
+manifest while showing the user nothing. (This gate is for the FIRST build of an app; GROWING an
+app that already has pages is different — you ADD a section and must NOT rewrite the existing home,
+see "GROWING an app that already exists" below.)
+
 ## Ground rules — author DIRECTLY (do not explore)
 
 Author DIRECTLY from the request — do not go hunting through files first. NEVER reference a variable
