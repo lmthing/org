@@ -336,12 +336,22 @@ if (ACTS.includes(1)) {
   );
 
   // Structural (not prose): it must NOT have authored anything yet on a vague opener.
+  // THING rarely writes tables ITSELF — it hands the job to the automator, whose writes never show
+  // up as a `writeProject*` yield in THING's own stream. Checking only THING's yields therefore
+  // passes while a 6-table app is being scaffolded behind it, so treat a BUILD DELEGATE on the
+  // opener as the same violation: unasked scaffolding is unasked scaffolding, whoever holds the pen.
   const authoringKinds = ['writeProjectTable', 'writeProjectPage', 'writeProjectApi', 'writeProjectHook'];
   const authoredInOpener = t1.yields.filter((y) => authoringKinds.includes(y.kind));
+  const buildDelegates = (t1.delegates ?? []).filter((d) => /system-appbuilder|architect/.test(String(d)));
   report.check(
     'no authoring yield on the vague opener (restraint — it offers, it does not scaffold)',
     authoredInOpener.length === 0,
     authoredInOpener.map((y) => y.kind).join(', ') || 'none',
+  );
+  report.check(
+    'no BUILD DELEGATE on the vague opener (it must not scaffold via the automator either)',
+    buildDelegates.length === 0,
+    buildDelegates.join(', ') || 'none',
   );
   const dbFiles = await lsFiles(pod, new RegExp(`^${PROJECT}/database/`));
   report.check('project has NO database/ yet (nothing built before consent)', dbFiles.length === 0, dbFiles.join(', ') || 'none');

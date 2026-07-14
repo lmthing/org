@@ -309,4 +309,38 @@ node ../05-latam/run.mjs --acts=9,10 # rerun just the tasklist Acts while triagi
 
 ## Actual results
 
-_Filled in by the runner — paste from `results/report.md` after a run._
+### Round 1 — baseline · 2026-07-14 · verdict: **FAIL (Act I)** — honest, and the finding is the point
+
+`run.mjs` is implemented 1:1 with the Acts table (I–XIII). Act I ran live against prod repeatedly;
+**Acts II–XIII are not yet run** (the run is checkpointed and resumable via `--acts=`).
+
+**Act I FAILS, and it fails on the scenario's central promise (US-1).** Elena's opener — notes
+attached, *"help me actually get on top of this"* — does not reliably produce an **offer**.
+
+| # | Finding | Evidence |
+|---|---|---|
+| 1 | **THING never OFFERED** (deployed image) | In the **13,079 chars she actually sees**: zero occurrences of *"want me to / shall I / should I / would you like / I can build / turn this into"*, zero mentions of *open / dashboard / one place*. The only 3 `?` are quotes from her own notes. She then says "yes please" — *yes to what?* — and THING builds the whole app anyway, **on a consent it never asked for**. |
+| 2 | Root cause: a **prompt** bug, fixed in source by the concurrent 06-tanzania agent (`11a9396`, "PROPOSE unasked"), **not deployed** | The live image's `instruct.md` is 27,067b and contains **no offer rule at all**. |
+| 3 | That fix **live-verified by hot-patch** | `PUT /api/fs/write` → `system/spaces/user-thing/agents/thing/instruct.md` + restart ⇒ the offer appears, with **0 authoring yields** (restraint holds: offer first, build only on consent). |
+| 4 | **But the offer is NONDETERMINISTIC** (~5/6) | Measured over **15 live openers** with `harness/probe-ab.mjs`. Every single miss has the same shape: a **long** reply — misses at **5,071 / 6,611 / 4,715** visible chars; offers at 1.2k–3.4k. THING spends the turn proving it read the material and stops exactly where the help begins. |
+| 5 | **Restraint REGRESSED on current HEAD** | On the newest instruct (`0a99b59`, `e1620bd`, `2d8e9fd`), the opener produced **no offer AND 6 database tables** (`bookings, budget_log, contacts, packing, stops, todos`) — it scaffolded unasked, **via the automator delegate**, so no `writeProject*` yield appeared in THING's own stream. The runner's restraint check was blind to this and now asserts on build **delegates** too. |
+| 6 | 101 recovered typecheck errors in one session | 0 unrecovered (the hard check holds), but the authoring retry surface is noisy. |
+
+**Prompt-fix attempts that did NOT work — reported, not hidden.** Two edits to THING's brain (a
+"ground every cited specific in THEIR material" rule; an "your reply is not the summary — do not
+bury the offer" rule) were A/B'd at N=6 and N=3 against HEAD: **5/6 → 6/6 and → 2/3, i.e. within
+noise.** Neither is evidenced, so **both were reverted** rather than ship an unproven change to a
+brain every scenario shares. The measured correlation (long reply ⇒ no offer) is robust; the cure
+is not yet found. **An honest FAIL beats a fake PASS.**
+
+**Harness bug fixed (affects ALL SIX scenarios).** A run died with an uncaught
+`TypeError: fetch failed` (undici `ConnectTimeoutError` to `lmthing.chat:443`): `pod.req` retried
+HTTP *statuses* (`{waking:true}`/504) but never a bare `fetch()` **throw**. Now retried at the
+transport layer (`fetchResilient`); a non-transient error still throws at once and a real 500 still
+passes through. The harness had **zero test coverage** (`scenarios/` was in no vitest include
+pattern) — added, plus 8 unit tests. Fix: sdk/org `c924339`.
+
+**Assertion bugs fixed in this runner (made stronger, never looser).** The offer check regexed the
+raw JSX descriptor JSON (missing prose in `children`, matching structural keys nobody said) — it now
+flattens to the text the user actually SEES, and additionally requires the offer to **ask** a
+question she can answer with a bare "yes". Fix: sdk/org `9ad4ff8`.
