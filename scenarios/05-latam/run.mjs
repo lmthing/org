@@ -17,6 +17,7 @@ import { Pod } from '../harness/lib/pod.mjs';
 import { ThingSession } from '../harness/lib/thing.mjs';
 import { Report } from '../harness/lib/report.mjs';
 import { mergePodEnv, waitPodReady, waitPodSettled } from '../harness/lib/gateway.mjs';
+import { LOCAL } from '../harness/lib/local.mjs';
 import { SDK_ORG } from '../harness/lib/paths.mjs';
 
 // ── config ─────────────────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ const POD_ENV = {
 const RESULTS = `${SDK_ORG}/scenarios/${ID}/results`;
 const CHECKPOINT = `${RESULTS}/checkpoint.json`;
 const argActs = (process.argv.find((a) => a.startsWith('--acts=')) ?? '').slice(7);
-const ALL_ACTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+const ALL_ACTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 const ACTS = argActs ? argActs.split(',').map(Number) : ALL_ACTS;
 const FRESH = process.argv.includes('--fresh');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -235,13 +236,30 @@ const t0 = now();
 const user = await getUser(LABEL);
 console.log(`user ${user.email} (${user.userId}) → ${user.pod}`);
 
-const { changed } = await mergePodEnv(user.token, POD_ENV);
-if (changed) {
-  await waitPodReady(user.token);
-  await waitPodSettled(user.token);
-}
-
 const pod = new Pod({ base: user.pod, token: user.token });
+
+// Act VII's integration-demo vars must reach the pod BEFORE the first turn.
+//   prod  → gateway `PUT /api/compute/env` (ROLLS the pod, so it must happen before any session).
+//   local → the pod's own live `PUT /api/env` (no roll). It REPLACES the .env at the pod's cwd, so
+//           GET + merge first — sibling lanes share this one server and their keys live there too.
+if (LOCAL) {
+  const { content = '' } = await pod.req('GET', '/api/env').catch(() => ({ content: '' }));
+  const have = new Set(
+    content.split('\n').map((l) => l.slice(0, l.indexOf('=')).trim()).filter(Boolean),
+  );
+  const add = Object.entries(POD_ENV).filter(([k]) => !have.has(k));
+  if (add.length) {
+    const merged = [content.trimEnd(), ...add.map(([k, v]) => `${k}=${v}`)].filter(Boolean).join('\n') + '\n';
+    await pod.req('PUT', '/api/env', { content: merged });
+    console.log(`[run] pod env (live, no roll) += ${add.map(([k]) => k).join(', ')}`);
+  }
+} else {
+  const { changed } = await mergePodEnv(user.token, POD_ENV);
+  if (changed) {
+    await waitPodReady(user.token);
+    await waitPodSettled(user.token);
+  }
+}
 const projects = await pod.listProjects();
 if (!(projects.projects ?? []).some((p) => (p.id ?? p) === PROJECT)) await pod.createProject(PROJECT);
 cp.projectId = PROJECT;
@@ -1112,6 +1130,268 @@ if (ACTS.includes(13)) {
     report.check('the weekly cron still fires after the restart', false, 'no cron recorded (Act VIII did not author one)');
   }
   cp.acts.XIII = { passed: report.stepPassed };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XIV — Camila's screenshot: readDocument fails, VISION catches it ══════
+// Closes coverage gap M. The token lives ONLY in the PNG's pixels — `strings` on the file does not
+// contain it and no other fixture mentions it — so a row carrying it is the only honest proof the
+// image was LOOKED at rather than plausibly guessed.
+if (ACTS.includes(14)) {
+  report.step(
+    'Act XIV — A screenshot from a friend (readDocument fails on an image → it degrades to vision)',
+    'The PNG goes through the vision path; "Red Planet Expedition" (pixels-only) lands in a REAL row; if readDocument was tried on the image, it failed and vision caught it IN THE SAME TURN — the turn still ends clean',
+  );
+  const shot = await pod.upload(`${FIX}/camila-whatsapp-uyuni.png`);
+  report.check('camila-whatsapp-uyuni.png uploaded (kind=image)', shot.kind === 'image' && /png/.test(shot.mediaType ?? ''), `${shot.kind} / ${shot.mediaType}`);
+
+  const t = await timed('Act XIV — the screenshot turn', () =>
+    thing
+      .sendWithAttachments(
+        'camila sent me this and i cba to type it all out, what is she actually telling me to do?? just put it wherever it needs to go',
+        [shot],
+        { timeoutMs: TURN },
+      )
+      .then(acc),
+  );
+
+  // The vision path was reached (a system-vision delegate, or an image-bearing yield).
+  const sawVision = thing.didDelegate('system-vision') || t.delegates.some((d) => /vision/i.test(d)) || t.yields.some((y) => /vision|image/i.test(y.kind));
+  report.check('the screenshot went through the VISION path (it was looked at, not opened as text)', sawVision, t.delegates.join(', ') || 'no delegates');
+
+  // The DEGRADATION, asserted rather than assumed. readDocument is documented to fail on an image.
+  // If the agent reached for it, the trace must show it FAILING and vision following in the SAME
+  // turn. If it never reached for it (it routed straight to vision), that is also correct — record
+  // which happened, and never fail the Act for taking the right path first time.
+  const rdYields = t.yields.filter((y) => y.kind === 'readDocument');
+  const rdResolved = t.events.filter((e) => e.type === 'yield_resolved' && e.kind === 'readDocument');
+  const rdFailed = rdResolved.filter((e) => {
+    const v = JSON.stringify(e.value ?? e.result ?? '');
+    return /error|unsupported|cannot|not a|fail|ok"?:\s*false/i.test(v);
+  });
+  if (rdYields.length) {
+    report.check(
+      'readDocument WAS tried on the image and FAILED (the documented behaviour), and vision still caught the turn',
+      rdFailed.length > 0 && sawVision,
+      `${rdYields.length} readDocument yield(s), ${rdFailed.length} failed; vision=${sawVision}`,
+    );
+    report.note('The wrong-tool-for-the-media-type path WAS exercised: readDocument was reached for on a PNG, failed, and the turn recovered via vision — exactly the degradation the runtime promises.');
+  } else {
+    report.note('readDocument was never reached for on the image — the dispatcher routed straight to vision. The right path first time is not a failure; the degradation edge simply did not trigger this run.');
+  }
+  report.metric('Act XIV — readDocument attempts on the image', rdYields.length);
+
+  // The only proof that survives a guessing model: the pixels-only token, in real state.
+  await assertTokenInState(report, pod, PROJECT, { fixture: 'camila-whatsapp-uyuni.png', token: 'Red Planet Expedition' });
+
+  report.check('the turn ended clean (no unrecovered error)', thing.unrecoveredErrors().length === 0, `${t.errors.length} recovered error(s) this turn`);
+  cp.acts.XIV = { passed: report.stepPassed };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XV — a LIVE column migration that must not eat her rows ═══════════════
+// Closes coverage gaps L (db.addColumn / live schema migration) and O (schema reconcile:
+// additive-OK vs non-additive fail-loud). Adding a column to a table that already holds data is the
+// most ordinary thing a growing app does — and losing the rows while doing it is the worst outcome
+// in this whole document.
+if (ACTS.includes(15)) {
+  report.step(
+    'Act XV — "which of these have I actually paid for?" — a live migration that keeps her rows',
+    'The paid/not-paid column is added to the EXISTING money table live; every pre-existing row id survives; the two lines she named are paid; the app still builds. Then a NON-additive change (an existing column retyped under live rows) must FAIL LOUD, not silently drop data',
+  );
+  const before = await allRows(pod, PROJECT);
+  const money = tableNamed(before, /budget|cost|expense|money|spend/i) ?? cp.facts.itinTable ?? tableNamed(before, /itinerar/i);
+  const beforeRows = money ? before[money] : [];
+  const idOf = (r) => r.id ?? r.rowId ?? r._id ?? JSON.stringify(r);
+  const beforeIds = new Set(beforeRows.map(idOf));
+  report.check('there is a money table with rows to migrate (the premise of the Act)', !!money && beforeRows.length > 0, `${money ?? '(none)'}: ${beforeRows.length} rows`);
+
+  const t = await timed('Act XV — the paid/not-paid turn', () =>
+    thing
+      .send(
+        "i keep forgetting which of this stuff i've actually paid for and which i just wrote down. can you put some kind of paid / not-paid thing on each of the money lines? the machu picchu ticket and the brazil visa are both already paid",
+        { timeoutMs: TURN },
+      )
+      .then(acc),
+  );
+
+  const after = await allRows(pod, PROJECT);
+  const afterRows = money ? (after[money] ?? []) : [];
+  const afterIds = new Set(afterRows.map(idOf));
+
+  // THE load-bearing assertion: an additive migration must not lose a single row.
+  const lost = [...beforeIds].filter((i) => !afterIds.has(i));
+  report.check(
+    'ANTI-EXPECTATION: the live migration LOST NO ROWS — every pre-existing row id is still there',
+    lost.length === 0 && afterRows.length >= beforeRows.length,
+    `${beforeRows.length} → ${afterRows.length} rows; ${lost.length} lost${lost.length ? ': ' + JSON.stringify(lost.slice(0, 3)) : ''}`,
+  );
+
+  // The new column exists — on the rows, and in the schema the app compiles against.
+  const paidKeyOf = (r) => Object.keys(r).find((k) => /paid|settled/i.test(k));
+  const paidKey = afterRows.map(paidKeyOf).find(Boolean);
+  report.check('a paid/not-paid column now exists on the money table', !!paidKey, paidKey ?? `columns: ${Object.keys(afterRows[0] ?? {}).join(', ')}`);
+
+  const truthy = (v) => v === true || v === 1 || /^(true|yes|paid|1)$/i.test(String(v ?? ''));
+  const paidRows = afterRows.filter((r) => paidKey && truthy(r[paidKey]));
+  const named = (rx) => afterRows.find((r) => rx.test(JSON.stringify(r)));
+  const mp = named(/machu\s*picchu/i);
+  const visa = named(/brazil.*visa|visa.*brazil|e-?visa/i);
+  report.check(
+    'the two lines she NAMED are marked paid — and only the ones she named',
+    !!paidKey && !!mp && !!visa && truthy(mp[paidKey]) && truthy(visa[paidKey]) && paidRows.length < afterRows.length,
+    `paid: ${paidRows.length}/${afterRows.length}; machu picchu=${mp ? truthy(mp[paidKey]) : 'no row'}; brazil visa=${visa ? truthy(visa[paidKey]) : 'no row'}`,
+  );
+
+  const rebuild = await pod.appBuild(PROJECT).catch((e) => ({ built: false, error: String(e) }));
+  report.check('the app still builds after the live migration', rebuild?.built === true, JSON.stringify({ built: rebuild?.built, error: rebuild?.error }).slice(0, 160));
+
+  // ── the NON-additive half: a destructive change must fail LOUD, never silently ───────────────
+  // Retype an existing column under live rows. A quiet success here is data loss wearing a green tick.
+  const schemaFiles = await lsFiles(pod, new RegExp(`^${PROJECT}/database/.*\\.json$`));
+  const schemaPath = schemaFiles.find((f) => money && f.includes(money)) ?? schemaFiles[0];
+  if (!schemaPath) {
+    report.check('the table has a schema file on disk to force a non-additive change against', false, `no ${PROJECT}/database/*.json found: ${schemaFiles.join(', ') || 'none'}`);
+  } else {
+    const raw = await pod.readFile(schemaPath);
+    const original = typeof raw === 'string' ? raw : (raw?.content ?? '');
+    let mutated = null;
+    let victim = null;
+    try {
+      const schema = JSON.parse(original);
+      const cols = schema.columns ?? schema.fields ?? schema.schema ?? null;
+      // Find a non-id column carrying a type we can flip to an incompatible one.
+      const flip = (ty) => (/int|number|float|real|decimal/i.test(ty) ? 'text' : 'integer');
+      if (Array.isArray(cols)) {
+        const c = cols.find((x) => !/^id$/i.test(x.name ?? x.column ?? '') && (x.type ?? x.dataType));
+        if (c) {
+          victim = `${c.name ?? c.column}: ${c.type ?? c.dataType} → ${flip(c.type ?? c.dataType)}`;
+          if (c.type) c.type = flip(c.type); else c.dataType = flip(c.dataType);
+          mutated = JSON.stringify(schema, null, 2);
+        }
+      } else if (cols && typeof cols === 'object') {
+        const k = Object.keys(cols).find((x) => !/^id$/i.test(x));
+        if (k) {
+          const cur = typeof cols[k] === 'string' ? cols[k] : (cols[k]?.type ?? '');
+          victim = `${k}: ${cur} → ${flip(cur)}`;
+          if (typeof cols[k] === 'string') cols[k] = flip(cur); else cols[k].type = flip(cur);
+          mutated = JSON.stringify(schema, null, 2);
+        }
+      }
+    } catch (e) {
+      report.note(`Act XV: could not parse ${schemaPath} as JSON to force the non-additive change (${String(e).slice(0, 80)}) — the destructive half was NOT exercised, and that is reported, not hidden.`);
+    }
+    if (!mutated) {
+      report.check('a non-additive change could be forced against the schema (the destructive half)', false, `schema shape at ${schemaPath} not recognised — destructive half NOT exercised (see note)`);
+    } else {
+      await pod.writeFile(schemaPath, mutated);
+      const bad = await pod.appBuild(PROJECT).then((r) => ({ ok: true, r })).catch((e) => ({ ok: false, e: String(e) }));
+      const failedLoud =
+        bad.ok === false ||
+        bad.r?.built === false ||
+        !!bad.r?.error ||
+        /reconcile|non-additive|type|incompatible|drop/i.test(JSON.stringify(bad.r ?? {}));
+      report.check(
+        'ANTI-EXPECTATION: the NON-additive change (a live column retyped) FAILS LOUD — it does not silently drop the column\'s data',
+        failedLoud,
+        `${victim} ⇒ ${JSON.stringify(bad.ok ? bad.r : bad.e).slice(0, 200)}`,
+      );
+      // Revert — the rest of the scenario runs on this table.
+      await pod.writeFile(schemaPath, original);
+      const good = await pod.appBuild(PROJECT).catch((e) => ({ built: false, error: String(e) }));
+      const reverted = await allRows(pod, PROJECT);
+      const revertedRows = money ? (reverted[money] ?? []) : [];
+      report.check(
+        'after reverting the schema the app builds again and every row is intact',
+        good?.built === true && revertedRows.length >= afterRows.length,
+        `built=${good?.built}; ${afterRows.length} → ${revertedRows.length} rows`,
+      );
+    }
+  }
+  cp.acts.XV = { passed: report.stepPassed };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XVI — the auto-fill hook that watches the table it writes: THE LOOP GUARD ═══
+// Closes coverage gap P. "Just fill it in for me whenever I add one" NATURALLY compiles to a hook
+// that subscribes to a write on a table and then writes that same table — the exact self-trigger
+// shape `shouldFireHook` exists to stop (`reason:'self-write'` when originatingHookSlug === hook.slug;
+// HOOK_DEPTH_CAP = 3). No scenario had ever put a real agent-authored hook into that shape and
+// watched. A runaway here burns a real user's budget overnight.
+if (ACTS.includes(16)) {
+  report.step(
+    'Act XVI — "just fill the cost in when i add a stop" — the LOOP GUARD holds',
+    'The authored hook subscribes to a write on the itinerary table AND writes that same table. Adding a real stop fills its cost ONCE: hook-triggered sessions stay bounded (≤ HOOK_DEPTH_CAP), rows do not explode, the pod is still responsive',
+  );
+  const t = await timed('Act XVI — the auto-fill turn', () =>
+    thing
+      .send(
+        "also — every time i add a new stop i forget to put what it's going to cost me, and then the total is a lie. can you just fill in a rough cost for me whenever i add one?",
+        { timeoutMs: TURN },
+      )
+      .then(acc),
+  );
+  report.check('THING authored an event/hook for it (a write yield, not just a promise)', t.yields.some((y) => /writeProject(Hook|Event)|emitEvent/i.test(y.kind)) || t.delegates.some((d) => /appbuilder|automator/i.test(d)), `${t.yields.map((y) => y.kind).join(', ')} | ${t.delegates.join(', ')}`);
+
+  const itinTable = cp.facts.itinTable ?? tableNamed(await allRows(pod, PROJECT), /itinerar|leg|route|trip|destination|stop/i);
+
+  // The hook must actually be in the self-trigger shape — otherwise the loop guard is never under
+  // test and a green tick here would be meaningless.
+  const hookFiles = await lsFiles(pod, new RegExp(`^${PROJECT}/(hooks|events)/`));
+  let selfTrigger = null;
+  for (const f of hookFiles) {
+    const raw = await pod.readFile(f).catch(() => null);
+    const body = typeof raw === 'string' ? raw : (raw?.content ?? '');
+    if (!body || !itinTable) continue;
+    const listens = new RegExp(`db\\.${itinTable}\\.|['"\`]${itinTable}['"\`]`).test(body) && /insert|create|update|write|\.on|event|trigger/i.test(body);
+    const writes = new RegExp(`db\\.(update|insert|write)|writeProject|['"\`]${itinTable}['"\`]`).test(body);
+    if (listens && writes) selfTrigger = f;
+  }
+  report.check(
+    'the hook is in the SELF-TRIGGER shape (it listens to the itinerary table AND writes it) — the loop guard is genuinely under test',
+    !!selfTrigger,
+    selfTrigger ?? `no self-writing hook among: ${hookFiles.join(', ') || 'none'}`,
+  );
+
+  // Now add a real stop, in her own words, and watch what the hook does.
+  const rowsBefore = (await allRows(pod, PROJECT))[itinTable] ?? [];
+  const sessionsBefore = new Set(await sessionIds(pod));
+
+  const tAdd = await timed('Act XVI — she adds a stop (the hook trigger)', () =>
+    thing.send("oh and i've decided to squeeze valparaiso in on the way up the chilean coast, 3 nights, stick it on the list", { timeoutMs: TURN }).then(acc),
+  );
+
+  // Let any cascade settle. If the loop guard is broken, THIS is where it runs away.
+  await sleep(60_000);
+
+  const rowsAfter = (await allRows(pod, PROJECT))[itinTable] ?? [];
+  const sessionsAfter = (await sessionIds(pod)).filter((i) => !sessionsBefore.has(i));
+
+  const valpo = rowsAfter.find((r) => /valpara[ií]so/i.test(JSON.stringify(r)));
+  const costKey = valpo ? Object.keys(valpo).find((k) => /cost|price|budget|amount|estimate|spend/i.test(k)) : null;
+  const costFilled = valpo && costKey && valpo[costKey] !== null && valpo[costKey] !== undefined && valpo[costKey] !== '' && valpo[costKey] !== 0;
+  report.check('the new stop landed, and its cost was FILLED IN for her (the hook actually fired)', !!costFilled, valpo ? `${costKey ?? 'no cost column'} = ${JSON.stringify(valpo[costKey ?? ''])} · ${JSON.stringify(valpo).slice(0, 140)}` : 'no Valparaíso row');
+
+  // THE loop-guard assertion. A hook that re-triggered itself would spawn a session per cascade
+  // level until the depth cap — and a BROKEN guard spawns them without end.
+  const bounded = sessionsAfter.length <= 3; // HOOK_DEPTH_CAP
+  report.check(
+    'ANTI-EXPECTATION: the hook did NOT re-trigger itself — hook-triggered sessions stayed bounded (loop guard: self-write / HOOK_DEPTH_CAP=3)',
+    bounded,
+    `${sessionsAfter.length} new session(s) after the insert (cap 3) — a runaway would be unbounded`,
+  );
+  const exploded = rowsAfter.length > rowsBefore.length + 3;
+  report.check(
+    'the itinerary rows did not explode (no write storm from a self-triggering hook)',
+    !exploded,
+    `${rowsBefore.length} → ${rowsAfter.length} rows`,
+  );
+  const alive = await pod.listProjects().then(() => true).catch(() => false);
+  report.check('the pod is still responsive afterwards (the cascade did not starve it)', alive, alive ? 'GET /api/projects → 200' : 'pod unreachable');
+  report.metric('Act XVI — hook-triggered sessions after one insert', sessionsAfter.length);
+
+  report.check('no unrecovered errors across the auto-fill Act', thing.unrecoveredErrors().length === 0, `${tAdd.errors.length} recovered on the add turn`);
+  cp.acts.XVI = { passed: report.stepPassed };
   saveCheckpoint(cp);
 }
 

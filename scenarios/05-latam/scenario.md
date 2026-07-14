@@ -49,6 +49,9 @@ is found.
 | 15 | A voice memo, in Spanish | attaches `voice-memo.mp3` — a change of mind about Sucre, spoken while walking |
 | 16 | Switches to Spanish, typed | a later plain-text message, in Spanish, changes something else |
 | 17 | Her pod restarts mid-trip | (simulated) — she keeps talking as if nothing happened |
+| 18 | A screenshot from a friend | attaches `camila-whatsapp-uyuni.png` and asks what it's telling her to do |
+| 19 | "which of these have I paid for?" | asks for a paid/not-paid marker on the money lines, and names two she's already paid |
+| 20 | "stop making me fill it in" | asks for a rough cost to be filled in automatically whenever she adds a stop |
 
 > *"omg ok. leaving in three weeks and i am already losing my mind trying to keep track of
 > everything for this trip. dumping my notes here [trip-notes.md attached], can u help me actually
@@ -73,6 +76,16 @@ is found.
 > *(step 16, Spanish switch, mid-conversation, no warning)* *"oye, cambié de planes — al final NO
 > voy a Buenos Aires, mejor me quedo más días en El Calafate, sácalo de la lista"*
 
+> *(step 18, the screenshot)* *"camila sent me this and i cba to type it all out, what is she
+> actually telling me to do?? just put it wherever it needs to go"*
+
+> *(step 19, the paid marker)* *"i keep forgetting which of this stuff i've actually paid for and
+> which i just wrote down. can you put some kind of paid / not-paid thing on each of the money
+> lines? the machu picchu ticket and the brazil visa are both already paid"*
+
+> *(step 20, the auto-fill)* *"also — every time i add a new stop i forget to put what it's going to
+> cost me, and then the total is a lie. can you just fill in a rough cost for me whenever i add one?"*
+
 ---
 
 ## 2. What the user expects (the contract)
@@ -94,6 +107,12 @@ In her terms, success is:
 9. **"It doesn't lose track of what I told it, even after I've rambled for ages."**
 10. **"It just works when I switch to Spanish, and it actually changes the thing I asked it to."**
 11. **"If it reboots, I don't lose anything."**
+12. **"It can read a screenshot."** A picture of a chat is not a file it can "open" — it has to
+    actually *look* at it, and what Camila said has to end up in her stuff.
+13. **"It can add a thing to my list without wrecking the list."** Asking for one more column does
+    not lose the rows already in it.
+14. **"It fills the boring bit in for me, and doesn't go mad doing it."** A cost that appears by
+    itself when she adds a stop — once, not a thousand times.
 
 **Anti-expectations (a failure even if the chat looks fine):**
 - A tidy research summary in the chat with **no space, no knowledge file, no PDF fact anywhere on
@@ -112,6 +131,15 @@ In her terms, success is:
 - "Book me the flight" resulting in a **fabricated confirmation or a payment form** — inventing a
   capability it does not have.
 - Pod restart losing the conversation, or the weekly automations going silent afterward.
+- The screenshot being **guessed at** rather than looked at — a plausible reply that never names the
+  one operator only visible in the pixels, or a `readDocument` failure on the PNG **killing the turn**
+  instead of degrading to vision.
+- Adding the paid/not-paid marker **silently dropping the rows already in the table** — a migration
+  that "worked" and lost her data is the worst failure in this document. And its mirror image: a
+  **destructive** schema change (a column's type changed under live rows) going through **quietly**
+  instead of failing loudly.
+- The auto-fill hook **triggering itself forever** because it writes the very table it watches — a
+  runaway that burns her budget while she sleeps. Once is the promise; a loop is a bug.
 
 ---
 
@@ -219,6 +247,22 @@ Hop by hop, for maintainers:
 - **US-13 — Survives a restart.** *As Elena, I don't want to lose anything if it reboots mid-trip.*
   **Accept:** the session auto-resumes after `POST /api/restart`; the weekly cron still fires
   afterward; all committed rows are intact.
+- **US-14 — A screenshot is readable.** *As Elena, I want to forward a picture of a chat and have
+  what it says end up in my stuff, without typing it out.* **Accept:** the operator name that exists
+  **only in the screenshot's pixels** (`Red Planet Expedition` — not in any other fixture, not
+  recoverable with `strings`) lands in a real row; if `readDocument` is tried on the PNG and fails,
+  the same turn recovers via the vision path rather than ending in error.
+- **US-15 — Growing the table doesn't break the table.** *As Elena, I want to add one more thing to
+  track without losing what's already there.* **Accept:** after the paid/not-paid column is added
+  live, **every pre-existing row id is still present**, the two rows she named are marked paid, and
+  the app still builds. Conversely a **non-additive** change (an existing column's type changed under
+  live rows) **fails loud** — it must not silently discard the column's data.
+- **US-16 — It fills the boring bit in, once.** *As Elena, I want a cost filled in automatically when
+  I add a stop, and I don't want it spiralling.* **Accept:** the authored event hook subscribes to a
+  write on the itinerary table **and writes that same table** — the classic self-trigger shape. The
+  new stop's cost field is filled, and the **loop guard's `self-write` rule** (`originatingHookSlug
+  === hook.slug`, `HOOK_DEPTH_CAP = 3`) holds: the hook does not re-trigger itself, the number of
+  hook-triggered sessions stays bounded, and the pod is still responsive afterward.
 
 ---
 
@@ -228,16 +272,18 @@ Hop by hop, for maintainers:
   (build_app) [ ] code (engineer) [x] memory [x] install+automate [x] compound request
   [x] provided-info shortcut [x] restraint/refusal [x] multilingual
 - Spaces: [x] create per-part [x] live-registered/delegatable [ ] no-clobber re-add
-- Event pipeline: [x] webhook [x] cron [ ] db [ ] internal · [ ] code-handler hook [x] agent-trigger
-  hook · [ ] code nodes [x] forEach · [ ] project functions · [ ] loop guard [ ] payload validation
-  [ ] emitEvent
+- Event pipeline: [x] webhook [x] cron [x] db (XVI) [ ] internal · [ ] code-handler hook
+  [x] agent-trigger hook · [ ] code nodes [x] forEach · [ ] project functions · [x] loop guard (XVI)
+  [ ] payload validation [ ] emitEvent
 - Consent/caps: [ ] @consent [x] installSpace approve/deny (approve only) [ ] fail-closed headless
   [ ] capability gating
 - Store/integrations: [x] discovery (`storeSearch`/`storeInspect`) [x] install a space
   [x] callConnection [x] inbound webhook [x] integration-demo source
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
-  [x] app build [x] /app/<id>/ serving [x] app data API
+  [x] app build [x] /app/<id>/ serving [x] app data API [x] live schema migration / addColumn (XV)
+  [x] reconcile: additive-OK vs non-additive fail-loud (XV)
 - Attachments: [x] upload [x] readDocument [x] attachmentIds to a specialist [x] vision/audio
+  [x] readDocument fails on an image → degrades to vision (XIV)
 - Pod lifecycle: [x] restart→auto-resume [ ] cold-wake [ ] event storm [ ] worker containment
 - Cross-cutting: [x] edge cases/errors [x] performance [ ] budget
 
@@ -262,6 +308,9 @@ The runner (`05-latam/run.mjs`) drives these and asserts on the **trace + real p
 | **XI — History summarization survives 20+ turns** | The turn-3 message states her `$9,000` ceiling. ≥17 further turns of real unrelated chatter follow. The recall turn's `lastText` states the correct figure. A subsequent `llm_request` trace event's `messages[0].content` starts with `[CONTEXT SUMMARY]` (summarization actually fired, not just a long session) | US-11 |
 | **XII — Spanish: voice memo + a typed switch, both write real rows** | `voice-memo.mp3` uploaded via `sendWithAttachments`; the `itinerary` Bolivia/Sucre row's `nights` field goes from **null → 4** (the memo's actual change of mind), and a field on that row (or a linked note) carries `Churuquella`. Separately, her later plain-Spanish-typed message ("quita Buenos Aires… más días en El Calafate") results in the Buenos Aires `itinerary` row removed/marked skipped and the El Calafate row's `nights` increased — a real `db:write`, not a reply. A following **English** message routes correctly afterward (no degradation) | US-12 |
 | **XIII — Pod restart → auto-resume mid-trip** | `pod.restart()`; the runner's `send()` sees the 404, waits for the pod, resumes the same session id; the reply continues the conversation coherently; a forced cron run (Act VIII's digest) still fires post-restart; all rows written before the restart are still present via `pod.appData` | US-13 |
+| **XIV — Camila's screenshot: `readDocument` fails, vision catches it** *(round 2 · closes gap **M**)* | `camila-whatsapp-uyuni.png` uploaded (`kind=image`, `image/png`) with her plain "what is she telling me to do?". The turn reaches the **vision** path (a `system-vision` delegate, or an image-bearing `attachmentIds` delegate). **`Red Planet Expedition` — a token that exists ONLY in the PNG's pixels** (absent from every other fixture; `strings` on the PNG does not contain it) — lands in a **real db row or space file**, never only in prose. **The degradation is asserted, not assumed:** if a `readDocument` yield is issued against the image attachment, its resolution must be an error/unsupported result AND the vision path must follow **in the same turn**, with the turn still ending cleanly (0 unrecovered errors). Whether the wrong tool was reached for at all is recorded as a metric | US-14 |
+| **XV — "which of these have I paid for?" — a LIVE migration that keeps her rows** *(round 2 · closes gap **L** + **O**)* | Snapshot the money table's row **ids + count** before the turn. She asks (plain words) for a paid/not-paid marker and names two lines already paid. After: the new column exists in `pod.appManifest`/the schema file; **every pre-existing row id is still present** and the count did not drop (an additive migration must not lose data); the two rows she named are marked paid, the rest are not; `pod.appBuild` still `built:true`. **Then the runner forces the NON-additive half:** it `pod.writeFile`s the table's schema changing an **existing column's type** under live rows and rebuilds — the reconcile must **fail loud** (a build/reconcile error naming the column), NOT silently drop the column's data. Revert ⇒ `built:true` and every row intact again | US-15 |
+| **XVI — The auto-fill hook that watches the table it writes — THE LOOP GUARD** *(round 2 · closes gap **P**)* | She asks for a rough cost to be filled in automatically whenever she adds a stop. The authored event hook must subscribe to a **write event on the itinerary table** and **write that same table** — the exact self-trigger shape the loop guard exists for (`shouldFireHook` → `reason:'self-write'` when `originatingHookSlug === hook.slug`; `HOOK_DEPTH_CAP = 3`). Assert: the hook file on disk listens to the itinerary table AND writes it. She then adds a real stop in conversation; after settle, that row's cost field is **filled** (the hook fired), the number of hook-triggered sessions is **bounded** (`≤ HOOK_DEPTH_CAP`, and nowhere near a runaway), the itinerary row count did not explode, and the **pod is still responsive** (`listProjects` 200). A runaway here is a bug that burns a real user's budget overnight | US-16 |
 
 *Performance targets are **hang detectors, not SLOs**. Record the ACTUAL time as a metric on every
 Act; only FAIL when a ceiling below is breached — that means something is broken, not merely slow.*
@@ -277,6 +326,9 @@ Act; only FAIL when a ceiling below is breached — that means something is brok
 | Forced cron digest run | < 5 min |
 | Weekly tasklist run (happy path, ~5 countries fanned out) | < 45 min |
 | Forced-degraded tasklist run | < 5 min |
+| Screenshot → vision → token in a real row (XIV) | < 5 min |
+| Live column migration, rows intact (XV) | < 10 min |
+| Auto-fill hook fires once after a new stop (XVI) | < 5 min |
 | Whole scenario wall clock | ≤ 4 h |
 | Eval/typecheck errors (unrecovered) | **0** (hard fail) |
 
@@ -296,6 +348,24 @@ survives a long, messy, human conversation without losing an early stated fact; 
 input is treated as a first-class write path, not a special case. If any of the six turns out to be
 unreliable against a real model in production, that is the honest finding this scenario exists to
 surface — not a reason to soften the assertion.
+
+**Round 2 adds three more never-exercised capabilities**, each chosen because it is a claim the
+platform *makes* and nothing has ever *checked*:
+
+- **The wrong tool for the media type must degrade, not die** (Act XIV). `readDocument` is
+  documented to fail on an image; the promise is that the agent then reaches for vision. Until now
+  no scenario had a fixture whose fact lived **only in pixels**, so nothing could tell the
+  difference between "it looked at the image" and "it guessed plausibly". `camila-whatsapp-uyuni.png`
+  can only be read by *looking*.
+- **A live migration must not eat her rows** (Act XV). Adding a column to a table that already has
+  data is the single most ordinary thing a growing app does, and the single most destructive thing to
+  get wrong. Its mirror — a **non-additive** change under live rows — must fail **loudly**; a quiet
+  drop is data loss that looks like success.
+- **The loop guard is the thing standing between a user and an overnight runaway** (Act XVI). A hook
+  that writes the very table it subscribes to is not an exotic edge case — it is what "fill this in
+  for me automatically" *naturally compiles to*. `shouldFireHook`'s `self-write` rule and
+  `HOOK_DEPTH_CAP` are load-bearing, and no scenario had ever put a real agent-authored hook into
+  that shape and watched what happened.
 
 ## 8. Running it
 

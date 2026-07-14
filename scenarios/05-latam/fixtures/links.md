@@ -63,6 +63,29 @@ curl -s -o /dev/null -w "%{http_code}" -A "Mozilla/5.0" -L <url>   # all returne
   - Brazil e-visa fee (~US$80.90): https://www.visahq.com/brazil/
   - ADO bus fares, LA2232 / AV9788 flights: same sources as `trip-notes.md` above
 
+- **`camila-whatsapp-uyuni.png`** (added round 2) — a phone screenshot of Camila's WhatsApp
+  messages, rendered for this fixture set (PIL, `/tmp/mk-screenshot.py`) in the same spirit as
+  `trip-notes.md` and `voice-memo.mp3`: **authored, but every checkable fact is grounded in real
+  research.** Its load-bearing fact is a REAL Uyuni tour operator —
+  **Red Planet Expedition** (TripAdvisor `d1940181`, Uyuni, Potosí Department):
+  https://www.tripadvisor.com/Attraction_Review-g317033-d1940181-Reviews-Red_Planet_Expedition_Day_Trip-Uyuni_Potosi_Department.html
+  — including the detail reviewers repeatedly single out (the only operator with night access to
+  the hot springs) and a realistic 3-day price in bolivianos.
+
+  **Why it is a genuinely different KIND of fixture.** The scenario's persona always promised "one
+  screenshot a friend sent her", and the fixture set never had one. The only other image
+  (`salar-de-uyuni…jpg`) carries **no extractable text**, and its token (`2016-02-04`) lives in the
+  *filename* — so nothing in 05-latam ever proved the **pixels** were read. Here the fact exists
+  ONLY as pixels:
+  - `strings camila-whatsapp-uyuni.png | grep -i "red planet"` → **no match** (a guessing model
+    cannot get it from the bytes, and neither can `grep`);
+  - **vision round-trip verified** (the same protocol the TTS memo used) — the image was sent to
+    the `gpt-5.4-mini` vision deployment on `$AZURE_RESOURCE_NAME`, which read back: *"She says to
+    book **Red Planet Expedition**, and it costs **1100 Bs per person** for a **3-day tour**"*.
+  - It is also the fixture that makes Act XIV honest: `readDocument` **legitimately fails** on a
+    PNG, so the trace can prove the wrong-tool-for-the-media-type degraded into vision rather than
+    dying.
+
 - **`voice-memo.mp3` + `voice-memo.txt`** — generated with Azure OpenAI TTS
   (`https://lmthing-resource.openai.azure.com/openai/deployments/tts/audio/speech`, voice
   `alloy`) from a Spanish script written for this fixture, and round-trip-verified by
@@ -90,3 +113,4 @@ excluded from the disjointness check — its entire job is to catalogue all of t
 | `peru-machu-picchu-tarifas-2026-resolucion-284-2025-MC.pdf` | `Huchuypicchu` (Ruta 3-D in the annex — a real, obscure Machu Picchu circuit name) |
 | `trip-budget.xlsx` | `Torres del Paine` (the Chile park-fee line item) |
 | `voice-memo.mp3` / `voice-memo.txt` | `Churuquella` (the Sucre viewpoint she mentions in the recording) |
+| `camila-whatsapp-uyuni.png` | `Red Planet Expedition` (the real Uyuni operator Camila tells her to pre-book — **pixels only**: `strings` on the PNG does not contain it, and no other fixture mentions it) |
