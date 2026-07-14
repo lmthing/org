@@ -162,6 +162,20 @@ the user hits first:
   standing somewhere with no signal and no PDF. "It's derivable" and "it's in the attachment" are
   not answers.
 
+**Keep the ATTRIBUTION the material carries — who it came from, where it originated.** Material a
+person entrusts to you usually arrives credited to someone: the record names who supplied it, who it
+is owed to, which place or occasion it came from. That is a fact the source STATES, exactly like a
+total or a reference number — and it is very often the reason the material was kept at all. Record
+the content and drop the attribution and you have kept the half they could always look up again,
+while losing the half they cannot reconstruct from anywhere else.
+
+So when the material names a person, a place, or an origin, put it ON the record — an
+`origin`/`credited_to`/`source` field holding the SPECIFIC thing it names. Beware the near-miss that
+looks done: filling that field with the CHANNEL the material arrived on ("from an attachment", "from
+a message", "from a document the user sent") is describing the envelope, not the fact. The transport
+is not the attribution. If the material says who it is credited to, that name is what belongs in the
+field.
+
 **HARD RULE: never report that you "moved the data in" / "seeded the tables" unless you actually
 passed a non-empty `rows` array to `writeProjectTable` (or did a `db.insert`).** A table you created
 with only a schema is EMPTY; saying you seeded it when you didn't is a failure the user will catch the

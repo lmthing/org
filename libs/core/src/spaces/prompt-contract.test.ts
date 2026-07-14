@@ -40,6 +40,35 @@ describe('system-appbuilder/automator — the empty-app failure', () => {
   });
 });
 
+describe('system-appbuilder/automator — attribution survives the seed', () => {
+  /**
+   * Observed live (10-family-recipes): the builder seeded a row from material the user handed over
+   * and captured every operational detail of it perfectly — while dropping WHO the material was
+   * credited to. It even chose a `source` column, then filled it with the CHANNEL the material
+   * arrived on rather than the name the material itself states. The user had asked, in as many
+   * words, not to lose any of it.
+   *
+   * The operational content is the half a person can always look up again; the attribution is the
+   * half they cannot reconstruct from anywhere else — and is very often why the material was kept.
+   * The existing rule covers figures and contacts the source STATES; it did not cover the name it
+   * is credited to, nor the near-miss of recording the envelope instead of the fact.
+   */
+  it('tells the builder to keep the attribution the material carries — and not to record the transport instead', () => {
+    const instruct = readFileSync(join(SYSTEM_SPACES, 'system-appbuilder', 'agents', 'automator', 'instruct.md'), 'utf8');
+
+    expect(
+      instruct,
+      'the automator must be told to keep WHO/WHERE material came from on the record, not just its operational content',
+    ).toMatch(/attribution|credited_to|provenance/i);
+
+    // The near-miss guard: a `source` field filled with "from an attachment" LOOKS done and is not.
+    expect(
+      instruct,
+      'the automator must be warned that recording the CHANNEL the material arrived on is not the attribution',
+    ).toMatch(/transport is not the attribution|channel the material arrived on/i);
+  });
+});
+
 describe('no system-space prompt is overfitted to a scenario', () => {
   /**
    * A system-space prompt is a brain EVERY user shares. A literal borrowed from one scenario

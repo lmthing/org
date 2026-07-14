@@ -512,7 +512,17 @@ if (ACTS.includes(3)) {
   const countBefore = recipesTable ? (rowsBefore[recipesTable] ?? []).length : 0;
 
   const photo = await pod.upload(`${FIX}/dish-photo.jpg`, { mediaType: 'image/jpeg' });
-  const probe = new ThingSession(pod, { projectId: PROJECT, onAsk: scriptedOnAsk(true), verbose: true });
+  // The probe runs AS the document dispatcher (scenario.md §6 Act III), not as THING. THING is
+  // smart enough to route an image straight to vision and never touch readDocument — which is good
+  // product behaviour but leaves the HOST GUARD untested. The guard exists for the case where an
+  // image reaches the document reader anyway; the only way to exercise it is to hand the photo to
+  // system-files/dispatch directly.
+  const probe = new ThingSession(pod, {
+    projectId: PROJECT,
+    agentSlug: 'system-files/dispatch',
+    onAsk: scriptedOnAsk(true),
+    verbose: true,
+  });
   await probe.start();
   await probe.syncToTail();
   // Plain-language, and wrong on purpose — he thinks a photo of a page IS a page. This is exactly
