@@ -342,13 +342,13 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     void staticApps.handle(req, res);
   };
   const rootPageServe = createPageServeHandler(getOutDirForProject, '', webFallback);
-  router.add('*', '/:projectId/api/*', async (req, res, params, routeCtx) => {
+  router.add('*', '/:projectId/api/*', async (req, res, params) => {
     if (RESERVED_ROOT_SEGMENTS.has(params['projectId']!)) { webFallback(req, res); return; }
-    await appApiHandler(req, res, params, routeCtx);
+    await appApiHandler(req, res, params);
   });
-  router.add('*', '/:projectId/*', async (req, res, params, routeCtx) => {
+  router.add('*', '/:projectId/*', async (req, res, params) => {
     if (RESERVED_ROOT_SEGMENTS.has(params['projectId']!)) { webFallback(req, res); return; }
-    await rootPageServe(req, res, params, routeCtx);
+    await rootPageServe(req, res, params);
   });
 
   // ─── Activity tracking (for the self-idle watchdog) ───────────────────────

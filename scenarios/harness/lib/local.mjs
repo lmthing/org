@@ -29,7 +29,16 @@ export const LOCAL_BASE = `http://localhost:${LOCAL_PORT}`;
 export const LOCAL =
   process.env.SCENARIO_TARGET === 'local' || /localhost|127\.0\.0\.1/.test(process.env.LM_POD_BASE ?? '');
 
-const DIR = join(STATE_DIR, 'local-server');
+/**
+ * State (pidfile, log, pod-root) is keyed by PORT, so a lane that wants ISOLATION can set
+ * `LM_LOCAL_PORT` and get its own server instead of sharing the default one. That matters because a
+ * restart is not a private act: `local-server.mjs restart` kills the shared process, and every other
+ * lane's in-flight turn dies with it. A scenario whose authoring turns run 10+ minutes cannot
+ * survive on a server that its siblings rebuild every few minutes — it gets interrupted, re-sends,
+ * and burns the budget again. The default port keeps the original shared dir, so nothing moves for
+ * lanes that are happy sharing.
+ */
+const DIR = join(STATE_DIR, LOCAL_PORT === 8080 ? 'local-server' : `local-server-${LOCAL_PORT}`);
 const PID_FILE = join(DIR, 'pid');
 const LOCK_FILE = join(DIR, 'starting.lock');
 const LOG_FILE = join(DIR, 'serve.log');

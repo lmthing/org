@@ -168,6 +168,11 @@ if (changed) {
 }
 
 const pod = new Pod({ base: user.pod, token: user.token });
+// `--fresh` means a fresh USER — but on the LOCAL target the pod is shared and long-lived, so the
+// previous run's project (its tables, pages, rows) is still sitting there. A "fresh" run that
+// inherits a built app is not fresh: Act I would open against someone else's tables, and later Acts
+// would go green on state THIS run never produced. Drop it first.
+if (FRESH) await pod.req('DELETE', `/api/projects/${PROJECT}`).catch(() => {});
 const projects = await pod.listProjects();
 if (!(projects.projects ?? []).some((p) => (p.id ?? p) === PROJECT)) await pod.createProject(PROJECT);
 cp.projectId = PROJECT;
