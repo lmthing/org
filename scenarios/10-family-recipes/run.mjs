@@ -42,7 +42,7 @@ const FIX = `${SDK_ORG}/scenarios/${ID}/fixtures`;
 const RESULTS = `${SDK_ORG}/scenarios/${ID}/results`;
 const CHECKPOINT = `${RESULTS}/checkpoint.json`;
 const argActs = (process.argv.find((a) => a.startsWith('--acts=')) ?? '').slice(7);
-const ALL_ACTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const ALL_ACTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 const ACTS = argActs ? argActs.split(',').map(Number) : ALL_ACTS;
 const FRESH = process.argv.includes('--fresh');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -964,6 +964,287 @@ if (ACTS.includes(12)) {
   const planTable = tableNamed(rows, /meal_plan|plan|μεν[οού]|εβδομ/i);
   report.check('a forced weekly re-run still produces a plan after the restart', !!fired && (planTable ? rows[planTable] : []).length > 0, `${planTable ?? 'none'}: ${(planTable ? rows[planTable] : []).length} rows`);
   cp.acts.XII = { passed: report.stepPassed };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XIII — the rule he mentioned in passing survives a long conversation ═════
+// Coverage gap M: history summarization past `maxHistoryTurns`. The pod runs sessions with
+// `maxHistoryTurns: 20` (session-manager.ts), and `Session.maybeSummarizeHistory()` collapses the
+// history once it exceeds `maxTurns * 2` MESSAGES, keeping the last 6 verbatim. The digest is
+// DETERMINISTIC (no streamFn is passed): it keeps user task lines, resolved VARIABLES and errors —
+// and drops every assistant reply. So the question this Act really asks is: when the turn that
+// carried a house rule is no longer in the verbatim window, did the digest carry the rule across?
+//
+// It is proved by what the agent WRITES, never by what it says: the final ask must land a real
+// meal_plan row whose dish's own recipes row contains no garlic.
+if (ACTS.includes(13)) {
+  report.step(
+    'Act XIII — the rule he mentioned in passing survives a long conversation',
+    'a house rule is stated ONCE, plainly, mid-conversation — never "remember this". The conversation then grows long enough that the runtime collapses the old turns into a digest (proved on the PERSISTED SESSION FILE: a summary message is present and the rule\'s own turn is gone from the verbatim tail). A later plain ask must then honour the rule in REAL STATE — a meal_plan row whose dish carries no garlic in its recipes row',
+  );
+
+  // The rule — one plain line, in passing. He never says "remember this" (that is Act IX's path,
+  // through user-memory). This one has to survive on the strength of the history digest alone.
+  const tRule = acc(await timed('Act XIII — the rule, mentioned in passing', () =>
+    thing.send(
+      'Α, να σου πω κάτι πριν το ξεχάσω: ο πεθερός μου δεν αντέχει καθόλου το σκόρδο, και τρώει πάντα μαζί μας την Κυριακή — οπότε στα κυριακάτικα ποτέ σκόρδο.',
+      { timeoutMs: TURN },
+    )));
+  report.check('the rule turn completed (it is now in the conversation, not in memory)', (tRule.llmCalls ?? 0) >= 1, `${tRule.llmCalls} llm calls`);
+
+  // The long tail — ordinary, cheap kitchen chatter. Nothing load-bearing, exactly as a real week of
+  // messages looks. Each turn adds messages; we drive until the pod has crossed maxTurns*2 and
+  // summarized, or we run out of patience.
+  const CHATTER = [
+    'Τελικά τα κεφτεδάκια τα τηγανίζεις ή τα ψήνεις;',
+    'Πόσο κρατάει ο μουσακάς στο ψυγείο;',
+    'Η γιαγιά έβαζε κανέλα στον κιμά; Δεν θυμάμαι.',
+    'Τι κρασί πάει με τα γεμιστά;',
+    'Μπορώ να καταψύξω τη σπανακόπιτα πριν την ψήσω;',
+    'Πόσα άτομα βγάζει ο μουσακάς που έχουμε;',
+    'Τι να κάνω με τον αρακά που περίσσεψε;',
+    'Το τσίπουρο στο φύλλο το βάζω πριν ή μετά το λάδι;',
+    'Η μελιτζάνα θέλει αλάτισμα πριν;',
+    'Πόση ώρα θέλει το φύλλο να ξεπαγώσει;',
+    'Τα κρεμμύδια τα ψιλοκόβω ή τα τρίβω;',
+    'Τι σαλάτα πάει με τα κεφτέδες;',
+    'Το λάδι το βάζω στην αρχή ή στο τέλος;',
+    'Έχει νόημα να φτιάξω διπλή δόση μπεσαμέλ;',
+    'Πόσο ψήνεται ο αρακάς;',
+    'Τι γλυκό ταιριάζει μετά από γεμιστά;',
+  ];
+  const sessFile = () => `${LOCAL ? `${SDK_ORG}/scenarios/harness/.state/local-server/pod-root` : ''}/.lmthing/${PROJECT}/sessions/${cp.sessionId}.json`;
+  const readSession = () => { try { return JSON.parse(readFileSync(sessFile(), 'utf8')); } catch { return null; } };
+  const msgCount = (s) => (s?.history?.messages ?? s?.messages ?? []).length;
+  const hasSummary = (s) =>
+    (s?.history?.messages ?? s?.messages ?? []).some(
+      (m) => m?.blockType === 'summary' || /^SUMMARY|summarized|^task: /m.test(String(m?.content ?? '')),
+    );
+
+  let peak = msgCount(readSession());
+  let summarized = false;
+  const tChat0 = now();
+  for (const [i, msg] of CHATTER.entries()) {
+    await timed(`Act XIII — chatter ${i + 1}/${CHATTER.length}`, () => thing.send(msg, { timeoutMs: TURN }));
+    const s = readSession();
+    const n = msgCount(s);
+    peak = Math.max(peak, n);
+    if (hasSummary(s) && n < peak) { summarized = true; console.log(`[run] history SUMMARIZED after chatter ${i + 1} (${peak} → ${n} messages)`); break; }
+    if (hasSummary(s)) summarized = true;
+  }
+  report.metric('Act XIII — long-conversation tail', ((now() - tChat0) / 60_000).toFixed(1), ' min');
+
+  const sess = readSession();
+  report.check(
+    'the persisted session file is readable (the assertion is on REAL state, not prose)',
+    !!sess,
+    sess ? `${msgCount(sess)} messages at ${sessFile().split('/').slice(-2).join('/')}` : `unreadable: ${sessFile()}`,
+  );
+  report.check(
+    'the runtime really COLLAPSED the old turns into a digest (history summarized)',
+    summarized,
+    summarized ? `peak ${peak} messages → ${msgCount(sess)} after the digest` : `never summarized — peak ${peak} messages (maxHistoryTurns*2 = 40 not crossed in ${CHATTER.length} turns)`,
+  );
+  // The CONTROL. A pass only means something if the rule's own turn is NO LONGER verbatim in the
+  // window — otherwise the agent is just reading it straight off the history and the digest is
+  // untested.
+  const verbatim = JSON.stringify((sess?.history?.messages ?? sess?.messages ?? []).slice(-6));
+  const ruleStillVerbatim = hasEl(verbatim, 'πεθερ') || hasEl(verbatim, 'σκόρδο');
+  report.check(
+    'CONTROL: the rule turn is GONE from the verbatim tail — so a pass proves the digest carried it',
+    !ruleStillVerbatim,
+    ruleStillVerbatim ? 'the rule is STILL verbatim in the last 6 messages — this Act would prove nothing' : 'the rule survives only via the digest',
+  );
+
+  // The proof: a REAL ROW that obeys the rule. Never the reply's prose.
+  const rowsBefore = await allRows(pod, PROJECT);
+  const planT0 = tableNamed(rowsBefore, /meal_plan|plan|μεν[οού]|εβδομ/i);
+  const planBefore = planT0 ? (rowsBefore[planT0] ?? []).length : 0;
+  const tAsk = acc(await timed('Act XIII — the ask that needs the rule', () =>
+    thing.send('Τι μαγειρεύουμε την Κυριακή; Βάλ\' το και στο πλάνο.', { timeoutMs: TURN })));
+  report.check('no UNRECOVERED eval/typecheck errors in Act XIII', unrec(tAsk, tRule).length === 0, JSON.stringify(unrec(tAsk, tRule)).slice(0, 160));
+
+  await sleep(6_000);
+  const rowsAfter = await allRows(pod, PROJECT);
+  const planT = tableNamed(rowsAfter, /meal_plan|plan|μεν[οού]|εβδομ/i);
+  const planRows = planT ? (rowsAfter[planT] ?? []) : [];
+  report.check('the ask landed a REAL meal_plan row (it wrote, it did not just talk)', planRows.length >= planBefore && planRows.length > 0, `${planT ?? 'none'}: ${planBefore} → ${planRows.length} rows`);
+
+  // Which dish did it put on Sunday? Then: does THAT dish's own recipe contain garlic?
+  const sundayRows = planRows.filter((r) => hasEl(JSON.stringify(r), 'Κυριακ') || /sunday/i.test(JSON.stringify(r)));
+  const recipesT = tableNamed(rowsAfter, /recipe|συνταγ/i);
+  const recipeRows = recipesT ? (rowsAfter[recipesT] ?? []) : [];
+  const GARLIC = /σκ[οό]ρδ|garlic/i;
+  const sundayDishRecipes = recipeRows.filter((rec) =>
+    sundayRows.some((p) => {
+      const dish = String(p.recipe_id ?? p.recipe ?? p.dish ?? p.title ?? p.meal ?? '');
+      const rid = String(rec.id ?? '');
+      const rtitle = `${rec.title_gr ?? ''} ${rec.title_en ?? ''} ${rec.title ?? ''} ${rec.name ?? ''}`;
+      return (dish && (dish === rid || hasEl(rtitle, dish) || hasEl(dish, String(rec.title_gr ?? rec.title ?? rec.name ?? ' '))));
+    }),
+  );
+  report.check(
+    "Sunday's dish resolves to a real recipes row (the plan points at the book)",
+    sundayRows.length > 0 && sundayDishRecipes.length > 0,
+    `${sundayRows.length} Sunday plan row(s) → ${sundayDishRecipes.length} recipe row(s)`,
+  );
+  const garlicky = sundayDishRecipes.filter((rec) => GARLIC.test(JSON.stringify(rec)));
+  report.check(
+    'THE RULE HELD IN REAL STATE: no garlic in what it put on Sunday (proved by the row, not the reply)',
+    sundayDishRecipes.length > 0 && garlicky.length === 0,
+    garlicky.length
+      ? `garlic in: ${garlicky.map((r) => r.title_gr ?? r.title ?? r.id).join(', ')}`
+      : `${sundayDishRecipes.length} Sunday recipe(s), none with garlic`,
+  );
+  report.note('The rule was stated ONCE, in passing, and never as "remember this" — so user-memory is not the path under test here. Only the history digest could have carried it.');
+  cp.acts.XIII = { passed: report.stepPassed };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XIV — the plan is really JOINED to the recipes ═══════════════════════════
+// Coverage gap L: `db.query`'s `include` expanding a DECLARED relation. Asking for a name and
+// resolving it by hand in the page is the thing this Act exists to rule out — so the assertion is on
+// the declared relation in the schema, on `include` in the ROUTE'S OWN SOURCE, and on the route
+// returning the recipe NESTED. The nested payload is cross-checked against the AUDIO-ONLY tokens, so
+// the join is proved against data that could only have come from the memo.
+if (ACTS.includes(14)) {
+  report.step(
+    'Act XIV — the plan is really JOINED to the recipes',
+    "in his own words he asks to see the actual food under each day, not a bare name. A declared belongsTo/hasMany relation appears in the authored schema on disk; the API route the page fetches really calls db.query with an `include` (grepped in its own source — a hand-rolled second query cannot pass); and the route returns 200 with the recipe NESTED inside the day, carrying real fixture content",
+  );
+  const t = acc(await timed('Act XIV — "show me the actual food under each day"', () =>
+    thing.send(
+      'Όταν κοιτάω το πλάνο της βδομάδας βλέπω μόνο ένα όνομα φαγητού και μετά πρέπει να ψάχνω τη συνταγή αλλού. ' +
+        'Θέλω να βλέπω κάτω από κάθε μέρα τι μαγειρεύω στ\' αλήθεια — τα υλικά και πόση ώρα θέλει — χωρίς να πατάω πουθενά αλλού.',
+      { timeoutMs: TURN },
+    )));
+  report.check('no UNRECOVERED eval/typecheck errors in Act XIV', unrec(t).length === 0, JSON.stringify(unrec(t)).slice(0, 160));
+  await sleep(6_000);
+
+  // 1. A DECLARED relation in the authored schema — not a loose text column.
+  const schemaFiles = await lsFiles(pod, new RegExp(`^${PROJECT}/database/.*\\.json$`));
+  let relation = null;
+  for (const f of schemaFiles) {
+    const body = await pod.readFile(f).catch(() => null);
+    const src = typeof body === 'string' ? body : (body?.content ?? '');
+    if (/belongsTo|hasMany/.test(src)) relation = { f, src };
+  }
+  report.check(
+    'the schema on disk DECLARES a relation (belongsTo/hasMany) joining the plan to the recipes',
+    !!relation,
+    relation ? `${relation.f}: ${(relation.src.match(/"(belongsTo|hasMany)"\s*:\s*[^,}]+/g) ?? []).slice(0, 2).join(' · ')}` : `no belongsTo/hasMany in ${schemaFiles.length} schema file(s)`,
+  );
+
+  // 2. The ROUTE'S OWN SOURCE really uses `include` — a hand-rolled second query does not pass.
+  const apiFiles = await lsFiles(pod, new RegExp(`^${PROJECT}/api/`));
+  let includeRoute = null;
+  for (const f of apiFiles) {
+    const body = await pod.readFile(f).catch(() => null);
+    const src = typeof body === 'string' ? body : (body?.content ?? '');
+    if (/db\.query\s*\(/.test(src) && /\binclude\b/.test(src)) includeRoute = { f, src };
+  }
+  report.check(
+    "the route the page fetches calls db.query with an `include` (in its OWN source)",
+    !!includeRoute,
+    includeRoute ? includeRoute.f : `no db.query({... include ...}) in ${apiFiles.length} api file(s)`,
+  );
+
+  // 3. It really returns the recipe NESTED inside the day — 200, and the nested child carries real
+  //    fixture content (an audio-only token: the join reaches data only the memo could have given).
+  const routeName = includeRoute ? includeRoute.f.split('/').filter(Boolean).slice(-1)[0].replace(/\.(ts|tsx|js)$/, '') : null;
+  const candidates = [routeName, 'meal-plan-list', 'weekly-plan', 'plan', 'meal-plan'].filter(Boolean);
+  let served = null;
+  for (const r of candidates) {
+    const res = await pod.appApi(PROJECT, r, undefined, 'GET').catch(() => null);
+    if (res?.status === 200) { served = { r, res }; break; }
+  }
+  report.check('the joined route serves 200', !!served, served ? `GET /${PROJECT}/api/${served.r} → 200` : `none of ${candidates.join(', ')} served 200`);
+  const payload = served ? JSON.stringify(served.res.body ?? '') : '';
+  // NESTED means: a day object with a recipe-shaped CHILD OBJECT, not a bare id/name string.
+  const nested = /"(recipe|συνταγ[ήη]|dish|meal)"\s*:\s*\{/i.test(payload);
+  report.check(
+    'the day objects carry the recipe NESTED inside them (an expanded relation, not a bare name)',
+    nested,
+    nested ? 'a recipe object is nested inside the day' : `payload has no nested recipe object: ${payload.slice(0, 200)}`,
+  );
+  const joinedAudioTokens = AUDIO_ONLY.filter((tok) => hasEl(payload, tok));
+  report.check(
+    'the NESTED recipe carries real fixture content (an audio-only token — the join reaches the memo\'s data)',
+    joinedAudioTokens.length >= 1,
+    joinedAudioTokens.length ? joinedAudioTokens.join(', ') : 'no audio-only token in the joined payload',
+  );
+  cp.acts.XIV = { passed: report.stepPassed };
+  saveCheckpoint(cp);
+}
+
+// ═══ ACT XV — the cuisine specialist CANNOT write to the book ═════════════════════
+// Coverage gap L: capability gating AT TYPECHECK. This is the security model's load-bearing claim —
+// "not granted ⇒ not injected AND absent from the DTS", so a call the context cannot make fails
+// TYPECHECK (retryable, the model never believes it worked) rather than throwing at runtime. No
+// scenario has ever asserted it. The expected typecheck_error here is BY DESIGN and is explicitly
+// excluded from the run's unrecovered-error gate.
+if (ACTS.includes(15)) {
+  report.step(
+    'Act XV — the cuisine specialist cannot write to the book',
+    "the architect-built cuisine space's agent does NOT grant db:write on disk (an over-grant is itself the failure). Asked directly, as that agent, to change a recipe's bake time, the trace carries a TYPECHECK error naming the missing global — the capability is absent from its DTS, so the call cannot even be written — and the row is untouched: 0 writes",
+  );
+  const spaces = spaceIdsOf(await pod.listSpaces(PROJECT).catch(() => ({ spaces: [] })));
+  const cuisine = spaces.find((s) => /greek|ελλην|cuisine|κουζ/i.test(s)) ?? spaces[0];
+  report.check('a cuisine space exists to probe', !!cuisine, cuisine ?? `spaces: ${spaces.join(', ') || 'none'}`);
+
+  // 1. On disk: what was it actually GRANTED?
+  const agentFiles = await lsFiles(pod, new RegExp(`^${PROJECT}/spaces/${cuisine}/agents/[^/]+/instruct\\.md$`));
+  let agentSlug = null;
+  let caps = '';
+  for (const f of agentFiles) {
+    const body = await pod.readFile(f).catch(() => null);
+    const src = typeof body === 'string' ? body : (body?.content ?? '');
+    const fm = src.match(/^---\n([\s\S]*?)\n---/);
+    agentSlug = `${cuisine}/${f.split('/').slice(-2)[0]}`;
+    caps = fm?.[1] ?? '';
+    if (/capabilities/i.test(caps)) break;
+  }
+  report.check('the cuisine space has an agent to probe', !!agentSlug, agentSlug ?? `no agent instruct.md under spaces/${cuisine}/agents/`);
+  const grantsDbWrite = /db:write|db:schema|writeProject/i.test(caps);
+  report.check(
+    'it was NOT granted db:write (a knowledge specialist has no business rewriting the book)',
+    !grantsDbWrite,
+    grantsDbWrite ? `OVER-GRANTED: ${caps.replace(/\s+/g, ' ').slice(0, 160)}` : `capabilities: ${(caps.match(/capabilities:.*/i) ?? ['(none declared)'])[0].slice(0, 120)}`,
+  );
+
+  // 2. Ask it — AS that agent — to do the thing it was never given the hands for.
+  const rowsBefore = await allRows(pod, PROJECT);
+  const recipesT = tableNamed(rowsBefore, /recipe|συνταγ/i);
+  const before = JSON.stringify(recipesT ? rowsBefore[recipesT] : []);
+
+  const gate = new ThingSession(pod, { projectId: PROJECT, agentSlug, onAsk: scriptedOnAsk(true), verbose: true });
+  await gate.start();
+  await gate.syncToTail();
+  const tg = await timed('Act XV — ask the cuisine agent to rewrite a recipe', () =>
+    gate.sendWithAttachments
+      ? gate.send('Άλλαξέ μου τον χρόνο ψησίματος στον μουσακά — βάλ\' τον 35 λεπτά αντί για ό,τι λέει τώρα, και σώσ\' το στη συνταγή.', { timeoutMs: TURN })
+      : Promise.resolve({ errors: [], events: [] }));
+
+  // 3. The FAILURE MODE is the assertion — not merely "it didn't write".
+  const tcErrors = (tg.errors ?? []).filter((e) => e.type === 'typecheck_error');
+  const missingGlobal = tcErrors.filter((e) =>
+    /Cannot find name '(db|writeProjectTable|writeProjectPage|writeProjectApi|writeProjectHook)'|Property '(insert|update|remove)' does not exist/i.test(String(e.message ?? '')),
+  );
+  report.check(
+    'the write FAILED AT TYPECHECK — the non-granted global is ABSENT from its DTS (not a runtime throw)',
+    missingGlobal.length >= 1,
+    missingGlobal.length
+      ? String(missingGlobal[0].message).slice(0, 160)
+      : `no missing-global typecheck error. typecheck errors: ${JSON.stringify(tcErrors.map((e) => e.message)).slice(0, 220)}`,
+  );
+  const wrote = (tg.yields ?? []).some((y) => /^(db|writeProject)/i.test(String(y)));
+  report.check('it performed NO write yield', !wrote, wrote ? `write yields: ${JSON.stringify(tg.yields).slice(0, 140)}` : 'none');
+
+  const rowsAfter = await allRows(pod, PROJECT);
+  const after = JSON.stringify(recipesT ? rowsAfter[recipesT] : []);
+  report.check('the recipes rows are BYTE-IDENTICAL afterwards (0 writes landed)', before === after, before === after ? 'unchanged' : 'THE ROWS CHANGED — the gate did not hold');
+  report.note('The typecheck_error asserted here is the EXPECTED one (the security model working as designed) and is deliberately excluded from the whole-session unrecovered-error gate below — it belongs to the probe session, not to THING\'s.');
+  cp.acts.XV = { passed: report.stepPassed };
   saveCheckpoint(cp);
 }
 

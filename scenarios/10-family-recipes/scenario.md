@@ -193,6 +193,22 @@ hand.
   without leaving the page.* **Accept:** a message through the app's own chat panel authors a new field
   and sets it on real rows; the app still compiles; it renders correctly in a real browser with no
   console errors.
+- **US-13 — It doesn't forget the thing I mentioned in passing.** *As a home cook who chats to it all
+  week, I want a rule I said once, ages ago, to still hold — even after we've talked about a hundred
+  other things.* **Accept:** a house rule stated plainly mid-conversation (never "remember this") is
+  still honoured after the conversation has grown long enough that the runtime has collapsed the old
+  turns into a summary; the proof is a real row it writes later that obeys the rule, not a reply that
+  claims to.
+- **US-14 — The plan shows me the actual food, not a name.** *As a home cook, I want to look at
+  Tuesday and see what I'm actually cooking — the ingredients, the times — not a word I have to go
+  look up.* **Accept:** the plan and the recipe are really joined (a declared relation), and the route
+  the page itself fetches returns the recipe nested inside the day — one request, not a name the page
+  has to resolve by hand.
+- **US-15 — The recipe expert can't quietly rewrite my book.** *As a home cook, I want the thing that
+  answers questions about Greek cooking to not be able to silently change my recipes.* **Accept:** a
+  cuisine specialist asked to change a recipe cannot do it — and it fails at the point the code is
+  CHECKED, because the ability was never in its hands to begin with, not because something threw at
+  the last second. The row is untouched.
 
 ---
 
@@ -206,7 +222,11 @@ hand.
   · [x] code nodes [x] forEach · [ ] project functions · [ ] loop guard [x] payload validation
   [x] emitEvent
 - Consent/caps: [x] @consent [ ] installSpace approve/deny [x] fail-closed headless
-  [x] capability gating (`events:emit`)
+  [x] capability gating (`events:emit`) · [x] **capability gating AT TYPECHECK — a non-granted global
+  is ABSENT from the agent's DTS (Act XV, gap L)**
+- Data & typed surface: [x] **`db.query` `include` over a declared relation (Act XIV, gap L)**
+- Long conversations: [x] **history summarization past `maxHistoryTurns` — a rule from an early turn
+  survives the digest (Act XIII, gap M)**
 - Store/integrations: [ ] discovery [ ] install a space [ ] callConnection [ ] inbound webhook
   [ ] integration-demo source
 - Project-app: [x] writeProjectTable(+rows seed) [x] writeProjectPage/Api [x] db:write later-update
@@ -241,6 +261,9 @@ Acts here must match the runner 1:1.
 | **X — Greek update + restraint + multilingual routing** | The Greek bake-time message changes the moussaka row's bake-time field (before/after, 45→40) via a real `db.update` — no English equivalent is sent anywhere in the run to "unlock" this, proving the routing isn't keyed off English. The "order the groceries" message produces **no** order/payment yield anywhere in that turn's trace; the reply hands back the current shopping list instead | US-9,11 |
 | **XI — The app is a living surface** | **A1:** through the served app's OWN chat session (`{agentSlug:'thing', projectId}`, reachable from the running app, not `/chat`), the favourite-field message produces a real schema-authoring yield; afterward `pod.appData(id,'recipes')` shows a NEW `favourite`-shaped field, **set true** on the moussaka and spanakopita rows specifically; `pod.appBuild` still succeeds after. **A2:** chrome-devtools opens the served app for real: the rendered DOM shows actual recipe names (Μουσακάς, Σπανακόπιτα) and non-zero data, the in-app chat panel is visibly present, **no console errors, no failed network requests**; `pod.appApi(id, <a route the page itself fetches>)` returns 200 with a non-empty payload (not a page silently rendering zeros while the raw table has rows) | US-12 |
 | **XII — Restart → auto-resume** | `pod.restart()` mid-run; the next `send()` observes the transient failure, waits for the pod, and resumes coherently (same or re-established session); `pod.listSpaces`, `pod.appData` for every table, and the served app all survive unchanged; a forced re-run of the weekly trigger (Act VII) still produces a plan afterward | — |
+| **XIII — The rule he mentioned in passing survives a long conversation** | *(gap **M** — history summarization past `maxHistoryTurns`; never exercised by any scenario.)* Mid-conversation, in one plain line and WITHOUT ever saying "remember this", Vasilis mentions a standing house rule (*"…ο πεθερός μου δεν αντέχει το σκόρδο, στα κυριακάτικα ποτέ σκόρδο"*). The runner then drives a long tail of ordinary, cheap kitchen chatter — enough turns that the pod's session (`maxHistoryTurns: 20`) crosses the `maxTurns*2` message threshold and the runtime COLLAPSES the old turns into a digest. Asserted on real state, not prose: the **persisted session file on disk** (`sessions/<id>.json`) shows the history was really summarized (a summary/digest message present AND the message count collapsed below the pre-summary peak — the rule's own turn is no longer verbatim in the window). Then a plain ask that requires the rule (*"τι μαγειρεύουμε την Κυριακή; βάλ' το στο πλάνο"*) must produce a **real `meal_plan` row** whose dish's own `recipes` row contains **no garlic** — the rule is proved by what it WROTE, never by what it said. A control assertion pins the mechanism honestly: the rule turn is confirmed absent from the verbatim tail, so a pass means the digest carried it, not that the raw turn was still in the window | US-13 |
+| **XIV — The plan is really JOINED to the recipes** | *(gap **L** — `db.query`'s `include` expanding a declared relation; never exercised.)* In his own words Vasilis asks to see the actual food under each day instead of a bare name. Asserts: a **declared relation** (`belongsTo`/`hasMany`) appears in the authored schema on disk (`database/*.json`) linking the plan rows to the recipe rows — not a loose text column; the authored API source the page fetches really calls `db.query` with an **`include`** (grepped in the route's own source, so a hand-rolled second query cannot pass); and `pod.appApi(id, <that route>)` returns **200 with the recipe NESTED inside the day** (a day object whose recipe child carries real fixture content — the audio-only tokens from Act II, so the join is proved against data that could only come from the memo). The served page renders it (no console errors) | US-14 |
+| **XV — The cuisine specialist CANNOT write to the book** | *(gap **L** — capability gating AT TYPECHECK, the security model's load-bearing claim; asserted by no scenario.)* First, on disk: the architect-built cuisine space's agent frontmatter grants it knowledge/read capabilities and **does NOT grant `db:write`** (an over-grant here is itself the failure). Then a session is opened directly AS that agent (`agentSlug:'<cuisine-space>/<agent>'`) and asked, in plain Greek, to change a recipe's bake time. The assertion is on the FAILURE MODE, not merely the outcome: the trace carries a **`typecheck_error`** naming the missing global (`Cannot find name 'db'`-shaped) — i.e. the capability it was not granted is **absent from its DTS**, so the call cannot even be written, rather than throwing at runtime after the model believed it would work. And the row is byte-identical afterwards: **0 writes**. (Recovered-vs-unrecovered accounting still applies — this typecheck error is the EXPECTED one and is excluded from the run's unrecovered-error gate by design, asserted explicitly.) | US-15 |
 | **Edges** | a malformed `emitEvent` payload (missing a required field the `emits` schema demands) is rejected before it reaches the hook (0 rows written); re-asking the same opening question a second time does not create duplicate per-cuisine spaces; recovered vs unrecovered `eval`/`typecheck` errors are recorded per Act; unrecovered count is 0 across the whole run | — |
 
 *Performance targets are **hang detectors, not SLOs**. Record the ACTUAL time as a metric on every
@@ -258,6 +281,9 @@ Act; only FAIL when a ceiling below is breached — that means something is brok
 | Remember → recall (Act IX) | < 2 min per turn |
 | In-app dock message → change live in the app (Act XI) | < 10 min |
 | Pod settle after an env change (Act V, XII) | < 5 min |
+| Long-conversation tail → summarized (Act XIII, ~16 cheap turns) | < 25 min |
+| Relation-join route (Act XIV) | < 8 min to author · route < 3 s |
+| Capability-gate probe (Act XV) | < 3 min |
 | Eval/typecheck errors (unrecovered, on THING's own turns) | **0** (hard fail) |
 
 ---
