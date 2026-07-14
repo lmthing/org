@@ -69,6 +69,48 @@ describe('system-appbuilder/automator — attribution survives the seed', () => 
   });
 });
 
+describe('user-thing/thing — the ingest turn must ASK, and must not leak its plumbing', () => {
+  const instruct = () => readFileSync(join(SYSTEM_SPACES, 'user-thing', 'agents', 'thing', 'instruct.md'), 'utf8');
+
+  /**
+   * Observed live (10-family-recipes, Act I): handed a pile of material and a description of a
+   * recurring frustration, THING read everything correctly, summarised it beautifully — and then
+   * stopped. No question. The user, who does not know that building something is even an option,
+   * has nothing to say yes to, and the turn dies there.
+   *
+   * Withholding the BUILD until they agree is right (that gate exists). Withholding the QUESTION
+   * is not: it turns "propose, then build on a plain yes" into "report, then wait forever".
+   */
+  it('tells THING to end a turn it has decided on with the plain question, then stop', () => {
+    expect(
+      instruct(),
+      'THING must be told to END the ingest turn with the one-sentence offer — a summary that stops without a question leaves the user nothing to answer',
+    ).toMatch(/ask,? then stop|end with the decision|END WITH THE DECISION/i);
+    expect(instruct()).toMatch(/nothing to answer|say yes/i);
+  });
+
+  /**
+   * Same turn, second failure: the reply ended with a KeyValue panel of the model's own internals —
+   * variable names, their TYPES, and their string LENGTHS. It had been taught to: the instructions'
+   * own examples ended `display(seen)` and `display(JSON.stringify(auto, null, 2))`.
+   *
+   * An example in an agent's brain gets copied into real output. These two were, verbatim.
+   */
+  it('does not teach THING to display raw specialist/writer return values', () => {
+    const src = instruct();
+    expect(
+      src,
+      'the attachment example must not end by displaying the raw specialist return value — the model copies it straight into the user\'s reply',
+    ).not.toMatch(/^\s*display\(seen\);?\s*$/m);
+    expect(
+      src,
+      'the build example must not end by dumping the writer\'s return value as JSON',
+    ).not.toMatch(/display\(JSON\.stringify\(auto/);
+    // And the principle that generalises past those two examples.
+    expect(src).toMatch(/never show them your plumbing|debugging output/i);
+  });
+});
+
 describe('no system-space prompt is overfitted to a scenario', () => {
   /**
    * A system-space prompt is a brain EVERY user shares. A literal borrowed from one scenario
