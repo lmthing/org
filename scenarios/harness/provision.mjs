@@ -18,6 +18,7 @@ import {
   waitPodReady,
   waitPodSettled,
 } from './lib/gateway.mjs';
+import { LOCAL } from './lib/local.mjs';
 import { STATE_DIR } from './lib/paths.mjs';
 
 const label = process.argv[2] ?? 'scn';
@@ -36,6 +37,8 @@ export async function loadUser(lbl = label) {
 
 /** Provision (or reuse) and guarantee: pod exists, agent keys loaded, pod ready. */
 export async function getUser(lbl = label, { fresh = false } = {}) {
+  // Local target: no prod user, no cache file, no JWT — just ensure the shared server is up.
+  if (LOCAL) return provisionUser({ label: lbl });
   if (!fresh) {
     const cached = await loadUser(lbl);
     if (cached) {
