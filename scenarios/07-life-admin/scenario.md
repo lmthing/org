@@ -275,6 +275,10 @@ Hop by hop, for maintainers:
   the built app + tables + spaces survive and still compile.
 - **US-18 — It actually looks right.** *As a homeowner, I want to open it and see MY things.*
   **Accept:** real browser render, real values, the dock present, no console errors/failed fetches.
+- **US-19 — I can make a quick choice in the vault.** *As a homeowner, I want it to show me a small decision card and let me cancel without making a mess, so I can decide when I am ready.*
+  **Accept:** a project specialist renders its own view component, its form component can be dismissed to `null`, and no row is changed after dismissal.
+- **US-20 — The vault does not trust unsafe interactive content.** *As a homeowner, I want a question in the vault to stay safe even if a helper tries to put something unsafe in it.*
+  **Accept:** `script`, `iframe`, unsafe HTML, and `javascript:` descriptors are rejected before an ask reaches the user.
 
 ---
 
@@ -330,6 +334,8 @@ verbatim.
 | **XII — The engineer fixes a real bug, persisted as code** | the wrong bill-total calculation is delegated to a code specialist (`system-engineer`/automator); the fix is **persisted as a project function** (`functions/*.ts` on disk, confirmed via `pod.readProjectFile`); the bills API **imports it** and now returns the correct total for a real seeded row (e.g. the June electricity bill, `€87.40` at the fixture's declared rate) | US-16 |
 | **XIII — Edges + restart→auto-resume** | idempotently re-sending the Act I opening message does not duplicate spaces or tables; after a simulated pod restart, the session can resume with the built app, tables, and spaces intact and still compiling; **zero unrecovered `eval_error`/`typecheck_error`** occur across THING's own turns, excluding Act IV’s deliberate capability denial | US-17 |
 | **XIV — Final browser render** | the served vault is the app rather than the chat SPA shell; every page fetches at least one API route, and every page-fetched route returns 200 with a substantive payload; a browser pass shows real rendered values (policies, bills, warranties, pets, and booking figures), an openable in-app chat dock, and no console errors or failed network requests | US-3,18 |
+| **XV — A small choice, safely cancelled (custom `display` + `ask`)** | *(new coverage gap J)* THING grows the household specialist with `components/view/<Name>.tsx` and `components/form/<Name>.tsx`; an opt-in specialist session renders the custom view with `display(<Name />)`, then offers the custom form with `ask(<Name />)` for a low-stakes reminder choice. The runner dismisses it (`null`), the agent handles that result without hanging, and no reminder/row is created. | US-19 |
+| **XVI — Unsafe question content is rejected before it can render** | *(new coverage gap J)* a direct technical probe calls `ask()` with a `script`, `iframe`, `dangerouslySetInnerHTML`, and a `javascript:` URL. Each rejection occurs before any ask yield; a safe custom form still produces exactly one ask yield. | US-20 |
 
 *Performance thresholds are hang-detection ceilings, not SLOs; exceeding a ceiling is a failure.*
 

@@ -73,6 +73,10 @@ from a degraded research pass, STILL run the pipeline exactly as above — `buil
 gracefully and the built agent simply carries the knowledge gaps. Never stop, never research it
 yourself here, and never improvise an alternative build pipeline.
 
+## Interactive components for a specialist
+
+When a specialist needs to show a compact domain-specific summary or ask a tailored low-stakes question, include the relevant `components/view/<Name>.tsx` and `components/form/<Name>.tsx` through the component builder and list both names in that agent's `components:` frontmatter. The agent uses the view through `display(<Name />)` and the form through `ask(<Name />)`. A dismissed form resolves to `null`: the agent must treat that as no decision and make no write. Do not replace an intentional dismissal with a default action, and do not leave a session waiting for a response that was declined.
+
 ## JOB 2 — Improve an existing synthesized space
 
 ```typescript

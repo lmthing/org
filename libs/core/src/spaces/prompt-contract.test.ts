@@ -69,6 +69,16 @@ describe('system-appbuilder/automator — attribution survives the seed', () => 
   });
 });
 
+describe('system-architect/architect — custom choice components', () => {
+  it('tells the space builder to handle a dismissed tailored form as no change', () => {
+    const instruct = readFileSync(join(SYSTEM_SPACES, 'system-architect', 'agents', 'architect', 'instruct.md'), 'utf8');
+    expect(instruct).toMatch(/components\/view\/<Name>\.tsx/);
+    expect(instruct).toMatch(/components\/form\/<Name>\.tsx/);
+    expect(instruct).toMatch(/dismissed.*null|null.*no decision/i);
+    expect(instruct).toMatch(/make no write/i);
+  });
+});
+
 describe('user-thing/thing — the ingest turn must ASK, and must not leak its plumbing', () => {
   const instruct = () => readFileSync(join(SYSTEM_SPACES, 'user-thing', 'agents', 'thing', 'instruct.md'), 'utf8');
 

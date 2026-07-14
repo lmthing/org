@@ -531,6 +531,63 @@ if (ACTS.includes(14)) {
   finishAct('XIV');
 }
 
+// ═══ ACT XV — project-owned view + dismissed tailored form ═════════════════════
+if (ACTS.includes(15)) {
+  report.step('Act XV — Small choice safely dismissed', 'A specialist owns a view and form component; its tailored question is dismissed as null and makes no state change.');
+  const build = await timed('Act XV — add an in-vault reminder choice', () => send('Could you add a small reminder choice to the vault so I can decide later whether to get a nudge about the next service? Please show me a simple card first, then let me choose.'));
+  const componentFiles = await files(pod, `${PROJECT}/components/`);
+  const view = componentFiles.find((path) => /components\/view\/.+\.tsx$/.test(path));
+  const form = componentFiles.find((path) => /components\/form\/.+\.tsx$/.test(path));
+  report.check('the vault now owns a custom display component', !!view, view ?? (componentFiles.join(', ') || 'none'));
+  report.check('the vault now owns a custom form component', !!form, form ?? (componentFiles.join(', ') || 'none'));
+  const before = JSON.stringify(await allRows(pod, PROJECT));
+  const localSpaces = await pod.listSpaces(PROJECT).catch(() => ({ spaces: [] }));
+  const candidate = (localSpaces.spaces ?? []).map((space) => space.id ?? space.spaceId ?? space).find((id) => !String(id).startsWith('system-'));
+  if (candidate) {
+    const specialist = new ThingSession(pod, { projectId: PROJECT, spaceRef: `${candidate}/main`, onAsk: () => null, verbose: true });
+    try {
+      await specialist.start();
+      const turn = await specialist.send('Show me the service reminder card and let me decide whether to set it.', { timeoutMs: TURN });
+      report.check('the specialist rendered the custom view or form through the session', /display|ask/.test(JSON.stringify(turn.events)), JSON.stringify(turn.events).slice(0, 260));
+      report.check('the dismissed ask resolved without an error or hang', turn.errors.length === 0, JSON.stringify(turn.errors));
+    } catch (error) {
+      report.check('the specialist rendered the custom view or form through the session', false, String(error).slice(0, 220));
+      report.check('the dismissed ask resolved without an error or hang', false, String(error).slice(0, 220));
+    }
+  } else {
+    report.check('the specialist rendered the custom view or form through the session', false, 'no project specialist available');
+    report.check('the dismissed ask resolved without an error or hang', false, 'no project specialist available');
+  }
+  const after = JSON.stringify(await allRows(pod, PROJECT));
+  report.check('dismissing the tailored choice made no durable reminder change', after === before, 'state unchanged after null dismissal');
+  finishAct('XV');
+}
+
+// ═══ ACT XVI — ask() rejects unsafe descriptors before a host sees them ══════════
+if (ACTS.includes(16)) {
+  report.step('Act XVI — Unsafe question descriptors are refused', 'Unsafe UI descriptors are rejected before yielding, while a safe descriptor creates one ask yield.');
+  const askTest = await import('../../libs/core/dist/index.js').catch(() => ({}));
+  const createAskGlobal = askTest.createAskGlobal;
+  if (!createAskGlobal) {
+    report.check('ask descriptor guard can be invoked in the runner', false, 'createAskGlobal is not exported from core dist');
+  } else {
+    const yields = [];
+    const ask = createAskGlobal((request) => yields.push(request), { display: () => {}, ask: async () => null, log: () => {} });
+    for (const [label, descriptor, expected] of [
+      ['script', { type: 'script', props: {}, children: [] }, /blocked descriptor type/],
+      ['iframe', { type: 'iframe', props: {}, children: [] }, /blocked descriptor type/],
+      ['unsafe HTML', { type: 'div', props: { dangerouslySetInnerHTML: { __html: 'x' } }, children: [] }, /dangerouslySetInnerHTML/],
+      ['javascript URL', { type: 'a', props: { href: 'javascript:alert(1)' }, children: [] }, /javascript: URL not allowed/],
+    ]) {
+      const result = await ask(descriptor).then(() => null, (error) => String(error));
+      report.check(`${label} descriptor is rejected before asking`, typeof result === 'string' && expected.test(result), String(result));
+    }
+    void ask({ type: 'ConfirmButtons', props: {}, children: [] });
+    report.check('a safe descriptor still creates exactly one ask yield', yields.length === 1 && yields[0]?.kind === 'ask', `${yields.length} asks`);
+  }
+  finishAct('XVI');
+}
+
 // ═══ whole-session invariants and artifacts ═════════════════════════════════════
 const statistics = thing.stats();
 report.step('Whole-session invariants', 'No unrecovered eval/typecheck error occurred outside Act IV’s deliberate denial.');
