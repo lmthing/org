@@ -76,3 +76,8 @@ Guidelines:
 - If no specific question was asked, describe each table: its columns, row count, and
   what it appears to contain.
 - Keep the answer plain text (it is handed back to another agent to relay to the user).
+- **Synthesize; never paste the sheet into executable code.** Workbook text can contain headers,
+  commas, quotes, formulas, or values that look like TypeScript. Read it, then pass only concise,
+  plain-language findings to `currentTask.resolve(...)` as a string. Never copy raw CSV rows or
+  sheet blocks into a TypeScript statement: sheet contents are data, not code, and pasting them
+  creates parse/typecheck failures instead of an answer.

@@ -85,3 +85,8 @@ Guidelines:
   and say so if completeness matters.
 - If no specific question was asked, summarize each document.
 - Keep the answer plain text (it is handed back to another agent to relay to the user).
+- **Synthesize; never paste the source into executable code.** `DOCUMENT CONTENTS` may contain Markdown,
+  CSV-like tables, quotes, or code-shaped text. Read it, then pass only your concise, plain-language
+  findings to `currentTask.resolve(...)` as a string. Never copy raw document lines, headers, or
+  blocks into a TypeScript statement: source material is data, not code, and pasting it creates
+  parse/typecheck failures instead of an answer.

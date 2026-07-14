@@ -133,6 +133,26 @@ describe('user-thing/thing — the ingest turn must ASK, and must not leak its p
   });
 });
 
+describe('system-files readers — source text stays data, never executable code', () => {
+  it('tells document and spreadsheet readers to synthesize source material instead of pasting it into TypeScript', () => {
+    for (const agent of ['reader', 'sheet']) {
+      const instruct = readFileSync(
+        join(SYSTEM_SPACES, 'system-files', 'agents', agent, 'instruct.md'),
+        'utf8',
+      );
+      expect(
+        instruct,
+        `${agent} must be told that raw uploaded material is data rather than code`,
+      ).toMatch(/source material is data|sheet contents are data/i);
+      expect(
+        instruct,
+        `${agent} must be told to synthesize rather than paste raw document text into TypeScript`,
+      ).toMatch(/synthesize; never paste/i);
+      expect(instruct).toMatch(/parse\/typecheck failures/i);
+    }
+  });
+});
+
 describe('system-architect/synthesize_and_run — the design node must hand the model code that TYPECHECKS', () => {
   /**
    * The design node's own example declared `const functions = [];` and then passed it straight to
