@@ -1013,13 +1013,17 @@ if (ACTS.includes(13)) {
     'Πόσο ψήνεται ο αρακάς;',
     'Τι γλυκό ταιριάζει μετά από γεμιστά;',
   ];
-  const sessFile = () => `${LOCAL ? `${SDK_ORG}/scenarios/harness/.state/local-server/pod-root` : ''}/.lmthing/${PROJECT}/sessions/${cp.sessionId}.json`;
+  // A session persists as a DIRECTORY — `sessions/<id>/{snapshot,trace,meta}.json` — and the history
+  // lives in `snapshot.history.messages`, each `{role, content, blockType}`. The deterministic digest
+  // (context/summarize.ts, no streamFn passed) emits `task: …` / `var: …` / `error: …` lines, so a
+  // collapsed history is recognisable by those markers appearing in a single early message.
+  const sessFile = () =>
+    `${LOCAL ? `${SDK_ORG}/scenarios/harness/.state/local-server/pod-root` : ''}/.lmthing/${PROJECT}/sessions/${cp.sessionId}/snapshot.json`;
   const readSession = () => { try { return JSON.parse(readFileSync(sessFile(), 'utf8')); } catch { return null; } };
-  const msgCount = (s) => (s?.history?.messages ?? s?.messages ?? []).length;
+  const messagesOf = (s) => s?.history?.messages ?? s?.messages ?? [];
+  const msgCount = (s) => messagesOf(s).length;
   const hasSummary = (s) =>
-    (s?.history?.messages ?? s?.messages ?? []).some(
-      (m) => m?.blockType === 'summary' || /^SUMMARY|summarized|^task: /m.test(String(m?.content ?? '')),
-    );
+    messagesOf(s).some((m) => m?.blockType === 'summary' || /^task: .*\n(task|var|error): /m.test(String(m?.content ?? '')));
 
   let peak = msgCount(readSession());
   let summarized = false;
@@ -1048,7 +1052,7 @@ if (ACTS.includes(13)) {
   // The CONTROL. A pass only means something if the rule's own turn is NO LONGER verbatim in the
   // window — otherwise the agent is just reading it straight off the history and the digest is
   // untested.
-  const verbatim = JSON.stringify((sess?.history?.messages ?? sess?.messages ?? []).slice(-6));
+  const verbatim = JSON.stringify(messagesOf(sess).slice(-6));
   const ruleStillVerbatim = hasEl(verbatim, 'πεθερ') || hasEl(verbatim, 'σκόρδο');
   report.check(
     'CONTROL: the rule turn is GONE from the verbatim tail — so a pass proves the digest carried it',
