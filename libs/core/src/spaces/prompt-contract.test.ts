@@ -111,6 +111,41 @@ describe('user-thing/thing — the ingest turn must ASK, and must not leak its p
   });
 });
 
+describe('system-architect/synthesize_and_run — the design node must hand the model code that TYPECHECKS', () => {
+  /**
+   * The design node's own example declared `const functions = [];` and then passed it straight to
+   * `currentTask.resolve({ slug, goal, actionId, fields, functions })`. A bare empty array literal
+   * is an "evolving array": push to it and TS infers the element type, but USE it before anything
+   * has been pushed and the type can never be determined. That exact shape fails typecheck:
+   *
+   *   TS7034: Variable 'functions' implicitly has type 'any[]' in some locations…
+   *   TS7005: Variable 'functions' implicitly has an 'any[]' type.
+   *
+   * The model copies the example, so this fired on EVERY specialist build — and the retry cascade
+   * from there is a trap: redeclaring it gives "Cannot redeclare block-scoped variable", and
+   * assigning to it gives "Cannot assign to 'functions' because it is a constant". Observed live
+   * (10-family-recipes Act I) as unrecovered typecheck errors that burned the authoring turn.
+   *
+   * A prompt that hands the model uncompilable code is a bug in the prompt.
+   */
+  it('annotates the empty `functions` array instead of leaving it to be inferred', () => {
+    const design = readFileSync(
+      join(SYSTEM_SPACES, 'system-architect', 'tasklists', 'synthesize_and_run', '01-design.md'),
+      'utf8',
+    );
+
+    expect(
+      design,
+      'a bare `const functions = [];` cannot typecheck once it is passed to currentTask.resolve — annotate the element type',
+    ).not.toMatch(/const\s+functions\s*=\s*\[\s*\]\s*;/);
+
+    expect(
+      design,
+      'the design node must declare `functions` with an explicit element type',
+    ).toMatch(/const\s+functions\s*:\s*(Array<|\{[\s\S]*?\}\[)/);
+  });
+});
+
 describe('no system-space prompt is overfitted to a scenario', () => {
   /**
    * A system-space prompt is a brain EVERY user shares. A literal borrowed from one scenario

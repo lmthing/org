@@ -24,7 +24,11 @@ const fields = [
   { domain: "<domain_slug>", field: "<field_slug>", aspects: ["<aspect_a>", "<aspect_b>"] }
 ];
 // Deterministic FUNCTIONS the agent needs (math / scoring / lookup). Often none.
-const functions = [];   // e.g. [{ name: "scoreMatch", purpose: "score a drink against a mood (0-10)" }]
+// ANNOTATE THE TYPE — keep the annotation below even when the array is empty. An empty array
+// literal declared with no type annotation does not typecheck once it is passed on: the checker
+// cannot infer an element type and fails with "implicitly has an 'any[]' type". Every rewrite from
+// there is a dead end too (redeclaring the name, or assigning to a const, are both errors).
+const functions: Array<{ name: string; purpose: string }> = [];   // e.g. [{ name: "scoreMatch", purpose: "score a drink against a mood (0-10)" }]
 const actionId = "answer";   // the single action the agent will expose
 const goal = "<one-sentence refined goal for the agent>";
 currentTask.resolve({ slug, goal, actionId, fields, functions });
