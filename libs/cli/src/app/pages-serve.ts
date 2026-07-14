@@ -87,18 +87,27 @@ function sendText(res: ServerResponse, status: number, body: string): void {
  * `getOutDirForProject` is wired by the integrator to build-on-demand / cache; it
  * resolves the project's built bundle (`outDir` + `assetManifest`) or `null` when
  * the project has no page app.
+ *
+ * `fallback` is what answers when the first path segment is NOT a project with a
+ * built app. On the reserved `/app/<project>/` mount there is nothing else it could
+ * be, so the default is a 404. On the ROOT mount (`/<project>/…`) that same pattern
+ * also matches every non-app path on the pod — `/studio`, `/assets/x.js`, any SPA
+ * route — so the integrator passes the SPA handler here and those fall through
+ * untouched. Without it, mounting at the root would shadow the whole SPA.
  */
 export function createPageServeHandler(
   getOutDirForProject: (
     projectId: string,
   ) => Promise<{ outDir: string; assetManifest: string[] } | null>,
   mountPrefix = '/app',
+  fallback?: (req: IncomingMessage, res: ServerResponse) => void,
 ): (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void> {
-  return async (_req, res, params) => {
+  return async (req, res, params) => {
     const projectId = params['projectId']!;
 
     const bundle = await getOutDirForProject(projectId);
     if (!bundle) {
+      if (fallback) { fallback(req, res); return; }
       sendText(res, 404, `project "${projectId}" has no page app`);
       return;
     }

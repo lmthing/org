@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { WebSocketServer } from 'ws';
@@ -74,6 +74,18 @@ export interface SessionServerHandle {
   /** Shut down the WS + HTTP server (used by tests; bin.ts keeps it running). */
   close: () => Promise<void>;
 }
+
+/**
+ * First path segments the ROOT app mount (`/<project>/…`) must never claim, because this
+ * same server answers them: the reserved API prefix, the `/app/<project>/` mount itself,
+ * the SPA's own bundle + icon, and the SPA's client routes. A project named after one of
+ * these is served at `/app/<project>/` (it keeps its clean URL nowhere else); everything
+ * else falls through to the SPA, so the root mount can stay always-on.
+ */
+const RESERVED_ROOT_SEGMENTS = new Set([
+  'api', 'app', 'assets', 'favicon.ico', 'install',
+  'chat', 'studio', 'computer',
+]);
 
 export async function startSessionServer(opts: SessionServerOpts): Promise<SessionServerHandle> {
   const { manager, port } = opts;
@@ -313,19 +325,31 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // `/install` and Exact `/` for the shell (a separate nginx image) and sends the
   // rest of the catch-all straight here.
   //
-  // Gated on LMTHING_GATEWAY_URL, which the gateway injects into EVERY per-user pod
-  // (compute.ts) and nothing else sets — so it is present exactly when this pod sits
-  // behind the Envoy shell/pod split. It is UNSET for local single-serve
-  // (`pnpm thing` / `lmthing serve`), where this same server also serves the unified
-  // SPA as the non-`/api` catch-all (the compute image bundles the SPA dist too); a
-  // bare `/:projectId/*` there would shadow every SPA route, so apps stay under the
-  // reserved `/app/*` prefix (hence `localhost/app/blog`). Registered LAST so the
-  // literal `/api/*` and `/app/*` routes above always win over the `:projectId` param.
-  const rootMountApps = Boolean(process.env['LMTHING_GATEWAY_URL']);
-  if (rootMountApps) {
-    router.add('*', '/:projectId/api/*', appApiHandler);
-    router.add('*', '/:projectId/*', createPageServeHandler(getOutDirForProject, ''));
-  }
+  // ALWAYS registered — and it falls THROUGH (to the SPA) for any first segment that
+  // is not a project with a built app, which is what makes that safe. It used to be
+  // gated on LMTHING_GATEWAY_URL (present only on gateway-provisioned pods) because a
+  // bare `/:projectId/*` would otherwise shadow every SPA route on a local serve. That
+  // gate is how EVERY app came to render blank in prod: a pod whose `user-env` Secret
+  // predated the variable never got it, so `/<project>/` matched no route at all, fell
+  // to the SPA catch-all, and answered 200 with the POD SHELL — whose own bundle is
+  // root-absolute `/assets/index-*.js` and 404s under the app's mount. The app looked
+  // built, served and empty, and `/<project>/api/<route>` returned that same HTML
+  // instead of JSON. Serving must not depend on an env var that can go missing.
+  // Registered LAST, so the literal `/api/*` and `/app/*` routes above always win over
+  // the `:projectId` param.
+  const webFallback = (req: IncomingMessage, res: ServerResponse): void => {
+    if (devWeb) { devWeb.handle(req, res); return; }
+    void staticApps.handle(req, res);
+  };
+  const rootPageServe = createPageServeHandler(getOutDirForProject, '', webFallback);
+  router.add('*', '/:projectId/api/*', async (req, res, params, routeCtx) => {
+    if (RESERVED_ROOT_SEGMENTS.has(params['projectId']!)) { webFallback(req, res); return; }
+    await appApiHandler(req, res, params, routeCtx);
+  });
+  router.add('*', '/:projectId/*', async (req, res, params, routeCtx) => {
+    if (RESERVED_ROOT_SEGMENTS.has(params['projectId']!)) { webFallback(req, res); return; }
+    await rootPageServe(req, res, params, routeCtx);
+  });
 
   // ─── Activity tracking (for the self-idle watchdog) ───────────────────────
   // "Busy" = a turn is running OR a mutating request is in flight (e.g. a hook
