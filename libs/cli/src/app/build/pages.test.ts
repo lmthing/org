@@ -129,6 +129,7 @@ export default function Home() {
     const cssAsset = res.assetManifest.find((f) => /^assets\/.*\.css$/.test(f));
     expect(cssAsset).toBeDefined();
     const html = await readFile(join(res.outDir, 'index.html'), 'utf8');
+    expect(html).toContain('<html lang="en" data-theme="light">');
     expect(html).toContain('rel="stylesheet"');
 
     const css = await readFile(join(res.outDir, cssAsset!), 'utf8');

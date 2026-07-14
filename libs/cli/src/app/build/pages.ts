@@ -85,8 +85,10 @@ const CACHE_FILE = join('.data', 'pages-cache.json');
  *       the app — e.g. `/discover` instead of `/app/<project>/discover`).
  * `4` = `<Chat>` sends the platform `@lmthing/auth` Bearer token on session create +
  *       WS (previously the pod's JWT-gated `/api/*` proxy 401'd the curator chat).
+ * `5` = generated HTML pins the light token theme so project apps don't inherit
+ *       dark foreground tokens on light app surfaces.
  */
-const BUILDER_VERSION = '4';
+const BUILDER_VERSION = '5';
 
 interface CacheMeta {
   hash: string;
@@ -418,7 +420,7 @@ function tailwindCssPlugin(): Plugin {
 function renderIndexHtml(jsRel: string, cssRel?: string): string {
   const css = cssRel ? `\n    <link rel="stylesheet" href="./${cssRel}">` : '';
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />${css}
