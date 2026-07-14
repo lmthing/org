@@ -146,4 +146,58 @@ describe('Session multimodal input threading', () => {
 
     await session.dispose();
   });
+
+  it('resolves a PRIOR turn\'s attachment id when a LATER turn delegates it (propose→consent→build)', async () => {
+    // THING's flow: turn 1 the user dumps a file and THING only OFFERS (no build);
+    // turn 2 a bare "yes please" and THING delegates the SAME file to the automator to
+    // seed the app. The attachment arrived in turn 1 but is delegated in turn 2. If
+    // `pendingAttachments` is cleared each turn, turn 2's delegate can't resolve the
+    // turn-1 id → the automator reads nothing → empty tables. This asserts the id still
+    // resolves across turns (the reader gets an id-anchored readDocument note).
+    let readerMsg = '';
+    let sawSecondTurn = false;
+    let delegated = false;
+    const streamFn = mockMatch(
+      [
+        {
+          when: /document reader/,
+          respond: (opts: StreamOpts) => {
+            const u = [...opts.messages].reverse().find((m) => m.role === 'user');
+            readerMsg = u?.content ?? '';
+            return 'currentTask.resolve("done");';
+          },
+        },
+      ],
+      // Top-level agent: turn 1 just "offers" (no statements); turn 2 delegates the
+      // turn-1 attachment id ONCE, then stops.
+      (opts: StreamOpts) => {
+        const u = [...opts.messages].reverse().find((m) => m.role === 'user');
+        if (/yes please/.test(u?.content ?? '')) sawSecondTurn = true;
+        if (!sawSecondTurn || delegated) return ''; // turn 1: offer only; post-delegate: stop
+        delegated = true;
+        return `await delegate('system-files', 'reader', { query: 'seed the app', attachmentIds: ['up1'] });`;
+      },
+    );
+    const documentResolver: DocumentResolver = async (id) => ({ ok: true, attachmentId: id, mediaType: 'application/pdf', kind: 'text', text: 'x' });
+    const host: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
+    const session = new Session(
+      { spaceDir: await makeSpace(), agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [SYSTEM_FILES_DIR], documentResolver },
+      { streamFn },
+    );
+
+    // Turn 1: the file arrives; THING only offers.
+    await session.start({
+      text: 'here is my budget spreadsheet, I keep losing track',
+      attachments: [{ id: 'up1', kind: 'file', mediaType: 'application/pdf', filename: 'budget.pdf' }],
+    });
+    expect(readerMsg).toBe(''); // nothing delegated yet
+
+    // Turn 2: a bare "yes please" — THING delegates the SAME (turn-1) attachment.
+    await session.continue('yes please, build it');
+    expect(readerMsg).toContain('readDocument');
+    expect(readerMsg).toContain('up1');
+    expect(readerMsg).toContain('budget.pdf');
+
+    await session.dispose();
+  });
 });

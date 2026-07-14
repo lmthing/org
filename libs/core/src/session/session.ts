@@ -94,11 +94,12 @@ export class Session {
   private space: Space | null = null;
   private sessionId: string;
   private tracer: Tracer;
-  /** Image/file attachments on the CURRENT user turn, keyed by upload id. A text
+  /** Image/file attachments the session has seen, keyed by upload id. A text
    *  agent (THING) can't read them, so it delegates by id — runDelegate resolves
-   *  the id here to the MediaPart and hands it to the vision/file agent. Cleared
-   *  and repopulated on each start/continue/resume (only the latest turn's
-   *  attachments are addressable). */
+   *  the id here to the MediaPart and hands it to the vision/file agent. ACCUMULATED
+   *  across turns (not cleared each turn) so a file attached in an EARLIER turn can
+   *  still be delegated in a LATER one — the propose→consent→build flow spans two
+   *  turns (see `ingestUserTurn`). Upload ids are unique and a ref is cheap metadata. */
   private pendingAttachments = new Map<string, UserAttachment>();
   private systemBlock: string | null = null;
   private ambientDts: string | null = null;
@@ -171,13 +172,25 @@ export class Session {
   /** The full message history (for persisting a resumable session snapshot). */
   getHistory(): import('../context/history.js').Message[] { return this.history.messages; }
 
-  /** Ingest a user turn: reset + record this turn's image/file attachments into
+  /** Ingest a user turn: record this turn's image/file attachments into
    *  `pendingAttachments` (for id-based delegation) and return the text to append
-   *  to history — the user's text, optionally framed, plus a note listing the
-   *  attachments by id. The raw bytes are NOT put on the text agent's message. */
+   *  to history — the user's text, optionally framed, plus a note listing THIS
+   *  turn's attachments by id. The raw bytes are NOT put on the text agent's message.
+   *
+   *  Attachments ACCUMULATE across the session's turns — they are NOT cleared each
+   *  turn. THING's propose→consent→build flow spans two turns (turn 1: the user
+   *  dumps files and THING offers; turn 2: a bare "yes please" and THING builds),
+   *  so the automator delegate that seeds the app fires a turn AFTER the files
+   *  arrived. Clearing on every turn made turn 1's upload ids unresolvable by turn 2
+   *  (`runDelegate` → `pendingAttachments.get(id)` → undefined), so THING handed the
+   *  automator a placeholder id, `readDocument` read nothing, and the app's budget
+   *  tables were created EMPTY. Upload ids are unique and an attachment ref is cheap
+   *  metadata (id + mediaType + url, no bytes), so keeping every id the session has
+   *  seen addressable is safe and is what makes cross-turn "here's a file … now use
+   *  it" work at all. The note still lists only the CURRENT turn's attachments, so
+   *  the agent isn't re-told about old ones each turn. */
   private ingestUserTurn(message: UserInput, opts?: { frame?: boolean }): string {
     const { text, attachments } = normalizeInput(message);
-    this.pendingAttachments.clear();
     const atts = attachments ?? [];
     for (const a of atts) this.pendingAttachments.set(a.id, a);
     const framed = opts?.frame === false ? text : `User request:\n\n${text}`;
