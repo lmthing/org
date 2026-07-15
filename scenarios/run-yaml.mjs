@@ -164,6 +164,13 @@ if (planOnly) {
   const pidFile = join(outDir, 'runner.pid');
   writeFileSync(pidFile, String(process.pid));
   process.on('exit', () => { try { rmSync(pidFile, { force: true }); } catch { /* ignore */ } });
+  // Clean stale evidence from a REUSED --out dir (a stopped-then-rerun round), so a poller can't
+  // read a prior run's step files / crash log as if they were this run's.
+  for (const f of readdirSyncSafe(outDir)) {
+    if (/^step-\d+\.json$/.test(f) || f === 'summary.json' || f === 'trace.md') {
+      try { rmSync(join(outDir, f), { force: true }); } catch { /* ignore */ }
+    }
+  }
   console.log(`[run-yaml] pid ${process.pid} → ${pidFile}`);
   if (freshServer) {
     console.log('[run-yaml] --fresh-server: wiping the pod runtime root (0 projects) and starting clean…');
