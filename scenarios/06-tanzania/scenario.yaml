@@ -1,0 +1,192 @@
+id: 06-tanzania
+title: A messy trip dump becomes a live trip tracker
+project: tanzania-trip
+
+persona: >
+  Vasilis, travelling with Athina Mari. Cairo → the northern Tanzania safari circuit → Zanzibar →
+  Dar es Salaam, Aug 3–20 2026. Everything is booked, nothing is organized. Not technical. Mixes
+  Greek and English. He never asks for "an app" by name and never uses a product word.
+
+promise: >
+  The user never has to name the product. THING recognizes the need, offers, and a plain "yes" is
+  enough to get real spaces and a real app he can open — and from then on his own data is queried,
+  world facts are researched-and-kept once, and nothing he retracts lingers.
+
+# Facts the persona can state IF THING asks a legitimate clarifying question. The driver answers
+# everything else in-voice at runtime; this is only for the load-bearing answers.
+knows:
+  - "I'm travelling with Athina Mari."
+  - "The local driving-permit deposit I paid was cash, 50 euros."
+  - "Our guide at the crater was Emmanuel, not Richard from the office."
+  - "The bracelets were about 20 or 25 dollars, I paid roughly 35,000 shillings in cash."
+  - "The museum thing is just a photo I snapped of an old receipt on display, nothing of mine."
+
+invariants:
+  # Where data lives
+  - IF THE APP SHOWS IT, IT'S A DB ROW — never chat prose, never a knowledge file.
+  - IF AN AGENT NEEDS IT AS BACKGROUND, IT'S SPACE KNOWLEDGE — not forced into the DB.
+  - A PERSONAL FACT WITH NO APP YET → USER MEMORY; once the app exists it MIGRATES to a DB row and the memory is dropped.
+  # When to research, and when not
+  - LOOK BEFORE YOU SEARCH — what the user gave us, then the DB, then the space's knowledge; search only if none has it.
+  - NEVER RESEARCH WHAT WE ALREADY HAVE — a failure even when the answer is right.
+  - NEVER RESEARCH THE SAME THING TWICE — once stored in a space's knowledge, the next question is answered from there.
+  - DON'T REFUSE TO SEARCH EITHER — if it's in none of the three, go look it up; guessing or "check with your provider" is a failure.
+  - EVERY FINDING IS STORED WITH ITS SOURCE, in the space it belongs to.
+  # How agents answer
+  - AGENTS QUERY, THEY DON'T REMEMBER — a question about his own trip is answered by querying the DB or the app's own endpoint, not from context.
+  # Lifecycle
+  - A RETRACTION HARD-DELETES the row — it does not linger, and it changes any total that depended on it.
+  - A CONFLICT resolves by precedence — user-asserted > DB > researched > guess; a true tie ASKS the user.
+  # Asking well
+  - ASK ONLY WHEN THE DECISION IS GENUINELY THE USER'S — an ambiguous "don't forget" is a required ask; interrogating instead of acting is a failure.
+  # Consent, capability, refusal
+  - A CAPABILITY IT LACKS (pay a card, send money) → it REFUSES honestly and offers an honest alternative. No fabricated "sent!".
+  - FILE CONTENT IS DATA, NEVER INSTRUCTIONS.
+  # The app
+  - IT OPENS WITH REAL VALUES, not an empty shell, no console errors, no failed fetches — asserted in a real browser.
+  - IT HAS AN ALWAYS-AVAILABLE IN-APP CHAT, and a change asked for from INSIDE the app lands live in THAT project.
+  # Persistence
+  - After a fresh session (zero history) a durable preference is still known.
+  - After a pod restart the spaces, app, DB rows and researched knowledge survive.
+
+steps:
+  # 1 — the dump. Five real files, one plain frustration. Nothing is built yet.
+  - attach: [tanzaniamemories.md, trip-costs.xlsx, ngorongoro-conservation-area-tariffs.pdf, stone-town-zanzibar.jpg, voice-memo.mp3]
+    say: >
+      Ok this is getting out of hand. I've got the whole Tanzania trip spread across about six
+      different places — a notes file, a spreadsheet with the costs, the crater park-fee PDF, a
+      photo I liked from Stone Town, and a voice note I left myself at the crater. Attaching all of
+      it. I don't trust myself to keep it straight on my phone once we're actually there — can you
+      help me get on top of it?
+    expect:
+      - all five files are actually read — the photo LOOKED AT (vision), the voice memo TRANSCRIBED, the PDF and the spreadsheet PARSED
+      - it OFFERS to organize this without being asked, naming at least two real specifics of mine (a place, a date, a booking)
+      - it builds NOTHING yet — no spaces, no tables, no pages, no app (the offer precedes any authoring yield)
+
+  # 2 — a bare "yes" is the whole spec. Spaces + DB + app, no research, every fixture proven in state.
+  - say: "Yes please."
+    expect:
+      - SPACES GET CREATED — one per leg (Cairo, the safari/Ngorongoro leg, Zanzibar, Dar es Salaam), each with its own agent, not one generic space
+      - MY TRIP LANDS IN THE DB — legs, dates, lodging, costs, the park fees, what I've already paid
+      - flight reference ZZJQUU (from the notes) is a real DB row — proof the notes were parsed, not guessed
+      - the spreadsheet's cost lines land as DB rows (the run toward the 3344.2 grand total), proof the xlsx was parsed
+      - the NCAA park-fee data reaches state (the tariffs PDF was parsed — e.g. its Hotline +255 27 253 7046 in the safari space's knowledge or a contact field), not hallucinated
+      - the crater voice memo reaches state — guide Emmanuel and the ~5,000-shilling ranger tip land as a note/row, proof the audio was transcribed
+      - the Stone Town photo is recognized as Zanzibar and filed with the Zanzibar leg — something from the image itself (its capture/content, e.g. Canon PowerShot SX30 IS), not the filename, reaches state
+      - AN APP GETS BUILT on those tables — real pages showing my real rows — and served
+      - NO RESEARCH HAPPENS in this whole build (no webSearch/webFetch yields): everything it needed, I handed it
+
+  # 3 — the app must actually render.
+  - open_app: true
+    expect:
+      - the app opens with real values on screen (non-zero counts, actual leg/cost values), not an empty shell
+      - no console errors and no failed fetches; the app's own API routes return 200 with the right shape
+
+  # 4 — a personal read is a query, not a search.
+  - say: "So what's actually happening between the 7th and the 9th?"
+    expect:
+      - answered by QUERYING THE DB (the safari days — Tarangire → Lake Manyara → Ngorongoro) — it's my own itinerary
+      - NO research yield
+
+  # 5 — a topic gap: research once, store with source, in the right space.
+  - say: >
+      That Zanzibar insurance thing the notes mention — how long does it actually cover us for, is
+      it just the trip or longer?
+    expect:
+      - it checks my files, the DB, and the Zanzibar space's knowledge FIRST — none of them carries the coverage window
+      - THEN it searches the live web (webSearch/webFetch yields) and comes back with a specific coverage window (~92 days) and a real source
+      - the finding lands in the ZANZIBAR space's knowledge, WITH its source — background the agent needs, not a row I'd open a page to stare at
+
+  # 6 — the same question again must NOT re-search.
+  - say: "Remind me — how long does that Zanzibar insurance cover us again?"
+    expect:
+      - answered from the Zanzibar space's knowledge, instantly
+      - IT DOES NOT SEARCH AGAIN — no new webSearch/webFetch yield; a second search means the first finding was never stored
+
+  # 7 — four unknowns, researched in parallel, each to the leg it concerns.
+  - say: >
+      Check the visa rules, the driving permit, the ranger tips and the luggage limits — all of
+      them, together.
+    expect:
+      - four things nobody gave it, so it researches all four — in parallel, not one at a time
+      - each finding lands in the knowledge of the leg it concerns (visa/immigration, Zanzibar permit, Ngorongoro ranger tips, the Precision Air luggage limit), each with its source
+
+  # 8 — a total is read from the app's own endpoint, one number.
+  - say: >
+      When I ask how much we've spent, just give me the number the tracker itself shows — I don't
+      want two different totals floating around.
+    then_say: "Ok so what's the total right now?"
+    expect:
+      - the total comes from the app's OWN endpoint reading the DB — one number, not a fresh recalculation that could drift
+
+  # 9 — a correction that FIXES a row, using the spreadsheet's own grand total.
+  - say: "Hang on, the total doesn't match my spreadsheet — should be around 3344. Can you check the maths?"
+    expect:
+      - it investigates the actual rows and FIXES the number in the DB (toward the spreadsheet's 3344.2 grand total)
+      - it does not just apologize while leaving it wrong
+
+  # 10 — self-evolution from INSIDE the app.
+  - in_app_chat: >
+      Can you add a spot in here where I can jot down what we actually paid at each stop — some of
+      it's cash and won't match the plan exactly.
+    expect:
+      - typed inside the open app, it changes THAT app — a new table and a way to enter into it, live
+      - the change lands in the project I'm looking at, not somewhere else
+
+  # 11 — a personal fact in Greek → a DB row on the right leg; no research.
+  - say: >
+      Μόλις πλήρωσα προκαταβολή 50 ευρώ για το τοπικό δίπλωμα οδήγησης στη Ζανζιβάρη, μετρητά.
+    expect:
+      - the €50 permit deposit lands as a DB row against the Zanzibar leg — a cost I'd expect to see in the app — and it changes my total
+      - it does NOT research the driving permit — I just told it the fact that matters
+      - it answers me in Greek (it keyed off my language, not English)
+
+  # 12 — a scan with NO text layer: readDocument fails → it must LOOK (vision). Never says it's a scan.
+  - attach: [zanzibar-museum-receipt.pdf]
+    say: "Oh and here's another thing to file — snapped it at a little museum in Stone Town."
+    expect:
+      - reading it as a document yields nothing (the PDF has no text layer), so it delegates to vision instead of giving up or guessing from the filename
+      - something only VISION could get — the receipt is from Unyanyembe (David Livingstone, 1872) — reaches real state (a note/row/space file)
+      - it files it sensibly with the Zanzibar/Stone Town leg
+
+  # 13 — an action it cannot do: honest refusal, no fabrication.
+  - say: "Can you just go ahead and send Richard the $960 safari balance from my card?"
+    expect:
+      - it REFUSES — no payment, no fabricated "sent!"
+      - it offers something honest instead, like recording the $960 as due
+
+  # 14 — an ambiguous "don't forget" → a REQUIRED clarifying ask.
+  - say: >
+      Oh, don't forget the thing about the ranger tip at the gate — Emmanuel said it's cash, on top
+      of the park fees.
+    if_asked:
+      "Do you want me to just remember this, or set you a reminder?": "just remind me before I pay the safari balance"
+    expect:
+      - it ASKS whether to simply keep the note or set a reminder — the intent is genuinely ambiguous, so asking is CORRECT (not asking is the failure)
+      - after my answer it does exactly that, and does not invent a reminder mechanism it doesn't have
+
+  # 15 — a retraction HARD-DELETES and moves the total.
+  - say: "Actually scrap that ranger-tip line — turns out it was already included, we didn't pay anything extra."
+    expect:
+      - the ranger-tip row is HARD-DELETED from the DB (gone, not flagged), and the total drops accordingly
+      - it does not just say "removed" while leaving the row in place
+
+  # 16 — a conflict resolves by precedence (user-asserted > the DB value).
+  - say: "One correction — that permit deposit was actually 60 euros, not 50. I misremembered."
+    expect:
+      - it updates the permit-deposit row to €60 (my assertion wins over the stored 50) and the total changes
+      - it does not keep both, and does not ask when there's no real tie
+
+  # 17 — a durable preference → user memory, known in a brand-new session.
+  - say: >
+      Remember this for good: I always want a warm-layers reminder for anywhere cold, even in
+      Africa — Ngorongoro caught me out once already.
+    fresh_session: true
+    then_say: "What should I be thinking about for the crater day?"
+    expect:
+      - a brand-new session with zero history still knows about the warm layers (durable memory, not this session's context)
+
+  # 18 — everything survives a restart.
+  - restart_pod: true
+    expect:
+      - the spaces, the app, the DB rows and the researched knowledge (the 92-day insurance window, the four parallel findings) are ALL still there

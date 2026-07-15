@@ -4,3 +4,8 @@
 */results/trace.json
 */results/checkpoint*.json
 */results/*.log
+
+# generic runner (run-yaml.mjs) evidence output — ephemeral
+*/.run/
+.run-smoke/
+.runs/
