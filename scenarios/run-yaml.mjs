@@ -17,14 +17,14 @@
  * Step verbs (see scenario-spec.md): attach[] · say · then_say · open_app · in_app_chat ·
  * fresh_session · restart_pod · if_asked{} · expect[] (expect is passed through, never executed).
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { join, resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseYaml } from './lib/yaml.mjs';
 import { getUser } from './harness/provision.mjs';
 import { Pod } from './harness/lib/pod.mjs';
 import { ThingSession, approveAllConsent, denyAllConsent } from './harness/lib/thing.mjs';
-import { restartLocalServer, serverUp } from './harness/lib/local.mjs';
+import { restartLocalServer, freshLocalServer, serverUp, podRoot } from './harness/lib/local.mjs';
 
 process.env.SCENARIO_TARGET ??= 'local'; // this runner is local-only by design
 
@@ -41,6 +41,7 @@ const idOrPath = argv.find((a) => !a.startsWith('--')) ?? '06-tanzania';
 const verbose = argv.includes('--verbose');
 const keepProject = argv.includes('--keep-project');
 const planOnly = argv.includes('--plan'); // parse + print the plan, never connect to a pod
+const freshServer = argv.includes('--fresh-server'); // WIPE the pod data dir (0 projects) + start clean first
 
 // Resolve scenario dir + yaml.
 const scenarioDir = idOrPath.endsWith('.yaml')
@@ -54,7 +55,10 @@ const scenario = parseYaml(readFileSync(yamlPath, 'utf8'));
 const steps = scenario.steps ?? [];
 const through = Number(flag('--through', String(steps.length)));
 const outDir = resolve(flag('--out', join(scenarioDir, '.run')));
-const projectId = flag('--project', `${scenario.project ?? scenario.id}-${Date.now().toString(36)}`);
+// A fresh server means an empty runtime root, so the stable scenario project id is collision-free
+// and keeps evidence readable. Without --fresh-server (dev re-runs on a dirty root) a unique suffix
+// avoids clobbering an existing project.
+const projectId = flag('--project', freshServer ? (scenario.project ?? scenario.id) : `${scenario.project ?? scenario.id}-${Date.now().toString(36)}`);
 
 mkdirSync(outDir, { recursive: true });
 const traceMd = [];
@@ -155,10 +159,33 @@ if (planOnly) {
 // ── main ─────────────────────────────────────────────────────────────────────────────────────
 (async () => {
   log(`scenario ${scenario.id} · project ${projectId} · steps 1..${through}/${steps.length}`);
-  if (!(await serverUp())) fail('local server not up — run: node harness/local-server.mjs up');
+  // The RUNNER owns its own PID file (never rely on the caller's shell `$!`): a stopper does
+  // `kill $(cat <out>/runner.pid)` and it is always correct. Cleared on clean exit.
+  const pidFile = join(outDir, 'runner.pid');
+  writeFileSync(pidFile, String(process.pid));
+  process.on('exit', () => { try { rmSync(pidFile, { force: true }); } catch { /* ignore */ } });
+  console.log(`[run-yaml] pid ${process.pid} → ${pidFile}`);
+  if (freshServer) {
+    console.log('[run-yaml] --fresh-server: wiping the pod runtime root (0 projects) and starting clean…');
+    await freshLocalServer();
+    console.log(`[run-yaml] fresh pod root: ${podRoot()}`);
+  }
+  if (!(await serverUp())) fail('local server not up — run: node harness/local-server.mjs up (or pass --fresh-server)');
 
   const user = await getUser(scenario.id);
   const pod = new Pod({ base: user.pod, token: user.token });
+  // Correctness check: a --fresh-server pod MUST start with no USER-created projects. A clean pod
+  // always has the built-in `system` and `user` projects — those are infrastructure, not state leak.
+  if (freshServer) {
+    const all = (await pod.listProjects().catch(() => null))?.projects ?? [];
+    const builtin = new Set(['system', 'user']);
+    const leaked = all.map((p) => p.id ?? p).filter((id) => !builtin.has(id));
+    console.log(
+      leaked.length === 0
+        ? `[run-yaml] confirmed: fresh pod has no user projects (built-ins only: ${all.map((p) => p.id ?? p).join(', ')})`
+        : `[run-yaml] WARNING: fresh pod already has leaked project(s): ${leaked.join(', ')} — expected none`,
+    );
+  }
   // Fresh project (unique id per run unless --project pins one).
   try {
     await pod.createProject(projectId);

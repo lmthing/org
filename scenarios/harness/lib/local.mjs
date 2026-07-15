@@ -173,6 +173,27 @@ export async function restartLocalServer() {
   return ensureLocalServer();
 }
 
+/**
+ * FRESH-STATE boot: stop the server, WIPE the pod runtime root (→ zero projects), start clean.
+ *
+ * Every scenario run (and every verify-rerun) must begin from a brand-new empty data dir so no
+ * project / space / DB / knowledge state leaks in from a prior run or attempt — the "from scratch"
+ * guarantee the judge relies on. Unlike `restartLocalServer` (which keeps the pod-root, used after a
+ * code rebuild), this deletes it first. Serial by design (maxParallel 1): only one run owns the
+ * shared root at a time.
+ */
+export async function freshLocalServer() {
+  stopLocalServer();
+  for (let i = 0; i < 30 && (await serverUp()); i++) await sleep(1000);
+  rmSync(POD_ROOT, { recursive: true, force: true });
+  return ensureLocalServer();
+}
+
+/** Absolute path of the pod runtime root (its `.lmthing/` holds every project). */
+export function podRoot() {
+  return POD_ROOT;
+}
+
 export function localStatus() {
   const pid = readPid();
   return { base: LOCAL_BASE, pid, alive: pidAlive(pid), podRoot: POD_ROOT, log: LOG_FILE };
