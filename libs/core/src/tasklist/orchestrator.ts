@@ -242,6 +242,7 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
               role: task.role,
               functions: task.functions,
               canDelegateTo: task.canDelegateTo,
+              capabilities: task.capabilities as import('../spaces/capabilities.js').CapabilityId[] | undefined,
               prelude: task.prelude,
               tasklistDescription: tasklistDir.description,
               parentScope: elemScope ?? taskScope,

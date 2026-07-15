@@ -11,7 +11,7 @@ import { validateOutput } from '../tasklist/schema.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { Budget, BudgetExceededError, type BudgetLimits } from '../eval/budget.js';
-import { forkCapabilities } from '../exec/capability.js';
+import { forkCapabilities, narrowAppCaps } from '../exec/capability.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
@@ -56,6 +56,10 @@ export interface ForkTask {
    *  into the fork and gated at yield time. Empty/omitted → no delegation
    *  (the task-level default). */
   canDelegateTo?: string[];
+  /** Per-node capability NARROWING (task frontmatter `capabilities:`). When set, the fork runs
+   *  with only the intersection of these ids and the parent agent's declared caps — least
+   *  privilege per step, never widening (see `narrowAppCaps`). Omit to inherit the parent's set. */
+  capabilities?: import('../spaces/capabilities.js').CapabilityId[];
   /** Host-executed TS statements (task frontmatter `prelude:`) run in the fork VM BEFORE the
    *  model's first turn, through the same statement pipeline as the turn loop (yields allowed).
    *  Bound values are surfaced as the fork's first VARIABLES block; per-statement failures bind
@@ -242,7 +246,11 @@ export class ForkEngine {
         // Default: no delegate global — keeps forks isolated and headless as before.
         const delegatePolicy = evaluateDelegatePolicy(task.canDelegateTo, 'task');
         const canDelegate = delegatePolicy.mode !== 'none' && typeof this.opts.delegateRunner === 'function';
-        const capabilities = forkCapabilities(task.role, canDelegate, this.opts.parentAppCapabilities ?? {});
+        // Per-node capability narrowing FIRST (select a subset of the parent agent's grants,
+        // never widening), THEN the role's read-only intersection on top — so both the injected
+        // globals and the ambient DTS narrow together and a sibling node's stray write fails typecheck.
+        const nodeApp = narrowAppCaps(this.opts.parentAppCapabilities ?? {}, task.capabilities);
+        const capabilities = forkCapabilities(task.role, canDelegate, nodeApp);
 
         // Space functions from the parent agent. When the task declares a `functions`
         // allowlist, scope to exactly those (least privilege — fewer tools to misuse,

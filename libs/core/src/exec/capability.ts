@@ -7,7 +7,7 @@ import type { AppCapabilities } from '../spaces/capabilities.js';
  * host-tools write gate withholds `writeFileRaw`. Only the read/outbound grants
  * (`db:read`, `api:call`, `connections:use`, `store:read`) survive; every
  * mutating/authoring grant (`db:write`/`db:schema`/`pages:write`/`api:write`/
- * `hooks:write`/`store:install`/`events:emit`) is dropped. NOTE: `connections:use`
+ * `hooks:write`/`knowledge:write`/`store:install`/`events:emit`) is dropped. NOTE: `connections:use`
  * can have a side-effect (POST to an external service), but is treated as
  * outbound like `api:call` — the caller's own read-only intent governs, not the
  * transport. Drop it here if read-only forks must never mutate external state.
@@ -22,6 +22,27 @@ export function intersectAppCaps(app: AppCapabilities, allowWrite: boolean): App
   // mutating store:install (writes into the project) and events:emit (triggers
   // hooks) are withheld, like every other write grant.
   if (app['store:read']) out['store:read'] = app['store:read'];
+  return out;
+}
+
+/**
+ * NARROW a capability set to a per-task-node subset — SELECT ∩ DECLARED, never widen.
+ *
+ * A tasklist task node may carry `capabilities: [<id>, ...]` to run with only a subset of
+ * its owning agent's grants (least privilege per step: e.g. only the migrate write-node of
+ * user-memory's tasklist carries `db:write`, its sibling collect-node runs without it). When
+ * `allow` is undefined the node inherits the agent's full set unchanged. When present, we copy
+ * ONLY the entries already granted to the agent, preserving each cap's scope object by
+ * reference — so a node can never conjure a capability (or a wider table scope) the agent
+ * itself lacks. Because `forkCapabilities` runs this before `intersectAppCaps`, the read-only
+ * role gate still applies on top.
+ */
+export function narrowAppCaps(app: AppCapabilities, allow: import('../spaces/capabilities.js').CapabilityId[] | undefined): AppCapabilities {
+  if (!allow) return app;
+  const out: AppCapabilities = {};
+  for (const id of allow) {
+    if (app[id] !== undefined) (out as Record<string, unknown>)[id] = app[id];
+  }
   return out;
 }
 

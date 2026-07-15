@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import ts from 'typescript';
 import { parseFrontmatter } from './frontmatter.js';
+import { CAPABILITY_IDS, type CapabilityId } from './capabilities.js';
 import type { Space } from './load.js';
 
 export interface TaskNode {
@@ -36,6 +37,11 @@ export interface TaskNode {
   /** Per-task delegation allowlist: `"space/agent"` (any action) or `"space/agent#action"`.
    *  When set, the task's fork may `delegate()` to exactly these targets (and nothing else). */
   canDelegateTo?: string[];
+  /** Per-node capability NARROWING (least privilege per step). When set, the fork runs with
+   *  only the intersection of these ids and the OWNING AGENT's declared capabilities — a node
+   *  can never gain a cap the agent lacks (see `narrowAppCaps`). Bare ids only; each cap keeps
+   *  the agent grant's scope config. Omit to inherit the agent's full set. */
+  capabilities?: string[];
   /** Host-executed TS statements (YAML block scalar) run in the fork VM BEFORE the model's
    *  first turn — the task's deterministic setup (bindings, webSearch/webFetch gathering)
    *  executes with host reliability instead of being re-emitted by the model. Yields are
@@ -141,6 +147,21 @@ function buildTaskNode(
   }
   if (Array.isArray(data['canDelegateTo'])) {
     task.canDelegateTo = data['canDelegateTo'].map(String);
+  }
+  if (data['capabilities'] !== undefined) {
+    if (!Array.isArray(data['capabilities'])) {
+      throw new Error(
+        `Task "${id}" (${filePath}): "capabilities" must be a list of bare capability ids (a per-node subset of the agent's grants)`,
+      );
+    }
+    const ids = data['capabilities'].map(String);
+    const unknown = ids.filter((c) => !CAPABILITY_IDS.has(c as CapabilityId));
+    if (unknown.length > 0) {
+      throw new Error(
+        `Task "${id}" (${filePath}): unknown capability id(s) in "capabilities": ${unknown.join(', ')}. Known: ${[...CAPABILITY_IDS].join(', ')}`,
+      );
+    }
+    task.capabilities = ids;
   }
   if (data['prelude'] !== undefined) {
     // Light load-time validation only (non-empty string). Deep validation is

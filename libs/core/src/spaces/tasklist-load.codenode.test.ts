@@ -106,6 +106,23 @@ describe('loadTasklist with code nodes', () => {
     expect(tasks['custom']!.kind).toBe('code');
   });
 
+  it('parses a per-node `capabilities:` subset off an md node', async () => {
+    const dir = await makeTasklistSpace({
+      '01-store.md': `---\nid: store\noutput:\n  ok: boolean\ncapabilities:\n  - knowledge:write\n---\n\nSTORE_T: persist.`,
+    });
+    const tl = join(dir, 'tasklists', 'flow');
+    const tasks = await loadTasklist(tl, [join(tl, '01-store.md')]);
+    expect(tasks['store']!.capabilities).toEqual(['knowledge:write']);
+  });
+
+  it('throws on an unknown capability id in a node `capabilities:` list', async () => {
+    const dir = await makeTasklistSpace({
+      '01-x.md': `---\nid: x\noutput:\n  v: number\ncapabilities:\n  - db:destroy\n---\n\nX_T: work.`,
+    });
+    const tl = join(dir, 'tasklists', 'flow');
+    await expect(loadTasklist(tl, [join(tl, '01-x.md')])).rejects.toThrow(/unknown capability id\(s\)/);
+  });
+
   it('throws when a .ts node has no run export', async () => {
     const dir = await makeTasklistSpace({
       '01-broken.ts': `export const node = { output: { v: 'number' } };`,

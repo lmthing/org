@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildAmbientDts, CURRENT_TASK_DTS } from './bootstrap.js';
-import { sessionCapabilities, forkCapabilities, delegateCapabilities } from './capability.js';
+import { sessionCapabilities, forkCapabilities, delegateCapabilities, narrowAppCaps } from './capability.js';
 import { LIBRARY_DTS, LIBRARY_DTS_NO_ASK } from '../typecheck/library-dts.js';
 import { runTsc } from '../typecheck/tsc.js';
 
@@ -151,5 +151,49 @@ describe('buildAmbientDts — connections:use gates callConnection', () => {
   it('callConnection is absent without the connections:use grant', () => {
     const stmt = 'const r = await callConnection("google", { method: "GET", path: "/x" });';
     expect(runTsc({ ambientDts: withoutCap, sessionContext: '', statement: stmt }).ok).toBe(false);
+  });
+});
+
+describe('buildAmbientDts — knowledge:write gates writeKnowledge', () => {
+  const withCap = buildAmbientDts({ capabilities: sessionCapabilities(true, { 'knowledge:write': {} }) });
+  const withoutCap = buildAmbientDts({ capabilities: sessionCapabilities() });
+  const stmt = 'const r = writeKnowledge("zanzibar", "insurance", "coverage", "# 92 days", { source: "researched" }); const p = r.path;';
+
+  it('writeKnowledge typechecks with the grant', () => {
+    expect(runTsc({ ambientDts: withCap, sessionContext: '', statement: stmt }).ok).toBe(true);
+  });
+
+  it('writeKnowledge is absent without the grant (stray call fails typecheck)', () => {
+    expect(runTsc({ ambientDts: withoutCap, sessionContext: '', statement: stmt }).ok).toBe(false);
+  });
+
+  it('writeKnowledge is dropped for a read-only fork role even when the agent holds the grant', () => {
+    const explore = buildAmbientDts({ capabilities: forkCapabilities('explore', false, { 'knowledge:write': {} }), currentTask: true });
+    expect(runTsc({ ambientDts: explore, sessionContext: '', statement: stmt }).ok).toBe(false);
+  });
+});
+
+describe('per-node capability narrowing shapes the fork DTS', () => {
+  // Agent holds both db:write and knowledge:write; two sibling nodes each select a subset.
+  const agentApp = { 'db:write': {}, 'knowledge:write': {} } as const;
+  const writeNode = buildAmbientDts({
+    capabilities: forkCapabilities('general', false, narrowAppCaps(agentApp, ['knowledge:write'])),
+    currentTask: true,
+  });
+  const dbNode = buildAmbientDts({
+    capabilities: forkCapabilities('general', false, narrowAppCaps(agentApp, ['db:write'])),
+    currentTask: true,
+  });
+  const knowStmt = 'const r = writeKnowledge("a", "b", "c", "x"); const p = r.path;';
+  const dbStmt = 'const n = db.insert("legs", { name: "x" });';
+
+  it('the knowledge node can writeKnowledge but NOT db.insert', () => {
+    expect(runTsc({ ambientDts: writeNode, sessionContext: '', statement: knowStmt }).ok).toBe(true);
+    expect(runTsc({ ambientDts: writeNode, sessionContext: '', statement: dbStmt }).ok).toBe(false);
+  });
+
+  it('the db node can db.insert but NOT writeKnowledge', () => {
+    expect(runTsc({ ambientDts: dbNode, sessionContext: '', statement: dbStmt }).ok).toBe(true);
+    expect(runTsc({ ambientDts: dbNode, sessionContext: '', statement: knowStmt }).ok).toBe(false);
   });
 });
