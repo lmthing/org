@@ -70,7 +70,7 @@ function typecheckPrelude(task: TaskNode, tl: TasklistDir, allFns: Record<string
 }
 
 describe('shipped system spaces load + validate', () => {
-  for (const name of ['system-architect', 'system-research', 'system-appbuilder', 'user-thing']) {
+  for (const name of ['system-architect', 'system-research', 'system-appbuilder', 'user-thing', 'user-memory']) {
     it(`${name}: agents have charters and all tasklists are valid DAGs`, async () => {
       const space = await loadSpace(resolve(SYS, name), { requireAgents: false });
       // Every agent ships a non-trivial charter (fork-safe identity).
@@ -85,6 +85,44 @@ describe('shipped system spaces load + validate', () => {
       }
     });
   }
+
+  it('THING lifecycle tasklists narrow db:write to only the mutating node', async () => {
+    const space = await loadSpace(resolve(SYS, 'user-thing'), { requireAgents: false });
+
+    const write = await loadTasklistFromSpace(space, 'write_fact');
+    expect(write['classify']!.role).toBe('explore'); // read-only classify
+    expect(write['classify']!.capabilities).toBeUndefined();
+    expect(write['write']!.role).toBe('general');
+    expect(write['write']!.capabilities).toContain('db:write');
+    expect(resolveGoalTask(write)!.id).toBe('write');
+
+    const retract = await loadTasklistFromSpace(space, 'retract_fact');
+    expect(retract['locate']!.role).toBe('explore');
+    expect(retract['remove']!.capabilities).toContain('db:write');
+
+    const answer = await loadTasklistFromSpace(space, 'answer_across_spaces');
+    expect(answer['ask']!.forEach).toBe('split.subquestions');
+    expect(answer['reason']!.capabilities).toContain('db:read');
+    // the fan-out node delegates to registered spaces, not db-writes
+    expect(answer['ask']!.capabilities).toBeUndefined();
+
+    const reconcile = await loadTasklistFromSpace(space, 'reconcile_conflict');
+    expect(resolveGoalTask(reconcile)!.id).toBe('resolve');
+    expect(reconcile['resolve']!.role).toBe('explore'); // pure reasoning, no writes
+  });
+
+  it('user-memory migrate_to_app_db carries db:write on ONLY the migrate node', async () => {
+    const space = await loadSpace(resolve(SYS, 'user-memory'), { requireAgents: false });
+    // The agent declares db:write as the ceiling, exposed via the migrate action.
+    expect(space.agents['memory']!.capabilities?.['db:write']).toBeDefined();
+    expect(space.agents['memory']!.actions.some((a) => a.tasklist === 'migrate_to_app_db')).toBe(true);
+
+    const tasks = await loadTasklistFromSpace(space, 'migrate_to_app_db');
+    expect(tasks['collect']!.capabilities).toEqual([]); // reads memory only — no db
+    expect(tasks['migrate']!.capabilities).toContain('db:write');
+    expect(tasks['forget']!.capabilities).toEqual([]); // tidies memory only — no db
+    expect(resolveGoalTask(tasks)!.id).toBe('forget');
+  });
 
   it('architect synthesize_and_run uses forEach fan-out with valid roles', async () => {
     const space = await loadSpace(resolve(SYS, 'system-architect'), { requireAgents: false });

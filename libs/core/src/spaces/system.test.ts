@@ -147,6 +147,8 @@ describe('system spaces', () => {
     // 1. It must OFFER unasked when handed material + an ongoing need — and wait, not build.
     expect(instruct).toMatch(/OFFER — do not wait to be asked/);
     expect(instruct).toMatch(/Do not author anything on the same turn as the offer/);
+    expect(instruct).toMatch(/A turn that has decided something must END WITH THE DECISION/);
+    expect(instruct).toMatch(/Ask, then stop, then wait/);
 
     // 2. A bare "yes" to its OWN offer is the consent path 4 requires (no re-spec, no re-offer).
     expect(instruct).toMatch(/A bare yes to YOUR OWN offer is CONSENT/);

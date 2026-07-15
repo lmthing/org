@@ -84,6 +84,26 @@ describe('parseCapabilities', () => {
     );
   });
 
+  it('parses bare knowledge:write as own-space only ({})', () => {
+    expect(parseCapabilities(['knowledge:write'], ctx())).toEqual({ 'knowledge:write': {} });
+  });
+
+  it('parses knowledge:write with a spaces allow-list', () => {
+    expect(parseCapabilities([{ 'knowledge:write': { spaces: ['other-space'] } }], ctx())).toEqual({
+      'knowledge:write': { spaces: ['other-space'] },
+    });
+  });
+
+  it('throws on knowledge:write with an unknown config key', () => {
+    expect(() => parseCapabilities([{ 'knowledge:write': { dirs: ['x'] } }], ctx())).toThrow(
+      /disallowed config key\(s\): dirs/,
+    );
+  });
+
+  it('exposes knowledge:write as a known capability id', () => {
+    expect(CAPABILITY_IDS.has('knowledge:write')).toBe(true);
+  });
+
   it('throws when db:* names a non-existent table AND knownTables is supplied', () => {
     expect(() =>
       parseCapabilities([{ 'db:read': { tables: ['ghost'] } }], ctx(['sources'])),
@@ -119,16 +139,18 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     const spaces = await loadSystemSpaces(dirs);
     expect(spaces.length).toBe(dirs.length);
     // System agents that declare capabilities: system-appbuilder's agents (project +
-    // authoring grants), the integration-* spaces (connections:use), and the plan-S11
-    // trio — system-engineer/engineer (fs:scratch → its scratch sandbox),
-    // system-store/finder (store:read), and user-thing/thing (store:install). Every
-    // other system agent parses to {}.
+    // authoring grants), the integration-* spaces (connections:use), system-engineer/engineer
+    // (fs:scratch → its scratch sandbox), system-store/finder (store:read),
+    // user-thing/thing (db:read+db:write+store:install+api:call — the routing rebuild), and
+    // user-memory/memory (db:write ceiling for its migrate_to_app_db action). Every other
+    // system agent parses to {}.
     const capBearing = (dir: string): boolean =>
       dir.endsWith('system-appbuilder') ||
       dir.includes('integration-') ||
       dir.endsWith('system-engineer') ||
       dir.endsWith('system-store') ||
-      dir.endsWith('user-thing');
+      dir.endsWith('user-thing') ||
+      dir.endsWith('user-memory');
     for (const space of spaces) {
       const hasCaps = capBearing(space.dir);
       for (const agent of Object.values(space.agents)) {
