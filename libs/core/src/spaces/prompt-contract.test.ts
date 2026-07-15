@@ -141,6 +141,15 @@ describe('user-thing/thing — the ingest turn must ASK, and must not leak its p
       'THING must be warned that deferring the reply loses the value: variables do not persist between statements',
     ).toMatch(/do not persist between statements|DO NOT PERSIST between statements/i);
   });
+
+  it('identifies attachment delegate results as plain text rather than object-shaped data', () => {
+    const src = instruct();
+    expect(
+      src,
+      'the dispatcher and vision delegates resolve plain-text summaries, so THING must compose with them rather than inspect object fields that do not exist',
+    ).toMatch(/delegates resolve to plain text/i);
+    expect(src).toMatch(/Do NOT inspect them as objects/i);
+  });
 });
 
 describe('system-files readers — source text stays data, never executable code', () => {

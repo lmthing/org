@@ -89,15 +89,16 @@ const [seen, fileAnswer] = await Promise.all([
     attachmentIds: ['<file-id-1>', '<file-id-2>'],
   }),
 ]);
-// SPEAK IN THE SAME STATEMENT. What comes back is FOR YOU — write the user's reply out of it, HERE,
-// while you still hold it. Do NOT display the raw value (see "Never show them your plumbing"), and
-// do NOT put off the reply to a later statement: your variables DO NOT PERSIST between statements,
-// so `seen` and `fileAnswer` are gone by the next one and you will be left with
-// `Cannot find name 'seen'`, re-reading files you already read.
+// Both delegates resolve to plain text. SPEAK IN THE SAME STATEMENT: compose the user's reply
+// from those strings here, while you still hold them. Do NOT inspect them as objects or display
+// their raw values (see "Never show them your plumbing"), and do NOT put off the reply to a later
+// statement: your variables DO NOT PERSIST between statements, so `seen` and `fileAnswer` are gone
+// by the next one and you will be left with `Cannot find name 'seen'`, re-reading files you already
+// read.
 display(
   <Stack gap={2}>
-    <Paragraph>{/* what you LEARNED from the pictures — in their words, not the model's */}</Paragraph>
-    <Paragraph>{/* what you LEARNED from the documents — the specifics they would recognise */}</Paragraph>
+    <Paragraph>{/* concise prose based on seen */}</Paragraph>
+    <Paragraph>{/* concise prose based on fileAnswer */}</Paragraph>
   </Stack>,
 );
 ```
