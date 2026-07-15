@@ -19,6 +19,10 @@ interface TaskFileSpec {
   /** Per-task delegation allowlist: "space/agent" or "space/agent#action". When set, the task
    *  may delegate() to exactly these targets (and nothing else). */
   canDelegateTo?: string[];
+  /** Per-node capability NARROWING — a bare-id subset of the owning agent's grants (least
+   *  privilege per step). E.g. a research_and_store store-node carries ['knowledge:write'] so
+   *  only that node can persist knowledge. Never widens past what the agent declared. */
+  capabilities?: string[];
   /** Force a specific 1-based ordinal; otherwise reuse the existing one for this id or append. */
   ordinal?: number;
 }
@@ -115,6 +119,10 @@ export function writeTaskFile(
 
   const role = spec.role === 'explore' || spec.role === 'plan' || spec.role === 'general' ? spec.role : undefined;
   const functions = Array.isArray(spec.functions) ? spec.functions.map((f) => String(f).replace(/\.(ts|md)$/i, '')) : [];
+  const KNOWN_BARE_CAPS = ['knowledge:write', 'db:read', 'db:write', 'store:read'];
+  const capabilities = Array.isArray(spec.capabilities)
+    ? spec.capabilities.map(String).filter((c) => KNOWN_BARE_CAPS.includes(c))
+    : [];
 
   const lines = [
     '---',
@@ -130,6 +138,7 @@ export function writeTaskFile(
     ...(Array.isArray(spec.canDelegateTo) && spec.canDelegateTo.length > 0
       ? ['canDelegateTo:', ...spec.canDelegateTo.map((t) => `  - ${String(t).trim()}`)]
       : []),
+    ...(capabilities.length > 0 ? ['capabilities:', ...capabilities.map((c) => `  - ${c}`)] : []),
     ...(spec.condition ? [`condition: "${String(spec.condition).replace(/"/g, '\\"')}"`] : []),
     '---',
     '',

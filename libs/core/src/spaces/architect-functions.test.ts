@@ -122,6 +122,27 @@ describe('per-file builders smoke', () => {
     expect(readFileSync(plain.path, 'utf8')).not.toMatch(/never infer/i);
   });
 
+  it('bakes knowledge:write onto the agent and a per-node capability into a task', () => {
+    const dir = join(baseDir, 'sK'); const D = JSON.stringify(dir);
+    const a = evalDump(vm, `writeAgentFile(${D}, ${JSON.stringify({
+      agentSlug: 'zx', agentTitle: 'ZX', systemPrompt: 'Answer about zanzibar.',
+      capabilities: ['knowledge:write', 'not-a-cap'], // unknown id filtered out
+      actions: [{ id: 'answer', label: 'A', description: 'd', tasklist: 'answer' }],
+    })})`);
+    expect(a.ok).toBe(true);
+    const agentBody = readFileSync(join(dir, 'agents', 'zx', 'instruct.md'), 'utf8');
+    expect(agentBody).toMatch(/capabilities:\n\s+- knowledge:write/);
+    expect(agentBody).not.toMatch(/not-a-cap/);
+
+    const store = evalDump(vm, `writeTaskFile(${D}, "research_and_store", ${JSON.stringify({
+      id: 'store',
+      instruction: "const w = writeKnowledge('a','b','c','x', { source: 'researched' }); currentTask.resolve({ stored: w.ok });",
+      output: { stored: 'boolean' }, role: 'general', capabilities: ['knowledge:write'], goal: true,
+    })})`);
+    expect(store.ok).toBe(true);
+    expect(readFileSync(store.path, 'utf8')).toMatch(/capabilities:\n\s+- knowledge:write/);
+  });
+
   it('rejects a function with a syntax error (typecheck on write)', () => {
     const dir = join(baseDir, 's2'); const D = JSON.stringify(dir);
     const fn = evalDump(vm, `writeFunctionFile(${D}, "broken", ${JSON.stringify('export function broken( { return 1 }')})`);

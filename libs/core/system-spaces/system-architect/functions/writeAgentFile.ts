@@ -19,6 +19,11 @@ interface AgentFileSpec {
   knowledge?: string[];
   /** Component names — written separately via writeComponentFile. */
   components?: string[];
+  /** Bare app-capability ids the agent is granted (e.g. 'knowledge:write', 'db:read'). A
+   *  synthesized space agent gets 'knowledge:write' so its research_and_store tasklist can
+   *  persist findings into its own knowledge; 'db:read' is added only when the space needs to
+   *  read the user's project data (the hybrid opt-in). */
+  capabilities?: string[];
   actions?: AgentActionSpec[];
   /** Action id to run deterministically in a freeform session. Defaults to the sole action. */
   defaultAction?: string;
@@ -96,12 +101,18 @@ export function writeAgentFile(
   const sole = actions.length === 1 ? actions[0]!.id : undefined;
   const defaultActionId = explicit ?? sole;
 
+  // Only recognized bare capability ids (drop config-bearing/unknown to keep synthesized
+  // frontmatter valid — the runtime gate is parseCapabilities, this is a friendly pre-filter).
+  const KNOWN_BARE_CAPS = ['knowledge:write', 'db:read', 'db:write', 'store:read'];
+  const capabilityIds = (spec.capabilities ?? []).map(String).filter((c) => KNOWN_BARE_CAPS.includes(c));
+
   const frontmatter = [
     '---',
     `title: ${spec.agentTitle}`,
     listBlock('knowledge', knowledgeRefs),
     listBlock('functions', functionNames),
     listBlock('components', componentNames),
+    ...(capabilityIds.length > 0 ? [listBlock('capabilities', capabilityIds)] : []),
     actionBlock,
     ...(defaultActionId ? [`defaultAction: ${defaultActionId}`] : []),
     listBlock('canDelegateTo', delegateTargets),

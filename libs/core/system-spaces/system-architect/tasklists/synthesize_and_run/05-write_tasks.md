@@ -8,25 +8,45 @@ functions:
   - writeTaskFile
 ---
 
-Write the new agent's action tasklist (named `design.actionId`) as a SINGLE goal task. The
-slug is `design.slug`. The task runs in a fork driven by a SMALL model, so its instruction
-must be SHORT, code-first, autonomous (use the injected `query`, never ask), and end with
-currentTask.resolve.
+Write the new agent's TWO tasklists, both driven by SMALL models, so every instruction must be
+SHORT, code-first, autonomous (use the injected `query`, never ask), and end with
+currentTask.resolve. Build REAL loadKnowledge lines from a field that was actually written
+(`build_field`) — NEVER angle-bracket placeholders; writeTaskFile rejects those.
 
-Build a REAL loadKnowledge line from a field that was actually written (`build_field`) — NEVER
-write angle-bracket placeholders like loadKnowledge('<domain>',…); writeTaskFile rejects those.
-Emit:
+**1. The answer tasklist** (`design.actionId`) — a single goal task that answers from static
+knowledge AND reports whether the knowledge actually COVERED the question (so the agent can escalate
+to research when it did not). **2. The `research_and_store` tasklist** — two nodes: research the web,
+then persist the finding into this space's knowledge with `writeKnowledge` (own-space, gated by the
+`knowledge:write` cap the agent now holds), so a repeat question is free. Emit:
 
 const written = Array.isArray(build_field) ? build_field.filter((x: { ok: boolean }) => x.ok) : [];
 const bf = written[0];
-const loadLine = bf ? ("const k = await loadKnowledge('" + bf.domain + "','" + bf.field + "','" + bf.aspect + ".md');\n") : "";
-const grounding = "Ground every claim in the knowledge you loaded: state ONLY what it supports. If the loaded knowledge does not answer `query`, say so plainly in your answer and state what you DO know — never infer, guess, or present a conclusion the knowledge does not state. ";
-const instruction = "Answer the user's request (it is in `query`). " + (loadLine ? "Load the knowledge you need, then resolve a structured markdown answer grounded in it and `query`. " + grounding + "Code:\n" + loadLine : "Resolve a structured markdown answer to `query`. Code:\n") + "currentTask.resolve({ answer: 'your full markdown answer' });";
-const w = writeTaskFile(design.slug, design.actionId, {
+const dom = bf ? bf.domain : "";
+const fld = bf ? bf.field : "";
+const loadLine = bf ? ("const k = await loadKnowledge('" + dom + "','" + fld + "','" + bf.aspect + ".md');\n") : "";
+const grounding = "Ground every claim in the knowledge you loaded: state ONLY what it supports. If the loaded knowledge does not answer `query`, set covered:false and say so plainly — never infer or guess. ";
+const answerInstruction = "Answer the user's request (it is in `query`). " + (loadLine ? "Load the knowledge you need, then resolve a markdown answer grounded in it and `query`. " + grounding + "Set covered:true only if the knowledge genuinely answered the question; covered:false if it did not. Code:\n" + loadLine : "Resolve a markdown answer to `query`, covered:true. Code:\n") + "currentTask.resolve({ answer: 'your full markdown answer', covered: true, sources: [] });";
+const wa = writeTaskFile(design.slug, design.actionId, {
   id: "answer",
-  instruction: instruction,
-  output: { answer: "string" },
+  instruction: answerInstruction,
+  output: { answer: "string", covered: "boolean", sources: "array" },
   role: "explore",
   goal: true,
 });
-currentTask.resolve({ ok: w.ok });
+const wr1 = writeTaskFile(design.slug, "research_and_store", {
+  id: "research",
+  instruction: "Research the answer to `query` on the live web. Call webSearch(query) then webFetch the top result's url, and resolve a concise answer grounded ONLY in what you read, with sources. Code:\nconst s = await webSearch(String(query), { depth: 'basic', maxResults: 4 });\nconst top = (s.results || [])[0];\nconst page = top ? await webFetch(top.url, { format: 'markdown' }) : { content: '' };\ncurrentTask.resolve({ answer: 'a concise answer grounded in what you read', sources: (s.results || []).slice(0,3).map(function(r){ return { title: r.title, url: r.url }; }) });",
+  output: { answer: "string", sources: "array" },
+  role: "explore",
+  functions: ["webSearch", "webFetch"],
+});
+const wr2 = writeTaskFile(design.slug, "research_and_store", {
+  id: "store",
+  instruction: "Save the researched finding into THIS space's knowledge so the next question is free, then return it. `research.answer` and `research.sources` are in scope, and `query`. Pick a short kebab-case slug from `query`. Code:\nconst slug = String(query).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,48) || 'finding';\nconst w = writeKnowledge('" + dom + "','" + fld + "', slug, String(research.answer), { source: 'researched' });\ncurrentTask.resolve({ answer: research.answer, sources: research.sources, stored: w.ok });",
+  output: { answer: "string", sources: "array", stored: "boolean" },
+  role: "general",
+  capabilities: ["knowledge:write"],
+  dependsOn: ["research"],
+  goal: true,
+});
+currentTask.resolve({ ok: wa.ok && wr1.ok && wr2.ok });
