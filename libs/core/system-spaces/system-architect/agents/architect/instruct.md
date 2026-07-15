@@ -58,14 +58,17 @@ const t = await tasklist('synthesize_and_run', {
 });
 ```
 ```typescript
-// Turn 2 — run the freshly-built agent and show the answer. Only delegate when the tasklist
-// ran clean (t.ok) AND the build succeeded (t.data.ok); otherwise display the reason.
-// NEVER try to build it yourself.
+// Turn 2 — report the build result. Synthesis is SETUP, not a user question: do NOT run the
+// freshly-created agent on its setup topic. That tests partial seed knowledge and can cause an
+// unnecessary research fallback. The caller runs the specialist only for a later real question.
 const built = t.data as { spaceKey: string; agentSlug: string; actionId: string; query: string; ok: boolean; errors: string };
-const result = (t.ok && built.ok)
-  ? await delegate(built.spaceKey, built.agentSlug, built.actionId, { query: built.query, context: {} })
-  : { error: 'Could not build the agent: ' + (built.errors || ('tasklist degraded: ' + (t.reason ?? 'unknown'))) };
-display(JSON.stringify(result, null, 2));
+display(JSON.stringify(
+  t.ok && built.ok
+    ? { ok: true, spaceKey: built.spaceKey, agentSlug: built.agentSlug, actionId: built.actionId }
+    : { error: 'Could not build the agent: ' + (built.errors || ('tasklist degraded: ' + (t.reason ?? 'unknown'))) },
+  null,
+  2,
+));
 ```
 
 **Proceed with whatever research is available.** If `context.research` is empty, thin, or came

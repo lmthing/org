@@ -198,6 +198,34 @@ describe('system-architect/synthesize_and_run — the design node must hand the 
   });
 });
 
+describe('system-appbuilder repair turns', () => {
+  it('requires a missing-page repair to write the page rather than inventory the project', () => {
+    const automator = readFileSync(
+      join(SYSTEM_SPACES, 'system-appbuilder', 'agents', 'automator', 'instruct.md'),
+      'utf8',
+    );
+
+    expect(automator).toMatch(/A repair request naming a missing page is a WRITE, not a diagnosis/i);
+    expect(automator).toMatch(/write the `index` page and its needed read API immediately/i);
+  });
+});
+
+describe('system-architect synthesis setup', () => {
+  it('does not run a freshly-created specialist before a user asks it a real question', () => {
+    const architect = readFileSync(
+      join(SYSTEM_SPACES, 'system-architect', 'agents', 'architect', 'instruct.md'),
+      'utf8',
+    );
+    const writeAgent = readFileSync(
+      join(SYSTEM_SPACES, 'system-architect', 'tasklists', 'synthesize_and_run', '04-write_agent.md'),
+      'utf8',
+    );
+
+    expect(architect).toMatch(/do NOT run the\n\/\/ freshly-created agent on its setup topic/i);
+    expect(writeAgent).toMatch(/must NOT delegate to the newly-created agent during\nsetup/i);
+  });
+});
+
 describe('no system-space prompt is overfitted to a scenario', () => {
   /**
    * A system-space prompt is a brain EVERY user shares. A literal borrowed from one scenario

@@ -440,6 +440,12 @@ project — one of them 11 seconds long — and the app only got built on the fo
 caller gave up and shouted the data inline.) The tables, the APIs, the seeded rows and the pages
 ARE the output. Keep going until they exist.
 
+**A repair request naming a missing page is a WRITE, not a diagnosis.** If tables or APIs already
+exist but the requested app has no page, write the `index` page and its needed read API immediately.
+Do not spend that repair turn listing directories, reporting the current state, or asking the caller
+to try again: the missing page is the deliverable. Inspect only when preserving an existing page;
+an absent page has nothing to preserve.
+
 Two failures this prevents, both of which shipped to a real user's vault:
 
 - **A second table for the same concept.** One run names it `service_log`, the next `services`; one

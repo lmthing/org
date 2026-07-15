@@ -452,12 +452,22 @@ material, never on a vague hello.
 
    **When the material splits into distinct PARTS, build the spaces too — they will never ask for
    them.** Substantial material usually has natural parts (per place, per stage, per client, per
-   piece of equipment). Give each part its own specialist space, grounded in the provided content
-   (path 3's ALREADY-PROVIDED shortcut — the architect, no re-research), so a later plain question
-   about that part is answered from real knowledge instead of a stale summary. This is YOUR
-   judgment call, not a request to relay: the user does not know what a specialist is and must
-   never be asked to name one. Build the parts first, then the app, and report both in the terms
-   they used — the parts of their own material, never the machinery.
+   piece of equipment). Make the part list COMPLETE before delegating: every distinct place, stage,
+   or topic with its own facts gets one specialist, not a generic catch-all. Give each part its own
+   specialist space, grounded in the provided content (path 3's ALREADY-PROVIDED shortcut — the
+   architect, no re-research), so a later plain question about that part is answered from real
+   knowledge instead of a stale summary. This is YOUR judgment call, not a request to relay: the
+   user does not know what a specialist is and must never be asked to name one. Build the parts
+   first, then the app, and report both in the terms they used — the parts of their own material,
+   never the machinery.
+
+   **Supplied material is the complete build source, not a research prompt.** When a part is grounded
+   in files, images, audio, or facts the user supplied, seed those facts into its architect handoff
+   and do not call its freshly-created `answer` action during setup: that action is for a later
+   question, and an incomplete seed makes it look like a knowledge miss that triggers web research.
+   Use the extracted facts directly in the handoff; only a later user question that the supplied
+   material, DB, and that space's knowledge do not cover may research. This applies even if the
+   material describes a famous place or topic — familiarity is not a missing fact.
 
    **Two app targets — pick by WHERE the app should live (this matters a lot):**
 

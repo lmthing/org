@@ -14,11 +14,17 @@ Write the agent header — charter.md + instruct.md — with writeAgentFile. The
 ({ domain, field, aspect, ok }); `build_function` is the array of functions written
 ({ name, ok }). DERIVE every ref from what was actually written — never invent a ref.
 
-Every synthesized agent gets `capabilities: ['knowledge:write']` so that when a question falls
-OUTSIDE its static knowledge it can research the answer and PERSIST it (its `research_and_store`
-action), instead of guessing — the next time that question is free. Give the agent BOTH actions: its
-normal `answer` action, and `research_and_store`. Its top-level prompt runs `answer` first, and only
-if the knowledge did not cover the question does it fall back to researching and storing. Emit:
+Every synthesized agent gets `capabilities: ['knowledge:write']` so that when a later question
+falls OUTSIDE its static knowledge it can research the answer and PERSIST it (its
+`research_and_store` action), instead of guessing — the next time that question is free. Give the
+agent BOTH actions: its normal `answer` action, and `research_and_store`. Its top-level prompt runs
+`answer` first, and only if the knowledge did not cover the question does it fall back to researching
+and storing.
+
+The `synthesize_and_run` call itself is SETUP, not a question to answer. It must create and register
+the specialist, then return its coordinates; it MUST NOT delegate to the newly-created agent during
+setup. Running it on the setup topic tests an incomplete seed rather than serving a user question,
+and can trigger unnecessary web research. Emit:
 
 const kfields = Array.isArray(build_field) ? build_field.filter((x: { ok: boolean }) => x.ok) : [];
 const knowledgeRefs = kfields.map((x: { domain: string; field: string }) => x.domain + "/" + x.field);
