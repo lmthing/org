@@ -22,6 +22,7 @@ import {
   STORE_READ_DTS,
   STORE_INSTALL_DTS,
   EVENTS_EMIT_DTS,
+  KNOWLEDGE_WRITE_DTS,
   CAPABILITY_DTS_FRAGMENTS,
   composeConnectionsDts,
   PROJECT_READ_DTS,
@@ -132,6 +133,7 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
       'store:read': STORE_READ_DTS,
       'store:install': STORE_INSTALL_DTS,
       'events:emit': EVENTS_EMIT_DTS,
+      'knowledge:write': KNOWLEDGE_WRITE_DTS,
     });
     // db:schema is composed onto the `db` object, but ALSO earns the standalone
     // writeTableSchema authoring global (emitted directly in buildAppCapabilityDts),

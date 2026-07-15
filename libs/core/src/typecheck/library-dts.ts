@@ -278,6 +278,12 @@ declare function installSpace(spaceId: string): Promise<{ ok: boolean; spaceId: 
 export const EVENTS_EMIT_DTS = `/** Publish an event declared by this scope's events/ defs; subscribing event hooks run before this resolves. */
 declare function emitEvent(name: string, payload: Record<string, unknown>): Promise<{ ok: boolean; event: string }>;`;
 
+// Emitted on the `knowledge:write` grant. Synchronous (not a Promise) like the other
+// authoring writers. Own-space only: there is no `space` parameter — the host binds the
+// write root to the running agent's own knowledge dir.
+export const KNOWLEDGE_WRITE_DTS = `/** Author a knowledge option into THIS agent's own space at knowledge/<domain>/<field>/<option>.md (option 'index' is reserved). opts.source tags provenance for later conflict resolution. */
+declare function writeKnowledge(domain: string, field: string, option: string, markdown: string, opts?: { source?: 'user' | 'researched' | 'agent' }): { ok: boolean; path: string; error?: string };`;
+
 /**
  * Registry of the STANDALONE app-capability fragments, keyed by capability id, for
  * the integrator to gate additively per agent in `buildAmbientDts`. The `db:*` trio
@@ -290,6 +296,7 @@ export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'pages:write': [PAGES_WRITE_DTS, PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS].join('\n'),
   'api:write': [API_WRITE_DTS, PROJECT_API_DTS].join('\n'),
   'hooks:write': [HOOKS_WRITE_DTS, PROJECT_AUTHORING_DTS].join('\n'),
+  'knowledge:write': KNOWLEDGE_WRITE_DTS,
   'project:manage': PROJECT_MANAGE_DTS,
   'store:read': STORE_READ_DTS,
   'store:install': STORE_INSTALL_DTS,

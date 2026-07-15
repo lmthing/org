@@ -10,6 +10,7 @@ import { createInspectGlobal } from '../globals/inspect.js';
 import { createSleepGlobal } from '../globals/sleep.js';
 import { createFetchGlobal } from '../globals/fetch.js';
 import { createLoadKnowledgeGlobal } from '../globals/load-knowledge.js';
+import { createWriteKnowledgeGlobal } from '../globals/write-knowledge.js';
 import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
@@ -185,6 +186,13 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   // via the yield router (documentResolver); absent ⇒ a clear retryable error.
   injectGlobal(ctx, 'readDocument', createReadDocumentGlobal(pushYield) as AnyFn);
   injectGlobal(ctx, 'loadKnowledge', createLoadKnowledgeGlobal(pushYield, opts.spaceDir + '/knowledge') as AnyFn);
+  // writeKnowledge: SYNCHRONOUS (no yield) knowledge author, gated on `knowledge:write`.
+  // The write root is closure-bound to THIS agent's own knowledge dir (own-space only,
+  // unspoofable — there is no `space` parameter); a write cap is dropped from read-only
+  // fork roles by intersectAppCaps, so a writing node must be `role: general`.
+  if (caps.app['knowledge:write']) {
+    injectGlobal(ctx, 'writeKnowledge', createWriteKnowledgeGlobal(opts.spaceDir + '/knowledge') as AnyFn);
+  }
   if (caps.orchestrate) {
     injectGlobal(ctx, 'fork', createForkGlobal(pushYield) as AnyFn);
     injectGlobal(ctx, 'tasklist', createTasklistGlobal(pushYield) as AnyFn);
@@ -327,7 +335,7 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string, projectRoo
   // Standalone authoring/management/store/event globals: writePage/writeApi/
   // writeHook + createProject/selectProject (Phase 9), storeSearch/storeInspect +
   // installSpace + emitEvent (plan S10). Each emitted only when its grant is present.
-  for (const id of ['pages:write', 'api:write', 'hooks:write', 'project:manage', 'store:read', 'store:install', 'events:emit'] as const) {
+  for (const id of ['pages:write', 'api:write', 'hooks:write', 'knowledge:write', 'project:manage', 'store:read', 'store:install', 'events:emit'] as const) {
     if (app[id]) parts.push(CAPABILITY_DTS_FRAGMENTS[id]);
   }
   return parts.filter(Boolean).join('\n');

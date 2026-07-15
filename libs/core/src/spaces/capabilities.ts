@@ -31,6 +31,7 @@ export type CapabilityId =
   | 'hooks:write'
   | 'api:call'
   | 'connections:use'
+  | 'knowledge:write'
   | 'project:manage'
   | 'store:read'
   | 'store:install'
@@ -47,6 +48,7 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'hooks:write',
   'api:call',
   'connections:use',
+  'knowledge:write',
   'project:manage',
   'store:read',
   'store:install',
@@ -60,6 +62,36 @@ export const DB_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
   'db:write',
   'db:schema',
 ]);
+
+/**
+ * Knowledge-write scope. A present `knowledge:write` cap lets an agent author knowledge
+ * option files (`writeKnowledge`) into its OWN space by default; `spaces` is a future
+ * allow-list of ADDITIONAL space keys it may write into. Only own-space is enforced today
+ * — the runtime binds the write path to the running agent's space dir (see
+ * `createWriteKnowledgeGlobal`); the `spaces` list is parsed and reserved for when
+ * cross-space writes ship.
+ */
+function parseKnowledgeWriteConfig(config: unknown, ctx: ParseCapabilitiesCtx): { spaces?: string[] } {
+  if (!isRecord(config)) {
+    throw new Error(
+      `Agent "${ctx.agentId}" capability "knowledge:write" has an invalid config: expected a map like { spaces: [...] }`,
+    );
+  }
+  const unknownKeys = Object.keys(config).filter((k) => k !== 'spaces');
+  if (unknownKeys.length > 0) {
+    throw new Error(
+      `Agent "${ctx.agentId}" capability "knowledge:write" has disallowed config key(s): ${unknownKeys.join(', ')}. Allowed key: spaces`,
+    );
+  }
+  if (!('spaces' in config)) return {};
+  const rawSpaces = config['spaces'];
+  if (!Array.isArray(rawSpaces) || rawSpaces.some((s) => typeof s !== 'string')) {
+    throw new Error(
+      `Agent "${ctx.agentId}" capability "knowledge:write" config "spaces" must be a list of space keys`,
+    );
+  }
+  return { spaces: rawSpaces as string[] };
+}
 
 /** Authoring/store/event caps that are **bare-only** — a config payload is an error. */
 const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
@@ -79,6 +111,9 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
  *   - `db:*`         → `{ tables?: string[] }` (omitted `tables` = all tables)
  *   - `api:call`     → `{ allow: string[] }` (always present — required)
  *   - `connections:use` → `{ providers: string[] }` (always present — required)
+ *   - `knowledge:write` → `{ spaces?: string[] }` (omitted = own space only; the
+ *                      `spaces` allow-list is reserved for cross-space writes — not
+ *                      yet enforced, own-space is bound host-side)
  *   - authoring      → `true` (bare, no config)
  *   - project:manage → `true` (bare; grants createProject/selectProject — the
  *                      appbuilder's authority to scaffold/select a catalog app)
@@ -101,6 +136,7 @@ export interface AppCapabilities {
   'hooks:write'?: true;
   'api:call'?: { allow: string[] };
   'connections:use'?: { providers: string[] };
+  'knowledge:write'?: { spaces?: string[] };
   'project:manage'?: true;
   'store:read'?: true;
   'store:install'?: true;
@@ -277,6 +313,12 @@ export function parseCapabilities(raw: unknown, ctx: ParseCapabilitiesCtx): AppC
       // Bare db cap = all tables; config narrows to named tables.
       (result as Record<string, unknown>)[capId] =
         config === undefined ? {} : parseDbConfig(capId, config, ctx);
+      continue;
+    }
+
+    // knowledge:write — bare = own space only; optional config narrows/extends via `spaces`.
+    if (capId === 'knowledge:write') {
+      result['knowledge:write'] = config === undefined ? {} : parseKnowledgeWriteConfig(config, ctx);
       continue;
     }
 
