@@ -184,8 +184,18 @@ describe('shipped system spaces load + validate', () => {
     expect(space.agents['automator']!.defaultAction).toBe('build_live_project');
     expect(space.tasklists['build_live_project']!.input).toEqual({ query: 'string', attachmentIds: 'array' });
     expect(live['read_sources']!.prelude).toContain('Promise.all');
-    // Holistic plan first, seeded from the source brief.
-    expect(live['plan_app']!.dependsOn).toEqual(['read_sources']);
+    // Sources → user stories → a holistic BINDING plan. Each planner is threaded with the stories.
+    expect(live['user_stories']!.dependsOn).toEqual(['read_sources']);
+    expect(live['plan_app']!.dependsOn).toEqual(['read_sources', 'user_stories']);
+    expect(live['plan_tables']!.dependsOn).toEqual(['plan_app', 'read_sources', 'user_stories']);
+    // Endpoints are planned from the FULL written tables + the stories.
+    expect(live['plan_endpoints']!.dependsOn).toEqual([
+      'plan_app', 'plan_tables', 'implement_tables', 'user_stories',
+    ]);
+    expect(live['plan_components']!.dependsOn).toEqual(['plan_app', 'plan_endpoints', 'user_stories']);
+    expect(live['plan_pages']!.dependsOn).toEqual([
+      'plan_app', 'plan_endpoints', 'plan_components', 'user_stories',
+    ]);
     // Each category is a plan node → an implement node that fans out over the plan's list.
     expect(live['implement_tables']!.forEach).toBe('plan_tables.tables');
     expect(live['implement_endpoints']!.forEach).toBe('plan_endpoints.endpoints');
@@ -203,7 +213,7 @@ describe('shipped system spaces load + validate', () => {
     // turn, so no generated-code errors. The plan_* nodes stay model-driven (judgment).
     expect(live['implement_tables']!.kind).toBe('code');
     // The model-driven nodes run with write access (role general).
-    for (const id of ['plan_app', 'plan_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'finalize']) {
+    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'finalize']) {
       expect(live[id]!.role).toBe('general');
     }
     // finalize is the sole goal — it writes the chat _layout and reports the build.

@@ -2,16 +2,19 @@
 id: plan_endpoints
 output:
   endpoints: array
-dependsOn: [plan_app, plan_tables]
+dependsOn: [plan_app, plan_tables, implement_tables, user_stories]
 role: general
 functions: []
 ---
 
-Refine the endpoint list GROUNDED in the real tables, and ASSIGN each endpoint its stable `name` — the
-single source of truth the whole app wires through. `query`, `plan_app` (`plan_app.endpoints`), and
-`plan_tables` (`plan_tables.tables` — the actual tables + columns being written) are in scope. This is
-a THINKING step — no writers. Plan the endpoints the pages need to read/write the real rows: at least
-one read endpoint per view the app shows.
+Refine the endpoint list GROUNDED in the FULL tables that were just written, and ASSIGN each endpoint
+its stable `name` — the single source of truth the whole app wires through. `query`, `plan_app`
+(`plan_app.endpoints`, the binding list), `plan_tables` (`plan_tables.tables` — the full schemas +
+columns + rows now in the DB), `implement_tables` (`{ name, ok }[]` — which tables actually landed), and
+`user_stories` (`user_stories.stories` — the reads each story needs) are in scope. This is a THINKING
+step — no writers. Plan the endpoints the pages need to read/write the real rows: at least one read
+endpoint per view the app shows, and enough that every user story's data is reachable. Give each a
+purpose specific enough that the implement step writes the right query against the real columns.
 
 Each endpoint is `{ name, route, purpose, tables }`:
 - `name` — a UNIQUE lowercase-hyphen id (e.g. `cost-lines`, `contacts-list`, `itinerary-legs`). This

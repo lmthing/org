@@ -57,3 +57,37 @@ const src = [
 const w = writeProjectPage(pg.route, src);
 currentTask.resolve({ route: pg.route, ok: w.ok });
 ```
+
+The page TSX is typechecked against a **NO-DOM ambient** (no `console`/`window`). Data comes only from
+`useApi(<endpoint name>)`; the endpoint name is one of `item.endpoints`, copied VERBATIM.
+
+✅ **The page source should look like this** (hooks from `@app/runtime`, verbatim endpoint name, component
+by relative path, tokens, reads `data.items`):
+
+```tsx
+import { useApi } from '@app/runtime';
+import CostCard from '../components/CostCard';
+
+export default function Page() {
+  const { data, isLoading, error } = useApi<{ items: { id: string; title?: string }[] }>('cost-lines');
+  if (isLoading) return <p className="p-4 text-muted">Loading…</p>;
+  if (error) return <p className="p-4 text-destructive">Could not load data.</p>;
+  return (
+    <main className="space-y-2 p-4">
+      {(data?.items ?? []).map((it) => <CostCard key={it.id} title={it.title ?? it.id} />)}
+    </main>
+  );
+}
+```
+
+❌ **Never emit any of these** — each one fails the compile or breaks the wiring:
+
+```tsx
+import { useRoute } from 'react-router';          // ✗ react-router is not in a generated project
+import * as Dialog from '@radix-ui/react-dialog'; // ✗ no @radix-ui
+import { useApi } from '../use-api';              // ✗ hooks come ONLY from '@app/runtime'
+useApi('costLines');                              // ✗ invented / transformed name — use item.endpoints verbatim
+const res = await fetch('/api/cost-lines');       // ✗ no raw fetch — read through useApi
+<div className="text-blue-600">                   // ✗ stock Tailwind color — use text-foreground
+console.log(data);                                // ✗ Cannot find name 'console' — no DOM lib
+```

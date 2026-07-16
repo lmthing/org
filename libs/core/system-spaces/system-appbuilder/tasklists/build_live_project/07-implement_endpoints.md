@@ -40,3 +40,31 @@ const src = [
 const w = writeProjectApi(ep.route, src);
 currentTask.resolve({ route: ep.route, name, ok: w.ok });
 ```
+
+The handler source you assemble is a self-contained ESM module, typechecked against a **NO-DOM ambient**:
+there is no `console`, `window`, `fetch`, `document`, or Node global — data comes ONLY through `ctx.db`.
+`w` (the `writeProjectApi` result) is `{ ok, error? }`: branch on `w.ok`, read `w.error` — never treat it
+as an array or call `.length` on it.
+
+✅ **The module source should look like this** (name verbatim, typed, reads `ctx.db`, returns `{ items }`):
+
+```typescript
+export const name = 'cost-lines';                      // === item.name, character-for-character
+export const description = 'Every cost line for the trip';
+export interface Input {}
+export interface Output { items: any[] }
+export default async function handler(_input: Input, ctx: { db: any }): Promise<Output> {
+  const items = await ctx.db.query('costs');
+  return { items };
+}
+```
+
+❌ **Never emit any of these** — each one has burned a real build:
+
+```typescript
+export const name = 'costLines';        // ✗ re-derived / renamed from the route → loader rejects the app
+console.log('built endpoint');          // ✗ Cannot find name 'console' — no DOM lib in the ambient
+const rows = await fetch('/costs');     // ✗ no fetch — read through ctx.db
+return { items } as const;              // ✗ orphaned `as const` on the return → typecheck fails, write lost
+if (w.length) { /* … */ }               // ✗ w is { ok, error? }, not an array — use w.ok
+```

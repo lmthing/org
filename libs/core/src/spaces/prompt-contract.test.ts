@@ -227,25 +227,30 @@ describe('system-appbuilder live-project build action', () => {
     const dir = join(SYSTEM_SPACES, 'system-appbuilder', 'tasklists', 'build_live_project');
     const read = (f: string) => readFileSync(join(dir, f), 'utf8');
 
+    // The pipeline opens on user stories, then a BINDING holistic plan threaded into every planner.
+    expect(read('02-user_stories.md')).toMatch(/acceptance/);
+    expect(read('03-plan_app.md')).toMatch(/user_stories/);
+    expect(read('03-plan_app.md')).toMatch(/BINDING/);
+
     // Each implement node uses the LIVE writers (not the catalog ones).
     // implement_tables is a deterministic code node: it authors via ctx.writeProjectTable(item…).
-    expect(read('04-implement_tables.ts')).toMatch(/export async function run\(ctx, inputs\)/);
-    expect(read('04-implement_tables.ts')).toMatch(/ctx\.writeProjectTable\(/);
-    expect(read('06-implement_endpoints.md')).toMatch(/writeProjectApi\(/);
+    expect(read('05-implement_tables.ts')).toMatch(/export async function run\(ctx, inputs\)/);
+    expect(read('05-implement_tables.ts')).toMatch(/ctx\.writeProjectTable\(/);
+    expect(read('07-implement_endpoints.md')).toMatch(/writeProjectApi\(/);
     // Endpoint name is the single source of truth: plan_endpoints ASSIGNS a unique `name`,
     // implement_endpoints uses `item.name` VERBATIM (never re-derives from the route), and pages
     // reference that exact name — the fix for the cross-node name-drift + duplicate-name failures.
-    expect(read('05-plan_endpoints.md')).toMatch(/UNIQUE lowercase-hyphen id/);
-    expect(read('06-implement_endpoints.md')).toMatch(/const name = ep\.name;/);
-    expect(read('06-implement_endpoints.md')).toMatch(/VERBATIM/);
-    expect(read('09-plan_pages.md')).toMatch(/plan_endpoints\.endpoints\[\]\.name/);
+    expect(read('06-plan_endpoints.md')).toMatch(/UNIQUE lowercase-hyphen id/);
+    expect(read('07-implement_endpoints.md')).toMatch(/const name = ep\.name;/);
+    expect(read('07-implement_endpoints.md')).toMatch(/VERBATIM/);
+    expect(read('10-plan_pages.md')).toMatch(/plan_endpoints\.endpoints\[\]\.name/);
 
     // Reusable components are their own plan → implement pair.
-    expect(read('08-implement_components.md')).toMatch(/writeProjectComponent\(/);
-    expect(read('08-implement_components.md')).toMatch(/PascalCase/);
+    expect(read('09-implement_components.md')).toMatch(/writeProjectComponent\(/);
+    expect(read('09-implement_components.md')).toMatch(/PascalCase/);
 
     // Pages read endpoints via useApi AND import the reusable components.
-    const pages = read('10-implement_pages.md');
+    const pages = read('11-implement_pages.md');
     expect(pages).toMatch(/writeProjectPage\(/);
     expect(pages).toMatch(/useApi/);
     expect(pages).toMatch(/components\//);
@@ -253,9 +258,17 @@ describe('system-appbuilder live-project build action', () => {
     expect(pages).toMatch(/react-router/);
     expect(pages).toMatch(/@radix-ui/);
 
+    // Every model-authored implement node carries ✅do/❌never code examples grounded in real
+    // generated-code failures — the NO-DOM `console` trap being the recurring one.
+    for (const f of ['07-implement_endpoints.md', '09-implement_components.md', '11-implement_pages.md']) {
+      expect(read(f)).toMatch(/console/);
+      expect(read(f)).toMatch(/NO-DOM ambient/);
+      expect(read(f)).toMatch(/❌/);
+    }
+
     // finalize writes the persistent chat dock layout.
-    expect(read('11-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
-    expect(read('11-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
+    expect(read('12-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
+    expect(read('12-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
   });
 });
 

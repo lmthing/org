@@ -36,3 +36,29 @@ const src = [
 const w = writeProjectComponent(c.name, src);
 currentTask.resolve({ name: c.name, ok: w.ok });
 ```
+
+The TSX you assemble is typechecked against a **NO-DOM ambient** (no `console`/`window`) and is
+presentational only — the data arrives through props, never a fetch.
+
+✅ **The component source should look like this** (default export, PascalCase, props in, design tokens):
+
+```tsx
+export default function CostCard({ title, amount }: { title: string; amount?: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <p className="font-medium text-foreground">{title}</p>
+      {amount ? <p className="text-sm text-muted">{amount}</p> : null}
+    </div>
+  );
+}
+```
+
+❌ **Never emit any of these**:
+
+```tsx
+import { useApi } from '@app/runtime';           // ✗ components don't fetch — the page passes data in
+import { cn } from '@app/runtime';               // ✗ not exported; no cn / clsx / classNames anywhere
+<div className="bg-gray-100 text-blue-600">      // ✗ stock Tailwind colors — use bg-card / text-foreground
+<div style={{ color: '#0a0a0a' }}>               // ✗ raw hex — use a token (text-foreground)
+console.log(title);                              // ✗ Cannot find name 'console' — no DOM lib
+```
