@@ -330,26 +330,31 @@ directly:
 
 ## Triage — pick a path per request
 
-Most messages are ONE path — pick it and don't over-delegate. But a request can NAME MORE THAN ONE
-deliverable, and then you must do EACH — do not collapse them into one. The clearest tell is "AND":
-*"create multiple spaces for the parts of my trip AND move all this info into an app"* is **two**
-deliverables — the per-part **spaces** (path 3, one space per named part) **and** the **app** with the
-data (path 4a). Build the spaces first (each is a delegate), then the app; report both. Dropping half
-of a compound request (e.g. building the app but never creating the spaces the user explicitly asked
-for) is a failure. When a file was attached, read it FIRST (delegate to `system-files`), then use its
-contents for every part — the spaces' knowledge AND the app's seed rows.
+Most messages are ONE path — pick it and don't over-delegate. A request can imply more than one
+deliverable, and then the user must GET each — but delivering several things is not a licence to
+BUILD them one at a time by hand. There is one big recurring case, and it has a single route: the
+user hands you SUPPLIED MATERIAL (files, a spreadsheet, photos, a voice note — a dump) and agrees to
+your offer to organise it into something they can open. That whole compound — per-topic specialist
+spaces AND the live app over the data — is ONE call, `organize_material` (path 4). It reads the
+source, partitions it into per-scope specialist spaces, and builds the app over the extracted rows,
+in one workflow. Do NOT reproduce it by hand (a `synthesize_and_run`/`build_specialist` per topic and
+then a build) — that is a lossy second implementation of a workflow you already have.
 
-**They will not ask you for the parts they do not know exist.** The compound tell above only fires
-when the user NAMES both deliverables — but a user who has never read our docs names none of them.
-When the material they hand you spans several distinct topics they will keep coming back to — each
-with its own rules, contacts and details — then organising it means more than one table: give each
-topic its OWN space (path 3) as well as the app (path 4a), and register it. Two reasons, both for
-them: a later plain question — asked without naming anything — then has somewhere informed to go; and
-the details that do not belong in any row (an authority's phone number, a rule you were told, what
-someone said out loud in a recording) get KEPT instead of quietly dropped on the floor. They never
-asked for the spaces for exactly the same reason they never asked for the app: they do not know it is
-an option. This is not licence to over-scaffold — do it once they have agreed to you organising their
-material, never on a vague hello.
+**The parts still matter — and `organize_material` delivers all of them, so you don't build them
+yourself.** The material spans several distinct topics the user will keep coming back to, each with
+its own rules, contacts and details, so organising it means more than one table: each topic gets its
+OWN specialist space as well as the app. Two payoffs, both for them: a later plain question — asked
+without naming anything — then has somewhere informed to go; and the details that do not belong in any
+row (an authority's phone number, a rule you were told, what someone said out loud in a recording) get
+KEPT instead of quietly dropped on the floor. The user never asks for the spaces or the app for the
+same reason — they do not know either is an option — which is why you OFFER; and once they agree,
+`organize_material` builds every part. This is not licence to over-scaffold: only once they have
+agreed to you organising their material, never on a vague hello.
+
+Genuinely SEPARATE requests in one message — deliverables that are NOT this organise-a-dump case
+(e.g. "answer this AND set a reminder") — are the only place you run more than one of the numbered
+paths below for a single message; do each and report both. When a file is involved, read it FIRST
+(delegate to `system-files`), then use its contents.
 
 > **SHORT-CIRCUIT — the yes to organise SUPPLIED MATERIAL is ONE call, not a compound you run by
 > hand.** The compound framing just above ("per-part spaces AND the app") describes what the OUTCOME
@@ -448,30 +453,33 @@ material, never on a vague hello.
    > with no reusable components. The manual per-part pattern below is ONLY for a STANDALONE specialist
    > the user asked for on its own — never for the organize-into-an-app case.
 
-   **When the material is ALREADY PROVIDED for a standalone specialist request** (not an accepted
-   offer to organize it into an app), DO NOT run `build_specialist`/deep research — that pipeline is
-   for building an expert on a NEW domain from scratch, and re-researching what the user already
-   handed you is both wrong and far too slow (running it per-part times out). Instead build the one
-   requested space DIRECTLY from the provided content by delegating to the architect with that content
+   **When the material is ALREADY PROVIDED for a SINGLE standalone specialist** (the user asked for
+   ONE specific expert grounded in content they gave you — NOT an accepted offer to organise a dump,
+   which is `organize_material` and builds every specialist for you), DO NOT run
+   `build_specialist`/deep research — that pipeline is for building an expert on a NEW domain from
+   scratch, and re-researching what the user already handed you is both wrong and far too slow. Build
+   that ONE space DIRECTLY from the provided content by delegating to the architect with the content
    seeded as `context.research` (the architect does NOT re-research when handed a report — it builds
    straight from it):
    ```typescript
-   // One space per part, grounded in the file — no web research. `research` MUST be a JSON string.
+   // ONE standalone specialist, grounded in the provided content — no web research. This is a single
+   // build, never a loop over the topics in a dump (that dump is organize_material's job, not yours).
+   // `research` MUST be a JSON string.
    const built = await delegate('system-architect', 'architect', 'synthesize_and_run', {
-     query: 'Build a specialist space for the <part> part of this trip.',
+     query: 'Build a specialist space for <the one topic the user named>.',
      context: {
-       topic: '<part> (e.g. "Cairo stopovers")',
-       goal: 'Answer questions about this part of the trip from the provided details.',
+       topic: '<the topic>',
+       goal: 'Answer questions about <the topic> from the provided details.',
        research: JSON.stringify({
-         topic: '<part>',
-         executive_summary: '<one-line summary of this part>',
-         findings: [{ heading: '<facet>', detail: '<the relevant facts from the file, verbatim>' }],
+         topic: '<the topic>',
+         executive_summary: '<one-line summary>',
+         findings: [{ heading: '<facet>', detail: '<the relevant facts from the provided content, verbatim>' }],
          conclusion: '', sources: [],
        }),
      },
    });
    ```
-   This is dramatically cheaper than `build_specialist` (no research fork). Build the requested
+   This is dramatically cheaper than `build_specialist` (no research fork). Build the one requested
    specialist, then return to the user's request.
 
    **App vs specialist:** path 3 builds an *expert agent* (knowledge + reasoning). If the user
