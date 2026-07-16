@@ -76,6 +76,37 @@ describe('ForkEngine', () => {
     expect(result).toMatchObject({ title: 'spaghetti', steps: 3, ready: true });
   });
 
+  it('types an upstream array-field output so a callback over it is not implicit-any (TS7006)', async () => {
+    // Regression: a plan node's `tables: array` output must be typed `{ tables: any[] }`, so
+    // `plan_tables.tables.find(t => …)` gives `t` a contextual type instead of aborting the fork.
+    const engine = makeEngine(
+      'const t = plan_tables.tables.find((t) => t.name === "items");\ncurrentTask.resolve({ found: !!t });\n',
+    );
+    const result = await engine.fork<{ found: boolean }>({
+      instruction: 'inspect upstream tables',
+      output: { found: 'boolean' },
+      upstreamOutputs: { plan_tables: { tables: [{ name: 'items' }] } },
+      upstreamOutputSchemas: { plan_tables: { fields: { tables: 'array' }, isArray: false } },
+    });
+    expect(result).toEqual({ found: true });
+  });
+
+  it('types a forEach-node upstream as an ARRAY so the collector callback is not implicit-any', async () => {
+    // Regression guard against the forEach-as-object bug: a forEach dependency's collected value
+    // is an array of its output shape, so it must be typed `Array<{ n: number }>` — otherwise a
+    // `.reduce`/`.map` over it fails typecheck and the fork salvages to a neutral (e.g. total 0).
+    const engine = makeEngine(
+      'const total = implement_rows.reduce((sum, r) => sum + r.n, 0);\ncurrentTask.resolve({ total });\n',
+    );
+    const result = await engine.fork<{ total: number }>({
+      instruction: 'sum a forEach output',
+      output: { total: 'number' },
+      upstreamOutputs: { implement_rows: [{ n: 2 }, { n: 3 }] },
+      upstreamOutputSchemas: { implement_rows: { fields: { n: 'number' }, isArray: true } },
+    });
+    expect(result).toEqual({ total: 5 });
+  });
+
   it('salvages a NEUTRAL schema-valid placeholder when currentTask.resolve() is never called', async () => {
     // Robustness contract: rather than hard-failing the parent when the model wanders
     // without resolving (model stupidity), the fork forces resolve-only turns and, as a

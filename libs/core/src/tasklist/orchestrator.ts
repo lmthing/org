@@ -128,6 +128,18 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
     return upstream;
   }
 
+  // Declared output schema per upstream dependency, so each `declare const <dep>` in the
+  // fork's typecheck overlay gets a real type. A `forEach` dependency is flagged isArray —
+  // its collected value is an array of its output shape (see fork.ts taskOutputDts).
+  function getUpstreamOutputSchemas(task: TaskNode): Record<string, { fields: Record<string, string>; isArray: boolean }> {
+    const schemas: Record<string, { fields: Record<string, string>; isArray: boolean }> = {};
+    for (const dep of task.dependsOn ?? []) {
+      const depTask = tasks[dep];
+      if (depTask) schemas[dep] = { fields: depTask.output, isArray: Boolean(depTask.forEach) };
+    }
+    return schemas;
+  }
+
   // Emit a `task` node and immediately end it as skipped (condition not met /
   // optional fork failed). Tracks via `skippedEmitted` so we never double-emit.
   const skippedEmitted = new Set<string>();
@@ -179,6 +191,7 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
       const results = await Promise.allSettled(
         ready.map(async (task) => {
           const upstreamOutputs = getUpstreamOutputs(task);
+          const upstreamOutputSchemas = getUpstreamOutputSchemas(task);
           const taskScope = tracer && tasklistScope
             ? tracer.child(tasklistScope, 'task', `fork:${task.id}`, {
                 tasklist: name, dependsOn: task.dependsOn, optional: task.optional, condition: task.condition, goal: task.goal, forEach: task.forEach,
@@ -238,6 +251,7 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
               output: task.output,
               seed: extraSeed ? { ...(taskSeed ?? {}), ...extraSeed } : taskSeed,
               upstreamOutputs: upstream,
+              upstreamOutputSchemas,
               taskId: task.id,
               role: task.role,
               functions: task.functions,

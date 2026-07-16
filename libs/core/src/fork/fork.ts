@@ -33,6 +33,37 @@ export interface ForkResultMeta<T = unknown> {
   reason?: DegradeReason;
 }
 
+/** DTS type for one upstream task value, derived from its declared `output` schema
+ *  ({ field -> type }). Array-valued fields become `any[]` so a callback over them
+ *  (`.map`/`.find`/`.filter`) gets a contextual element type instead of an implicit-any
+ *  (TS7006) that would abort the fork under strict typecheck. An absent schema → `any`. */
+export function taskOutputDts(schema?: Record<string, string>): string {
+  if (!schema || Object.keys(schema).length === 0) return 'any';
+  const fields = Object.entries(schema).map(([name, rawType]) => {
+    const optional = rawType.endsWith('?') ? '?' : '';
+    const type = rawType.replace(/\?$/, '').trim().toLowerCase();
+    const dts =
+      type === 'string' ? 'string'
+      : type === 'number' ? 'number'
+      : type === 'boolean' ? 'boolean'
+      : type === 'string[]' ? 'string[]'
+      : type === 'number[]' ? 'number[]'
+      : type === 'boolean[]' ? 'boolean[]'
+      : type === 'array' || type.endsWith('[]') ? 'any[]'
+      : type === 'object' ? 'Record<string, unknown>'
+      : 'any';
+    return `${JSON.stringify(name)}${optional}: ${dts}`;
+  });
+  return `{ ${fields.join('; ')} }`;
+}
+
+/** Declared shape of one upstream dependency for typing: its `output` schema plus
+ *  whether that dependency is a `forEach` node (whose value is an ARRAY of that shape). */
+export interface UpstreamOutputSchema {
+  fields: Record<string, string>;
+  isArray: boolean;
+}
+
 export interface ForkTask {
   instruction: string;
   output: Record<string, string>;
@@ -40,6 +71,10 @@ export interface ForkTask {
   timeout?: number;
   taskId?: string;
   upstreamOutputs?: Record<string, unknown>;
+  /** Declared output schemas for upstream task values, keyed by task id — used to give
+   *  each `declare const <id>` a real type (so callbacks over array outputs don't TS7006).
+   *  A `forEach` dependency is typed `Array<…>` since its collected value is an array. */
+  upstreamOutputSchemas?: Record<string, UpstreamOutputSchema>;
   /** Subagent role controlling capability profile + system-prompt preamble. */
   role?: 'explore' | 'plan' | 'general';
   /** Allowlist of space-function names to inject + advertise (least privilege). When set,
@@ -343,7 +378,13 @@ export class ForkEngine {
           ? buildOverlay(agentFunctions, { view: {}, form: {} })
           : '';
         const upstreamDts = task.upstreamOutputs
-          ? Object.keys(task.upstreamOutputs).map((id) => `declare const ${id}: any;`).join('\n')
+          ? Object.keys(task.upstreamOutputs).map((id) => {
+              const meta = task.upstreamOutputSchemas?.[id];
+              const base = taskOutputDts(meta?.fields);
+              // A forEach dependency's collected value is an ARRAY of its output shape.
+              const type = meta?.isArray ? `Array<${base}>` : base;
+              return `declare const ${id}: ${type};`;
+            }).join('\n')
           : '';
         const seedDts = task.seed
           ? Object.keys(task.seed).map((k) => `declare const ${k}: any;`).join('\n')
