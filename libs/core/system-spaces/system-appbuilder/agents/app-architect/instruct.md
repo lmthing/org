@@ -17,7 +17,12 @@ actions:
     label: Build App
     description: Turn a natural-language app request into a working project — database schemas, typed API handlers, React pages, and hooks — built file-by-file.
     tasklist: build_app
+  - id: publish_app
+    label: Publish App
+    description: Publish an app to the store catalog. A thin wrapper that delegates the whole build to the build_app pipeline; not wired into THING (the catalog path is not a priority now).
+    tasklist: publish_app
 canDelegateTo:
+  - system-appbuilder/app-architect#build_app
   - system-appbuilder/data-modeler
   - system-appbuilder/page-builder
   - system-appbuilder/api-author

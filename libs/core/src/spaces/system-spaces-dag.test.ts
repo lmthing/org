@@ -179,14 +179,41 @@ describe('shipped system spaces load + validate', () => {
     expect(resolveGoalTask(tasks)!.id).toBe('finalize');
     expect(space.tasklists['build_app']!.input).toEqual({ request: 'string' });
 
+    // build_live_project is a plan → per-category implement (forEach) → finalize pipeline.
     const live = await loadTasklistFromSpace(space, 'build_live_project');
     expect(space.agents['automator']!.defaultAction).toBe('build_live_project');
     expect(space.tasklists['build_live_project']!.input).toEqual({ query: 'string', attachmentIds: 'array' });
     expect(live['read_sources']!.prelude).toContain('Promise.all');
-    expect(live['write_data']!.dependsOn).toEqual(['read_sources']);
-    expect(live['write_openable_app']!.dependsOn).toEqual(['write_data']);
-    expect(live['write_openable_app']!.goal).toBe(true);
-    expect(resolveGoalTask(live)!.id).toBe('write_openable_app');
+    // Holistic plan first, seeded from the source brief.
+    expect(live['plan_app']!.dependsOn).toEqual(['read_sources']);
+    // Each category is a plan node → an implement node that fans out over the plan's list.
+    expect(live['implement_tables']!.forEach).toBe('plan_tables.tables');
+    expect(live['implement_endpoints']!.forEach).toBe('plan_endpoints.endpoints');
+    expect(live['implement_components']!.forEach).toBe('plan_components.components');
+    expect(live['implement_pages']!.forEach).toBe('plan_pages.pages');
+    // Pages know the endpoints they read AND the reusable components they import.
+    expect(live['implement_pages']!.dependsOn).toEqual([
+      'plan_pages', 'plan_endpoints', 'plan_components', 'implement_components',
+    ]);
+    // Endpoints are grounded in the real tables being written.
+    expect(live['implement_endpoints']!.dependsOn).toEqual([
+      'plan_endpoints', 'plan_tables', 'implement_tables',
+    ]);
+    // Every write node runs with write access (role general).
+    for (const id of ['plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'finalize']) {
+      expect(live[id]!.role).toBe('general');
+    }
+    // finalize is the sole goal — it writes the chat _layout and reports the build.
+    expect(live['finalize']!.goal).toBe(true);
+    expect(resolveGoalTask(live)!.id).toBe('finalize');
+
+    // publish_app is a thin one-node wrapper that delegates to the catalog build_app.
+    const publish = await loadTasklistFromSpace(space, 'publish_app');
+    expect(space.tasklists['publish_app']!.input).toEqual({ request: 'string' });
+    expect(Object.keys(publish)).toEqual(['build']);
+    expect(publish['build']!.goal).toBe(true);
+    expect(publish['build']!.canDelegateTo).toEqual(['system-appbuilder/app-architect#build_app']);
+    expect(space.agents['app-architect']!.actions.find((a) => a.id === 'publish_app')!.tasklist).toBe('publish_app');
   });
 
   it('architect tasklists declare input schemas matching what their callers pass', async () => {

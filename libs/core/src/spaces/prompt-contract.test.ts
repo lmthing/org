@@ -217,6 +217,34 @@ describe('system-appbuilder live-project build action', () => {
     expect(automator).toMatch(/currentTask\.resolve\(await tasklist\('build_live_project', \{ query, \.\.\.context \}\)\)/);
     expect(automator).toMatch(/do not continue with a second model turn or manually replace its result/i);
   });
+
+  it('builds the live app as a plan → per-item build DAG (multiple pages + reusable components)', () => {
+    const dir = join(SYSTEM_SPACES, 'system-appbuilder', 'tasklists', 'build_live_project');
+    const read = (f: string) => readFileSync(join(dir, f), 'utf8');
+
+    // Each implement node uses the LIVE writers (not the catalog ones).
+    expect(read('04-implement_tables.md')).toMatch(/writeProjectTable\(item\.name, item\.schema/);
+    expect(read('06-implement_endpoints.md')).toMatch(/writeProjectApi\(/);
+    // Endpoints must export a unique `name` — the loader rejects the whole app without it.
+    expect(read('06-implement_endpoints.md')).toMatch(/UNIQUE string `name`/);
+
+    // Reusable components are their own plan → implement pair.
+    expect(read('08-implement_components.md')).toMatch(/writeProjectComponent\(/);
+    expect(read('08-implement_components.md')).toMatch(/PascalCase/);
+
+    // Pages read endpoints via useApi AND import the reusable components.
+    const pages = read('10-implement_pages.md');
+    expect(pages).toMatch(/writeProjectPage\(/);
+    expect(pages).toMatch(/useApi/);
+    expect(pages).toMatch(/components\//);
+    // The forbidden-import guard survives the redesign.
+    expect(pages).toMatch(/react-router/);
+    expect(pages).toMatch(/@radix-ui/);
+
+    // finalize writes the persistent chat dock layout.
+    expect(read('11-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
+    expect(read('11-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
+  });
 });
 
 describe('system-appbuilder repair turns', () => {
