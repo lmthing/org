@@ -167,7 +167,7 @@ if (planOnly) {
   // Clean stale evidence from a REUSED --out dir (a stopped-then-rerun round), so a poller can't
   // read a prior run's step files / crash log as if they were this run's.
   for (const f of readdirSyncSafe(outDir)) {
-    if (/^step-\d+\.json$/.test(f) || f === 'summary.json' || f === 'trace.md') {
+    if (/^step-\d+(\.full)?\.json$/.test(f) || f === 'summary.json' || f === 'trace.md') {
       try { rmSync(join(outDir, f), { force: true }); } catch { /* ignore */ }
     }
   }
@@ -270,7 +270,13 @@ if (planOnly) {
     rec.asks = [...asksThisStep];
     rec.state = await snapshot(pod);
     results.push(rec);
-    writeFileSync(join(outDir, `step-${String(num).padStart(2, '0')}.json`), JSON.stringify(rec, null, 2));
+    const stem = join(outDir, `step-${String(num).padStart(2, '0')}`);
+    // The judge reads step-NN.json every poll, often across several reruns — a full dump (every DB
+    // row + every yield's args, ~80KB on a heavy build step) exhausts its context ("Prompt is too
+    // long"). Write the COMPACT observables the judge actually scores to step-NN.json, and spill the
+    // raw turn/state dump to step-NN.full.json for the rare deep-dive.
+    writeFileSync(`${stem}.full.json`, JSON.stringify(rec, null, 2));
+    writeFileSync(`${stem}.json`, JSON.stringify(compactStep(rec), null, 2));
     appendTrace(rec);
   }
 
@@ -288,7 +294,7 @@ if (planOnly) {
   writeFileSync(join(outDir, 'trace.md'), traceMd.join('\n'));
   if (!keepProject) log(`project ${projectId} left in place (delete with: pod.deleteProject)`);
   console.log(`\n✅ played ${results.length}/${steps.length} steps → ${outDir}`);
-  console.log(`   read: ${join(outDir, 'trace.md')}  +  step-NN.json  +  summary.json`);
+  console.log(`   read: ${join(outDir, 'trace.md')}  +  step-NN.json (compact; step-NN.full.json for drill-down)  +  summary.json`);
 })().catch((e) => fail(String(e?.stack ?? e)));
 
 // ── helpers ────────────────────────────────────────────────────────────────────────────────────
@@ -314,6 +320,54 @@ function compact(args) {
   } catch {
     return String(args);
   }
+}
+// The observables a step is JUDGED on — space names, table names + ROW COUNTS (not the rows),
+// delegate names + outcomes, yield KINDS + count (not full args), errors, the reply, the asks.
+// Everything a full dump carries for drill-down (every row, every yield's args, node bodies) stays
+// in step-NN.full.json. Keeps the judge's per-poll read ~10× smaller so a heavy build step (or a
+// rerun of one) doesn't blow its context window.
+function compactStep(rec) {
+  const s = rec.state ?? {};
+  const turns = (rec.turns ?? []).map((t) =>
+    t.empty
+      ? { sent: t.sent, empty: true }
+      : {
+          sent: t.sent,
+          lastText: typeof t.lastText === 'string' && t.lastText.length > 1200 ? t.lastText.slice(0, 1200) + '…' : t.lastText,
+          delegates: t.delegates,
+          yieldKinds: t.yieldKinds,
+          yieldCount: (t.yields ?? []).length,
+          errors: t.errors,
+          nodeCount: (t.nodes ?? []).length,
+          tokens: t.tokens,
+          durationMs: t.durationMs,
+          interrupted: t.interrupted,
+        },
+  );
+  const state = {
+    spaces: s.spaces ?? [],
+    spaceCount: (s.spaces ?? []).length,
+    appTables: Object.fromEntries(Object.entries(s.appTables ?? {}).map(([k, v]) => [k, Array.isArray(v) ? v.length : v])),
+    appManifest: s.appManifest
+      ? { tableNames: (s.appManifest.tables ?? []).map((t) => t.name ?? t.slug ?? t).filter(Boolean), pageCount: (s.appManifest.pages ?? []).length, built: s.appManifest.built }
+      : null,
+    error: s.error ?? null,
+    appError: s.appError ?? null,
+  };
+  return {
+    step: rec.step,
+    verbs: rec.verbs,
+    expect: rec.expect,
+    attached: rec.attached,
+    turns,
+    asks: rec.asks,
+    appBuild: rec.appBuild,
+    appPageStatus: rec.appPageStatus,
+    notes: rec.notes,
+    error: rec.error,
+    state,
+    fullEvidence: `step-${String(rec.step).padStart(2, '0')}.full.json`,
+  };
 }
 function appendTrace(rec) {
   const L = traceMd;

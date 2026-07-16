@@ -279,7 +279,12 @@ export class ThingSession {
     });
   }
 
-  async #dispatchAndWait(dispatch, logLine, { timeoutMs = 600_000, quietMs = 4_000, pollMs = 1_500 } = {}) {
+  // 20-min per-turn cap: a bulk-dump "yes" turn legitimately fans out one architect build PER leg
+  // (organize_material's forEach) plus the app build — 4+ specialist pipelines can run well past 10
+  // minutes. In production this streams as a background job; the harness treats it as one turn, so the
+  // cap must be generous enough to let a real multi-part build finish and be judged, not time out
+  // mid-build (which read as a false step-2 failure).
+  async #dispatchAndWait(dispatch, logLine, { timeoutMs = 1_200_000, quietMs = 4_000, pollMs = 1_500 } = {}) {
     const startSeq = this.events.length;
     const t0 = Date.now();
     await dispatch();
