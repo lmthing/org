@@ -206,6 +206,11 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     onDisplay: (value) => {
       tracer.write({ ts: Date.now(), type: 'display', context: delegateScope.label, nodeId: delegateScope.nodeId, descriptor: value });
     },
+    // A delegate's setActivity is a SUB-activity keyed by its node — the UI clears
+    // it on this node's node_end (or on an explicit '' clear).
+    onActivity: (text) => {
+      tracer.write({ ts: Date.now(), type: 'activity', context: delegateScope.label, nodeId: delegateScope.nodeId, scope: 'delegate', text });
+    },
     currentTaskResolve: (value) => {
       capturedResult = value;
       resultCaptured = true;

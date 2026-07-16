@@ -86,6 +86,7 @@ export function ChatView({
   const spaceName = useStore(s => s.spaceName);
   const agentSlug = useStore(s => s.agentSlug);
   const sessionTitle = useStore(s => s.sessionTitle);
+  const activity = useStore(s => s.activity);
   const sessionCostUsd = useStore(s => s.sessionCostUsd + s.sessionCostInflight);
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
@@ -179,7 +180,22 @@ export function ChatView({
         className="flex items-center gap-3 pl-12 md:pl-4 pr-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm shrink-0"
         aria-label="chat header"
       >
-        <span className="text-sm font-medium text-foreground truncate flex-1">{title}</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium text-foreground truncate">{title}</div>
+          {/* THING's live "currently doing" line (setActivity, session scope). Sub-agent
+              activities are shown by the LiveActivity/WorkBlock panel, not here. */}
+          {activity && (
+            <div
+              className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground min-w-0"
+              aria-live="polite"
+              data-testid="activity"
+              title={activity}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-agent animate-pulse shrink-0" aria-hidden />
+              <span className="truncate italic">{activity}</span>
+            </div>
+          )}
+        </div>
         {sessionCostUsd > 0 && (
           <span className="text-xs text-muted-foreground shrink-0" title="Session cost">
             {formatCost(sessionCostUsd)}

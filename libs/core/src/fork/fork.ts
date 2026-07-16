@@ -304,6 +304,11 @@ export class ForkEngine {
           onDisplay: (value) => {
             forkTracer.write({ ts: Date.now(), type: 'display', context: forkScope.label, nodeId: forkScope.nodeId, descriptor: value });
           },
+          // A fork's setActivity is a SUB-activity keyed by its node — the UI clears
+          // it on this node's node_end (or on an explicit '' clear).
+          onActivity: (text) => {
+            forkTracer.write({ ts: Date.now(), type: 'activity', context: forkScope.label, nodeId: forkScope.nodeId, scope: 'fork', text });
+          },
           currentTaskResolve,
           // Seed variables, then upstream outputs as named variables matching the task id.
           seedVars: { ...(task.seed ?? {}), ...(task.upstreamOutputs ?? {}) },

@@ -34,6 +34,8 @@ declare function delegate(packageName: string, agentName: string, action?: strin
  */
 export const COMMON_DTS = `
 declare function display(descriptor: unknown): void;
+/** Set the live "currently doing" status shown in the UI while you work. Fire-and-forget — does NOT end the turn, so call it inline as you progress. Pass '' to clear. */
+declare function setActivity(text: string): void;
 declare function inspect(...args: (unknown | [unknown, InspectQuery])[]): Promise<void>;
 declare function loadKnowledge(...path: string[]): Promise<any>;
 declare function sleep(duration: string): Promise<void>;

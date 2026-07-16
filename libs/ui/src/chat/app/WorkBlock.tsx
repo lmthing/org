@@ -61,8 +61,10 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
         : null;
   const colorKey = statusColorKey(node.status);
   // One-line live activity shown even while the row is collapsed, so the box
-  // stays scannable without expanding every entry.
-  const headline = narrationOf(recentSubtreeStatements(model, nodeId, 1)[0]?.code ?? '');
+  // stays scannable without expanding every entry. An explicit setActivity()
+  // from the sub-agent is authoritative; otherwise fall back to the //-comment
+  // narration scraped from its most recent statement.
+  const headline = node.activity || narrationOf(recentSubtreeStatements(model, nodeId, 1)[0]?.code ?? '');
 
   const openInspector = (): void => {
     selectNode(nodeId, true);

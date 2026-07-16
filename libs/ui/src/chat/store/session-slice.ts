@@ -25,6 +25,7 @@ export interface SessionSlice {
   spaceName: string;
   agentSlug: string;
   sessionTitle: string;
+  activity: string;
 
   feedLive: (events: WireEvent[]) => void;
   setConnection: (c: Connection) => void;
@@ -61,6 +62,7 @@ export function createSessionSlice(
     spaceName: '',
     agentSlug: '',
     sessionTitle: '',
+    activity: '',
 
     feedLive: (events) => {
       const s = get();
@@ -71,12 +73,17 @@ export function createSessionSlice(
       let costDelta = 0;
       let inflightChanged = false;
       let titleUpdate: string | undefined;
+      let activityUpdate: string | undefined;
       for (const we of events) {
         applyWireEvent(m, we);
         const ev = we.event;
         costDelta += computeEventCost(ev, s.prices);
         // The agent named the session — surface the title live in the header + sidebar.
         if (ev.type === 'session_meta' && ev.title) titleUpdate = ev.title;
+        // The MAIN "currently doing" line: only the top-level session (THING) scope.
+        // Fork/delegate sub-activities are handled by applyWireEvent (they set the
+        // work node's narration, shown by WorkBlock — not this header line).
+        else if (ev.type === 'activity' && ev.scope === 'session') activityUpdate = ev.text;
         // Track in-flight turns for real-time cost estimate
         if (ev.type === 'llm_request') {
           const key = ev.nodeId ?? ev.context;
@@ -116,13 +123,16 @@ export function createSessionSlice(
         ...(costDelta > 0 ? { sessionCostUsd: s.sessionCostUsd + costDelta } : {}),
         ...(inflightChanged ? { sessionCostInflight: newInflight } : {}),
         ...(titleUpdate !== undefined ? { sessionTitle: titleUpdate } : {}),
+        ...(activityUpdate !== undefined ? { activity: activityUpdate } : {}),
       });
     },
 
     setConnection: (connection) => set({ connection }),
     setHello: (h) => set({ spaceName: h.spaceName, agentSlug: h.agentSlug }),
     setSessionTitle: (sessionTitle) => set({ sessionTitle }),
-    setDone: (done) => set({ done }),
+    // Turn went idle → clear the live "currently doing" lines (both main + any
+    // stragglers). setDone(false) on a new turn leaves them alone.
+    setDone: (done) => set(done ? { done, activity: '' } : { done }),
     selectNode: (id, byUser = false) => set((s) => ({ selectedNodeId: id, userSelected: byUser || s.userSelected })),
     setTab: (tab) => set({ tab }),
     toggleExpand: (id) => set((s) => {
@@ -155,6 +165,7 @@ export function createSessionSlice(
         spaceName: '',
         agentSlug: '',
         sessionTitle: '',
+        activity: '',
         replay: null,
         mode: 'live',
         connection: 'connecting',

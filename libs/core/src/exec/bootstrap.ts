@@ -20,6 +20,7 @@ import { createReadDocumentGlobal } from '../globals/read-document.js';
 import { createIntegrationStatusGlobal } from '../globals/integration-status.js';
 import { createRegisterSpaceGlobal } from '../globals/register-space.js';
 import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
+import { createSetActivityGlobal } from '../globals/set-activity.js';
 import { createStoreSearchGlobal, createStoreInspectGlobal, createInstallSpaceGlobal } from '../globals/store.js';
 import { createEmitEventGlobal, deriveEventScope } from '../globals/emit-event.js';
 import { createConsentRequestGlobal } from '../globals/consent.js';
@@ -82,6 +83,9 @@ export interface ChildVMOpts {
   componentNames: string[];
   /** Trace hook fired on every display() (context-labelled tracer write). */
   onDisplay?: (descriptor: unknown) => void;
+  /** Trace hook fired on every setActivity() (fire-and-forget "currently doing"
+   *  status; context-labelled tracer write). Absent ⇒ the global is a no-op. */
+  onActivity?: (text: string) => void;
   /** When set, a `currentTask` global with this resolve implementation is
    *  injected (fork: schema-validating recorder; delegate: result capture). */
   currentTaskResolve?: (value: unknown) => void;
@@ -178,6 +182,10 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   type AnyFn = (...args: unknown[]) => unknown;
   if (caps.ask) injectGlobal(ctx, 'ask', createAskGlobal(pushYield, opts.renderHost) as AnyFn);
   injectGlobal(ctx, 'display', createDisplayGlobal(opts.renderHost, opts.onDisplay) as AnyFn);
+  // setActivity: fire-and-forget "currently doing" status — injected UNCONDITIONALLY
+  // like display (no capability gate). The host wires `onActivity` per scope so the
+  // emitting VM decides main (session) vs sub (fork/delegate) — see set-activity.ts.
+  injectGlobal(ctx, 'setActivity', createSetActivityGlobal(opts.onActivity ?? (() => {})) as AnyFn);
   injectGlobal(ctx, 'inspect', createInspectGlobal(pushYield) as AnyFn);
   injectGlobal(ctx, 'sleep', createSleepGlobal(pushYield, opts.clock) as AnyFn);
   injectGlobal(ctx, 'fetch', createFetchGlobal(pushYield) as AnyFn);

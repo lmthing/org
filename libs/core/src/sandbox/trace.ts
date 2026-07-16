@@ -84,10 +84,15 @@ export type TraceEvent =
   | { ts: number; type: 'user_message'; nodeId?: string; content: string; attachments?: TraceAttachment[] }
   // New: the agent named the session via setSessionMeta — the server ingests this
   // to update + persist the SessionEntry's title/slug (keeps core persistence-free).
-  | { ts: number; type: 'session_meta'; nodeId?: string; title?: string; slug?: string };
+  | { ts: number; type: 'session_meta'; nodeId?: string; title?: string; slug?: string }
+  // New: the agent's live "currently doing" status via setActivity() — fire-and-forget,
+  // does NOT end the turn. `scope: 'session'` is the MAIN line (THING); 'fork'/'delegate'
+  // are SUB-activities keyed by `nodeId` (cleared on that node's `node_end`). `text: ''`
+  // clears the scope's activity. Ephemeral (excluded from the NDJSON file below).
+  | { ts: number; type: 'activity'; context: string; nodeId?: string; scope: 'session' | 'fork' | 'delegate'; text: string };
 
 /** Event types excluded from the NDJSON file (ephemeral, high-frequency). */
-const FILE_EXCLUDED = new Set<TraceEvent['type']>(['llm_progress']);
+const FILE_EXCLUDED = new Set<TraceEvent['type']>(['llm_progress', 'activity']);
 
 // ─── Node ID minting ───────────────────────────────────────────────────────
 

@@ -669,6 +669,12 @@ export class Session {
         const scope = this.currentScope;
         this.tracer.write({ ts: Date.now(), type: 'display', context: scope?.label ?? 'session', ...(scope ? { nodeId: scope.nodeId } : {}), descriptor: value });
       },
+      // setActivity from the top-level session VM is always the MAIN "currently
+      // doing" line (forks/delegates run in their own VMs with their own hooks).
+      onActivity: (text) => {
+        const scope = this.currentScope;
+        this.tracer.write({ ts: Date.now(), type: 'activity', context: scope?.label ?? 'session', ...(scope ? { nodeId: scope.nodeId } : {}), scope: 'session', text });
+      },
       seedVars,
       onFunctionError: (name, error) => {
         this.opts.renderHost.log(`[warn] failed to inject function "${name}": ${error}`);

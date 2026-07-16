@@ -75,7 +75,7 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw', 'readFileRaw', 'createScratch']) {
       expect(names, `read-only fork DTS must not declare ${absent}`).not.toContain(absent);
     }
-    for (const present of ['display', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'fetch', 'currentTask']) {
+    for (const present of ['display', 'setActivity', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'fetch', 'currentTask']) {
       expect(names).toContain(present);
     }
   });
@@ -128,6 +128,13 @@ describe('buildAmbientDts — typecheck enforcement (stray calls fail cleanly)',
     const stmt = 'const r = await setSessionMeta({ title: "T", slug: "s" });';
     expect(runTsc({ ambientDts: forkPlain, sessionContext: '', statement: stmt }).ok).toBe(false);
     expect(runTsc({ ambientDts: delegate, sessionContext: '', statement: stmt }).ok).toBe(false);
+    expect(runTsc({ ambientDts: session, sessionContext: '', statement: stmt }).ok).toBe(true);
+  });
+
+  it('setActivity() passes typecheck in EVERY context (unconditional, like display) — fork/delegate set sub-activities', () => {
+    const stmt = 'setActivity("searching…");';
+    expect(runTsc({ ambientDts: forkPlain, sessionContext: '', statement: stmt }).ok).toBe(true);
+    expect(runTsc({ ambientDts: delegate, sessionContext: '', statement: stmt }).ok).toBe(true);
     expect(runTsc({ ambientDts: session, sessionContext: '', statement: stmt }).ok).toBe(true);
   });
 });

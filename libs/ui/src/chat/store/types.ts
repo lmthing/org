@@ -51,6 +51,11 @@ export interface AppState {
   agentSlug: string;
   /** Live session title, set by the agent via setSessionMeta() (resets on session switch). */
   sessionTitle: string;
+  /** Live "currently doing" status (THING's main line), set via setActivity() from the
+   *  top-level session scope. '' = none. Clears when the turn goes idle (setDone) and on
+   *  session switch/reset. Fork/delegate sub-activities live on their execution node
+   *  (`ExecNode.activity`, shown by WorkBlock), not here. */
+  activity: string;
   replay: ReplayState | null;
   /** Running token cost for the current live session (resets on session switch). */
   sessionCostUsd: number;
