@@ -232,10 +232,10 @@ describe('system-appbuilder live-project build action', () => {
     expect(read('03-plan_app.md')).toMatch(/user_stories/);
     expect(read('03-plan_app.md')).toMatch(/BINDING/);
 
-    // Each implement node uses the LIVE writers (not the catalog ones).
-    // implement_tables is a deterministic code node: it authors via ctx.writeProjectTable(item…).
-    expect(read('05-implement_tables.ts')).toMatch(/export async function run\(ctx, inputs\)/);
-    expect(read('05-implement_tables.ts')).toMatch(/ctx\.writeProjectTable\(/);
+    // Each implement node is model-driven and uses the LIVE writers (not the catalog ones).
+    // implement_tables forwards the plan's schema + rows through writeProjectTable.
+    expect(read('05-implement_tables.md')).toMatch(/writeProjectTable\(/);
+    expect(read('05-implement_tables.md')).toMatch(/forEach: plan_tables\.tables/);
     expect(read('07-implement_endpoints.md')).toMatch(/writeProjectApi\(/);
     // Endpoint name is the single source of truth: plan_endpoints ASSIGNS a unique `name`,
     // implement_endpoints uses `item.name` VERBATIM (never re-derives from the route), and pages

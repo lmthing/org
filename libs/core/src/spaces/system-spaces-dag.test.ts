@@ -209,11 +209,10 @@ describe('shipped system spaces load + validate', () => {
     expect(live['implement_endpoints']!.dependsOn).toEqual([
       'plan_endpoints', 'plan_tables', 'implement_tables',
     ]);
-    // implement_tables is a DETERMINISTIC code node (authors via ctx.writeProjectTable) — no model
-    // turn, so no generated-code errors. The plan_* nodes stay model-driven (judgment).
-    expect(live['implement_tables']!.kind).toBe('code');
+    // Every implement node is model-driven (a code node would need codeNodeCtxFactory threaded through
+    // the delegate path THING uses; a model node needs no host factory and writes via writeProjectTable).
     // The model-driven nodes run with write access (role general).
-    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'finalize']) {
+    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'finalize']) {
       expect(live[id]!.role).toBe('general');
     }
     // finalize is the sole goal — it writes the chat _layout and reports the build.
