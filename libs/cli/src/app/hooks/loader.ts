@@ -60,7 +60,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { basename, join } from 'node:path';
 
-import { transform } from 'esbuild';
+import { transformSync } from 'esbuild';
 
 import { loadDefaultInWorker, invokeDefaultFnInWorker, type WorkerInvokeHandlers } from '../worker-load.js';
 
@@ -367,10 +367,14 @@ function makeSpaceHandlerShim(file: string): HookHandler {
   };
 }
 
-/** Transpile a hook `.ts` → CJS and evaluate it, returning its default export. */
-async function importDefault(file: string): Promise<unknown> {
-  const source = await readFile(file, 'utf8');
-  const { code } = await transform(source, {
+/**
+ * Transpile a hook `.ts` SOURCE → CJS and evaluate it, returning its default export.
+ * SYNCHRONOUS (esbuild `transformSync`) so the synchronous write-time lint can run the SAME eval the
+ * loader does (no drift): the lint evaluates the just-written source, then hands the result to
+ * {@link validateHook}. Same esbuild + options as the loader's own transpile below.
+ */
+export function evalHookDefaultFromSource(source: string, file: string): unknown {
+  const { code } = transformSync(source, {
     loader: 'ts',
     format: 'cjs',
     target: 'node18',
@@ -383,6 +387,11 @@ async function importDefault(file: string): Promise<unknown> {
   fn(moduleObj, moduleObj.exports, shimRequire);
   const exp = moduleObj.exports as Record<string, unknown>;
   return exp.default;
+}
+
+/** Transpile a hook `.ts` FILE → CJS and evaluate it, returning its default export. */
+async function importDefault(file: string): Promise<unknown> {
+  return evalHookDefaultFromSource(await readFile(file, 'utf8'), file);
 }
 
 /** Validate a raw default export into a typed {@link HookDef} (fail-loud). */

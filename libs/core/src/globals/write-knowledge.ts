@@ -39,6 +39,7 @@ export function createWriteKnowledgeGlobal(
       return { ok: false, path: '', error: 'writeKnowledge: option "index" is reserved — use the architect to write a field index' };
     }
     if (typeof markdown !== 'string') return { ok: false, path: '', error: 'writeKnowledge: markdown content must be a string' };
+    if (!markdown.trim()) return { ok: false, path: '', error: 'writeKnowledge: markdown content is empty — write the actual guidance content, not a blank file' };
 
     const path = join(knowledgeBaseDir, domain, field, `${optSlug}.md`);
     const body = opts?.source ? `> source: ${provenanceLabel(opts.source)}\n\n${markdown}` : markdown;

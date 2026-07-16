@@ -21,6 +21,21 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname, join, resolve, sep } from 'node:path';
 import { transformSync } from 'esbuild';
 import { validateTableSchema, type TableSchema } from '@lmthing/core';
+import {
+  LintError,
+  existingApiNames,
+  lintApiHandler,
+  lintComponentSource,
+  lintHookSource,
+  lintPageSource,
+} from './lint.js';
+
+/** Throw a {@link LintError} when a lint check returned a message, so it surfaces to the model as a
+ *  retryable error (like a typecheck failure) instead of a `{ ok:false }` a node might ignore. Each
+ *  writer's `catch` re-throws `LintError` (see below) so only genuine fs/host faults become `{ok:false}`. */
+function throwLint(msg: string | null): void {
+  if (msg) throw new LintError(msg);
+}
 
 /**
  * Reject source that does not PARSE before it lands on disk. A live-project hook/event/api/page
@@ -250,6 +265,7 @@ export function createAppAuthoringGlobals(opts: { catalogRoot: string }): AppAut
       writeFile(target, JSON.stringify(schema, null, 2) + '\n');
       return { ok: true };
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
   }
@@ -259,10 +275,13 @@ export function createAppAuthoringGlobals(opts: { catalogRoot: string }): AppAut
       const { root } = requireCurrent();
       let rel = assertPathSegments('page route', route);
       if (!rel.endsWith('.tsx')) rel = `${rel}.tsx`;
+      assertSourceParses(src, 'tsx');
+      throwLint(lintPageSource(src));
       const target = safeResolve(root, join('pages', rel));
       writeFile(target, src);
       return { ok: true };
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
   }
@@ -280,9 +299,12 @@ export function createAppAuthoringGlobals(opts: { catalogRoot: string }): AppAut
         throw new Error(`api route "${route}" is missing an endpoint path before the method`);
       }
       const target = safeResolve(root, join('api', ...segments, `${method}.ts`));
+      assertSourceParses(src, 'ts');
+      throwLint(lintApiHandler(src, { existingNames: existingApiNames(root, target) }));
       writeFile(target, src);
       return { ok: true };
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
   }
@@ -292,9 +314,12 @@ export function createAppAuthoringGlobals(opts: { catalogRoot: string }): AppAut
       const { root } = requireCurrent();
       assertSlug('hook slug', slug);
       const target = safeResolve(root, join('hooks', `${slug}.ts`));
+      assertSourceParses(src, 'ts');
+      throwLint(lintHookSource(src, slug, target));
       writeFile(target, src);
       return { ok: true };
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
   }
@@ -402,11 +427,13 @@ export function createProjectAuthoringGlobals(opts: {
     try {
       assertSlug('hook slug', slug);
       assertSourceParses(src, 'ts');
+      const cols = unknownColumnsIn(src);
+      if (cols) return { ok: false, error: cols };
+      throwLint(lintHookSource(src, slug, safeResolve(projectRoot, join('hooks', `${slug}.ts`))));
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
-    const cols = unknownColumnsIn(src);
-    if (cols) return { ok: false, error: cols };
     return writeUnder(join('hooks', `${slug}.ts`), src);
   }
 
@@ -415,6 +442,7 @@ export function createProjectAuthoringGlobals(opts: {
       assertSlug('event name', name);
       assertSourceParses(src, 'ts');
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
     return writeUnder(join('events', `${name}.ts`), src);
@@ -430,6 +458,7 @@ export function createProjectAuthoringGlobals(opts: {
     try {
       assertSourceParses(src, 'ts');
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
     return writeUnder(join('functions', `${name}.ts`), src);
@@ -604,6 +633,7 @@ export function createProjectAuthoringGlobals(opts: {
       assertTableName(name);
       validateTableSchema(name, schema as TableSchema);
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
     if (rows !== undefined && !Array.isArray(rows)) {
@@ -651,7 +681,9 @@ export function createProjectAuthoringGlobals(opts: {
       rel = assertPathSegments('page route', route);
       if (!rel.endsWith('.tsx')) rel = `${rel}.tsx`;
       assertSourceParses(src, 'tsx');
+      throwLint(lintPageSource(src));
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
     if (!opts?.replace) {
@@ -689,13 +721,16 @@ export function createProjectAuthoringGlobals(opts: {
       }
       assertSourceParses(src, 'ts');
       target = join('api', ...segments, `${method}.ts`);
+      // An API route that writes the wrong columns fails exactly like a hook that does — the POST
+      // 500s (or worse, is caught) and the user's submission is silently gone. Same gate.
+      const cols = unknownColumnsIn(src);
+      if (cols) return { ok: false, error: cols };
+      // Loader contract: every endpoint needs a unique `export const name` + a default/handler fn.
+      throwLint(lintApiHandler(src, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)) }));
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
-    // An API route that writes the wrong columns fails exactly like a hook that does — the POST
-    // 500s (or worse, is caught) and the user's submission is silently gone. Same gate.
-    const cols = unknownColumnsIn(src);
-    if (cols) return { ok: false, error: cols };
     const out = writeUnder(target, src);
     if (out.ok) {
       try {
@@ -720,7 +755,9 @@ export function createProjectAuthoringGlobals(opts: {
         throw new Error(`component name "${name}" is not PascalCase (expected /${COMPONENT_NAME_RE.source}/)`);
       }
       assertSourceParses(src, 'tsx');
+      throwLint(lintComponentSource(src));
     } catch (e) {
+      if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
     const out = writeUnder(join('components', `${name}.tsx`), src);

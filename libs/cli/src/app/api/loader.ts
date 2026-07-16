@@ -116,12 +116,11 @@ async function walk(dir: string, segments: string[], out: Endpoint[]): Promise<v
     const method = m[1] as HttpMethod;
     const { pattern, paramNames } = patternFromSegments(segments);
     const source = await readFile(abs, 'utf8');
-    const name = parseExportedString(source, 'name');
-    if (!name) {
-      throw new Error(
-        `[api-loader] ${abs}: missing \`export const name\` (every endpoint must be named)`,
-      );
+    const contractErr = apiEndpointContractError(source);
+    if (contractErr) {
+      throw new Error(`[api-loader] ${abs}: ${contractErr}`);
     }
+    const name = parseExportedString(source, 'name')!;
     const description = parseExportedString(source, 'description');
     out.push({ method, pattern, paramNames, file: abs, name, description });
   }
@@ -144,11 +143,24 @@ function patternFromSegments(segments: string[]): { pattern: string; paramNames:
 /**
  * Static-parse `export const <key> = '<value>'` (single/double/backtick quotes)
  * from handler source, without evaluating it. Returns `undefined` if absent.
+ * Exported so the write-time lint can run the SAME name/uniqueness contract this loader enforces.
  */
-function parseExportedString(source: string, key: string): string | undefined {
+export function parseExportedString(source: string, key: string): string | undefined {
   const re = new RegExp(`export\\s+const\\s+${key}\\s*=\\s*(['"\`])((?:\\\\.|(?!\\1).)*)\\1`);
   const m = re.exec(source);
   return m ? m[2] : undefined;
+}
+
+/**
+ * The API-endpoint MODULE contract, as ONE reusable check shared by the loader `walk` (which wraps
+ * the message with the file path) and the write-time lint. Static — never evaluates the module.
+ * Returns a human message describing the first violation, or null when the source satisfies it.
+ */
+export function apiEndpointContractError(source: string): string | null {
+  if (!parseExportedString(source, 'name')) {
+    return 'missing `export const name` (every endpoint must be named)';
+  }
+  return null;
 }
 
 /**

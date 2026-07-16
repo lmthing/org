@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TableSchema } from '@lmthing/core';
 
 import { createAppAuthoringGlobals, createProjectAuthoringGlobals, type AppAuthoringGlobals } from './globals.js';
+import { LintError } from './lint.js';
 
 let catalogRoot: string;
 let authoring: AppAuthoringGlobals;
@@ -181,14 +182,14 @@ describe('writePage', () => {
 describe('writeApi', () => {
   it('writes api/feed-list/GET.ts', () => {
     const { root } = authoring.createProject('feed');
-    const res = authoring.writeApi('feed-list/GET', 'export default async function handler() {}');
+    const res = authoring.writeApi('feed-list/GET', "export const name = 'feedList';\nexport default async function handler() {}");
     expect(res.ok).toBe(true);
     expect(existsSync(join(root!, 'api', 'feed-list', 'GET.ts'))).toBe(true);
   });
 
   it('writes a nested dynamic endpoint api/articles/[id]/POST.ts', () => {
     const { root } = authoring.createProject('feed');
-    const res = authoring.writeApi('articles/[id]/POST', 'export default async function handler() {}');
+    const res = authoring.writeApi('articles/[id]/POST', "export const name = 'articleCreate';\nexport default async function handler() {}");
     expect(res.ok).toBe(true);
     expect(existsSync(join(root!, 'api', 'articles', '[id]', 'POST.ts'))).toBe(true);
   });
@@ -209,7 +210,7 @@ describe('writeApi', () => {
 describe('writeHook', () => {
   it('writes hooks/<slug>.ts', () => {
     const { root } = authoring.createProject('feed');
-    const res = authoring.writeHook('nightly-digest', 'export default async function hook() {}');
+    const res = authoring.writeHook('nightly-digest', "export default { type: 'cron', every: '1d', handler: async () => {} };");
     expect(res.ok).toBe(true);
     expect(existsSync(join(root!, 'hooks', 'nightly-digest.ts'))).toBe(true);
   });
@@ -316,7 +317,7 @@ describe('createProjectAuthoringGlobals', () => {
         throw new Error('republish boom');
       },
     });
-    const res = pa.writeProjectHook('resilient', 'export default {};');
+    const res = pa.writeProjectHook('resilient', "export default { type: 'event', on: { event: 'x/y' }, handler: async () => {} };");
     expect(res.ok).toBe(true);
     expect(existsSync(join(projectRoot, 'hooks', 'resilient.ts'))).toBe(true);
   });
@@ -482,7 +483,8 @@ describe('createProjectAuthoringGlobals', () => {
       expect(
         pa.writeProjectApi(
           'recipes-create/POST',
-          `export default async function handler({ body, db }: any) {
+          `export const name = 'recipesCreate';
+           export default async function handler({ body, db }: any) {
              await db.insert('recipes', { title_gr: body.title });
              return { ok: true };
            }`,
@@ -665,7 +667,7 @@ describe('createProjectAuthoringGlobals', () => {
       republish: () => {},
       onAppWrite: (kind, route) => appWrites.push([kind, route]),
     });
-    const res = pa.writeProjectApi('bookings-list/GET', 'export default async () => ({ items: [] });');
+    const res = pa.writeProjectApi('bookings-list/GET', "export const name = 'bookingsList';\nexport default async () => ({ items: [] });");
     expect(res.ok).toBe(true);
     expect(existsSync(join(projectRoot, 'api', 'bookings-list', 'GET.ts'))).toBe(true);
     expect(appWrites).toEqual([['api', 'bookings-list/GET']]);
@@ -702,5 +704,55 @@ describe('createProjectAuthoringGlobals', () => {
     expect(pa.writeProjectPage('../../evil', 'x').ok).toBe(false);
     expect(appWrites).toBe(0);
     expect(existsSync(join(projectRoot, 'api'))).toBe(false);
+  });
+
+  // Write-time lint: a generated artifact that violates its loader contract is REJECTED at the
+  // write with a thrown, retryable error (like a typecheck failure) — not accepted here to fail
+  // later at app compile/serve. The model sees the throw and re-writes.
+  describe('write-time lint (loader contract) throws a retryable error, writes nothing', () => {
+    it('writeProjectApi: missing `export const name` throws and leaves no file (the round-1 regression)', () => {
+      const pa = make();
+      expect(() => pa.writeProjectApi('dash/GET', 'export default async () => ({ items: [] });')).toThrow(
+        /export const name/,
+      );
+      expect(existsSync(join(projectRoot, 'api', 'dash', 'GET.ts'))).toBe(false);
+      // A corrected re-write (with a name) succeeds.
+      expect(
+        pa.writeProjectApi('dash/GET', "export const name = 'dashGet';\nexport default async () => ({ items: [] });").ok,
+      ).toBe(true);
+    });
+
+    it('writeProjectApi: a duplicate endpoint name throws', () => {
+      const pa = make();
+      expect(pa.writeProjectApi('a/GET', "export const name = 'shared';\nexport default () => ({});").ok).toBe(true);
+      expect(() =>
+        pa.writeProjectApi('b/GET', "export const name = 'shared';\nexport default () => ({});"),
+      ).toThrow(/already used by/);
+    });
+
+    it('writeProjectPage / writeProjectComponent: no default export throws', () => {
+      const pa = make();
+      expect(() => pa.writeProjectPage('nope', 'export const x = 1;')).toThrow(/default export/);
+      expect(() => pa.writeProjectComponent('Card', 'export const x = 1;')).toThrow(/default export/);
+    });
+
+    it('writeProjectHook: a non-object / unknown-type hook throws', () => {
+      const pa = make();
+      expect(() => pa.writeProjectHook('h1', 'export default async function () {}')).toThrow(/hook OBJECT/);
+      expect(() => pa.writeProjectHook('h2', 'export default { type: "nope" };')).toThrow(/cron/);
+      // A valid hook object still writes.
+      expect(pa.writeProjectHook('h3', "export default { type: 'cron', every: '1d', handler: async () => {} };").ok).toBe(true);
+    });
+
+    it('the thrown lint error is a LintError (retryable), not a swallowed { ok:false }', () => {
+      const pa = make();
+      let caught: unknown;
+      try {
+        pa.writeProjectPage('x', 'export const x = 1;');
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(LintError);
+    });
   });
 });
