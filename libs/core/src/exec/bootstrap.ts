@@ -86,6 +86,11 @@ export interface ChildVMOpts {
   /** Trace hook fired on every setActivity() (fire-and-forget "currently doing"
    *  status; context-labelled tracer write). Absent ⇒ the global is a no-op. */
   onActivity?: (text: string) => void;
+  /** Hook fired on every setSessionMeta() (fire-and-forget conversation naming).
+   *  The host slugifies + records the title/slug and emits the session_meta trace
+   *  event; returns whether anything was set (the global's `{ ok }`). Session-only
+   *  (wired only in createSessionVM); absent ⇒ the global reports `{ ok: false }`. */
+  onSessionMeta?: (meta: { title?: string; slug?: string }) => boolean;
   /** When set, a `currentTask` global with this resolve implementation is
    *  injected (fork: schema-validating recorder; delegate: result capture). */
   currentTaskResolve?: (value: unknown) => void;
@@ -242,7 +247,10 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   // prompter) — and deliberately absent from the ambient DTS.
   injectGlobal(ctx, '__requestConsent', createConsentRequestGlobal(pushYield, basename(opts.spaceDir)) as AnyFn);
   if (caps.registerSpace) injectGlobal(ctx, 'registerSpace', createRegisterSpaceGlobal(pushYield) as AnyFn);
-  if (caps.setSessionMeta) injectGlobal(ctx, 'setSessionMeta', createSetSessionMetaGlobal(pushYield) as AnyFn);
+  // setSessionMeta: fire-and-forget conversation naming (session-only) — like
+  // setActivity/display, NOT a yield, so naming never ends the turn. The host hook
+  // slugifies + emits session_meta; absent ⇒ reports { ok: false }.
+  if (caps.setSessionMeta) injectGlobal(ctx, 'setSessionMeta', createSetSessionMetaGlobal(opts.onSessionMeta ?? (() => false)) as AnyFn);
 
   // 6. JSX runtime: React shim (classic transform → JSXDescriptor) + component
   //    stubs, so model-emitted `display(<Stack>…)` works in EVERY context (the

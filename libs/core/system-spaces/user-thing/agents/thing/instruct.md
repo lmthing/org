@@ -54,26 +54,33 @@ they would still not want it as JSON). Load what you need, then GO ON and do wha
 same turn. This matters most in a brand-new conversation on an EXISTING project — the orientation
 step is biggest exactly there, which is exactly where it is most tempting to stop.
 
-## Name the conversation (once, early)
+## First statement of a new conversation: NAME IT
 
-As soon as the user's intent is clear (usually your first substantive reply), give the
-session a short, human-readable title and a URL-safe slug so it is easy to find later.
-Call it once — not every turn — and don't ask the user for a name:
+In a brand-new conversation, name the session in your **first statement** with `setSessionMeta`.
+It is **fire-and-forget — it does NOT end your turn** (just like `setActivity`/`display`), so it
+costs you nothing: call it inline, right alongside your first status and the start of your work,
+in the same statement. There is no reason to skip it or defer it. Don't ask the user for a name:
 
 ```typescript
-await setSessionMeta({ title: 'Bolognese from scratch', slug: 'bolognese-from-scratch' });
+// Opening statement — none of these end the turn, so do them together with your work:
+setSessionMeta({ title: '3-day Rome trip', slug: 'rome-trip' });
+setActivity('Planning your Rome itinerary');
+// …then get on with the request in the same turn.
 ```
 
-The host slugifies `slug` (lowercased, non-alphanumerics → `-`); either field is optional.
+`setSessionMeta` NAMES the conversation (call it once — the title shows in the sidebar and
+header). The host slugifies `slug` (lowercased, non-alphanumerics → `-`); either field is
+optional. Because it no longer ends your turn, name the session even when you immediately
+delegate or search — there is nothing to trade off.
 
-## Say what you're doing (setActivity)
+## Say what you're doing (setActivity) — your live status, NOT the title
 
-While you work, keep a live one-line status so the user can see what's happening. Call
-`setActivity` with a short present-tense phrase whenever you START a distinct piece of work —
-before a web search, while reading the project, before a delegation, while composing a long
-answer. It is **fire-and-forget: it does NOT end your turn**, so call it inline as often as the
-work changes (unlike `setSessionMeta`, which you call once). Keep it to a few words, no
-punctuation needed:
+`setActivity` is your changing "what am I doing right now" line — it is **NOT** the conversation
+title and does **not** replace `setSessionMeta` (a status never names the session). While you
+work, keep it current: call `setActivity` with a short present-tense phrase whenever you START a
+distinct piece of work — before a web search, while reading the project, before a delegation,
+while composing a long answer. It is **fire-and-forget: it does NOT end your turn**, so call it
+inline as often as the work changes. Keep it to a few words, no punctuation needed:
 
 ```typescript
 setActivity('Searching for pasta recipes');

@@ -195,17 +195,18 @@ describe('turn loop — parallel yields (Promise.all of forks)', () => {
   });
 });
 
-describe('turn loop — setSessionMeta() runs end-to-end in a real VM', () => {
-  it('injects the real global, typechecks against LIBRARY_DTS, and binds {ok:true}', async () => {
+describe('turn loop — setSessionMeta() runs end-to-end in a real VM (fire-and-forget)', () => {
+  it('injects the real global, typechecks against LIBRARY_DTS, binds {ok:true}, and does NOT yield', async () => {
     const vm = await createVM();
-    // The genuine global factory pushes a 'setSessionMeta' yield.
-    const setSessionMeta = createSetSessionMetaGlobal((req) => vm.pendingYields.push(req));
+    let seen: unknown;
+    // Fire-and-forget: the genuine global calls the host hook SYNCHRONOUSLY (no yield),
+    // so naming the conversation never ends the turn.
+    const setSessionMeta = createSetSessionMetaGlobal((meta) => { seen = meta; return true; });
     injectGlobal(vm.ctx, 'setSessionMeta', setSessionMeta as (...a: unknown[]) => unknown);
 
     const history = new MessageHistory();
     history.append({ role: 'user', content: 'go', blockType: 'normal' });
 
-    let seen: unknown;
     await runTurnLoop({
       vm,
       history,
@@ -213,17 +214,14 @@ describe('turn loop — setSessionMeta() runs end-to-end in a real VM', () => {
       // LIBRARY_DTS is the real session DTS — proves setSessionMeta typechecks there.
       ambientDts: LIBRARY_DTS,
       renderHost: silentHost,
-      streamFn: scriptedStream('const r = await setSessionMeta({ title: "Pasta night", slug: "pasta-night" });'),
-      processYield: async (req) => {
-        seen = req.args[0];
-        expect(req.kind).toBe('setSessionMeta');
-        return { ok: true }; // mirrors Session.handleYield's return
-      },
+      streamFn: scriptedStream('const r = setSessionMeta({ title: "Pasta night", slug: "pasta-night" });'),
+      processYield: async () => { throw new Error('setSessionMeta must not yield (fire-and-forget)'); },
       maxRetries: 2,
     });
 
     expect(seen).toEqual({ title: 'Pasta night', slug: 'pasta-night' });
     expect(readGlobal(vm, 'r')).toEqual({ ok: true });
+    expect(vm.pendingYields.length).toBe(0); // no yield was pushed
     vm.dispose();
   });
 });

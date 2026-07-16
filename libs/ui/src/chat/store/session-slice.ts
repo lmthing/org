@@ -147,7 +147,15 @@ export function createSessionSlice(
     }),
     setFollow: (follow) => set({ follow }),
 
-    noteUserMessage: (content, attachments) => set((s) => { pushUserBlock(s.model, content, attachments); return { version: s.version + 1, done: false }; }),
+    noteUserMessage: (content, attachments) => set((s) => {
+      pushUserBlock(s.model, content, attachments);
+      // Show the user's first message as a PLACEHOLDER title immediately, so a new
+      // chat is never title-less while THING gets around to setSessionMeta() (which
+      // ends its turn, so it often can't name AND answer in one shot). A real
+      // session_meta from the agent overrides this later; only fill when still empty.
+      const placeholder = !s.sessionTitle ? content.replace(/\s+/g, ' ').trim().slice(0, 80) : undefined;
+      return { version: s.version + 1, done: false, ...(placeholder ? { sessionTitle: placeholder } : {}) };
+    }),
     noteError: (message) => set((s) => { pushErrorBlock(s.model, message); return { version: s.version + 1 }; }),
     noteAskStart: (askId, descriptor) => set((s) => { pushAskBlock(s.model, askId, descriptor); return { version: s.version + 1 }; }),
     noteAskEnd: (askId, value, cancelled) => set((s) => { resolveAskBlock(s.model, askId, value, cancelled); return { version: s.version + 1 }; }),

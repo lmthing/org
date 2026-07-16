@@ -5,6 +5,7 @@ import type { SessionOpts, SessionDeps } from './types.js';
 import type { YieldRequest } from '../eval/yield.js';
 import type { VM } from '../sandbox/quickjs.js';
 import { MessageHistory } from '../context/history.js';
+import { ReminderRegistry } from '../context/reminders.js';
 import type { MediaPart } from '../eval/stream-types.js';
 import { summarizeHistory } from '../context/summarize.js';
 import { buildSystemBlock, resolvePreloadedKnowledge } from '../context/system-block.js';
@@ -94,6 +95,19 @@ export class Session {
   private space: Space | null = null;
   private sessionId: string;
   private tracer: Tracer;
+  /** True once the agent has named the session via setSessionMeta(). Drives the
+   *  soft naming nudge in `beforeTurn` (setSessionMeta ends the turn, so the agent
+   *  often skips it while answering — we remind it if it hasn't named after a
+   *  couple of turns). Reset on start()/resume(); persists across continue(). */
+  private sessionNamed = false;
+  /** Count of CONVERSATIONAL turns (user messages) in this session object —
+   *  incremented once per start()/continue()/resume(), NOT per model episode — so
+   *  the naming nudge fires "after 2 turns" of conversation, never mid-first-answer. */
+  private turnNo = 0;
+  /** Generic per-turn soft reminders (open todos, unnamed session, …), composed
+   *  into one transient note by `beforeTurn`. Providers are registered once in the
+   *  constructor; add a reminder there — the turn loop needs no changes. */
+  private reminders = new ReminderRegistry();
   /** Image/file attachments the session has seen, keyed by upload id. A text
    *  agent (THING) can't read them, so it delegates by id — runDelegate resolves
    *  the id here to the MediaPart and hands it to the vision/file agent. ACCUMULATED
@@ -159,6 +173,10 @@ export class Session {
     this.history = new MessageHistory();
     this.sessionId = randomUUID();
     this.tracer = new Tracer(opts.traceFile ?? null);
+    // Register the soft per-turn reminders (order = display order). Add more here.
+    this.reminders
+      .add(() => this.readTodoReminder())
+      .add(() => this.namingNudge());
   }
 
   /** Expose the tracer so the CLI can subscribe the TraceHub to it. */
@@ -201,6 +219,7 @@ export class Session {
     if (!this.vm || !this.systemBlock || !this.ambientDts) {
       throw new Error('Session not started — call start() first');
     }
+    this.turnNo += 1; // next conversational turn (drives the naming nudge threshold)
     // Neutral framing: the TS-statement reply channel is fully specified by
     // STATEMENT_PROTOCOL in the system block. Framing the user's message itself as
     // "write TypeScript code" primed the triage toward the code path for EVERY
@@ -232,7 +251,7 @@ export class Session {
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
         model: this.opts.modelAlias,
-        beforeTurn: () => this.readTodoReminder(),
+        beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
       });
       this.tracer.end(runScope, 'done');
@@ -316,6 +335,8 @@ export class Session {
     // 7. Run turn loop until done or error
     this.budget = new Budget(this.opts.budget ?? {});
     this.turnContext = ''; // fresh program — start() resets cross-turn typecheck scope
+    this.turnNo = 1; // fresh conversation — this is the 1st conversational turn
+    this.sessionNamed = false;
     const runScope = this.mintRunScope();
 
     // Structural routing for less-capable models: if the agent declares a
@@ -379,7 +400,7 @@ export class Session {
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
         model: this.opts.modelAlias,
-        beforeTurn: () => this.readTodoReminder(),
+        beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
       });
       this.tracer.end(runScope, 'done');
@@ -453,6 +474,11 @@ export class Session {
     }
 
     // Restore history
+    this.turnNo = 1;
+    // A resumed session has already had its chance to be named in the original run;
+    // suppress the naming nudge so it never falsely tells a titled conversation it is
+    // unnamed. (Fresh naming happens in start(); the placeholder title covers UX.)
+    this.sessionNamed = true;
     this.history = new MessageHistory();
     for (const msg of snapshot.history) {
       this.history.append(msg);
@@ -516,7 +542,7 @@ export class Session {
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
         model: this.opts.modelAlias,
-        beforeTurn: () => this.readTodoReminder(),
+        beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
       });
       this.tracer.end(runScope, 'done');
@@ -675,6 +701,9 @@ export class Session {
         const scope = this.currentScope;
         this.tracer.write({ ts: Date.now(), type: 'activity', context: scope?.label ?? 'session', ...(scope ? { nodeId: scope.nodeId } : {}), scope: 'session', text });
       },
+      // setSessionMeta (fire-and-forget): record + emit the session_meta trace event
+      // inline, without ending the turn.
+      onSessionMeta: (meta) => this.recordSessionMeta(meta),
       seedVars,
       onFunctionError: (name, error) => {
         this.opts.renderHost.log(`[warn] failed to inject function "${name}": ${error}`);
@@ -812,6 +841,53 @@ export class Session {
     }
   }
 
+  /**
+   * The `beforeTurn` hook wired into every session turn loop: compose all
+   * registered soft reminders (see `ReminderRegistry`). Fires once per model
+   * episode. Top-level session only — forks/delegates do not set this hook.
+   */
+  private beforeTurn(): string | undefined {
+    return this.reminders.collect();
+  }
+
+  /**
+   * Naming nudge (a reminder provider): because `setSessionMeta` ends the turn, the
+   * agent frequently answers first and never names the conversation — especially on
+   * quick one-statement turns. If it still hasn't named the session after 2 turns,
+   * re-surface a short prompt to do it. Returns undefined (nothing to add) once
+   * named or before the threshold.
+   */
+  private namingNudge(): string | undefined {
+    if (this.sessionNamed || this.turnNo <= 2) return undefined;
+    return (
+      '## Name this conversation\n' +
+      'You have not named this session yet. Call `setSessionMeta({ title, slug })` now with a short, ' +
+      'human-readable title so it is easy to find later — a status set via `setActivity` is NOT a title.'
+    );
+  }
+
+  /**
+   * Record the agent's setSessionMeta() call (the fire-and-forget host hook). Core
+   * stays persistence-free: we trim the title, slugify the slug, mark the session
+   * named (silencing the nudge), and emit a session_meta trace event the server's
+   * wireTracer ingests to update + persist the SessionEntry (mirrors how
+   * totalCostUsd rides llm_response events). Returns whether anything was set.
+   */
+  private recordSessionMeta(meta: { title?: unknown; slug?: unknown }): boolean {
+    const title = typeof meta.title === 'string' ? meta.title.trim().slice(0, 120) : undefined;
+    // slugify: lowercase, non-alphanumerics → '-', collapse/trim dashes, cap length.
+    const rawSlug = typeof meta.slug === 'string'
+      ? meta.slug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
+      : undefined;
+    const slug = rawSlug || undefined;
+    if (title || slug) {
+      this.sessionNamed = true; // silence the naming nudge (beforeTurn)
+      this.tracer.write({ ts: Date.now(), type: 'session_meta', nodeId: this.sessionId, title, slug });
+      return true;
+    }
+    return false;
+  }
+
   private async handleYield(req: YieldRequest): Promise<unknown> {
     switch (req.kind) {
       case 'ask': {
@@ -843,22 +919,6 @@ export class Session {
         } catch (err: any) {
           return { ok: false, spaceKey: '', agentSlug: '', error: String(err?.message ?? err) };
         }
-      }
-      case 'setSessionMeta': {
-        // The agent names the session. Core stays persistence-free: we just emit a
-        // session_meta trace event that the server's wireTracer ingests to update +
-        // persist the SessionEntry (mirrors how totalCostUsd rides llm_response events).
-        const meta = (req.args[0] ?? {}) as { title?: unknown; slug?: unknown };
-        const title = typeof meta.title === 'string' ? meta.title.trim().slice(0, 120) : undefined;
-        // slugify: lowercase, non-alphanumerics → '-', collapse/trim dashes, cap length.
-        const rawSlug = typeof meta.slug === 'string'
-          ? meta.slug.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)
-          : undefined;
-        const slug = rawSlug || undefined;
-        if (title || slug) {
-          this.tracer.write({ ts: Date.now(), type: 'session_meta', nodeId: this.sessionId, title, slug });
-        }
-        return { ok: Boolean(title || slug) };
       }
       default: {
         // sleep / fork / tasklist / delegate are resolved by the shared router.

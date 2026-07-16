@@ -43,31 +43,25 @@ describe('Session fork engine sharing', () => {
   });
 });
 
-describe('Session setSessionMeta yield', () => {
-  /** Reach the private handleYield to drive a single setSessionMeta yield. It only
+describe('Session recordSessionMeta (fire-and-forget naming)', () => {
+  /** Reach the private recordSessionMeta (the setSessionMeta host hook). It only
    *  touches the tracer + sessionId, so no VM/start() is required. */
   function driveMeta(
     session: Session,
     meta: unknown,
-  ): { events: TraceEvent[]; result: Promise<unknown> } {
+  ): { events: TraceEvent[]; ok: boolean } {
     const events: TraceEvent[] = [];
     session.getTracer().subscribe((e) => events.push(e));
-    const handleYield = (
-      session as unknown as { handleYield: (r: YieldRequest) => Promise<unknown> }
-    ).handleYield.bind(session);
-    const req: YieldRequest = {
-      kind: 'setSessionMeta',
-      args: [meta],
-      deferred: { resolve: () => {}, reject: () => {} },
-      vmPromiseHandle: undefined,
-    };
-    return { events, result: handleYield(req) };
+    const record = (
+      session as unknown as { recordSessionMeta: (m: unknown) => boolean }
+    ).recordSessionMeta.bind(session);
+    return { events, ok: record(meta) };
   }
 
-  it('emits a session_meta trace event with a slugified slug and returns ok', async () => {
+  it('emits a session_meta trace event with a slugified slug and returns true', () => {
     const session = makeSession();
-    const { events, result } = driveMeta(session, { title: '  Pasta night  ', slug: 'Pasta Night!' });
-    expect(await result).toEqual({ ok: true });
+    const { events, ok } = driveMeta(session, { title: '  Pasta night  ', slug: 'Pasta Night!' });
+    expect(ok).toBe(true);
     const meta = events.find((e) => e.type === 'session_meta') as
       | Extract<TraceEvent, { type: 'session_meta' }>
       | undefined;
@@ -77,10 +71,10 @@ describe('Session setSessionMeta yield', () => {
     expect(meta!.nodeId).toBe(session.getRootNodeId());
   });
 
-  it('sets title only (no slug) and returns ok', async () => {
+  it('sets title only (no slug) and returns true', () => {
     const session = makeSession();
-    const { events, result } = driveMeta(session, { title: 'Just a title' });
-    expect(await result).toEqual({ ok: true });
+    const { events, ok } = driveMeta(session, { title: 'Just a title' });
+    expect(ok).toBe(true);
     const meta = events.find((e) => e.type === 'session_meta') as
       | Extract<TraceEvent, { type: 'session_meta' }>
       | undefined;
@@ -88,10 +82,10 @@ describe('Session setSessionMeta yield', () => {
     expect(meta!.slug).toBeUndefined();
   });
 
-  it('emits nothing and returns ok:false for an empty/invalid input', async () => {
+  it('emits nothing and returns false for an empty/invalid input', () => {
     const session = makeSession();
-    const { events, result } = driveMeta(session, { slug: '!!!' }); // slugifies to empty
-    expect(await result).toEqual({ ok: false });
+    const { events, ok } = driveMeta(session, { slug: '!!!' }); // slugifies to empty
+    expect(ok).toBe(false);
     expect(events.some((e) => e.type === 'session_meta')).toBe(false);
   });
 });

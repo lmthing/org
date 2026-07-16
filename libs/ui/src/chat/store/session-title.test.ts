@@ -44,3 +44,41 @@ describe('feedLive — session_meta → sessionTitle', () => {
     expect(useStore.getState().sessionTitle).toBe('');
   });
 });
+
+/**
+ * The first user message is shown as a PLACEHOLDER title immediately, so a new chat
+ * is never title-less while THING gets around to setSessionMeta() — a real
+ * session_meta from the agent overrides it later.
+ */
+describe('noteUserMessage — placeholder title', () => {
+  beforeEach(() => {
+    seq = 0;
+    useStore.getState().resetSession();
+  });
+
+  it('uses the first user message as the placeholder title when none is set', () => {
+    expect(useStore.getState().sessionTitle).toBe('');
+    useStore.getState().noteUserMessage('What is a healthy breakfast?');
+    expect(useStore.getState().sessionTitle).toBe('What is a healthy breakfast?');
+  });
+
+  it('collapses whitespace and caps the placeholder length', () => {
+    useStore.getState().noteUserMessage('  hello\n\n   world  ' + ' x'.repeat(100));
+    const t = useStore.getState().sessionTitle;
+    expect(t.startsWith('hello world')).toBe(true);
+    expect(t.length).toBeLessThanOrEqual(80);
+  });
+
+  it('does not override a title the agent already set', () => {
+    useStore.getState().feedLive([wire({ ts: 1, type: 'session_meta', title: 'Real Title' })]);
+    useStore.getState().noteUserMessage('some later message');
+    expect(useStore.getState().sessionTitle).toBe('Real Title');
+  });
+
+  it('a later session_meta overrides the placeholder', () => {
+    useStore.getState().noteUserMessage('my question');
+    expect(useStore.getState().sessionTitle).toBe('my question');
+    useStore.getState().feedLive([wire({ ts: 1, type: 'session_meta', title: 'Proper Title' })]);
+    expect(useStore.getState().sessionTitle).toBe('Proper Title');
+  });
+});

@@ -13,9 +13,10 @@ import { catalogDts } from '../ui/catalog.js';
  */
 export const ASK_DTS = `declare function ask<T = unknown>(descriptor: JSXDescriptor | string): Promise<T>;`;
 // setSessionMeta() names the current conversation. Session-only (like ask): absent
-// from fork/delegate DTS so a stray call there fails typecheck.
-export const SET_SESSION_META_DTS = `/** Set the current session's human-readable title and/or URL-safe slug. Top-level session only. */
-declare function setSessionMeta(meta: { title?: string; slug?: string }): Promise<{ ok: boolean }>;`;
+// from fork/delegate DTS so a stray call there fails typecheck. Fire-and-forget
+// (synchronous, does NOT end the turn) — so it can be called inline alongside work.
+export const SET_SESSION_META_DTS = `/** Name the current conversation (human-readable title + URL-safe slug). Fire-and-forget — does NOT end the turn, so call it inline. Top-level session only. */
+declare function setSessionMeta(meta: { title?: string; slug?: string }): { ok: boolean };`;
 // tasklist() resolves to a TaskEnvelope: { ok: boolean; degraded: boolean; data: <goal output>;
 // reason?: string; degradedTasks?: string[] }. Branch on r.ok / r.degraded; the payload is r.data.
 // Declared `any` by convention so r.data.field reads without casts.
