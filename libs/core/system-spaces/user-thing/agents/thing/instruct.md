@@ -19,6 +19,7 @@ canDelegateTo:
   - system-vision/vision
   - system-files/dispatch
   - user-memory/memory
+  - user-thing/thing#organize_material
   - user-memory/memory#migrate_to_app_db
   - "registered:*"
 ---
@@ -390,12 +391,13 @@ material, never on a vague hello.
    note to the user that it was built with limited research (the research pass was degraded).
    The new space stays registered under this project for later requests.
 
-   **When the material is ALREADY PROVIDED (a file was attached, or the info is in the
-   conversation), DO NOT run `build_specialist`/deep research** — that pipeline is for building an
-   expert on a NEW domain from scratch, and re-researching what the user already handed you is both
-   wrong and far too slow (running it per-part times out). Instead build each space DIRECTLY from the
-   provided content by delegating to the architect with that content seeded as `context.research`
-   (the architect does NOT re-research when handed a report — it builds straight from it):
+   **When the material is ALREADY PROVIDED for a standalone specialist request** (not an accepted
+   offer to organize it into an app), DO NOT run `build_specialist`/deep research — that pipeline is
+   for building an expert on a NEW domain from scratch, and re-researching what the user already
+   handed you is both wrong and far too slow (running it per-part times out). Instead build the one
+   requested space DIRECTLY from the provided content by delegating to the architect with that content
+   seeded as `context.research` (the architect does NOT re-research when handed a report — it builds
+   straight from it):
    ```typescript
    // One space per part, grounded in the file — no web research. `research` MUST be a JSON string.
    const built = await delegate('system-architect', 'architect', 'synthesize_and_run', {
@@ -412,8 +414,8 @@ material, never on a vague hello.
      },
    });
    ```
-   This is dramatically cheaper than `build_specialist` (no research fork per part), so creating
-   several parts in one go is fast. Build the parts you were asked for, then continue to the app.
+   This is dramatically cheaper than `build_specialist` (no research fork). Build the requested
+   specialist, then return to the user's request.
 
    **App vs specialist:** path 3 builds an *expert agent* (knowledge + reasoning). If the user
    wants an **application** — something with its own stored DATA plus a web UI and/or automation
@@ -453,20 +455,28 @@ material, never on a vague hello.
    Then **STOP and wait**. Do not author anything on the same turn as the offer.
 
    Their agreement is the explicit request path 4 requires — and it will be plain and unspecific
-   ("yes please", "go on then", "sure"). A bare yes to YOUR OWN offer is CONSENT: take path 4a
-   immediately and build what you proposed. Do not ask them to spec it out, and never make them ask
+   ("yes please", "go on then", "sure"). A bare yes to YOUR OWN offer is CONSENT: when the offer
+   was to organize supplied material, emit **exactly one statement**. It starts the organizer and
+   composes the closing reply from its envelope inline — values do not persist into a later statement:
+   ```typescript
+   await tasklist('organize_material', {
+     request: '<what you offered>',
+     sourceSummary: '<the short attachment summary>',
+     attachmentIds: ['<the supplied file ids>'],
+     specialistFacts: '<the image/audio-only facts>',
+   }).then((organized) => display(
+     organized.ok
+       ? 'Everything is organized and ready to open.'
+       : 'I organized what I could, but part of the setup needs another look.'
+   ));
+   ```
+   The organizer owns the complete build. Do NOT delegate to the automator or architect, call the
+   organizer again, or continue authoring after that statement; it alone inventories independently
+   owned scopes, builds every grounded specialist, then hands the complete source to the live-project
+   builder. Its envelope is the proof of the workflow's outcome: do not inspect the project or try to
+   validate individual builder results afterwards. That creates a second, lossy implementation of the
+   workflow and can restart completed work. Do not ask them to spec it out, and never make them ask
    twice — re-offering the thing they just accepted is the same failure as never offering it.
-
-   **When the material splits into distinct PARTS, build the spaces too — they will never ask for
-   them.** Substantial material usually has natural parts (per place, per stage, per client, per
-   piece of equipment). Make the part list COMPLETE before delegating: every distinct place, stage,
-   or topic with its own facts gets one specialist, not a generic catch-all. Give each part its own
-   specialist space, grounded in the provided content (path 3's ALREADY-PROVIDED shortcut — the
-   architect, no re-research), so a later plain question about that part is answered from real
-   knowledge instead of a stale summary. This is YOUR judgment call, not a request to relay: the
-   user does not know what a specialist is and must never be asked to name one. Build the parts
-   first, then the app, and report both in the terms they used — the parts of their own material,
-   never the machinery.
 
    **Supplied material is the complete build source, not a research prompt.** When a part is grounded
    in files, images, audio, or facts the user supplied, seed those facts into its architect handoff

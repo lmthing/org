@@ -148,14 +148,16 @@ describe('system spaces', () => {
     expect(instruct).toMatch(/OFFER — do not wait to be asked/);
     expect(instruct).toMatch(/Do not author anything on the same turn as the offer/);
     expect(instruct).toMatch(/A turn that has decided something must END WITH THE DECISION/);
-    expect(instruct).toMatch(/Ask, then stop, then wait/);
+    expect(instruct).toMatch(/Ask, then\s+stop, then\s+wait/);
 
     // 2. A bare "yes" to its OWN offer is the consent path 4 requires (no re-spec, no re-offer).
     expect(instruct).toMatch(/A bare yes to YOUR OWN offer is CONSENT/);
+    expect(instruct).toMatch(/The organizer owns the complete build/);
+    expect(instruct).toMatch(/Do NOT delegate to the automator or architect/);
 
-    // 3. Distinct parts of the material get their own spaces — THING's call, never the user's.
-    expect(instruct).toMatch(/When the material splits into distinct PARTS, build the spaces too/);
-    expect(instruct).toMatch(/must\s+never be asked to name one/);
+    // 3. The organizer, not a second free-form path, creates every distinct scope.
+    expect(instruct).toMatch(/inventories independently\s+owned scopes, builds every grounded specialist/);
+    expect(instruct).toMatch(/hands the complete source to the live-project\s+builder/);
 
     // 4. A turn may never end on a raw artifact (the "24872" failure).
     expect(instruct).toMatch(/LAST `display\(\)` is the only thing the user actually reads/);

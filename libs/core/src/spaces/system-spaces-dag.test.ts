@@ -109,6 +109,27 @@ describe('shipped system spaces load + validate', () => {
     const reconcile = await loadTasklistFromSpace(space, 'reconcile_conflict');
     expect(resolveGoalTask(reconcile)!.id).toBe('resolve');
     expect(reconcile['resolve']!.role).toBe('explore'); // pure reasoning, no writes
+
+    const organize = await loadTasklistFromSpace(space, 'organize_material');
+    expect(space.tasklists['organize_material']!.input).toEqual({
+      request: 'string', sourceSummary: 'string', attachmentIds: 'array', specialistFacts: 'string',
+    });
+    expect(organize['inventory']!.prelude).toContain('Promise.all');
+    expect(organize['inventory']!.prelude).toContain('readDocument');
+    // The split heuristic lives in loadable knowledge (user-thing/knowledge/organizing/split/*),
+    // not inline: the node loads the menu then the per-domain guide and splits by SUBJECT-vs-DATA.
+    expect(organize['inventory']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split'\)/);
+    expect(organize['inventory']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split', ?'<domain>'\)/);
+    expect(organize['inventory']!.instruction).toMatch(/subjects? vs\.? .*records|record type|app DATA/i);
+    expect(organize['build_specialist']!.forEach).toBe('inventory.scopes');
+    expect(organize['build_specialist']!.canDelegateTo).toEqual(['system-architect/architect#synthesize_and_run']);
+    expect(organize['build_specialist']!.instruction).toContain('exactly one self-contained statement');
+    expect(organize['build_app']!.canDelegateTo).toEqual(['system-appbuilder/automator#build_live_project']);
+    expect(organize['build_app']!.instruction).toContain("'build_live_project'");
+    expect(organize['build_app']!.instruction).toContain('live-project automator');
+    expect(organize['build_app']!.instruction).toContain('source-derived rows and an\nopenable page backed by the project\'s own API');
+    expect(organize['build_app']!.instruction).toContain('exactly one self-contained statement');
+    expect(resolveGoalTask(organize)!.id).toBe('build_app');
   });
 
   it('user-memory migrate_to_app_db carries db:write on ONLY the migrate node', async () => {
@@ -157,6 +178,15 @@ describe('shipped system spaces load + validate', () => {
     expect(tasks['build_hook']!.optional).toBe(true);
     expect(resolveGoalTask(tasks)!.id).toBe('finalize');
     expect(space.tasklists['build_app']!.input).toEqual({ request: 'string' });
+
+    const live = await loadTasklistFromSpace(space, 'build_live_project');
+    expect(space.agents['automator']!.defaultAction).toBe('build_live_project');
+    expect(space.tasklists['build_live_project']!.input).toEqual({ query: 'string', attachmentIds: 'array' });
+    expect(live['read_sources']!.prelude).toContain('Promise.all');
+    expect(live['write_data']!.dependsOn).toEqual(['read_sources']);
+    expect(live['write_openable_app']!.dependsOn).toEqual(['write_data']);
+    expect(live['write_openable_app']!.goal).toBe(true);
+    expect(resolveGoalTask(live)!.id).toBe('write_openable_app');
   });
 
   it('architect tasklists declare input schemas matching what their callers pass', async () => {

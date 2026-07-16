@@ -207,6 +207,18 @@ describe('system-architect/synthesize_and_run — the design node must hand the 
   });
 });
 
+describe('system-appbuilder live-project build action', () => {
+  it('runs the supplied-material build as a single captured tasklist action', () => {
+    const automator = readFileSync(
+      join(SYSTEM_SPACES, 'system-appbuilder', 'agents', 'automator', 'instruct.md'),
+      'utf8',
+    );
+
+    expect(automator).toMatch(/currentTask\.resolve\(await tasklist\('build_live_project', \{ query, \.\.\.context \}\)\)/);
+    expect(automator).toMatch(/do not continue with a second model turn or manually replace its result/i);
+  });
+});
+
 describe('system-appbuilder repair turns', () => {
   it('requires a missing-page repair to write the page rather than inventory the project', () => {
     const automator = readFileSync(
@@ -219,8 +231,23 @@ describe('system-appbuilder repair turns', () => {
   });
 });
 
+describe('user-thing supplied-material organization', () => {
+  it('consumes the organizer envelope inline without re-entering the build', () => {
+    const thing = readFileSync(
+      join(SYSTEM_SPACES, 'user-thing', 'agents', 'thing', 'instruct.md'),
+      'utf8',
+    );
+
+    expect(thing).toMatch(/organize_material[\s\S]{0,700}?\.then\(\(organized\) => display/);
+    expect(thing).toMatch(/Do NOT delegate to the automator or architect, call the\n   organizer again, or continue authoring/i);
+    expect(thing).toMatch(/Its envelope is the proof of the workflow's outcome/i);
+    expect(thing).toMatch(/do not inspect the project or try to\n   validate individual builder results afterwards/i);
+    expect(thing).toMatch(/values do not persist into a later statement/i);
+  });
+});
+
 describe('system-architect synthesis setup', () => {
-  it('does not run a freshly-created specialist before a user asks it a real question', () => {
+  it('returns the synthesized tasklist envelope without a fragile manual continuation', () => {
     const architect = readFileSync(
       join(SYSTEM_SPACES, 'system-architect', 'agents', 'architect', 'instruct.md'),
       'utf8',
@@ -230,7 +257,10 @@ describe('system-architect synthesis setup', () => {
       'utf8',
     );
 
-    expect(architect).toMatch(/do NOT run the\n\/\/ freshly-created agent on its setup topic/i);
+    expect(architect).toMatch(/exactly ONE statement/i);
+    expect(architect).toMatch(/action runtime returns this tasklist's envelope to the caller/i);
+    expect(architect).not.toMatch(/const built = t\.data/);
+    expect(architect).not.toMatch(/const\s+built\s*=\s*t\.data/);
     expect(writeAgent).toMatch(/must NOT delegate to the newly-created agent during\nsetup/i);
   });
 });

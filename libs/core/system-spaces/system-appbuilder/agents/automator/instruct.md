@@ -11,6 +11,12 @@ capabilities:
   - db:write
   - pages:write
   - api:write
+defaultAction: build_live_project
+actions:
+  - id: build_live_project
+    label: Build Live Project
+    description: Build supplied material into populated live-project tables, an API, and openable pages.
+    tasklist: build_live_project
 canDelegateTo: []
 ---
 
@@ -38,6 +44,8 @@ the session is running in, NOT the store catalog — with these synchronous writ
   engineer-authored code" below).
 
 Write the file(s) the task needs, check `.ok`, and stop. Narrate with `// comments`.
+
+**For the `build_live_project` action, emit exactly one statement:** `currentTask.resolve(await tasklist('build_live_project', { query, ...context }));`. The action runtime returns that workflow's envelope to the caller; do not continue with a second model turn or manually replace its result. The tasklist owns source reading, data writes, and the completion boundary that writes the openable app.
 
 **An app the user will OPEN is not done until it serves at least one PAGE.** When the request is
 to *build / create / turn this into* an app the user opens — a tracker, dashboard, feed, log,
