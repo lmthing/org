@@ -30,6 +30,7 @@ import { basename, dirname, join } from 'node:path';
 import { parseFrontmatter } from '@lmthing/core';
 import type { ConnectionRequest, ConnectionResolver, CodeNodeCtxFactory, TaskNode } from '@lmthing/core';
 import { invokeNamedFnInWorker, type WorkerInvokeHandlers } from '../app/worker-load.js';
+import type { ProjectAuthoringGlobals } from '../app/authoring/globals.js';
 
 /** Dependencies {@link createCodeNodeCtxFactory} needs from the host (SessionManager).
  *  All are project-scoped closures the manager already has the pieces to build. */
@@ -46,6 +47,10 @@ export interface CodeNodeFactoryDeps {
   connectionResolver: ConnectionResolver;
   /** Per-node worker wall-clock budget (ms). Omit for the worker-load default. */
   timeoutMs?: number;
+  /** Typed live-project writers (`writeProjectTable`/`writeProjectApi`/`writeProjectPage`/
+   *  `writeProjectComponent`/…) for CODE nodes that author files — the SAME host impls the
+   *  agent nodes use, exposed on `ctx.<name>`. Omit for a project with no authoring. */
+  projectAuthoring?: ProjectAuthoringGlobals;
 }
 
 /** Read a space's OWN connection provider(s) from `<spaceDir>/package.json`
@@ -124,6 +129,9 @@ export function createCodeNodeCtxFactory(deps: CodeNodeFactoryDeps): CodeNodeCtx
           }
           return deps.connectionResolver(provider, req as ConnectionRequest);
         },
+        ...(deps.projectAuthoring
+          ? { authoring: deps.projectAuthoring as unknown as Record<string, (...args: unknown[]) => unknown> }
+          : {}),
       };
       const out = await invokeNamedFnInWorker(
         modulePath,

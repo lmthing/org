@@ -12,7 +12,7 @@
  *       (inspectable in chat) and never enters the interactive pool.
  */
 import { describe, it, expect, afterAll } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createMockStreamFn } from '@lmthing/core';
@@ -76,6 +76,21 @@ async function makeRoot(): Promise<string> {
     'utf8',
   );
 
+  // write: a code node that AUTHORS a live-project table via the ctx writer proxy
+  // (proves createProjectAuthoringGlobals reaches a worker code node's ctx).
+  const write = join(spaceDir, 'tasklists', 'write');
+  await mkdir(write, { recursive: true });
+  await writeFile(join(write, 'index.md'), 'Write.\n', 'utf8');
+  await writeFile(
+    join(write, '01-author.ts'),
+    `export const node = { output: { ok: 'boolean' }, goal: true };\n` +
+      `export async function run(ctx) {\n` +
+      `  const w = await ctx.writeProjectTable('widgets', { title: 'Widgets', description: 'A widget table.', columns: { id: { type: 'string', description: 'primary key', primaryKey: true, generated: 'uuid' } } }, [{ id: 'w1' }]);\n` +
+      `  return { ok: w.ok };\n` +
+      `}\n`,
+    'utf8',
+  );
+
   return root;
 }
 
@@ -128,6 +143,19 @@ describe('SessionManager.runTasklistHeadless (S9, keyless)', () => {
     const sessions = await manager.listSpaceSessions('user', 'greeter');
     expect(sessions.length).toBe(1);
     expect(sessions[0]!.status).toBe('error');
+  });
+
+  it('(e) a code node authors a live-project table via ctx.writeProjectTable', async () => {
+    const root = await makeRoot();
+    const manager = new SessionManager({ streamFn: mockStreamFn, lmthingRoot: root });
+
+    const envelope = await manager.runTasklistHeadless({ projectId: 'user', spaceId: 'greeter', slug: 'write' });
+
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data).toEqual({ ok: true });
+    // The writer proxy reached the main-process authoring globals and the table file landed.
+    const raw = await readFile(join(root, 'user', 'database', 'widgets.json'), 'utf8');
+    expect(JSON.parse(raw).title).toBe('Widgets');
   });
 
   it('(d) throws on an unknown tasklist slug', async () => {

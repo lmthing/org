@@ -8,7 +8,7 @@
 /** Which main-process capability a worker proxy request targets. `state` is the
  *  cron-emitter per-def JSON KV scratchpad (get/set), serviced main-side by
  *  `server/emitter-state.ts`. */
-export type ProxyKind = 'db' | 'delegate' | 'callConnection' | 'tasklist' | 'state';
+export type ProxyKind = 'db' | 'delegate' | 'callConnection' | 'tasklist' | 'state' | 'authoring';
 
 /** The `workerData` handed to the worker entry. */
 export type WorkerLoadJob =
@@ -30,6 +30,9 @@ export type WorkerLoadJob =
       ctxSeed: Record<string, unknown>;
       /** The db method names exposed as ctx.db proxies (mirrors `AsyncDbApi`). */
       dbMethods: string[];
+      /** Typed project-writer names exposed as ctx proxies (`writeProjectTable`, …)
+       *  for tasklist code nodes that author files. Empty/absent → no writers. */
+      authoringMethods?: string[];
     };
 
 /** Worker → main messages. */

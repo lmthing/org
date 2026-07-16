@@ -29,7 +29,7 @@ import {
 import { bootProjectApp } from '../app/boot.js';
 import { createApiRuntime, type ApiRuntime } from '../app/api/runtime.js';
 import type { ProjectDb } from '../app/store.js';
-import { createAppAuthoringGlobals, createProjectAuthoringGlobals, resolveCatalogRoot, type AppAuthoringGlobals } from '../app/authoring/index.js';
+import { createAppAuthoringGlobals, createProjectAuthoringGlobals, resolveCatalogRoot, type AppAuthoringGlobals, type ProjectAuthoringGlobals } from '../app/authoring/index.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
 import { loadAllHooks } from '../app/hooks/index.js';
 import { ProjectHookRuntime } from '../app/hooks/runtime.js';
@@ -457,6 +457,71 @@ export class SessionManager {
       getDb: () => this.getProjectDb(root, projectId),
       delegate: (spaceRef, action, opts) => this.codeNodeDelegate(projectId, spaceRef, action, opts),
       connectionResolver: this.getConnectionResolver(projectRoot),
+      // Give CODE nodes the SAME typed live-project writers the agent nodes hold, so an
+      // implement_* node can deterministically author tables/endpoints/pages/components.
+      projectAuthoring: this.buildProjectAuthoring(root, projectId),
+    });
+  }
+
+  /** Build this project's typed live-project authoring writers, bound to its dir, with the
+   *  republish / db-reload+seed / page-and-api cache-invalidation side effects fired after each
+   *  write. Shared by {@link getProjectAppGlobals} (agent nodes) and {@link buildCodeNodeCtxFactory}
+   *  (code nodes) so both paths land identical writes + re-derives. */
+  private buildProjectAuthoring(root: string, projectId: string): ProjectAuthoringGlobals {
+    return createProjectAuthoringGlobals({
+      projectRoot: join(root, projectId),
+      republish: () => {
+        // Fire-and-forget from the synchronous writer; a republish failure never fails
+        // the write (the file already landed — the next boot picks it up regardless).
+        void this.republish().catch((err) =>
+          console.warn(`[authoring] republish after project write failed: ${err instanceof Error ? err.message : String(err)}`),
+        );
+        // A newly authored hook must ALSO join the live db-write dispatch set. That wiring
+        // happens once, when the project's db first boots — so without this refresh a hook
+        // written AFTER the db booted never fires on a db write until the pod restarts.
+        void this.refreshProjectHooks(root, projectId).catch((err) =>
+          console.warn(`[authoring] hook refresh failed: ${err instanceof Error ? err.message : String(err)}`),
+        );
+      },
+      onSchemaWrite: (table, rows) => {
+        // A project with no `database/*.json` boots NO db at all (bootProjectApp → null),
+        // and that `null` is CACHED. The first authored table must drop the cached "no db"
+        // so the next getProjectDb() actually boots one. When the authoring agent passed seed
+        // `rows` (moving KNOWN data into the app — e.g. a trip's flights/hotels from a file it
+        // was given), insert them AFTER the reload: the agent itself cannot, because `db` is not
+        // injected into its session until a table already exists.
+        void this.reloadProjectDb(root, projectId)
+          .then(() => (rows && rows.length ? this.seedProjectTable(root, projectId, table, rows) : undefined))
+          .catch((err) =>
+            console.warn(`[authoring] project db reload/seed failed: ${err instanceof Error ? err.message : String(err)}`),
+          );
+      },
+      onAppWrite: (kind) => {
+        // A live page/api write must invalidate the caches derived from `api/` + `pages/`:
+        // the typed endpoint contracts (feed the manifest + apiCall DTS) and the per-project
+        // api runtime (loads the handlers). Dropping them makes the next manifest/apiCall
+        // re-derive from the new files. (`kind` is 'api' | 'page'; both invalidate the same.)
+        void kind;
+        this.projectContracts.delete(projectId);
+        const rt = this.apiRuntimes.get(projectId);
+        if (rt) {
+          try {
+            rt.dispose();
+          } catch {
+            /* best-effort */
+          }
+        }
+        this.apiRuntimes.delete(projectId);
+        // …AND the SERVED bundle, which is cached for the server's lifetime (serve.ts's
+        // `pageBuildCache`). Without this the app keeps serving the pre-write build: the user
+        // asks the in-app assistant for a new page, the agent writes it, and the running app
+        // shows "No page for /favorites" — the self-evolution never lands. Worse, once anything
+        // DOES rebuild (the automator's `POST /app/build`), the fresh index.html references a
+        // new hashed entry that the STALE manifest does not contain, so the asset request falls
+        // through to the SPA shell and the app goes BLANK. Found live in scenario 10, driving
+        // the in-app dock in a real browser. The next page request re-derives the bundle.
+        this.invalidatePageBuildFn?.(projectId);
+      },
     });
   }
 
@@ -612,61 +677,7 @@ export class SessionManager {
     // crontab goes live without a pod restart. Injected only on `hooks:write` (core's
     // injectAppGlobals), so THING/ordinary agents never see them; the automator writes
     // hooks+events, the engineer writes functions.
-    const projectAuthoring = createProjectAuthoringGlobals({
-      projectRoot: join(root, projectId),
-      republish: () => {
-        // Fire-and-forget from the synchronous writer; a republish failure never fails
-        // the write (the file already landed — the next boot picks it up regardless).
-        void this.republish().catch((err) =>
-          console.warn(`[authoring] republish after project write failed: ${err instanceof Error ? err.message : String(err)}`),
-        );
-        // A newly authored hook must ALSO join the live db-write dispatch set. That wiring
-        // happens once, when the project's db first boots — so without this refresh a hook
-        // written AFTER the db booted never fires on a db write until the pod restarts.
-        void this.refreshProjectHooks(root, projectId).catch((err) =>
-          console.warn(`[authoring] hook refresh failed: ${err instanceof Error ? err.message : String(err)}`),
-        );
-      },
-      onSchemaWrite: (table, rows) => {
-        // A project with no `database/*.json` boots NO db at all (bootProjectApp → null),
-        // and that `null` is CACHED. The first authored table must drop the cached "no db"
-        // so the next getProjectDb() actually boots one. When the authoring agent passed seed
-        // `rows` (moving KNOWN data into the app — e.g. a trip's flights/hotels from a file it
-        // was given), insert them AFTER the reload: the agent itself cannot, because `db` is not
-        // injected into its session until a table already exists.
-        void this.reloadProjectDb(root, projectId)
-          .then(() => (rows && rows.length ? this.seedProjectTable(root, projectId, table, rows) : undefined))
-          .catch((err) =>
-            console.warn(`[authoring] project db reload/seed failed: ${err instanceof Error ? err.message : String(err)}`),
-          );
-      },
-      onAppWrite: (kind) => {
-        // A live page/api write must invalidate the caches derived from `api/` + `pages/`:
-        // the typed endpoint contracts (feed the manifest + apiCall DTS) and the per-project
-        // api runtime (loads the handlers). Dropping them makes the next manifest/apiCall
-        // re-derive from the new files. (`kind` is 'api' | 'page'; both invalidate the same.)
-        void kind;
-        this.projectContracts.delete(projectId);
-        const rt = this.apiRuntimes.get(projectId);
-        if (rt) {
-          try {
-            rt.dispose();
-          } catch {
-            /* best-effort */
-          }
-        }
-        this.apiRuntimes.delete(projectId);
-        // …AND the SERVED bundle, which is cached for the server's lifetime (serve.ts's
-        // `pageBuildCache`). Without this the app keeps serving the pre-write build: the user
-        // asks the in-app assistant for a new page, the agent writes it, and the running app
-        // shows "No page for /favorites" — the self-evolution never lands. Worse, once anything
-        // DOES rebuild (the automator's `POST /app/build`), the fresh index.html references a
-        // new hashed entry that the STALE manifest does not contain, so the asset request falls
-        // through to the SPA shell and the app goes BLANK. Found live in scenario 10, driving
-        // the in-app dock in a real browser. The next page request re-derives the bundle.
-        this.invalidatePageBuildFn?.(projectId);
-      },
-    });
+    const projectAuthoring = this.buildProjectAuthoring(root, projectId);
     return {
       // Live forwarder (NOT a build-time snapshot): reflects whatever db is booted for
       // the project when a session/delegate injects it. Present on the CAPABILITY grant

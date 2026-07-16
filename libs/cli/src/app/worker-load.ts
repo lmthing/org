@@ -106,6 +106,11 @@ export interface WorkerInvokeHandlers {
    *  main-side by `server/emitter-state.ts`. Omitted for hooks/code nodes (a
    *  `ctx.state` call then rejects). */
   state?: { get: (key: string) => Promise<unknown>; set: (key: string, value: unknown) => Promise<void> };
+  /** Typed live-project writers (`writeProjectTable`/`writeProjectApi`/`writeProjectPage`/
+   *  `writeProjectComponent`/…) exposed as `ctx.<name>` proxies so a tasklist CODE node can
+   *  author files. Each returns a serializable `{ ok, error? }` (readers return their payload);
+   *  synchronous impls are fine — `serviceProxy` awaits the return either way. */
+  authoring?: Record<string, (...args: unknown[]) => unknown>;
 }
 
 /**
@@ -137,7 +142,10 @@ export async function invokeDefaultFnInWorker(
   opts: { timeoutMs?: number } = {},
 ): Promise<unknown> {
   const code = await transpileFile(file);
-  const job: WorkerLoadJob = { mode: 'invoke', code, fnKey, ctxSeed, dbMethods: DB_METHODS };
+  const job: WorkerLoadJob = {
+    mode: 'invoke', code, fnKey, ctxSeed, dbMethods: DB_METHODS,
+    authoringMethods: handlers.authoring ? Object.keys(handlers.authoring) : undefined,
+  };
   const result = await runWorker(job, handlers, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   if (result.type === 'result') return result.value;
   throw new Error(`worker-load: unexpected result invoking "${fnKey}" in "${file}"`);
@@ -169,6 +177,7 @@ export async function invokeNamedFnInWorker(
     extraArgs: args,
     ctxSeed: {},
     dbMethods: DB_METHODS,
+    authoringMethods: handlers.authoring ? Object.keys(handlers.authoring) : undefined,
   };
   const result = await runWorker(job, handlers, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   if (result.type === 'result') return result.value;
@@ -252,6 +261,11 @@ async function serviceProxy(
       const { op, key, value } = msg.payload as { op: 'get' | 'set'; key: string; value?: unknown };
       if (op === 'get') result = await handlers.state.get(key);
       else result = await handlers.state.set(key, value);
+    } else if (msg.kind === 'authoring') {
+      const { method, args } = msg.payload as { method: string; args: unknown[] };
+      const fn = handlers.authoring?.[method];
+      if (typeof fn !== 'function') throw new Error(`ctx.${method} is not available to this code node`);
+      result = await fn(...args);
     } else {
       if (!handlers.tasklistRun) throw new Error('tasklist runner not available yet');
       const { ref, seed } = msg.payload as { ref: string; seed?: unknown };

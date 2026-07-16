@@ -121,8 +121,17 @@ function main(): void {
       db[method] = (...args: unknown[]) => rpc('db', { method, args });
     }
 
+    // Typed live-project writers (`writeProjectTable`/`writeProjectApi`/…) exposed at the top
+    // level of ctx so a code node can `await ctx.writeProjectTable(...)`. Each proxies to the
+    // main-process authoring globals; absent when the node's tasklist ships no writers.
+    const authoring: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+    for (const method of job.authoringMethods ?? []) {
+      authoring[method] = (...args: unknown[]) => rpc('authoring', { method, args });
+    }
+
     const ctx: Record<string, unknown> = {
       ...job.ctxSeed,
+      ...authoring,
       db,
       delegate: (spaceRef: string, action?: string, opts?: unknown) =>
         rpc('delegate', { spaceRef, action, opts }),
