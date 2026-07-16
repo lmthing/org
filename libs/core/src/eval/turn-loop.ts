@@ -735,7 +735,16 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       if (budgetWarning) varContent += `\n\n${budgetWarning}`;
       history.append({ role: 'user', content: varContent, blockType: 'variables' });
 
-      attempt = 0;
+      // Reset the retry budget ONLY on a CLEAN resolution. If this turn's yields ERRORED and
+      // we still reached here (attempt >= maxRetries → the fall-through above binds the failed
+      // names to `undefined` so the run can limp forward), that is NOT progress. A model that
+      // stubbornly re-emits the same failing yield (e.g. a forbidden delegate) would otherwise
+      // get its retry counter zeroed every cycle and loop forever — each cycle appending another
+      // error+variables block until the history string overflows V8's max length ("Invalid
+      // string length"). Withholding the reset lets `attempt` climb past maxRetries so the loop
+      // returns 'error' (forks then salvage a schema-valid placeholder; sessions stop) instead
+      // of spinning.
+      if (yieldErrors.length === 0) attempt = 0;
       continue;
     }
 
