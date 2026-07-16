@@ -18,7 +18,9 @@ Wiring rules — the app fails to compile if you break them:
 - Import data hooks ONLY from `@app/runtime` (`useApi`/`useApiMutation`/`apiCall`/`Link`/`useParams`) —
   never `fetch` a raw URL, and NEVER import `react-router`, `@radix-ui/*`, `@agent-chat/react`, or a
   relative `use-api`; none exist in a generated project.
-- Read data by passing an endpoint's logical `name` to `useApi` (the same id the endpoint exported).
+- Read data by passing an endpoint `name` to `useApi` — the exact stable id the endpoint exported. Use
+  ONLY names listed for this page in `item.endpoints` (each is a real `plan_endpoints.endpoints[].name`);
+  never invent or transform a name. Every read endpoint returns `{ items: [...] }`, so read `data.items`.
 - IMPORT the reusable components you planned, by relative path from `pages/` to `components/`: a
   top-level page uses `../components/<Name>`, a page one directory deep uses `../../components/<Name>`.
 - STYLE WITH `@lmthing/css` DESIGN TOKENS ONLY (`bg-primary`, `text-foreground`, `text-muted`,
@@ -32,7 +34,7 @@ const pg = item;
 const depth = String(pg.route).split('/').length; // 'index' → 1, 'items/[id]' → 2
 const up = '../'.repeat(depth);                    // '../' to reach the project root from this page
 const ep = (Array.isArray(pg.endpoints) && pg.endpoints[0]) ? pg.endpoints[0]
-  : (plan_endpoints.endpoints[0] ? String(plan_endpoints.endpoints[0].route).split('/')[0] : 'items-list');
+  : (plan_endpoints.endpoints[0] ? plan_endpoints.endpoints[0].name : 'items-list');
 const comp = (Array.isArray(pg.components) && pg.components[0]) ? pg.components[0]
   : (plan_components.components[0] ? plan_components.components[0].name : null);
 const src = [

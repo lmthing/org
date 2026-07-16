@@ -45,30 +45,32 @@ the session is running in, NOT the store catalog — with these synchronous writ
 
 Write the file(s) the task needs, check `.ok`, and stop. Narrate with `// comments`.
 
-**For the `build_live_project` action, emit exactly one statement:** `currentTask.resolve(await tasklist('build_live_project', { query, ...context }));`. The action runtime returns that workflow's envelope to the caller; do not continue with a second model turn or manually replace its result. The tasklist owns source reading, data writes, and the completion boundary that writes the openable app.
+**A first WHOLE-APP build ALWAYS runs the `build_live_project` tasklist — never freeform, no matter how you were invoked.** Whether the runtime started you on the `build_live_project` action OR a caller delegated to you MODEL-DRIVEN with a request to *build / create / turn this into* a complete app the user opens (a tracker, dashboard, feed, log, CRUD tool, "somewhere I can look at this") from supplied material, the FIRST build of that app — its tables, endpoints, reusable components, and multiple openable pages — is authored by the structured pipeline, in exactly one statement:
 
-**An app the user will OPEN is not done until it serves at least one PAGE.** When the request is
-to *build / create / turn this into* an app the user opens — a tracker, dashboard, feed, log,
-CRUD tool, "somewhere I can look at this" — a set of `writeProjectTable`s is only the DATA MODEL,
-not an app: with no `writeProjectPage`, `/app/<project>/` serves an empty shell and the user opens
-nothing. So finish the job in the SAME turn: after the tables, author at least the `index` home
-page backed by a `writeProjectApi` that reads the REAL rows, and if you created several tables the
-home must surface them (the dashboard/list they asked to see). Do NOT stop at the tables and report
-"app built" — a project with tables and zero pages is the empty-app failure, and it looks fine in a
-manifest while showing the user nothing. (This gate is for the FIRST build of an app; GROWING an
-app that already has pages is different — you ADD a section and must NOT rewrite the existing home,
-see "GROWING an app that already exists" below.)
+```typescript
+currentTask.resolve(await tasklist('build_live_project', { query, attachmentIds }));
+```
 
-**MAKE IT OPENABLE EARLY — order matters, because you can run out of turn.** A big first build (many
-tables, a large attached file, a lot of rows to seed) can consume your whole turn on DATA and leave
-you reporting "all tables created and seeded!" with no page ever written. That is the same empty-app
-failure, arrived at by running long rather than by forgetting — and it is worse, because you sound
-finished. So do NOT leave the page to the end. As soon as the FIRST table exists, author the `index`
-page and the `writeProjectApi` behind it; then go back and add the remaining tables, seed the rest of
-the rows, and grow the home to surface them as you go. Judge it by what the user gets if you are cut
-off at any moment: a home page over three of the seven tables is an app they can open and use, and
-you can always seed more later. Seven perfectly seeded tables and no page is not an app at all — it
-is nothing they can open. **Openable first, complete second.**
+Pass the `attachmentIds` you were given (omit only if there were none) so the pipeline reads the source itself. The runtime returns that workflow's envelope to the caller; do NOT continue with a second model turn or manually replace its result, and do NOT hand-author the app with a sequence of `writeProjectTable`/`writeProjectApi`/`writeProjectPage` calls in this turn. **A whole app authored freeform in one model turn is the single-page / empty-app failure** — one turn cannot reliably write every table, endpoint, component, and page, so a slip anywhere loses the build (a data model with zero pages, or a lone `index` over one table). The tasklist owns source reading, the per-item plan→build fan-out, and the completion boundary that writes the openable app. The freeform `writeProject*` writers below are for GROWING an app that ALREADY has pages (adding one section) and for small incremental changes — **not** the first whole-app build.
+
+**GROWING an app is not done until the new section serves a PAGE.** When you ADD to an app that already
+has pages, a set of `writeProjectTable`s is only the DATA MODEL, not a usable section: with no
+`writeProjectPage`, `/app/<project>/` shows the user nothing new. So finish in the SAME turn — after the
+tables, author the page(s) backed by a `writeProjectApi` that reads the REAL rows — and you ADD a
+section without rewriting the existing home (see "GROWING an app that already exists" below).
+
+**MAKE IT OPENABLE EARLY — order matters, because you can run out of turn.** (This applies to the
+freeform GROW path — the first whole-app build goes through the `build_live_project` tasklist above,
+which owns its own openable boundary.) When you GROW an app freeform, a big addition (many tables, a
+large attached file, a lot of rows to seed) can consume your whole turn on DATA and leave you reporting
+"all tables created and seeded!" with no page ever written. That is the same empty-app failure, arrived
+at by running long rather than by forgetting — and it is worse, because you sound finished. So do NOT
+leave the page to the end. As soon as the FIRST new table exists, author its page and the
+`writeProjectApi` behind it; then go back and add the remaining tables, seed the rest of the rows, and
+grow the section to surface them as you go. Judge it by what the user gets if you are cut off at any
+moment: a page over three of the seven tables is something they can open and use, and you can always
+seed more later. Seven perfectly seeded tables and no page is nothing they can open. **Openable first,
+complete second.**
 
 ## Ground rules — author DIRECTLY (do not explore)
 

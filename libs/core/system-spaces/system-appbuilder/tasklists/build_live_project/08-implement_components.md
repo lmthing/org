@@ -16,7 +16,9 @@ that it parses as TSX, returning `{ ok, error? }`. Write the FULL `.tsx` source 
 array-`join("\n")` pattern. This is presentational UI: take the record/value via props and render it —
 do NOT fetch data here (pages pass data in). STYLE WITH `@lmthing/css` DESIGN TOKENS ONLY (`bg-card`,
 `text-foreground`, `text-muted`, `border-border`, `bg-primary`) — never a raw hex, `rgb()/hsl()`, or a
-stock Tailwind color (`gray-500`, `blue-600`). Import only from `react`/`@app/runtime` if needed. Emit
+stock Tailwind color (`gray-500`, `blue-600`). Import only from `react`/`@app/runtime` if needed.
+`@app/runtime` exports ONLY `apiCall`, `HttpError`, `useApi`, `useApiMutation`, `useParams`, `Link`,
+`navigate`, and `Chat`; do not import utility helpers such as `cn`, `clsx`, or `classNames`. Emit
 one statement:
 
 ```typescript

@@ -8,13 +8,13 @@ functions: []
 ---
 
 Plan the MULTIPLE pages of the app, each wired to the real endpoints and the reusable components.
-`query`, `plan_app` (`plan_app.pages`), `plan_endpoints` (`plan_endpoints.endpoints` — each carries a
-stable `name`… planned via its route's first segment), and `plan_components`
-(`plan_components.components`) are in scope. This is a THINKING step — no writers. Plan an `index` home
-PLUS the additional views the material calls for (a list, a detail `items/[id]`, a dashboard) — a
-single page is not enough. For each page, name the endpoints it reads (by their route's logical name)
-and the components it renders, so the implement step wires real data through shared UI. Emit one
-statement:
+`query`, `plan_app` (`plan_app.pages`), `plan_endpoints` (`plan_endpoints.endpoints` — each is
+`{ name, route, purpose, tables }`), and `plan_components` (`plan_components.components`) are in scope.
+This is a THINKING step — no writers. **Every endpoint a page lists must be an existing
+`plan_endpoints.endpoints[].name`, copied VERBATIM — never invent a name or transform one.** Plan an
+`index` home PLUS the additional views the material calls for (a list, a detail `items/[id]`, a
+dashboard) — a single page is not enough. For each page, list the endpoint `name`s it reads and the
+components it renders, so the implement step wires real data through shared UI. Emit one statement:
 
 ```typescript
 currentTask.resolve({
@@ -22,7 +22,7 @@ currentTask.resolve({
     {
       route: 'index',
       purpose: '<what this page shows>',
-      // endpoint logical names (the first segment of the route, e.g. 'items-list') this page reads:
+      // endpoint NAMES, each copied verbatim from plan_endpoints.endpoints[].name:
       endpoints: [ '<endpoint name>' ],
       // component names (from plan_components) this page renders:
       components: [ '<ComponentName>' ],

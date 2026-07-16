@@ -25,17 +25,20 @@ describe('system-appbuilder/automator — the empty-app failure', () => {
    * what isolates the cause: not a missing gate, but a missing ORDERING rule. The existing gate says
    * a page is required; it did not say to write it EARLY, before the data can eat the turn.
    */
-  it('tells the builder to make the app OPENABLE EARLY, not to leave the page until after the data', () => {
+  it('routes a first whole-app build to the tasklist and keeps the openable-early gate for the freeform grow path', () => {
     const instruct = readFileSync(join(SYSTEM_SPACES, 'system-appbuilder', 'agents', 'automator', 'instruct.md'), 'utf8');
 
-    // The page-required gate (the quality rule).
-    expect(instruct).toMatch(/not done until it serves at least one PAGE/i);
-
-    // The ordering rule (the one that survives running out of turn) — this is the regression guard.
+    // The reliability guarantee: a first whole-app build NEVER goes freeform — it runs the pipeline.
     expect(
       instruct,
-      'the automator must be told to author the home page EARLY (right after the first table), or a large seed run will consume the turn and ship an app with no page',
-    ).toMatch(/openable first|make it openable early/i);
+      'a first whole-app build must route to build_live_project, never freeform in one turn (freeform is the single-page/empty-app failure)',
+    ).toMatch(/whole app authored freeform in one model turn is the single-page/i);
+
+    // The page-required gate still applies to the freeform GROW path.
+    expect(instruct).toMatch(/not done until the new section serves a PAGE/i);
+
+    // The ordering rule (the one that survives running out of turn) — the regression guard.
+    expect(instruct).toMatch(/openable first|make it openable early/i);
     expect(instruct).toMatch(/run out of turn|cut off/i);
   });
 });
@@ -214,8 +217,10 @@ describe('system-appbuilder live-project build action', () => {
       'utf8',
     );
 
-    expect(automator).toMatch(/currentTask\.resolve\(await tasklist\('build_live_project', \{ query, \.\.\.context \}\)\)/);
+    expect(automator).toMatch(/currentTask\.resolve\(await tasklist\('build_live_project', \{ query, attachmentIds \}\)\)/);
     expect(automator).toMatch(/do not continue with a second model turn or manually replace its result/i);
+    // The route is invocation-independent: a MODEL-DRIVEN whole-app delegate must reach the tasklist too.
+    expect(automator).toMatch(/no matter how you were invoked|delegated to you MODEL-DRIVEN/i);
   });
 
   it('builds the live app as a plan → per-item build DAG (multiple pages + reusable components)', () => {
@@ -225,8 +230,13 @@ describe('system-appbuilder live-project build action', () => {
     // Each implement node uses the LIVE writers (not the catalog ones).
     expect(read('04-implement_tables.md')).toMatch(/writeProjectTable\(item\.name, item\.schema/);
     expect(read('06-implement_endpoints.md')).toMatch(/writeProjectApi\(/);
-    // Endpoints must export a unique `name` — the loader rejects the whole app without it.
-    expect(read('06-implement_endpoints.md')).toMatch(/UNIQUE string `name`/);
+    // Endpoint name is the single source of truth: plan_endpoints ASSIGNS a unique `name`,
+    // implement_endpoints uses `item.name` VERBATIM (never re-derives from the route), and pages
+    // reference that exact name — the fix for the cross-node name-drift + duplicate-name failures.
+    expect(read('05-plan_endpoints.md')).toMatch(/UNIQUE lowercase-hyphen id/);
+    expect(read('06-implement_endpoints.md')).toMatch(/const name = ep\.name;/);
+    expect(read('06-implement_endpoints.md')).toMatch(/VERBATIM/);
+    expect(read('09-plan_pages.md')).toMatch(/plan_endpoints\.endpoints\[\]\.name/);
 
     // Reusable components are their own plan → implement pair.
     expect(read('08-implement_components.md')).toMatch(/writeProjectComponent\(/);
