@@ -147,6 +147,114 @@ describe('Session multimodal input threading', () => {
     await session.dispose();
   });
 
+  it('threads document reading through a task-fork delegate into its action tasklist', async () => {
+    const childDir = await mkdtemp(join(tmpdir(), 'lmthing-nested-document-child-'));
+    tmpDirs.push(childDir);
+    const childAgent = join(childDir, 'agents', 'reader', 'instruct.md');
+    const childTask = join(childDir, 'tasklists', 'read_upload', '01-read.md');
+    await mkdir(dirname(childAgent), { recursive: true });
+    await mkdir(dirname(childTask), { recursive: true });
+    await writeFile(childAgent, `---
+title: Reader
+actions:
+  - id: read
+    label: Read
+    description: Read the supplied upload
+    tasklist: read_upload
+---
+
+Read uploads.\n`, 'utf8');
+    await writeFile(join(dirname(childTask), 'index.md'), `---
+input:
+  query: string
+  attachmentIds: array
+---
+
+Read an upload.\n`, 'utf8');
+    await writeFile(childTask, `---
+id: read
+goal: true
+role: general
+output:
+  content: string
+prelude: |
+  const documents = await Promise.all((attachmentIds as string[]).map((id) => readDocument(id)));
+---
+
+READ_UPLOAD_TASK\n`, 'utf8');
+
+    const parentDir = await mkdtemp(join(tmpdir(), 'lmthing-nested-document-parent-'));
+    tmpDirs.push(parentDir);
+    const parentAgent = join(parentDir, 'agents', 'main', 'instruct.md');
+    const parentTask = join(parentDir, 'tasklists', 'outer', '01-delegate.md');
+    await mkdir(dirname(parentAgent), { recursive: true });
+    await mkdir(dirname(parentTask), { recursive: true });
+    await writeFile(parentAgent, `---
+canDelegateTo:
+  - ${JSON.stringify(`${childDir}/reader#read`)}
+---
+
+Delegate the work.\n`, 'utf8');
+    await writeFile(parentTask, `---
+id: delegate
+goal: true
+role: general
+output:
+  content: string
+canDelegateTo:
+  - ${JSON.stringify(`${childDir}/reader#read`)}
+---
+
+OUTER_TASK\n`, 'utf8');
+
+    const lastUser = (opts: StreamOpts) => [...opts.messages].reverse().find((message) => message.role === 'user')?.content ?? '';
+    const allText = (opts: StreamOpts) => opts.messages.map((m) => String(m.content)).join('\n');
+    const streamFn = createMockStreamFn((opts: StreamOpts) => {
+      const user = lastUser(opts);
+      // The nested action tasklist's node: read the upload via the injected readDocument and
+      // resolve its text. Its own turn shows the host PRELUDE results, so the node-body token
+      // lives in the system block, not the last user message — match across all messages.
+      // This resolves to real content ONLY when the fork leaf received a documentResolver down
+      // the delegate chain (the fix under test); without it the prelude readDocument throws.
+      if (allText(opts).includes('READ_UPLOAD_TASK')) {
+        return `currentTask.resolve({ content: String(documents[0]?.text ?? '') });`;
+      }
+      // The child agent's action: run its tasklist and RETURN its envelope (mirrors the
+      // real automator's `currentTask.resolve(await tasklist('build_live_project', { query, ...context }))`).
+      if (user.includes('Run action: read')) {
+        return `currentTask.resolve(await tasklist('read_upload', { query, ...context }));`;
+      }
+      // The parent tasklist node: delegate to the child action, forwarding the upload id
+      // through `context` (the channel delegate seeds into the action node, delegate.ts).
+      // Issuing the delegate FROM a tasklist fork is what routes it through
+      // Session.runDelegateForFork — the leg that used to drop documentResolver.
+      if (user.includes('OUTER_TASK')) {
+        return `currentTask.resolve({ content: String((await delegate(${JSON.stringify(childDir)}, 'reader', 'read', { query: 'read the upload', context: { attachmentIds: ['up1'] } }) as { data: { content: string } }).data.content) });`;
+      }
+      if (user.includes('User request:')) {
+        return `display('content=' + String((await tasklist('outer') as { data: { content: string } }).data.content));`;
+      }
+      return '';
+    });
+
+    const displays: unknown[] = [];
+    const session = new Session(
+      {
+        spaceDir: parentDir,
+        agentSlug: 'default',
+        modelAlias: 'mock',
+        renderHost: { display: (value) => displays.push(value), ask: async () => undefined, log: () => {} },
+        systemSpaceDirs: [childDir],
+        documentResolver: async (id) => ({ ok: true, attachmentId: id, mediaType: 'text/plain', kind: 'text', text: id === 'up1' ? 'nested source content' : '' }),
+      },
+      { streamFn },
+    );
+
+    await session.start('build from the upload');
+    expect(displays).toContain('content=nested source content');
+    await session.dispose();
+  });
+
   it('resolves a PRIOR turn\'s attachment id when a LATER turn delegates it (propose→consent→build)', async () => {
     // THING's flow: turn 1 the user dumps a file and THING only OFFERS (no build);
     // turn 2 a bare "yes please" and THING delegates the SAME file to the automator to

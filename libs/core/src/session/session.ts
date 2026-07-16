@@ -729,6 +729,7 @@ export class Session {
       budgetLimits: this.opts.budget,
       roleModels: this.opts.roleModels,
       dynamicSpaces: this.dynamicSpaces,
+      documentResolver: this.opts.documentResolver,
     });
   }
 
