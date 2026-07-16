@@ -126,7 +126,12 @@ export async function ensureLocalServer() {
     // capacity gate then sheds sessions the lanes are still using.
     const child = spawn(process.execPath, [BIN, 'serve', '--port', String(LOCAL_PORT), '--adopt-system-spaces', '--max-sessions', '40'], {
       cwd: SDK_ORG, // read sdk/org/.env → Azure keys credential the agents (budget-free direct Azure)
-      env: { ...process.env, LMTHING_ROOT: join(POD_ROOT, '.lmthing') },
+      // Isolate BOTH runtime stores into the throwaway pod root: LMTHING_ROOT = live-project runtime,
+      // and LM_STORE_APPS_DIR = the app CATALOG (store/projects/<id>). Without the latter,
+      // resolveCatalogRoot() falls back to <monorepoRoot>/store/projects and a scenario's catalog
+      // app-build writes a template straight into the REPO (leaks tanzania-trip/ into git). Both dirs
+      // live under POD_ROOT, which --fresh-server wipes, so every run starts truly empty.
+      env: { ...process.env, LMTHING_ROOT: join(POD_ROOT, '.lmthing'), LM_STORE_APPS_DIR: join(POD_ROOT, 'store-apps') },
       detached: true, // own process group → survives the agent, killable as a tree
       stdio: ['ignore', logFd, logFd],
     });
