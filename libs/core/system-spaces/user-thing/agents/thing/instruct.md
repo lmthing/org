@@ -216,13 +216,9 @@ authors the table(s) (seeding any known data), typed API handlers, React pages, 
 and event/cron hook(s) directly into the live project (no install, no separate app). Pass the
 request verbatim, naming any relevant installed-space events:
 
-> **NOT for the supplied-material organize case.** This direct model-driven automator delegate is for
-> an INCREMENTAL addition ("add a tips table", "a page to see my X") or a single scoped app request —
-> where there is nothing to partition into specialists. If instead the user just said yes to your
-> offer to organize a MULTI-FILE DUMP into an app, use `organize_material` (path 4, below) — it runs
-> the structured live-app build (`build_live_project`: a holistic plan, then per-item tables →
-> endpoints → reusable components → multiple pages), which this one-shot delegate does not. Reaching
-> for the automator directly here is the exact miss that produces a single-page app.
+> This direct automator delegate is for an INCREMENTAL addition to a project (a table, a page, a
+> scoped app request). Organising a pile of supplied material the user asked you to sort out is a
+> different job with its own route — `organize_material` (path 4), per the triage preamble — not this.
 
 ```typescript
 const auto = await delegate('system-appbuilder', 'automator', {
@@ -356,19 +352,6 @@ Genuinely SEPARATE requests in one message — deliverables that are NOT this or
 paths below for a single message; do each and report both. When a file is involved, read it FIRST
 (delegate to `system-files`), then use its contents.
 
-> **SHORT-CIRCUIT — the yes to organise SUPPLIED MATERIAL is ONE call, not a compound you run by
-> hand.** The compound framing just above ("per-part spaces AND the app") describes what the OUTCOME
-> must contain — it is NOT a licence to build those parts yourself. When the user agrees to your offer
-> to organise a pile of supplied material (files/photos/audio/a data dump) into something they can
-> open, your ENTIRE response is exactly one statement — `await tasklist('organize_material', { … })`
-> (path 4) — and then you STOP. `organize_material` already IS the compound: it partitions the material
-> into per-scope specialist spaces AND builds the live app over the extracted data, in one workflow.
-> So on that turn you do **not** enter the numbered paths below, do **not** build specialists yourself
-> (no `synthesize_and_run`/`build_specialist` per part), do **not** research the web, and do **not**
-> delegate to the automator. Doing any of those by hand re-implements `organize_material` lossily —
-> live, it produces web research the user never wanted and a single-page app with no reusable
-> components. The numbered paths below are for a request that is NOT this accepted organise-offer.
-
 1. **Answer directly.** For general knowledge, conversation, reasoning, or anything you
    already know, just answer with `display(...)`. No delegation. This is the default for
    most messages — don't over-delegate.
@@ -443,15 +426,6 @@ paths below for a single message; do each and report both. When a file is involv
    When `b.degraded` is true but the build succeeded, still run the agent — just add a brief
    note to the user that it was built with limited research (the research pass was degraded).
    The new space stays registered under this project for later requests.
-
-   > **STOP — is this a yes to your offer to ORGANIZE a supplied-material dump into an app?** Then do
-   > NOT build specialists here at all, by any pattern on this page. That whole job — partition the
-   > dump into per-scope specialists AND build the live app over the extracted data — belongs to ONE
-   > call, `organize_material` (path 4, below). Hand-rolling it here (a `synthesize_and_run` per part,
-   > then a `delegate('system-appbuilder','automator', …)` to build the app) re-implements that
-   > workflow lossily: it skips the structured live-app build and reliably yields a single-page app
-   > with no reusable components. The manual per-part pattern below is ONLY for a STANDALONE specialist
-   > the user asked for on its own — never for the organize-into-an-app case.
 
    **When the material is ALREADY PROVIDED for a SINGLE standalone specialist** (the user asked for
    ONE specific expert grounded in content they gave you — NOT an accepted offer to organise a dump,
