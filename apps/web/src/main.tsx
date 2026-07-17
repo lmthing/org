@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { RouterProvider, createRouter, createBrowserHistory } from '@tanstack/react-router'
 import type { RouterHistory, HistoryLocation } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
-import { surfaceForHost } from './routes/index'
+import { surfaceForHost, foreignSurfaceRedirect } from './routes/index'
 
 const DOMAIN_HOSTS = new Set(['lmthing.computer', 'lmthing.chat', 'lmthing.studio', 'lmthing.app'])
 
@@ -76,10 +76,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
-const rootElement = document.getElementById('root')!
+// Production-only cross-domain surface redirect. A foreign surface path landing on the
+// wrong product domain (e.g. lmthing.chat/studio/…) is bounced to its canonical domain
+// BEFORE the router mounts — otherwise the prefixed history above would rewrite it to a
+// non-existent internal route (/chat/studio/…) and 404. `location.replace` is the
+// client-side equivalent of a 302: no history entry (no back-button trap) and uncached.
+// Locally (localhost / *.test) `foreignSurfaceRedirect` returns null, so these paths stay
+// client-side routes and local links keep working.
+const redirectTarget =
+  typeof window !== 'undefined' ? foreignSurfaceRedirect(window.location) : null
 
-ReactDOM.createRoot(rootElement).render(
-  <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>,
-)
+if (redirectTarget) {
+  window.location.replace(redirectTarget)
+} else {
+  const rootElement = document.getElementById('root')!
+
+  ReactDOM.createRoot(rootElement).render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  )
+}
