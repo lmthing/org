@@ -31,7 +31,11 @@ invariants:
 
 # The beats. Each step is one or more verbs; `expect[]` is what the judge verifies (never executed).
 # Verbs: say · then_say · in_app_chat · open_app · attach[] · fresh_session · restart_pod ·
-#        if_asked{question-substring: answer} · deny_consent
+#        if_asked{question-substring: answer} · deny_consent · cancel_ask
+# Direct pod probe verbs (0 LLM calls) — a webhook, an app route, a cron tick, a settings-path
+# credential, a schema drift: space_session · call_app_api · run_emitter · inbound (+ sign{}) ·
+# list_integrations · set_env · blank_env · restore_env · mutate_schema. Full shapes + examples:
+# campaign/scenario-spec.md's "Direct pod probe verbs" section.
 steps:
   # 1 — the opening dump. A `say` step (a file is delivered by attaching it to a say).
   - attach: [some-input-file.pdf]

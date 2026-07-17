@@ -117,9 +117,14 @@ steps:
       - answered instantly from the stock space's knowledge — NO new webSearch/webFetch yield; a second search would mean the first finding was never actually stored
 
   # 6 — Act IX, US-10. DIRECT pod probe, not a chat turn: the judge opens a session bound to the
-  # stock space's OWN agent (ThingSession `spaceRef: 'stock/advisor'`) — distinct from the general
-  # THING dock — and asks the same whiteware question.
-  - expect:
+  # stock space's OWN agent (`space_session: 'stock/advisor'`, distinct from the general THING dock)
+  # and asks the same whiteware question. NOTE: `stock/advisor` is the persona-neutral example name
+  # used in this scenario's own narration — substitute the model's ACTUAL stock-space agent slug
+  # (confirm via `pod.listSpaces()`) before driving this step live if the build named it differently.
+  - space_session: 'stock/advisor'
+    say: >
+      Quick one — what actually IS whiteware, and where was that cheaper place you found?
+    expect:
       - the stock page's manifest renders a `<Chat agent="stock/advisor">` widget
       - a message sent to that exact space reference (`stock/advisor`, its own session) is answered from the stock space's OWN researched knowledge — a different session and space reference from the general THING dock, not a THING lookalike
 
@@ -140,14 +145,23 @@ steps:
 
   # 8 — Act IV, US-5. DIRECT pod probe (GET /api/projects/:id/integrations), 0 LLM calls, BEFORE any
   # credential exists.
-  - expect:
+  - list_integrations: true
+    expect:
       - "GET /api/projects/:id/integrations reports missingRequired as exactly the three NAMES above — never a value — in well under 15s with 0 LLM calls"
       - no credential value, hers or a planted sentinel, appears anywhere in this response or in any trace so far
 
   # 9 — Act V (positive), US-6. Her credential is injected the ONLY way it's allowed to be — through
-  # the trusted settings path (host-side PUT /api/env), never through chat — before this turn plays.
-  # Her message is just the go-ahead.
-  - say: >
+  # the trusted settings path (host-side PUT /api/env, the `set_env` verb), never through chat —
+  # before this turn plays. A runner ACTUALLY DRIVING this step must first stand up a local mock
+  # "demo" provider HTTP server (see libs/cli/src/server/integration-demo-e2e.test.ts's
+  # `mockProvider` for the exact pattern — a plain http.createServer echoing what it receives) and
+  # point INTEGRATION_DEMO_BASE_URL at its real address; the value below is a syntax placeholder,
+  # not a live endpoint. Her message is just the go-ahead.
+  - set_env:
+      INTEGRATION_DEMO_BASE_URL: "http://127.0.0.1:0" # REPLACE: the real local mock-provider address
+      INTEGRATION_DEMO_API_TOKEN: "tok-scenario-08"
+      INTEGRATION_DEMO_WEBHOOK_SECRET: "whsec-scenario-08"
+    say: >
       Oh — yeah okay. I've added the key in settings; go ahead.
     if_asked:
       "how many thermocouples": "just the one, like normal — I don't keep spares of that."
@@ -158,7 +172,11 @@ steps:
       - the SAME reply also proactively offers a second thing — pinging her on WhatsApp when something's low — a second offer she never asked for
 
   # 10 — Act V (negatives), US-6. DIRECT pod probes against the now-configured connection resolver,
-  # no LLM call: refuse before connecting, not after.
+  # no LLM call: refuse before connecting, not after. FLAGGED (verbs pass): no harness primitive
+  # reaches this today — `callConnection`'s SSRF/DNS-rebind guard (libs/cli/src/server/connections.ts)
+  # is only invoked from INSIDE an agent turn via the `callConnection` global; a genuinely 0-LLM-call
+  # probe of it needs a NEW product-level test route (an L3 change to the product, not a scenario
+  # mechanism verb) — out of scope for the generic-verbs pass. Left verbless on purpose.
   - expect:
       - a call whose resolved target is a literal link-local address (the cloud-metadata range, e.g. 169.254.169.254) is REFUSED before any connection is attempted
       - a call to a fixture-controlled hostname that resolves to loopback (or another prohibited address) at execution time is refused the same way — the DNS-rebinding guard, not just a static host-string check
@@ -174,14 +192,75 @@ steps:
 
   # 12 — Act VII, US-8. DIRECT pod probe: a real order arrives while she isn't looking, plus the
   # negatives (POST /api/inbound/demo).
-  - expect:
+  - inbound:
+      - path: demo
+        body: { message: { message_id: 9001, text: "wholesale reorder — usual Bloem & Vaas order", chat: { id: 'shop-inbox' }, from: { id: 'wholesale-bot' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9001, text: "wholesale reorder — usual Bloem & Vaas order", chat: { id: 'shop-inbox' }, from: { id: 'wholesale-bot' } } }
+        headers: { x-demo-signature: "sha256=0000000000000000000000000000000000000000000000000000000000000000" }
+      - path: no-such-inbound-path
+        body: { message: { text: "irrelevant" } }
+      - path: demo
+        body: { notAMessage: true }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+    expect:
       - a validly HMAC-signed demo webhook (a wholesale order notification) returns 200 {events:1} and a NEW sales row appears — she never touched the screen
       - the identical body with a bad signature returns 401 and the row count does not change
       - POSTing to an unknown inbound path returns 404
       - a body with no JSON `message` field returns 200 {events:0} and adds no row
 
-  # 13 — Act VIII, US-9. DIRECT pod probe: a burst of orders under load.
-  - expect:
+  # 13 — Act VIII, US-9. DIRECT pod probe: a burst of orders under load (the `inbound` verb always
+  # fires an array's deliveries concurrently via Promise.all — this IS the storm), then an ordinary
+  # turn proves the pod stayed responsive.
+  - inbound:
+      - path: demo
+        body: { message: { message_id: 9101, text: "order 1", chat: { id: 'shop-inbox' }, from: { id: 'storm-01' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9102, text: "order 2", chat: { id: 'shop-inbox' }, from: { id: 'storm-02' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9103, text: "order 3", chat: { id: 'shop-inbox' }, from: { id: 'storm-03' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9104, text: "order 4", chat: { id: 'shop-inbox' }, from: { id: 'storm-04' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9105, text: "order 5", chat: { id: 'shop-inbox' }, from: { id: 'storm-05' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9106, text: "order 6", chat: { id: 'shop-inbox' }, from: { id: 'storm-06' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9107, text: "order 7", chat: { id: 'shop-inbox' }, from: { id: 'storm-07' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9108, text: "order 8", chat: { id: 'shop-inbox' }, from: { id: 'storm-08' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9109, text: "order 9", chat: { id: 'shop-inbox' }, from: { id: 'storm-09' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9110, text: "order 10", chat: { id: 'shop-inbox' }, from: { id: 'storm-10' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9111, text: "order 11", chat: { id: 'shop-inbox' }, from: { id: 'storm-11' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9112, text: "order 12", chat: { id: 'shop-inbox' }, from: { id: 'storm-12' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9113, text: "order 13", chat: { id: 'shop-inbox' }, from: { id: 'storm-13' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9114, text: "order 14", chat: { id: 'shop-inbox' }, from: { id: 'storm-14' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo
+        body: { message: { message_id: 9115, text: "order 15", chat: { id: 'shop-inbox' }, from: { id: 'storm-15' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+    then_say: "Quick one while I've got you — is everything still working ok?"
+    expect:
       - 15 independently-signed demo webhooks fired concurrently are ALL eventually processed — same-source coalescing under the loop guard is fine, silently dropping one is not
       - the pod stays responsive throughout, and an ordinary THING chat turn sent immediately after the storm still completes
 

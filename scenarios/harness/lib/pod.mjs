@@ -180,11 +180,14 @@ export class Pod {
     this.reqAbs(method, `${this.appOrigin(projectId)}/api/${String(route).replace(/^\//, '')}`, body);
   /** The one authoritative hook-run path (crond, boot catch-up and Studio all use it).
    *  The slug is a single path segment and may contain `:`/`@` (space hooks are
-   *  `<spaceId>:<base>`; emitters are `@emitter:<scope>:<name>`) — encode it. */
-  runHook = (projectId, slug) =>
-    this.req('POST', `/api/projects/${projectId}/hooks/${encodeURIComponent(slug)}/run`, {});
+   *  `<spaceId>:<base>`; emitters are `@emitter:<scope>:<name>`) — encode it. `body` is an optional
+   *  payload forwarded verbatim (the `run_emitter` step verb's `payload`); today's run endpoint
+   *  ignores any body for both a plain hook and an emitter pseudo-slug, but this keeps the client
+   *  forward-compatible without a second signature. */
+  runHook = (projectId, slug, body = {}) =>
+    this.req('POST', `/api/projects/${projectId}/hooks/${encodeURIComponent(slug)}/run`, body);
   /** Run a cron emitter def by its pseudo-slug (`@emitter:<scope>:<name>`). */
-  runEmitter = (projectId, scope, name) => this.runHook(projectId, `@emitter:${scope}:${name}`);
+  runEmitter = (projectId, scope, name, payload) => this.runHook(projectId, `@emitter:${scope}:${name}`, payload ?? {});
 
   /**
    * Deliver an inbound webhook exactly as an external provider would.
@@ -293,6 +296,10 @@ export class Pod {
 
   // ── env / lifecycle ─────────────────────────────────────────────────────
   getEnv = () => this.req('GET', '/api/env');
+  /** `PUT /api/env` REPLACES the whole file (`libs/cli/src/server/routes/env.ts`) — callers use
+   *  `env.mjs#applyEnv` (GET, merge, PUT) rather than calling this directly, so an unrelated var
+   *  is never clobbered. Backs the `set_env`/`blank_env`/`restore_env` step verbs. */
+  putEnv = (content) => this.req('PUT', '/api/env', { content });
   /**
    * Restart the pod process (used by the auto-resume scenario). The pod exits ~100ms later.
    *

@@ -12,6 +12,7 @@ import {
   serverUp,
   startRun,
   stopRun,
+  mutateTableSchema,
 } from './local.mjs';
 
 const tmps = [];
@@ -107,6 +108,58 @@ describe('latestSessionId', () => {
     utimesSync(dir, new Date(2_000_000), new Date(2_000_000));
     expect(latestSessionId(run, 'proj')).toBe('sess-2');
     expect(latestSessionId(run, 'no-such-project')).toBeNull();
+  });
+});
+
+describe('mutateTableSchema', () => {
+  function fakeSchemaRun(sc) {
+    const run = fakeRun(sc, 1, 'proj');
+    const schemaPath = join(run.dataDir, '.lmthing', 'proj', 'database', 'expenses.json');
+    writeFileSync(
+      schemaPath,
+      JSON.stringify({
+        title: 'Expenses',
+        columns: {
+          id: { type: 'string', primaryKey: true, generated: 'uuid' },
+          total: { type: 'number' },
+          note: { type: 'string' },
+        },
+      }),
+    );
+    return { run, schemaPath };
+  }
+
+  it('retypes an existing column non-additively, leaving other columns untouched', () => {
+    const sc = mkTmp();
+    const { run, schemaPath } = fakeSchemaRun(sc);
+    const result = mutateTableSchema(run, 'proj', 'expenses', { column: 'total', type: 'string' });
+    expect(result).toEqual({ table: 'expenses', path: schemaPath, change: { column: 'total', type: 'string' } });
+    const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
+    expect(schema.columns.total.type).toBe('string');
+    expect(schema.columns.note.type).toBe('string'); // untouched
+    expect(schema.columns.id.primaryKey).toBe(true); // untouched
+  });
+
+  it('moves the primary key to a different existing column', () => {
+    const sc = mkTmp();
+    const { run, schemaPath } = fakeSchemaRun(sc);
+    mutateTableSchema(run, 'proj', 'expenses', { movePrimaryKeyTo: 'note' });
+    const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
+    expect(schema.columns.note.primaryKey).toBe(true);
+    expect(schema.columns.id.primaryKey).toBeUndefined();
+  });
+
+  it('throws when the named column does not exist (never silently no-ops)', () => {
+    const sc = mkTmp();
+    const { run } = fakeSchemaRun(sc);
+    expect(() => mutateTableSchema(run, 'proj', 'expenses', { column: 'nope', type: 'string' })).toThrow(/no column "nope"/);
+    expect(() => mutateTableSchema(run, 'proj', 'expenses', { movePrimaryKeyTo: 'nope' })).toThrow(/no column "nope"/);
+  });
+
+  it('throws on a malformed change descriptor', () => {
+    const sc = mkTmp();
+    const { run } = fakeSchemaRun(sc);
+    expect(() => mutateTableSchema(run, 'proj', 'expenses', {})).toThrow(/change must be/);
   });
 });
 

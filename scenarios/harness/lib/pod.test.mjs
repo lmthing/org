@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchResilient } from './pod.mjs';
+import { fetchResilient, Pod } from './pod.mjs';
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -72,5 +72,44 @@ describe('fetchResilient', () => {
 
     expect(res.status).toBe(500);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Pod — env write + hook/emitter payload passthrough', () => {
+  /** Capture the exact url/method/body of the NEXT fetch call, always answering 200 {}. */
+  function mockFetchJson() {
+    let seen;
+    globalThis.fetch = vi.fn(async (url, init) => {
+      seen = { url: String(url), method: init?.method, body: init?.body ? JSON.parse(init.body) : undefined };
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    return () => seen;
+  }
+
+  it('putEnv PUTs {content} to /api/env — the whole-file-replace route', async () => {
+    const lastCall = mockFetchJson();
+    const pod = new Pod({ base: 'http://x' });
+    await pod.putEnv('KEY=value\n');
+    expect(lastCall()).toEqual({ url: 'http://x/api/env', method: 'PUT', body: { content: 'KEY=value\n' } });
+  });
+
+  it('runHook forwards an optional payload as the POST body (defaults to {})', async () => {
+    const lastCall = mockFetchJson();
+    const pod = new Pod({ base: 'http://x' });
+
+    await pod.runHook('proj', 'weekly-reconcile');
+    expect(lastCall()).toEqual({ url: 'http://x/api/projects/proj/hooks/weekly-reconcile/run', method: 'POST', body: {} });
+
+    await pod.runHook('proj', 'weekly-reconcile', { forced: true });
+    expect(lastCall().body).toEqual({ forced: true });
+  });
+
+  it('runEmitter builds the @emitter:scope:name pseudo-slug and forwards a payload', async () => {
+    const lastCall = mockFetchJson();
+    const pod = new Pod({ base: 'http://x' });
+
+    await pod.runEmitter('proj', 'household', 'weekly_plan', { forced: true });
+    expect(lastCall().url).toBe(`http://x/api/projects/proj/hooks/${encodeURIComponent('@emitter:household:weekly_plan')}/run`);
+    expect(lastCall().body).toEqual({ forced: true });
   });
 });

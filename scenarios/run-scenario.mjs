@@ -21,7 +21,9 @@
  * killed WITH this process on every exit path, including when run-scenario is signalled.
  *
  * Step verbs (see scenario-spec.md): attach[] · say · then_say · open_app · in_app_chat ·
- * fresh_session · restart_pod · if_asked{} · expect[] (expect is passed through, never executed).
+ * fresh_session · restart_pod · if_asked{} · deny_consent · cancel_ask · space_session ·
+ * call_app_api · run_emitter · inbound (+ sign{}) · list_integrations · set_env · blank_env ·
+ * restore_env · mutate_schema · expect[] (expect is passed through, never executed).
  */
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';

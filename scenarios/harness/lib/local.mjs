@@ -274,6 +274,46 @@ export function latestSessionId(run, projectId) {
   return entries[0]?.id ?? null;
 }
 
+/**
+ * Mutate one project table's `database/<table>.json` schema file directly on disk, NON-ADDITIVELY
+ * — either retyping an existing column or moving the primary key to a different column — for the
+ * `mutate_schema` step verb (09-home-renovation Act XI). A real user never asks for this by name;
+ * it is an operator/harness action modelling a schema drift a live model would never author on
+ * purpose, so the next session's per-table reconcile hits a genuine incompatible change. Pair with
+ * `fresh_session` (not `restart_pod`): the reconcile runs at project (re)load, which a new session
+ * triggers without needing to bounce the whole server.
+ *
+ * @param {{dataDir: string}} run
+ * @param {string} projectId
+ * @param {string} table                    table name (its `database/<table>.json` must exist)
+ * @param {{column?: string, type?: string, movePrimaryKeyTo?: string}} change
+ *   EITHER `{column, type}` (retype an existing column to an incompatible type) OR
+ *   `{movePrimaryKeyTo}` (move the primary key onto a different existing column).
+ * @returns {{table: string, path: string, change: object}}
+ */
+export function mutateTableSchema(run, projectId, table, change) {
+  const path = join(run.dataDir, '.lmthing', projectId, 'database', `${table}.json`);
+  const schema = JSON.parse(readFileSync(path, 'utf8'));
+  const columns = schema.columns ?? {};
+  if (change?.column && change?.type) {
+    if (!columns[change.column]) {
+      throw new Error(`mutate_schema: table "${table}" has no column "${change.column}"`);
+    }
+    columns[change.column] = { ...columns[change.column], type: change.type };
+  } else if (change?.movePrimaryKeyTo) {
+    if (!columns[change.movePrimaryKeyTo]) {
+      throw new Error(`mutate_schema: table "${table}" has no column "${change.movePrimaryKeyTo}"`);
+    }
+    for (const col of Object.values(columns)) delete col.primaryKey;
+    columns[change.movePrimaryKeyTo] = { ...columns[change.movePrimaryKeyTo], primaryKey: true };
+  } else {
+    throw new Error('mutate_schema: change must be {column,type} (retype) or {movePrimaryKeyTo} (move the PK)');
+  }
+  schema.columns = columns;
+  writeFileSync(path, JSON.stringify(schema, null, 2));
+  return { table, path, change };
+}
+
 // ── run lifecycle ───────────────────────────────────────────────────────────────
 function spawnServer(run) {
   mkdirSync(run.dataDir, { recursive: true });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { StepAsks } from './asks.mjs';
+import { StepAsks, CANCEL_ASK } from './asks.mjs';
 
 const consent = { type: 'ConsentCard', space: 'system-store' };
 const question = (prompt) => ({ type: 'Ask', prompt });
@@ -55,5 +55,24 @@ describe('StepAsks — the driver ask handler (reentrant)', () => {
     a.onAsk(consent);
     a.begin({});
     expect(a.drain()).toEqual([]);
+  });
+
+  it('cancel_ask: true CANCELS (does not answer) an unmatched question — true-cancel fidelity', () => {
+    const a = new StepAsks();
+    a.begin({ cancel_ask: true });
+    expect(a.onAsk(question('anything at all'))).toBe(CANCEL_ASK);
+    expect(a.drain()[0]).toMatchObject({ kind: 'question', matched: null, answer: CANCEL_ASK, cancelled: true });
+  });
+
+  it('cancel_ask still lets a MATCHED if_asked answer win over cancelling', () => {
+    const a = new StepAsks();
+    a.begin({ cancel_ask: true, if_asked: { 'the exact question': 'a real answer' } });
+    expect(a.onAsk(question('So, the exact question, what do you say?'))).toBe('a real answer');
+  });
+
+  it('cancel_ask never touches a consent card (that is still deny_consent\'s job)', () => {
+    const a = new StepAsks();
+    a.begin({ cancel_ask: true });
+    expect(a.onAsk(consent)).toBe(true);
   });
 });

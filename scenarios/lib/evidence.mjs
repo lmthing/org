@@ -128,13 +128,24 @@ export function traceLines(rec) {
     if (t.errors?.length) L.push(`- errors: ${t.errors.map((e) => `${e.type}@${e.attempt}`).join(', ')}`);
     if (t.lastText) L.push(`- reply: ${String(t.lastText).replace(/\n/g, ' ').slice(0, 240)}`);
   }
-  if (rec.asks?.length) L.push(`- asks: ${rec.asks.map((a) => `${a.kind}${a.matched ? `(matched)` : a.kind === 'question' && !a.answer ? '(UNANSWERED)' : ''}`).join(', ')}`);
+  if (rec.asks?.length) L.push(`- asks: ${rec.asks.map((a) => `${a.kind}${a.cancelled ? '(cancelled)' : a.matched ? '(matched)' : a.kind === 'question' && !a.answer ? '(UNANSWERED)' : ''}`).join(', ')}`);
   if (rec.appBuild) L.push(`- app: built=${rec.appBuild.built} pageStatus=${rec.appPageStatus}`);
   if (rec.state) {
     L.push(`- spaces: ${(rec.state.spaces ?? []).join(', ') || '(none)'}`);
     const tables = Object.keys(rec.state.appTables ?? {});
     if (tables.length) L.push(`- app tables: ${tables.map((t) => `${t}(${(rec.state.appTables[t] ?? []).length})`).join(', ')}`);
   }
+  // ── direct-pod-probe verbs (0 LLM calls) — surfaced only when the step actually used them, so a
+  // step without them reproduces the exact trace this file always produced. ───────────────────────
+  if (rec.spaceSession) L.push(`- space_session: ${rec.spaceSession}`);
+  if (rec.callAppApi) L.push(`- call_app_api: ${rec.callAppApi.method} ${rec.callAppApi.path} → ${rec.callAppApi.status}`);
+  if (rec.runEmitter) L.push(`- run_emitter: ${rec.runEmitter.slug ?? `${rec.runEmitter.scope}:${rec.runEmitter.name}`}`);
+  if (rec.inbound) L.push(`- inbound: ${rec.inbound.map((d) => `${d.path}→${d.status}`).join(', ')}`);
+  if (rec.integrations) L.push(`- integrations: ${JSON.stringify(rec.integrations).slice(0, 200)}`);
+  if (rec.setEnv) L.push(`- set_env: ${rec.setEnv.keys.join(', ')}`);
+  if (rec.blankEnv) L.push(`- blank_env: ${rec.blankEnv.keys.join(', ')}`);
+  if (rec.restoreEnv) L.push('- restore_env: true');
+  if (rec.mutateSchema) L.push(`- mutate_schema: ${rec.mutateSchema.table}`);
   if (rec.notes?.length) L.push(`- notes: ${rec.notes.join(' · ')}`);
   if (rec.error) L.push(`- ⚠️ ERROR: ${rec.error.split('\n')[0]}`);
   L.push(`\n**expect (judge verifies):**`);

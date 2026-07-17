@@ -114,17 +114,25 @@ steps:
       - answered instantly from the Greek-cuisine space's knowledge, with the same substitution found in step 2
       - NO new webSearch/webFetch yield in this turn — a second search would mean the first finding was never really stored
 
-  # 6 — Act V: research keeps working when the usual way in is down.
-  - say: >
+  # 6 — Act V: research keeps working when the usual way in is down. `blank_env` sets
+  # TAVILY_API_KEY to an explicit empty string BEFORE the turn plays; `restore_env` puts the
+  # original content back, verbatim, AFTER it — in the same step, so no later step is left with a
+  # dead search key.
+  - blank_env: [TAVILY_API_KEY]
+    say: >
       Το crossini της θείας Μαρίας πώς φουσκώνει έτσι ωραία, τι κάνει η ζύμη μέσα, δεν έχω ξανακάνει
       τέτοιο ψωμάκι.
+    restore_env: true
     expect:
-      - "with TAVILY_API_KEY blanked to an explicit empty string beforehand (PUT /api/compute/env, keeping every other var) and the rolled pod settled, this turn's resolved webSearch/webFetch event still shows ok:true with a non-empty result set from a provider OTHER than Tavily (the render service's Bing route, or DuckDuckGo) — the outage was skipped, not failed closed"
-      - the dough-technique finding lands as a real fact (a row or knowledge entry), not just a reply; restore the original env and let the pod resettle before the next step
+      - "with TAVILY_API_KEY blanked to an explicit empty string beforehand (PUT /api/env, keeping every other var), this turn's resolved webSearch/webFetch event still shows ok:true with a non-empty result set from a provider OTHER than Tavily (the render service's Bing route, or DuckDuckGo) — the outage was skipped, not failed closed"
+      - the dough-technique finding lands as a real fact (a row or knowledge entry), not just a reply; the original TAVILY_API_KEY is restored before the next step
 
   # 7 — Act VI/VII: the weekly trigger is code, not a guess, and the schedule (not the code) gates it.
   # Nothing for Vasilis to say — this is the "Sunday just happens" promise, forced out of schedule.
-  - expect:
+  # PLACEHOLDER scope — the household-logistics space's ACTUAL slug is model-chosen in step 2;
+  # confirm the real one via `pod.listSpaces()` before driving this step live.
+  - run_emitter: { scope: household-logistics, name: weekly_plan }
+    expect:
       - "pod.readProjectFile on the household space's two authored weekly-shop tasklist files (spaces/<household-space>/tasklists/weekly-shop/NN-<id>.ts) shows one exporting a node with a forEach over the week's chosen dishes, and a second with dependsOn the first — real, statically declared code, no generic fs"
       - the authored weekly-plan trigger's source is an every/interval schedule and contains NO getDay()/weekday conditional anywhere — the period itself is "weekly"
       - "pod.runEmitter(id, scope, 'weekly_plan') forced out of schedule still produces meal_plan rows and a shopping_list where κρεμμύδι/onion (needed by Μουσακάς, Gemista, Κεφτέδες and Αυγολέμονο σούπα — all four call for it) appears EXACTLY once, its quantity equal to the sum read off those dishes' own recipes rows"
@@ -226,10 +234,14 @@ steps:
       - the served page renders the nested data with no console errors
 
   # 24 — Act XV: the cuisine specialist cannot quietly rewrite the book. A direct probe of ITS OWN
-  # capability profile, bypassing THING's own routing — no user-facing message; the judge opens a
-  # session bound directly to the Greek-cuisine agent (spaceRef, as harness/lib/thing.mjs already
-  # supports for exactly this kind of probe) and asks it, in plain Greek, to change a bake time.
-  - expect:
+  # capability profile, bypassing THING's own routing — no user-facing message from Vasilis's side;
+  # the judge opens a session bound directly to the Greek-cuisine agent (`space_session`) and asks
+  # it, in plain Greek, to change a bake time. PLACEHOLDER spaceRef — substitute the model's ACTUAL
+  # Greek-cuisine space+agent slugs (created in step 2); confirm via `pod.listSpaces()` before
+  # driving this step live.
+  - space_session: 'greek-cuisine/advisor'
+    say: "Άλλαξε τον χρόνο ψησίματος του μουσακά σε 35 λεπτά."
+    expect:
       - "the architect-built Greek-cuisine agent's own frontmatter grants knowledge/read capabilities and does NOT grant db:write; asked directly (bypassing THING) in plain Greek to change the moussaka's bake time, its trace carries a typecheck_error naming the unavailable global (a `Cannot find name 'db'`-shaped message) — the capability was absent from ITS DTS, so the call could never be WRITTEN, not merely refused at runtime"
       - the moussaka row stays byte-identical, 0 writes from that probe; this expected typecheck_error is classified separately from unrecovered errors and does not weaken the zero-unrecovered-error gate
 

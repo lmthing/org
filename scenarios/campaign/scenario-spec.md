@@ -70,6 +70,70 @@ steps:
 `say` step; you cannot upload a file "inside the app" via `in_app_chat`. To exercise both an in-app
 change AND a new file, split them into two steps, or deliver the file through the main-chat `say`.
 
+## Direct pod probe verbs — 0 LLM calls
+
+Some Acts test the PRODUCT directly — a webhook delivery, an app's own API route, a cron tick, a
+credential landing through the trusted settings path, a table's schema drifting on disk — never a
+chat turn (the persona never says these words either; they are operator/harness actions, not
+something a real person would ask for). These are declarative step verbs too, executed by the
+harness against the pod exactly as the real integration/cron/settings path would, with their own
+evidence for the judge:
+
+```yaml
+  - call_app_api: { method: POST, path: costs, body: { … } }   # the APP's OWN route, not chat
+    expect: [...]
+
+  - run_emitter: { scope: household, name: weekly_plan }        # a cron/event tick, forced out of schedule
+    # OR, for a plain project/space hook (not a `type:'cron'` EMITTER def): run_emitter: weekly-reconcile
+    expect: [...]
+
+  - inbound:                                                    # one or more signed webhook deliveries
+      - path: demo
+        body: { message: { text: "…", chat: { id: 'c1' }, from: { id: 'u1' } } }
+        sign: { header: x-demo-signature, prefix: "sha256=", secretEnv: INTEGRATION_DEMO_WEBHOOK_SECRET }
+      - path: demo                                              # the negative: a bad/static signature
+        body: { … same shape … }
+        headers: { x-demo-signature: "sha256=0000000000000000000000000000000000000000000000000000000000000000" }
+    expect: [...]
+
+  - list_integrations: true                                     # GET .../integrations — names only, never a value
+    expect: [...]
+
+  - set_env: { INTEGRATION_DEMO_BASE_URL: "…", INTEGRATION_DEMO_API_TOKEN: "…", INTEGRATION_DEMO_WEBHOOK_SECRET: "…" }
+    say: "Oh — yeah okay. I've added the key in settings; go ahead."   # host-side injection BEFORE the turn plays
+    expect: [...]
+
+  - blank_env: [TAVILY_API_KEY]                                 # simulate an outage — an explicit empty string, not a removed line
+    say: "…"
+    restore_env: true                                           # pop the SAME step's set_env/blank_env snapshot back, after the turn
+    expect: [...]
+
+  - space_session: 'stock/advisor'                               # bind THIS step's turn to one space's OWN agent
+    say: "…"                                                     # (bypasses THING; the NEXT step is back on the general dock)
+    expect: [...]
+
+  - mutate_schema:                                                # a NON-additive schema drift, direct on disk
+      table: expenses
+      change: { column: total, type: string }        # retype an existing column…
+      # …or: change: { movePrimaryKeyTo: someOtherColumn }
+    fresh_session: true                                          # …then a fresh session models the next boot's reconcile
+    expect: [...]
+
+  - cancel_ask: true                                              # an unmatched ask this step DISMISSES (DELETE→null),
+    in_app_chat: "…"                                              # never answers with '' — true-cancel fidelity
+    expect: [...]
+```
+
+`inbound`'s `sign:` block computes the signature at DELIVERY TIME from whatever the pod's OWN env
+currently holds for `secretEnv` — a scenario never bakes a precomputed secret into its yaml; a
+bad-signature negative is simply a STATIC (wrong) `headers:` value with no `sign:` block. `inbound`
+also accepts an ARRAY (several checks in one step, or a concurrent burst — all deliveries fire via
+`Promise.all`). `call_app_api`/`run_emitter`/`mutate_schema`'s exact target (an app route, a hook
+slug, a table name) is usually something the MODEL authored earlier in the same run — resolve the
+real value from the live pod (`pod.listHooks()`, the app manifest, `pod.listSpaces()`) before
+driving the step for real; a scenario file can only fix what's deterministic (the shape, the
+persona's fixtures) and must leave a model-chosen name as a clearly marked placeholder.
+
 # The person knows ZERO lmthing words (hard rules)
 
 1. They NEVER say — or imply they know — space · project · app · agent · hook · event · webhook ·

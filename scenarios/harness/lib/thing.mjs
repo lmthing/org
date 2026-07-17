@@ -10,6 +10,7 @@
  *   GET  /api/sessions/:id/events?since=N&format=json                          → {events,lastSeq}
  *   GET  /api/sessions/:id/asks?format=json                                    → {asks}
  *   POST /api/sessions/:id/ask/:askId       {value}                            → answer a prompt
+ *   DELETE /api/sessions/:id/ask/:askId                                        → cancel a prompt (→ null)
  *
  * The event stream is the full execution trace (sdk/org/libs/core/src/sandbox/trace.ts), so a
  * scenario can assert on the things that actually matter — which agents THING delegated to, which
@@ -24,6 +25,16 @@
  */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Sentinel an `onAsk` callback returns to CANCEL an open ask — `DELETE /api/sessions/:id/ask/:id`,
+ * which resolves the agent's `await ask(...)` with `null` (true-cancel fidelity) — as opposed to
+ * ANSWERING it with `''`/`null` via `POST .../ask/:id` (indistinguishable to the agent by value, but
+ * NOT the same wire action: a real dismiss is a DELETE, never a submitted empty value). A shared,
+ * frozen plain object (not a `Symbol`) so it still JSON-serializes into step evidence instead of
+ * silently vanishing from it.
+ */
+export const CANCEL_ASK = Object.freeze({ __cancelAsk: true });
 
 export class ThingSession {
   /**
@@ -166,6 +177,13 @@ export class ThingSession {
   async answerAsk(askId, value) {
     await this.pod.req('POST', `/api/sessions/${this.sessionId}/ask/${askId}`, { value });
     this.log('answered ask', askId, JSON.stringify(value));
+  }
+
+  /** Cancel (dismiss) an open ask — `DELETE /api/sessions/:id/ask/:askId` — instead of answering
+   *  it. See `CANCEL_ASK` above for why this is a distinct wire action from `answerAsk(id, null)`. */
+  async cancelAsk(askId) {
+    await this.pod.req('DELETE', `/api/sessions/${this.sessionId}/ask/${askId}`);
+    this.log('cancelled ask', askId);
   }
 
   /**
@@ -319,7 +337,10 @@ export class ThingSession {
         if (this.asks.some((a) => a.id === ask.id)) continue;
         const answer = this.onAsk ? this.onAsk(ask.descriptor, ask) : undefined;
         this.asks.push({ id: ask.id, descriptor: ask.descriptor, answered: answer });
-        if (answer !== undefined) {
+        if (answer === CANCEL_ASK) {
+          await this.cancelAsk(ask.id).catch(() => {});
+          lastChange = Date.now();
+        } else if (answer !== undefined) {
           await this.answerAsk(ask.id, answer).catch(() => {});
           lastChange = Date.now();
         }

@@ -64,8 +64,11 @@ node scenarios/run-scenario.mjs 08-myscenario --plan   # sanity-check the plan +
 ```
 
 The full step-verb spec (`say`, `then_say`, `in_app_chat`, `open_app`, `attach[]`, `fresh_session`,
-`restart_pod`, `if_asked{}`, `deny_consent`, `expect[]`) lives in the campaign brain at
-[`campaign/scenario-spec.md`](./campaign/README.md).
+`restart_pod`, `if_asked{}`, `deny_consent`, `cancel_ask`, plus the direct-pod-probe verbs —
+`space_session`, `call_app_api`, `run_emitter`, `inbound` (+ `sign{}`), `list_integrations`,
+`set_env`, `blank_env`, `restore_env`, `mutate_schema` — for the "0 LLM calls" beats: a webhook, an
+app's own route, a cron tick, a settings-path credential, a schema drift, `expect[]`) lives in the
+campaign brain at [`campaign/scenario-spec.md`](./campaign/README.md).
 
 ## The campaign brain — `campaign/`
 
@@ -102,9 +105,12 @@ thing.consentCards() // every ConsentCard raised, and how it was answered
   `evidence.mjs` (`compactStep`/`traceLines`/`snapshot`), `asks.mjs` (`StepAsks`), `errors.mjs`. The
   pure transforms are golden-tested against recorded run output (`lib/*.test.mjs`).
 - `harness/` — the pod client the runner drives: `provision.mjs` (`getUser`), `lib/pod.mjs` (`Pod`),
-  `lib/thing.mjs` (`ThingSession`), `lib/local.mjs` (the PER-RUN server lifecycle — `startRun`/
-  `stopRun`/`restartRun`/`snapshotProject`/`seedRun`/`listRuns`), `lib/gateway.mjs` (the
-  prod-provisioning path used by `smoke.mjs`), `lib/report.mjs` (`Report`), `jwt.mjs`, `paths.mjs`.
+  `lib/thing.mjs` (`ThingSession`, and the `CANCEL_ASK` sentinel for a true-cancel `cancel_ask`),
+  `lib/local.mjs` (the PER-RUN server lifecycle — `startRun`/`stopRun`/`restartRun`/
+  `snapshotProject`/`seedRun`/`listRuns`/`mutateTableSchema`), `lib/env.mjs` (`applyEnv`/
+  `mergeEnvContent`/`readEnvVar` for `set_env`/`blank_env`/`restore_env`), `lib/webhook-sign.mjs`
+  (`signHmac`, for `inbound`'s `sign:` block), `lib/gateway.mjs` (the prod-provisioning path used by
+  `smoke.mjs`), `lib/report.mjs` (`Report`), `jwt.mjs`, `paths.mjs`.
 - `harness/runs.mjs` — a small CLI to `list`/`path`/`logs`/`down`/`gc` a scenario's prior runs.
 - `harness/smoke.mjs` — register → pod → env → THING session → a real LLM turn → trace assertions; run
   it to prove the harness + a target are healthy before a long run.
