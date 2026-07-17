@@ -53,6 +53,23 @@ function splitPath(path: string): string[] {
   return path.split('/').filter((s) => s.length > 0);
 }
 
+/**
+ * Drop a stray leading `/pages` segment from an app-relative path.
+ *
+ * Route-table paths are derived RELATIVE to the project's `pages/` dir
+ * (`pages/park-fees.tsx` → `/park-fees`), so a real route is NEVER mounted under
+ * `/pages/…`. But the on-disk folder is literally `pages/`, so an LLM-authored
+ * page routinely links to a sibling as `/pages/park-fees` instead of the route
+ * `/park-fees` — the link then resolves to a client path no route matches and the
+ * page renders "No page for /pages/park-fees" (live: scenario 06 index page).
+ * Normalizing the prefix away makes that natural mistake resolve to the real
+ * route. `/pages` alone collapses to `/`. Non-`/pages` paths pass through.
+ */
+export function stripPagesPrefix(path: string): string {
+  const stripped = path.replace(/^\/pages(?=\/|$)/, '');
+  return stripped.length > 0 ? stripped : '/';
+}
+
 /** Match a concrete client path against a route table (`:param` → capture). */
 export function matchRoutes(routes: RouteEntry[], clientPath: string): RouteMatch | null {
   const reqSegs = splitPath(clientPath);
@@ -71,6 +88,10 @@ export function matchRoutes(routes: RouteEntry[], clientPath: string): RouteMatc
     }
     if (ok) return { entry, params };
   }
+  // Fallback AFTER the literal pass (so a genuine route always wins): tolerate a
+  // stray `/pages/` prefix on a page-authored link — see {@link stripPagesPrefix}.
+  const normalized = stripPagesPrefix(clientPath);
+  if (normalized !== clientPath) return matchRoutes(routes, normalized);
   return null;
 }
 
@@ -110,7 +131,9 @@ export function toHref(to: string): string {
   if (!to.startsWith('/') || to.startsWith('//')) return to;
   const base = resolveAppBase(window.location.pathname);
   if (!base || to === base || to.startsWith(base + '/')) return to;
-  return base + to;
+  // Normalize a stray `/pages/` prefix on an app-relative dest (see
+  // {@link stripPagesPrefix}) so the pushed URL is the clean route, not `…/pages/x`.
+  return base + stripPagesPrefix(to);
 }
 
 /**

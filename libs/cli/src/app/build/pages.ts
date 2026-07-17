@@ -87,8 +87,12 @@ const CACHE_FILE = join('.data', 'pages-cache.json');
  *       WS (previously the pod's JWT-gated `/api/*` proxy 401'd the curator chat).
  * `5` = generated HTML pins the light token theme so project apps don't inherit
  *       dark foreground tokens on light app surfaces.
+ * `6` = router tolerates a stray `/pages/` prefix on a page-authored link
+ *       (`stripPagesPrefix`): `matchRoutes` falls back to the prefix-stripped route
+ *       and `toHref` normalizes it out (previously `<Link to="/pages/park-fees">`
+ *       rendered "No page for /pages/park-fees" — live: scenario 06 index page).
  */
-const BUILDER_VERSION = '5';
+const BUILDER_VERSION = '6';
 
 interface CacheMeta {
   hash: string;

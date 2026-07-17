@@ -19,6 +19,7 @@ import {
   linkDest,
   clientPath,
   matchRoutes,
+  stripPagesPrefix,
   PageErrorBoundary,
   type RouteEntry,
 } from './router.js';
@@ -54,6 +55,19 @@ describe('toHref', () => {
     setLocation('/app/blog/');
     expect(toHref('/app/blog/discover')).toBe('/app/blog/discover');
     expect(toHref('/app/blog')).toBe('/app/blog');
+  });
+
+  it('strips a stray `/pages/` prefix so the pushed URL is the clean route', () => {
+    // A page-authored link like `/pages/park-fees` (the on-disk folder is `pages/`)
+    // must land on the route `/park-fees`, not `…/app/blog/pages/park-fees`.
+    setLocation('/app/blog/');
+    expect(toHref('/pages/park-fees')).toBe('/app/blog/park-fees');
+    expect(toHref('/pages')).toBe('/app/blog/');
+  });
+
+  it('leaves a real `/pages/` INSIDE an already-based path untouched', () => {
+    setLocation('/app/blog/');
+    expect(toHref('/app/blog/pages/park-fees')).toBe('/app/blog/pages/park-fees');
   });
 
   it('leaves external, protocol-relative, hash and query links untouched', () => {
@@ -121,6 +135,51 @@ describe('navigate → clientPath round-trip', () => {
     const cp = clientPath(pushed);
     expect(cp).toBe('/discover');
     expect(matchRoutes(routes, cp)?.entry.routePath).toBe('/discover');
+  });
+});
+
+// ── /pages/ prefix tolerance ──────────────────────────────────────────────────
+// Routes are derived RELATIVE to the project's `pages/` dir, so no real route is
+// ever mounted under `/pages/…`. But the folder is literally `pages/`, so an
+// LLM-authored page routinely links to a sibling as `/pages/park-fees` instead of
+// the route `/park-fees` (live: scenario 06 index page → "No page for
+// /pages/park-fees"). The router tolerates the stray prefix as a fallback.
+describe('stripPagesPrefix', () => {
+  it('drops a leading /pages segment', () => {
+    expect(stripPagesPrefix('/pages/park-fees')).toBe('/park-fees');
+    expect(stripPagesPrefix('/pages/items/abc')).toBe('/items/abc');
+  });
+  it('collapses a bare /pages to /', () => {
+    expect(stripPagesPrefix('/pages')).toBe('/');
+  });
+  it('leaves non-/pages paths untouched', () => {
+    expect(stripPagesPrefix('/park-fees')).toBe('/park-fees');
+    expect(stripPagesPrefix('/')).toBe('/');
+    expect(stripPagesPrefix('/pagesx/y')).toBe('/pagesx/y'); // not the `pages` segment
+  });
+});
+
+describe('matchRoutes /pages/ tolerance', () => {
+  const routes: RouteEntry[] = [
+    { routePath: '/', Component: (() => null) as unknown as RouteEntry['Component'] },
+    { routePath: '/park-fees', Component: (() => null) as unknown as RouteEntry['Component'] },
+    { routePath: '/items/:id', Component: (() => null) as unknown as RouteEntry['Component'] },
+  ];
+
+  it('resolves a stray /pages/ prefix to the real route', () => {
+    expect(matchRoutes(routes, '/pages/park-fees')?.entry.routePath).toBe('/park-fees');
+  });
+  it('resolves a stray /pages/ prefix on a dynamic route (params intact)', () => {
+    const m = matchRoutes(routes, '/pages/items/abc');
+    expect(m?.entry.routePath).toBe('/items/:id');
+    expect(m?.params).toEqual({ id: 'abc' });
+  });
+  it('a literal route still wins over the fallback', () => {
+    expect(matchRoutes(routes, '/park-fees')?.entry.routePath).toBe('/park-fees');
+  });
+  it('still returns null for a genuinely unknown path', () => {
+    expect(matchRoutes(routes, '/pages/nope')).toBeNull();
+    expect(matchRoutes(routes, '/nope')).toBeNull();
   });
 });
 

@@ -31,6 +31,12 @@ Wiring rules — the app fails to compile if you break them:
   invent or camelCase a field name; copy it from the endpoint's `fields`.
 - IMPORT the reusable components you planned, by relative path from `pages/` to `components/`: a
   top-level page uses `../components/<Name>`, a page one directory deep uses `../../components/<Name>`.
+- LINK BETWEEN PAGES with `<Link>` (from `@app/runtime`) to a page's ROUTE, authored base-agnostic:
+  the route is the page's file path under `pages/` WITHOUT the `pages/` prefix or the `.tsx`
+  (`pages/park-fees.tsx` → `to="/park-fees"`, `pages/index.tsx` → `to="/"`, `pages/items/[id].tsx` →
+  `` to={`/items/${id}`} ``). NEVER prefix `/pages/` (the on-disk folder name is NOT part of the URL —
+  `to="/pages/park-fees"` 404s as "No page for /pages/park-fees") and NEVER hard-code `/app/<project>/…`
+  (`Link` re-adds the base). A leading slash is required so the base resolves.
 - STYLE WITH `@lmthing/css` DESIGN TOKENS ONLY (`bg-primary`, `text-foreground`, `text-muted`,
   `border-border`) — never a raw hex, `rgb()/hsl()`, or a stock Tailwind color.
 - GUARD NULLS. Every DB column is NULLABLE, so any value you read may be null/undefined — real parsed
@@ -103,6 +109,8 @@ useApi('costLines');                              // ✗ invented / transformed 
 const total = data?.total_cost_usd;               // ✗ read data.items[0].total_cost_usd — never a field off data
 const t = data?.items?.[0]?.grandTotalUSD;        // ✗ re-cased guess — read the endpoint's exact field: grand_total_usd
 {row.amount.toLocaleString()}                     // ✗ amount may be null → crashes the whole page; use (row.amount ?? 0).toLocaleString()
+<Link to="/pages/park-fees">Fees</Link>          // ✗ no `/pages/` prefix — link to the route: to="/park-fees"
+<Link to="/app/trip/park-fees">Fees</Link>       // ✗ never hard-code the base — Link re-adds it: to="/park-fees"
 const res = await fetch('/api/cost-lines');       // ✗ no raw fetch — read through useApi
 <div className="text-blue-600">                   // ✗ stock Tailwind color — use text-foreground
 console.log(data);                                // ✗ Cannot find name 'console' — no DOM lib
