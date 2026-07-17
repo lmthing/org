@@ -273,7 +273,11 @@ export class SessionManager {
     this.streamFn = opts.streamFn;
     this.defaultSpaceDir = opts.defaultSpaceDir;
     this.defaultModelAlias = opts.defaultModelAlias;
-    this.maxSessions = opts.maxSessions ?? (Number(process.env['MAX_SESSIONS']) || 8);
+    // A whole-app build fans out into many concurrent sub-sessions (per-specialist research +
+    // scaffold + the app builder), so the resident cap must clear that headroom or the top-level
+    // turn gets starved/evicted mid-build. The P3 memory watchdog still sheds idle sessions under
+    // real pressure, so the ceiling is safe to raise. Override with MAX_SESSIONS.
+    this.maxSessions = opts.maxSessions ?? (Number(process.env['MAX_SESSIONS']) || 24);
     this.snapshotsDir = opts.snapshotsDir ?? process.env['SNAPSHOTS_DIR'] ?? '/data/snapshots';
     this.idleTtlMs = opts.idleTtlMs ?? Number(process.env['IDLE_TTL_MINUTES'] ?? 15) * 60000;
     this.buildSessionFn = opts.buildSession ?? this.defaultBuildSession.bind(this);

@@ -4,7 +4,8 @@ output:
   tables: array
 dependsOn: [plan_app, read_sources, user_stories]
 role: general
-functions: []
+functions:
+  - uuid
 ---
 
 Detail EVERY table `plan_app` planned into a source-grounded data model — one entry per
@@ -15,17 +16,30 @@ BINDING list) are in scope. This is still a THINKING step — no writers.
 
 For every planned table produce its full `schema` AND the actual `rows` read from the material, so the
 implement step seeds data at creation. Do NOT invent rows: use only values the source states
-(identifiers, contacts, dates, payments, stated totals, attribution). Mine the brief HARD for each
-table's rows before concluding it has few — the acceptance checks in `user_stories` name the specific
+(identifiers, contacts, dates, payments, stated totals, attribution). And do NOT drop a value the source
+DID state: if `read_sources` captured a booking reference, flight number, amount, or contact detail for a
+row, put it in that row's field — a column left null when the brief has the value (a blank `flight_no`
+when the notes give one, a blank `amount_usd` when the spreadsheet cell has a number) is a
+parse-loss failure, the same as inventing data. `read_sources.summary` is a
+convenience index, not permission to invent: if a value there conflicts with the supplied source text
+or cannot be supported by the source, use the source text or omit that value. Mine the brief HARD for
+each table's rows before concluding it has few — the acceptance checks in `user_stories` name the specific
 data that must land. If after a genuine search a planned table truly has no rows in the material, keep
 it with an empty `rows: []` and a complete schema rather than dropping it — the plan is binding — but
 that should be rare; a planned table almost always has rows if you look.
 
 Every table schema needs a `title`, a `description`, and `columns` where each column has a
 `description` and exactly one uuid primary key. Keys in each row object MUST match the column names.
-Emit one statement:
+
+**Never author the `id` primary key in a row.** It is `generated: 'uuid'` — the SYSTEM fills it on
+insert. OMIT `id` from every row object (a row that carries `id: ''` collapses the whole table onto one
+empty key). The ONLY time you set an id yourself is to WIRE A RELATION where a child row must point at a
+parent row you're seeding in the same pass: call `uuid()` once, keep it in a `const`, and use that value
+as BOTH the parent row's `id` and the child row's foreign-key column. Emit one statement:
 
 ```typescript
+// Mint ids ONLY for rows another table references. Plain rows omit id entirely.
+const arushaStayId = uuid();
 currentTask.resolve({
   tables: [
     {
@@ -38,8 +52,9 @@ currentTask.resolve({
           // …one column per field the record carries, each with a real description.
         },
       },
-      // One object per record READ FROM THE MATERIAL. Never carry over an example value.
-      rows: [ /* { id: '…', …source-derived fields } */ ],
+      // One object per record READ FROM THE MATERIAL. NO `id` key (the system generates it),
+      // unless this row is a relation target — then set id to a minted const (e.g. `id: arushaStayId`).
+      rows: [ /* { …source-derived fields } */ ],
     },
   ],
 });

@@ -379,13 +379,24 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
     const types = columnTypes(table);
     const row: Row = { ...values };
 
-    // Apply generated + default values for columns missing from the input.
+    // Apply generated + default values. A `generated` column is OWNED by the system: it is filled
+    // whenever the model did not supply a real value — missing, null, or blank ('') — so a row the
+    // model wrote with `id: ''` can never collide on an empty primary key. A genuine non-empty value
+    // (e.g. a uuid the model minted via the `uuid()` global to wire a relation) is honored as-is.
     if (schema) {
       for (const [col, def] of Object.entries(schema.columns)) {
-        if (row[col] !== undefined) continue;
-        if (def.generated === 'uuid') row[col] = randomUUID();
-        else if (def.generated === 'now') row[col] = new Date().toISOString();
-        else if (def.default !== undefined) row[col] = def.default;
+        const provided = row[col];
+        const blank = provided === undefined || provided === null || provided === '';
+        if (def.generated === 'uuid') {
+          if (blank) row[col] = randomUUID();
+          continue;
+        }
+        if (def.generated === 'now') {
+          if (blank) row[col] = new Date().toISOString();
+          continue;
+        }
+        if (provided !== undefined) continue;
+        if (def.default !== undefined) row[col] = def.default;
       }
     }
 

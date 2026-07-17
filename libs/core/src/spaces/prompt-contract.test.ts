@@ -257,6 +257,10 @@ describe('system-appbuilder live-project build action', () => {
     // The forbidden-import guard survives the redesign.
     expect(pages).toMatch(/react-router/);
     expect(pages).toMatch(/@radix-ui/);
+    // Null-safety: nullable DB columns must be COALESCED before use (the park-fees crash fix) —
+    // stated as a general principle, not a list of specific methods.
+    expect(pages).toMatch(/GUARD NULLS/);
+    expect(pages).toMatch(/COALESCE/);
 
     // Every model-authored implement node carries ✅do/❌never code examples grounded in real
     // generated-code failures — the NO-DOM `console` trap being the recurring one.
@@ -265,6 +269,21 @@ describe('system-appbuilder live-project build action', () => {
       expect(read(f)).toMatch(/NO-DOM ambient/);
       expect(read(f)).toMatch(/❌/);
     }
+
+    // IDs are system-generated: plan_tables tells the model to OMIT the id, and reach for the `uuid()`
+    // space function only to wire a relation. (The store also regenerates a blank generated PK.)
+    expect(read('04-plan_tables.md')).toMatch(/Never author the `id`/);
+    expect(read('04-plan_tables.md')).toMatch(/uuid\(\)/);
+    expect(read('04-plan_tables.md')).toMatch(/^\s*-\s*uuid\s*$/m); // the node scopes the uuid function
+
+    // The endpoint response SHAPE is a single source of truth: plan_endpoints declares each endpoint's
+    // `fields`, implement_endpoints emits exactly those keys, implement_pages reads exactly those keys
+    // (verbatim, never re-cased) — the fix for the endpoint↔page field-name mismatch that crashed pages.
+    expect(read('06-plan_endpoints.md')).toMatch(/`fields`/);
+    expect(read('06-plan_endpoints.md')).toMatch(/EXACT keys of ONE item/);
+    expect(read('07-implement_endpoints.md')).toMatch(/item\.fields/);
+    expect(read('11-implement_pages.md')).toMatch(/plan_endpoints\.endpoints/);
+    expect(read('11-implement_pages.md')).toMatch(/verbatim/i);
 
     // finalize writes the persistent chat dock layout.
     expect(read('12-finalize.md')).toMatch(/writeProjectPage\('_layout'/);

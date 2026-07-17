@@ -20,11 +20,24 @@ Wiring rules — the app fails to compile if you break them:
   relative `use-api`; none exist in a generated project.
 - Read data by passing an endpoint `name` to `useApi` — the exact stable id the endpoint exported. Use
   ONLY names listed for this page in `item.endpoints` (each is a real `plan_endpoints.endpoints[].name`);
-  never invent or transform a name. Every read endpoint returns `{ items: [...] }`, so read `data.items`.
+  never invent or transform a name. Every read endpoint returns `{ items: [...] }` (ALWAYS an array), so
+  read `data.items` — and for a dashboard/aggregate endpoint read its single summary object as
+  `data.items[0]`. NEVER read a field straight off `data` (e.g. `data.total_cost_usd`): the shape is
+  always `{ items: [...] }`, so a flat field is always `undefined` and the value silently vanishes.
+- The item's FIELD NAMES are fixed by the endpoint: look up this endpoint in `plan_endpoints.endpoints`,
+  find its `fields`, and read ONLY those keys, EXACTLY as written (snake_case, verbatim). The endpoint
+  returns those exact keys, so `item.grand_total_usd` works and a re-cased guess like
+  `item.grandTotalUSD` is `undefined` → the page renders blank or crashes on `.toLocaleString()`. Never
+  invent or camelCase a field name; copy it from the endpoint's `fields`.
 - IMPORT the reusable components you planned, by relative path from `pages/` to `components/`: a
   top-level page uses `../components/<Name>`, a page one directory deep uses `../../components/<Name>`.
 - STYLE WITH `@lmthing/css` DESIGN TOKENS ONLY (`bg-primary`, `text-foreground`, `text-muted`,
   `border-border`) — never a raw hex, `rgb()/hsl()`, or a stock Tailwind color.
+- GUARD NULLS. Every DB column is NULLABLE, so any value you read may be null/undefined — real parsed
+  data routinely leaves fields blank. Never use a value in a way that a null would break (calling a
+  method on it, reading a property, indexing, passing it somewhere non-null). COALESCE first:
+  `value ?? fallback` (e.g. `amount ?? 0`, `items ?? []`, `label ?? '—'`), then use the result. One
+  unguarded use crashes the whole page the moment a row's field is null.
 
 `writeProjectPage` validates the page has a default export and parses, returning `{ ok, error? }`;
 rewrite and retry if `w.ok` is false. Emit one statement:
@@ -87,6 +100,9 @@ import { useRoute } from 'react-router';          // ✗ react-router is not in 
 import * as Dialog from '@radix-ui/react-dialog'; // ✗ no @radix-ui
 import { useApi } from '../use-api';              // ✗ hooks come ONLY from '@app/runtime'
 useApi('costLines');                              // ✗ invented / transformed name — use item.endpoints verbatim
+const total = data?.total_cost_usd;               // ✗ read data.items[0].total_cost_usd — never a field off data
+const t = data?.items?.[0]?.grandTotalUSD;        // ✗ re-cased guess — read the endpoint's exact field: grand_total_usd
+{row.amount.toLocaleString()}                     // ✗ amount may be null → crashes the whole page; use (row.amount ?? 0).toLocaleString()
 const res = await fetch('/api/cost-lines');       // ✗ no raw fetch — read through useApi
 <div className="text-blue-600">                   // ✗ stock Tailwind color — use text-foreground
 console.log(data);                                // ✗ Cannot find name 'console' — no DOM lib

@@ -259,6 +259,66 @@ describe('runTasklist orchestrator', () => {
     expect(result.data).toEqual([{ n: 10 }, { n: 20 }, { n: 0 }]);
   });
 
+  it('retries a FAILING forEach element (fresh fork) and keeps its later successful result', async () => {
+    // A required forEach element whose fork REJECTS (off-schema resolve) is retried with a fresh
+    // fork; the model gets another try. Here item 20 fails twice then resolves valid on attempt 3 —
+    // so the element is NOT salvaged and the tasklist is not degraded.
+    const dir = await makeTasklistSpace({
+      '01-list.md': `---\nid: list\noutput:\n  items: array\n---\n\nLIST_T: produce the list.`,
+      '02-each.md': `---\nid: each\ndependsOn: [list]\nforEach: list.items\ngoal: true\noutput:\n  n: number\n---\n\nEACH_T: process one item.`,
+    });
+    const space = await loadSpace(dir);
+    let item20Attempts = 0;
+    const streamFn = createMockStreamFn((o: StreamOpts) => {
+      const user = o.messages.map((m) => m.content).join('\n');
+      if (user.includes('LIST_T')) return `currentTask.resolve({ items: [10, 20] });`;
+      if (user.includes('EACH_T')) {
+        if (user.includes('- item: 20')) {
+          item20Attempts++;
+          return item20Attempts < 3 ? `currentTask.resolve({ n: "bad" });` : `currentTask.resolve({ n: item });`;
+        }
+        return `currentTask.resolve({ n: item });`;
+      }
+      return '';
+    });
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
+      renderHost: silentHost, streamFn,
+    });
+    const result = await runTasklist({ name: 'flow', space, forkEngine: engine });
+    expect(item20Attempts).toBe(3); // two failed attempts + one that succeeded
+    expect(result.ok).toBe(true); // element eventually resolved valid → not salvaged
+    expect(result.degraded).toBe(false);
+    expect(result.data).toEqual([{ n: 10 }, { n: 20 }]);
+  });
+
+  it('salvages a forEach element ONLY after exhausting its retries (one bad item never sinks the task)', async () => {
+    // item 20 fails every attempt → retried 3× then salvaged, so the required task still completes.
+    const dir = await makeTasklistSpace({
+      '01-list.md': `---\nid: list\noutput:\n  items: array\n---\n\nLIST_T: produce the list.`,
+      '02-each.md': `---\nid: each\ndependsOn: [list]\nforEach: list.items\ngoal: true\noutput:\n  n: number\n---\n\nEACH_T: process one item.`,
+    });
+    const space = await loadSpace(dir);
+    let item20Attempts = 0;
+    const streamFn = createMockStreamFn((o: StreamOpts) => {
+      const user = o.messages.map((m) => m.content).join('\n');
+      if (user.includes('LIST_T')) return `currentTask.resolve({ items: [10, 20] });`;
+      if (user.includes('EACH_T')) {
+        if (user.includes('- item: 20')) { item20Attempts++; return `currentTask.resolve({ n: "bad" });`; }
+        return `currentTask.resolve({ n: item });`;
+      }
+      return '';
+    });
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4, parentHistory: [], parentSpaceDir: dir, parentAgentSlug: 'main',
+      renderHost: silentHost, streamFn,
+    });
+    const result = await runTasklist({ name: 'flow', space, forkEngine: engine });
+    expect(item20Attempts).toBe(3); // exactly the retry budget, then salvage
+    expect(result.degradedTasks).toEqual(['each[1]']);
+    expect(result.data).toEqual([{ n: 10 }, { n: 0 }]); // item 20 salvaged to the neutral default
+  });
+
   it('a degraded NON-goal task marks the envelope degraded but keeps ok:true', async () => {
     const dir = await makeTasklistSpace({
       '01-shaky.md': `---\nid: shaky\noutput:\n  hint: string\n---\n\nSHAKY_T: never resolves.`,

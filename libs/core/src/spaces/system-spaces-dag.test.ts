@@ -121,7 +121,12 @@ describe('shipped system spaces load + validate', () => {
     expect(organize['inventory']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split'\)/);
     expect(organize['inventory']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split', ?'<domain>'\)/);
     expect(organize['inventory']!.instruction).toMatch(/subjects? vs\.? .*records|record type|app DATA/i);
-    expect(organize['build_specialist']!.forEach).toBe('inventory.scopes');
+    // inventory → consolidate_scopes (dedup the over-split scopes) → build_specialist fans out over
+    // the CONSOLIDATED set, so duplicate/overlapping specialists don't waste the build budget.
+    expect(organize['consolidate_scopes']!.dependsOn).toEqual(['inventory']);
+    expect(organize['consolidate_scopes']!.instruction).toMatch(/consolidat|merge|overlap|minimal/i);
+    expect(organize['build_specialist']!.dependsOn).toEqual(['consolidate_scopes']);
+    expect(organize['build_specialist']!.forEach).toBe('consolidate_scopes.scopes');
     expect(organize['build_specialist']!.canDelegateTo).toEqual(['system-architect/architect#synthesize_and_run']);
     expect(organize['build_specialist']!.instruction).toContain('exactly one self-contained statement');
     expect(organize['build_app']!.canDelegateTo).toEqual(['system-appbuilder/automator#build_live_project']);

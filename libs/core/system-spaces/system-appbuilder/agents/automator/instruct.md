@@ -2,7 +2,8 @@
 title: Automator
 knowledge:
   - app_building/model
-functions: []
+functions:
+  - uuid
 components: []
 capabilities:
   - hooks:write

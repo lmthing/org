@@ -179,6 +179,30 @@ describe('insert', () => {
     expect(rows.map((r) => r.title).sort()).toEqual(['A', 'B']);
   });
 
+  it('regenerates a generated PK the caller left BLANK — an empty id never collides (row-collapse fix)', () => {
+    // A model that writes rows with a literal `id: ''` used to collapse a whole table to one row:
+    // every insert shared the same empty-string primary key. A `generated` column is system-owned, so
+    // a blank ('' / null / undefined) value is regenerated rather than inserted verbatim.
+    const rows = pdb.db.insert('feed_items', [
+      { id: '', title: 'One', url: 'https://one.test' },
+      { id: '', title: 'Two', url: 'https://two.test' },
+      { id: '', title: 'Three', url: 'https://three.test' },
+    ]) as Record<string, unknown>[];
+    const ids = rows.map((r) => r.id as string);
+    for (const id of ids) expect(id.length).toBeGreaterThan(10); // each got a real uuid, none is ''
+    expect(new Set(ids).size).toBe(3); // all distinct → all three rows survive
+    expect((pdb.db.query('feed_items') as unknown[]).length).toBe(3);
+  });
+
+  it('honors a genuine non-empty id the caller minted (e.g. a uuid() for relation wiring)', () => {
+    const mine = '11111111-2222-3333-4444-555555555555';
+    const row = pdb.db.insert('feed_items', { id: mine, title: 'Kept', url: 'https://kept.test' }) as Record<
+      string,
+      unknown
+    >;
+    expect(row.id).toBe(mine); // a real supplied id is preserved, not overwritten
+  });
+
   it('enforces UNIQUE columns', () => {
     pdb.db.insert('feed_items', { title: 'x', url: 'https://dupe.test' });
     expect(() => pdb.db.insert('feed_items', { title: 'y', url: 'https://dupe.test' })).toThrow();

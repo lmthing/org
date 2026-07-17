@@ -15,3 +15,22 @@ guide when no domain matches.
 Guides: default · trips · household · vehicles · pets · health · home-renovation · events · wedding ·
 studies · work-clients · job-search · moving · garden · family-kids · finances · recipes · fitness ·
 collections
+
+## Consolidate to the minimal specialist set
+
+Splitting tends to OVER-PRODUCE — the same subject shows up twice under different words, or a broad
+advisor sits next to the very specifics it already covers. Before building, collapse the candidates to
+the fewest specialists that are each genuinely DISTINCT. Every extra specialist is a full research +
+build that costs time and can fail, so err toward FEWER:
+
+- **Same subject → one specialist.** If two candidates name the same real-world subject or place (even
+  with different wording, or one adds a nearby landmark), they are ONE. Merge them; keep the clearer
+  name; union what each was going to cover.
+- **Facets are not specialists.** Fees, rules, tips, logistics, and history *about the same subject*
+  are one specialist that advises on all of them — not one per facet.
+- **Drop the redundant generic.** A broad catch-all advisor whose material is already carried by the
+  specific specialists adds nothing — drop it and keep the specifics. (If instead the material is thin
+  and only the broad one has substance, keep the broad one and drop the empty specifics.)
+- **Aim small.** The right number is the count of subjects the user would ASK about separately —
+  typically a handful. If you can't say in one line why two specialists must stay separate, they are
+  one.

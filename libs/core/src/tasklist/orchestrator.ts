@@ -6,6 +6,12 @@ import type { TaskNode } from '../spaces/tasklist-load.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { validateInput } from './schema.js';
 import type { TaskEnvelope, DegradeReason } from '../exec/envelope.js';
+import { salvageData } from '../exec/envelope.js';
+
+/** How many times a single forEach ELEMENT is retried (fresh fork) before its value is salvaged.
+ *  A failing element (bad resolve, thrown error, VM error) must never sink the whole required task —
+ *  one flaky specialist build shouldn't block the app build — so each element gets its own retries. */
+const FOREACH_ITEM_ATTEMPTS = 3;
 
 /** Resolve a `forEach` reference ("taskId" or "taskId.field.subfield") against accumulated
  *  task outputs. Returns the referenced array, or [] when missing / not an array. */
@@ -277,16 +283,32 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
           // the element as `item` (+ `index`). Collect the resolved values into an array.
           if (task.forEach) {
             const items = resolveForEachItems(task.forEach, allOutputs);
+            // Each element is independent: if its fork FAILS (off-schema resolve, thrown error, VM
+            // error), retry the SAME element with a FRESH fork up to FOREACH_ITEM_ATTEMPTS times
+            // (a transient VM error usually clears on a clean fork; the model gets more tries at a
+            // valid resolve). Only after the last attempt fails do we salvage a schema-valid neutral
+            // placeholder for THAT element — so one bad item never rejects the collection and sinks
+            // the whole (required) task; the goal always runs.
             const output = await Promise.all(
-              items.map((item, index) => {
+              items.map(async (item, index) => {
                 const elemScope = tracer && taskScope
                   ? tracer.child(taskScope, 'task', `fork:${task.id}[${index}]`, { tasklist: name, forEachIndex: index })
                   : undefined;
-                return runFork({ item, index }, elemScope).then((meta) => {
-                  if (meta.degraded) noteDegraded(`${task.id}[${index}]`, meta.reason);
-                  if (tracer && elemScope) tracer.end(elemScope, 'done', { result: meta.value, ...(meta.degraded ? { degraded: true, reason: meta.reason } : {}) });
-                  return meta.value;
-                });
+                let lastErr: unknown;
+                for (let attempt = 1; attempt <= FOREACH_ITEM_ATTEMPTS; attempt++) {
+                  try {
+                    const meta = await runFork({ item, index }, elemScope);
+                    if (meta.degraded) noteDegraded(`${task.id}[${index}]`, meta.reason);
+                    if (tracer && elemScope) tracer.end(elemScope, 'done', { result: meta.value, ...(meta.degraded ? { degraded: true, reason: meta.reason } : {}) });
+                    return meta.value;
+                  } catch (err) {
+                    lastErr = err;
+                  }
+                }
+                const salvagedValue = salvageData(task.output);
+                noteDegraded(`${task.id}[${index}]`, 'no_resolve');
+                if (tracer && elemScope) tracer.end(elemScope, 'error', { error: lastErr instanceof Error ? lastErr.message : String(lastErr) });
+                return salvagedValue;
               }),
             );
             return { task, output };

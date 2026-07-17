@@ -143,8 +143,8 @@ describe('ForkEngine', () => {
   });
 
   it('rejects when the resolved value does not match the output schema', async () => {
-    // Schema wants a number; the fork resolves a string → validateOutput fails and
-    // the fork rejects rather than handing back an off-schema value.
+    // Schema wants a number; the fork resolves a string → validateOutput fails and the fork rejects.
+    // (Tolerance to a bad forEach item lives in the ORCHESTRATOR — retry-then-salvage — not here.)
     const engine = makeEngine('currentTask.resolve({ count: "not a number" });\n');
     await expect(
       engine.fork({ instruction: 'count things', output: { count: 'number' } }),

@@ -312,6 +312,10 @@ export class ForkEngine {
           if (didResolve) return;
           didResolve = true;
           if (!validateOutput(outputSchema, value)) {
+            // Reject on an off-schema resolve. For a forEach item this rejection is caught by the
+            // orchestrator, which RETRIES the item (fresh fork) up to a few times before salvaging —
+            // so tolerance lives in one place (the orchestrator), covering every failure mode
+            // (bad resolve, exception, VM error) rather than only this one.
             resolvedError = new Error(`Fork output does not match schema ${JSON.stringify(outputSchema)}`);
           } else {
             resolvedValue = value;

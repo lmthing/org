@@ -4,8 +4,8 @@ output:
   topic: string
   ok: boolean
   errors: string
-dependsOn: [inventory]
-forEach: inventory.scopes
+dependsOn: [consolidate_scopes]
+forEach: consolidate_scopes.scopes
 role: general
 functions: []
 canDelegateTo:
