@@ -9,15 +9,11 @@ import {
   SCRATCH_DTS,
   composeDbDts,
   API_CALL_DTS,
-  PAGES_WRITE_DTS,
-  API_WRITE_DTS,
   PROJECT_PAGE_DTS,
   PROJECT_COMPONENT_DTS,
   PROJECT_API_DTS,
-  HOOKS_WRITE_DTS,
   PROJECT_AUTHORING_DTS,
   PROJECT_MANAGE_DTS,
-  WRITE_TABLE_SCHEMA_DTS,
   PROJECT_TABLE_DTS,
   STORE_READ_DTS,
   STORE_INSTALL_DTS,
@@ -113,8 +109,8 @@ describe('standalone capability fragments', () => {
     expect(CAPABILITY_DTS_FRAGMENTS['connections:use']).toBeUndefined();
   });
 
-  it('the write helpers are non-empty one-liners', () => {
-    for (const frag of [PAGES_WRITE_DTS, API_WRITE_DTS, HOOKS_WRITE_DTS]) {
+  it('the live-project write helpers are non-empty one-liners', () => {
+    for (const frag of [PROJECT_PAGE_DTS, PROJECT_API_DTS, PROJECT_COMPONENT_DTS]) {
       expect(frag.trim().length).toBeGreaterThan(0);
       expect(frag).not.toContain('\n');
       expect(frag).toContain('declare function');
@@ -126,9 +122,9 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
   it('maps the standalone capability ids and omits the db trio', () => {
     expect(CAPABILITY_DTS_FRAGMENTS).toEqual({
       'api:call': API_CALL_DTS,
-      'pages:write': [PAGES_WRITE_DTS, PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS].join('\n'),
-      'api:write': [API_WRITE_DTS, PROJECT_API_DTS].join('\n'),
-      'hooks:write': [HOOKS_WRITE_DTS, PROJECT_AUTHORING_DTS].join('\n'),
+      'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS].join('\n'),
+      'api:write': PROJECT_API_DTS,
+      'hooks:write': PROJECT_AUTHORING_DTS,
       'project:manage': PROJECT_MANAGE_DTS,
       'store:read': STORE_READ_DTS,
       'store:install': STORE_INSTALL_DTS,
@@ -146,27 +142,24 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     expect(PROJECT_AUTHORING_DTS).toContain('writeProjectHook(');
     expect(PROJECT_AUTHORING_DTS).toContain('writeProjectEvent(');
     expect(PROJECT_AUTHORING_DTS).toContain('writeProjectFunction(');
-    // hooks:write earns BOTH the catalog writeHook and the live-project writers.
-    expect(CAPABILITY_DTS_FRAGMENTS['hooks:write']).toContain('writeHook(');
+    // hooks:write is now the live-project writers ONLY (the catalog writeHook is gone).
     expect(CAPABILITY_DTS_FRAGMENTS['hooks:write']).toContain('writeProjectHook(');
   });
 
-  it('PROJECT_MANAGE_DTS declares createProject + selectProject; WRITE_TABLE_SCHEMA_DTS declares writeTableSchema', () => {
+  it('PROJECT_MANAGE_DTS declares createProject + selectProject', () => {
     expect(PROJECT_MANAGE_DTS).toContain('createProject(');
     expect(PROJECT_MANAGE_DTS).toContain('selectProject(');
-    expect(WRITE_TABLE_SCHEMA_DTS).toContain('writeTableSchema(');
   });
 
   it('PROJECT_TABLE_DTS declares the live-project table writer (db:schema twin)', () => {
     expect(PROJECT_TABLE_DTS).toContain('writeProjectTable(');
   });
 
-  it('pages:write / api:write earn BOTH the catalog and live-project writers', () => {
-    // pages:write → writePage (catalog) + writeProjectPage (live project)
-    expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toContain('writePage(');
+  it('pages:write / api:write earn the live-project writers (the catalog writers are gone)', () => {
+    // pages:write → writeProjectPage + writeProjectComponent (live project)
     expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toContain('writeProjectPage(');
-    // api:write → writeApi (catalog) + writeProjectApi (live project)
-    expect(CAPABILITY_DTS_FRAGMENTS['api:write']).toContain('writeApi(');
+    expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toContain('writeProjectComponent(');
+    // api:write → writeProjectApi (live project)
     expect(CAPABILITY_DTS_FRAGMENTS['api:write']).toContain('writeProjectApi(');
   });
 });

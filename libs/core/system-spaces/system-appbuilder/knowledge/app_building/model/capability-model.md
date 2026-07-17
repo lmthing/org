@@ -47,11 +47,15 @@ capabilities:
 
 ## Least-privilege in practice
 
-The `app-architect` orchestrator holds the full authoring set (it builds every file kind). The
-specialist agents hold only their slice: `data-modeler` = `db:schema`+`db:read`; `page-builder` =
-`pages:write`+`db:read`; `api-author` = `api:write`+`db:read`. The `automator` is the broad one — it
-authors the LIVE project (data model + automation + UI) and so holds six grants:
-`hooks:write`, `db:schema`, `db:read`, `db:write`, `pages:write`, `api:write`. A page
-builder cannot write a table; a data modeler cannot write a page. The build_app tasklist runs its
-per-file steps with role `general` under the app-architect's own grants, so every write global is
-callable in those task bodies without any extra delegation.
+The `automator` is the broad authoring agent — it builds the LIVE project (data model + automation +
+UI) end-to-end and so holds six grants: `hooks:write`, `db:schema`, `db:read`, `db:write`,
+`pages:write`, `api:write`. Its `build_live_project` tasklist runs its per-file steps with role
+`general` under the automator's own grants, so every write global is callable in those task bodies
+without any extra delegation. The narrower specialists hold only their slice: `data-modeler` =
+`db:schema`+`db:read`; `page-builder` = `pages:write`+`db:read`; `api-author` = `api:write`+`db:read`
+— a page builder cannot write a table; a data modeler cannot write a page.
+
+`project:manage` (`createProject`/`selectProject`) is held by the **host orchestrator (THING)**, not
+the appbuilder agents: THING creates or selects the LIVE project, and the runtime automatically
+retargets the automator's build into that project. The automator itself never creates a project — it
+only authors files into the project the session is already targeting.

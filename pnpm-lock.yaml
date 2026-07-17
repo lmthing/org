@@ -547,6 +547,8 @@ importers:
         specifier: ^9.0.0
         version: 9.39.4(jiti@2.7.0)
 
+  scenarios: {}
+
 packages:
 
   '@ai-sdk/anthropic@2.0.85':

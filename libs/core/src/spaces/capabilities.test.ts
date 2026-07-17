@@ -163,20 +163,23 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     }
   });
 
-  it("system-appbuilder's app-architect holds the full authoring capability set", async () => {
+  it("system-appbuilder's automator holds the full authoring capability set", async () => {
     const dirs = defaultSystemSpaceDirs();
     const spaces = await loadSystemSpaces(dirs);
     const appbuilder = spaces.find((s) => s.dir.endsWith('system-appbuilder'));
     expect(appbuilder, 'system-appbuilder loads').toBeTruthy();
-    const architect = appbuilder!.agents['app-architect'];
-    expect(architect, 'app-architect agent present').toBeTruthy();
-    expect(architect!.capabilities).toEqual({
-      'project:manage': true,
+    // app-architect (and the store-catalog build_app/publish_app pipeline) is gone — the
+    // automator is now the sole builder agent, defaultAction build_live_project, and holds
+    // the full live-project authoring set (project:manage moved to THING, not the builder).
+    const automator = appbuilder!.agents['automator'];
+    expect(automator, 'automator agent present').toBeTruthy();
+    expect(automator!.capabilities).toEqual({
+      'hooks:write': true,
       'db:schema': {},
       'db:read': {},
+      'db:write': {},
       'pages:write': true,
       'api:write': true,
-      'hooks:write': true,
     });
   });
 });

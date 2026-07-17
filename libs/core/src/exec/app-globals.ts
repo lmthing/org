@@ -19,9 +19,9 @@ export type ProjectResult = { ok: boolean; appId?: string; root?: string; error?
  * frontmatter granted, enforced on EVERY call (not just at injection).
  *
  * Phase 1 wires the flagship SYNCHRONOUS `db` global (execShell-class: a same-process
- * host call, no yield). Phase 9 adds the SYNCHRONOUS authoring globals
- * (`writePage`/`writeApi`/`writeHook`/`writeTableSchema` + `createProject`/`selectProject`)
- * — the DTS declares them non-Promise, so like `db` they are plain host calls (no
+ * host call, no yield). The SYNCHRONOUS authoring globals (the live `writeProject*`
+ * writers + `createProject`/`selectProject`) follow — the DTS declares them non-Promise,
+ * so like `db` they are plain host calls (no
  * yield-router). `apiCall` remains the one value-yielding app global (wired at its P4/P6
  * seam). Each impl below is UNSCOPED (host engine, libs/cli); core injects it only when
  * the agent holds the matching capability.
@@ -55,19 +55,18 @@ export interface AppGlobalImpls {
    *  The host (libs/cli) validates against the caller scope's declared events and
    *  dispatches via the event pipeline; project-scoped. */
   emitEvent?: EmitEventResolver;
-  /** Phase 9 authoring globals — write into the `store/apps/<id>/` catalog source of
-   *  the currently-selected app. Provided by libs/cli (`createAppAuthoringGlobals`).
-   *  Injected purely on the capability grant (NOT projectRoot): the appbuilder has no
-   *  project of its own until `createProject` establishes one. */
-  writePage?: (route: string, src: string) => AuthoringResult;
-  writeApi?: (route: string, src: string) => AuthoringResult;
-  writeHook?: (slug: string, src: string) => AuthoringResult;
-  writeTableSchema?: (name: string, schema: unknown) => AuthoringResult;
+  /** LIVE-PROJECT lifecycle globals (`project:manage`) — `createProject` makes a NEW
+   *  live pod project under `.lmthing/<id>/` (a real, servable project — NOT a
+   *  `store/apps/<id>/` catalog template) and marks it the session's build TARGET;
+   *  `selectProject` binds an existing live project as the target. A subsequent
+   *  `delegate` to the automator then builds INTO that target (see
+   *  `resolveBuildTarget`). Provided by libs/cli; injected purely on the capability
+   *  grant (NOT projectRoot) — THING holds `project:manage` and creates the live
+   *  project it will delegate the build into. */
   createProject?: (id: string, opts?: { title?: string }) => ProjectResult;
   selectProject?: (id: string) => ProjectResult;
-  /** Plan S11 LIVE-PROJECT authoring globals — unlike the catalog writers above
-   *  (which target `store/projects/<id>/` templates), these write into the SESSION'S
-   *  OWN live project (`<lmthingRoot>/<projectId>/{hooks,events,functions}/`) and
+  /** Plan S11 LIVE-PROJECT authoring globals — these write into the target live
+   *  project (`<lmthingRoot>/<projectId>/{hooks,events,functions}/`) and
    *  republish so the change goes live without a pod restart. Provided by libs/cli
    *  (`createProjectAuthoringGlobals`), bound to the session's project root, and
    *  injected purely on the `hooks:write` grant (see {@link injectAppGlobals}):
@@ -77,9 +76,8 @@ export interface AppGlobalImpls {
   writeProjectEvent?: (name: string, src: string) => AuthoringResult;
   writeProjectFunction?: (name: string, src: string) => AuthoringResult;
   /** LIVE-project table writer (the `db:schema` twin of the three above): writes
-   *  `<projectRoot>/database/<name>.json` and re-derives the project's db. Without it a
-   *  live project can never gain a data model — `writeTableSchema` only targets a catalog
-   *  template, and a project with no `database/*.json` boots NO db at all. */
+   *  `<projectRoot>/database/<name>.json` and re-derives the project's db. The ONLY
+   *  data-model writer now — a project with no `database/*.json` boots NO db at all. */
   writeProjectTable?: (name: string, schema: unknown) => AuthoringResult;
   /** LIVE-project page/API writers (the `pages:write`/`api:write` twins): write
    *  `<projectRoot>/pages/<route>.tsx` / `<projectRoot>/api/<path>/<METHOD>.ts` and
@@ -174,13 +172,13 @@ function buildScopedDb(db: DbApi, app: AppCapabilities): Record<string, unknown>
  *     a session/fork/delegate running OUTSIDE a project (no `projectRoot`) receives
  *     NO `db` — the backward-compat invariant that keeps a top-level THING session
  *     behaving exactly as before, and there is no live db to bind without a project.
- *   - **The Phase-9 authoring globals** (`writePage`/`writeApi`/`writeHook`/
- *     `writeTableSchema` + `createProject`/`selectProject`) are gated on the
- *     CAPABILITY GRANT ALONE, not `projectRoot`: the appbuilder legitimately has no
- *     project of its own — `createProject` is precisely what establishes the catalog
- *     app the other authoring writes target. THING and ordinary agents hold none of
- *     these caps, so nothing is injected for them (invariant preserved: no caps ⇒ no
- *     app globals), regardless of whether the host passes the impls.
+ *   - **The `project:manage` lifecycle globals** (`createProject`/`selectProject`)
+ *     are gated on the CAPABILITY GRANT ALONE, not `projectRoot`: `createProject`
+ *     makes a NEW live project under `.lmthing/<id>/` and marks it the build target,
+ *     so it must be callable from a session that is not yet inside that project.
+ *     THING holds `project:manage`; ordinary agents hold none of these caps, so
+ *     nothing is injected for them (invariant preserved: no caps ⇒ no app globals),
+ *     regardless of whether the host passes the impls.
  *
  * Nothing is injected unless the host supplies `appGlobals` (libs/cli, P2+).
  */
@@ -201,9 +199,6 @@ export function injectAppGlobals(
     handle.dispose();
   }
 
-  // Authoring/management globals — capability-gated only (project-independent).
-  if (app['pages:write'] && impls.writePage) injectGlobal(ctx, 'writePage', impls.writePage as (...a: unknown[]) => unknown);
-  if (app['api:write'] && impls.writeApi) injectGlobal(ctx, 'writeApi', impls.writeApi as (...a: unknown[]) => unknown);
   // Live-project page/API authoring (S11) — same `pages:write`/`api:write` grant, but these
   // write into the session's OWN project (not the catalog) and rebuild the served app. Present
   // only when the host supplies them (a project-rooted session); a catalog-only appbuilder
@@ -211,7 +206,6 @@ export function injectAppGlobals(
   if (app['pages:write'] && impls.writeProjectPage) injectGlobal(ctx, 'writeProjectPage', impls.writeProjectPage as (...a: unknown[]) => unknown);
   if (app['pages:write'] && impls.writeProjectComponent) injectGlobal(ctx, 'writeProjectComponent', impls.writeProjectComponent as (...a: unknown[]) => unknown);
   if (app['api:write'] && impls.writeProjectApi) injectGlobal(ctx, 'writeProjectApi', impls.writeProjectApi as (...a: unknown[]) => unknown);
-  if (app['hooks:write'] && impls.writeHook) injectGlobal(ctx, 'writeHook', impls.writeHook as (...a: unknown[]) => unknown);
   // Live-project authoring (S11) — same `hooks:write` grant, but these write into the
   // session's OWN project (not the catalog) and republish. Present only when the host
   // supplies them (a project-rooted session); a catalog-only appbuilder session leaves
@@ -219,7 +213,6 @@ export function injectAppGlobals(
   if (app['hooks:write'] && impls.writeProjectHook) injectGlobal(ctx, 'writeProjectHook', impls.writeProjectHook as (...a: unknown[]) => unknown);
   if (app['hooks:write'] && impls.writeProjectEvent) injectGlobal(ctx, 'writeProjectEvent', impls.writeProjectEvent as (...a: unknown[]) => unknown);
   if (app['hooks:write'] && impls.writeProjectFunction) injectGlobal(ctx, 'writeProjectFunction', impls.writeProjectFunction as (...a: unknown[]) => unknown);
-  if (app['db:schema'] && impls.writeTableSchema) injectGlobal(ctx, 'writeTableSchema', impls.writeTableSchema as (...a: unknown[]) => unknown);
   // The LIVE-project table writer — same `db:schema` grant, but it targets the session's
   // OWN project (not the catalog). Present only when the host supplies it (a project-rooted
   // session); a catalog-only appbuilder session leaves it absent.

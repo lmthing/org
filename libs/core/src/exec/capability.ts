@@ -96,7 +96,7 @@ export interface CapabilityProfile {
    *  callable model global nor declared, so a stray call fails typecheck. */
   scratchFs: boolean;
   /** Project-app capability grants (`capabilities:` frontmatter → parsed `AppCapabilities`).
-   *  Drives BOTH which app globals `createChildVM` injects (`db.*`/`apiCall`/`writePage`/…)
+   *  Drives BOTH which app globals `createChildVM` injects (`db.*`/`apiCall`/`writeProjectPage`/…)
    *  AND which capability fragments `buildAmbientDts` emits — kept in lockstep exactly like
    *  the boolean flags above. Empty (`{}`) for any agent that declares no `capabilities:`
    *  (the default), so a session/fork/delegate with no app grants injects no app globals and

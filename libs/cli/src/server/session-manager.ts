@@ -3,7 +3,7 @@ import { join, basename } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { Session, saveSnapshot, loadSpace, loadProjectFunctions, ForkEngine, runTasklist, Tracer, createAskConsentPrompter } from '@lmthing/core';
-import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope } from '@lmthing/core';
+import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope, ProjectResult } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
 import { createCodeNodeCtxFactory } from './tasklist-runner.js';
 import { loadAzurePrices, computeTurnCost, type ModelPricing } from './pricing.js';
@@ -29,7 +29,7 @@ import {
 import { bootProjectApp } from '../app/boot.js';
 import { createApiRuntime, type ApiRuntime } from '../app/api/runtime.js';
 import type { ProjectDb } from '../app/store.js';
-import { createAppAuthoringGlobals, createProjectAuthoringGlobals, resolveCatalogRoot, type AppAuthoringGlobals, type ProjectAuthoringGlobals } from '../app/authoring/index.js';
+import { createProjectAuthoringGlobals, type ProjectAuthoringGlobals } from '../app/authoring/index.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
 import { loadAllHooks } from '../app/hooks/index.js';
 import { ProjectHookRuntime } from '../app/hooks/runtime.js';
@@ -40,9 +40,7 @@ import {
   DEFAULT_PROJECT_ID,
   SYSTEM_PROJECT_ID,
   safeProjectId,
-  slugify,
-  scaffoldProject,
-  readProjectMeta,
+  createProjectSync,
   listProjects,
   deleteProject,
   getInstructions,
@@ -406,6 +404,54 @@ export class SessionManager {
 
   /** Default session builder — constructs a Session bound to `streamFn`. */
   private defaultBuildSession(args: BuildSessionArgs): Session {
+    // ── Per-session app-BUILD TARGET (plan: LIVE-project delegated build) ────────
+    // THING creates a LIVE project and delegates the app build INTO it. The live
+    // `createProject`/`selectProject` globals move a per-session build target off the
+    // session's own project; a delegate then resolves `resolveBuildTarget()` at delegate
+    // time and builds into the target's roots + appGlobals (null ⇒ its own project).
+    // Only a project-rooted session WITH app globals gets these — a legacy/headless
+    // session (no projectId / no appGlobals / no lmthingRoot) leaves both unset.
+    let appGlobals = args.appGlobals;
+    // Typed via the exported SessionOpts field so we never depend on a standalone
+    // `DelegateProjectContext` re-export from the core barrel.
+    let resolveBuildTarget: import('@lmthing/core').SessionOpts['resolveBuildTarget'];
+    const projectId = args.projectId;
+    const root = this.lmthingRoot;
+    if (projectId && args.projectRoot && appGlobals && root) {
+      // create/select + resolveBuildTarget MUST close over the SAME holder.
+      const buildTarget = { projectId };
+      const liveCreateProject = (name: string): ProjectResult => {
+        try {
+          const meta = createProjectSync(root, name);
+          // A brand-new project is the signal's SUBJECT, not its audience → fanOutAll.
+          emitInternalSignal('project.created', { projectId: meta.id }, { fanOutAll: true });
+          buildTarget.projectId = meta.id;
+          return { ok: true, appId: meta.id, root: join(root, meta.id) };
+        } catch (e) {
+          return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      };
+      const liveSelectProject = (id: string): ProjectResult => {
+        const safe = safeProjectId(id);
+        if (!safe || !existsSync(join(root, safe, 'project.json'))) {
+          return { ok: false, error: `no such project: ${id}` };
+        }
+        buildTarget.projectId = safe;
+        return { ok: true, appId: safe, root: join(root, safe) };
+      };
+      appGlobals = { ...appGlobals, createProject: liveCreateProject, selectProject: liveSelectProject };
+      resolveBuildTarget = async () => {
+        if (buildTarget.projectId === projectId) return null; // no retarget — build into own project
+        const targetRoot = join(root, buildTarget.projectId);
+        const appG = await this.getProjectAppGlobals(root, buildTarget.projectId);
+        return {
+          projectId: buildTarget.projectId,
+          projectRoot: targetRoot,
+          projectSpacesDir: join(targetRoot, 'spaces'),
+          appGlobals: appG,
+        };
+      };
+    }
     return new Session(
       {
         spaceDir: args.spaceDir,
@@ -422,7 +468,8 @@ export class SessionManager {
         projectFunctionsBundled: args.projectFunctionsBundled,
         projectId: args.projectId,
         projectRoot: args.projectRoot,
-        appGlobals: this.withStore(this.withConnections(args.appGlobals, args.projectRoot), args.projectId),
+        appGlobals: this.withStore(this.withConnections(appGlobals, args.projectRoot), args.projectId),
+        resolveBuildTarget,
         appDts: args.appDts,
         documentResolver: (id, opts) => this.resolveDocument(id, opts),
         // Consent gate (plan S10): ONLY interactive sessions get a prompter (the
@@ -608,18 +655,6 @@ export class SessionManager {
     }
   }
 
-  /** One authoring-globals instance per SessionManager (lazy singleton), so
-   *  `currentApp` state (createProject/selectProject) is shared across a
-   *  delegation tree within this manager rather than reset per session. */
-  private authoringGlobals: AppAuthoringGlobals | undefined;
-
-  private getAuthoringGlobals(): AppAuthoringGlobals {
-    if (!this.authoringGlobals) {
-      this.authoringGlobals = createAppAuthoringGlobals({ catalogRoot: resolveCatalogRoot() });
-    }
-    return this.authoringGlobals;
-  }
-
   /** Stable, per-project `db` handles that forward every verb to whatever db is
    *  CURRENTLY booted for the project (the {@link projectDbs} cache) — see
    *  {@link liveProjectDb}. */
@@ -674,7 +709,6 @@ export class SessionManager {
     // Warm the db cache + wire the db-write→event dispatch runtime (side effects). The
     // returned `db` is the live forwarder, not this snapshot — see {@link liveProjectDb}.
     await this.getProjectDb(root, projectId);
-    const authoring = this.getAuthoringGlobals();
     const apiRt = await this.getApiRuntime(root, projectId);
     // LIVE-PROJECT authoring writers (S11) — bound to THIS project's own dir (not the
     // catalog), republishing after each write so the new event hook / emitter def /
@@ -691,12 +725,6 @@ export class SessionManager {
       // (same runtime the browser + hooks use). Only present when the project has
       // an `api/` dir; the yield router rejects apiCall() otherwise.
       ...(apiRt ? { apiCall: (name: string, input?: unknown) => unwrapApiCall(apiRt, name, input) } : undefined),
-      writePage: authoring.writePage,
-      writeApi: authoring.writeApi,
-      writeHook: authoring.writeHook,
-      writeTableSchema: authoring.writeTableSchema,
-      createProject: authoring.createProject,
-      selectProject: authoring.selectProject,
       writeProjectHook: projectAuthoring.writeProjectHook,
       writeProjectEvent: projectAuthoring.writeProjectEvent,
       writeProjectFunction: projectAuthoring.writeProjectFunction,
@@ -2069,30 +2097,9 @@ export class SessionManager {
    */
   async createProject(name: string): Promise<ProjectMeta> {
     const root = this.requireRoot();
-    if (typeof name !== 'string' || name.trim().length === 0) {
-      throw new Error('project name must be a non-empty string');
-    }
-    let id = slugify(name.trim());
-    // Ensure uniqueness: append a counter if the slug already exists.
-    let suffix = 1;
-    let candidate = id;
-    while (true) {
-      // 'system' is reserved for the synthetic system project — never clobber it.
-      if (candidate === SYSTEM_PROJECT_ID) {
-        candidate = `${id}-${suffix++}`;
-        continue;
-      }
-      try {
-        await readProjectMeta(root, candidate);
-        // Exists — try a numbered variant.
-        candidate = `${id}-${suffix++}`;
-      } catch {
-        // Doesn't exist — safe to use.
-        id = candidate;
-        break;
-      }
-    }
-    const meta = await scaffoldProject(root, id, name.trim());
+    // Sync core shared with the agent-facing `createProject` global, so a project
+    // is created identically whether the REST route or an agent triggers it.
+    const meta = createProjectSync(root, name);
     // S8 instrumentation: server-side project creation (guarded one-liner).
     // `fanOutAll`: the new project's id is the signal's SUBJECT, not its audience —
     // a just-scaffolded project has no emitter defs or hooks, so the default

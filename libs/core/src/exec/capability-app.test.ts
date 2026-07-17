@@ -46,10 +46,10 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
     const dts = dtsFor({});
     expect(dts).not.toMatch(/declare const db\b/);
     expect(dts).not.toContain('apiCall');
-    expect(dts).not.toContain('writePage');
-    expect(dts).not.toContain('writeApi');
-    expect(dts).not.toContain('writeHook');
-    expect(dts).not.toContain('writeTableSchema');
+    expect(dts).not.toContain('writeProjectPage');
+    expect(dts).not.toContain('writeProjectApi');
+    expect(dts).not.toContain('writeProjectHook');
+    expect(dts).not.toContain('writeProjectTable');
     expect(dts).not.toContain('createProject');
     expect(dts).not.toContain('selectProject');
   });
@@ -73,18 +73,16 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
 
   it('api:call / pages:write / api:write / hooks:write each add their own declaration', () => {
     expect(dtsFor({ 'api:call': { allow: ['x'] } })).toContain('apiCall');
-    expect(dtsFor({ 'pages:write': true })).toContain('writePage');
-    expect(dtsFor({ 'api:write': true })).toContain('writeApi');
-    expect(dtsFor({ 'hooks:write': true })).toContain('writeHook');
+    expect(dtsFor({ 'pages:write': true })).toContain('writeProjectPage');
+    expect(dtsFor({ 'api:write': true })).toContain('writeProjectApi');
+    expect(dtsFor({ 'hooks:write': true })).toContain('writeProjectHook');
   });
 
-  it('db:schema ⇒ writeTableSchema + writeProjectTable authoring globals in ADDITION to db.createTable', () => {
+  it('db:schema ⇒ writeProjectTable authoring global in ADDITION to db.createTable', () => {
     const dts = dtsFor({ 'db:schema': {} });
     expect(dts).toContain('createTable('); // the db member
-    expect(dts).toContain('writeTableSchema'); // the standalone catalog authoring global
     expect(dts).toContain('writeProjectTable'); // the live-project authoring twin
-    // db:read/db:write alone must NOT earn either table-authoring global
-    expect(dtsFor({ 'db:read': {} })).not.toContain('writeTableSchema');
+    // db:read/db:write alone must NOT earn the table-authoring global
     expect(dtsFor({ 'db:read': {} })).not.toContain('writeProjectTable');
     expect(dtsFor({ 'db:write': {} })).not.toContain('writeProjectTable');
   });

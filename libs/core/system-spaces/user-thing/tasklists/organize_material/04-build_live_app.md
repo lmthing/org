@@ -1,5 +1,5 @@
 ---
-id: build_app
+id: build_live_app
 output:
   ok: boolean
   detail: string

@@ -17,7 +17,7 @@
  * the same instance instead of racing up a second one. Startup is guarded by an exclusive lock so
  * two lanes booting at once cannot both spawn.
  */
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { mkdirSync, openSync, closeSync, readFileSync, writeFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { SDK_ORG, STATE_DIR } from './paths.mjs';
@@ -73,6 +73,34 @@ function readPid() {
     return Number.isInteger(pid) && pid > 0 ? pid : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Every PID currently LISTENING on `port`. The pidfile is not enough: a server spawned via the
+ * `ensureLocalServer` adopt-path (serverUp() already true) never writes its pid, and a detached
+ * server whose `.state` dir is later deleted/trashed keeps serving with no pidfile at all. Such an
+ * orphan is immortal under a pidfile-only kill — `stopLocalServer` misses it, and the next
+ * `freshLocalServer` ADOPTS it (wiping only its disk, never its accumulated in-memory VFS), so
+ * phantom projects from prior runs resurface as "leaked". Killing by port closes that hole.
+ */
+function pidsOnPort(port) {
+  try {
+    const out = execSync(`ss -ltnpH 'sport = :${port}'`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return [...out.matchAll(/pid=(\d+)/g)].map((m) => Number(m[1]));
+  } catch {
+    return [];
+  }
+}
+
+/** Kill whatever is listening on `port` (SIGKILL — this is teardown, not graceful shutdown). */
+function killPort(port) {
+  for (const pid of pidsOnPort(port)) {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      /* already gone */
+    }
   }
 }
 
@@ -193,7 +221,15 @@ export async function restartLocalServer() {
  */
 export async function freshLocalServer() {
   stopLocalServer();
-  for (let i = 0; i < 30 && (await serverUp()); i++) await sleep(1000);
+  // Belt-and-braces: also kill by PORT, so an orphan the pidfile doesn't know about (adopt-path
+  // spawn, or a detached server whose .state dir was trashed out from under it) cannot survive and
+  // get re-adopted by ensureLocalServer() below — which would leak its in-memory projects into a
+  // "fresh" run. Without this, that orphan is immortal.
+  killPort(LOCAL_PORT);
+  for (let i = 0; i < 30 && (await serverUp()); i++) {
+    killPort(LOCAL_PORT);
+    await sleep(1000);
+  }
   rmSync(POD_ROOT, { recursive: true, force: true });
   return ensureLocalServer();
 }

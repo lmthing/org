@@ -18,6 +18,20 @@ export interface Clock {
   clearTimeout(id: unknown): void;
 }
 
+/** The live project a delegate should build INTO when THING has set an app-BUILD
+ *  TARGET (createProject/selectProject) distinct from THING's own session project.
+ *  Carries the target project's own roots + its per-project appGlobals so the
+ *  delegated builder's `db` + `writeProject*` writers bind to the NEW live project
+ *  (`.lmthing/<projectId>`), not THING's `user` project. Returned by
+ *  {@link SessionOpts.resolveBuildTarget}; null there means "no target — build into
+ *  this session's own project" (the normal path). */
+export interface DelegateProjectContext {
+  projectId: string;
+  projectRoot: string;
+  projectSpacesDir?: string;
+  appGlobals?: AppGlobalImpls;
+}
+
 export interface SessionOpts {
   spaceDir: string;
   agentSlug: string;
@@ -80,6 +94,16 @@ export interface SessionOpts {
    *  agent holds the matching grants AND projectRoot is set (see exec/app-globals.ts). The
    *  db impl is built by libs/cli (better-sqlite3) per project. */
   appGlobals?: AppGlobalImpls;
+  /** Host hook (project:manage) — the current app-BUILD TARGET for delegates.
+   *  THING's `createProject`/`selectProject` globals set a session-scoped target project
+   *  (a live project under `.lmthing/<id>`). When that target differs from THIS session's
+   *  own project, a delegate (the automator) must build into the TARGET, not THING's own
+   *  project — THING never builds into `user`. The host resolves the target's
+   *  projectId/projectRoot/projectSpacesDir + that project's own `appGlobals`
+   *  (getProjectAppGlobals) so the delegated builder's `db` + `writeProject*` writers bind
+   *  to the new live project. Returns null when no target is set (delegate builds into this
+   *  session's own project — the normal path for an already-real project). */
+  resolveBuildTarget?: () => Promise<DelegateProjectContext | null>;
   /** Host resolver for the universal `readDocument` global — extracts a stored
    *  upload's text (unpdf/utf8/transcript) Node-side. Supplied by libs/cli (where
    *  the uploads dir is known) and threaded into the session, its delegates and

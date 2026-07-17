@@ -129,12 +129,12 @@ describe('shipped system spaces load + validate', () => {
     expect(organize['build_specialist']!.forEach).toBe('consolidate_scopes.scopes');
     expect(organize['build_specialist']!.canDelegateTo).toEqual(['system-architect/architect#synthesize_and_run']);
     expect(organize['build_specialist']!.instruction).toContain('exactly one self-contained statement');
-    expect(organize['build_app']!.canDelegateTo).toEqual(['system-appbuilder/automator#build_live_project']);
-    expect(organize['build_app']!.instruction).toContain("'build_live_project'");
-    expect(organize['build_app']!.instruction).toContain('live-project automator');
-    expect(organize['build_app']!.instruction).toContain('source-derived rows and an\nopenable page backed by the project\'s own API');
-    expect(organize['build_app']!.instruction).toContain('exactly one self-contained statement');
-    expect(resolveGoalTask(organize)!.id).toBe('build_app');
+    expect(organize['build_live_app']!.canDelegateTo).toEqual(['system-appbuilder/automator#build_live_project']);
+    expect(organize['build_live_app']!.instruction).toContain("'build_live_project'");
+    expect(organize['build_live_app']!.instruction).toContain('live-project automator');
+    expect(organize['build_live_app']!.instruction).toContain('source-derived rows and an\nopenable page backed by the project\'s own API');
+    expect(organize['build_live_app']!.instruction).toContain('exactly one self-contained statement');
+    expect(resolveGoalTask(organize)!.id).toBe('build_live_app');
   });
 
   it('user-memory migrate_to_app_db carries db:write on ONLY the migrate node', async () => {
@@ -166,23 +166,12 @@ describe('shipped system spaces load + validate', () => {
     }
   });
 
-  it('appbuilder build_app fans out per-file with valid roles and a finalize goal', async () => {
+  it('appbuilder build_live_project fans out per-category with valid roles and a finalize goal', async () => {
     const space = await loadSpace(resolve(SYS, 'system-appbuilder'), { requireAgents: false });
-    const tasks = await loadTasklistFromSpace(space, 'build_app');
-    // design → create_project → per-file forEach builders → finalize (goal).
-    expect(tasks['build_table']!.forEach).toBe('design.tables');
-    expect(tasks['build_api']!.forEach).toBe('design.endpoints');
-    expect(tasks['build_page']!.forEach).toBe('design.pages');
-    expect(tasks['build_hook']!.forEach).toBe('design.hooks');
-    // Every per-file step runs with write access (role general) under the architect's caps.
-    for (const id of ['design', 'create_project', 'build_table', 'build_api', 'build_page', 'build_hook', 'finalize']) {
-      expect(tasks[id]!.role).toBe('general');
-    }
-    // Optional builders don't sink the pipeline; the goal is finalize.
-    expect(tasks['build_table']!.optional).toBe(true);
-    expect(tasks['build_hook']!.optional).toBe(true);
-    expect(resolveGoalTask(tasks)!.id).toBe('finalize');
-    expect(space.tasklists['build_app']!.input).toEqual({ request: 'string' });
+    // The store-catalog build_app/publish_app pipeline and the app-architect agent are gone —
+    // build_live_project (the automator's default action) is the sole appbuilder tasklist now.
+    expect(Object.keys(space.tasklists)).toEqual(['build_live_project']);
+    expect(space.agents['app-architect']).toBeUndefined();
 
     // build_live_project is a plan → per-category implement (forEach) → finalize pipeline.
     const live = await loadTasklistFromSpace(space, 'build_live_project');
@@ -223,14 +212,6 @@ describe('shipped system spaces load + validate', () => {
     // finalize is the sole goal — it writes the chat _layout and reports the build.
     expect(live['finalize']!.goal).toBe(true);
     expect(resolveGoalTask(live)!.id).toBe('finalize');
-
-    // publish_app is a thin one-node wrapper that delegates to the catalog build_app.
-    const publish = await loadTasklistFromSpace(space, 'publish_app');
-    expect(space.tasklists['publish_app']!.input).toEqual({ request: 'string' });
-    expect(Object.keys(publish)).toEqual(['build']);
-    expect(publish['build']!.goal).toBe(true);
-    expect(publish['build']!.canDelegateTo).toEqual(['system-appbuilder/app-architect#build_app']);
-    expect(space.agents['app-architect']!.actions.find((a) => a.id === 'publish_app')!.tasklist).toBe('publish_app');
   });
 
   it('architect tasklists declare input schemas matching what their callers pass', async () => {

@@ -14,5 +14,5 @@ owns an app the way a space owns agents). The `allow-list` aspect covers the ful
 validation rule; the `capabilities` aspect covers the capability ids, their config shapes, and the
 fail-loud grant validation. **Do not add `capabilities:` to a plain scaffolded space unless the
 request is specifically for a data-backed app** — building one is the job of the dedicated
-`system-appbuilder` space (`app-architect` + its specialists), not this architect scaffolding a raw
+`system-appbuilder` space (the `automator` + its specialists), not this architect scaffolding a raw
 space by hand.

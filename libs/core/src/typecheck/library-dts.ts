@@ -190,13 +190,10 @@ export function composeConnectionsDts(providers: string[]): string {
   return `declare function callConnection(provider: ${union}, req: { method: string; path: string; query?: Record<string, string>; body?: unknown; headers?: Record<string, string> }): Promise<{ ok: boolean; status: number; data: any }>;`;
 }
 
-export const PAGES_WRITE_DTS = `declare function writePage(route: string, src: string): { ok: boolean; error?: string };`;
-export const API_WRITE_DTS = `declare function writeApi(route: string, src: string): { ok: boolean; error?: string };`;
-export const HOOKS_WRITE_DTS = `declare function writeHook(slug: string, src: string): { ok: boolean; error?: string };`;
-
-// `pages:write`/`api:write` ALSO earn the plan-S11 LIVE-PROJECT twins — `writeProjectPage`
+// `pages:write`/`api:write` earn the plan-S11 LIVE-PROJECT writers — `writeProjectPage`
 // (`pages/<route>.tsx`) and `writeProjectApi` (`api/<path>/<METHOD>.ts`) — which write the UI
-// into the session's OWN project (not the store catalog) and rebuild the served app, so "turn
+// into the session's OWN project (the store-catalog `writePage`/`writeApi` writers are gone) and
+// rebuild the served app, so "turn
 // this into an app I can open" produces a real page-serving app in the live project rather than
 // dead-ending (the automator had only writeProjectTable — scenario 05). Appended to the catalog
 // writers in the capability registry; the one-liner invariant on the base consts is preserved.
@@ -211,30 +208,21 @@ export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, 
 // typed surface for shared UI (there is no space-rooted fs writer for components anymore).
 export const PROJECT_COMPONENT_DTS = `declare function writeProjectComponent(name: string, src: string): { ok: boolean; error?: string };`;
 
-// `hooks:write` ALSO earns the plan-S11 LIVE-PROJECT authoring writers — the automator
+// `hooks:write` earns the plan-S11 LIVE-PROJECT authoring writers — the automator
 // authors event hooks (`hooks/<slug>.ts`) + emitter defs (`events/<name>.ts`) and the
 // engineer authors project functions (`functions/<name>.ts`), all into the session's OWN
-// project (not the store catalog) with a republish so the change goes live immediately.
-// Synchronous host calls like the catalog writers. Appended to HOOKS_WRITE_DTS in the
-// capability registry (kept a separate const so the one-liner invariant on HOOKS_WRITE_DTS
-// holds).
+// project (the store-catalog `writeHook` writer is gone) with a republish so the change
+// goes live immediately. Synchronous host calls. This is the whole `hooks:write` fragment.
 export const PROJECT_AUTHORING_DTS = `declare function writeProjectHook(slug: string, src: string): { ok: boolean; error?: string };
 declare function writeProjectEvent(name: string, src: string): { ok: boolean; error?: string };
 declare function writeProjectFunction(name: string, src: string): { ok: boolean; error?: string };`;
 
-// `db:schema` also earns `writeTableSchema` — the AUTHORING form that writes a
-// `database/<name>.json` schema file into the catalog app (distinct from the runtime
-// `db.createTable` migration on `db`). Emitted alongside `composeDbDts` when db:schema
-// is granted (see buildAppCapabilityDts) — kept OUT of composeDbDts because it is a
-// standalone global, not a member of the `db` object.
-export const WRITE_TABLE_SCHEMA_DTS = `declare function writeTableSchema(name: string, schema: unknown): { ok: boolean; error?: string };`;
-
-// `db:schema` ALSO earns the LIVE-PROJECT table writer, the twin of the S11 live hook/
-// event/function writers: `writeTableSchema` targets a store/projects/<id>/ TEMPLATE,
-// while `writeProjectTable` writes `database/<name>.json` into the project the session is
+// `db:schema` earns the LIVE-PROJECT table writer, the twin of the S11 live hook/
+// event/function writers (the store-catalog `writeTableSchema` writer is gone):
+// `writeProjectTable` writes `database/<name>.json` into the project the session is
 // actually running in and re-derives its db (a project with no table has no db at all).
-// Emitted only when the host supplies the impl (i.e. a project-rooted session), so a
-// catalog-only appbuilder session leaves it absent and a stray call fails typecheck.
+// Emitted alongside `composeDbDts` when db:schema is granted — kept OUT of composeDbDts
+// because it is a standalone global, not a member of the `db` object.
 // The optional third arg SEEDS rows at table-creation time (host-side insert after the db
 // re-derives), so KNOWN data the user gave you to "move into the app" lands in one pass — the
 // agent can't insert into a table it just created (`db` isn't injected until a table exists).
@@ -250,10 +238,10 @@ export const PROJECT_TABLE_DTS = `declare function writeProjectTable(name: strin
 export const PROJECT_READ_DTS = `declare function listProjectDir(dir: string): { ok: boolean; entries: string[]; error?: string };
 declare function readProjectFile(path: string): { ok: boolean; content: string; error?: string };`;
 
-// `project:manage` — the appbuilder's authority to scaffold or bind a catalog app.
-// createProject creates a NEW store/apps/<id>/ template + selects it as the authoring
-// target; selectProject binds an existing one. Subsequent writePage/writeApi/... land
-// in the currently-selected app. Synchronous host calls.
+// `project:manage` — the authority to create or bind a LIVE project. createProject
+// creates a NEW live project under `.lmthing/<id>` + marks it the session's build
+// TARGET; selectProject binds an existing live project as the target. A subsequent
+// `delegate` to the automator then builds INTO that target. Synchronous host calls.
 export const PROJECT_MANAGE_DTS = `declare function createProject(id: string, opts?: { title?: string }): { ok: boolean; appId?: string; root?: string; error?: string };
 declare function selectProject(id: string): { ok: boolean; appId?: string; root?: string; error?: string };`;
 
@@ -292,13 +280,13 @@ declare function writeKnowledge(domain: string, field: string, option: string, m
  * the integrator to gate additively per agent in `buildAmbientDts`. The `db:*` trio
  * (`db:read`/`db:write`/`db:schema`) is NOT in this flat map — because all three
  * share one `db` object they are composed together via `composeDbDts` (db:schema also
- * emits the standalone `WRITE_TABLE_SCHEMA_DTS`, handled in buildAppCapabilityDts).
+ * emits the standalone live `PROJECT_TABLE_DTS`, handled in buildAppCapabilityDts).
  */
 export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:call': API_CALL_DTS,
-  'pages:write': [PAGES_WRITE_DTS, PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS].join('\n'),
-  'api:write': [API_WRITE_DTS, PROJECT_API_DTS].join('\n'),
-  'hooks:write': [HOOKS_WRITE_DTS, PROJECT_AUTHORING_DTS].join('\n'),
+  'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS].join('\n'),
+  'api:write': PROJECT_API_DTS,
+  'hooks:write': PROJECT_AUTHORING_DTS,
   'knowledge:write': KNOWLEDGE_WRITE_DTS,
   'project:manage': PROJECT_MANAGE_DTS,
   'store:read': STORE_READ_DTS,

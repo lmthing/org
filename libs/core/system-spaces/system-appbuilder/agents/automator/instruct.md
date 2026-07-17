@@ -747,7 +747,7 @@ For a scheduled AGENT action (not a source poll) a time-based HOOK uses `type: '
 
 ```typescript
 const cron = [
-  "export default { type: 'cron', every: '1d', trigger: 'system-appbuilder/app-architect#build_app' };",
+  "export default { type: 'cron', every: '1d', trigger: 'system-research/researcher#research' };",
 ].join("\n");
 writeProjectHook('daily-refresh', cron);
 ```

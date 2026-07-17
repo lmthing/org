@@ -44,7 +44,7 @@ import { materializeRuntime, runtimeNeedsInit, syncSystemSpaces } from './runtim
 import { bootProjectApp } from '../app/boot.js';
 import type { ProjectDb } from '../app/store.js';
 import { generateProjectContracts } from '../app/build/contracts.js';
-import { createAppAuthoringGlobals, resolveCatalogRoot } from '../app/authoring/index.js';
+import { createProjectAuthoringGlobals } from '../app/authoring/index.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
 import { createStream } from '../stream/stream.js';
@@ -579,22 +579,25 @@ async function main(): Promise<void> {
         preloadSpaceDirs,
         projectId,
         projectRoot,
-        // Authoring globals are harmless to always include: core only injects
-        // writePage/writeApi/writeHook/writeTableSchema/createProject/selectProject
-        // for an agent holding the matching authoring capability (none of which
-        // THING or ordinary agents have), so a headless "build me a feed"
-        // capstone run has them available to an appbuilder delegate without
-        // affecting any other agent.
+        // LIVE-PROJECT authoring writers, bound to THIS project's own dir. Harmless
+        // to always include: core only injects the `writeProject*` family for an agent
+        // holding the matching authoring capability (`hooks:write` — which THING and
+        // ordinary agents lack), so a headless "build me a feed" capstone run has them
+        // available to an appbuilder/automator delegate without affecting any other agent.
+        // (The old store-catalog authoring engine has been removed.)
         appGlobals: (() => {
-          const authoring = createAppAuthoringGlobals({ catalogRoot: resolveCatalogRoot() });
+          const projectAuthoring = createProjectAuthoringGlobals({ projectRoot });
           return {
             ...(projectDb ? { db: projectDb.db } : undefined),
-            writePage: authoring.writePage,
-            writeApi: authoring.writeApi,
-            writeHook: authoring.writeHook,
-            writeTableSchema: authoring.writeTableSchema,
-            createProject: authoring.createProject,
-            selectProject: authoring.selectProject,
+            writeProjectHook: projectAuthoring.writeProjectHook,
+            writeProjectEvent: projectAuthoring.writeProjectEvent,
+            writeProjectFunction: projectAuthoring.writeProjectFunction,
+            writeProjectTable: projectAuthoring.writeProjectTable,
+            writeProjectPage: projectAuthoring.writeProjectPage,
+            writeProjectComponent: projectAuthoring.writeProjectComponent,
+            writeProjectApi: projectAuthoring.writeProjectApi,
+            listProjectDir: projectAuthoring.listProjectDir,
+            readProjectFile: projectAuthoring.readProjectFile,
           };
         })(),
         appDts,

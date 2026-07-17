@@ -17,6 +17,7 @@
  */
 
 import { mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
 export const DEFAULT_PROJECT_ID = 'user';
@@ -252,6 +253,56 @@ export async function deleteProjectSpaceFile(spaceDir: string, rel: string): Pro
 }
 
 // ─── Projects CRUD ────────────────────────────────────────────────────────────
+
+/**
+ * Pick a collision-free project id for `name` under `root`, SYNCHRONOUSLY.
+ * Slugifies the name, then appends `-N` until the id is neither a live project
+ * dir nor the reserved `system` id. The sync twin of the uniqueness loop in
+ * {@link SessionManager.createProject}, so both the REST create path and the
+ * agent's synchronous `createProject` global derive ids the same way.
+ */
+export function uniqueProjectIdSync(root: string, name: string): string {
+  const base = slugify(name.trim());
+  let candidate = base;
+  let suffix = 1;
+  while (candidate === SYSTEM_PROJECT_ID || existsSync(projectJsonPath(root, candidate))) {
+    candidate = `${base}-${suffix++}`;
+  }
+  return candidate;
+}
+
+/**
+ * Scaffold a new project directory SYNCHRONOUSLY, writing project.json + empty
+ * files. The sync twin of {@link scaffoldProject}, for the agent-facing
+ * `createProject` global (a plain sync host call, like the catalog writer it
+ * replaces) — the handful of mkdir/writeFile calls are trivially fast and let
+ * `createProject` stay non-Promise in the DTS.
+ */
+export function scaffoldProjectSync(root: string, id: string, name: string): ProjectMeta {
+  const dir = projectDir(root, id);
+  assertUnder(root, id);
+  mkdirSync(join(dir, 'spaces'), { recursive: true });
+  mkdirSync(join(dir, 'documents'), { recursive: true });
+  const meta: ProjectMeta = { id, name, createdAt: Date.now() };
+  writeFileSync(projectJsonPath(root, id), JSON.stringify(meta, null, 2), 'utf8');
+  writeFileSync(instructionsPath(root, id), '', 'utf8');
+  return meta;
+}
+
+/**
+ * Create a live project under `root` (`.lmthing/<id>/`) SYNCHRONOUSLY: pick a
+ * unique id from `name`, scaffold it, return its metadata. Shared by the REST
+ * `POST /api/projects` path and the agent's `createProject` global so a project
+ * is created identically however it is triggered. `project.created` is NOT
+ * emitted here (this module has no signal bus) — the caller emits it.
+ */
+export function createProjectSync(root: string, name: string): ProjectMeta {
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw new Error('project name must be a non-empty string');
+  }
+  const id = uniqueProjectIdSync(root, name);
+  return scaffoldProjectSync(root, id, name.trim());
+}
 
 /** Scaffold a new project directory, writing project.json + empty files. */
 export async function scaffoldProject(root: string, id: string, name: string): Promise<ProjectMeta> {

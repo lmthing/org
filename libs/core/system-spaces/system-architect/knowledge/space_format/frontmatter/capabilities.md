@@ -41,6 +41,6 @@ capability (`pages:write`/`api:write`/`hooks:write`/`project:manage`), or a bare
 **When to reach for this**: never for a plain research/Q&A/tool-calling space — those never need
 `capabilities:` at all. If a request is actually "build me a data-backed app with pages/tables/
 endpoints", that is **not** a job for this architect's `synthesize_and_run`/`iterate_space`
-pipeline — delegate to `system-appbuilder/app-architect`, which already knows this model and holds
-the matching capability grants across its `data-modeler`/`page-builder`/`api-author`/`automator`
-specialists.
+pipeline — delegate to `system-appbuilder/automator`, which already knows this model and holds the
+matching capability grants for building the live project (with the `data-modeler`/`page-builder`/
+`api-author` specialists available for isolated slices).

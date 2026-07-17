@@ -2,7 +2,7 @@
 
 The exact on-disk shapes each authoring global writes.
 
-## Table schema — `writeTableSchema(name, schema)` → `database/<name>.json`
+## Table schema — `writeProjectTable(name, schema)` → `database/<name>.json`
 
 `name` is a lowercase slug. `schema` is an object:
 
@@ -31,7 +31,7 @@ The exact on-disk shapes each authoring global writes.
 - Relations: `belongsTo` (this table holds the FK, `via` = its column) or `hasMany` (target holds
   the FK back). Both need a `description`. Validation fails loud on any missing description.
 
-## API handler — `writeApi('<name>/<METHOD>', src)` → `api/<name>/<METHOD>.ts`
+## API handler — `writeProjectApi('<name>/<METHOD>', src)` → `api/<name>/<METHOD>.ts`
 
 The route's LAST segment is the HTTP method (`GET`|`POST`|`PUT`|`PATCH`|`DELETE`); the rest is the
 endpoint path. `src` is a full ESM handler module:
@@ -51,7 +51,7 @@ export default async function handler(input: Input, ctx: { db: any }): Promise<O
 `Output` become the endpoint's JSON-Schema contract. `import { HttpError } from '@app/runtime'` to
 signal 4xx/5xx.
 
-## Page — `writePage(route, src)` → `pages/<route>.tsx`
+## Page — `writeProjectPage(route, src)` → `pages/<route>.tsx`
 
 `route` is `index` (root) or a path like `items/[id]` (a `[seg]` is dynamic, read via
 `useParams`). `src` is a full `.tsx` module with a default-exported component. Data hooks come from
@@ -59,7 +59,7 @@ signal 4xx/5xx.
 refetch }`), `useApiMutation(name, { invalidates? })` (POST/PATCH/PUT → `{ mutate }`), `apiCall`,
 `Link`, `navigate`. Style with design tokens ONLY.
 
-## Hook — `writeHook(slug, src)` → `hooks/<slug>.ts`
+## Hook — `writeProjectHook(slug, src)` → `hooks/<slug>.ts`
 
 Default export is one of:
 

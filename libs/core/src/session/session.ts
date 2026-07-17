@@ -31,6 +31,7 @@ import type { TraceScope } from '../sandbox/trace.js';
 import { sessionCapabilities } from '../exec/capability.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
+import type { AppGlobalImpls } from '../exec/app-globals.js';
 import { forkEngineOptsFrom } from '../exec/fork-config.js';
 import {
   evaluateDelegatePolicy,
@@ -662,6 +663,20 @@ export class Session {
     };
   }
 
+  /** The project context a delegate should build into. Normally this session's own
+   *  project; but when THING has set an app-BUILD TARGET (createProject/selectProject)
+   *  that differs from this session's project, the delegate (the automator) builds into
+   *  the TARGET's live project instead — its own projectRoot/projectSpacesDir + that
+   *  project's appGlobals, so the builder's db + writeProject* writers bind to the new
+   *  project. THING never builds into its own `user` project. */
+  private async delegateProjectContext(): Promise<{ projectSpacesDir?: string; projectRoot?: string; projectId?: string; appGlobals?: AppGlobalImpls }> {
+    const target = await this.opts.resolveBuildTarget?.();
+    if (target && target.projectId !== this.opts.projectId) {
+      return { projectSpacesDir: target.projectSpacesDir, projectRoot: target.projectRoot, projectId: target.projectId, appGlobals: target.appGlobals };
+    }
+    return { projectSpacesDir: this.opts.projectSpacesDir, projectRoot: this.opts.projectRoot, projectId: this.opts.projectId, appGlobals: this.opts.appGlobals };
+  }
+
   /**
    * Create the top-level session VM via the shared exec bootstrap: full
    * capability profile (interactive ask, fork/tasklist/delegate/registerSpace),
@@ -674,6 +689,7 @@ export class Session {
     componentNames: string[],
     seedVars?: Record<string, unknown>,
   ): Promise<VM> {
+    const pctx = await this.delegateProjectContext();
     return createChildVM({
       // `delegate` follows the agent's canDelegateTo policy (mode 'none' ⇒ the
       // global is withheld here AND absent from the ambient DTS built above).
@@ -681,10 +697,10 @@ export class Session {
       renderHost: this.opts.renderHost,
       clock: this.opts.clock,
       spaceDir: this.opts.spaceDir,
-      projectSpacesDir: this.opts.projectSpacesDir,
-      projectRoot: this.opts.projectRoot,
-      projectId: this.opts.projectId,
-      appGlobals: this.opts.appGlobals,
+      projectSpacesDir: pctx.projectSpacesDir,
+      projectRoot: pctx.projectRoot,
+      projectId: pctx.projectId,
+      appGlobals: pctx.appGlobals,
       // `progress` reads the live per-run budget (the closure dereferences the
       // field, so resetting this.budget per task is reflected).
       progress: () => this.budget.snapshot(),
@@ -737,6 +753,7 @@ export class Session {
       if (sysSpace.packageName) spaceMap.set(sysSpace.packageName, sysSpace);
     }
     for (const [key, dynSpace] of this.dynamicSpaces) spaceMap.set(key, dynSpace);
+    const pctx = await this.delegateProjectContext();
     return runDelegate({
       packageName,
       agentName,
@@ -753,10 +770,10 @@ export class Session {
       tracer: this.tracer,
       scope: this.currentScope ?? undefined,
       systemSpaces: this.systemSpaces,
-      projectSpacesDir: this.opts.projectSpacesDir,
-      projectRoot: this.opts.projectRoot,
-      projectId: this.opts.projectId,
-      appGlobals: this.opts.appGlobals,
+      projectSpacesDir: pctx.projectSpacesDir,
+      projectRoot: pctx.projectRoot,
+      projectId: pctx.projectId,
+      appGlobals: pctx.appGlobals,
       model: this.opts.modelAlias,
       // Inherit the session's fork wiring down the delegation chain (A1 fix):
       // budget caps + role models for the delegate's leaf forks, and the SHARED
@@ -782,6 +799,7 @@ export class Session {
     const fkSlug = this.opts.agentSlug === 'default' && !agents['default']
       ? (Object.keys(agents)[0] ?? this.opts.agentSlug)
       : this.opts.agentSlug;
+    const pctx = await this.delegateProjectContext();
     this.forkEngine = new ForkEngine(forkEngineOptsFrom({
       maxConcurrentForks: this.opts.maxConcurrentForks ?? 4,
       parentHistory: this.history.messages,
@@ -801,12 +819,12 @@ export class Session {
       defaultModel: this.opts.modelAlias,
       // Same Map reference the delegate path reads — a fork's registerSpace() lands here.
       dynamicSpaces: this.dynamicSpaces,
-      projectSpacesDir: this.opts.projectSpacesDir,
-      projectRoot: this.opts.projectRoot,
-      projectId: this.opts.projectId,
+      projectSpacesDir: pctx.projectSpacesDir,
+      projectRoot: pctx.projectRoot,
+      projectId: pctx.projectId,
       // The session agent's app grants flow to its forks (role-intersected in forkCapabilities).
       parentAppCapabilities: this.appCapabilities,
-      appGlobals: this.opts.appGlobals,
+      appGlobals: pctx.appGlobals,
       // A task in a tasklist may delegate (gated by its own canDelegateTo) — route through the
       // session's registry with the recursion bound enforced by runDelegate.
       delegateRunner: (p, a, act, o, allowed) => this.runDelegateForFork(p, a, act, o, allowed),
@@ -1035,6 +1053,7 @@ export class Session {
             (a) =>
               `[Attached file id="${a.id}" type="${a.mediaType}"${a.filename ? ` name="${a.filename}"` : ''} — call \`await readDocument("${a.id}")\` to read it.]`,
           );
+        const pctx = await this.delegateProjectContext();
         return runDelegate({
           packageName,
           agentName,
@@ -1053,10 +1072,10 @@ export class Session {
           tracer: this.tracer,
           scope: this.currentScope ?? undefined,
           systemSpaces: this.systemSpaces,
-          projectSpacesDir: this.opts.projectSpacesDir,
-          projectRoot: this.opts.projectRoot,
-          projectId: this.opts.projectId,
-          appGlobals: this.opts.appGlobals,
+          projectSpacesDir: pctx.projectSpacesDir,
+          projectRoot: pctx.projectRoot,
+          projectId: pctx.projectId,
+          appGlobals: pctx.appGlobals,
           model: this.opts.modelAlias,
           // Inherit the session's fork wiring down the delegation chain (A1 fix).
           budgetLimits: this.opts.budget,

@@ -1,20 +1,20 @@
 /**
- * Phase 9 **app-authoring globals** — the host-side (CLI) impls behind the
- * `AppGlobalImpls` `writePage`/`writeApi`/`writeHook`/`writeTableSchema`/
- * `createProject`/`selectProject` fields (`libs/core/src/exec/app-globals.ts`).
+ * LIVE-PROJECT **app-authoring globals** — the host-side (CLI) impls behind the
+ * `AppGlobalImpls` `writeProject*` writer family (`libs/core/src/exec/app-globals.ts`).
  *
- * These are pure, SYNCHRONOUS, validated file-writers into a `store/projects/<id>/`
- * catalog-source template (see {@link resolveCatalogRoot}). Authoring never
- * builds/migrates/installs the app — that ("apply") happens later, at
- * install+boot time, from the written source. A writer here does exactly one
- * thing: validate the input, write ONE file (creating its parent dirs), and
- * return `{ ok, error? }` — never a bulk delete, never a build step.
+ * These are pure, SYNCHRONOUS, validated file-writers into ONE fixed live-project
+ * root (`.lmthing/<projectId>/`): a project's own `database/ pages/ api/ hooks/
+ * events/ functions/ components/` dirs. A writer here does exactly one thing:
+ * validate the input, write ONE file (creating its parent dirs), fire the
+ * project's republish/re-derive side effect, and return `{ ok, error? }` — never
+ * a bulk delete. The old STORE-CATALOG authoring engine (`createAppAuthoringGlobals`,
+ * which templated `store/projects/<id>/`) has been removed: THING now creates a
+ * LIVE project and delegates the build INTO it (see `SessionManager` `resolveBuildTarget`).
  *
- * Core only INJECTS these onto a VM for an agent holding the matching
- * authoring capability (`pages:write`/`api:write`/`hooks:write`/`db:schema`/
- * `project:manage`); THING and ordinary agents have none of those, so it is
- * harmless to always construct and pass this object through `appGlobals` —
- * it is simply never exposed to a capability-less agent.
+ * Core only INJECTS these onto a VM for an agent holding the matching authoring
+ * capability (`hooks:write` for the writers here); THING and ordinary agents hold
+ * none, so it is harmless to always construct and pass this object through
+ * `appGlobals` — it is simply never exposed to a capability-less agent.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -104,17 +104,6 @@ function wouldDropData(file: string, src: string): string | undefined {
   );
 }
 
-export interface AppAuthoringGlobals {
-  writePage: (route: string, src: string) => { ok: boolean; error?: string };
-  writeApi: (route: string, src: string) => { ok: boolean; error?: string };
-  writeHook: (slug: string, src: string) => { ok: boolean; error?: string };
-  writeTableSchema: (name: string, schema: unknown) => { ok: boolean; error?: string };
-  createProject: (id: string, opts?: { title?: string }) => { ok: boolean; appId?: string; root?: string; error?: string };
-  selectProject: (id: string) => { ok: boolean; appId?: string; root?: string; error?: string };
-  /** For tests/inspection: the currently-selected authoring app, if any. */
-  currentApp(): { id: string; root: string } | undefined;
-}
-
 /** Project ids and hook slugs are a lowercase kebab-slug: letters/digits/hyphen,
  *  must start with a letter. No dots, no slashes — traversal is structurally
  *  impossible in a value that matches this. */
@@ -190,151 +179,6 @@ function writeFile(absPath: string, contents: string): void {
   writeFileSync(absPath, contents, 'utf8');
 }
 
-/**
- * Build the app-authoring globals bound to a single `catalogRoot`
- * (`<monorepoRoot>/store/projects`). Holds ONE piece of mutable state — the
- * currently-selected authoring app — shared across every call made through
- * this instance (a SessionManager caches one instance so a delegation tree
- * within it shares `currentApp`).
- */
-export function createAppAuthoringGlobals(opts: { catalogRoot: string }): AppAuthoringGlobals {
-  const { catalogRoot } = opts;
-  let current: { id: string; root: string } | undefined;
-
-  function requireCurrent(): { id: string; root: string } {
-    if (!current) {
-      throw new Error('no project selected — call createProject/selectProject first');
-    }
-    return current;
-  }
-
-  function createProject(id: string, opts?: { title?: string }): { ok: boolean; appId?: string; root?: string; error?: string } {
-    try {
-      assertSlug('project id', id);
-      if (id === 'system') {
-        throw new Error('project id "system" is reserved');
-      }
-      const root = safeResolve(catalogRoot, id);
-      if (existsSync(root)) {
-        throw new Error(`project "${id}" already exists at ${root}`);
-      }
-      mkdirSync(root, { recursive: true });
-      for (const dir of ['database', 'pages', 'api', 'hooks', 'components', 'lib']) {
-        mkdirSync(join(root, dir), { recursive: true });
-      }
-      const pkg = {
-        name: `@app/${id}`,
-        private: true,
-        type: 'module',
-        version: '0.0.0',
-      };
-      writeFile(join(root, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
-      const project = {
-        id,
-        title: opts?.title ?? id,
-        createdAt: new Date().toISOString(),
-      };
-      writeFile(join(root, 'project.json'), JSON.stringify(project, null, 2) + '\n');
-      current = { id, root };
-      return { ok: true, appId: id, root };
-    } catch (e) {
-      return { ok: false, error: String(e instanceof Error ? e.message : e) };
-    }
-  }
-
-  function selectProject(id: string): { ok: boolean; appId?: string; root?: string; error?: string } {
-    try {
-      assertSlug('project id', id);
-      const root = safeResolve(catalogRoot, id);
-      if (!existsSync(root)) {
-        throw new Error(`project "${id}" does not exist at ${root}`);
-      }
-      current = { id, root };
-      return { ok: true, appId: id, root };
-    } catch (e) {
-      return { ok: false, error: String(e instanceof Error ? e.message : e) };
-    }
-  }
-
-  function writeTableSchema(name: string, schema: unknown): { ok: boolean; error?: string } {
-    try {
-      const { root } = requireCurrent();
-      assertTableName(name);
-      validateTableSchema(name, schema as TableSchema);
-      const target = safeResolve(root, join('database', `${name}.json`));
-      writeFile(target, JSON.stringify(schema, null, 2) + '\n');
-      return { ok: true };
-    } catch (e) {
-      if (e instanceof LintError) throw e;
-      return { ok: false, error: String(e instanceof Error ? e.message : e) };
-    }
-  }
-
-  function writePage(route: string, src: string): { ok: boolean; error?: string } {
-    try {
-      const { root } = requireCurrent();
-      let rel = assertPathSegments('page route', route);
-      if (!rel.endsWith('.tsx')) rel = `${rel}.tsx`;
-      assertSourceParses(src, 'tsx');
-      throwLint(lintPageSource(src));
-      const target = safeResolve(root, join('pages', rel));
-      writeFile(target, src);
-      return { ok: true };
-    } catch (e) {
-      if (e instanceof LintError) throw e;
-      return { ok: false, error: String(e instanceof Error ? e.message : e) };
-    }
-  }
-
-  function writeApi(route: string, src: string): { ok: boolean; error?: string } {
-    try {
-      const { root } = requireCurrent();
-      const rel = assertPathSegments('api route', route);
-      const segments = rel.split('/');
-      const method = segments.pop() as string;
-      if (!METHODS.has(method)) {
-        throw new Error(`api route "${route}" has an invalid method "${method}" (expected one of ${[...METHODS].join(', ')})`);
-      }
-      if (segments.length === 0) {
-        throw new Error(`api route "${route}" is missing an endpoint path before the method`);
-      }
-      const target = safeResolve(root, join('api', ...segments, `${method}.ts`));
-      assertSourceParses(src, 'ts');
-      throwLint(lintApiHandler(src, { existingNames: existingApiNames(root, target) }));
-      writeFile(target, src);
-      return { ok: true };
-    } catch (e) {
-      if (e instanceof LintError) throw e;
-      return { ok: false, error: String(e instanceof Error ? e.message : e) };
-    }
-  }
-
-  function writeHook(slug: string, src: string): { ok: boolean; error?: string } {
-    try {
-      const { root } = requireCurrent();
-      assertSlug('hook slug', slug);
-      const target = safeResolve(root, join('hooks', `${slug}.ts`));
-      assertSourceParses(src, 'ts');
-      throwLint(lintHookSource(src, slug, target));
-      writeFile(target, src);
-      return { ok: true };
-    } catch (e) {
-      if (e instanceof LintError) throw e;
-      return { ok: false, error: String(e instanceof Error ? e.message : e) };
-    }
-  }
-
-  return {
-    writePage,
-    writeApi,
-    writeHook,
-    writeTableSchema,
-    createProject,
-    selectProject,
-    currentApp: () => current,
-  };
-}
-
 /** The plan-S11 LIVE-PROJECT authoring writers — the `hooks:write`-gated globals that
  *  the automator (event hooks + emitter defs) and engineer (project functions) call. */
 export interface ProjectAuthoringGlobals {
@@ -371,9 +215,9 @@ export interface ProjectAuthoringGlobals {
 }
 
 /**
- * Build the LIVE-PROJECT authoring writers (plan S11). Unlike
- * {@link createAppAuthoringGlobals} — which targets `store/projects/<id>/` catalog
- * TEMPLATES and carries a mutable createProject/selectProject "current app" — these
+ * Build the LIVE-PROJECT authoring writers (plan S11). Unlike the now-removed
+ * store-catalog authoring engine — which targeted `store/projects/<id>/` catalog
+ * TEMPLATES and carried a mutable createProject/selectProject "current app" — these
  * are bound to ONE fixed live project root (`<lmthingRoot>/<projectId>`) and write
  * directly into the running project's `hooks/`, `events/`, and `functions/` dirs.
  *
