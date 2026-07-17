@@ -7,3 +7,7 @@
 */.run/
 .run-smoke/
 .runs/
+
+# Autonomous scenario-campaign orchestrator: ephemeral state (edit-lock, orchestrator-state.json,
+# per-scenario <id>.handoff.md). The tracked memory is campaign/attempts/<id>.md.
+campaign/state/

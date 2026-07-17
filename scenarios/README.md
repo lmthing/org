@@ -64,8 +64,17 @@ node scenarios/run-scenario.mjs 08-myscenario --plan   # sanity-check the plan +
 ```
 
 The full step-verb spec (`say`, `then_say`, `in_app_chat`, `open_app`, `attach[]`, `fresh_session`,
-`restart_pod`, `if_asked{}`, `deny_consent`, `expect[]`) lives with the campaign automation in
-`automation/instances/scenario-campaign/scenario-spec.md`.
+`restart_pod`, `if_asked{}`, `deny_consent`, `expect[]`) lives in the campaign brain at
+[`campaign/scenario-spec.md`](./campaign/README.md).
+
+## The campaign brain — `campaign/`
+
+The agent-facing prompts that run, judge, and fix the campaign — `scenario-spec.md` (shared
+foundation), `judge.md` (run-judge-fix a scenario to green), `migrate.md` (prose `scenario.md` →
+`scenario.yaml`), `create.md` / `extend.md` (authoring), and `orchestrator.md` (the autonomous Opus
+orchestrator's runbook). An Opus orchestrator fans out Sonnet subagents that read these directly; it
+is the sole committer. The old `automation/lmauto` engine is **deprecated** — see
+[`campaign/README.md`](./campaign/README.md).
 
 ## The package
 
