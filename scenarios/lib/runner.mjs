@@ -60,7 +60,15 @@ export class ScenarioRunner {
   async run() {
     const { scenario, steps, fixturesDir, projectId, outDir, through, freshServer, keepProject } = this;
     mkdirSync(outDir, { recursive: true });
-    this.log(`scenario ${scenario.id} · project ${projectId} · steps 1..${through}/${steps.length}`);
+    // `bootstrap: thing` — the app's project is NOT pre-created by the runner. THING starts in the
+    // default `user` project and must CREATE a dedicated project itself (createProject) and build the
+    // app INTO it, never into `user`. The runner discovers whatever project THING made and rebinds the
+    // remaining steps into it — mirroring the real UX (create in `user`, then work in the new project),
+    // which is also required for later steps to query the app's data. Tests the live-project feature.
+    const bootstrapByThing = scenario.bootstrap === 'thing';
+    let activeProjectId = bootstrapByThing ? 'user' : projectId;
+    let createdProjectId = null;
+    this.log(`scenario ${scenario.id} · project ${bootstrapByThing ? '(THING creates it)' : projectId} · steps 1..${through}/${steps.length}`);
 
     // The RUNNER owns its own PID file (never rely on the caller's shell `$!`): a stopper does
     // `kill $(cat <out>/runner.pid)` and it is always correct. Cleared on clean exit.
@@ -92,14 +100,17 @@ export class ScenarioRunner {
       const leaked = all.map((p) => p.id ?? p).filter((id) => !builtin.has(id));
       this.reporter.onFreshCheck?.({ all, leaked });
     }
-    // Fresh project (unique id per run unless --project pins one).
-    try {
-      await pod.createProject(projectId);
-    } catch (e) {
-      this.log(`createProject(${projectId}) — ${String(e?.message ?? e)} (continuing; may already exist)`);
+    // Fresh project (unique id per run unless --project pins one). In `bootstrap: thing` mode the
+    // runner creates NOTHING — THING must create its own project during the build.
+    if (!bootstrapByThing) {
+      try {
+        await pod.createProject(projectId);
+      } catch (e) {
+        this.log(`createProject(${projectId}) — ${String(e?.message ?? e)} (continuing; may already exist)`);
+      }
     }
 
-    let thing = new ThingSession(pod, { projectId, onAsk: this.asks.onAsk, verbose: this.verbose });
+    let thing = new ThingSession(pod, { projectId: activeProjectId, onAsk: this.asks.onAsk, verbose: this.verbose });
     await thing.start();
 
     const results = [];
@@ -112,7 +123,7 @@ export class ScenarioRunner {
 
       try {
         if (step.fresh_session) {
-          thing = new ThingSession(pod, { projectId, onAsk: this.asks.onAsk, verbose: this.verbose });
+          thing = new ThingSession(pod, { projectId: activeProjectId, onAsk: this.asks.onAsk, verbose: this.verbose });
           await thing.start();
           await thing.syncToTail();
           rec.notes.push('started a fresh session (zero history)');
@@ -154,9 +165,9 @@ export class ScenarioRunner {
           rec.turns.push(summarizeTurn(t, `[in-app] ${step.in_app_chat}`));
         }
         if (step.open_app) {
-          const build = await pod.appBuild(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
+          const build = await pod.appBuild(activeProjectId).catch((e) => ({ error: String(e?.message ?? e) }));
           rec.appBuild = { built: build?.built ?? build?.build?.built ?? null, routes: build?.routes ?? null, error: build?.error ?? null };
-          const page = await pod.appPage(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
+          const page = await pod.appPage(activeProjectId).catch((e) => ({ error: String(e?.message ?? e) }));
           rec.appPageStatus = page?.status ?? (page?.error ? `error: ${page.error}` : 'ok');
           rec.notes.push('opened app (built + fetched root page; browser render is the judge\'s job)');
         }
@@ -165,8 +176,30 @@ export class ScenarioRunner {
         rec.notes.push(`STEP THREW: ${rec.error.split('\n')[0]}`);
       }
 
+      // bootstrap:thing — after THING has had a turn, discover the project it created and rebind the
+      // remaining steps into it. A brand-new project appearing (never `user`/`system`) IS the feature
+      // working; the app + data live there, so open_app/snapshot/in_app_chat below must target it.
+      if (bootstrapByThing && !createdProjectId) {
+        const projs = (await pod.listProjects().catch(() => ({ projects: [] }))).projects.map((p) => p.id ?? p);
+        const found = projs.find((id) => id !== 'system' && id !== 'user');
+        if (found) {
+          createdProjectId = found;
+          activeProjectId = found;
+          rec.createdProject = found;
+          rec.notes.push(`THING created a dedicated project "${found}" (NOT user) — rebinding subsequent steps into it`);
+          // Prove the app did NOT land in `user`: user must have no app tables/pages of its own.
+          const userState = await snapshot(pod, 'user').catch(() => null);
+          const uTables = userState?.appManifest?.tables?.length ?? 0;
+          const uPages = userState?.appManifest?.pages?.length ?? 0;
+          rec.userProjectClean = uTables === 0 && uPages === 0;
+          if (!rec.userProjectClean) rec.notes.push('WARNING: the `user` project has app tables/pages — THING built into user (FAILURE)');
+          thing = new ThingSession(pod, { projectId: found, onAsk: this.asks.onAsk, verbose: this.verbose });
+          await thing.start();
+        }
+      }
+
       rec.asks = this.asks.drain();
-      rec.state = await snapshot(pod, projectId);
+      rec.state = await snapshot(pod, activeProjectId);
       results.push(rec);
       const stem = join(outDir, `step-${String(num).padStart(2, '0')}`);
       // The judge reads step-NN.json every poll, often across several reruns — a full dump (every DB
@@ -181,7 +214,8 @@ export class ScenarioRunner {
     // Summary.
     const summary = {
       scenario: scenario.id,
-      project: projectId,
+      project: activeProjectId,
+      ...(bootstrapByThing ? { bootstrap: 'thing', createdProject: createdProjectId } : {}),
       ranSteps: results.length,
       ofSteps: steps.length,
       sessionStats: thing.stats?.() ?? null,
@@ -191,7 +225,7 @@ export class ScenarioRunner {
     writeFileSync(join(outDir, 'summary.json'), JSON.stringify(summary, null, 2));
     const tracePath = join(outDir, 'trace.md');
     writeFileSync(tracePath, this.traceMd.join('\n'));
-    if (!keepProject) this.log(`project ${projectId} left in place (delete with: pod.deleteProject)`);
+    if (!keepProject) this.log(`project ${activeProjectId} left in place (delete with: pod.deleteProject)`);
     this.reporter.onDone?.({ ranSteps: results.length, ofSteps: steps.length, outDir, tracePath });
     return { ranSteps: results.length, ofSteps: steps.length, outDir, results, summary };
   }

@@ -105,6 +105,8 @@ export function compactStep(rec) {
     asks: rec.asks,
     appBuild: rec.appBuild,
     appPageStatus: rec.appPageStatus,
+    createdProject: rec.createdProject,
+    userProjectClean: rec.userProjectClean,
     notes: rec.notes,
     error: rec.error,
     state,
