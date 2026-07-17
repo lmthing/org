@@ -30,9 +30,12 @@ import {
   nextRunId,
   reapOrphanRuns,
   readRunJson,
+  mutateTableSchema,
 } from '../harness/lib/local.mjs';
+import { applyEnv, readEnvVar } from '../harness/lib/env.mjs';
+import { signHmac } from '../harness/lib/webhook-sign.mjs';
 import { getUser } from '../harness/provision.mjs';
-import { snapshot, summarizeTurn, compactStep, traceLines } from './evidence.mjs';
+import { snapshot, summarizeTurn, compactStep, traceLines, compact } from './evidence.mjs';
 import { StepAsks } from './asks.mjs';
 import { FatalError } from './errors.mjs';
 
@@ -44,6 +47,171 @@ function readdirSyncSafe(dir) {
   } catch {
     return [];
   }
+}
+
+/**
+ * Execute one step's verbs against a (possibly faked) pod/session, mutating `rec` in place.
+ * Returns the `ThingSession` the NEXT step should use — unchanged unless `fresh_session` replaced
+ * it (a step's OWN `space_session` diversion is scoped to just this step and never leaks forward).
+ *
+ * Extracted from the run loop so the verb dispatch is directly unit-testable against fake
+ * pod/session doubles, independent of booting a real per-run server (see `runner-verbs.test.mjs`).
+ * `projectId` is whatever project the CALLER currently considers active (for a `bootstrap: thing`
+ * scenario that is `activeProjectId`, rebound once THING creates its own project) — this function
+ * stays agnostic to that discovery dance, it just targets whichever id it's given.
+ *
+ * @param {object} o
+ * @param {object} o.step
+ * @param {import('../harness/lib/thing.mjs').ThingSession} o.thing  the project's main session
+ * @param {import('../harness/lib/pod.mjs').Pod} o.pod
+ * @param {{dataDir: string}} o.run          needed only by `mutate_schema`/`restart_pod`/`fresh_session`
+ * @param {string} o.projectId
+ * @param {string} o.fixturesDir
+ * @param {object} o.rec                     the step's evidence record (mutated in place)
+ * @param {Array<string>} o.envStack         LIFO of pre-mutation `.env` contents, for `restore_env`
+ * @param {(descriptor:object)=>unknown} o.onAsk
+ * @param {boolean} o.verbose
+ */
+export async function runStep({ step, thing, pod, run, projectId, fixturesDir, rec, envStack, onAsk, verbose }) {
+  // ── host-side, out-of-band actions that land BEFORE anything else this step does ──────────────
+  if (step.set_env) {
+    const { keys, previousContent } = await applyEnv(pod, step.set_env);
+    envStack.push(previousContent);
+    rec.setEnv = { keys };
+  }
+  if (step.blank_env) {
+    const updates = Object.fromEntries(step.blank_env.map((k) => [k, '']));
+    const { keys, previousContent } = await applyEnv(pod, updates);
+    envStack.push(previousContent);
+    rec.blankEnv = { keys };
+  }
+  if (step.mutate_schema) {
+    rec.mutateSchema = mutateTableSchema(run, projectId, step.mutate_schema.table, step.mutate_schema.change);
+  }
+
+  if (step.fresh_session) {
+    thing = new ThingSession(pod, { projectId, onAsk, verbose });
+    await thing.start();
+    await thing.syncToTail();
+    rec.notes.push('started a fresh session (zero history)');
+  }
+  if (step.restart_pod) {
+    rec.notes.push('restarting local server…');
+    await restartRun(run);
+    rec.notes.push('server back up');
+  }
+
+  // Which session drives this step's say/then_say — `space_session` diverts to a SCOPED probe
+  // bound to one space's own agent (bypassing THING), for exactly this step; `thing` itself is
+  // untouched, so the NEXT step is back on the general dock.
+  let sess = thing;
+  if (step.space_session) {
+    sess = new ThingSession(pod, { projectId, spaceRef: step.space_session, onAsk, verbose });
+    await sess.start();
+    await sess.syncToTail();
+    rec.spaceSession = step.space_session;
+  }
+
+  if (step.say != null) {
+    let turn;
+    if (Array.isArray(step.attach) && step.attach.length) {
+      const refs = [];
+      for (const f of step.attach) {
+        const p = join(fixturesDir, f);
+        if (!existsSync(p)) {
+          rec.notes.push(`MISSING FIXTURE: ${f}`);
+          continue;
+        }
+        refs.push(await pod.upload(p));
+      }
+      rec.attached = step.attach;
+      turn = await sess.sendWithAttachments(step.say, refs);
+    } else {
+      turn = await sess.send(step.say);
+    }
+    rec.turns.push(summarizeTurn(turn, step.space_session ? `[${step.space_session}] ${step.say}` : step.say));
+  }
+  if (step.then_say != null) {
+    const t = await sess.send(step.then_say);
+    rec.turns.push(summarizeTurn(t, step.space_session ? `[${step.space_session}] ${step.then_say}` : step.then_say));
+  }
+  if (step.in_app_chat != null) {
+    const t = await thing.send(step.in_app_chat);
+    rec.turns.push(summarizeTurn(t, `[in-app] ${step.in_app_chat}`));
+  }
+  if (step.open_app) {
+    const build = await pod.appBuild(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
+    rec.appBuild = { built: build?.built ?? build?.build?.built ?? null, routes: build?.routes ?? null, error: build?.error ?? null };
+    const page = await pod.appPage(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
+    rec.appPageStatus = page?.status ?? (page?.error ? `error: ${page.error}` : 'ok');
+    rec.notes.push('opened app (built + fetched root page; browser render is the judge\'s job)');
+  }
+
+  // ── DIRECT pod probes — 0 LLM calls, exactly the "direct, no LLM call" beats 08/09/10 need ─────
+  if (step.call_app_api) {
+    const { method, path, body } = step.call_app_api;
+    const res = await pod.appApi(projectId, path, body, method ?? 'POST');
+    rec.callAppApi = { method: method ?? 'POST', path, status: res.status, body: compact(res.body) };
+  }
+  if (step.run_emitter) {
+    const spec = step.run_emitter;
+    if (typeof spec === 'string') {
+      // A bare string is a PLAIN hook's own file-based slug (an old-style `hooks/*.ts` cron def,
+      // e.g. `trigger: '<space>/agent#action'`) — run directly, no `@emitter:` wrapper.
+      const result = await pod.runHook(projectId, spec);
+      rec.runEmitter = { slug: spec, result: compact(result) };
+    } else if (spec.slug) {
+      const result = await pod.runHook(projectId, spec.slug, spec.payload ?? {});
+      rec.runEmitter = { slug: spec.slug, result: compact(result) };
+    } else {
+      // `{scope, name}` is a `type:'cron'` EMITTER DEF declared in an `events/*.ts` manifest
+      // (project- or space-scoped) — fired via the `@emitter:<scope>:<name>` pseudo-slug.
+      const result = await pod.runEmitter(projectId, spec.scope, spec.name, spec.payload);
+      rec.runEmitter = { scope: spec.scope, name: spec.name, result: compact(result) };
+    }
+  }
+  if (step.inbound) {
+    // One delivery, or several (a multi-check beat, or a concurrent burst) — always fired via
+    // Promise.all: each delivery's assertions (status code, presence in the FINAL state snapshot)
+    // are independent of the others' ordering.
+    const list = Array.isArray(step.inbound) ? step.inbound : [step.inbound];
+    const deliveries = await Promise.all(
+      list.map(async (d) => {
+        const headers = { ...(d.headers ?? {}) };
+        if (d.sign) {
+          // The secret is only known at RUN time (set via `set_env`, or already in the pod's env) —
+          // read it fresh right before signing so the yaml never bakes in a precomputed signature.
+          const secret = await readEnvVar(pod, d.sign.secretEnv);
+          const raw = typeof d.body === 'string' ? d.body : JSON.stringify(d.body ?? {});
+          headers[d.sign.header] = signHmac(secret, raw, d.sign);
+        }
+        const res = await pod.inbound(d.path, d.body, headers);
+        // Header NAMES only, matching set_env's own credential hygiene — a signature is a secret.
+        return { path: d.path, headerNames: Object.keys(headers), status: res.status, body: compact(res.body) };
+      }),
+    );
+    rec.inbound = deliveries;
+  }
+  if (step.list_integrations) {
+    const t0 = Date.now();
+    rec.integrations = await pod.listIntegrations(projectId);
+    rec.integrationsMs = Date.now() - t0;
+  }
+
+  // `restore_env` runs LAST so ONE step can do `blank_env` → `say` → `restore_env` atomically —
+  // undoing the SAME step's own mutation once the turn that needed the outage has run, before the
+  // NEXT step ever sees the pod.
+  if (step.restore_env) {
+    const previousContent = envStack.pop();
+    if (previousContent !== undefined) {
+      await pod.putEnv(previousContent);
+      rec.restoreEnv = { restored: true };
+    } else {
+      rec.notes.push('restore_env: no prior env snapshot on the stack — nothing to restore');
+    }
+  }
+
+  return thing;
 }
 
 export class ScenarioRunner {
@@ -91,13 +259,28 @@ export class ScenarioRunner {
     // Reap any server left behind by an untrappable SIGKILL of a prior run-scenario (owner pid dead).
     reapOrphanRuns(scenarioDir);
 
+    // `bootstrap: thing` — THING starts in the shared `user` project and must CREATE its OWN
+    // dedicated project (createProject) and build into it; the runner pre-creates NOTHING. Once
+    // THING's turn produces a new project, we discover it (below, after each step) and rebind every
+    // subsequent step into it — mirroring the real UX (create in `user`, then work in the new
+    // project). `projectId` stays the scenario's NOMINAL name (only used to pre-create a project for
+    // non-bootstrap scenarios); `activeProjectId` is the project every step actually runs against.
+    const bootstrapByThing = scenario.bootstrap === 'thing';
+
     // Resolve the resume seed + where the step loop starts.
     let projectId = this.projectId;
+    let activeProjectId = bootstrapByThing ? 'user' : projectId;
+    let createdProjectId = null;
     let seedFrom = null;
     let startIndex = 0;
     if (this.resumeFrom) {
       const src = readRunJson(scenarioDir, this.resumeFrom.runId);
       projectId = src.projectId; // match the snapshot's project
+      // The snapshot may predate discovery (still `user`) or postdate it (the real project THING
+      // made) — `src.projectId`/`src.createdProject` (persisted every step, below) is ground truth
+      // for where to resume, never a re-guess at `user`.
+      activeProjectId = bootstrapByThing ? src.projectId : projectId;
+      if (bootstrapByThing) createdProjectId = src.createdProject ?? (src.projectId !== 'user' ? src.projectId : null);
       const fromStep = this.resumeFrom.from ?? src.completedSteps ?? 0;
       if (fromStep >= 1) {
         seedFrom = snapshotDir(scenarioDir, this.resumeFrom.runId, fromStep);
@@ -110,7 +293,7 @@ export class ScenarioRunner {
     }
 
     const runId = this.runId ?? nextRunId(scenarioDir);
-    const run = await startRun({ scenarioDir, runId, projectId, scenarioId: scenario.id, seedFrom });
+    const run = await startRun({ scenarioDir, runId, projectId: activeProjectId, scenarioId: scenario.id, seedFrom });
     this.reporter.onRunStart?.({ runId, runDir: run.dir, port: run.port, base: run.base, resumeFrom: this.resumeFrom, seedFrom });
 
     // Evidence + runner.pid live in the run dir by default (a self-contained run); --out overrides.
@@ -141,13 +324,17 @@ export class ScenarioRunner {
     }
 
     const results = [];
+    // A LIFO of pre-mutation `.env` contents — `set_env`/`blank_env` push, `restore_env` pops (see
+    // `runStep`). Lives for the whole run so a step's restore can outlive its own step boundary.
+    const envStack = [];
     let thing;
     try {
       const user = await getUser(scenario.id, { localBase: run.base });
       const pod = new Pod({ base: user.pod, token: user.token, onLocalRestart: () => restartRun(run) });
 
-      // Fresh run → create the project. Resume → the project came in with the snapshot.
-      if (!this.resumeFrom) {
+      // Fresh run → create the project (unless THING must create its own via `bootstrap: thing`).
+      // Resume → the project came in with the snapshot.
+      if (!this.resumeFrom && !bootstrapByThing) {
         try {
           await pod.createProject(projectId);
         } catch (e) {
@@ -158,8 +345,8 @@ export class ScenarioRunner {
       // On resume, reconnect to the THING session the snapshot captured so a follow-up ("yes, go for
       // it") keeps its conversational context; on a fresh run, a clean session. Either way the
       // project (spaces/app/db) is on disk, so the session sees everything built so far.
-      const resumeSessionId = this.resumeFrom ? latestSessionId(run, projectId) : null;
-      thing = new ThingSession(pod, { projectId, onAsk: this.asks.onAsk, verbose: this.verbose });
+      const resumeSessionId = this.resumeFrom ? latestSessionId(run, activeProjectId) : null;
+      thing = new ThingSession(pod, { projectId: activeProjectId, onAsk: this.asks.onAsk, verbose: this.verbose });
       await thing.start(resumeSessionId ? { resumeSessionId } : {});
       if (resumeSessionId) await thing.syncToTail();
 
@@ -171,62 +358,39 @@ export class ScenarioRunner {
         this.log(`── step ${num}: ${rec.verbs.join(', ')}`);
 
         try {
-          if (step.fresh_session) {
-            thing = new ThingSession(pod, { projectId, onAsk: this.asks.onAsk, verbose: this.verbose });
-            await thing.start();
-            await thing.syncToTail();
-            rec.notes.push('started a fresh session (zero history)');
-          }
-          if (step.restart_pod) {
-            rec.notes.push('restarting local server…');
-            await restartRun(run);
-            rec.notes.push('server back up');
-          }
-
-          if (step.say != null) {
-            let turn;
-            if (Array.isArray(step.attach) && step.attach.length) {
-              const refs = [];
-              for (const f of step.attach) {
-                const p = join(fixturesDir, f);
-                if (!existsSync(p)) {
-                  rec.notes.push(`MISSING FIXTURE: ${f}`);
-                  continue;
-                }
-                refs.push(await pod.upload(p));
-              }
-              rec.attached = step.attach;
-              turn = await thing.sendWithAttachments(step.say, refs);
-            } else {
-              turn = await thing.send(step.say);
-            }
-            rec.turns.push(summarizeTurn(turn, step.say));
-          }
-          if (step.then_say != null) {
-            const t = await thing.send(step.then_say);
-            rec.turns.push(summarizeTurn(t, step.then_say));
-          }
-          if (step.in_app_chat != null) {
-            const t = await thing.send(step.in_app_chat);
-            rec.turns.push(summarizeTurn(t, `[in-app] ${step.in_app_chat}`));
-          }
-          if (step.open_app) {
-            const build = await pod.appBuild(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
-            rec.appBuild = { built: build?.built ?? build?.build?.built ?? null, routes: build?.routes ?? null, error: build?.error ?? null };
-            const page = await pod.appPage(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
-            rec.appPageStatus = page?.status ?? (page?.error ? `error: ${page.error}` : 'ok');
-            rec.notes.push('opened app (built + fetched root page; browser render is the judge\'s job)');
-          }
+          thing = await runStep({ step, thing, pod, run, projectId: activeProjectId, fixturesDir, rec, envStack, onAsk: this.asks.onAsk, verbose: this.verbose });
         } catch (e) {
           rec.error = String(e?.stack ?? e?.message ?? e);
           rec.notes.push(`STEP THREW: ${rec.error.split('\n')[0]}`);
         }
 
+        // bootstrap:thing — after THING has had a turn, discover the project it created and rebind
+        // the remaining steps into it. A brand-new project appearing (never `user`/`system`) IS the
+        // feature working; the app + data live there, so every read/write below must target it.
+        if (bootstrapByThing && !createdProjectId) {
+          const projs = (await pod.listProjects().catch(() => ({ projects: [] }))).projects.map((p) => p.id ?? p);
+          const found = projs.find((id) => id !== 'system' && id !== 'user');
+          if (found) {
+            createdProjectId = found;
+            activeProjectId = found;
+            rec.createdProject = found;
+            rec.notes.push(`THING created a dedicated project "${found}" (NOT user) — rebinding subsequent steps into it`);
+            // Prove the app did NOT land in `user`: user must have no app tables/pages of its own.
+            const userState = await snapshot(pod, 'user').catch(() => null);
+            const uTables = userState?.appManifest?.tables?.length ?? 0;
+            const uPages = userState?.appManifest?.pages?.length ?? 0;
+            rec.userProjectClean = uTables === 0 && uPages === 0;
+            if (!rec.userProjectClean) rec.notes.push('WARNING: the `user` project has app tables/pages — THING built into user (FAILURE)');
+            thing = new ThingSession(pod, { projectId: found, onAsk: this.asks.onAsk, verbose: this.verbose });
+            await thing.start();
+          }
+        }
+
         rec.asks = this.asks.drain();
-        rec.state = await snapshot(pod, projectId);
+        rec.state = await snapshot(pod, activeProjectId);
         // Snapshot the project files so a later --resume can seed from here and continue.
         rec.snapshot = snapshotProject(run, num);
-        bumpCompletedSteps(run, num, { stepCount: steps.length });
+        bumpCompletedSteps(run, num, { stepCount: steps.length, projectId: activeProjectId, createdProject: createdProjectId });
         this.reporter.onSnapshot?.({ step: num, dir: rec.snapshot });
 
         results.push(rec);
@@ -247,7 +411,8 @@ export class ScenarioRunner {
     const summary = {
       scenario: scenario.id,
       run: runId,
-      project: projectId,
+      project: activeProjectId,
+      ...(bootstrapByThing ? { bootstrap: 'thing', createdProject: createdProjectId } : {}),
       ranSteps: results.length,
       ofSteps: steps.length,
       startedAtStep: startIndex + 1,
