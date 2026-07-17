@@ -1,8 +1,8 @@
 /**
  * evidence.mjs — the pure evidence transforms the scenario runner writes for the JUDGE.
  *
- * These were inlined in run-yaml.mjs; extracted here verbatim so they can be unit-tested (golden
- * fixtures) and reused. FIELD INSERTION ORDER is the byte-compat contract: `run-yaml` writes every
+ * These were inlined in the runner; extracted here verbatim so they can be unit-tested (golden
+ * fixtures) and reused. FIELD INSERTION ORDER is the byte-compat contract: the runner writes every
  * file with `JSON.stringify(obj, null, 2)`, and the judge parses the result, so never reorder the
  * keys in `summarizeTurn`/`compactStep` — move the object literals as-is.
  *

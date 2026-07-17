@@ -1,6 +1,9 @@
-# The generic runner (run-yaml.mjs) writes per-run evidence into <scenario>/.run/ — step-NN.json,
-# step-NN.full.json, trace.md, summary.json, runner.pid. All ephemeral; the committed golden copies
-# the lib tests assert against live in lib/__fixtures__/, which is NOT ignored.
+# The generic runner (run-scenario.mjs) writes each isolated run into <scenario>/runs/<n>/ — its own
+# data/.lmthing (SQLite dbs, sessions), per-step snapshots/, sessions.log, run.json, evidence
+# (step-NN.json, .full.json, trace.md, summary.json), runner.pid — plus a runs/latest pointer. All
+# ephemeral and often large; never committed. The committed golden copies the lib tests assert
+# against live in lib/__fixtures__/, which is NOT ignored.
+*/runs/
 */.run/
 .run-smoke/
 .runs/

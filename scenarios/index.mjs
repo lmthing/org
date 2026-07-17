@@ -7,7 +7,7 @@
  *
  *   import { runScenario, loadScenario, Pod, ThingSession } from '@lmthing/scenario-harness';
  *
- * The CLI (`run-yaml.mjs`) does NOT import this barrel — it imports `./lib/*` directly, to keep the
+ * The CLI (`run-scenario.mjs`) does NOT import this barrel — it imports `./lib/*` directly, to keep the
  * `SCENARIO_TARGET` import-timing and native MODULE_NOT_FOUND behaviour identical to the old script.
  */
 
@@ -17,18 +17,27 @@ export { Pod, fetchResilient } from './harness/lib/pod.mjs';
 // ── an interactive THING chat session over WS + HTTP ────────────────────────────────────────────
 export { ThingSession, approveAllConsent, denyAllConsent, textOf, lastTextOf } from './harness/lib/thing.mjs';
 
-// ── the local `lmthing serve` lifecycle (the default, local-only target) ────────────────────────
+// ── the PER-RUN local `lmthing serve` lifecycle (the default, local-only target) ────────────────
 export {
   LOCAL,
-  LOCAL_BASE,
-  LOCAL_PORT,
   serverUp,
-  ensureLocalServer,
-  stopLocalServer,
-  restartLocalServer,
-  freshLocalServer,
-  podRoot,
-  localStatus,
+  allocatePort,
+  runsDir,
+  runDir,
+  nextRunId,
+  snapshotDir,
+  readRunJson,
+  bumpCompletedSteps,
+  listRuns,
+  snapshotProject,
+  seedRun,
+  latestSessionId,
+  startRun,
+  stopRun,
+  restartRun,
+  reapOrphanRuns,
+  ensureAdhocServer,
+  restartAdhocServer,
 } from './harness/lib/local.mjs';
 
 // ── prod-cluster provisioning (register → pod → env → ready) ────────────────────────────────────

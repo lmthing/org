@@ -1,12 +1,12 @@
 scenario 06-tanzania — "A messy trip dump becomes a live trip tracker"  (project tanzania-trip)
 persona: Vasilis, travelling with Athina Mari. Cairo → the northern Tanzania safari circuit → Zanzi…
-invariants: 18  ·  knows: 5  ·  steps: 18
+invariants: 19  ·  knows: 5  ·  steps: 18
 
    1. [attach, say]  Ok this is getting out of hand. I've got the whole Tanzania trip…
        attach: tanzaniamemories.md, trip-costs.xlsx, ngorongoro-conservation-area-tariffs.pdf, stone-town-zanzibar.jpg, voice-memo.mp3
        expect: 3
    2. [say]  Yes please.
-       expect: 9
+       expect: 10
    3. [open_app]  
        expect: 2
    4. [say]  So what's actually happening between the 7th and the 9th?

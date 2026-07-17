@@ -9,6 +9,6 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "lmthing-scenario": "./run-yaml.mjs"
+    "lmthing-scenario": "./run-scenario.mjs"
   }
 }

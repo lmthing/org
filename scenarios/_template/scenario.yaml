@@ -2,14 +2,14 @@
 #   cp -r _template <NN-slug>   then fill this file + drop real files in fixtures/
 #
 # A scenario is a SINGLE declarative spec played by the generic runner:
-#   node scenarios/run-yaml.mjs <NN-slug> --plan          # dry-print the plan + fixture audit
-#   node scenarios/run-yaml.mjs <NN-slug> --fresh-server   # play it, write evidence to .run/
+#   node scenarios/run-scenario.mjs <NN-slug> --plan   # dry-print the plan + fixture audit
+#   node scenarios/run-scenario.mjs <NN-slug>          # a fresh run under <NN-slug>/runs/<n>/, write evidence
 # The runner writes per-step evidence for a JUDGE to score; `expect[]` is passed through, never run.
 # Full step-verb reference: automation/instances/scenario-campaign/scenario-spec.md.
 
 id: NN-slug
 title: One line — what the messy input becomes
-project: NN-slug # the project id the runner creates (stable under --fresh-server)
+project: NN-slug # the project id the runner creates (one per run, in its own isolated data dir)
 
 persona: >
   Who the user is, how they talk, what they will NOT say (e.g. never names the product). A few

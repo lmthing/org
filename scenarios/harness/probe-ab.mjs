@@ -18,7 +18,7 @@ const FIX = process.env.FIX;
 const src = readFileSync(file, 'utf8');
 
 const user = await getUser('latam');
-const pod = new Pod({ base: user.pod, token: user.token });
+const pod = new Pod({ base: user.pod, token: user.token, onLocalRestart: user.onLocalRestart });
 
 await pod.req('PUT', '/api/fs/write', {
   path: 'system/spaces/user-thing/agents/thing/instruct.md',

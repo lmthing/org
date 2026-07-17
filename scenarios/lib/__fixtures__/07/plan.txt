@@ -1,12 +1,12 @@
 scenario 07-life-admin — "A drawer of household paperwork becomes a vault he can actually check"  (project life-admin)
 persona: Dimitris, early 40s, apartment at Filolaou 41 in Athens, household of four. Not technical …
-invariants: 18  ·  knows: 4  ·  steps: 17
+invariants: 19  ·  knows: 4  ·  steps: 17
 
    1. [attach, say]  Right, sorry, I'm going to dump a load on you at once. Attaching…
        attach: policies.md, policy.pdf, policy-photo.jpg, product-photo.png, household-ledger.xlsx, voice-memo.mp3, boiler-service-manual.pdf
        expect: 3
    2. [say]  Yes please, go for it.
-       expect: 8
+       expect: 9
    3. [open_app]  
        expect: 2
    4. [say]  What's the next thing I actually need to renew, and when?

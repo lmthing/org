@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { SDK_ORG } from './paths.mjs';
 import { mintSession } from './jwt.mjs';
 import { fetchResilient } from './pod.mjs';
-import { LOCAL, LOCAL_BASE, ensureLocalServer } from './local.mjs';
+import { LOCAL, ensureAdhocServer, restartAdhocServer } from './local.mjs';
 
 export const GATEWAY = process.env.LM_GATEWAY ?? 'https://lmthing.cloud';
 
@@ -184,13 +184,16 @@ export async function waitPodReady(token, { timeoutMs = 180_000, intervalMs = 3_
  * Pods are reached through the chat origin: Envoy validates the JWT and routes on the `sub` claim
  * to `lmthing.user-<id>.svc`, waking a scaled-to-zero pod on the way.
  */
-export async function provisionUser({ label = 'scn', password = 'Test-Passw0rd!' } = {}) {
-  // Local target: no register, no JWT, no pod env PUT. Bring up (or attach to) the one shared
-  // `lmthing serve`, which reads sdk/org/.env for the Azure keys itself. The pod does no auth, so
-  // token is null; lanes are isolated by projectId, not by user, on this single server.
+export async function provisionUser({ label = 'scn', password = 'Test-Passw0rd!', localBase } = {}) {
+  // Local target: no register, no JWT, no pod env PUT. The scenario runner owns a per-run server and
+  // passes its `localBase`; a standalone probe with no run of its own gets a lazily-started ad-hoc
+  // server. The pod does no auth (Envoy validates the JWT at the edge in prod), so token is null.
   if (LOCAL) {
-    await ensureLocalServer();
-    return { email: `${label}@local`, password, userId: `local-${label}`, session: null, token: null, pod: LOCAL_BASE };
+    const base = localBase ?? (await ensureAdhocServer());
+    // The runner supplies its own `onLocalRestart` (per-run server); a standalone probe gets the
+    // ad-hoc server's restart so `pod.restart()` brings it back instead of leaving it dead.
+    const onLocalRestart = localBase ? undefined : restartAdhocServer;
+    return { email: `${label}@local`, password, userId: `local-${label}`, session: null, token: null, pod: base, onLocalRestart };
   }
   const email = `${label}-${Date.now().toString(36)}@lmthing.test`;
   const { user_id: userId } = await register(email, password);
@@ -204,5 +207,6 @@ export async function provisionUser({ label = 'scn', password = 'Test-Passw0rd!'
   return { email, password, userId, session, token: session.accessToken, pod: podBase() };
 }
 
-/** The origin that fronts a user's pod (Envoy routes by JWT `sub`; local → the shared serve). */
-export const podBase = () => process.env.LM_POD_BASE ?? (LOCAL ? LOCAL_BASE : 'https://lmthing.chat');
+/** The origin that fronts a user's pod (Envoy routes by JWT `sub`). Local runs pass an explicit
+ *  per-run base, so this is only consulted on the prod path. */
+export const podBase = () => process.env.LM_POD_BASE ?? (LOCAL ? 'http://localhost:8080' : 'https://lmthing.chat');

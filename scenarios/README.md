@@ -8,7 +8,7 @@ feature works.
 
 A scenario is a **single declarative `scenario.yaml`** (persona · promise · invariants · knows ·
 steps) plus a **`fixtures/`** dir of real input files. It is played by the **generic runner**
-`run-yaml.mjs`, which drives the pod exactly as the `/chat` SPA would and writes per-step
+`run-scenario.mjs`, which drives the pod exactly as the `/chat` SPA would and writes per-step
 **evidence** for a separate **judge** to score — the runner never judges.
 
 | # | Scenario | Covers |
@@ -18,29 +18,41 @@ steps) plus a **`fixtures/`** dir of real input files. It is played by the **gen
 
 ## Running one
 
-Local by design (`SCENARIO_TARGET=local` → `http://localhost:8080`, no auth): a product fix is
-`pnpm build` + a server restart (seconds), not a prod image roll (minutes).
+Local by design (`SCENARIO_TARGET=local`, the default). **No `pnpm build`** — every run spins up its
+own `lmthing serve` via `pnpm lmthing serve --cwd …`, which runs the CLI from TS source through `tsx`,
+so a product fix is just a rerun (the fresh process re-reads source).
 
 ```bash
-# 1. build the CLI and bring up a throwaway `lmthing serve` on :8080
-cd sdk/org && pnpm --filter @lmthing/cli... build
-node scenarios/harness/local-server.mjs up
+cd sdk/org
 
-# 2. dry-run the plan (no pod) — prints the steps + a fixture-coverage audit
-node scenarios/run-yaml.mjs 06-tanzania --plan
+# 1. dry-run the plan (no pod) — prints the steps + a fixture-coverage audit
+node scenarios/run-scenario.mjs 06-tanzania --plan
 
-# 3. play it — wipes the pod root, plays every step, writes evidence to 06-tanzania/.run/
-node scenarios/run-yaml.mjs 06-tanzania --fresh-server
+# 2. play it — a fresh, uniquely-numbered run (06-tanzania/runs/<n>/), every step, evidence + snapshots
+node scenarios/run-scenario.mjs 06-tanzania
+
+# 3. a rerun that continues from a prior run's snapshot instead of replaying (the judge's verify)
+node scenarios/run-scenario.mjs 06-tanzania --resume 1 --from 2   # seed run 1's step-2, continue at step 3
+
+# inspect / clean up runs
+node scenarios/harness/runs.mjs 06-tanzania list          # list · path <n> · logs <n> · down <n>|--all · gc [--keep N]
 ```
 
-Flags: `--through N` (play steps 1..N — the judge's verify rerun) · `--out <dir>` (evidence dir,
-default `<sc>/.run`) · `--project <id>` · `--fresh-server` (wipe the runtime root first) · `--plan`
-(parse + print, never connect) · `--verbose` · `--keep-project`.
+Each invocation is an isolated run under **`06-tanzania/runs/<n>/`**: `data/.lmthing` (its runtime
+root), `snapshots/step-NN/` (per-step project-file snapshots), `sessions.log` (the server's output),
+`run.json`, `runner.pid`, and the evidence — plus a `runs/latest` pointer. The whole `runs/` tree is
+gitignored. The run's server is killed WITH `run-scenario` on every exit path (including a kill).
 
-**Evidence** (per step, in `.run/`): `step-NN.json` (the compact observables the judge scores — space
-names, table row COUNTS, delegate names, yield kinds+counts, errors, the reply, the asks),
+Flags: `--through N` (play steps 1..N) · `--resume <runId> [--from N]` (seed from a prior run's
+snapshot and continue) · `--run <id>` (name the run; default: next integer) · `--out <dir>` (evidence
+dir; default: the run dir) · `--project <id>` · `--plan` (parse + print, never connect) · `--verbose`
+· `--keep-project` · `--keep-server` (leave the server up on normal completion) · `--purge` (delete
+the run dir at the end).
+
+**Evidence** (per step, in the run dir): `step-NN.json` (the compact observables the judge scores —
+space names, table row COUNTS, delegate names, yield kinds+counts, errors, the reply, the asks),
 `step-NN.full.json` (the raw drill-down dump), `trace.md` (human-readable), `summary.json`. The runner
-also writes `runner.pid` (a stopper does `kill $(cat .run/runner.pid)`). The judge prompt lives at
+also writes `runner.pid` (a stopper does `kill $(cat <run>/runner.pid)`). The judge prompt lives at
 `automation/instances/scenario-campaign/judge.md`.
 
 ## Authoring a new scenario
@@ -48,7 +60,7 @@ also writes `runner.pid` (a stopper does `kill $(cat .run/runner.pid)`). The jud
 ```bash
 cp -r _template 08-myscenario          # a scenario.yaml skeleton + an empty fixtures/
 # fill 08-myscenario/scenario.yaml, drop real files in 08-myscenario/fixtures/
-node scenarios/run-yaml.mjs 08-myscenario --plan   # sanity-check the plan + fixture coverage
+node scenarios/run-scenario.mjs 08-myscenario --plan   # sanity-check the plan + fixture coverage
 ```
 
 The full step-verb spec (`say`, `then_say`, `in_app_chat`, `open_app`, `attach[]`, `fresh_session`,
@@ -57,8 +69,9 @@ The full step-verb spec (`say`, `then_say`, `in_app_chat`, `open_app`, `attach[]
 
 ## The package
 
-`scenarios/` is `@lmthing/scenario-harness` (a script-free workspace package — no build step; run by
-raw `node`). Its public surface is the barrel `index.mjs`; the runner engine is `lib/`:
+`scenarios/` is `@lmthing/scenario-harness` (a script-free workspace package — the runner is run by
+raw `node`; the per-run `lmthing serve` it spawns runs the product CLI from source via `pnpm lmthing`,
+so no build step). Its public surface is the barrel `index.mjs`; the runner engine is `lib/`:
 
 ```js
 import { runScenario, loadScenario, Pod, ThingSession, getUser } from '@lmthing/scenario-harness';
@@ -80,8 +93,10 @@ thing.consentCards() // every ConsentCard raised, and how it was answered
   `evidence.mjs` (`compactStep`/`traceLines`/`snapshot`), `asks.mjs` (`StepAsks`), `errors.mjs`. The
   pure transforms are golden-tested against recorded run output (`lib/*.test.mjs`).
 - `harness/` — the pod client the runner drives: `provision.mjs` (`getUser`), `lib/pod.mjs` (`Pod`),
-  `lib/thing.mjs` (`ThingSession`), `lib/local.mjs` (the local-server lifecycle), `lib/gateway.mjs`
-  (the prod-provisioning path used by `smoke.mjs`), `lib/report.mjs` (`Report`), `jwt.mjs`, `paths.mjs`.
+  `lib/thing.mjs` (`ThingSession`), `lib/local.mjs` (the PER-RUN server lifecycle — `startRun`/
+  `stopRun`/`restartRun`/`snapshotProject`/`seedRun`/`listRuns`), `lib/gateway.mjs` (the
+  prod-provisioning path used by `smoke.mjs`), `lib/report.mjs` (`Report`), `jwt.mjs`, `paths.mjs`.
+- `harness/runs.mjs` — a small CLI to `list`/`path`/`logs`/`down`/`gc` a scenario's prior runs.
 - `harness/smoke.mjs` — register → pod → env → THING session → a real LLM turn → trace assertions; run
   it to prove the harness + a target are healthy before a long run.
 
@@ -98,12 +113,18 @@ is broken. That is exactly what `step-NN.json` records for the judge.
 - **Consent needs an interactive session.** The consent prompter is only wired when
   `POST /api/sessions` created the session. Headless paths (hooks, delegates, webhook dispatch) have
   no prompter and **fail closed** — that is the designed behaviour (assert it, don't work around it).
-- **`--fresh-server` wipes the runtime root**, so every run starts from zero projects (the "from
-  scratch" guarantee the judge relies on). A clean pod still has the built-in `system`/`user`
-  projects — those are infrastructure, not state leak.
-- **The local server is process-shared and keyed by `LM_LOCAL_PORT`.** A `restart_pod` in one lane
-  drops every other lane's in-memory session; the harness re-resumes from the persisted id. A lane
-  that needs isolation sets its own `LM_LOCAL_PORT`.
+- **Every run is isolated by construction** — its own `data/.lmthing`, its own server, its own port.
+  A clean run still has the built-in `system`/`user` projects — those are infrastructure, not state
+  leak. `--resume` seeds a NEW run's data dir from a prior run's snapshot *before* the server boots
+  (restoring into a live server wouldn't be seen — the runtime holds state in memory).
+- **`SCENARIO_TARGET=local` must be set before the harness is imported** — `local.mjs` computes its
+  `LOCAL` flag at module-eval time and ESM hoists `import`s above any assignment, so `run-scenario.mjs`
+  sets the default and then `import()`s the harness dynamically. Setting the env var externally also
+  works (and is what the campaign does).
+- **A killed `run-scenario` always kills its server** — the server is a detached process group, and
+  the runner SIGKILLs it on `SIGINT`/`SIGTERM`/`SIGHUP`/`SIGQUIT`/`exit`; a startup reaper cleans any
+  server orphaned by an untrappable `kill -9`. `restart_pod` cycles the run's own server in place
+  (same data dir + port), and the persisted session resumes from disk.
 - **`PUT /api/compute/env` rolls the pod (prod path), and sessions are in-memory.** A session created
   against the old replica dies with it; `provisionUser()` loads env *before* the first turn and proves
   a session survives before handing the pod over.

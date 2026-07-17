@@ -5,7 +5,7 @@
  * `sub` claim to `lmthing.user-<id>.svc`. So every call here just carries the bearer token and
  * talks to the chat origin. Locally (`lmthing serve`) pass base=http://localhost:8080 and no token.
  */
-import { LOCAL, restartLocalServer } from './local.mjs';
+import { LOCAL } from './local.mjs';
 
 /**
  * A pod that is scaling from zero, rolling a new image, or sitting behind a blipping gateway does
@@ -41,10 +41,13 @@ export class Pod {
    *   a scenario asserting only "200 + <!doctype" false-passes) and a POST with **405**. The app
    *   is root-mounted on lmthing.app (`/<project>/`, `/<project>/api/<route>` — serve.ts's
    *   "Project-app ROOT mount"). Locally there is no split host, so apps stay under `/app/<id>/`.
+   * @param {() => Promise<unknown>} [o.onLocalRestart] how to bring the LOCAL server back after a
+   *   `POST /api/restart` kills it (the runner passes `() => restartRun(run)`).
    */
-  constructor({ base, token, appBase }) {
+  constructor({ base, token, appBase, onLocalRestart }) {
     this.base = base;
     this.token = token;
+    this.onLocalRestart = onLocalRestart;
     this.appBase = appBase ?? process.env.LM_APP_BASE ?? (/lmthing\.chat/.test(base) ? 'https://lmthing.app' : base);
     /** true when the app has its own host → root mount (no `/app` prefix). */
     this.appRootMounted = this.appBase !== this.base;
@@ -294,16 +297,15 @@ export class Pod {
    * Restart the pod process (used by the auto-resume scenario). The pod exits ~100ms later.
    *
    * In prod, Kubernetes brings it straight back. LOCALLY, NOTHING DOES — `POST /api/restart` just
-   * kills the one shared `lmthing serve` and leaves it dead, hanging this lane AND every sibling
-   * lane on the same server (found the hard way: S06's Act XIII took the whole local pod down
-   * mid-run). So on the local target we must bring it back up ourselves — which is also the truer
-   * reproduction of the edge this Act exists to test: the process really does die and really does
-   * come back, and the session must survive it.
+   * kills this run's `lmthing serve` and leaves it dead. So on the local target we must bring it back
+   * up ourselves (`onLocalRestart`, supplied by the runner as `() => restartRun(run)`) — which is
+   * also the truer reproduction of the edge this Act exists to test: the process really does die and
+   * really does come back, and the session must survive it.
    */
   restart = async () => {
     if (!LOCAL) return this.req('POST', '/api/restart', {}).catch(() => ({ ok: true }));
     await this.req('POST', '/api/restart', {}).catch(() => ({ ok: true }));
-    await restartLocalServer();
+    if (this.onLocalRestart) await this.onLocalRestart();
     return { ok: true, local: true };
   };
 }

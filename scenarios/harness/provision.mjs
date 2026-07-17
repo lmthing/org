@@ -36,9 +36,10 @@ export async function loadUser(lbl = label) {
 }
 
 /** Provision (or reuse) and guarantee: pod exists, agent keys loaded, pod ready. */
-export async function getUser(lbl = label, { fresh = false } = {}) {
-  // Local target: no prod user, no cache file, no JWT — just ensure the shared server is up.
-  if (LOCAL) return provisionUser({ label: lbl });
+export async function getUser(lbl = label, { fresh = false, localBase } = {}) {
+  // Local target: no prod user, no cache file, no JWT — the caller's per-run server base (or an
+  // ad-hoc one for standalone probes) is used directly.
+  if (LOCAL) return provisionUser({ label: lbl, localBase });
   if (!fresh) {
     const cached = await loadUser(lbl);
     if (cached) {
