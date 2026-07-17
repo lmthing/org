@@ -479,7 +479,14 @@ async function loadAgent(
     } else if (Array.isArray(data['dependencies'])) {
       canDelegateTo = data['dependencies'].map(String);
     }
-    if (canDelegateTo && canDelegateTo.length === 0 && instructBody.includes('delegate(')) {
+    // Ignore fenced code blocks: a `delegate(` inside a ```code``` EXAMPLE is not the
+    // agent delegating in its OWN turn. An AUTHORING agent (the automator) shows
+    // `writeProjectHook` source whose handler calls its ctx `delegate` — authored code
+    // that runs in the project's hook runtime, independent of this agent's canDelegateTo.
+    // Only a PROSE directive to delegate signals the real misconfig; the runtime gate
+    // (exec/target-match.ts) is the actual enforcement either way.
+    const instructProse = instructBody.replace(/```[\s\S]*?```/g, '');
+    if (canDelegateTo && canDelegateTo.length === 0 && instructProse.includes('delegate(')) {
       // `[]` used to be a silent no-op (delegate stayed unrestricted); it now means
       // NO delegation. Warn only for the genuinely confusing combo — an instruct
       // body that CALLS delegate() while its frontmatter forbids delegation.
