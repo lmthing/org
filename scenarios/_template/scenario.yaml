@@ -5,7 +5,7 @@
 #   node scenarios/run-scenario.mjs <NN-slug> --plan   # dry-print the plan + fixture audit
 #   node scenarios/run-scenario.mjs <NN-slug>          # a fresh run under <NN-slug>/runs/<n>/, write evidence
 # The runner writes per-step evidence for a JUDGE to score; `expect[]` is passed through, never run.
-# Full step-verb reference: automation/instances/scenario-campaign/scenario-spec.md.
+# Full step-verb reference: campaign/scenario-spec.md.
 
 id: NN-slug
 title: One line — what the messy input becomes
