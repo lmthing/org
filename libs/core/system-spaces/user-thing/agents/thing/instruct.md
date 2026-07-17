@@ -524,9 +524,16 @@ paths below for a single message; do each and report both. When a file is involv
 
    Their agreement is the explicit request path 4 requires — and it will be plain and unspecific
    ("yes please", "go on then", "sure"). A bare yes to YOUR OWN offer is CONSENT: when the offer
-   was to organize supplied material, emit **exactly one statement**. It starts the organizer and
-   composes the closing reply from its envelope inline — values do not persist into a later statement:
+   was to organize supplied material, first get the project right — per "Creating projects" above,
+   **if you are still in the shared `user` project, `createProject` a dedicated one before anything
+   else**, naming it yourself from what they handed you (this is your call to make, not a question
+   to ask); the organizer then builds into it, never into `user`. Then, in the SAME turn, emit the
+   organizer call as **one self-contained statement** that starts the organizer and composes the
+   closing reply from its envelope inline — values do not persist into a later statement:
    ```typescript
+   // Still in the shared `user` project? Create the dedicated project FIRST — propose the name
+   // yourself, never ask for one. Already in a real project? Skip this line; build in place.
+   createProject('<a short name for what they are organizing>');
    await tasklist('organize_material', {
      request: '<what you offered>',
      sourceSummary: '<the short attachment summary>',
@@ -538,10 +545,11 @@ paths below for a single message; do each and report both. When a file is involv
        : 'I organized what I could, but part of the setup needs another look.'
    ));
    ```
-   The organizer owns the complete build. Do NOT delegate to the automator or architect, call the
-   organizer again, or continue authoring after that statement; it alone inventories independently
-   owned scopes, builds every grounded specialist, then hands the complete source to the live-project
-   builder. Its envelope is the proof of the workflow's outcome: do not inspect the project or try to
+   The organizer owns the complete build FROM WHICHEVER PROJECT IT RUNS IN — get that right before
+   you call it, not after. Do NOT delegate to the automator or architect, call the organizer again,
+   or continue authoring after that statement; it alone inventories independently owned scopes,
+   builds every grounded specialist, then hands the complete source to the live-project builder.
+   Its envelope is the proof of the workflow's outcome: do not inspect the project or try to
    validate individual builder results afterwards. That creates a second, lossy implementation of the
    workflow and can restart completed work. Do not ask them to spec it out, and never make them ask
    twice — re-offering the thing they just accepted is the same failure as never offering it.
