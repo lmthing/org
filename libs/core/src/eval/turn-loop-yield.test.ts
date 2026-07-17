@@ -90,6 +90,59 @@ describe('turn loop — transient stream error recovery', () => {
   });
 });
 
+describe('turn loop — model output habits (leaked reasoning tags)', () => {
+  it('does not burn a retry on a leaked </think> tag — it is commented out, the real code still binds', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    // The exact DeepSeek habit: a stray closing tag leaks ahead of the first real
+    // statement. The boundary detector carves it into its own statement; without the
+    // sanitizer it would typecheck-error ("Cannot find name 'think'") and waste a turn.
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: scriptedStream('</think>\nconst x = 7;'),
+      processYield: async () => undefined,
+      maxRetries: 3,
+    });
+
+    expect(result).toBe('done');
+    expect(readGlobal(vm, 'x')).toBe(7);
+    // No error block was ever appended — the leaked tag never reached the model as a retry.
+    expect(history.messages.some((m) => m.blockType === 'error')).toBe(false);
+    // The tag survives in history as a harmless comment (commented, not silently dropped).
+    const assistant = history.messages.find((m) => m.role === 'assistant');
+    expect(assistant?.content).toContain('// </think>');
+    vm.dispose();
+  });
+
+  it('comments out a whole <think>…</think> block emitted as text without erroring', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: scriptedStream('<think>\nlet me reason\n</think>\nconst y = 42;'),
+      processYield: async () => undefined,
+      maxRetries: 3,
+    });
+
+    expect(result).toBe('done');
+    expect(readGlobal(vm, 'y')).toBe(42);
+    expect(history.messages.some((m) => m.blockType === 'error')).toBe(false);
+    vm.dispose();
+  });
+});
+
 describe('turn loop — parallel yields (Promise.all of forks)', () => {
   it('binds each parallel yield to its OWN result (no collision)', async () => {
     const vm = await createVM();

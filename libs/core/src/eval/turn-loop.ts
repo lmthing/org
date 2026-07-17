@@ -6,6 +6,7 @@ import type { StreamOpts, StreamSession } from './stream-types.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { BoundaryDetector } from '../sandbox/boundary.js';
+import { sanitizeModelHabits } from './model-habits.js';
 import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { buildErrorBlock } from './error-rewind.js';
@@ -421,6 +422,18 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       return { kind: 'ok' };
     };
 
+    // Neutralize known, provider-agnostic model output habits (e.g. a chain-of-thought
+    // model leaking a stray </think> tag into its first statement) BEFORE the statement
+    // is traced, typechecked or evaluated — a sibling of the fence/prose filters above.
+    // The returned text is what every downstream site (log, trace, processStatement)
+    // sees, so the trace stays honest with what actually ran. Runs at BOTH statement
+    // sites (the streaming loop and the trailing-buffer flush). See eval/model-habits.ts.
+    const sanitize = (raw: string): string => {
+      const { text, applied } = sanitizeModelHabits(raw);
+      if (applied.length > 0) renderHost.log(`[stmt] (sanitized model habit: ${applied.join(', ')})`);
+      return text;
+    };
+
     renderHost.log(`[turn ${attempt}] streaming...`);
     const idleMs = deps.streamIdleMs ?? 60_000;
     try {
@@ -449,10 +462,14 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         assistantContent += chunk;
         const statements = detector.feed(fenceFilter.feed(chunk));
 
-        for (const stmt of statements) {
-          // Drop narrated prose the model emitted instead of code (e.g. "Based on the
-          // query, I will…"). It never parses as TS, so skipping it avoids burning a
-          // retry on a guaranteed typecheck error. Same rationale as stray fence tags.
+        for (const rawStmt of statements) {
+          // Neutralize known model output habits (e.g. a leaked </think> tag), then:
+          // drop narrated prose the model emitted instead of code (e.g. "Based on the
+          // query, I will…"). Both never parse as TS, so handling them here avoids
+          // burning a retry on a guaranteed typecheck error. Same rationale as stray
+          // fence tags. `stmt` is the sanitized text so every trace/log below matches
+          // what actually ran.
+          const stmt = sanitize(rawStmt);
           const outcome = processStatement(stmt);
           if (outcome.kind === 'dropped') {
             renderHost.log(`[stmt] (dropped prose) ${stmt}`);
@@ -527,7 +544,8 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       const released = fenceFilter.flush();
       const flushedStatements = released ? detector.feed(released) : [];
       const trailing = detector.flush().trim();
-      for (const stmt of [...flushedStatements, ...(trailing ? [trailing] : [])]) {
+      for (const rawStmt of [...flushedStatements, ...(trailing ? [trailing] : [])]) {
+        const stmt = sanitize(rawStmt);
         const outcome = processStatement(stmt);
         if (outcome.kind !== 'dropped') hadStatements = true;
         // Mirror the streaming loop: stop at the first error or yield.
