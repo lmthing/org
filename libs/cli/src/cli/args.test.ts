@@ -55,6 +55,31 @@ describe('parseArgs — budget flags', () => {
   });
 });
 
+describe('parseArgs — --cwd flag', () => {
+  it('parses --cwd <dir> in serve mode', () => {
+    const a = parseArgs(['serve', '--cwd', '/srv/project', '--port', '9000']);
+    expect(a.serve).toBe(true);
+    expect(a.cwd).toBe('/srv/project');
+    expect(a.servePort).toBe(9000);
+  });
+
+  it('parses --cwd on a normal run', () => {
+    const a = parseArgs(['--cwd', './work', '--space', 's', 'go']);
+    expect(a.cwd).toBe('./work');
+    expect(a.space).toBe('s');
+    expect(a.message).toBe('go');
+  });
+
+  it('leaves cwd undefined when not given', () => {
+    const a = parseArgs(['serve']);
+    expect(a.cwd).toBeUndefined();
+  });
+
+  it('throws when the value is missing', () => {
+    expect(() => parseArgs(['serve', '--cwd'])).toThrow(/--cwd requires a value/);
+  });
+});
+
 describe('parseArgs — --mock flag', () => {
   const base = ['--space', 'fixtures/solver'];
 

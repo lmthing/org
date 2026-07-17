@@ -35,6 +35,10 @@ export interface CliArgs {
   snapshotsDir?: string;
   /** Path to a .env file to load instead of `<cwd>/.env` (consumed early by loadEnv in bin.ts). */
   envFile?: string;
+  /** Working directory to switch into before anything else resolves — the runtime root becomes
+   *  `<cwd>/.lmthing` and `<cwd>/.env` is loaded from it. Default: the directory the command was
+   *  run from. Consumed early by `applyCwd` in bin.ts (before formal arg parsing). */
+  cwd?: string;
   /** Materialize the runtime into `<cwd>/.lmthing` (`lmthing init`). Keyless. */
   init?: boolean;
   /** Active project name for multi-session server mode (default: "user"). */
@@ -90,6 +94,12 @@ export function parseArgs(argv: string[]): CliArgs {
         const val = args.shift();
         if (!val) throw new Error('--env-file requires a value');
         result.envFile = val;
+        break;
+      }
+      case '--cwd': {
+        const val = args.shift();
+        if (!val) throw new Error('--cwd requires a value');
+        result.cwd = val;
         break;
       }
       case '--project':

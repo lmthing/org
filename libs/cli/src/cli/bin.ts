@@ -6,6 +6,7 @@ import { readdir } from 'node:fs/promises';
 import React, { useState } from 'react';
 import { render, Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
+import { applyCwd } from './cwd.js';
 
 // Load .env from the directory where the script is invoked. Unconditionally
 // overwrites process.env for any key present in the file — this file is the
@@ -35,6 +36,9 @@ function loadEnv() {
     }
   } catch { /* no .env in cwd */ }
 }
+// `--cwd <dir>` switches the working directory first, so both the .env below and the
+// runtime root (<cwd>/.lmthing) resolve against it. No-op when the flag is absent.
+applyCwd(process.argv.slice(2));
 loadEnv();
 
 import { Session, createMockStreamFn, mockScript, defaultSystemSpaceDirs } from '@lmthing/core';
@@ -212,7 +216,8 @@ async function loadMockStreamFn(mockPath: string): Promise<(opts: StreamOpts) =>
  * Resolve the persistent runtime root. The single source of truth for project
  * spaces, synced spaces, and session snapshots. `LMTHING_ROOT` overrides the
  * default `<cwd>/.lmthing` so the compute pod can persist onto its data volume
- * (e.g. `LMTHING_ROOT=/data/.lmthing`).
+ * (e.g. `LMTHING_ROOT=/data/.lmthing`). `<cwd>` is the working directory after
+ * any `--cwd` flag has been applied (see `applyCwd`, invoked at bin.ts startup).
  */
 function resolveLmthingRoot(): string {
   const override = process.env['LMTHING_ROOT'];
