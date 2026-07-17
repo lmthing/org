@@ -5,7 +5,7 @@ import type { RenderHost } from '../session/types.js';
 import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { emitVariables, extractBindingNames, extractBindingPattern } from '../context/variables.js';
-import { bindYieldResults } from '../eval/turn-loop.js';
+import { bindYieldResults, formatReadDocuments } from '../eval/turn-loop.js';
 import { serialize } from '../globals/serialize.js';
 import { BudgetExceededError, type Budget } from '../eval/budget.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
@@ -117,6 +117,8 @@ export async function runPrelude(opts: RunPreludeOpts): Promise<PreludeResult> {
 
   let context = '';
   const vars: Record<string, unknown> = {};
+  const documentYields: YieldRequest[] = [];
+  const documentResults: unknown[] = [];
   const failedNames: string[] = [];
   const failures: PreludeFailure[] = [];
 
@@ -209,6 +211,12 @@ export async function runPrelude(opts: RunPreludeOpts): Promise<PreludeResult> {
           }
         }));
         vm.drivePendingJobs();
+        for (let j = 0; j < yields.length; j++) {
+          if (yields[j]?.kind === 'readDocument') {
+            documentYields.push(yields[j]!);
+            documentResults.push(resolvedValues[j]);
+          }
+        }
 
         if (round === 0) {
           firstRoundCount = yields.length;
@@ -259,6 +267,8 @@ export async function runPrelude(opts: RunPreludeOpts): Promise<PreludeResult> {
       'A host-executed PRELUDE already ran the setup statements for this task. ' +
       'Their results are bound in scope — read them below; do NOT re-run these statements.\n\n' +
       emitVariables(vars, context || undefined);
+    const documentBlock = formatReadDocuments(documentYields, documentResults);
+    if (documentBlock) variablesBlock += `\n\n${documentBlock}`;
     if (failures.length > 0) {
       variablesBlock += '\n\n' + failures
         .map((f) => {

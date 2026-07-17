@@ -89,6 +89,37 @@ describe('fork prelude', () => {
     expect(preludeStmts.length).toBe(2);
   });
 
+  it('surfaces a full document read during the prelude in the model’s first prompt', async () => {
+    const prompts: string[] = [];
+    const longText = 'source '.repeat(1000) + 'UNIQUE_DOCUMENT_TAIL';
+    const engine = new ForkEngine({
+      maxConcurrentForks: 2,
+      parentHistory: [],
+      parentSpaceDir: '/tmp',
+      parentAgentSlug: 'test',
+      renderHost: silentHost,
+      streamFn: createMockStreamFn((o: StreamOpts) => {
+        prompts.push(o.messages.map((m) => m.content).join('\n---\n'));
+        return 'currentTask.resolve({ ok: true });';
+      }),
+      documentResolver: async (attachmentId) => ({
+        ok: true, attachmentId, mediaType: 'text/plain', filename: 'source.txt', kind: 'text', text: longText,
+      }),
+    });
+
+    await engine.fork<{ ok: boolean }>({
+      instruction: 'summarize the source',
+      output: { ok: 'boolean' },
+      prelude: "const source = await readDocument('source-1');",
+    });
+
+    // The DOCUMENT CONTENTS block carries the FULL text (not the truncated variable preview).
+    expect(prompts[0]).toContain('DOCUMENT CONTENTS');
+    const docBlock = prompts[0].slice(prompts[0].indexOf('DOCUMENT CONTENTS'));
+    expect(docBlock).toContain('UNIQUE_DOCUMENT_TAIL'); // the full tail reached the block
+    expect(docBlock).not.toContain('chars total'); // the block itself is not the truncated preview
+  });
+
   it('resolves a YIELDING prelude statement (loadKnowledge) through the fork yield router and ticks the tool-call budget', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'prelude-lk-'));
     tmpDirs.push(dir);
