@@ -1,0 +1,61 @@
+{
+  "step": 1,
+  "verbs": [
+    "attach",
+    "say"
+  ],
+  "expect": [
+    "all five files are actually read — the photo LOOKED AT (vision), the voice memo TRANSCRIBED, the PDF and the spreadsheet PARSED",
+    "it OFFERS to organize this without being asked, naming at least two real specifics of mine (a place, a date, a booking)",
+    "it builds NOTHING yet — no spaces, no tables, no pages, no app (the offer precedes any authoring yield)"
+  ],
+  "attached": [
+    "tanzaniamemories.md",
+    "trip-costs.xlsx",
+    "ngorongoro-conservation-area-tariffs.pdf",
+    "stone-town-zanzibar.jpg",
+    "voice-memo.mp3"
+  ],
+  "turns": [
+    {
+      "sent": "Ok this is getting out of hand. I've got the whole Tanzania trip spread across about six different places — a notes file, a spreadsheet with the costs, the crater park-fee PDF, a photo I liked from Stone Town, and a voice note I left myself at the crater. Attaching all of it. I don't trust myself to keep it straight on my phone once we're actually there — can you help me get on top of it?",
+      "lastText": "{\"type\":\"Stack\",\"props\":{\"gap\":2},\"children\":[{\"type\":\"Paragraph\",\"props\":{},\"children\":[\"I've read through everything — and you're right, this is spread thin. Here's what I'm seeing:\"]},{\"type\":\"List\",\"props\":{\"items\":[\"Your notes file has the full itinerary: Arusha → Ngorongoro → Serengeti → Zanzibar, Aug 3–20, with contacts like Richard and Emmanuel and loads of practical notes.\",\"The cost spreadsheet tracks your spending across multiple sheets — accommodation, transport, park fees, safari payments.\",\"The Ngorongoro tariff PDF has the official fee structure and rules — which matters because Emmanuel mentioned that extra ~TZS 5,000 ranger tip nobody told you about.\",\"Your voice memo adds things nowhere else: the bracelets from the Maasai lady (≈TZS 35,000 / $20–25) for Athina, and that ranger-tip question you want to ask Richard before the balance payment.\",\"And your Stone Town photo — that courtyard shot — deserves a home too.\"]},\"children\":[]},{\"type\":\"Paragraph\",\"props\":{},\"children\":[\"I can pull all of this into one place you can open on your phone — a proper Tanzania trip app right here in this project, with your itinerary, every cost tracked against what you've paid and wha…",
+      "delegates": [
+        "system-vision/vision",
+        "system-files/dispatch",
+        "system-files/reader",
+        "system-files/sheet"
+      ],
+      "yieldKinds": [
+        "delegate",
+        "loadKnowledge",
+        "readDocument",
+        "inspect"
+      ],
+      "yieldCount": 19,
+      "errors": [],
+      "nodeCount": 5,
+      "tokens": {
+        "in": 75220,
+        "out": 7982
+      },
+      "durationMs": 246970,
+      "interrupted": false
+    }
+  ],
+  "asks": [],
+  "notes": [],
+  "state": {
+    "spaces": [],
+    "spaceCount": 0,
+    "appTables": {},
+    "appManifest": {
+      "tableNames": [],
+      "pageCount": 0,
+      "built": false
+    },
+    "error": null,
+    "appError": null
+  },
+  "fullEvidence": "step-01.full.json"
+}

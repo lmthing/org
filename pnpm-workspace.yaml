@@ -1,3 +1,7 @@
 packages:
   - 'libs/*'
   - 'apps/*'
+  # The scenario harness is a script-free package (name @lmthing/scenario-harness) — it declares
+  # no build/typecheck/test scripts, so turbo/pnpm -r skip it and it stays a raw-`node` `.mjs`
+  # runner with no build step. Membership only makes it resolvable + `pnpm install`-linkable.
+  - 'scenarios'

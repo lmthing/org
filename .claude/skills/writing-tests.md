@@ -38,9 +38,9 @@ pnpm build
 # real-model suite (Azure keys from sdk/org/.env)
 pnpm build && LM_LIVE=1 pnpm exec vitest run libs/cli/src/testing/live-llm.test.ts
 
-# live prod scenarios — run the smoke check before burning time on a scenario
-cd sdk/org/scenarios/harness && node smoke.mjs
-node ../05-latam/run.mjs        # any scenario dir: 05-latam 06-tanzania 07-life-admin 08-small-shop 09-home-renovation 10-family-recipes
+# live scenarios — a scenario.yaml played against a LOCAL `lmthing serve` (rebuild + restart, seconds)
+node sdk/org/scenarios/harness/local-server.mjs up            # throwaway server on :8080
+node sdk/org/scenarios/run-yaml.mjs 06-tanzania --fresh-server # play it, write evidence to <sc>/.run/
 ```
 
 **Never use `pnpm --filter <pkg> test`.** `@lmthing/core`, `cli`, `auth`, `utils` and `ui` declare no

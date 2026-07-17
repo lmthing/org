@@ -1,0 +1,14 @@
+{
+  "name": "@lmthing/scenario-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Declarative scenario runner + pod harness for lmthing — plays a scenario.yaml against a local `lmthing serve` and writes judge-sized evidence.",
+  "exports": {
+    ".": "./index.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "lmthing-scenario": "./run-yaml.mjs"
+  }
+}

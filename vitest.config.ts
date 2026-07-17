@@ -17,6 +17,9 @@ export default defineConfig({
       // coverage at all, so a transport regression in it only ever surfaced as a dead
       // multi-hour prod run. Its pure units (retry/backoff policy) are node-safe.
       'scenarios/harness/**/*.test.mjs',
+      // The scenario library's pure transforms (evidence/scenario/asks) — golden-tested against
+      // recorded run output so a byte-compat regression in the judge's evidence is caught here.
+      'scenarios/lib/**/*.test.mjs',
     ],
     // libs/state has its OWN vitest config (jsdom + React transforms), so it is
     // excluded here and run by its own `test` script.

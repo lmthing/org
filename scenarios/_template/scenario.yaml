@@ -1,0 +1,53 @@
+# _template/scenario.yaml — copy this dir to start a new scenario:
+#   cp -r _template <NN-slug>   then fill this file + drop real files in fixtures/
+#
+# A scenario is a SINGLE declarative spec played by the generic runner:
+#   node scenarios/run-yaml.mjs <NN-slug> --plan          # dry-print the plan + fixture audit
+#   node scenarios/run-yaml.mjs <NN-slug> --fresh-server   # play it, write evidence to .run/
+# The runner writes per-step evidence for a JUDGE to score; `expect[]` is passed through, never run.
+# Full step-verb reference: automation/instances/scenario-campaign/scenario-spec.md.
+
+id: NN-slug
+title: One line — what the messy input becomes
+project: NN-slug # the project id the runner creates (stable under --fresh-server)
+
+persona: >
+  Who the user is, how they talk, what they will NOT say (e.g. never names the product). A few
+  sentences. The driver answers the agent's questions in this voice at runtime.
+
+promise: >
+  The behavioural promise the judge is scoring — what MUST be true by the end, stated as outcomes,
+  not implementation.
+
+# Load-bearing facts the persona can state IF the agent asks a legitimate clarifying question.
+# Everything else the driver answers in-voice at runtime; list only the answers that matter.
+knows:
+  - "A fact the agent might need to ask for."
+
+# The always-true rules the judge checks against every step (data placement, when to research, how
+# agents answer, lifecycle, asking well). Written as SHOUTED one-liners.
+invariants:
+  - AN INVARIANT — short, absolute, checkable.
+
+# The beats. Each step is one or more verbs; `expect[]` is what the judge verifies (never executed).
+# Verbs: say · then_say · in_app_chat · open_app · attach[] · fresh_session · restart_pod ·
+#        if_asked{question-substring: answer} · deny_consent
+steps:
+  # 1 — the opening dump. A `say` step (a file is delivered by attaching it to a say).
+  - attach: [some-input-file.pdf]
+    say: >
+      The first user message, verbatim and in-voice. Attach the real fixtures this beat delivers.
+    expect:
+      - the load-bearing thing that must happen here, phrased so pass/fail is unambiguous.
+
+  # 2 — a bare confirmation is often the whole spec.
+  - say: "Yes please."
+    if_asked:
+      "how much is your budget": "About 3000 euros."
+    expect:
+      - what real state must exist now (spaces / DB rows / app pages), named concretely.
+
+  # 3 — the app must actually render.
+  - open_app: true
+    expect:
+      - the app opens with real values on screen, no console errors, its API routes return 200.

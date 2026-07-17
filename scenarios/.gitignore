@@ -1,11 +1,6 @@
-# Each scenario's run output lives in <scenario>/results/. Keep the human-readable report.md
-# (it mirrors the spec's "Actual results"); ignore the heavy/ephemeral machine artifacts —
-# multi-MB traces, resume checkpoints, and run logs.
-*/results/trace.json
-*/results/checkpoint*.json
-*/results/*.log
-
-# generic runner (run-yaml.mjs) evidence output — ephemeral
+# The generic runner (run-yaml.mjs) writes per-run evidence into <scenario>/.run/ — step-NN.json,
+# step-NN.full.json, trace.md, summary.json, runner.pid. All ephemeral; the committed golden copies
+# the lib tests assert against live in lib/__fixtures__/, which is NOT ignored.
 */.run/
 .run-smoke/
 .runs/
