@@ -1,0 +1,15 @@
+{
+  "comment": "tsx-only config: makes `pnpx tsx libs/cli/src/cli/bin.ts` (run from this dir) execute @lmthing/core from SOURCE instead of its built dist. tsx reads compilerOptions.paths + baseUrl and rewrites the bare `@lmthing/core` specifier to libs/core/src. Only core is remapped: the cli's other workspace deps (ui/css/auth/state) are imported solely in browser entries that esbuild already bundles from their own src, so they stay on their package `exports` (dist). `include: []` keeps this file inert for `tsc`/editors — each package still builds via its own tsconfig.",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "baseUrl": ".",
+    "paths": {
+      "@lmthing/core": ["./libs/core/src/index.ts"],
+      "@lmthing/core/ui": ["./libs/core/src/ui/index.ts"]
+    }
+  },
+  "include": []
+}

@@ -9,6 +9,8 @@
     "test": "vitest run",
     "dev": "turbo run dev --parallel",
     "thing": "node scripts/thing-dev.mjs",
+    "lmthing": "tsx libs/cli/src/cli/bin.ts",
+    "lmthing:watch": "tsx watch libs/cli/src/cli/bin.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -18,6 +20,7 @@
     "vitest": "^1.6.0",
     "@vitest/coverage-v8": "^1.6.0",
     "tsup": "^8.1.0",
+    "tsx": "^4.19.0",
     "turbo": "latest"
   },
   "pnpm": {
