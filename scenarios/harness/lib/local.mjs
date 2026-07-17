@@ -124,14 +124,18 @@ export async function ensureLocalServer() {
     // every scenario lane at once, and a single authoring turn adds a delegate sub-session per
     // specialist it fans out to — so a handful of concurrent lanes blow past 8 easily, and the
     // capacity gate then sheds sessions the lanes are still using.
-    const child = spawn(process.execPath, [BIN, 'serve', '--port', String(LOCAL_PORT), '--adopt-system-spaces', '--max-sessions', '40'], {
-      cwd: SDK_ORG, // read sdk/org/.env → Azure keys credential the agents (budget-free direct Azure)
-      // Isolate BOTH runtime stores into the throwaway pod root: LMTHING_ROOT = live-project runtime,
-      // and LM_STORE_APPS_DIR = the app CATALOG (store/projects/<id>). Without the latter,
+    const child = spawn(process.execPath, [BIN, 'serve', '--port', String(LOCAL_PORT), '--adopt-system-spaces', '--max-sessions', '40', '--env-file', join(SDK_ORG, '.env')], {
+      // Run the server FROM the pod root so the CLI's default resolveLmthingRoot() makes
+      // <cwd>/.lmthing (= POD_ROOT/.lmthing) — the SAME mechanism a normal `lmthing serve` uses,
+      // with no LMTHING_ROOT override. This is the fix for the /data/.lmthing leak: the override
+      // was not reaching the fork/delegate VMs, which fell back to the prod default. `--env-file`
+      // keeps the Azure keys loading from sdk/org/.env despite the moved cwd.
+      cwd: POD_ROOT,
+      // Isolate the app CATALOG (store/projects/<id>) into the throwaway pod root. Without this,
       // resolveCatalogRoot() falls back to <monorepoRoot>/store/projects and a scenario's catalog
-      // app-build writes a template straight into the REPO (leaks tanzania-trip/ into git). Both dirs
-      // live under POD_ROOT, which --fresh-server wipes, so every run starts truly empty.
-      env: { ...process.env, LMTHING_ROOT: join(POD_ROOT, '.lmthing'), LM_STORE_APPS_DIR: join(POD_ROOT, 'store-apps') },
+      // app-build writes a template straight into the REPO (leaks tanzania-trip/ into git). It lives
+      // under POD_ROOT, which --fresh-server wipes, so every run starts truly empty.
+      env: { ...process.env, LM_STORE_APPS_DIR: join(POD_ROOT, 'store-apps') },
       detached: true, // own process group → survives the agent, killable as a tree
       stdio: ['ignore', logFd, logFd],
     });

@@ -33,6 +33,8 @@ export interface CliArgs {
   maxSessions?: number;
   /** Snapshot output dir for `serve` mode. */
   snapshotsDir?: string;
+  /** Path to a .env file to load instead of `<cwd>/.env` (consumed early by loadEnv in bin.ts). */
+  envFile?: string;
   /** Materialize the runtime into `<cwd>/.lmthing` (`lmthing init`). Keyless. */
   init?: boolean;
   /** Active project name for multi-session server mode (default: "user"). */
@@ -82,6 +84,12 @@ export function parseArgs(argv: string[]): CliArgs {
         const val = args.shift();
         if (!val) throw new Error('--snapshots-dir requires a value');
         result.snapshotsDir = val;
+        break;
+      }
+      case '--env-file': {
+        const val = args.shift();
+        if (!val) throw new Error('--env-file requires a value');
+        result.envFile = val;
         break;
       }
       case '--project':

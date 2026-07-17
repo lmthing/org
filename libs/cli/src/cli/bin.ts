@@ -14,8 +14,16 @@ import TextInput from 'ink-text-input';
 // litellmEnvDefaults set by cloud/gateway), matching applyEnvContent's
 // semantics in server/serve.ts, which re-applies the same file later.
 function loadEnv() {
+  // An explicit `--env-file <path>` wins (scanned straight from argv because this runs before
+  // formal arg parsing); otherwise the .env in the invocation cwd is used. This lets the server
+  // run with a cwd chosen for its runtime root (<cwd>/.lmthing) while still loading keys from a
+  // .env that lives elsewhere.
+  const flagIdx = process.argv.indexOf('--env-file');
+  const envPath = flagIdx !== -1 && process.argv[flagIdx + 1]
+    ? resolve(process.argv[flagIdx + 1])
+    : join(process.cwd(), '.env');
   try {
-    const lines = readFileSync(join(process.cwd(), '.env'), 'utf8').split('\n');
+    const lines = readFileSync(envPath, 'utf8').split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
