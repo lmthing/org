@@ -255,6 +255,55 @@ OUTER_TASK\n`, 'utf8');
     await session.dispose();
   });
 
+  it('a MISMATCHED attachment id throws a named, actionable error instead of silently dropping it', async () => {
+    // If the delegating agent mistypes even one character of a long id it had to
+    // retype by hand from the attachment note, the old behavior silently dropped the
+    // attachment — the specialist got zero attachment info, indistinguishable from
+    // "nothing was ever attached", and the model had no signal to self-correct. The
+    // fix throws a named error listing the real id(s) so a retry can fix it.
+    const displays: unknown[] = [];
+    let delegated = false;
+    const streamFn = createMockStreamFn(() => {
+      if (delegated) return '';
+      delegated = true;
+      // 'up1x' stands in for a mistyped id — one character off from the real 'up1'.
+      return `
+        try {
+          await delegate('system-files', 'reader', { query: 'summarize', attachmentIds: ['up1x'] });
+        } catch (e) {
+          // The host bridges a rejection as a plain string (host-bridge.ts
+          // marshalToQuickJS), not an Error instance — e IS the message here.
+          display(String(e));
+        }
+      `;
+    });
+    const documentResolver: DocumentResolver = async (id) => ({ ok: true, attachmentId: id, mediaType: 'application/pdf', kind: 'text', text: 'x' });
+    const host: RenderHost = {
+      display: (value) => displays.push(value),
+      ask: async () => undefined,
+      log: () => {},
+    };
+    const session = new Session(
+      { spaceDir: await makeSpace(), agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [SYSTEM_FILES_DIR], documentResolver },
+      { streamFn },
+    );
+
+    await session.start({
+      text: 'summarize this file',
+      attachments: [{ id: 'up1', kind: 'file', mediaType: 'application/pdf', filename: 'doc.pdf' }],
+    });
+
+    expect(displays.length).toBe(1);
+    const message = String(displays[0]);
+    // Names the mismatched id it was passed...
+    expect(message).toContain('up1x');
+    // ...and the real known attachment (id + filename) so a retry can self-correct.
+    expect(message).toContain('up1');
+    expect(message).toContain('doc.pdf');
+
+    await session.dispose();
+  });
+
   it('resolves a PRIOR turn\'s attachment id when a LATER turn delegates it (propose→consent→build)', async () => {
     // THING's flow: turn 1 the user dumps a file and THING only OFFERS (no build);
     // turn 2 a bare "yes please" and THING delegates the SAME file to the automator to

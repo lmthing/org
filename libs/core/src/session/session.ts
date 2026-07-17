@@ -1041,9 +1041,33 @@ export class Session {
         // NO bytes/text — the specialist fetches their content itself via
         // readDocument(id), so we hand it an id-anchored note instead.
         const reqIds = (delegateOpts as import('../globals/delegate.js').DelegateOpts | undefined)?.attachmentIds;
-        const resolved = (reqIds ?? [])
-          .map((aid) => this.pendingAttachments.get(aid))
-          .filter((a): a is UserAttachment => a !== undefined);
+        const resolved: UserAttachment[] = [];
+        const unresolvedIds: string[] = [];
+        for (const aid of reqIds ?? []) {
+          const found = this.pendingAttachments.get(aid);
+          if (found) resolved.push(found);
+          else unresolvedIds.push(aid);
+        }
+        if (unresolvedIds.length > 0) {
+          // A mismatched id used to be silently DROPPED here — the specialist then
+          // received zero attachment info, indistinguishable from "nothing was ever
+          // attached". The delegating agent must retype each id by hand from the
+          // attachment note (attachmentNote() above puts the raw id in prose; there
+          // is no copy-by-reference), so a single mistyped character loses the file
+          // with no signal to self-correct. Throwing a named, actionable error (the
+          // same "actionable, retryable" shape as formatDelegateDenial) instead lets
+          // a retry fix it: the model sees exactly which id didn't match and what the
+          // real ids are.
+          const known = [...this.pendingAttachments.values()]
+            .map((a) => `${a.filename ?? a.mediaType} = "${a.id}"`)
+            .join(', ');
+          throw new Error(
+            `delegate("${packageName}", "${agentName}") was passed attachmentIds that don't match any ` +
+              `attachment in this conversation: ${unresolvedIds.map((i) => `"${i}"`).join(', ')}. ` +
+              `Copy the id EXACTLY, character for character, from the attachment list` +
+              `${known ? ` — known attachments: ${known}.` : ' (there are no attachments in this conversation).'}`,
+          );
+        }
         const attachments = resolved.map((a) => a.part).filter((p): p is MediaPart => p !== undefined);
         // File attachments (no image part): tell the specialist to read them with
         // readDocument(id) rather than inlining server-extracted text.
