@@ -2,7 +2,7 @@
  * yaml.mjs — a minimal YAML-subset parser for `scenario.yaml`.
  *
  * The harness is zero-dependency and Node ships no YAML parser, so this covers exactly the shape the
- * scenario format uses (see automation/instances/scenario-campaign/scenario-spec.md) and nothing
+ * scenario format uses (see ../campaign/scenario-spec.md) and nothing
  * more: nested maps, lists (scalar items AND map items), `>` (folded) / `|` (literal) block scalars,
  * inline flow arrays `[a, b]`, single/double-quoted and bare scalars, and `#`-comment / blank lines.
  * It is deliberately NOT a general YAML implementation — anchors, multi-doc, nested flow, etc. are

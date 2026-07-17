@@ -53,7 +53,7 @@ the run dir at the end).
 space names, table row COUNTS, delegate names, yield kinds+counts, errors, the reply, the asks),
 `step-NN.full.json` (the raw drill-down dump), `trace.md` (human-readable), `summary.json`. The runner
 also writes `runner.pid` (a stopper does `kill $(cat <run>/runner.pid)`). The judge prompt lives at
-`automation/instances/scenario-campaign/judge.md`.
+`campaign/judge.md`.
 
 ## Authoring a new scenario
 

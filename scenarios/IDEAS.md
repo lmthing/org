@@ -2,7 +2,7 @@
 
 A scratchpad of live-prod scenario candidates, the selection bar they must meet, and the product
 gap each one is meant to expose. The authored scenarios live in `05-latam/` through `07-life-admin/`
-(see the [README](./README.md) table and `../../../automation/instances/scenario-campaign/prompt.common.md` for the format).
+(see the [README](./README.md) table and `./campaign/scenario-spec.md` for the format).
 Everything below is **not yet authored** — pick one, `cp -r _template <NN-slug>`, and fill it.
 
 ## The bar every new scenario must meet — the "evolving lifecycle" template
