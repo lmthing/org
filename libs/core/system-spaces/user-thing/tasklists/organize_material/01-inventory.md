@@ -18,11 +18,15 @@ heuristic for THIS kind of material is always available.** Work in two reads, th
 1. **See the menu + the default axis.** `await loadKnowledge('organizing', 'split')` returns the index:
    the universal rule (a specialist is a subject the user would ASK for advice on; a category of their
    own records — costs, dates, payments, photos, contacts, a list/tracker/dashboard/overview — is app
-   DATA, a table, never a specialist) and the list of available domain guides.
-2. **Load the guide(s) for this material.** From what `documents` actually contain and what `request`
-   asks, decide which listed domain(s) the material spans, and load each:
-   `await loadKnowledge('organizing', 'split', '<domain>')` (a mixed pile loads several; use `'default'`
-   when none of the listed domains fit). Read that guidance — it tells you the axis this domain splits
+   DATA, a table, never a specialist) and the list of available domain guides on its `Guides:` line.
+2. **Load the guide(s) for this material — by the EXACT name printed on that line, never a guessed
+   synonym.** From what `documents` actually contain and what `request` asks, pick the name(s) that
+   literally appear after `Guides:` in the text you were just given — read the line itself; do not
+   infer a plausible-sounding domain word that isn't on it (a word like "inventory", "sales", or
+   "studio" is not a guide just because it sounds related to the material). Load each:
+   `await loadKnowledge('organizing', 'split', '<exact-name-from-the-line>')` (a mixed pile loads
+   several). If nothing on the line fits, load `'default'` directly — one clean read beats a guessed
+   name that fails and falls back anyway. Read that guidance — it tells you the axis this domain splits
    on and which of its parts are subjects vs. mere records.
 
 Then split accordingly and emit exactly ONE `currentTask.resolve({ scopes: [...] })`. For each scope

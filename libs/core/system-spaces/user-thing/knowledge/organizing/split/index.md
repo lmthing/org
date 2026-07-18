@@ -14,7 +14,7 @@ guide when no domain matches.
 
 Guides: default · trips · household · vehicles · pets · health · home-renovation · events · wedding ·
 studies · work-clients · job-search · moving · garden · family-kids · finances · recipes · fitness ·
-collections
+collections · small-business
 
 ## Consolidate to the minimal specialist set
 
