@@ -114,16 +114,25 @@ describe('shipped system spaces load + validate', () => {
     expect(space.tasklists['organize_material']!.input).toEqual({
       request: 'string', sourceSummary: 'string', attachmentIds: 'array', specialistFacts: 'string',
     });
-    expect(organize['inventory']!.prelude).toContain('Promise.all');
-    expect(organize['inventory']!.prelude).toContain('readDocument');
+    // enumerate is a NAMING pass, one entry per guide-defined instance (a pet, a standing home
+    // domain, …) — it carries the loadKnowledge menu + per-domain-guide contract so a genuine part
+    // never silently gets folded into a bigger one before it even reaches inventory.
+    expect(organize['enumerate']!.prelude).toContain('Promise.all');
+    expect(organize['enumerate']!.prelude).toContain('readDocument');
     // The split heuristic lives in loadable knowledge (user-thing/knowledge/organizing/split/*),
     // not inline: the node loads the menu then the per-domain guide and splits by SUBJECT-vs-DATA.
-    expect(organize['inventory']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split'\)/);
+    expect(organize['enumerate']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split'\)/);
     // per-domain guide: a 3-arg load with a placeholder for the specific guide name — assert the
     // contract, not the exact placeholder token (it reads '<exact-name-from-the-line>' since e2571b0).
-    expect(organize['inventory']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split', ?'<[^']+>'\)/);
-    expect(organize['inventory']!.instruction).toMatch(/subjects? vs\.? .*records|record type|app DATA/i);
-    // inventory → consolidate_scopes (dedup the over-split scopes) → build_specialist fans out over
+    expect(organize['enumerate']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split', ?'<[^']+>'\)/);
+    expect(organize['enumerate']!.instruction).toMatch(/subjects? vs\.? .*records|record type|app DATA/i);
+    // inventory fans out ONE FORK PER NAMED SUBJECT (enumerate.subjects) — each subject gets its own
+    // independent scope-build so a distinct, low-fact part (a single pet, a single utility) can no
+    // longer be silently absorbed into a bigger scope by one holistic free-form pass.
+    expect(organize['inventory']!.dependsOn).toEqual(['enumerate']);
+    expect(organize['inventory']!.forEach).toBe('enumerate.subjects');
+    expect(organize['inventory']!.prelude).toContain('readDocument');
+    // inventory → consolidate_scopes (dedup genuine near-duplicates) → build_specialist fans out over
     // the CONSOLIDATED set, so duplicate/overlapping specialists don't waste the build budget.
     expect(organize['consolidate_scopes']!.dependsOn).toEqual(['inventory']);
     expect(organize['consolidate_scopes']!.instruction).toMatch(/consolidat|merge|overlap|minimal/i);

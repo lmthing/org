@@ -146,3 +146,92 @@ Two solid, committed, verified fixes landed this session (space-split L2 + knowl
 row L1, plus the scenario.yaml L0 correction and the read_sources "never discard" L1 — see above).
 Step 1-3 are solid/reproducible. Step 4 is the next thing to fix — clearly attributed above, ready for
 a fresh continuation to pick up without re-deriving. See handoff.md for the exact resume commands.
+
+## R2 — appbuilder findings (owned lane: system-appbuilder/** + organize_material/** + knowledge/organizing/**)
+
+R2 · step 2 (finding #4: pile-parts under-splitting) · L2 · restructured `organize_material`:
+`01-inventory.md` split into `01-enumerate.md` (NAMING pass — loads `organizing/split` menu +
+per-domain guide(s), lists one entry per guide-defined instance — "splits by each PET" ⇒ one
+entry per named pet, never one "pets" entry) + `02-inventory.md` (now `forEach: enumerate.subjects`
+— ONE independent fork builds the full `{topic,goal,research}` scope for ONE named subject, so a
+distinct low-fact part can no longer be silently absorbed into a bigger scope by a single holistic
+free-form pass). Renumbered `03-consolidate_scopes.md` (now consumes `inventory` as an ARRAY, not
+`inventory.scopes` — updated its own references), `04-build_specialist.md`, `05-build_live_app.md`
+(content unchanged, filename only). Updated `organize_material/index.md`'s description and
+`libs/core/src/spaces/system-spaces-dag.test.ts`'s node-contract assertions to match (moved the
+loadKnowledge/menu checks onto `enumerate`; added `inventory.dependsOn===['enumerate']` +
+`inventory.forEach==='enumerate.subjects'` checks). verify=PASS: `pnpm test
+libs/core/src/spaces/system-spaces-dag.test.ts` 16/16 green; FULL FRESH run 8, step 2 — 4 clean
+distinct specialists (Materials & Supplies Tracker, Finished Products & Catalog Advisor, Supplier
+Tracker, Kiln & Equipment Advisor), materials/stock never merged with products/catalog, live trace
+shows `consolidate_scopes` correctly reading `inventory[0].research`/`inventory[1].research`/…
+(the new array contract). Also incorporated main's `6b87b5b`/`a673f57` loadKnowledge menu-append
+change: `01-enumerate.md` points at the auto-appended "Available options" list, not a hand-maintained
+"Guides:" line.
+
+R2 · step 2/4 (finding #2: automator retry non-idempotent) · L1 ·
+`system-appbuilder/tasklists/build_live_project/05-implement_tables.md` · verify=PASS · added a
+retry-safety guard: check `listProjectDir('database').entries` for `item.name + '.json'` BEFORE
+seeding; if the table file already exists (a forEach element retried with a fresh fork after a
+PRIOR attempt's write already landed — the host's forEach-item retry from
+`orchestrator.ts:284-315` re-runs the SAME statement from scratch, and `writeProjectTable` would
+otherwise re-insert `item.rows` a second time with freshly generated ids), write schema-only (no
+rows) — the merge is idempotent, the seed is not. Verified: run 8's live trace shows the model
+emitting this EXACT guard for every table; final row counts have ZERO duplicates anywhere (18
+materials/7 products/23 sales/7 suppliers/1 filed_document/2 works_in_progress, every SKU/name
+unique) despite the turn's own delegate log recording TWO separate
+`system-appbuilder/automator/build_live_project` entries for the same turn.
+
+R2 · step 2 (finding #5: every parsed source needs a home) · L1 ·
+`system-appbuilder/tasklists/build_live_project/03-plan_app.md` · verify=PASS · added an explicit
+"every parsed source needs a home" rule: an off-topic/one-off document's stated values still need a
+landing spot — never mint a table shaped only for that one document (junk-table sprawl), add ONE
+general-purpose catch-all table instead, reserving a dedicated table only once a shape recurs.
+Verified: run 8 — invoice INV-3337 landed as exactly ONE row in a `filed_documents` table with its
+real total (93.5) and a clear "DEMO — … NOT operational" label, and the app even grew a dedicated
+`/documents` page for it (not junk-sprawled: one general table, one row).
+
+R2 · NEW finding (extends #2, found during MY OWN verification, not in the original 5) ·
+BUILD_LIVE_PROJECT RE-INVOCATION DUPLICATES TABLES/BREAKS PAGE-ENDPOINT WIRING · L1 ·
+`system-appbuilder/tasklists/build_live_project/03-plan_app.md` · verify=CODE-REVIEWED, NOT
+independently re-triggered (expensive to force deterministically) · Live evidence from run 8 (well
+after step 2): a LATER pass planned fresh `sales_orders`/`equipment`/`invoices` tables duplicating
+the EXISTING `sales`/`materials`/`filed_documents` concepts under different names, then rewrote the
+`dashboard-summary` endpoint to read the NEW tables while `pages/index.tsx` kept reading the OLD
+field names — a real chrome-devtools browser check showed the home dashboard rendering
+"Materials on Hand: 0 / Unpaid Amount: €NaN" over a fully-populated real DB (empty-shell/broken-page
+regression, caught live, not from the assigned 5). Fix: `03-plan_app.md` (the ONE binding-membership
+node) now reads `listProjectDir('database')`/`listProjectDir('pages')` FIRST and must reuse EXISTING
+names for existing concepts rather than planning a fresh parallel set when the project already has
+tables/pages (this pipeline is meant for the FIRST build only; a retry/re-invocation must converge,
+not duplicate — same principle as automator's own "Running twice must CONVERGE" section, now applied
+at the planning layer where it was previously absent). NOT re-verified against a forced double
+build_live_project invocation — flagging honestly; the fix is a straightforward extension of an
+already-established, working principle (automator/instruct.md's existing convergence discipline)
+applied to a node that lacked it.
+
+R2 · step 3 (open_app) · PASS (via run 8's own evidence: `appManifest.built:true`, 8 routes, root
+200) · plus a REAL chrome-devtools check — surfaced the NEW finding above (caught mid-flight, after
+later steps had already grown the app further; not a step-2/3-time regression from my changes).
+
+R2 · step 4 (finding #1: researching specialist can't persist a candidate row) · NOT FIXED —
+CONFIRMED CROSS-LANE, reported to main · re-confirmed unchanged on run 8: THING delegates to the
+materials specialist, which researches live (webSearch×1, webFetch×1) and stores its own knowledge,
+but ZERO `db.insert` occurs and the `suppliers` table stays at 7 rows (no new candidate). ROOT CAUSE
+(same as prior attempt, re-confirmed): `system-architect/tasklists/synthesize_and_run/04-write_agent.md:17`
+hardcodes `capabilities: ['knowledge:write']` for EVERY synthesized specialist, and
+`05-write_tasks.md`'s generated `research_and_store`/`store` node only ever calls `writeKnowledge` —
+both 06-lane files. THING's OWN "hand the finding back to the space that owns the topic" contract
+(`user-thing/agents/thing/instruct.md:419-422`, 07-lane) has NO data-shaped return contract for a
+specialist to hand a row-worthy candidate back for THING to persist (THING already holds
+`db:read`+`db:write` itself). RECOMMENDED fix (two-lane, no new capability grant): (a) 06 —
+`research_and_store`'s `store` node also returns a `candidate: {...} | null` field when the finding
+names a concrete row-shaped entity; (b) 07 — THING's research-triage section reads that field and
+`db.insert`s it into the owning project's matching table itself. Not touched (both files are outside
+my owned lane) — see FIX READY signal to main for the full packet.
+
+## Session checkpoint 2 (context-pressure, clean handoff)
+
+Steps 1-3 solid on a fresh run (run 8). Step 4 unchanged/cross-lane (reported). Five files changed +
+verified in my lane (organize_material ×5 + the dag test + 3 system-appbuilder task files +
+automator/instruct.md); all uncommitted, edit-lock held pending orchestrator review. See handoff.md.

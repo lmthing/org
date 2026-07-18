@@ -271,6 +271,16 @@ did not make.** The user opens the app to check; a "done!" with no row changed i
 `db` is genuinely unavailable (a project with no tables yet), CREATE+seed the table first with
 `writeProjectTable(name, schema, rows)` — do not fabricate success.
 
+**HARD RULE (completeness): an INSERT carries every field your current context supplies a value for —
+not just the one that prompted the write.** When the user hands you a NEW item with several attributes
+in the SAME message (a name, a category, a date, an identifier — whatever the row's own columns are
+for), a `db.insert` that sets only the first field or two you reach for and leaves the rest of the row
+blank is the same data-loss failure as an empty seed table: the value was right there in what you were
+just given, and it never reached the row. Before you write, check what your current context actually
+states against the table's real columns, and set every one it has a value for — leave a column blank
+only when the user genuinely did not supply that value, never because you stopped after the first
+field.
+
 **Report AFTER the write, from the write's own result — never before it.** A success card you
 display in one statement is a promise the NEXT statement has to keep, and if that statement dies
 (a typecheck error aborts it — `Cannot find name 'saved'` is enough), you have told the user their

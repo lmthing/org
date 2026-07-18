@@ -9,13 +9,16 @@ prelude: |
   const consolidationGuide = await loadKnowledge('organizing', 'split');
 ---
 
-Consolidate the inventoried scopes into the MINIMAL set of distinct specialists. `inventory`
-(`inventory.scopes`, each `{ topic, goal, research }`) and `consolidationGuide` (the organizing guide —
-apply its "Consolidate to the minimal specialist set" rules) are in scope. THINKING step — no writers,
-no delegation.
+Consolidate the inventoried scopes into the MINIMAL set of distinct specialists. `inventory` (an array
+of `{ topic, goal, research }`, one entry per subject `enumerate` named — each already built its own
+scope independently, so a genuinely distinct part never went missing here) and `consolidationGuide`
+(the organizing guide — apply its "Consolidate to the minimal specialist set" rules) are in scope.
+THINKING step — no writers, no delegation.
 
-`inventory.scopes` almost always OVER-SPLITS, and every extra specialist is a full research + build
-that costs time and can fail — so collapse the list HARD, following the guide:
+`inventory` names subjects one at a time upstream, so it can still carry genuine near-duplicates — the
+same real-world subject named twice in different words, or a broad catch-all sitting next to the
+specifics it already covers. Collapse those HARD, following the guide (but a distinct subject with few
+facts is not a near-duplicate — do not merge it away just because its `research` is short):
 
 - **Same subject → one.** Two scopes naming the same real-world subject or place — even with different
   wording, or one tacking on a nearby landmark, or one covering a FACET of the other (fees vs rules vs
