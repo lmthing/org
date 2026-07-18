@@ -31,6 +31,15 @@ Wiring rules — the app fails to compile if you break them:
   invent or camelCase a field name; copy it from the endpoint's `fields`.
 - IMPORT the reusable components you planned, by relative path from `pages/` to `components/`: a
   top-level page uses `../components/<Name>`, a page one directory deep uses `../../components/<Name>`.
+- **NEVER import a component that failed to write.** `implement_components` (an upstream dependency, in
+  scope by its task id) is that node's own per-item `{ name, ok }[]` results — the SAME array
+  `12-finalize` filters. Before importing ANY planned component, check it is actually in THAT ok-list
+  (`ok === true` for its name), not merely in `plan_components.components` (the plan) or in
+  `item.components` (this page's wishlist) — a component can be planned and still have failed to
+  land. If a component this page wants is NOT in the ok-list, do not import it or reference it on this
+  page at all: drop the dependent markup and render the row/value inline instead. One page with a
+  dangling import to a component that never landed fails the WHOLE app's build, not just this page —
+  this check is cheap; skipping it is not.
 - LINK BETWEEN PAGES with `<Link>` (from `@app/runtime`) to a page's ROUTE, authored base-agnostic:
   the route is the page's file path under `pages/` WITHOUT the `pages/` prefix or the `.tsx`
   (`pages/park-fees.tsx` → `to="/park-fees"`, `pages/index.tsx` → `to="/"`, `pages/items/[id].tsx` →
@@ -61,8 +70,12 @@ const depth = String(pg.route).split('/').length; // 'index' → 1, 'items/[id]'
 const up = '../'.repeat(depth);                    // '../' to reach the project root from this page
 const ep = (Array.isArray(pg.endpoints) && pg.endpoints[0]) ? pg.endpoints[0]
   : (plan_endpoints.endpoints[0] ? plan_endpoints.endpoints[0].name : 'items-list');
-const comp = (Array.isArray(pg.components) && pg.components[0]) ? pg.components[0]
+// Cross-check against implement_components' OWN ok-list — planned is not the same as landed.
+const okComponentNames = (Array.isArray(implement_components) ? implement_components : [])
+  .filter((x: { ok: boolean }) => x.ok).map((x: { name: string }) => x.name);
+const wantedComp = (Array.isArray(pg.components) && pg.components[0]) ? pg.components[0]
   : (plan_components.components[0] ? plan_components.components[0].name : null);
+const comp = (wantedComp && okComponentNames.includes(wantedComp)) ? wantedComp : null;
 const src = [
   "import { useApi } from '@app/runtime';",
   comp ? ("import " + comp + " from '" + up + "components/" + comp + "';") : "",
@@ -121,4 +134,8 @@ const t = data?.items?.[0]?.grandTotalUSD;        // ✗ re-cased guess — read
 const res = await fetch('/api/cost-lines');       // ✗ no raw fetch — read through useApi
 <div className="text-blue-600">                   // ✗ stock Tailwind color — use text-foreground
 console.log(data);                                // ✗ Cannot find name 'console' — no DOM lib
+import Missing from '../components/Missing';      // ✗ imported without checking implement_components'
+                                                   //   ok-list — if Missing failed to write, this import
+                                                   //   resolves to nothing and fails the WHOLE app build,
+                                                   //   not just this page; drop it and render inline instead
 ```

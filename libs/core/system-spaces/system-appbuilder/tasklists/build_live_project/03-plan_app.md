@@ -45,6 +45,16 @@ from the material for every `<…>` (never leave a placeholder). Plan for an app
   catches ANY number of such one-off facts across the whole material. Reserve a DEDICATED table for a
   shape only once it actually recurs — a single stray document earns a row in the general table, not a
   table of its own.
+- **a shared keyword or theme between two facts is NOT evidence they are the same real-world instance —
+  count them separately.** When you tally how many rows a table needs, a vision/audio-described item
+  (something photographed or spoken about, with its OWN distinguishing details — a color, a shape, a
+  material, a marking) is a DIFFERENT record from an unrelated mention elsewhere that merely uses a
+  similar word (a technique name, a category, a material name appearing in an unrelated ledger note or
+  line item). Merge two facts into one row ONLY when another source explicitly ties them together — a
+  matching id, order/reference number, or SKU — never because they mention the same noun. If your own
+  count silently drops from N sources to fewer rows because two of them "are basically the same thing,"
+  that drop is the bug: re-open your count and give the vision/audio item its own row with its own
+  details, distinct from whatever unrelated fact happens to share the word.
 - **endpoints** — enough to read every table a page shows (at least one read per view).
 - **components** — a few REUSABLE pieces (a card, a row, a stat) that repeat across pages. COUNT them
   deliberately: name each shared UI element the pages will import, not per-page markup.

@@ -18,8 +18,18 @@ do NOT fetch data here (pages pass data in). STYLE WITH `@lmthing/css` DESIGN TO
 `text-foreground`, `text-muted`, `border-border`, `bg-primary`) — never a raw hex, `rgb()/hsl()`, or a
 stock Tailwind color (`gray-500`, `blue-600`). Import only from `react`/`@app/runtime` if needed.
 `@app/runtime` exports ONLY `apiCall`, `HttpError`, `useApi`, `useApiMutation`, `useParams`, `Link`,
-`navigate`, and `Chat`; do not import utility helpers such as `cn`, `clsx`, or `classNames`. Emit
-one statement:
+`navigate`, and `Chat`; do not import utility helpers such as `cn`, `clsx`, or `classNames`.
+
+**If `w.ok` is false, DO NOT resolve yet.** Read `w.error` — it names the concrete problem (a parse
+error at a line/column, a missing default export, an unresolved import) — construct a CORRECTED source
+that fixes exactly that mistake, and call `writeProjectComponent` a second time before resolving. A
+common concrete cause: a JSX `{...}` expression container holds exactly ONE expression — a stray
+trailing comma after it (`{ a ? x : y, }`) is a comma with nothing following, which is a syntax error,
+not a harmless list-style trailing comma. Never resolve `{ ok: false }` (or a stale `{ ok: true }`) off
+the FIRST attempt without reading `w.error` and retrying: a component that never actually lands on disk
+still gets imported by a page downstream (`implement_pages` doesn't re-verify), and one dangling import
+fails the WHOLE app's build, not just this component — the entire app becomes unopenable over one
+unwritten file. Emit one statement:
 
 ```typescript
 const c = item;
@@ -34,7 +44,16 @@ const src = [
   "}",
 ].join("\n");
 const w = writeProjectComponent(c.name, src);
-currentTask.resolve({ name: c.name, ok: w.ok });
+if (w.ok) {
+  currentTask.resolve({ name: c.name, ok: true });
+} else {
+  // w.error named the exact mistake — e.g. a stray trailing comma inside a JSX expression
+  // container, an unclosed tag, a missing default export. Fix THAT problem in a corrected
+  // source (never just resubmit the same broken string) and retry once before giving up.
+  const fixedSrc = src; // replace with `src` corrected for the specific issue in w.error
+  const w2 = writeProjectComponent(c.name, fixedSrc);
+  currentTask.resolve({ name: c.name, ok: w2.ok });
+}
 ```
 
 The TSX you assemble is typechecked against a **NO-DOM ambient** (no `console`/`window`) and is
@@ -61,4 +80,10 @@ import { cn } from '@app/runtime';               // ✗ not exported; no cn / cl
 <div className="bg-gray-100 text-blue-600">      // ✗ stock Tailwind colors — use bg-card / text-foreground
 <div style={{ color: '#0a0a0a' }}>               // ✗ raw hex — use a token (text-foreground)
 console.log(title);                              // ✗ Cannot find name 'console' — no DOM lib
+<span className={
+  "font-medium " + (ok ? "text-foreground" : "text-muted"),
+}>                                                // ✗ trailing comma after the expression — a JSX
+                                                  //   `{...}` container holds exactly ONE expression;
+                                                  //   a comma with nothing after it fails to parse and
+                                                  //   the write is silently rejected
 ```

@@ -106,6 +106,23 @@ When a lane signals **FIX READY** (files + rung + before/after evidence), or a m
 7. **Feedback path:** if wrong/overfit/red, SendMessage the lane specific, actionable feedback; it revises and
    re-signals. Never commit an overfit or red-gate diff.
 
+**Delegate the reading — protect your own context.** When a gate step is context-heavy (reviewing a lane's
+ready fix, auditing the anti-overfit grep across several prompt files, reading long evidence/ledgers), do NOT
+read it yourself: spawn a short-lived Sonnet subagent (Agent tool, `model: sonnet`) with the exact file list +
+this checklist. It reads, RUNS the gates (`cd sdk/org && pnpm typecheck`; touched `pnpm test <path>`;
+`pnpm lint:tokens`; `pnpm docs:check` for any L3 core change) and the anti-overfit grep (scenario literals /
+persona names / places / fixture tokens / domain framing in edited prompts), then reports back a COMPACT
+pass/fail verdict per gate + the specific issues + files — never the raw diff or file contents. **You still do
+the git ops yourself** — you are the SOLE committer: on a clean report you path-scoped `git add` + commit +
+push the submodule + bump the parent pointer. The Sonnet reviewer never commits.
+
+**Report-and-await-OK gate — no lane moves on its own authority.** Required loop for every lane/helper
+subagent: investigate → decide (attribution + fix-ladder rung + exact files + the proposed change) → REPORT
+the decision to you and STOP → you review and give an explicit OK (or redirect) → only THEN it applies +
+verifies → REPORTS evidence and STOPS → you run the gate above and commit. You review EVERY decision before it
+proceeds — nothing lands without your OK. Running/judging steps need no OK; the gate is any source edit and
+any commit.
+
 Commit trailer (both repos):
 
     Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
@@ -154,22 +171,56 @@ the list holds only transcripts written in the last ~300s (idle/parked agents dr
 aggregate session spend; the status engine has **no** per-subagent field, which is why the export derives
 `tokens` from each subagent's own transcript.
 
-Run a **`Monitor` with an `until` condition** that polls `statusline.json` and fires when EITHER:
+Arm ONE **persistent `Monitor`** that watches per-subagent size + 5h usage AND projects a burn ETA from
+the rhythm. It emits **SHUTDOWN** (a subagent ≥ `CAP`), **USAGE_90** (5h ≥ 90%), **USAGE_ETA_WARN** (at the
+current burn rate the 5h budget will reach 90% BEFORE it resets), and a heartbeat with `rate`/`eta90`/`reset`
+minutes. The EXACT command (substitute your own session's `subagents` dir into `SUB`; tune `CAP` DOWN to
+throttle):
 
-- **any `subagents[].tokens ≥ 300000`** → that subagent's context is nearly full: **gracefully shut it
-  down**. SendMessage it to checkpoint (its `handoff.md` + attempt ledger current, a fresh snapshot taken),
-  wait for its confirmation, let it stop, then spawn a FRESH Sonnet continuation seeded from that handoff
-  (§8). NEVER let a lane run past ~300k — output degrades and a hard context-limit crash loses the tail (a
-  real failure this session: a lane died mid-turn at the limit). **This 300k rule ALWAYS applies**, even when
-  usage-pausing is disabled — it protects the *work*, not the budget.
-- **`five_hour.used_percentage ≥ 90`** → the shared 5h budget is nearly spent: SendMessage every live lane to
-  checkpoint + stop, stop launching lanes, record `paused` + `resets_at` in state, and resume FRESH from each
-  handoff once the window resets (`resets_at`). **Skip this branch entirely when the human says to ignore
-  usage** ("don't self-pause", "drive through the reset") — then keep driving to green / the 300k
-  self-checkpoint. Record the active directive in state so a fresh you honours it.
+    SUB="<…>/projects/<proj>/<session>/subagents"; STAT="$HOME/.claude/statusline.json"; CAP=200000
+    A="/tmp/orch-alert-$$"; : > "$A"; echo "MONITOR ARMED"; bp=""; bt=0; hb=0
+    while true; do now=$(date +%s); maxtok=0; maxid=none
+      for f in "$SUB"/agent-*.jsonl; do [ -e "$f" ]||continue
+        mt=$(stat -c %Y "$f" 2>/dev/null||echo 0); [ $((now-mt)) -le 300 ]||continue
+        id=$(basename "$f" .jsonl); id=${id#agent-}
+        tok=$(grep -oE '"usage":\{[^}]*\}' "$f"|tail -1|grep -oE '"(input_tokens|cache_read_input_tokens|cache_creation_input_tokens)":[0-9]+'|grep -oE '[0-9]+'|awk '{s+=$1}END{print s+0}')
+        [ "${tok:-0}" -gt "$maxtok" ]&&{ maxtok=$tok; maxid=$id; }
+        [ "${tok:-0}" -ge "$CAP" ]&&! grep -qx "tok:$id" "$A"&&{ echo "SHUTDOWN subagent=$id tokens=$tok"; echo "tok:$id">>"$A"; }
+      done
+      pct=$(jq -r '(.five_hour.used_percentage//0)|floor' "$STAT" 2>/dev/null||echo 0)
+      reset=$(jq -r '(.five_hour.resets_at//0)' "$STAT" 2>/dev/null||echo 0)
+      { [ -z "$bp" ]||[ "$pct" -lt "$bp" ]; }&&{ bp=$pct; bt=$now; grep -v -e '^usage90$' -e '^etawarn$' "$A">"$A.t" 2>/dev/null; mv -f "$A.t" "$A" 2>/dev/null; }
+      eval "$(awk -v p="$pct" -v bp="$bp" -v bt="$bt" -v nn="$now" -v rs="$reset" 'BEGIN{dtm=(nn-bt)/60;r=(dtm>1)?(p-bp)/dtm:0;e90=(r>0.001)?(90-p)/r:-1;rmin=(rs>nn)?(rs-nn)/60:-1;printf"RATE=%.3f ETA90=%.0f RMIN=%.0f",r,e90,rmin}')"
+      [ "$pct" -ge 90 ]&&! grep -qx usage90 "$A"&&{ echo "USAGE_90 pct=$pct"; echo usage90>>"$A"; }
+      [ "${ETA90%.*}" -ge 0 ] 2>/dev/null&&[ "${RMIN%.*}" -ge 0 ] 2>/dev/null&&[ "${ETA90%.*}" -lt "${RMIN%.*}" ]&&! grep -qx etawarn "$A"&&{ echo "USAGE_ETA_WARN pct=$pct rate=$RATE%/min: 90% in ~${ETA90}min, reset ~${RMIN}min — THROTTLE"; echo etawarn>>"$A"; }
+      hb=$((hb+1)); [ $((hb%7)) -eq 0 ]&&echo "HB sub=$maxid:$maxtok usage=${pct}% rate=$RATE%/min eta90=${ETA90}min reset=${RMIN}min"
+      sleep 45
+    done
 
-Re-arm the Monitor after each firing. Cadence otherwise = Monitor heartbeats + subagent-completion
-notifications; you're re-invoked when harness-tracked work finishes, so don't poll for it.
+Actions on each event:
+
+- **SHUTDOWN** → gracefully shut that subagent down: SendMessage it to make `handoff.md` + ledger current and
+  snapshot, wait for confirmation, let it stop, then spawn a FRESH Sonnet continuation from that handoff (§8).
+  **ALWAYS applies** (protects the *work*), even when usage-pausing is off. A hard context-limit crash mid-turn
+  loses the tail — a real failure this session.
+- **USAGE_90** → checkpoint + stop every lane; resume FRESH after `resets_at`. Skip only if the human said
+  ignore-usage.
+- **USAGE_ETA_WARN** → you are ON TRACK to blow the budget before it resets. **Do not wait for 90%** — treat
+  this event as the REAL ceiling and throttle NOW, in this order: **(a)** don't add another lane; **(b)** drop
+  the lane nearest a checkpoint (halves the burn); **(c)** lower `CAP` further (smaller subagent context ⇒
+  cheaper turns ⇒ slower burn), then re-arm the Monitor with the new `CAP`. **Don't over-throttle on a
+  transient spike** — a big subagent finishing (~200k tokens) or a `/compact` each cause a ONE-TIME rate spike
+  (observed 0.667%/min) that decays within a couple of Monitor heartbeats back to the settled ~0.27–0.33%/min;
+  before shedding a lane on a single firing, check whether the rate is FALLING across successive heartbeats —
+  shed only on a SUSTAINED high rate.
+
+**Scope: ideally NEVER reach 90%** (not just 95%). Treat `USAGE_ETA_WARN` as the real ceiling — throttle early
+so the projection stays past `resets_at`. **Sustainable ≈ ≤2 concurrent lanes:** both lanes spend most of their
+time parked on local, budget-free scenario runs, so their duty cycle is low and 2 low-duty lanes ≈ one
+continuous burn; if the SUSTAINED rate exceeds ~0.30%/min, drop to 1 lane. Your levers are **fewer concurrent
+lanes** and a **lower `CAP`**; a paused/shut lane resumes FRESH from its handoff at no lost work. Re-arm after
+each firing. Record the active usage directive + current `CAP`/lane count in state. Otherwise cadence = Monitor
+heartbeats + completion notifications; don't poll for harness-tracked work — you're re-invoked when it finishes.
 
 ## 8. Handoffs, liveness, and fresh continuations
 
@@ -178,12 +229,12 @@ notifications; you're re-invoked when harness-tracked work finishes, so don't po
   handoff watch looked broken. Use **`statusline.json`'s per-subagent `tokens`** (§7) for a live context size,
   or `stat -L -c%s` / `tail -c 65536 <transcript> | grep '"usage"' | tail -1` for the last turn's
   input+cache tokens. A subagent is "running" while its transcript keeps being written (recent mtime).
-  The 300k Monitor-`until` (§7) is the primary trigger; lanes ALSO self-checkpoint at ~300k of their own
+  The 200k Monitor-`until` (§7) is the primary trigger; lanes ALSO self-checkpoint at ~200k of their own
   context as a backstop. Corroborate with `pgrep -af run-scenario` + freshest
   `find scenarios/0*/runs -name 'step-*.json' -printf '%TY-%Tm-%Td %TH:%TM %p\n' | sort -r | head` mtimes +
   the SendMessage cadence. NEVER Read/tail a full transcript into your OWN context — it's huge.
 - **Resume a checkpointed lane by spawning a FRESH Sonnet agent** (Agent tool), seeded from its
-  `handoff.md` + attempt ledger + snapshot resume point — do NOT SendMessage-resume a 350k+ transcript (it
+  `handoff.md` + attempt ledger + snapshot resume point — do NOT SendMessage-resume a 200k+ transcript (it
   starts already under context pressure). SendMessage-resume is only for a still-small, still-live lane you
   parked briefly. Lanes' own self-`Monitor`s don't persist across your turns; you re-engage them via SendMessage.
 
@@ -201,17 +252,24 @@ notifications; you're re-invoked when harness-tracked work finishes, so don't po
 
 ## 10. Runner-judge-fixer spawn template (fill the ⟨…⟩)
 
+**Spawn every lane — and every short-lived helper/reviewer subagent — via the Agent tool with `model: sonnet`,
+ALWAYS.** The orchestrator itself is the only Opus; 100% of fan-out is Sonnet, to sustain the shared 5h budget.
+
 > You are a scenario runner-judge-fixer continuing **⟨id⟩** to green. Fully autonomous — NEVER ask the human;
 > signal the orchestrator (`main`) via SendMessage. cwd `sdk/org`. Read FIRST: `scenarios/campaign/judge.md`,
 > `scenarios/campaign/scenario-spec.md`, `scenarios/campaign/state/⟨id⟩.handoff.md`,
 > `scenarios/campaign/attempts/⟨id⟩.md`. YOUR OWNED SUBSYSTEM (disjoint, path-scoped): ⟨files⟩. Do NOT touch
 > ⟨other lanes' files⟩ — REPORT cross-lane needs to `main`. Findings to fix: ⟨precise, evidence-backed list⟩.
 > Anti-overfit: NO scenario literals in any prompt; a domain heuristic → `knowledge/…` via loadKnowledge.
-> Fix at the lowest rung; verify via a FRESH run (a system-space change needs a fresh boot) or `--resume`;
-> after any instruct.md edit run its content tests. Update handoff + ledger every step. Signal FIX READY (files
-> + rung + before/after evidence) — main is the SOLE committer; do NOT commit/push. Self-checkpoint at ~350k of
-> your own context (your output_file is a stub; main can't watch your size): update handoff+ledger, tell main,
-> stop.
+> SIGNAL PROTOCOL — no source edit or commit on your own authority: (1) run + judge freely, no OK needed;
+> (2) once you've diagnosed a failing step, REPORT to `main` and STOP — attribution, proposed fix-ladder rung,
+> exact files, the proposed change — and WAIT for an explicit OK (or redirect); (3) only after OK, apply the
+> fix at the lowest rung and verify via a FRESH run (a system-space change needs a fresh boot) or `--resume`;
+> launch `run-scenario.mjs` via the Bash tool's `run_in_background: true` — NEVER `nohup … & disown` (it has
+> died silently in this env with no crash evidence); after any instruct.md edit run its content tests;
+> (4) REPORT the evidence as FIX READY (files + rung + before/after evidence) and STOP — main is the SOLE
+> committer; do NOT commit/push. Update handoff + ledger every step. Self-checkpoint at ~200k of your own
+> context (your output_file is a stub; main can't watch your size): update handoff+ledger, tell main, stop.
 
 ## 11. Gotchas learned the hard way (keep these alive in state)
 
@@ -222,6 +280,18 @@ notifications; you're re-invoked when harness-tracked work finishes, so don't po
   FRESH runs over `--resume` for a heavy scenario; fix at `restart_pod` needs a `session.ts` claim.
 - **`run-scenario.mjs --help` is a footgun** — with no id it defaults to launching a run; never invoke it bare.
 - **Don't blind-`pkill run-scenario`** — you'll kill a sibling lane's server. Kill by `runs/<n>/runner.pid`.
+- **An empty `subagents:[]` in `statusline.json` (or a lane missing from it) does NOT mean idle or dead** — it
+  only means that lane hasn't written its transcript within the last ~300s, which is NORMAL while it
+  blocking-polls a local scenario run. Lane liveness/stops come from the task-notification model, not from
+  `subagents` being empty.
+- **Launch background processes via the Bash tool's `run_in_background: true` — never `nohup … & disown`.**
+  The latter has died silently in this env with no crash evidence; this applies to your own launches and to
+  the instructions you hand lanes for launching scenario runs.
+- **100% of fan-out is Sonnet, always** — every lane and every short-lived helper/reviewer subagent spawns
+  with `model: sonnet`; only the orchestrator itself is Opus.
+- **No fan-out subagent edits or commits on its own authority** — investigate → decide → REPORT + STOP → await
+  your explicit OK → apply + verify → REPORT + STOP → you commit. Running/judging needs no OK; any source edit
+  or commit does.
 - **Migrations use ALL fixtures** — wire every `attach`; `--plan`'s fixture audit must be all ✅.
 - Keep `orchestrator-state.json` current after every commit/spawn/finding — it is the ONLY thing a fresh you
   has. Record the coordination split, the parent-repo config/flow, open findings, and the per-lane resume points.
