@@ -335,6 +335,58 @@ describe('system-architect synthesis setup', () => {
     expect(architect).not.toMatch(/const\s+built\s*=\s*t\.data/);
     expect(writeAgent).toMatch(/must NOT delegate to the newly-created agent during\nsetup/i);
   });
+
+  /**
+   * Live E5 failure (06-tanzania step 5): a synthesized specialist's systemPrompt told it to
+   * `display(...)` its answer on BOTH the covered and not-covered branches, never
+   * `currentTask.resolve(...)`. A delegate() only auto-captures the SPECIFICALLY-REQUESTED action's
+   * own tasklist result (delegate.ts's `capturableTasklists`) — so when the covered:false branch
+   * fell back to a SECOND tasklist (research_and_store) and displayed ITS answer, that second
+   * tasklist's result was never captured; the caller (THING) received back the FIRST tasklist's
+   * stale `{covered:false}` miss and, believing the specialist never had the fact, redundantly
+   * re-researched the exact same question itself. The fix: the generated systemPrompt must
+   * `currentTask.resolve(...)` on EVERY branch, carrying the REAL (post-research, on the
+   * covered:false path) answer — never `display()`, which the caller never sees.
+   */
+  it('a synthesized specialist resolves its answer on every branch, never displays it', () => {
+    const writeAgent = readFileSync(
+      join(SYSTEM_SPACES, 'system-architect', 'tasklists', 'synthesize_and_run', '04-write_agent.md'),
+      'utf8',
+    );
+
+    // The generated systemPrompt string itself (not the architect's own file prose) must carry
+    // currentTask.resolve on both the covered:true and covered:false paths, and must not tell the
+    // agent to display() its answer at all (display never reaches the delegate's caller).
+    const systemPromptMatch = writeAgent.match(/systemPrompt:\s*"([\s\S]*?)",\s*\n\s*knowledge:/);
+    expect(systemPromptMatch, 'expected a systemPrompt: "..." field before knowledge:').toBeTruthy();
+    const systemPrompt = systemPromptMatch![1];
+
+    expect(systemPrompt).toMatch(/covered is true,\s*currentTask\.resolve\(/i);
+    expect(systemPrompt).toMatch(/covered is FALSE.*currentTask\.resolve\(/is);
+    expect(systemPrompt).not.toMatch(/display\(/);
+  });
+
+  /**
+   * Same live failure, second half: even once resolve() fixed the same-turn drop, the space's OWN
+   * generated "store" task (research_and_store) hardcoded the knowledge field from whichever field
+   * happened to be built FIRST (`written[0]`) — regardless of what the CALLER actually asked it to
+   * store under. Confirmed on disk: three separate Zanzibar insurance findings all landed under
+   * `zanzibar/accommodations/*` (the space's first-built field, about Stone Town lodging), never
+   * under insurance/logistics — a later "remind me" question then missed again and re-searched the
+   * web a second time. The fix: trust the caller's `domain`/`field` (as the systemPrompt already
+   * passes) when given; fall back to the scaffolded default ONLY when the caller passed neither.
+   */
+  it('a synthesized specialist stores a researched finding under the CALLER-named field, not a hardcoded one', () => {
+    const writeTasks = readFileSync(
+      join(SYSTEM_SPACES, 'system-architect', 'tasklists', 'synthesize_and_run', '05-write_tasks.md'),
+      'utf8',
+    );
+
+    expect(writeTasks).toMatch(/typeof domain === 'string' && domain/);
+    expect(writeTasks).toMatch(/typeof field === 'string' && field/);
+    // writeKnowledge must be called with the derived targets, never the raw scaffolded dom/fld directly.
+    expect(writeTasks).toMatch(/writeKnowledge\(targetDomain,\s*targetField,/);
+  });
 });
 
 describe('no system-space prompt is overfitted to a scenario', () => {

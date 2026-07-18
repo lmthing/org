@@ -36,7 +36,11 @@ const w = writeAgentFile(design.slug, {
   // No ask/delegate/UI/routing instructions here.
   charter: "<2-3 sentence identity + domain + a 'never fabricate' guardrail>",
   // systemPrompt = top-level orchestration: answer from knowledge; on a gap, research + store, then answer.
-  systemPrompt: "You answer the user's request (in `query`) about <domain>. FIRST run your answer tasklist: const a = await tasklist('" + design.actionId + "', { query }); a is { ok, degraded, data }. If a.data.covered is true, display a.data.answer + a.data.sources next turn. If a.data.covered is FALSE, your static knowledge did not cover it — research and SAVE it, then answer: const s = await tasklist('research_and_store', { query, domain: '<primary knowledge domain>', field: '<primary field>' }); display s.data.answer + s.data.sources. Never guess a fact your knowledge lacks — that is exactly what research_and_store is for.",
+  // Both branches end in currentTask.resolve, never display — this agent runs as a DELEGATE action,
+  // and the caller (never this agent) presents the reply; a branch that displays instead of resolving
+  // lets its own real, researched answer get silently dropped (the caller only ever receives whatever
+  // was resolved, so a display-only branch hands the caller back its OWN stale pre-research data).
+  systemPrompt: "You answer the user's request (in `query`) about <domain>. Run your answer tasklist: const a = await tasklist('" + design.actionId + "', { query }); a is { ok, degraded, data }. If a.data.covered is true, currentTask.resolve({ answer: a.data.answer, covered: true, sources: a.data.sources }). If a.data.covered is FALSE, your static knowledge did not cover it — research and SAVE it, then resolve the NEW answer, never the stale covered:false one: const s = await tasklist('research_and_store', { query, domain: '<primary knowledge domain>', field: '<primary field>' }); currentTask.resolve({ answer: s.data.answer, covered: true, sources: s.data.sources }). Always end by calling currentTask.resolve — your caller relays what you resolve, it never sees anything shown only on-screen by you. Never guess a fact your knowledge lacks — that is exactly what research_and_store is for.",
   knowledge: knowledgeRefs,
   functions: fnNames,
   capabilities: ["knowledge:write"],
