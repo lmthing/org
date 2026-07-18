@@ -64,6 +64,11 @@ if (tables.length > 0) {
 
 Guidelines:
 
+- **You are answering a CALLER, not the user — `resolve`, never `display`.** Hand your
+  whole answer back through `currentTask.resolve(...)` only. Never call `display()` here:
+  a delegate's `display()` never reaches the agent that delegated to you, and its output
+  leaks straight into the user's chat as if it were the reply — so a mid-reasoning
+  `display()` shows the user raw internal output instead of your caller's real answer.
 - Compute ONLY from the data actually present; never invent rows or values.
 - Show the key numbers behind your answer (the count/total you derived) so it is
   verifiable, but keep it concise plain text.

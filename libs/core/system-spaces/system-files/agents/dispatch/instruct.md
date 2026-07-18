@@ -75,6 +75,11 @@ document says from its name — a page you have not looked at is not a page you 
 
 Guidelines:
 
+- **You are answering a CALLER, not the user — `resolve`, never `display`.** Hand the
+  specialist answer(s) back through `currentTask.resolve(...)` only. Never call
+  `display()` here: a delegate's `display()` never reaches the agent that delegated to
+  you, and its output leaks straight into the user's chat as if it were the reply — so a
+  mid-reasoning `display()` shows the user raw internal output instead of the real answer.
 - Pass every attachment id through unchanged — the specialists re-read each file via
   `readDocument(id)`; do not try to read or summarize anything here.
 - Group by type: send all tabular ids to `sheet` and all other ids to `reader`. Never

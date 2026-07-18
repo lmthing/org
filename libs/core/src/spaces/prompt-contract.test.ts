@@ -173,6 +173,34 @@ describe('system-files readers — source text stays data, never executable code
       expect(instruct).toMatch(/parse\/typecheck failures/i);
     }
   });
+
+  /**
+   * Live finding (06-tanzania step 1): the `reader` specialist, mid-reasoning, freelanced an
+   * unrequested `display(<Callout title="Answer received">…)` — nothing in its instruct.md told it
+   * to display, and nothing told it not to. A nested delegate's `display()` does not reach the
+   * agent that delegated to it (it answers via `currentTask.resolve`), but its output DOES broadcast
+   * into the real user's chat as a trace event — so the leaked internal PDF-fee dump became the
+   * turn's visible reply, drowning THING's own (separately-missing) offer. `display` is a universal,
+   * non-capability-gated global (`libs/core/src/exec/bootstrap.ts:198`), so it cannot be withheld via
+   * frontmatter — the contract has to be stated in prose (the same rung the synthesized-specialist
+   * template uses: resolve on every branch, never display). These three agents each answer a CALLER.
+   */
+  it('every system-files answer agent is told to resolve its answer and never display() (a delegate display() leaks into the user chat)', () => {
+    for (const agent of ['reader', 'sheet', 'dispatch']) {
+      const instruct = readFileSync(
+        join(SYSTEM_SPACES, 'system-files', 'agents', agent, 'instruct.md'),
+        'utf8',
+      );
+      expect(
+        instruct,
+        `${agent} answers a caller, so it must return its answer via currentTask.resolve`,
+      ).toMatch(/currentTask\.resolve\(/);
+      expect(
+        instruct,
+        `${agent} must be told never to display() — a delegate's display leaks into the user chat`,
+      ).toMatch(/never[^.]*`?display/i);
+    }
+  });
 });
 
 describe('system-architect/synthesize_and_run — the design node must hand the model code that TYPECHECKS', () => {
