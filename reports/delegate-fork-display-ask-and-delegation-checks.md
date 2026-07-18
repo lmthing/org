@@ -302,6 +302,131 @@ retiring it.
 
 ---
 
+## Proposal 4 — context overload on a heavy task node: split into smaller tasks + `forEach`, and read upstream inputs partially via `inspect()`
+
+### Problem
+
+This is the `08-small-shop` / `plan_pages` failure written up in the `d87c76d` ledger
+(`scenarios/campaign/attempts/08-small-shop.md`), generalized. On a large app build, the
+required `10-plan_pages` node throws (leading hypothesis: a per-fork budget trip), which
+aborts the **whole** 12-node `build_live_project` tasklist and silently salvages to
+`pageCount:0, built:false, status:done`. Two structural facts make it happen, both now
+confirmed in code:
+
+1. **Upstream outputs are threaded into a downstream node RAW and uncapped — twice.**
+   `getUpstreamOutputs` (`libs/core/src/tasklist/orchestrator.ts:127-135`) returns each
+   dependency's full accumulated output *by reference*. That map reaches the node's VM
+   through `forkWithMeta` (`orchestrator.ts:255-263`) and is then materialized **two
+   ways, both verbatim**:
+   - **bound as live variables** — `seedVars: { ...task.seed, ...task.upstreamOutputs }`
+     at `fork/fork.ts:361`, and
+   - **also fully `JSON.stringify`'d into the first user message** — `inputSummary` at
+     `fork.ts:373-380` (the per-entry dump is `JSON.stringify(v)` at `fork.ts:375`, **no
+     length cap, no `serialize()`/`strCap`, no preview**).
+
+   So `10-plan_pages` (`dependsOn: [plan_app, plan_endpoints, plan_components,
+   user_stories]`) is force-fed the *entire* endpoint list + component list, in the
+   prompt, up front. This is a **prompt cost that scales with the app, not the task** —
+   exactly the ledger's diagnosis. The orchestrator keeps upstream raw *by design*
+   (`orchestrator.ts:66-71`), so there's no size guard anywhere on this path.
+
+2. **A required non-`forEach` node has no fallback.** When such a node throws,
+   `runTasklist` aborts with `Required task "X" failed: …` (`orchestrator.ts:293-306`) —
+   there is no tasklist-level salvage for it. Contrast a `forEach` node, which gets, *per
+   item*: **input scoping** (each item fork receives only `{ item, index }`, not the whole
+   array — `runFork({ item, index })` at `orchestrator.ts:300`, seed merge at
+   `orchestrator.ts:258`), **3 retries** (`FOREACH_ITEM_ATTEMPTS = 3`,
+   `orchestrator.ts:14`, loop at `orchestrator.ts:298-307`), and **per-item salvage** to a
+   schema-valid placeholder (`orchestrator.ts:308-311`). A monolithic required node gets
+   *none* of these.
+
+### Proposed change — two complementary levers
+
+**(4a) When a node's context would overload, decompose it into a planning node + a
+`forEach` expansion.** Instead of one `plan_pages` fork that receives the full endpoint +
+component lists and plans *every* page in one context, split it:
+
+- a **lightweight planner** node that only decides the *set* of pages — one terse spec per
+  page (route, title, which endpoints/components it needs) — producing an **array**; then
+- a **`forEach` expansion** node (`forEach: plan_pages.pages`) where each item fork plans
+  *one* page. Each fork is automatically scoped to just its own item
+  (`orchestrator.ts:300`), so its context is O(one page), not O(whole app); it inherits the
+  3-retries + per-item-salvage resilience for free; and one heavy page can degrade to a
+  placeholder instead of aborting the entire build.
+
+This is the same "openable-early / freeform-grow" principle the ledger proposed, but
+generalized into a **repeatable strategy**: *a required node whose cost scales with app
+size should be a planner that emits a list + a `forEach` that expands the list.* It
+converts a fragile monolith into a resilient fan-out using machinery that already exists —
+no new runtime primitive. (The minimal-index-page fallback from the ledger is a special
+case: split "finalize" so a bare openable page lands right after `05-implement_tables`.)
+
+**(4b) Thread upstream inputs as a *preview*, and let a node read them partially via
+`inspect()`.** Splitting alone isn't enough if each item fork still gets the full upstream
+blob force-fed in its prompt. The runtime already has the exact mechanism to fix this — it
+just isn't applied on the upstream path:
+
+- The top-level VARIABLES block the model reads is **previewed** — `serialize()` with
+  `DEFAULT_STR_CAP = 200` (`libs/core/src/globals/serialize.ts:15-17`), emitted per
+  variable at `context/variables.ts:12` (turn loop `eval/turn-loop.ts:788`).
+- The documented **escape hatch** to expand any previewed value is
+  `inspect([var, { slice: [a, b] }])` — `applyQuery`'s string/array slice
+  (`globals/inspect.ts:91-97`), formatted with the wide `INSPECT_STR_CAP = 20_000`
+  (`inspect.ts:189-190, 200`).
+- Crucially, **`inspect()` is a universal, non-capability-gated global injected into every
+  child VM** — including every fork / `forEach`-item / delegate task node
+  (`exec/bootstrap.ts:203`, unconditional, inside `createChildVM`).
+
+So the change is: on the upstream-threading path, replace the raw full `JSON.stringify(v)`
+dump (`fork.ts:375`, and the seed dump at `fork.ts:368-372`) with a **`serialize()`
+preview** (strCap 200, same as the VARIABLES block). The full value **stays bound as the
+live variable** (`fork.ts:361` unchanged), so the node can pull exactly the slice it needs
+on demand via `inspect(['plan_endpoints', { slice: [...] }])`. A downstream planner then
+reads *what it needs* instead of swallowing *everything* up front — attacking the cost
+driver directly, while the variable remains complete and typed (`fork.ts:392-400`). This
+is fully compatible with the "upstream stays RAW" design intent (`orchestrator.ts:66-71`):
+the *variable value* is still raw and complete; only the *prompt echo* becomes a preview.
+
+### Why this shape
+
+- **4a** turns "a required node throws → whole tasklist dies → silent `pageCount:0`" into
+  "one item degrades → placeholder → build still opens," reusing `forEach`'s existing
+  retry+salvage+scoping. It's the structural fallback the required-node path lacks.
+- **4b** removes the reason the node overloads in the first place, using the
+  preview+`inspect` model the runtime *already* trusts for the top-level VARIABLES block —
+  no new concept for the model to learn, and `inspect()` is already in scope in every fork.
+- Together they address both failure axes the ledger separated: the **structural
+  fragility** (no fallback) and the **cost driver** (raw upstream blobs).
+
+### Touch points
+
+- `libs/core/src/fork/fork.ts:368-380` — swap `JSON.stringify(v)` in `seedSummary` /
+  `inputSummary` for a `serialize(v)` preview; keep `seedVars` (`fork.ts:361`) raw.
+- `libs/core/src/tasklist/orchestrator.ts:127-135, 255-263` — no change needed for 4b (the
+  variable stays raw); for 4a, this is authoring-side (split the tasklist DAG), not a
+  runtime change — the `forEach` machinery (`orchestrator.ts:284-315`) already supports it.
+- System-space authoring: `system-appbuilder`'s `build_live_project` tasklist — restructure
+  `plan_pages`/`implement_pages` into planner + `forEach`, and land a minimal openable page
+  early.
+- Docs: `org/docs/runtime/fork-and-tasklists.md` (required-vs-forEach failure semantics;
+  the preview-upstream + `inspect` contract).
+
+### Open questions
+
+- **Preview vs. schema.** A downstream planner often needs the *shape* of upstream data,
+  not every row. The DTS overlay (`fork.ts:392-400`) already gives it the typed shape for
+  free; the preview only needs to convey enough sample content to disambiguate. Confirm 200
+  chars is enough signal, or add a per-dependency `previewCap`.
+- **When to auto-split vs. author-split.** 4a is currently an authoring pattern. Worth
+  asking whether the orchestrator should *detect* a repeatedly-budget-tripping required
+  node and surface a "split me" diagnostic, rather than relying on authors to anticipate
+  it.
+- **Confirm the actual throw first.** The ledger's next probe still stands: grep
+  `runs/11/step-02.full.json` for `"Required task"` / `BudgetExceededError` / `forkDepth`
+  to verify it's a budget trip inside `plan_pages`, before committing to the fix shape.
+
+---
+
 ## Summary
 
 | # | Change | Core seam | Enforced by |
@@ -309,8 +434,12 @@ retiring it.
 | 1 | Child `display()` → renders to the **caller**, **string-only** | `globals/display.ts:11-25`, `bootstrap.ts:198` | typecheck (string DTS) + retargeted render |
 | 2 | `ask()` available to **delegate/fork**, addresses the **parent caller** | new profile flag `capability.ts:66-124`, new yield leg `yield-router.ts:179`, `bootstrap.ts:197/375` | capability profile + new router case |
 | 3 | Rethink the **prose delegation lint** — derive from typecheck/frontmatter, not a prose grep | `spaces/load.ts:488-489` | (advisory only; real gate `target-match.ts:177` unchanged) |
+| 4 | **Context overload on a heavy node** → split into planner + `forEach`; thread upstream as a **preview** + read partially via `inspect()` | `fork.ts:368-380` (preview), `orchestrator.ts:284-315` (`forEach`), `inspect.ts` / `bootstrap.ts:203` | `forEach` retry+salvage + typecheck-typed variables |
 
-Common thread: **children should talk to their _caller_, not the real user; capability
-facts should be structural, not prose-inferred.** Proposals 1 and 2 give a child a
-proper, caller-scoped output (`display`) and question (`ask`) channel; proposal 3 removes
-the last place a capability is guessed from English.
+Common threads: **children should talk to their _caller_, not the real user; capability
+facts should be structural, not prose-inferred; and heavy context should be _scoped and
+pulled on demand_, not force-fed.** Proposals 1 and 2 give a child a proper, caller-scoped
+output (`display`) and question (`ask`) channel; proposal 3 removes the last place a
+capability is guessed from English; proposal 4 turns a monolithic, no-fallback node into a
+resilient `forEach` fan-out and replaces raw upstream force-feeding with the
+preview+`inspect()` model the runtime already trusts.
