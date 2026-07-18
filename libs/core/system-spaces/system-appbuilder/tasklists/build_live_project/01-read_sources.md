@@ -33,6 +33,13 @@ the sources were parsed and each one is a downstream table row/field:
   <the structured source>." Never describe it merely as "a photo of the X already listed" or fold its
   count into an existing source's total — that phrasing is exactly what makes a downstream planner
   treat it as decoration for a row that already exists and drop its own row entirely.
+- **A document that turns out UNRELATED to the primary subject is still transcribed, never discarded.**
+  Its own concrete values (a total, a reference number, a date, names on it) are proof its text was
+  actually read, so they still belong in the brief and must still reach the live project — as a row in
+  whatever table fits its shape (a receipt/invoice table if one exists or is warranted) or, at minimum,
+  a clearly-labelled fact noting what it is and its own figures. IRRELEVANCE to the main subject is a
+  reason to flag it as unrelated/placeholder, never a reason to say "discard" or omit its values — a
+  brief that reasons its way to dropping a document's own numbers is the same failure as inventing one.
 
 Do not research the web. Emit exactly one statement:
 
