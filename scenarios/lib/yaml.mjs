@@ -4,9 +4,12 @@
  * The harness is zero-dependency and Node ships no YAML parser, so this covers exactly the shape the
  * scenario format uses (see ../campaign/scenario-spec.md) and nothing
  * more: nested maps, lists (scalar items AND map items), `>` (folded) / `|` (literal) block scalars,
- * inline flow arrays `[a, b]`, single/double-quoted and bare scalars, and `#`-comment / blank lines.
- * It is deliberately NOT a general YAML implementation — anchors, multi-doc, nested flow, etc. are
- * out of scope. Author scenarios in the documented style and this parses them faithfully.
+ * inline flow arrays `[a, b]` AND inline flow maps `{ k: v, k2: { nested: … } }` (arbitrarily
+ * nested — `inbound.body: { message: { …, chat: { id: '…' } } }` and `mutate_schema.change:
+ * { column: amount, type: string }` both need this), single/double-quoted and bare scalars, and
+ * `#`-comment / blank lines. It is deliberately NOT a general YAML implementation — anchors,
+ * multi-doc, flow scalars containing an unescaped `,`/`}`/`]`, etc. are out of scope. Author
+ * scenarios in the documented style and this parses them faithfully.
  */
 
 export function parseYaml(text) {
@@ -82,7 +85,7 @@ function parseMap(state, indent) {
 function parseScalarOrBlock(state, valueStr, childIndent) {
   const v = valueStr.trim();
   if (v === '>' || v === '|') return parseBlockScalar(state, v === '|', childIndent);
-  if (v.startsWith('[')) return parseFlowArray(v);
+  if (v.startsWith('[') || v.startsWith('{')) return parseFlowValueAt(v, 0).value;
   return scalar(v);
 }
 
@@ -113,10 +116,76 @@ function parseBlockScalar(state, literal, minIndent) {
   return res.trim();
 }
 
-function parseFlowArray(v) {
-  const inner = v.replace(/^\[/, '').replace(/\]$/, '').trim();
-  if (!inner) return [];
-  return inner.split(',').map((s) => scalar(s.trim()));
+/** Skip spaces at/after index `i`. */
+function skipWs(str, i) {
+  while (i < str.length && str[i] === ' ') i++;
+  return i;
+}
+
+/** Parse a quoted scalar (`str[i]` is the opening quote). No escape handling — matches this
+ * parser's existing block-style `scalar()` quoting, which is the documented subset. */
+function parseQuotedAt(str, i) {
+  const q = str[i];
+  let j = i + 1;
+  while (j < str.length && str[j] !== q) j++;
+  return { value: str.slice(i + 1, j), next: Math.min(j + 1, str.length) };
+}
+
+/** Parse ONE inline flow value — a `{...}` map, a `[...]` array, a quoted string, or a bare
+ * scalar — starting at `str[i]`. Returns `{ value, next }`, `next` being the index just past what
+ * was consumed (so callers can keep walking the same line for `, nextKey: ...` / a closing bracket).
+ * Nests arbitrarily (a map value can itself be `{...}`/`[...]`), which is what a real
+ * `inbound.body: { message: { …, chat: { id: '…' } } }` shape requires. */
+function parseFlowValueAt(str, i) {
+  i = skipWs(str, i);
+  const c = str[i];
+  if (c === '{') return parseFlowMapAt(str, i);
+  if (c === '[') return parseFlowArrayAt(str, i);
+  if (c === '"' || c === "'") return parseQuotedAt(str, i);
+  let j = i;
+  while (j < str.length && str[j] !== ',' && str[j] !== '}' && str[j] !== ']') j++;
+  return { value: scalar(str.slice(i, j).trim()), next: j };
+}
+
+function parseFlowArrayAt(str, i) {
+  let j = skipWs(str, i + 1); // past '['
+  const arr = [];
+  if (str[j] === ']') return { value: arr, next: j + 1 };
+  for (;;) {
+    const { value, next } = parseFlowValueAt(str, j);
+    arr.push(value);
+    j = skipWs(str, next);
+    if (str[j] === ',') { j = skipWs(str, j + 1); continue; }
+    break;
+  }
+  return { value: arr, next: str[j] === ']' ? j + 1 : j };
+}
+
+function parseFlowMapAt(str, i) {
+  let j = skipWs(str, i + 1); // past '{'
+  const obj = {};
+  if (str[j] === '}') return { value: obj, next: j + 1 };
+  for (;;) {
+    j = skipWs(str, j);
+    let key;
+    if (str[j] === '"' || str[j] === "'") {
+      const r = parseQuotedAt(str, j);
+      key = r.value;
+      j = r.next;
+    } else {
+      const k = str.indexOf(':', j);
+      key = str.slice(j, k).trim();
+      j = k;
+    }
+    j = skipWs(str, j);
+    if (str[j] === ':') j = skipWs(str, j + 1);
+    const { value, next } = parseFlowValueAt(str, j);
+    obj[key] = value;
+    j = skipWs(str, next);
+    if (str[j] === ',') { j = skipWs(str, j + 1); continue; }
+    break;
+  }
+  return { value: obj, next: str[j] === '}' ? j + 1 : j };
 }
 
 /** True when a list item `rest` is a `key: ...` map entry (vs a bare scalar). */
