@@ -119,7 +119,9 @@ describe('shipped system spaces load + validate', () => {
     // The split heuristic lives in loadable knowledge (user-thing/knowledge/organizing/split/*),
     // not inline: the node loads the menu then the per-domain guide and splits by SUBJECT-vs-DATA.
     expect(organize['inventory']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split'\)/);
-    expect(organize['inventory']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split', ?'<domain>'\)/);
+    // per-domain guide: a 3-arg load with a placeholder for the specific guide name — assert the
+    // contract, not the exact placeholder token (it reads '<exact-name-from-the-line>' since e2571b0).
+    expect(organize['inventory']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split', ?'<[^']+>'\)/);
     expect(organize['inventory']!.instruction).toMatch(/subjects? vs\.? .*records|record type|app DATA/i);
     // inventory → consolidate_scopes (dedup the over-split scopes) → build_specialist fans out over
     // the CONSOLIDATED set, so duplicate/overlapping specialists don't waste the build budget.
