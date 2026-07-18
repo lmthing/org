@@ -311,9 +311,9 @@ describe('user-thing supplied-material organization', () => {
     );
 
     expect(thing).toMatch(/organize_material[\s\S]{0,700}?\.then\(\(organized\) => display/);
-    expect(thing).toMatch(/Do NOT delegate to the automator or architect, call the\n   organizer again, or continue authoring/i);
+    expect(thing).toMatch(/Do NOT delegate to the automator or architect, call the organizer again,\s+or continue authoring/i);
     expect(thing).toMatch(/Its envelope is the proof of the workflow's outcome/i);
-    expect(thing).toMatch(/do not inspect the project or try to\n   validate individual builder results afterwards/i);
+    expect(thing).toMatch(/do not inspect the project or try to\s+validate individual builder results afterwards/i);
     expect(thing).toMatch(/values do not persist into a later statement/i);
   });
 });

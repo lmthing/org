@@ -156,7 +156,7 @@ describe('system spaces', () => {
     expect(instruct).toMatch(/Do NOT delegate to the automator or architect/);
 
     // 3. The organizer, not a second free-form path, creates every distinct scope.
-    expect(instruct).toMatch(/inventories independently\s+owned scopes, builds every grounded specialist/);
+    expect(instruct).toMatch(/inventories independently\s+owned scopes,\s+builds every grounded specialist/);
     expect(instruct).toMatch(/hands the complete source to the live-project\s+builder/);
 
     // 4. A turn may never end on a raw artifact (the "24872" failure).
