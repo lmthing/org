@@ -1253,6 +1253,52 @@ describe('harness — session.resume()', () => {
     await expect(session.resume(empty, 'go')).rejects.toThrow(/No snapshot/);
     session.dispose();
   });
+
+  it('collapses a heavy restored history past the threshold, mirroring continue() (live bug: resume() never called maybeSummarizeHistory)', async () => {
+    // A snapshot taken after a long-running session (e.g. a big app build) can carry
+    // a large persisted history. resume() restores it VERBATIM before this fix — the
+    // very next turn (a pod restart replaying the user's next message) would flood
+    // context unbounded. Build a snapshot heavy enough to cross a low maxHistoryTurns
+    // threshold and confirm resume() collapses it BEFORE the turn loop runs, exactly
+    // like continue() does.
+    const spaceDir = await makeSpace(); // agent slug "main"
+    const snapDir = await mkdtemp(join(tmpdir(), 'lmthing-snap-resume-summ-'));
+    tmpDirs.push(snapDir);
+    const history: Array<{ role: 'user' | 'assistant'; content: string; blockType: 'normal' }> = [];
+    for (let i = 0; i < 6; i++) {
+      history.push({ role: 'user', content: `Task: t${i}`, blockType: 'normal' });
+      history.push({ role: 'assistant', content: `const x${i} = ${i};\ndisplay(x${i});`, blockType: 'normal' });
+    }
+    await saveSnapshot(snapDir, {
+      sessionId: 'sess-resume-summ',
+      agentSlug: 'main',
+      spaceDir,
+      history,
+      scope: {},
+      createdAt: Date.now(),
+    });
+
+    const logs: string[] = [];
+    const prompts: StreamOpts[] = [];
+    const host: RenderHost = { display: () => {}, ask: async () => undefined, log: (m) => logs.push(m) };
+    const m = createMockStreamFn((o) => { prompts.push(o); return ''; });
+    const session = new Session(
+      { spaceDir, agentSlug: 'main', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [], maxHistoryTurns: 2 },
+      { streamFn: m },
+    );
+    await session.resume(snapDir, 'now continue after restart');
+    session.dispose();
+
+    // The restored 12-message history + the new message crosses maxHistoryTurns*2 (4) —
+    // resume() must collapse it BEFORE building the turn-loop prompt, same as continue().
+    expect(logs.some((l) => l.includes('history summarized'))).toBe(true);
+    const msgs = prompts[0]!.messages;
+    expect(msgs.some((mm) => mm.content.includes('[CONTEXT SUMMARY]'))).toBe(true);
+    expect(msgs.some((mm) => mm.content.includes('Task: t0'))).toBe(false); // earliest turn folded away
+    // resume()'s own contract (unrelated to this fix) still holds: the new message is
+    // appended verbatim, unwrapped, as the last message.
+    expect(msgs.at(-1)!.content).toBe('now continue after restart');
+  });
 });
 
 // ---------------------------------------------------------------------------

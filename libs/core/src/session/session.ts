@@ -496,6 +496,15 @@ export class Session {
       });
     }
 
+    // Context economy: collapse old turns into a summary once the RESTORED history
+    // (plus this new message) grows large — mirrors continue()'s call (see its
+    // comment). Without this, resuming from a snapshot taken after a heavy turn
+    // (e.g. a big app build) replays the ENTIRE persisted history verbatim into the
+    // next turn's context, uncapped — the exact shape of a pod-restart hitting a
+    // session whose last snapshot was multi-hundred-thousand tokens: the next turn
+    // floods context and can stall/evict the session before it does any work.
+    await this.maybeSummarizeHistory();
+
     // Resolve direct deps + canDelegateTo policy and build system block
     this.delegatePolicy = evaluateDelegatePolicy(agent.canDelegateTo, 'agent');
     const directDeps = resolveDirectDeps(this.space, agent.canDelegateTo);
