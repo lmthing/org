@@ -52,8 +52,15 @@ describe('applyQuery', () => {
     expect(applyQuery([1, 2], { sample: 10 })).toEqual([1, 2]); // n >= length → all
   });
 
-  it('leaves non-array values untouched for array-only queries', () => {
-    expect(applyQuery('plain', { slice: [0, 2] })).toBe('plain'); // slice only applies to arrays
+  it('slice: also returns the [start, end) window of a STRING — the escape hatch a model reaches for after serialize() tells it to "inspect([var, {slice:[0,10]}]) to expand" a truncated document/delegate-result string, not just an array', () => {
+    expect(applyQuery('hello world', { slice: [0, 5] })).toBe('hello');
+    expect(applyQuery('x'.repeat(5000), { slice: [200, 400] })).toBe('x'.repeat(200));
+  });
+
+  it('leaves non-array, non-string values untouched for slice', () => {
+    expect(applyQuery(42, { slice: [0, 2] })).toBe(42);
+    expect(applyQuery({ a: 1 }, { slice: [0, 2] })).toEqual({ a: 1 });
+    expect(applyQuery(null, { slice: [0, 2] })).toBe(null);
   });
 });
 
@@ -68,5 +75,26 @@ describe('formatInspectResult', () => {
   it('includes the queried path in the key when present', () => {
     const out = formatInspectResult([{ value: 7, query: { path: 'a.b' } }]);
     expect(out).toContain('inspected[0].a.b: 7');
+  });
+
+  it('does NOT re-apply the standard 200-char preview cap to a big string — inspect() exists precisely to show more than the preview did', () => {
+    const big = 'y'.repeat(5000);
+    const out = formatInspectResult([{ value: big }]);
+    expect(out).not.toContain('chars total'); // under the 20k inspect cap: shown in full, untruncated
+    expect(out).toContain(big);
+  });
+
+  it('a slice narrowed to a small window is shown in full, not re-truncated by the outer byteCap', () => {
+    const big = 'z'.repeat(50_000);
+    const sliced = applyQuery(big, { slice: [0, 3000] }) as string;
+    const out = formatInspectResult([{ value: sliced, query: { slice: [0, 3000] } }]);
+    expect(out).toContain('z'.repeat(3000));
+    expect(out).not.toContain('chars total');
+  });
+
+  it('still bounds a pathological outlier past the inspect cap, with a total-length marker', () => {
+    const huge = 'w'.repeat(30_000);
+    const out = formatInspectResult([{ value: huge }]);
+    expect(out).toContain('chars total');
   });
 });

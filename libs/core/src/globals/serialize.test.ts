@@ -52,6 +52,24 @@ describe('serialize', () => {
     expect(result).not.toContain('"g"');
   });
 
+  it('respects a wider strCap — a caller (inspect()) explicitly asking to see more of a string than the default 200-char preview', () => {
+    const long = 'a'.repeat(5000);
+    const capped = serialize(long); // default strCap: 200
+    expect(capped).toContain('chars total');
+    expect(capped.length).toBeLessThan(300);
+
+    const wide = serialize(long, { strCap: 20_000, byteCap: 24_000 });
+    expect(wide).not.toContain('chars total');
+    expect(wide).toContain(long);
+  });
+
+  it('threads strCap through nested arrays/objects, not just a top-level string', () => {
+    const nested = { note: 'b'.repeat(1000) };
+    const wide = serialize(nested, { strCap: 20_000, byteCap: 24_000 });
+    expect(wide).not.toContain('chars total');
+    expect(wide).toContain('b'.repeat(1000));
+  });
+
   it('respects byteCap', () => {
     const big = { data: 'x'.repeat(5000) };
     const result = serialize(big, { byteCap: 100 });

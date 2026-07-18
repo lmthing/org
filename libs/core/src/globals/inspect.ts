@@ -84,9 +84,16 @@ export function applyQuery(value: unknown, query: InspectQuery): unknown {
     result = applyFilter(result as unknown[], query.filter);
   }
 
-  // slice: [start, end]
-  if (query.slice && Array.isArray(result)) {
-    result = (result as unknown[]).slice(query.slice[0], query.slice[1]);
+  // slice: [start, end) — of an array's items, or (just as often, since this is the
+  // documented escape hatch from serialize()'s own "chars total" truncation message) a
+  // window of a STRING's characters. A big delegate result, a document body, or an API
+  // response is exactly as likely to be a giant string as a giant array.
+  if (query.slice) {
+    if (Array.isArray(result)) {
+      result = (result as unknown[]).slice(query.slice[0], query.slice[1]);
+    } else if (typeof result === 'string') {
+      result = (result as string).slice(query.slice[0], query.slice[1]);
+    }
   }
 
   // sample: random sample of n items
@@ -174,6 +181,15 @@ function parseLiteral(s: string): unknown {
 }
 
 /**
+ * `inspect()`'s whole purpose is to let the model see more of a value than the standard
+ * 200-char VARIABLES preview shows — so its OWN output must not re-apply that same cap.
+ * Bounded (not unlimited) purely as a pathological-outlier guard, matching the precedent
+ * set by `formatLoadKnowledgeContents`/`formatReadDocuments` in `eval/turn-loop.ts`.
+ */
+const INSPECT_STR_CAP = 20_000;
+const INSPECT_BYTE_CAP = 24_000;
+
+/**
  * Format inspect results as a VARIABLES block string.
  */
 export function formatInspectResult(args: Array<{ value: unknown; query?: InspectQuery }>): string {
@@ -181,7 +197,7 @@ export function formatInspectResult(args: Array<{ value: unknown; query?: Inspec
   for (let i = 0; i < args.length; i++) {
     const { value, query } = args[i]!;
     const key = query?.path ? `inspected[${i}].${query.path}` : `inspected[${i}]`;
-    lines.push(`${key}: ${serialize(value)}`);
+    lines.push(`${key}: ${serialize(value, { strCap: INSPECT_STR_CAP, byteCap: INSPECT_BYTE_CAP })}`);
   }
   return lines.join('\n');
 }
