@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createVM } from '../sandbox/quickjs.js';
-import { runTurnLoop, formatReadDocuments } from './turn-loop.js';
+import { runTurnLoop, formatReadDocuments, formatLoadKnowledgeContents } from './turn-loop.js';
 import { MessageHistory } from '../context/history.js';
 import { LIBRARY_DTS } from '../typecheck/library-dts.js';
 import type { RenderHost } from '../session/types.js';
@@ -41,6 +41,42 @@ describe('formatReadDocuments', () => {
     expect(formatReadDocuments([], [])).toBe('');
     expect(formatReadDocuments([ydoc()], [{ ok: false, attachmentId: 'x', mediaType: '', kind: 'unsupported', error: 'nope' }])).toBe('');
     expect(formatReadDocuments([yother()], [{ ok: true, kind: 'text', text: 'not a doc yield' }])).toBe('');
+  });
+});
+
+describe('formatLoadKnowledgeContents', () => {
+  const yk = (path = 'domain/field/opt'): YieldRequest =>
+    ({ kind: 'loadKnowledge', args: [path], deferred: { resolve() {}, reject() {} }, vmPromiseHandle: undefined } as unknown as YieldRequest);
+  const yother = (): YieldRequest =>
+    ({ kind: 'fetch', args: [], deferred: { resolve() {}, reject() {} }, vmPromiseHandle: undefined } as unknown as YieldRequest);
+
+  it('surfaces the FULL text of a loaded knowledge file (bypassing the 200-char preview cap)', () => {
+    const longText = 'B'.repeat(5000) + ' END';
+    const out = formatLoadKnowledgeContents([yk('organizing/split/household')], [longText]);
+    expect(out).toContain('KNOWLEDGE CONTENTS');
+    expect(out).toContain('organizing/split/household');
+    expect(out).toContain(longText); // whole text present, not truncated to 200 chars
+    expect(out).not.toContain('chars total');
+  });
+
+  it('reads the `body` off a { frontmatter, body } resolution (a knowledge file WITH frontmatter)', () => {
+    const longText = 'C'.repeat(1000) + ' TAIL';
+    const out = formatLoadKnowledgeContents([yk()], [{ frontmatter: { description: 'x' }, body: longText }]);
+    expect(out).toContain(longText);
+  });
+
+  it('truncates a pathologically large file with a marked total length', () => {
+    const longText = 'D'.repeat(30_000);
+    const out = formatLoadKnowledgeContents([yk()], [longText]);
+    expect(out).toContain('truncated');
+    expect(out).toContain('30000 chars total');
+    expect(out.length).toBeLessThan(longText.length);
+  });
+
+  it('returns empty string for no loadKnowledge yields, non-text resolutions, and non-matching kinds', () => {
+    expect(formatLoadKnowledgeContents([], [])).toBe('');
+    expect(formatLoadKnowledgeContents([yk()], [undefined])).toBe('');
+    expect(formatLoadKnowledgeContents([yother()], ['some text'])).toBe('');
   });
 });
 

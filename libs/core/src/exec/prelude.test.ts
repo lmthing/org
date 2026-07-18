@@ -160,6 +160,40 @@ describe('fork prelude', () => {
     expect(preludeResolved.length).toBe(1);
   });
 
+  it('surfaces the FULL text of a knowledge file loaded during the prelude in the model’s first prompt', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'prelude-lk-full-'));
+    tmpDirs.push(dir);
+    const knowledgeDir = join(dir, 'knowledge', 'domain', 'field');
+    await mkdir(knowledgeDir, { recursive: true });
+    const longText = 'guide '.repeat(500) + 'UNIQUE_KNOWLEDGE_TAIL';
+    await writeFile(join(knowledgeDir, 'opt.md'), longText, 'utf8');
+
+    const prompts: string[] = [];
+    const engine = new ForkEngine({
+      maxConcurrentForks: 2,
+      parentHistory: [],
+      parentSpaceDir: dir,
+      parentAgentSlug: 'test',
+      renderHost: silentHost,
+      streamFn: createMockStreamFn((o: StreamOpts) => {
+        prompts.push(o.messages.map((m) => m.content).join('\n---\n'));
+        return 'currentTask.resolve({ ok: true });';
+      }),
+    });
+
+    await engine.fork<{ ok: boolean }>({
+      instruction: 'use the pre-loaded knowledge',
+      output: { ok: 'boolean' },
+      prelude: "const k = await loadKnowledge('domain', 'field', 'opt.md');",
+    });
+
+    // The KNOWLEDGE CONTENTS block carries the FULL text (not the truncated variable preview).
+    expect(prompts[0]).toContain('KNOWLEDGE CONTENTS');
+    const kBlock = prompts[0]!.slice(prompts[0]!.indexOf('KNOWLEDGE CONTENTS'));
+    expect(kBlock).toContain('UNIQUE_KNOWLEDGE_TAIL'); // the full tail reached the block
+    expect(kBlock).not.toContain('chars total'); // the block itself is not the truncated preview
+  });
+
   it('binds a NESTED yield (space function internally awaiting fetch) via bindYieldResults\' getVar preference', async () => {
     // `fetcher` mirrors webSearch/webFetch: a space function whose own awaited
     // fetch() is the actual yield. Binding the raw resolved value would bind the

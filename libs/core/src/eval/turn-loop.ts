@@ -65,6 +65,58 @@ export function formatReadDocuments(yields: YieldRequest[], resolvedValues: unkn
   );
 }
 
+/** Duck-typed extraction of the text a `loadKnowledge` yield resolved to: either the
+ *  raw markdown string (no frontmatter), or the `{ frontmatter, body }` shape's `body`
+ *  (`globals/load-knowledge.ts#parseKnowledgeContent`). Anything else (a failed/undefined
+ *  resolution) is not knowledge text. */
+function knowledgeTextOf(v: unknown): string | undefined {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object' && v !== null && typeof (v as { body?: unknown }).body === 'string') {
+    return (v as { body: string }).body;
+  }
+  return undefined;
+}
+
+/** Purely defensive — real knowledge files are short, hand/model-authored markdown
+ *  (typically well under 2 KB); this only bounds a pathological outlier so it can't
+ *  balloon a prompt. */
+const LOAD_KNOWLEDGE_MAX_CHARS = 20_000;
+
+/**
+ * Build a KNOWLEDGE CONTENTS block from any `loadKnowledge` yields that resolved to
+ * text, so the model reads the FULL knowledge file rather than the 200-char VARIABLES
+ * preview of the bound result — the same gap {@link formatReadDocuments} already closes
+ * for `readDocument`, never extended to `loadKnowledge`. A loaded knowledge file is
+ * exactly as much "the thing to ground an answer in" as an uploaded document: past the
+ * 200-char cap the model was silently blind to the rest and free-invented it instead of
+ * quoting it (confirmed failure modes: a classification guide's decisive exception
+ * clause landing past char 200 was never read at all, and a grounded-answer task
+ * fabricated facts a longer knowledge file held in full, in both cases citing the file
+ * as its "source"). Returns '' when no loadKnowledge yield resolved to text. `yields[i]`
+ * aligns with `resolvedValues[i]`.
+ */
+export function formatLoadKnowledgeContents(yields: YieldRequest[], resolvedValues: unknown[]): string {
+  const entries: Array<{ label: string; text: string }> = [];
+  for (let i = 0; i < yields.length; i++) {
+    if (yields[i]?.kind !== 'loadKnowledge') continue;
+    const text = knowledgeTextOf(resolvedValues[i]);
+    if (text === undefined) continue;
+    const label = (yields[i]?.args?.[0] as string | undefined) ?? `knowledge[${i}]`;
+    const truncated = text.length > LOAD_KNOWLEDGE_MAX_CHARS;
+    const body = truncated
+      ? `${text.slice(0, LOAD_KNOWLEDGE_MAX_CHARS)}\n… truncated (${text.length} chars total)`
+      : text;
+    entries.push({ label, text: body });
+  }
+  if (entries.length === 0) return '';
+  const blocks = entries.map((e) => `--- ${e.label} ---\n${e.text}`);
+  return (
+    'KNOWLEDGE CONTENTS (full text of the knowledge file(s) you just loaded — answer from THIS, ' +
+    'not from the truncated preview in VARIABLES above):\n\n' +
+    blocks.join('\n\n')
+  );
+}
+
 /** Every suffix (length ≥ 2) of a fence language tag. A bare fence tag is left
  *  behind when the stream splits the opening ``` from its language across chunks,
  *  so the per-chunk fence filter strips the ``` but not the tag. The split can land
@@ -749,6 +801,11 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       // capped host-side at READ_DOCUMENT_MAX_CHARS).
       const documentBlock = formatReadDocuments(yields, resolvedValues);
       if (documentBlock) varContent += `\n\n${documentBlock}`;
+      // loadKnowledge results deserve the identical treatment — see formatLoadKnowledgeContents'
+      // doc comment: the same 200-char VARIABLES cap silently hid everything past the opening
+      // of any real knowledge file, and the model free-invented what it couldn't see.
+      const knowledgeBlock = formatLoadKnowledgeContents(yields, resolvedValues);
+      if (knowledgeBlock) varContent += `\n\n${knowledgeBlock}`;
       const budgetWarning = deps.budget?.nearLimitWarning();
       if (budgetWarning) varContent += `\n\n${budgetWarning}`;
       history.append({ role: 'user', content: varContent, blockType: 'variables' });

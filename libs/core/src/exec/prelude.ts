@@ -5,7 +5,7 @@ import type { RenderHost } from '../session/types.js';
 import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
 import { emitVariables, extractBindingNames, extractBindingPattern } from '../context/variables.js';
-import { bindYieldResults, formatReadDocuments } from '../eval/turn-loop.js';
+import { bindYieldResults, formatReadDocuments, formatLoadKnowledgeContents } from '../eval/turn-loop.js';
 import { serialize } from '../globals/serialize.js';
 import { BudgetExceededError, type Budget } from '../eval/budget.js';
 import { NULL_TRACER } from '../sandbox/trace.js';
@@ -119,6 +119,8 @@ export async function runPrelude(opts: RunPreludeOpts): Promise<PreludeResult> {
   const vars: Record<string, unknown> = {};
   const documentYields: YieldRequest[] = [];
   const documentResults: unknown[] = [];
+  const knowledgeYields: YieldRequest[] = [];
+  const knowledgeResults: unknown[] = [];
   const failedNames: string[] = [];
   const failures: PreludeFailure[] = [];
 
@@ -216,6 +218,10 @@ export async function runPrelude(opts: RunPreludeOpts): Promise<PreludeResult> {
             documentYields.push(yields[j]!);
             documentResults.push(resolvedValues[j]);
           }
+          if (yields[j]?.kind === 'loadKnowledge') {
+            knowledgeYields.push(yields[j]!);
+            knowledgeResults.push(resolvedValues[j]);
+          }
         }
 
         if (round === 0) {
@@ -269,6 +275,8 @@ export async function runPrelude(opts: RunPreludeOpts): Promise<PreludeResult> {
       emitVariables(vars, context || undefined);
     const documentBlock = formatReadDocuments(documentYields, documentResults);
     if (documentBlock) variablesBlock += `\n\n${documentBlock}`;
+    const knowledgeBlock = formatLoadKnowledgeContents(knowledgeYields, knowledgeResults);
+    if (knowledgeBlock) variablesBlock += `\n\n${knowledgeBlock}`;
     if (failures.length > 0) {
       variablesBlock += '\n\n' + failures
         .map((f) => {
