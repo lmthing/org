@@ -59,6 +59,35 @@ describe('loadKnowledgeFile', () => {
     expect(out.body).toBe('Field overview.');
   });
 
+  // A domain/field MENU load (`loadKnowledge(domain, field)` → `<field>/index.md`) is
+  // augmented with the REAL option slugs on disk, in full, so the model never guesses an
+  // option name the hand-written menu forgot to list (or that no longer exists).
+  it('a domain/field menu (index.md) load appends the real option list from disk, in full', async () => {
+    const fieldDir = join(dir, 'split');
+    mkdirSync(fieldDir, { recursive: true });
+    writeFileSync(join(fieldDir, 'index.md'), '# Split guide\n\nPick a domain.', 'utf8');
+    writeFileSync(join(fieldDir, 'trips.md'), 'Trips.', 'utf8');
+    writeFileSync(join(fieldDir, 'pets.md'), 'Pets.', 'utf8');
+    writeFileSync(join(fieldDir, 'default.md'), 'Default.', 'utf8');
+    const out = await loadKnowledgeFile(fieldDir);
+    expect(typeof out).toBe('string');
+    const text = out as string;
+    expect(text).toContain('Pick a domain.');           // the index body, in full
+    expect(text).toContain('- default');                // real slugs, sorted, index excluded
+    expect(text).toContain('- pets');
+    expect(text).toContain('- trips');
+    expect(text).not.toContain('- index');
+  });
+
+  it('a direct option file load is returned verbatim — NOT augmented with a sibling option list', async () => {
+    const fieldDir = join(dir, 'split2');
+    mkdirSync(fieldDir, { recursive: true });
+    writeFileSync(join(fieldDir, 'trips.md'), 'Trips split guide.', 'utf8');
+    writeFileSync(join(fieldDir, 'pets.md'), 'Pets split guide.', 'utf8');
+    const out = await loadKnowledgeFile(join(fieldDir, 'trips'));
+    expect(out).toBe('Trips split guide.'); // exact — no option list appended to an option file
+  });
+
   it('still throws for a path that resolves to nothing', async () => {
     await expect(loadKnowledgeFile(join(dir, 'nope'))).rejects.toThrow(/cannot read/);
   });

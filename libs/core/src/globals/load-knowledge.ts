@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import type { YieldRequest } from '../eval/yield.js';
@@ -94,17 +94,53 @@ export async function loadKnowledgeFileFromDirs(baseDirs: string[], pathParts: s
 
 /** Try `<path>.md` then `<path>/index.md` for an extension-less knowledge path.
  *  Returns the file content, or undefined when neither exists. Only invoked after a
- *  direct read miss, so a path that already ends in `.md` never reaches here. */
+ *  direct read miss, so a path that already ends in `.md` never reaches here.
+ *
+ *  A `<path>/index.md` hit is a domain/field MENU load — `loadKnowledge(domain, field)`
+ *  with no option. The menu's own hand-written guide list can drift from the files
+ *  actually on disk, and an agent that then picks an option that does NOT exist silently
+ *  falls back to a default guide. So a menu load is augmented with the REAL option list
+ *  read from the directory: index.md AND the actual option slugs, in full, so the model
+ *  always sees the exact names it can pass as a third argument. A direct `<path>.md`
+ *  option file is returned verbatim — no sibling list. */
 async function readWithKnowledgeFallback(filePath: string): Promise<string | undefined> {
   if (filePath.endsWith('.md')) return undefined;
-  for (const candidate of [`${filePath}.md`, join(filePath, 'index.md')]) {
-    try {
-      return await readFile(candidate, 'utf8');
-    } catch {
-      // try the next candidate
-    }
+  // `<path>.md` — a direct option/overview file, returned verbatim.
+  try {
+    return await readFile(`${filePath}.md`, 'utf8');
+  } catch {
+    // not an option file — fall through to the directory menu
   }
-  return undefined;
+  // `<path>/index.md` — a domain/field menu; append the real option list from disk.
+  try {
+    const index = await readFile(join(filePath, 'index.md'), 'utf8');
+    const options = await listKnowledgeOptions(filePath);
+    return options ? `${index.trimEnd()}\n\n${options}` : index;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The real option slugs in a knowledge field/domain directory (every `<slug>.md`
+ *  except `index.md`), as a menu block the model reads to pick an EXACT third argument.
+ *  Returns undefined when the directory has no option files beyond its index. */
+async function listKnowledgeOptions(dir: string): Promise<string | undefined> {
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return undefined;
+  }
+  const slugs = names
+    .filter((n) => n.endsWith('.md') && n !== 'index.md')
+    .map((n) => n.slice(0, -'.md'.length))
+    .sort();
+  if (slugs.length === 0) return undefined;
+  return (
+    'Available options (load ONE in full with a third argument — ' +
+    "loadKnowledge(<domain>, <field>, '<option>') — using an EXACT name from this list):\n" +
+    slugs.map((s) => `- ${s}`).join('\n')
+  );
 }
 
 /**
