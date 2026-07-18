@@ -153,6 +153,55 @@ describe('user-thing/thing — the ingest turn must ASK, and must not leak its p
     ).toMatch(/delegates resolve to plain text/i);
     expect(src).toMatch(/Do NOT inspect them as objects/i);
   });
+
+  /**
+   * Live finding (09-home-renovation, 2/2 runs): "oh — don't let us forget, Astrid's only ever on
+   * site Tuesday to Thursday, and we're away the first week of September." never triggered the
+   * required clarifying ask, even though the file already had a "don't forget X" ambiguity rule and
+   * `ask()` worked elsewhere in the SAME runs (a consent card a few steps later). Two things about
+   * that sentence sat outside the rule's literal phrasing: the rememberer ("us"), not the forgotten
+   * thing, is the grammatical subject ("don't let X slip" reads X as subject; "don't let us forget"
+   * doesn't), and it carries TWO facts in the same breath rather than one bare item — so the model
+   * read the trailing facts as having answered the mechanism question. The rule must generalize past
+   * one fixed sentence shape and say explicitly that riding facts don't resolve the ambiguity.
+   */
+  it('the "keep this front of mind" ambiguity covers the rememberer-as-subject phrasing and multi-fact statements', () => {
+    const src = instruct();
+    expect(
+      src,
+      'the ambiguity rule must not be scoped to one grammatical subject ("X slip") — "don\'t let ME/US forget" is the same ambiguity with a different subject',
+    ).toMatch(/don't let me\/us forget/i);
+    expect(
+      src,
+      'the rule must say a sentence carrying several concrete facts alongside the "don\'t forget" phrase is still ambiguous — the facts are not an answer to the mechanism question',
+    ).toMatch(/one fact or several|riding along|does not (answer|resolve|settle)/i);
+  });
+});
+
+describe('user-thing/thing — capability honesty for real-world actions', () => {
+  const instruct = () => readFileSync(join(SYSTEM_SPACES, 'user-thing', 'agents', 'thing', 'instruct.md'), 'utf8');
+
+  /**
+   * Live finding (09-home-renovation, "pay Stefanos €4,450"): NONDETERMINISTIC across identical
+   * runs — one run fabricated "paid in full, Stefanos is square" with zero send/pay yield ever made
+   * (a bare capability-honesty violation: THING holds no payment capability at all, per its own
+   * frontmatter, so no call could possibly have done this); a second, independent run correctly
+   * refused in Greek and offered to record the debt instead. The file had NO explicit rule against
+   * narrating an unattempted real-world action as completed — refusal worked only when the model
+   * happened to reason its way there unprompted. This pins the discipline down as an explicit rule
+   * so it stops being a coin flip.
+   */
+  it('tells THING never to narrate a real-world action as done unless a call actually performed it', () => {
+    const src = instruct();
+    expect(
+      src,
+      'THING must be told that a real-world action (payment, sending a message, booking/cancelling) is only done if an actual call performed it',
+    ).toMatch(/real-world action as done|only if you invoked|actually made did it/i);
+    expect(
+      src,
+      'a missing capability must be handled with an honest refusal plus an alternative it CAN do, never a fabricated "done"',
+    ).toMatch(/fabrication|never a confident|honest reply is a refusal/i);
+  });
 });
 
 describe('system-files readers — source text stays data, never executable code', () => {
