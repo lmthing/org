@@ -255,6 +255,106 @@ OUTER_TASK\n`, 'utf8');
     await session.dispose();
   });
 
+  it('resolves attachmentIds into a real MediaPart for a delegate() issued FROM a task fork', async () => {
+    // Session.runDelegate (the top-level ctx.runDelegate) resolves delegateOpts.attachmentIds
+    // via pendingAttachments before calling delegate/delegate.ts. Session.runDelegateForFork —
+    // the delegateRunner wired into EVERY ForkEngine, i.e. what a fork/tasklist-issued
+    // delegate() call actually goes through — used to skip that resolution entirely and pass
+    // delegateOpts straight through, so a vision delegate issued from inside a tasklist task
+    // silently never received the image (delegate.ts only reads the RESOLVED
+    // opts.attachments/opts.attachmentTexts, never raw attachmentIds). This asserts the
+    // fork-issued delegate's own turn actually receives the image as a MediaPart on its first
+    // user message — i.e. it went through the SAME resolution as the top-level path.
+    const childDir = await mkdtemp(join(tmpdir(), 'lmthing-fork-delegate-attachment-child-'));
+    tmpDirs.push(childDir);
+    const childAgent = join(childDir, 'agents', 'vision', 'instruct.md');
+    await mkdir(dirname(childAgent), { recursive: true });
+    await writeFile(childAgent, 'You are a vision agent.\n', 'utf8');
+
+    const parentDir = await mkdtemp(join(tmpdir(), 'lmthing-fork-delegate-attachment-parent-'));
+    tmpDirs.push(parentDir);
+    const parentAgent = join(parentDir, 'agents', 'main', 'instruct.md');
+    const parentTask = join(parentDir, 'tasklists', 'outer', '01-delegate.md');
+    await mkdir(dirname(parentAgent), { recursive: true });
+    await mkdir(dirname(parentTask), { recursive: true });
+    await writeFile(parentAgent, `---
+canDelegateTo:
+  - ${JSON.stringify(`${childDir}/vision`)}
+---
+
+Delegate the work.\n`, 'utf8');
+    await writeFile(parentTask, `---
+id: delegate
+goal: true
+role: general
+output:
+  content: string
+canDelegateTo:
+  - ${JSON.stringify(`${childDir}/vision`)}
+---
+
+OUTER_TASK\n`, 'utf8');
+
+    let delegateAttachments: unknown;
+    const lastUser = (opts: StreamOpts) => [...opts.messages].reverse().find((m) => m.role === 'user');
+    const streamFn = createMockStreamFn((opts: StreamOpts) => {
+      const user = lastUser(opts);
+      const content = user?.content ?? '';
+      // The vision delegate's own first turn (model-driven — no action id, hence
+      // delegate.ts's no-action framing line): capture whatever attachments rode
+      // on its user message, then resolve.
+      if (content.includes('delegated this request')) {
+        delegateAttachments = user?.attachments;
+        return `currentTask.resolve('seen');`;
+      }
+      // The parent tasklist's task-fork node: issue the delegate() call itself —
+      // this is what routes through Session.runDelegateForFork, the leg under test.
+      if (content.includes('OUTER_TASK')) {
+        return `currentTask.resolve({ content: String(await delegate(${JSON.stringify(childDir)}, 'vision', { query: 'describe this image', attachmentIds: ['up1'] })) });`;
+      }
+      // The top-level agent's turn: run the tasklist and surface its result.
+      if (content.includes('User request:')) {
+        return `display('content=' + String((await tasklist('outer') as { data: { content: string } }).data.content));`;
+      }
+      return '';
+    });
+
+    const displays: unknown[] = [];
+    const session = new Session(
+      {
+        spaceDir: parentDir,
+        agentSlug: 'default',
+        modelAlias: 'mock',
+        renderHost: { display: (value) => displays.push(value), ask: async () => undefined, log: () => {} },
+        systemSpaceDirs: [childDir],
+      },
+      { streamFn },
+    );
+
+    await session.start({
+      text: 'look at this image',
+      attachments: [
+        {
+          id: 'up1',
+          kind: 'image',
+          mediaType: 'image/png',
+          filename: 'p.png',
+          part: { type: 'image', image: 'data:image/png;base64,AAAA', mediaType: 'image/png' },
+        },
+      ],
+    });
+
+    expect(displays).toContain('content=seen');
+    // The bug: before the fix this stayed `undefined` because runDelegateForFork
+    // dropped attachmentIds on the floor instead of resolving them.
+    expect(delegateAttachments).toBeDefined();
+    expect(delegateAttachments).toEqual([
+      { type: 'image', image: 'data:image/png;base64,AAAA', mediaType: 'image/png' },
+    ]);
+
+    await session.dispose();
+  });
+
   it('a MISMATCHED attachment id throws a named, actionable error instead of silently dropping it', async () => {
     // If the delegating agent mistypes even one character of a long id it had to
     // retype by hand from the attachment note, the old behavior silently dropped the

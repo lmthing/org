@@ -742,6 +742,65 @@ export class Session {
   }
 
   /**
+   * Resolve `delegateOpts.attachmentIds` (the raw ids a delegating agent copied from
+   * the attachment note — see `attachmentNote()` above) to this turn's real attachments:
+   * a MediaPart per image (`attachments`) and a `readDocument(id)`-pointer note per file
+   * (`attachmentTexts`). Shared by BOTH delegate entry points — the top-level `runDelegate`
+   * yield context below AND `runDelegateForFork` (every fork/tasklist-issued `delegate()`
+   * call) — so a task-issued delegate carrying an image doesn't silently arrive at
+   * `delegate/delegate.ts` empty (the two paths used to resolve this independently, and
+   * only the top-level one actually did). Throws a retryable, actionable error when an id
+   * doesn't match any pending attachment — see the historical note inline below.
+   */
+  private resolveDelegateAttachments(
+    packageName: string,
+    agentName: string,
+    delegateOpts: unknown,
+  ): { attachments?: MediaPart[]; attachmentTexts?: string[] } {
+    const reqIds = (delegateOpts as import('../globals/delegate.js').DelegateOpts | undefined)?.attachmentIds;
+    const resolved: UserAttachment[] = [];
+    const unresolvedIds: string[] = [];
+    for (const aid of reqIds ?? []) {
+      const found = this.pendingAttachments.get(aid);
+      if (found) resolved.push(found);
+      else unresolvedIds.push(aid);
+    }
+    if (unresolvedIds.length > 0) {
+      // A mismatched id used to be silently DROPPED here — the specialist then
+      // received zero attachment info, indistinguishable from "nothing was ever
+      // attached". The delegating agent must retype each id by hand from the
+      // attachment note (attachmentNote() above puts the raw id in prose; there
+      // is no copy-by-reference), so a single mistyped character loses the file
+      // with no signal to self-correct. Throwing a named, actionable error (the
+      // same "actionable, retryable" shape as formatDelegateDenial) instead lets
+      // a retry fix it: the model sees exactly which id didn't match and what the
+      // real ids are.
+      const known = [...this.pendingAttachments.values()]
+        .map((a) => `${a.filename ?? a.mediaType} = "${a.id}"`)
+        .join(', ');
+      throw new Error(
+        `delegate("${packageName}", "${agentName}") was passed attachmentIds that don't match any ` +
+          `attachment in this conversation: ${unresolvedIds.map((i) => `"${i}"`).join(', ')}. ` +
+          `Copy the id EXACTLY, character for character, from the attachment list` +
+          `${known ? ` — known attachments: ${known}.` : ' (there are no attachments in this conversation).'}`,
+      );
+    }
+    const attachments = resolved.map((a) => a.part).filter((p): p is MediaPart => p !== undefined);
+    // File attachments (no image part): tell the specialist to read them with
+    // readDocument(id) rather than inlining server-extracted text.
+    const attachmentTexts = resolved
+      .filter((a) => !a.part)
+      .map(
+        (a) =>
+          `[Attached file id="${a.id}" type="${a.mediaType}"${a.filename ? ` name="${a.filename}"` : ''} — call \`await readDocument("${a.id}")\` to read it.]`,
+      );
+    return {
+      ...(attachments.length ? { attachments } : {}),
+      ...(attachmentTexts.length ? { attachmentTexts } : {}),
+    };
+  }
+
+  /**
    * Run a delegate requested by a TASK FORK (gated by that task's `canDelegateTo`). Mirrors the
    * runtime-context `runDelegate` but sources the space from `this.space` and forwards the task's
    * `allowedActions`, one recursion level deep (bounded by runDelegate's maxDepth).
@@ -767,6 +826,13 @@ export class Session {
       if (sysSpace.packageName) spaceMap.set(sysSpace.packageName, sysSpace);
     }
     for (const [key, dynSpace] of this.dynamicSpaces) spaceMap.set(key, dynSpace);
+    // Resolve any attachmentIds in delegateOpts (e.g. a tasklist task delegating an
+    // image to system-vision) to real attachments — see resolveDelegateAttachments.
+    const { attachments, attachmentTexts } = this.resolveDelegateAttachments(
+      packageName,
+      agentName,
+      delegateOpts,
+    );
     const pctx = await this.delegateProjectContext();
     return runDelegate({
       packageName,
@@ -774,6 +840,8 @@ export class Session {
       action,
       allowedActions,
       delegateOpts: delegateOpts as import('../globals/delegate.js').DelegateOpts | undefined,
+      ...(attachments ? { attachments } : {}),
+      ...(attachmentTexts ? { attachmentTexts } : {}),
       registry: new DelegateRegistry(spaceMap),
       renderHost: this.opts.renderHost,
       streamFn: this.deps.streamFn,
@@ -1062,46 +1130,13 @@ export class Session {
         const registry = new DelegateRegistry(spaceMap);
         // Resolve any attachment ids the delegating agent passed (e.g. THING
         // handing an image to system-vision, or a file to system-files) to the
-        // parts/notes held for this turn. Images ride as a MediaPart; files carry
-        // NO bytes/text — the specialist fetches their content itself via
-        // readDocument(id), so we hand it an id-anchored note instead.
-        const reqIds = (delegateOpts as import('../globals/delegate.js').DelegateOpts | undefined)?.attachmentIds;
-        const resolved: UserAttachment[] = [];
-        const unresolvedIds: string[] = [];
-        for (const aid of reqIds ?? []) {
-          const found = this.pendingAttachments.get(aid);
-          if (found) resolved.push(found);
-          else unresolvedIds.push(aid);
-        }
-        if (unresolvedIds.length > 0) {
-          // A mismatched id used to be silently DROPPED here — the specialist then
-          // received zero attachment info, indistinguishable from "nothing was ever
-          // attached". The delegating agent must retype each id by hand from the
-          // attachment note (attachmentNote() above puts the raw id in prose; there
-          // is no copy-by-reference), so a single mistyped character loses the file
-          // with no signal to self-correct. Throwing a named, actionable error (the
-          // same "actionable, retryable" shape as formatDelegateDenial) instead lets
-          // a retry fix it: the model sees exactly which id didn't match and what the
-          // real ids are.
-          const known = [...this.pendingAttachments.values()]
-            .map((a) => `${a.filename ?? a.mediaType} = "${a.id}"`)
-            .join(', ');
-          throw new Error(
-            `delegate("${packageName}", "${agentName}") was passed attachmentIds that don't match any ` +
-              `attachment in this conversation: ${unresolvedIds.map((i) => `"${i}"`).join(', ')}. ` +
-              `Copy the id EXACTLY, character for character, from the attachment list` +
-              `${known ? ` — known attachments: ${known}.` : ' (there are no attachments in this conversation).'}`,
-          );
-        }
-        const attachments = resolved.map((a) => a.part).filter((p): p is MediaPart => p !== undefined);
-        // File attachments (no image part): tell the specialist to read them with
-        // readDocument(id) rather than inlining server-extracted text.
-        const attachmentTexts = resolved
-          .filter((a) => !a.part)
-          .map(
-            (a) =>
-              `[Attached file id="${a.id}" type="${a.mediaType}"${a.filename ? ` name="${a.filename}"` : ''} — call \`await readDocument("${a.id}")\` to read it.]`,
-          );
+        // parts/notes held for this turn — see resolveDelegateAttachments (shared
+        // with runDelegateForFork so a fork/tasklist delegate resolves the same way).
+        const { attachments, attachmentTexts } = this.resolveDelegateAttachments(
+          packageName,
+          agentName,
+          delegateOpts,
+        );
         const pctx = await this.delegateProjectContext();
         return runDelegate({
           packageName,
@@ -1109,8 +1144,8 @@ export class Session {
           action,
           allowedActions,
           delegateOpts,
-          ...(attachments.length ? { attachments } : {}),
-          ...(attachmentTexts.length ? { attachmentTexts } : {}),
+          ...(attachments ? { attachments } : {}),
+          ...(attachmentTexts ? { attachmentTexts } : {}),
           registry,
           renderHost: this.opts.renderHost,
           streamFn: this.deps.streamFn,
