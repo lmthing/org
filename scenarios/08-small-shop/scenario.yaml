@@ -84,7 +84,7 @@ steps:
   - say: "Yes please."
     expect:
       - A DEDICATED PROJECT IS CREATED FOR THE SHOP — starting from `user`, THING calls createProject and a NEW project appears; everything below is built INTO it, never into the shared `user` project
-      - AT LEAST FOUR PER-TOPIC SPACES exist, including catalog, suppliers, sales, and stock (materials) — not one generic catch-all space
+      - SEVERAL DISTINCT ADVICE-TOPIC SPECIALIST SPACES exist, never one generic catch-all — the hard invariant is that materials/stock is NEVER merged with products/catalog into one undifferentiated inventory blob (they are different real-world subjects: what to source vs. what to sell). Materials and suppliers MAY share one specialist (sourcing questions naturally span both, as later steps' clay-supplier research shows) or split further — the exact count is a legitimate "aim small" judgment call, not a fixed number. Products and sales are DB DATA, not specialists, when nothing in this arc asks pricing/sales advice — no space needs to be literally named "catalog" or "sales"
       - "the CSV lands in real rows: CLAY-W12 (Sibelco NL) as a materials row, Mori Mug/MM-01 as a products row, and sale ORD-1043 as a sales row"
       - "the workbook's three tabs each reach state, not just the first one: THERMO-K26 marked out of stock in materials, Keramikos Amsterdam under contract CTR-KMA-2026-04 as a supplier, and wholesale order WHL-0007 for Bloem & Vaas Rotterdam sitting OVERDUE in sales"
       - the kintsugi-mended bowl in product-photo.jpg (blue glaze, gold seams, blossom motif) lands as a NEW products row — it isn't in her CSV/xlsx catalog, so this has to be vision's own description, not a paraphrase of an existing SKU
