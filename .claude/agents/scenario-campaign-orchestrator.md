@@ -144,30 +144,44 @@ The parent frequently has unrelated CI `[skip ci]` image-tag commits ahead of yo
 lane is mid-editing — `--autostash` rebases cleanly around both. NEVER commit a WIP `org/docs` file you didn't
 write; leave it for its lane. If you fall behind on the pointer, it's fine — reconcile in a later commit.
 
-## 7. Usage guard — the shared 5h budget (strict 90%) - except if instructed to ignore usage
+## 7. Usage + per-subagent-size guard — via `statusline.json` and a Monitor-`until`
 
-`~/.claude/statusline-capture.sh` writes `~/.claude/lmthing-orchestrator/usage.json = { five_hour:
-{used_percentage, resets_at}, … }` on every render (each of your turns is a render). A `Monitor` task also
-pushes usage bands (88/90) + heartbeats. Every heartbeat, read `five_hour.used_percentage`:
+`~/.claude/statusline-command.sh` writes **`~/.claude/statusline.json`** on every render:
+`{ updated_at, five_hour:{used_percentage,resets_at}, seven_day, context_pct, cost_usd,
+subagents:[{id,tokens,age_s}] }`. Each `subagents[].tokens` is that RUNNING subagent's current **context
+size** — the last transcript turn's `input + cache_read + cache_creation`, i.e. how full its window is;
+the list holds only transcripts written in the last ~300s (idle/parked agents drop off). `cost_usd` is the
+aggregate session spend; the status engine has **no** per-subagent field, which is why the export derives
+`tokens` from each subagent's own transcript.
 
-- **≥ 90:** SendMessage every live lane to ensure `handoff.md` + latest snapshot are current, then stop; stop
-  launching lanes; record `paused` + `resets_at` in state. Then **chain wakeups**: `ScheduleWakeup` clamps to
-  ≤3600s but a 5h reset can be further out — schedule ~1800s, and on each wake re-check `usage.json.resets_at`;
-  reschedule until it's past, then resume (re-spawn each paused lane FRESH from its handoff — §8). Lanes are
-  stopped during the pause, so usage stays flat and the tiny wakeup turns never lock out.
-- **~88 (band):** nudge live lanes to refresh their `handoff.md` now, so a pause costs minimal work.
-- Bounded concurrency (≤3 lanes) keeps how far usage climbs between heartbeats small. Cadence: react to
-  Monitor heartbeats + subagent-completion notifications; add a `ScheduleWakeup` only if you have a specific
-  external thing to wait on (don't poll for harness-tracked work — you're re-invoked when it finishes).
+Run a **`Monitor` with an `until` condition** that polls `statusline.json` and fires when EITHER:
+
+- **any `subagents[].tokens ≥ 300000`** → that subagent's context is nearly full: **gracefully shut it
+  down**. SendMessage it to checkpoint (its `handoff.md` + attempt ledger current, a fresh snapshot taken),
+  wait for its confirmation, let it stop, then spawn a FRESH Sonnet continuation seeded from that handoff
+  (§8). NEVER let a lane run past ~300k — output degrades and a hard context-limit crash loses the tail (a
+  real failure this session: a lane died mid-turn at the limit). **This 300k rule ALWAYS applies**, even when
+  usage-pausing is disabled — it protects the *work*, not the budget.
+- **`five_hour.used_percentage ≥ 90`** → the shared 5h budget is nearly spent: SendMessage every live lane to
+  checkpoint + stop, stop launching lanes, record `paused` + `resets_at` in state, and resume FRESH from each
+  handoff once the window resets (`resets_at`). **Skip this branch entirely when the human says to ignore
+  usage** ("don't self-pause", "drive through the reset") — then keep driving to green / the 300k
+  self-checkpoint. Record the active directive in state so a fresh you honours it.
+
+Re-arm the Monitor after each firing. Cadence otherwise = Monitor heartbeats + subagent-completion
+notifications; you're re-invoked when harness-tracked work finishes, so don't poll for it.
 
 ## 8. Handoffs, liveness, and fresh continuations
 
-- **`output_file` is a ~145-byte STUB — it does NOT grow with the transcript.** The runbook's byte-size
-  400k-handoff trigger is therefore **inoperative**; do NOT `stat` it for progress. Instead, lanes
-  **self-checkpoint** at ~350-380k of their OWN context (they've done so reliably), update handoff + ledger,
-  SendMessage you, and stop. True liveness = `pgrep -af run-scenario` + freshest
+- **A subagent's `output_file` is a SYMLINK to its real transcript** (`<session>/subagents/agent-<id>.jsonl`),
+  NOT a stub — `stat -c%s` on the link returns ~145 (the link path length), which is why the byte-size
+  handoff watch looked broken. Use **`statusline.json`'s per-subagent `tokens`** (§7) for a live context size,
+  or `stat -L -c%s` / `tail -c 65536 <transcript> | grep '"usage"' | tail -1` for the last turn's
+  input+cache tokens. A subagent is "running" while its transcript keeps being written (recent mtime).
+  The 300k Monitor-`until` (§7) is the primary trigger; lanes ALSO self-checkpoint at ~300k of their own
+  context as a backstop. Corroborate with `pgrep -af run-scenario` + freshest
   `find scenarios/0*/runs -name 'step-*.json' -printf '%TY-%Tm-%Td %TH:%TM %p\n' | sort -r | head` mtimes +
-  the SendMessage cadence. Never Read/tail a subagent output_file (it overflows your context).
+  the SendMessage cadence. NEVER Read/tail a full transcript into your OWN context — it's huge.
 - **Resume a checkpointed lane by spawning a FRESH Sonnet agent** (Agent tool), seeded from its
   `handoff.md` + attempt ledger + snapshot resume point — do NOT SendMessage-resume a 350k+ transcript (it
   starts already under context pressure). SendMessage-resume is only for a still-small, still-live lane you
