@@ -72,6 +72,24 @@ function readdirSyncSafe(dir) {
  * @param {(descriptor:object)=>unknown} o.onAsk
  * @param {boolean} o.verbose
  */
+/**
+ * Send a turn, honouring the harness's documented eviction contract. On a wide fan-out the session
+ * manager can evict this top-level session mid-turn (`maxSessions` on a small pod), which
+ * `ThingSession` surfaces as `turn.interrupted` — "the caller's cue to re-send" (harness/lib/thing.mjs).
+ * `ThingSession` re-establishes the session on its next send, so re-issue the SAME message (bounded)
+ * until the turn completes; the appbuilder's own convergence + retry-safe guards keep a re-run
+ * idempotent (no duplicate rows, no parallel app). Without this the documented recovery path was
+ * never wired up and an evicted build surfaced as a hard `interrupted:true` step failure.
+ */
+export async function sendResilient(fn, rec, maxRetries = 2) {
+  let turn = await fn();
+  for (let i = 0; turn?.interrupted && i < maxRetries; i++) {
+    rec.notes.push(`session evicted mid-turn — re-sent (attempt ${i + 2}/${maxRetries + 1})`);
+    turn = await fn();
+  }
+  return turn;
+}
+
 export async function runStep({ step, thing, pod, run, projectId, fixturesDir, rec, envStack, onAsk, verbose }) {
   // ── host-side, out-of-band actions that land BEFORE anything else this step does ──────────────
   if (step.set_env) {
@@ -125,14 +143,14 @@ export async function runStep({ step, thing, pod, run, projectId, fixturesDir, r
         refs.push(await pod.upload(p));
       }
       rec.attached = step.attach;
-      turn = await sess.sendWithAttachments(step.say, refs);
+      turn = await sendResilient(() => sess.sendWithAttachments(step.say, refs), rec);
     } else {
-      turn = await sess.send(step.say);
+      turn = await sendResilient(() => sess.send(step.say), rec);
     }
     rec.turns.push(summarizeTurn(turn, step.space_session ? `[${step.space_session}] ${step.say}` : step.say));
   }
   if (step.then_say != null) {
-    const t = await sess.send(step.then_say);
+    const t = await sendResilient(() => sess.send(step.then_say), rec);
     rec.turns.push(summarizeTurn(t, step.space_session ? `[${step.space_session}] ${step.then_say}` : step.then_say));
   }
   if (step.in_app_chat != null) {

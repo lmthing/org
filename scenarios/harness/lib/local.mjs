@@ -16,7 +16,7 @@
  *   runner.pid                  the run-scenario process (written by runner.mjs)
  *
  * HOW it launches: `pnpm lmthing serve --cwd <data> --port <port> --env-file <sdk/org>/.env
- * --adopt-system-spaces --max-sessions 40` — spawned FROM `sdk/org` so pnpm resolves the `lmthing`
+ * --adopt-system-spaces --max-sessions 80` — spawned FROM `sdk/org` so pnpm resolves the `lmthing`
  * script (runs the CLI from TS source via tsx → NO build needed), then `applyCwd` chdirs the process
  * into `<data>` so `.lmthing` and `--env-file` resolve correctly.
  *
@@ -323,7 +323,7 @@ function spawnServer(run) {
   // Detached → own process group → the whole pnpm→tsx→node tree is one killable unit.
   const child = spawn(
     'pnpm',
-    [...BIN_ARGS, '--cwd', run.dataDir, '--port', String(run.port), '--env-file', ENV_FILE, '--adopt-system-spaces', '--max-sessions', '40'],
+    [...BIN_ARGS, '--cwd', run.dataDir, '--port', String(run.port), '--env-file', ENV_FILE, '--adopt-system-spaces', '--max-sessions', '80'],
     {
       cwd: SDK_ORG,
       env: { ...process.env, LM_STORE_APPS_DIR: join(run.dataDir, 'store-apps') },

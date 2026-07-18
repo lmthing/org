@@ -149,7 +149,7 @@ vi.mock('../harness/lib/local.mjs', () => ({
   },
 }));
 
-const { ScenarioRunner } = await import('./runner.mjs');
+const { ScenarioRunner, sendResilient } = await import('./runner.mjs');
 
 const tmps = [];
 const mkTmp = () => {
@@ -264,5 +264,36 @@ describe('bootstrap: thing — discovery + rebind', () => {
     expect(H.state.sessionsCreated[0]).toEqual({ projectId: 'discovered-trip' });
     expect(results).toHaveLength(1);
     expect(results[0].createdProject).toBeUndefined(); // already known — no re-discovery bookkeeping
+  });
+});
+
+describe('sendResilient — honours the harness eviction re-send contract', () => {
+  it('returns the turn as-is when it did not interrupt (one send, no note)', async () => {
+    const rec = { notes: [] };
+    let calls = 0;
+    const turn = await sendResilient(() => { calls++; return Promise.resolve({ ok: true }); }, rec);
+    expect(calls).toBe(1);
+    expect(turn).toEqual({ ok: true });
+    expect(rec.notes).toEqual([]);
+  });
+
+  it('re-sends when a turn is interrupted, and stops once it completes', async () => {
+    const rec = { notes: [] };
+    const turns = [{ interrupted: true }, { ok: true, built: true }];
+    let i = 0;
+    const turn = await sendResilient(() => Promise.resolve(turns[i++]), rec);
+    expect(i).toBe(2); // sent twice: the eviction + the recovery
+    expect(turn).toEqual({ ok: true, built: true });
+    expect(rec.notes).toHaveLength(1); // the re-send is recorded so the judge sees it happened
+    expect(rec.notes[0]).toMatch(/evicted mid-turn — re-sent/);
+  });
+
+  it('gives up after maxRetries and returns the last still-interrupted turn — never loops forever', async () => {
+    const rec = { notes: [] };
+    let calls = 0;
+    const turn = await sendResilient(() => { calls++; return Promise.resolve({ interrupted: true }); }, rec, 2);
+    expect(calls).toBe(3); // initial + 2 retries
+    expect(turn.interrupted).toBe(true);
+    expect(rec.notes).toHaveLength(2);
   });
 });
