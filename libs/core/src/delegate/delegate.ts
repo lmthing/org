@@ -195,6 +195,10 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     renderHost: opts.renderHost,
     clock: opts.clock,
     spaceDir: space.dir,
+    // Each merged system space's own knowledge dir — same reasoning as the
+    // session/fork sites: an on-demand loadKnowledge() domain that lives only in
+    // a space merged INTO `space` (not `space.dir` itself) would otherwise ENOENT.
+    knowledgeFallbackDirs: systemSpaces.map((s) => s.dir + '/knowledge'),
     projectSpacesDir: opts.projectSpacesDir,
     projectRoot: opts.projectRoot,
     projectId: opts.projectId,
@@ -329,6 +333,10 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
         runChildDelegate(packageName, agentName2, action, childOpts as DelegateOpts | undefined, allowedActions),
       // Forks under this delegate may read attachments too — thread the resolver.
       documentResolver: opts.documentResolver,
+      // Same reasoning as the createChildVM call above — a task node's spaceDir is
+      // this delegate's own space.dir, so its on-demand loadKnowledge() needs the
+      // same per-merged-system-space fallback dirs.
+      knowledgeFallbackDirs: systemSpaces.map((s) => s.dir + '/knowledge'),
     }));
 
     try {
@@ -348,6 +356,12 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             clock: opts.clock,
             tracer: opts.tracer,
             scope: delegateScope,
+            // Own space first, then each merged system space's own knowledge dir —
+            // without this a direct loadKnowledge() from THIS delegate's own
+            // statements fell through unhandled and bound `undefined` immediately
+            // (routed.handled === false below), never even reaching the injected
+            // global's own (losing) resolve race.
+            knowledgeBaseDirs: [space.dir + '/knowledge', ...systemSpaces.map((s) => s.dir + '/knowledge')],
             apiCallResolver: opts.appGlobals?.apiCall,
             apiCallAllow: capabilities.app['api:call']?.allow,
             connectionResolver: opts.appGlobals?.callConnection,

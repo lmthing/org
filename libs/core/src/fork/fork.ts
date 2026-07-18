@@ -160,6 +160,13 @@ export interface ForkEngineOpts {
   /** Host resolver for the universal `readDocument` global — threaded from the parent
    *  session/delegate so a fork leaf can read an attached upload's text by id. */
   documentResolver?: DocumentResolver;
+  /** Fallback directories `loadKnowledge()` searches after `<parentSpaceDir>/knowledge`
+   *  — each merged-in system space's own `knowledge/` dir. A task node's `spaceDir` is
+   *  always the PARENT's (line below), but a system-space-owned tasklist (e.g. THING's
+   *  own `organize_material`, merged in from `user-thing`) may `loadKnowledge()` a
+   *  domain that only physically exists under ITS space, not the parent's — see
+   *  `ChildVMOpts.knowledgeFallbackDirs`. */
+  knowledgeFallbackDirs?: string[];
 }
 
 export class ForkEngine {
@@ -332,6 +339,7 @@ export class ForkEngine {
           renderHost: this.opts.renderHost,
           clock: this.opts.clock,
           spaceDir: this.opts.parentSpaceDir,
+          knowledgeFallbackDirs: this.opts.knowledgeFallbackDirs,
           projectSpacesDir: this.opts.projectSpacesDir,
           projectRoot: this.opts.projectRoot,
           projectId: this.opts.projectId,
@@ -491,7 +499,11 @@ export class ForkEngine {
         // undefined exactly as before.
         const yieldCtx: YieldRouterContext = {
           clock: this.opts.clock,
-          knowledgeSpaceDir: this.opts.parentSpaceDir,
+          // Own space first (so a project can shadow/override), then each merged
+          // system space's own knowledge dir — see ChildVMOpts.knowledgeFallbackDirs
+          // for why a system-space-owned tasklist (e.g. THING's organize_material)
+          // needs the fallback even though this fork's spaceDir is the PARENT's.
+          knowledgeBaseDirs: [this.opts.parentSpaceDir + '/knowledge', ...(this.opts.knowledgeFallbackDirs ?? [])],
           resolveRegisterSpace: true,
           dynamicSpaces: this.opts.dynamicSpaces,
           apiCallResolver: this.opts.appGlobals?.apiCall,

@@ -60,6 +60,15 @@ export interface ChildVMOpts {
   /** Working root: host tools resolve relative paths here; loadKnowledge reads
    *  from `<spaceDir>/knowledge`. (For forks this is the PARENT's space dir.) */
   spaceDir: string;
+  /** Additional knowledge base directories `loadKnowledge()` falls back to, in
+   *  order, after `<spaceDir>/knowledge` — typically each merged-in system
+   *  space's own `knowledge/` dir. Needed because the running agent's
+   *  DEFINITION can be MERGED IN from a system space (e.g. THING, from
+   *  `user-thing`) while `spaceDir` stays the project's own directory: an
+   *  on-demand domain that only physically exists under the system space (not
+   *  the project) would otherwise ENOENT on every call. See
+   *  `loadKnowledgeFileFromDirs` in `globals/load-knowledge.ts`. */
+  knowledgeFallbackDirs?: string[];
   /** Exposed as LMTHING_PROJECT_SPACES_DIR (architect scaffolding target). */
   projectSpacesDir?: string;
   /** Absolute project root `<root>/<projectId>` — the app layer (db/pages/api/hooks)
@@ -198,7 +207,11 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   // delegate can read an attached upload's text by id. The host resolver is threaded
   // via the yield router (documentResolver); absent ⇒ a clear retryable error.
   injectGlobal(ctx, 'readDocument', createReadDocumentGlobal(pushYield) as AnyFn);
-  injectGlobal(ctx, 'loadKnowledge', createLoadKnowledgeGlobal(pushYield, opts.spaceDir + '/knowledge') as AnyFn);
+  injectGlobal(
+    ctx,
+    'loadKnowledge',
+    createLoadKnowledgeGlobal(pushYield, [opts.spaceDir + '/knowledge', ...(opts.knowledgeFallbackDirs ?? [])]) as AnyFn,
+  );
   // writeKnowledge: SYNCHRONOUS (no yield) knowledge author, gated on `knowledge:write`.
   // The write root is closure-bound to THIS agent's own knowledge dir (own-space only,
   // unspoofable — there is no `space` parameter); a write cap is dropped from read-only

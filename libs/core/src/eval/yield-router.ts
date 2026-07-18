@@ -57,12 +57,17 @@ export interface YieldRouterContext {
   tracer?: Tracer;
   /** Current execution scope — becomes parentScope on spawned forks/delegates. */
   scope?: TraceScope;
-  /** When set, loadKnowledge yields are resolved HERE by reading the file under
-   *  `<knowledgeSpaceDir>/knowledge/…` and returning its content (fork leaves,
-   *  which must win the race against the global's own concurrent resolve —
-   *  otherwise undefined is bound before the file read completes). The session
-   *  handles loadKnowledge itself; leave unset there. */
-  knowledgeSpaceDir?: string;
+  /** When set, loadKnowledge yields are resolved HERE by searching these knowledge
+   *  base dirs IN ORDER and returning the first match's content (fork leaves and
+   *  delegates, which must win the race against the global's own concurrent
+   *  resolve — otherwise undefined is bound before the file read completes). Pass
+   *  the caller's own `<space>/knowledge` FIRST, then each merged system space's
+   *  own `<space>/knowledge` dir as a fallback — a domain that only physically
+   *  exists in a MERGED-IN system space (e.g. THING's own organize_material
+   *  consulting user-thing's organizing/split library) is otherwise unreachable
+   *  on demand even though the file is right there on disk. The session handles
+   *  loadKnowledge itself (Session#handleYield); leave unset there. */
+  knowledgeBaseDirs?: string[];
   /** When true, registerSpace yields are resolved HERE (fork leaves): the space
    *  is loaded and inserted into `dynamicSpaces` when provided. The map is the
    *  SAME reference the parent Session hands to delegate(), so a space
@@ -342,14 +347,14 @@ export async function routeCommonYield(
       return { handled: true, value };
     }
     case 'loadKnowledge': {
-      // Fork leaves only (knowledgeSpaceDir set): return the file CONTENT so it
-      // wins the race against the global's own loadKnowledgeFile().then(resolve)
-      // — otherwise undefined is bound before the file read completes.
-      if (!ctx.knowledgeSpaceDir) return { handled: false };
-      const { loadKnowledgeFile } = await import('../globals/load-knowledge.js');
-      const { join } = await import('node:path');
-      const filePath = join(ctx.knowledgeSpaceDir, 'knowledge', ...(req.args[0] as string).split('/'));
-      return { handled: true, value: await loadKnowledgeFile(filePath) };
+      // Fork leaves + delegates (knowledgeBaseDirs set): return the file CONTENT so
+      // it wins the race against the global's own loadKnowledgeFile().then(resolve)
+      // — otherwise undefined is bound before the file read completes. Searches
+      // every candidate dir in order (own space first, then merged system spaces).
+      if (!ctx.knowledgeBaseDirs) return { handled: false };
+      const { loadKnowledgeFileFromDirs } = await import('../globals/load-knowledge.js');
+      const value = await loadKnowledgeFileFromDirs(ctx.knowledgeBaseDirs, (req.args[0] as string).split('/'));
+      return { handled: true, value };
     }
     case 'registerSpace': {
       // Fork leaves only (resolveRegisterSpace set): load the space and insert it

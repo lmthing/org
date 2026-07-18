@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadKnowledgeFile } from './load-knowledge.js';
+import { loadKnowledgeFile, createLoadKnowledgeGlobal } from './load-knowledge.js';
+import type { YieldRequest } from '../eval/yield.js';
+import { Session } from '../session/session.js';
+import { createMockStreamFn } from '../testing/mock-provider.js';
+import type { StreamOpts } from '../eval/stream-types.js';
+import type { RenderHost } from '../session/types.js';
 
 describe('loadKnowledgeFile', () => {
   let dir: string;
@@ -56,5 +61,130 @@ describe('loadKnowledgeFile', () => {
 
   it('still throws for a path that resolves to nothing', async () => {
     await expect(loadKnowledgeFile(join(dir, 'nope'))).rejects.toThrow(/cannot read/);
+  });
+});
+
+describe('createLoadKnowledgeGlobal (multi-dir fallback)', () => {
+  let ownDir: string;
+  let systemDir: string;
+  const pushYield = (_req: YieldRequest): void => {};
+
+  beforeEach(() => {
+    ownDir = mkdtempSync(join(tmpdir(), 'kn-own-'));
+    systemDir = mkdtempSync(join(tmpdir(), 'kn-system-'));
+  });
+  afterEach(() => {
+    rmSync(ownDir, { recursive: true, force: true });
+    rmSync(systemDir, { recursive: true, force: true });
+  });
+
+  // Reproduces the real bug: an agent's OWN runtime spaceDir (a project directory)
+  // has no knowledge of its own for a domain that only physically exists in a
+  // MERGED-IN system space (e.g. THING's own `organize_material` consulting
+  // user-thing's `organizing/split` library) — the fix is trying every candidate
+  // base dir, not just the first.
+  it('falls back to a later base dir when the domain is absent from the first', async () => {
+    mkdirSync(join(systemDir, 'organizing', 'split'), { recursive: true });
+    writeFileSync(join(systemDir, 'organizing', 'split', 'household.md'), 'Household split guide.', 'utf8');
+
+    const loadKnowledge = createLoadKnowledgeGlobal(pushYield, [ownDir, systemDir]);
+    const result = await loadKnowledge('organizing', 'split', 'household');
+    expect(result).toBe('Household split guide.');
+  });
+
+  it('prefers the FIRST dir when both have the same domain (own space can override/shadow)', async () => {
+    mkdirSync(join(ownDir, 'organizing', 'split'), { recursive: true });
+    writeFileSync(join(ownDir, 'organizing', 'split', 'household.md'), 'Project override.', 'utf8');
+    mkdirSync(join(systemDir, 'organizing', 'split'), { recursive: true });
+    writeFileSync(join(systemDir, 'organizing', 'split', 'household.md'), 'System default.', 'utf8');
+
+    const loadKnowledge = createLoadKnowledgeGlobal(pushYield, [ownDir, systemDir]);
+    const result = await loadKnowledge('organizing', 'split', 'household');
+    expect(result).toBe('Project override.');
+  });
+
+  it('throws naming every directory it tried when NO candidate has the domain', async () => {
+    const loadKnowledge = createLoadKnowledgeGlobal(pushYield, [ownDir, systemDir]);
+    await expect(loadKnowledge('organizing', 'split', 'nope')).rejects.toThrow(/tried:/);
+  });
+});
+
+describe('loadKnowledge through a Session fork (end-to-end wiring regression)', () => {
+  // This reproduces the real failure THING hit in every "organize a pile of files"
+  // run: the top-level agent's session `spaceDir` is a PROJECT directory with no
+  // knowledge of its own; the system space that DEFINES the agent (e.g. user-thing)
+  // carries the actual knowledge library, merged in via mergeSystemInto. A fork
+  // (like a task node inside `organize_material`) inherits the PARENT's spaceDir
+  // (fork.ts `parentSpaceDir`) — before the fix, its loadKnowledge() had no way to
+  // reach the system space's knowledge dir at all and ENOENTed on every call, so
+  // organize_material always silently fell back to a generic default guide. This
+  // test drives the actual Session → fork() → loadKnowledge() path (not just the
+  // primitive in isolation above) to prove the wiring, not just the resolver, is
+  // fixed — the field the fork/session/delegate construction sites must all pass.
+  it('a fork inheriting the parent PROJECT spaceDir still reaches a domain that only exists in a merged SYSTEM space', async () => {
+    const projectDir = mkdtempSync(join(tmpdir(), 'kn-e2e-project-'));
+    const sysDir = mkdtempSync(join(tmpdir(), 'kn-e2e-system-'));
+    try {
+      mkdirSync(join(projectDir, 'agents', 'main'), { recursive: true });
+      writeFileSync(join(projectDir, 'agents', 'main', 'instruct.md'), 'Test agent.\n', 'utf8');
+      // The project itself has NO knowledge/ dir at all — matching the real
+      // `.lmthing/<project>` layout, which never carries user-thing's own library.
+      mkdirSync(join(sysDir, 'knowledge', 'organizing', 'split'), { recursive: true });
+      writeFileSync(
+        join(sysDir, 'knowledge', 'organizing', 'split', 'household.md'),
+        'System household split guide.',
+        'utf8',
+      );
+
+      let forked = false;
+      let forkStatementsIssued = 0;
+      const displays: unknown[] = [];
+      const logs: string[] = [];
+      const streamFn = createMockStreamFn((opts: StreamOpts) => {
+        // Match the fork's OWN user message specifically: it carries BOTH the
+        // instruction AND "Output schema" (fork.ts's userMessage template) — the
+        // session's OWN turns never have both together, which is what a looser
+        // "LOAD_TEST" substring match (system prompt, or full history) wrongly hit.
+        const isForkTurn = opts.messages.some((m) => String(m.content).includes('LOAD_TEST') && String(m.content).includes('Output schema'));
+        if (isForkTurn) {
+          // Two SEPARATE statements — `await loadKnowledge(...)` yields on its own
+          // (turn ends there); `currentTask.resolve` must be a LATER turn once `k`
+          // comes back bound, or the fork just re-issues the same yield forever.
+          forkStatementsIssued++;
+          if (forkStatementsIssued === 1) {
+            return `const k = await loadKnowledge('organizing', 'split', 'household');`;
+          }
+          return `currentTask.resolve({ text: String(k) });`;
+        }
+        if (!forked) {
+          forked = true;
+          return `const f = await fork({ role: 'general', instruction: 'LOAD_TEST', output: { text: 'string' } });`;
+        }
+        return `display(String((f as { text: string }).text));`;
+      });
+
+      const host: RenderHost = {
+        display: (d) => displays.push(d),
+        ask: async () => undefined,
+        log: (msg: string) => logs.push(msg),
+      };
+      const session = new Session(
+        {
+          spaceDir: projectDir,
+          agentSlug: 'main',
+          modelAlias: 'mock',
+          renderHost: host,
+          systemSpaceDirs: [sysDir],
+        },
+        { streamFn },
+      );
+      await session.start('go');
+      await session.dispose();
+
+      expect(displays, `logs:\n${logs.join('\n')}`).toContain('System household split guide.');
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+      rmSync(sysDir, { recursive: true, force: true });
+    }
   });
 });

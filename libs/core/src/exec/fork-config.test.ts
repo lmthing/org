@@ -49,6 +49,7 @@ describe('forkEngineOptsFrom (A1 regression lock)', () => {
       appGlobals: undefined,
       delegateRunner,
       documentResolver: undefined,
+      knowledgeFallbackDirs: ['/system/spaces/user-thing/knowledge'],
     };
   }
 

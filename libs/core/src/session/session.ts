@@ -697,6 +697,11 @@ export class Session {
       renderHost: this.opts.renderHost,
       clock: this.opts.clock,
       spaceDir: this.opts.spaceDir,
+      // Each merged system space's own knowledge dir — an on-demand loadKnowledge()
+      // domain that lives only in a MERGED-IN system space (e.g. THING's own
+      // organize_material consulting user-thing's organizing/split library) would
+      // otherwise ENOENT against opts.spaceDir (the project's own directory).
+      knowledgeFallbackDirs: this.systemSpaces.map((s) => s.dir + '/knowledge'),
       projectSpacesDir: pctx.projectSpacesDir,
       projectRoot: pctx.projectRoot,
       projectId: pctx.projectId,
@@ -830,6 +835,10 @@ export class Session {
       delegateRunner: (p, a, act, o, allowed) => this.runDelegateForFork(p, a, act, o, allowed),
       // Forks may read attachments too — thread the same host resolver.
       documentResolver: this.opts.documentResolver,
+      // Same reasoning as createSessionVM above — a task node's spaceDir is the
+      // PARENT's (this.opts.spaceDir), so a system-space-owned tasklist's on-demand
+      // loadKnowledge() needs the same per-system-space fallback dirs.
+      knowledgeFallbackDirs: this.systemSpaces.map((s) => s.dir + '/knowledge'),
     }));
     return this.forkEngine;
   }
@@ -921,11 +930,18 @@ export class Session {
         // args[0] is the normalized relative path; load and return the parsed file
         // CONTENT here so it is the value bound into scope. (Returning args[0] would
         // bind the path string — the fork path correctly loads content the same way.)
-        const { loadKnowledgeFile } = await import('../globals/load-knowledge.js');
-        const { join } = await import('node:path');
+        // THIS is the value actually bound (turn-loop.ts: `deferred.resolve(await
+        // processYield(req))`) — the injected loadKnowledge global's own internal
+        // `.then(resolve, reject)` races this and normally loses, so it must search
+        // the SAME candidate dirs: this session's own space first (so a project can
+        // shadow/override), then each merged system space's own knowledge dir — a
+        // domain that lives only in a MERGED-IN system space (e.g. THING's own
+        // organize_material consulting user-thing's organizing/split library) would
+        // otherwise ENOENT here even though bootstrap.ts's global was fixed.
+        const { loadKnowledgeFileFromDirs } = await import('../globals/load-knowledge.js');
         const rel = req.args[0] as string;
-        const filePath = join(this.opts.spaceDir, 'knowledge', ...rel.split('/'));
-        return loadKnowledgeFile(filePath);
+        const baseDirs = [this.opts.spaceDir + '/knowledge', ...this.systemSpaces.map((s) => s.dir + '/knowledge')];
+        return loadKnowledgeFileFromDirs(baseDirs, rel.split('/'));
       }
       case 'registerSpace': {
         const dir = req.args[0] as string;
