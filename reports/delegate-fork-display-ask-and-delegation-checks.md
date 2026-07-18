@@ -2,14 +2,24 @@
 
 Status: **proposal / not implemented.** Author's date context: 2026-07-18.
 
-This report captures three runtime-design changes for the LMThing agent runtime
-(`libs/core`). All three came out of the scenario campaign, where the same class of
-bug kept recurring: a **child agent (delegate or fork) tries to communicate with the
-user, but the runtime has no first-class channel for a child to talk to its _caller_**,
-so children either leak into the real user's chat or silently drop information.
+This report has two parts:
+
+- **Part I — Design proposals (§1–4):** four runtime-design changes that came out of
+  the scenario campaign, where the same class of bug kept recurring: a **child agent
+  (delegate or fork) tries to communicate with the user, but the runtime has no
+  first-class channel for a child to talk to its _caller_**, so children either leak into
+  the real user's chat or silently drop information — plus the context-overload class on
+  heavy task nodes.
+- **Part II — Critical review of the last 2 days of commits (§5):** a per-commit design
+  review of ~50 commits (2026-07-17 → 07-18), flagging what is under-thought or better
+  done another way. It surfaces concrete correctness risks (an in-memory build-target that
+  a mid-turn eviction can silently corrupt; a port-allocation race; a `--cwd` footgun) and
+  a set of **missing structural mechanisms** that a dozen prose patches are compensating
+  for. The review corroborates §1 and §4 independently.
 
 Every claim below is grounded in the current code. Symbol / line anchors follow the
-`org/docs` convention (`path:Lstart` / `path#Symbol`).
+`org/docs` convention (`path:Lstart` / `path#Symbol`). Part II's line anchors come from the
+reviewing pass; spot-check them before acting, as the tree moves.
 
 ---
 
@@ -427,7 +437,208 @@ the *variable value* is still raw and complete; only the *prompt echo* becomes a
 
 ---
 
+# Part II — Critical review of the last 2 days' commits
+
+A per-commit design review of the ~50 commits from 2026-07-17 22:37 → 2026-07-18 14:35
+(the `docs(report)` commits for this file excluded). The goal was to flag anything
+**under-thought or implementable a better way**, grounded in the diffs. Most commits are
+sound and well-tested — the campaign's test discipline (revert-proven, load-bearing tests
+on every mechanism change) is consistently good. What follows is only the findings worth
+acting on, ordered by severity.
+
+## 5.1 Correctness risks (verify / fix before trusting)
+
+### C1 — the per-session build target is RAM-only and a mid-turn eviction can silently violate the "never build into `user`" invariant · `635ebbc` × `77d95de`
+The two biggest runtime commits of the window interact badly, and neither references the
+other.
+
+- `635ebbc` introduces a per-session **build target** as in-memory closure state
+  (`session-manager.ts:441`, `const buildTarget = { projectId }`), read by
+  `resolveBuildTarget` (`session-manager.ts:443`). It is **never written into the session
+  snapshot.** The commit's stated invariant is "THING never builds into its own `user`
+  project" (`session.ts:666-676`).
+- `77d95de` *institutionalizes* mid-turn eviction/rebuild of exactly that top-level session
+  (its whole `sendResilient` re-send path exists because the session is evicted on a wide
+  fan-out).
+
+So the failure sequence is real: THING `createProject`s in one turn → session evicted →
+resumed → `buildTarget.projectId` is back to `undefined` → `resolveBuildTarget()` returns
+`null` → the delegated build lands in `user`, the precise outcome `635ebbc` says never
+happens. The invariant is enforced only by transient RAM that `77d95de` routinely discards.
+- **Fix:** persist the build target in the session snapshot (or a marker under
+  `.lmthing/<id>`) so it survives resume; or have `resolveBuildTarget` fall back to "the
+  most recently created project owned by this session," never silently to `user`.
+- **Do first:** a live `create → evict → delegate-build` test. This is the highest-value
+  check in the window.
+
+### C2 — port allocation is racy and teardown can kill an innocent run's server · `b7b4bae`
+`allocatePort()` binds `:0`, reads the port, and **closes the socket before returning**
+(`scenarios/harness/lib/local.mjs:113-122`), then `spawnServer` takes seconds (pnpm → tsx →
+node) before the child binds. The port is free for that whole window. The campaign fans out
+one subagent per scenario on one host, so two runs can be handed the same port; the loser
+exits `EADDRINUSE`, `waitUp` burns up to 120s (`:70-76`), and the retry calls
+`killPort(run.port)` (`:98-107`) — which SIGKILLs **whatever now holds that port, i.e. the
+winning run's server.** A lost race murders an innocent run.
+- **Fix:** close the reserve-then-release gap — launch with `--port 0` and scrape the
+  actually-bound port from the ready log/file, or hold the fd and hand it down, or use an
+  atomic file-lock under `runs/`. Watch the child `exit` event so a failed bind fails fast
+  instead of polling a dead server for 120s. And never `killPort` a port you didn't confirm
+  is your own `run.serverPid`.
+- Secondary: `reapOrphanRuns` reads `join(r.dir, 'runner.pid')` (`:398`) but the pidfile is
+  written to `outDir`; under `--out` the reaper sees no pidfile, declares the owner dead,
+  and can kill a live run.
+
+### C3 — `--cwd` mutates global process state from a raw pre-parse argv scan · `b430f68`
+`applyCwd` does `mkdirSync(dir,{recursive:true})` then `process.chdir(dir)`
+(`cwd.ts:20-26`) during a pre-parse scan, before any command/flag validation. Two
+consequences: a typo (`--cwd /srv/porject`) silently creates the wrong tree and runs
+against an empty runtime instead of erroring; and because the only guard is `if (!raw)`,
+`lmthing --cwd --port 9000` treats `--port` as the directory — it `mkdirSync('./--port')`
+and chdirs there, and `parseArgs`' own `--cwd requires a value` check (`args.ts:99-104`)
+never fires because the damage is done at import time.
+- **Fix:** reject a value beginning with `-` (treat as missing, matching `parseArgs`);
+  defer directory creation to the `init`/`serve` auto-materialization path rather than the
+  blind pre-parse scan; validate before mutating `cwd`.
+
+## 5.2 Missing structural mechanisms (recurring prose patches point here)
+
+A dozen behavior commits in the window are **prose edits to system-space `instruct.md` /
+tasklist nodes** that compensate for gaps the runtime should close structurally. They keep
+recurring across scenarios and rounds because the mechanism doesn't exist. Four clusters:
+
+### M1 — unchecked identifier strings in the model DTS *(biggest single gap; new proposal)*
+`library-dts.ts:148-154` types DB identifiers as bare `string`: `query(table: string, …)`,
+`where?: Record<string, unknown>`, `set: Record<string, unknown>`. So a **hallucinated
+table name** (`2c892ec`), a **hallucinated field name** (`0beae4b` #3, `a96c37e`), and even
+a raw SQL fragment passed as a `table` name all pass typecheck and then either throw at
+runtime or **silently return nothing — which reads to the model as "no data" and primes it
+to give up.** `2c892ec`'s own message admits it is an "INCOMPLETE … L1" prose patch and
+names the real fix as an L3 DTS change; the class then recurred across steps 5/6/8/15/16 of
+the next run.
+- **Proposal (structural):** the DTS is already generated per-capability, so emit a
+  **per-project literal union of the real table names**, and make `where`/`set`/predicate
+  keys `keyof` the table's generated row type. A wrong identifier becomes a **retryable
+  typecheck error** instead of a runtime throw or a silent empty. This one mechanism
+  subsumes the DB-identifier parts of `2c892ec`, `0beae4b`, and `a96c37e`.
+
+### M2 — `display()` has no channel/scope typing *(corroborates §1 — independent second opinion)*
+The prose reviewer arrived at §1 from the opposite direction: `display` is injected
+**unconditionally and un-scoped** (`bootstrap.ts:198`), while `setActivity` immediately
+below it (`bootstrap.ts:199-202`) is **already per-scope routed via `onActivity`** (main vs
+fork/delegate). So the mechanism to fix the `display()` leak structurally *already exists* —
+`display` just wasn't given it. This underlies `ecf6631` (a delegate's `display()` leaks to
+user chat) and the display-vs-`setActivity` items in `2c892ec` and `0beae4b` (a placeholder
+`display()` silently ends a turn with no answer). → implement as §1; additionally, "a turn
+that produced no substantive `display()` is incomplete → retry" is host-observable and would
+close the turn-ends-without-answer half.
+
+### M3 — no source→row coverage invariant in the appbuilder pipeline *(new proposal)*
+`42106e1`, `13e8c84`, `8a52325`, and `842723f` #4a all fight the same thing: parsed source
+data silently vanishing (or rendering as a hardcoded `$0.00`) somewhere between
+`read_sources` and the live tables/pages. The current design passes free-text **"briefs"**
+between nodes and **tunes one node's prose so a downstream node's heuristic will re-interpret
+it favorably** — a brittle cross-node coupling that is guaranteed to recur.
+- **Proposal:** give the handoff a **schema** — each extracted item a typed candidate
+  (`{kind, values, source: 'structured'|'vision'|'audio', matchedStructuredSource,
+  isNew}`) — and add a **host/code-node coverage gate**: every parsed source id must map to
+  ≥1 landed row or labelled fact, and every live-figure prop must trace to a real endpoint
+  field, else the build fails. "Don't drop it" / "don't hardcode the total" become
+  assertions, not pleas. (`8a52325`'s `usdTotal={0}` case also has a typed-lever option: a
+  branded `LiveFigure` type that only `useApi(...)` produces, making a literal a typecheck
+  error.)
+
+### M4 — non-idempotent host writers + no re-entry detection *(new proposal)*
+`842723f` #3 (a forEach-item retry re-runs `writeProjectTable(name, schema, rows)` and
+**re-inserts rows with fresh ids** → duplicates), `842723f` #4 / `07749b5` `03-plan_app`
+(a second build pass **spawns a parallel duplicate app**), and `07749b5` 09–11 (a **failed
+component write is still imported and 404s the whole app**) are all the pipeline's own
+retry/re-run/partial-failure semantics leaking into per-node prose guards (each node must
+`listProjectDir` before seeding, each page must re-derive an `okComponentNames` filter).
+- **Proposal:** make the host writers **idempotent** (upsert on a stable natural key so a
+  retry is a no-op), compute a **first-build-vs-reentry signal once** in the pipeline
+  instead of instructing every node to check, and add a **build gate** that verifies every
+  page import resolved to a landed file. Moves four+ prose patches to "the host guarantees
+  it."
+
+### M5 — closed-enumeration args fail silently to a default instead of erroring · `e2571b0`, `842723f`
+`loadKnowledge('organizing','split', X)` with an invented guide name (`crafts`/`studio`/
+`retail`) **silently falls back to `'default'`** — the wrong guide loads with no error, so
+the model can't self-correct. Two commits had to add the same "use the EXACT name from the
+menu line" prose (recurrence signal). `6b87b5b` (append the real option list) helps the
+model *see* the names but doesn't make a miss loud.
+- **Proposal:** validate the option arg against the on-disk list; a miss returns a
+  **retryable error listing the valid names** (or the arg is a literal union). Same shape
+  as M1 — a closed enumeration should be checked, not silently degraded.
+
+## 5.3 Maintainability / smaller cleanups
+
+- **Architect fixes are validated by prompt-substring greps, not behavior · `e6b7557`,
+  `8350be3`.** Their "contract tests" (`prompt-contract.test.ts`) assert regexes against the
+  *generated prompt text* (`toMatch(/readDocument\(/)`, `/never invent one/i`) — they pass
+  whether or not a synthesized agent obeys, and break on harmless rewording; "revert → red"
+  only proves the substring was added. These two are the least-verified fixes in the window.
+  Add one end-to-end test that builds a specialist and asserts its *runtime* behavior
+  (grounding; resolve-on-every-branch), the way the core commits are revert-proven.
+- **`loadKnowledge` now has two resolution engines · `ea8c914`.** The on-demand path
+  re-walks disk with a hand-built dir list (`systemSpaces.map(s => s.dir + '/knowledge')`,
+  repeated 3× in `delegate.ts`), while the declarative preload reads the already-merged
+  in-memory `Space.knowledge.domains`. They can drift — a **dynamically `registerSpace`'d**
+  space's knowledge is in the in-memory map but not the base-dir list, so on-demand
+  `loadKnowledge` still can't see it. Resolve on-demand against the merged in-memory index
+  (fall back to disk only for the lazy body read); at minimum hoist the thrice-repeated map.
+- **The `20_000`-char "pathological guard" is a copy-pasted magic constant** — independently
+  `INSPECT_STR_CAP` (`inspect.ts`), `LOAD_KNOWLEDGE_MAX_CHARS` (`turn-loop.ts`), and
+  `READ_DOCUMENT_MAX_CHARS`, each commit noting it "mirrors" the others. One concept, three
+  definitions that will drift. Hoist to a shared constant.
+- **The "value silently dropped" archetype is fixed unevenly.** `17374e3` solved its
+  instance structurally (throw on a mismatched attachmentId); `8350be3` solved the same
+  shape (a delegate's *second* nested tasklist result is dropped by `delegate.ts`
+  `capturableTasklists`, so the caller gets its own stale input back) with prose. The
+  general rule — *a runtime path that discards a value the caller expected should error or
+  diagnose, never return a stale/empty stand-in* — should be applied at the
+  `capturableTasklists` seam, not per-scaffold.
+- **The scenario harness hand-rolls a YAML subset parser that is accreting field-discovered
+  bugs · `ccea7d0`** (the 2nd such bug: `change` came back as a literal string and threw at
+  09 step 14). It still can't handle quote-escapes or `,`/`}`/`]` in bare scalars. The
+  "zero-dep" rationale is weak inside a pnpm workspace. Add `js-yaml`/`yaml` as a harness
+  devDependency and delete it, or at least **fail loudly** on out-of-subset constructs
+  instead of returning a wrong-typed value.
+- **Running the scenario harness from TS source via tsx bypasses the `dist` bundle ·
+  `6916d5c`.** `local.mjs` now runs the CLI from `src`, so the one integration layer that
+  could catch the `worker-load-entry` packaging class (CLAUDE.md's documented prod-only
+  failure) no longer exercises `dist/`. Keep from-source for dev speed, but pin the harness
+  (or a CI smoke pass) to the built bin.
+- **`77d95de` treats a symptom.** `sendResilient` re-sends the *identical* message relying
+  on assumed appbuilder idempotency (see M4), and `--max-sessions 40→80` is a probability
+  band-aid — a big enough fan-out still evicts the top-level session. The real fix is to make
+  the **root session non-evictable** (evict only leaf fork/delegate sessions) so the
+  documented interrupt is rare-by-construction; keep `sendResilient` as belt-and-suspenders.
+- **Overfit vector — grammatical whack-a-mole · `297fa77`, `a96c37e`.** Both teach an
+  intent-routing rule by enumerating surface phrasings, and `297fa77` asserts a literal
+  example sentence (`don't let me/us forget`) in a **CI test** — baking a scenario phrasing
+  into a gate, so the next un-enumerated phrasing ("keep this on my radar") misses again.
+  State the invariant once at the semantic level; test that the *rule* exists, not that a
+  specific sentence appears.
+- **Commit hygiene · `3c453ee`.** A small, correct `feat(web): redirect` (~one pure
+  function) ships a 6.3MB diff touching the whole `apps/web` tree plus
+  `.claude/hooks/session-start.sh`, burying the actual change and hurting bisectability.
+
+## 5.4 What's done right (keep as the model)
+
+`842723f`'s **DAG restructure** (`enumerate → inventory forEach → consolidate`, with the
+contract test updated) and `e2571b0`'s **knowledge-file addition** are the correct
+structural / `loadKnowledge` altitude — proof the team fixes these properly when the
+mechanism exists. `0e2d388` (the `MODEL_HABITS` registry — one choke point, extensible
+without touching the turn loop, comments-out rather than drops so the trace stays honest),
+`17374e3` / `8178e65` (attachment fixes — structural, behaviorally revert-proven), and
+`3c453ee`'s redirect logic itself are all clean. The recurring prose patches cluster
+precisely where mechanisms M1–M5 don't yet exist — that's the signal for where to invest.
+
+---
+
 ## Summary
+
+### Part I — design proposals
 
 | # | Change | Core seam | Enforced by |
 |---|---|---|---|
@@ -443,3 +654,37 @@ output (`display`) and question (`ask`) channel; proposal 3 removes the last pla
 capability is guessed from English; proposal 4 turns a monolithic, no-fallback node into a
 resilient `forEach` fan-out and replaces raw upstream force-feeding with the
 preview+`inspect()` model the runtime already trusts.
+
+### Part II — review findings
+
+**Correctness (do first):**
+
+| id | Risk | Where |
+|---|---|---|
+| C1 | RAM-only build target + mid-turn eviction → build silently lands in `user` | `635ebbc` × `77d95de`; `session-manager.ts:441-443` |
+| C2 | Port reserve-then-release race; `killPort` can kill another run's server | `b7b4bae`; `local.mjs:113-122,98-107` |
+| C3 | `--cwd` does `mkdirSync`+`chdir` from a pre-parse argv scan; eats the next flag as its value | `b430f68`; `cwd.ts:20-26` |
+
+**Missing structural mechanisms (retire recurring prose patches):**
+
+| id | Mechanism | Retires |
+|---|---|---|
+| M1 | Per-project **literal-union table names** + `keyof`-row `where`/`set` in the DTS | `2c892ec`, `0beae4b`#3, `a96c37e` (DB-identifier parts) |
+| M2 | **Scope-aware `display()`** (= §1; `setActivity` already does it) | `ecf6631`, `2c892ec`/`0beae4b` display items |
+| M3 | Typed `read_sources→plan_app` handoff + **source→row / prop→endpoint coverage gate** | `42106e1`, `13e8c84`, `8a52325`, `842723f`#4a |
+| M4 | **Idempotent host writers** (upsert) + a computed re-entry signal + page-import build gate | `842723f`#3/#4, `07749b5` |
+| M5 | Closed-enumeration args (`loadKnowledge` option) **error loudly**, never silently `default` | `e2571b0`, `842723f` |
+
+**Cleanups:** behavioral (not prose-grep) tests for the architect layer (`e6b7557`,
+`8350be3`); unify `loadKnowledge`'s two resolution engines (`ea8c914`); hoist the triplicated
+`20_000` cap; apply the "never return a stale stand-in" rule at `delegate.ts`
+`capturableTasklists`; replace the hand-rolled scenario YAML parser (`ccea7d0`); pin the
+scenario harness to `dist` in CI (`6916d5c`); make the root session non-evictable
+(`77d95de`); drop literal-sentence CI assertions (`297fa77`, `a96c37e`); split the
+`3c453ee` mega-diff in future.
+
+The single highest-leverage investment is **M1 (checked identifiers in the DTS)** — it
+converts an entire recurring "hallucinated name → silent empty → model gives up" class into
+retryable typecheck errors, and the campaign is already paying for it in repeated prose
+rounds. C1 is the highest-leverage *correctness* fix — verify it with a live
+create→evict→delegate test before the next campaign run.
