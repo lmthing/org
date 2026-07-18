@@ -387,6 +387,58 @@ describe('system-architect synthesis setup', () => {
     // writeKnowledge must be called with the derived targets, never the raw scaffolded dom/fld directly.
     expect(writeTasks).toMatch(/writeKnowledge\(targetDomain,\s*targetField,/);
   });
+
+  /**
+   * 07's live finding: a specialist built from SUPPLIED material invented specific facts (a wrong
+   * boiler fault-code meaning) because `context.research` seeded into synthesize_and_run is a lossy
+   * one-sentence summary, never the real document text or a re-readable attachmentId — so the model,
+   * unable to verify a specific, wrote a plausible-sounding invented one anyway. The generated
+   * knowledge also cited a vague "Source: the research report" for content that was never actually
+   * backed by any real report or document. Fix: accept an optional `attachmentIds` seed so build_field
+   * can re-read the ACTUAL document text with `readDocument` and ground specifics in it (falling back
+   * gracefully to the summary alone when none are given, so existing callers keep working); never
+   * fabricate a "Source:" line when there is no real URL; and never hand-list the aspect slugs in the
+   * field overview (that menu is now supplied automatically off disk, per 6b87b5b / 59ff4227 — a
+   * hand-written one only drifts stale).
+   */
+  it('a synthesized specialist grounds its knowledge in the real document, not a lossy summary alone', () => {
+    const synthIndex = readFileSync(
+      join(SYSTEM_SPACES, 'system-architect', 'tasklists', 'synthesize_and_run', 'index.md'),
+      'utf8',
+    );
+    const buildField = readFileSync(
+      join(SYSTEM_SPACES, 'system-architect', 'tasklists', 'synthesize_and_run', '02-build_field.md'),
+      'utf8',
+    );
+
+    // The tasklist accepts attachmentIds so a caller with real documents can pass them through.
+    expect(synthIndex).toMatch(/attachmentIds:\s*array\?/);
+
+    // build_field actually reads them when given, rather than only ever trusting the summary.
+    expect(buildField).toMatch(/readDocument\(/);
+    // No fabricated "Source:" line when there is no real URL to cite.
+    expect(buildField).not.toMatch(/"the research report"/);
+    expect(buildField).toMatch(/never invent one/i);
+    // Grounding discipline against inventing a specific the source material doesn't contain.
+    expect(buildField).toMatch(/never a specific/i);
+    // The overview must not hand-list the aspect slugs — that menu is supplied automatically.
+    expect(buildField).toMatch(/never a hand-listed slug menu/i);
+  });
+
+  /**
+   * The accept-and-use side above is a no-op unless the CALLER also forwards attachmentIds —
+   * organize_material's build_specialist is the one caller that builds a specialist straight from
+   * supplied material (the exact path that produced the fabricated boiler knowledge), so it must
+   * pass them through alongside `research`.
+   */
+  it('organize_material forwards attachmentIds to the specialist it builds, alongside research', () => {
+    const buildSpecialist = readFileSync(
+      join(SYSTEM_SPACES, 'user-thing', 'tasklists', 'organize_material', '04-build_specialist.md'),
+      'utf8',
+    );
+
+    expect(buildSpecialist).toMatch(/context:\s*\{[^}]*research:\s*item\.research,\s*attachmentIds/);
+  });
 });
 
 describe('no system-space prompt is overfitted to a scenario', () => {

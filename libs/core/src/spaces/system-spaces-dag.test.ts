@@ -227,11 +227,14 @@ describe('shipped system spaces load + validate', () => {
 
   it('architect tasklists declare input schemas matching what their callers pass', async () => {
     const space = await loadSpace(resolve(SYS, 'system-architect'), { requireAgents: false });
-    // THING's build task / the architect instruct seed { topic, goal, research }.
+    // THING's build task / the architect instruct seed { topic, goal, research }, plus an OPTIONAL
+    // attachmentIds so a caller with real supplied documents can let build_field re-read them
+    // instead of trusting the lossy `research` summary alone for a specific fact.
     expect(space.tasklists['synthesize_and_run']!.input).toEqual({
       topic: 'string',
       goal: 'string',
       research: 'string',
+      attachmentIds: 'array?',
     });
     // The architect instruct's Job 2 seeds { spaceKey, feedback }.
     expect(space.tasklists['iterate_space']!.input).toEqual({
