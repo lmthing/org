@@ -479,14 +479,19 @@ one subagent per scenario on one host, so two runs can be handed the same port; 
 exits `EADDRINUSE`, `waitUp` burns up to 120s (`:70-76`), and the retry calls
 `killPort(run.port)` (`:98-107`) — which SIGKILLs **whatever now holds that port, i.e. the
 winning run's server.** A lost race murders an innocent run.
-- **Fix:** close the reserve-then-release gap — launch with `--port 0` and scrape the
-  actually-bound port from the ready log/file, or hold the fd and hand it down, or use an
-  atomic file-lock under `runs/`. Watch the child `exit` event so a failed bind fails fast
-  instead of polling a dead server for 120s. And never `killPort` a port you didn't confirm
-  is your own `run.serverPid`.
-- Secondary: `reapOrphanRuns` reads `join(r.dir, 'runner.pid')` (`:398`) but the pidfile is
-  written to `outDir`; under `--out` the reaper sees no pidfile, declares the owner dead,
-  and can kill a live run.
+- **Fix (decided): select the port from the persisted run state, not the OS.** The harness
+  already assigns each run a unique, monotonic `runId` and persists per-run state under
+  `runs/<n>/` (`local.mjs` `nextRunId`/`seedRun`). Derive the port deterministically from that
+  state — e.g. `basePort + runId` (mod a range), or record the chosen port in the run's state
+  file and pick the lowest free port not claimed by another live run's state. Because `runId`
+  is already unique per run, two concurrent runs get distinct ports **by construction** — no
+  `:0` reserve-then-release gap, no race. Keep `killPort` keyed to the run's own
+  `serverPid`/`runId` so teardown can never touch another run's server, and watch the child
+  `exit` event so a failed bind fails fast instead of polling for 120s.
+- Secondary (same root): `reapOrphanRuns` reads `join(r.dir, 'runner.pid')` (`:398`) but the
+  pidfile is written to `outDir`; under `--out` the reaper sees no pidfile, declares the owner
+  dead, and can kill a live run — resolving port + pid + liveness all from one per-run state
+  record fixes this too.
 
 ### C3 — `--cwd` mutates global process state from a raw pre-parse argv scan · `b430f68`
 `applyCwd` does `mkdirSync(dir,{recursive:true})` then `process.chdir(dir)`
@@ -496,9 +501,15 @@ against an empty runtime instead of erroring; and because the only guard is `if 
 `lmthing --cwd --port 9000` treats `--port` as the directory — it `mkdirSync('./--port')`
 and chdirs there, and `parseArgs`' own `--cwd requires a value` check (`args.ts:99-104`)
 never fires because the damage is done at import time.
-- **Fix:** reject a value beginning with `-` (treat as missing, matching `parseArgs`);
-  defer directory creation to the `init`/`serve` auto-materialization path rather than the
-  blind pre-parse scan; validate before mutating `cwd`.
+- **Fix (decided): use a real arg-parsing library.** The whole footgun exists because
+  `--cwd` is handled by a **hand-rolled pre-parse argv scan** (`applyCwd`) that runs before —
+  and separately from — the actual parser (`parseArgs`, `args.ts`). Replace the bespoke
+  scanning with a standard arg parser (Node's built-in `util.parseArgs`, or `commander` /
+  `yargs`) that owns the *entire* argv, including `--cwd`. A library parser rejects
+  `--cwd --port` (a flag can't be a flag's value), requires a value, and gives one validated
+  arg table — so `--cwd` is read *after* parsing, and the `mkdirSync`/`chdir` happen only on a
+  validated path. This also lets `applyCwd`'s duplicated `--env-file`-style scanning
+  (`loadEnv`) collapse into the same parser instead of a second ad-hoc argv walk.
 
 ## 5.2 Missing structural mechanisms (recurring prose patches point here)
 
@@ -515,11 +526,16 @@ runtime or **silently return nothing — which reads to the model as "no data" a
 to give up.** `2c892ec`'s own message admits it is an "INCOMPLETE … L1" prose patch and
 names the real fix as an L3 DTS change; the class then recurred across steps 5/6/8/15/16 of
 the next run.
-- **Proposal (structural):** the DTS is already generated per-capability, so emit a
-  **per-project literal union of the real table names**, and make `where`/`set`/predicate
-  keys `keyof` the table's generated row type. A wrong identifier becomes a **retryable
-  typecheck error** instead of a runtime throw or a silent empty. This one mechanism
-  subsumes the DB-identifier parts of `2c892ec`, `0beae4b`, and `a96c37e`.
+- **Fix (decided): generate the DB types from the project schema.** The DTS is already
+  generated per-capability, so generate a **per-project set of table types off the live
+  schema** — a literal union of the real table names for the `table` param, and a real row
+  `interface` per table so `where`/`set`/predicate keys are `keyof` that row. A wrong table or
+  field name becomes a **retryable typecheck error** instead of a runtime throw or a silent
+  empty. Generating from the schema (rather than hand-writing) means the types **stay correct
+  as the project's tables evolve** — a new `writeProjectTable` / migration regenerates the
+  union and row interfaces, so the model's DTS is always the ground truth. This one mechanism
+  subsumes the DB-identifier parts of `2c892ec`, `0beae4b`, and `a96c37e`, and is the single
+  highest-leverage change in the report.
 
 ### M2 — `display()` has no channel/scope typing *(corroborates §1 — independent second opinion)*
 The prose reviewer arrived at §1 from the opposite direction: `display` is injected
@@ -554,21 +570,32 @@ it favorably** — a brittle cross-node coupling that is guaranteed to recur.
 component write is still imported and 404s the whole app**) are all the pipeline's own
 retry/re-run/partial-failure semantics leaking into per-node prose guards (each node must
 `listProjectDir` before seeding, each page must re-derive an `okComponentNames` filter).
-- **Proposal:** make the host writers **idempotent** (upsert on a stable natural key so a
-  retry is a no-op), compute a **first-build-vs-reentry signal once** in the pipeline
-  instead of instructing every node to check, and add a **build gate** that verifies every
-  page import resolved to a landed file. Moves four+ prose patches to "the host guarantees
-  it."
+- **Fix (decided): writing to something that already exists must force a read first.** Make
+  the host writers **read-before-write**: a `writeProjectTable` / `writeProjectPage` /
+  `writeProjectComponent` against a target that **already exists** must first read the current
+  content and reconcile against it, rather than blindly re-emitting. Concretely — a write to
+  an existing table seeds/updates against the rows already there (a retry that re-runs the
+  same statement is then a no-op or an update, never a duplicate insert); a second build pass
+  reads the existing tables/pages and edits them in place instead of spawning a parallel app;
+  and a page write reads the set of landed components so it can't import one that isn't there.
+  This makes the write path **converge by construction** — the writer sees prior state before
+  it acts — so no per-node prose guard (`listProjectDir` before seeding, re-derived
+  `okComponentNames` filter) is needed. It also matches the engineer's existing discipline
+  (return code for the caller to persist) and the general "look at the target before
+  overwriting" rule. Moves the four+ prose patches (`842723f` #3/#4, `07749b5`) to "the host
+  guarantees it."
 
-### M5 — closed-enumeration args fail silently to a default instead of erroring · `e2571b0`, `842723f`
-`loadKnowledge('organizing','split', X)` with an invented guide name (`crafts`/`studio`/
-`retail`) **silently falls back to `'default'`** — the wrong guide loads with no error, so
-the model can't self-correct. Two commits had to add the same "use the EXACT name from the
-menu line" prose (recurrence signal). `6b87b5b` (append the real option list) helps the
-model *see* the names but doesn't make a miss loud.
-- **Proposal:** validate the option arg against the on-disk list; a miss returns a
-  **retryable error listing the valid names** (or the arg is a literal union). Same shape
-  as M1 — a closed enumeration should be checked, not silently degraded.
+### M5 — closed-enumeration args fall back to a default *(reviewed → WON'T FIX: fallback is acceptable)*
+The review flagged that `loadKnowledge('organizing','split', X)` with an invented guide name
+(`crafts`/`studio`/`retail`) **silently falls back to `'default'`**, and proposed erroring on
+a miss. **Decision: keep the fallback.** A `default` guide is a sensible, safe degradation —
+an unrecognised option gets generic-but-correct guidance rather than a hard failure, which is
+the right behavior for a *knowledge menu* (unlike a DB identifier in M1, where a wrong name
+means wrong/no data). The existing mitigations are sufficient: `6b87b5b` already appends the
+real option list so the model sees the exact names, and the "use the EXACT name from the menu
+line" prose nudges toward them. No structural change; M5 is closed. *(Contrast M1: an
+enumeration only needs to error when a miss produces a wrong result, not when it degrades to a
+reasonable default.)*
 
 ## 5.3 Maintainability / smaller cleanups
 
@@ -657,23 +684,23 @@ preview+`inspect()` model the runtime already trusts.
 
 ### Part II — review findings
 
-**Correctness (do first):**
+**Correctness (do first) — decided directions:**
 
-| id | Risk | Where |
+| id | Risk | Decided fix |
 |---|---|---|
-| C1 | RAM-only build target + mid-turn eviction → build silently lands in `user` | `635ebbc` × `77d95de`; `session-manager.ts:441-443` |
-| C2 | Port reserve-then-release race; `killPort` can kill another run's server | `b7b4bae`; `local.mjs:113-122,98-107` |
-| C3 | `--cwd` does `mkdirSync`+`chdir` from a pre-parse argv scan; eats the next flag as its value | `b430f68`; `cwd.ts:20-26` |
+| C1 | RAM-only build target + mid-turn eviction → build silently lands in `user` (`635ebbc`×`77d95de`; `session-manager.ts:441-443`) | *(needs decision — see §5.1 C1; persist the target so it survives eviction)* |
+| C2 | Port reserve-then-release race; `killPort` can kill another run's server (`b7b4bae`; `local.mjs:113-122`) | **Select the port from the persisted per-run state (`runId`)** — unique by construction, no race |
+| C3 | `--cwd` does `mkdirSync`+`chdir` from a pre-parse argv scan; eats the next flag (`b430f68`; `cwd.ts:20-26`) | **Use a real arg-parsing library** for all of argv incl. `--cwd` |
 
 **Missing structural mechanisms (retire recurring prose patches):**
 
-| id | Mechanism | Retires |
-|---|---|---|
-| M1 | Per-project **literal-union table names** + `keyof`-row `where`/`set` in the DTS | `2c892ec`, `0beae4b`#3, `a96c37e` (DB-identifier parts) |
-| M2 | **Scope-aware `display()`** (= §1; `setActivity` already does it) | `ecf6631`, `2c892ec`/`0beae4b` display items |
-| M3 | Typed `read_sources→plan_app` handoff + **source→row / prop→endpoint coverage gate** | `42106e1`, `13e8c84`, `8a52325`, `842723f`#4a |
-| M4 | **Idempotent host writers** (upsert) + a computed re-entry signal + page-import build gate | `842723f`#3/#4, `07749b5` |
-| M5 | Closed-enumeration args (`loadKnowledge` option) **error loudly**, never silently `default` | `e2571b0`, `842723f` |
+| id | Mechanism | Status | Retires |
+|---|---|---|---|
+| M1 | **Generate DB table types from the project schema** — literal-union table names + `keyof`-row `where`/`set` in the DTS | ✅ decided (top priority) | `2c892ec`, `0beae4b`#3, `a96c37e` |
+| M2 | **Scope-aware `display()`** (= §1; `setActivity` already does it) | ✅ = Proposal 1 | `ecf6631`, `2c892ec`/`0beae4b` display items |
+| M3 | Typed `read_sources→plan_app` handoff + **source→row / prop→endpoint coverage gate** | proposed | `42106e1`, `13e8c84`, `8a52325`, `842723f`#4a |
+| M4 | **Read-before-write host writers** — writing an existing target reads it first & reconciles | ✅ decided | `842723f`#3/#4, `07749b5` |
+| M5 | Closed-enumeration args falling back to `default` | ❌ won't fix — fallback is acceptable | — |
 
 **Cleanups:** behavioral (not prose-grep) tests for the architect layer (`e6b7557`,
 `8350be3`); unify `loadKnowledge`'s two resolution engines (`ea8c914`); hoist the triplicated
@@ -683,8 +710,8 @@ scenario harness to `dist` in CI (`6916d5c`); make the root session non-evictabl
 (`77d95de`); drop literal-sentence CI assertions (`297fa77`, `a96c37e`); split the
 `3c453ee` mega-diff in future.
 
-The single highest-leverage investment is **M1 (checked identifiers in the DTS)** — it
-converts an entire recurring "hallucinated name → silent empty → model gives up" class into
-retryable typecheck errors, and the campaign is already paying for it in repeated prose
-rounds. C1 is the highest-leverage *correctness* fix — verify it with a live
-create→evict→delegate test before the next campaign run.
+The single highest-leverage investment is **M1 (generated DB table types)** — it converts an
+entire recurring "hallucinated name → silent empty → model gives up" class into retryable
+typecheck errors, and the campaign is already paying for it in repeated prose rounds. C1 is
+the highest-leverage *correctness* fix — verify it with a live create→evict→delegate test
+before the next campaign run.
