@@ -461,15 +461,32 @@ other.
   (its whole `sendResilient` re-send path exists because the session is evicted on a wide
   fan-out).
 
-So the failure sequence is real: THING `createProject`s in one turn → session evicted →
-resumed → `buildTarget.projectId` is back to `undefined` → `resolveBuildTarget()` returns
-`null` → the delegated build lands in `user`, the precise outcome `635ebbc` says never
-happens. The invariant is enforced only by transient RAM that `77d95de` routinely discards.
-- **Fix:** persist the build target in the session snapshot (or a marker under
-  `.lmthing/<id>`) so it survives resume; or have `resolveBuildTarget` fall back to "the
-  most recently created project owned by this session," never silently to `user`.
-- **Do first:** a live `create → evict → delegate-build` test. This is the highest-value
-  check in the window.
+So the failure sequence is real: THING `createProject`s in one turn → session evicted
+(idle, between turns) → resumed → `buildTarget.projectId` is back to `undefined` →
+`resolveBuildTarget()` returns `null` → the delegated build lands in `user`, the precise
+outcome `635ebbc` says never happens. The invariant is enforced only by transient RAM that
+eviction discards.
+
+- **Fix (decided): remove the session-eviction mechanism entirely.** The root cause of C1 —
+  and of the whole `77d95de` band-aid — is that sessions are evicted from memory at all.
+  Two eviction paths exist: the `maxSessions` cap (`session-manager.ts:278`, default 24) via
+  `ensureRoom → evictOneIdle` (`session-manager.ts:979-1008`), and the memory watchdog
+  (`serve.ts:542`, `mem-watchdog.ts`) that sheds one idle session per tick. **With eviction
+  gone, the RAM-only build target simply survives** (no snapshot round-trip loses it), so C1
+  disappears *without* having to persist the target, and `77d95de`'s `sendResilient` re-send
+  + `--max-sessions 40→80` become unnecessary (the top-level session is never interrupted).
+  This is the clean, unifying fix: it retires a whole class of "state lived only in RAM and
+  eviction ate it" bugs rather than persisting each piece of transient state defensively.
+- **Consideration to design around, not a blocker:** eviction currently exists to bound
+  memory and to keep "+ New chat" from failing once several chats are resident
+  (`session-manager.ts:969-976`). Removing it needs a replacement memory strategy — e.g.
+  keep sessions **persisted-and-dormant on disk and lazily rehydrate on the next request**
+  (so an idle session costs disk, not RAM, and is never *lost*, only paged out and faithfully
+  restored), rather than discarded. The decision is to remove *eviction-as-loss*; dormancy +
+  faithful rehydrate is the mechanism that keeps the memory bound without the corruption.
+- **Verify:** a live `create → go-idle → resume → delegate-build` test still lands the build
+  in the dedicated project (guards against a regression if any dormancy/rehydrate path is
+  added later).
 
 ### C2 — port allocation is racy and teardown can kill an innocent run's server · `b7b4bae`
 `allocatePort()` binds `:0`, reads the port, and **closes the socket before returning**
@@ -537,31 +554,62 @@ the next run.
   subsumes the DB-identifier parts of `2c892ec`, `0beae4b`, and `a96c37e`, and is the single
   highest-leverage change in the report.
 
-### M2 — `display()` has no channel/scope typing *(corroborates §1 — independent second opinion)*
+### M2 — `display()` has no channel/scope typing *(= §1; decided semantics below)*
 The prose reviewer arrived at §1 from the opposite direction: `display` is injected
 **unconditionally and un-scoped** (`bootstrap.ts:198`), while `setActivity` immediately
 below it (`bootstrap.ts:199-202`) is **already per-scope routed via `onActivity`** (main vs
 fork/delegate). So the mechanism to fix the `display()` leak structurally *already exists* —
-`display` just wasn't given it. This underlies `ecf6631` (a delegate's `display()` leaks to
-user chat) and the display-vs-`setActivity` items in `2c892ec` and `0beae4b` (a placeholder
-`display()` silently ends a turn with no answer). → implement as §1; additionally, "a turn
-that produced no substantive `display()` is incomplete → retry" is host-observable and would
-close the turn-ends-without-answer half.
+`display` just wasn't given it.
 
-### M3 — no source→row coverage invariant in the appbuilder pipeline *(new proposal)*
+- **Decided semantics: a child's `display()` sends purely INFORMATIONAL messages to its
+  PARENT AGENT — nothing else.** Not the real user, not a rendered artifact, not the child's
+  *result*. It is an informational side-channel (a progress note / "here's what I found")
+  addressed to the caller that spawned the child. The child's actual answer still flows only
+  through `currentTask.resolve` (unchanged). Concretely: in a fork/delegate VM, `display(msg:
+  string)` routes the message into the **parent's** trace/scope (mirroring how `setActivity`
+  already scopes), and the top-level user surface never receives it. This is Proposal §1 with
+  the semantics pinned — string-only, informational, parent-addressed.
+- This fixes `ecf6631` (a delegate's `display()` leaks to user chat) and the
+  display-vs-`setActivity` items in `2c892ec` / `0beae4b` structurally. The complementary
+  host check — "a turn that produced no substantive answer is incomplete → retry" — still
+  applies at the *session* level, where `display()` IS the user answer.
+
+### M3 — per-project document handling: the file agent saves an analysis for every file *(decided)*
 `42106e1`, `13e8c84`, `8a52325`, and `842723f` #4a all fight the same thing: parsed source
 data silently vanishing (or rendering as a hardcoded `$0.00`) somewhere between
-`read_sources` and the live tables/pages. The current design passes free-text **"briefs"**
-between nodes and **tunes one node's prose so a downstream node's heuristic will re-interpret
-it favorably** — a brittle cross-node coupling that is guaranteed to recur.
-- **Proposal:** give the handoff a **schema** — each extracted item a typed candidate
-  (`{kind, values, source: 'structured'|'vision'|'audio', matchedStructuredSource,
-  isNew}`) — and add a **host/code-node coverage gate**: every parsed source id must map to
-  ≥1 landed row or labelled fact, and every live-figure prop must trace to a real endpoint
-  field, else the build fails. "Don't drop it" / "don't hardcode the total" become
-  assertions, not pleas. (`8a52325`'s `usdTotal={0}` case also has a typed-lever option: a
-  branded `LiveFigure` type that only `useApi(...)` produces, making a literal a typecheck
-  error.)
+`read_sources` and the live tables/pages. The current design **re-reads each file ad hoc**
+(`readDocument(id)` — a universal global that extracts a stored upload's text host-side,
+`types.ts:107`, `yield-router.ts:229`) and then passes a lossy free-text **"brief"** between
+pipeline nodes, **tuning one node's prose so a downstream node's heuristic re-interprets it
+favorably** — a brittle cross-node coupling guaranteed to recur, and nothing durable is ever
+written back per file.
+
+- **Decided fix: per-project document handling, with a saved analysis stored alongside each
+  document.** A project already has a `documents/` directory rooted at the project root
+  (`bootstrap.ts:353`, `app-globals.ts:228`), read through the project readers. The change:
+  1. **The file agent auto-saves an analysis for every file it processes.** The `system-files`
+     agents (`reader`/`sheet`/`dispatch`, `libs/core/system-spaces/system-files/agents/*`)
+     today read via `readDocument` and only `resolve` an answer — nothing is persisted.
+     Instead, each analysis is written **next to its document** in the project's `documents/`
+     dir (e.g. `documents/<id>/analysis.json` + the original), via a typed root-scoped writer
+     (the only sanctioned persistence path per `CLAUDE.md` — a `writeProjectDocument*` writer,
+     not raw fs). Analyzing a file becomes idempotent and durable, not a per-turn re-read.
+  2. **Downstream nodes read the saved analysis, not a re-passed brief.** `read_sources` /
+     `plan_app` and the appbuilder pipeline consume the persisted per-file analysis (a typed
+     record: `{kind, values, source: 'structured'|'vision'|'audio', matchedStructuredSource,
+     isNew}`), so information can't be lost or re-summarized between nodes — it lives on disk,
+     attached to the document, for the life of the project.
+  3. **A coverage gate closes the loop:** every document with a saved analysis must map to ≥1
+     landed row or labelled fact, and every live-figure prop must trace to a real endpoint
+     field, else the build fails. "Don't drop it" / "don't hardcode the total" become
+     assertions against durable state, not pleas in prose. (`8a52325`'s `usdTotal={0}` case
+     also has a typed-lever option: a branded `LiveFigure` type that only `useApi(...)`
+     produces, making a literal a typecheck error.)
+- **Why saving with the document is the right shape:** it makes the analysis a **first-class,
+  per-project, reusable artifact** — re-openable, inspectable, and stable across retries and
+  re-runs (which also complements M4's read-before-write: a re-run reads the existing analysis
+  instead of re-deriving it). The lossy brief-between-nodes coupling disappears because the
+  source of truth is one durable file per document, not a message in flight.
 
 ### M4 — non-idempotent host writers + no re-entry detection *(new proposal)*
 `842723f` #3 (a forEach-item retry re-runs `writeProjectTable(name, schema, rows)` and
@@ -688,7 +736,7 @@ preview+`inspect()` model the runtime already trusts.
 
 | id | Risk | Decided fix |
 |---|---|---|
-| C1 | RAM-only build target + mid-turn eviction → build silently lands in `user` (`635ebbc`×`77d95de`; `session-manager.ts:441-443`) | *(needs decision — see §5.1 C1; persist the target so it survives eviction)* |
+| C1 | RAM-only build target + eviction → build silently lands in `user` (`635ebbc`×`77d95de`; `session-manager.ts:441-443`) | **Remove session eviction entirely** — RAM target survives; obsoletes `77d95de`. Replace memory bound with persist-and-lazily-rehydrate (dormant, never lost) |
 | C2 | Port reserve-then-release race; `killPort` can kill another run's server (`b7b4bae`; `local.mjs:113-122`) | **Select the port from the persisted per-run state (`runId`)** — unique by construction, no race |
 | C3 | `--cwd` does `mkdirSync`+`chdir` from a pre-parse argv scan; eats the next flag (`b430f68`; `cwd.ts:20-26`) | **Use a real arg-parsing library** for all of argv incl. `--cwd` |
 
@@ -697,8 +745,8 @@ preview+`inspect()` model the runtime already trusts.
 | id | Mechanism | Status | Retires |
 |---|---|---|---|
 | M1 | **Generate DB table types from the project schema** — literal-union table names + `keyof`-row `where`/`set` in the DTS | ✅ decided (top priority) | `2c892ec`, `0beae4b`#3, `a96c37e` |
-| M2 | **Scope-aware `display()`** (= §1; `setActivity` already does it) | ✅ = Proposal 1 | `ecf6631`, `2c892ec`/`0beae4b` display items |
-| M3 | Typed `read_sources→plan_app` handoff + **source→row / prop→endpoint coverage gate** | proposed | `42106e1`, `13e8c84`, `8a52325`, `842723f`#4a |
+| M2 | **`display()` = informational messages to the parent agent only** (string; not the user, not the result) | ✅ = Proposal 1 | `ecf6631`, `2c892ec`/`0beae4b` display items |
+| M3 | **Per-project document handling** — file agent auto-saves a typed analysis in `documents/`; downstream reads it; + coverage gate | ✅ decided | `42106e1`, `13e8c84`, `8a52325`, `842723f`#4a |
 | M4 | **Read-before-write host writers** — writing an existing target reads it first & reconciles | ✅ decided | `842723f`#3/#4, `07749b5` |
 | M5 | Closed-enumeration args falling back to `default` | ❌ won't fix — fallback is acceptable | — |
 
