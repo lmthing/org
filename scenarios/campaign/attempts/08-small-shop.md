@@ -235,3 +235,99 @@ my owned lane) — see FIX READY signal to main for the full packet.
 Steps 1-3 solid on a fresh run (run 8). Step 4 unchanged/cross-lane (reported). Five files changed +
 verified in my lane (organize_material ×5 + the dag test + 3 system-appbuilder task files +
 automator/instruct.md); all uncommitted, edit-lock held pending orchestrator review. See handoff.md.
+
+## R3 — TASK 1 (shared blocker): automator page-gap root-cause — INVESTIGATION ONLY, human STOP directive
+mid-flight, NO edit landed this round · files read, zero edits made · edit-lock was already held by
+07-life-admin (not touched) · NOT verify=anything — this is a root-cause writeup for the next
+continuation, not a fix.
+
+Evidence trail (07-life-admin run 11, `scenarios/07-life-admin/runs/11/`):
+- `step-03.json`: `appManifest:{pageCount:0,built:false}`, `appPageStatus:404`, `appError:null` — the
+  same shape the task brief described.
+- `sessions.log` (19208 lines): confirmed via grep counts — `writeProjectTable`×48,
+  `writeProjectApi`×38, `writeProjectComponent`×16, **`writeProjectPage`×0**. The last automator
+  activity before the log jumps to an unrelated LATER scenario step (electricity-tariff research,
+  step 4) is `writeProjectComponent("StatusBadge", …)` — i.e. the build got through
+  `08-plan_components`/`09-implement_components` and NEVER reached `10-plan_pages` at all (no
+  `plan_pages`/`implement_pages` instruction text appears anywhere in the log — grepped for the task
+  files' own distinctive phrases, zero hits).
+- `data/.lmthing/sessions-ledger.jsonl`: the single `system-appbuilder/automator#build_live_project`
+  `DelegateEntry` grows `inputTokens` 40180 → 629994 over 34 snapshots. Traced this to
+  `libs/cli/src/server/session-ledger.ts#SessionLedger.ingest` (`case 'llm_response'`): every
+  descendant fork's token cost is attributed to the **nearest enclosing delegate** node
+  (`nearestDelegate` walks node parentage), so this is a CUMULATIVE total-cost-of-the-whole-build
+  figure across every tasklist node/forEach-item fork, not one conversation's context outgrowing a
+  window. (The ledger entry's `status` flipping to `"done"` while the number keeps climbing afterward
+  is a benign async trace-flush ordering artifact — deprioritized, not load-bearing to the real bug.)
+
+Structural read of `libs/core/src/tasklist/orchestrator.ts#runTasklist`: its scheduling `while` loop
+can ONLY return an envelope once `done.size + skipped.size === total tasks`, and NONE of
+`build_live_project`'s 12 nodes are `optional`/`condition`-gated (so none can ever land in `skipped`) —
+meaning the function structurally CANNOT produce a normal envelope while `10-plan_pages`/
+`11-implement_pages`/`12-finalize` never ran. So either (a) `runTasklist` genuinely never returned
+(still in-flight when evidence was captured — ruled out; the recorded turn shows
+`interrupted:false`, i.e. the harness's `sess.send()` polling saw the session go IDLE within the
+20-min per-turn cap, `scenarios/harness/lib/thing.mjs:305` `#dispatchAndWait timeoutMs=1_200_000`), or
+(b) a REQUIRED task deep in the DAG (most likely `10-plan_pages` or `11-implement_pages`, both
+non-optional; `implement_pages` IS a `forEach` with its own `FOREACH_ITEM_ATTEMPTS=3` per-element
+retry, but `plan_pages` is a single fork with NO retry at the orchestrator level) threw — per
+`orchestrator.ts:293-306`, a non-optional task failing throws `Required task "X" failed: …` and
+ABORTS THE WHOLE `runTasklist` call (no salvage at the tasklist level for a non-forEach required
+task; salvage is a FORK-internal, not-forEach-item mechanism, and "a hard budget cap on the main
+loop propagates as `BudgetExceededError` and rejects… rather than salvaging" per
+`org/docs/runtime/fork-and-tasklists.md`). That thrown error surfaces to the automator's own turn as
+a normal JS rejection on `currentTask.resolve(await tasklist('build_live_project', seed))` — a
+RETRYABLE runtime error the automator's own turn loop would re-attempt (re-running the WHOLE
+tasklist from scratch each time; the existing idempotent/convergence guards — R2's
+`05-implement_tables.md` retry-safe check + `03-plan_app.md`'s convergence guard — keep re-seeding
+from duplicating rows, so retries look like "wasted, but not corrupting" work) — burning the
+observed cumulative token growth across MULTIPLE full/partial re-attempts, until the automator's own
+outer session exhausts its retry/episode budget and gets silently salvaged (a neutral placeholder,
+never visible as a top-level `errors` entry in the step evidence THING/the runner captures — matching
+"status: done, errors: []").
+
+LEADING HYPOTHESIS for WHY `plan_pages`/`implement_pages` would fail on a large app specifically
+(not yet directly observed — a budget-exceeded rejection deep in a nested fork does not surface its
+own message in the compact step evidence, and reading the full trace to confirm was where this
+investigation was cut off by the human STOP directive): `06-plan_endpoints.md` and
+`07-implement_endpoints.md` both declare `dependsOn` on `plan_tables` and get its FULL schema +
+ALL SEEDED ROWS threaded in as upstream context (`getUpstreamOutputs`/`getUpstreamOutputSchemas` in
+`orchestrator.ts` pass `allOutputs[dep]` RAW, uncompressed); `10-plan_pages.md` depends on `plan_app,
+plan_endpoints, plan_components, user_stories` — i.e. it receives the FULL endpoint list (every
+route's purpose/fields/tables) and FULL component list threaded in. For a LARGE app (12 tables, 16
+routes, per the task brief's numbers) this upstream blob is substantial and scales with app size —
+exactly the "prompt-cost that scales with the app, not the task" shape the task brief's option (b)
+flagged. The DAG topology ITSELF is not naively serial, though: `plan_pages` depends on
+`plan_components` (the SPEC), not `implement_components` (the WRITTEN files) — so the DAG already
+allows `plan_pages` to run in PARALLEL with `implement_components`'s forEach, and `implement_pages`
+only waits on `implement_components`+`plan_pages`. The bottleneck is not "pages are scheduled last in
+file-order" (they aren't, structurally) — it's that by the time `plan_pages` becomes ready, the
+CUMULATIVE distinct upstream artifacts it (and everything after it) must carry are large enough on a
+big build to risk a per-fork budget trip, with NO structural fallback if that trip happens (a required,
+non-forEach task's single failure kills the whole tasklist, unlike a forEach item which gets 3 tries
++ salvage).
+
+NOT YET CONFIRMED (would need the STOPPED investigation to resume): reading `step-02.full.json`'s
+raw yield/error detail for evidence of an actual `BudgetExceededError`/"Required task ... failed"
+message reaching the automator's own turn's `eval_error`/`typecheck_error` retries (the COMPACT
+`step-02.json` I read only shows 4 early THING-side typecheck errors before automator was even
+delegated to — none from inside the tasklist). This is the single most valuable next probe: grep
+`step-02.full.json` (or re-run with a trace) for `"Required task"` / `BudgetExceededError` /
+`forkDepth` to nail which node actually threw, rather than inferring it structurally.
+
+PROPOSED FIX DIRECTION (not implemented, not verified — next continuation's starting point): option
+(a) from the task brief — mirror the freeform grow path's "openable-early" principle inside the
+TASKLIST itself. Concretely: insert a node (or extend `12-finalize.md`'s own preconditions, or add a
+new `06b-` node) that writes a MINIMAL index page + a persistent `_layout` right after
+`05-implement_tables` succeeds — BEFORE the endpoint/component/page fan-out that risks the budget —
+so `built:true`/`pageCount>=1` survives even if `plan_pages`/`implement_pages` later fail or degrade.
+The real `10-plan_pages`/`11-implement_pages` pipeline would then OVERWRITE this minimal page with the
+richly-wired one when it succeeds; when it doesn't, the app is still openable. This does not yet
+address the root COST driver (large upstream blobs threaded into every downstream planner — option
+b), which is worth revisiting once (a) stops the visible symptom, since the wasted-retry cost/latency
+would still be real even if pages always land.
+
+STOPPED HERE on an explicit human directive (via main) to freeze all lanes — no edit was started, the
+edit-lock (held by 07-life-admin throughout) was never touched, and the one 08-small-shop run I had
+launched (run 9, for TASK 2's resume) was killed cleanly per the directive before touching anything
+else. See handoff.md for the exact resume state.
