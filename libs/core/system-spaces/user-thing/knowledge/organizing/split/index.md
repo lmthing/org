@@ -9,12 +9,10 @@ is app DATA (a table), never a specialist.
 
 Read what the material actually is and what the user asked for, decide which domain(s) it spans, and
 load the matching guide(s) for how that domain splits with
-`loadKnowledge('organizing','split','<domain>')`. A mixed pile can load several. Use the `default`
-guide when no domain matches.
-
-Guides: default · trips · household · vehicles · pets · health · home-renovation · events · wedding ·
-studies · work-clients · job-search · moving · garden · family-kids · finances · recipes · fitness ·
-collections · small-business
+`loadKnowledge('organizing','split','<option>')`, using an EXACT name from the **Available options**
+list appended to this menu — it is read straight off the guide files on disk, so it is always current;
+never infer a plausible-sounding name that isn't on it. A mixed pile can load several. Use the
+`default` guide when no domain matches.
 
 ## Consolidate to the minimal specialist set
 
