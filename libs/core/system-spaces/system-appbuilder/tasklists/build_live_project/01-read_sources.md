@@ -26,6 +26,13 @@ the sources were parsed and each one is a downstream table row/field:
 - **Every numeric cell**: each amount, price, fee, quantity, and any stated total — with its currency
   (USD / TZS) and what row it belongs to. A spreadsheet cell you skip becomes a NULL column later.
 - **Every named person, place, date, and any camera/EXIF or capture detail** an image carries.
+- **A vision/audio-derived item that ISN'T already in a structured source is its own NEW record, not
+  an illustration of one that IS.** A voice memo or photo often shows something the CSV/spreadsheet
+  never listed — a new SKU, a new contact, a new attendee, a new stop. State it the same way you would
+  a structured row that's missing a value: "NEW <kind> (from photo/audio): <description> — no match in
+  <the structured source>." Never describe it merely as "a photo of the X already listed" or fold its
+  count into an existing source's total — that phrasing is exactly what makes a downstream planner
+  treat it as decoration for a row that already exists and drop its own row entirely.
 
 Do not research the web. Emit exactly one statement:
 
