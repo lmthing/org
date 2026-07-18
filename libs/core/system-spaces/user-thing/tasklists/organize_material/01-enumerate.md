@@ -4,16 +4,32 @@ output:
   subjects: array
 role: explore
 functions: []
+canDelegateTo:
+  - system-vision/vision
 prelude: |
   const documents = await Promise.all((attachmentIds as string[]).map((id) => readDocument(id)));
+  const imageIds = documents
+    .filter((d) => d && d.mediaType && String(d.mediaType).startsWith('image/'))
+    .map((d) => d.attachmentId);
+  const visionDetail = imageIds.length > 0
+    ? await delegate('system-vision', 'vision', {
+        query: 'Describe everything visible in detail: every distinct item or subject, its own color/material/markings/state, and how many of each.',
+        attachmentIds: imageIds,
+      })
+    : '';
 ---
 
 Name every distinct real-world SUBJECT in the supplied material — a NAMING pass, before any specialist
-scope is built. The host has already read every supplied document into `documents`; `request`,
+scope is built. The host has already read every supplied document into `documents` (an image attachment
+comes back `{kind:'unsupported'}` there — a document reader cannot see a picture); `request`,
 `sourceSummary`, `attachmentIds`, and `specialistFacts` are also in scope, and the source text is
-authoritative over the short summary. Do not write research notes yet, and do not consolidate — a later
-step merges genuine near-duplicates, so over-listing here is safe and under-listing is the failure to
-avoid.
+authoritative over the short summary. **This now includes images**: `visionDetail` is this task's OWN
+direct description of every image attachment, delegated straight to the vision specialist in the
+prelude above — read it for what an image actually shows instead of trusting `specialistFacts`' one-line
+paraphrase of it, which routinely drops the distinguishing detail that makes an item its own subject (a
+caller's summary of a photo is not the photo). Do not write research notes yet, and do not consolidate —
+a later step merges genuine near-duplicates, so over-listing here is safe and under-listing is the
+failure to avoid.
 
 **You do not carry the splitting rules yourself — they live in loadable knowledge, so the right
 heuristic for THIS kind of material is always available.** Work in two reads:
