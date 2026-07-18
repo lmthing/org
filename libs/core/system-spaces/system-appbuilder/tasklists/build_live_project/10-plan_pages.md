@@ -11,12 +11,21 @@ Detail the MULTIPLE pages of the app, each wired to the real endpoints and the r
 that every user story has a page that satisfies it. `query`, `user_stories` (`user_stories.stories` —
 each page must serve one or more), `plan_app` (`plan_app.pages`, the binding page list), `plan_endpoints`
 (`plan_endpoints.endpoints` — each is `{ name, route, purpose, tables }`), and `plan_components`
-(`plan_components.components`) are in scope. This is a THINKING step — no writers. **Every endpoint a
-page lists must be an existing `plan_endpoints.endpoints[].name`, copied VERBATIM — never invent a name
-or transform one.** Detail the `index` home PLUS the additional views the stories call for (a list, a
-detail `items/[id]`, a dashboard) — a single page is not enough. For each page, list the endpoint
-`name`s it reads and the components it renders, so the implement step wires real data through shared UI.
-Emit one statement:
+(`plan_components.components` — each is `{ name, purpose, props }`) are in scope. This is a THINKING
+step — no writers. **Every endpoint a page lists must be an existing `plan_endpoints.endpoints[].name`,
+copied VERBATIM — never invent a name or transform one.** Detail the `index` home PLUS the additional
+views the stories call for (a list, a detail `items/[id]`, a dashboard) — a single page is not enough.
+For each page, list the endpoint `name`s it reads and the components it renders, so the implement step
+wires real data through shared UI.
+
+**A page's endpoints must cover every component's props, not just its OWN headline numbers.** For
+every component you assign to a page, check its `plan_components` `props` against this page's
+endpoint list: each prop that represents a live figure (a total, a count, a computed summary — not a
+static label) must be produced by a field on ONE of the page's listed endpoints. If a component you
+want on this page needs a figure none of its endpoints supplies, ADD the endpoint that supplies it
+(from `plan_endpoints`) — never assign the component anyway and leave its data need unmet; a page
+that ships a total/summary component with nothing to feed it renders a **hardcoded zero**, which is
+indistinguishable from broken to the person looking at it. Emit one statement:
 
 ```typescript
 currentTask.resolve({

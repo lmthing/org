@@ -44,6 +44,13 @@ Wiring rules — the app fails to compile if you break them:
   method on it, reading a property, indexing, passing it somewhere non-null). COALESCE first:
   `value ?? fallback` (e.g. `amount ?? 0`, `items ?? []`, `label ?? '—'`), then use the result. One
   unguarded use crashes the whole page the moment a row's field is null.
+- NEVER HARDCODE A LITERAL IN PLACE OF LIVE DATA. A component prop that represents a real figure (a
+  total, a count, a computed value) must be read from `data.items[0].<field>` off one of `item.endpoints`
+  — never a bare number/string typed straight into the JSX (`usdTotal={0}`, `count={12}`). A missing
+  null is a crash you'd notice; a hardcoded placeholder compiles clean and LOOKS like a real value while
+  quietly showing nothing the user has — the worse failure because nothing flags it. If no endpoint on
+  this page supplies a component's figure, that is a PLANNING gap (`item.endpoints` is missing one) —
+  do not paper over it with a literal; the fix is upstream, not a stand-in value.
 
 `writeProjectPage` validates the page has a default export and parses, returning `{ ok, error? }`;
 rewrite and retry if `w.ok` is false. Emit one statement:
