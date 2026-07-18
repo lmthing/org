@@ -144,13 +144,13 @@ The parent frequently has unrelated CI `[skip ci]` image-tag commits ahead of yo
 lane is mid-editing — `--autostash` rebases cleanly around both. NEVER commit a WIP `org/docs` file you didn't
 write; leave it for its lane. If you fall behind on the pointer, it's fine — reconcile in a later commit.
 
-## 7. Usage guard — the shared 5h budget (strict 95%)
+## 7. Usage guard — the shared 5h budget (strict 90%) - except if instructed to ignore usage
 
 `~/.claude/statusline-capture.sh` writes `~/.claude/lmthing-orchestrator/usage.json = { five_hour:
 {used_percentage, resets_at}, … }` on every render (each of your turns is a render). A `Monitor` task also
-pushes usage bands (88/95) + heartbeats. Every heartbeat, read `five_hour.used_percentage`:
+pushes usage bands (88/90) + heartbeats. Every heartbeat, read `five_hour.used_percentage`:
 
-- **≥ 95:** SendMessage every live lane to ensure `handoff.md` + latest snapshot are current, then stop; stop
+- **≥ 90:** SendMessage every live lane to ensure `handoff.md` + latest snapshot are current, then stop; stop
   launching lanes; record `paused` + `resets_at` in state. Then **chain wakeups**: `ScheduleWakeup` clamps to
   ≤3600s but a 5h reset can be further out — schedule ~1800s, and on each wake re-check `usage.json.resets_at`;
   reschedule until it's past, then resume (re-spawn each paused lane FRESH from its handoff — §8). Lanes are
