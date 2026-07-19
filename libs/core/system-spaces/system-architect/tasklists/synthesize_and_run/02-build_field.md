@@ -17,11 +17,17 @@ functions:
 Write ONE knowledge field's files, grounded in the `research` seed (a deep-research report OR a
 summary of supplied material — either way, it is a SUMMARY, not the ground truth itself) and, when
 `attachmentIds` are given, the REAL documents you can re-read yourself. A one-sentence summary is
-not sufficient grounding for a SPECIFIC fact (a serial number, a fault code, a date, an amount): if
-`attachmentIds` were given, read them and confirm a specific claim actually appears in the real text
-before writing it — if it doesn't, describe the point more generally instead of inventing the
-precision the summary implied but the real document doesn't actually contain. A plausible-sounding
-invented specific is a worse failure than an honest, less detailed line. Your field is in `item` =
+not sufficient grounding for a SPECIFIC fact — and "specific" is not just identifier-shaped
+precision (a serial number, a fault code, a date, an amount): it equally covers SCOPE, DURATION,
+VALIDITY and CONDITION qualifiers — "covers X", "valid for/until", "applies while", "includes /
+excludes", "expires after". A sentence that pairs a real fact with such a qualifier the material
+never states is a fabricated claim wearing connective prose. If `attachmentIds` were given, read
+them and confirm a specific claim actually appears in the real text before writing it — if it
+doesn't, either describe the point more generally, or state the gap OUTRIGHT ("the supplied
+material does not state how long/whether/under what conditions …"): an explicitly-stated gap is
+load-bearing — it is what makes a later answer honestly report the fact as missing and trigger real
+research, whereas a plausible qualifier silently poisons every answer that trusts this file. A
+plausible-sounding invented specific is a worse failure than an honest, less detailed line. Your field is in `item` =
 { domain, field, aspects }; the space slug is `design.slug`. Reference `item.domain` / `item.field` /
 `item.aspects` DIRECTLY — never alias `item` to a shorter name in a separate statement first: each
 statement is its own module, and a lost or failed alias declaration turns every later use into a
@@ -45,7 +51,9 @@ const realText = docs.filter((d: { ok: boolean }) => d.ok).map((d: { text?: stri
 // loadKnowledge already appends the real option list read straight off disk, so a hand-written menu
 // here only drifts stale.
 writeKnowledgeIndex(design.slug, item.domain, item.field, { variable: item.field + "Knowledge", description: "<overview paragraph on the splitting axis and what each aspect is for, using only what findings/realText actually say — never a hand-listed slug menu>" });
-// One option file per aspect (>=2), each grounded ONLY in findings/realText, with an honest Source line (or none).
-writeKnowledgeOption(design.slug, item.domain, item.field, item.aspects[0], "# " + item.aspects[0] + "\n\n<content using only what findings/realText actually say — never a specific neither one contains>" + srcLine);
-writeKnowledgeOption(design.slug, item.domain, item.field, item.aspects[1], "# " + item.aspects[1] + "\n\n<content using only what findings/realText actually say — never a specific neither one contains>");
+// One option file per aspect (>=2), each grounded ONLY in findings/realText, and EVERY option file
+// carries the same honest Source line (or none) — an unsourced option is how an invented qualifier
+// later reads as trusted fact.
+writeKnowledgeOption(design.slug, item.domain, item.field, item.aspects[0], "# " + item.aspects[0] + "\n\n<content using only what findings/realText actually say — never a specific (incl. a scope/duration/condition qualifier) neither one contains; name a gap explicitly rather than papering over it>" + srcLine);
+writeKnowledgeOption(design.slug, item.domain, item.field, item.aspects[1], "# " + item.aspects[1] + "\n\n<content using only what findings/realText actually say — never a specific (incl. a scope/duration/condition qualifier) neither one contains; name a gap explicitly rather than papering over it>" + srcLine);
 currentTask.resolve({ domain: item.domain, field: item.field, aspect: item.aspects[0], ok: true });

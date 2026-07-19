@@ -5,7 +5,7 @@ output:
   reason: string
   table: string
   operation: string
-  rowId: string
+  criteria: string
   spaceKey: string
   agent: string
   question: string
@@ -46,11 +46,15 @@ Otherwise pick exactly one `target`:
 - **`db`** — a personal fact AND an existing table clearly fits it. Set `table` to that table's
   name (from `db.tables()`), then settle `operation`:
   - **`operation: "insert"`** — a **newly-reported** amount or record (something they say they just
-    paid, spent, added, or did) that had no prior row. Step two inserts a NEW row; leave `rowId` `""`.
-    This is the default for a stated new fact — do NOT fold it into an existing row's field.
-  - **`operation: "update"`** — ONLY when they are **correcting** what a SPECIFIC existing row already
-    holds ("it was actually X, not Y"). `db.query(table, ...)` to FIND that exact row and set `rowId`
-    to its `id`. If you cannot pin a single existing row, it is not an update — use `insert`.
+    paid, spent, added, or did) that had no prior row. A later step inserts a NEW row; leave
+    `criteria` `""`. This is the default for a stated new fact — do NOT fold it into an existing
+    row's field.
+  - **`operation: "update"`** — ONLY when they are **correcting** what an existing row already holds
+    ("it was actually X, not Y"). You do NOT pick the row here — a dedicated locate step does that.
+    Your job is `criteria`: one compact line naming every IDENTIFYING attribute the user referenced
+    (the old value being corrected, its unit/currency, any label, name, or date). The locate step
+    matches rows against exactly these; leave nothing identifying out, and add nothing the user
+    didn't say.
 - **`space`** — a fact about the WORLD/a topic the user is volunteering (not their own data). Set
   `spaceKey` and `agent` to the space that owns the topic if one is registered; leave them empty if
   none fits (step two will note it).
@@ -59,6 +63,6 @@ Otherwise pick exactly one `target`:
   to add a place for it). Do NOT invent a table.
 
 Write a one-sentence `reason`. Leave any field you don't use as an empty string (`operation` and
-`rowId` are `""` unless `target` is `db`). Emit ONE statement:
+`criteria` are `""` unless `target` is `db`). Emit ONE statement:
 
-currentTask.resolve({ target: "<memory|db|space|ask>", reason: "<why>", table: "<table or ''>", operation: "<insert|update or ''>", rowId: "<row id for update or ''>", spaceKey: "<space or ''>", agent: "<agent or ''>", question: "<ask text or ''>" });
+currentTask.resolve({ target: "<memory|db|space|ask>", reason: "<why>", table: "<table or ''>", operation: "<insert|update or ''>", criteria: "<identifying attributes for update or ''>", spaceKey: "<space or ''>", agent: "<agent or ''>", question: "<ask text or ''>" });

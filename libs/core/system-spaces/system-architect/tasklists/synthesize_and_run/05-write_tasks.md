@@ -24,8 +24,8 @@ const bf = written[0];
 const dom = bf ? bf.domain : "";
 const fld = bf ? bf.field : "";
 const loadLine = bf ? ("const k = await loadKnowledge('" + dom + "','" + fld + "','" + bf.aspect + ".md');\n") : "";
-const grounding = "Ground every claim in the knowledge you loaded: state ONLY what it supports. If the loaded knowledge does not answer `query`, set covered:false and say so plainly — never infer or guess. ";
-const answerInstruction = "Answer the user's request (it is in `query`). " + (loadLine ? "Load the knowledge you need, then resolve a markdown answer grounded in it and `query`. " + grounding + "Set covered:true only if the knowledge genuinely answered the question; covered:false if it did not. Code:\n" + loadLine : "Resolve a markdown answer to `query`, covered:true. Code:\n") + "currentTask.resolve({ answer: 'your full markdown answer', covered: true, sources: [] });";
+const grounding = "Ground every claim in the knowledge you loaded: state ONLY what it explicitly states. covered:true means the loaded text EXPLICITLY states the specific fact(s) `query` asks for (the exact number, duration, date, price, or condition asked about). Text that merely covers the same topic without stating the asked fact is NOT coverage — set covered:false and say plainly what is missing. Never stretch adjacent detail into the missing specific — that gap is exactly what the research fallback is for. ";
+const answerInstruction = "Answer the user's request (it is in `query`). " + (loadLine ? "Load the knowledge you need, then resolve a markdown answer grounded in it and `query`. " + grounding + "Code:\n" + loadLine : "Resolve a markdown answer to `query`, covered:true. Code:\n") + "currentTask.resolve({ answer: 'your full markdown answer', covered: true, sources: [] });";
 const wa = writeTaskFile(design.slug, design.actionId, {
   id: "answer",
   instruction: answerInstruction,

@@ -214,19 +214,36 @@ describe('shipped system spaces load + validate', () => {
     expect(() => validateDag(write), 'write_fact DAG').not.toThrow();
     expect(resolveGoalTask(write)!.id).toBe('write');
 
-    // classify stays read-only (role explore, no write cap) and now resolves the operation split.
+    // classify stays read-only (role explore, no write cap) and resolves the operation split — but it
+    // no longer PINS the row: it emits `criteria` (the user-referenced identifying attributes) and the
+    // dedicated locate node does the matching. Locate-inside-classify is how a correction landed on an
+    // UNRELATED row while the reply claimed success (06-tanzania run 25 step 16 — the €→$ wrong-row
+    // write): one overloaded judgment matched loosely and picked a near-miss. Splitting the location
+    // into its own exactly-one-match step is the step-by-step decomposition that makes that impossible.
     expect(write['classify']!.role).toBe('explore');
     expect(write['classify']!.capabilities).toBeUndefined();
     expect(Object.keys(write['classify']!.output)).toEqual(
-      expect.arrayContaining(['target', 'operation', 'rowId', 'question']),
+      expect.arrayContaining(['target', 'operation', 'criteria', 'question']),
     );
     // The ambiguity detection is LOADABLE knowledge, not inline prose (the recording/intent heuristic).
     expect(write['classify']!.instruction).toMatch(/loadKnowledge\('recording', ?'intent'\)/);
 
+    // The locate node: read-only, matches on EVERY user-referenced attribute, and refuses to guess —
+    // anything but exactly one match resolves ambiguous/none (→ the write step turns it into an ask,
+    // never a write to the nearest-looking row). Reverting the refusal turns this RED.
+    const loc = write['locate']!;
+    expect(loc.role).toBe('explore');
+    expect(loc.dependsOn).toContain('classify');
+    expect(Object.keys(loc.output)).toEqual(expect.arrayContaining(['status', 'rowId', 'candidates']));
+    expect(loc.instruction).toMatch(/EVERY attribute the user referenced/);
+    expect(loc.instruction).toMatch(/not the first, not the\s+closest/);
+
     // The write node branches on the ALWAYS-PRESENT classify.operation (never `typeof` an optional
-    // upstream — the fork-DTS footgun), THROWS on an update with no rowId (a retryable statement error
-    // → corrected to insert), and RE-READS to prove the row landed. Reverting any turns this RED.
+    // upstream — the fork-DTS footgun), writes an update ONLY to the row locate CONFIRMED (ambiguous
+    // and none become an ask, never a guessed write), and RE-READS to prove the row landed.
+    // Reverting any of it turns this RED.
     const w = write['write']!.instruction;
+    expect(write['write']!.dependsOn).toEqual(expect.arrayContaining(['classify', 'locate']));
     expect(write['write']!.capabilities).toContain('db:write');
     // Step-11 fix (06-tanzania run 24): the write node RE-READS with db.query on BOTH branches to
     // prove the row landed — so it MUST also declare db:read. With db:write alone the node's db DTS
@@ -234,8 +251,10 @@ describe('shipped system spaces load + validate', () => {
     // the write is abandoned, and THING fabricates "recorded". Removing db:read turns this RED.
     expect(write['write']!.capabilities).toContain('db:read');
     expect(w).toMatch(/classify\.operation/);
-    expect(w).toMatch(/operation 'update' needs the rowId/);
-    expect(w).toMatch(/!classify\.rowId/);
+    expect(w).toMatch(/locate\.status === "confirmed"/);
+    expect(w).toMatch(/locate\.status === "ambiguous"/);
+    expect(w).toMatch(/never write one `locate` did not\s+confirm|never choose a row yourself/);
+    expect(w).toMatch(/id: locate\.rowId/);
     expect(w).toMatch(/db\.insert\(classify\.table/);
     expect(w).toMatch(/after > before/); // insert path re-reads to prove the count moved
     // The ask branch relays classify.question so THING (not the fork) asks the user — no fork calls ask().
