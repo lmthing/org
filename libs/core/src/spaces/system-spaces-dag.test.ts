@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { loadSpace } from './load.js';
 import { loadTasklistFromSpace } from './tasklist-load.js';
 import type { Space, TasklistDir } from './load.js';
@@ -148,6 +149,88 @@ describe('shipped system spaces load + validate', () => {
     expect(resolveGoalTask(organize)!.id).toBe('build_live_app');
   });
 
+  it('THING resolve_flagged_figure isolates db:write to the confidence-gated fix node', async () => {
+    // Step-9 L2 (06-tanzania run 21): THING diagnosed a double-counted figure PERFECTLY, computed the
+    // exact correct total, then ended the turn asking "want me to fix it?" — zero db mutations. Two L1
+    // prose attempts failed identically, so the ask-vs-act judgment moves OUT of instruct.md prose into
+    // this deterministic DAG. The guarantee is structural, and these assertions are its revert-proof.
+    const space = await loadSpace(resolve(SYS, 'user-thing'), { requireAgents: false });
+    const rff = await loadTasklistFromSpace(space, 'resolve_flagged_figure');
+
+    expect(() => validateDag(rff), 'resolve_flagged_figure DAG').not.toThrow();
+    expect(space.tasklists['resolve_flagged_figure']!.input).toEqual({ complaint: 'string' });
+    expect(Object.keys(rff).sort()).toEqual(['diagnose', 'fix', 'report']);
+
+    // diagnose is read-only reasoning: role explore (write withheld at injection) and NO db:write cap.
+    // Re-granting it any write capability — letting it silently ask-and-guess-write — turns this RED.
+    expect(rff['diagnose']!.role).toBe('explore');
+    expect(rff['diagnose']!.capabilities).toBeUndefined();
+    expect(rff['diagnose']!.dependsOn ?? []).toEqual([]);
+
+    // fix is the SOLE writer, and it runs ONLY on a high-confidence diagnosis. Dropping the condition
+    // (so it could write on a low-confidence guess) OR removing db:write both turn this RED.
+    expect(rff['fix']!.role).toBe('general');
+    expect(rff['fix']!.capabilities).toContain('db:write');
+    expect(rff['fix']!.condition).toMatch(/diagnose\.confidence\s*==\s*'high'/);
+    expect(rff['fix']!.dependsOn).toEqual(['diagnose']);
+    expect(rff['fix']!.goal).toBeFalsy();
+
+    // report is the UNCONDITIONAL goal terminal — Clarification 2: a condition-gated goal that gets
+    // SKIPPED throws "produced no result" (orchestrator.ts), so the goal must MERGE both branches, not
+    // BE the conditional fix. Making fix the goal, or giving report a write cap, turns this RED.
+    expect(resolveGoalTask(rff)!.id).toBe('report');
+    expect(rff['report']!.role).toBe('explore');
+    expect(rff['report']!.capabilities).toBeUndefined();
+    expect(rff['report']!.condition).toBeUndefined();
+    expect(rff['report']!.dependsOn).toEqual(['diagnose', 'fix']);
+  });
+
+  it('THING write_fact hardens the DB write: classify decides insert-vs-update, write refuses an update with no row and re-reads to prove it landed', async () => {
+    // Step-11 L2 (06-tanzania run 19): user STATED a new cash payment; THING mis-routed it as an
+    // actual-paid annotation on an EXISTING row, guessed columns, failed 3× and ended the turn SILENT.
+    // The insert-vs-update judgment now lives IN the DAG: classify resolves an explicit `operation`
+    // (+`rowId` for update), and the write node REFUSES an update without a matched row — so folding a
+    // newly-reported payment into some other row is impossible by construction, and the tasklist returns
+    // {ok,target,detail} THING must relay (non-silent). Column-guessing is separately already a
+    // typecheck error via the in-tree db-schema gate (composeDbDts/DB_WRITE_MEMBERS_TYPED), which also
+    // reaches this fork node (fork.ts threads dbSchema) — so no schema prelude is needed here.
+    const space = await loadSpace(resolve(SYS, 'user-thing'), { requireAgents: false });
+    const write = await loadTasklistFromSpace(space, 'write_fact');
+
+    expect(() => validateDag(write), 'write_fact DAG').not.toThrow();
+    expect(resolveGoalTask(write)!.id).toBe('write');
+
+    // classify stays read-only (role explore, no write cap) and now resolves the operation split.
+    expect(write['classify']!.role).toBe('explore');
+    expect(write['classify']!.capabilities).toBeUndefined();
+    expect(Object.keys(write['classify']!.output)).toEqual(
+      expect.arrayContaining(['target', 'operation', 'rowId', 'question']),
+    );
+    // The ambiguity detection is LOADABLE knowledge, not inline prose (the recording/intent heuristic).
+    expect(write['classify']!.instruction).toMatch(/loadKnowledge\('recording', ?'intent'\)/);
+
+    // The write node branches on the ALWAYS-PRESENT classify.operation (never `typeof` an optional
+    // upstream — the fork-DTS footgun), THROWS on an update with no rowId (a retryable statement error
+    // → corrected to insert), and RE-READS to prove the row landed. Reverting any turns this RED.
+    const w = write['write']!.instruction;
+    expect(write['write']!.capabilities).toContain('db:write');
+    expect(w).toMatch(/classify\.operation/);
+    expect(w).toMatch(/operation 'update' needs the rowId/);
+    expect(w).toMatch(/!classify\.rowId/);
+    expect(w).toMatch(/db\.insert\(classify\.table/);
+    expect(w).toMatch(/after > before/); // insert path re-reads to prove the count moved
+    // The ask branch relays classify.question so THING (not the fork) asks the user — no fork calls ask().
+    expect(w).toMatch(/classify\.target === "ask"/);
+    expect(w).toMatch(/classify\.question/);
+
+    // The domain-neutral heuristic files exist on disk (index menu + a general option), zero literals.
+    const kdir = resolve(SYS, 'user-thing', 'knowledge', 'recording', 'intent');
+    expect(readFileSync(resolve(kdir, 'index.md'), 'utf8')).toMatch(/remind/i);
+    const heuristic = readFileSync(resolve(kdir, 'default.md'), 'utf8');
+    expect(heuristic).toMatch(/unstated desired future behaviour/i); // a positive ambiguity signal
+    expect(heuristic).toMatch(/just STORE|do not ask/i);              // the NEGATIVE signal
+  });
+
   it('user-memory migrate_to_app_db carries db:write on ONLY the migrate node', async () => {
     const space = await loadSpace(resolve(SYS, 'user-memory'), { requireAgents: false });
     // The agent declares db:write as the ceiling, exposed via the migrate action.
@@ -205,7 +288,11 @@ describe('shipped system spaces load + validate', () => {
     expect(live['implement_tables']!.forEach).toBe('plan_tables.tables');
     expect(live['implement_endpoints']!.forEach).toBe('plan_endpoints.endpoints');
     expect(live['implement_components']!.forEach).toBe('plan_components.components');
-    expect(live['implement_pages']!.forEach).toBe('plan_pages.pages');
+    // Pages are the exception: plan_app emits a LIGHTWEIGHT page list, plan_pages is ITSELF a
+    // per-page forEach that details one page per node (so no node holds every page's detail), and
+    // implement_pages fans out over that aggregated per-page array (the bare task id).
+    expect(live['plan_pages']!.forEach).toBe('plan_app.pages');
+    expect(live['implement_pages']!.forEach).toBe('plan_pages');
     // Pages know the endpoints they read AND the reusable components they import.
     expect(live['implement_pages']!.dependsOn).toEqual([
       'plan_pages', 'plan_endpoints', 'plan_components', 'implement_components',
@@ -214,10 +301,24 @@ describe('shipped system spaces load + validate', () => {
     expect(live['implement_endpoints']!.dependsOn).toEqual([
       'plan_endpoints', 'plan_tables', 'implement_tables',
     ]);
+    // GATE-AND-RETRY: after every file is written, the app is compiled against the real toolchain
+    // (buildApp = lint → typecheck → esbuild). A compile node reads the STRUCTURED errors and routes
+    // each offending FILE to a per-file fix fork (forEach over the compile node's `offending` array);
+    // up to two bounded rounds drive the app type-correct, then finalize does the authoritative build.
+    expect(live['compile_pass1']!.dependsOn).toEqual([
+      'implement_tables', 'implement_endpoints', 'implement_components', 'implement_pages',
+    ]);
+    expect(live['fix_pass1']!.forEach).toBe('compile_pass1.offending');
+    expect(live['compile_pass2']!.dependsOn).toEqual(['compile_pass1', 'fix_pass1']);
+    expect(live['fix_pass2']!.forEach).toBe('compile_pass2.offending');
+    // finalize runs after the last fix round and is the sole authoritative build-invoker.
+    expect(live['finalize']!.dependsOn).toEqual([
+      'implement_tables', 'implement_endpoints', 'implement_components', 'implement_pages', 'compile_pass2', 'fix_pass2',
+    ]);
     // Every implement node is model-driven (a code node would need codeNodeCtxFactory threaded through
     // the delegate path THING uses; a model node needs no host factory and writes via writeProjectTable).
     // The model-driven nodes run with write access (role general).
-    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'finalize']) {
+    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'compile_pass1', 'fix_pass1', 'compile_pass2', 'fix_pass2', 'finalize']) {
       expect(live[id]!.role).toBe('general');
     }
     // finalize is the sole goal — it writes the chat _layout and reports the build.

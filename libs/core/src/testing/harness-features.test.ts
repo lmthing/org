@@ -1571,3 +1571,95 @@ describe('harness — tracer subscription', () => {
     expect(vars.some((v) => 'color' in v.vars)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mid-turn history compaction by SIZE (runaway-turn crash fix, P1A)
+// ---------------------------------------------------------------------------
+
+describe('harness — mid-turn history compaction (by size)', () => {
+  it('compacts a long SINGLE turn mid-flight, and a variable bound before compaction still evaluates after', async () => {
+    // A single turn with MANY yield-resume cycles never crosses a turn boundary, so the per-turn
+    // summarizer (maxHistoryTurns) never runs and history grows until the prompt overflows V8's
+    // max string length. The char-triggered hook (maybeCompactHistoryBySize, DEFAULT-ON, wired
+    // via maybeCompact) compacts MID-turn. The crucial safety property: compaction rewrites ONLY
+    // `history`; the binding lives in the VM + turnContext, so `early` — bound in the FIRST cycle,
+    // long before any compaction — is still referenceable and evaluates in the LAST cycle.
+    const SLEEP_CYCLES = 30;
+    const m = createMockStreamFn((_o, { callIndex }) => {
+      if (callIndex === 0) return `const early = 111;\nawait sleep("1ms");`;
+      if (callIndex <= SLEEP_CYCLES) return `await sleep("1ms");`;
+      if (callIndex === SLEEP_CYCLES + 1) return `display("early=" + early);`;
+      return '';
+    });
+    const r = await runSession({
+      streamFn: m,
+      message: 'go',
+      extraOpts: { maxPromptChars: 2000 }, // low threshold so compaction fires within one turn
+    });
+    expect(r.error).toBeUndefined();
+    // The variable bound in cycle 0 survived every mid-turn compaction and evaluated at the end.
+    expect(r.displays).toContain('early=111');
+    // Compaction actually fired — and since there is only ONE turn (no continue()), it was MID-turn.
+    expect(r.logs.some((l) => l.includes('history compacted by size'))).toBe(true);
+    // The run really did span many cycles (each sleep = one session request), yet did not crash.
+    expect(sessionRequests(r.trace).length).toBeGreaterThan(SLEEP_CYCLES);
+  });
+
+  it('does NOT compact when the size threshold is not crossed (default-off behavior preserved for short turns)', async () => {
+    const m = createMockStreamFn((_o, { callIndex }) => {
+      if (callIndex === 0) return `await sleep("1ms");`;
+      if (callIndex === 1) return `display("done");`;
+      return '';
+    });
+    const r = await runSession({ streamFn: m, message: 'go', extraOpts: { maxPromptChars: 2000 } });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('done');
+    expect(r.logs.some((l) => l.includes('history compacted by size'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Anti-silent-turn guard: an all-dropped-prose turn (P3)
+// ---------------------------------------------------------------------------
+
+describe('harness — anti-silent dropped-prose guard', () => {
+  it('a turn whose entire output is dropped prose nudges once, then fails LOUD — never a silent clean done', async () => {
+    // Every response is natural-language prose that looksLikeProse drops → ZERO statements ran,
+    // yet the model emitted visible text. Returning clean `done` would silently discard the whole
+    // turn (the "wrote a plan in prose, saved nothing" failure). The guard re-prompts ONCE, and
+    // if the model persists, surfaces `error` — not a silent empty completion.
+    const prose = 'Based on the request, I will now update the database and save the changes for you.';
+    const m = createMockStreamFn(() => prose);
+    const r = await runSession({ streamFn: m, message: 'go' });
+
+    // The nudge fired exactly once, then the turn ended in a LOUD failure.
+    const reasons = r.trace
+      .filter((e): e is Extract<TraceEvent, { type: 'turn_end' }> => e.type === 'turn_end')
+      .map((e) => e.reason);
+    expect(reasons).toContain('dropped_prose_nudge');
+    expect(reasons).toContain('dropped_prose_error');
+    // It never returned a silent clean done for this turn.
+    expect(reasons).not.toContain('no_statements');
+    expect(reasons).not.toContain('done');
+    // The re-prompt reached the model on the retry turn.
+    const reqs = sessionRequests(r.trace);
+    expect(reqs.some((req) => lastUserMessage(req).includes('Prose is not executed'))).toBe(true);
+  });
+
+  it('a turn that runs real work then signs off in prose completes cleanly (no false positive)', async () => {
+    // everRanStatement guards this: the response runs a real statement AND ends with a prose
+    // sign-off. That is a legitimate clean done, not an all-dropped-prose turn.
+    const m = createMockStreamFn((_o, { callIndex }) => {
+      if (callIndex === 0) return `display("did work");\nEverything is complete now.`;
+      return '';
+    });
+    const r = await runSession({ streamFn: m, message: 'go' });
+    expect(r.error).toBeUndefined();
+    expect(r.displays).toContain('did work');
+    const reasons = r.trace
+      .filter((e): e is Extract<TraceEvent, { type: 'turn_end' }> => e.type === 'turn_end')
+      .map((e) => e.reason);
+    expect(reasons).not.toContain('dropped_prose_nudge');
+    expect(reasons).not.toContain('dropped_prose_error');
+  });
+});

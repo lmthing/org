@@ -57,6 +57,41 @@ export function sandboxApiHint(message: string): string {
   return '';
 }
 
+/** Rolling window (chars) for the ALREADY-EXECUTED echo in {@link buildErrorBlock}. The
+ *  full accumulated context is re-embedded on EVERY retry so the model can see what ran;
+ *  on a long turn that is thousands of statements re-sent each attempt — a quadratic driver
+ *  of the runaway-turn history blow-up ("Invalid string length"). The model only needs the
+ *  RECENT tail to "continue from there"; the complete set of live bindings is already
+ *  advertised on the "Still in scope" line (derived from the FULL context), and typecheck
+ *  still runs against the full accumulatedContext host-side (turn-loop.ts) — so bounding
+ *  this echo is purely a prompt-size cap with ZERO typecheck-correctness cost. */
+const ALREADY_EXECUTED_WINDOW_CHARS = 8_000;
+
+/**
+ * Bound the re-embedded ALREADY-EXECUTED context to the last {@link ALREADY_EXECUTED_WINDOW_CHARS}
+ * characters, cut on a statement (newline) boundary, prefixed with an "N earlier statements
+ * omitted" marker. The omitted statements are NOT lost to the model: their bound names are
+ * listed on the "Still in scope" line above (computed from the full context), and the VM +
+ * host typecheck context still hold them. Always keeps at least the final statement even if
+ * it alone exceeds the window. Exported for direct testing.
+ */
+export function boundAlreadyExecuted(scopeContext: string, windowChars = ALREADY_EXECUTED_WINDOW_CHARS): string {
+  if (scopeContext.length <= windowChars) return scopeContext;
+  const stmts = scopeContext.split('\n');
+  const kept: string[] = [];
+  let total = 0;
+  for (let i = stmts.length - 1; i >= 0; i--) {
+    const cost = stmts[i]!.length + 1; // + the joining newline
+    if (kept.length > 0 && total + cost > windowChars) break;
+    kept.unshift(stmts[i]!);
+    total += cost;
+  }
+  const omitted = stmts.length - kept.length;
+  if (omitted <= 0) return kept.join('\n');
+  const marker = `// … ${omitted} earlier statement${omitted === 1 ? '' : 's'} omitted (still in scope — see the names listed above) …`;
+  return marker + '\n' + kept.join('\n');
+}
+
 /**
  * Build an error block for injection into the message history after a failed statement.
  *
@@ -93,7 +128,7 @@ export function buildErrorBlock(
     }
     lines.push('');
     lines.push('// ALREADY EXECUTED (do not repeat — fix the failing statement and continue from there):');
-    lines.push(scopeContext);
+    lines.push(boundAlreadyExecuted(scopeContext));
   }
 
   return lines.join('\n');

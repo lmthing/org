@@ -30,15 +30,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { build, type BuildOptions, type Plugin } from 'esbuild';
+import { build, type BuildFailure, type BuildOptions, type Message, type Plugin } from 'esbuild';
 import { isUnderMemoryPressure } from '../../server/mem-watchdog.js';
 import { compile, Features } from '@tailwindcss/node';
 import { Scanner } from '@tailwindcss/oxide';
 
 import { generateAppTypes, type EndpointContract } from './schema.js';
+import type { AppCheckError } from './check.js';
 
 /** A discovered page route. */
 export interface PageRoute {
@@ -150,6 +151,58 @@ export async function buildProjectPages(
   const assetManifest = await runBuild(projectRoot, pagesDir, outDir, routes, opts);
   await writeCache(cachePath, { hash, assetManifest, routes });
   return { outDir, assetManifest, built: true, routes };
+}
+
+/** Result of {@link buildProjectPagesChecked}. */
+export interface CheckedPagesBuild {
+  /** `true` iff a clean bundle was produced (esbuild did not throw). */
+  built: boolean;
+  /** The built route paths (`routePath` only — the model-facing shape). */
+  routes: string[];
+  /** Structured `phase:'build'` failures; empty on a clean build. */
+  errors: AppCheckError[];
+}
+
+/**
+ * {@link buildProjectPages} wrapped for the programmatic-check pipeline
+ * ({@link ../build/check.js}'s `runProjectAppCheck`): an esbuild `BuildFailure` is
+ * caught and its `errors` (esbuild `Message[]`) mapped to structured
+ * {@link AppCheckError}s instead of propagating as an uncaught throw. Always forces
+ * a fresh build (`force:true`) — the check must reflect the CURRENT sources, never
+ * a stale cache hit. Any other (non-esbuild) throw is a real bug, not a build
+ * failure, and is left to propagate.
+ */
+export async function buildProjectPagesChecked(
+  projectRoot: string,
+  opts: BuildPagesOpts = {},
+): Promise<CheckedPagesBuild> {
+  const outDir = join(projectRoot, OUT_SUBDIR);
+  try {
+    const res = await buildProjectPages(projectRoot, { ...opts, force: true });
+    return { built: res.built, routes: res.routes.map((r) => r.routePath), errors: [] };
+  } catch (err) {
+    if (!isBuildFailure(err)) throw err;
+    return { built: false, routes: [], errors: err.errors.map((m) => esbuildMessageToError(m, projectRoot, outDir)) };
+  }
+}
+
+/** `true` for an esbuild `BuildFailure` — an `Error` carrying structured `errors`/`warnings`. */
+function isBuildFailure(err: unknown): err is BuildFailure {
+  return err instanceof Error && Array.isArray((err as { errors?: unknown }).errors);
+}
+
+/** Map one esbuild `Message` to a `phase:'build'` {@link AppCheckError}. */
+function esbuildMessageToError(msg: Message, projectRoot: string, absWorkingDir: string): AppCheckError {
+  const loc = msg.location;
+  if (!loc) return { phase: 'build', file: '(unknown)', message: msg.text };
+  const abs = isAbsolute(loc.file) ? loc.file : join(absWorkingDir, loc.file);
+  return {
+    phase: 'build',
+    file: relative(projectRoot, abs).split(sep).join('/'),
+    line: loc.line,
+    column: loc.column,
+    message: msg.text,
+  };
 }
 
 // ── Route discovery ───────────────────────────────────────────────────────────

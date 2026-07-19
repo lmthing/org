@@ -3,7 +3,7 @@ import { join, basename } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { Session, saveSnapshot, loadSpace, loadProjectFunctions, ForkEngine, runTasklist, Tracer, createAskConsentPrompter } from '@lmthing/core';
-import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope, ProjectResult } from '@lmthing/core';
+import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope, ProjectResult, DbTableSchema } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
 import { createCodeNodeCtxFactory } from './tasklist-runner.js';
 import { loadAzurePrices, computeTurnCost, type ModelPricing } from './pricing.js';
@@ -27,10 +27,12 @@ import {
   type AttachmentRef,
 } from './uploads.js';
 import { bootProjectApp } from '../app/boot.js';
+import { loadProjectApp } from '../app/loader.js';
 import { createApiRuntime, type ApiRuntime } from '../app/api/runtime.js';
 import type { ProjectDb } from '../app/store.js';
 import { createProjectAuthoringGlobals, type ProjectAuthoringGlobals } from '../app/authoring/index.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
+import { runProjectAppCheck } from '../app/build/check.js';
 import { loadAllHooks } from '../app/hooks/index.js';
 import { ProjectHookRuntime } from '../app/hooks/runtime.js';
 import { scanEmitterDefs } from './emitter-manifests.js';
@@ -165,6 +167,16 @@ export interface BuildSessionArgs {
    *  unset so consent-marked calls fail closed instead of hanging on an ask
    *  no client will ever answer. */
   interactive?: boolean;
+  /** This session's id. When set on a project-rooted build, `defaultBuildSession`
+   *  registers the session's live app-build-target holder in `buildTargets` under this
+   *  key so {@link SessionManager.persistSession} can persist it (and a later resume
+   *  restore it). Omitted for headless/legacy builders that never retarget. */
+  sessionId?: string;
+  /** Seed for the live app-build target on a RE-ESTABLISH (resume). When set,
+   *  `defaultBuildSession` seeds the build-target holder to this project id instead of
+   *  the session's own `projectId`, so a delegated app build resumes into the SAME live
+   *  project THING originally created. Restored from `PersistedSessionMeta.buildTargetProjectId`. */
+  initialBuildTargetProjectId?: string;
 }
 
 /** Encapsulates the bin.ts wiring: construct a Session bound to the chosen
@@ -232,6 +244,12 @@ async function unwrapApiCall(rt: ApiRuntime, name: string, input?: unknown): Pro
  */
 export class SessionManager {
   private sessions: Map<string, SessionEntry> = new Map();
+  /** Per-session LIVE app-build-target holder, keyed by sessionId. The SAME object a
+   *  project session's `createProject`/`selectProject`/`resolveBuildTarget` close over in
+   *  {@link defaultBuildSession}, kept here so {@link persistSession} can persist its
+   *  `projectId` and a resume re-seed it — making the retargeted build target durable
+   *  across a session re-establish (was in-RAM only, lost on resume/eviction). */
+  private buildTargets: Map<string, { projectId: string }> = new Map();
   private streamFn: (opts: StreamOpts) => Promise<StreamSession>;
   private defaultSpaceDir?: string;
   private defaultModelAlias?: string;
@@ -418,8 +436,14 @@ export class SessionManager {
     const projectId = args.projectId;
     const root = this.lmthingRoot;
     if (projectId && args.projectRoot && appGlobals && root) {
-      // create/select + resolveBuildTarget MUST close over the SAME holder.
-      const buildTarget = { projectId };
+      // create/select + resolveBuildTarget MUST close over the SAME holder. On a
+      // RE-ESTABLISH (resume) `initialBuildTargetProjectId` re-seeds it to the live
+      // project THING originally retargeted to (persisted in meta), so the delegated
+      // build resumes into that project rather than silently falling back to its own.
+      const buildTarget = { projectId: args.initialBuildTargetProjectId ?? projectId };
+      // Register the holder so persistSession can persist buildTarget.projectId (and a
+      // later resume restore it). Keyed by sessionId; absent for headless/legacy builders.
+      if (args.sessionId) this.buildTargets.set(args.sessionId, buildTarget);
       const liveCreateProject = (name: string): ProjectResult => {
         try {
           const meta = createProjectSync(root, name);
@@ -471,6 +495,13 @@ export class SessionManager {
         appGlobals: this.withStore(this.withConnections(appGlobals, args.projectRoot), args.projectId),
         resolveBuildTarget,
         appDts: args.appDts,
+        // Schema-gated db.* (core composeDbDts). Initial schema for the first bake + the
+        // targeted-freshness hooks: `dbSchemaRevision` (cheap counter read each turn) and
+        // `resolveDbSchema` (re-derive only when it moved). Both read the maps populated by
+        // getProjectDb at boot/reload; keyed by this session's projectId (undefined ⇒ loose).
+        dbSchema: projectId ? this.projectDbSchemas.get(projectId) : undefined,
+        dbSchemaRevision: () => (projectId ? this.projectDbSchemaRev.get(projectId) ?? 0 : 0),
+        resolveDbSchema: () => (projectId ? this.projectDbSchemas.get(projectId) : undefined),
         documentResolver: (id, opts) => this.resolveDocument(id, opts),
         // Consent gate (plan S10): ONLY interactive sessions get a prompter (the
         // consent card rides renderHost.ask → the ask_start WS event). Headless
@@ -598,6 +629,16 @@ export class SessionManager {
    *  re-probe every session. Closed in {@link closeProjectDbs} on shutdown. */
   private projectDbs = new Map<string, ProjectDb | null>();
 
+  /** Per-project DECLARED DB schema (table + column names from `database/*.json`) used to gate
+   *  `db.*` at typecheck (core `composeDbDts`). Derived from the SAME boot pass as {@link projectDbs}
+   *  (below) so a hallucinated table / typo'd column fails typecheck instead of throwing at runtime.
+   *  `projectDbSchemaRev` bumps on every (re)boot — the session reads it each turn (cheap) and
+   *  re-bakes its ambient DTS ONLY when it moved (a `writeProjectTable`/`createTable` landed →
+   *  {@link reloadProjectDb} → {@link getProjectDb}), so a table created in one turn is queryable
+   *  (typechecks) in the next. */
+  private projectDbSchemas = new Map<string, DbTableSchema[]>();
+  private projectDbSchemaRev = new Map<string, number>();
+
   /** Boot (once) and return the project's app db, or `null` for a spaces-only project.
    *  Cached across sessions in that project; the same handle backs the agent's sync `db`
    *  global (via {@link getProjectAppGlobals}) AND the Node api runtime (`.async`). */
@@ -609,9 +650,30 @@ export class SessionManager {
     if (db === undefined) {
       db = await bootProjectApp(join(root, projectId));
       this.projectDbs.set(projectId, db);
+      await this.refreshProjectDbSchema(root, projectId);
       if (db) await this.ensureProjectHookRuntime(root, projectId, db);
     }
     return db;
+  }
+
+  /**
+   * Re-derive the project's DECLARED schema (`database/*.json` basenames + column keys) into
+   * {@link projectDbSchemas} and bump {@link projectDbSchemaRev}. Called from {@link getProjectDb}
+   * on every (re)boot — so boot AND {@link reloadProjectDb} (which funnels through getProjectDb
+   * after an authoring table write) both refresh it. Cheap (one readdir + small JSON reads, the
+   * same files boot already read — NOT `ts-json-schema-generator`); best-effort (an unreadable/
+   * mid-write schema leaves an empty list ⇒ the loose `string`-typed db DTS, never a crash).
+   */
+  private async refreshProjectDbSchema(root: string, projectId: string): Promise<void> {
+    let schema: DbTableSchema[] = [];
+    try {
+      const app = await loadProjectApp(join(root, projectId));
+      schema = app.tables.map((t) => ({ name: t.name, columns: Object.keys(t.schema.columns) }));
+    } catch {
+      schema = [];
+    }
+    this.projectDbSchemas.set(projectId, schema);
+    this.projectDbSchemaRev.set(projectId, (this.projectDbSchemaRev.get(projectId) ?? 0) + 1);
   }
 
   /**
@@ -725,6 +787,11 @@ export class SessionManager {
       // (same runtime the browser + hooks use). Only present when the project has
       // an `api/` dir; the yield router rejects apiCall() otherwise.
       ...(apiRt ? { apiCall: (name: string, input?: unknown) => unwrapApiCall(apiRt, name, input) } : undefined),
+      // Agent-facing buildApp — build + programmatically check THIS project's live app
+      // (lint → typecheck → esbuild) and return the structured error list. The build gate
+      // node calls it to drive the app to type-correct-or-fail-loud; a clean run is the
+      // sole authoritative build (sets built:true for all routes). Bound to the project root.
+      buildApp: () => runProjectAppCheck(join(root, projectId)),
       writeProjectHook: projectAuthoring.writeProjectHook,
       writeProjectEvent: projectAuthoring.writeProjectEvent,
       writeProjectFunction: projectAuthoring.writeProjectFunction,
@@ -1006,6 +1073,9 @@ export class SessionManager {
     void (async () => {
       try { await this.persistSession(evicted); } catch { /* best-effort */ }
       try { evicted.session?.dispose(); } catch { /* best-effort */ }
+      // Drop the live build-target holder AFTER persist (which reads it) so eviction
+      // doesn't leak it; a reopen re-seeds a fresh holder from the persisted meta.
+      this.buildTargets.delete(evicted.sessionId);
     })();
     return true;
   }
@@ -1289,6 +1359,7 @@ export class SessionManager {
       appGlobals,
       appDts: contracts?.apiCallDts,
       interactive: true,
+      sessionId: entry.sessionId,
     });
 
     // Wire up the tracer to this session's hub + cost tracking.
@@ -1327,6 +1398,9 @@ export class SessionManager {
 
     // Load persisted meta to restore title/createdAt/messageCount.
     const metaPath = join(snapshotDir, 'meta.json');
+    // The live app-build target THING retargeted to (if any), restored below and re-seeded
+    // into the rebuilt session's holder so the delegated build survives this re-establish.
+    let restoredBuildTargetProjectId: string | undefined;
     try {
       const raw = await readFile(metaPath, 'utf8');
       const meta = JSON.parse(raw) as PersistedSessionMeta;
@@ -1336,6 +1410,7 @@ export class SessionManager {
       entry.messageCount = meta.messageCount;
       entry.agentSlug = meta.agentSlug || entry.agentSlug;
       if (meta.totalCostUsd !== undefined) entry.totalCostUsd = meta.totalCostUsd;
+      restoredBuildTargetProjectId = meta.buildTargetProjectId;
     } catch {
       // No meta — keep defaults set at placeholder creation.
     }
@@ -1366,6 +1441,8 @@ export class SessionManager {
       appGlobals,
       appDts: contracts?.apiCallDts,
       interactive: true,
+      sessionId: entry.sessionId,
+      initialBuildTargetProjectId: restoredBuildTargetProjectId,
     });
 
     // Wire up the tracer to this session's hub + cost tracking.
@@ -1407,6 +1484,13 @@ export class SessionManager {
         createdAt: entry.createdAt,
       });
 
+      // Persist the retargeted live app-build target so a resume re-seeds the holder.
+      // Only when it moved OFF the session's own project (else the resolver builds into
+      // its own project anyway — no need to persist, and no seed to restore).
+      const bt = this.buildTargets.get(entry.sessionId);
+      const buildTargetProjectId =
+        bt && bt.projectId !== entry.projectId ? bt.projectId : undefined;
+
       const meta: PersistedSessionMeta = {
         sessionId: entry.sessionId,
         projectId: entry.projectId,
@@ -1420,6 +1504,7 @@ export class SessionManager {
         messageCount: entry.messageCount,
         status: entry.status,
         totalCostUsd: entry.totalCostUsd > 0 ? entry.totalCostUsd : undefined,
+        buildTargetProjectId,
       };
       await mkdir(snapshotDir, { recursive: true });
       await writeFile(join(snapshotDir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');
@@ -1627,6 +1712,10 @@ export class SessionManager {
       /* best-effort */
     }
     this.sessions.delete(id);
+    // Drop the live app-build-target holder (persisted above, if it had moved off the
+    // session's own project) so an explicit dispose doesn't leak it — a later resume
+    // re-seeds a fresh holder from meta.buildTargetProjectId regardless.
+    this.buildTargets.delete(id);
     this.sessionLedger.finalize(id, 'done');
     return true;
   }

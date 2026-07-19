@@ -331,3 +331,178 @@ STOPPED HERE on an explicit human directive (via main) to freeze all lanes — n
 edit-lock (held by 07-life-admin throughout) was never touched, and the one 08-small-shop run I had
 launched (run 9, for TASK 2's resume) was killed cleanly per the directive before touching anything
 else. See handoff.md for the exact resume state.
+
+## R4 — TASK 2 actually driven: steps 1-3 judged in full, 3 NEW findings, ZERO fixed (context-cap stop)
+
+R4 · step 1 · PASS (re-confirmed) · run 9 · all 6 fixtures read via delegates, THING offers unprompted
+citing ≥2 real specifics, zero space/table/page yields before "yes". No fix needed.
+
+R4 · step 2 · L1 (found, NOT fixed) · `system-appbuilder/tasklists/build_live_project/03-plan_app.md`
+· verify=N/A (not attempted) · BUG A: the kintsugi-mended bowl (product-photo.jpg, vision-described:
+blue glaze, gold seams, floral motif) never lands as its own products row — it gets conflated with
+"Kintsugi repair kit" (a DIFFERENT item, from a sales-ledger note on an unrelated order) purely because
+both mention the word "kintsugi." Root cause pinned to `plan_app`'s own row-counting pass
+(`runs/10/sessions.log` ~6102-6128: "...Shino glazed jug) PLUS kintsugi repair kit = 6. Total 12" — the
+photographed bowl never separately tallied). Confirmed via `runs/10/snapshots/step-02/.../app.db`'s
+`products` table: no bowl-describing row exists, only the repair-kit one. Recommended fix: a
+domain-neutral guard in `03-plan_app.md`'s "every parsed source needs a home" section — a shared
+keyword/theme between two facts is NOT evidence they're the same instance; a vision/audio item keeps
+its own row unless another source explicitly ties it to the same instance (matching id/order
+ref/SKU). Full detail + exact quote in handoff.md's "BUG A" section.
+
+R4 · step 2 · L2 (found, NOT fixed) · `user-thing/tasklists/organize_material/01-enumerate.md` and/or
+`system-appbuilder/tasklists/build_live_project/01-read_sources.md` · verify=N/A (not attempted) ·
+BUG B: the kiln-shelves photo (studio-photo.jpg)'s rich vision detail ("multiple stacked shelves...
+mixed bisque/glaze states...") never reaches ANY space knowledge — grepped every knowledge `.md` in
+`runs/10/snapshots/step-02/.../spaces/*/knowledge/**`, found only the voice-memo's "11 bisque mugs"
+fact, nothing describing the actual photo content. Root cause: `readDocument()` returns
+`{kind:'unsupported'}` for ANY image attachment (confirmed: `libs/cli/src/server/uploads.ts:308-310`),
+so organize_material/build_live_project depend entirely on THING's OWN paraphrase when it calls
+`tasklist('organize_material', {specialistFacts: '...'})` — and that paraphrase this run was a lossy
+one-liner ("kiln interior with work in progress"), losing all distinguishing detail. THING's own
+construction of that paraphrase is `user-thing/agents/thing/instruct.md` territory (out of my lane,
+not touched). Recommended fix (confirmed feasible via sub-agent research, in MY lane): give
+`01-enumerate.md`/`01-read_sources.md` their own `canDelegateTo: [system-vision/vision]` + a prelude
+`delegate('system-vision','vision', {...})` call on image attachmentIds, so the pipeline re-derives
+full vision detail directly from the source. Exact precedent already in the codebase:
+`user-thing/tasklists/build_specialist/01-research.md` (same `canDelegateTo` + prelude-delegate
+shape, different target). `delegate()` gating is via `canDelegateTo` only
+(`libs/core/src/exec/capability.ts:66-104`), orthogonal to `role`/`functions:` — no other frontmatter
+change needed. Full detail in handoff.md's "BUG B" section.
+
+R4 · step 3 (open_app) · L1 (found, NOT fixed) ·
+`system-appbuilder/tasklists/build_live_project/{09-implement_components,11-implement_pages}.md` ·
+verify=N/A (not attempted) · BUG C, SEVERE: the app fails to BUILD AT ALL —
+`POST /api/projects/yuki-studio/app/build → 400: Could not resolve "../components/CountComparison"`,
+`appPageStatus:404` (`runs/10/step-03.json`). Root cause #1: the generated `CountComparison.tsx` has a
+genuine TSX syntax bug (a stray trailing comma inside a JSX `className={...}` expression container —
+`expr,` before the closing `}`), which throws in `assertSourceParses` so `writeProjectComponent`
+returns `{ok:false}` and the file never lands (confirmed absent from
+`runs/10/data/.lmthing/yuki-studio/components/`). (The source separately ALSO uses raw stock Tailwind
+colors — `bg-emerald-100`/`text-red-600`/etc — a real but SEPARATE violation of
+`09-implement_components.md`'s "tokens only" rule; confirmed `lintComponentSource`
+(`libs/cli/src/app/authoring/lint.ts:86-94`) does NOT check for this, only a default export, so this
+is not what caused the `{ok:false}` — the stray comma is.) Root cause #2: `09-implement_components.md`
+has ZERO instruction to check `w.ok`/retry-on-failure (unlike `05-implement_tables.md`, which at least
+has that PROSE, though its own example has the same gap) — the failed write is silently accepted.
+Root cause #3: `11-implement_pages.md` DOES see `implement_components`'s per-item `{name,ok}` results
+via `dependsOn`, and the model's own reasoning elsewhere shows it KNEW "CountComparison failed to
+implement" (correctly omitted the import on other pages) — but for `counts.tsx`, the one page that
+actually needs it, it emitted the import anyway right after commenting it would skip it (a
+self-contradicting generation mistake); `11-implement_pages.md` has no rule forcing an actual
+cross-check against the ok-list before importing. Recommended fix, two-part, both files in MY lane:
+(a) add the missing "check w.ok, read w.error, fix, retry before resolving" prose to
+`09-implement_components.md`; (b) add a defensive "verify a planned component is in the ok-list before
+importing it anywhere" rule to `11-implement_pages.md`. Full detail + exact code snippets in
+handoff.md's "BUG C" section. THIS IS THE HIGHEST-PRIORITY FIX — it blocks the app compiling at all,
+which likely poisons later steps (16, 19) too.
+
+R4 · step 4 · re-confirmed UNCHANGED, still cross-lane (06/07), NOT touched · `git log` confirms
+neither `system-architect/tasklists/synthesize_and_run/{04-write_agent,05-write_tasks}.md` nor
+`user-thing/agents/thing/instruct.md` have a candidate-return-contract fix since R2. Same root cause as
+before (see R2 section above). Steps 5-19 ran to completion in run 10 (evidence exists) but were NOT
+judged this session — context cap hit first.
+
+## Session checkpoint 3 (context-cap, clean handoff)
+
+Zero edits made, zero edit-lock taken (investigation + judging only this session). Runner environment
+quirk discovered and worked around (see handoff.md's "NOTE on the runner") — future attempts should
+launch `run-scenario.mjs` via the Bash tool's `run_in_background: true`, not `nohup … & disown`. Three
+concrete, root-caused, unfixed findings handed off (BUG A/B/C above) — fix BUG C first (severe, blocks
+the whole app), then A, then B, each verified via `--resume 9 --from 1 --through 3` before moving to
+steps 4-19. See handoff.md for full detail and exact resume commands.
+
+## R5 — fresh continuation, JUDGED run 11 (prior lane applied all 3 fixes uncommitted; did NOT re-run)
+
+R5 · verify=PASS · BUG A (kintsugi-bowl conflation) · `03-plan_app.md`'s "shared keyword ≠ same
+instance" guard (domain-neutral, verified no scenario literal in the prompt text) works as intended.
+Run 11 evidence: `snapshots/step-02/.../app.db`'s `studio_pieces` table has its OWN row ("Kintsugi-
+repaired blue-glazed bowl", blue glaze + gold-filled crack lines, `photo_available:1`,
+`status:catalogued`) fully DISTINCT from `sale_line_items`' unrelated "Kintsugi repair kit" line (order
+ETS-5507, qty 1, price 0) — the two are no longer merged. (Minor, non-blocking: the expect's "blossom
+motif" detail never appears anywhere in this run's vision output/reasoning — likely a vision-fidelity
+gap on the fixture image itself, not a re-manifestation of the conflation bug; the core defect — same-
+keyword merge — is resolved.)
+
+R5 · verify=PASS · BUG C (stray-comma component breaks whole build) · both
+`09-implement_components.md` (retry-on-`w.ok:false` + JSX-trailing-comma/raw-Tailwind-color examples)
+and `11-implement_pages.md` (cross-check `implement_components`' ok-list before importing) diffs match
+the proposed fix exactly, domain-neutral. Run 11 (a DIFFERENT app shape than run 10 — 4 tables'-worth
+fewer text, no `CountComparison` this time, so not a byte-for-byte repro of the original trigger, but
+the fix's general mechanism is what's on test): `step-03.json` → `appBuild.built:true`, 4 real routes
+(`/`, `/finished-goods`, `/materials`, `/materials/:sku`), `appBuild.error:null`, `appPageStatus:200`.
+Confirmed on-disk: `runs/11/data/.lmthing/yuki-studio/pages/` has 4 `.tsx` files, `components/` has 8 —
+no dangling/missing file, no orphaned import anywhere in the app.
+
+R5 · verify=FAIL — root cause is a CORE RUNTIME gap, NOT fixable inside my lane · BUG B (kiln-shelves
+photo's detail never reaches knowledge). The `01-enumerate.md`/`02-inventory.md` diff is exactly the
+proposed shape (`canDelegateTo: [system-vision/vision]` + a prelude `delegate('system-vision','vision',
+{query, attachmentIds: imageIds})` call, matching the `build_specialist/01-research.md` precedent) and
+IS domain-neutral. But in run 11 it does not work: `sessions.log` (~line 159) shows the delegate call's
+OWN result is `"I can't access the attached image in this interface, so I'm unable to describe its
+contents."` — the vision sub-agent received NO image. Grepped every knowledge `.md` under
+`snapshots/step-02/.../spaces/*/knowledge/**` — still nothing describes the studio photo's actual
+content (multiple shelves, mixed bisque/glaze states); the kiln-equipment-advisor's notes only carry
+the VOICE-MEMO fact (11 bisque mugs) same as before the fix.
+
+ROOT CAUSE (confirmed by reading the runtime, not inferred): `libs/core/src/session/session.ts`'s
+TOP-LEVEL `runDelegate` (~L1032-1134, used for a session's OWN top-level `delegate()` calls) resolves
+`delegateOpts.attachmentIds` → real `attachments`(MediaPart)/`attachmentTexts` via
+`this.pendingAttachments.get(aid)` before calling `runDelegate()` in `delegate/delegate.ts`. But
+`runDelegateForFork` (~L749-800 — this is the `delegateRunner` wired into `ForkEngine` at L844, i.e.
+the path EVERY delegate() call issued from INSIDE a fork or tasklist node goes through) does the
+resolution NOWHERE — it passes `delegateOpts` straight through unchanged. `delegate/delegate.ts` only
+reads `opts.attachments`/`opts.attachmentTexts` (the RESOLVED forms), never `opts.attachmentIds` (the
+raw id list the model passes) — so a tasklist-fork delegate call carrying `attachmentIds` silently
+loses the image every time, and the receiving agent gets nothing (no MediaPart, no id-note), which is
+exactly why vision (whose own instructions never call `readDocument`) answers "I can't access the
+attached image." This is STRUCTURAL and GENERAL: it breaks ANY `canDelegateTo`+`attachmentIds` call
+made from ANY tasklist task, not just `organize_material`'s — a wider blast radius than one lane.
+NOT in my subsystem (`libs/core/src/session/session.ts` is core runtime, shared across everything) —
+reported to main, not touched.
+
+Two viable fix directions (not applied, for main to route):
+(a) core-runtime, general fix: mirror `runDelegate`'s attachment-resolution block (L1063-1104) inside
+`runDelegateForFork` before its own `return runDelegate({...})` — fixes every tasklist-fork
+attachment-delegate call at once, matches the "same principle as its sibling" shape.
+(b) caller-side workaround (still not my lane — `user-thing/agents/thing/instruct.md`): have THING
+resolve vision detail for every image attachment itself (top-level context, where resolution already
+works) BEFORE calling `tasklist('organize_material', {...})`, and thread the full text in as a seed
+field instead of a paraphrase — sidesteps the runtime gap but only for this one call site.
+Recommend (a): it is the smaller, most general, most surgical fix and the intended design (per the
+established top-level/fork "sibling" pattern) was clearly for the two paths to behave identically.
+
+R5 · NEW finding (not A/B/C, discovered incidentally while judging step 2, NOT investigated further —
+flagged for main's triage) · two things happened to the SAME catch-all "notes" table this run that
+look like a REGRESSION + a hallucination:
+1. **INV-3337 (the real, correctly-parsed, correctly-flagged "$93.50 demo invoice, not a pottery
+   supplier invoice" fact) never reaches ANY table this run** — confirmed via `sessions.log` grep for
+   "INV-3337"/"93.5": the model's own reasoning names it correctly (twice, in two different specialist
+   builds) but ZERO `db.insert`/`writeProjectTable` seed row for it exists anywhere in
+   `snapshots/step-02/.../app.db`. This is a regression from R2/R4's established behavior (previously
+   verified landing as a `filed_documents` row with a "DEMO — NOT operational" label).
+2. **The app's ONE `notes` table instead holds a fact that does not exist in ANY of the 6 real
+   fixtures**: `{category:'unresolved', note:'Ranger tip ~TSH 5,000 unresolved — clarify with Richard
+   (Suricata Safaris)', source_person:'Richard / Suricata Safaris', ...}`. Verified this is NOT
+   fixture-file contamination — the actual uploaded `voice-memo.mp3` bytes for this run md5-match the
+   real 08-small-shop fixture exactly (`3f3eeb08...`, confirmed against
+   `08-small-shop/fixtures/voice-memo.mp3`) and its stored `transcript` field
+   (`runs/11/data/.lmthing/uploads/8755b517-*.json`) is the correct, real Yuki pottery-studio transcript
+   — no Tanzania content anywhere in it. Also verified `libs/core/system-spaces/**` has zero
+   occurrences of "suricata"/"ranger tip"/"richard" (not a leaked few-shot example either). "Suricata
+   Safaris" genuinely belongs to `06-tanzania/fixtures/tanzaniamemories.md` (a DIFFERENT scenario) — the
+   model appears to have spontaneously fabricated a 5th "voice memo fact" (labeled `VOICE-005` right
+   alongside 4 REAL ones, `VOICE-001`-`004`) that has no basis in any of this run's actual material.
+   Root cause NOT pinned further (would need to trace which specific task/turn introduced it, past this
+   session's budget) — flagged as a correctness/hallucination concern for main's triage, not chased.
+   Net effect: the app's one general-purpose catch-all row got SPENT on a fabricated fact while a real,
+   correctly-identified one (INV-3337) was dropped entirely.
+Both are ORTHOGONAL to BUG A/B/C and NOT touched — reported for main's awareness/triage only.
+
+R5 · other step-2 expects spot-checked (not exhaustive, but nothing else looked broken): dedicated
+project `yuki-studio` (not `user`) ✓; 4 distinct specialist spaces, materials/kiln/products/suppliers
+never merged ✓; THERMO-K26 `on_hand_qty:0`/`low_stock:1`/note "OUT OF STOCK — kiln reads 40C low" ✓;
+Keramikos Amsterdam `CTR-KMA-2026-04` ✓; WHL-0007 `payment_status:unpaid`/`is_overdue:1` ✓.
+
+Session checkpoint: zero edits made this session (judging only, per the gate — awaiting main's OK
+before any further edit). See handoff.md for the full DECISION PACKET sent to main.

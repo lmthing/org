@@ -480,3 +480,87 @@ describe('runTasklist orchestrator', () => {
     expect(result.data).toEqual({ v: 5 });
   });
 });
+
+/**
+ * Step-9 L2 execution proof: the REAL user-thing `resolve_flagged_figure` tasklist scheduled by the
+ * real runTasklist. Its terminal `report` is an UNCONDITIONAL goal that MERGES both branches, precisely
+ * because a condition-gated goal that gets skipped throws "produced no result" (Clarification 2). These
+ * two runs prove the merge holds from both sides — the low-confidence path (fix condition-skipped) must
+ * NOT throw and must relay the diagnosis's question, and the high-confidence path applies + reports.
+ */
+describe('user-thing resolve_flagged_figure — confidence-gated diagnose → fix → merge-report', () => {
+  const userThingDir = join(__dirname, '..', '..', 'system-spaces', 'user-thing');
+  // report branches on diagnose.confidence and writes only the ONE matching resolve — the low path
+  // never references the skipped `fix` (it is absent from that fork's inputs AND its ambient DTS).
+  const REPORT_LOW = `currentTask.resolve({ ok: false, applied: false, question: diagnose.question, detail: diagnose.detail });`;
+  const REPORT_HIGH = `currentTask.resolve({ ok: fix.applied, applied: fix.applied, question: '', detail: fix.detail });`;
+
+  function rffEngine(answers: Array<{ token: string; code: string }>, seen: string[]): ForkEngine {
+    const streamFn = createMockStreamFn((o: StreamOpts) => {
+      const user = o.messages.map((m) => m.content).join('\n');
+      for (const a of answers) {
+        if (user.includes('Output schema:') && user.includes(a.token)) {
+          seen.push(a.token);
+          return a.code;
+        }
+      }
+      return '';
+    });
+    return new ForkEngine({
+      maxConcurrentForks: 4,
+      parentHistory: [],
+      parentSpaceDir: userThingDir,
+      parentAgentSlug: 'thing',
+      renderHost: silentHost,
+      streamFn,
+    });
+  }
+
+  it('low confidence: fix is SKIPPED, and the unconditional goal relays the question (never throws)', async () => {
+    const space = await loadSpace(userThingDir, { requireAgents: false });
+    const seen: string[] = [];
+    const engine = rffEngine(
+      [
+        {
+          token: 'Investigate the flagged figure',
+          code: `currentTask.resolve({ cause: "more than one row could be the culprit", table: "", targetIds: [], fixAction: "none", targetValue: "", confidence: "low", question: "Which of the two entries is the wrong one?", detail: "genuinely ambiguous" });`,
+        },
+        { token: 'Report the outcome to the caller', code: REPORT_LOW },
+      ],
+      seen,
+    );
+    // Must NOT throw: report is the unconditional goal, so a skipped fix never trips the skipped-goal throw.
+    const goal = await runTasklist({
+      name: 'resolve_flagged_figure', space, forkEngine: engine, seed: { complaint: 'that total looks too high' },
+    });
+    expect(seen).toContain('Investigate the flagged figure');
+    expect(seen).toContain('Report the outcome to the caller');
+    expect(seen).not.toContain('Carry out exactly the correction'); // fix fork was never dispatched
+    expect(goal.data).toMatchObject({ ok: false, applied: false });
+    expect((goal.data as { question: string }).question).toBe('Which of the two entries is the wrong one?');
+  });
+
+  it('high confidence: fix runs and the goal reports the applied correction', async () => {
+    const space = await loadSpace(userThingDir, { requireAgents: false });
+    const seen: string[] = [];
+    const engine = rffEngine(
+      [
+        {
+          token: 'Investigate the flagged figure',
+          code: `currentTask.resolve({ cause: "a duplicated line item", table: "cost_items", targetIds: ["row-1"], fixAction: "remove", targetValue: "", confidence: "high", question: "", detail: "one clear duplicate" });`,
+        },
+        {
+          token: 'Carry out exactly the correction',
+          code: `currentTask.resolve({ applied: true, changed: 1, before: "the old figure", after: "the corrected figure", detail: "removed the duplicated row" });`,
+        },
+        { token: 'Report the outcome to the caller', code: REPORT_HIGH },
+      ],
+      seen,
+    );
+    const goal = await runTasklist({
+      name: 'resolve_flagged_figure', space, forkEngine: engine, seed: { complaint: 'the maths does not add up' },
+    });
+    expect(seen).toContain('Carry out exactly the correction'); // fix DID run on high confidence
+    expect(goal.data).toMatchObject({ ok: true, applied: true });
+  });
+});

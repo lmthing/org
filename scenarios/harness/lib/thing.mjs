@@ -324,12 +324,18 @@ export class ThingSession {
       // The session vanished mid-turn (evicted past `maxSessions`, or the pod rolled/woke from
       // scale-to-zero under us — sessions are in-memory). We saw work, but we do NOT know the turn
       // FINISHED: a long build (build_specialist → deep_research → architect) can be cut off with
-      // nothing durable written. Returning silently here reports a killed turn as a completed one —
-      // that is how scenario 07's Act V "built" two sections and produced no space, table or page.
-      // So flag it: `turn.interrupted` lets the caller re-send once the pod is back (see run.mjs).
+      // nothing durable written. The live app-build target THING retargets to is now DURABLE across a
+      // re-establish (SessionManager persists `buildTargetProjectId` and re-seeds the holder on
+      // resume), so a vanish is no longer a recoverable "re-send" condition — it is an HONEST failure.
+      // Throw either way (the runner records a step error) rather than return a turn that reads as
+      // "done": returning silently is how scenario 07's Act V "built" two sections and produced no
+      // space, table or page.
       if (this.sessionGone) {
-        if (sawWork) return { ...this.turn(startSeq, Date.now() - t0), interrupted: true };
-        throw new Error(`session ${this.sessionId} disappeared before doing any work (pod restart mid-init?)`);
+        throw new Error(
+          sawWork
+            ? `session ${this.sessionId} vanished mid-turn after doing work — the turn did not finish (pod eviction/restart?)`
+            : `session ${this.sessionId} disappeared before doing any work (pod restart mid-init?)`,
+        );
       }
 
       // Drain asks (consent cards, forms) — an unanswered ask stalls the turn forever.
@@ -353,15 +359,15 @@ export class ThingSession {
         await this.pullEvents();
         throw new Error(`session entered error state: ${JSON.stringify(me)}`);
       }
-      // The session is no longer LISTED, though we saw work. Same hazard as `sessionGone` above and
-      // it must be flagged the same way: "not resident any more" does NOT mean "the turn finished".
-      // A shared local server that a sibling lane restarts (or any drop of the in-memory session)
-      // vanishes the entry mid-flight, and a turn that had only just dispatched its delegates gets
-      // reported as a COMPLETED turn with no results. Scenario 10 then sent the user's "yes" into a
-      // session that had never made the offer it was agreeing to, and every downstream Act failed on
-      // a build that never happened. Flag it — `turn.interrupted` is the caller's cue to re-send.
+      // The session is no longer LISTED, though we saw work. Same hazard as `sessionGone` above:
+      // "not resident any more" does NOT mean "the turn finished". Any drop of the in-memory session
+      // vanishes the entry mid-flight, and a turn that had only just dispatched its delegates would
+      // otherwise be reported as a COMPLETED turn with no results (scenario 10 then sent the user's
+      // "yes" into a session that had never made the offer it was agreeing to). With the build target
+      // now durable across a re-establish there is nothing to re-send, so a vanish is an HONEST
+      // failure: throw, so the runner records a real step error instead of a silent completed turn.
       if (sawWork && !me && this.events.length > startSeq) {
-        return { ...this.turn(startSeq, Date.now() - t0), interrupted: true };
+        throw new Error(`session ${this.sessionId} left the resident set mid-turn — the turn did not finish (pod restart/eviction?)`);
       }
 
       if (sawWork && idle && Date.now() - lastChange >= quietMs) {

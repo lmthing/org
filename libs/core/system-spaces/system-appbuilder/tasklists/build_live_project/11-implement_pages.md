@@ -3,8 +3,9 @@ id: implement_pages
 output:
   route: string
   ok: boolean
+  error: string
 dependsOn: [plan_pages, plan_endpoints, plan_components, implement_components]
-forEach: plan_pages.pages
+forEach: plan_pages
 role: general
 functions: []
 ---
@@ -61,8 +62,16 @@ Wiring rules — the app fails to compile if you break them:
   this page supplies a component's figure, that is a PLANNING gap (`item.endpoints` is missing one) —
   do not paper over it with a literal; the fix is upstream, not a stand-in value.
 
-`writeProjectPage` validates the page has a default export and parses, returning `{ ok, error? }`;
-rewrite and retry if `w.ok` is false. Emit one statement:
+`writeProjectPage` validates the page has a default export and parses (and rejects a rewrite that would
+silently drop the data an existing page already fetched), RETURNING `{ ok, error? }` — a parse slip is a
+returned `{ ok: false }`, NOT a thrown error, so a template that resolves `w.ok` blind makes the page
+VANISH with no trace and `12-finalize` still declares success on the pages that happened to land. So a
+returned `{ ok: false }` is NEVER the end: read `w.error` (it names the exact fault — a TSX parse error
+such as a stray comma in a JSX `{…}` container or an unclosed tag, a missing default export, a
+dropped-data guard), build a CORRECTED source that fixes THAT fault (not the same string resubmitted),
+and call `writeProjectPage` a SECOND time before resolving. Resolve the FINAL outcome honestly, carrying
+`w.error` when it still failed so the loss is visible downstream, never a stale `ok: true`. Emit one
+statement:
 
 ```typescript
 const pg = item;
@@ -93,8 +102,15 @@ const src = [
   "  );",
   "}",
 ].filter((line) => line !== "").join("\n");
-const w = writeProjectPage(pg.route, src);
-currentTask.resolve({ route: pg.route, ok: w.ok });
+let w = writeProjectPage(pg.route, src);
+if (!w.ok) {
+  // w.error named the exact fault (a TSX parse error, a missing default export, a
+  // dropped-data guard). NEVER resolve the failed first attempt: build a src2 that
+  // fixes THAT fault — never the same string — and write once more before resolving.
+  const src2 = src; // replace with `src` corrected for the specific issue in w.error
+  w = writeProjectPage(pg.route, src2);
+}
+currentTask.resolve({ route: pg.route, ok: w.ok, error: w.ok ? '' : (w.error ?? 'write failed') });
 ```
 
 The page TSX is typechecked against a **NO-DOM ambient** (no `console`/`window`). Data comes only from

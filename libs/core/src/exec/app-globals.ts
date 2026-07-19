@@ -1,6 +1,6 @@
 import type { VM } from '../sandbox/quickjs.js';
 import { marshalToQuickJS, injectGlobal } from '../sandbox/host-bridge.js';
-import type { DbApi, QueryOpts, UpdateOpts, RemoveOpts, Row, ApiCallFn, ConnectionResolver } from '../db/types.js';
+import type { DbApi, QueryOpts, UpdateOpts, RemoveOpts, Row, ApiCallFn, AppBuildFn, ConnectionResolver } from '../db/types.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import type { StoreResolver } from '../globals/store.js';
 import type { EmitEventResolver } from '../globals/emit-event.js';
@@ -36,6 +36,14 @@ export interface AppGlobalImpls {
    *  `YieldRouterContext.apiCallResolver`), so it can end the turn and resume. The
    *  host (libs/cli) supplies a resolver that re-enters the project's api runtime. */
   apiCall?: ApiCallFn;
+  /** Agent-facing `buildApp` — build + programmatically check the project's live app
+   *  (lint → typecheck → esbuild) and return the structured {@link AppCheckResult}.
+   *  Value-yielding (Promise-returning) like `apiCall`: NOT injected here but wired
+   *  through the yield router (`YieldRouterContext.buildAppResolver`), so the heavy
+   *  esbuild + tsc run host-side without blocking the sandbox bridge. The host (libs/cli)
+   *  supplies a resolver bound to the session's project root. Injected on `pages:write`
+   *  (the same grant as the page/component writers it verifies). */
+  buildApp?: AppBuildFn;
   /** Agent-facing `callConnection` — an authenticated request to a user-connected
    *  external service via the gateway egress proxy. Value-yielding like `apiCall`:
    *  NOT injected here (see `injectAppGlobals`) but wired through the yield router

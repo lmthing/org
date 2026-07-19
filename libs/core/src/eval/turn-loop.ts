@@ -286,6 +286,25 @@ export interface TurnLoopDeps {
    *  read is treated as a transient failure and retried (a silent no-token stall would
    *  otherwise hang the turn forever). Default 60000. */
   streamIdleMs?: number;
+  /** Mid-turn history compaction hook (top-level session only). Called ONCE at the top of
+   *  every cycle — before the prompt is built — so it covers error-retry, yield-resume AND
+   *  nudge cycles alike. A long SINGLE turn (many yield-resume cycles) never crosses the
+   *  turn boundary where the Session's per-turn summarizer runs, so without this its history
+   *  can grow until the concatenated prompt overflows V8's max string length (the
+   *  runaway-turn "Invalid string length" crash). Safe to call between cycles: no yield is
+   *  pending, and the Session's implementation rewrites ONLY history (the in-flight binding
+   *  lives in the VM + accumulatedContext, and keepLast preserves the recent VARIABLES
+   *  block). See Session.maybeCompactHistoryBySize. Forks/delegates don't set it. */
+  maybeCompact?: () => Promise<void>;
+  /** Structural early-termination signal, checked at the TOP of every cycle (before any
+   *  compaction or model request). When it returns true the loop returns 'done' immediately —
+   *  the caller already has everything it needs and must NOT re-prompt the model. Used by
+   *  `runDelegate` (`shouldStop: () => resultCaptured`): once a delegate's action tasklist is
+   *  auto-captured — or the model explicitly resolves — the delegate's deliverable is in hand,
+   *  so re-prompting is not just wasteful but unbounded for a weak/looping model that keeps
+   *  re-emitting the same action tasklist call every turn (it never volunteers a no-statements
+   *  turn). Absent ⇒ never short-circuits (sessions/forks rely on the natural done paths). */
+  shouldStop?: () => boolean;
 }
 
 /** Re-prompt sent when the model ends its response immediately after awaiting a
@@ -298,6 +317,14 @@ const CONTINUATION_NUDGE =
   '- If you must SEE that result before the next step, call inspect(<var>) — it surfaces the value and resumes you.\n' +
   '- Otherwise keep emitting the remaining statements (validate, register, delegate, display the final result, …).\n' +
   'Only stop (reply with no code) once the whole task is complete and the final result has been displayed.';
+
+/** Re-prompt sent when a whole turn produced ONLY natural-language prose — every "statement"
+ *  was dropped by looksLikeProse, so nothing ran and nothing was saved, yet the model emitted
+ *  visible text. Silently returning `done` there discards the entire turn (the "wrote a plan in
+ *  prose, saved nothing" failure). This tells the model the runtime truth and asks for the real
+ *  statements; if the very next turn is prose again, the turn loop fails LOUD instead. */
+const DROPPED_PROSE_NUDGE =
+  'Nothing ran. Prose is not executed here — your entire last response was natural-language text with no TypeScript statements, so NOTHING was run or saved. Do not describe what you will do; emit the actual statements now (e.g. `const x = await …;`, `db.insert(...)`, `display(...)`). If the task is genuinely already complete, reply with no code at all.';
 
 /** Outcome of running the shared per-statement pipeline (typecheck → transpile →
  *  eval → pending-yield check). Callers own the parts that legitimately differ
@@ -384,9 +411,32 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       : ambientDts;
   let continueNudges = 0;
   const maxContinueNudges = deps.maxContinueNudges ?? 4;
+  // TURN-level (persists across every cycle of this runTurnLoop call): true once ANY cycle
+  // ran a real statement. Guards the anti-silent-prose check below so a turn that did real
+  // work and then signed off in prose is NOT mistaken for an all-dropped-prose turn.
+  let everRanStatement = false;
+  // Re-prompt budget for the all-dropped-prose guard: fire the nudge ONCE, then fail loud.
+  let droppedProseNudges = 0;
 
   while (attempt < maxRetries) {
     attempt++;
+    // Structural early stop (delegate auto-capture): the caller signals it already holds the
+    // deliverable, so end the turn cleanly INSTEAD of re-prompting. Checked first — before any
+    // compaction or model request — so a weak/looping delegate that keeps re-emitting its action
+    // tasklist call terminates the moment its result is captured, rather than spinning forever.
+    if (deps.shouldStop?.()) {
+      renderHost.log(`[turn ${attempt}] caller signalled stop — done`);
+      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'done' });
+      return 'done';
+    }
+    // Mid-turn history compaction. A single long turn (many yield-resume, error-retry or
+    // nudge cycles) never crosses the turn boundary where the Session's per-turn summarizer
+    // runs, so without this its `history` can grow until the concatenated prompt overflows
+    // V8's max string length (the runaway-turn "Invalid string length" crash). Runs at the
+    // TOP of every cycle — no yield is pending here, and the hook rewrites ONLY `history`;
+    // the in-flight binding lives in the VM + accumulatedContext, and keepLast preserves the
+    // just-appended VARIABLES block. See Session.maybeCompactHistoryBySize.
+    await deps.maybeCompact?.();
     // Budget: count this LLM turn before issuing the request. Throws
     // BudgetExceededError (propagates out of runTurnLoop) if over the episode
     // or wall-clock cap — the caller disposes the VM. Counted outside the
@@ -604,6 +654,10 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         if (outcome.kind !== 'ok' && outcome.kind !== 'dropped') break;
       }
     }
+
+    // Record, across the whole turn, whether ANY real statement ever ran (covers both the
+    // streaming loop and the flush above). Consumed by the anti-silent-prose guard below.
+    if (hadStatements) everRanStatement = true;
 
     // Await token usage from the stream (best-effort; available after stream is consumed).
     // Skip when the stream was aborted mid-way (yield/error): the usage event arrives
@@ -824,6 +878,28 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
     }
 
     if (!hadStatements) {
+      // Anti-silent-turn guard (dropped-prose case): the turn ran ZERO statements yet the
+      // model emitted non-whitespace text — i.e. ALL of its output was natural-language prose
+      // that looksLikeProse dropped (it "wrote a plan / narrated a change" but ran nothing and
+      // saved nothing). Returning clean `done` here silently discards the whole turn. Re-prompt
+      // ONCE; if the very next cycle is prose again, surface `error` (loud) instead of a false
+      // completion. `everRanStatement` keeps this from firing on a turn that did real work and
+      // then signed off in prose (that legitimately reaches `done`). A genuinely-empty response
+      // (no prose either) is a real "done" and falls through untouched.
+      const allDroppedProse = !everRanStatement && assistantContent.trim() !== '';
+      if (allDroppedProse && droppedProseNudges < 1) {
+        droppedProseNudges++;
+        renderHost.log(`[turn ${attempt}] entire response was dropped prose — nudging for real statements`);
+        tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'dropped_prose_nudge' });
+        history.append({ role: 'user', content: DROPPED_PROSE_NUDGE, blockType: 'normal' });
+        attempt = 0;
+        continue;
+      }
+      if (allDroppedProse) {
+        renderHost.log(`[turn ${attempt}] all output was dropped prose after a nudge — failing loud (nothing ran or was saved)`);
+        tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'dropped_prose_error' });
+        return 'error';
+      }
       renderHost.log(`[turn ${attempt}] model produced no statements — done`);
       tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_statements' });
       return 'done';

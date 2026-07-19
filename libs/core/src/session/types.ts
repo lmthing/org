@@ -6,6 +6,7 @@ import type { DocumentResolver } from '../globals/read-document.js';
 import type { IntegrationStatusResolver } from '../globals/integration-status.js';
 import type { ConsentPrompter } from '../globals/consent.js';
 import type { CodeNodeCtxFactory } from '../tasklist/orchestrator.js';
+import type { DbTableSchema } from '../typecheck/library-dts.js';
 
 export interface RenderHost {
   display(descriptor: unknown): void;
@@ -50,6 +51,14 @@ export interface SessionOpts {
   /** When set, collapse history to a summary once it exceeds maxHistoryTurns*2
    *  messages (keeping the last few verbatim). Used by long REPL sessions. */
   maxHistoryTurns?: number;
+  /** Mid-turn history-compaction threshold in CHARACTERS. DEFAULT-ON (~400k chars ≈
+   *  ~100k tokens): the turn loop calls `Session.maybeCompactHistoryBySize()` at the top of
+   *  EVERY cycle, and once total history chars cross this, old turns collapse to a digest
+   *  (keeping the recent messages verbatim). Independent of `maxHistoryTurns` — a long SINGLE
+   *  turn (many yield-resume cycles) never crosses a turn boundary, so `maxHistoryTurns` alone
+   *  let its history grow until it overflowed V8's max string length (the runaway-turn crash).
+   *  Set to 0 to disable. */
+  maxPromptChars?: number;
   /** When true, bypass an agent's `defaultAction` routing so the first turn runs
    *  the model-driven turn loop instead of the action's tasklist. */
   noDefaultAction?: boolean;
@@ -89,6 +98,23 @@ export interface SessionOpts {
    *  DTS when it holds `api:call`, so `apiCall('markRead', …)` is strictly typed. Built by
    *  libs/cli from the project's `api/` endpoint contracts. */
   appDts?: string;
+  /** The real per-run DB schema (table names + column names) used to GATE `db.*` at
+   *  typecheck: a hallucinated table or a typo'd column fails typecheck (retryable) instead
+   *  of returning an empty result the model fabricates against. Derived cheaply by libs/cli
+   *  from `database/*.json` (basenames + column keys, NOT ts-json-schema-generator). Absent
+   *  for a non-project session ⇒ the loose `string`-typed db members (unchanged behavior).
+   *  Threaded into every child VM (session/fork/delegate) via `buildAmbientDts`. */
+  dbSchema?: DbTableSchema[];
+  /** Freshness (TARGETED invalidation). A monotonically-bumped revision for THIS project's
+   *  schema — the session reads it each turn (cheap Map counter) and, only when it changed
+   *  since the last bake (a `createTable`/`writeProjectTable` landed), re-derives via
+   *  `resolveDbSchema` and re-bakes the ambient DTS. Absent ⇒ the schema is treated as fixed
+   *  for the session's life (no re-bake). */
+  dbSchemaRevision?: () => number;
+  /** Re-derive the current `dbSchema` — called by the session ONLY on a turn where
+   *  `dbSchemaRevision()` changed, so a table created in one turn is queryable (typechecks)
+   *  in the next. Cheap + synchronous (reads a host-cached map, not the filesystem). */
+  resolveDbSchema?: () => DbTableSchema[] | undefined;
   /** Host-provided app-global engine impls (the project's db store, etc.). Wrapped in the
    *  capability-scope check and injected into the session VM + its forks/delegates when the
    *  agent holds the matching grants AND projectRoot is set (see exec/app-globals.ts). The

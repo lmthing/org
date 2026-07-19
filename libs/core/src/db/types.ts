@@ -139,6 +139,36 @@ export type AsyncDbApi = {
 export type ApiCallFn = (name: string, input?: unknown) => Promise<unknown>;
 
 /**
+ * One programmatic-check failure in a live-project app artifact — the PROGRAMMATIC
+ * GROUND TRUTH a build gate reads (never a model self-assessment). `phase` names the
+ * check that produced it (write-time contract lint, the project-app typecheck, or the
+ * esbuild bundle); `file` is project-relative (`pages/index.tsx`).
+ */
+export interface AppCheckError {
+  phase: 'lint' | 'typecheck' | 'build';
+  file: string;
+  line?: number;
+  column?: number;
+  message: string;
+}
+
+/**
+ * The structured result of building + checking a live-project app — what the
+ * model-facing `buildApp()` global resolves. `ok` ⇔ zero errors; `built` ⇔ a clean
+ * esbuild bundle was produced (all routes). A non-empty `errors` is a FAIL the caller
+ * feeds back and retries (or surfaces loudly), never a partial ship.
+ */
+export interface AppCheckResult {
+  ok: boolean;
+  built: boolean;
+  routes: string[];
+  errors: AppCheckError[];
+}
+
+/** Build + programmatically check the session's live-project app (host-supplied). */
+export type AppBuildFn = () => Promise<AppCheckResult>;
+
+/**
  * A single authenticated request to a connected external service, made through
  * the gateway egress proxy. `path` is ALWAYS relative to the provider's API base
  * (the gateway pins the host and rejects absolute URLs); the OAuth token is

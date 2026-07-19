@@ -46,6 +46,7 @@ describe('forkEngineOptsFrom (A1 regression lock)', () => {
       projectRoot: '/proj',
       projectId: 'proj',
       parentAppCapabilities: {},
+      dbSchema: undefined,
       appGlobals: undefined,
       delegateRunner,
       documentResolver: undefined,

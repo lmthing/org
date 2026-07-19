@@ -15,6 +15,7 @@ import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
 import { createApiCallGlobal } from '../globals/api-call.js';
+import { createBuildAppGlobal } from '../globals/build-app.js';
 import { createCallConnectionGlobal } from '../globals/call-connection.js';
 import { createReadDocumentGlobal } from '../globals/read-document.js';
 import { createIntegrationStatusGlobal } from '../globals/integration-status.js';
@@ -28,7 +29,7 @@ import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
   EXEC_SHELL_DTS, SCRATCH_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
-  PROJECT_TABLE_DTS, PROJECT_READ_DTS, composeConnectionsDts,
+  PROJECT_TABLE_DTS, PROJECT_READ_DTS, composeConnectionsDts, type DbTableSchema,
 } from '../typecheck/library-dts.js';
 import { injectAppGlobals, type AppGlobalImpls } from './app-globals.js';
 import type { RenderHost, Clock } from '../session/types.js';
@@ -228,6 +229,11 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   // `api:call` grant. The host resolver is threaded through the yield router
   // (apiCallResolver); the DTS is declared by buildAppCapabilityDts on the same grant.
   if (caps.app['api:call']) injectGlobal(ctx, 'apiCall', createApiCallGlobal(pushYield) as AnyFn);
+  // buildApp: value-yielding build+programmatic-check of the project's live app, gated on
+  // the `pages:write` grant (the same grant as the page/component writers it verifies).
+  // Resolver threaded via the yield router (buildAppResolver); the DTS is declared by
+  // buildAppCapabilityDts on the same grant.
+  if (caps.app['pages:write']) injectGlobal(ctx, 'buildApp', createBuildAppGlobal(pushYield) as AnyFn);
   // callConnection: value-yielding entry to a user-connected external service, gated on the
   // `connections:use` grant. Resolver threaded via the yield router (connectionResolver); the
   // per-grant typed DTS (buildAppCapabilityDts) restricts `provider` to the granted providers.
@@ -329,6 +335,11 @@ export interface AmbientDtsOpts {
    *  (`listProjectDir`/`readProjectFile`) so it is declared exactly where the impls are
    *  injected (injectAppGlobals gates the same globals on projectRoot alone). */
   projectRoot?: boolean;
+  /** The real per-run DB schema (table names + column names, derived cheaply from
+   *  `database/*.json` by the host). When present AND the agent is not a schema author,
+   *  `composeDbDts` gates `db.*` table/column names to it so a hallucinated table or a
+   *  typo'd column fails typecheck. Absent ⇒ the loose `string`-typed db members. */
+  dbSchema?: DbTableSchema[];
 }
 
 /**
@@ -339,9 +350,9 @@ export interface AmbientDtsOpts {
  * the DTS, so a stray call fails typecheck — the same "not listed ⇒ not injected AND
  * absent from the DTS" invariant the boolean flags enforce for ask/fork/delegate.
  */
-function buildAppCapabilityDts(app: AppCapabilities, appDts?: string, projectRoot?: boolean): string {
+function buildAppCapabilityDts(app: AppCapabilities, appDts?: string, projectRoot?: boolean, dbSchema?: DbTableSchema[]): string {
   const parts: string[] = [
-    composeDbDts({ read: !!app['db:read'], write: !!app['db:write'], schema: !!app['db:schema'] }),
+    composeDbDts({ read: !!app['db:read'], write: !!app['db:write'], schema: !!app['db:schema'] }, dbSchema),
   ];
   // db:schema earns the standalone LIVE-project writer `writeProjectTable` (writes
   // `database/<name>.json` into the running project and re-derives its db) in ADDITION
@@ -386,7 +397,7 @@ export function buildAmbientDts(opts: AmbientDtsOpts): string {
     // builder functions, so a stray readFile/writeFile/execShell call fails typecheck.
     caps.scratchFs ? EXEC_SHELL_DTS : '',
     caps.scratchFs ? SCRATCH_DTS : '',
-    buildAppCapabilityDts(caps.app, opts.appDts, opts.projectRoot),
+    buildAppCapabilityDts(caps.app, opts.appDts, opts.projectRoot, opts.dbSchema),
     opts.overlay ?? '',
     opts.currentTask ? CURRENT_TASK_DTS : '',
     ...(opts.extraDecls ?? []),

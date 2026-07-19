@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildErrorBlock, redeclareHint, sandboxApiHint } from './error-rewind.js';
+import { buildErrorBlock, boundAlreadyExecuted, redeclareHint, sandboxApiHint } from './error-rewind.js';
 
 describe('redeclareHint', () => {
   it('names the colliding binding and both ways out of it', () => {
@@ -104,5 +104,62 @@ describe('buildErrorBlock', () => {
     const block = buildErrorBlock('const x = foo();', 'boom', 1, 3, '');
     expect(block).not.toContain('do NOT redeclare');
     expect(block).not.toContain('ALREADY EXECUTED');
+  });
+
+  it('bounds a huge ALREADY-EXECUTED echo to a rolling window while still listing every name in scope', () => {
+    // Regression for the runaway-turn "Invalid string length" blow-up: on a long turn the full
+    // accumulated context was re-embedded verbatim on EVERY retry (quadratic). Now the echo is
+    // windowed to the recent tail + an omitted-count marker — but the "Still in scope" line
+    // (derived from the FULL context) must remain COMPLETE so the model still knows every binding.
+    const stmts = Array.from({ length: 600 }, (_, i) => `const v${i} = ${i};`);
+    const scope = stmts.join('\n'); // ~9600 chars, well over the 8k window
+    const block = buildErrorBlock('const bad = nope();', 'Cannot find name nope', 1, 3, scope);
+
+    // The omitted-count marker is present and names how many earlier statements were dropped.
+    expect(block).toMatch(/… \d+ earlier statements omitted/);
+    // The echoed ALREADY-EXECUTED body is SHORTER than the raw scope (it was bounded).
+    const echo = block.slice(block.indexOf('ALREADY EXECUTED'));
+    expect(echo.length).toBeLessThan(scope.length);
+    // The RECENT tail is kept verbatim (so the model can "continue from there")...
+    expect(block).toContain('const v599 = 599;');
+    // ...but an EARLY statement is omitted from the echoed body.
+    expect(echo).not.toContain('const v0 = 0;');
+    // Yet EVERY name — earliest AND latest — is still advertised on the in-scope line, so the
+    // model never loses track of what it can reference.
+    const inScopeLine = block.split('\n').find((l) => l.includes('Still in scope')) ?? '';
+    expect(inScopeLine).toContain('v0');
+    expect(inScopeLine).toContain('v599');
+  });
+});
+
+describe('boundAlreadyExecuted', () => {
+  it('returns the context unchanged when it fits inside the window', () => {
+    const ctx = 'const a = 1;\nconst b = 2;';
+    expect(boundAlreadyExecuted(ctx, 1000)).toBe(ctx);
+    expect(boundAlreadyExecuted(ctx, 1000)).not.toContain('omitted');
+  });
+
+  it('keeps the recent tail on a statement boundary and marks the omitted count', () => {
+    const stmts = Array.from({ length: 20 }, (_, i) => `const s${i} = ${i};`); // 20 lines
+    const out = boundAlreadyExecuted(stmts.join('\n'), 40); // tiny window → keep only the last few
+    // Never a truncated half-statement: every kept line (past the marker) is a whole statement.
+    for (const line of out.split('\n')) {
+      if (line.startsWith('//')) continue;
+      expect(line).toMatch(/^const s\d+ = \d+;$/);
+    }
+    // The last statement is always kept; the omitted count accounts for the rest.
+    expect(out).toContain('const s19 = 19;');
+    const m = out.match(/… (\d+) earlier statements? omitted/);
+    expect(m).not.toBeNull();
+    const omitted = Number(m![1]);
+    const kept = out.split('\n').filter((l) => !l.startsWith('//')).length;
+    expect(omitted + kept).toBe(20);
+  });
+
+  it('keeps at least the final statement even when it alone exceeds the window', () => {
+    const big = 'const huge = ' + JSON.stringify('x'.repeat(200)) + ';';
+    const out = boundAlreadyExecuted('const a = 1;\n' + big, 20);
+    expect(out).toContain(big); // the last statement survives whole
+    expect(out).toContain('1 earlier statement omitted'); // singular
   });
 });

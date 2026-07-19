@@ -267,7 +267,12 @@ describe('bootstrap: thing — discovery + rebind', () => {
   });
 });
 
-describe('sendResilient — honours the harness eviction re-send contract', () => {
+// Option C made the live app-build target DURABLE across a session re-establish (SessionManager
+// persists `buildTargetProjectId` + re-seeds the holder on resume), so the harness no longer needs
+// to re-issue an interrupted turn to rebuild it. `sendResilient` is now an HONEST pass-through and
+// a genuine mid-turn vanish throws from `ThingSession` instead of coming back as a completed-but-
+// `interrupted` turn this loop would silently re-run. These pin that no-re-send contract.
+describe('sendResilient — honest pass-through (no re-send on interrupt)', () => {
   it('returns the turn as-is when it did not interrupt (one send, no note)', async () => {
     const rec = { notes: [] };
     let calls = 0;
@@ -277,23 +282,21 @@ describe('sendResilient — honours the harness eviction re-send contract', () =
     expect(rec.notes).toEqual([]);
   });
 
-  it('re-sends when a turn is interrupted, and stops once it completes', async () => {
-    const rec = { notes: [] };
-    const turns = [{ interrupted: true }, { ok: true, built: true }];
-    let i = 0;
-    const turn = await sendResilient(() => Promise.resolve(turns[i++]), rec);
-    expect(i).toBe(2); // sent twice: the eviction + the recovery
-    expect(turn).toEqual({ ok: true, built: true });
-    expect(rec.notes).toHaveLength(1); // the re-send is recorded so the judge sees it happened
-    expect(rec.notes[0]).toMatch(/evicted mid-turn — re-sent/);
-  });
-
-  it('gives up after maxRetries and returns the last still-interrupted turn — never loops forever', async () => {
+  it('does NOT re-send an interrupted turn — it passes the interrupt straight through, ONCE', async () => {
     const rec = { notes: [] };
     let calls = 0;
-    const turn = await sendResilient(() => { calls++; return Promise.resolve({ interrupted: true }); }, rec, 2);
-    expect(calls).toBe(3); // initial + 2 retries
-    expect(turn.interrupted).toBe(true);
-    expect(rec.notes).toHaveLength(2);
+    const turn = await sendResilient(() => { calls++; return Promise.resolve({ interrupted: true }); }, rec);
+    expect(calls).toBe(1); // sent exactly once — no replay of the eviction
+    expect(turn).toEqual({ interrupted: true }); // surfaced honestly, not masked as a recovery
+    expect(rec.notes).toEqual([]); // no "re-sent" note — there was no re-send
+  });
+
+  it('is a thin wrapper: whatever the fn resolves is returned unchanged, with no bookkeeping', async () => {
+    const rec = { notes: [] };
+    let calls = 0;
+    const turn = await sendResilient(() => { calls++; return Promise.resolve({ ok: true, built: true }); }, rec);
+    expect(calls).toBe(1);
+    expect(turn).toEqual({ ok: true, built: true });
+    expect(rec.notes).toEqual([]);
   });
 });

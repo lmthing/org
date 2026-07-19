@@ -11,6 +11,7 @@ import {
   API_CALL_DTS,
   PROJECT_PAGE_DTS,
   PROJECT_COMPONENT_DTS,
+  BUILD_APP_DTS,
   PROJECT_API_DTS,
   PROJECT_AUTHORING_DTS,
   PROJECT_MANAGE_DTS,
@@ -23,6 +24,7 @@ import {
   composeConnectionsDts,
   PROJECT_READ_DTS,
 } from './library-dts.js';
+import { runTsc } from './tsc.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -85,6 +87,98 @@ describe('composeDbDts', () => {
   });
 });
 
+// The per-run schema constrains db table/column names to compile-time literal unions, so a
+// hallucinated table or a typo'd column FAILS typecheck (retryable) instead of throwing at
+// runtime. The concrete evidence: 07-life-admin run15 ~step 13 — THING read `type` instead of
+// the real `policy_type` column, got an empty result, and FABRICATED "no home insurance". A
+// gated DTS turns that silent wrong answer into a typecheck error that names the real columns.
+describe('composeDbDts schema gating (shape)', () => {
+  const schema = [
+    { name: 'policies', columns: ['id', 'policy_type', 'premium'] },
+    { name: 'claims', columns: ['id', 'amount'] },
+  ];
+
+  it('falls back to the loose string-typed members when NO schema is supplied (backward compat)', () => {
+    const dts = composeDbDts({ read: true, write: true });
+    expect(dts).toContain('query(table: string');
+    expect(dts).not.toContain('__DbCols');
+  });
+
+  it('an EMPTY schema array also stays loose', () => {
+    const dts = composeDbDts({ read: true }, []);
+    expect(dts).toContain('query(table: string');
+    expect(dts).not.toContain('__DbCols');
+  });
+
+  it('gates read+write table/column names when a schema is supplied to a non-authoring agent', () => {
+    const dts = composeDbDts({ read: true, write: true }, schema);
+    expect(dts).toContain('type __DbCols = {');
+    expect(dts).toContain('"policies": "id" | "policy_type" | "premium"');
+    expect(dts).toContain('query<T extends keyof __DbCols>');
+    expect(dts).toContain('insert<T extends keyof __DbCols>');
+    expect(dts).toContain('tables(): (keyof __DbCols)[]');
+  });
+
+  it('stays LOOSE for a db:schema HOLDER even with a schema (authoring is open-table)', () => {
+    const dts = composeDbDts({ read: true, write: true, schema: true }, schema);
+    expect(dts).not.toContain('__DbCols');
+    expect(dts).toContain('query(table: string');
+    expect(dts).toContain('createTable(');
+  });
+});
+
+// Load-bearing: run the emitted DTS through the real typechecker (runTsc) and prove a bad
+// table AND a bad column are REJECTED while valid + every dynamic call pattern the shipped
+// agents use still PASS. Reverting composeDbDts to the ungated members turns the four
+// "fails typecheck" cases green, so this test is load-bearing on the gating.
+describe('schema-gated db DTS is enforced by tsc', () => {
+  const gatedDts = composeDbDts(
+    { read: true, write: true },
+    [
+      { name: 'policies', columns: ['id', 'policy_type', 'premium'] },
+      { name: 'claims', columns: ['id', 'amount'] },
+    ],
+  );
+  const check = (statement: string, sessionContext = ''): ReturnType<typeof runTsc> =>
+    runTsc({ ambientDts: gatedDts, sessionContext, statement });
+
+  it('a valid table + valid columns PASS (query, orderBy, insert)', () => {
+    expect(check(`const r = db.query('policies', { where: { policy_type: 'home' }, orderBy: 'premium' });`).ok).toBe(true);
+    expect(check(`const n = db.insert('claims', { amount: 100 });`).ok).toBe(true);
+  });
+
+  it('a hallucinated TABLE fails typecheck', () => {
+    const r = check(`const r = db.query('policyz', { where: { policy_type: 'home' } });`);
+    expect(r.ok).toBe(false);
+  });
+
+  it('a typo COLUMN in a where clause fails typecheck AND names the real columns', () => {
+    const r = check(`const r = db.query('policies', { where: { type: 'home' } });`);
+    expect(r.ok).toBe(false);
+    // The diagnostic surfaces the real column names so the model can self-correct.
+    expect(r.diagnostics.some((d) => /policy_type/.test(d.message))).toBe(true);
+  });
+
+  it('a typo COLUMN in insert values and in update set fails typecheck', () => {
+    expect(check(`const n = db.insert('policies', { policy_typ: 'home' });`).ok).toBe(false);
+    expect(check(`const n = db.update('policies', { where: { id: '1' }, set: { premiun: 1 } });`).ok).toBe(false);
+  });
+
+  it('a dynamic table from a db.tables() loop still PASSES (enumerate-then-query)', () => {
+    expect(check(`for (const t of db.tables()) { db.query(t, { limit: 1 }); }`).ok).toBe(true);
+  });
+
+  it('an any-typed dynamic table + computed column key still PASSES (write_fact/retract_fact)', () => {
+    expect(check(`db.query(up.table, { where: { [up.col]: up.val } });`, `const up: any = {};`).ok).toBe(true);
+  });
+
+  it('the LOOSE fallback (no schema) accepts an arbitrary table + column (no gating)', () => {
+    const loose = composeDbDts({ read: true, write: true });
+    const r = runTsc({ ambientDts: loose, sessionContext: '', statement: `const r = db.query('anything', { where: { whatever: 1 } });` });
+    expect(r.ok).toBe(true);
+  });
+});
+
 describe('standalone capability fragments', () => {
   it('apiCall is value-yielding (Promise)', () => {
     expect(API_CALL_DTS).toContain('declare function apiCall(');
@@ -122,7 +216,7 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
   it('maps the standalone capability ids and omits the db trio', () => {
     expect(CAPABILITY_DTS_FRAGMENTS).toEqual({
       'api:call': API_CALL_DTS,
-      'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS].join('\n'),
+      'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS, BUILD_APP_DTS].join('\n'),
       'api:write': PROJECT_API_DTS,
       'hooks:write': PROJECT_AUTHORING_DTS,
       'project:manage': PROJECT_MANAGE_DTS,

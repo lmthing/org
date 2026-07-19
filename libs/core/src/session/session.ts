@@ -31,6 +31,7 @@ import type { TraceScope } from '../sandbox/trace.js';
 import { sessionCapabilities } from '../exec/capability.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
+import type { DbTableSchema } from '../typecheck/library-dts.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
 import { forkEngineOptsFrom } from '../exec/fork-config.js';
 import {
@@ -66,6 +67,13 @@ export type UserInput = string | { text: string; attachments?: UserAttachment[] 
 function normalizeInput(message: UserInput): { text: string; attachments?: UserAttachment[] } {
   return typeof message === 'string' ? { text: message } : message;
 }
+
+/** Default mid-turn compaction threshold (chars) when `SessionOpts.maxPromptChars` is unset.
+ *  ~400k chars ≈ ~100k tokens — well under V8's ~512MB max string length, and low enough that
+ *  a runaway single turn is compacted long before the concatenated prompt can overflow. Applied
+ *  to EVERY session (the top-level THING session never sets maxHistoryTurns, so char-triggered
+ *  compaction is its only mid-turn bound). */
+const DEFAULT_MAX_PROMPT_CHARS = 400_000;
 
 /** A short text note listing the turn's image/file attachments (by id), appended
  *  to a text agent's message so it knows what's attached and can delegate each to
@@ -118,6 +126,14 @@ export class Session {
   private pendingAttachments = new Map<string, UserAttachment>();
   private systemBlock: string | null = null;
   private ambientDts: string | null = null;
+  /** Freshness (targeted DB-schema invalidation). `bakeAmbientDts` re-runs `buildAmbientDts`
+   *  with a given schema, capturing THIS entry's overlay + session capabilities;
+   *  `currentDbSchema` is what was last baked; `bakedDbSchemaRev` is the revision it was baked
+   *  at. `continue()` re-bakes only when `opts.dbSchemaRevision()` moved (a table was
+   *  created/altered) — the common turn pays only a Map-counter read. */
+  private bakeAmbientDts: ((dbSchema?: DbTableSchema[]) => string) | null = null;
+  private currentDbSchema: DbTableSchema[] | undefined;
+  private bakedDbSchemaRev = 0;
   private agentFunctions: Record<string, string> = {};
   private agentFunctionsBundled: Record<string, string> = {};
   private systemSpaces: Space[] = [];
@@ -233,6 +249,10 @@ export class Session {
     // Context economy: collapse old turns into a summary once history grows large,
     // keeping the most recent messages (incl. this task) verbatim.
     await this.maybeSummarizeHistory();
+    // Freshness: if a table/column was created since the ambient DTS was last baked (a rare
+    // createTable/writeProjectTable), re-derive the schema + re-bake so the new table is
+    // queryable (typechecks) THIS turn. Gated by a cheap revision check — a no-op otherwise.
+    this.refreshDbSchemaIfDirty();
     this.budget = new Budget(this.opts.budget ?? {});
     const runScope = this.mintRunScope();
     try {
@@ -254,12 +274,26 @@ export class Session {
         model: this.opts.modelAlias,
         beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
+        maybeCompact: () => this.maybeCompactHistoryBySize(),
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
       this.tracer.end(runScope, 'error', { error: err instanceof Error ? err.message : String(err) });
       throw err;
     }
+  }
+
+  /** Re-bake the ambient DTS when the project's DB schema changed since the last bake (targeted
+   *  invalidation — see `SessionOpts.dbSchemaRevision`/`resolveDbSchema`). No-op without the
+   *  hooks or when the revision is unchanged, so the common turn pays only a Map-counter read. */
+  private refreshDbSchemaIfDirty(): void {
+    const rev = this.opts.dbSchemaRevision?.();
+    if (rev === undefined || rev === this.bakedDbSchemaRev || !this.bakeAmbientDts) return;
+    this.currentDbSchema = this.opts.resolveDbSchema?.() ?? this.currentDbSchema;
+    this.bakedDbSchemaRev = rev;
+    this.ambientDts = this.bakeAmbientDts(this.currentDbSchema);
+    // Drop the cached fork engine so its next build captures the fresh schema too.
+    this.forkEngine = null;
   }
 
   async start(initialMessage: UserInput): Promise<void> {
@@ -308,7 +342,13 @@ export class Session {
       this.opts.renderHost.log(`[warn] ${name}: ${message}`);
     });
     this.appCapabilities = agent.capabilities ?? {};
-    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot });
+    const sessionCaps = sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities);
+    // Bake the ambient DTS through a captured closure so continue() can re-bake it with a fresh
+    // schema (targeted freshness) without re-deriving overlay/caps.
+    this.bakeAmbientDts = (dbSchema) => buildAmbientDts({ capabilities: sessionCaps, overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot, dbSchema });
+    this.currentDbSchema = this.opts.resolveDbSchema?.() ?? this.opts.dbSchema;
+    this.bakedDbSchemaRev = this.opts.dbSchemaRevision?.() ?? 0;
+    const ambientDts = this.bakeAmbientDts(this.currentDbSchema);
     this.systemBlock = systemBlock;
     this.ambientDts = ambientDts;
     this.agentFunctions = agentFunctions;
@@ -403,6 +443,7 @@ export class Session {
         model: this.opts.modelAlias,
         beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
+        maybeCompact: () => this.maybeCompactHistoryBySize(),
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -443,7 +484,7 @@ export class Session {
       this.opts.renderHost.log(`[warn] ${name}: ${message}`);
     });
     this.appCapabilities = agent.capabilities ?? {};
-    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot });
+    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot, dbSchema: this.opts.resolveDbSchema?.() ?? this.opts.dbSchema });
     return { agentSlug: resolvedSlug, systemBlock, ambientDts };
   }
 
@@ -518,7 +559,16 @@ export class Session {
       this.opts.renderHost.log(`[warn] ${name}: ${message2}`);
     });
     this.appCapabilities = agent.capabilities ?? {};
-    const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot });
+    const sessionCaps = sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities);
+    // Mirror start()'s bake so continue() after a resume() has a live re-bake closure + the
+    // current schema/revision (targeted freshness). resume() also sets this.systemBlock/
+    // this.ambientDts (previously left unset) so a post-resume continue() runs on this agent's DTS.
+    this.bakeAmbientDts = (dbSchema) => buildAmbientDts({ capabilities: sessionCaps, overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot, dbSchema });
+    this.currentDbSchema = this.opts.resolveDbSchema?.() ?? this.opts.dbSchema;
+    this.bakedDbSchemaRev = this.opts.dbSchemaRevision?.() ?? 0;
+    const ambientDts = this.bakeAmbientDts(this.currentDbSchema);
+    this.systemBlock = systemBlock;
+    this.ambientDts = ambientDts;
     this.agentFunctions = agentFunctions;
     this.agentFunctionsBundled = agentFunctionsBundled;
     this.forkEngine = null; // agent functions changed — rebuild on next fork yield
@@ -554,6 +604,7 @@ export class Session {
         model: this.opts.modelAlias,
         beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
+        maybeCompact: () => this.maybeCompactHistoryBySize(),
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -581,6 +632,28 @@ export class Session {
     if (summary) {
       this.history.summarize(summary, 6);
       this.opts.renderHost.log(`[context] history summarized → ${this.history.messages.length} messages`);
+    }
+  }
+
+  /**
+   * Mid-turn history compaction by SIZE (chars), independent of `maxHistoryTurns`. Wired into
+   * every `runTurnLoop` as `maybeCompact`, it runs at the TOP of every cycle (error-retry /
+   * yield-resume / nudge), so a long SINGLE turn — many cycles that never cross a turn boundary
+   * where `maybeSummarizeHistory` runs — cannot grow its history past V8's max string length
+   * (the runaway-turn "Invalid string length" overflow the top-level THING session hit, since
+   * it never sets `maxHistoryTurns`). Uses the SAME deterministic digest as
+   * `maybeSummarizeHistory` and keeps the last 6 messages verbatim — including the just-appended
+   * VARIABLES block — so the pending yield's binding, which lives in the VM + `turnContext` and
+   * NEVER in `history`, is untouched. DEFAULT-ON at `DEFAULT_MAX_PROMPT_CHARS`;
+   * `opts.maxPromptChars` overrides (0 disables).
+   */
+  private async maybeCompactHistoryBySize(): Promise<void> {
+    const cap = this.opts.maxPromptChars ?? DEFAULT_MAX_PROMPT_CHARS;
+    if (cap <= 0 || this.history.totalChars() <= cap) return;
+    const summary = await summarizeHistory({ messages: this.history.messages, keepLast: 6 });
+    if (summary) {
+      this.history.summarize(summary, 6);
+      this.opts.renderHost.log(`[context] history compacted by size → ${this.history.messages.length} messages`);
     }
   }
 
@@ -856,6 +929,8 @@ export class Session {
       projectRoot: pctx.projectRoot,
       projectId: pctx.projectId,
       appGlobals: pctx.appGlobals,
+      // Gate the delegated specialist's db.* against the parent's current schema.
+      dbSchema: this.currentDbSchema,
       model: this.opts.modelAlias,
       // Inherit the session's fork wiring down the delegation chain (A1 fix):
       // budget caps + role models for the delegate's leaf forks, and the SHARED
@@ -906,6 +981,9 @@ export class Session {
       projectId: pctx.projectId,
       // The session agent's app grants flow to its forks (role-intersected in forkCapabilities).
       parentAppCapabilities: this.appCapabilities,
+      // Current schema so a gated fork's db.* is constrained like the parent's (rebuilt on a
+      // schema change — see refreshDbSchemaIfDirty, which nulls this.forkEngine).
+      dbSchema: this.currentDbSchema,
       appGlobals: pctx.appGlobals,
       // A task in a tasklist may delegate (gated by its own canDelegateTo) — route through the
       // session's registry with the recursion bound enforced by runDelegate.
@@ -1067,6 +1145,7 @@ export class Session {
       scope: this.currentScope ?? undefined,
       apiCallResolver: this.opts.appGlobals?.apiCall,
       apiCallAllow: this.appCapabilities['api:call']?.allow,
+      buildAppResolver: this.opts.appGlobals?.buildApp,
       connectionResolver: this.opts.appGlobals?.callConnection,
       documentResolver: this.opts.documentResolver,
       integrationStatusResolver: this.opts.integrationStatusResolver,
@@ -1160,6 +1239,8 @@ export class Session {
           projectRoot: pctx.projectRoot,
           projectId: pctx.projectId,
           appGlobals: pctx.appGlobals,
+          // Gate the delegated specialist's db.* against the parent's current schema.
+          dbSchema: this.currentDbSchema,
           model: this.opts.modelAlias,
           // Inherit the session's fork wiring down the delegation chain (A1 fix).
           budgetLimits: this.opts.budget,

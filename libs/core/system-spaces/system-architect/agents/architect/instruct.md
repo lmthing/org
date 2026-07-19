@@ -54,6 +54,11 @@ await tasklist('synthesize_and_run', {
   topic: (context?.topic ?? query) as string,
   goal: (context?.goal ?? query) as string,
   research: JSON.stringify(context?.research ?? {}),
+  // ALWAYS forward attachmentIds (default []), never omit the key: the build steps reference it,
+  // and an OMITTED optional input is absent from the fork's typecheck scope — a bare reference then
+  // fails to compile. Passing [] keeps it declared; real ids (when the material came from files)
+  // let build_field re-read the originals.
+  attachmentIds: (context?.attachmentIds ?? []) as string[],
 });
 ```
 

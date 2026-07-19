@@ -73,21 +73,22 @@ function readdirSyncSafe(dir) {
  * @param {boolean} o.verbose
  */
 /**
- * Send a turn, honouring the harness's documented eviction contract. On a wide fan-out the session
- * manager can evict this top-level session mid-turn (`maxSessions` on a small pod), which
- * `ThingSession` surfaces as `turn.interrupted` — "the caller's cue to re-send" (harness/lib/thing.mjs).
- * `ThingSession` re-establishes the session on its next send, so re-issue the SAME message (bounded)
- * until the turn completes; the appbuilder's own convergence + retry-safe guards keep a re-run
- * idempotent (no duplicate rows, no parallel app). Without this the documented recovery path was
- * never wired up and an evicted build surfaced as a hard `interrupted:true` step failure.
+ * Send a turn — an HONEST pass-through (no re-send).
+ *
+ * This used to re-issue a turn that came back `interrupted` (a mid-turn session eviction), because
+ * the in-RAM app-build target THING retargets to (`createProject`/`selectProject`) was LOST on a
+ * session re-establish, so a replay was the only way to rebuild into the right project. That target
+ * is now DURABLE across a re-establish: `SessionManager` persists `buildTargetProjectId` in the
+ * session meta and re-seeds the live holder on resume (see
+ * `sdk/org/libs/cli/src/server/session-manager.ts` — `persistSession` + `defaultBuildSession`). A
+ * re-established session therefore already points at the same live project, so there is nothing to
+ * replay. A genuine mid-turn vanish now surfaces as an HONEST failure — `ThingSession` THROWS
+ * (harness/lib/thing.mjs) rather than masking it as a completed-but-`interrupted` turn that this
+ * loop would silently re-run. Kept as a thin wrapper so the call sites read unchanged and the
+ * eviction contract has one documented home; `rec` is unused now (no re-send note to record).
  */
-export async function sendResilient(fn, rec, maxRetries = 2) {
-  let turn = await fn();
-  for (let i = 0; turn?.interrupted && i < maxRetries; i++) {
-    rec.notes.push(`session evicted mid-turn — re-sent (attempt ${i + 2}/${maxRetries + 1})`);
-    turn = await fn();
-  }
-  return turn;
+export async function sendResilient(fn, _rec) {
+  return await fn();
 }
 
 export async function runStep({ step, thing, pod, run, projectId, fixturesDir, rec, envStack, onAsk, verbose }) {

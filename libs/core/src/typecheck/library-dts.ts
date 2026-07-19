@@ -153,9 +153,50 @@ export const DB_WRITE_MEMBERS = `  insert(table: string, values: Record<string, 
   update(table: string, opts: { where: Record<string, unknown>; set: Record<string, unknown> }): number;
   remove(table: string, opts: { where: Record<string, unknown> }): number;`;
 
-// `db:schema` members — DDL.
+// `db:schema` members — DDL. Always LOOSE (`string`): schema authoring is open-table
+// (it INVENTS new table/column names), so it is never gated by the current schema.
 export const DB_SCHEMA_MEMBERS = `  createTable(schema: any): void;
   addColumn(table: string, name: string, column: any): void;`;
+
+/**
+ * One table's name + its column names, the minimum a per-run schema needs to gate
+ * `db.*` at typecheck time. Derived cheaply from the project's `database/<name>.json`
+ * basenames + column keys by the host (NOT the heavy `ts-json-schema-generator`) and
+ * threaded to `composeDbDts` via the ambient-DTS builder.
+ */
+export interface DbTableSchema {
+  /** The table name — the `database/<name>.json` basename. */
+  name: string;
+  /** The column names (the keys of the table's `columns`). */
+  columns: string[];
+}
+
+/**
+ * Column-GATED (generic) READ/WRITE members, emitted in place of the loose `string`
+ * members when a real per-run schema is supplied AND the agent is not a schema author.
+ * `<T extends keyof __DbCols>` binds `table` to a real table name (a hallucinated table
+ * is not in `keyof __DbCols` ⇒ typecheck error) and `Partial<Record<__DbCols[T], unknown>>`
+ * binds `where`/`set`/`values` keys + `orderBy` to THAT table's columns (a typo'd column
+ * is an excess property ⇒ typecheck error). A dynamic/`any`-typed table arg still resolves
+ * (T ⇒ `any`), and `tables()` yields the table-name union so an enumerate-then-query loop
+ * still typechecks. Values stay `unknown` — only NAMES are gated, never value types.
+ */
+export const DB_READ_MEMBERS_TYPED = `  query<T extends keyof __DbCols>(table: T, opts?: { where?: Partial<Record<__DbCols[T], unknown>>; include?: string[]; orderBy?: __DbCols[T] | { column: __DbCols[T]; dir?: 'asc' | 'desc' }; limit?: number; offset?: number }): any[];
+  tables(): (keyof __DbCols)[];`;
+export const DB_WRITE_MEMBERS_TYPED = `  insert<T extends keyof __DbCols>(table: T, values: Partial<Record<__DbCols[T], unknown>> | Partial<Record<__DbCols[T], unknown>>[]): any;
+  update<T extends keyof __DbCols>(table: T, opts: { where: Partial<Record<__DbCols[T], unknown>>; set: Partial<Record<__DbCols[T], unknown>> }): number;
+  remove<T extends keyof __DbCols>(table: T, opts: { where: Partial<Record<__DbCols[T], unknown>> }): number;`;
+
+/** The `type __DbCols = { <table>: <col> | <col> ; … }` map the gated members index into.
+ *  Names are JSON-quoted so kebab-case table names / arbitrary column names are legal type
+ *  keys; an empty column list degrades to `never` (every column then errors — a real table
+ *  always has at least its primary key). */
+function dbColsType(tables: DbTableSchema[]): string {
+  const entries = tables.map(
+    (t) => `${JSON.stringify(t.name)}: ${t.columns.length ? t.columns.map((c) => JSON.stringify(c)).join(' | ') : 'never'}`,
+  );
+  return `type __DbCols = { ${entries.join('; ')} };`;
+}
 
 /**
  * Compose the single `declare const db` from whichever of the three db capabilities
@@ -163,14 +204,27 @@ export const DB_SCHEMA_MEMBERS = `  createTable(schema: any): void;
  * separate `declare const db` blocks — we union the present member strings into a
  * single declaration. Returns `''` when none are present (so the `db` global fails
  * typecheck on a stray call in a VM without any db capability).
+ *
+ * When `tables` (the real per-run schema) is supplied AND the agent is NOT a schema
+ * author (`!present.schema`), the read/write members are GATED: `table`/column names are
+ * constrained to compile-time literal unions derived from the schema, so a hallucinated
+ * table or a typo'd column FAILS typecheck (retryable) instead of throwing at runtime. A
+ * db:schema holder creates tables mid-session (open table set), so it stays loose; absent
+ * or empty `tables` (a non-project session, or the schema not threaded on this path) also
+ * stays loose — the same permissive `string`-typed members as before.
  */
-export function composeDbDts(present: { read?: boolean; write?: boolean; schema?: boolean }): string {
+export function composeDbDts(
+  present: { read?: boolean; write?: boolean; schema?: boolean },
+  tables?: DbTableSchema[],
+): string {
+  const gated = !present.schema && Array.isArray(tables) && tables.length > 0;
   const members: string[] = [];
-  if (present.read) members.push(DB_READ_MEMBERS);
-  if (present.write) members.push(DB_WRITE_MEMBERS);
+  if (present.read) members.push(gated ? DB_READ_MEMBERS_TYPED : DB_READ_MEMBERS);
+  if (present.write) members.push(gated ? DB_WRITE_MEMBERS_TYPED : DB_WRITE_MEMBERS);
   if (present.schema) members.push(DB_SCHEMA_MEMBERS);
   if (members.length === 0) return '';
-  return `declare const db: {\n${members.join('\n')}\n};`;
+  const decl = `declare const db: {\n${members.join('\n')}\n};`;
+  return gated ? `${dbColsType(tables!)}\n${decl}` : decl;
 }
 
 // Standalone `declare function` capability fragments.
@@ -207,6 +261,15 @@ export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, 
 // `components/<Name>.tsx` (PascalCase) into the live project so a page can import it. The
 // typed surface for shared UI (there is no space-rooted fs writer for components anymore).
 export const PROJECT_COMPONENT_DTS = `declare function writeProjectComponent(name: string, src: string): { ok: boolean; error?: string };`;
+
+// `pages:write` ALSO earns `buildApp` — build + PROGRAMMATICALLY CHECK the live app
+// (write-time lint → project-app typecheck → esbuild bundle). Value-yielding (Promise,
+// like `apiCall`): the heavy tsc + esbuild run host-side. It returns the STRUCTURED
+// error list (exit-status ground truth, never a model self-assessment) a build gate
+// node reads to fix the offending page/component and re-check until the app is clean
+// (or fails loudly) — a clean resolve sets `built:true` for ALL routes. `phase` says
+// which check produced each error; `file` is project-relative.
+export const BUILD_APP_DTS = `declare function buildApp(): Promise<{ ok: boolean; built: boolean; routes: string[]; errors: Array<{ phase: 'lint' | 'typecheck' | 'build'; file: string; line?: number; column?: number; message: string }> }>;`;
 
 // `hooks:write` earns the plan-S11 LIVE-PROJECT authoring writers — the automator
 // authors event hooks (`hooks/<slug>.ts`) + emitter defs (`events/<name>.ts`) and the
@@ -284,7 +347,7 @@ declare function writeKnowledge(domain: string, field: string, option: string, m
  */
 export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:call': API_CALL_DTS,
-  'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS].join('\n'),
+  'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS, BUILD_APP_DTS].join('\n'),
   'api:write': PROJECT_API_DTS,
   'hooks:write': PROJECT_AUTHORING_DTS,
   'knowledge:write': KNOWLEDGE_WRITE_DTS,

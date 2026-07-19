@@ -469,6 +469,15 @@ export interface PersistedSessionMeta {
   messageCount: number;
   status: string;
   totalCostUsd?: number;
+  /** The LIVE app-build target this session retargeted to (via the `createProject`/
+   *  `selectProject` globals). THING creates a live project and delegates the app build
+   *  INTO it; that target lives ONLY as an in-RAM holder closed over by the session's
+   *  `resolveBuildTarget` (see SessionManager.defaultBuildSession), so a session
+   *  re-establish (resume, or eviction-then-reopen) used to LOSE it and the delegated
+   *  build silently fell back to the session's own project. Persisting the id here lets
+   *  resume re-seed the holder so the build target SURVIVES. Absent ⇒ never retargeted
+   *  (build into own project). */
+  buildTargetProjectId?: string;
 }
 
 /** `<root>/<projectId>/sessions/` */

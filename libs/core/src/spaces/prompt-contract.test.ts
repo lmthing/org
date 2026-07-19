@@ -204,6 +204,116 @@ describe('user-thing/thing — capability honesty for real-world actions', () =>
   });
 });
 
+describe('user-thing/thing — act on a determined change, ask only when the choice is genuinely theirs', () => {
+  const instruct = () => readFileSync(join(SYSTEM_SPACES, 'user-thing', 'agents', 'thing', 'instruct.md'), 'utf8');
+  // Whitespace-flattened source: line-wrap must never break these anchors (a rewrap has broken
+  // hardcoded regexes in this file before). Match single-space phrases against the flattened body.
+  const flat = () => instruct().replace(/\s+/g, ' ');
+
+  /**
+   * Live 06-tanzania run 19: THREE ask-vs-act failures in ONE run, pulling opposite ways.
+   * Step 9 — "should be ~3344, fix the maths": THING diagnosed the double-counted rows PERFECTLY,
+   *   then ENDED THE TURN ASKING "want me to fix it?" — zero db mutations, the total left wrong.
+   * Step 14 — a genuinely ambiguous "don't forget the ranger tip" (save-a-note vs set-a-reminder):
+   *   THING did NOT ask (asking is REQUIRED here) — it unilaterally stored AND researched it.
+   * The prior fix (0beae4b) encoded 9 and 14 as two DISCONNECTED bullets with no shared frame, so
+   *   the model inverted the instinct: conservative on the destructive fix, impulsive on the choice.
+   * The fix is ONE unified principle that names BOTH poles and the operational test, so the model
+   *   sees them as two sides of a single decision — NOT a broad "just act more" (which regresses 14).
+   */
+  it('states the unified act-vs-ask distinction with both poles and an operational test', () => {
+    const src = flat();
+    // The determined-target (ACT) pole and the genuine-choice (ASK) pole must BOTH be present.
+    expect(src).toMatch(/Act on a determined change; ask only when the CHOICE itself is genuinely theirs/i);
+    expect(src).toMatch(/the outcome ITSELF has two genuinely different meanings, and only their preference picks between/i);
+    // The operational test that separates them — investigate-vs-preference.
+    expect(src).toMatch(/settle this by investigating the data/i);
+    expect(src).toMatch(/a choice only their preference decides/i);
+    // Act-side: a requested change with a determinable target is never an ask.
+    expect(src).toMatch(/change they requested with a determinable target is never the second/i);
+    // The destructive-fix reframing that step 9 needed: a deletion is the MECHANISM, not a decision.
+    expect(src).toMatch(/deletion is the MECHANISM of the change they asked for/i);
+  });
+
+  /**
+   * Step 11 — user states a NEW cash payment. THING mis-routed it as an actual-paid annotation on
+   * an EXISTING row (which does not change the total) instead of a NEW cost-row db.insert. A newly
+   * reported payment is a NEW record; only an explicit correction of a value a row already holds is
+   * an update. The new record must move any total that sums those records.
+   */
+  it('routes a newly-reported payment to a NEW row (db.insert), not an annotation on an existing one', () => {
+    const src = flat();
+    expect(src).toMatch(/a payment that had no prior row is a new row/i);
+    expect(src).toMatch(/must MOVE any total that sums those records/i);
+    // The one case that IS an update: correcting a value the row already holds (keeps step 16 green).
+    expect(src).toMatch(/"it was actually X, not Y"/);
+  });
+
+  /**
+   * Step 11 also GUESSED column names → eval_error "no such column". The read-path field discipline
+   * existed; the WRITE path (db.insert / db.update set keys) did not say to introspect first, and a
+   * bad write column THROWS rather than silently missing. Introspect the real row, retry — never
+   * re-guess, never abandon on the throw.
+   */
+  it('extends the field-name discipline to writes: introspect real columns before db.insert/db.update', () => {
+    const src = flat();
+    expect(src).toMatch(/keys you pass to `db\.insert`/);
+    expect(src).toMatch(/THROWS `no such column`/i);
+    expect(src).toMatch(/never re-guess a second name/i);
+  });
+
+  /**
+   * Step 11 finally ENDED THE TURN SILENTLY (empty reply) after 3 write failures. The existing
+   * never-silent OFFER discipline had a gap on the "write failed N times -> give up" case: an empty
+   * reply after failed writes makes the user believe the change landed. Recover, or report — never
+   * nothing.
+   */
+  it('forbids ending a turn silently after repeated write failures', () => {
+    const src = flat();
+    expect(src).toMatch(/keeps failing is never a reason to fall silent/i);
+    expect(src).toMatch(/empty reply after failed writes/i);
+    expect(src).toMatch(/Recover the write, or report that it failed/i);
+  });
+
+  /**
+   * Step 9 stayed RED after two L1 prose attempts (06-tanzania run 21: THING diagnosed the
+   * double-count and computed the exact correct total, then ended the turn asking "want me to fix
+   * it?" — zero db writes). L1 is exhausted, so the flagged-figure judgment is now a DETERMINISTIC
+   * tasklist (`resolve_flagged_figure`: diagnose has no db:write → a confidence-gated fix is the sole
+   * writer → an unconditional merge-report goal). This asserts instruct.md ROUTES to it rather than
+   * carrying inline "fix it yourself" prose — reverting the route back to prose turns this RED.
+   */
+  it('routes a flagged/mis-adding figure to the deterministic resolve_flagged_figure tasklist', () => {
+    const src = flat();
+    expect(src).toMatch(/tasklist\('resolve_flagged_figure', ?\{ ?complaint ?\}\)/);
+  });
+
+  /**
+   * Step 11 stayed RED after L1 prose (06-tanzania run 19: a newly-reported cash payment mis-routed to
+   * an actual-paid annotation on an existing row, guessed columns, then ended the turn SILENT). L1 is
+   * exhausted, so the insert-vs-update judgment now runs in the deterministic `write_fact` DAG (classify
+   * sets `operation`; the write node refuses an `update` without a matched row and re-reads to prove it
+   * landed). instruct.md must ROUTE a newly-reported payment THROUGH the tasklist rather than keep an
+   * inline "db.insert it yourself" as the primary path — reverting the route to inline turns this RED.
+   * (The narrow correction-of-an-existing-row case stays inline, keeping step 16 green.)
+   */
+  it('routes a newly-reported payment through the hardened write_fact tasklist', () => {
+    expect(flat()).toMatch(/tasklist\('write_fact', ?\{ ?fact, ?kind: ?'personal' ?\}\)/);
+  });
+
+  /**
+   * Step 14 stayed RED after L1 prose (06-tanzania run 19: a genuinely store-vs-remind-ambiguous
+   * volunteered "don't forget" item was stored AND re-researched unilaterally, never asked, when asking
+   * is REQUIRED). L1 is exhausted, so the ambiguity detection moves into `write_fact`'s classify (via
+   * the domain-neutral recording/intent heuristic), which returns an `ask` THING relays. instruct.md
+   * must ROUTE the volunteered "keep this front of mind" item through the tasklist rather than deciding
+   * store-vs-remind inline — reverting the route to an inline decision turns this RED.
+   */
+  it('routes a store-vs-remind-ambiguous volunteered item through write_fact', () => {
+    expect(flat()).toMatch(/tasklist\('write_fact', ?\{ ?fact, ?kind: ?'preference' ?\}\)/);
+  });
+});
+
 describe('system-files readers — source text stays data, never executable code', () => {
   it('tells document and spreadsheet readers to synthesize source material instead of pasting it into TypeScript', () => {
     for (const agent of ['reader', 'sheet']) {
@@ -363,8 +473,51 @@ describe('system-appbuilder live-project build action', () => {
     expect(read('11-implement_pages.md')).toMatch(/verbatim/i);
 
     // finalize writes the persistent chat dock layout.
-    expect(read('12-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
-    expect(read('12-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
+    expect(read('16-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
+    expect(read('16-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
+
+    // Pages are detailed ONE per node too: plan_pages fans out over the binding page list, so no
+    // single node holds every page's detail (the "split the monolithic page node" fix).
+    expect(read('10-plan_pages.md')).toMatch(/forEach: plan_app\.pages/);
+    expect(read('11-implement_pages.md')).toMatch(/forEach: plan_pages\b/);
+
+    // A page write that returns `{ ok: false }` (a TSX parse slip RETURNS, it does not throw) is read
+    // and RETRIED with a corrected source before resolving — the fix for the silent 1-of-N page drop
+    // where the no-retry template resolved a failed write blind while finalize still declared victory.
+    expect(pages).toMatch(/if \(!w\.ok\)/);
+    expect(pages).toMatch(/writeProjectPage\(pg\.route, src2\)/);
+    expect(pages).toMatch(/resolve\(\{ route: pg\.route, ok: w\.ok, error/);
+    expect(pages).toMatch(/NEVER resolve the failed first attempt/i);
+
+    // finalize reports pages HONESTLY from disk and surfaces any planned page that went missing — it
+    // does NOT declare a clean `ok` on a partial build (the reporting half of the silent-drop fix).
+    expect(read('16-finalize.md')).toMatch(/listProjectDir\('pages'\)/);
+    expect(read('16-finalize.md')).toMatch(/const missing =/);
+    expect(read('16-finalize.md')).toMatch(/missing\.length === 0/);
+
+    // GATE-AND-RETRY (durable completeness): after every file is written the app is compiled against the
+    // REAL toolchain via buildApp() (lint → typecheck → esbuild), and each offending FILE is routed to a
+    // per-file fix fork — driven by the STRUCTURED error list (programmatic ground truth), not a
+    // self-assessment. This is what turns "built but broken" into "type-correct or fail loud".
+    const compile1 = read('12-compile_pass1.md');
+    expect(compile1).toMatch(/await buildApp\(\)/);
+    expect(compile1).toMatch(/errors/); // reads the structured error list
+    expect(compile1).toMatch(/offending/); // groups errors by file for the fix fan-out
+    const fix1 = read('13-fix_pass1.md');
+    expect(fix1).toMatch(/forEach: compile_pass1\.offending/);
+    expect(fix1).toMatch(/readProjectFile\(/); // reads the failing file before fixing it
+    expect(fix1).toMatch(/item\.errors|f\.errors/); // fixes the SPECIFIC compiler errors
+    expect(read('14-compile_pass2.md')).toMatch(/await buildApp\(\)/);
+    expect(read('15-fix_pass2.md')).toMatch(/forEach: compile_pass2\.offending/);
+    // Nothing is excluded or stubbed to make the build pass.
+    expect(read('index.md')).toMatch(/never (silently )?(excluded|stubbed)|excluded or stubbed/i);
+
+    // finalize is the sole authoritative build-invoker (subsumes the no-build-trigger defect): it runs
+    // buildApp() itself and gates `ok` on a CLEAN, BUILT app — a residual compiler error fails loudly.
+    const finalize = read('16-finalize.md');
+    expect(finalize).toMatch(/const check = await buildApp\(\)/);
+    expect(finalize).toMatch(/check\.ok && check\.built/);
+    expect(finalize).toMatch(/check\.errors\.length === 0/);
   });
 });
 
@@ -500,6 +653,37 @@ describe('system-architect synthesis setup', () => {
     expect(buildField).toMatch(/never a specific/i);
     // The overview must not hand-list the aspect slugs — that menu is supplied automatically.
     expect(buildField).toMatch(/never a hand-listed slug menu/i);
+
+    // Never alias `item` to a separate `const f = item;` first: each statement is its own module, so a
+    // lost/failed alias declaration turns every later `f.*` use into "Cannot find name 'f'" (observed
+    // live cascading from the attachmentIds typecheck failure below). Reference item.* directly.
+    expect(
+      buildField,
+      'build_field must reference item.* directly, never alias it to `const f = item;`',
+    ).not.toMatch(/const\s+f\s*=\s*item\s*;/);
+    expect(buildField).toMatch(/writeKnowledgeIndex\(design\.slug,\s*item\.domain/);
+  });
+
+  /**
+   * The accept-and-use in build_field and the forward from organize_material are both no-ops if the
+   * ARCHITECT'S OWN instruct drops attachmentIds when it invokes synthesize_and_run. An OMITTED
+   * optional tasklist input is absent from the fork's typecheck scope entirely (not merely
+   * `undefined`), so build_field's bare `attachmentIds` reference then fails to COMPILE on every
+   * build — observed live as ~30 "Cannot find name 'attachmentIds'" in a single build step, which
+   * also poisoned the statement bundle that declared `const f = item` and cascaded into "Cannot find
+   * name 'f'". instruct.md must ALWAYS forward the key (default []), never omit it — passing [] keeps
+   * it declared and real ids still flow through when the caller (organize_material) supplies them.
+   */
+  it('the architect instruct forwards attachmentIds into the synthesize_and_run call (never omits the key)', () => {
+    const architect = readFileSync(
+      join(SYSTEM_SPACES, 'system-architect', 'agents', 'architect', 'instruct.md'),
+      'utf8',
+    );
+
+    expect(
+      architect,
+      'instruct.md must forward attachmentIds (default []) so the build steps see it declared — an omitted optional input is absent from the fork DTS and a bare reference fails typecheck',
+    ).toMatch(/attachmentIds:\s*\(context\?\.attachmentIds\s*\?\?\s*\[\s*\]\)/);
   });
 
   /**

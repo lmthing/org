@@ -18,6 +18,7 @@ import { Budget, BudgetExceededError } from '../eval/budget.js';
 import type { RoleModelConfig } from '../fork/roles.js';
 import { delegateCapabilities } from '../exec/capability.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
+import type { DbTableSchema } from '../typecheck/library-dts.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
 import type { DocumentResolver } from '../globals/read-document.js';
 import { forkEngineOptsFrom } from '../exec/fork-config.js';
@@ -55,6 +56,10 @@ export interface RunDelegateOpts {
   projectRoot?: string;
   /** Project id — forwarded as LMTHING_PROJECT_ID. */
   projectId?: string;
+  /** The parent session's current DB schema (table + column names) — passed to the delegate's
+   *  ambient DTS (and its nested forks) so a GATED delegated specialist (db:read/db:write, not
+   *  a schema author) has its `db.*` table/column names constrained to the real project schema. */
+  dbSchema?: DbTableSchema[];
   /** Host-provided app-global engine impls (libs/cli, P2+), forwarded to the delegate
    *  VM and its nested forks so a delegated db-writer reaches the project's engine. */
   appGlobals?: AppGlobalImpls;
@@ -269,6 +274,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       overlay,
       currentTask: true,
       projectRoot: !!opts.projectRoot,
+      dbSchema: opts.dbSchema,
       extraDecls: [`declare const query: string;\ndeclare const context: Record<string, any>;`],
     });
 
@@ -318,6 +324,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       projectId: opts.projectId,
       // This delegate's forks inherit ITS app grants (role-intersected in forkCapabilities).
       parentAppCapabilities: capabilities.app,
+      dbSchema: opts.dbSchema,
       appGlobals: opts.appGlobals,
       defaultModel: opts.model,
       budgetLimits: opts.budgetLimits,
@@ -347,6 +354,14 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
         ambientDts,
         renderHost: opts.renderHost,
         streamFn: opts.streamFn,
+        // Structural termination: once this delegate's action tasklist result is auto-captured
+        // (onTasklistResult below) — or the model explicitly currentTask.resolve()s — the
+        // deliverable is in hand, so end the loop instead of re-prompting. Without this a
+        // weak/looping model that keeps re-emitting the same `tasklist(action, …)` call every
+        // turn (never volunteering a no-statements turn) spins forever, since this loop carries
+        // no Budget. `resultCaptured` is the delegate's TERMINAL signal — set only on the
+        // action tasklist's envelope or an explicit resolve, never on an intermediate.
+        shouldStop: () => resultCaptured,
         processYield: async (req) => {
           // sleep / fork / tasklist / delegate share the central router. The two
           // delegate-specific behaviours are passed as hooks: auto-capture of the
@@ -364,6 +379,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             knowledgeBaseDirs: [space.dir + '/knowledge', ...systemSpaces.map((s) => s.dir + '/knowledge')],
             apiCallResolver: opts.appGlobals?.apiCall,
             apiCallAllow: capabilities.app['api:call']?.allow,
+            buildAppResolver: opts.appGlobals?.buildApp,
             connectionResolver: opts.appGlobals?.callConnection,
             documentResolver: opts.documentResolver,
             // Store search/inspect + manual emits work in delegates (system-store

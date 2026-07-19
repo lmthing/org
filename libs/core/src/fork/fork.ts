@@ -14,6 +14,7 @@ import { Budget, BudgetExceededError, type BudgetLimits } from '../eval/budget.j
 import { forkCapabilities, narrowAppCaps } from '../exec/capability.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
+import type { DbTableSchema } from '../typecheck/library-dts.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
 import type { DocumentResolver } from '../globals/read-document.js';
 import { resolveTaskDelegate, evaluateDelegatePolicy, isDelegateAllowed, formatDelegateDenial } from '../exec/target-match.js';
@@ -155,6 +156,10 @@ export interface ForkEngineOpts {
   /** The parent agent's app-capability grants. A fork task receives the
    *  `allowWrite`-intersected subset (read-only roles keep only db:read/api:call). */
   parentAppCapabilities?: AppCapabilities;
+  /** The parent session's current DB schema (table + column names) — passed to the fork's
+   *  ambient DTS so a gated fork role (db:read/db:write, not a schema author) has its `db.*`
+   *  table/column names constrained the same way the parent does. */
+  dbSchema?: DbTableSchema[];
   /** Host-provided app-global engine impls (libs/cli, P2+), passed through to the fork VM. */
   appGlobals?: AppGlobalImpls;
   /** Host resolver for the universal `readDocument` global — threaded from the parent
@@ -406,6 +411,7 @@ export class ForkEngine {
           overlay: functionsOverlay,
           currentTask: true,
           projectRoot: !!this.opts.projectRoot,
+          dbSchema: this.opts.dbSchema,
           extraDecls: [upstreamDts, seedDts].filter(Boolean),
         });
 
@@ -507,6 +513,7 @@ export class ForkEngine {
           resolveRegisterSpace: true,
           dynamicSpaces: this.opts.dynamicSpaces,
           apiCallResolver: this.opts.appGlobals?.apiCall,
+          buildAppResolver: this.opts.appGlobals?.buildApp,
           connectionResolver: this.opts.appGlobals?.callConnection,
           documentResolver: this.opts.documentResolver,
           // Store discovery + manual emits follow the (role-intersected) app
@@ -558,6 +565,7 @@ export class ForkEngine {
             overlay: functionsOverlay,
             currentTask: false,
             projectRoot: !!this.opts.projectRoot,
+            dbSchema: this.opts.dbSchema,
             extraDecls: [upstreamDts, seedDts].filter(Boolean),
           });
           const prelude = await runPrelude({

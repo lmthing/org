@@ -22,9 +22,11 @@ not sufficient grounding for a SPECIFIC fact (a serial number, a fault code, a d
 before writing it — if it doesn't, describe the point more generally instead of inventing the
 precision the summary implied but the real document doesn't actually contain. A plausible-sounding
 invented specific is a worse failure than an honest, less detailed line. Your field is in `item` =
-{ domain, field, aspects }; the space slug is `design.slug`. Emit, in order:
+{ domain, field, aspects }; the space slug is `design.slug`. Reference `item.domain` / `item.field` /
+`item.aspects` DIRECTLY — never alias `item` to a shorter name in a separate statement first: each
+statement is its own module, and a lost or failed alias declaration turns every later use into a
+"Cannot find name" error. Emit, in order:
 
-const f = item;
 const report = (() => { try { return JSON.parse(research); } catch { return { findings: [], sources: [] }; } })();
 // Pull the report findings relevant to this field; ground every claim in them (or in realText below).
 const findings = Array.isArray(report.findings) ? report.findings : [];
@@ -42,8 +44,8 @@ const realText = docs.filter((d: { ok: boolean }) => d.ok).map((d: { text?: stri
 // what each aspect is FOR, grounded in findings/realText. Do NOT hand-list the aspect slug names —
 // loadKnowledge already appends the real option list read straight off disk, so a hand-written menu
 // here only drifts stale.
-writeKnowledgeIndex(design.slug, f.domain, f.field, { variable: f.field + "Knowledge", description: "<overview paragraph on the splitting axis and what each aspect is for, using only what findings/realText actually say — never a hand-listed slug menu>" });
+writeKnowledgeIndex(design.slug, item.domain, item.field, { variable: item.field + "Knowledge", description: "<overview paragraph on the splitting axis and what each aspect is for, using only what findings/realText actually say — never a hand-listed slug menu>" });
 // One option file per aspect (>=2), each grounded ONLY in findings/realText, with an honest Source line (or none).
-writeKnowledgeOption(design.slug, f.domain, f.field, f.aspects[0], "# " + f.aspects[0] + "\n\n<content using only what findings/realText actually say — never a specific neither one contains>" + srcLine);
-writeKnowledgeOption(design.slug, f.domain, f.field, f.aspects[1], "# " + f.aspects[1] + "\n\n<content using only what findings/realText actually say — never a specific neither one contains>");
-currentTask.resolve({ domain: f.domain, field: f.field, aspect: f.aspects[0], ok: true });
+writeKnowledgeOption(design.slug, item.domain, item.field, item.aspects[0], "# " + item.aspects[0] + "\n\n<content using only what findings/realText actually say — never a specific neither one contains>" + srcLine);
+writeKnowledgeOption(design.slug, item.domain, item.field, item.aspects[1], "# " + item.aspects[1] + "\n\n<content using only what findings/realText actually say — never a specific neither one contains>");
+currentTask.resolve({ domain: item.domain, field: item.field, aspect: item.aspects[0], ok: true });

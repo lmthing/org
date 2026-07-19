@@ -14,7 +14,7 @@ import { mkdtemp, mkdir, writeFile, rm, stat, readFile } from 'node:fs/promises'
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { buildProjectPages, uiElementsDirResolve } from './pages.js';
+import { buildProjectPages, buildProjectPagesChecked, uiElementsDirResolve } from './pages.js';
 
 const tmpDirs: string[] = [];
 async function scratchProject(): Promise<string> {
@@ -199,4 +199,43 @@ export default function Index() { return <Chat agent="space/agent" />; }
     plugin.setup(build2 as unknown as Parameters<typeof plugin.setup>[0]);
     expect(untouched).toBeUndefined();
   });
+});
+
+describe('buildProjectPagesChecked', () => {
+  it('a clean project maps to { built:true, routes, errors:[] } (routePath strings, not PageRoute objects)', async () => {
+    const root = await scratchProject();
+    const res = await buildProjectPagesChecked(root);
+    expect(res.built).toBe(true);
+    expect(res.errors).toEqual([]);
+    expect(res.routes.sort()).toEqual(['/', '/items/:id']);
+  }, 30_000);
+
+  // {@link buildProjectPages}'s `runBuild` lets an esbuild `BuildFailure` THROW
+  // uncaught (pre-existing, unchanged behavior — see its own describe block above).
+  // `buildProjectPagesChecked` is the wrapper that catches it: an unresolvable
+  // import is a genuine esbuild-time failure (not a typecheck-time one — the page
+  // never reaches `typecheckProjectApp` in this direct, isolated call), so this
+  // proves the esbuild `Message[]` → `AppCheckError[]` mapping itself, independent
+  // of the typecheck short-circuit exercised in `./typecheck.test.ts`.
+  it('an esbuild BuildFailure (unresolvable import) maps to structured phase:"build" errors instead of throwing', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lm-pages-checked-fail-'));
+    tmpDirs.push(dir);
+    await mkdir(join(dir, 'pages'), { recursive: true });
+    await writeFile(
+      join(dir, 'pages', 'index.tsx'),
+      `import Missing from './does-not-exist';
+export default function Home() { return <div>{String(Missing)}</div>; }
+`,
+    );
+
+    const res = await buildProjectPagesChecked(dir, { minify: false });
+    expect(res.built).toBe(false);
+    expect(res.routes).toEqual([]);
+    expect(res.errors.length).toBeGreaterThan(0);
+    const err = res.errors[0];
+    expect(err.phase).toBe('build');
+    expect(err.file).toBe('pages/index.tsx');
+    expect(typeof err.line).toBe('number');
+    expect(err.message).toMatch(/does-not-exist/);
+  }, 30_000);
 });

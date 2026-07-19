@@ -1,0 +1,245 @@
+/**
+ * {@link typecheckProjectApp} — the project-app programmatic typecheck — plus
+ * {@link runProjectAppCheck}'s aggregation of it with the esbuild bundle.
+ *
+ * TEST 1 (positive, non-negotiable): a KNOWN-GOOD app must typecheck with ZERO
+ * errors, and `runProjectAppCheck` must report `{ ok:true, built:true }`. If this
+ * ever goes red, the ambient is wrong (a false positive on correct code) — fix the
+ * ambient in `./typecheck.ts`, never the fixture.
+ *
+ * TEST 2 (negative, revert-proven): three classes of real author mistakes must
+ * each produce a typecheck error naming the offending file, AND we prove the
+ * typecheck phase — not esbuild — is what catches them: esbuild alone (bundling
+ * the SAME broken pages via `buildProjectPagesChecked`, skipping `typecheckProjectApp`
+ * entirely) reports a CLEAN build, because none of these mistakes are things esbuild's
+ * type-stripping transpile can see. That's the load-bearing proof: without the
+ * typecheck phase this task adds, `runProjectAppCheck` would have shipped all three.
+ */
+import { describe, expect, it, afterAll } from 'vitest';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+import { typecheckProjectApp } from './typecheck.js';
+import { runProjectAppCheck } from './check.js';
+import { buildProjectPagesChecked } from './pages.js';
+
+const tmpDirs: string[] = [];
+afterAll(async () => {
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+});
+
+async function scratch(prefix: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
+  tmpDirs.push(dir);
+  return dir;
+}
+
+/** The shared "correct app" component: typed props, tokens-only styling, no `import React`. */
+const GOOD_COST_CARD = `export interface CostCardProps {
+  title: string;
+  amount: number;
+}
+
+export default function CostCard({ title, amount }: CostCardProps) {
+  return (
+    <div className="border-border rounded border p-4">
+      <p className="text-muted-foreground text-sm">{title}</p>
+      <p className="text-foreground text-lg font-semibold">{amount.toFixed(2)}</p>
+    </div>
+  );
+}
+`;
+
+/** The shared "correct app" page: relative import, \`useApi\`, null-guards, tokens, \`<Link to>\`. */
+const GOOD_INDEX_PAGE = `import { useApi, Link } from '@app/runtime';
+import CostCard from '../components/CostCard';
+
+interface ItemsResponse {
+  items: { id: string; title: string; amount: number }[];
+}
+
+export default function Home() {
+  const { data, isLoading, error } = useApi<ItemsResponse>('listItems', {});
+
+  if (isLoading) {
+    return <div className="text-muted-foreground p-4">Loading…</div>;
+  }
+  if (error) {
+    return <div className="text-destructive p-4">{error.message}</div>;
+  }
+
+  const items = data?.items ?? [];
+
+  return (
+    <main className="mx-auto max-w-2xl p-4">
+      <h1 className="text-foreground text-xl font-bold">Items</h1>
+      {items.map((item) => (
+        <CostCard key={item.id} title={item.title} amount={item.amount} />
+      ))}
+      <Link to="/about" className="text-primary underline">
+        About
+      </Link>
+    </main>
+  );
+}
+`;
+
+const GOOD_PING_HANDLER = `export const name = 'ping';
+
+export interface Output { pong: boolean }
+
+export default async function handler(): Promise<Output> {
+  return { pong: true };
+}
+`;
+
+/** A known-good project: component + page + api handler, nothing else. */
+async function goodProject(): Promise<string> {
+  const root = await scratch('lm-typecheck-good-');
+  await mkdir(join(root, 'pages'), { recursive: true });
+  await mkdir(join(root, 'components'), { recursive: true });
+  await mkdir(join(root, 'api', 'ping'), { recursive: true });
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'good-scratch', version: '0.0.0' }));
+  await writeFile(join(root, 'components', 'CostCard.tsx'), GOOD_COST_CARD, 'utf8');
+  await writeFile(join(root, 'pages', 'index.tsx'), GOOD_INDEX_PAGE, 'utf8');
+  await writeFile(join(root, 'api', 'ping', 'GET.ts'), GOOD_PING_HANDLER, 'utf8');
+  return root;
+}
+
+describe('typecheckProjectApp — positive', () => {
+  it('a known-good app (typed component, relative import, useApi, Link, null-guards, tokens, no `import React`) typechecks CLEAN', async () => {
+    const root = await goodProject();
+    const errors = await typecheckProjectApp(root);
+    expect(errors).toEqual([]);
+  }, 30_000);
+
+  it('runProjectAppCheck reports ok:true, built:true for the same known-good app', async () => {
+    const root = await goodProject();
+    const result = await runProjectAppCheck(root);
+    expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.built).toBe(true);
+    expect(result.routes).toContain('/');
+  }, 30_000);
+
+  it('an api/db-only project (no pages/components/api dirs at all) has nothing to typecheck', async () => {
+    const root = await scratch('lm-typecheck-empty-');
+    const errors = await typecheckProjectApp(root);
+    expect(errors).toEqual([]);
+  });
+});
+
+// ── Negative fixtures ───────────────────────────────────────────────────────────
+
+/** (a) reaches for the ambient-less `console` instead of the typed `@app/runtime` surface. */
+const BAD_CONSOLE_PAGE = `export default function BadConsole() {
+  console.log('debugging');
+  return <div className="p-4">bad</div>;
+}
+`;
+
+/** (b) passes a prop \`CostCardProps\` never declared. */
+const BAD_PROP_PAGE = `import CostCard from '../components/CostCard';
+
+export default function BadProp() {
+  return <CostCard title="x" amount={1} foo={1} />;
+}
+`;
+
+/** (c) imports a module that doesn't exist in this project (nor is it ambiently declared). */
+const BAD_IMPORT_PAGE = `import { Link } from 'react-router';
+
+export default function BadImport() {
+  return <Link to="/x">go</Link>;
+}
+`;
+
+/** A project carrying all three mistakes (a)+(b)+(c), alongside the good component. */
+async function allBadProject(): Promise<string> {
+  const root = await scratch('lm-typecheck-bad-');
+  await mkdir(join(root, 'pages'), { recursive: true });
+  await mkdir(join(root, 'components'), { recursive: true });
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'bad-scratch', version: '0.0.0' }));
+  await writeFile(join(root, 'components', 'CostCard.tsx'), GOOD_COST_CARD, 'utf8');
+  await writeFile(join(root, 'pages', 'bad-console.tsx'), BAD_CONSOLE_PAGE, 'utf8');
+  await writeFile(join(root, 'pages', 'bad-prop.tsx'), BAD_PROP_PAGE, 'utf8');
+  await writeFile(join(root, 'pages', 'bad-import.tsx'), BAD_IMPORT_PAGE, 'utf8');
+  return root;
+}
+
+/** Same as {@link allBadProject} MINUS (c) — esbuild itself refuses an import it
+ *  cannot resolve on disk, which would muddy the "esbuild doesn't catch this"
+ *  proof for (a)/(b). This fixture isolates the two mistakes esbuild's
+ *  type-stripping transpile is genuinely blind to. */
+async function esbuildBlindBadProject(): Promise<string> {
+  const root = await scratch('lm-typecheck-bad-esbuild-blind-');
+  await mkdir(join(root, 'pages'), { recursive: true });
+  await mkdir(join(root, 'components'), { recursive: true });
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'bad-blind-scratch', version: '0.0.0' }));
+  await writeFile(join(root, 'components', 'CostCard.tsx'), GOOD_COST_CARD, 'utf8');
+  await writeFile(join(root, 'pages', 'bad-console.tsx'), BAD_CONSOLE_PAGE, 'utf8');
+  await writeFile(join(root, 'pages', 'bad-prop.tsx'), BAD_PROP_PAGE, 'utf8');
+  return root;
+}
+
+describe('typecheckProjectApp — negative', () => {
+  it('(a) console.log(...) → a typecheck error mentioning `console`, naming the file', async () => {
+    const root = await allBadProject();
+    const errors = await typecheckProjectApp(root);
+    const hit = errors.find((e) => e.file === 'pages/bad-console.tsx' && /console/.test(e.message));
+    expect(hit).toBeDefined();
+    expect(hit?.phase).toBe('typecheck');
+  }, 30_000);
+
+  it('(b) a prop the component does not declare → a typecheck error, naming the file', async () => {
+    const root = await allBadProject();
+    const errors = await typecheckProjectApp(root);
+    const hit = errors.find((e) => e.file === 'pages/bad-prop.tsx');
+    expect(hit).toBeDefined();
+    expect(hit?.message).toMatch(/foo/);
+  }, 30_000);
+
+  it('(c) importing a module that does not exist → a module-not-found error, naming the file', async () => {
+    const root = await allBadProject();
+    const errors = await typecheckProjectApp(root);
+    const hit = errors.find((e) => e.file === 'pages/bad-import.tsx');
+    expect(hit).toBeDefined();
+    expect(hit?.message).toMatch(/Cannot find module ['"]react-router['"]/);
+  }, 30_000);
+
+  it('runProjectAppCheck on the all-bad project is ok:false and names every offending file — never bundles broken code', async () => {
+    const root = await allBadProject();
+    const result = await runProjectAppCheck(root);
+    expect(result.ok).toBe(false);
+    expect(result.built).toBe(false);
+    const files = new Set(result.errors.map((e) => e.file));
+    expect(files).toContain('pages/bad-console.tsx');
+    expect(files).toContain('pages/bad-prop.tsx');
+    expect(files).toContain('pages/bad-import.tsx');
+    // Short-circuit: every reported error is phase:'typecheck' — the esbuild phase
+    // never ran (build-broken diagnostics, if any had leaked through, would say 'build').
+    expect(result.errors.every((e) => e.phase === 'typecheck')).toBe(true);
+  }, 30_000);
+
+  // LOAD-BEARING PROOF: esbuild alone (bypassing typecheckProjectApp entirely, exactly
+  // as `buildProjectPages`/`runBuild` behaved before this change — no typecheck existed
+  // at all) does NOT catch (a) or (b). Both are pure type-level mistakes: `console` is a
+  // perfectly valid runtime global esbuild happily bundles, and an excess JSX prop is
+  // just an extra object property at runtime. This is the concrete, executed
+  // (not just asserted) demonstration that `typecheckProjectApp` — not esbuild — is
+  // what makes `runProjectAppCheck` catch these classes of bugs.
+  it('LOAD-BEARING: esbuild alone (no typecheck) reports a CLEAN build for the same (a)+(b) mistakes', async () => {
+    const root = await esbuildBlindBadProject();
+
+    // Sanity: the typecheck phase DOES flag both on this exact fixture.
+    const tcErrors = await typecheckProjectApp(root);
+    expect(tcErrors.length).toBeGreaterThanOrEqual(2);
+
+    // But esbuild alone — i.e. `runProjectAppCheck` with its typecheck short-circuit
+    // removed — sees nothing wrong: it type-strips and bundles both broken pages fine.
+    const esbuildOnly = await buildProjectPagesChecked(root, { minify: false });
+    expect(esbuildOnly.errors).toEqual([]);
+    expect(esbuildOnly.built).toBe(true);
+  }, 30_000);
+});

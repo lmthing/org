@@ -7,6 +7,10 @@ input:
 Record a fact the user just STATED into the right one of the three stores — the DB (their own app
 data), a space's knowledge (a fact about the world), or user memory (a preference, or any personal
 fact before an app exists). `fact` is the thing they said, verbatim; `kind` is a hint
-(`personal` | `world` | `preference`). Step one classifies WHERE it belongs; step two writes it
-there (or reports that the user must be asked first — e.g. it's personal but there's no table for it
-yet). The goal output is `{ ok, target, detail }` so the caller can confirm what changed.
+(`personal` | `world` | `preference`). Step one classifies WHERE it belongs and, for a DB fact,
+WHETHER it is a new record (`insert`) or a correction to a specific existing row (`update`) — and it
+flags a genuinely ambiguous volunteered intent (a passive fact to keep vs. an active reminder that
+must fire on its own later) as an `ask` instead of storing it unilaterally. Step two writes it there
+and RE-READS to prove the row landed (or reports that the user must be asked first — e.g. it's
+personal but there's no table for it yet). The goal output is `{ ok, target, detail }` so the caller
+can confirm what changed — or relay the question.

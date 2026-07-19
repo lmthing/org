@@ -26,6 +26,20 @@ export class MessageHistory {
   }
 
   /**
+   * Total character count across every message's content — a cheap proxy for the
+   * concatenated prompt size. Used to trigger MID-turn compaction
+   * (`Session.maybeCompactHistoryBySize`) before a long single turn's growing history can
+   * overflow V8's max string length (the runaway-turn "Invalid string length" crash). It
+   * ignores attachments and the system block, so it is a lower bound — which is the safe
+   * direction for a size gate.
+   */
+  totalChars(): number {
+    let total = 0;
+    for (const m of this.messages) total += m.content.length;
+    return total;
+  }
+
+  /**
    * Collapse old messages into a summary, keeping the last `keepLast` messages verbatim.
    */
   summarize(summary: string, keepLast: number): void {
