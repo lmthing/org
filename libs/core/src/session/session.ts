@@ -184,6 +184,12 @@ export class Session {
    */
   private turnContext = '';
 
+  /** Whether the CURRENT interactive turn has emitted at least one top-level `display()`.
+   *  Reset at the start of each start()/continue()/resume() turn, set by the session VM's
+   *  onDisplay hook. Read by the turn loop (via `hadVisibleOutput`) so an interactive turn
+   *  that did work yet showed the user nothing re-prompts once, then fails loud. */
+  private displayedThisTurn = false;
+
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
     this.deps = deps;
@@ -256,6 +262,7 @@ export class Session {
     this.budget = new Budget(this.opts.budget ?? {});
     const runScope = this.mintRunScope();
     try {
+      this.displayedThisTurn = false; // fresh turn — reset the no-visible-output tracking
       await runTurnLoop({
         vm: this.vm,
         history: this.history,
@@ -275,6 +282,10 @@ export class Session {
         beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
         maybeCompact: () => this.maybeCompactHistoryBySize(),
+        // Interactive top-level turn: gate the anti-silent no-visible-output guard, and
+        // report whether this turn has shown the user anything (display()).
+        interactive: this.opts.interactive === true,
+        hadVisibleOutput: () => this.displayedThisTurn,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -425,6 +436,7 @@ export class Session {
     }
 
     try {
+      this.displayedThisTurn = false; // fresh turn — reset the no-visible-output tracking
       await runTurnLoop({
         vm: this.vm,
         history: this.history,
@@ -444,6 +456,10 @@ export class Session {
         beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
         maybeCompact: () => this.maybeCompactHistoryBySize(),
+        // Interactive top-level turn: gate the anti-silent no-visible-output guard, and
+        // report whether this turn has shown the user anything (display()).
+        interactive: this.opts.interactive === true,
+        hadVisibleOutput: () => this.displayedThisTurn,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -586,6 +602,7 @@ export class Session {
     this.budget = new Budget(this.opts.budget ?? {});
     const runScope = this.mintRunScope();
     try {
+      this.displayedThisTurn = false; // fresh turn — reset the no-visible-output tracking
       await runTurnLoop({
         vm: this.vm,
         history: this.history,
@@ -605,6 +622,10 @@ export class Session {
         beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
         maybeCompact: () => this.maybeCompactHistoryBySize(),
+        // Interactive top-level turn: gate the anti-silent no-visible-output guard, and
+        // report whether this turn has shown the user anything (display()).
+        interactive: this.opts.interactive === true,
+        hadVisibleOutput: () => this.displayedThisTurn,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -795,6 +816,9 @@ export class Session {
       functionsBundled,
       componentNames,
       onDisplay: (value) => {
+        // A top-level display — the session VM's hook only (forks/delegates have their own).
+        // Record it so the turn loop's no-visible-output guard knows the user saw something.
+        this.displayedThisTurn = true;
         const scope = this.currentScope;
         this.tracer.write({ ts: Date.now(), type: 'display', context: scope?.label ?? 'session', ...(scope ? { nodeId: scope.nodeId } : {}), descriptor: value });
       },

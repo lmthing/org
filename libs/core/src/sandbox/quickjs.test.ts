@@ -65,3 +65,45 @@ describe('VM evalStatement — error surfacing', () => {
     }
   });
 });
+
+/**
+ * ITEM 5a: a VM disposed OUT OF BAND (idle reaper / capacity/memory eviction) while a
+ * long yield is in flight must not make later VM ops throw the opaque QuickJS "Lifetime
+ * not alive". evalStatement / drivePendingJobs return a structured error and setVar
+ * no-ops the VM write, so the turn loop can end the turn cleanly (see turn-loop's
+ * isAlive resume guard). isAlive() reports the state.
+ */
+describe('VM — disposed-VM guards (no raw "Lifetime not alive")', () => {
+  it('isAlive() flips to false after dispose', async () => {
+    const vm = await createVM();
+    expect(vm.isAlive()).toBe(true);
+    vm.dispose();
+    expect(vm.isAlive()).toBe(false);
+  });
+
+  it('evalStatement on a disposed VM returns a structured error (does not throw)', async () => {
+    const vm = await createVM();
+    vm.dispose();
+    let r: ReturnType<typeof vm.evalStatement>;
+    expect(() => { r = vm.evalStatement('const a = 1;'); }).not.toThrow();
+    expect(r!.ok).toBe(false);
+    if (!r!.ok) expect(r!.error).toBe('VM disposed mid-turn');
+  });
+
+  it('drivePendingJobs on a disposed VM returns a structured error (does not throw)', async () => {
+    const vm = await createVM();
+    vm.dispose();
+    let r: ReturnType<typeof vm.drivePendingJobs>;
+    expect(() => { r = vm.drivePendingJobs(); }).not.toThrow();
+    expect(r!.ok).toBe(false);
+    if (!r!.ok) expect(r!.error).toBe('VM disposed mid-turn');
+  });
+
+  it('setVar on a disposed VM does not throw (skips the VM write)', async () => {
+    const vm = await createVM();
+    vm.dispose();
+    expect(() => vm.setVar('x', 42)).not.toThrow();
+    // The host-side scope still records it (getScope), even though the VM write is skipped.
+    expect(vm.getScope()['x']).toBe(42);
+  });
+});

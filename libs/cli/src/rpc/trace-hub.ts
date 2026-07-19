@@ -13,6 +13,9 @@ const STRUCTURAL = new Set<TraceEvent['type']>([
   'node_update',
   'node_end',
   'turn_end',
+  // Rare + load-bearing for diagnosis: an out-of-band VM disposal (see trace.ts). Must
+  // never be shed under compaction — it is the evidence that pins a mid-turn disposer.
+  'session_disposed',
 ]);
 
 /** High-frequency / ephemeral types that may be shed under WS backpressure. */

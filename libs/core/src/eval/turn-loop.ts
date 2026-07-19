@@ -305,6 +305,16 @@ export interface TurnLoopDeps {
    *  re-emitting the same action tasklist call every turn (it never volunteers a no-statements
    *  turn). Absent ⇒ never short-circuits (sessions/forks rely on the natural done paths). */
   shouldStop?: () => boolean;
+  /** True only for an INTERACTIVE top-level session turn (the Session's start/continue/
+   *  resume). Left unset by forks, delegates and headless single-shots — they legitimately
+   *  produce no `display()`. Gates the anti-silent no-visible-output guard below: an
+   *  interactive turn that did real work yet reaches 'done' having emitted ZERO display()
+   *  and ZERO ask() showed the user nothing, so we re-prompt once then fail loud. */
+  interactive?: boolean;
+  /** Reports whether THIS turn has emitted at least one top-level `display()` (the
+   *  Session tracks it via its onDisplay hook). Combined with an `ask` yield this turn,
+   *  it tells the no-visible-output guard whether the user saw anything. */
+  hadVisibleOutput?: () => boolean;
 }
 
 /** Re-prompt sent when the model ends its response immediately after awaiting a
@@ -325,6 +335,14 @@ const CONTINUATION_NUDGE =
  *  statements; if the very next turn is prose again, the turn loop fails LOUD instead. */
 const DROPPED_PROSE_NUDGE =
   'Nothing ran. Prose is not executed here — your entire last response was natural-language text with no TypeScript statements, so NOTHING was run or saved. Do not describe what you will do; emit the actual statements now (e.g. `const x = await …;`, `db.insert(...)`, `display(...)`). If the task is genuinely already complete, reply with no code at all.';
+
+/** Re-prompt sent when an INTERACTIVE turn did real work (ran statements) but is about to
+ *  settle having shown the user NOTHING — no `display()` and no `ask()`. That is a silent
+ *  turn: the work happened but the user sees a blank reply. This tells the model to surface
+ *  the result; if it settles output-less again, the loop fails LOUD instead of returning a
+ *  blank `done`. (Distinct from DROPPED_PROSE, which fires when NOTHING ran.) */
+const NO_OUTPUT_NUDGE =
+  'You did the work but showed the user nothing — this turn ran statements yet called neither display() nor ask(), so the user sees a blank reply. Surface the result now: display(...) the answer/outcome the user asked for (or ask(...) if you genuinely need input before you can). Do not stop until the user can see the result.';
 
 /** Outcome of running the shared per-statement pipeline (typecheck → transpile →
  *  eval → pending-yield check). Callers own the parts that legitimately differ
@@ -417,6 +435,27 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
   let everRanStatement = false;
   // Re-prompt budget for the all-dropped-prose guard: fire the nudge ONCE, then fail loud.
   let droppedProseNudges = 0;
+  // TURN-level: true once ANY cycle resolved an `ask` yield (user-visible interaction).
+  // Consumed, together with deps.hadVisibleOutput() (display), by the no-visible-output guard.
+  let didAsk = false;
+  // Re-prompt budget for the no-visible-output guard: nudge ONCE, then fail loud.
+  let noOutputNudges = 0;
+
+  // Anti-silent-turn guard (no-visible-output case) — see NO_OUTPUT_NUDGE. Verdict for the
+  // CURRENT settle: an INTERACTIVE turn that ran real work but emitted no display() AND no
+  // ask() showed the user nothing → ONE nudge, then fail loud. `null` ⇒ not applicable (let
+  // the normal 'done' proceed). Gated on `interactive` so forks/delegates (which legitimately
+  // never display) and headless single-shots are never touched; on `everRanStatement` so it
+  // stays disjoint from the DROPPED_PROSE / empty-response paths (which ran nothing).
+  const noVisibleOutputVerdict = (): 'nudge' | 'fail' | null => {
+    const silent =
+      deps.interactive === true &&
+      everRanStatement &&
+      !didAsk &&
+      !(deps.hadVisibleOutput?.() ?? false);
+    if (!silent) return null;
+    return noOutputNudges < 1 ? 'nudge' : 'fail';
+  };
 
   while (attempt < maxRetries) {
     attempt++;
@@ -741,7 +780,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       let batch = vm.pendingYields.splice(0);
       for (let guard = 0; batch.length > 0 && guard < MAX_SEQUENTIAL_YIELDS; guard++) {
         const base = resolvedValues.length;
-        for (const y of batch) { yields.push(y); resolvedValues.push(undefined); }
+        for (const y of batch) { yields.push(y); resolvedValues.push(undefined); if (y.kind === 'ask') didAsk = true; }
         // Budget: count each resolved yield as a tool call. Throws (and the caller
         // disposes the VM) if over the tool-call or wall-clock cap.
         deps.budget?.tickToolCalls(batch.length);
@@ -773,6 +812,20 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         // webFetch/webSearch's sequential fetches always run to completion here.
         if (yieldErrors.length > 0) break;
         batch = vm.pendingYields.splice(0);
+      }
+
+      // The VM can be torn down (disposed) WHILE a long yield — e.g. a multi-minute nested
+      // delegate — is in flight: an idle-reaper / capacity / memory eviction that races the
+      // in-flight turn. Every resume op below (bindYieldResults' getVar, setVar, and the
+      // drivePendingJobs already run above) would then throw the opaque QuickJS "Lifetime not
+      // alive". Detect it here and end the turn with an ATTRIBUTABLE error instead — a clean,
+      // retryable stop. This is a DEFENSIVE guard, not a root-cause fix: WHAT disposed the VM
+      // is recorded separately as a `session_disposed` trace event by the session manager.
+      // See CLAUDE.md's bridged-host-promise hazard.
+      if (!vm.isAlive()) {
+        renderHost.log(`[turn ${attempt}] session VM was disposed while a yield was in flight — aborting turn`);
+        tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'vm_disposed' });
+        return 'error';
       }
 
       // A yield that threw (e.g. delegate() to a hallucinated space key, a function
@@ -900,6 +953,22 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'dropped_prose_error' });
         return 'error';
       }
+      // Broadened anti-silent guard: real work ran in an EARLIER cycle (everRanStatement)
+      // but the turn is settling here having shown the user nothing. Nudge once, then fail.
+      const nsVerdict = noVisibleOutputVerdict();
+      if (nsVerdict === 'nudge') {
+        noOutputNudges++;
+        renderHost.log(`[turn ${attempt}] did work but showed the user nothing — nudging for display()`);
+        tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_output_nudge' });
+        history.append({ role: 'user', content: NO_OUTPUT_NUDGE, blockType: 'normal' });
+        attempt = 0;
+        continue;
+      }
+      if (nsVerdict === 'fail') {
+        renderHost.log(`[turn ${attempt}] did work but produced no user-visible output after a nudge — failing loud`);
+        tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_output_error' });
+        return 'error';
+      }
       renderHost.log(`[turn ${attempt}] model produced no statements — done`);
       tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_statements' });
       return 'done';
@@ -918,6 +987,24 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       history.append({ role: 'user', content: CONTINUATION_NUDGE, blockType: 'normal' });
       attempt = 0;
       continue;
+    }
+
+    // Broadened anti-silent guard (main done path): an interactive turn that ran real work
+    // but is about to settle 'done' having emitted neither display() nor ask() showed the
+    // user nothing — nudge once, then fail loud rather than return a blank reply.
+    const doneVerdict = noVisibleOutputVerdict();
+    if (doneVerdict === 'nudge') {
+      noOutputNudges++;
+      renderHost.log(`[turn ${attempt}] did work but showed the user nothing — nudging for display()`);
+      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_output_nudge' });
+      history.append({ role: 'user', content: NO_OUTPUT_NUDGE, blockType: 'normal' });
+      attempt = 0;
+      continue;
+    }
+    if (doneVerdict === 'fail') {
+      renderHost.log(`[turn ${attempt}] did work but produced no user-visible output after a nudge — failing loud`);
+      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_output_error' });
+      return 'error';
     }
 
     renderHost.log(`[turn ${attempt}] done`);

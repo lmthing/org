@@ -297,12 +297,52 @@ export class ThingSession {
     });
   }
 
+  /**
+   * Confirm a SUSPECTED vanish before believing it. Both call sites below react to a single missed
+   * signal — one 404 on the events poll (`sessionGone`), or one `GET /api/sessions` response that
+   * happens not to list this id — and neither, on its own, proves the session is actually gone.
+   *
+   * Scenario 07's `automator#build_live_project` ran ~18 minutes at ~1.7M cumulative input tokens
+   * (build-completeness's compile_pass/fix_pass gate-and-retry loop is legitimately slow) and stayed
+   * LISTED and working the ENTIRE time — but one blipped poll got the turn declared "vanished" ~90s
+   * before the build genuinely finished, turning a real success into a false step failure. So a
+   * suspected vanish gets a second look: keep re-listing `GET /api/sessions` every `recheckMs` until
+   * either the id reappears (false alarm — clear `sessionGone` and tell the caller to keep waiting)
+   * or `deadline` passes with it never once relisted (a GENUINE disappearance — evicted for good,
+   * the pod actually rolled, or scaled fully to zero). The caller caps `deadline` at the turn's own
+   * `timeoutMs`, so confirming a real vanish can't outrun the overall wait budget.
+   *
+   * This does NOT reintroduce the old silent-completion or the removed mid-turn re-send: a session
+   * that stays gone for the whole patience window still throws the honest "vanished" error below.
+   *
+   * @returns {Promise<boolean>} true = genuinely gone (absent the whole window); false = false alarm
+   */
+  async #confirmVanished(deadline, recheckMs) {
+    while (Date.now() < deadline) {
+      await sleep(recheckMs);
+      const list = await this.pod.req('GET', '/api/sessions').catch(() => null);
+      const listed = !!list && (list.sessions ?? []).some((s) => s.sessionId === this.sessionId);
+      if (listed) {
+        this.sessionGone = false; // whatever tripped this (e.g. an events-poll 404) was a blip
+        return false;
+      }
+    }
+    return true;
+  }
+
   // 20-min per-turn cap: a bulk-dump "yes" turn legitimately fans out one architect build PER leg
   // (organize_material's forEach) plus the app build — 4+ specialist pipelines can run well past 10
   // minutes. In production this streams as a background job; the harness treats it as one turn, so the
   // cap must be generous enough to let a real multi-part build finish and be judged, not time out
   // mid-build (which read as a false step-2 failure).
-  async #dispatchAndWait(dispatch, logLine, { timeoutMs = 1_200_000, quietMs = 4_000, pollMs = 1_500 } = {}) {
+  //
+  // `vanishPatienceMs`/`vanishRecheckMs` bound `#confirmVanished` above — generous enough to bridge a
+  // multi-minute build's occasional blipped poll, but not unbounded (see `#confirmVanished`'s doc).
+  async #dispatchAndWait(
+    dispatch,
+    logLine,
+    { timeoutMs = 1_200_000, quietMs = 4_000, pollMs = 1_500, vanishPatienceMs = 180_000, vanishRecheckMs = 3_000 } = {},
+  ) {
     const startSeq = this.events.length;
     const t0 = Date.now();
     await dispatch();
@@ -321,21 +361,30 @@ export class ThingSession {
         quietSince = null;
       }
 
-      // The session vanished mid-turn (evicted past `maxSessions`, or the pod rolled/woke from
-      // scale-to-zero under us — sessions are in-memory). We saw work, but we do NOT know the turn
-      // FINISHED: a long build (build_specialist → deep_research → architect) can be cut off with
-      // nothing durable written. The live app-build target THING retargets to is now DURABLE across a
-      // re-establish (SessionManager persists `buildTargetProjectId` and re-seeds the holder on
-      // resume), so a vanish is no longer a recoverable "re-send" condition — it is an HONEST failure.
-      // Throw either way (the runner records a step error) rather than return a turn that reads as
-      // "done": returning silently is how scenario 07's Act V "built" two sections and produced no
-      // space, table or page.
+      // The session APPEARS to have vanished mid-turn (a 404 on the events poll — evicted past
+      // `maxSessions`, or the pod rolled/woke from scale-to-zero under us — sessions are in-memory).
+      // We saw work, but we do NOT know the turn FINISHED: a long build (build_specialist →
+      // deep_research → architect) can be cut off with nothing durable written. The live app-build
+      // target THING retargets to is DURABLE across a re-establish (SessionManager persists
+      // `buildTargetProjectId` and re-seeds the holder on resume), so a CONFIRMED vanish is not a
+      // recoverable "re-send" condition — it is an HONEST failure.
+      //
+      // But a single 404 is only a SUSPECTED vanish, not a confirmed one (see `#confirmVanished`) —
+      // if the session is still LISTED and was doing work, keep waiting instead of throwing. Throw
+      // (the runner records a step error) only once genuinely gone: returning silently is how
+      // scenario 07's Act V "built" two sections and produced no space, table or page.
       if (this.sessionGone) {
-        throw new Error(
-          sawWork
-            ? `session ${this.sessionId} vanished mid-turn after doing work — the turn did not finish (pod eviction/restart?)`
-            : `session ${this.sessionId} disappeared before doing any work (pod restart mid-init?)`,
-        );
+        if (!sawWork) {
+          throw new Error(`session ${this.sessionId} disappeared before doing any work (pod restart mid-init?)`);
+        }
+        const deadline = Math.min(Date.now() + vanishPatienceMs, t0 + timeoutMs);
+        if (await this.#confirmVanished(deadline, vanishRecheckMs)) {
+          throw new Error(
+            `session ${this.sessionId} vanished mid-turn after doing work — the turn did not finish (pod eviction/restart?)`,
+          );
+        }
+        // False alarm — re-listed within the patience window (`#confirmVanished` cleared
+        // `sessionGone`). Fall through and keep waiting; the loop below re-polls fresh state.
       }
 
       // Drain asks (consent cards, forms) — an unanswered ask stalls the turn forever.
@@ -359,15 +408,23 @@ export class ThingSession {
         await this.pullEvents();
         throw new Error(`session entered error state: ${JSON.stringify(me)}`);
       }
-      // The session is no longer LISTED, though we saw work. Same hazard as `sessionGone` above:
-      // "not resident any more" does NOT mean "the turn finished". Any drop of the in-memory session
-      // vanishes the entry mid-flight, and a turn that had only just dispatched its delegates would
-      // otherwise be reported as a COMPLETED turn with no results (scenario 10 then sent the user's
-      // "yes" into a session that had never made the offer it was agreeing to). With the build target
-      // now durable across a re-establish there is nothing to re-send, so a vanish is an HONEST
-      // failure: throw, so the runner records a real step error instead of a silent completed turn.
+      // The session was not found in THIS ONE `GET /api/sessions` poll, though we saw work. Same
+      // hazard as `sessionGone` above: "missing from one poll" does NOT mean "the turn finished", but
+      // it doesn't mean "gone for good" either — a single missed listing is exactly the false-alarm
+      // shape `#confirmVanished` exists to rule out before we believe it. If it stays unlisted for the
+      // WHOLE patience window, that IS a genuine drop of the in-memory session, and a turn that had
+      // only just dispatched its delegates would otherwise be reported as a COMPLETED turn with no
+      // results (scenario 10 then sent the user's "yes" into a session that had never made the offer
+      // it was agreeing to). With the build target durable across a re-establish there is nothing to
+      // re-send, so a CONFIRMED vanish is an HONEST failure: throw, so the runner records a real step
+      // error instead of a silent completed turn.
       if (sawWork && !me && this.events.length > startSeq) {
-        throw new Error(`session ${this.sessionId} left the resident set mid-turn — the turn did not finish (pod restart/eviction?)`);
+        const deadline = Math.min(Date.now() + vanishPatienceMs, t0 + timeoutMs);
+        if (await this.#confirmVanished(deadline, vanishRecheckMs)) {
+          throw new Error(`session ${this.sessionId} left the resident set mid-turn — the turn did not finish (pod restart/eviction?)`);
+        }
+        // False alarm — re-listed within the patience window. Fall through; the loop re-polls fresh
+        // state below, so this iteration doesn't fire the (now-stale) idle+quiet completion check.
       }
 
       if (sawWork && idle && Date.now() - lastChange >= quietMs) {

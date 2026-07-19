@@ -89,7 +89,13 @@ export type TraceEvent =
   // does NOT end the turn. `scope: 'session'` is the MAIN line (THING); 'fork'/'delegate'
   // are SUB-activities keyed by `nodeId` (cleared on that node's `node_end`). `text: ''`
   // clears the scope's activity. Ephemeral (excluded from the NDJSON file below).
-  | { ts: number; type: 'activity'; context: string; nodeId?: string; scope: 'session' | 'fork' | 'delegate'; text: string };
+  | { ts: number; type: 'activity'; context: string; nodeId?: string; scope: 'session' | 'fork' | 'delegate'; text: string }
+  // New: the session's VM was torn down OUT OF BAND (idle reaper, capacity/memory
+  // eviction, or an explicit dispose). Recorded on the session so a disposal that races
+  // an in-flight turn — the resume then throws the opaque QuickJS "Lifetime not alive" —
+  // is diagnosable from the PERSISTED trace (runs/<n>/…/trace.json). The disposer's own
+  // console.warn goes to server stderr, which run evidence discards; this event survives.
+  | { ts: number; type: 'session_disposed'; nodeId?: string; sessionId: string; trigger: 'reaper' | 'evict' | 'explicit'; status: string };
 
 /** Event types excluded from the NDJSON file (ephemeral, high-frequency). */
 const FILE_EXCLUDED = new Set<TraceEvent['type']>(['llm_progress', 'activity']);

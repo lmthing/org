@@ -26,6 +26,12 @@ export interface VM {
   drivePendingJobs(): EvalResult;
   getScope(): Record<string, unknown>;
   setVar(name: string, value: unknown): void;
+  /** True while the underlying context AND runtime are both still alive. A long yield
+   *  (e.g. a multi-minute nested delegate) can be resolved AFTER the VM was torn down
+   *  out of band (idle reaper, capacity/memory eviction). The turn loop checks this
+   *  before resuming so it ends the turn cleanly instead of throwing the opaque QuickJS
+   *  "Lifetime not alive" from a resume op on a disposed handle. */
+  isAlive(): boolean;
   /** Read a global's current value back out of the VM (e.g. to recover the real
    *  value of a binding whose yielding call was nested inside another async
    *  function — see turn-loop's post-yield binding). Returns `undefined` if the
@@ -78,6 +84,12 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
       : String(errMsg);
   }
 
+  /** Both the context and its runtime must be live to touch any handle; either being
+   *  disposed makes every op throw "Lifetime not alive". */
+  function isAlive(): boolean {
+    return ctx.alive && runtime.alive;
+  }
+
   /**
    * Evaluate a statement synchronously using evalCode (not evalCodeAsync).
    * Drives executePendingJobs until a yield is detected or all jobs exhaust.
@@ -88,6 +100,10 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
    * With sync evalCode + manual job driving we can detect the yield and return.
    */
   function evalStatement(code: string): EvalResult {
+    // A statement can only be evaluated on a live VM. Bail with a structured error
+    // rather than throwing the opaque QuickJS "Lifetime not alive" if the VM was
+    // disposed out of band (idle reaper / eviction) between turns or mid-resume.
+    if (!isAlive()) return { ok: false, error: 'VM disposed mid-turn' };
     const deadline = Date.now() + maxMs;
     runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
 
@@ -148,6 +164,10 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
    * Call this after resolving a yield's deferred to run the VM continuation.
    */
   function drivePendingJobs(): EvalResult {
+    // Resuming a disposed VM (e.g. after a long yield whose VM was torn down out of band)
+    // would throw "Lifetime not alive" from executePendingJobs; return a structured error
+    // so the turn loop can end cleanly instead of crashing opaquely. Mirrors getVar's swallow.
+    if (!isAlive()) return { ok: false, error: 'VM disposed mid-turn' };
     let jobsResult = runtime.executePendingJobs(1);
     while (true) {
       if (pendingYields.length > 0) {
@@ -174,6 +194,10 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
 
   function setVar(name: string, value: unknown): void {
     scope[name] = value;
+    // A disposed ctx makes setProp throw "Lifetime not alive". Keep the host-side scope
+    // update (above) but skip the VM write when the VM is gone — the turn loop's own
+    // isAlive() guard turns this situation into a clean turn error.
+    if (!isAlive()) return;
     const handle = marshalSimple(ctx, value);
     ctx.setProp(ctx.global, name, handle);
     handle.dispose();
@@ -246,7 +270,7 @@ export async function createVM(opts: VMOpts = {}): Promise<VM> {
     }
   }
 
-  return { evalStatement, evalScript, drivePendingJobs, getScope, setVar, getVar, dispose, pendingYields, ctx };
+  return { evalStatement, evalScript, drivePendingJobs, getScope, setVar, getVar, isAlive, dispose, pendingYields, ctx };
 }
 
 function marshalSimple(ctx: QuickJSAsyncContext, value: unknown): ReturnType<typeof ctx.newString> {

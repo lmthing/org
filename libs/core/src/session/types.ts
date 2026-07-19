@@ -158,6 +158,12 @@ export interface SessionOpts {
    *  code node then fails with a clear required-task error (core never executes
    *  the node module itself). Built by libs/cli's `createCodeNodeCtxFactory`. */
   codeNodeCtxFactory?: CodeNodeCtxFactory;
+  /** True ONLY for an interactive top-level session (a real user can see display() and
+   *  answer ask()). Set by the interactive session path; headless single-shots / hooks /
+   *  code-node runs leave it unset. Threaded into `runTurnLoop` as `interactive` to gate the
+   *  anti-silent no-visible-output guard (an interactive turn that did work yet showed the
+   *  user nothing re-prompts once then fails loud). Absent ⇒ the guard never fires. */
+  interactive?: boolean;
 }
 
 export interface SessionDeps {

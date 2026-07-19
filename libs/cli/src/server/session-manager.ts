@@ -508,6 +508,10 @@ export class SessionManager {
         // runs leave it unset so consent-marked calls FAIL CLOSED instead of
         // hanging on an ask with no client attached.
         consentPrompter: args.interactive ? createAskConsentPrompter(args.renderHost) : undefined,
+        // Interactive top-level session (a real user sees display() / answers ask()) — gates
+        // the turn loop's anti-silent no-visible-output guard. Headless single-shots
+        // (runHeadless), hooks and code-node runs pass interactive:false and are unaffected.
+        interactive: args.interactive === true,
         // Presence-only integration config status (S13) — reads the installed space's
         // required env-var NAMES vs `process.env`, never any secret values. Only a
         // project-rooted session (THING) gets it; absent ⇒ the yield errors clearly.
@@ -1064,6 +1068,9 @@ export class SessionManager {
     }
     if (!victim) return false;
 
+    // Record the disposal on the session's trace BEFORE persisting (so it lands in the
+    // snapshot) — diagnostic for a disposal that races an in-flight turn (see traceDispose).
+    this.traceDispose(victim, 'evict');
     // Free the slot synchronously (so the immediate size check passes), then
     // persist + dispose in the background.
     const evicted = victim;
@@ -1701,10 +1708,44 @@ export class SessionManager {
       });
   }
 
-  /** Snapshot best-effort, dispose the VM, then drop from the map. */
-  async disposeSession(id: string): Promise<boolean> {
+  /**
+   * Record an OUT-OF-BAND VM disposal as a `session_disposed` trace event on the session
+   * (persisted to trace.json via {@link persistSession}). If the disposal races an in-flight
+   * turn, that turn's resume throws the opaque QuickJS "Lifetime not alive" — this event is
+   * the retained evidence that pins WHICH disposer (reaper / capacity/memory eviction /
+   * explicit) fired and the session's `status` at the moment. The disposer's own console.warn
+   * goes to server stderr, which run evidence discards; this survives in runs/<n>/ evidence.
+   */
+  private traceDispose(entry: SessionEntry, trigger: 'reaper' | 'evict' | 'explicit'): void {
+    // Sink 1 (always): the server's stdout+stderr — captured to the run's `sessions.log`,
+    // which run evidence RETAINS. Structured so grep pins the disposer + the status at kill.
+    console.warn(`[session-manager] disposing session ${entry.sessionId} (trigger=${trigger}, status=${entry.status})`);
+    // Sink 2 (when the session is live): a persisted `session_disposed` trace event, so a
+    // disposal that races an in-flight turn is diagnosable from runs/<n>/…/trace.json too.
+    const s = entry.session;
+    if (!s || typeof s.getTracer !== 'function') return;
+    try {
+      const nodeId = typeof s.getRootNodeId === 'function' ? s.getRootNodeId() : undefined;
+      s.getTracer().write({
+        ts: Date.now(),
+        type: 'session_disposed',
+        ...(nodeId ? { nodeId } : {}),
+        sessionId: entry.sessionId,
+        trigger,
+        status: entry.status,
+      });
+    } catch {
+      /* best-effort diagnostics — never let tracing break teardown */
+    }
+  }
+
+  /** Snapshot best-effort, dispose the VM, then drop from the map. `trigger` records WHO
+   *  disposed it (default 'explicit'); the reaper passes 'reaper'. */
+  async disposeSession(id: string, trigger: 'reaper' | 'evict' | 'explicit' = 'explicit'): Promise<boolean> {
     const entry = this.sessions.get(id);
     if (!entry) return false;
+    // Emit the diagnostic BEFORE persistSession so it lands in the persisted trace snapshot.
+    this.traceDispose(entry, trigger);
     await this.persistSession(entry);
     try {
       entry.session?.dispose();
@@ -2500,17 +2541,28 @@ export class SessionManager {
 
   startReaper(intervalMs = 60000): void {
     if (this.reaper) return;
-    this.reaper = setInterval(() => {
-      const now = Date.now();
-      for (const [id, entry] of this.sessions) {
-        if (now - entry.lastActivity > this.idleTtlMs) {
-          console.warn(`[session-manager] reaping idle session ${id}`);
-          void this.disposeSession(id);
-        }
-      }
-    }, intervalMs);
+    this.reaper = setInterval(() => this.reapIdleOnce(), intervalMs);
     // Don't keep the process alive solely for the reaper.
     this.reaper.unref?.();
+  }
+
+  /**
+   * One reaper sweep: dispose sessions idle past {@link idleTtlMs}. NEVER reaps a session
+   * whose turn is in flight (`status === 'running'`) — the SAME guard {@link evictOneIdle}
+   * enforces. `lastActivity` is only touched at turn start/end (see {@link sendMessage}),
+   * so a long build/turn that outlasts the idle TTL would otherwise be reaped mid-work — the
+   * "session vanished mid-turn" failure. A genuinely idle session (running just ended, or it
+   * was idle between turns) reaps as before. Extracted from the interval body so it is
+   * deterministically unit-testable (pass an explicit `now`).
+   */
+  reapIdleOnce(now = Date.now()): void {
+    for (const [id, entry] of this.sessions) {
+      if (entry.status === 'running') continue; // never reap an in-flight turn
+      if (now - entry.lastActivity > this.idleTtlMs) {
+        // disposeSession → traceDispose logs the kill (trigger=reaper) to both sinks.
+        void this.disposeSession(id, 'reaper');
+      }
+    }
   }
 
   stopReaper(): void {

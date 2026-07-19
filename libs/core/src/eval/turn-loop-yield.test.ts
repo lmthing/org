@@ -626,3 +626,148 @@ describe('turn loop — cross-turn typecheck scope (initialContext)', () => {
     vm.dispose();
   });
 });
+
+describe('turn loop — anti-silent no-visible-output guard (interactive turns)', () => {
+  // Emit a real statement on turn 0, then '' forever (so the loop settles).
+  const oneStatementThenIdle = () => scriptedStream('const x = 1;');
+
+  it('interactive turn that did work but never displayed/asked: nudge once, then error', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: oneStatementThenIdle(),
+      processYield: async () => undefined,
+      maxRetries: 3,
+      interactive: true,
+      hadVisibleOutput: () => false, // never displayed
+    });
+
+    // Two-strike: real work + zero display/ask → nudge, then (still silent) fail loud.
+    expect(result).toBe('error');
+    const nudged = history.messages.some((m) => m.content.includes('showed the user nothing'));
+    expect(nudged).toBe(true);
+    vm.dispose();
+  });
+
+  it('interactive turn that displayed is a clean done (no nudge, no false-positive)', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: oneStatementThenIdle(),
+      processYield: async () => undefined,
+      maxRetries: 3,
+      interactive: true,
+      hadVisibleOutput: () => true, // the turn showed the user something
+    });
+
+    expect(result).toBe('done');
+    const nudged = history.messages.some((m) => m.content.includes('showed the user nothing'));
+    expect(nudged).toBe(false);
+    vm.dispose();
+  });
+
+  it('a fork/delegate turn (interactive unset) never triggers the guard even with no display', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: oneStatementThenIdle(),
+      processYield: async () => undefined,
+      maxRetries: 3,
+      // interactive omitted (fork/delegate): the guard must NOT fire.
+      hadVisibleOutput: () => false,
+    });
+
+    expect(result).toBe('done');
+    const nudged = history.messages.some((m) => m.content.includes('showed the user nothing'));
+    expect(nudged).toBe(false);
+    vm.dispose();
+  });
+
+  it('an interactive turn that ASKED (but did not display) is a clean done', async () => {
+    const vm = await createVM();
+    // A yielding `ask()`-kind global so the turn resolves a user-visible ask.
+    const ask3 = () =>
+      new Promise((resolve, reject) => {
+        vm.pendingYields.push({ kind: 'ask', args: [], deferred: { resolve, reject }, vmPromiseHandle: undefined } as YieldRequest);
+      });
+    injectGlobal(vm.ctx, 'ask3', ask3 as (...a: unknown[]) => unknown);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: 'declare function ask3(): Promise<any>;',
+      renderHost: silentHost,
+      streamFn: scriptedStream('const a = await ask3();'),
+      processYield: async () => 'answered',
+      maxRetries: 3,
+      interactive: true,
+      hadVisibleOutput: () => false, // did not display, but DID ask → not silent
+    });
+
+    expect(result).toBe('done');
+    const nudged = history.messages.some((m) => m.content.includes('showed the user nothing'));
+    expect(nudged).toBe(false);
+    vm.dispose();
+  });
+});
+
+describe('turn loop — VM disposed mid-yield (ITEM 5b: attributable error, not a raw crash)', () => {
+  it('returns error (not a thrown "Lifetime not alive") when the VM is disposed during a yield', async () => {
+    const vm = await createVM();
+    const y = () =>
+      new Promise((resolve, reject) => {
+        vm.pendingYields.push({ kind: 'y', args: [], deferred: { resolve, reject }, vmPromiseHandle: undefined } as unknown as YieldRequest);
+      });
+    injectGlobal(vm.ctx, 'y', y as (...a: unknown[]) => unknown);
+
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const logs: string[] = [];
+    const loggingHost: RenderHost = { display: () => {}, ask: async () => undefined, log: (m) => { logs.push(m); } };
+
+    // Simulate an out-of-band disposal (idle reaper / eviction) that races the in-flight
+    // yield: dispose the VM while resolving it. Without the guard, the resume ops
+    // (drivePendingJobs/setVar) throw the opaque QuickJS "Lifetime not alive".
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: 'declare function y(): Promise<any>;',
+      renderHost: loggingHost,
+      streamFn: scriptedStream('const a = await y();'),
+      processYield: async () => { vm.dispose(); return undefined; },
+      maxRetries: 3,
+    });
+
+    expect(result).toBe('error');
+    expect(logs.some((m) => m.includes('disposed while a yield was in flight'))).toBe(true);
+    // vm already disposed inside processYield; a second dispose must be safe.
+    vm.dispose();
+  });
+});
