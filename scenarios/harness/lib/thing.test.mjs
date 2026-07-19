@@ -158,6 +158,118 @@ describe('ThingSession — suspected vs. confirmed "vanished" (scenario 07 false
   }, 5000);
 });
 
+// The soft-cap/extension fix: a fixed `timeoutMs` declared a legitimately slow build (observed
+// >20min, events flowing, session listed `running` the whole time — 06 run 25 / 07 run 22) "timed
+// out" mid-work while the server turn then completed fine. These pin the new wait contract:
+// `timeoutMs` is SOFT (activity extends it), `stallGraceMs` of silence past it ends the wait
+// promptly, and `hardCapMs` bounds even a never-quiet turn.
+describe('ThingSession — soft cap extends while active, stalls and hard cap still throw', () => {
+  /** Emits a fresh event on every poll for `emitMs` after dispatch, then goes quiet and idle —
+   *  the slow-but-genuinely-working build shape. */
+  class SlowButActiveFakePod {
+    constructor(emitMs) {
+      this.sessionId = 's1';
+      this.emitMs = emitMs;
+      this.t0 = null;
+      this.seq = 0;
+    }
+    #working() {
+      return this.t0 !== null && Date.now() - this.t0 < this.emitMs;
+    }
+    async req(method, path) {
+      if (method === 'POST' && path === '/api/sessions') return { sessionId: this.sessionId };
+      if (method === 'POST' && path === `/api/sessions/${this.sessionId}/message`) {
+        this.t0 = Date.now();
+        return { ok: true };
+      }
+      if (method === 'GET' && path === `/api/sessions/${this.sessionId}/asks?format=json`) return { asks: [] };
+      if (method === 'GET' && path.startsWith(`/api/sessions/${this.sessionId}/events`)) {
+        if (this.#working()) {
+          this.seq++;
+          return {
+            events: [{ seq: this.seq, event: { type: 'display', descriptor: { props: { text: `work ${this.seq}` } } } }],
+            lastSeq: this.seq,
+          };
+        }
+        return { events: [], lastSeq: this.seq };
+      }
+      if (method === 'GET' && path === '/api/sessions') {
+        return { sessions: [{ sessionId: this.sessionId, status: this.#working() ? 'running' : 'idle' }] };
+      }
+      throw new Error(`FakePod: unhandled ${method} ${path}`);
+    }
+  }
+
+  it('a turn still emitting events past the soft cap is NOT timed out — it runs to completion', async () => {
+    const pod = new SlowButActiveFakePod(400); // works for 400ms, 4x the soft cap below
+    const sess = new ThingSession(pod);
+    await sess.start();
+    const turn = await sess.send('build something slow', {
+      timeoutMs: 100,
+      hardCapMs: 5_000,
+      stallGraceMs: 1_000,
+      pollMs: 10,
+      quietMs: 20,
+    });
+    expect(turn.lastText).toMatch(/^work \d+$/); // finished and was judged, despite blowing the soft cap
+  }, 10000);
+
+  /** One event at dispatch, then silence forever — but the session stays listed `running`
+   *  (a genuine hang, not a vanish). */
+  class ActiveThenStalledFakePod {
+    constructor() {
+      this.sessionId = 's1';
+      this.eventsCall = 0;
+    }
+    async req(method, path) {
+      if (method === 'POST' && path === '/api/sessions') return { sessionId: this.sessionId };
+      if (method === 'POST' && path === `/api/sessions/${this.sessionId}/message`) return { ok: true };
+      if (method === 'GET' && path === `/api/sessions/${this.sessionId}/asks?format=json`) return { asks: [] };
+      if (method === 'GET' && path.startsWith(`/api/sessions/${this.sessionId}/events`)) {
+        this.eventsCall++;
+        if (this.eventsCall === 1) {
+          return { events: [{ seq: 1, event: { type: 'display', descriptor: { props: { text: 'started' } } } }], lastSeq: 1 };
+        }
+        return { events: [], lastSeq: 1 };
+      }
+      if (method === 'GET' && path === '/api/sessions') {
+        return { sessions: [{ sessionId: this.sessionId, status: 'running' }] }; // never idle, never gone
+      }
+      throw new Error(`FakePod: unhandled ${method} ${path}`);
+    }
+  }
+
+  it('a turn with NO activity past the soft cap throws promptly (stall grace), not at the hard cap', async () => {
+    const pod = new ActiveThenStalledFakePod();
+    const sess = new ThingSession(pod);
+    await sess.start();
+    await expect(
+      sess.send('hang forever', {
+        timeoutMs: 60,
+        hardCapMs: 60_000, // far away — the throw must come from the stall grace, not this
+        stallGraceMs: 150,
+        pollMs: 10,
+        quietMs: 20,
+      }),
+    ).rejects.toThrow(/no activity for 150ms past the 60ms soft cap/);
+  }, 10000);
+
+  it('a never-quiet turn is bounded by the hard cap', async () => {
+    const pod = new SlowButActiveFakePod(60_000); // "works" far longer than the hard cap
+    const sess = new ThingSession(pod);
+    await sess.start();
+    await expect(
+      sess.send('run away', {
+        timeoutMs: 50,
+        hardCapMs: 300,
+        stallGraceMs: 60_000, // activity never lapses — only the hard cap can end this
+        pollMs: 10,
+        quietMs: 20,
+      }),
+    ).rejects.toThrow(/hard cap 300ms/);
+  }, 10000);
+});
+
 describe('the ask-draining loop routes CANCEL_ASK to DELETE, a normal value to POST', () => {
   it('calls cancelAsk (DELETE) when onAsk returns the CANCEL_ASK sentinel', async () => {
     const pod = new FakePod();

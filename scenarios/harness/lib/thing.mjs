@@ -310,7 +310,7 @@ export class ThingSession {
    * either the id reappears (false alarm — clear `sessionGone` and tell the caller to keep waiting)
    * or `deadline` passes with it never once relisted (a GENUINE disappearance — evicted for good,
    * the pod actually rolled, or scaled fully to zero). The caller caps `deadline` at the turn's own
-   * `timeoutMs`, so confirming a real vanish can't outrun the overall wait budget.
+   * `hardCapMs`, so confirming a real vanish can't outrun the overall wait budget.
    *
    * This does NOT reintroduce the old silent-completion or the removed mid-turn re-send: a session
    * that stays gone for the whole patience window still throws the honest "vanished" error below.
@@ -330,18 +330,31 @@ export class ThingSession {
     return true;
   }
 
-  // 20-min per-turn cap: a bulk-dump "yes" turn legitimately fans out one architect build PER leg
-  // (organize_material's forEach) plus the app build — 4+ specialist pipelines can run well past 10
-  // minutes. In production this streams as a background job; the harness treats it as one turn, so the
-  // cap must be generous enough to let a real multi-part build finish and be judged, not time out
-  // mid-build (which read as a false step-2 failure).
+  // Per-turn wait budget: `timeoutMs` is a SOFT cap. A bulk-dump "yes" turn legitimately fans out
+  // one architect build PER leg (organize_material's forEach) plus the app build, and a full build
+  // under build-completeness's gate-and-retry loop has been observed to run well past 20 minutes
+  // while demonstrably alive (events flowing, session listed `running`) — a fixed cap turned that
+  // real success into a spurious "timed out" step error, the same class as the false-vanish below.
+  // So past the soft cap the wait EXTENDS as long as fresh events keep arriving: a gap of
+  // `stallGraceMs` with no activity ends it (a hung turn still dies promptly), and `hardCapMs`
+  // bounds the whole wait absolutely. In production this streams as a background job; the harness
+  // treats it as one turn, so the budget must fit a real multi-part build without giving a genuine
+  // hang unbounded rope.
   //
   // `vanishPatienceMs`/`vanishRecheckMs` bound `#confirmVanished` above — generous enough to bridge a
   // multi-minute build's occasional blipped poll, but not unbounded (see `#confirmVanished`'s doc).
   async #dispatchAndWait(
     dispatch,
     logLine,
-    { timeoutMs = 1_200_000, quietMs = 4_000, pollMs = 1_500, vanishPatienceMs = 180_000, vanishRecheckMs = 3_000 } = {},
+    {
+      timeoutMs = 1_200_000,
+      hardCapMs = 3_600_000,
+      stallGraceMs = 300_000,
+      quietMs = 4_000,
+      pollMs = 1_500,
+      vanishPatienceMs = 180_000,
+      vanishRecheckMs = 3_000,
+    } = {},
   ) {
     const startSeq = this.events.length;
     const t0 = Date.now();
@@ -353,7 +366,10 @@ export class ThingSession {
     let quietSince = null;
     this.sessionGone = false;
 
-    while (Date.now() - t0 < timeoutMs) {
+    while (
+      Date.now() - t0 < timeoutMs ||
+      (Date.now() - t0 < hardCapMs && Date.now() - lastChange < stallGraceMs)
+    ) {
       const fresh = await this.pullEvents();
       if (fresh.length) {
         lastChange = Date.now();
@@ -377,7 +393,7 @@ export class ThingSession {
         if (!sawWork) {
           throw new Error(`session ${this.sessionId} disappeared before doing any work (pod restart mid-init?)`);
         }
-        const deadline = Math.min(Date.now() + vanishPatienceMs, t0 + timeoutMs);
+        const deadline = Math.min(Date.now() + vanishPatienceMs, t0 + hardCapMs);
         if (await this.#confirmVanished(deadline, vanishRecheckMs)) {
           throw new Error(
             `session ${this.sessionId} vanished mid-turn after doing work — the turn did not finish (pod eviction/restart?)`,
@@ -419,7 +435,7 @@ export class ThingSession {
       // re-send, so a CONFIRMED vanish is an HONEST failure: throw, so the runner records a real step
       // error instead of a silent completed turn.
       if (sawWork && !me && this.events.length > startSeq) {
-        const deadline = Math.min(Date.now() + vanishPatienceMs, t0 + timeoutMs);
+        const deadline = Math.min(Date.now() + vanishPatienceMs, t0 + hardCapMs);
         if (await this.#confirmVanished(deadline, vanishRecheckMs)) {
           throw new Error(`session ${this.sessionId} left the resident set mid-turn — the turn did not finish (pod restart/eviction?)`);
         }
@@ -436,12 +452,17 @@ export class ThingSession {
     }
     await this.pullEvents();
     const open = await this.openAsks();
+    const elapsed = Date.now() - t0;
     throw Object.assign(
       new Error(
-        `turn timed out after ${timeoutMs}ms` +
+        `turn timed out after ${elapsed}ms (` +
+          (elapsed >= hardCapMs
+            ? `hard cap ${hardCapMs}ms`
+            : `no activity for ${stallGraceMs}ms past the ${timeoutMs}ms soft cap`) +
+          ')' +
           (open.length ? ` with ${open.length} unanswered ask(s): ${JSON.stringify(open)}` : ''),
       ),
-      { turn: this.turn(startSeq, Date.now() - t0), openAsks: open },
+      { turn: this.turn(startSeq, elapsed), openAsks: open },
     );
   }
 

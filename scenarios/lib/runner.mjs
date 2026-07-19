@@ -35,7 +35,7 @@ import {
 import { applyEnv, readEnvVar } from '../harness/lib/env.mjs';
 import { signHmac } from '../harness/lib/webhook-sign.mjs';
 import { getUser } from '../harness/provision.mjs';
-import { snapshot, summarizeTurn, compactStep, traceLines, compact } from './evidence.mjs';
+import { snapshot, summarizeTurn, compactStep, traceLines, compact, deadTurnError } from './evidence.mjs';
 import { StepAsks } from './asks.mjs';
 import { FatalError } from './errors.mjs';
 
@@ -381,6 +381,12 @@ export class ScenarioRunner {
         } catch (e) {
           rec.error = String(e?.stack ?? e?.message ?? e);
           rec.notes.push(`STEP THREW: ${rec.error.split('\n')[0]}`);
+        }
+
+        const dead = deadTurnError(rec);
+        if (dead) {
+          rec.error = dead;
+          rec.notes.push(`STEP THREW: ${dead}`);
         }
 
         // bootstrap:thing — after THING has had a turn, discover the project it created and rebind

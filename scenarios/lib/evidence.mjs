@@ -54,6 +54,21 @@ export function summarizeTurn(turn, sent) {
   };
 }
 
+// A step whose every turn ran NOTHING — no reply, no yields, no delegate, no error, and no ask —
+// is a DEAD step, not a played one: a resumed/hung session can absorb the message and stream zero
+// work, which previously recorded as a silently-"completed" step (06-tanzania run 28's empty
+// step-04, where the restored session never streamed a statement and was later reaped idle).
+// Returns the error string to record, or null when the step shows any sign of life.
+export function deadTurnError(rec) {
+  if (rec.error || !rec.turns?.length || rec.asks?.length) return null;
+  const dead = rec.turns.every(
+    (t) => t && (t.empty === true || (!t.lastText && !t.yields?.length && !t.delegates?.length && !t.errors?.length)),
+  );
+  return dead
+    ? 'DEAD TURN: the session accepted the message but streamed no work, no reply, and no ask'
+    : null;
+}
+
 export function compact(args) {
   try {
     const s = JSON.stringify(args);

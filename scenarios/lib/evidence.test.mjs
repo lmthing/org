@@ -58,3 +58,36 @@ describe('summarizeTurn / compact', () => {
     expect(compact(small)).toBe(small);
   });
 });
+
+// Run-28 regression (06-tanzania): a resumed session absorbed the step-4 message, streamed zero
+// statements, and the runner recorded a "played" step with an empty turn, no error, and exit 0 —
+// a silently-dead turn indistinguishable from success. `deadTurnError` is the harness-level
+// anti-silent: every-turn-empty ⇒ an error string; any sign of life ⇒ null.
+describe('deadTurnError — a zero-work turn is an error, not a completed step', () => {
+  const deadTurn = { sent: 'hi', lastText: '', delegates: [], yields: [], errors: [] };
+
+  it('flags a step whose only turn did nothing', async () => {
+    const { deadTurnError } = await import('./evidence.mjs');
+    const rec = { step: 4, turns: [deadTurn], asks: [], notes: [] };
+    expect(deadTurnError(rec)).toMatch(/DEAD TURN/);
+  });
+
+  it('stays silent when the turn shows any sign of life (text, yields, delegates, errors, or an ask)', async () => {
+    const { deadTurnError } = await import('./evidence.mjs');
+    for (const live of [
+      { ...deadTurn, lastText: 'an answer' },
+      { ...deadTurn, yields: [{ kind: 'inspect' }] },
+      { ...deadTurn, delegates: ['/some/space/agent/answer'] },
+      { ...deadTurn, errors: [{ type: 'typecheck_error' }] },
+    ]) {
+      expect(deadTurnError({ step: 1, turns: [live], asks: [], notes: [] })).toBeNull();
+    }
+    expect(deadTurnError({ step: 1, turns: [deadTurn], asks: [{ id: 'a1' }], notes: [] })).toBeNull();
+  });
+
+  it('never overrides an existing error and ignores turnless steps (open_app, restart_pod)', async () => {
+    const { deadTurnError } = await import('./evidence.mjs');
+    expect(deadTurnError({ step: 1, turns: [deadTurn], asks: [], error: 'STEP THREW: x' })).toBeNull();
+    expect(deadTurnError({ step: 1, turns: [], asks: [] })).toBeNull();
+  });
+});
