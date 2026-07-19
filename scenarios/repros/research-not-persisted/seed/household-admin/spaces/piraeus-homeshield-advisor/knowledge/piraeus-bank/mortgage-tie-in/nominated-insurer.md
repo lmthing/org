@@ -1,0 +1,5 @@
+# nominated-insurer
+
+Both the mortgage (GR-VAULT-002) and the home insurance policy (PIR-HOME-882) are with Piraeus Group entities — the bank holds the loan, and Piraeus HomeShield is the insurer. This alignment is common in Greek bancassurance arrangements, where the lending bank either requires or strongly incentivises insurance through its own group.
+
+The documents on file do not contain an explicit nominated-insurer clause or any written requirement that insurance must be placed specifically with Piraeus. However, in practice, choosing a different insurer may require the policyholder to confirm with the lender that the alternative cover meets the lender's conditions. The broker for the home policy is Nikoleta at Asfalia Pros (+30 210 555 1182), who can advise on whether switching insurers would satisfy the lender's requirements.

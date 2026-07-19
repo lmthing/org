@@ -1,0 +1,7 @@
+# payout-calculation
+
+Greek state pensions under the post-2016 system are calculated as the sum of two components:
+1. NATIONAL PENSION (εθνική σύνταξη): a flat monthly amount, currently approximately €413 per month (2024 levels, adjusted annually), paid in full with at least 20 years of contributions and 40 years of residence in Greece. Dimitris's 22 years would qualify him for the full national pension amount, provided he meets the residence requirement.
+2. CONTRIBUTORY PENSION (ανταποδοτική σύνταξη): calculated as the product of (a) the total pensionable earnings over the entire working life, adjusted for inflation, divided by the total contribution years, yielding a "pensionable wage"; multiplied by (b) a replacement rate that increases with contribution years, starting around 0.77% per year and rising to about 2.55% per year for the highest brackets.
+
+CRITICAL CAVEAT: the available source documents contain NO earnings history, NO declared income levels, and NO contribution-class breakdown for Dimitris. The 22-year stamp count alone is insufficient to calculate a meaningful contributory pension estimate. Any payout figure produced without earnings data would be a guess, not a calculation, and must carry a low confidence rating. To obtain an actual estimate, Dimitris should request his contribution history from EFKA and use the official online pension calculator at www.efka.gov.gr.

@@ -1,0 +1,40 @@
+{
+  "title": "Key Contacts",
+  "description": "Trusted contacts directory: broker, bank advisor, lawyer, boiler technician, and merchant contacts from receipts.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "Contact name"
+    },
+    "role": {
+      "type": "string",
+      "description": "Role: broker, bank advisor, lawyer, boiler technician, merchant"
+    },
+    "company": {
+      "type": "string",
+      "description": "Company or firm name"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number"
+    },
+    "address": {
+      "type": "string",
+      "description": "Physical address (for merchants)"
+    },
+    "tax_id": {
+      "type": "string",
+      "description": "Tax ID / ΑΦΜ (for merchants/brokers)"
+    },
+    "source_ref": {
+      "type": "string",
+      "description": "Where this contact comes from, e.g. policies.md, voice-note, receipt-photo"
+    }
+  }
+}

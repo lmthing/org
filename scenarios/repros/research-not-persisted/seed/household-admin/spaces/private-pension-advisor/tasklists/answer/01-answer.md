@@ -1,0 +1,16 @@
+---
+id: answer
+output:
+  answer: string
+  covered: boolean
+  sources: array
+dependsOn: []
+optional: false
+goal: true
+role: explore
+---
+
+Answer the user's request (it is in `query`). Load the knowledge you need, then resolve a markdown answer grounded in it and `query`. Ground every claim in the knowledge you loaded: state ONLY what it supports. If the loaded knowledge does not answer `query`, set covered:false and say so plainly — never infer or guess. Set covered:true only if the knowledge genuinely answered the question; covered:false if it did not. Code:
+const k_metlife_silver = await loadKnowledge('insurance','private-pension','metlife-silver.md');
+const k_policies_index = await loadKnowledge('policy-documents','dimitris-policies','policies-index.md');
+currentTask.resolve({ answer: 'your full markdown answer', covered: true, sources: [] });

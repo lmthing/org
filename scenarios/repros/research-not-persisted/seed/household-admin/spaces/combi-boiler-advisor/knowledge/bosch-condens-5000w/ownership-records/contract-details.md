@@ -1,0 +1,3 @@
+# contract-details
+
+After the original two-year manufacturer warranty expired in September 2024, the boiler is now covered under an annual legal service contract. This contract mandates a yearly inspection and servicing visit by a qualified technician. The servicing contractor is Costas Xenakis of ThermoFix Akis, who performed the last service on 14 January 2026. The contract is not tied to any specific insurance policy listed in the household documents dump — the boiler's ongoing maintenance is handled separately from the home, health, and car insurance policies recorded elsewhere.

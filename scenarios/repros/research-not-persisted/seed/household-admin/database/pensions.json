@@ -1,0 +1,48 @@
+{
+  "title": "Pensions",
+  "description": "Private and state pension records: contributions, projected benefits, years of contributions, and beneficiaries.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "pension_type": {
+      "type": "string",
+      "description": "private | state"
+    },
+    "provider": {
+      "type": "string",
+      "description": "Pension provider, e.g. MetLife, IKA"
+    },
+    "policy_number": {
+      "type": "string",
+      "description": "Policy or AM number"
+    },
+    "monthly_contribution": {
+      "type": "string",
+      "description": "Monthly contribution amount"
+    },
+    "projected_annuity": {
+      "type": "string",
+      "description": "Projected annuity at retirement age (private)"
+    },
+    "retirement_age": {
+      "type": "string",
+      "description": "Projected retirement age and year"
+    },
+    "beneficiary": {
+      "type": "string",
+      "description": "Named beneficiary"
+    },
+    "years_of_stamps": {
+      "type": "string",
+      "description": "Accumulated years of stamps (state)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra context"
+    }
+  }
+}

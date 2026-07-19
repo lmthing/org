@@ -1,0 +1,3 @@
+# green-tariff
+
+The Oikiako G1/G1N is PPC's residential Green tariff, introduced as part of Greece's colour-coded electricity tariff system. The Green tariff is a floating-rate product where the kWh price adjusts monthly based on the wholesale electricity market. The household ledger notes a rate of €0.1384/kWh for consumption up to 200kWh (July 2026 pricing), with the implication that higher consumption blocks would be billed at a different rate. The tariff is supplied under the PPC (ΔΕΗ) brand and covers the full electricity service including network charges (DEDDIE distribution).

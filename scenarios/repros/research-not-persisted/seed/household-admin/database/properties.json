@@ -1,0 +1,72 @@
+{
+  "title": "Properties & Mortgage",
+  "description": "Property legal records: mortgage details and title deed references for household properties.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "record_type": {
+      "type": "string",
+      "description": "mortgage | title_deed"
+    },
+    "property_address": {
+      "type": "string",
+      "description": "Full property address"
+    },
+    "loan_number": {
+      "type": "string",
+      "description": "Mortgage loan reference number"
+    },
+    "bank": {
+      "type": "string",
+      "description": "Bank or lender"
+    },
+    "total_loan": {
+      "type": "string",
+      "description": "Total original loan amount"
+    },
+    "outstanding": {
+      "type": "string",
+      "description": "Current outstanding balance"
+    },
+    "monthly_payment": {
+      "type": "string",
+      "description": "Monthly instalment amount"
+    },
+    "payment_day": {
+      "type": "string",
+      "description": "Day of month payment is debited"
+    },
+    "interest_rate": {
+      "type": "string",
+      "description": "Current interest rate"
+    },
+    "fixed_until": {
+      "type": "string",
+      "description": "Date fixed-rate period expires"
+    },
+    "plot_id": {
+      "type": "string",
+      "description": "Plot identifier, e.g. K1K2"
+    },
+    "deed_number": {
+      "type": "string",
+      "description": "Title deed number"
+    },
+    "registry": {
+      "type": "string",
+      "description": "Land registry office"
+    },
+    "lawyer_name": {
+      "type": "string",
+      "description": "Property lawyer contact name"
+    },
+    "lawyer_phone": {
+      "type": "string",
+      "description": "Property lawyer phone"
+    }
+  }
+}

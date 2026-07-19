@@ -1,0 +1,3 @@
+# eda-attikis
+
+EDA Attikis is the natural gas distribution network operator for the Attica region, including Athens. The household at Filolaou 41 receives its gas through the EDA Attikis network — Heron Thermansi is the commercial supplier that sells the gas, but the physical pipes and distribution infrastructure belong to and are maintained by EDA Attikis. This is a common structure in the Greek gas market: the supplier (Heron Thermansi) handles billing and customer relationships, while the distribution network operator (EDA Attikis) is responsible for the infrastructure that delivers gas to the property.

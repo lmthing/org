@@ -1,0 +1,22 @@
+id: research-not-persisted
+from: 07-life-admin#5
+bug: >
+  A researched world-fact (a cheaper electricity tariff) is NOT persisted to the target space's
+  knowledge — it goes through the generic researcher and the finding lives only in the session, so the
+  same question would re-search. Correct behaviour stores the finding WITH its source in the utility
+  space, which adds a knowledge file. This is OPEN on HEAD (confirmed in 07 run 22).
+seed: ./seed
+seedProject: household-admin
+runs: 4
+
+# Seeded from 07 run 22 step-04 (before the research question). The utility space has a 25-file
+# knowledge baseline; a stored finding pushes it to ≥26. A persistence failure leaves it flat at 25.
+steps:
+  - say: >
+      Is there anything cheaper than what we're on for electricity? This ΔΕΗ bill feels like a lot
+      every month.
+    expect:
+      - after researching a cheaper option it STORES the finding (with source) in the utility space's knowledge — a new file — not only in chat
+
+assert:
+  - knowledge utility fileCount >= 26   # a stored finding adds a knowledge file; a persistence failure stays at the 25 baseline

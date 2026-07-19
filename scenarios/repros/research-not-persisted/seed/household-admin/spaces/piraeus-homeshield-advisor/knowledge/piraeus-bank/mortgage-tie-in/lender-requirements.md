@@ -1,0 +1,5 @@
+# lender-requirements
+
+The mortgage on the Filolaou 41 apartment is held with Piraeus Bank under loan reference GR-VAULT-002. The outstanding balance is €148,200 of the original €210,000, with monthly repayments of €1,042 by direct debit on the 5th of each month at a fixed rate of 3.1% until 2028-03.
+
+Greek mortgage lenders routinely require that the financed property carries buildings insurance for at least the outstanding loan amount throughout the loan term. The existence of a Piraeus HomeShield policy (PIR-HOME-882) covering buildings and contents on this same property, issued by a Piraeus Group insurer, is consistent with such a lender requirement — but the actual loan agreement or formal lender mandate is not in the documents on file, so the precise conditions (e.g., whether the lender must be noted as loss payee, or whether cover must be maintained for the full reinstatement value rather than just the loan balance) cannot be confirmed from the available records.

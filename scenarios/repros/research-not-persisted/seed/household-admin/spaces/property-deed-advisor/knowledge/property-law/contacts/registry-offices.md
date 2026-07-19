@@ -1,0 +1,3 @@
+# registry-offices
+
+The title deed for the K1K2 plot (deed number **44871/2010**) is registered at the **Land Registry of Kallithea** (Κτηματολογικό Γραφείο Καλλιθέας). This is the official registry office where the deed is recorded and where ownership records for the plot can be verified or searched. The household policies document lists this as the registration authority under the "Property" section. No additional registry office details (address, hours, phone) appear in the available documents.

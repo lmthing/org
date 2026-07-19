@@ -1,0 +1,5 @@
+# boiler-maintenance
+
+The household uses a Bosch Condens 5000 W gas condensing combi boiler (model ZWB 30-2 A, serial BLR-ZWB30-208841), purchased on 2022-09-10. The manufacturer's standard 2-year warranty expired on 2024-09-10. The boiler is now past its warranty period and is covered only under an annual legal service contract.
+
+The supply contract with Heron Thermansi is separate from boiler maintenance — the gas supplier provides the fuel, while the boiler itself requires independent servicing. The Bosch Condens 5000 W is a wall-mounted condensing boiler that provides both central heating and domestic hot water (DHW) on demand. The installation and servicing manual (covering the ZWB 37-2 A variant in the same product line) specifies that an annual inspection and servicing contract with an authorised contractor is recommended to keep gas consumption and environmental impact low. Key safety instructions from the manual: if you smell gas, turn off the gas tap, open windows and doors, do not operate any electrical switches, extinguish naked flames, leave the building, and call the gas supply utility and an authorised contractor from an outside phone.

@@ -1,0 +1,3 @@
+# notary-services
+
+No specific notary or notary-service contact appears in the household policies document, the car insurance policy, the household ledger spreadsheet, or the boiler service manual. The available documents do not name a notary associated with the K1K2 plot deed (44871/2010). For notary services — such as certifying copies of the deed or handling property transfer formalities — a local notary in the Kallithea area would typically need to be engaged, but no particular individual or office is referenced in the source material.

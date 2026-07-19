@@ -1,0 +1,3 @@
+# met-pen-441
+
+MET-PEN-441 is the policy number of Dimitris's private pension, as recorded in the household policies document (policies.md, "Pensions & savings" section). The policy is described as a "MetLife Silver private pension." The document places it under the "Pensions & savings" heading alongside his state pension (IKA, AM 4401982-22, 22 years of stamps) and his rainy-day savings account. The pension is a private, individual policy — not a group or employer-sponsored scheme. The document does not specify the policy's inception date, the issuing entity beyond the MetLife brand, or applicable surrender or transfer terms.

@@ -1,0 +1,44 @@
+{
+  "title": "Utility Bills",
+  "description": "Every household utility bill: electricity, water, natural gas, internet, mobile — with amounts, periods, due dates, and tariff info.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "provider": {
+      "type": "string",
+      "description": "Utility provider, e.g. PPC (DEH), EYDAP, Heron, Cosmote, Vodafone"
+    },
+    "service_type": {
+      "type": "string",
+      "description": "electricity | water | gas | internet | mobile"
+    },
+    "tariff": {
+      "type": "string",
+      "description": "Tariff name, e.g. Oikiako G1/G1N, Cosmote fibre 1Gbps"
+    },
+    "period_label": {
+      "type": "string",
+      "description": "Billing period display label, e.g. 2026-05, 2026-03/04"
+    },
+    "bill_month": {
+      "type": "string",
+      "description": "ISO year-month for sorting, e.g. 2026-05"
+    },
+    "amount": {
+      "type": "string",
+      "description": "Bill amount with currency"
+    },
+    "due_date": {
+      "type": "string",
+      "description": "Payment due date"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra info: subscriber line, tariff detail"
+    }
+  }
+}

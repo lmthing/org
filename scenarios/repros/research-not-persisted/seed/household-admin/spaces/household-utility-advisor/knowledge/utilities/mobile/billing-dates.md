@@ -1,0 +1,3 @@
+# Billing Dates
+
+Only one mobile bill is recorded in the household ledger. The entry for July 2026 shows an amount of €19.90 with a due date of 2026-07-10. No earlier or later mobile bills appear in the ledger, so there is no pattern of billing cycles or payment history beyond this single point. The due date suggests billing falls early in the month, but this cannot be confirmed as a recurring schedule from one data point alone.

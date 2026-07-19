@@ -1,0 +1,3 @@
+# k1k2-plot-records
+
+The K1K2 plot is a separate property from the Filolaou 41 apartment. According to the household policies document, the K1K2 plot has its own title deed (number 44871/2010) registered at the Land Registry of Kallithea, while the Filolaou 41 apartment has its own mortgage (loan GR-VAULT-002 with Piraeus Bank) and its own home insurance policy (Piraeus HomeShield, policy PIR-HOME-882). The K1K2 plot's records are maintained independently at the Kallithea land registry office.

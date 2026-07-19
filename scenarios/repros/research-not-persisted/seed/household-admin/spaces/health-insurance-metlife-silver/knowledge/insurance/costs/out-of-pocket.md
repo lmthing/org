@@ -1,0 +1,3 @@
+# out-of-pocket
+
+Beyond the €20 copay per visit, the policy documents do not mention any other out-of-pocket costs for the MET-SILVER-7 MetLife Silver plan. There is no stated deductible, no coinsurance rate, and no annual out-of-pocket maximum in the materials available. The cost structure appearing in the documents is straightforward: the employer handles the full premium, and the family's only financial responsibility at the point of care is the flat €20 copay. For any costs beyond routine visits — such as hospitalisation, surgery, or prescription drugs — the documents are silent; consult the full plan booklet or the broker for those details.

@@ -1,0 +1,5 @@
+# physical-dimensions
+
+The ZWB 37-2 A measures 440 mm (W) × 760 mm (H) × 360 mm (D) and weighs 48.5 kg excluding packaging. The integrated expansion vessel has a total capacity of 10 litres, pre-charged to 75 kPa (0.75 bar). The nominal heating water capacity of the appliance is 3.75 litres. The maximum operating pressure for the heating circuit is 300 kPa (3 bar), and the maximum flow temperature is approximately 90 °C. The permissible ambient temperature range is 0–50 °C.
+
+The sound pressure level in heating mode is ≤45 dB(A). The boiler must be installed indoors in a sealed unvented system, with minimum clearances of 100 mm at the sides, 20 mm to a reversible door, and 600 mm front clearance for service. The maximum condensate quantity is 2.7 L/h (at tR = 30 °C) with a pH of approximately 4.8.

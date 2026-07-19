@@ -1,0 +1,40 @@
+{
+  "title": "Household Appliances",
+  "description": "Household appliances with purchase dates, warranty expiry, serial numbers, model details, and links to service records.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "Appliance name/type, e.g. Washing machine, Dishwasher"
+    },
+    "brand": {
+      "type": "string",
+      "description": "Brand, e.g. Bosch, Samsung, LG"
+    },
+    "model": {
+      "type": "string",
+      "description": "Full model identifier"
+    },
+    "serial_number": {
+      "type": "string",
+      "description": "Unique serial number"
+    },
+    "purchase_date": {
+      "type": "string",
+      "description": "Date of purchase"
+    },
+    "warranty_expiry": {
+      "type": "string",
+      "description": "Warranty expiry date (EU standard 2 years)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra info: warranty status, boiler spec notes"
+    }
+  }
+}

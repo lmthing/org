@@ -1,0 +1,3 @@
+# exclusions
+
+No specific exclusions for policy PIR-HOME-882 are listed in the available documents (the policies.md seed file only records the summary line: buildings + contents €120k, premium €311/yr, renewal 2026-11-02). Greek home insurance policies commonly exclude wear and tear, gradual deterioration, faulty design or workmanship, war, nuclear risks, and intentional damage, and often apply specific exclusions or sub-limits for earthquake, flood, and subsidence unless expressly included. Without the full policy wording, the exact exclusions applicable to this policy cannot be confirmed. Request the full policy terms from the broker (Nikoleta at Asfalia Pros, +30 210 555 1182) or from Piraeus Bank if the policy is packaged with the mortgage (loan GR-VAULT-002).

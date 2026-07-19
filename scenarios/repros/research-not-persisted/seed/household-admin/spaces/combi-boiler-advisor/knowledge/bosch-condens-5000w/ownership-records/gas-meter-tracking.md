@@ -1,0 +1,3 @@
+# gas-meter-tracking
+
+The gas meter reading recorded at the 14 January 2026 service visit was 04821.6 m³. This is the baseline reading for tracking gas consumption between service intervals. The boiler runs on natural gas supplied via the Heron Thermansi provider through the EDA Attikis network, as recorded in the utility bills sheet of the household ledger. Tracking the meter reading at each annual service allows monitoring of consumption trends and can help detect unusual usage patterns that may indicate a developing fault.

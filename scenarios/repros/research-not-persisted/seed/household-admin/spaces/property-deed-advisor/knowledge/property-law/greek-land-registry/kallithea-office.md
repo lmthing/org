@@ -1,0 +1,3 @@
+# kallithea-office
+
+The K1K2 plot title deed (deed number 44871/2010) is registered at the Land Registry of Kallithea (Ktimatologio Kallitheas). This is the competent land registry office for the property. The Kallithea office holds the official registration records for this plot, and any inquiries about the deed, ownership status, or certified copies should be directed there. The household policies document confirms this registration location explicitly.

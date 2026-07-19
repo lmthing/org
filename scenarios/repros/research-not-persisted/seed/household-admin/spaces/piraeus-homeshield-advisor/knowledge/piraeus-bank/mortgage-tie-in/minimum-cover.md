@@ -1,0 +1,5 @@
+# minimum-cover
+
+The home insurance policy PIR-HOME-882 provides a total sum insured of €120,000 across buildings and contents. The mortgage outstanding is €148,200 (original loan €210,000).
+
+In typical Greek mortgage practice, the lender requires buildings cover at least equal to the loan outstanding or the rebuilding cost — whichever is higher. The €120,000 total sum insured on the policy may or may not meet a lender's minimum depending on how it splits between buildings and contents, and on the actual rebuilding cost of the apartment. The documents on file do not break down the €120,000 between buildings and contents, nor do they contain the lender's formal minimum-cover requirement, so the adequacy of the current insured amount relative to the mortgage obligation cannot be verified from the available records.

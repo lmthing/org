@@ -1,0 +1,3 @@
+# legal-representatives
+
+**Stefanos Karagiannis** is the family lawyer for property and deed matters. He handles legal questions related to the title deed for the K1K2 plot (deed number 44871/2010, registered at the Land Registry of Kallithea). His phone number is **+30 210 555 3390**. This contact is recorded in the household policies document under the "Contacts (who to call)" section as "Lawyer (property/deeds)." No additional legal representatives for property matters appear in the available documents.

@@ -1,0 +1,36 @@
+{
+  "title": "Boiler Service Records",
+  "description": "Annual boiler service log: technician, company, date, gas meter reading, and auto-computed next-due date.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "service_date": {
+      "type": "string",
+      "description": "Date the service was performed"
+    },
+    "technician_name": {
+      "type": "string",
+      "description": "Technician who performed the service"
+    },
+    "company": {
+      "type": "string",
+      "description": "Service company"
+    },
+    "gas_meter_reading": {
+      "type": "string",
+      "description": "Gas meter reading in cubic metres (m³) at time of service"
+    },
+    "next_service_due": {
+      "type": "string",
+      "description": "Auto-computed next service due date (service_date + 1 year)"
+    },
+    "boiler_id": {
+      "type": "string",
+      "description": "FK to appliances row for the boiler"
+    }
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "title": "Insurance Policies",
+  "description": "All household insurance policies — car, home, health — with coverage summaries, premium amounts, renewal dates, intermediary contacts, and help-line info.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "provider": {
+      "type": "string",
+      "description": "Insurance company, e.g. AXA, Piraeus, MetLife"
+    },
+    "policy_type": {
+      "type": "string",
+      "description": "car | home | health | other"
+    },
+    "policy_number": {
+      "type": "string",
+      "description": "Policy identifier, e.g. AX-7741-VAULT"
+    },
+    "insured_name": {
+      "type": "string",
+      "description": "Named insured on the policy"
+    },
+    "insured_vat": {
+      "type": "string",
+      "description": "VAT / ΑΦΜ of the insured (if present)"
+    },
+    "insured_dob": {
+      "type": "string",
+      "description": "Date of birth of the insured (if present)"
+    },
+    "insured_phone": {
+      "type": "string",
+      "description": "Phone of the insured (if present)"
+    },
+    "insured_address": {
+      "type": "string",
+      "description": "Address of the insured (if different from Filolaou 41)"
+    },
+    "period_start": {
+      "type": "string",
+      "description": "Policy period start date"
+    },
+    "period_end": {
+      "type": "string",
+      "description": "Policy period end date"
+    },
+    "premium_amount": {
+      "type": "string",
+      "description": "Annual or total premium amount with currency"
+    },
+    "premium_detail": {
+      "type": "string",
+      "description": "Premium breakdown (base premium + taxes + fees) as structured text"
+    },
+    "renews_on": {
+      "type": "string",
+      "description": "Next renewal date"
+    },
+    "coverage_summary": {
+      "type": "string",
+      "description": "Human-readable summary of coverages and limits"
+    },
+    "coverage_lines": {
+      "type": "string",
+      "description": "JSON array of per-coverage detail objects (code, description, limit, premium)"
+    },
+    "vehicle_plate": {
+      "type": "string",
+      "description": "Vehicle plate(s) if car policy"
+    },
+    "vehicle_desc": {
+      "type": "string",
+      "description": "Vehicle description (make, model, year, fuel, seats, first reg)"
+    },
+    "property_address": {
+      "type": "string",
+      "description": "Insured property address if home policy"
+    },
+    "co_pay": {
+      "type": "string",
+      "description": "Co-pay amount per visit (health)"
+    },
+    "intermediary": {
+      "type": "string",
+      "description": "Broker or intermediary company name"
+    },
+    "intermediary_phone": {
+      "type": "string",
+      "description": "Intermediary phone number"
+    },
+    "intermediary_partner_code": {
+      "type": "string",
+      "description": "Intermediary partner code"
+    },
+    "intermediary_vat": {
+      "type": "string",
+      "description": "Intermediary tax ID"
+    },
+    "help_line": {
+      "type": "string",
+      "description": "24-hour claims/assistance phone line"
+    },
+    "glass_partners": {
+      "type": "string",
+      "description": "Glass-breakage excess-waiver partner list (if applicable)"
+    },
+    "employer_paid": {
+      "type": "string",
+      "description": "Whether premium is paid by employer (health group plan)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-form notes"
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# service-history
+
+**No service or repair records** for the LG OLED55B3 appear in any of the household documents currently on file (policies.md, household-ledger.xlsx, policy.pdf, boiler-service-manual.pdf). The warranties sheet in household-ledger.xlsx lists only purchase and expiry dates — no service events, repair invoices, or technician visits are noted. If the TV has been serviced, the record was not captured in this document set.

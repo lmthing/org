@@ -1,0 +1,28 @@
+{
+  "title": "Bank Accounts & Cards",
+  "description": "Household bank accounts and payment cards — institution, type, masked number, and usage notes.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "account_type": {
+      "type": "string",
+      "description": "bank_account | card"
+    },
+    "institution": {
+      "type": "string",
+      "description": "Bank or card network"
+    },
+    "label": {
+      "type": "string",
+      "description": "Usage label, e.g. main, joint expenses, pocket money"
+    },
+    "masked_number": {
+      "type": "string",
+      "description": "Last 4 digits or masked number"
+    }
+  }
+}

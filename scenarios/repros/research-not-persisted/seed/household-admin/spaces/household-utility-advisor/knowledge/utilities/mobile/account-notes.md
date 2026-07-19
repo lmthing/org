@@ -1,0 +1,3 @@
+# Account Notes
+
+Several key details are absent from the source documents. No Vodafone account number appears anywhere in policies.md, the household ledger, or any other attachment. No contract end date or renewal date is recorded. No customer service phone number or online account portal reference for Vodafone Greece is included in the contacts section of policies.md (which lists a broker, a bank advisor, and a lawyer but no mobile provider contact). These gaps mean that verifying the tariff, checking usage, or disputing a charge would require locating the original Vodafone contract or logging into the My Vodafone portal, neither of which is referenced in the current document set.

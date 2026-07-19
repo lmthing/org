@@ -1,0 +1,52 @@
+{
+  "title": "Purchases & Receipts",
+  "description": "Household purchase ledger: every receipt and online purchase with merchant, date, total, line items, and reference numbers.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "merchant": {
+      "type": "string",
+      "description": "Merchant name"
+    },
+    "merchant_address": {
+      "type": "string",
+      "description": "Merchant address"
+    },
+    "merchant_phone": {
+      "type": "string",
+      "description": "Merchant phone"
+    },
+    "merchant_vat": {
+      "type": "string",
+      "description": "Merchant tax ID (ΑΦΜ)"
+    },
+    "date": {
+      "type": "string",
+      "description": "Purchase/receipt date"
+    },
+    "reference_no": {
+      "type": "string",
+      "description": "Receipt or order reference number"
+    },
+    "total": {
+      "type": "string",
+      "description": "Total amount with currency"
+    },
+    "line_items": {
+      "type": "string",
+      "description": "JSON array of line-item objects {item, qty, unit_price, total}"
+    },
+    "product_model": {
+      "type": "string",
+      "description": "Product model number (for online purchases)"
+    },
+    "purchase_type": {
+      "type": "string",
+      "description": "in_store | online"
+    }
+  }
+}

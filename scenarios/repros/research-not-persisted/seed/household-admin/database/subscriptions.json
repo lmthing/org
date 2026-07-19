@@ -1,0 +1,36 @@
+{
+  "title": "Subscriptions",
+  "description": "Recurring household subscriptions — streaming, internet, gym, cloud storage, software, news — with costs, frequency, payer, and renewal dates.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "Subscription name"
+    },
+    "cost": {
+      "type": "string",
+      "description": "Cost with currency"
+    },
+    "frequency": {
+      "type": "string",
+      "description": "monthly | annual"
+    },
+    "payer": {
+      "type": "string",
+      "description": "Who pays this subscription"
+    },
+    "renews_on": {
+      "type": "string",
+      "description": "Next renewal date"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra detail"
+    }
+  }
+}

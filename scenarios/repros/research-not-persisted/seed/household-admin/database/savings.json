@@ -1,0 +1,28 @@
+{
+  "title": "Savings Accounts",
+  "description": "Savings account balances and IBAN details — rainy-day fund tracking.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "bank": {
+      "type": "string",
+      "description": "Bank name"
+    },
+    "iban": {
+      "type": "string",
+      "description": "Full IBAN"
+    },
+    "balance": {
+      "type": "string",
+      "description": "Current balance with currency"
+    },
+    "label": {
+      "type": "string",
+      "description": "Label/purpose, e.g. Rainy-day fund"
+    }
+  }
+}

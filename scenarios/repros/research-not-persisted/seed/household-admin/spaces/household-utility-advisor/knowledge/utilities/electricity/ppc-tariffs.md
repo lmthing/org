@@ -1,0 +1,3 @@
+# ppc-tariffs
+
+The household electricity provider is PPC (ΔΕΗ), the Greek Public Power Corporation. The active tariff recorded in the household ledger is the Oikiako G1/G1N Green tariff — a residential green-energy tariff. The per-kWh rate noted alongside July 2026 pricing in the ledger is €0.1384/kWh for consumption up to 200kWh. This is a variable-rate green tariff tied to wholesale market conditions with a lower rate for the first consumption block.

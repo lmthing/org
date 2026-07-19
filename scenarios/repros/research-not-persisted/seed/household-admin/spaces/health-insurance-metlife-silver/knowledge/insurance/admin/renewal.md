@@ -1,0 +1,3 @@
+# Renewal
+
+The MetLife Silver family health insurance policy (MET-SILVER-7) renews on **2027-01-31**. It is a group plan provided through Dimitris's employer, with the premium fully paid by the employer. No action is required from the family for annual renewal as long as employment continues; the policy rolls over automatically each year. If employment status changes, contact the broker immediately to understand coverage implications.

@@ -1,0 +1,3 @@
+# copay
+
+Under the MetLife Silver group health plan (policy MET-SILVER-7), each visit to a healthcare provider requires a flat copay of €20. This is the only point-of-care cost the family pays — there is no mention of a deductible, coinsurance percentage, or out-of-pocket maximum in the policy documents. The copay applies per visit; the documents do not specify whether it differs for primary care, specialist, or emergency visits, so assume the €20 figure is the standard copay for any covered visit unless the insurance card or plan booklet states otherwise.

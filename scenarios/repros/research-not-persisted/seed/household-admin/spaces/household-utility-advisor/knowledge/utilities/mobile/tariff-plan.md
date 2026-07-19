@@ -1,0 +1,3 @@
+# Tariff Plan
+
+No tariff plan name is recorded in any of the source documents. The household ledger entries for Vodafone Greece show only a monthly amount (€19.90 for July 2026) with no breakdown of minutes, data, SMS, or any plan identifier. The policies.md file does not list a mobile tariff at all. Without a contract document or account statement, the specific plan — prepaid, postpaid, contract length, data allowance — cannot be confirmed from the materials on file.

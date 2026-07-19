@@ -1,0 +1,3 @@
+# deed-lookup
+
+To look up the title deed for the K1K2 plot, reference deed number 44871/2010 at the Land Registry of Kallithea. This deed number uniquely identifies the property registration and is the key reference for any ownership verification, encumbrance check, or certified copy request. The deed number is recorded in the household policies document as the official reference for the K1K2 plot.

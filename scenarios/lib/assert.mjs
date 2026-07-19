@@ -188,6 +188,13 @@ export function evaluate(line, ctx) {
       }
       return { pass: false, actual: line, error: 'unrecognized db assert' };
     }
+    // knowledge <space|*> fileCount <op> <n>   — the persistence oracle: a research finding that WAS
+    // stored adds a knowledge file, so `fileCount` grows past the seed baseline; a persistence FAILURE
+    // leaves it flat.
+    if (t[0] === 'knowledge' && t[2] === 'fileCount') {
+      const files = knowledgeFiles(ctx, t[1]);
+      return { pass: cmpNum(t[3], files.length, Number(t[4])), actual: `${t[1]} knowledge files=${files.length}` };
+    }
     // knowledge <space|*> matches /re/[i]
     if (t[0] === 'knowledge') {
       const m = line.match(/^knowledge\s+(\S+)\s+matches\s+\/(.*)\/([a-z]*)\s*$/);

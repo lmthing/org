@@ -1,0 +1,3 @@
+# premium
+
+The premium for the MetLife Silver family health insurance plan (policy MET-SILVER-7) is fully paid by Dimitris's employer. This is a group plan provided as an employment benefit, so the household bears no monthly or annual premium cost. The policy documents do not disclose the actual premium amount the employer pays — only that it is employer-covered for the full family (household of 4).

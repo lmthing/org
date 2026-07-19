@@ -1,0 +1,3 @@
+# metlife-silver
+
+MetLife Silver is the product name of Dimitris's private pension plan. The household document dump (policies.md, last updated 2026-07-12) lists it under "Pensions & savings" as a "MetLife Silver private pension." The plan is a voluntary, individually held pension — not tied to his employer — and it is separate from the MetLife Silver group health insurance (policy MET-SILVER-7), which is employer-provided and covers the family's medical visits with a €20 co-pay. The pension plan is funded by monthly contributions; the projected annuity date is age 65 (around year 2042). The source document does not state the policy inception date, the full managing institution chain beyond the MetLife brand, or any surrender/early-exit terms.

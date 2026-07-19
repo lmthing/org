@@ -1,0 +1,3 @@
+# benefits
+
+Each outpatient visit carries a €20 co-pay. The back of the MetLife Silver insurance card carries an emergency telephone line, which is listed as the go-to contact in case of emergency. The policy renews annually on 2027-01-31. No deductible, hospitalisation benefit, or prescription coverage details appear in the source document — only the co-pay amount and the emergency-line reference are confirmed.

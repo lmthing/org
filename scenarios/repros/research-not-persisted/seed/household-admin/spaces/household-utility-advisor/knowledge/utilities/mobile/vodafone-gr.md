@@ -1,0 +1,3 @@
+# Vodafone Greece
+
+Dimitris's mobile line is with Vodafone Greece. The household ledger (bills sheet) lists the provider as "Vodafone Greece (Dimitris' line)". The policies.md subscriptions table does not include a mobile entry — the mobile service is tracked solely in the bills ledger. Vodafone Greece is one of the three major mobile network operators in the country; the documents do not record which specific retail package or contract type applies.

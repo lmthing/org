@@ -125,6 +125,13 @@ describe('knowledge asserts (reads space knowledge files on disk)', () => {
     expect(evaluate('knowledge zanzibar matches /Protergia/', c).pass).toBe(false);
     expect(evaluate('knowledge household matches /90 days/', c).pass).toBe(false); // wrong space scope
   });
+  it('fileCount is the persistence oracle (baseline vs a stored finding)', () => {
+    const c = { dataDir: dir, projectId: 'p', state: {}, turns: [] };
+    expect(evaluate('knowledge zanzibar fileCount == 1', c).pass).toBe(true);
+    expect(evaluate('knowledge zanzibar fileCount >= 2', c).pass).toBe(false); // a finding would have added one
+    expect(evaluate('knowledge * fileCount >= 1', c).pass).toBe(true);
+    expect(evaluate('knowledge household fileCount == 0', c).pass).toBe(true); // no such space → no files
+  });
 });
 
 describe('evaluateAll', () => {

@@ -1,0 +1,5 @@
+# heat-output
+
+The Bosch Condens 5000 W ZWB 37-2 A is a modulating gas condensing combi boiler. On natural gas, its maximum central heating output (Pmax) is 30.0 kW at 80/60 °C, 31.8 kW at 50/30 °C, and 32.1 kW at 40/30 °C. The minimum central heating output (Pmin) on natural gas is 9.4 kW at 80/60 °C, 10.5 kW at 50/30 °C, and 10.6 kW at 40/30 °C. The maximum DHW output (PnW) on natural gas is 37.0 kW, with a corresponding maximum gas consumption of 147.7 MJ/h.
+
+The boiler supports natural gas (code 23), propane, and butane. Output figures for propane and butane differ — for example, on butane the max CH output at 80/60 °C is 34.2 kW. The gas supply pressure permissible range for natural gas is 1.1–3.0 kPa; for LPG it is 2.75 kPa. Flue gas CO₂ at maximum rated output on natural gas is 9.7%, at minimum 9.1%. The NOx class is 5.

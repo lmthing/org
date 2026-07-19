@@ -1,0 +1,3 @@
+# service-history
+
+The most recent annual service was carried out on 14 January 2026 by Costas Xenakis of ThermoFix Akis. The next annual service is due by 15 January 2027, in line with the annual legal service contract that is now in effect. The service schedule follows the manufacturer's annual inspection checklist as detailed in the boiler service manual, covering flue gas analysis, burner inspection, heat exchanger cleaning, condensate trap maintenance, and expansion vessel pressure checks.
