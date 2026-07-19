@@ -101,7 +101,6 @@ declare function readDocument(attachmentId: string, opts?: { maxChars?: number }
 // space in this project (injected for project-rooted sessions). missingRequired = the
 // NAMES (never values) of required env vars not yet set; ready = all required set.
 declare function integrationStatus(spaceId: string): Promise<{ ready: boolean; missingRequired: string[] }>;
-declare const process: { env: Record<string, string | undefined>; exit(code?: number): never };
 declare function typecheckSource(src: string): { ok: boolean; errors: string[] };
 declare function spacePath(...parts: string[]): string;
 declare function resolveSpaceDir(space: string): string;
@@ -372,8 +371,15 @@ const WRITE_PRIMITIVES_DTS = [EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, READ_FILE_RAW_
 // instructed store path this way, and the provider API key surfaced in the yield evidence).
 export const NET_FETCH_DTS = `declare function fetch(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status: number; text(): string; json(): unknown }>;`;
 
+// `process.env` gets the SAME internal-only treatment: system-function BODIES legitimately read it
+// (webSearch reads TAVILY_API_KEY) and typecheck against the bundles below, but it is NOT declared on
+// any agent's model surface — combined with (formerly) ambient fetch, a model-authored `process.env.X`
+// is how a specialist hand-rolled a keyed provider request past its granted research path. Keep the
+// runtime shim for bodies; a model-authored `process.env` now fails typecheck in every context.
+export const PROCESS_ENV_DTS = `declare const process: { env: Record<string, string | undefined>; exit(code?: number): never };`;
+
 /** Full library DTS for the top-level session VM (all globals, incl. `ask`). */
-export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS, NET_FETCH_DTS].join('\n');
+export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS, NET_FETCH_DTS, PROCESS_ENV_DTS].join('\n');
 
 /**
  * Library DTS WITHOUT `ask`. Fork and delegate VMs run headless/autonomous — there is
@@ -382,4 +388,4 @@ export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DT
  * name 'ask'") and steers the model back to working from its seed/inputs, instead of
  * binding `undefined` (or, in a real PTY, blocking forever on stdin).
  */
-export const LIBRARY_DTS_NO_ASK = [TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS, NET_FETCH_DTS].join('\n');
+export const LIBRARY_DTS_NO_ASK = [TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS, NET_FETCH_DTS, PROCESS_ENV_DTS].join('\n');

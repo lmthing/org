@@ -76,7 +76,7 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     // on a model surface): a scaffolded specialist hand-rolled raw HTTP past its instructed
     // research_and_store path with it (06-tanzania run 26), so a model-authored fetch(...) must
     // fail typecheck in EVERY context.
-    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw', 'readFileRaw', 'createScratch', 'fetch']) {
+    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw', 'readFileRaw', 'createScratch', 'fetch', 'process']) {
       expect(names, `read-only fork DTS must not declare ${absent}`).not.toContain(absent);
     }
     for (const present of ['display', 'setActivity', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'currentTask']) {
@@ -90,6 +90,14 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     }
     expect(LIBRARY_DTS).toMatch(/declare function fetch\(/);
     expect(LIBRARY_DTS_NO_ASK).toMatch(/declare function fetch\(/);
+  });
+
+  it('process.env is declared in NO model surface, but stays in the full internal bundles (function bodies read TAVILY_API_KEY etc.)', () => {
+    for (const surface of [session, forkPlain, forkDelegating, delegate]) {
+      expect(declNames(surface), 'model DTS must not declare process').not.toContain('process');
+    }
+    expect(LIBRARY_DTS).toMatch(/declare const process:/);
+    expect(LIBRARY_DTS_NO_ASK).toMatch(/declare const process:/);
   });
 
   it('a general fork does NOT declare the generic fs primitives (no fs:scratch grant)', () => {

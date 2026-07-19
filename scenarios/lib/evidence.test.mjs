@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { compact, compactStep, summarizeTurn, traceLines } from './evidence.mjs';
+import { compact, compactStep, summarizeTurn, traceLines, redactSecrets } from './evidence.mjs';
 
 // The strongest guarantee: the judge parses these transforms' output, so they must be BYTE-identical
 // to what the pre-refactor inline code produced. `06/step-01.full.json` is a real recorded `rec`
@@ -53,9 +53,9 @@ describe('summarizeTurn / compact', () => {
     expect(out.length).toBe(401);
     expect(out.endsWith('…')).toBe(true);
   });
-  it('returns small args unchanged', () => {
+  it('returns small args unchanged (structurally — compact now returns a redacted copy)', () => {
     const small = { a: 1 };
-    expect(compact(small)).toBe(small);
+    expect(compact(small)).toEqual(small);
   });
 });
 
@@ -89,5 +89,36 @@ describe('deadTurnError — a zero-work turn is an error, not a completed step',
     const { deadTurnError } = await import('./evidence.mjs');
     expect(deadTurnError({ step: 1, turns: [deadTurn], asks: [], error: 'STEP THREW: x' })).toBeNull();
     expect(deadTurnError({ step: 1, turns: [], asks: [] })).toBeNull();
+  });
+});
+
+describe('redactSecrets — evidence secrets hygiene', () => {
+  it('masks credential-named fields and Bearer/sk-/tvly- tokens, leaves normal data intact', () => {
+    const input = {
+      headers: { authorization: 'Bearer tvly-abc123secretlong', 'x-api-key': 'sk-longsecretvalue123' },
+      body: 'q=weather&token=tvly-anotherkey9999',
+      query: 'is there anything cheaper',
+      count: 42,
+    };
+    const out = redactSecrets(input);
+    const s = JSON.stringify(out);
+    expect(s).not.toContain('abc123secretlong');
+    expect(s).not.toContain('longsecretvalue123');
+    expect(s).not.toContain('anotherkey9999');
+    expect(out.query).toBe('is there anything cheaper'); // non-secret untouched
+    expect(out.count).toBe(42);
+  });
+  it('redacts an exact secret value the runner env exposes', () => {
+    process.env.LM_TEST_FAKE_API_KEY = 'supersecret-value-1234567890';
+    try {
+      const out = redactSecrets({ url: 'https://api.example.com?k=supersecret-value-1234567890' });
+      expect(JSON.stringify(out)).not.toContain('supersecret-value-1234567890');
+    } finally {
+      delete process.env.LM_TEST_FAKE_API_KEY;
+    }
+  });
+  it('is a structural no-op on secret-free data (byte round-trip)', () => {
+    const clean = { a: 1, b: ['x', 'y'], c: { d: 'hello world' } };
+    expect(JSON.stringify(redactSecrets(clean))).toBe(JSON.stringify(clean));
   });
 });

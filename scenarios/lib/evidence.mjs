@@ -69,12 +69,51 @@ export function deadTurnError(rec) {
     : null;
 }
 
+// Defense-in-depth secrets hygiene: never persist a credential into step evidence. Three passes,
+// applied to a yield's args (and any other compacted body) BEFORE it is written — (1) exact-match any
+// secret VALUE the runner can see in its own env (best-effort; a no-op when the runner env lacks the
+// keys), (2) mask the value of any object field whose KEY looks like a credential, (3) mask obvious
+// Bearer / `sk-` / `tvly-` tokens embedded in a string. The model surface no longer declares
+// fetch/process.env, so a model can't hand-roll a keyed request — this also guards the system-function
+// BODIES' own yield args (06-tanzania run 26 leaked the Tavily key through a fetch-yield's args).
+const SECRET_KEY_RE = /(api[_-]?key|apikey|secret|token|authorization|auth|password|passwd|bearer|access[_-]?key)/i;
+const SECRET_ENV_RE = /(_KEY|_SECRET|_TOKEN|_PASSWORD|API_KEY)$/i;
+const secretEnvValues = () =>
+  Object.entries(typeof process !== 'undefined' ? process.env : {})
+    .filter(([k, v]) => SECRET_ENV_RE.test(k) && typeof v === 'string' && v.length >= 12)
+    .map(([, v]) => v);
+
+export function redactSecrets(value) {
+  const secrets = secretEnvValues();
+  const maskField = (s) => (s.length > 6 ? s.slice(0, 3) + '…«REDACTED»' : '«REDACTED»');
+  const scrubString = (s) => {
+    let out = s;
+    for (const sec of secrets) if (out.includes(sec)) out = out.split(sec).join('«REDACTED»');
+    return out.replace(/\b(Bearer\s+|sk-|tvly-)[A-Za-z0-9._-]{6,}/g, (_m, p) => p + '«REDACTED»');
+  };
+  const walk = (v) => {
+    if (v == null) return v;
+    if (typeof v === 'string') return scrubString(v);
+    if (Array.isArray(v)) return v.map(walk);
+    if (typeof v === 'object') {
+      const out = {};
+      for (const [k, val] of Object.entries(v)) {
+        out[k] = SECRET_KEY_RE.test(k) && typeof val === 'string' ? maskField(val) : walk(val);
+      }
+      return out;
+    }
+    return v;
+  };
+  return walk(value);
+}
+
 export function compact(args) {
+  const safe = redactSecrets(args);
   try {
-    const s = JSON.stringify(args);
-    return s && s.length > 400 ? s.slice(0, 400) + '…' : args;
+    const s = JSON.stringify(safe);
+    return s && s.length > 400 ? s.slice(0, 400) + '…' : safe;
   } catch {
-    return String(args);
+    return String(safe);
   }
 }
 
