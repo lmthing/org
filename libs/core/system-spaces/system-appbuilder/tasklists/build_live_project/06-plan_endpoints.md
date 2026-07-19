@@ -24,7 +24,10 @@ Each endpoint is `{ name, route, purpose, tables, fields }`:
   list before resolving and rename any collision.
 - `route` — the file route with its HTTP method LAST (`cost-lines/GET`, `bookings/[id]/PATCH`); methods
   GET|POST|PUT|PATCH|DELETE.
-- `tables` — the table name(s) from `plan_tables.tables` it reads/writes.
+- `tables` — the table name(s) it reads/writes, using the names `implement_tables` actually RESOLVED
+  (the written ground truth — a write-time correction may have altered a planned name). Fall back to
+  `plan_tables.tables` only for a name `implement_tables` confirms `ok`. An endpoint planned against a
+  table that never landed ships a handler that builds clean and 500s at runtime.
 - `fields` — the EXACT keys of ONE item in the response (`items[0]`), each as `'key: type'`. This is the
   SINGLE SOURCE OF TRUTH for the response shape: `implement_endpoints` emits exactly these keys and
   `implement_pages` reads exactly these keys — so the two never disagree on a name. For a table-backed

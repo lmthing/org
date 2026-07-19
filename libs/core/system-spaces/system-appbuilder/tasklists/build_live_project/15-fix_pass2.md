@@ -21,7 +21,11 @@ file): wrong/re-cased field → read the endpoint's `fields` verbatim off `data.
 the component does not declare or has no data → match `plan_components` props, drop unfed markup rather than
 hardcode; a bad import (`react-router`/`@radix-ui`/relative `use-api`) or non-exported `@app/runtime` name →
 import only the real `@app/runtime` exports or drop it; a component not in the `implement_components` ok-list
-→ remove the import and render inline; `console`/`window` → remove; a demanded null-guard → coalesce first.
+→ remove the import and render inline; `console`/`window` → remove; a demanded null-guard → coalesce first;
+a `phase: 'gate'` error naming a table absent from `database/` → re-point the query at the drifted real
+table name (check `plan_tables.tables` + `listProjectDir('database').entries`), or — when no existing table
+holds that record kind — create the missing table with `writeProjectTable` (valid snake_case name, columns
+from the endpoint's declared `fields`, schema-only, never invented rows) and re-point the file at it.
 Preserve every endpoint and section the file already has. Emit one statement:
 
 ```typescript

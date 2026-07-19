@@ -29,13 +29,25 @@ has tables/pages, this is NOT a from-scratch build: name every table/page for an
 its REAL, existing name — never invent a parallel one — and only add a table/page for a concept nothing
 existing covers yet.
 
+**And an INCREMENTAL request BOUNDS your membership.** When the project already has tables/pages and the
+request names a specific addition or change, plan ONLY the artifacts the request names plus what those
+artifacts structurally require to work (the table a requested view must read, the endpoint a requested
+form must call, a column an existing table needs for the change). Do NOT re-model, rename, or newly model
+unrelated concepts in the same pass: source material that earlier builds left unmodeled is NOT an
+invitation to model it now, and an existing table/page/endpoint the request does not touch is left
+exactly as it is. A grow pass that ships artifacts nobody asked for is churn the user has to distrust —
+scope is part of correctness.
+
 Every user story must be SERVED by the shape you plan — trace each story to the tables that hold its
 data, the endpoints that read it, and the page the user opens to do it. Substitute REAL values derived
 from the material for every `<…>` (never leave a placeholder). Plan for an app the user OPENS:
 
 - **tables** — one per KIND of record the material actually contains AND can fill with real rows. Do NOT
   list a table the sources have no rows for (a created-but-empty table is the #1 failure — decide that
-  HERE, where you can see everything; downstream nodes may not drop what you list).
+  HERE, where you can see everything; downstream nodes may not drop what you list). Table names are
+  snake_case identifiers (underscores) — the table writer REJECTS any other shape, so a
+  hyphenated/kebab-case name minted here guarantees a downstream write failure; endpoint routes and ids
+  are kebab-case. Never let the two conventions cross.
 - **every parsed source needs a home — check this before you finalize the list.** `read_sources.summary`
   sometimes carries a document that doesn't fit any of the domain-specific tables you're otherwise
   planning (a one-off receipt, a stray note unrelated to the app's main subject). Its stated values still
