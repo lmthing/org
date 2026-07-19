@@ -9,7 +9,10 @@ tasklist + cron + internal low-stock event pipeline) + a live app (recipes/meal_
 substitutions). Six fixtures all attached on step 1 (+ dish-photo re-sent on step 4).
 
 ## Runs
-- R1 · run 1 (port 32895) · launched, polling from step 01.
+- R1 · run 1 (port 32895) · launched, polling from step 01. STOPPED at failing step 2 (hold decision).
+- R2 · run 2 (port 34433) · FRESH full run @ main d549fc6 (post appbuilder build-completeness gate +
+  durability batch + user-thing repairs). Mission: drive to the operational-space wall, capture the
+  precise L2 requirements spec for the architect scaffold (lane 06's subsystem).
 
 ## Notes / observations
 - knowledge/organizing/split/recipes.md already exists: "recipe collection is mostly DATA; make a
@@ -19,6 +22,15 @@ substitutions). Six fixtures all attached on step 1 (+ dish-photo re-sent on ste
   internal event pipeline. Watch step 2/7 for whether that space gets created.
 
 ## Ledger lines
+- R2 · migration · n/a · scenario.yaml pre-existing, --plan re-validated clean (25 steps, 6/6
+  fixtures attached) · no migration work needed.
+- R2 · step 1 · PASS · run 2 · same evidence shape as R1 step 1: photos→vision, docs→dispatch→
+  reader/sheet, audio-only tokens in reply w/ zero audio delegates, all fixture facts cited, plain
+  offer, 0 asks, 2 recovered typecheck_errors.
+- R2 · step 2 · IN FLIGHT at main's PARK order (budget throttle) · run 2 left playing unattended ·
+  judge from disk on resume (runs/2/step-02.json onward). In-flight: advice-only scaffold shape
+  confirmed again (knowledge+answer+research_and_store, no tasklist/cron/event writers seen);
+  appbuilder healthier than R1 (no 474K eviction; meal-plan/shopping/dashboard pages authored).
 - R1 · step 1 · PASS · photos→vision, docs→files/dispatch, audio transcribed sync (audio-only tokens
   in reply, no audio delegate), all fixture facts cited, build offer present, 0 errors/asks.
 - R1 · step 2 · FAIL (multi-cause, mostly NOT mine) · run 1 · reported to main, awaiting sequencing.

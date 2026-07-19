@@ -371,3 +371,7 @@ honestly rather than claiming one that didn't happen (same caveat as step 3 in R
 
 ## Summary for main (see SendMessage) — nothing here is in my owned lane (home-renovation.md knowledge
 + ledger only); every finding above is cross-lane and reported, not fixed, by design.
+
+## Round 3 — NO-REGRESSION RECHECK on the new brain (2026-07-19, main @ d549fc6 + uncommitted retract_fact/architect-04/vision edits in tree). Fresh full run 4 (`runs/4`, port 34815). PARKED mid-run by orchestrator budget throttle after judging step 1; run left playing unattended (evidence-accumulation mode — stop-on-fail overridden by park order; later steps may sit on corrupted state, attribute accordingly). Resume: judge runs/4/step-NN.json from disk, NEVER --resume. No trace.md this round — sessions.log + step-NN.json only.
+
+R3 · step 1 · (judged, no fix) · verify=PASS · run 4 · all 7 attachments truly read (cq2.pdf honest {ok:false} image-only; NPS PDF parsed + flagged unrelated; memo facts VO-114/padstone/€1,250/Delta Scaffolding/Aegean €340 cited; XLS-RENO-V7 in inventory); unprompted offer precedes any build (spaceCount 0, built:false); 1 RECOVERED prose-leak typecheck_error (metric); token-landing deferred to step 2 per expect's "this turn or the next". No regression vs R1.

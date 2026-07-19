@@ -506,3 +506,15 @@ Keramikos Amsterdam `CTR-KMA-2026-04` ✓; WHL-0007 `payment_status:unpaid`/`is_
 
 Session checkpoint: zero edits made this session (judging only, per the gate — awaiting main's OK
 before any further edit). See handoff.md for the full DECISION PACKET sent to main.
+
+## R6 — charter session (appbuilder endpoint→table gate + scope rule)
+
+R6 · charter (06 run 25 step 10 class) · L1 (proposed, NOT yet applied) · 8 files in
+build_live_project/{03-plan_app,05-implement_tables,06-plan_endpoints,12-compile_pass1,
+13-fix_pass1,14-compile_pass2,15-fix_pass2,16-finalize}.md · verify=PENDING (awaiting main's OK) ·
+Root chain fully pinned on run 25 evidence: kebab-case table name minted at plan_app → host
+assertTableName rejection → no retry in implement_tables example → endpoints written against the
+known-missing table explicitly trusting a gate that has no endpoint→table check (ctx.db dynamic,
+buildApp clean, unknownColumnsIn skips unknown tables). Run 29 step 10 judged LEGITIMATE (real
+column-add, verified on snapshot schema+sqlite) — no fix from it. Full proposal + verify plan in
+handoff.md R6 header; decision packet sent to main. Zero edits this session so far.
