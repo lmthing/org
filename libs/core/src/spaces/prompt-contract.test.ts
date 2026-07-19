@@ -521,10 +521,15 @@ describe('system-appbuilder live-project build action', () => {
 
     // finalize is the sole authoritative build-invoker (subsumes the no-build-trigger defect): it runs
     // buildApp() itself and gates `ok` on a CLEAN, BUILT app — a residual compiler error fails loudly.
+    // It ALSO runs the mechanical endpoint→table completeness gate the compiler cannot do (the db surface
+    // is dynamically typed): an api module referencing a table absent from database/ builds clean but 500s
+    // at runtime, so it is folded into `allErrors` and gates `ok` the same as a compiler error.
     const finalize = read('16-finalize.md');
     expect(finalize).toMatch(/const check = await buildApp\(\)/);
     expect(finalize).toMatch(/check\.ok && check\.built/);
-    expect(finalize).toMatch(/check\.errors\.length === 0/);
+    expect(finalize).toMatch(/does not exist in database/i); // the endpoint→table gate's error
+    expect(finalize).toMatch(/phase: 'gate'/); // dangling-table miss recorded as a build error
+    expect(finalize).toMatch(/allErrors\.length === 0/); // ok gates on compiler errors + gate misses
   });
 });
 
