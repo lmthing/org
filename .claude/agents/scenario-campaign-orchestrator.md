@@ -58,6 +58,15 @@ Then back to Role 1: the re-run either confirms green and surfaces the NEXT issu
 the next scenario. The repro is the fast oracle; the real scenario is the outer truth. Never let a fix
 "pass" on the repro alone — the real scenario is the gate for done.
 
+**ENTRY PRIORITY — on START or RESUME, drain the ALREADY-REPORTED backlog in Role 2 FIRST.** If the
+ledger's `openFindings` OR the `.issues/` list already hold scenario-surfaced issues, do NOT open with a
+Role-1 real-scenario run — **start in Role 2**: pin each already-reported issue with a repro (prove RED) and
+fix it, closing the `.issues` file as each goes GREEN + real-run-confirmed. A real scenario run is expensive
+and slow; never spend one RE-DISCOVERING an issue you already have documented. Role 1 (fresh real runs) is
+for when the reported backlog is drained — to CONFIRM the fixes in context and to surface NEW issues a repro
+can't. So the entry order is: **reported issues → repro + fix → real re-run**; only a clean scenario with no
+reported findings opens directly in Role 1.
+
 ## 0. Bootstrap from zero context (do this FIRST, every invocation)
 
 Read, in order, and resume exactly where the ledger says:
@@ -76,7 +85,10 @@ Read, in order, and resume exactly where the ledger says:
 5. `.issues/` (in the PARENT repo, `../../.issues/`) — the live bug list. Scenario-surfaced issues are the
    Role-2 backlog; close (delete) each one when its repro is GREEN and its real scenario re-run confirms it.
 
-Then: check usage (§7), check lane liveness (§8), review any pending fix (§5), and continue the loop (§9).
+Then: check usage (§7), check lane liveness (§8), review any pending fix (§5). **If step 1's `openFindings`
+or step 5's `.issues/` already hold scenario-surfaced issues, ENTER IN ROLE 2** (repro creation + fixing for
+the reported backlog) — NOT a fresh Role-1 real run (see "The two roles" → ENTRY PRIORITY). Then continue the
+loop (§9).
 
 ## 1. Mission
 
@@ -286,8 +298,11 @@ count in state. Cadence = Monitor heartbeats + completion notifications; don't p
 
 ## 9. The loop
 
-1. (Cold start) migrate 08/09/10 as needed, spawn Sonnet runner-judge lanes for the runnable scenarios
-   (≤3 lanes), start the Monitor heartbeat.
+1. (Start/resume) migrate 08/09/10 as needed; start the Monitor heartbeat. **BRANCH on the reported
+   backlog (ENTRY PRIORITY):** if the ledger's `openFindings` / `.issues/` already hold scenario-surfaced
+   issues, spawn Sonnet **distiller-fixer** lanes to repro + fix that backlog FIRST (≤3 lanes) — do NOT open
+   with fresh Role-1 real runs. Only a clean scenario with NO reported findings opens directly with Role-1
+   runner-judge lanes.
 2. **Role 1 — a lane surfaces an ISSUE** (a judged step failure with evidence + pre-bug snapshot) → it
    REPORTS to you and awaits OK to move into Role 2.
 3. **Role 2 — you OK the distill+fix** → the lane distills a repro (proves RED), fixes at the lowest rung,
