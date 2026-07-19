@@ -1,0 +1,56 @@
+{
+  "title": "Flight Legs",
+  "description": "All 6 flight legs chronologically — Aegean, EgyptAir, Precision Air — with airline, flight number, date, departure/arrival times, route, booking reference, and contextual notes.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "leg_number": {
+      "type": "number",
+      "description": "Chronological leg order 1–6"
+    },
+    "airline": {
+      "type": "string",
+      "description": "Airline name (Aegean, EgyptAir, Precision Air)"
+    },
+    "flight_number": {
+      "type": "string",
+      "description": "Flight number (A3932, TC144, etc.)"
+    },
+    "date": {
+      "type": "string",
+      "description": "Departure date ISO (2026-08-03 etc.)"
+    },
+    "departure_time": {
+      "type": "string",
+      "description": "Scheduled departure time (HH:MM 24h)"
+    },
+    "arrival_time": {
+      "type": "string",
+      "description": "Scheduled arrival time (HH:MM 24h, +1 for next-day arrivals)"
+    },
+    "route_code": {
+      "type": "string",
+      "description": "IATA route code (ATH→CAI, CAI→DAR, etc.)"
+    },
+    "origin": {
+      "type": "string",
+      "description": "Origin airport IATA code"
+    },
+    "destination": {
+      "type": "string",
+      "description": "Destination airport IATA code"
+    },
+    "booking_ref": {
+      "type": "string",
+      "description": "Booking reference / PNR code"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Baggage rules, terminal info, connecting context"
+    }
+  }
+}

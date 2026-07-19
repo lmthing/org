@@ -1,0 +1,3 @@
+# swimming-conditions
+
+The north coast (Nungwi area) offers more consistent swimming conditions compared to the east and south coasts, according to the trip notes. Kiwengwa Beach (Ayla Beach House) is on the east coast — the material notes that low tide can limit swimming access on the east coast, but does not provide Kiwengwa-specific depth, current, or safety information. No details about Nungwi beach names, facilities, or entry points are included.

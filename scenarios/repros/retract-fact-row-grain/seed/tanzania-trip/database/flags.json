@@ -1,0 +1,40 @@
+{
+  "title": "Flags & Issues",
+  "description": "Every flagged issue and action item: Ngorongoro entry fee discrepancy, Emmanuel's unreported ~5,000 TZS ranger tip, and the Maasai bracelet souvenir purchase. Each flag shows severity, description, action required, and related contact. 3 flags.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "severity": {
+      "type": "string",
+      "description": "Severity level: warning, action-needed, info"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short flag title for glanceability"
+    },
+    "description": {
+      "type": "string",
+      "description": "Full issue description with all known details"
+    },
+    "source": {
+      "type": "string",
+      "description": "Where the flag originated: PDF-vs-spreadsheet, voice-memo, cash-expense"
+    },
+    "action_item": {
+      "type": "string",
+      "description": "Recommended action — what to do, who to contact"
+    },
+    "related_contact": {
+      "type": "string",
+      "description": "Contact name this action relates to (e.g. Richard)"
+    },
+    "impact_usd": {
+      "type": "number",
+      "description": "Estimated financial impact in USD (if known)"
+    }
+  }
+}

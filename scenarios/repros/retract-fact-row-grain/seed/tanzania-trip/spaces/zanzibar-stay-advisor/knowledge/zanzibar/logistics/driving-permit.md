@@ -1,0 +1,3 @@
+# driving-permit
+
+A local Zanzibar Driving Permit is required in addition to an International Driving Permit (IDP). The cost is $15 per driver, with validity of approximately 3 months. Most rental companies arrange this permit — provide a license photo at least 24 hours before arrival. Police checkpoints are frequent; carry both the IDP and the local permit. A screenshot of the permit is acceptable at checkpoints.

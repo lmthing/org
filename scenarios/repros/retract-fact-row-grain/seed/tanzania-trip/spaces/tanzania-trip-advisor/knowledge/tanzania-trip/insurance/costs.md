@@ -1,0 +1,3 @@
+# costs
+
+From the trip cost spreadsheet: Zanzibar mandatory travel insurance from ZIC costs $44 per person. For two travelers (Vasileios Kefallinos and Athina Mari), the total is $88. This is listed under the 'insurance' category in the spreadsheet. The supplied material does not state whether this is a one-time fee per entry, a daily rate, or valid for the entire stay; whether it is paid in cash on arrival, online in advance, or included in a tour package; whether any additional taxes or fees apply; or whether children or residents have different rates. The documents contain no receipt or confirmation of payment for this insurance, so its payment status is unconfirmed from the available material.

@@ -1,0 +1,48 @@
+{
+  "title": "Ngorongoro Conservation Area Tariffs",
+  "description": "Official NCAA tariff structure from the Ngorongoro Conservation Area PDF — sections A through P covering entry permits, crater service, vehicle permits, camping, activities, penalties, and visitor guidelines. All rates for non-East African citizens in USD (or TZS where noted). 40+ rows.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "section": {
+      "type": "string",
+      "description": "Tariff section letter: A through P"
+    },
+    "section_title": {
+      "type": "string",
+      "description": "Full section title (e.g. 'Entry Permit')"
+    },
+    "item_label": {
+      "type": "string",
+      "description": "Specific line item label (e.g. 'Age 16+', 'Children 5–16', 'Up to 2000kg')"
+    },
+    "rate_non_ea_adult": {
+      "type": "number",
+      "description": "Rate in USD for non-East African adult/standard (or TZS amount if specified as TZS)"
+    },
+    "rate_child": {
+      "type": "number",
+      "description": "Rate for children 5–16 where applicable (USD or TZS)"
+    },
+    "rate_child_under_5": {
+      "type": "string",
+      "description": "Rate for children under 5 (usually 'Free' or 'N/A')"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Currency of the rates: USD or TZS"
+    },
+    "per_unit": {
+      "type": "string",
+      "description": "Per what: per person/24h, per vehicle/trip, per landing, per person, per vehicle"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional rules, constraints, or context from the PDF"
+    }
+  }
+}

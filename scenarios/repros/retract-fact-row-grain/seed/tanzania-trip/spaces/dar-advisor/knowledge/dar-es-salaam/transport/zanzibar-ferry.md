@@ -1,0 +1,5 @@
+# zanzibar-ferry
+
+The trip journal states: "Dar es Salaam: arriving by ferry from Zanzibar." The Zanzibar beach leg ends with checkout from Ayla Beach House (Kiwengwa) on Aug 17, so the ferry crossing is implied for that day. No ferry operator, vessel name, departure port (Stone Town vs. elsewhere), arrival dock in Dar es Salaam, schedule, duration, fare, or booking confirmation exists in any supplied document — including the trip-costs spreadsheet, which lists no ferry line item. The Tanzania e-visa ($50/person, already covered) is sufficient for entry at the Dar port; no separate Zanzibar exit documentation is noted beyond the mandatory Zanzibar travel insurance already purchased.
+
+Gap: the ferry is unbooked and unpriced. No ticket, operator, or timetable appears anywhere in the supplied material.

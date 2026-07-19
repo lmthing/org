@@ -1,0 +1,3 @@
+# egypt-evisa
+
+Egypt requires a multiple-entry e-visa because the trip itinerary enters Egypt twice: Cairo stopover 1 (Aug 3–5) and Cairo stopover 2 (Aug 19–20). The cost is $65 per person, totaling $130 for both travelers. Each traveler must apply separately. A mandatory printed copy of the e-visa must be carried. The supplied material does not state the application portal URL, processing time, or exact validity window — confirm these on the official Egyptian e-visa portal before applying.

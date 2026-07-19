@@ -1,0 +1,3 @@
+# logistics
+
+Lake Manyara is Day 2 (Aug 8, 2026) of the 3-day Suricata Safaris group camping safari. Overnight accommodation is at Twiga Camp Site (full board), shared with the Tarangire night (both nights at Twiga). The safari operator is Suricata Safaris Ltd; contact Richard at +255 763 222 293 or info@suricatasafaris.com. The supplied material does not specify the exact departure time from Twiga to Lake Manyara, game-drive duration, or return time. The Ngorongoro day (Day 3) switches accommodation to Jevas Hotel (half-board). 

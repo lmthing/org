@@ -242,6 +242,8 @@ export class ScenarioRunner {
     projectId,
     runId,
     resumeFrom = null,
+    seedDir = null,
+    seedProject = null,
     outDir,
     through,
     keepServer = false,
@@ -257,6 +259,10 @@ export class ScenarioRunner {
     this.projectId = projectId;
     this.runId = runId;
     this.resumeFrom = resumeFrom; // { runId, from? } | null
+    // Repro mode: seed real STATE from a snapshot-shaped dir but start a FRESH session (no history
+    // reconnect) — reproduces a bug from state alone, sidestepping the broken session-resume path.
+    this.seedDir = seedDir; // absolute path to a snapshot-shaped seed dir | null
+    this.seedProject = seedProject; // the project id inside the seed
     this.outDir = outDir;
     this.through = through ?? this.steps.length;
     this.keepServer = keepServer;
@@ -309,6 +315,13 @@ export class ScenarioRunner {
       if (steps.length !== (src.stepCount ?? steps.length)) {
         this.log(`⚠️ resume: current scenario has ${steps.length} steps but run ${this.resumeFrom.runId} recorded ${src.stepCount} — step numbers may have shifted`);
       }
+    } else if (this.seedDir) {
+      // Repro seed: copy the state (the seed dir is snapshot-shaped) but leave the session fresh —
+      // `resumeFrom` is null, so `resumeSessionId` stays null below and the project has no history.
+      if (!existsSync(this.seedDir)) throw new FatalError(`no seed dir at ${this.seedDir}`);
+      seedFrom = this.seedDir;
+      activeProjectId = this.seedProject ?? projectId;
+      projectId = activeProjectId;
     }
 
     const runId = this.runId ?? nextRunId(scenarioDir);
@@ -352,8 +365,8 @@ export class ScenarioRunner {
       const pod = new Pod({ base: user.pod, token: user.token, onLocalRestart: () => restartRun(run) });
 
       // Fresh run → create the project (unless THING must create its own via `bootstrap: thing`).
-      // Resume → the project came in with the snapshot.
-      if (!this.resumeFrom && !bootstrapByThing) {
+      // Resume / repro-seed → the project came in with the snapshot.
+      if (!this.resumeFrom && !this.seedDir && !bootstrapByThing) {
         try {
           await pod.createProject(projectId);
         } catch (e) {

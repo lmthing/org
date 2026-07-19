@@ -1,0 +1,56 @@
+{
+  "title": "Trip Itinerary",
+  "description": "8-segment day-by-day itinerary for Vasilis & Athina's Aug 3–20, 2026 Tanzania trip — every stay with dates, lodging name, city/country, night count, and cost from the spreadsheet. Chronological order.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "segment": {
+      "type": "number",
+      "description": "Ordinal segment number 1–8 for ordering"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable segment label (e.g. 'Cairo — Arrival Stopover')"
+    },
+    "city": {
+      "type": "string",
+      "description": "City or area name (Cairo, Arusha, Tarangire, Ngorongoro, Stone Town, Kiwengwa, Dar es Salaam)"
+    },
+    "country": {
+      "type": "string",
+      "description": "Country (Egypt, Tanzania)"
+    },
+    "date_start": {
+      "type": "string",
+      "description": "Start date ISO (2026-08-03 etc.)"
+    },
+    "date_end": {
+      "type": "string",
+      "description": "End date ISO (2026-08-20 etc.)"
+    },
+    "nights": {
+      "type": "number",
+      "description": "Number of nights in this segment"
+    },
+    "lodging_name": {
+      "type": "string",
+      "description": "Hotel/lodge/camp name"
+    },
+    "meal_plan": {
+      "type": "string",
+      "description": "Meal plan if applicable (FB, HB, or empty for self-catered/hotel default)"
+    },
+    "cost_usd": {
+      "type": "number",
+      "description": "Lodging cost in USD from the spreadsheet (or total package cost for safari)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra context: flight connections, activities, tips from trip journal"
+    }
+  }
+}

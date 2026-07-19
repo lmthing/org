@@ -1,0 +1,6 @@
+---
+type: string
+variable: safariKnowledge
+---
+
+The safari component of the Arusha-based trip covers the 3-day group camping safari (Aug 7–9) booked through Suricata Safaris Ltd, the northern circuit parks it visits, the payment logistics handled by Richard in Arusha, and the Ngorongoro Conservation Area contact offices and tariff framework. Arusha is the launch point for Tarangire National Park, Lake Manyara National Park, and Ngorongoro Crater — the classic northern Tanzania safari circuit. The safari package is $1,200 total for two travelers; a $240 deposit (20%) is already paid, and the $960 balance is due on arrival in Arusha. Richard (+255 763 222 293 / info@suricatasafaris.com) is the Suricata Safaris office contact who handles payment — cash (post-2009 USD notes) preferred, or online via Pesapal with a +5% surcharge. The Ngorongoro Conservation Area Authority publishes official tariffs for entry permits, crater service fees, camping fees, and vehicle permits, with contact offices reachable from the Arusha region. The supplied material does not state whether the Suricata package price includes park fees or whether these are charged separately on arrival — the trip-costs spreadsheet lists individual Ngorongoro, Tarangire, and Lake Manyara park fee line items that may or may not be outside the $1,200 safari package.

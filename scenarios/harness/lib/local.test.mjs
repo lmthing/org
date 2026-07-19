@@ -92,6 +92,23 @@ describe('snapshotProject + seedRun', () => {
     expect(existsSync(join(dest.dataDir, 'store-apps', 'catalog.json'))).toBe(true);
     expect(existsSync(join(dest.dataDir, '.lmthing', 'system'))).toBe(false);
   });
+
+  it('seeds from a BARE seed (repro fixture: the dir IS the .lmthing payload, no wrapper)', () => {
+    const sc = mkTmp();
+    // A committed repro seed is stored de-wrapped (no `.lmthing/` dir) so it escapes the gitignore:
+    // the seed dir's contents ARE the payload.
+    const bare = join(sc, 'seed');
+    mkdirSync(join(bare, 'tanzania-trip', 'database'), { recursive: true });
+    writeFileSync(join(bare, 'tanzania-trip', 'database', 'flags.json'), '{}');
+    mkdirSync(join(bare, 'tanzania-trip', '.data'), { recursive: true });
+    writeFileSync(join(bare, 'tanzania-trip', '.data', 'app.db'), 'SQLITE');
+
+    const dest = { dataDir: join(sc, 'runs', '9', 'data') };
+    seedRun(dest, bare);
+    // wrapped back into `.lmthing/` at the destination
+    expect(readFileSync(join(dest.dataDir, '.lmthing', 'tanzania-trip', '.data', 'app.db'), 'utf8')).toBe('SQLITE');
+    expect(existsSync(join(dest.dataDir, '.lmthing', 'tanzania-trip', 'database', 'flags.json'))).toBe(true);
+  });
 });
 
 describe('latestSessionId', () => {

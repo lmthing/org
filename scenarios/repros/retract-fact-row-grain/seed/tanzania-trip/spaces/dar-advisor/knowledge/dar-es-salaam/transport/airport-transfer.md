@@ -1,0 +1,5 @@
+# airport-transfer
+
+The flight itinerary confirms EgyptAir DAR→CAI departing at 05:20 on Aug 19. This extremely early departure requires a pre-dawn transfer from Sunny Shore B&B to Julius Nyerere International Airport — a drive that typically takes 30–45 minutes in light traffic, implying a pickup around 03:30–04:00. No transfer provider, booking, cost, or contact exists in any supplied document. The trip-costs spreadsheet lists no airport-transfer line item for Dar es Salaam. Sunny Shore B&B has no phone number or email listed in the trip journal (unlike other accommodations that do), so whether the B&B arranges transfers is unknown.
+
+Gap: no airport transfer is booked, priced, or arranged. The 05:20 departure makes this a critical missing piece — missing the flight would break the Cairo stopover (Ramses Hilton, Aug 19–20) and the final ATH leg.

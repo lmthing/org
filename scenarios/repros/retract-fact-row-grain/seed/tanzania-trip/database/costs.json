@@ -1,0 +1,52 @@
+{
+  "title": "Trip Costs",
+  "description": "Every numeric figure from the spreadsheet organized by category — flights, lodging, safari, park fees, visas, insurance, dining, permits, souvenirs. Includes amounts, currency, paid/owing status, and payment method. 20+ rows covering the complete financial picture.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "category": {
+      "type": "string",
+      "description": "Cost category: flights, lodging, safari, park-fees, visas, insurance, dining, permits, souvenirs"
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable line item label"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Numeric amount (in the currency specified)"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Currency code: USD, EUR, TZS"
+    },
+    "per_person": {
+      "type": "boolean",
+      "description": "True if the amount is per person; false if total for 2 pax"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Multiplier — e.g. 2 for 2 travelers, used to compute line total"
+    },
+    "paid": {
+      "type": "number",
+      "description": "Amount already paid in this currency"
+    },
+    "owing": {
+      "type": "number",
+      "description": "Amount still owing in this currency"
+    },
+    "payment_method": {
+      "type": "string",
+      "description": "How to pay: cash (post-2009 USD), Pesapal, credit card, bank transfer, online portal name"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Context: booking reference, URL, deadlines, restrictions"
+    }
+  }
+}

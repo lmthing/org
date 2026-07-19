@@ -1,0 +1,6 @@
+---
+type: string
+variable: voice-memoKnowledge
+---
+
+Ground-level voice-memo notes from Vasilis's Ngorongoro crater day, capturing two informal / unadvertised cash items encountered at the crater rim and gate that are separate from the official NCAA park-fee tariff. The research findings (derived from Vasilis's voice-memo notes tagged as specialistFacts / crater-day notes) describe these incidents, but THE ORIGINAL VOICE-MEMO TRANSCRIPT ITSELF was not supplied among the attached documents — only the research summary's paraphrase is available. These facts are therefore SECOND-HAND: all specifics below (amounts, who said what, the exact circumstances) come from the research report's distillation of the memo, not from the raw recording or a verbatim transcript. When answering, prefer hedging language ("per the research summary…", "the notes indicate…", "reportedly…") and flag that the amounts are approximate and should be confirmed with Richard (Suricata Safaris, +255 763 222 293) before settling the safari balance.

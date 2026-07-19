@@ -1,0 +1,3 @@
+# insect-repellent
+
+DEET-based insect repellent is described as essential for this trip — the tanzaniamemories.md document lists it under "Tools & resources" as a key item. The material covers both the safari circuit (Tarangire, Lake Manyara, Ngorongoro) and Zanzibar, where mosquito-borne illnesses are a concern. The supplied material does not specify a recommended DEET concentration percentage, brand, or additional precautions such as malaria prophylaxis or mosquito-net availability at the listed accommodations.

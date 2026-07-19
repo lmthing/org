@@ -1,0 +1,33 @@
+id: retract-fact-row-grain
+from: 06-tanzania#15
+bug: >
+  retract_fact deletes WHOLE rows (and neighbouring rows) for a field-level / single-item retraction —
+  e.g. "scrap that ranger-tip line" wiped multiple safari rows, losing the Ngorongoro day (run 29).
+  Correct behaviour scraps ONLY the one referenced item; nothing else is collateral-deleted.
+# VALIDATED (revert-test): RED 1/4 on eb67ebb^ (pre-fix — run 3 deleted the whole Ngorongoro
+# safari_days row while claiming "the ranger tip has been removed"); GREEN 0/1 on HEAD (the committed
+# eb67ebb fix). ~50s/run. The bug is stochastic (~25%), which is why the ×N reproduction RATE is the
+# oracle, not a single replay.
+red_on: "eb67ebb^"
+green_on: "eb67ebb"
+seed: ./seed
+seedProject: tanzania-trip
+runs: 6
+
+# The seeded state (run 31 step-10) carries the full trip: 8 itinerary, 3 safari_days, 20 costs,
+# 11 notes, 10 contacts, 43 tariffs, 3 flags (one of which is the ~5,000 TZS ranger-tip flag). A FRESH
+# session is told to scrap the ranger-tip line. The oracle is COLLATERAL DAMAGE: every other table's
+# rows must survive; at most the single ranger-tip flag may go.
+steps:
+  - say: "Actually scrap that ranger-tip line — turns out it was already included, we didn't pay anything extra."
+    expect:
+      - only the ranger-tip item is removed/resolved; no other row in any table is collateral-deleted (the run-29 failure was losing whole safari rows)
+
+assert:
+  - db safari_days count == 3     # the run-29 victim class — safari-day rows must NOT be collateral-deleted
+  - db itinerary count == 8
+  - db costs count == 20
+  - db contacts count == 10
+  - db notes count == 11
+  - db tariffs count == 43
+  - db flags count >= 2           # at most the ONE ranger-tip flag scrapped — never a multi-row wipe

@@ -246,11 +246,18 @@ export function snapshotProject(run, stepNum) {
   return dst;
 }
 
-/** Restore a snapshot into a run's (empty) data dir BEFORE the server boots. */
-export function seedRun(run, fromSnapshotDir) {
-  const srcLm = join(fromSnapshotDir, '.lmthing');
+/**
+ * Restore a seed into a run's (empty) data dir BEFORE the server boots. Two seed shapes are accepted:
+ *   - a SNAPSHOT (from `snapshotProject`) — has a `.lmthing/` payload dir + a sibling `store-apps/`;
+ *   - a BARE seed (a committed repro fixture) — the dir's CONTENTS are the `.lmthing/` payload directly
+ *     (project dirs like `<project>/database`, `<project>/.data`), stored WITHOUT a `.lmthing/` wrapper
+ *     so it escapes the blanket `.lmthing/` gitignore. `store-apps` is snapshot-only.
+ */
+export function seedRun(run, fromDir) {
+  const wrapped = join(fromDir, '.lmthing');
+  const srcLm = existsSync(wrapped) ? wrapped : fromDir; // bare seed: the dir itself is the payload
   if (existsSync(srcLm)) copyLmthingSansSystem(srcLm, join(run.dataDir, '.lmthing'));
-  const srcApps = join(fromSnapshotDir, 'store-apps');
+  const srcApps = join(fromDir, 'store-apps');
   if (existsSync(srcApps)) cpSync(srcApps, join(run.dataDir, 'store-apps'), { recursive: true });
 }
 

@@ -1,0 +1,3 @@
+# dar-flight
+
+Precision Air flight TC144, Dar es Salaam (DAR) to Arusha (ARK), August 5. Scheduled departure 10:50, arrival 12:00. Both travelers (Vasileios Kefallinos + Athina Mari) are on this flight as part of the 6-leg itinerary. Precision Air luggage restrictions favor soft bags — pack accordingly. On arrival, proceed to Serengeti Villa for a 2-night pre-safari stay (Aug 5–7, $62 USD total, phone +255 757 757 928). The supplied material does not state the terminal, baggage allowance weight/size limits, check-in deadline, or whether a transfer from ARK to Serengeti Villa is prearranged.

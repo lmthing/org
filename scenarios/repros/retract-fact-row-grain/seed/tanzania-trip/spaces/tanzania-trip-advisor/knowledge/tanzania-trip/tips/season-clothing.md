@@ -1,0 +1,3 @@
+# season-clothing
+
+August is peak safari season in northern Tanzania — ideal for wildlife viewing, including the Great Wildebeest Migration corridor. Ngorongoro Crater nights are cold: warm layers are essential. For safari clothing, the Decathlon Forclaz trekking line (available in Greece) is recommended as a primary source. The supplied material does not specify exact temperature ranges, a detailed packing list, or clothing recommendations for Cairo or Dar es Salaam segments.

@@ -1,0 +1,28 @@
+{
+  "title": "Trip Notes & Extras",
+  "description": "General-purpose table for one-off facts that don't fit dedicated tables: Stone Town courtyard photo description, trip journal extras (Claude AI context, packing tips, Cairo/Dar activities), specialist build error context, and any other reference material. Searchable.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "category": {
+      "type": "string",
+      "description": "Category: photo, journal, packing, activities, build-errors, reference"
+    },
+    "label": {
+      "type": "string",
+      "description": "Short label for the note"
+    },
+    "detail": {
+      "type": "string",
+      "description": "Full note content — what to know"
+    },
+    "source_origin": {
+      "type": "string",
+      "description": "Where the fact came from: trip-journal, photo-analysis, voice-memo, specialist-build"
+    }
+  }
+}

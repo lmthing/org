@@ -1,0 +1,3 @@
+# tanzania-evisa
+
+Tanzania requires an e-visa obtained online before travel at visa.immigration.go.tz. Visa-on-arrival is no longer available as of January 2025. The cost is $50 per person, totaling $100 for both travelers (Vasileios Kefallinos and Athina Mari). This is a single-entry visa. Both travelers must apply separately. The supplied material does not specify processing time, required documents beyond the application, or validity period — confirm these on the official portal before applying.

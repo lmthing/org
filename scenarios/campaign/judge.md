@@ -278,6 +278,17 @@ knows a framework change is in it.
 > `knowledge:write` capability, the per-task `capabilities:` field). An attempt that only ever reached
 > for L1 would have kept polishing prose while the real gap was a missing primitive.
 
+# Pin a confirmed bug with a repro (fast future verification)
+
+The resume-rerun above is the campaign's verify step, but it is SLOW and rides the fragile resume path.
+When a failure is **state-reproducible** — the bug is THING acting on existing DB/knowledge/app state,
+not on restored conversation history (retract/write/answer/persist/dump bugs — most of them) — also
+distill it into a **repro** ([`distill.md`](./distill.md)): seed the last-good snapshot, fire the one
+trigger, assert mechanically, ×N. A repro verifies a fix in ~1–2 min with a deterministic
+reproduction-rate oracle (RED k/N buggy → GREEN 0/N fixed), sidesteps the broken resume entirely, and
+guards the bug forever after. Do this once the failure is CONFIRMED (you have the failing step's
+evidence + the pre-bug snapshot); report the repro alongside the fix so the orchestrator commits both.
+
 # Fixing the scenario MECHANISM itself
 
 If the fault is not the product but the RUNNER / harness / snapshot (`sdk/org/scenarios/run-scenario.mjs`,

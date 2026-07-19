@@ -1,0 +1,40 @@
+{
+  "title": "Trip Contacts",
+  "description": "All trip contacts with name, role, phone, email, address, and category — Richard (Suricata office), Emmanuel (driver-guide), hotels, The Rock Restaurant, Ngorongoro offices. Every phone number is a tappable tel: link. 10+ contacts.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "Contact person or organization name"
+    },
+    "role": {
+      "type": "string",
+      "description": "Role or context (e.g. 'Office contact, safari payments and questions')"
+    },
+    "category": {
+      "type": "string",
+      "description": "Grouping: Safari Operator, Driver-Guide, Hotels, Restaurants, Ngorongoro Offices, Travelers"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number in E.164 or local format for tel: link"
+    },
+    "email": {
+      "type": "string",
+      "description": "Email address for mailto: link"
+    },
+    "address": {
+      "type": "string",
+      "description": "Physical address or location context"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Any extra context: when to contact, what to ask about"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "title": "Actual Payments",
+  "description": "What was actually paid at each stop/lodging segment — may differ from planned costs, especially for cash payments.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "itinerary_id": {
+      "type": "string",
+      "description": "Foreign key to the itinerary table"
+    },
+    "stop_name": {
+      "type": "string",
+      "description": "e.g. Cairo, Arusha, Safari, Zanzibar Stone Town, Zanzibar Kiwengwa"
+    },
+    "amount_paid": {
+      "type": "number",
+      "description": "Amount actually paid, in USD"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Currency code (default USD)"
+    },
+    "payment_method": {
+      "type": "string",
+      "description": "cash, card, or online"
+    },
+    "date": {
+      "type": "string",
+      "description": "Date of payment"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Any additional notes"
+    }
+  }
+}

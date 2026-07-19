@@ -1,0 +1,3 @@
+# fees
+
+Lake Manyara National Park entrance fee: $59 per person, peak season, non-East African adult. For two travelers the total is $118. This fee is itemized in the trip cost spreadsheet under park fees. The $1,200 Suricata Safaris package ($240 deposit paid, $960 balance due on arrival) covers the safari circuit including Tarangire, Lake Manyara, and Ngorongoro, but the spreadsheet lists park entrance fees as separate line items alongside the package — the supplied material does not state definitively whether these fees are included in the $1,200 package price or paid separately at the gate. Balance payment is in cash (post-2009 USD notes) or online via Pesapal with a 5% surcharge.

@@ -1,0 +1,3 @@
+> source: researched
+
+The ZIC mandatory inbound travel insurance is NOT a fixed-term policy (e.g., 3, 6, or 12 months). It is a single-trip policy valid for the entire duration of your stay in Zanzibar, up to a maximum of 90 days — matching the standard tourist visa validity. Once you leave Zanzibar, coverage ends. The $44 per person is a one-time premium per trip, not a recurring charge. There is no option to purchase a longer fixed-term policy; if you stay longer than 90 days (e.g., on an extended visa), you would need to check with ZIC directly, but the standard visitor policy is stay-based, capped at 90 days.

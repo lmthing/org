@@ -1,0 +1,5 @@
+# maasai-bracelet
+
+Per the research summary of Vasilis's voice-memo notes (specialistFacts / crater-day notes): at the Ngorongoro crater rim, a Maasai lady sold Vasilis two beaded bracelets for Athina Mari. Vasilis paid roughly **35,000 TZS** in shillings, estimated in the notes at approximately **$20–25 USD**. The exact amount is uncertain — the research summary itself flags this as approximate. This was an informal, person-to-person purchase at the rim, NOT a park fee and NOT captured in the trip-costs spreadsheet. It is a completed transaction, not an outstanding action item.
+
+Note: the original voice-memo recording or verbatim transcript was NOT provided among the attached documents. The figures above are the research report's best-effort paraphrase and may carry imprecision from the original memo. The supplied material (tanzaniamemories.md, trip-costs.xlsx, NCAA tariff PDF) contains no mention of this bracelet purchase.

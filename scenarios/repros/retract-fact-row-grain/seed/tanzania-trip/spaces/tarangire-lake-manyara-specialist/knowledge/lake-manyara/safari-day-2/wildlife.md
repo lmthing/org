@@ -1,0 +1,3 @@
+# wildlife
+
+August is peak dry season, when wildlife congregates around water sources. Lake Manyara is known for tree-climbing lions, flamingos, and diverse birdlife along the lake. The supplied material (trip notes and spreadsheet) confirms the safari timing is August 2026, peak season, but does not provide a detailed species list, specific viewing locations, or ranger/guide specifics for Lake Manyara. The material notes that Ngorongoro is cold and requires warm layers; no equivalent temperature or clothing notes are provided specifically for the Lake Manyara day.
