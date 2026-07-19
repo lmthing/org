@@ -82,7 +82,7 @@ steps:
       - the spreadsheet's rows land as DB rows — the boiler serial BLR-ZWB30-208841 from the warranties sheet reaches state — proof the xlsx was parsed
       - the plumbing receipt is filed from the PHOTO — its "receipt No. 2273 / €29.33" reaches state (vision, not the filename), and the bought item's product code STE-042455-P42455 reaches state from the other photo
       - the boiler voice note reaches state — engineer Costas Xenakis, next service 15th of January 2027, and the gas-meter reading 04821.6 land as a boiler service note/row (audio transcribed)
-      - the boiler MANUAL's own document number 6 720 613 085-00.1O lands in the boiler space's KNOWLEDGE (background the agent needs), not forced into a DB row
+      - the boiler MANUAL's own identifier lands in the boiler space's KNOWLEDGE (background the agent needs), not forced into a DB row — EITHER the cover figure label 6 720 613 085-00.1O OR the manual's footer document number 6 720 644 143 counts; both strings exist only inside the PDF, so either one proves it was read
       - NO RESEARCH HAPPENS in this whole build (no webSearch/webFetch yields) — he handed over everything it needed
 
   # 3 — the app must actually render.
