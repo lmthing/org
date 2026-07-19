@@ -96,7 +96,6 @@ declare interface DelegateOpts {
 }
 
 // Host-injected globals available in space functions and agent code
-declare function fetch(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status: number; text(): string; json(): unknown }>;
 declare function readDocument(attachmentId: string, opts?: { maxChars?: number }): Promise<{ ok: boolean; attachmentId: string; mediaType: string; filename?: string; kind: 'text' | 'unsupported'; text?: string; truncated?: boolean; error?: string }>;
 // integrationStatus(spaceId): presence-only config status of an installed integration
 // space in this project (injected for project-rooted sessions). missingRequired = the
@@ -364,8 +363,17 @@ export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
 // no longer emits them by default.
 const WRITE_PRIMITIVES_DTS = [EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, READ_FILE_RAW_DTS].join('\n');
 
+// Raw `fetch` gets the same internal-only treatment as the fs/shell primitives: it stays
+// INJECTED in every VM (the system-global webSearch/webFetch function BODIES run on it, and
+// they are typechecked against the full bundles below, not the model DTS) but is NOT declared
+// on any agent's model surface — a model-authored `fetch(...)` fails typecheck (clean,
+// retryable) instead of hand-rolling raw HTTP past the granted research functions and the
+// research_and_store pipeline (06-tanzania run 26: a scaffolded specialist bypassed its
+// instructed store path this way, and the provider API key surfaced in the yield evidence).
+export const NET_FETCH_DTS = `declare function fetch(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status: number; text(): string; json(): unknown }>;`;
+
 /** Full library DTS for the top-level session VM (all globals, incl. `ask`). */
-export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS].join('\n');
+export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS, NET_FETCH_DTS].join('\n');
 
 /**
  * Library DTS WITHOUT `ask`. Fork and delegate VMs run headless/autonomous — there is
@@ -374,4 +382,4 @@ export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DT
  * name 'ask'") and steers the model back to working from its seed/inputs, instead of
  * binding `undefined` (or, in a real PTY, blocking forever on stdin).
  */
-export const LIBRARY_DTS_NO_ASK = [TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS].join('\n');
+export const LIBRARY_DTS_NO_ASK = [TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS, NET_FETCH_DTS].join('\n');

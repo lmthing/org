@@ -71,13 +71,25 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     const names = declNames(forkPlain);
     // Orchestration/session globals absent (headless leaf) AND the generic fs primitives
     // absent — the whole family (readFileRaw/writeFileRaw/execShell/createScratch) is off the
-    // model surface unless the agent holds fs:scratch, which a fork role does not.
-    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw', 'readFileRaw', 'createScratch']) {
+    // model surface unless the agent holds fs:scratch, which a fork role does not. Raw `fetch`
+    // gets the same internal-only treatment (injected for system-function BODIES, never declared
+    // on a model surface): a scaffolded specialist hand-rolled raw HTTP past its instructed
+    // research_and_store path with it (06-tanzania run 26), so a model-authored fetch(...) must
+    // fail typecheck in EVERY context.
+    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw', 'readFileRaw', 'createScratch', 'fetch']) {
       expect(names, `read-only fork DTS must not declare ${absent}`).not.toContain(absent);
     }
-    for (const present of ['display', 'setActivity', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'fetch', 'currentTask']) {
+    for (const present of ['display', 'setActivity', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'currentTask']) {
       expect(names).toContain(present);
     }
+  });
+
+  it('raw fetch is declared in NO model surface, but stays in the full internal bundles (function bodies typecheck against those)', () => {
+    for (const surface of [session, forkPlain, forkDelegating, delegate]) {
+      expect(declNames(surface), 'model DTS must not declare fetch').not.toContain('fetch');
+    }
+    expect(LIBRARY_DTS).toMatch(/declare function fetch\(/);
+    expect(LIBRARY_DTS_NO_ASK).toMatch(/declare function fetch\(/);
   });
 
   it('a general fork does NOT declare the generic fs primitives (no fs:scratch grant)', () => {
