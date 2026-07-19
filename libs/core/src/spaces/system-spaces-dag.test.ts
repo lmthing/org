@@ -167,6 +167,20 @@ describe('shipped system spaces load + validate', () => {
     expect(rff['diagnose']!.capabilities).toBeUndefined();
     expect(rff['diagnose']!.dependsOn ?? []).toEqual([]);
 
+    // Step-9 fix (06-tanzania run 24): diagnose named the cause and computed the exact total MATCHING
+    // the user's stated target, then judged LOW (it saw several candidate mechanisms) → asked, no fix.
+    // The high-confidence rule now HIGH-confidences two determined cases: (a) the user stated the target
+    // and exactly one candidate correction reproduces it (the stated target SELECTS the mechanism), and
+    // (b) an arithmetically/structurally determined correction (duplicate/mis-sum). Reverting the rule
+    // back to "exactly one correction is conceivable" turns this RED.
+    const diag = rff['diagnose']!.instruction;
+    expect(diag).toMatch(/stated or confirmed the target value/i);
+    expect(diag).toMatch(/target SELECTS the mechanism/i);
+    expect(diag).toMatch(/arithmetically or structurally determined/i);
+    // The cause list names the cross-table duplicate + wrong-unit/currency causes (6-routing/step-8).
+    expect(diag).toMatch(/two\s+tables\s+that\s+both\s+feed\s+the\s+total/i);
+    expect(diag).toMatch(/wrong\s+unit\/currency/i);
+
     // fix is the SOLE writer, and it runs ONLY on a high-confidence diagnosis. Dropping the condition
     // (so it could write on a low-confidence guess) OR removing db:write both turn this RED.
     expect(rff['fix']!.role).toBe('general');
@@ -214,6 +228,11 @@ describe('shipped system spaces load + validate', () => {
     // → corrected to insert), and RE-READS to prove the row landed. Reverting any turns this RED.
     const w = write['write']!.instruction;
     expect(write['write']!.capabilities).toContain('db:write');
+    // Step-11 fix (06-tanzania run 24): the write node RE-READS with db.query on BOTH branches to
+    // prove the row landed — so it MUST also declare db:read. With db:write alone the node's db DTS
+    // is {insert;update;remove} and `db.query` fails typecheck (`Property 'query' does not exist`),
+    // the write is abandoned, and THING fabricates "recorded". Removing db:read turns this RED.
+    expect(write['write']!.capabilities).toContain('db:read');
     expect(w).toMatch(/classify\.operation/);
     expect(w).toMatch(/operation 'update' needs the rowId/);
     expect(w).toMatch(/!classify\.rowId/);
@@ -229,6 +248,41 @@ describe('shipped system spaces load + validate', () => {
     const heuristic = readFileSync(resolve(kdir, 'default.md'), 'utf8');
     expect(heuristic).toMatch(/unstated desired future behaviour/i); // a positive ambiguity signal
     expect(heuristic).toMatch(/just STORE|do not ask/i);              // the NEGATIVE signal
+    // Step-14 fix (06-tanzania run 24): a "don't forget" item carrying a riding amount was stored
+    // outright (classified db, never asked). The heuristic now makes precedence explicit — a
+    // keep-in-mind phrasing DOMINATES a riding storable value; the classify node BINDS that (ask even
+    // when a value is present). Weakening either back to "store when a value has a home" turns this RED.
+    expect(heuristic).toMatch(/riding stated amount|riding value|does NOT (?:qualify|license|downgrade)/i);
+    expect(heuristic).toMatch(/DOMINATES/);
+    expect(write['classify']!.instruction).toMatch(/EVEN IF\s+the\s+item\s+also\s+carries\s+a\s+concrete\s+storable\s+value/);
+  });
+
+  /**
+   * CLASS-GUARD (06-tanzania run 24 step-11): write_fact/02-write re-read with `db.query` but its
+   * frontmatter declared only `db:write` — so its composed db DTS was {insert;update;remove} and every
+   * `db.query` failed typecheck (`Property 'query' does not exist`), the write was abandoned, and THING
+   * fabricated success. The bug class is: a node that NARROWS its caps via a `capabilities:` array and
+   * calls `db.query`/`db.tables` in its body, but forgets `db:read`. (A node with NO `capabilities:`
+   * block inherits its agent's full app caps — incl. db:read — so it is exempt; only DECLARED-array
+   * nodes can drop the read grant.) This asserts EVERY such node across the shipped tasklists includes
+   * `db:read`. Removing db:read from write_fact/02-write (or any future re-reading node) turns this RED.
+   */
+  it('every capabilities-narrowed tasklist node that reads the db (db.query/db.tables) declares db:read', async () => {
+    const offenders: string[] = [];
+    for (const spaceName of ['system-architect', 'system-research', 'system-appbuilder', 'user-thing', 'user-memory']) {
+      const space = await loadSpace(resolve(SYS, spaceName), { requireAgents: false });
+      for (const tlName of Object.keys(space.tasklists)) {
+        const tl = await loadTasklistFromSpace(space, tlName);
+        for (const [id, node] of Object.entries(tl)) {
+          const readsDb = /\bdb\.(query|tables)\(/.test(node.instruction);
+          const narrows = Array.isArray(node.capabilities); // a DECLARED array narrows; undefined inherits
+          if (readsDb && narrows && !node.capabilities!.includes('db:read')) {
+            offenders.push(`${spaceName}/${tlName}#${id} (caps: [${node.capabilities!.join(', ')}])`);
+          }
+        }
+      }
+    }
+    expect(offenders, `nodes that call db.query/db.tables but narrow caps without db:read:\n${offenders.join('\n')}`).toEqual([]);
   });
 
   it('user-memory migrate_to_app_db carries db:write on ONLY the migrate node', async () => {

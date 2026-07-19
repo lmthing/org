@@ -27,8 +27,16 @@ it. `await loadKnowledge('recording', 'intent')` and then `await loadKnowledge('
 (a passive fact to keep vs. an active reminder that must fire on its own later — with a required slot
 like WHEN left unspecified) and which are plain declarative facts to STORE without asking. If — and
 ONLY if — the guide's ambiguity signals fire, pick `target: "ask"` and set `question` to a single
-plain sentence naming the TWO things you could do (just record it, or set a reminder). A plain
-declarative fact with a determinable home is NOT this case — store it, do not ask.
+plain sentence naming the TWO things you could do (just record it, or set a reminder).
+
+**A "keep this front of mind" / "don't forget" / "don't let this slip" phrasing with the future
+behaviour left unstated is the ambiguous case, and that ambiguity BINDS: pick `target: "ask"` EVEN IF
+the item also carries a concrete storable value** (a price, a fee, a payment). A riding amount does
+NOT downgrade such an item to a plain fact — its home is where the value goes AFTER they answer
+remember-vs-remind, not a licence to store it now and skip the ask. Capture the value in `reason`, but
+still ask. The "plain declarative fact with a determinable home → store it, do not ask" carve-out
+applies ONLY to items with NO keep-in-mind phrasing; never fold a keep-in-mind item into a
+loosely-matching table to avoid asking.
 
 Otherwise pick exactly one `target`:
 

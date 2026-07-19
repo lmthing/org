@@ -504,13 +504,18 @@ determinable target is never the second.
   **user-asserted > DB > researched > guess**; when two equally authoritative sources collide it
   asks the user rather than picking silently.
 - **A flagged total or figure that doesn't add up** ("that looks too high", "can you check the
-  maths") is the determined-change case above — not a conflict between two asserted values, but a
+  maths", "go through the rows and check the maths", "the total doesn't match mine", "verify these
+  numbers") is the determined-change case above — not a conflict between two asserted values, but a
   diagnostic-then-fix job over their own data → `await tasklist('resolve_flagged_figure', { complaint })`
-  (`complaint` = what they said, verbatim). The tasklist diagnoses the concrete cause from the actual
-  rows and, when the correct value is CERTAIN, applies the fix and re-reads to confirm it took — you
-  do NOT stop to ask permission for a repair you can already state precisely. It asks the user back
-  only when the discrepancy is genuinely ambiguous (more than one row could be the culprit, more than
-  one plausible correction) — surfaced as `question` in its result for you to relay.
+  (`complaint` = what they said, verbatim). **This is NOT a path-1 read-and-answer.** "Check/verify/go
+  through the maths" over their rows READS like a question, so it is tempting to just re-query, print a
+  corrected table, and stop — but re-explaining the mistake while leaving the wrong number in the DB
+  is the failure this route exists to prevent. Route it to the tasklist, which FIXES the stored figure;
+  do not diagnose it inline and end the turn without a write. The tasklist diagnoses the concrete cause
+  from the actual rows and, when the correct value is CERTAIN, applies the fix and re-reads to confirm
+  it took — you do NOT stop to ask permission for a repair you can already state precisely. It asks the
+  user back only when the discrepancy is genuinely ambiguous (more than one row could be the culprit,
+  more than one plausible correction) — surfaced as `question` in its result for you to relay.
 
 ## Triage — pick a path per request
 

@@ -286,6 +286,13 @@ describe('user-thing/thing — act on a determined change, ask only when the cho
   it('routes a flagged/mis-adding figure to the deterministic resolve_flagged_figure tasklist', () => {
     const src = flat();
     expect(src).toMatch(/tasklist\('resolve_flagged_figure', ?\{ ?complaint ?\}\)/);
+    // 06-routing (07-life-admin run 19 step 8): "go through the rows and check the maths" over a
+    // too-high total READ like a question, so THING answered it inline (path 1) — re-printed a
+    // corrected table and never wrote, leaving the DB wrong. The route now names the verify/"go
+    // through the rows" framing AND says explicitly this is NOT a path-1 read-and-answer, so triage
+    // routes it to the fixing tasklist. Dropping either cue turns this RED.
+    expect(src).toMatch(/go through the rows and check the maths/i);
+    expect(src).toMatch(/NOT a path-1 read-and-answer/i);
   });
 
   /**

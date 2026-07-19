@@ -8,6 +8,7 @@ dependsOn: [classify]
 goal: true
 role: general
 capabilities:
+  - db:read
   - db:write
 canDelegateTo:
   - user-memory/memory
