@@ -31,6 +31,12 @@ export interface DelegateProjectContext {
   projectRoot: string;
   projectSpacesDir?: string;
   appGlobals?: AppGlobalImpls;
+  /** The code-node ctx factory bound to THIS target project. A cross-project delegate (THING in
+   *  `user` building into `tanzania-trip`) rebinds `appGlobals` to the target so agent nodes write
+   *  there — the factory MUST rebind too, or a code node (`emit_types`) writes `types/contract.d.ts`
+   *  into the WRONG project and every generated `import '../types/contract'` fails to resolve.
+   *  Absent ⇒ the delegate keeps its own session's factory (same-project delegate). */
+  codeNodeCtxFactory?: CodeNodeCtxFactory;
 }
 
 export interface SessionOpts {

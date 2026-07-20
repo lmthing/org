@@ -18,16 +18,75 @@ const deps: SessionDeps = {
   },
 };
 
-function makeSession(maxConcurrentForks?: number): Session {
+function makeSession(maxConcurrentForks?: number, extra?: Partial<SessionOpts>): Session {
   const opts: SessionOpts = {
     spaceDir: '/tmp/does-not-matter',
     agentSlug: 'default',
     modelAlias: 'M',
     renderHost,
     maxConcurrentForks,
+    ...extra,
   };
   return new Session(opts, deps);
 }
+
+// Two distinguishable code-node factories — object identity is the whole assertion.
+const ownFactory = (() => ({ runCodeNode: async () => ({}) })) as unknown as NonNullable<SessionOpts['codeNodeCtxFactory']>;
+const targetFactory = (() => ({ runCodeNode: async () => ({}) })) as unknown as NonNullable<SessionOpts['codeNodeCtxFactory']>;
+const projectContext = (session: Session) =>
+  (session as unknown as { delegateProjectContext: () => Promise<{ projectId?: string; codeNodeCtxFactory?: unknown }> })
+    .delegateProjectContext.call(session);
+
+describe('Session — a cross-project delegate rebinds the code-node factory to its target', () => {
+  // THING lives in `user` and builds INTO `tanzania-trip`. The agent-node writers (appGlobals) rebind
+  // to the target so `writeProjectComponent` lands there; the CODE-node factory must rebind too, or a
+  // code node like `emit_types` writes `types/contract.d.ts` into `user` while every generated
+  // `import '../types/contract'` resolves against `tanzania-trip` — module-not-found on every file.
+  // Confirmed in 06-tanzania run 35 (19 typecheck errors, all "Cannot find module '../../types/
+  // contract'"), invisible to every prior unit test because none of them retarget.
+  it('uses the TARGET project factory, not the session own factory, when retargeting', async () => {
+    const session = makeSession(undefined, {
+      projectId: 'user',
+      codeNodeCtxFactory: ownFactory,
+      resolveBuildTarget: async () => ({
+        projectId: 'tanzania-trip',
+        projectRoot: '/root/tanzania-trip',
+        projectSpacesDir: '/root/tanzania-trip/spaces',
+        codeNodeCtxFactory: targetFactory,
+      }),
+    });
+    const pctx = await projectContext(session);
+    expect(pctx.projectId).toBe('tanzania-trip');
+    expect(pctx.codeNodeCtxFactory).toBe(targetFactory); // the fix — was ownFactory before
+  });
+
+  it('falls back to the session factory when the target omits one', async () => {
+    const session = makeSession(undefined, {
+      projectId: 'user',
+      codeNodeCtxFactory: ownFactory,
+      resolveBuildTarget: async () => ({ projectId: 'tanzania-trip', projectRoot: '/root/tanzania-trip' }),
+    });
+    const pctx = await projectContext(session);
+    expect(pctx.codeNodeCtxFactory).toBe(ownFactory);
+  });
+
+  it('keeps the session own factory when there is no retarget (same-project delegate)', async () => {
+    const session = makeSession(undefined, { projectId: 'user', codeNodeCtxFactory: ownFactory });
+    const pctx = await projectContext(session);
+    expect(pctx.projectId).toBe('user');
+    expect(pctx.codeNodeCtxFactory).toBe(ownFactory);
+  });
+
+  it('does NOT retarget when the build target names the session own project', async () => {
+    const session = makeSession(undefined, {
+      projectId: 'user',
+      codeNodeCtxFactory: ownFactory,
+      resolveBuildTarget: async () => ({ projectId: 'user', projectRoot: '/root/user', codeNodeCtxFactory: targetFactory }),
+    });
+    const pctx = await projectContext(session);
+    expect(pctx.codeNodeCtxFactory).toBe(ownFactory);
+  });
+});
 
 describe('Session fork engine sharing', () => {
   it('reuses one ForkEngine across fork/tasklist yields (shared semaphore)', async () => {

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { SessionOpts, SessionDeps } from './types.js';
+import type { CodeNodeCtxFactory } from '../tasklist/orchestrator.js';
 import type { YieldRequest } from '../eval/yield.js';
 import type { VM } from '../sandbox/quickjs.js';
 import { MessageHistory } from '../context/history.js';
@@ -804,12 +805,14 @@ export class Session {
    *  the TARGET's live project instead — its own projectRoot/projectSpacesDir + that
    *  project's appGlobals, so the builder's db + writeProject* writers bind to the new
    *  project. THING never builds into its own `user` project. */
-  private async delegateProjectContext(): Promise<{ projectSpacesDir?: string; projectRoot?: string; projectId?: string; appGlobals?: AppGlobalImpls }> {
+  private async delegateProjectContext(): Promise<{ projectSpacesDir?: string; projectRoot?: string; projectId?: string; appGlobals?: AppGlobalImpls; codeNodeCtxFactory?: CodeNodeCtxFactory }> {
     const target = await this.opts.resolveBuildTarget?.();
     if (target && target.projectId !== this.opts.projectId) {
-      return { projectSpacesDir: target.projectSpacesDir, projectRoot: target.projectRoot, projectId: target.projectId, appGlobals: target.appGlobals };
+      // codeNodeCtxFactory rides along with appGlobals: a code node in the delegated tasklist
+      // (`emit_types`) must write into the TARGET project, not this session's own.
+      return { projectSpacesDir: target.projectSpacesDir, projectRoot: target.projectRoot, projectId: target.projectId, appGlobals: target.appGlobals, codeNodeCtxFactory: target.codeNodeCtxFactory ?? this.opts.codeNodeCtxFactory };
     }
-    return { projectSpacesDir: this.opts.projectSpacesDir, projectRoot: this.opts.projectRoot, projectId: this.opts.projectId, appGlobals: this.opts.appGlobals };
+    return { projectSpacesDir: this.opts.projectSpacesDir, projectRoot: this.opts.projectRoot, projectId: this.opts.projectId, appGlobals: this.opts.appGlobals, codeNodeCtxFactory: this.opts.codeNodeCtxFactory };
   }
 
   /**
@@ -995,9 +998,11 @@ export class Session {
       roleModels: this.opts.roleModels,
       dynamicSpaces: this.dynamicSpaces,
       // A delegated agent runs its OWN action tasklists through the yield router; without
-      // this a code node in one dies with "no codeNodeCtxFactory" and the model abandons
+      // this a code node in one dies with "no codeNodeCtxFactory" and the model abandons — and it
+      // must be the TARGET project's factory (pctx), not this session's, so a code node writes into
+      // the project being built, not THING's own.
       // the tasklist and free-hands the work instead.
-      codeNodeCtxFactory: this.opts.codeNodeCtxFactory,
+      codeNodeCtxFactory: pctx.codeNodeCtxFactory,
       documentResolver: this.opts.documentResolver,
     });
   }
@@ -1225,6 +1230,8 @@ export class Session {
       dynamicSpaces: this.dynamicSpaces,
       // Code-node runner for `tasklist()` yields whose SPACE tasklist has code
       // nodes (plan S9). Host-built (libs/cli) — core never executes node modules.
+      // This is the session's OWN tasklist yield (no cross-project retarget), so the
+      // session's factory is correct — unlike the delegate paths, which use pctx.
       codeNodeCtxFactory: this.opts.codeNodeCtxFactory,
       getForkEngine: () => this.getForkEngine(),
       // Runs host-side with the space dir as cwd, so a checker (tests / tsc) sees
@@ -1310,9 +1317,11 @@ export class Session {
           roleModels: this.opts.roleModels,
           dynamicSpaces: this.dynamicSpaces,
           // A delegated agent runs its OWN action tasklists through the yield router; without
-          // this a code node in one dies with "no codeNodeCtxFactory" and the model abandons
-          // the tasklist and free-hands the work instead.
-          codeNodeCtxFactory: this.opts.codeNodeCtxFactory,
+          // this a code node in one dies with "no codeNodeCtxFactory" and the model abandons the
+          // tasklist and free-hands the work instead. It must be the TARGET project's factory
+          // (pctx), not this session's — else a code node like `emit_types` writes into THING's
+          // own `user` project instead of the project being built.
+          codeNodeCtxFactory: pctx.codeNodeCtxFactory,
           documentResolver: this.opts.documentResolver,
         });
       },

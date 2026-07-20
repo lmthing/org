@@ -473,6 +473,10 @@ export class SessionManager {
           projectRoot: targetRoot,
           projectSpacesDir: join(targetRoot, 'spaces'),
           appGlobals: appG,
+          // Rebind the code-node factory to the TARGET too, so a code node's `writeProjectFile` /
+          // `writeProject*` land in the project the agent nodes are writing into — not THING's
+          // own `user` project. Without this `emit_types` wrote the contract to the wrong project.
+          codeNodeCtxFactory: this.buildCodeNodeCtxFactory(root, buildTarget.projectId, targetRoot),
         };
       };
     }
