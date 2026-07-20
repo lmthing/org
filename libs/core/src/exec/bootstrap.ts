@@ -30,6 +30,7 @@ import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
   EXEC_SHELL_DTS, SCRATCH_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
   PROJECT_TABLE_DTS, PROJECT_READ_DTS, composeConnectionsDts, type DbTableSchema,
+  PROCESS_EXIT_DTS,
 } from '../typecheck/library-dts.js';
 import { injectAppGlobals, type AppGlobalImpls } from './app-globals.js';
 import type { RenderHost, Clock } from '../session/types.js';
@@ -389,6 +390,14 @@ export function buildAmbientDts(opts: AmbientDtsOpts): string {
     caps.orchestrate ? FORK_DTS : '',
     caps.delegate ? DELEGATE_DTS : '',
     COMMON_DTS,
+    // process.exit is declared UNCONDITIONALLY, same tier as COMMON_DTS — the runtime already
+    // injects a real `process.exit` in every VM regardless of role/capabilities
+    // (globals/host-tools.ts's injectHostTools runs before any capability gating), so every
+    // context's ambient DTS must match ("not granted ⇒ not injected AND absent from the DTS"
+    // runs both directions: injected-everywhere ⇒ declared-everywhere). Deliberately NOT
+    // PROCESS_ENV_DTS — `process.env` stays off every model surface (secrets hygiene); only the
+    // env-free PROCESS_EXIT_DTS fragment is emitted here.
+    PROCESS_EXIT_DTS,
     // Generic fs/shell is NOT part of any agent's model surface. readFileRaw/writeFileRaw
     // are internal-only (memory/todos + architect builders call them in un-typechecked
     // bodies), so they are never declared here. execShell + createScratch are declared ONLY

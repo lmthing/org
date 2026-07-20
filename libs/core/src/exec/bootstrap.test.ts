@@ -67,7 +67,7 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     expect(names).not.toContain('currentTask');
   });
 
-  it('read-only fork (explore) declares NONE of ask/tasklist/fork/delegate NOR any generic fs, but keeps the read-only common globals + currentTask', () => {
+  it('read-only fork (explore) declares NONE of ask/tasklist/fork/delegate NOR any generic fs, but keeps the read-only common globals + currentTask + process.exit', () => {
     const names = declNames(forkPlain);
     // Orchestration/session globals absent (headless leaf) AND the generic fs primitives
     // absent — the whole family (readFileRaw/writeFileRaw/execShell/createScratch) is off the
@@ -75,11 +75,12 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     // gets the same internal-only treatment (injected for system-function BODIES, never declared
     // on a model surface): a scaffolded specialist hand-rolled raw HTTP past its instructed
     // research_and_store path with it (06-tanzania run 26), so a model-authored fetch(...) must
-    // fail typecheck in EVERY context.
-    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw', 'readFileRaw', 'createScratch', 'fetch', 'process']) {
+    // fail typecheck in EVERY context. `process` is NOT in this absent list — see the dedicated
+    // process.exit/process.env split test below.
+    for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw', 'readFileRaw', 'createScratch', 'fetch']) {
       expect(names, `read-only fork DTS must not declare ${absent}`).not.toContain(absent);
     }
-    for (const present of ['display', 'setActivity', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'currentTask']) {
+    for (const present of ['display', 'setActivity', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'currentTask', 'process']) {
       expect(names).toContain(present);
     }
   });
@@ -92,12 +93,22 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     expect(LIBRARY_DTS_NO_ASK).toMatch(/declare function fetch\(/);
   });
 
-  it('process.env is declared in NO model surface, but stays in the full internal bundles (function bodies read TAVILY_API_KEY etc.)', () => {
+  // process-exit-typecheck-regression: process.exit is intentional-termination control flow
+  // (turn-loop.ts's `/\bprocess\.exit\(/` check) and carries no secret — unlike process.env,
+  // which stays internal-only (model-surface secrets hygiene). The runtime injects a real
+  // `process.exit` in EVERY VM regardless of role (host-tools.ts, ungated), so it must be
+  // declared on every model surface too; `process.env` must not be, on any surface.
+  it('process.exit IS declared on every model surface; process.env is declared on NONE — only the internal bundles keep both', () => {
     for (const surface of [session, forkPlain, forkDelegating, delegate]) {
-      expect(declNames(surface), 'model DTS must not declare process').not.toContain('process');
+      expect(declNames(surface), 'model DTS must declare process (for .exit)').toContain('process');
+      const processDecl = surface.match(/declare const process:[^;]*;/)?.[0] ?? '';
+      expect(processDecl, 'model-surface process decl must expose exit(...)').toContain('exit(');
+      expect(processDecl, 'model-surface process decl must NOT expose env').not.toContain('env');
     }
     expect(LIBRARY_DTS).toMatch(/declare const process:/);
     expect(LIBRARY_DTS_NO_ASK).toMatch(/declare const process:/);
+    expect(LIBRARY_DTS).toContain('env: Record<string, string | undefined>');
+    expect(LIBRARY_DTS_NO_ASK).toContain('env: Record<string, string | undefined>');
   });
 
   it('a general fork does NOT declare the generic fs primitives (no fs:scratch grant)', () => {

@@ -23,6 +23,8 @@ import {
   CAPABILITY_DTS_FRAGMENTS,
   composeConnectionsDts,
   PROJECT_READ_DTS,
+  PROCESS_EXIT_DTS,
+  PROCESS_ENV_DTS,
 } from './library-dts.js';
 import { runTsc } from './tsc.js';
 import { readFileSync } from 'node:fs';
@@ -209,6 +211,25 @@ describe('standalone capability fragments', () => {
       expect(frag).not.toContain('\n');
       expect(frag).toContain('declare function');
     }
+  });
+});
+
+// process-exit-typecheck-regression: PROCESS_EXIT_DTS is the env-free fragment buildAmbientDts
+// emits unconditionally (bootstrap.test.ts pins the per-context contract); this file just pins
+// its own shape and its independence from PROCESS_ENV_DTS (never both land in the same bundle).
+describe('PROCESS_EXIT_DTS — the env-free process fragment (model-surface process.exit)', () => {
+  it('declares process.exit but no env member', () => {
+    expect(PROCESS_EXIT_DTS).toContain('declare const process:');
+    expect(PROCESS_EXIT_DTS).toContain('exit(code?: number): never');
+    expect(PROCESS_EXIT_DTS).not.toContain('env');
+  });
+
+  it('is NOT part of LIBRARY_DTS/LIBRARY_DTS_NO_ASK — those keep the full PROCESS_ENV_DTS (env+exit) instead, so the two `declare const process` fragments never collide in the same bundle', () => {
+    expect(LIBRARY_DTS).not.toContain(PROCESS_EXIT_DTS);
+    expect(LIBRARY_DTS_NO_ASK).not.toContain(PROCESS_EXIT_DTS);
+    // Both bundles still carry the full env+exit shape via PROCESS_ENV_DTS, unchanged.
+    expect(LIBRARY_DTS).toContain(PROCESS_ENV_DTS);
+    expect(LIBRARY_DTS_NO_ASK).toContain(PROCESS_ENV_DTS);
   });
 });
 

@@ -378,6 +378,19 @@ export const NET_FETCH_DTS = `declare function fetch(url: string, opts?: { metho
 // runtime shim for bodies; a model-authored `process.env` now fails typecheck in every context.
 export const PROCESS_ENV_DTS = `declare const process: { env: Record<string, string | undefined>; exit(code?: number): never };`;
 
+// `process.exit` is DIFFERENT from `process.env`: it carries no secret, and the model is meant to
+// use it as intentional-termination control flow (`turn-loop.ts`'s `/\bprocess\.exit\(/` check
+// returns 'done' without retrying when it sees the runtime throw from `host-tools.ts`). The
+// `process.env` removal above (model-surface secrets hygiene) accidentally took `.exit` down with
+// it — same single `process` object — so a model-authored `process.exit(...)` no longer typechecks
+// on ANY model surface and gets treated as an ordinary retryable error instead of a clean stop
+// (`.issues/` — process-exit-typecheck-regression). Fixed by declaring a SEPARATE, minimal,
+// `env`-free `process` on the model surface (`buildAmbientDts`, unconditionally like COMMON_DTS —
+// the runtime already injects `process.exit` in every VM regardless of role, so the DTS should
+// match). Kept apart from `PROCESS_ENV_DTS` (never both emitted into the same bundle) so the two
+// `declare const process` fragments never collide when concatenated.
+export const PROCESS_EXIT_DTS = `declare const process: { exit(code?: number): never };`;
+
 /** Full library DTS for the top-level session VM (all globals, incl. `ask`). */
 export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS, NET_FETCH_DTS, PROCESS_ENV_DTS].join('\n');
 
