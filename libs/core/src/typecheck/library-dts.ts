@@ -146,10 +146,13 @@ declare function createScratch(): string;`;
 export const DB_READ_MEMBERS = `  query(table: string, opts?: { where?: Record<string, unknown>; include?: string[]; orderBy?: string | { column: string; dir?: 'asc' | 'desc' }; limit?: number; offset?: number }): any[];
   tables(): string[];`;
 
-// `db:write` members — row mutations.
+// `db:write` members — row mutations. NOTE: `remove` (hard delete) is DELIBERATELY absent from every
+// model surface. A destructive delete is a host-only primitive available ONLY to tasklist code nodes
+// (via their injected `ctx.db.remove`), so an agent can never delete a row inline — it must route the
+// deletion through a guarded tasklist (`retract_fact`, `resolve_flagged_figure`) whose code node
+// verifies the delete before it happens. A stray `db.remove(...)` in agent code is a typecheck error.
 export const DB_WRITE_MEMBERS = `  insert(table: string, values: Record<string, unknown> | Record<string, unknown>[]): any;
-  update(table: string, opts: { where: Record<string, unknown>; set: Record<string, unknown> }): number;
-  remove(table: string, opts: { where: Record<string, unknown> }): number;`;
+  update(table: string, opts: { where: Record<string, unknown>; set: Record<string, unknown> }): number;`;
 
 // `db:schema` members — DDL. Always LOOSE (`string`): schema authoring is open-table
 // (it INVENTS new table/column names), so it is never gated by the current schema.
@@ -182,8 +185,7 @@ export interface DbTableSchema {
 export const DB_READ_MEMBERS_TYPED = `  query<T extends keyof __DbCols>(table: T, opts?: { where?: Partial<Record<__DbCols[T], unknown>>; include?: string[]; orderBy?: __DbCols[T] | { column: __DbCols[T]; dir?: 'asc' | 'desc' }; limit?: number; offset?: number }): any[];
   tables(): (keyof __DbCols)[];`;
 export const DB_WRITE_MEMBERS_TYPED = `  insert<T extends keyof __DbCols>(table: T, values: Partial<Record<__DbCols[T], unknown>> | Partial<Record<__DbCols[T], unknown>>[]): any;
-  update<T extends keyof __DbCols>(table: T, opts: { where: Partial<Record<__DbCols[T], unknown>>; set: Partial<Record<__DbCols[T], unknown>> }): number;
-  remove<T extends keyof __DbCols>(table: T, opts: { where: Partial<Record<__DbCols[T], unknown>> }): number;`;
+  update<T extends keyof __DbCols>(table: T, opts: { where: Partial<Record<__DbCols[T], unknown>>; set: Partial<Record<__DbCols[T], unknown>> }): number;`;
 
 /** The `type __DbCols = { <table>: <col> | <col> ; … }` map the gated members index into.
  *  Names are JSON-quoted so kebab-case table names / arbitrary column names are legal type

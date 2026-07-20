@@ -1,0 +1,72 @@
+{
+  "title": "Visas & Insurance",
+  "description": "Three mandatory entry requirements: Tanzania e-visa ($50 each), Egypt e-visa ($65 each, multiple-entry, printed copy required), Zanzibar mandatory insurance ZIC ($44 each) — per-person costs, status, portal links.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "item_type": {
+      "type": "string",
+      "description": "'visa' or 'insurance'"
+    },
+    "country": {
+      "type": "string",
+      "description": "Country / territory requiring this: Tanzania, Egypt, Zanzibar"
+    },
+    "name": {
+      "type": "string",
+      "description": "Full name of the requirement"
+    },
+    "cost_per_person_usd": {
+      "type": "number",
+      "description": "Cost per person in USD"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Number of travelers"
+    },
+    "total_cost_usd": {
+      "type": "number",
+      "description": "Total cost for 2 travellers"
+    },
+    "portal_url": {
+      "type": "string",
+      "description": "Application portal URL"
+    },
+    "requirements": {
+      "type": "string",
+      "description": "Key requirements and notes"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes and document requirements"
+    },
+    "requirement_type": {
+      "type": "string",
+      "description": "visa or insurance"
+    },
+    "issuer": {
+      "type": "string",
+      "description": "Issuing authority"
+    },
+    "per_person_cost_usd": {
+      "type": "number",
+      "description": "Cost per person in USD"
+    },
+    "multiple_entry": {
+      "type": "boolean",
+      "description": "Is this a multiple-entry visa?"
+    },
+    "printed_copy_required": {
+      "type": "boolean",
+      "description": "Must a printed copy be carried?"
+    },
+    "status": {
+      "type": "string",
+      "description": "not-started, applied, issued"
+    }
+  }
+}

@@ -78,9 +78,11 @@ describe('composeDbDts', () => {
     const dts = composeDbDts({ read: true, write: true, schema: true });
     // exactly one db declaration
     expect(dts.match(/declare const db/g)?.length).toBe(1);
-    for (const m of ['query(', 'tables(', 'insert(', 'update(', 'remove(', 'createTable(', 'addColumn(']) {
+    for (const m of ['query(', 'tables(', 'insert(', 'update(', 'createTable(', 'addColumn(']) {
       expect(dts).toContain(m);
     }
+    // `remove` (hard delete) is a host-only primitive — NEVER on the model db surface.
+    expect(dts).not.toContain('remove(');
   });
 
   it('db.* signatures are synchronous (no Promise)', () => {

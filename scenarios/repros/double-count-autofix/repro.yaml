@@ -1,0 +1,27 @@
+id: double-count-autofix
+from: 06-tanzania#9
+bug: >
+  HAPPY-PATH CHECK (not a bug) for the resolve_flagged_figure code-node interlock: a GENUINE
+  double-count must still AUTO-FIX in one turn. After the L3 fix, a mode-a "removing this row makes the
+  total match" no longer auto-deletes — only a code-verified structural DUPLICATE (mode-b) does. This
+  repro seeds a real double-count (two identical $295 "Ngorongoro crater vehicle descent fee" rows, so
+  the USD total reads $3,639.20 instead of $3,344.20) and asserts THING removes the duplicate and the
+  total corrects. GREEN 0/N here = the interlock did NOT over-block the legitimate fix; RED = it degraded
+  the one-turn auto-fix to an ask (diagnose failed to emit duplicateOf for a clear duplicate).
+seed: ./seed
+seedProject: tanzania-trip-2026
+runs: 4
+
+# Seeded from resolve-already-correct's snapshot (16 costs rows, USD summing to $3,344.20) with ONE
+# injected exact duplicate of the $295 crater descent-fee row (new PK
+# dupdup95-0000-0000-0000-000000000295) → 17 rows, USD sum $3,639.20. The correct fix removes the
+# duplicate, restoring 16 rows / $3,344.20. A FRESH session (no history) plays the single trigger.
+steps:
+  - say: "My spreadsheet says the trip total should be $3,344.20 but the app is showing $3,639.20 — I think a cost got entered twice by mistake. Can you go through the rows, find the double-counted item, and fix it?"
+    expect:
+      - it finds the duplicated $295 crater descent-fee row and removes ONE copy, correcting the total to $3,344.20
+      - it does NOT touch the separately-tracked EUR flights row or any unrelated cost
+
+assert:
+  - db costs count == 16                                          # the duplicate was removed (17 → 16)
+  - db costs where currency=EUR exists                            # the EUR flights row is untouched (no collateral)

@@ -5,6 +5,7 @@ output:
   rowId: string
   grain: string
   field: string
+  clearedValue: string
   status: string
   candidates: string
   detail: string
@@ -28,6 +29,10 @@ specific the user names (an amount, a reference, a payee, a date, the remark's w
 
 - **Exactly one** row matches them all → `status: "confirmed"`, fill `table` + `rowId` (+ `field`
   when `grain` is `"field"`), and put the matched row's current values in `candidates` (one line).
+  **When `grain` is `"field"`, also set `clearedValue`** to what that column should read AFTER only the
+  retracted piece is removed — the surrounding text kept verbatim, or `''` if the retracted piece was
+  all the column held. (The apply step writes this value mechanically; it does not re-derive it.) For a
+  `row` grain, leave `clearedValue: ''`.
 - **More than one** → `status: "ambiguous"` — list each candidate (id + distinguishing values) in
   `candidates`. Do NOT pick one — not the first, not the best-looking. A row that matches on value
   but differs in any named specific is a different row.
@@ -36,4 +41,4 @@ specific the user names (an amount, a reference, a payee, a date, the remark's w
 
 Emit ONE statement:
 
-currentTask.resolve({ table: "<table or ''>", rowId: "<id or ''>", grain: "<row|field or ''>", field: "<column or ''>", status: "<confirmed|ambiguous|none>", candidates: "<matched/candidate rows or ''>", detail: "<what you matched, or why nothing matched>" });
+currentTask.resolve({ table: "<table or ''>", rowId: "<id or ''>", grain: "<row|field or ''>", field: "<column or ''>", clearedValue: "<field value with the retracted piece removed, or ''>", status: "<confirmed|ambiguous|none>", candidates: "<matched/candidate rows or ''>", detail: "<what you matched, or why nothing matched>" });

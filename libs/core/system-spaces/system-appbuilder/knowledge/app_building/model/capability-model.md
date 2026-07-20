@@ -12,7 +12,7 @@ reaching the engine. This is least-privilege: give an agent exactly the caps its
 | `project:manage` | `createProject`, `selectProject` | bare (no config) |
 | `db:schema` | `writeTableSchema`, `db.createTable`/`db.addColumn` | optional `{ tables: [...] }` |
 | `db:read` | `db.query`, `db.tables` | optional `{ tables: [...] }` |
-| `db:write` | `db.insert`, `db.update`, `db.remove` | optional `{ tables: [...] }` |
+| `db:write` | `db.insert`, `db.update` | optional `{ tables: [...] }` |
 | `pages:write` | `writePage`, `writeProjectPage` | bare |
 | `api:write` | `writeApi`, `writeProjectApi` | bare |
 | `hooks:write` | `writeHook` | bare |

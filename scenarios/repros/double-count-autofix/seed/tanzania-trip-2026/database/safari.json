@@ -1,0 +1,128 @@
+{
+  "title": "Safari — Suricata Safaris Ltd",
+  "description": "Suricata Safaris 3-day group camping safari booking: $1,200 total, $240 deposit paid, $960 balance due, Richard's contact, Pesapal link, route Tarangire → Lake Manyara → Ngorongoro.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "operator_name": {
+      "type": "string",
+      "description": "Safari operator company name"
+    },
+    "contact_name": {
+      "type": "string",
+      "description": "Primary contact person name"
+    },
+    "contact_phone": {
+      "type": "string",
+      "description": "Contact phone number"
+    },
+    "contact_email": {
+      "type": "string",
+      "description": "Contact email address"
+    },
+    "safari_type": {
+      "type": "string",
+      "description": "Type of safari e.g. group camping"
+    },
+    "start_date": {
+      "type": "date",
+      "description": "Safari start date"
+    },
+    "end_date": {
+      "type": "date",
+      "description": "Safari end date"
+    },
+    "circuit": {
+      "type": "string",
+      "description": "Circuit description, e.g. Tarangire → Lake Manyara → Ngorongoro Crater"
+    },
+    "included_accommodation": {
+      "type": "string",
+      "description": "Accommodation included in the package"
+    },
+    "total_package_cost_usd": {
+      "type": "number",
+      "description": "Total package cost in USD for 2 pax"
+    },
+    "deposit_paid_usd": {
+      "type": "number",
+      "description": "Deposit already paid in USD"
+    },
+    "balance_due_usd": {
+      "type": "number",
+      "description": "Remaining balance due in USD"
+    },
+    "payment_methods": {
+      "type": "string",
+      "description": "Accepted payment methods"
+    },
+    "pesapal_link": {
+      "type": "string",
+      "description": "Pesapal online payment link"
+    },
+    "pesapal_surcharge_pct": {
+      "type": "number",
+      "description": "Pesapal surcharge percentage"
+    },
+    "ranger_tip_flagged": {
+      "type": "boolean",
+      "description": "True if Ngorongoro ranger tip is flagged as unconfirmed"
+    },
+    "ranger_tip_amount_tzs": {
+      "type": "number",
+      "description": "Expected ranger tip in TZS (~5,000)"
+    },
+    "ranger_tip_source": {
+      "type": "string",
+      "description": "Who mentioned the tip"
+    },
+    "ranger_tip_action": {
+      "type": "string",
+      "description": "Reminder action for the traveller"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "operator": {
+      "type": "string",
+      "description": "Safari operator company name"
+    },
+    "days": {
+      "type": "number",
+      "description": "Number of safari days"
+    },
+    "pax": {
+      "type": "number",
+      "description": "Number of travellers"
+    },
+    "route": {
+      "type": "string",
+      "description": "Park-by-park route itinerary"
+    },
+    "accommodations_included": {
+      "type": "string",
+      "description": "Camps/lodges per night included in package"
+    },
+    "total_cost_usd": {
+      "type": "number",
+      "description": "Total safari cost in USD"
+    },
+    "balance_currency_note": {
+      "type": "string",
+      "description": "Balance payment options: cash USD post-2009 notes, or Pesapal +5%"
+    },
+    "pesapal_url": {
+      "type": "string",
+      "description": "Pesapal payment link"
+    },
+    "pesapal_total_usd": {
+      "type": "number",
+      "description": "Balance total if paid via Pesapal with surcharge"
+    }
+  }
+}

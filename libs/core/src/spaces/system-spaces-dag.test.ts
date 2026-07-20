@@ -99,7 +99,12 @@ describe('shipped system spaces load + validate', () => {
 
     const retract = await loadTasklistFromSpace(space, 'retract_fact');
     expect(retract['locate']!.role).toBe('explore');
-    expect(retract['remove']!.capabilities).toContain('db:write');
+    // The destructive apply is a HOST-RUN code node (a hard delete is host-only — `db.remove` is not on
+    // any model surface), so a retraction's delete can never happen inline in THING's own turn.
+    expect(retract['apply']!.kind).toBe('code');
+    expect(retract['apply']!.codeModulePath).toMatch(/retract_fact\/02-apply\.ts$/);
+    expect(retract['apply']!.goal).toBe(true);
+    expect(resolveGoalTask(retract)!.id).toBe('apply');
 
     const answer = await loadTasklistFromSpace(space, 'answer_across_spaces');
     expect(answer['ask']!.forEach).toBe('split.subquestions');

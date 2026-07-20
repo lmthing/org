@@ -1,6 +1,6 @@
 import type { VM } from '../sandbox/quickjs.js';
 import { marshalToQuickJS, injectGlobal } from '../sandbox/host-bridge.js';
-import type { DbApi, QueryOpts, UpdateOpts, RemoveOpts, Row, ApiCallFn, AppBuildFn, ConnectionResolver } from '../db/types.js';
+import type { DbApi, QueryOpts, UpdateOpts, Row, ApiCallFn, AppBuildFn, ConnectionResolver } from '../db/types.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import type { StoreResolver } from '../globals/store.js';
 import type { EmitEventResolver } from '../globals/emit-event.js';
@@ -153,10 +153,10 @@ function buildScopedDb(db: DbApi, app: AppCapabilities): Record<string, unknown>
       assertTableAllowed('db:write', write, table);
       return db.update(table, opts);
     };
-    scoped['remove'] = (table: string, opts: RemoveOpts): number => {
-      assertTableAllowed('db:write', write, table);
-      return db.remove(table, opts);
-    };
+    // NOTE: `remove` (hard delete) is intentionally NOT exposed on the model `db` surface.
+    // A destructive delete is a host-only primitive reached only through a tasklist CODE node's
+    // injected `ctx.db.remove` (see libs/cli's code-node runner), so an agent can never inline-delete
+    // a row — it must route the deletion through a guarded tasklist. Mirrors DB_WRITE_MEMBERS.
   }
   if (schema) {
     // createTable names a NEW table — the grant's table list (if any) pre-authorizes

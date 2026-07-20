@@ -1,0 +1,40 @@
+{
+  "title": "Non-Flight Transport",
+  "description": "Non-flight transport details: Zanzibar local driving permit (USD 15, IDP requirements, police checkpoints) and Dar es Salaam ferry arrival.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "location": {
+      "type": "string",
+      "description": "City or island"
+    },
+    "transport_type": {
+      "type": "string",
+      "description": "Type: driving_permit, ferry, other"
+    },
+    "name": {
+      "type": "string",
+      "description": "Name or description"
+    },
+    "cost_usd": {
+      "type": "number",
+      "description": "Cost in USD"
+    },
+    "validity": {
+      "type": "string",
+      "description": "Validity period"
+    },
+    "requirements": {
+      "type": "string",
+      "description": "Requirements and rules"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  }
+}

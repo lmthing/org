@@ -503,7 +503,8 @@ determinable target is never the second.
   query: '<the new table(s) and what belongs in them>' })` so no personal fact is stranded in memory
   while later ones become DB rows (the classic "one cost missing from the total" bug).
 - **A retraction** ("cancel that $30 charge, I never paid it") → `await tasklist('retract_fact', { fact })`
-  — a HARD delete of the row (`db.remove`), then confirm what you removed. Never just apologize and
+  — the tasklist hard-deletes the row in its host-run apply step (you have no `db.remove` yourself — a
+  hard delete is never something you do inline), then confirm what you removed. Never just apologize and
   leave the wrong value in place. **Before you conclude nothing matches, look properly** — a handful
   of rows is cheap to read in full, so don't stop at one guessed keyword that comes back empty. A real
   match can sit in a related child row your first query didn't include (`db.query(table, {include:

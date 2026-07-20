@@ -1,0 +1,88 @@
+{
+  "title": "Accommodations",
+  "description": "All 8 confirmed properties with check-in/check-out dates, contact phone/email, address, cost in USD, and notes. Total lodging (excl. safari package): $951.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "stop_number": {
+      "type": "number",
+      "description": "Sequential stop 1–8"
+    },
+    "property_name": {
+      "type": "string",
+      "description": "Name of the hotel/lodge/house"
+    },
+    "location": {
+      "type": "string",
+      "description": "City / area"
+    },
+    "check_in": {
+      "type": "string",
+      "description": "Check-in date YYYY-MM-DD"
+    },
+    "check_out": {
+      "type": "string",
+      "description": "Check-out date YYYY-MM-DD"
+    },
+    "nights": {
+      "type": "number",
+      "description": "Number of nights"
+    },
+    "address": {
+      "type": "string",
+      "description": "Full address"
+    },
+    "contact_phone": {
+      "type": "string",
+      "description": "Contact phone number"
+    },
+    "contact_email": {
+      "type": "string",
+      "description": "Contact email"
+    },
+    "cost_usd": {
+      "type": "number",
+      "description": "Total cost in USD for this stay"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "included_in_safari": {
+      "type": "boolean",
+      "description": "True if accommodation is part of the safari package"
+    },
+    "name": {
+      "type": "string",
+      "description": "Property name"
+    },
+    "check_in_date": {
+      "type": "date",
+      "description": "Check-in date"
+    },
+    "check_out_date": {
+      "type": "date",
+      "description": "Check-out date"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Contact phone number"
+    },
+    "email": {
+      "type": "string",
+      "description": "Contact email address"
+    },
+    "is_safari_package": {
+      "type": "boolean",
+      "description": "True if this is part of the Suricata Safaris package (camping+hotel)"
+    },
+    "accommodation_order": {
+      "type": "number",
+      "description": "Chronological order 1-8"
+    }
+  }
+}

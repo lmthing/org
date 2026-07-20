@@ -158,6 +158,25 @@ describe('resolve_flagged_figure/02-fix code node — interlock branches', () =>
     expect(tables.costs.map((r) => r.id)).toContain('orig');
   });
 
+  it('AUTO-DETECT DUPLICATE: removes an exact full-row twin even when diagnose omits duplicateOf', async () => {
+    // A genuine double-count where diagnose targets a row for removal but forgot to populate
+    // duplicateOf. The code detects the identical twin itself and auto-applies (a copy survives).
+    const tables = {
+      costs: [
+        { id: 'u1', amount: 1000, currency: 'USD', label: 'hotel' },
+        { id: 'orig', amount: 295, currency: 'USD', label: 'descent-fee' },
+        { id: 'dup', amount: 295, currency: 'USD', label: 'descent-fee' },
+      ],
+    };
+    const db = makeDb(tables);
+    const diagnose = { cause: 'descent fee entered twice', table: 'costs', targetIds: ['dup'], fixAction: 'remove', targetValue: '', figureSpec: USD, assertedTarget: '1295', duplicateOf: [], confidence: 'high' };
+    const out = await run({ db }, { diagnose });
+    expect(out.applied).toBe(true);
+    expect(db.calls.remove).toHaveLength(1);
+    expect(tables.costs).toHaveLength(2);
+    expect(tables.costs.filter((r) => r.amount === 295)).toHaveLength(1); // exactly one copy remains
+  });
+
   it('UNVERIFIABLE: asks (no delete) when there is no recompute spec', async () => {
     const tables = { costs: [{ id: 'x', amount: 5, currency: 'USD' }] };
     const db = makeDb(tables);

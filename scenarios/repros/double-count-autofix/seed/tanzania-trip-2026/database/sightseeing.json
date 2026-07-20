@@ -1,0 +1,40 @@
+{
+  "title": "Sightseeing Plans",
+  "description": "Cairo stopover sightseeing plans (stopover 1: Grand Egyptian Museum, Pyramids; stopover 2: Islamic Cairo, Citadel, Khan el-Khalili, Coptic Cairo) and Dar es Salaam points of interest.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "location": {
+      "type": "string",
+      "description": "City"
+    },
+    "stopover": {
+      "type": "string",
+      "description": "Stopover label: 'Stopover 1', 'Stopover 2', or 'Points of Interest'"
+    },
+    "date_range": {
+      "type": "string",
+      "description": "Date range, e.g. Aug 3–4"
+    },
+    "base_hotel": {
+      "type": "string",
+      "description": "Hotel based at during this stopover"
+    },
+    "sights": {
+      "type": "string",
+      "description": "Semicolon-separated list of sightseeing items"
+    },
+    "transport_note": {
+      "type": "string",
+      "description": "Transport notes between sights"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  }
+}

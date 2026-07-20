@@ -129,6 +129,24 @@ function rid(r: Row): string {
   return String(r && r.id !== undefined ? r.id : '');
 }
 
+// Two rows are "the same charge recorded twice" only if they agree on EVERY field except
+// the primary key. Such a row is a SAFE auto-delete: an identical copy survives, so removing
+// one loses no information. Rows that merely share the aggregated value but differ elsewhere
+// are DISTINCT (a coincidental twin) and are NEVER auto-deleted.
+function sameRowExceptId(a: Row, b: Row): boolean {
+  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  for (const k of keys) {
+    if (k === 'id') continue;
+    const av = a ? a[k] : undefined;
+    const bv = b ? b[k] : undefined;
+    if (av === bv) continue;
+    if (Number.isFinite(num(av)) && num(av) === num(bv)) continue;
+    if (JSON.stringify(av) === JSON.stringify(bv)) continue;
+    return false;
+  }
+  return true;
+}
+
 function idList(v: unknown[]): string[] {
   return (v || []).map(String);
 }
@@ -201,25 +219,32 @@ export async function run(ctx: Ctx, inputs: Inputs): Promise<FixResult> {
   if (fixAction === 'remove') {
     if (!targetIds.length) return ask(d, 'no target row was identified');
 
-    // Mode (b) — structural duplicate. Diagnose asserts each target duplicates a
-    // named peer; verify the peer exists, is a different row, and carries the same
-    // aggregated value (so removing the target genuinely drops a double-count).
+    // A removal is AUTO-APPLIED only when each target is a genuine DUPLICATE — a copy of the row
+    // survives, so no data is lost. Two ways to establish that: diagnose NAMED the peer
+    // (`duplicateOf`, verified to exist, differ, and match on the aggregated column), or the target
+    // has an EXACT full-row twin in the table (identical on every column but the id) — which the
+    // code detects on its own, so a clear double-count still auto-fixes even when diagnose forgot to
+    // populate `duplicateOf`. A removal justified merely by "the total drops to the target" is NOT a
+    // duplicate (a legitimate row can hit the target by coincidence) and is handled below.
+    const allRows = await ctx.db.query(table, {});
+    const byId = new Map(allRows.map((r) => [rid(r), r]));
     const dupOf = idList(d.duplicateOf ?? []);
-    if (dupOf.length === targetIds.length && dupOf.every((p) => p !== '')) {
-      const rows = await ctx.db.query(table, {});
-      const byId = new Map(rows.map((r) => [rid(r), r]));
-      const col = spec ? spec.column : undefined;
-      let verified = true;
-      for (let i = 0; i < targetIds.length; i++) {
-        const t = byId.get(targetIds[i]!);
+    const hasNamedPeers = dupOf.length === targetIds.length && dupOf.every((p) => p !== '');
+    const col = spec ? spec.column : undefined;
+    const isDuplicate = (id: string, i: number): boolean => {
+      const t = byId.get(id);
+      if (!t) return false;
+      if (hasNamedPeers) {
         const p = byId.get(dupOf[i]!);
-        if (!t || !p || targetIds[i] === dupOf[i]) { verified = false; break; }
-        if (col && num(t[col]) !== num(p[col])) { verified = false; break; }
+        return !!p && dupOf[i] !== id && (!col || num(t[col]) === num(p[col]));
       }
-      if (verified) {
-        const before = spec ? agg(spec.op ?? 'sum', await ctx.db.query(table, { where: spec.filter || {} }), spec.column ?? '') : undefined;
-        return await applyRemove(ctx, table, targetIds, spec, `removed ${targetIds.length} duplicate row(s) from ${table}`, before);
-      }
+      return allRows.some((r) => rid(r) !== id && sameRowExceptId(r, t));
+    };
+    if (targetIds.every(isDuplicate)) {
+      const before = spec && spec.op ? agg(spec.op, await ctx.db.query(table, { where: spec.filter || {} }), spec.column ?? '') : undefined;
+      return await applyRemove(ctx, table, targetIds, spec, `removed ${targetIds.length} duplicate row(s) from ${table}`, before);
+    }
+    if (hasNamedPeers) {
       return ask(d, 'the target does not match its claimed duplicate');
     }
 

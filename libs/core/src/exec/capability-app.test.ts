@@ -65,9 +65,11 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
 
   it('db:read + db:write + db:schema ⇒ all verbs on one db object', () => {
     const dts = dtsFor({ 'db:read': {}, 'db:write': {}, 'db:schema': {} });
-    for (const m of ['query(', 'tables(', 'insert(', 'update(', 'remove(', 'createTable(', 'addColumn(']) {
+    for (const m of ['query(', 'tables(', 'insert(', 'update(', 'createTable(', 'addColumn(']) {
       expect(dts).toContain(m);
     }
+    // `remove` (hard delete) is host-only — absent from the model db surface even with db:write.
+    expect(dts).not.toContain('remove(');
     expect((dts.match(/declare const db\b/g) ?? []).length).toBe(1); // single db object
   });
 

@@ -1,0 +1,100 @@
+{
+  "title": "NCAA Ngorongoro Conservation Area Tariff Reference",
+  "description": "Full NCAA tariff reference: entry permits, crater service fees, vehicle descent, camping, walking safaris, Olduvai Gorge, balloon, horse riding, sundown, filming, bush lunch, boma, penalties, and park rules.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "category": {
+      "type": "string",
+      "description": "Fee category e.g. Entry Permit, Crater Service, Vehicle Descent"
+    },
+    "park": {
+      "type": "string",
+      "description": "Park or conservation area name"
+    },
+    "fee_name": {
+      "type": "string",
+      "description": "Name of the fee or rule"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description"
+    },
+    "rate_usd": {
+      "type": "number",
+      "description": "Rate in USD (per person unless noted otherwise)"
+    },
+    "rate_tzs": {
+      "type": "number",
+      "description": "Rate in TZS where applicable"
+    },
+    "per": {
+      "type": "string",
+      "description": "Unit: per person, per vehicle, per night, per day, etc."
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Number of units (travelers or vehicles)"
+    },
+    "total_usd": {
+      "type": "number",
+      "description": "Total for this line item (unit_rate × quantity)"
+    },
+    "age_group": {
+      "type": "string",
+      "description": "Applicable age group, e.g. 16+, 5-16, below 5"
+    },
+    "ncaa_contact": {
+      "type": "string",
+      "description": "Official NCAA contact number or email if this is a contact row"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Special conditions, rules, or contact info"
+    },
+    "fee_type": {
+      "type": "string",
+      "description": "Type of fee (entry permit, crater service, vehicle descent, etc.)"
+    },
+    "rate_description": {
+      "type": "string",
+      "description": "How the rate is calculated (per person, per vehicle, etc.)"
+    },
+    "unit_rate_usd": {
+      "type": "number",
+      "description": "Unit rate in USD"
+    },
+    "tariff_section": {
+      "type": "string",
+      "description": "NCA tariff section reference, e.g. A, B, E"
+    },
+    "sub_category": {
+      "type": "string",
+      "description": "Sub-type or weight class e.g. adult 16+, child 5-16, ≤2000kg"
+    },
+    "resident_type": {
+      "type": "string",
+      "description": "Non-EA, EA, or Foreign"
+    },
+    "adult_rate_usd": {
+      "type": "number",
+      "description": "Rate per adult in USD (if applicable)"
+    },
+    "child_rate_usd": {
+      "type": "number",
+      "description": "Rate per child in USD (if applicable)"
+    },
+    "child_age_range": {
+      "type": "string",
+      "description": "Child age range e.g. 5-16, <5 free"
+    },
+    "unit": {
+      "type": "string",
+      "description": "Per what — person/day, per trip, per landing, per vehicle"
+    }
+  }
+}

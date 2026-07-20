@@ -1,0 +1,44 @@
+{
+  "title": "Cairo Stopovers",
+  "description": "Both Cairo stopover sightseeing plans: Stopover 1 (Aug 3–4, Grand Egyptian Museum + Pyramids of Giza, Eileen Hotel base) and Stopover 2 (Aug 19–20, Islamic Cairo/Citadel/Khan el-Khalili/Coptic Cairo, Ramses Hilton base), with POI details and taxi notes.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "stopover_number": {
+      "type": "number",
+      "description": "1 or 2"
+    },
+    "dates": {
+      "type": "string",
+      "description": "Date range e.g. Aug 3–4"
+    },
+    "title": {
+      "type": "string",
+      "description": "Stopover title / theme"
+    },
+    "hotel_base": {
+      "type": "string",
+      "description": "Hotel name used as base"
+    },
+    "hotel_location_note": {
+      "type": "string",
+      "description": "Hotel location context"
+    },
+    "pois": {
+      "type": "string",
+      "description": "Comma-separated list of points of interest"
+    },
+    "taxi_notes": {
+      "type": "string",
+      "description": "Taxi / transport logistics notes"
+    },
+    "description": {
+      "type": "string",
+      "description": "Full stopover description / plan"
+    }
+  }
+}

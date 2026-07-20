@@ -1,0 +1,76 @@
+{
+  "title": "Trip Notes",
+  "description": "General-purpose notes table: voice-note items, trip learnings/rules, Dar es Salaam POIs, and future notes.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when the note was created"
+    },
+    "label": {
+      "type": "string",
+      "description": "Short label for the note"
+    },
+    "detail": {
+      "type": "string",
+      "description": "Full note detail or description"
+    },
+    "source": {
+      "type": "string",
+      "description": "Source: voice-note, traveler-added, etc."
+    },
+    "cost_usd": {
+      "type": "number",
+      "description": "Approximate cost in USD if applicable"
+    },
+    "cost_tzs": {
+      "type": "number",
+      "description": "Approximate cost in TZS if applicable"
+    },
+    "currency_note": {
+      "type": "string",
+      "description": "Note about currency uncertainty"
+    },
+    "flag_unconfirmed": {
+      "type": "boolean",
+      "description": "True if the item needs verification"
+    },
+    "action_required": {
+      "type": "string",
+      "description": "Action reminder if applicable"
+    },
+    "title": {
+      "type": "string",
+      "description": "Note title / label"
+    },
+    "content": {
+      "type": "string",
+      "description": "Full note content"
+    },
+    "category": {
+      "type": "string",
+      "description": "voice-note, learning, dar-poi, packing, driving, park-rule, zanzibar, general"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags for filtering"
+    },
+    "origin": {
+      "type": "string",
+      "description": "Where this note came from: voice-note, trip-costs, NCAA-tariff, user, read_sources"
+    },
+    "is_voice_note": {
+      "type": "boolean",
+      "description": "True if this item originated as a voice recording"
+    },
+    "display_order": {
+      "type": "number",
+      "description": "Sort order for display"
+    }
+  }
+}

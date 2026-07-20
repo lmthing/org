@@ -25,7 +25,7 @@ capabilities:
 | Capability | Unlocks | Config |
 |---|---|---|
 | `db:read` | `db.query`, `db.tables` | optional `{ tables: [...] }` |
-| `db:write` | `db.insert`, `db.update`, `db.remove` | optional `{ tables: [...] }` |
+| `db:write` | `db.insert`, `db.update` | optional `{ tables: [...] }` |
 | `db:schema` | `db.createTable`, `db.addColumn`, `writeTableSchema` | optional `{ tables: [...] }` |
 | `pages:write` | `writePage(route, src)` | bare only |
 | `api:write` | `writeApi(route, src)` | bare only |
