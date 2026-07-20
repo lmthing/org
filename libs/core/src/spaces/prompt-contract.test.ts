@@ -531,6 +531,50 @@ describe('system-appbuilder live-project build action', () => {
     expect(finalize).toMatch(/phase: 'gate'/); // dangling-table miss recorded as a build error
     expect(finalize).toMatch(/allErrors\.length === 0/); // ok gates on compiler errors + gate misses
   });
+
+  it('the gate ALSO catches a bad useApi/useApiMutation/apiCall endpoint reference and a non-JSX Page() return — mechanical, not compiler-visible (06-tanzania run 32, steps 3 + 10)', () => {
+    const dir = join(SYSTEM_SPACES, 'system-appbuilder', 'tasklists', 'build_live_project');
+    const read = (f: string) => readFileSync(join(dir, f), 'utf8');
+
+    // These two mechanical scans run in ALL THREE gate nodes (compile_pass1, compile_pass2, finalize),
+    // exactly like the endpoint→table scan they sit beside — a caught file is routed to the matching
+    // fix fork, not just surfaced at the very end. Assertions are wrap/spacing-insensitive (\s+, not
+    // literal newlines/indentation) so a harmless reflow of the embedded statement doesn't false-fail.
+    for (const file of ['12-compile_pass1.md', '14-compile_pass2.md', '16-finalize.md']) {
+      const src = read(file);
+
+      // Page→endpoint: every useApi/useApiMutation/apiCall('<name>') in pages/+components/ must resolve
+      // to a real generated endpoint name (ground-truthed off `export const name` in api/, not an
+      // upstream ok-list — self-correcting after a fix, same discipline as the table scan). These are
+      // fixed single-line statements (never reflowed), so a plain substring check is the honest form —
+      // a regex here would just be re-escaping the same literal text.
+      expect(src, `${file}: page→endpoint scan`).toContain("useApi(?:Mutation)?|apiCall)");
+      expect(src, `${file}: reads real endpoint names off api/`).toContain("export\\s+const\\s+name\\s*=");
+      expect(src, `${file}: not a generated endpoint name`).toContain('is not a generated endpoint name');
+      expect(src, `${file}: names the useApi short-circuit failure mode`).toContain('short-circuits to an error state with NO network request');
+
+      // Render-correctness: a page/component returning the display()-descriptor { type, props } shape
+      // instead of JSX is a gate miss too (typechecks clean, throws React error #31 at runtime).
+      expect(src, `${file}: descriptor-return scan`).toContain("return\\s*\\{\\s*type\\s*:");
+      expect(src, `${file}: names the display()-descriptor shape`).toContain("display()-descriptor shape");
+      expect(src, `${file}: names the React runtime failure`).toContain('React error #31');
+
+      // Both scans fold into the SAME error/offending accumulator the table scan already uses.
+      expect(src, `${file}: shares the gate's error list`).toMatch(/(?:gateErrors|allErrors)\.push\(\{[\s\S]{0,400}is not a generated endpoint name/);
+      expect(src, `${file}: shares the gate's error list`).toMatch(/(?:gateErrors|allErrors)\.push\(\{[\s\S]{0,400}display\(\)-descriptor shape/);
+    }
+
+    // The fix nodes carry matching repair guidance for both new gate-error classes, alongside the
+    // existing table-gate bullet.
+    for (const file of ['13-fix_pass1.md', '15-fix_pass2.md']) {
+      const src = read(file);
+      expect(src, `${file}: repair guidance for a bad endpoint reference`).toMatch(/plan_endpoints\.endpoints[\s\S]{0,200}VERBATIM/);
+      // Order/proximity-insensitive on purpose: the two bullets sit next to each other in prose and a
+      // harmless reword could shuffle which phrase comes first — just require both ideas are present.
+      expect(src, `${file}: repair guidance rewrites the descriptor as JSX`).toMatch(/rewrite/i);
+      expect(src, `${file}: repair guidance names JSX as the target shape`).toMatch(/\bJSX\b/);
+    }
+  });
 });
 
 describe('system-appbuilder repair turns', () => {

@@ -25,7 +25,14 @@ import only the real `@app/runtime` exports or drop it; a component not in the `
 a `phase: 'gate'` error naming a table absent from `database/` → re-point the query at the drifted real
 table name (check `plan_tables.tables` + `listProjectDir('database').entries`), or — when no existing table
 holds that record kind — create the missing table with `writeProjectTable` (valid snake_case name, columns
-from the endpoint's declared `fields`, schema-only, never invented rows) and re-point the file at it.
+from the endpoint's declared `fields`, schema-only, never invented rows) and re-point the file at it; a
+`phase: 'gate'` error naming a `useApi`/`useApiMutation`/`apiCall` call whose name is not a real generated
+endpoint → find the REAL endpoint serving this page's data in `plan_endpoints.endpoints` (match by
+`purpose`/`tables`) and rewrite the call to its `name`, VERBATIM, reading `fields` off that SAME endpoint;
+a `phase: 'gate'` error citing a bare `{ type, props }` object literal returned from a page/component →
+that is THIS SYSTEM'S OWN display()-descriptor shape (the chat/tasklist protocol) leaking into JSX
+authoring — rewrite the SAME markup as real JSX, preserving every element/prop/child the descriptor
+already encoded (a component reference in `type` becomes a JSX tag), never `React.createElement`.
 Preserve every endpoint and section the file already has. Emit one statement:
 
 ```typescript

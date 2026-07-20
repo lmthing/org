@@ -38,6 +38,19 @@ EACH error `item.errors` names, grounded in the real artifacts, NOT a guess:
   real name; if NO existing table holds it, the TABLE is the missing artifact — create it first with
   `writeProjectTable` under a valid snake_case name (columns derived from the endpoint's declared
   `fields`; schema-only — NEVER invent rows), then point every reference in this file at that name.
+- A `phase: 'gate'` error naming a `useApi`/`useApiMutation`/`apiCall` call whose name is not a real
+  generated endpoint (the page calls one that was never written, so the hook short-circuits to an error
+  state with NO network request ever firing) → find the REAL endpoint that serves this page's data in
+  `plan_endpoints.endpoints` (match by `purpose`/`tables` against what this file is trying to show), and
+  rewrite the call to that endpoint's `name`, VERBATIM. Re-read `fields` off that SAME endpoint and use
+  exactly those keys — never invent a name and never leave the call pointed at the missing one.
+- A `phase: 'gate'` error citing a bare `{ type, props }` (or `{ type, props, children }`) object literal
+  returned from a page/component → that is THIS SYSTEM'S OWN display()-descriptor shape (the chat/tasklist
+  rendering protocol) leaking into JSX authoring, not real React. Rewrite the SAME markup as JSX, keeping
+  every element, prop, and child the descriptor already encoded (`{ type: 'div', props: { className: 'p-4',
+  children: 'Cash Expenses' } }` → `<div className="p-4">Cash Expenses</div>`; a component reference in
+  `type` becomes a JSX tag: `{ type: RunningTotalBanner, props: { total } }` → `<RunningTotalBanner
+  total={total} />`) — never `React.createElement`, never a stringified template.
 
 You must PRESERVE the file's real content — keep every endpoint it already reads and every section it
 already renders; you are correcting the fault, not wiping the file. Write with the matching typed writer
