@@ -22,6 +22,11 @@ export default defineConfig({
   target: 'node20',
   // `unpdf` (PDF), `xlsx` (spreadsheets) and `officeparser` (docx/pptx/odt/odp) are
   // lazily-imported document extractors kept external so tsup doesn't inline them;
-  // they ship in node_modules.
-  external: ['ink', 'react', 'ws', 'esbuild', 'unpdf', 'xlsx', 'officeparser'],
+  // they ship in node_modules. `typescript` must stay external too: its `sys` object
+  // is computed by an eagerly-invoked IIFE at module load (getNodeSystem() calling
+  // require('fs')/require('path')/...), and tsup/esbuild replace that require() with
+  // a dynamic-require shim that only works if a real CJS `require` exists at runtime —
+  // there is none in an ESM bundle, so bundling `typescript` crashes on the very first
+  // `import ts from 'typescript'` with "Dynamic require of \"fs\" is not supported".
+  external: ['ink', 'react', 'ws', 'esbuild', 'unpdf', 'xlsx', 'officeparser', 'typescript'],
 });
