@@ -76,6 +76,29 @@ export interface RunTasklistOptions {
  * variable values. Only the tasklist BOUNDARY result is enveloped:
  * `{ ok, degraded, data, reason?, degradedTasks? }`.
  */
+
+/**
+ * Upstream outputs are keyed by dependency id (`{ user_stories: { stories: [...] } }`), but a node's
+ * `input:` names bare FIELDS (`stories: array`). Flatten one level so both forms validate — a field
+ * emitted by exactly one dependency is visible unqualified; a name two dependencies both emit stays
+ * ambiguous and is deliberately NOT flattened, so the node must qualify it.
+ */
+function flattenForInput(upstream: Record<string, unknown>): Record<string, unknown> {
+  const counts = new Map<string, number>();
+  for (const out of Object.values(upstream)) {
+    if (!out || typeof out !== 'object' || Array.isArray(out)) continue;
+    for (const k of Object.keys(out as Record<string, unknown>)) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const flat: Record<string, unknown> = {};
+  for (const out of Object.values(upstream)) {
+    if (!out || typeof out !== 'object' || Array.isArray(out)) continue;
+    for (const [k, v] of Object.entries(out as Record<string, unknown>)) {
+      if (counts.get(k) === 1) flat[k] = v;
+    }
+  }
+  return flat;
+}
+
 export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelope> {
   const { name, space, forkEngine, seed, tracer, parentScope, codeNodeCtxFactory } = opts;
 
@@ -268,6 +291,24 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
           taskScopes.set(task.id, taskScope);
 
           const upstream = Object.keys(upstreamOutputs).length > 0 ? upstreamOutputs : undefined;
+
+          // A node's own `input:` schema is a CONTRACT over what its dependencies must have
+          // produced — enforce it, fail-loud, before the node runs. It was parsed
+          // (`spaces/tasklist-load.ts`) and then read by nothing, so a node could declare an
+          // input its upstream never emits and still run, receiving `undefined` and failing
+          // somewhere further on with an error that named the wrong node. Dead contract metadata
+          // is worse than none: it reads as a guarantee.
+          if (task.input && Object.keys(task.input).length > 0) {
+            const seen = { ...(seedFor(task) ?? {}), ...upstreamOutputs, ...flattenForInput(upstreamOutputs) };
+            const inputErrors = validateInput(task.input, seen);
+            if (inputErrors.length > 0) {
+              throw new Error(
+                `Task "${task.id}" input contract unmet: ${inputErrors.join('; ')}. ` +
+                  `Declared \`input:\` names what this node's dependencies (${(task.dependsOn ?? []).join(', ') || 'none'}) ` +
+                  'must supply — either the upstream output schema changed, or this node depends on the wrong task.',
+              );
+            }
+          }
 
           // CODE NODE: the host runs the node module's `run(ctx, inputs)` via the
           // injected factory (core stays free of any transpile/worker runtime).

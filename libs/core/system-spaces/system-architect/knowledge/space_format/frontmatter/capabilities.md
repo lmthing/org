@@ -26,12 +26,17 @@ capabilities:
 |---|---|---|
 | `db:read` | `db.query`, `db.tables` | optional `{ tables: [...] }` |
 | `db:write` | `db.insert`, `db.update` | optional `{ tables: [...] }` |
-| `db:schema` | `db.createTable`, `db.addColumn`, `writeTableSchema` | optional `{ tables: [...] }` |
-| `pages:write` | `writePage(route, src)` | bare only |
-| `api:write` | `writeApi(route, src)` | bare only |
-| `hooks:write` | `writeHook(slug, def)` | bare only |
+| `db:schema` | `db.createTable`, `db.addColumn`, `writeProjectTable(name, schema, rows?)` | optional `{ tables: [...] }` |
+| `pages:write` | `writeProjectPage(route, src, opts?)`, `writeProjectComponent(name, src)`, `buildApp()` | bare only |
+| `api:write` | `writeProjectApi(route, src)` | bare only |
+| `hooks:write` | `writeProjectHook(slug, src)`, `writeProjectEvent(name, src)`, `writeProjectFunction(name, src)` | bare only |
 | `api:call` | `apiCall(name, input)` | **required** `{ allow: [...] }` |
 | `project:manage` | `createProject(id, opts)`, `selectProject(id)` | bare only |
+
+> The writers are all `writeProject*` and write into the session's OWN live project. The older
+> store-catalog names (`writePage`/`writeApi`/`writeHook`/`writeTableSchema`) are **gone** — a space
+> authored against one produces an agent whose call is absent from its DTS, i.e. a typecheck error on
+> every turn that tries it (`sdk/org/libs/core/src/typecheck/library-dts.ts`).
 
 **Validation is fail-loud**: an unknown capability id, an unknown config key, a `db:*` `tables`
 entry naming a table absent from the project's `database/`, a config payload given to a bare-only

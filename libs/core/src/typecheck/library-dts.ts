@@ -262,14 +262,16 @@ export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, 
 // typed surface for shared UI (there is no space-rooted fs writer for components anymore).
 export const PROJECT_COMPONENT_DTS = `declare function writeProjectComponent(name: string, src: string): { ok: boolean; error?: string };`;
 
-// `pages:write` ALSO earns `buildApp` — build + PROGRAMMATICALLY CHECK the live app
-// (write-time lint → project-app typecheck → esbuild bundle). Value-yielding (Promise,
+// `pages:write` ALSO earns `buildApp` — build + PROGRAMMATICALLY CHECK the live app: the
+// project-app typecheck, and THEN the esbuild bundle only if it passed. Two phases, not three —
+// the write-time contract lint is real but throws at the WRITER during the authoring turn
+// (`app/authoring/lint.ts`), so it never appears in this error list. Value-yielding (Promise,
 // like `apiCall`): the heavy tsc + esbuild run host-side. It returns the STRUCTURED
 // error list (exit-status ground truth, never a model self-assessment) a build gate
 // node reads to fix the offending page/component and re-check until the app is clean
 // (or fails loudly) — a clean resolve sets `built:true` for ALL routes. `phase` says
 // which check produced each error; `file` is project-relative.
-export const BUILD_APP_DTS = `declare function buildApp(): Promise<{ ok: boolean; built: boolean; routes: string[]; errors: Array<{ phase: 'lint' | 'typecheck' | 'build'; file: string; line?: number; column?: number; message: string }> }>;`;
+export const BUILD_APP_DTS = `declare function buildApp(): Promise<{ ok: boolean; built: boolean; routes: string[]; errors: Array<{ phase: 'typecheck' | 'build'; file: string; line?: number; column?: number; message: string }> }>;`;
 
 // `hooks:write` earns the plan-S11 LIVE-PROJECT authoring writers — the automator
 // authors event hooks (`hooks/<slug>.ts`) + emitter defs (`events/<name>.ts`) and the

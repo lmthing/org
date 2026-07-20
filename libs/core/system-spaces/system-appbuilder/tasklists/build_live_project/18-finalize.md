@@ -26,7 +26,11 @@ First make the app OPENABLE by writing the persistent chat layout `_layout` with
 from `@app/runtime`.
 
 Then run the AUTHORITATIVE build+check: call `buildApp()`. This is the SOLE build-invoker — it runs the
-real lint → typecheck → esbuild bundle over EVERY route (including the layout just written) and is what
+real project-app typecheck and THEN, only if that passed, the esbuild bundle, over EVERY route
+(including the layout just written). Two phases, not three: `errors[].phase` is `'typecheck'` or
+`'build'` and NEVER `'lint'` — the write-time contract lint is real but throws at the WRITER during the
+authoring turn, so it can never appear here. Because typecheck short-circuits, an empty `build` phase on
+a failed check means the bundle never ran, not that bundling succeeded. It is what
 sets the app `built` (nothing relies on a lazy build the first time the app is opened). It resolves the
 structured `{ ok, built, routes, errors }` — the programmatic ground truth. The prior gate+fix rounds have
 already driven the offending files clean; this is the final verification.

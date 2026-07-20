@@ -141,11 +141,18 @@ export type ApiCallFn = (name: string, input?: unknown) => Promise<unknown>;
 /**
  * One programmatic-check failure in a live-project app artifact — the PROGRAMMATIC
  * GROUND TRUTH a build gate reads (never a model self-assessment). `phase` names the
- * check that produced it (write-time contract lint, the project-app typecheck, or the
- * esbuild bundle); `file` is project-relative (`pages/index.tsx`).
+ * check that produced it; `file` is project-relative (`pages/index.tsx`).
+ *
+ * There are exactly TWO phases, and typecheck SHORT-CIRCUITS: a failing typecheck means the bundle
+ * never runs, so a clean `build` phase is not evidence of anything on a failed check
+ * (`sdk/org/libs/cli/src/app/build/check.ts#runProjectAppCheck`). A third `'lint'` member used to be
+ * declared here and was never emitted by anything — the write-time contract lint is real
+ * (`app/authoring/lint.ts`) but it throws a `LintError` at the WRITER, in the authoring turn; it is
+ * not a phase of `buildApp()`. Prompts that promised "buildApp runs the lint" were describing a
+ * check that would never appear in this list.
  */
 export interface AppCheckError {
-  phase: 'lint' | 'typecheck' | 'build';
+  phase: 'typecheck' | 'build';
   file: string;
   line?: number;
   column?: number;

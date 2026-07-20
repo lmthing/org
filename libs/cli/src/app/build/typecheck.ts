@@ -30,10 +30,18 @@
  *     correct call never false-positives.
  *
  * Deliberately **NOT** included: the `lib.dom.d.ts` lib. `compilerOptions.lib` is
- * `['lib.es2020.d.ts']` only — `console`/`window`/`document`/`fetch` etc. are
- * genuinely undeclared, so a page that reaches for one of them (instead of the
- * typed `@app/runtime` surface, or nothing) gets a real `Cannot find name` error.
- * This is the "NO-DOM ambient" the prompts describe.
+ * `['lib.es2020.d.ts']` only — `window`/`document`/`navigator`/`alert` are genuinely
+ * undeclared, so a page that reaches for the DOM (instead of the typed `@app/runtime`
+ * surface, or JSX and React state) gets a real `Cannot find name` error. This is the
+ * "NO-DOM ambient" the prompts describe.
+ *
+ * A SMALL set of host globals that genuinely exist at runtime IS declared explicitly
+ * ({@link buildAmbientDts}): `fetch`, `crypto`, `console`, the timers, and `AbortSignal`/
+ * `AbortController`. Leaving them out did not enforce anything — a page runs in a real
+ * browser and an endpoint in real Node, so the code worked and only the types complained.
+ * Measured across the 5 shipped store apps, they accounted for 25 of 57 flagged files,
+ * every one live and correct. "Undeclared" is only a useful signal when there is a
+ * sanctioned alternative to point at; for these there is none.
  *
  * ## Module resolution
  *
@@ -122,6 +130,11 @@ declare function setTimeout(handler: (...args: any[]) => void, timeout?: number,
 declare function setInterval(handler: (...args: any[]) => void, timeout?: number, ...args: any[]): any;
 declare function clearTimeout(handle?: any): void;
 declare function clearInterval(handle?: any): void;
+/** \`fetch\`'s own timeout mechanism. Every use across the shipped store apps is
+ *  \`fetch(url, { signal: AbortSignal.timeout(8000) })\` — allowing \`fetch\` without this pushes the
+ *  author toward an UNBOUNDED external call, which is worse than not allowing it. */
+declare const AbortSignal: { timeout(ms: number): any; abort(reason?: any): any };
+declare class AbortController { signal: any; abort(reason?: any): void; }
 
 declare namespace JSX {
   interface IntrinsicElements { [elem: string]: any }
