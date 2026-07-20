@@ -36,6 +36,14 @@ EACH error `item.errors` names, grounded in the real artifacts, NOT a guess:
 - `window`/`document`/`navigator`/`alert` (NO-DOM ambient) → express it as JSX and React state instead.
   (`console`, `fetch`, `crypto`, `setTimeout`/`setInterval` are DECLARED — they are never this error.)
 - A null-guard the types demand (`x.toLocaleString()` on a nullable) → coalesce first (`(x ?? 0)`).
+- A `phase: 'smoke'` error — the endpoint was actually CALLED and misbehaved. This is the only fault
+  class proving RUNTIME behaviour, so never "fix" it by changing the page: fix the HANDLER.
+  `returned 500` → the handler threw; the usual cause is querying a table or column that does not
+  exist, so check the real names in `plan_tables`. `envelope` → a read endpoint must resolve
+  `{ items: [...] }` (an aggregate is the single summary at `items[0]`). `undefined` param → the
+  handler answered 2xx with rows when its `[id]` was missing; it must validate the param and return
+  an error instead of silently matching everything, because a plausible 200 carrying the wrong row
+  is worse than a failure.
 - A `phase: 'gate'` error — the file references a TABLE that does not exist in `database/` (the handler
   builds clean but every call 500s at runtime) → decide which side is wrong, grounded in
   `plan_tables.tables` and `listProjectDir('database').entries`: if an EXISTING table already holds this

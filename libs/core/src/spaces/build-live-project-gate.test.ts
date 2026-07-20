@@ -202,6 +202,43 @@ export default async function handler(_i: any, ctx: any) { return { ok: true }; 
     expect(r.offending).toEqual([]);
   });
 
+  it('FOLDS IN smoke_endpoints findings — fix fans out over verify.offending and nothing else', async () => {
+    // `verify` depends on `smoke_endpoints` but originally never READ it, so every runtime fault the
+    // only node that actually calls an endpoint could find was computed and discarded. Worse than not
+    // probing: the pipeline reports a gate that ran and found nothing.
+    const r = await run(ctxFor({ ...CLEAN, 'pages/index.tsx': page(`  return <div>ok</div>;`) }), {
+      smoke_endpoints: {
+        ok: false,
+        offending: [
+          {
+            path: 'api/costs-list/GET.ts',
+            kind: 'api',
+            errors: [{ phase: 'smoke', message: 'valid-input probe returned 500' }],
+          },
+        ],
+      },
+    });
+    expect(r.ok).toBe(false);
+    expect(r.offending.map((o) => o.path)).toContain('api/costs-list/GET.ts');
+    expect(findingsFor(r, 'api/costs-list/GET.ts')).toContain('500');
+  });
+
+  it('surfaces an UNAVAILABLE smoke probe rather than letting it read as clean', async () => {
+    const r = await run(ctxFor({ ...CLEAN, 'pages/index.tsx': page(`  return <div>ok</div>;`) }), {
+      smoke_endpoints: { ok: false, unavailable: true, reason: 'ctx has no callProjectApi', offending: [] },
+    });
+    expect(r.ok).toBe(false);
+    expect(JSON.stringify(r.offending)).toContain('did not run');
+  });
+
+  it('is unaffected when smoke_endpoints reports clean', async () => {
+    const r = await run(ctxFor({ ...CLEAN, 'pages/index.tsx': page(`  return <div>ok</div>;`) }), {
+      smoke_endpoints: { ok: true, offending: [], offendingCount: 0 },
+    });
+    expect(r.offending).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
   it('flags a Page() returning a { type, props } descriptor instead of JSX', async () => {
     const r = await run(
       ctxFor({

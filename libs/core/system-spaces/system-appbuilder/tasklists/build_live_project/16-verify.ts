@@ -125,7 +125,7 @@ const SURFACE_TOKENS: Record<string, string> = {
   input: 'foreground',
 };
 
-export async function run(ctx: Ctx, _inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
   const build = await ctx.buildProjectApp();
   const byFile: Record<string, Finding[]> = {};
   const add = (file: string, f: Finding): void => {
@@ -133,6 +133,23 @@ export async function run(ctx: Ctx, _inputs: Record<string, unknown>): Promise<R
     list.push(f);
     byFile[file] = list;
   };
+
+  // FOLD IN the runtime probes. `smoke_endpoints` is the only node that actually CALLS a generated
+  // endpoint, and its findings must land in `offending` because `fix` fans out over
+  // `verify.offending` and nothing else — depending on the node without reading it would compute
+  // every 500, every `"undefined"` param and every broken envelope and then throw them away, which
+  // is worse than not probing at all: the pipeline would report a gate that ran and found nothing.
+  const smoke = inputs['smoke_endpoints'] as
+    | { offending?: Array<{ path?: string; errors?: Finding[] }>; unavailable?: boolean; reason?: string }
+    | undefined;
+  if (smoke?.unavailable) {
+    // The probe could not run at all (no `callProjectApi` on ctx). Surface it as a finding rather
+    // than letting an un-run gate read as a clean one.
+    add('api', { phase: 'smoke', message: `endpoint smoke probes did not run: ${smoke.reason ?? 'unavailable'}` });
+  }
+  for (const entry of smoke?.offending ?? []) {
+    for (const e of entry.errors ?? []) add(String(entry.path ?? 'api'), e);
+  }
 
   for (const e of build.errors) {
     add(e.file, { line: e.line, phase: e.phase, message: e.message });
