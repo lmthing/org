@@ -47,8 +47,12 @@ Wiring rules — the app fails to compile if you break them:
   `` to={`/items/${id}`} ``). NEVER prefix `/pages/` (the on-disk folder name is NOT part of the URL —
   `to="/pages/park-fees"` 404s as "No page for /pages/park-fees") and NEVER hard-code `/app/<project>/…`
   (`Link` re-adds the base). A leading slash is required so the base resolves.
-- STYLE WITH `@lmthing/css` DESIGN TOKENS ONLY (`bg-primary`, `text-foreground`, `text-muted`,
-  `border-border`) — never a raw hex, `rgb()/hsl()`, or a stock Tailwind color.
+- STYLE WITH `@lmthing/css` DESIGN TOKENS ONLY (`bg-primary`, `text-foreground`,
+  `text-muted-foreground`, `border-border`) — never a raw hex, `rgb()/hsl()`, or a stock Tailwind
+  color. Muted TEXT is `text-muted-foreground` — NEVER `text-muted`. `--muted` is a background
+  token; `text-muted` is a real Tailwind utility that compiles clean and silently renders text in
+  that background color (invisible-on-its-surface, not a build failure). `bg-muted` is the only
+  correct place for the bare `muted` name.
 - GUARD NULLS. Every DB column is NULLABLE, so any value you read may be null/undefined — real parsed
   data routinely leaves fields blank. Never use a value in a way that a null would break (calling a
   method on it, reading a property, indexing, passing it somewhere non-null). COALESCE first:
@@ -91,7 +95,7 @@ const src = [
   "",
   "export default function Page() {",
   "  const { data, isLoading, error } = useApi<{ items: { id: string; title?: string }[] }>('" + ep + "');",
-  "  if (isLoading) return <p className=\"p-4 text-muted\">Loading…</p>;",
+  "  if (isLoading) return <p className=\"p-4 text-muted-foreground\">Loading…</p>;",
   "  if (error) return <p className=\"p-4 text-destructive\">Could not load data.</p>;",
   "  return (",
   "    <main className=\"space-y-2 p-4\">",
@@ -125,7 +129,7 @@ import CostCard from '../components/CostCard';
 
 export default function Page() {
   const { data, isLoading, error } = useApi<{ items: { id: string; title?: string }[] }>('cost-lines');
-  if (isLoading) return <p className="p-4 text-muted">Loading…</p>;
+  if (isLoading) return <p className="p-4 text-muted-foreground">Loading…</p>;
   if (error) return <p className="p-4 text-destructive">Could not load data.</p>;
   return (
     <main className="space-y-2 p-4">
@@ -149,6 +153,10 @@ const t = data?.items?.[0]?.grandTotalUSD;        // ✗ re-cased guess — read
 <Link to="/app/trip/park-fees">Fees</Link>       // ✗ never hard-code the base — Link re-adds it: to="/park-fees"
 const res = await fetch('/api/cost-lines');       // ✗ no raw fetch — read through useApi
 <div className="text-blue-600">                   // ✗ stock Tailwind color — use text-foreground
+<p className="text-muted p-4">Loading…</p>        // ✗ text-muted is a REAL utility that resolves to
+                                                   //   the --muted BACKGROUND color as text — it
+                                                   //   compiles clean and renders near-invisible; use
+                                                   //   text-muted-foreground for muted text
 console.log(data);                                // ✗ Cannot find name 'console' — no DOM lib
 import Missing from '../components/Missing';      // ✗ imported without checking implement_components'
                                                    //   ok-list — if Missing failed to write, this import

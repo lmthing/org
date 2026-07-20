@@ -34,7 +34,7 @@ the session is running in, NOT the store catalog — with these synchronous writ
   encodes its HTTP method last, e.g. `bookings-list/GET`).
 - `writeProjectPage(route, src)` → `pages/<route>.tsx` — a client-side React page (`index`
   is the app home; `bookings/[id]` is a dynamic route). Style with `@lmthing/css` design
-  TOKENS only (`bg-primary`, `text-foreground`, `text-muted`, `border-border`) — never a raw
+  TOKENS only (`bg-primary`, `text-foreground`, `text-muted-foreground`, `border-border`) — never a raw
   hex/`rgb()`/stock Tailwind color. Import data hooks from `@app/runtime`
   (`useApi`/`useApiMutation`/`Link`/`useParams`) — never `fetch` a raw URL.
 - `writeProjectComponent(name, src)` → `components/<Name>.tsx` — a shared React component
@@ -342,7 +342,7 @@ const p = writeProjectPage('index', [
   "import { useApi } from '@app/runtime';",
   "export default function Home() {",
   "  const { data, isLoading } = useApi<{ items: { id: string; summary: string }[] }>('activity-list');",
-  "  if (isLoading) return <p className=\"text-muted p-4\">Loading…</p>;",
+  "  if (isLoading) return <p className=\"text-muted-foreground p-4\">Loading…</p>;",
   "  return (<ul className=\"divide-y divide-border\">{(data?.items ?? []).map((a) => (",
   "    <li key={a.id} className=\"p-3 text-foreground\">{a.summary}</li>))}</ul>);",
   "}",
@@ -510,7 +510,7 @@ const l = writeProjectPage('_layout', [
   "      <div className=\"fixed bottom-5 right-5 z-40 flex h-[32rem] w-96 flex-col rounded-lg border border-border bg-background shadow-xl\">",
   "        <div className=\"flex items-center justify-between border-b border-border px-3 py-2\">",
   "          <span className=\"text-sm font-medium text-foreground\">Assistant</span>",
-  "          <button onClick={() => setOpen(false)} aria-label=\"Close the assistant\" className=\"text-muted\">×</button>",
+  "          <button onClick={() => setOpen(false)} aria-label=\"Close the assistant\" className=\"text-muted-foreground\">×</button>",
   "        </div>",
   "        <Chat agent=\"thing\" className=\"flex-1\" />",
   "      </div>",

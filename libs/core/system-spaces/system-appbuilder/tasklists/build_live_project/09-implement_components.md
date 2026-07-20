@@ -15,8 +15,11 @@ and the source MUST have a DEFAULT export (the component a page renders); the wr
 that it parses as TSX, returning `{ ok, error? }`. Write the FULL `.tsx` source inline with the
 array-`join("\n")` pattern. This is presentational UI: take the record/value via props and render it —
 do NOT fetch data here (pages pass data in). STYLE WITH `@lmthing/css` DESIGN TOKENS ONLY (`bg-card`,
-`text-foreground`, `text-muted`, `border-border`, `bg-primary`) — never a raw hex, `rgb()/hsl()`, or a
-stock Tailwind color (`gray-500`, `blue-600`). Import only from `react`/`@app/runtime` if needed.
+`text-foreground`, `text-muted-foreground`, `border-border`, `bg-primary`) — never a raw hex,
+`rgb()/hsl()`, or a stock Tailwind color (`gray-500`, `blue-600`). Muted TEXT is
+`text-muted-foreground` — NEVER `text-muted` (that resolves to the `--muted` BACKGROUND token, so it
+compiles clean but renders text the same color as the surface behind it). Import only from
+`react`/`@app/runtime` if needed.
 `@app/runtime` exports ONLY `apiCall`, `HttpError`, `useApi`, `useApiMutation`, `useParams`, `Link`,
 `navigate`, and `Chat`; do not import utility helpers such as `cn`, `clsx`, or `classNames`.
 
@@ -38,7 +41,7 @@ const src = [
   "  return (",
   "    <div className=\"rounded-lg border border-border bg-card p-3\">",
   "      <p className=\"font-medium text-foreground\">{title}</p>",
-  "      {subtitle ? <p className=\"text-sm text-muted\">{subtitle}</p> : null}",
+  "      {subtitle ? <p className=\"text-sm text-muted-foreground\">{subtitle}</p> : null}",
   "    </div>",
   "  );",
   "}",
@@ -66,7 +69,7 @@ export default function CostCard({ title, amount }: { title: string; amount?: st
   return (
     <div className="rounded-lg border border-border bg-card p-3">
       <p className="font-medium text-foreground">{title}</p>
-      {amount ? <p className="text-sm text-muted">{amount}</p> : null}
+      {amount ? <p className="text-sm text-muted-foreground">{amount}</p> : null}
     </div>
   );
 }
@@ -81,9 +84,12 @@ import { cn } from '@app/runtime';               // ✗ not exported; no cn / cl
 <div style={{ color: '#0a0a0a' }}>               // ✗ raw hex — use a token (text-foreground)
 console.log(title);                              // ✗ Cannot find name 'console' — no DOM lib
 <span className={
-  "font-medium " + (ok ? "text-foreground" : "text-muted"),
+  "font-medium " + (ok ? "text-foreground" : "text-muted-foreground"),
 }>                                                // ✗ trailing comma after the expression — a JSX
                                                   //   `{...}` container holds exactly ONE expression;
                                                   //   a comma with nothing after it fails to parse and
                                                   //   the write is silently rejected
+<p className="text-sm text-muted">{amount}</p>   // ✗ text-muted resolves to the --muted BACKGROUND
+                                                  //   color, not a text color — compiles clean, renders
+                                                  //   near-invisible; use text-muted-foreground
 ```
