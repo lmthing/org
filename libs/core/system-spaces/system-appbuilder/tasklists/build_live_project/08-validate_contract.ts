@@ -41,7 +41,6 @@ export const node = {
 
 interface TableSpec {
   name?: string;
-  schema?: { columns?: Record<string, unknown> };
 }
 interface EndpointSpec {
   name?: string;
@@ -95,10 +94,6 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
   };
 
   const tableNames = new Set(tables.map((t) => String(t.name ?? '')).filter(Boolean));
-  const columnsOf = new Map<string, Set<string>>();
-  for (const t of tables) {
-    columnsOf.set(String(t.name ?? ''), new Set(Object.keys(t.schema?.columns ?? {})));
-  }
   const endpointNames = new Set(endpoints.map((e) => String(e.name ?? '')).filter(Boolean));
   const componentNames = new Set(components.map((c) => String(c.name ?? '')).filter(Boolean));
   const knownEndpoints = [...endpointNames].join(', ') || 'none';
@@ -133,19 +128,13 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
     }
   }
 
-  // (3) A field claimed off a single table that the table has no column for. Only checked for a
-  // SINGLE-table endpoint: a join or an aggregate legitimately computes keys no column carries.
-  for (const e of endpoints) {
-    const srcTables = list<string>(e.tables);
-    if (srcTables.length !== 1) continue;
-    const cols = columnsOf.get(String(srcTables[0]));
-    if (!cols || cols.size === 0) continue;
-    for (const f of list<string>(e.fields)) {
-      const key = fieldName(f);
-      if (!key || cols.has(key)) continue;
-      add('plan_endpoints', key, `endpoint "${e.name}" returns field "${key}" but table "${srcTables[0]}" has no such column (has: ${[...cols].join(', ')}) — either add the column in plan_tables, rename the field to the real column, or mark the endpoint as computing it from more than one table`);
-    }
-  }
+  // NOTE — there is deliberately NO "endpoint field must be a real column" check. It was here and
+  // removed after run 35: a single-table GROUP BY / aggregate legitimately computes fields no column
+  // carries (`costs-summary` on `costs`), so the check fired on correct designs, and the model began
+  // dismissing the WHOLE feedback channel as noise. The one real case it caught — a re-cased field
+  // (`amountUSD` for `amount_usd`) — is now a COMPILE error via the `emit_types` contract (a page
+  // reading the wrong key does not typecheck), and a field the handler never actually returns is
+  // caught at runtime by `smoke_endpoints`. Both downstream mechanisms are precise; this one was not.
 
   // (4) A page naming an endpoint nobody assigned — the run-32 dead-page fault, caught at plan time.
   for (const p of pages) {
@@ -172,20 +161,18 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
 
   // (6) A component whose props no page-visible endpoint can feed. Props are the contract between a
   // page and a component; one nothing supplies renders permanently blank.
-  const allFields = new Set<string>();
-  for (const e of endpoints) for (const f of list<string>(e.fields)) allFields.add(fieldName(f));
   for (const c of components) {
     const used = pages.some((p) => list<string>(p.components).includes(String(c.name)));
     if (!used) {
       add('plan_components', String(c.name), `component "${c.name}" is declared but no page renders it — drop it, or have a page use it`);
-      continue;
     }
-    for (const prop of list<string>(c.props)) {
-      const key = fieldName(prop);
-      // Presentational props (children/className) and anything an endpoint returns are fine.
-      if (!key || key === 'children' || key === 'className' || allFields.has(key)) continue;
-      add('plan_components', key, `component "${c.name}" declares prop "${key}" but no endpoint returns a field of that name (fields available: ${[...allFields].join(', ') || 'none'}) — the prop would be fed nothing and render blank`);
-    }
+    // There is deliberately NO "every prop must be an endpoint field" check. A prop is a contract
+    // between the PAGE and the component, not between the component and an endpoint: a page passes
+    // literals (`label="Pending"`), values it derives client-side, or endpoint fields, and at plan
+    // time "fed a literal" is indistinguishable from "fed nothing". The version that flagged this
+    // (run 35) fired on every static `title`/`subtitle`/`message`/`label`, inflating the error list
+    // until the model dismissed real errors alongside the false ones. A prop actually fed nothing
+    // surfaces where it is real — an empty render — not as a plan-time guess.
   }
 
   // (7) A table nothing reads is dead weight the app will never show.

@@ -77,25 +77,18 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
     expect(msgs(r)).toContain('500'); // names the runtime failure mode, not just the mismatch
   });
 
-  it('flags a field the single source table has no column for', async () => {
+  it('does NOT validate endpoint fields against columns — a single-table aggregate computes them', async () => {
+    // Removed after run 35: a single-table GROUP BY legitimately returns keys no column carries
+    // (`costs-summary` on `costs`). Flagging those fired on correct designs until the model began
+    // dismissing the whole feedback channel as noise. The real case (a re-cased field) is now a
+    // COMPILE error via the emit_types contract, and a field the handler never returns is caught by
+    // smoke_endpoints — both precise where this check was not.
     const c = clone();
-    c.plan_endpoints.endpoints[0]!.fields = ['label: string', 'grandTotalUSD: number'];
+    c.plan_endpoints.endpoints[0]!.fields = ['label: string', 'grandTotalUSD: number', 'total_by_category: number'];
     const r = await run({}, c as unknown as Record<string, unknown>);
-    expect(r.ok).toBe(false);
-    expect(refs(r)).toContain('grandTotalUSD');
-    expect(msgs(r)).toContain('amount_usd'); // tells the redesign the real column name
-  });
-
-  it('does NOT flag computed fields on a MULTI-table endpoint', async () => {
-    // A join or an aggregate legitimately returns keys no single column carries. Flagging those
-    // would teach the redesign to delete correct work.
-    const c = clone();
-    c.plan_tables.tables.push(table('trips', ['id', 'name']));
-    c.plan_endpoints.endpoints[0]!.tables = ['costs', 'trips'];
-    c.plan_endpoints.endpoints[0]!.fields = ['trip_name: string', 'total_usd: number'];
-    c.plan_components.components[0]!.props = ['trip_name: string'];
-    const r = await run({}, c as unknown as Record<string, unknown>);
-    expect(refs(r)).not.toContain('total_usd');
+    expect(r.ok).toBe(true);
+    expect(refs(r)).not.toContain('grandTotalUSD');
+    expect(refs(r)).not.toContain('total_by_category');
   });
 
   it('flags duplicate endpoint names and duplicate routes', async () => {
@@ -124,19 +117,25 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
     expect(msgs(r)).toContain('[id]');
   });
 
-  it('flags a component prop no endpoint can feed', async () => {
+  it('does NOT validate component props against endpoint fields — a prop can be a page-provided literal', async () => {
+    // Removed after run 35: a prop is a contract between the PAGE and the component, not between the
+    // component and an endpoint. A page passes literals (`label="Pending"`), derived values, or
+    // endpoint fields, and at plan time "fed a literal" is indistinguishable from "fed nothing". The
+    // check fired on every static title/subtitle/message until the model ignored real errors too.
     const c = clone();
-    c.plan_components.components[0]!.props = ['label: string', 'vendorName: string'];
+    c.plan_components.components[0]!.props = ['label: string', 'vendorName: string', 'subtitle: string'];
     const r = await run({}, c as unknown as Record<string, unknown>);
-    expect(r.ok).toBe(false);
-    expect(refs(r)).toContain('vendorName');
+    expect(r.ok).toBe(true);
+    expect(refs(r)).not.toContain('vendorName');
+    expect(refs(r)).not.toContain('subtitle');
   });
 
-  it('does NOT flag presentational props', async () => {
+  it('STILL flags a component no page renders — dead weight, no false-positive risk', async () => {
     const c = clone();
-    c.plan_components.components[0]!.props = ['label: string', 'children', 'className: string'];
+    c.plan_components.components.push({ name: 'Unused', props: [] });
     const r = await run({}, c as unknown as Record<string, unknown>);
-    expect(r.errors).toEqual([]);
+    expect(r.ok).toBe(false);
+    expect(refs(r)).toContain('Unused');
   });
 
   it('flags an unrendered component and an unread table', async () => {
