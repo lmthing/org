@@ -9,6 +9,8 @@ export { VariablesBlock } from './components/VariablesBlock.js';
 export type { ReplBlock } from './client/useReplSession.js';
 export { AgentChatPanel } from './components/AgentChatPanel.js';
 export type { AgentChatPanelProps, SessionTarget } from './components/AgentChatPanel.js';
+export { ReplChatView } from './components/ReplChatView.js';
+export type { ReplChatViewProps } from './components/ReplChatView.js';
 export { ChatShell } from './app/ChatShell.js';
 export { getAccessToken, authHeaders, wsTokenSuffix, withAuthToken } from './app/auth.js';
 
