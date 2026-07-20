@@ -51,7 +51,9 @@ currentTask.resolve({ route: ep.route, name, ok: w.ok });
 ```
 
 The handler source you assemble is a self-contained ESM module, typechecked against a **NO-DOM ambient**:
-there is no `console`, `window`, `fetch`, `document`, or Node global — data comes ONLY through `ctx.db`.
+there is no `window` or `document`. `fetch`, `crypto`, `console` and the timers ARE available (an
+endpoint runs in real Node, so calling an external service is legitimate) — but the PROJECT's own data
+comes ONLY through `ctx.db`, never by fetching your own API.
 `w` (the `writeProjectApi` result) is `{ ok, error? }`: branch on `w.ok`, read `w.error` — never treat it
 as an array or call `.length` on it.
 

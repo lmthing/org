@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -480,8 +480,8 @@ describe('system-appbuilder live-project build action', () => {
     expect(read('11-implement_pages.md')).toMatch(/verbatim/i);
 
     // finalize writes the persistent chat dock layout.
-    expect(read('16-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
-    expect(read('16-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
+    expect(read('14-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
+    expect(read('14-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
 
     // Pages are detailed ONE per node too: plan_pages fans out over the binding page list, so no
     // single node holds every page's detail (the "split the monolithic page node" fix).
@@ -498,82 +498,72 @@ describe('system-appbuilder live-project build action', () => {
 
     // finalize reports pages HONESTLY from disk and surfaces any planned page that went missing — it
     // does NOT declare a clean `ok` on a partial build (the reporting half of the silent-drop fix).
-    expect(read('16-finalize.md')).toMatch(/listProjectDir\('pages'\)/);
-    expect(read('16-finalize.md')).toMatch(/const missing =/);
-    expect(read('16-finalize.md')).toMatch(/missing\.length === 0/);
+    expect(read('14-finalize.md')).toMatch(/listProjectDir\('pages'\)/);
+    expect(read('14-finalize.md')).toMatch(/const missing =/);
+    expect(read('14-finalize.md')).toMatch(/missing\.length === 0/);
 
     // GATE-AND-RETRY (durable completeness): after every file is written the app is compiled against the
     // REAL toolchain via buildApp() (lint → typecheck → esbuild), and each offending FILE is routed to a
     // per-file fix fork — driven by the STRUCTURED error list (programmatic ground truth), not a
     // self-assessment. This is what turns "built but broken" into "type-correct or fail loud".
-    const compile1 = read('12-compile_pass1.md');
-    expect(compile1).toMatch(/await buildApp\(\)/);
-    expect(compile1).toMatch(/errors/); // reads the structured error list
-    expect(compile1).toMatch(/offending/); // groups errors by file for the fix fan-out
-    const fix1 = read('13-fix_pass1.md');
-    expect(fix1).toMatch(/forEach: compile_pass1\.offending/);
-    expect(fix1).toMatch(/readProjectFile\(/); // reads the failing file before fixing it
-    expect(fix1).toMatch(/item\.errors|f\.errors/); // fixes the SPECIFIC compiler errors
-    expect(read('14-compile_pass2.md')).toMatch(/await buildApp\(\)/);
-    expect(read('15-fix_pass2.md')).toMatch(/forEach: compile_pass2\.offending/);
+    // The gate is a HOST-RUN code node, so the scan cannot fail to be reproduced (see
+    // build-live-project-gate.test.ts, which drives its real run()). `fix` loops back to it.
+    const verify = read('12-verify.ts');
+    expect(verify).toMatch(/ctx\.buildProjectApp\(\)/);
+    expect(verify).toMatch(/offending/); // groups findings by file for the fix fan-out
+    const fix = read('13-fix.md');
+    expect(fix).toMatch(/forEach: verify\.offending/);
+    expect(fix).toMatch(/goto: verify/); // resumes the gate instead of a hand-unrolled second pass
+    expect(fix).toMatch(/readProjectFile\(/); // reads the failing file before fixing it
+    expect(fix).toMatch(/item\.errors|f\.errors/); // fixes the SPECIFIC reported errors
     // Nothing is excluded or stubbed to make the build pass.
     expect(read('index.md')).toMatch(/never (silently )?(excluded|stubbed)|excluded or stubbed/i);
 
     // finalize is the sole authoritative build-invoker (subsumes the no-build-trigger defect): it runs
     // buildApp() itself and gates `ok` on a CLEAN, BUILT app — a residual compiler error fails loudly.
-    // It ALSO runs the mechanical endpoint→table completeness gate the compiler cannot do (the db surface
-    // is dynamically typed): an api module referencing a table absent from database/ builds clean but 500s
-    // at runtime, so it is folded into `allErrors` and gates `ok` the same as a compiler error.
-    const finalize = read('16-finalize.md');
+    // The mechanical scans the compiler cannot do now live in `verify` (a host-run code node), so
+    // finalize CARRIES their residue rather than re-implementing them: a non-empty verify.offending
+    // means the fix loop exhausted its attempts with faults still open, and gates `ok` the same as a
+    // compiler error.
+    const finalize = read('14-finalize.md');
     expect(finalize).toMatch(/const check = await buildApp\(\)/);
     expect(finalize).toMatch(/check\.ok && check\.built/);
-    expect(finalize).toMatch(/does not exist in database/i); // the endpoint→table gate's error
-    expect(finalize).toMatch(/phase: 'gate'/); // dangling-table miss recorded as a build error
+    expect(finalize).toMatch(/verify\.offending/); // carries the gate's residue
     expect(finalize).toMatch(/allErrors\.length === 0/); // ok gates on compiler errors + gate misses
   });
 
-  it('the gate ALSO catches a bad useApi/useApiMutation/apiCall endpoint reference and a non-JSX Page() return — mechanical, not compiler-visible (06-tanzania run 32, steps 3 + 10)', () => {
+  it('the mechanical scans live in the CODE NODE, and no prompt duplicates them (06-tanzania run 32)', () => {
     const dir = join(SYSTEM_SPACES, 'system-appbuilder', 'tasklists', 'build_live_project');
     const read = (f: string) => readFileSync(join(dir, f), 'utf8');
 
-    // These two mechanical scans run in ALL THREE gate nodes (compile_pass1, compile_pass2, finalize),
-    // exactly like the endpoint→table scan they sit beside — a caught file is routed to the matching
-    // fix fork, not just surfaced at the very end. Assertions are wrap/spacing-insensitive (\s+, not
-    // literal newlines/indentation) so a harmless reflow of the embedded statement doesn't false-fail.
-    for (const file of ['12-compile_pass1.md', '14-compile_pass2.md', '16-finalize.md']) {
-      const src = read(file);
+    // These scans used to be ~50 lines of TypeScript the MODEL re-emitted inside three separate
+    // prompt nodes. In run 32 that was 44 of 124 errors across the build steps ('gateErrors' is
+    // not defined cascades) — and a gate that fails to execute contributes no findings, which the
+    // pipeline reads as "clean". They are now one host-run code node; its behaviour is tested for
+    // real in build-live-project-gate.test.ts. Here we only pin WHERE they live.
+    const verify = read('12-verify.ts');
+    expect(verify, 'page→endpoint scan').toContain('useApiMutation|useApi|apiCall');
+    expect(verify, 'reads real endpoint names off api/').toContain('export\\s+const\\s+name\\s*=');
+    expect(verify, 'names the unknown-endpoint failure mode').toContain('BEFORE issuing any request');
+    expect(verify, 'param-arity scan').toContain('stringified into the path');
+    expect(verify, 'descriptor-return scan').toContain('return\\s*\\{\\s*type\\s*:');
+    expect(verify, 'names the React runtime failure').toContain('React error #31');
+    expect(verify, 'endpoint→table scan').toContain('db\\s*\\.\\s*(?:query|insert|update|remove)');
+    expect(verify, 'surface-token-as-text scan').toContain('SURFACE token');
 
-      // Page→endpoint: every useApi/useApiMutation/apiCall('<name>') in pages/+components/ must resolve
-      // to a real generated endpoint name (ground-truthed off `export const name` in api/, not an
-      // upstream ok-list — self-correcting after a fix, same discipline as the table scan). These are
-      // fixed single-line statements (never reflowed), so a plain substring check is the honest form —
-      // a regex here would just be re-escaping the same literal text.
-      expect(src, `${file}: page→endpoint scan`).toContain("useApi(?:Mutation)?|apiCall)");
-      expect(src, `${file}: reads real endpoint names off api/`).toContain("export\\s+const\\s+name\\s*=");
-      expect(src, `${file}: not a generated endpoint name`).toContain('is not a generated endpoint name');
-      expect(src, `${file}: names the useApi short-circuit failure mode`).toContain('short-circuits to an error state with NO network request');
+    // The duplication is GONE: finalize consumes verify's result instead of re-scanning, and the
+    // second compile/fix pair no longer exists at all.
+    const finalize = read('14-finalize.md');
+    expect(finalize, 'finalize must not re-implement the scans').not.toContain('is not a generated endpoint name');
+    expect(finalize, 'finalize consumes the gate result').toMatch(/verify\.offending/);
+    expect(existsSync(join(dir, '14-compile_pass2.md')), 'the unrolled second pass is removed').toBe(false);
+    expect(existsSync(join(dir, '15-fix_pass2.md')), 'the unrolled second fix is removed').toBe(false);
 
-      // Render-correctness: a page/component returning the display()-descriptor { type, props } shape
-      // instead of JSX is a gate miss too (typechecks clean, throws React error #31 at runtime).
-      expect(src, `${file}: descriptor-return scan`).toContain("return\\s*\\{\\s*type\\s*:");
-      expect(src, `${file}: names the display()-descriptor shape`).toContain("display()-descriptor shape");
-      expect(src, `${file}: names the React runtime failure`).toContain('React error #31');
-
-      // Both scans fold into the SAME error/offending accumulator the table scan already uses.
-      expect(src, `${file}: shares the gate's error list`).toMatch(/(?:gateErrors|allErrors)\.push\(\{[\s\S]{0,400}is not a generated endpoint name/);
-      expect(src, `${file}: shares the gate's error list`).toMatch(/(?:gateErrors|allErrors)\.push\(\{[\s\S]{0,400}display\(\)-descriptor shape/);
-    }
-
-    // The fix nodes carry matching repair guidance for both new gate-error classes, alongside the
-    // existing table-gate bullet.
-    for (const file of ['13-fix_pass1.md', '15-fix_pass2.md']) {
-      const src = read(file);
-      expect(src, `${file}: repair guidance for a bad endpoint reference`).toMatch(/plan_endpoints\.endpoints[\s\S]{0,200}VERBATIM/);
-      // Order/proximity-insensitive on purpose: the two bullets sit next to each other in prose and a
-      // harmless reword could shuffle which phrase comes first — just require both ideas are present.
-      expect(src, `${file}: repair guidance rewrites the descriptor as JSX`).toMatch(/rewrite/i);
-      expect(src, `${file}: repair guidance names JSX as the target shape`).toMatch(/\bJSX\b/);
-    }
+    // The fix node carries repair guidance for each gate-error class.
+    const fix = read('13-fix.md');
+    expect(fix, 'repair guidance for a bad endpoint reference').toMatch(/plan_endpoints\.endpoints[\s\S]{0,200}VERBATIM/);
+    expect(fix, 'repair guidance rewrites the descriptor as JSX').toMatch(/rewrite/i);
+    expect(fix, 'repair guidance names JSX as the target shape').toMatch(/\bJSX\b/);
   });
 });
 

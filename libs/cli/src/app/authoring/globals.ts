@@ -18,16 +18,21 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { runProjectAppCheck } from '../build/check.js';
+import type { AppCheckResult } from '../build/check.js';
 import { dirname, join, resolve, sep } from 'node:path';
 import { transformSync } from 'esbuild';
 import { validateTableSchema, type TableSchema } from '@lmthing/core';
 import {
   LintError,
+  apiCallSites,
+  braceBody,
   existingApiNames,
   lintApiHandler,
   lintComponentSource,
   lintHookSource,
   lintPageSource,
+  topLevelKeys,
 } from './lint.js';
 
 /** Throw a {@link LintError} when a lint check returned a message, so it surfaces to the model as a
@@ -63,16 +68,7 @@ function assertSourceParses(src: string, loader: 'ts' | 'tsx'): void {
  * fetches nothing renders nothing (a `@app/runtime` page has no other way to reach the db).
  */
 function fetchedRoutes(src: string): string[] {
-  const out = new Set<string>();
-  for (const m of src.matchAll(/\b(?:useApi|useApiMutation|apiCall)\b/g)) {
-    // Skip the generic (`useApi<{ items: Row[] }>(…)`) and take the first literal argument.
-    const tail = src.slice(m.index + m[0].length, m.index + m[0].length + 400);
-    const open = tail.indexOf('(');
-    if (open < 0) continue;
-    const lit = /^\(\s*['"`]([^'"`]+)['"`]/.exec(tail.slice(open));
-    if (lit) out.add(lit[1]!);
-  }
-  return [...out];
+  return [...new Set(apiCallSites(src).map((s) => s.name))];
 }
 
 /**
@@ -212,6 +208,16 @@ export interface ProjectAuthoringGlobals {
   /** Read a project file's text (`<projectRoot>/<path>`). Project-rooted; the read twin of the
    *  writers, for inspecting an existing table schema / page / hook before editing it. */
   readProjectFile: (path: string) => { ok: boolean; content: string; error?: string };
+  /** Typecheck + bundle the project app, returning the SAME structured result as the agent-facing
+   *  `buildApp()` global (which resolves to the very same {@link runProjectAppCheck}).
+   *
+   *  This exists so a tasklist **code node** can gate a build. `buildApp()` is a sandbox yield, so
+   *  it is reachable only from a model turn — which meant every build gate had to be ~50 lines of
+   *  scanning TypeScript re-emitted by the model on each run. In one real scenario run that
+   *  accounted for 35% of all errors (`'gateErrors' is not defined` cascades), and a gate that
+   *  fails to execute contributes no findings, so the pipeline reads its empty result as "clean".
+   *  Exposing it host-side lets the gate be deterministic. */
+  buildProjectApp: () => Promise<AppCheckResult>;
 }
 
 /**
@@ -384,42 +390,10 @@ export function createProjectAuthoringGlobals(opts: {
     return null;
   }
 
-  /** The text inside the `{…}` whose opening brace is at `open` (null if unbalanced). */
-  function braceBody(src: string, open: number): string | null {
-    let depth = 0;
-    for (let i = open; i < src.length; i++) {
-      if (src[i] === '{') depth++;
-      else if (src[i] === '}' && --depth === 0) return src.slice(open + 1, i);
-    }
-    return null;
-  }
-
   /** The `set: { … }` block of an update's options object. */
   function setBlock(body: string): string | null {
     const m = /\bset\s*:\s*\{/.exec(body);
     return m ? braceBody(body, m.index + m[0].length - 1) : null;
-  }
-
-  /** Top-level `key:` names of an object-literal body (nested objects/arrays skipped). */
-  function topLevelKeys(body: string): string[] {
-    const keys: string[] = [];
-    let depth = 0;
-    let atKey = true;
-    for (let i = 0; i < body.length; i++) {
-      const c = body[i];
-      if (c === '{' || c === '[' || c === '(') depth++;
-      else if (c === '}' || c === ']' || c === ')') depth--;
-      else if (c === ',' && depth === 0) atKey = true;
-      else if (depth === 0 && atKey) {
-        const m = /^\s*(?:['"`]([A-Za-z0-9_]+)['"`]|([A-Za-z_$][\w$]*))\s*:/.exec(body.slice(i));
-        if (m) {
-          keys.push(m[1] ?? m[2]);
-          i += m[0].length - 1;
-          atKey = false;
-        } else if (!/\s/.test(c)) atKey = false;
-      }
-    }
-    return keys;
   }
 
   /**
@@ -525,7 +499,7 @@ export function createProjectAuthoringGlobals(opts: {
       rel = assertPathSegments('page route', route);
       if (!rel.endsWith('.tsx')) rel = `${rel}.tsx`;
       assertSourceParses(src, 'tsx');
-      throwLint(lintPageSource(src));
+      throwLint(lintPageSource(src, { projectRoot }));
     } catch (e) {
       if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
@@ -599,7 +573,7 @@ export function createProjectAuthoringGlobals(opts: {
         throw new Error(`component name "${name}" is not PascalCase (expected /${COMPONENT_NAME_RE.source}/)`);
       }
       assertSourceParses(src, 'tsx');
-      throwLint(lintComponentSource(src));
+      throwLint(lintComponentSource(src, { projectRoot }));
     } catch (e) {
       if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
@@ -640,6 +614,10 @@ export function createProjectAuthoringGlobals(opts: {
     }
   }
 
+  /** Host-side twin of the agent's `buildApp()` — same `runProjectAppCheck`, reachable from a
+   *  tasklist code node so a build gate can be deterministic rather than model-emitted. */
+  const buildProjectApp = (): Promise<AppCheckResult> => runProjectAppCheck(opts.projectRoot);
+
   return {
     writeProjectHook,
     writeProjectEvent,
@@ -650,5 +628,6 @@ export function createProjectAuthoringGlobals(opts: {
     writeProjectApi,
     listProjectDir,
     readProjectFile,
+    buildProjectApp,
   };
 }

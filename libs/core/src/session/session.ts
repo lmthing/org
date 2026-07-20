@@ -994,6 +994,10 @@ export class Session {
       budgetLimits: this.opts.budget,
       roleModels: this.opts.roleModels,
       dynamicSpaces: this.dynamicSpaces,
+      // A delegated agent runs its OWN action tasklists through the yield router; without
+      // this a code node in one dies with "no codeNodeCtxFactory" and the model abandons
+      // the tasklist and free-hands the work instead.
+      codeNodeCtxFactory: this.opts.codeNodeCtxFactory,
       documentResolver: this.opts.documentResolver,
     });
   }
@@ -1305,6 +1309,10 @@ export class Session {
           budgetLimits: this.opts.budget,
           roleModels: this.opts.roleModels,
           dynamicSpaces: this.dynamicSpaces,
+          // A delegated agent runs its OWN action tasklists through the yield router; without
+          // this a code node in one dies with "no codeNodeCtxFactory" and the model abandons
+          // the tasklist and free-hands the work instead.
+          codeNodeCtxFactory: this.opts.codeNodeCtxFactory,
           documentResolver: this.opts.documentResolver,
         });
       },

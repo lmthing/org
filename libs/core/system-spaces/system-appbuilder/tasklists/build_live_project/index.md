@@ -16,12 +16,16 @@ built upstream: plan the tables → write each table (with its source-derived ro
 component, then — PER PAGE — detail that one page against the real endpoints/components → write it (it
 imports the components and reads the endpoints). Detailing AND writing pages are both per-page host
 fan-outs, so a slip on one page is salvaged on its own and can never zero the rest. Once every file is
-written, a GATE compiles the WHOLE app against the real toolchain — `buildApp()` runs the write-time lint,
-the project-app typecheck (a NO-DOM ambient; data only through `@app/runtime`) and the esbuild bundle, and
-returns the STRUCTURED error list (exit-status ground truth, not a self-assessment). A file that parsed but
-does not type-check or build (a wrong field, a prop a component lacks, a `console` reference, a bad import,
-an undefined name) is routed to a per-file fix fork — one fork per offending file, reading THAT file's real
-errors plus the plan — then the app is compiled again; up to two bounded fix rounds drive it clean. The
+written, a HOST-RUN GATE (`verify`, a code node) compiles the WHOLE app against the real toolchain — the
+project-app typecheck (a NO-DOM ambient; data only through `@app/runtime`) then the esbuild bundle — and
+returns the STRUCTURED error list (exit-status ground truth, not a self-assessment). It also runs the
+mechanical scans the compiler structurally cannot: an api module querying a table that does not exist, a
+page naming an endpoint that was never generated, a `[id]` route called without its param, a `{ type,
+props }` descriptor returned in place of JSX, and a surface token used as a text colour. Running host-side
+is deliberate — as prose the model had to re-emit the scan on every pass, and a gate that fails to execute
+reports nothing, which reads as "clean". A file that parsed but does not type-check, build, or pass a scan
+is routed to a per-file fix fork — one fork per offending file, reading THAT file's real errors plus the
+plan — and the fixer then RESUMES the gate (`onFail`), so the compile→fix cycle loops until clean. The
 final node writes the persistent chat layout, runs the ONE authoritative `buildApp()` (the sole
 build-invoker — it sets `built` for every route), and reports HONESTLY: it resolves `ok` only when the build
 is CLEAN and complete, and FAILS LOUDLY (carrying the residual errors and any missing page) rather than

@@ -556,3 +556,90 @@ describe('runDelegate auto-capture — two-tasklist escalation pattern (research
     expect(result).toEqual({ final: true, covered: true });
   });
 });
+
+/**
+ * A DELEGATED agent runs its own action tasklists through the delegate's yield router, which
+ * builds its own context — so `codeNodeCtxFactory` has to be threaded in explicitly. It was not,
+ * and the consequences were worse than a clean failure.
+ *
+ * Observed live (06-tanzania run 33): the appbuilder's `build_live_project` ran all the way
+ * through `implement_pages`, then its `verify` code node died with "no codeNodeCtxFactory was
+ * provided". The required task failed, the tasklist threw — and the automator answered the error
+ * by ABANDONING the pipeline: "The tasklist code-node runner isn't available in this session —
+ * I'll build the app directly." Every gate the tasklist exists to enforce was skipped, and the
+ * app was hand-built instead. A missing wire became a silent bypass of the whole build contract.
+ */
+async function makeCodeNodeSpace(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'lmthing-delegate-codenode-'));
+  escalationTmpDirs.push(dir);
+  const agentFile = join(dir, 'agents', 'builder', 'instruct.md');
+  await mkdir(dirname(agentFile), { recursive: true });
+  await writeFile(
+    agentFile,
+    `---\ntitle: Builder\nactions:\n  - id: build\n    label: Build\n    description: Build the thing\n    tasklist: build\n---\n\nYou are a builder.\n`,
+    'utf8',
+  );
+  const gate = join(dir, 'tasklists', 'build', '01-gate.ts');
+  await mkdir(dirname(gate), { recursive: true });
+  await writeFile(
+    gate,
+    `export const node = { id: 'gate', goal: true, output: { ok: 'boolean' } };\nexport async function run() { return {}; }\n`,
+    'utf8',
+  );
+  return dir;
+}
+
+describe('runDelegate threads codeNodeCtxFactory into the delegate’s own tasklists', () => {
+  it('runs a code node in a delegated action tasklist when the parent supplies a factory', async () => {
+    const dir = await makeCodeNodeSpace();
+    let ran = false;
+    const streamFn = mockMatch([], (): string => `const r = await tasklist("build", { query });`);
+
+    const result = (await runDelegate({
+      packageName: dir,
+      agentName: 'builder',
+      action: 'build',
+      registry: new DelegateRegistry(new Map()),
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+      codeNodeCtxFactory: () => ({
+        runCodeNode: async () => {
+          ran = true;
+          return { ok: true };
+        },
+      }),
+    })) as { ok: boolean; data: { ok: boolean } } | undefined;
+
+    expect(ran, 'the code node must actually execute inside the delegate').toBe(true);
+    expect(result?.data).toEqual({ ok: true });
+  });
+
+  it('without a factory the code node fails — the regression this guards', async () => {
+    const dir = await makeCodeNodeSpace();
+    let sawError = false;
+    const streamFn = mockMatch([], (): string => {
+      // The delegate's turn: run the tasklist and surface whatever it throws.
+      return `try { await tasklist("build", { query }); } catch (e) { currentTask.resolve({ failed: String(e) }); }`;
+    });
+
+    await runDelegate({
+      packageName: dir,
+      agentName: 'builder',
+      action: 'build',
+      registry: new DelegateRegistry(new Map()),
+      renderHost: { ...silentHost, log: (m: string) => { if (/codeNodeCtxFactory/.test(String(m))) sawError = true; } },
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+      // codeNodeCtxFactory deliberately omitted
+    }).catch((e: unknown) => {
+      if (/codeNodeCtxFactory/.test(String(e))) sawError = true;
+    });
+
+    expect(sawError, 'omitting the factory must still fail loudly, not silently no-op').toBe(true);
+  });
+});

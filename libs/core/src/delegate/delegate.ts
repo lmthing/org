@@ -91,6 +91,15 @@ export interface RunDelegateOpts {
    *  parent Session owns, so a registerSpace() inside a fork under this delegate is
    *  visible to later parent delegate() calls (A1 fix — previously a dead path). */
   dynamicSpaces?: Map<string, Space>;
+  /** Host runner for `kind:'code'` tasklist nodes. A delegated agent runs its OWN action
+   *  tasklists through the yield router below, so without this a code node in one of them
+   *  fails with "no codeNodeCtxFactory was provided" — even though the delegating session
+   *  has one. That is not a clean failure: the delegate's required task dies, and the model
+   *  then abandons the tasklist and free-hands the work instead (observed live: the
+   *  appbuilder's automator answered the error with "the tasklist code-node runner isn't
+   *  available in this session — I'll build the app directly"). Threaded from the parent
+   *  session so a delegated tasklist gates exactly like a top-level one. */
+  codeNodeCtxFactory?: import('../tasklist/orchestrator.js').CodeNodeCtxFactory;
 }
 
 export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
@@ -419,6 +428,8 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             // the parent's later delegate()) — same reference forks receive.
             dynamicSpaces: opts.dynamicSpaces,
             getForkEngine: () => forkEngine,
+            // Code nodes in THIS delegate's own action tasklists (see the opt's doc).
+            codeNodeCtxFactory: opts.codeNodeCtxFactory,
             // `result` is the tasklist's TaskEnvelope ({ ok, degraded, data, … })
             // since Phase 3 — captured and returned UNTOUCHED, so the delegator
             // sees the same envelope contract as a direct tasklist() caller.

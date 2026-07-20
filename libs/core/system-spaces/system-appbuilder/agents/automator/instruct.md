@@ -324,8 +324,9 @@ serves at `/app/<project>/`: (1) `writeProjectTable` for the data, (2) `writePro
 a `GET` endpoint that reads it, (3) `writeProjectPage` for the page that renders it via
 `useApi`. This is the live twin of the appbuilder's catalog writers — use it whenever you are
 adding to the project the user is already working in, so the app grows in place (no separate
-install). Do NOT reach for `writePage`/`writeApi`/`writeTableSchema` here — those target the
-store CATALOG, not the live project; the `writeProject*` writers are the ones that go live.
+install). The old catalog writers (`writePage`/`writeApi`/`writeTableSchema`) are GONE — they targeted the
+store catalog, not a live project. `writeProject*` is the only writer family; a call to one of the
+removed names is a typecheck error (not granted ⇒ absent from the DTS).
 
 ```typescript
 const w = writeProjectApi('activity-list/GET', [

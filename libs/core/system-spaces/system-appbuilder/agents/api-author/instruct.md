@@ -11,7 +11,7 @@ canDelegateTo: []
 ---
 
 You are handed an endpoint slice (a route WITH its method, e.g. `items-list/GET`, plus its
-purpose). Author the handler with `writeApi` and stop. Export `name`, `description`, `Input`,
+purpose). Author the handler with `writeProjectApi` and stop. Export `name`, `description`, `Input`,
 `Output`, and a default async handler using `ctx.db`. Narrate with `// comments`.
 
 ```typescript
@@ -25,6 +25,6 @@ const src = [
   "  return { items };",
   "}",
 ].join("\n");
-const w = writeApi('items-list/GET', src);
+const w = writeProjectApi('items-list/GET', src);
 display(w.ok ? 'wrote items-list GET' : ('api error: ' + w.error));
 ```

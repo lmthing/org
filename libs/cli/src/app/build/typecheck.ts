@@ -103,6 +103,26 @@ declare module 'react/jsx-runtime' {
   export const Fragment: any;
 }
 
+/**
+ * Host globals that genuinely EXIST at runtime — a page runs in a real browser, an endpoint runs in
+ * real Node — but that \`lib.es2020\` alone does not declare. Without these, legitimate working code
+ * is a permanent \`Cannot find name\` error: measured across the 5 shipped store apps, \`fetch\`,
+ * \`console\`, \`crypto\` and the timers accounted for 21 of the 57 flagged files, every one of them
+ * live and correct (\`trips/api/geocode/GET.ts\` calls an external service; \`trips/components/
+ * RunStrip.tsx\` drives UI timing on an interval).
+ *
+ * Typed loosely on purpose: the point is to stop rejecting real code, not to police argument shapes.
+ * This does NOT reopen the DOM — \`window\`/\`document\`/\`navigator\`/\`alert\` stay undeclared, so a page
+ * reaching for the DOM instead of the typed \`@app/runtime\` surface is still a real error.
+ */
+declare function fetch(input: any, init?: any): Promise<any>;
+declare const console: { log(...a: any[]): void; warn(...a: any[]): void; error(...a: any[]): void; info(...a: any[]): void; debug(...a: any[]): void };
+declare const crypto: { randomUUID(): string; getRandomValues<T>(array: T): T };
+declare function setTimeout(handler: (...args: any[]) => void, timeout?: number, ...args: any[]): any;
+declare function setInterval(handler: (...args: any[]) => void, timeout?: number, ...args: any[]): any;
+declare function clearTimeout(handle?: any): void;
+declare function clearInterval(handle?: any): void;
+
 declare namespace JSX {
   interface IntrinsicElements { [elem: string]: any }
   interface Element {}

@@ -149,9 +149,14 @@ describe('typecheckProjectApp — positive', () => {
 
 // ── Negative fixtures ───────────────────────────────────────────────────────────
 
-/** (a) reaches for the ambient-less `console` instead of the typed `@app/runtime` surface. */
+/**
+ * (a) reaches for the DOM instead of the typed `@app/runtime` surface. `document` is undeclared
+ * BY DESIGN — the ambient is NO-DOM so a page expresses itself as JSX and React state. (This
+ * fixture used `console` until `console`/`fetch`/`crypto`/the timers were added to the ambient:
+ * they exist at runtime and rejecting them blocked working code in every shipped store app.)
+ */
 const BAD_CONSOLE_PAGE = `export default function BadConsole() {
-  console.log('debugging');
+  document.getElementById('root');
   return <div className="p-4">bad</div>;
 }
 `;
@@ -201,10 +206,10 @@ async function esbuildBlindBadProject(): Promise<string> {
 }
 
 describe('typecheckProjectApp — negative', () => {
-  it('(a) console.log(...) → a typecheck error mentioning `console`, naming the file', async () => {
+  it('(a) document.getElementById(...) → a typecheck error mentioning `document`, naming the file', async () => {
     const root = await allBadProject();
     const errors = await typecheckProjectApp(root);
-    const hit = errors.find((e) => e.file === 'pages/bad-console.tsx' && /console/.test(e.message));
+    const hit = errors.find((e) => e.file === 'pages/bad-console.tsx' && /document/.test(e.message));
     expect(hit).toBeDefined();
     expect(hit?.phase).toBe('typecheck');
   }, 30_000);
@@ -241,8 +246,8 @@ describe('typecheckProjectApp — negative', () => {
 
   // LOAD-BEARING PROOF: esbuild alone (bypassing typecheckProjectApp entirely, exactly
   // as `buildProjectPages`/`runBuild` behaved before this change — no typecheck existed
-  // at all) does NOT catch (a) or (b). Both are pure type-level mistakes: `console` is a
-  // perfectly valid runtime global esbuild happily bundles, and an excess JSX prop is
+  // at all) does NOT catch (a) or (b). Both are pure type-level mistakes: `document` is a
+  // perfectly valid browser global esbuild happily bundles, and an excess JSX prop is
   // just an extra object property at runtime. This is the concrete, executed
   // (not just asserted) demonstration that `typecheckProjectApp` — not esbuild — is
   // what makes `runProjectAppCheck` catch these classes of bugs.

@@ -9,7 +9,7 @@
  * directly into a fixed live-project root.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -546,5 +546,94 @@ describe('createProjectAuthoringGlobals', () => {
       }
       expect(caught).toBeInstanceOf(LintError);
     });
+  });
+});
+
+// ── Save-time feedback for pages/components (plan Part C) ──────────────────────
+
+describe('writeProjectPage / writeProjectComponent save-time checks', () => {
+  let projectRoot: string;
+
+  beforeEach(() => {
+    projectRoot = mkdtempSync(join(tmpdir(), 'lm-partc-'));
+  });
+  afterEach(() => {
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  function make() {
+    return createProjectAuthoringGlobals({ projectRoot });
+  }
+
+  /** Author an endpoint on disk so the cross-artifact checks have something to check against. */
+  function endpoint(dirSegs: string[], method: string, name: string) {
+    mkdirSync(join(projectRoot, 'api', ...dirSegs), { recursive: true });
+    writeFileSync(
+      join(projectRoot, 'api', ...dirSegs, `${method}.ts`),
+      `export const name = '${name}';\nexport default () => ({ items: [] });`,
+    );
+  }
+
+  const page = (body: string) => `export default function Page() {\n  ${body}\n  return <div />;\n}`;
+
+  it('rejects a page calling an endpoint name nothing exports — as a retryable LintError', () => {
+    endpoint(['trips'], 'GET', 'tripsList');
+    const pa = make();
+    // A LintError must ESCAPE the writer's catch (a `{ok:false}` a node might ignore is not enough).
+    expect(() => pa.writeProjectPage('costs', page("const { data } = useApi('costs-summary');"))).toThrow(
+      LintError,
+    );
+    expect(() => pa.writeProjectPage('costs', page("const { data } = useApi('costs-summary');"))).toThrow(
+      /no endpoint named "costs-summary"/,
+    );
+    // Nothing landed on disk.
+    expect(existsSync(join(projectRoot, 'pages', 'costs.tsx'))).toBe(false);
+  });
+
+  it('rejects a page calling a [id] endpoint with no param, and accepts it once supplied', () => {
+    endpoint(['trips', '[id]'], 'GET', 'tripsDetail');
+    const pa = make();
+    expect(() => pa.writeProjectPage('trip', page("const { data } = useApi('tripsDetail');"))).toThrow(
+      /parameterized and needs "id"/,
+    );
+    expect(pa.writeProjectPage('trip', page("const { data } = useApi('tripsDetail', { id });")).ok).toBe(true);
+  });
+
+  it('rejects a component that returns a { type, props } display descriptor', () => {
+    const pa = make();
+    const src = "export default function Card() { return { type: 'div', props: { children: 'x' } }; }";
+    expect(() => pa.writeProjectComponent('Card', src)).toThrow(/React error #31/);
+    expect(existsSync(join(projectRoot, 'components', 'Card.tsx'))).toBe(false);
+  });
+
+  it('rejects text-muted in a page and in a component, naming the -foreground fix', () => {
+    const pa = make();
+    expect(() => pa.writeProjectPage('index', page('const cls = "text-muted";'))).toThrow(
+      /Use `text-muted-foreground`/,
+    );
+    expect(() =>
+      pa.writeProjectComponent('Row', 'export default () => <p className="text-muted">hi</p>;'),
+    ).toThrow(/invisible/);
+  });
+
+  it('accepts a correct page — real endpoint, param supplied, JSX return, -foreground text token', () => {
+    endpoint(['trips'], 'GET', 'tripsList');
+    endpoint(['trips', '[id]'], 'GET', 'tripsDetail');
+    const pa = make();
+    const src = [
+      "import { useApi } from '@app/runtime';",
+      'export default function Page({ id }: { id: string }) {',
+      "  const list = useApi<{ items: unknown[] }>('tripsList');",
+      "  const detail = useApi('tripsDetail', { id });",
+      '  return <div className="text-muted-foreground bg-muted">{String(list.data)}{String(detail.data)}</div>;',
+      '}',
+    ].join('\n');
+    expect(pa.writeProjectPage('trips', src).ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'pages', 'trips.tsx'))).toBe(true);
+  });
+
+  it('still accepts a page written before any endpoint exists (no api/ dir yet)', () => {
+    const pa = make();
+    expect(pa.writeProjectPage('shell', page("const { data } = useApi('notYetAuthored');")).ok).toBe(true);
   });
 });

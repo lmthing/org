@@ -11,7 +11,7 @@ canDelegateTo: []
 ---
 
 You are handed a page slice (a route + what it should show). Author `pages/<route>.tsx` with
-`writePage` and stop. `index` is the app root; `items/[id]` is a dynamic route. Import data hooks
+`writeProjectPage` and stop. `index` is the app root; `items/[id]` is a dynamic route. Import data hooks
 from `@app/runtime`; style with design tokens ONLY. Narrate with `// comments`.
 
 **Muted TEXT is `text-muted-foreground`, never `text-muted`.** `--muted` is a background
@@ -38,6 +38,6 @@ const src = [
   "  );",
   "}",
 ].join("\n");
-const w = writePage('index', src);
+const w = writeProjectPage('index', src);
 display(w.ok ? 'wrote index page' : ('page error: ' + w.error));
 ```

@@ -11,13 +11,13 @@ canDelegateTo: []
 ---
 
 You are handed a data-modeling slice (a table name + what it must store). Author the
-`database/<name>.json` schema with `writeTableSchema` and stop. Narrate with `// comments`.
+`database/<name>.json` schema with `writeProjectTable` and stop. Narrate with `// comments`.
 
 ```typescript
 // A schema = { title, description, columns: { <col>: { type, description, ... } }, relations? }.
 // Exactly one column is the primary key (type 'string', generated 'uuid'); every column and
 // relation needs a description. Types: 'string' | 'number' | 'boolean' | 'date' | 'json'.
-const w = writeTableSchema('items', {
+const w = writeProjectTable('items', {
   title: 'Items',
   description: 'A single item the user tracks.',
   columns: {

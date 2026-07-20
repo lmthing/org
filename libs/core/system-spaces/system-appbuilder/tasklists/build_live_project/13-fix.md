@@ -1,12 +1,16 @@
 ---
-id: fix_pass1
+id: fix
 output:
   path: string
   ok: boolean
-dependsOn: [compile_pass1, plan_pages, plan_endpoints, plan_components, plan_tables, implement_components]
-forEach: compile_pass1.offending
+dependsOn: [verify, plan_pages, plan_endpoints, plan_components, plan_tables, implement_components]
+forEach: verify.offending
 role: general
 functions: []
+onFail:
+  goto: verify
+  when: "verify.ok == false"
+  maxAttempts: 3
 ---
 
 Fix ONE file the compiler rejected — the file in `item` = `{ path, kind, errors }` (`kind` is
@@ -29,7 +33,8 @@ EACH error `item.errors` names, grounded in the real artifacts, NOT a guess:
   (`useApi`/`useApiMutation`/`apiCall`/`Link`/`useParams`/`navigate`/`Chat`), or drop it.
 - A component that is imported but NOT in the `implement_components` ok-list → remove the import and render
   the value inline (a dangling import fails the whole bundle).
-- `console`/`window`/`document` (NO-DOM ambient) → remove it.
+- `window`/`document`/`navigator`/`alert` (NO-DOM ambient) → express it as JSX and React state instead.
+  (`console`, `fetch`, `crypto`, `setTimeout`/`setInterval` are DECLARED — they are never this error.)
 - A null-guard the types demand (`x.toLocaleString()` on a nullable) → coalesce first (`(x ?? 0)`).
 - A `phase: 'gate'` error — the file references a TABLE that does not exist in `database/` (the handler
   builds clean but every call 500s at runtime) → decide which side is wrong, grounded in
@@ -44,6 +49,18 @@ EACH error `item.errors` names, grounded in the real artifacts, NOT a guess:
   `plan_endpoints.endpoints` (match by `purpose`/`tables` against what this file is trying to show), and
   rewrite the call to that endpoint's `name`, VERBATIM. Re-read `fields` off that SAME endpoint and use
   exactly those keys — never invent a name and never leave the call pointed at the missing one.
+- A `phase: 'gate'` error saying a call passes NO INPUT to a route that takes `[id]` (or another param) →
+  that endpoint's route is parameterized, so the value belongs in the call: `useApi('trip-detail', { id })`.
+  Read the id from the page's own route with `useParams()` (a `pages/items/[id].tsx` page) or from the row
+  being rendered — never hard-code one, and never drop the call. Left as-is the client stringifies the
+  missing value into the URL (`/api/trips/undefined`), which still matches the route and still returns
+  200, so the page shows the WRONG row with nothing to debug.
+- A `phase: 'gate'` error naming a `text-<token>` that is a SURFACE colour (`text-muted`, `text-card`,
+  `text-accent`, …) → that paints the text in its own background colour, so it is invisible on the
+  surface it sits on (a shipped app measured 1.08:1 where WCAG AA needs 4.5). It is a real Tailwind
+  utility, so nothing else catches it. Swap it for the paired text token the error names
+  (`text-muted-foreground`, `text-card-foreground`, …), or `text-foreground` where the token has no
+  `-foreground` partner. Keep `bg-<token>` exactly as it is — the bare name is correct for a background.
 - A `phase: 'gate'` error citing a bare `{ type, props }` (or `{ type, props, children }`) object literal
   returned from a page/component → that is THIS SYSTEM'S OWN display()-descriptor shape (the chat/tasklist
   rendering protocol) leaking into JSX authoring, not real React. Rewrite the SAME markup as JSX, keeping

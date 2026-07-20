@@ -117,7 +117,8 @@ if (!w.ok) {
 currentTask.resolve({ route: pg.route, ok: w.ok, error: w.ok ? '' : (w.error ?? 'write failed') });
 ```
 
-The page TSX is typechecked against a **NO-DOM ambient** (no `console`/`window`). Data comes only from
+The page TSX is typechecked against a **NO-DOM ambient** (no `window`/`document` — express it as JSX and
+React state; `console`, `crypto` and the timers ARE available). Data comes only from
 `useApi(<endpoint name>)`; the endpoint name is one of `item.endpoints`, copied VERBATIM.
 
 ✅ **The page source should look like this** (hooks from `@app/runtime`, verbatim endpoint name, component

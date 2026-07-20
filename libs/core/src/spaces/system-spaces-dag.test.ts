@@ -387,24 +387,27 @@ describe('shipped system spaces load + validate', () => {
     expect(live['implement_endpoints']!.dependsOn).toEqual([
       'plan_endpoints', 'plan_tables', 'implement_tables',
     ]);
-    // GATE-AND-RETRY: after every file is written, the app is compiled against the real toolchain
-    // (buildApp = lint → typecheck → esbuild). A compile node reads the STRUCTURED errors and routes
-    // each offending FILE to a per-file fix fork (forEach over the compile node's `offending` array);
-    // up to two bounded rounds drive the app type-correct, then finalize does the authoritative build.
-    expect(live['compile_pass1']!.dependsOn).toEqual([
+    // GATE-AND-RETRY: after every file is written, `verify` — a HOST-RUN code node — compiles the
+    // app (buildProjectApp = typecheck → esbuild) AND runs the mechanical scans the compiler cannot
+    // (endpoint→table, page→endpoint, param arity, the { type, props } descriptor shape, a surface
+    // token used as text). It routes each offending FILE to a per-file fix fork. `fix` then RESUMES
+    // `verify` through onFail, so the cycle loops until clean instead of being hand-unrolled into
+    // compile_pass1 → fix_pass1 → compile_pass2 → fix_pass2 (which duplicated the scan three times
+    // and capped the retry budget at however many copies were written).
+    expect(live['verify']!.kind).toBe('code');
+    expect(live['verify']!.dependsOn).toEqual([
       'implement_tables', 'implement_endpoints', 'implement_components', 'implement_pages',
     ]);
-    expect(live['fix_pass1']!.forEach).toBe('compile_pass1.offending');
-    expect(live['compile_pass2']!.dependsOn).toEqual(['compile_pass1', 'fix_pass1']);
-    expect(live['fix_pass2']!.forEach).toBe('compile_pass2.offending');
-    // finalize runs after the last fix round and is the sole authoritative build-invoker.
+    expect(live['fix']!.forEach).toBe('verify.offending');
+    expect(live['fix']!.onFail).toEqual({ goto: 'verify', when: 'verify.ok == false', maxAttempts: 3 });
+    // finalize runs after the loop settles and is the sole authoritative build-invoker.
     expect(live['finalize']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'implement_components', 'implement_pages', 'compile_pass2', 'fix_pass2',
+      'implement_tables', 'implement_endpoints', 'implement_components', 'implement_pages', 'verify', 'fix',
     ]);
     // Every implement node is model-driven (a code node would need codeNodeCtxFactory threaded through
     // the delegate path THING uses; a model node needs no host factory and writes via writeProjectTable).
     // The model-driven nodes run with write access (role general).
-    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'compile_pass1', 'fix_pass1', 'compile_pass2', 'fix_pass2', 'finalize']) {
+    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'fix', 'finalize']) {
       expect(live[id]!.role).toBe('general');
     }
     // finalize is the sole goal — it writes the chat _layout and reports the build.

@@ -1,227 +1,281 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { transpileStatement } from '../typecheck/transpile.js';
+import { describe, it, expect, beforeAll } from 'vitest';
 
 /**
- * Executes the REAL mechanical build-completeness gate embedded in
- * `12-compile_pass1.md` against a mocked project filesystem — proving the
- * exact statement the model is instructed to write and run, not a
- * reimplementation that could drift from the prompt.
+ * The build gate — `12-verify.ts`, a HOST-RUN code node — driven against a mocked project
+ * filesystem.
  *
- * Two gaps this file guards (both confirmed live in 06-tanzania run 32):
- *  - step 3: `pages/index.tsx` called `useApi('costs-summary')`, an endpoint
- *    that was never generated — `useApi` short-circuits to an error state
- *    with NO network request, invisible to the compiler.
- *  - step 10: `pages/cash-expenses.tsx`'s `Page()` returned a bare
- *    `{ type, props }` object literal (this system's OWN display()-descriptor
- *    shape) instead of JSX — typechecks clean, throws React error #31 at
- *    runtime.
+ * This file used to extract the fenced ```typescript block out of `12-compile_pass1.md` and eval
+ * it, because the scans lived in prose the MODEL had to re-emit on every pass. That arrangement
+ * was as much the bug as the thing under test: in 06-tanzania run 32, 44 of 124 errors across the
+ * three build steps were the model failing to reproduce that snippet (`'gateErrors' is not
+ * defined` cascades) — and a gate that fails to execute contributes no findings, which the
+ * pipeline reads as "clean". The scans are now real code, so this exercises the real `run()`.
  *
- * Before the fix, both fixtures resolve `ok: true` with an empty `offending`
- * (the gate has no page/component scan at all) — that is the measured gap.
- * After the fix, both resolve `ok: false` with a `phase: 'gate'` error
- * naming the fault.
+ * Each fault below is invisible to `buildApp()` (typecheck + esbuild); three were measured live:
+ *  - `useApi('costs-summary')` — an endpoint never generated. The client rejects an unknown name
+ *    BEFORE issuing a request, so the page renders an error state with no network trace.
+ *  - a `[id]` route called with no input — the missing value is stringified into the path, which
+ *    still matches and passes validation, returning a plausible 200 carrying the wrong row.
+ *  - `Page()` returning a bare `{ type, props }` literal — this system's OWN display()-descriptor
+ *    shape, not renderable React: typechecks, then throws React error #31.
+ *  - `text-muted` — a surface token as a text colour. A shipped app carried 149 of these at
+ *    contrast 1.08 where WCAG AA needs 4.5.
  */
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const NODE_DIR = join(__dirname, '..', '..', 'system-spaces', 'system-appbuilder', 'tasklists', 'build_live_project');
-
-/** Pull the one fenced ```typescript block out of a tasklist node's prose. */
-function extractCode(file: string): string {
-  const src = readFileSync(join(NODE_DIR, file), 'utf8');
-  const m = /```typescript\n([\s\S]*?)```/.exec(src);
-  if (!m) throw new Error(`no fenced typescript block found in ${file}`);
-  return m[1];
-}
 
 type Offending = { path: string; kind: string; errors: Array<{ line?: number; phase: string; message: string }> };
-type GateResult = { ok: boolean; built: boolean; routes: string[]; offending: Offending[] };
+type GateResult = { ok: boolean; built: boolean; routes: string[]; offending: Offending[]; offendingCount: number };
 
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
-  ...args: string[]
-) => (...fnArgs: unknown[]) => Promise<unknown>;
-
-/**
- * A minimal in-memory project filesystem, shaped exactly like the real
- * `listProjectDir`/`readProjectFile` globals (`sdk/org/libs/cli/src/app/authoring/globals.ts`):
- * `listProjectDir` returns BARE entry names (files and subdirectories) for one
- * directory level — never full paths — derived here from the flat file map so
- * a fixture is just `{ 'pages/index.tsx': '<source>' }`.
- */
-function mkFs(files: Record<string, string>) {
-  const dirs: Record<string, Set<string>> = {};
-  const add = (dir: string, name: string) => {
-    (dirs[dir] ??= new Set()).add(name);
-  };
-  for (const path of Object.keys(files)) {
-    const parts = path.split('/');
-    for (let i = 0; i < parts.length; i++) {
-      add(parts.slice(0, i).join('/'), parts[i]);
-    }
-  }
-  const listProjectDir = (dir: string) => {
-    const norm = dir.replace(/\/+$/, '');
-    const set = dirs[norm];
-    return { ok: true, entries: set ? Array.from(set).sort() : [] };
-  };
-  const readProjectFile = (path: string) => {
-    const content = files[path];
-    return content === undefined ? { ok: false, content: '', error: `no such file: ${path}` } : { ok: true, content };
-  };
-  return { listProjectDir, readProjectFile };
-}
-
-/** Run the real `12-compile_pass1.md` statement against a fixture filesystem. `buildApp()` is
- *  stubbed clean (`{ ok: true, built: true, routes: [], errors: [] }`) so the assertion isolates
- *  the MECHANICAL scan this gate adds on top of the compiler — not the typecheck/bundle itself. */
-async function runCompilePass1(files: Record<string, string>): Promise<GateResult> {
-  const { listProjectDir, readProjectFile } = mkFs(files);
-  const buildApp = async () => ({ ok: true, built: true, routes: [] as string[], errors: [] as unknown[] });
-  let resolved: unknown;
-  const currentTask = { resolve: (v: unknown) => { resolved = v; } };
-  const code = transpileStatement(extractCode('12-compile_pass1.md'));
-  const fn = new AsyncFunction('listProjectDir', 'readProjectFile', 'buildApp', 'currentTask', code);
-  await fn(listProjectDir, readProjectFile, buildApp, currentTask);
-  return resolved as GateResult;
-}
-
-/** A real generated endpoint module — `export const name` is the ONLY thing the gate reads. */
-function endpointModule(name: string, table: string): string {
-  return [
-    `export const name = '${name}';`,
-    `export const description = 'reads ${table}';`,
-    'export interface Input {}',
-    'export interface Output { items: any[] }',
-    'export default async function handler(_input: Input, ctx: { db: any }): Promise<Output> {',
-    `  const items = await ctx.db.query('${table}');`,
-    '  return { items };',
-    '}',
-  ].join('\n');
-}
-
-describe('build_live_project gate — 12-compile_pass1.md mechanical scans (real prompt code)', () => {
-  const baseFiles = {
-    'database/costs.json': '{"columns":[{"name":"id","type":"string"}]}',
-    'api/costs-list/GET.ts': endpointModule('costs-list', 'costs'),
-  };
-
-  it('FAILS a page that calls useApi() with a name no generated endpoint exports', async () => {
-    const files = {
-      ...baseFiles,
-      'pages/index.tsx': [
-        "import { useApi } from '@app/runtime';",
-        'export default function Page() {',
-        "  const { data } = useApi<{ items: { total: number }[] }>('costs-summary');",
-        '  return <div>{data?.items?.[0]?.total}</div>;',
-        '}',
-      ].join('\n'),
-    };
-    const r = await runCompilePass1(files);
-    expect(r.ok).toBe(false);
-    const hit = r.offending.find((o) => o.path === 'pages/index.tsx');
-    expect(hit, 'pages/index.tsx must be flagged offending').toBeDefined();
-    expect(hit!.errors.some((e) => e.phase === 'gate' && /costs-summary/.test(e.message))).toBe(true);
-  });
-
-  it('PASSES a page that calls useApi() with a real generated endpoint name', async () => {
-    const files = {
-      ...baseFiles,
-      'pages/index.tsx': [
-        "import { useApi } from '@app/runtime';",
-        'export default function Page() {',
-        "  const { data } = useApi<{ items: { total: number }[] }>('costs-list');",
-        '  return <div>{data?.items?.[0]?.total}</div>;',
-        '}',
-      ].join('\n'),
-    };
-    const r = await runCompilePass1(files);
-    expect(r.offending.find((o) => o.path === 'pages/index.tsx')).toBeUndefined();
-    expect(r.ok).toBe(true);
-  });
-
-  it('FAILS a Page() that returns a bare { type, props } object literal instead of JSX', async () => {
-    const files = {
-      ...baseFiles,
-      'pages/cash-expenses.tsx': [
-        "import { useApi } from '@app/runtime';",
-        'export default function Page() {',
-        "  const { data, isLoading } = useApi('costs-list');",
-        "  if (isLoading) return { type: 'div', props: { className: 'p-4', children: 'Loading...' } };",
-        '  return {',
-        "    type: 'div',",
-        "    props: { className: 'p-4', children: 'Cash Expenses' },",
-        '  };',
-        '}',
-      ].join('\n'),
-    };
-    const r = await runCompilePass1(files);
-    expect(r.ok).toBe(false);
-    const hit = r.offending.find((o) => o.path === 'pages/cash-expenses.tsx');
-    expect(hit, 'pages/cash-expenses.tsx must be flagged offending').toBeDefined();
-    expect(hit!.errors.some((e) => e.phase === 'gate' && /type,\s*props|JSX/i.test(e.message))).toBe(true);
-  });
-
-  it('PASSES a Page() that returns real JSX', async () => {
-    const files = {
-      ...baseFiles,
-      'pages/cash-expenses.tsx': [
-        "import { useApi } from '@app/runtime';",
-        'export default function Page() {',
-        "  const { data, isLoading } = useApi('costs-list');",
-        "  if (isLoading) return <p className=\"p-4\">Loading...</p>;",
-        '  return (',
-        '    <main className="p-4">',
-        '      <h1>Cash Expenses</h1>',
-        '    </main>',
-        '  );',
-        '}',
-      ].join('\n'),
-    };
-    const r = await runCompilePass1(files);
-    expect(r.offending.find((o) => o.path === 'pages/cash-expenses.tsx')).toBeUndefined();
-    expect(r.ok).toBe(true);
-  });
-
-  it('a component (not just a page) with a bad useApi ref or a descriptor return is also flagged', async () => {
-    const files = {
-      ...baseFiles,
-      'components/CostCard.tsx': [
-        "import { useApi } from '@app/runtime';",
-        'export default function CostCard() {',
-        "  const { data } = useApi('costs-summary');",
-        "  return { type: 'div', props: { children: data } };",
-        '}',
-      ].join('\n'),
-    };
-    const r = await runCompilePass1(files);
-    expect(r.ok).toBe(false);
-    const hit = r.offending.find((o) => o.path === 'components/CostCard.tsx');
-    expect(hit).toBeDefined();
-    expect(hit!.kind).toBe('component');
-    // Both faults live in the same file — both must be named, not just the first one found.
-    expect(hit!.errors.some((e) => /costs-summary/.test(e.message))).toBe(true);
-    expect(hit!.errors.some((e) => /type,\s*props|JSX/i.test(e.message))).toBe(true);
-  });
+// The node lives outside libs/core's tsconfig `include: ["src"]`, so it is reached by a computed
+// dynamic import rather than a static one.
+let run: (ctx: unknown, inputs: Record<string, unknown>) => Promise<GateResult>;
+beforeAll(async () => {
+  const mod = (await import(
+    new URL(
+      '../../system-spaces/system-appbuilder/tasklists/build_live_project/12-verify.ts',
+      import.meta.url,
+    ).href
+  )) as { run: typeof run };
+  run = mod.run;
 });
 
-describe('build_live_project gate — 14-compile_pass2.md / 16-finalize.md carry the same scans', () => {
-  /**
-   * 14 and 16 mirror 12's two new scans verbatim (same regexes, same message shape) — proved by
-   * fixture in 12 above. Here we only need a SYNTAX sanity check that the mirrored blocks actually
-   * transpile to valid JS (a copy-paste slip in either mirror would otherwise ship silently: neither
-   * file is ever executed by `tsc`, since a tasklist `.md` is prose, not a compiled source file).
-   */
-  it('both mirrors transpile clean and contain both new scans', () => {
-    for (const file of ['14-compile_pass2.md', '16-finalize.md']) {
-      const code = extractCode(file);
-      const js = transpileStatement(code);
-      expect(() => new AsyncFunction('listProjectDir', 'readProjectFile', 'buildApp', 'currentTask', 'writeProjectPage', 'implement_tables', 'implement_endpoints', 'implement_components', 'implement_pages', js)).not.toThrow();
-      // Both scans present verbatim (copy-paste fidelity from the 12-compile_pass1.md original).
-      expect(code).toContain("useApi(?:Mutation)?|apiCall)");
-      expect(code).toContain("type\\s*:\\s*(?:'[^']*'|\"[^\"]*\"|[A-Za-z_$][\\w$]*)\\s*,\\s*props\\s*:");
-    }
+/**
+ * A project as a flat `path -> contents` map plus a scripted `buildApp()` result. `listProjectDir`
+ * returns BARE entry names for ONE directory level — never full paths — exactly like the real
+ * global in `sdk/org/libs/cli/src/app/authoring/globals.ts`.
+ */
+function ctxFor(files: Record<string, string>, build?: Record<string, unknown>) {
+  const paths = Object.keys(files);
+  return {
+    buildProjectApp: async () => ({ ok: true, built: true, routes: ['/'], errors: [], ...(build ?? {}) }),
+    listProjectDir: (dir: string) => {
+      const entries = new Set<string>();
+      for (const p of paths) {
+        if (!p.startsWith(`${dir}/`)) continue;
+        entries.add(p.slice(dir.length + 1).split('/')[0]!);
+      }
+      return { ok: true, entries: [...entries] };
+    },
+    readProjectFile: (path: string) => ({ ok: true, content: files[path] ?? '' }),
+  };
+}
+
+const LIST_ENDPOINT = `export const name = 'costs-list';
+export interface Output { items: any[] }
+export default async function handler(_i: any, ctx: any) { return { items: await ctx.db.query('costs') }; }
+`;
+
+const DETAIL_ENDPOINT = `export const name = 'trips-detail';
+export interface Output { id: string }
+export default async function handler(_i: any, ctx: any) { return { id: '' }; }
+`;
+
+const page = (body: string) => `import { useApi } from '@app/runtime';
+export default function Page() {
+${body}
+}
+`;
+
+const findingsFor = (r: GateResult, path: string) =>
+  (r.offending.find((o) => o.path === path)?.errors ?? []).map((e) => e.message).join(' | ');
+
+/** A clean baseline project: one table, one endpoint, one page that reads it correctly. */
+const CLEAN = {
+  'database/costs.json': '{}',
+  'api/costs-list/GET.ts': LIST_ENDPOINT,
+};
+
+describe('build_live_project — the verify gate (12-verify.ts)', () => {
+  it('passes a clean project', async () => {
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'pages/index.tsx': page(`  const { data } = useApi('costs-list');
+  return <div className="text-muted-foreground">{JSON.stringify(data)}</div>;`),
+      }),
+      {},
+    );
+    expect(r.offending).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(r.offendingCount).toBe(0);
+  });
+
+  it('flags a useApi name no endpoint exports', async () => {
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'pages/index.tsx': page(`  const { data } = useApi('costs-summary');
+  return <div>{JSON.stringify(data)}</div>;`),
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    const msg = findingsFor(r, 'pages/index.tsx');
+    expect(msg).toContain('costs-summary');
+    expect(msg).toContain('costs-list'); // must name the real options — it is the fixer's whole input
+  });
+
+  it('flags a [id] route called with no input', async () => {
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'api/trips/[id]/GET.ts': DETAIL_ENDPOINT,
+        'pages/detail.tsx': page(`  const { data } = useApi('trips-detail');
+  return <div>{JSON.stringify(data)}</div>;`),
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(findingsFor(r, 'pages/detail.tsx')).toContain('[id]');
+  });
+
+  it('accepts the same [id] route once its param is supplied', async () => {
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'api/trips/[id]/GET.ts': DETAIL_ENDPOINT,
+        'pages/detail.tsx': page(`  const { data } = useApi('trips-detail', { id: 'abc' });
+  return <div>{JSON.stringify(data)}</div>;`),
+      }),
+      {},
+    );
+    expect(r.offending).toEqual([]);
+  });
+
+  it('does NOT flag useApiMutation on a [id] route with no hook-time input', async () => {
+    // Run 34 flagged `useApiMutation('notes-delete')` for a missing `[id]`. False positive: the hook
+    // returns a MUTATE FUNCTION and the input is supplied when THAT is called. `useApi`/`apiCall`
+    // take input positionally and are still checked (the test above).
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'api/notes/[id]/DELETE.ts': `export const name = 'notes-delete';
+export default async function handler(_i: any, ctx: any) { return { ok: true }; }
+`,
+        'pages/notes.tsx': page(`  const del = useApiMutation('notes-delete');
+  return <button onClick={() => del({ id: '1' })}>x</button>;`),
+      }),
+      {},
+    );
+    expect(r.offending).toEqual([]);
+  });
+
+  it('flags a Page() returning a { type, props } descriptor instead of JSX', async () => {
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'pages/index.tsx': `export default function Page() {
+  return { type: 'div', props: { className: 'p-4', children: 'Cash Expenses' } };
+}
+`,
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(findingsFor(r, 'pages/index.tsx')).toContain('React error #31');
+  });
+
+  it('flags a surface token used as a text colour', async () => {
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'pages/index.tsx': page(`  const { data } = useApi('costs-list');
+  return <p className="text-xs text-muted uppercase">{JSON.stringify(data)}</p>;`),
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    const msg = findingsFor(r, 'pages/index.tsx');
+    expect(msg).toContain('text-muted');
+    expect(msg).toContain('text-muted-foreground'); // tells the fixer what to write instead
+  });
+
+  it('does NOT flag text-muted-foreground, nor bg-muted', async () => {
+    // A false positive here would teach the fixer to "correct" working code.
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'pages/index.tsx': page(`  const { data } = useApi('costs-list');
+  return <p className="bg-muted text-muted-foreground">{JSON.stringify(data)}</p>;`),
+      }),
+      {},
+    );
+    expect(r.offending).toEqual([]);
+  });
+
+  it('flags an api module querying a table that does not exist', async () => {
+    const r = await run(
+      ctxFor({
+        'database/costs.json': '{}',
+        'api/costs-list/GET.ts': `export const name = 'costs-list';
+export default async function handler(_i: any, ctx: any) { return { items: await ctx.db.query('expenses') }; }
+`,
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(findingsFor(r, 'api/costs-list/GET.ts')).toContain('expenses');
+  });
+
+  it('scans components as well as pages', async () => {
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'components/Total.tsx': `import { useApi } from '@app/runtime';
+export default function Total() {
+  const { data } = useApi('costs-summary');
+  return <span className="text-muted">{JSON.stringify(data)}</span>;
+}
+`,
+      }),
+      {},
+    );
+    expect(r.offending.map((o) => o.path)).toEqual(['components/Total.tsx']);
+    expect(r.offending[0]!.kind).toBe('component');
+    expect(r.offending[0]!.errors).toHaveLength(2); // bad endpoint name AND the surface token
+  });
+
+  it('folds real compiler errors in alongside the scans, grouped by file', async () => {
+    const r = await run(
+      ctxFor(
+        {
+          ...CLEAN,
+          'pages/index.tsx': page(`  const { data } = useApi('nope');
+  return <div>{JSON.stringify(data)}</div>;`),
+        },
+        {
+          ok: false,
+          errors: [{ phase: 'typecheck', file: 'pages/index.tsx', line: 3, message: "Cannot find name 'console'." }],
+        },
+      ),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.offending).toHaveLength(1); // one entry per FILE…
+    expect(r.offending[0]!.errors).toHaveLength(2); // …carrying compiler error AND gate finding
+    expect(r.offending[0]!.errors.map((e) => e.phase).sort()).toEqual(['gate', 'typecheck']);
+  });
+
+  it('reports a build failure even when every scan is clean', async () => {
+    const r = await run(
+      ctxFor(
+        {
+          ...CLEAN,
+          'pages/index.tsx': page(`  const { data } = useApi('costs-list');
+  return <div>{JSON.stringify(data)}</div>;`),
+        },
+        { ok: false, built: false, errors: [{ phase: 'build', file: 'pages/index.tsx', message: 'bundle failed' }] },
+      ),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.built).toBe(false);
+  });
+
+  it('never throws on a finding — a code node has no salvage path', async () => {
+    // A throw would fail the whole node and abort the tasklist instead of routing the faults to
+    // `fix`. Every fault must come back as DATA.
+    const r = await run(ctxFor({ 'pages/index.tsx': page(`  return { type: 'div', props: {} };`) }), {});
+    expect(r.ok).toBe(false);
+    expect(Array.isArray(r.offending)).toBe(true);
   });
 });

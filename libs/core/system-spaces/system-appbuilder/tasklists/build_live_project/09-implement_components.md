@@ -59,7 +59,8 @@ if (w.ok) {
 }
 ```
 
-The TSX you assemble is typechecked against a **NO-DOM ambient** (no `console`/`window`) and is
+The TSX you assemble is typechecked against a **NO-DOM ambient** (no `window`/`document`; `console`,
+`fetch`, `crypto` and the timers are available) and is
 presentational only — the data arrives through props, never a fetch.
 
 ✅ **The component source should look like this** (default export, PascalCase, props in, design tokens):
