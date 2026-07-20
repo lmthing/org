@@ -34,6 +34,7 @@ import { generateProjectContracts } from '../../app/build/contracts.js';
 import type { EndpointContract } from '../../app/build/schema.js';
 import { loadHooks, loadHooksState, type LoadedHook } from '../../app/hooks/index.js';
 import { buildProjectPages } from '../../app/build/pages.js';
+import { runProjectAppCheck } from '../../app/build/check.js';
 import type { ProjectDb } from '../../app/store.js';
 
 // ── Structural manager surface (satisfied by SessionManager; mockable in tests) ─
@@ -480,6 +481,42 @@ export function handleRebuild(
         assetManifest: result.assetManifest,
         routes: result.routes.map((r) => ({ routePath: r.routePath, file: relFile(projectRoot, r.file) })),
       });
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+    }
+  };
+}
+
+/**
+ * `POST /api/projects/:projectId/app/check` — the AUTHORITATIVE build verdict:
+ * `{ ok, built, routes, errors }` from {@link runProjectAppCheck}, i.e. the project-app typecheck
+ * FOLLOWED BY the esbuild bundle. This is the same call behind the agent's `buildApp()` global and
+ * the `verify` code node, so all three agree.
+ *
+ * Deliberately SEPARATE from `POST .../app/build`, which runs {@link buildProjectPages} — esbuild
+ * only, no typecheck — and is what actually serves the app. That tolerance is intentional and stays:
+ * all 5 shipped store apps carry type errors and run fine, so making serving conditional on a clean
+ * typecheck would take them offline.
+ *
+ * The split existed but only `build` was reachable over REST, so anything asking the pod "did it
+ * build?" got the esbuild-only answer. The 06-tanzania scenario reported `built: true, error: null`
+ * for run 34's app while the authoritative check returned 4 typecheck errors — a harness that
+ * cannot see a failure reports success, which is the one thing a verification harness must never do.
+ */
+export function handleAppCheck(_manager: AppAdminManager, lmthingRoot: string | undefined): AppHandler {
+  return async (_req, res, params) => {
+    const projectId = params['projectId']!;
+    if (!safeProjectId(projectId)) {
+      sendJson(res, 400, { error: `invalid project id: ${projectId}` });
+      return;
+    }
+    if (!lmthingRoot) {
+      sendJson(res, 404, { error: 'no project root configured' });
+      return;
+    }
+    try {
+      const result = await runProjectAppCheck(join(lmthingRoot, projectId));
+      sendJson(res, 200, { ok: result.ok, built: result.built, routes: result.routes, errors: result.errors });
     } catch (err) {
       sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
     }

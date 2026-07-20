@@ -158,6 +158,7 @@ export function compactStep(rec) {
     turns,
     asks: rec.asks,
     appBuild: rec.appBuild,
+    appCheck: rec.appCheck,
     appPageStatus: rec.appPageStatus,
     createdProject: rec.createdProject,
     userProjectClean: rec.userProjectClean,
@@ -184,6 +185,12 @@ export function traceLines(rec) {
   }
   if (rec.asks?.length) L.push(`- asks: ${rec.asks.map((a) => `${a.kind}${a.cancelled ? '(cancelled)' : a.matched ? '(matched)' : a.kind === 'question' && !a.answer ? '(UNANSWERED)' : ''}`).join(', ')}`);
   if (rec.appBuild) L.push(`- app: built=${rec.appBuild.built} pageStatus=${rec.appPageStatus}`);
+  // The authoritative verdict, reported SEPARATELY from `built` — they legitimately disagree
+  // (esbuild bundles an app the typecheck rejects), and the judge must see the stricter one.
+  if (rec.appCheck) {
+    L.push(`- app check (typecheck+bundle): ok=${rec.appCheck.ok} errors=${rec.appCheck.errorCount}`);
+    for (const e of rec.appCheck.errors ?? []) L.push(`  - [${e.phase}] ${e.file}:${e.line ?? '?'} ${e.message}`);
+  }
   if (rec.state) {
     L.push(`- spaces: ${(rec.state.spaces ?? []).join(', ') || '(none)'}`);
     const tables = Object.keys(rec.state.appTables ?? {});

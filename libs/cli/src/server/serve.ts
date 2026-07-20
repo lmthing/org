@@ -42,7 +42,7 @@ import { emitInternalSignal, installInternalSignalSink } from './internal-signal
 import type { EventDispatchManager } from './event-dispatch.js';
 import {
   handleAppManifest, handleGetAppFile, handlePutAppFile,
-  handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild,
+  handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild, handleAppCheck,
 } from './routes/app-admin.js';
 import { handleListApps, handleInstallApp } from './routes/apps.js';
 import { handleListStoreSpaces, handleInstallStoreSpace, handleListProjectIntegrations } from './routes/store-spaces.js';
@@ -253,6 +253,9 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       pageBuildCache.delete(projectId);
     }),
   );
+  // The AUTHORITATIVE verdict (typecheck THEN bundle) — `app/build` above is esbuild-only and
+  // reports `built:true` for an app that does not type-check. Same call as the `buildApp()` global.
+  router.add('POST', '/api/projects/:projectId/app/check', handleAppCheck(manager, effectiveLmthingRoot));
   router.add('GET', '/api/projects/:projectId/app/data/:table', handleListRows(manager, effectiveLmthingRoot));
   router.add('PATCH', '/api/projects/:projectId/app/data/:table/:id', handleUpdateRow(manager, effectiveLmthingRoot));
   router.add('GET', '/api/projects/:projectId/app/files/*', handleGetAppFile(manager, effectiveLmthingRoot));

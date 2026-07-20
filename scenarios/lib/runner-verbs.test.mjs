@@ -32,6 +32,15 @@ function fakePod() {
     listIntegrations: vi.fn().mockResolvedValue({ missingRequired: ['A', 'B'] }),
     getEnv: vi.fn().mockResolvedValue({ content: 'TAVILY_API_KEY=real-secret\nOTHER=1\n' }),
     putEnv: vi.fn().mockResolvedValue({ ok: true }),
+    // The two build surfaces deliberately DISAGREE — that is the real shape.
+    appBuild: vi.fn().mockResolvedValue({ built: true, routes: [{ routePath: '/', file: 'pages/index.tsx' }] }),
+    appCheck: vi.fn().mockResolvedValue({
+      ok: false,
+      built: true,
+      routes: ['/'],
+      errors: [{ phase: 'typecheck', file: 'pages/notes.tsx', line: 39, message: "Cannot find name 'document'." }],
+    }),
+    appPage: vi.fn().mockResolvedValue({ status: 200 }),
   };
 }
 const freshRec = () => ({ notes: [], turns: [] });
@@ -265,4 +274,43 @@ describe('runStep — space_session', () => {
     expect(createCalls).toHaveLength(2); // thing's own session, then the probe
     expect(createCalls[1].body.spaceRef).toBe('stock/advisor');
   }, 15000);
+});
+
+describe('runStep — open_app records the AUTHORITATIVE verdict, not just the bundle', () => {
+  // `POST app/build` is esbuild-only and answers `built:true` for an app that fails typecheck. Run 34
+  // of 06-tanzania reported `built:true, error:null` while 4 real type errors stood — a harness that
+  // cannot see a failure reports success, which is the one thing a verification harness must not do.
+  it('reports appCheck alongside appBuild when they disagree', async () => {
+    const pod = fakePod();
+    const rec = freshRec();
+    await runStep(base({ open_app: true }, pod, { rec }));
+
+    expect(pod.appCheck).toHaveBeenCalledWith('proj');
+    expect(rec.appBuild.built).toBe(true); // the bundle really did succeed…
+    expect(rec.appCheck.ok).toBe(false); // …and the app is still broken
+    expect(rec.appCheck.errorCount).toBe(1);
+    expect(rec.appCheck.errors[0].message).toContain('document');
+  });
+
+  it('survives a pod with no check route rather than failing the step', async () => {
+    const pod = fakePod();
+    pod.appCheck = vi.fn().mockRejectedValue(new Error('POST /app/check → 404'));
+    const rec = freshRec();
+    await runStep(base({ open_app: true }, pod, { rec }));
+
+    expect(rec.appCheck.ok).toBeNull();
+    expect(rec.appCheck.error).toContain('404');
+    expect(rec.appBuild.built).toBe(true);
+  });
+
+  it('caps the recorded errors so one broken app cannot flood the evidence file', async () => {
+    const pod = fakePod();
+    const many = Array.from({ length: 25 }, (_, i) => ({ phase: 'typecheck', file: `pages/p${i}.tsx`, message: 'boom' }));
+    pod.appCheck = vi.fn().mockResolvedValue({ ok: false, built: false, routes: [], errors: many });
+    const rec = freshRec();
+    await runStep(base({ open_app: true }, pod, { rec }));
+
+    expect(rec.appCheck.errorCount).toBe(25); // the true count is kept…
+    expect(rec.appCheck.errors).toHaveLength(10); // …but only a sample is inlined
+  });
 });

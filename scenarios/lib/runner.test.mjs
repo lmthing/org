@@ -64,6 +64,11 @@ const H = vi.hoisted(() => {
     async appBuild() {
       return { built: true, routes: [] };
     }
+    // Deliberately DISAGREES with appBuild — that is the real shape (esbuild bundles an app the
+    // typecheck rejects), and `open_app` must surface the stricter verdict rather than the rosier one.
+    async appCheck() {
+      return { ok: false, built: true, routes: [], errors: [{ phase: 'typecheck', file: 'pages/x.tsx', line: 3, message: "Cannot find name 'document'." }] };
+    }
     async appPage() {
       return { status: 200 };
     }

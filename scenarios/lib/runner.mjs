@@ -161,6 +161,16 @@ export async function runStep({ step, thing, pod, run, projectId, fixturesDir, r
   if (step.open_app) {
     const build = await pod.appBuild(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
     rec.appBuild = { built: build?.built ?? build?.build?.built ?? null, routes: build?.routes ?? null, error: build?.error ?? null };
+    // `appBuild` is esbuild-only: it answers `built:true` for an app that fails typecheck (run 34
+    // of 06-tanzania reported exactly that while 4 real type errors stood). Ask for the
+    // authoritative verdict too, so a step can never pass on a build the pod itself calls broken.
+    const check = await pod.appCheck(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
+    rec.appCheck = {
+      ok: check?.ok ?? null,
+      errorCount: Array.isArray(check?.errors) ? check.errors.length : null,
+      errors: Array.isArray(check?.errors) ? check.errors.slice(0, 10) : null,
+      error: check?.error ?? null,
+    };
     const page = await pod.appPage(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
     rec.appPageStatus = page?.status ?? (page?.error ? `error: ${page.error}` : 'ok');
     rec.notes.push('opened app (built + fetched root page; browser render is the judge\'s job)');

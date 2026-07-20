@@ -164,6 +164,10 @@ export class Pod {
   // ── project-app runtime ─────────────────────────────────────────────────
   appManifest = (projectId) => this.req('GET', `/api/projects/${projectId}/app`);
   appBuild = (projectId) => this.req('POST', `/api/projects/${projectId}/app/build`);
+  /** The AUTHORITATIVE verdict: typecheck THEN bundle (`{ ok, built, routes, errors }`).
+   *  `appBuild` above is esbuild-only and answers `built:true` for an app that does not
+   *  type-check — never use it alone to decide whether a generated app is sound. */
+  appCheck = (projectId) => this.req('POST', `/api/projects/${projectId}/app/check`);
   appData = (projectId, table) => this.req('GET', `/api/projects/${projectId}/app/data/${table}`);
   /** GET the SERVED app page — on its real origin (see `appBase`), not the SPA shell. */
   appPage = (projectId, path = '') => this.reqAbs('GET', `${this.appOrigin(projectId)}/${path}`);
