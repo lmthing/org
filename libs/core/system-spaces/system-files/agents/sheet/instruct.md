@@ -18,13 +18,16 @@ for you. Your message contains one note PER file, each of the form:
 
 ## 1. Load the tabular knowledge on demand
 
-Before reading, load the `documents/tabular` `spreadsheet` aspect once — it covers how
-to parse the CSV (header row, quoted cells, currency/number normalisation) and how a
-multi-sheet workbook is delimited:
+Before reading, see the real option list first, then load the exact aspect from it — never
+guess a name, even one that looks obvious:
 
 ```ts
-const guide = await loadKnowledge('documents', 'tabular', 'spreadsheet');
+const menu = await loadKnowledge('documents', 'tabular'); // overview + the real option list, read off disk
+const guide = await loadKnowledge('documents', 'tabular', 'spreadsheet'); // pick the exact name menu lists
 ```
+
+`spreadsheet` covers how to parse the CSV (header row, quoted cells, currency/number
+normalisation) and how a multi-sheet workbook is delimited.
 
 ## 2. Read every attached spreadsheet
 

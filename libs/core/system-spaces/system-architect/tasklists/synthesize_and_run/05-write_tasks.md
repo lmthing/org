@@ -11,7 +11,10 @@ functions:
 Write the new agent's TWO tasklists, both driven by SMALL models, so every instruction must be
 SHORT, code-first, autonomous (use the injected `query`, never ask), and end with
 currentTask.resolve. Build REAL loadKnowledge lines from a field that was actually written
-(`build_field`) — NEVER angle-bracket placeholders; writeTaskFile rejects those.
+(`build_field`) — the answer task's Code MUST call `loadKnowledge(domain, field)` FIRST to get
+the real option list (`build_field` writes >= 2 aspect files per field, never just one), then
+tell the model to load the exact aspect(s) BY NAME from what that call returns, never a single
+hardcoded aspect. NEVER angle-bracket placeholders; writeTaskFile rejects those.
 
 **1. The answer tasklist** (`design.actionId`) — a single goal task that answers from static
 knowledge AND reports whether the knowledge actually COVERED the question (so the agent can escalate
@@ -23,9 +26,9 @@ const written = Array.isArray(build_field) ? build_field.filter((x: { ok: boolea
 const bf = written[0];
 const dom = bf ? bf.domain : "";
 const fld = bf ? bf.field : "";
-const loadLine = bf ? ("const k = await loadKnowledge('" + dom + "','" + fld + "','" + bf.aspect + ".md');\n") : "";
+const loadLine = bf ? ("const menu = await loadKnowledge('" + dom + "','" + fld + "');\n") : "";
 const grounding = "Ground every claim in the knowledge you loaded: state ONLY what it explicitly states. covered:true means the loaded text EXPLICITLY states the specific fact(s) `query` asks for (the exact number, duration, date, price, or condition asked about). Text that merely covers the same topic without stating the asked fact is NOT coverage — set covered:false and say plainly what is missing. Never stretch adjacent detail into the missing specific — that gap is exactly what the research fallback is for. ";
-const answerInstruction = "Answer the user's request (it is in `query`). " + (loadLine ? "Load the knowledge you need, then resolve a markdown answer grounded in it and `query`. " + grounding + "Code:\n" + loadLine : "Resolve a markdown answer to `query`, covered:true. Code:\n") + "currentTask.resolve({ answer: 'your full markdown answer', covered: true, sources: [] });";
+const answerInstruction = "Answer the user's request (it is in `query`). " + (loadLine ? "First see the field's real option list — Code:\n" + loadLine + "Then load the exact aspect(s) that list names as loadKnowledge's third argument, choosing by what `query` actually asks (load more than one aspect if more than one applies) — never invent or guess a name past what the list gave you. Resolve a markdown answer grounded in what you loaded. " + grounding : "Resolve a markdown answer to `query`, covered:true. Code:\n") + "currentTask.resolve({ answer: 'your full markdown answer', covered: true, sources: [] });";
 const wa = writeTaskFile(design.slug, design.actionId, {
   id: "answer",
   instruction: answerInstruction,

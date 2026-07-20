@@ -19,13 +19,13 @@ you. Your message contains one note PER file, each of the form:
 
 ## 1. Load the format knowledge on demand
 
-Before reading, look at each file's **mediaType/extension** and load the matching
-aspect of the `documents/formats` knowledge so you interpret its extracted text
-correctly and know its failure modes — `pdf`, `word`, `powerpoint`, `opendocument`,
-or `text`:
+See the real option list once, then, for each attached file's **mediaType/extension**,
+load the matching aspect by an EXACT name from that list — never a guessed synonym —
+so you interpret its extracted text correctly and know its failure modes:
 
 ```ts
-// e.g. a .docx was attached:
+const menu = await loadKnowledge('documents', 'formats'); // overview + the real option list, read off disk
+// e.g. a .docx was attached — pick the exact name menu lists (typically pdf/word/powerpoint/opendocument/text):
 const guide = await loadKnowledge('documents', 'formats', 'word');
 ```
 
