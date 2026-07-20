@@ -351,6 +351,56 @@ export default function Total() {
     expect(r.built).toBe(false);
   });
 
+  // ── HOOK (automation) scans — a hook loads clean and then its handler 500s or never fires ──────
+  const CRON_BAD = `export default { type: 'cron', every: '7d', handler: async ({ db }) => {
+  const rows = await db.query('shopping_list');
+  return rows.length;
+} };
+`;
+  const CRON_GOOD = `export default { type: 'cron', every: '7d', handler: async ({ db }) => {
+  const rows = await db.query('costs');
+  return rows.length;
+} };
+`;
+  const EVENT_BAD = `export default { type: 'event', on: { event: 'project/db.reminders.insert' }, handler: async () => {} };
+`;
+
+  it('flags a hook whose handler queries a table that does not exist — routed as kind "hook"', async () => {
+    const r = await run(ctxFor({ ...CLEAN, 'hooks/weekly-list.ts': CRON_BAD }), {});
+    expect(r.ok).toBe(false);
+    expect(findingsFor(r, 'hooks/weekly-list.ts')).toContain('shopping_list');
+    // Must be marked 'hook' so the per-file `fix` fork uses writeProjectHook, not writeProjectPage.
+    expect(r.offending.find((o) => o.path === 'hooks/weekly-list.ts')?.kind).toBe('hook');
+  });
+
+  it('flags an event hook subscribing to project/db.<missingTable>.* — that write is never emitted', async () => {
+    const r = await run(ctxFor({ ...CLEAN, 'hooks/on-reminder.ts': EVENT_BAD }), {});
+    expect(r.ok).toBe(false);
+    expect(findingsFor(r, 'hooks/on-reminder.ts')).toContain('reminders');
+    expect(findingsFor(r, 'hooks/on-reminder.ts')).toContain('never fires');
+  });
+
+  it('LOAD-BEARING: the hook scan runs through an ASYNC ctx (the real worker shape)', async () => {
+    // Same silent-nothing trap as every other scan: a sync `ctx.listProjectDir(...).entries` off a
+    // Promise is undefined, so the walk finds no hooks and the automation ships broken behind a clean gate.
+    const r = await run(asyncCtxFor({ ...CLEAN, 'hooks/weekly-list.ts': CRON_BAD }), {});
+    expect(r.ok).toBe(false);
+    expect(findingsFor(r, 'hooks/weekly-list.ts')).toContain('shopping_list');
+  });
+
+  it('is clean when a hook only touches real tables and a real db address', async () => {
+    const r = await run(
+      asyncCtxFor({
+        ...CLEAN,
+        'hooks/weekly-list.ts': CRON_GOOD,
+        'hooks/on-cost.ts': `export default { type: 'event', on: { event: 'project/db.costs.insert' }, handler: async () => {} };\n`,
+      }),
+      {},
+    );
+    expect(r.offending).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
   it('never throws on a finding — a code node has no salvage path', async () => {
     // A throw would fail the whole node and abort the tasklist instead of routing the faults to
     // `fix`. Every fault must come back as DATA.

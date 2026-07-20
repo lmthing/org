@@ -7,10 +7,11 @@ output:
   endpoints: array
   components: array
   pages: array
+  automations: array
   routes: array
   missing: array
   errors: array
-dependsOn: [implement_tables, implement_endpoints, smoke_endpoints, implement_components, implement_pages, verify, fix]
+dependsOn: [implement_tables, implement_endpoints, smoke_endpoints, implement_components, implement_pages, implement_automations, verify, fix]
 goal: true
 role: general
 functions: []
@@ -19,7 +20,9 @@ functions: []
 Complete, BUILD, and package the app — the authoritative gate. This is the GOAL task: it ALWAYS runs, does
 the ONE real build, and resolves an honest summary. Upstream per-item arrays arrive by task id:
 `implement_tables` ({ name, ok }[]), `implement_endpoints` ({ route, name, ok }[]), `implement_components`
-({ name, ok }[]), `implement_pages` ({ route, ok, error }[]) — one entry PER planned page.
+({ name, ok }[]), `implement_pages` ({ route, ok, error }[]) — one entry PER planned page — and
+`implement_automations` ({ slug, ok }[]) — one entry per planned cron/event hook, USUALLY an empty array
+(most apps need no automation, and that is a complete, successful build — never treat zero hooks as a fault).
 
 First make the app OPENABLE by writing the persistent chat layout `_layout` with the `<Chat agent="thing"
 />` dock — receive `children` and render them directly with the dock (NOT an `Outlet`); import `Chat` only
@@ -46,7 +49,10 @@ Then report HONESTLY, and NEVER declare success on a partial or broken app. Read
 landed with `listProjectDir('pages').entries` (ground truth) and compare against what `implement_pages`
 attempted: any `ok:false` entry is a MISSING page. The same discipline covers TABLES: any
 `implement_tables` `ok:false` entry is a MISSING table — the data foundation of every endpoint planned
-against it — and belongs in `missing` just like a failed page. Resolve `ok` ONLY when the layout wrote,
+against it — and belongs in `missing` just like a failed page. It covers AUTOMATIONS too: a planned
+`implement_automations` entry with `ok:false` is a hook that failed to land, so a story's automatic
+behaviour is silently gone — surface it in `missing`. An EMPTY automations list is NOT a fault: most apps
+need none, so `ok` never depends on there being any. Resolve `ok` ONLY when the layout wrote,
 the build is clean (`buildApp().ok` — zero typecheck/build errors) and `built` for all routes, the
 endpoint→table / page→endpoint / render-correctness scans found nothing dangling, at least one table and
 one page landed, AND nothing planned is missing. If the build still has `errors`, resolve `ok:false` and
@@ -71,6 +77,10 @@ for (const f of residue) {
 const okTables = (Array.isArray(implement_tables) ? implement_tables : []).filter((x: { ok: boolean }) => x.ok).map((x: { name: string }) => x.name);
 const okEndpoints = (Array.isArray(implement_endpoints) ? implement_endpoints : []).filter((x: { ok: boolean }) => x.ok).map((x: { route: string }) => x.route);
 const okComponents = (Array.isArray(implement_components) ? implement_components : []).filter((x: { ok: boolean }) => x.ok).map((x: { name: string }) => x.name);
+// Automations are OPTIONAL — `implement_automations` is empty for the many apps that need none, and an
+// empty list is a COMPLETE build, never a fault. A planned hook that FAILED to write is a real gap.
+const automationResults = Array.isArray(implement_automations) ? implement_automations : [];
+const okAutomations = automationResults.filter((x: { ok: boolean }) => x.ok).map((x: { slug: string }) => x.slug);
 const pageResults = Array.isArray(implement_pages) ? implement_pages : [];
 // Pages actually on disk (ground truth): every top-level *.tsx that is not a wrapper (_layout/_app).
 const diskPages = (listProjectDir('pages').entries || []).filter((e: string) => e.endsWith('.tsx') && !e.startsWith('_')).map((e: string) => e.replace(/\.tsx$/, ''));
@@ -78,6 +88,8 @@ const diskPages = (listProjectDir('pages').entries || []).filter((e: string) => 
 const missing = [
   ...pageResults.filter((x: { ok: boolean }) => !x.ok).map((x: { route: string; error: string }) => ({ kind: 'page', route: x.route, error: x.error })),
   ...(Array.isArray(implement_tables) ? implement_tables : []).filter((x: { ok: boolean }) => !x.ok).map((x: { name: string }) => ({ kind: 'table', name: x.name, error: 'planned table failed to write' })),
+  // A planned automation that failed to write — a story's automatic behaviour silently gone.
+  ...automationResults.filter((x: { ok: boolean }) => !x.ok).map((x: { slug: string }) => ({ kind: 'automation', slug: x.slug, error: 'planned automation failed to write' })),
 ];
 currentTask.resolve({
   // ok ⇔ the app is COMPLETE and type-correct: layout wrote, the build is clean and built, the
@@ -88,6 +100,7 @@ currentTask.resolve({
   endpoints: okEndpoints,
   components: okComponents,
   pages: diskPages,
+  automations: okAutomations,
   routes: check.routes,
   missing,
   errors: allErrors,

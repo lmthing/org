@@ -307,6 +307,69 @@ describe('createProjectAuthoringGlobals', () => {
     });
   });
 
+  describe('writeProjectHook rejects an event address on a table that does not exist', () => {
+    /** A project whose only table is `recipes` — so `project/db.recipes.*` is real and nothing else is. */
+    function withRecipes() {
+      const pa = make();
+      pa.writeProjectTable('recipes', {
+        title: 'Recipes',
+        description: 'The family recipe book',
+        columns: {
+          id: { type: 'string', description: 'pk', primaryKey: true, generated: 'uuid' },
+          title_gr: { type: 'string', description: 'greek title' },
+        },
+      } as unknown as TableSchema);
+      return pa;
+    }
+
+    it('rejects an event hook subscribing to project/db.<missingTable>.insert — a hook that never fires', () => {
+      const pa = withRecipes();
+      const res = pa.writeProjectHook(
+        'watch-reminders',
+        `export default { type: 'event', on: { event: 'project/db.reminders.insert' },
+           handler: async () => {} };`,
+      );
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain('reminders');
+      expect(res.error).toContain('never fires');
+      // The real table is named so the agent can re-point at it.
+      expect(res.error).toContain('recipes');
+      // Nothing left on disk — a silently-inert hook must not ship.
+      expect(existsSync(join(projectRoot, 'hooks', 'watch-reminders.ts'))).toBe(false);
+    });
+
+    it('accepts an event hook subscribing to a REAL db table', () => {
+      const pa = withRecipes();
+      const res = pa.writeProjectHook(
+        'on-recipe-added',
+        `export default { type: 'event', on: { event: 'project/db.recipes.insert' },
+           handler: async ({ input }) => { if (!input) return; } };`,
+      );
+      expect(res.ok).toBe(true);
+      expect(existsSync(join(projectRoot, 'hooks', 'on-recipe-added.ts'))).toBe(true);
+    });
+
+    it('stays out of the way for a space event and a curated project event (not a db address)', () => {
+      const pa = withRecipes();
+      // A space-scoped event is not a db address — never checked.
+      expect(
+        pa.writeProjectHook('slack', "export default { type: 'event', on: { event: 'integration-slack/message.posted' }, handler: async () => {} };").ok,
+      ).toBe(true);
+      // A curated `project/<name>` event (not `project/db.<table>.<event>`) is not a table address.
+      expect(
+        pa.writeProjectHook('curated', "export default { type: 'event', on: { event: 'project/recipe.published' }, handler: async () => {} };").ok,
+      ).toBe(true);
+    });
+
+    it('never false-rejects on a fresh project with no tables — nothing to check against', () => {
+      // A distinct root with NO tables written: declaredTables() is empty, so the check is silent.
+      const fresh = make();
+      expect(
+        fresh.writeProjectHook('early', "export default { type: 'event', on: { event: 'project/db.anything.insert' }, handler: async () => {} };").ok,
+      ).toBe(true);
+    });
+  });
+
   it('writeProjectTable forwards seed rows to onSchemaWrite (move known data into the app in one pass)', () => {
     const seeds: Array<{ table: string; rows: unknown[] | undefined }> = [];
     const pa = createProjectAuthoringGlobals({

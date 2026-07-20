@@ -3,7 +3,7 @@ id: fix
 output:
   path: string
   ok: boolean
-dependsOn: [verify, plan_pages, plan_endpoints, plan_components, plan_tables, implement_components]
+dependsOn: [verify, plan_pages, plan_endpoints, plan_components, plan_tables, plan_automations, implement_components]
 forEach: verify.offending
 role: general
 functions: []
@@ -14,7 +14,7 @@ onFail:
 ---
 
 Fix ONE file the compiler rejected — the file in `item` = `{ path, kind, errors }` (`kind` is
-`'page'|'component'|'api'`; `errors` is the exact list of `{ line?, phase, message }` the real typecheck
+`'page'|'component'|'api'|'hook'`; `errors` is the exact list of `{ line?, phase, message }` the real typecheck
 or bundle produced for THIS file). The host runs this node once PER offending file, so you reason about
 only this ONE file and never hold the whole app. In scope: `item`, `plan_endpoints`
 (`plan_endpoints.endpoints` — each `{ name, route, purpose, tables, fields }`), `plan_components`
@@ -77,9 +77,19 @@ EACH error `item.errors` names, grounded in the real artifacts, NOT a guess:
   `type` becomes a JSX tag: `{ type: RunningTotalBanner, props: { total } }` → `<RunningTotalBanner
   total={total} />`) — never `React.createElement`, never a stringified template.
 
+- A `kind: 'hook'` file (a project automation under `hooks/`) with a `phase: 'gate'` error naming a TABLE
+  that does not exist in `database/` → the hook's handler queries/writes a table, or subscribes to a
+  `project/db.<table>.<event>`, that never landed. Ground the fix in `plan_automations`
+  (`plan_automations.automations` — find the entry whose `slug` matches this file) and `plan_tables`: if
+  a real table holds this data under a drifted spelling, re-point every `db.query/insert/update/remove`
+  and the `on.event` address at the real snake_case name; if none does, that table is the missing
+  artifact. Keep the hook's `export default { type: 'cron' | 'event', … }` OBJECT shape and its
+  `handler`/`trigger` exactly — you are correcting a name, not rewriting the automation. Re-write with
+  `writeProjectHook(slug, fixed)` where `slug` is the file basename (`hooks/<slug>.ts`).
+
 You must PRESERVE the file's real content — keep every endpoint it already reads and every section it
-already renders; you are correcting the fault, not wiping the file. Write with the matching typed writer
-for `item.kind` and resolve the outcome honestly.
+already renders (and every automation it already runs); you are correcting the fault, not wiping the file.
+Write with the matching typed writer for `item.kind` and resolve the outcome honestly.
 
 **`ok: true` is a VERIFIED claim, never an intention.** Resolve `ok: true` ONLY when the writer's result
 was actually consumed (`w.ok === true`) AND you re-read the file in this SAME fork and confirmed the
@@ -91,7 +101,7 @@ gets routed onward; a fabricated success is invisible. Declare and assign the wr
 statement (`const w = …`), never a bare `let w;` assigned later. Emit one statement:
 
 ```typescript
-const f = item as { path: string; kind: 'page' | 'component' | 'api'; errors: Array<{ line?: number; message: string }> };
+const f = item as { path: string; kind: 'page' | 'component' | 'api' | 'hook'; errors: Array<{ line?: number; message: string }> };
 const cur = readProjectFile(f.path);
 // Build `fixed` = cur.content corrected for EVERY fault in f.errors (see above). NEVER resubmit the
 // same string, and NEVER blank the file — fix the specific lines the compiler named.
@@ -100,7 +110,9 @@ const w = f.kind === 'component'
   ? writeProjectComponent(f.path.replace(/^components\//, '').replace(/\.tsx$/, ''), fixed)
   : f.kind === 'api'
     ? writeProjectApi(f.path.replace(/^api\//, '').replace(/\.ts$/, ''), fixed)
-    : writeProjectPage(f.path.replace(/^pages\//, '').replace(/\.tsx$/, ''), fixed, { replace: true });
+    : f.kind === 'hook'
+      ? writeProjectHook(f.path.replace(/^hooks\//, '').replace(/\.ts$/, ''), fixed)
+      : writeProjectPage(f.path.replace(/^pages\//, '').replace(/\.tsx$/, ''), fixed, { replace: true });
 // VERIFY the fix LANDED before claiming it: the writer said ok AND the file on disk is the corrected
 // source. ok:true from assumption (not verification) ships a broken file behind a green flag.
 const landed = w.ok && readProjectFile(f.path).content === fixed;

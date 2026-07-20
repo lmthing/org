@@ -170,6 +170,84 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
     expect(Array.isArray(junk.errors)).toBe(true);
   });
 
+  // ── AUTOMATIONS (plan_automations) — conditional cron/event hooks, validated like every other ref ──
+  // `plan_automations` emits a possibly-empty list; MOST apps (06-tanzania included) emit `[]`, and the
+  // whole pipeline must still validate end-to-end. When an automation IS planned, every table it
+  // touches must be a real one — a dangling trigger is caught here at PLAN time, not after it ships inert.
+  const withAuto = (autos: unknown[]) => ({ ...clone(), plan_automations: { automations: autos } });
+
+  it('ZERO automations (the tanzania case) — an empty list still validates end-to-end', async () => {
+    const r = await run({}, withAuto([]) as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(true);
+    expect(r.errorCount).toBe(0);
+  });
+
+  it('a WEEKLY cron automation over real tables validates', async () => {
+    const r = await run(
+      {},
+      withAuto([
+        { slug: 'weekly-rollup', story: 's', kind: 'cron', run: 'handler', every: '7d', reads: ['costs'], writes: ['costs'] },
+      ]) as unknown as Record<string, unknown>,
+    );
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('flags a DANGLING TRIGGER — a handler writing a table nobody declared', async () => {
+    const r = await run(
+      {},
+      withAuto([
+        { slug: 'renewal-warnings', story: 's', kind: 'cron', run: 'handler', daily: '08:00', reads: ['costs'], writes: ['reminders'] },
+      ]) as unknown as Record<string, unknown>,
+    );
+    expect(r.ok).toBe(false);
+    expect(refs(r)).toContain('reminders');
+    expect(msgs(r)).toContain('plan_tables never declares');
+    // It is the plan_automations node that must change — that text is the fixer's whole input.
+    for (const e of r.errors) expect(e.node).toBe('plan_automations');
+  });
+
+  it('flags an EVENT automation reacting to a table that does not exist', async () => {
+    const r = await run(
+      {},
+      withAuto([
+        { slug: 'on-reminder', story: 's', kind: 'event', run: 'handler', on: { table: 'reminders', event: 'insert' }, reads: [], writes: [] },
+      ]) as unknown as Record<string, unknown>,
+    );
+    expect(r.ok).toBe(false);
+    expect(refs(r)).toContain('reminders');
+  });
+
+  it('flags a cron automation with neither `every` nor `daily`', async () => {
+    const r = await run(
+      {},
+      withAuto([{ slug: 'no-cadence', story: 's', kind: 'cron', run: 'handler', reads: ['costs'], writes: ['costs'] }]) as unknown as Record<string, unknown>,
+    );
+    expect(r.ok).toBe(false);
+    expect(msgs(r)).toContain('EXACTLY ONE cadence');
+  });
+
+  it('flags an agent automation with a malformed trigger, and accepts a well-formed one', async () => {
+    const bad = await run(
+      {},
+      withAuto([{ slug: 'draft-note', story: 's', kind: 'cron', run: 'agent', daily: '07:00', reads: [], writes: [], trigger: 'not-a-target' }]) as unknown as Record<string, unknown>,
+    );
+    expect(bad.ok).toBe(false);
+    expect(msgs(bad)).toContain('space/agent#action');
+    const good = await run(
+      {},
+      withAuto([{ slug: 'draft-note', story: 's', kind: 'cron', run: 'agent', daily: '07:00', reads: [], writes: [], trigger: 'editorial/curator#digest' }]) as unknown as Record<string, unknown>,
+    );
+    expect(good.ok).toBe(true);
+  });
+
+  it('automations never make the node throw on malformed input — a code node has no salvage path', async () => {
+    const junk = await run({}, { ...OK, plan_automations: { automations: 'nope' } } as unknown as Record<string, unknown>);
+    expect(Array.isArray(junk.errors)).toBe(true);
+    const junk2 = await run({}, { ...OK, plan_automations: 42 } as unknown as Record<string, unknown>);
+    expect(Array.isArray(junk2.errors)).toBe(true);
+  });
+
   it('emits a SCALAR ok — the condition DSL cannot read array length', async () => {
     // `getAtPath` returns undefined for arrays, so `validate_contract.errors.length > 0` is not
     // expressible in a `when:`. The onFail predicate compares `ok`.

@@ -21,7 +21,7 @@
 
 export const node = {
   id: 'validate_contract',
-  dependsOn: ['plan_tables', 'plan_endpoints', 'plan_components', 'plan_pages'],
+  dependsOn: ['plan_tables', 'plan_endpoints', 'plan_components', 'plan_pages', 'plan_automations'],
   output: {
     ok: 'boolean',
     errorCount: 'number',
@@ -57,6 +57,18 @@ interface PageSpec {
   endpoints?: string[];
   components?: string[];
 }
+interface AutomationSpec {
+  slug?: string;
+  story?: string;
+  kind?: string;
+  run?: string;
+  every?: string;
+  daily?: string;
+  on?: { table?: string; event?: string };
+  reads?: string[];
+  writes?: string[];
+  trigger?: string;
+}
 
 interface Ctx {
   [k: string]: unknown;
@@ -87,6 +99,9 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
   );
   // `plan_pages` is a per-page forEach, so its output is already an ARRAY of page specs.
   const pages = list<PageSpec>(inputs['plan_pages']);
+  const automations = list<AutomationSpec>(
+    (inputs['plan_automations'] as { automations?: unknown } | undefined)?.automations,
+  );
 
   const errors: Array<{ node: string; ref: string; message: string }> = [];
   const add = (n: string, ref: string, message: string): void => {
@@ -180,6 +195,65 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
     const read = endpoints.some((e) => list<string>(e.tables).includes(name));
     if (read) continue;
     add('plan_tables', name, `table "${name}" is declared but no endpoint reads it — nothing in the app can ever show it. Add an endpoint, or drop the table.`);
+  }
+
+  // (8) AUTOMATIONS — a cron/event hook is authored ONLY when a user story needs it, and MOST apps
+  // plan none (an empty list is the correct common case, so this loop simply runs zero times). When
+  // one IS planned, every table it reads/writes/reacts-to must be a table `plan_tables` declares: a
+  // handler querying a table that never landed builds clean and 500s at runtime, and an event hook
+  // subscribed to `project/db.<missingTable>.<event>` never fires — a dangling trigger. This is the
+  // same class of fault as an endpoint reading a missing table (check 2), routed to the same redesign.
+  const WRITE_EVENTS = new Set(['insert', 'update', 'remove']);
+  const seenSlug = new Set<string>();
+  const refTable = (auto: AutomationSpec, table: unknown, role: string): void => {
+    const t = String(table ?? '');
+    if (!t || tableNames.has(t)) return;
+    add(
+      'plan_automations',
+      t,
+      `automation "${auto.slug}" ${role} table "${t}" which plan_tables never declares (have: ${knownTables}) ` +
+        `— a hook that touches a table that never landed builds clean and 500s (or never fires) at runtime`,
+    );
+  };
+  for (const a of automations) {
+    const slug = String(a.slug ?? '');
+    if (!slug) {
+      add('plan_automations', '(unnamed)', 'an automation has no `slug` — the slug is its `hooks/<slug>.ts` filename; every automation needs a unique lowercase-hyphen one');
+    } else if (seenSlug.has(slug)) {
+      add('plan_automations', slug, `two automations share the slug "${slug}" — one file path can hold one hook. Rename one.`);
+    }
+    seenSlug.add(slug);
+
+    const kind = String(a.kind ?? '');
+    if (kind !== 'cron' && kind !== 'event') {
+      add('plan_automations', slug || kind, `automation "${slug}" has kind "${kind}" — an app automation is 'cron' (a schedule) or 'event' (a database write). Pick one that a user story needs.`);
+    }
+
+    if (kind === 'cron') {
+      const hasEvery = typeof a.every === 'string' && a.every.length > 0;
+      const hasDaily = typeof a.daily === 'string' && a.daily.length > 0;
+      if (hasEvery === hasDaily) {
+        add('plan_automations', slug, `cron automation "${slug}" needs EXACTLY ONE cadence — set \`every\` ('7d' for weekly) OR \`daily\` ('HH:MM'), not both and not neither.`);
+      }
+    }
+    if (kind === 'event') {
+      const table = String(a.on?.table ?? '');
+      const event = String(a.on?.event ?? '');
+      if (!table || !WRITE_EVENTS.has(event)) {
+        add('plan_automations', slug, `event automation "${slug}" needs \`on: { table, event }\` — a real table (from plan_tables) and an event of insert|update|remove (got table "${table}", event "${event}").`);
+      }
+      refTable(a, table, 'reacts to writes on');
+    }
+
+    if (String(a.run ?? 'handler') === 'agent') {
+      const trigger = String(a.trigger ?? '');
+      if (!/^[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+(#[A-Za-z0-9_-]+)?$/.test(trigger)) {
+        add('plan_automations', slug, `agent automation "${slug}" needs a \`trigger\` naming a 'space/agent#action' to delegate to (got "${trigger}"). Use run:'handler' for deterministic code instead.`);
+      }
+    }
+
+    for (const t of list<string>(a.reads)) refTable(a, t, 'reads');
+    for (const t of list<string>(a.writes)) refTable(a, t, 'writes');
   }
 
   return { ok: errors.length === 0, errorCount: errors.length, errors };

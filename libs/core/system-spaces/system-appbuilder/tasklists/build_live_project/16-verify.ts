@@ -18,7 +18,7 @@
 
 export const node = {
   id: 'verify',
-  dependsOn: ['implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages'],
+  dependsOn: ['implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages', 'implement_automations'],
   output: {
     ok: 'boolean',
     built: 'boolean',
@@ -176,6 +176,35 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     }
   }
 
+  // (1b) A HOOK (project automation) whose handler reads/writes a table that does not exist, or that
+  // subscribes to a synthetic `project/db.<table>.<event>` for a table that never landed. Both build +
+  // load clean — the db surface is dynamically typed and a bad hook is skipped-with-warn at load — and
+  // then the scheduled/reactive code 500s or never fires, so nothing the user's story promised happens.
+  // Most apps author ZERO hooks, so this loop usually walks nothing. Awaited async ctx, like every scan.
+  for (const path of await walkFiles(ctx, 'hooks')) {
+    const src = await read(ctx, path);
+    const ref = /\bdb\s*\.\s*(?:query|insert|update|remove)\s*\(\s*['"`]([A-Za-z0-9_-]+)['"`]/g;
+    for (let m = ref.exec(src); m; m = ref.exec(src)) {
+      if (tables.includes(m[1] as string)) continue;
+      add(path, {
+        phase: 'gate',
+        message:
+          `hook references table "${m[1]}" which does not exist in database/ (have: ${tables.join(', ') || 'none'}) ` +
+          `— the automation loads clean but its handler 500s on every run. Point it at a real table (or create it).`,
+      });
+    }
+    const evt = /['"`]project\/db\.([A-Za-z0-9_]+)\.(?:insert|update|remove)['"`]/g;
+    for (let m = evt.exec(src); m; m = evt.exec(src)) {
+      if (tables.includes(m[1] as string)) continue;
+      add(path, {
+        phase: 'gate',
+        message:
+          `hook subscribes to project/db.${m[1]}.* but table "${m[1]}" does not exist in database/ ` +
+          `(have: ${tables.join(', ') || 'none'}) — that write is never emitted, so the automation never fires.`,
+      });
+    }
+  }
+
   // (2)+(3)+(4) Client-side scans over pages/ and components/.
   for (const path of [...(await walkFiles(ctx, 'pages')), ...(await walkFiles(ctx, 'components'))]) {
     const src = await read(ctx, path);
@@ -238,7 +267,13 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
 
   const offending = Object.keys(byFile).map((path) => ({
     path,
-    kind: path.startsWith('components/') ? 'component' : path.startsWith('api/') ? 'api' : 'page',
+    kind: path.startsWith('components/')
+      ? 'component'
+      : path.startsWith('api/')
+        ? 'api'
+        : path.startsWith('hooks/')
+          ? 'hook'
+          : 'page',
     errors: byFile[path],
   }));
 

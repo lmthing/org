@@ -20,8 +20,12 @@ the components it renders) run as one design pass, each seeing the previous stag
 reference is made against a real name instead of an invented one. `validate_contract`, a HOST-RUN code
 node, then cross-checks the whole graph while it is still cheap to fix: every page endpoint ref exists,
 every endpoint table ref exists, a single-table endpoint's fields are real columns, no duplicate
-name/route, every `[id]` route has a caller, every component prop is fed by some endpoint field, and no
-table is unread. On failure it RESUMES `plan_tables` through `onFail`, carrying `errors` — so the
+name/route, every `[id]` route has a caller, every component prop is fed by some endpoint field, no
+table is unread, and every automation reads/writes/reacts-to a table that actually exists. A CONDITIONAL
+`plan_automations` also runs in this design pass, reading the USER STORIES: only a story whose payoff must
+happen while the user is away — a weekly schedule that merges a list, a warning before a renewal lapses, a
+reaction to a form submission — yields an automation (a `cron` or `event` hook), and MOST apps emit an
+EMPTY list (an app satisfied by opening its pages needs none). On failure it RESUMES `plan_tables` through `onFail`, carrying `errors` — so the
 redesign is told exactly which references broke rather than re-running blind. `emit_types` then writes
 the validated contract into the project's own `.d.ts`, so **the types exist before the first line of
 app code** and every file the model writes is typechecked against them.
@@ -32,7 +36,10 @@ against the contract, reconciles column drift silently and resumes the design on
 entirely missing → write each typed API → `smoke_endpoints` (host-run) INVOKES every endpoint with
 valid, wrong-typed and missing-param input, because nothing else in the pipeline ever runs one and a
 handler returning structurally-valid zeros passes every static check → write each reusable component →
-write each page (importing the components, reading the endpoints).
+write each page (importing the components, reading the endpoints) → write each planned automation
+(`implement_automations`, a per-hook fan-out that runs ZERO times when no story needed one) as a
+`hooks/<slug>.ts` — a `cron`/`event` hook whose imperative `handler` reads and writes the real tables
+in deterministic Node code, so "a schedule fires code" is delivered with no agent and no LLM.
 
 Detailing AND writing pages are both per-page host fan-outs, so a slip on one page is salvaged on its
 own and can never zero the rest. Once every file is written, a HOST-RUN GATE (`verify`) compiles the

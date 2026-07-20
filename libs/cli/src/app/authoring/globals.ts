@@ -312,6 +312,8 @@ export function createProjectAuthoringGlobals(opts: {
       assertSourceParses(src, 'ts');
       const cols = unknownColumnsIn(src);
       if (cols) return { ok: false, error: cols };
+      const evt = unknownEventTableIn(src);
+      if (evt) return { ok: false, error: evt };
       throwLint(lintHookSource(src, slug, safeResolve(projectRoot, join('hooks', `${slug}.ts`))));
     } catch (e) {
       if (e instanceof LintError) throw e;
@@ -427,6 +429,39 @@ export function createProjectAuthoringGlobals(opts: {
   function setBlock(body: string): string | null {
     const m = /\bset\s*:\s*\{/.exec(body);
     return m ? braceBody(body, m.index + m[0].length - 1) : null;
+  }
+
+  /**
+   * Reject an EVENT hook that subscribes to a synthetic `project/db.<table>.<event>` address for a
+   * table the project does not have — the write-time twin of the endpoint→table gate, in the WRITER
+   * so the authoring agent fixes it in the same turn instead of shipping a hook that never fires.
+   *
+   * A db write auto-emits `project/db.<table>.<insert|update|remove>` (its payload IS the row), and an
+   * event hook fires on the matching address. If `<table>` never landed, that write is never emitted,
+   * so the automation is silently inert — it loads fine (a hook shape is valid) and nothing the user's
+   * story promised ever happens. The one class this catches that `unknownColumnsIn` cannot: the address
+   * itself, before any `db.` call. Conservative like `unknownColumnsIn` — silent when the project has no
+   * tables yet (nothing to check against) and only for a LITERAL `project/db.<table>.<event>` string, so
+   * a space event (`integration-slack/message.posted`) or a curated `project/<name>` event never trips it.
+   */
+  function unknownEventTableIn(src: string): string | null {
+    const tables = declaredTables();
+    if (!tables.size) return null;
+    const re = /['"`]project\/db\.([a-z][a-z0-9_]*)\.(?:insert|update|remove)['"`]/g;
+    for (let m = re.exec(src); m; m = re.exec(src)) {
+      const table = m[1] as string;
+      if (tables.has(table)) continue;
+      const known = [...tables.keys()].join(', ');
+      const guess = [...tables.keys()].find((c) => c.startsWith(table) || table.startsWith(c) || c.includes(table));
+      return (
+        `this hook subscribes to \`project/db.${table}.*\`, but the project has no table "${table}"` +
+        `${guess ? ` (did you mean "${guess}"?)` : ''}. A db write auto-emits \`project/db.<table>.<event>\`, ` +
+        `so an address on a table that does not exist never fires — the automation is silently inert. ` +
+        `The tables that exist are: ${known}. Subscribe to a real one, or create the table first with ` +
+        `writeProjectTable.`
+      );
+    }
+    return null;
   }
 
   /**

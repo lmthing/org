@@ -404,7 +404,17 @@ describe('shipped system spaces load + validate', () => {
     // carrying the reasons — `carry` is the point: getUpstreamOutputs only passes `dependsOn`, and
     // the resumed node cannot depend on its own checker without making the graph cyclic.
     expect(live['validate_contract']!.dependsOn).toEqual([
-      'plan_tables', 'plan_endpoints', 'plan_components', 'plan_pages',
+      'plan_tables', 'plan_endpoints', 'plan_components', 'plan_pages', 'plan_automations',
+    ]);
+    // CONDITIONAL AUTOMATIONS: a per-story cron/event plan (usually EMPTY) that fans out one hook per
+    // node. `plan_automations` reads only the stories + tables; `implement_automations` runs after the
+    // tables have LANDED (reconcile_tables) so the write-time column/db-address checks have a schema to
+    // check against. An empty plan makes the forEach run zero times — the clean-skip mechanism.
+    expect(live['plan_automations']!.dependsOn).toEqual(['user_stories', 'plan_tables']);
+    expect(live['plan_automations']!.forEach).toBeUndefined();
+    expect(live['implement_automations']!.forEach).toBe('plan_automations.automations');
+    expect(live['implement_automations']!.dependsOn).toEqual([
+      'plan_automations', 'plan_tables', 'reconcile_tables',
     ]);
     expect(live['validate_contract']!.onFail).toEqual({
       goto: 'plan_tables',
@@ -434,18 +444,18 @@ describe('shipped system spaces load + validate', () => {
     // and capped the retry budget at however many copies were written).
     expect(live['verify']!.kind).toBe('code');
     expect(live['verify']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages',
+      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages', 'implement_automations',
     ]);
     expect(live['fix']!.forEach).toBe('verify.offending');
     expect(live['fix']!.onFail).toEqual({ goto: 'verify', when: 'verify.ok == false', maxAttempts: 3 });
     // finalize runs after the loop settles and is the sole authoritative build-invoker.
     expect(live['finalize']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages', 'verify', 'fix',
+      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages', 'implement_automations', 'verify', 'fix',
     ]);
     // Every implement node is model-driven (a code node would need codeNodeCtxFactory threaded through
     // the delegate path THING uses; a model node needs no host factory and writes via writeProjectTable).
     // The model-driven nodes run with write access (role general).
-    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'fix', 'finalize']) {
+    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'plan_automations', 'implement_automations', 'fix', 'finalize']) {
       expect(live[id]!.role).toBe('general');
     }
     // finalize is the sole goal — it writes the chat _layout and reports the build.
