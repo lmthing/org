@@ -116,6 +116,38 @@ function hasDefaultExport(src: string): boolean {
 }
 
 /**
+ * An api handler may import ONLY `@app/runtime` (for `HttpError`) or a Node builtin (`node:crypto`,
+ * `node:util`, …) — a handler runs in real Node. The db reaches it as the injected `ctx` parameter,
+ * the contract types are global ambients, and `fetch`/`crypto` are globals. Anything else — a `@app/*`
+ * package, a relative helper, a third-party dep — is a guaranteed `Cannot find module` at typecheck.
+ *
+ * Caught at WRITE time because the model repeatedly invents a db module (`@app/database`, `@app/db`)
+ * — 06-tanzania run 36 spent many turns circling `Cannot find module '@app/database'`. A list-based
+ * ban fails (it invents the next fake name); the allowlist is exhaustive, so it catches the whole
+ * class. Verified against all 216 handler imports across the 5 shipped store apps: only `@app/runtime`
+ * and `node:*` appear, and both pass.
+ */
+function illegalHandlerImport(src: string): string | null {
+  // Strip COMMENTS but keep string literals — the module specifier lives in a string, so `codeOnly`
+  // (which blanks strings too) would erase exactly what this check reads. Match only a LINE-START
+  // import statement, so `const s = "import x from 'y'"` (the word inside a string) never trips it.
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+  const re = /^\s*import\b[^;\n]*?\bfrom\s*['"`]([^'"`]+)['"`]/gm;
+  for (let m = re.exec(code); m; m = re.exec(code)) {
+    const spec = m[1] as string;
+    if (spec === '@app/runtime' || spec.startsWith('node:')) continue;
+    return (
+      `api endpoint rejected (not saved): a handler imports from "${spec}", which does not exist — a ` +
+      "handler's ONLY legal import is `import { HttpError } from '@app/runtime'`. The database reaches " +
+      'you as the injected `ctx` parameter (`ctx.db.query/insert/update/remove`), never an import; ' +
+      'there is no `@app/database` or `@app/db`. Contract types (`<Name>Output`) are global — no ' +
+      'import. Delete this import and read through `ctx.db`.'
+    );
+  }
+  return null;
+}
+
+/**
  * The API-endpoint contract at write time: the loader's own `export const name` check
  * ({@link apiEndpointContractError}), a default/`handler` export (the runtime handler-module
  * contract, `api/handler-module.ts#loadHandlerFromCode`), and a project-unique name.
@@ -125,6 +157,8 @@ export function lintApiHandler(src: string, opts: { existingNames?: Map<string, 
   if (contractErr) {
     return `api endpoint rejected (not saved): ${contractErr}. Add e.g. \`export const name = 'itemsList'\` and re-write.`;
   }
+  const badImport = illegalHandlerImport(src);
+  if (badImport) return badImport;
   const hasHandler =
     hasDefaultExport(src) ||
     /export\s+(?:async\s+)?function\s+handler\b/.test(src) ||

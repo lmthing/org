@@ -340,6 +340,38 @@ describe('invisibleTextToken (check 4)', () => {
   });
 });
 
+describe('lintApiHandler — a handler imports only @app/runtime', () => {
+  const H = `export const name = 'x';\nexport default async function handler(_i, ctx) { return { items: await ctx.db.query('t') }; }`;
+
+  it('rejects the run-36 invented db module', () => {
+    const msg = lintApiHandler(`import { db } from '@app/database';\n${H}`);
+    expect(msg).toContain('@app/database');
+    expect(msg).toContain('ctx.db'); // names the real path
+  });
+
+  it('rejects any invented module, not just a fixed list', () => {
+    for (const spec of ['@app/db', '@app/data', '../lib/helpers', 'lodash', '@app/orm']) {
+      expect(lintApiHandler(`import x from '${spec}';\n${H}`), spec).toContain('does not exist');
+    }
+  });
+
+  it('ALLOWS the one legal import — HttpError from @app/runtime (71 shipped handlers use it)', () => {
+    expect(lintApiHandler(`import { HttpError } from '@app/runtime';\n${H}`)).toBeNull();
+  });
+
+  it('ALLOWS a Node builtin — a handler runs in real Node (health/api/shares/POST.ts ships node:crypto)', () => {
+    expect(lintApiHandler(`import { randomBytes } from 'node:crypto';\n${H}`)).toBeNull();
+  });
+
+  it('does not flag a handler with no imports at all', () => {
+    expect(lintApiHandler(H)).toBeNull();
+  });
+
+  it('does not trip on the word import inside a string or comment', () => {
+    expect(lintApiHandler(`// import from '@app/database' would fail\nconst s = "import x from 'y'";\n${H}`)).toBeNull();
+  });
+});
+
 describe('absentGlobalUse (check 5) — write-time, not a late gate', () => {
   // Rejection is only defensible where the author has somewhere else to go. Globals that WORK at
   // runtime are declared in the ambient instead (build/typecheck.ts), so they neither error nor

@@ -77,6 +77,15 @@ The handler source you assemble is a self-contained ESM module, typechecked agai
 there is no `window` or `document`. `fetch`, `crypto`, `console` and the timers ARE available (an
 endpoint runs in real Node, so calling an external service is legitimate) — but the PROJECT's own data
 comes ONLY through `ctx.db`, never by fetching your own API.
+
+**A handler's ONLY legal import is `import { HttpError } from '@app/runtime'`** (to throw a typed HTTP
+error). Nothing else. `ctx` (and `ctx.db`) is the second FUNCTION PARAMETER, injected by the runtime —
+never imported. There is no `@app/database`, no `@app/db`, no db package of any kind; inventing one is a
+guaranteed "Cannot find module" and the writer will REJECT the file. The db reaches you as `ctx.db`,
+full stop; the GLOBAL contract types (`<Name>Output` etc.) are already in scope with no import; and an
+external service uses the global `fetch` (no import). A Node builtin (`node:crypto`, `node:util`) is
+also fine — a handler runs in real Node. But anything else — a `@app/*` package, a relative helper, a
+third-party dependency — the writer REJECTS: import only `@app/runtime` or a `node:` builtin.
 `w` (the `writeProjectApi` result) is `{ ok, error? }`: branch on `w.ok`, read `w.error` — never treat it
 as an array or call `.length` on it.
 
@@ -113,8 +122,8 @@ export default async function handler(_input: Input, ctx: { db: any }): Promise<
 
 ```typescript
 export const name = 'costLines';        // ✗ re-derived / renamed from the route → loader rejects the app
-console.log('built endpoint');          // ✗ Cannot find name 'console' — no DOM lib in the ambient
-const rows = await fetch('/costs');     // ✗ no fetch — read through ctx.db
+import { db } from '@app/database';     // ✗ no such module — the db is the injected ctx param; writer REJECTS
+const rows = await fetch('/api/costs'); // ✗ fetch EXISTS, but never fetch your OWN api — read ctx.db (an EXTERNAL fetch is fine)
 return { items } as const;              // ✗ orphaned `as const` on the return → typecheck fails, write lost
 return { items: { total: 5 } };         // ✗ items must be an ARRAY — an aggregate is items: [summary]
 if (w.length) { /* … */ }               // ✗ w is { ok, error? }, not an array — use w.ok

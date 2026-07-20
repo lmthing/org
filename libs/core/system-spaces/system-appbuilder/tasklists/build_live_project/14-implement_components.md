@@ -99,7 +99,7 @@ import { useApi } from '@app/runtime';           // ✗ components don't fetch �
 import { cn } from '@app/runtime';               // ✗ not exported; no cn / clsx / classNames anywhere
 <div className="bg-gray-100 text-blue-600">      // ✗ stock Tailwind colors — use bg-card / text-foreground
 <div style={{ color: '#0a0a0a' }}>               // ✗ raw hex — use a token (text-foreground)
-console.log(title);                              // ✗ Cannot find name 'console' — no DOM lib
+document.querySelector('.x');                    // ✗ no DOM — express it as JSX and React state
 <span className={
   "font-medium " + (ok ? "text-foreground" : "text-muted-foreground"),
 }>                                                // ✗ trailing comma after the expression — a JSX

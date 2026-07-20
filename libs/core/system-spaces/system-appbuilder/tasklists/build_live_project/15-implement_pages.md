@@ -170,13 +170,13 @@ const t = data?.items?.[0]?.grandTotalUSD;        // ✗ re-cased guess — read
 {row.amount.toLocaleString()}                     // ✗ amount may be null → crashes the whole page; use (row.amount ?? 0).toLocaleString()
 <Link to="/pages/park-fees">Fees</Link>          // ✗ no `/pages/` prefix — link to the route: to="/park-fees"
 <Link to="/app/trip/park-fees">Fees</Link>       // ✗ never hard-code the base — Link re-adds it: to="/park-fees"
-const res = await fetch('/api/cost-lines');       // ✗ no raw fetch — read through useApi
+const res = await fetch('/api/cost-lines');       // ✗ never fetch your OWN api — read through useApi (external fetch is fine)
 <div className="text-blue-600">                   // ✗ stock Tailwind color — use text-foreground
 <p className="text-muted p-4">Loading…</p>        // ✗ text-muted is a REAL utility that resolves to
                                                    //   the --muted BACKGROUND color as text — it
                                                    //   compiles clean and renders near-invisible; use
                                                    //   text-muted-foreground for muted text
-console.log(data);                                // ✗ Cannot find name 'console' — no DOM lib
+window.location.href = '/x';                      // ✗ no DOM — use navigate() from @app/runtime
 import Missing from '../components/Missing';      // ✗ imported without checking implement_components'
                                                    //   ok-list — if Missing failed to write, this import
                                                    //   resolves to nothing and fails the WHOLE app build,
