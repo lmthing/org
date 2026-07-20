@@ -48,6 +48,31 @@ export interface TaskNode {
    *  allowed; failures degrade per-statement (never kill the fork). Deep validation happens
    *  at run time through the same typecheck pipeline as model statements. */
   prelude?: string;
+  /** Resume an EARLIER step when this node's check fails, carrying the reason.
+   *  After this node completes, `when` is evaluated against all outputs; if true (and the
+   *  attempt budget is not spent) every node on a dependency path from `goto` through this
+   *  node is un-done and re-runs. `dependsOn` stays acyclic — this is scheduler-level
+   *  re-execution, not a graph edge. The `carry` field of THIS node's output is injected
+   *  into the resumed nodes as `feedback` (with `attempt`), so the retry knows what to fix
+   *  instead of repeating the same mistake. A plain retry loop is just `goto` naming this
+   *  node's own body. */
+  onFail?: TaskOnFail;
+}
+
+export interface TaskOnFail {
+  /** Task id to resume from (inclusive). Must be a transitive dependency of this node. */
+  goto: string;
+  /** Condition DSL evaluated against all outputs after this node completes. Defaults to
+   *  `"<taskId>.ok == false"`. NOTE: the DSL cannot index arrays
+   *  (`condition-dsl.ts` `getAtPath`), so compare a SCALAR — emit `ok`/a count, never
+   *  `errors.length`. */
+  when?: string;
+  /** Field of this node's output carrying the failure reason. Omit to carry the whole
+   *  output. Surfaces on the resumed nodes as `feedback`. */
+  carry?: string;
+  /** Max resume attempts before giving up and letting the pipeline continue (so the goal
+   *  task still runs and reports honestly). Default 2. */
+  maxAttempts?: number;
 }
 
 export async function loadTasklist(dir: string, files: string[]): Promise<Record<string, TaskNode>> {
@@ -174,6 +199,40 @@ function buildTaskNode(
       );
     }
     task.prelude = data['prelude'];
+  }
+  if (data['onFail'] !== undefined) {
+    const raw = data['onFail'];
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      throw new Error(
+        `Task "${id}" (${filePath}): "onFail" must be a block with a "goto" task id (plus optional when/carry/maxAttempts)`,
+      );
+    }
+    const cfg = raw as Record<string, unknown>;
+    const goto = cfg['goto'];
+    if (typeof goto !== 'string' || !goto.trim()) {
+      throw new Error(`Task "${id}" (${filePath}): "onFail.goto" must name the task id to resume from`);
+    }
+    const onFail: TaskOnFail = { goto: goto.trim() };
+    if (cfg['when'] !== undefined) {
+      if (typeof cfg['when'] !== 'string' || !cfg['when'].trim()) {
+        throw new Error(`Task "${id}" (${filePath}): "onFail.when" must be a condition expression`);
+      }
+      onFail.when = cfg['when'].trim();
+    }
+    if (cfg['carry'] !== undefined) {
+      if (typeof cfg['carry'] !== 'string' || !cfg['carry'].trim()) {
+        throw new Error(`Task "${id}" (${filePath}): "onFail.carry" must name a field of this task's output`);
+      }
+      onFail.carry = cfg['carry'].trim();
+    }
+    if (cfg['maxAttempts'] !== undefined) {
+      const n = Number(cfg['maxAttempts']);
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error(`Task "${id}" (${filePath}): "onFail.maxAttempts" must be a positive integer`);
+      }
+      onFail.maxAttempts = n;
+    }
+    task.onFail = onFail;
   }
 
   return task;

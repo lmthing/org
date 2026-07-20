@@ -1,7 +1,8 @@
 import type { Space } from '../spaces/load.js';
 import type { ForkEngine } from '../fork/fork.js';
 import { loadTasklist } from '../spaces/tasklist-load.js';
-import { validateDag, findReadyTasks, resolveGoalTask } from './dag.js';
+import { validateDag, findReadyTasks, resolveGoalTask, resumeSet } from './dag.js';
+import { evaluateCondition } from './condition-dsl.js';
 import type { TaskNode } from '../spaces/tasklist-load.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
 import { validateInput } from './schema.js';
@@ -12,6 +13,11 @@ import { salvageData } from '../exec/envelope.js';
  *  A failing element (bad resolve, thrown error, VM error) must never sink the whole required task —
  *  one flaky specialist build shouldn't block the app build — so each element gets its own retries. */
 const FOREACH_ITEM_ATTEMPTS = 3;
+
+/** Default `onFail.maxAttempts`: how many times a failed check may resume an earlier step
+ *  before the pipeline gives up and runs on to its goal task (which reports the residual
+ *  failure honestly). Bounded so a check that can never be satisfied cannot spin forever. */
+const DEFAULT_ON_FAIL_ATTEMPTS = 2;
 
 /** Resolve a `forEach` reference ("taskId" or "taskId.field.subfield") against accumulated
  *  task outputs. Returns the referenced array, or [] when missing / not an array. */
@@ -123,6 +129,20 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
   let goalDegraded = false;
   let goalReason: DegradeReason | undefined;
 
+  // onFail bookkeeping: how many resumes each checker has spent, and the reason payload
+  // handed to each node a resume re-opened. `feedback` cannot travel through
+  // getUpstreamOutputs (the resumed node is UPSTREAM of the checker — depending on it
+  // would be a cycle), so it rides in on the seed instead.
+  const onFailAttempts = new Map<string, number>();
+  const resumeFeedback = new Map<string, Record<string, unknown>>();
+
+  /** The seed a task runs with: the filtered tasklist seed plus any resume feedback. */
+  function seedFor(task: TaskNode): Record<string, unknown> | undefined {
+    const fb = resumeFeedback.get(task.id);
+    if (!fb) return taskSeed;
+    return { ...(taskSeed ?? {}), ...fb };
+  }
+
   // Build up upstream outputs per task
   function getUpstreamOutputs(task: TaskNode): Record<string, unknown> {
     const upstream: Record<string, unknown> = {};
@@ -156,6 +176,48 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
       tasklist: name, dependsOn: task.dependsOn, optional: task.optional, condition: task.condition, goal: task.goal,
     });
     tracer.end(s, 'skipped');
+  };
+
+  /**
+   * `onFail`: when this node's check fails, un-do the stretch back to `goto` so it re-runs,
+   * carrying WHY it failed. Purely scheduler-level — `dependsOn` is never mutated, so the
+   * DAG stays acyclic and `findReadyTasks` re-offers the body on the next wave (its own
+   * dependencies are still `done`).
+   *
+   * Budget-exhausted resumes deliberately DO NOT throw: the pipeline continues to its goal
+   * task, which reports the residual failure honestly. A silent extra pass is worse than a
+   * loud partial result.
+   */
+  const maybeResume = (task: TaskNode, output: unknown): void => {
+    if (!task.onFail) return;
+    // Default predicate matches the gate convention: a check resolves `ok`. The DSL cannot
+    // index arrays, so this is always a scalar comparison (see condition-dsl getAtPath).
+    const when = task.onFail.when ?? `${task.id}.ok == false`;
+    let failed = false;
+    try {
+      failed = evaluateCondition(when, allOutputs);
+    } catch {
+      return; // an unparseable predicate must not wedge the pipeline into a resume loop
+    }
+    if (!failed) return;
+
+    const spent = onFailAttempts.get(task.id) ?? 0;
+    const budget = task.onFail.maxAttempts ?? DEFAULT_ON_FAIL_ATTEMPTS;
+    if (spent >= budget) return;
+    onFailAttempts.set(task.id, spent + 1);
+
+    const carried =
+      task.onFail.carry && output && typeof output === 'object'
+        ? (output as Record<string, unknown>)[task.onFail.carry]
+        : output;
+
+    for (const id of resumeSet(tasks, task.onFail.goto, task.id)) {
+      done.delete(id);
+      skipped.delete(id);
+      skippedEmitted.delete(id);
+      delete allOutputs[id];
+      resumeFeedback.set(id, { feedback: carried, attempt: spent + 1 });
+    }
   };
 
   try {
@@ -225,7 +287,7 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
               );
             }
             const codeCtx = codeNodeCtxFactory(task);
-            const baseInputs: Record<string, unknown> = { ...(taskSeed ?? {}), ...upstreamOutputs };
+            const baseInputs: Record<string, unknown> = { ...(seedFor(task) ?? {}), ...upstreamOutputs };
             if (task.forEach) {
               const items = resolveForEachItems(task.forEach, allOutputs);
               const output = await Promise.all(
@@ -255,7 +317,7 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
             forkEngine.forkWithMeta({
               instruction: task.instruction,
               output: task.output,
-              seed: extraSeed ? { ...(taskSeed ?? {}), ...extraSeed } : taskSeed,
+              seed: extraSeed ? { ...(seedFor(task) ?? {}), ...extraSeed } : seedFor(task),
               upstreamOutputs: upstream,
               upstreamOutputSchemas,
               taskId: task.id,
@@ -327,6 +389,7 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
           allOutputs[task.id] = output;
           if (tracer) { const ts = taskScopes.get(task.id); if (ts) tracer.end(ts, 'done', { result: output }); }
           if (goalTask && task.id === goalTask.id) goalOutput = output;
+          maybeResume(task, output);
         } else {
           // Fork failed
           const failedTask = ready[results.indexOf(result)]!;

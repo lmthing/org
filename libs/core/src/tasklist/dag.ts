@@ -34,6 +34,27 @@ export function validateDag(tasks: Record<string, TaskNode>): void {
     }
   }
 
+  // onFail.goto must name a task this one transitively depends on: resuming works by
+  // un-doing the nodes BETWEEN goto and here, so a goto that is not upstream would either
+  // reset nothing or reset an unrelated branch.
+  for (const id of ids) {
+    const onFail = tasks[id]!.onFail;
+    if (!onFail) continue;
+    if (!(onFail.goto in tasks)) {
+      throw new Error(`Task "${id}" onFail.goto references unknown task "${onFail.goto}"`);
+    }
+    if (onFail.goto === id) {
+      throw new Error(
+        `Task "${id}" onFail.goto points at itself — a node cannot resume from itself (name the upstream step to redo)`,
+      );
+    }
+    if (!ancestorsOf(tasks, id).has(onFail.goto)) {
+      throw new Error(
+        `Task "${id}" onFail.goto "${onFail.goto}" must be a task "${id}" transitively depends on`,
+      );
+    }
+  }
+
   // Check no cycles using DFS
   const WHITE = 0, GRAY = 1, BLACK = 2;
   const color: Record<string, number> = {};
@@ -56,6 +77,37 @@ export function validateDag(tasks: Record<string, TaskNode>): void {
   for (const id of ids) {
     if (color[id] === WHITE) dfs(id);
   }
+}
+
+/** Every task reachable by following `dependsOn` upward from `id` (excluding `id`). */
+export function ancestorsOf(tasks: Record<string, TaskNode>, id: string): Set<string> {
+  const seen = new Set<string>();
+  const walk = (cur: string): void => {
+    for (const dep of tasks[cur]?.dependsOn ?? []) {
+      if (seen.has(dep)) continue;
+      seen.add(dep);
+      walk(dep);
+    }
+  };
+  walk(id);
+  return seen;
+}
+
+/**
+ * The nodes an `onFail` resume must un-do: `goto` and `node` themselves, plus every task
+ * BETWEEN them — i.e. each task that both descends from `goto` and is an ancestor of
+ * `node`. Nodes on unrelated branches are deliberately left `done`, so resuming redoes the
+ * failed stretch and nothing else.
+ */
+export function resumeSet(tasks: Record<string, TaskNode>, from: string, to: string): Set<string> {
+  const body = new Set<string>([from, to]);
+  const toAncestors = ancestorsOf(tasks, to);
+  for (const id of Object.keys(tasks)) {
+    if (id === from || id === to) continue;
+    // between = ancestor of `to` AND descendant of `from`
+    if (toAncestors.has(id) && ancestorsOf(tasks, id).has(from)) body.add(id);
+  }
+  return body;
 }
 
 /**
