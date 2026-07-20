@@ -17,6 +17,7 @@ import {
   defaultSystemSpaceDirs,
   systemFunctionSources,
   systemFunctionsBundled,
+  filterUniversalFunctions,
 } from '../spaces/system.js';
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { Budget } from '../eval/budget.js';
@@ -136,6 +137,15 @@ export class Session {
   private bakedDbSchemaRev = 0;
   private agentFunctions: Record<string, string> = {};
   private agentFunctionsBundled: Record<string, string> = {};
+  /** The FORK-ENGINE POOL — the UNFILTERED superset `buildInjectedFunctions` derives alongside
+   *  the (filtered) `agentFunctions`/`agentFunctionsBundled` above. A task's `functions:`
+   *  allow-list (fork.ts's `pickAllowed`) narrows FROM this pool, never from the filtered
+   *  top-level view — so a granted-only function absent from the top-level VM (e.g. webSearch/
+   *  webFetch on a specialist that doesn't declare them) is still selectable by a task node
+   *  that explicitly names it (e.g. research_and_store's research node). Set alongside
+   *  agentFunctions* in start()/resume(); read by getForkEngine(). */
+  private forkFunctionPool: Record<string, string> = {};
+  private forkFunctionPoolBundled: Record<string, string> = {};
   private systemSpaces: Space[] = [];
   /**
    * Spaces loaded at runtime via registerSpace(). Shared mutable reference so
@@ -340,13 +350,15 @@ export class Session {
     this.delegatePolicy = evaluateDelegatePolicy(agent.canDelegateTo, 'agent');
     const directDeps = resolveDirectDeps(this.space, agent.canDelegateTo);
 
-    // 4. Build system block (system functions rendered as a concise Built-in Tools list)
+    // 4. Build system block (system functions rendered as a concise Built-in Tools list).
+    // Granted-only universal functions (webSearch/webFetch) are withheld here unless this
+    // agent's `functions:` frontmatter names them — see filterUniversalFunctions.
     const systemFns = systemFunctionSources(this.systemSpaces);
     const knowledgePreloads = await resolvePreloadedKnowledge(this.space, agent);
-    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads, omitDelegate: this.delegatePolicy.mode === 'none' }) + this.projectAgentsBlock();
+    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: filterUniversalFunctions(systemFns, agent.config.functions), knowledgePreloads, omitDelegate: this.delegatePolicy.mode === 'none' }) + this.projectAgentsBlock();
 
     // 4b. Build ambient DTS overlay — system functions are always in scope, then agent functions
-    const { functions: agentFunctions, functionsBundled: agentFunctionsBundled } =
+    const { functions: agentFunctions, functionsBundled: agentFunctionsBundled, poolFunctions, poolFunctionsBundled } =
       this.buildInjectedFunctions(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
     const overlay = buildOverlay(agentFunctions, agentComponents, (name, message) => {
@@ -364,6 +376,8 @@ export class Session {
     this.ambientDts = ambientDts;
     this.agentFunctions = agentFunctions;
     this.agentFunctionsBundled = agentFunctionsBundled;
+    this.forkFunctionPool = poolFunctions;
+    this.forkFunctionPoolBundled = poolFunctionsBundled;
     this.forkEngine = null; // agent functions changed — rebuild on next fork yield
 
     // 5. Create the VM via the shared bootstrap (functions, host tools, all
@@ -493,7 +507,7 @@ export class Session {
     const directDeps = resolveDirectDeps(space, agent.canDelegateTo);
     const systemFns = systemFunctionSources(this.systemSpaces);
     const knowledgePreloads = await resolvePreloadedKnowledge(space, agent);
-    const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads, omitDelegate: delegatePolicy.mode === 'none' });
+    const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: filterUniversalFunctions(systemFns, agent.config.functions), knowledgePreloads, omitDelegate: delegatePolicy.mode === 'none' });
     const { functions: agentFunctions } = this.buildInjectedFunctions(space, agent);
     const agentComponents = getAgentComponents(space, agent);
     const overlay = buildOverlay(agentFunctions, agentComponents, (name, message) => {
@@ -567,8 +581,8 @@ export class Session {
     const directDeps = resolveDirectDeps(this.space, agent.canDelegateTo);
     const systemFns = systemFunctionSources(this.systemSpaces);
     const knowledgePreloads = await resolvePreloadedKnowledge(this.space, agent);
-    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: systemFns, knowledgePreloads, omitDelegate: this.delegatePolicy.mode === 'none' }) + this.projectAgentsBlock();
-    const { functions: agentFunctions, functionsBundled: agentFunctionsBundled } =
+    const systemBlock = buildSystemBlock({ space: this.space, agent, directDeps, systemFunctions: filterUniversalFunctions(systemFns, agent.config.functions), knowledgePreloads, omitDelegate: this.delegatePolicy.mode === 'none' }) + this.projectAgentsBlock();
+    const { functions: agentFunctions, functionsBundled: agentFunctionsBundled, poolFunctions, poolFunctionsBundled } =
       this.buildInjectedFunctions(this.space, agent);
     const agentComponents = getAgentComponents(this.space, agent);
     const overlay = buildOverlay(agentFunctions, agentComponents, (name, message2) => {
@@ -587,6 +601,8 @@ export class Session {
     this.ambientDts = ambientDts;
     this.agentFunctions = agentFunctions;
     this.agentFunctionsBundled = agentFunctionsBundled;
+    this.forkFunctionPool = poolFunctions;
+    this.forkFunctionPoolBundled = poolFunctionsBundled;
     this.forkEngine = null; // agent functions changed — rebuild on next fork yield
 
     // Create the VM via the shared bootstrap, restoring the persisted scope as
@@ -734,10 +750,20 @@ export class Session {
    * Project functions are present only for project-rooted sessions (the caller
    * populates `projectFunctions` from `<projectRoot>/functions/`); a legacy
    * session's map is byte-identical to before.
+   *
+   * Returns TWO views: the top-level INJECTED functions/functionsBundled (granted-only
+   * universal functions like webSearch/webFetch withheld unless `agent.config.functions`
+   * names them — see filterUniversalFunctions) and the UNFILTERED poolFunctions/
+   * poolFunctionsBundled (the fork-engine superset — task `functions:` allow-lists narrow FROM this, never
+   * from the filtered view, so a scaffolded specialist's research_and_store task node
+   * still resolves webSearch/webFetch even though the specialist's own top level doesn't
+   * see them). See `.issues/research-store-noop-diagnosis.md` (Slice B).
    */
   private buildInjectedFunctions(space: Space, agent: import('../spaces/load.js').AgentDef): {
     functions: Record<string, string>;
     functionsBundled: Record<string, string>;
+    poolFunctions: Record<string, string>;
+    poolFunctionsBundled: Record<string, string>;
   } {
     const systemFns = systemFunctionSources(this.systemSpaces);
     const systemBundled = systemFunctionsBundled(this.systemSpaces);
@@ -760,10 +786,16 @@ export class Session {
         )
       : { functions: {}, functionsBundled: {} };
 
-    return {
-      functions: { ...systemFns, ...scoped.functions, ...spaceFns },
-      functionsBundled: { ...systemBundled, ...scoped.functionsBundled, ...spaceBundled },
-    };
+    // Unfiltered pool FIRST (today's logic, unchanged) — the fork-engine superset.
+    const poolFunctions = { ...systemFns, ...scoped.functions, ...spaceFns };
+    const poolFunctionsBundled = { ...systemBundled, ...scoped.functionsBundled, ...spaceBundled };
+
+    // Then narrow to the top-level INJECTED view: granted-only universal functions
+    // dropped unless this agent's own `functions:` frontmatter names them.
+    const functions = filterUniversalFunctions(poolFunctions, agent.config.functions);
+    const functionsBundled = filterUniversalFunctions(poolFunctionsBundled, agent.config.functions);
+
+    return { functions, functionsBundled, poolFunctions, poolFunctionsBundled };
   }
 
   /** The project context a delegate should build into. Normally this session's own
@@ -991,8 +1023,11 @@ export class Session {
       streamFn: this.deps.streamFn,
       clock: this.opts.clock,
       tracer: this.tracer,
-      agentFunctions: this.agentFunctions,
-      agentFunctionsBundled: this.agentFunctionsBundled,
+      // The UNFILTERED pool, not the (possibly narrower) top-level agentFunctions — a task's
+      // `functions:` allow-list must be able to select a granted-only function (webSearch/
+      // webFetch) the running agent itself wasn't granted at top level. See forkFunctionPool.
+      agentFunctions: this.forkFunctionPool,
+      agentFunctionsBundled: this.forkFunctionPoolBundled,
       budgetLimits: this.opts.budget,
       // Session forks are top-level: ForkEngine defaults their depth to 1.
       forkDepth: undefined,

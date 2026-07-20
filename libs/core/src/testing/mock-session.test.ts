@@ -115,10 +115,46 @@ describe('Session.buildSystemPrompt (keyless prompt dump)', () => {
     expect(agentSlug).toBe('main'); // 'default' resolves to the sole agent
     expect(systemBlock).toContain('# Available Globals');
     // System functions present as signatures-only "Built-in Tools" when system spaces are loaded.
-    // (The generic fs wrappers are gone from system-global; webSearch/remember remain universal.)
+    // (The generic fs wrappers are gone from system-global; `remember`/`recall`/`forget` stay
+    // universal.) webSearch/webFetch are GRANTED-ONLY (filterUniversalFunctions,
+    // GRANTED_ONLY_SYSTEM_FUNCTIONS in spaces/system.ts): this fixture's `default` agent has no
+    // `functions:` frontmatter at all (config.functions is undefined, same as `[]`), so they are
+    // withheld from its system block — see the positive-grant case below.
     expect(systemBlock).toContain('# Built-in Tools');
-    expect(systemBlock).toContain('webSearch');
+    expect(systemBlock).toContain('remember');
+    expect(systemBlock).not.toContain('webSearch');
+    expect(systemBlock).not.toContain('webFetch');
     expect(ambientDts).toContain('declare function ask');
+  });
+
+  it('webSearch/webFetch DO appear in the system block for an agent whose functions: frontmatter names them', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lmthing-mocksess-'));
+    tmpDirs.push(dir);
+    const file = join(dir, 'agents', 'main', 'instruct.md');
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      '---\nfunctions:\n  - webSearch\n  - webFetch\n---\nYou are a test agent.\n',
+      'utf8',
+    );
+    // loadSpace's own-agent validation (spaces/load.ts) requires every name in an agent's
+    // `functions:` frontmatter to resolve against the SPACE'S OWN `functions/` dir — it has
+    // no visibility into system-space-provided universal functions at load time (those are
+    // merged in later, session-side, by buildInjectedFunctions/filterUniversalFunctions).
+    // Stub local files satisfy that check; their content is never executed by this test —
+    // only the rendered systemBlock text (sourced from the REAL system-global webSearch/
+    // webFetch, not these stubs) is asserted below.
+    await mkdir(join(dir, 'functions'), { recursive: true });
+    await writeFile(join(dir, 'functions', 'webSearch.ts'), 'export {};\n', 'utf8');
+    await writeFile(join(dir, 'functions', 'webFetch.ts'), 'export {};\n', 'utf8');
+    const session = new Session(
+      { spaceDir: dir, agentSlug: 'default', modelAlias: 'mock', renderHost: host, systemSpaceDirs: [join(SYSTEM_SPACES_ROOT, 'system-global')] },
+      { streamFn: neverCalled },
+    );
+    const { systemBlock } = await session.buildSystemPrompt();
+    session.dispose();
+    expect(systemBlock).toContain('webSearch');
+    expect(systemBlock).toContain('webFetch');
   });
 
   it('omits the Built-in Tools section when system spaces are disabled', async () => {

@@ -8,6 +8,8 @@ import { salvageData } from '../exec/envelope.js';
 import { BudgetExceededError } from '../eval/budget.js';
 import type { RenderHost } from '../session/types.js';
 import type { StreamSession } from '../eval/stream-types.js';
+import type { StreamOpts } from '../eval/stream-types.js';
+import { loadSystemSpaces, defaultSystemSpaceDirs, systemFunctionSources } from '../spaces/system.js';
 
 function makeStream(text: string): StreamSession {
   let aborted = false;
@@ -461,5 +463,87 @@ describe('ForkEngine', () => {
         rmSync(tmpDir, { recursive: true, force: true });
       }
     });
+  });
+});
+
+/**
+ * Task-node default filtering (`.issues/research-store-noop-diagnosis.md`, cause (b)):
+ * `pickAllowed`'s default branch (task OMITS `functions:`) used to hand back the RAW,
+ * unfiltered fork-engine pool — which (since Slice B) includes granted-only universal
+ * functions like webSearch/webFetch even though the OWNING agent's own top-level VM
+ * never sees them. A scaffolded task with no `functions:` (e.g. an `answer` task meant
+ * only to check coverage) thus silently got web access anyway and could research inline
+ * instead of honestly reporting `covered:false` for the caller to escalate. The fix
+ * re-applies `filterUniversalFunctions` in the omitted-`functions:` default branch, so a
+ * task must now opt in EXPLICITLY (`functions: [webSearch, ...]`) — mirroring the
+ * top-level "not granted ⇒ not injected" rule Slice B already applies to the agent VM.
+ */
+describe('ForkEngine — task-node default omits granted-only universal functions (research-store-noop fix)', () => {
+  it('omitted `functions:` — a task statement referencing `webSearch` is UNRESOLVED (typecheck failure, retryable)', async () => {
+    const systemSpaces = await loadSystemSpaces(defaultSystemSpaceDirs());
+    const pool = systemFunctionSources(systemSpaces); // the UNFILTERED pool (includes webSearch/webFetch)
+    expect(pool['webSearch']).toBeTruthy(); // sanity: the pool really carries it
+
+    const retryPrompts: string[] = [];
+    let call = 0;
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4,
+      parentHistory: [],
+      parentSpaceDir: '/tmp',
+      parentAgentSlug: 'test',
+      renderHost: silentHost,
+      agentFunctions: pool,
+      streamFn: async (opts: StreamOpts) => {
+        call++;
+        if (call === 1) return makeStream(`const x = typeof webSearch;\ncurrentTask.resolve({ kind: x });`);
+        // Retry turn: capture what the model was shown, then resolve cleanly so the
+        // fork completes instead of burning all 3 attempts.
+        const last = [...opts.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+        retryPrompts.push(last);
+        return makeStream(`currentTask.resolve({ kind: 'retried' });`);
+      },
+    });
+
+    const result = await engine.fork<{ kind: string }>({
+      instruction: 'no functions declared — should NOT see webSearch',
+      output: { kind: 'string' },
+      // functions: omitted entirely
+    });
+
+    expect(retryPrompts.length).toBeGreaterThan(0);
+    expect(retryPrompts[0]).toMatch(/webSearch/);
+    expect(retryPrompts[0]).toMatch(/Cannot find name/);
+    expect(result.kind).toBe('retried');
+  });
+
+  it('explicit `functions: ["webSearch"]` still resolves it from the pool (opt-in unaffected — research_and_store\'s own nodes rely on this)', async () => {
+    const systemSpaces = await loadSystemSpaces(defaultSystemSpaceDirs());
+    const pool = systemFunctionSources(systemSpaces);
+
+    let sawTypecheckRetry = false;
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4,
+      parentHistory: [],
+      parentSpaceDir: '/tmp',
+      parentAgentSlug: 'test',
+      renderHost: silentHost,
+      agentFunctions: pool,
+      streamFn: async (opts: StreamOpts) => {
+        const last = [...opts.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+        if (last.includes('Cannot find name')) sawTypecheckRetry = true;
+        // Referencing (not calling) the identifier is enough to prove it resolved —
+        // same reasoning as the delegate.test.ts Slice B positive case.
+        return makeStream(`currentTask.resolve({ kind: typeof webSearch });`);
+      },
+    });
+
+    const result = await engine.fork<{ kind: string }>({
+      instruction: 'explicit web grant on this task node',
+      output: { kind: 'string' },
+      functions: ['webSearch'],
+    });
+
+    expect(sawTypecheckRetry).toBe(false);
+    expect(result.kind).toBe('function');
   });
 });

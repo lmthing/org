@@ -105,6 +105,36 @@ export function systemFunctionsBundled(systemSpaces: Space[]): Record<string, st
 }
 
 /**
+ * Universal functions that are GRANTED-ONLY, not truly universal: they live in the
+ * `system-global` toolkit (so `systemFunctionSources`/`systemFunctionNames` still see them —
+ * task-level `functions:` allow-lists, which narrow FROM the fork-engine pool, need them there),
+ * but they are withheld from the TOP-LEVEL injected view (prompt/DTS/VM) unless the running
+ * agent's `functions:` frontmatter names them. `webSearch`/`webFetch` run raw fetch against
+ * ambient `fetch` with no persistence step of their own — an agent that can call them directly
+ * can research and never store the finding (the research_and_store bypass this closes). See
+ * `.issues/research-store-noop-diagnosis.md` (Slice B) and `filterUniversalFunctions` below.
+ */
+export const GRANTED_ONLY_SYSTEM_FUNCTIONS: ReadonlySet<string> = new Set(['webSearch', 'webFetch']);
+
+/**
+ * Narrow a UNIVERSAL function map (system-global toolkit) down to the TOP-LEVEL injected view:
+ * every function EXCEPT the granted-only ones in `GRANTED_ONLY_SYSTEM_FUNCTIONS`, unless the
+ * running agent's own `functions:` frontmatter names it. Callers keep the UNFILTERED map as the
+ * fork-engine pool (task `functions:` allow-lists narrow FROM that unfiltered superset, never
+ * from this filtered view) — see session.ts's `poolFunctions`/`poolFunctionsBundled` and
+ * delegate.ts's `poolFunctions`.
+ */
+export function filterUniversalFunctions<T>(map: Record<string, T>, agentFunctionNames: readonly string[] | undefined): Record<string, T> {
+  const granted = new Set(agentFunctionNames ?? []);
+  const out: Record<string, T> = {};
+  for (const [name, value] of Object.entries(map)) {
+    if (GRANTED_ONLY_SYSTEM_FUNCTIONS.has(name) && !granted.has(name)) continue;
+    out[name] = value;
+  }
+  return out;
+}
+
+/**
  * Merge system spaces into a user space. The user space wins on every name
  * collision (so a space can override a system tool). Returns a NEW Space; the
  * inputs are not mutated.

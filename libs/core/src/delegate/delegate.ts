@@ -11,7 +11,7 @@ import { buildSystemBlock, resolvePreloadedKnowledge } from '../context/system-b
 import { runTurnLoop } from '../eval/turn-loop.js';
 import { routeCommonYield } from '../eval/yield-router.js';
 import { buildOverlay } from '../typecheck/overlay.js';
-import { systemFunctionSources, systemFunctionsBundled } from '../spaces/system.js';
+import { systemFunctionSources, systemFunctionsBundled, filterUniversalFunctions } from '../spaces/system.js';
 import type { Space } from '../spaces/load.js';
 import type { BudgetLimits } from '../eval/budget.js';
 import { Budget, BudgetExceededError } from '../eval/budget.js';
@@ -152,9 +152,17 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   // delegate VM below. Surface it in the system prompt AND the typecheck overlay too —
   // otherwise an agent that calls a bare global tool (e.g. the memory agent's remember())
   // fails typecheck with "Cannot find name", since it declares no functions of its own.
+  //
+  // `systemFnSources` stays UNFILTERED — it becomes the fork-engine POOL source below (a task
+  // node's `functions:` allow-list must be able to select a granted-only function like
+  // webSearch/webFetch that THIS agent itself wasn't granted at top level). The INJECTED view
+  // (system block + overlay + VM) narrows it via filterUniversalFunctions, withholding
+  // granted-only universal functions unless this agent's own `functions:` frontmatter names
+  // them. See `.issues/research-store-noop-diagnosis.md` (Slice B).
   const systemFnSources = systemFunctionSources(opts.systemSpaces ?? []);
+  const injectedSystemFnSources = filterUniversalFunctions(systemFnSources, agent.config.functions);
   const knowledgePreloads = await resolvePreloadedKnowledge(space, agent);
-  const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: systemFnSources, knowledgePreloads, omitAsk: true, omitDelegate: delegatePolicy.mode === 'none' });
+  const systemBlock = buildSystemBlock({ space, agent, directDeps, systemFunctions: injectedSystemFnSources, knowledgePreloads, omitAsk: true, omitDelegate: delegatePolicy.mode === 'none' });
 
   // The delegated agent runs with ITS OWN declared app grants, but project-rooted at
   // the PARENT's projectRoot (forwarded below) — so a delegated specialist mutates the
@@ -180,14 +188,30 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   const capturableTasklists = actionDef?.tasklist
     ? new Set<string>([actionDef.tasklist])
     : new Set<string>(agent.actions.map((a) => a.tasklist).filter(Boolean));
+  // First resolution of a capturable tasklist is a FALLBACK only — it does not stop the
+  // loop. This lets a "probe tasklist, escalate on a field in its result" pattern (e.g.
+  // an `answer` tasklist that resolves `{covered:false}`, prompting the model to run
+  // `research_and_store` next) complete naturally: the model gets to see the first
+  // result and act on it before the delegate's turn loop is torn down. A tasklist with
+  // the SAME name resolving a SECOND time (the model re-running it, or a stuck-loop
+  // re-emission) IS treated as terminal — see onTasklistResult below.
+  // See `.issues/research-store-noop-diagnosis.md` (auto-capture early-stop fix).
+  const seenCapturableTasklists = new Set<string>();
 
   // Space functions injected into the VM (system functions + agent functions).
   const agentFunctions = getAgentFunctions(space, agent);
   const agentFunctionsBundled = getAgentFunctionsBundled(space, agent);
   const agentComponents = getAgentComponents(space, agent);
   const systemSpaces = opts.systemSpaces ?? [];
-  const functions = { ...systemFnSources, ...agentFunctions };
-  const functionsBundled = { ...systemFunctionsBundled(systemSpaces), ...agentFunctionsBundled };
+  const systemFnBundled = systemFunctionsBundled(systemSpaces);
+  // The two-set split: `injectedFunctions`/`injectedFunctionsBundled` (filtered — the child
+  // VM's actual functions/functionsBundled AND the typecheck overlay) vs `poolFunctions`/
+  // `poolFunctionsBundled` (UNFILTERED superset — the ForkEngine's `agentFunctions`/
+  // `agentFunctionsBundled`, which a task's `functions:` allow-list narrows FROM).
+  const injectedFunctions = { ...injectedSystemFnSources, ...agentFunctions };
+  const injectedFunctionsBundled = { ...filterUniversalFunctions(systemFnBundled, agent.config.functions), ...agentFunctionsBundled };
+  const poolFunctions = { ...systemFnSources, ...agentFunctions };
+  const poolFunctionsBundled = { ...systemFnBundled, ...agentFunctionsBundled };
 
   // Shared child-VM bootstrap: query/context seed vars, currentTask capture,
   // functions, host tools, yielding globals per the capability profile (no ask —
@@ -209,8 +233,8 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     projectId: opts.projectId,
     appGlobals: opts.appGlobals,
     progress: undefined,
-    functions,
-    functionsBundled,
+    functions: injectedFunctions,
+    functionsBundled: injectedFunctionsBundled,
     componentNames: [...Object.keys(agentComponents.view), ...Object.keys(agentComponents.form)],
     onDisplay: (value) => {
       tracer.write({ ts: Date.now(), type: 'display', context: delegateScope.label, nodeId: delegateScope.nodeId, descriptor: value });
@@ -268,7 +292,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     // the query/context seed variables (injected as real VM variables above so
     // an agent can seed its tasklist with structured data handed down by the
     // delegator instead of re-serializing it from prose).
-    const overlay = buildOverlay({ ...systemFnSources, ...agentFunctions }, agentComponents);
+    const overlay = buildOverlay(injectedFunctions, agentComponents);
     const ambientDts = buildAmbientDts({
       capabilities,
       overlay,
@@ -313,8 +337,11 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       parentSpaceDir: space.dir,
       parentAgentSlug: agent.slug,
       parentAgentCharter: agent.charterBody,
-      agentFunctions: functions,
-      agentFunctionsBundled: functionsBundled,
+      // The UNFILTERED pool, not the (possibly narrower) injectedFunctions — a task's
+      // `functions:` allow-list must be able to select a granted-only function (webSearch/
+      // webFetch) this delegate itself wasn't granted at top level. See poolFunctions above.
+      agentFunctions: poolFunctions,
+      agentFunctionsBundled: poolFunctionsBundled,
       renderHost: opts.renderHost,
       streamFn: opts.streamFn,
       clock: opts.clock,
@@ -396,10 +423,21 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             // since Phase 3 — captured and returned UNTOUCHED, so the delegator
             // sees the same envelope contract as a direct tasklist() caller.
             onTasklistResult: (name, result) => {
-              if (capturableTasklists.has(name) && !resultCaptured) {
+              if (!capturableTasklists.has(name) || resultCaptured) return;
+              if (seenCapturableTasklists.has(name)) {
+                // RE-EMISSION: the same capturable tasklist resolved a second time —
+                // either a stuck-loop re-run or the model deliberately re-invoking it.
+                // This IS terminal: capture the LATEST result and stop.
                 capturedResult = result;
                 resultCaptured = true;
+                return;
               }
+              seenCapturableTasklists.add(name);
+              // First resolution: stash as the fallback, but do NOT stop the loop —
+              // give the model a chance to act on it (e.g. escalate to a second
+              // tasklist) before an explicit currentTask.resolve() or a re-emission
+              // makes the result terminal.
+              capturedResult = result;
             },
             runDelegate: (packageName, agentName, action, delegateOpts2) => {
               // Yield-time canDelegateTo gate (unified semantics): this agent's
@@ -470,7 +508,14 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       throw err;
     }
 
-    return resultCaptured ? capturedResult : undefined;
+    // `capturedResult` holds the best available result: an explicit `currentTask.resolve()`
+    // value (authoritative, via currentTaskResolve above), or — if the model never resolved
+    // explicitly — the terminal/fallback tasklist result captured by onTasklistResult. When
+    // NOTHING was ever captured this is `undefined`, identical to the old `resultCaptured ?
+    // capturedResult : undefined` ternary; the difference only matters when the model
+    // exhausts the resolve-nudge retries above WITHOUT resolving but DID leave a first-pass
+    // fallback in `capturedResult` — return that instead of discarding it.
+    return capturedResult;
   } finally {
     vm.dispose();
   }

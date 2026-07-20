@@ -8,6 +8,8 @@ import {
   systemFunctionNames,
   systemFunctionSources,
   defaultSystemSpaceDirs,
+  filterUniversalFunctions,
+  GRANTED_ONLY_SYSTEM_FUNCTIONS,
 } from './system.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -182,5 +184,56 @@ describe('system spaces', () => {
     expect(instruct).toMatch(/believe it, and\s+escalate\./);
     // …and the finding must be kept, not left in one chat reply.
     expect(instruct).toMatch(/Then KEEP what you found/);
+  });
+});
+
+// ── filterUniversalFunctions — the granted-only two-set split (Slice B) ─────────────
+//
+// webSearch/webFetch are UNIVERSAL for `systemFunctionSources`/`systemFunctionNames` (the
+// pins above stay true — those are the raw/pool primitives, untouched) but GRANTED-ONLY for
+// the top-level INJECTED view: a specialist that calls them directly at top level (bypassing
+// research_and_store's persistence step) is exactly the bug this closes — see
+// `.issues/research-store-noop-diagnosis.md` (Slice B).
+describe('filterUniversalFunctions', () => {
+  const map = { webSearch: 'src-webSearch', webFetch: 'src-webFetch', remember: 'src-remember', recall: 'src-recall' };
+
+  it('GRANTED_ONLY_SYSTEM_FUNCTIONS is exactly {webSearch, webFetch}', () => {
+    expect([...GRANTED_ONLY_SYSTEM_FUNCTIONS].sort()).toEqual(['webFetch', 'webSearch']);
+  });
+
+  it('drops webSearch/webFetch when not granted, keeping every other universal function', () => {
+    const out = filterUniversalFunctions(map, []);
+    expect('webSearch' in out).toBe(false);
+    expect('webFetch' in out).toBe(false);
+    expect(Object.keys(out).sort()).toEqual(['recall', 'remember']);
+    expect(out['remember']).toBe('src-remember');
+    expect(out['recall']).toBe('src-recall');
+  });
+
+  it('an undefined grant list behaves like an empty one (withholds granted-only names)', () => {
+    const out = filterUniversalFunctions(map, undefined);
+    expect('webSearch' in out).toBe(false);
+    expect('webFetch' in out).toBe(false);
+  });
+
+  it('keeps ONLY the granted-only name the agent actually named — a partial grant', () => {
+    const out = filterUniversalFunctions(map, ['webSearch']);
+    expect(out['webSearch']).toBe('src-webSearch');
+    expect('webFetch' in out).toBe(false); // not granted — still withheld
+    expect(out['remember']).toBe('src-remember'); // ordinary universal fn unaffected
+  });
+
+  it('keeps both granted-only names when both are named in functions:', () => {
+    const out = filterUniversalFunctions(map, ['webSearch', 'webFetch']);
+    expect(out['webSearch']).toBe('src-webSearch');
+    expect(out['webFetch']).toBe('src-webFetch');
+    expect(Object.keys(out).sort()).toEqual(['recall', 'remember', 'webFetch', 'webSearch']);
+  });
+
+  it('is a no-op on a map with none of the granted-only names, however it is called', () => {
+    const noGrantedNames = { remember: 'src-remember', recall: 'src-recall', forget: 'src-forget' };
+    expect(filterUniversalFunctions(noGrantedNames, [])).toEqual(noGrantedNames);
+    expect(filterUniversalFunctions(noGrantedNames, undefined)).toEqual(noGrantedNames);
+    expect(filterUniversalFunctions(noGrantedNames, ['webSearch'])).toEqual(noGrantedNames);
   });
 });

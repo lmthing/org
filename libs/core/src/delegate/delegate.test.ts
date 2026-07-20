@@ -1,11 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { runDelegate } from './delegate.js';
 import { DelegateRegistry } from './registry.js';
 import type { RenderHost } from '../session/types.js';
-import type { StreamSession } from '../eval/stream-types.js';
+import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
 import type { Space, AgentDef } from '../spaces/load.js';
 import { loadSystemSpaces, defaultSystemSpaceDirs } from '../spaces/system.js';
-import { createMockStreamFn } from '../testing/mock-provider.js';
+import { createMockStreamFn, mockMatch } from '../testing/mock-provider.js';
 import { Tracer, type TraceEvent } from '../sandbox/trace.js';
 
 /**
@@ -264,5 +267,292 @@ describe('runDelegate action-restriction (allowedActions)', () => {
     });
 
     expect(result).toBe('ok');
+  });
+});
+
+/**
+ * Slice B lockstep pin (`.issues/research-store-noop-diagnosis.md`): webSearch/webFetch are
+ * GRANTED-ONLY at the top level (filterUniversalFunctions in spaces/system.ts) — withheld from
+ * a delegate's injected functions/overlay unless its own `functions:` frontmatter names them,
+ * even though they remain in the UNFILTERED fork-engine pool a task node can still select (see
+ * delegate.ts's poolFunctions / session.ts's forkFunctionPool). No shipped agent grants them
+ * today (main's call, 2026-07-20 — confirmed by grep that neither THING nor the researcher calls
+ * webSearch/webFetch at top level; both route through delegation/tasklists whose task nodes carry
+ * their own `functions:` allow-list resolving from the pool) — this fixture proves the MECHANISM
+ * generally, independent of which shipped agent (if any) ever opts in.
+ */
+describe('runDelegate — webSearch/webFetch are granted-only for the top-level VM (Slice B)', () => {
+  function specialistAgent(functions: string[]): AgentDef {
+    return {
+      slug: 'specialist',
+      title: 'Specialist',
+      instructBody: '',
+      charterBody: '',
+      actions: [],
+      canDelegateTo: [],
+      config: { knowledge: [], functions, components: [] },
+    };
+  }
+
+  function specialistSpace(dir: string, agent: AgentDef): Space {
+    return {
+      dir,
+      packageName: undefined,
+      agents: { specialist: agent },
+      tasklists: {},
+      functions: {},
+      functionsBundled: {},
+      dependentSpaces: {},
+      components: { view: {}, form: {} },
+      knowledge: { domains: {} },
+    } as Space;
+  }
+
+  it('functions: [] — a top-level `webSearch(...)` call is UNRESOLVED (typecheck failure, retryable)', async () => {
+    const systemSpaces = await loadSystemSpaces(defaultSystemSpaceDirs());
+    const agent = specialistAgent([]); // no grant
+    const space = specialistSpace('/fake/no-grant', agent);
+    const registry = new DelegateRegistry(new Map([[space.dir, space]]));
+
+    const retryPrompts: string[] = [];
+    const streamFn = createMockStreamFn((o, ctx) => {
+      if (ctx.callIndex === 0) return `await webSearch("x");`;
+      // Every subsequent call is a RETRY turn — capture what the model was shown, then
+      // stop cleanly so the run doesn't burn all 3 retries or trip the forced-resolve nudge.
+      const last = [...o.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+      retryPrompts.push(last);
+      return `currentTask.resolve({ retried: true });`;
+    });
+
+    const result = (await runDelegate({
+      packageName: space.dir,
+      agentName: 'specialist',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+      systemSpaces,
+    })) as { retried: boolean } | undefined;
+
+    // The turn loop retried (webSearch never bound/resolved on the first attempt) and the
+    // retry prompt names webSearch as an unrecognized identifier — a typecheck failure, not
+    // a runtime throw (a granted-only function absent from the overlay fails typecheck, just
+    // like any other undeclared identifier).
+    expect(retryPrompts.length).toBeGreaterThan(0);
+    expect(retryPrompts[0]).toMatch(/webSearch/);
+    expect(retryPrompts[0]).toMatch(/Cannot find name/);
+    expect(result).toEqual({ retried: true });
+  });
+
+  it('functions: ["webSearch"] — referencing `webSearch` at top level RESOLVES (no typecheck retry)', async () => {
+    const systemSpaces = await loadSystemSpaces(defaultSystemSpaceDirs());
+    const agent = specialistAgent(['webSearch']); // granted
+    const space = specialistSpace('/fake/granted', agent);
+    const registry = new DelegateRegistry(new Map([[space.dir, space]]));
+
+    let sawTypecheckRetry = false;
+    const streamFn = createMockStreamFn((o, ctx) => {
+      const last = [...o.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+      if (last.includes('Cannot find name')) sawTypecheckRetry = true;
+      if (ctx.callIndex === 0) {
+        // The assertion is that the identifier RESOLVES (declared + typechecks) — not a
+        // fully-stubbed real search result (main's call: don't over-engineer a fetch stub
+        // here). Referencing it without calling it is enough to prove no retry occurs.
+        return `currentTask.resolve({ kind: typeof webSearch });`;
+      }
+      return '';
+    });
+
+    const result = (await runDelegate({
+      packageName: space.dir,
+      agentName: 'specialist',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+      systemSpaces,
+    })) as { kind: string } | undefined;
+
+    expect(sawTypecheckRetry).toBe(false);
+    expect(result).toEqual({ kind: 'function' });
+  });
+});
+
+/**
+ * Auto-capture early-stop fix (`.issues/research-store-noop-diagnosis.md`, cause (a)):
+ * before this fix, `onTasklistResult` captured + STOPPED the delegate's turn loop the
+ * INSTANT the action's own tasklist resolved, regardless of what the result said. That
+ * broke the "probe tasklist, escalate on a field in its result" pattern used by
+ * `household-utility-advisor`-shaped specialists: `answer` resolves `{covered:false}`,
+ * and the model's OWN prose plan is to then run `research_and_store` and resolve THAT
+ * result instead — but the loop was already torn down before the model's next turn ever
+ * got a chance to run (`shouldStop` is checked at the TOP of the turn loop's next cycle,
+ * before a new LLM request is even issued — see turn-loop.ts's `shouldStop` doc comment).
+ *
+ * The fix: the FIRST resolution of a capturable tasklist is stashed as a fallback only
+ * — it does not stop the loop. Only an EXPLICIT `currentTask.resolve()` (unchanged,
+ * `currentTaskResolve`) or a SECOND resolution of the SAME tasklist name (a stuck-loop
+ * re-emission — the model re-running it without ever calling `currentTask.resolve()`)
+ * is terminal.
+ */
+const escalationTmpDirs: string[] = [];
+afterAll(async () => {
+  await Promise.all(escalationTmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+});
+
+/** A specialist with ONE action ("answer") whose tasklist resolves `{covered}`, plus a
+ *  SECOND, differently-named tasklist ("research_and_store") the action's own prose
+ *  plan escalates to when `covered` is false. Mirrors the real
+ *  `household-utility-advisor` shape at the level that matters for this bug: two
+ *  DISTINCT tasklist names, only the first ("answer") is in `capturableTasklists`. */
+async function makeEscalationSpace(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'lmthing-delegate-escalate-'));
+  escalationTmpDirs.push(dir);
+  const agentFile = join(dir, 'agents', 'specialist', 'instruct.md');
+  await mkdir(dirname(agentFile), { recursive: true });
+  await writeFile(
+    agentFile,
+    `---\ntitle: Specialist\nactions:\n  - id: answer\n    label: Answer\n    description: Answer, escalating to research when not covered\n    tasklist: answer\n---\n\nYou are a specialist.\n`,
+    'utf8',
+  );
+  const answerTask = join(dir, 'tasklists', 'answer', '01-check.md');
+  await mkdir(dirname(answerTask), { recursive: true });
+  await writeFile(
+    answerTask,
+    `---\nid: check\ngoal: true\noutput:\n  covered: boolean\n---\n\nANSWER_TASK: check whether the knowledge base covers this question.`,
+    'utf8',
+  );
+  const researchTask = join(dir, 'tasklists', 'research_and_store', '01-research.md');
+  await mkdir(dirname(researchTask), { recursive: true });
+  await writeFile(
+    researchTask,
+    `---\nid: research\ngoal: true\noutput:\n  stored: boolean\n  source: string\n---\n\nRESEARCH_TASK: research the web and store findings.`,
+    'utf8',
+  );
+  return dir;
+}
+
+/** Same discriminator harness-features.test.ts's `forkRule` uses: "Output schema:" only
+ *  appears in a fork/tasklist-task prompt, never in the delegate's own top-level turn —
+ *  so matching on it (plus a token unique to the node's instruction) cleanly separates
+ *  task-node turns from the delegate's own turns without relying on call ordering. */
+function taskRule(token: string, respond: (o: StreamOpts) => string) {
+  return {
+    when: (o: StreamOpts) => o.messages.some((m) => m.content.includes('Output schema:') && m.content.includes(token)),
+    respond,
+  };
+}
+
+describe('runDelegate auto-capture — two-tasklist escalation pattern (research-store-noop fix)', () => {
+  it('returns the SECOND (research_and_store) result, not the first (answer) tasklist result', async () => {
+    const dir = await makeEscalationSpace();
+    const registry = new DelegateRegistry(new Map());
+    let delegateTurn = 0;
+    const streamFn = mockMatch(
+      [
+        taskRule('ANSWER_TASK', () => `currentTask.resolve({ covered: false });`),
+        taskRule('RESEARCH_TASK', () => `currentTask.resolve({ stored: true, source: 'srcX' });`),
+      ],
+      () => {
+        delegateTurn++;
+        // Turn 1: probe. Turn 2 (only reachable if the loop did NOT stop after the
+        // 'answer' tasklist resolved): read covered===false and escalate. Turn 3:
+        // resolve with the research result.
+        if (delegateTurn === 1) return `const r = await tasklist("answer", { query, ...context });`;
+        if (delegateTurn === 2) return `const r2 = await tasklist("research_and_store", { query, ...context });`;
+        if (delegateTurn === 3) return `currentTask.resolve(r2);`;
+        return '';
+      },
+    );
+
+    const result = (await runDelegate({
+      packageName: dir,
+      agentName: 'specialist',
+      action: 'answer',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+    })) as { ok: boolean; degraded: boolean; data: { stored: boolean; source: string } } | undefined;
+
+    // Pre-fix, delegateTurn would stop at 1 (shouldStop tore the loop down the instant
+    // 'answer' resolved) and `result` would be the 'answer' envelope, not the research one.
+    expect(delegateTurn).toBe(3);
+    expect(result?.data).toEqual({ stored: true, source: 'srcX' });
+  });
+
+  it('re-emission of the SAME capturable tasklist (no explicit resolve — the stuck-loop case) is terminal: stops after the 2nd, no 3rd call', async () => {
+    const dir = await makeEscalationSpace();
+    const registry = new DelegateRegistry(new Map());
+    let forkCallCount = 0;
+    let delegateTurn = 0;
+    const streamFn = mockMatch(
+      [
+        taskRule('ANSWER_TASK', () => {
+          forkCallCount++;
+          return `currentTask.resolve({ covered: false, attempt: ${forkCallCount} });`;
+        }),
+      ],
+      () => {
+        delegateTurn++;
+        // The model never calls currentTask.resolve() — it just keeps re-running the
+        // SAME tasklist every turn (the stuck-loop pattern the re-emission rule guards).
+        return `const r = await tasklist("answer", { query, ...context });`;
+      },
+    );
+
+    const result = (await runDelegate({
+      packageName: dir,
+      agentName: 'specialist',
+      action: 'answer',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+    })) as { ok: boolean; degraded: boolean; data: { covered: boolean; attempt: number } } | undefined;
+
+    expect(forkCallCount).toBe(2); // the tasklist ran exactly twice
+    expect(delegateTurn).toBe(2); // no 3rd delegate-level turn — the loop stopped after the re-emission
+    expect(result?.data).toEqual({ covered: false, attempt: 2 }); // the LATEST result, not the discarded 1st
+  });
+
+  it('a normal single-tasklist delegate: the model reads the result and resolves explicitly on the NEXT turn', async () => {
+    const dir = await makeEscalationSpace();
+    const registry = new DelegateRegistry(new Map());
+    let delegateTurn = 0;
+    const streamFn = mockMatch(
+      [taskRule('ANSWER_TASK', () => `currentTask.resolve({ covered: true });`)],
+      () => {
+        delegateTurn++;
+        if (delegateTurn === 1) return `const r = await tasklist("answer", { query, ...context });`;
+        // Reading r.data.covered here proves the loop did NOT stop after the first
+        // (fallback-only) capture — the model got to see the bound result and act on it.
+        if (delegateTurn === 2) return `currentTask.resolve({ final: true, covered: (r as any).data.covered });`;
+        return '';
+      },
+    );
+
+    const result = (await runDelegate({
+      packageName: dir,
+      agentName: 'specialist',
+      action: 'answer',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+    })) as { final: boolean; covered: boolean } | undefined;
+
+    expect(delegateTurn).toBe(2);
+    expect(result).toEqual({ final: true, covered: true });
   });
 });

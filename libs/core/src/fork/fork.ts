@@ -21,6 +21,7 @@ import { resolveTaskDelegate, evaluateDelegatePolicy, isDelegateAllowed, formatD
 import { STATEMENT_PROTOCOL } from '../exec/preamble.js';
 import { salvageData, type DegradeReason } from '../exec/envelope.js';
 import { runPrelude } from '../exec/prelude.js';
+import { filterUniversalFunctions } from '../spaces/system.js';
 
 // Re-exported for compatibility: the allowlist matcher moved to exec/target-match.ts
 // (Phase 2 exec unification) but was historically imported from fork.ts.
@@ -115,9 +116,22 @@ export interface ForkEngineOpts {
   streamFn: (opts: StreamOpts) => Promise<StreamSession>;
   clock?: Clock;
   tracer?: Tracer;
-  /** Agent functions (TS source) available in the parent session — injected into fork VMs */
+  /** Agent functions (TS source) available in the parent session — injected into fork VMs.
+   *  This is the FORK-ENGINE POOL: an UNFILTERED superset (includes granted-only universal
+   *  functions like webSearch/webFetch even when the parent's own top-level VM/DTS withholds
+   *  them — see `filterUniversalFunctions` in spaces/system.ts). A task's EXPLICIT `functions:`
+   *  allow-list (`pickAllowed` below) NARROWS FROM this pool — it never adds to it — so a
+   *  task node can select a granted-only function the running agent itself wasn't granted at
+   *  top level (e.g. research_and_store's research node selecting webSearch/webFetch on a
+   *  specialist that doesn't declare them). A task node that OMITS `functions:` does NOT get
+   *  the raw pool, though — `pickAllowed`'s default branch re-applies `filterUniversalFunctions`
+   *  so granted-only functions still require an explicit opt-in even at the task-node default
+   *  (closes the accidental-web-access path the auto-capture/research-store-noop bug exploited).
+   *  See `.issues/research-store-noop-diagnosis.md` (Slice B + the task-node-default fix) and
+   *  the callers in session.ts (`forkFunctionPool`) and delegate.ts (`poolFunctions`). */
   agentFunctions?: Record<string, string>;
-  /** Bundled JS versions of agent functions (when space has node_modules) */
+  /** Bundled JS versions of agent functions (when space has node_modules). Same pool
+   *  semantics as `agentFunctions` above. */
   agentFunctionsBundled?: Record<string, string>;
   /** Host budget caps applied to each fork's own turn loop (fresh Budget per fork). */
   budgetLimits?: BudgetLimits;
@@ -305,8 +319,20 @@ export class ForkEngine {
         const allFns = this.opts.agentFunctions ?? {};
         const allFnsBundled = this.opts.agentFunctionsBundled ?? {};
         const fnAllow = task.functions;
+        // A task node that OMITS `functions:` gets the pool MINUS the granted-only
+        // universal functions (webSearch/webFetch) — the same "not granted ⇒ not
+        // injected" principle Slice B applies at the top level (filterUniversalFunctions
+        // in spaces/system.ts). Before this fix an omitted-functions task silently
+        // inherited the FULL unfiltered pool, so a scaffolded task with no `functions:`
+        // (e.g. an `answer` task meant only to check coverage) got webSearch/webFetch
+        // for free and could research inline instead of honestly reporting
+        // `covered:false` and letting the caller escalate to `research_and_store`. A
+        // task now opts into web access EXPLICITLY via `functions: [webSearch,
+        // webFetch, ...]` — the named-allowlist branch below, unaffected by this change
+        // (research_and_store's own task nodes already declare it explicitly and keep
+        // resolving it from the pool). See `.issues/research-store-noop-diagnosis.md`.
         const pickAllowed = <T,>(rec: Record<string, T>): Record<string, T> => {
-          if (!fnAllow) return rec;
+          if (!fnAllow) return filterUniversalFunctions(rec, undefined);
           const out: Record<string, T> = {};
           for (const name of fnAllow) if (name in rec) out[name] = rec[name]!;
           return out;
