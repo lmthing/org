@@ -258,12 +258,14 @@ const HEADER = [
   ' * Emitted by the appbuilder from the AGREED plan BEFORE any implementation code was written,',
   ' * so every endpoint and page is checked against declared names instead of remembered ones.',
   ' *',
-  ' * Import it with a RELATIVE, TYPE-ONLY import:',
-  ' *     import type { CostLinesOutput } from \'../types/contract\';',
-  ' *',
-  ' * NOT via `@app/types` — that specifier is hard-mapped to `types/generated.d.ts`, which the',
-  ' * build regenerates from the code that actually landed. This file is the other direction:',
-  ' * what the code is supposed to be. Generated file — do not hand-edit.',
+  ' * These are GLOBAL AMBIENT types — this file is a .d.ts SCRIPT (no export), and the project-app',
+  ' * typecheck loads it as a program root, so every name here is in scope EVERYWHERE with NO import.',
+  ' * A page writes `useApi<CostLinesOutput>(...)`, a component `function Row(props: RowProps)`, an',
+  ' * endpoint `export type Output = CostLinesOutput` — never an `import`. That is deliberate: an',
+  ' * import forces the author to compute a relative depth (`../` vs `../../`) and, when it looks',
+  ' * wrong, to abandon the contract; a global type has neither failure mode. NOT `@app/types` either',
+  ' * — that maps to `types/generated.d.ts`, which the build regenerates from the code that landed.',
+  ' * This file is the other direction: what the code is supposed to be. Generated — do not hand-edit.',
   ' */',
   '',
 ].join('\n');
@@ -276,7 +278,7 @@ function renderRows(tables: ContractTable[]): string {
     const lines: string[] = [];
     const description = doc(table.schema?.description ?? table.schema?.title ?? `Row of ${table.name}`);
     lines.push(`/** ${description} (table \`${table.name}\`) */`);
-    lines.push(`export interface ${name(`${pascal(table.name)}Row`)} {`);
+    lines.push(`interface ${name(`${pascal(table.name)}Row`)} {`);
     const entries = Object.entries(columns);
     if (entries.length === 0) {
       lines.push('  [column: string]: unknown;');
@@ -305,29 +307,29 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
     const lines: string[] = [];
     const purpose = doc(endpoint.purpose);
     lines.push(`/** \`${endpoint.name}\`${endpoint.route ? ` — ${endpoint.route}` : ''}${purpose ? `: ${purpose}` : ''} */`);
-    lines.push(`export interface ${base}Item {`);
+    lines.push(`interface ${base}Item {`);
     if (fields.length === 0) lines.push('  [field: string]: unknown;');
     for (const field of fields) lines.push(`  ${propKey(field.key)}: ${field.type};`);
     lines.push('}');
     // Every read endpoint answers `{ items: [...] }` — an aggregate is the single summary at
     // `items[0]` (`05-plan_endpoints.md`), so one shape covers both.
-    lines.push(`export interface ${base}Output { items: ${base}Item[]; }`);
+    lines.push(`interface ${base}Output { items: ${base}Item[]; }`);
     lines.push(
       params.length > 0
-        ? `export interface ${base}Input {\n${params.map((p) => `  ${propKey(p)}: string;`).join('\n')}\n}`
-        : `export type ${base}Input = Record<string, unknown>;`,
+        ? `interface ${base}Input {\n${params.map((p) => `  ${propKey(p)}: string;`).join('\n')}\n}`
+        : `type ${base}Input = Record<string, unknown>;`,
     );
     blocks.push(lines.join('\n'));
   }
   const names = endpoints.map((e) => String(e.name)).filter(Boolean);
   const union =
     names.length > 0
-      ? `/** Every endpoint name the plan assigned — the exact strings \`useApi\`/\`useApiMutation\`/\n *  \`apiCall\` take, and each handler's \`export const name\`. */\nexport type EndpointName =\n${[
+      ? `/** Every endpoint name the plan assigned — the exact strings \`useApi\`/\`useApiMutation\`/\n *  \`apiCall\` take, and each handler's \`export const name\`. */\ntype EndpointName =\n${[
           ...new Set(names),
         ]
           .map((n) => `  | ${quote(n)}`)
           .join('\n')};`
-      : '/** No endpoints in the contract. */\nexport type EndpointName = never;';
+      : '/** No endpoints in the contract. */\ntype EndpointName = never;';
   blocks.push(union);
   return blocks.join('\n\n');
 }
@@ -340,7 +342,7 @@ function renderComponents(components: ContractComponent[]): string {
     const lines: string[] = [];
     const purpose = doc(component.purpose);
     lines.push(`/** Props of \`<${component.name} />\`${purpose ? ` — ${purpose}` : ''} */`);
-    lines.push(`export interface ${name(`${pascal(component.name)}Props`)} {`);
+    lines.push(`interface ${name(`${pascal(component.name)}Props`)} {`);
     if (props.length === 0) lines.push('  [prop: string]: unknown;');
     for (const prop of props) lines.push(`  ${propKey(prop.key)}: ${prop.type};`);
     lines.push('}');

@@ -37,16 +37,17 @@ unwritten file. Emit one statement:
 ## Satisfy the emitted type contract
 
 `emit_types` wrote `types/contract.d.ts` from the plan BEFORE any code was authored, including a
-`<Name>Props` interface for THIS component (PascalCase of `item.name`). Use it as the props type rather
-than re-declaring one, so a prop the page feeds under a different name is a compiler error:
+`<Name>Props` interface for THIS component (PascalCase of `item.name`). The typecheck loads it as a
+GLOBAL ambient, so use the props type directly — **no import**:
 
 ```typescript
-import type { CostRowProps } from '../types/contract';
-export default function CostRow(props: CostRowProps) { … }
+export default function CostRow(props: CostRowProps) { … }   // global — no import
 ```
 
-The import is TYPE-ONLY (esbuild erases it). Never import from `@app/types` — hard-mapped to
-`types/generated.d.ts`, a build artifact regenerated on every build.
+NEVER write `import ... from '../types/contract'` or emit any project import as a statement: those
+modules do not exist in your authoring VM and importing one is a guaranteed "Cannot find module" that
+says nothing about the build. Use `<Name>Props` by name; never drop it for an inline `{...}` because a
+name looked missing.
 
 
 ```typescript

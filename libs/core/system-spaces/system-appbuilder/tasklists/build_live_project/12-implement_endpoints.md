@@ -34,25 +34,25 @@ and validates the module at write time; rewrite and retry if `w.ok` is false. Em
 
 ## Satisfy the emitted type contract
 
-`emit_types` already wrote `types/contract.d.ts` from the plan, BEFORE this node ran. For the endpoint
-`item.name` it declares `<Name>Item` (one row's exact fields), `<Name>Output` (`{ items: <Name>Item[] }`)
-and `<Name>Input` — `<Name>` being the endpoint name in PascalCase (`cost-lines` → `CostLines`).
+`emit_types` already wrote `types/contract.d.ts` from the plan, BEFORE this node ran, and the
+project-app typecheck loads it as a GLOBAL ambient — so its types are in scope with **NO import**. For
+the endpoint `item.name` it declares `<Name>Item` (one row's exact fields), `<Name>Output`
+(`{ items: <Name>Item[] }`) and `<Name>Input` — `<Name>` = the endpoint name in PascalCase
+(`cost-lines` → `CostLines`).
 
-Do NOT re-declare `Output` inline. Import the declared one and alias it, so the compiler — not a later
-reviewer — is what catches a field you renamed, dropped or typed wrong:
+Use the declared `Output` directly, so the compiler — not a later reviewer — catches a field you
+renamed, dropped or typed wrong:
 
 ```typescript
-import type { CostLinesOutput } from '../../types/contract';
 export const name = 'cost-lines';
-export type Output = CostLinesOutput;
+export type Output = CostLinesOutput;   // global — no import, no path to compute
 ```
 
-The relative depth depends on the route (`api/cost-lines/GET.ts` → `../../types/contract`;
-`api/bookings/[id]/PATCH.ts` → `../../../types/contract`) — count the segments and get it right, a wrong
-path is a hard build error. The import is TYPE-ONLY, so esbuild erases it and the bundle is unaffected.
-Import from `../types/contract`, never from `@app/types` — that specifier is hard-mapped to
-`types/generated.d.ts`, a BUILD ARTIFACT the next `buildApp()` regenerates from the handlers you write,
-so a contract placed there would be erased exactly when it should be enforcing something.
+NEVER write `import ... from '../types/contract'` or emit any project import (`@app/runtime`,
+`../types/...`) as a statement: these are AMBIENT/app modules that do not exist in your authoring VM,
+so importing one is a guaranteed "Cannot find module" that means nothing about whether the app builds.
+The type name alone is enough. If a name is somehow not found, the plan and `emit_types` are the source
+of truth — never abandon the typed contract for an inline shape.
 
 
 ```typescript

@@ -173,35 +173,38 @@ describe('build_live_project — emit_types (09-emit_types.ts)', () => {
 
     // One row interface per table, columns typed from the contract (`date` → ISO string,
     // `json` → opaque `unknown`, mirroring `schema.ts#COLUMN_TS`).
-    expect(r.dts).toContain('export interface TripsRow {');
+    expect(r.dts).toContain('interface TripsRow {');
     expect(r.dts).toContain('  id: string;'); // primary key ⇒ non-optional
     expect(r.dts).toContain('  starts_on?: string;'); // date ⇒ ISO string, optional
-    expect(r.dts).toContain('export interface CostLinesRow {');
+    expect(r.dts).toContain('interface CostLinesRow {');
     expect(r.dts).toContain('  meta?: unknown;'); // json ⇒ opaque
 
     // One input/output pair per endpoint, keyed on the plan's EXACT `fields` strings.
-    expect(r.dts).toContain('export interface CostLinesItem {');
+    expect(r.dts).toContain('interface CostLinesItem {');
     expect(r.dts).toContain('  amount_usd: number;');
-    expect(r.dts).toContain('export interface CostLinesOutput { items: CostLinesItem[]; }');
+    expect(r.dts).toContain('interface CostLinesOutput { items: CostLinesItem[]; }');
     // A `[id]` route's param is a declared input — the value the verify gate flags when omitted.
-    expect(r.dts).toContain('export interface TripsDetailInput {');
+    expect(r.dts).toContain('interface TripsDetailInput {');
     expect(r.dts).toContain('  id: string;');
     // A route with no params takes no declared params.
-    expect(r.dts).toContain('export type CostLinesInput = Record<string, unknown>;');
+    expect(r.dts).toContain('type CostLinesInput = Record<string, unknown>;');
 
     // One props interface per shared component.
-    expect(r.dts).toContain('export interface TripCardProps {');
+    expect(r.dts).toContain('interface TripCardProps {');
     expect(r.dts).toContain('  nights: number;');
 
-    // It must never point project source at `@app/types` — that specifier is hard-mapped to
-    // `types/generated.d.ts` by `typecheck.ts#createProgramHost`.
-    expect(r.dts).toContain("from '../types/contract'");
+    // The file must be a GLOBAL AMBIENT SCRIPT — no `export`, no `import`, so the typecheck can
+    // load it as a program root and every type is in scope with no import (the import approach made
+    // the author compute a relative depth and abandon the contract on a "Cannot find module"; run 36).
+    expect(r.dts).not.toMatch(/^export /m); // no declaration is exported…
+    expect(r.dts).not.toMatch(/^import /m); // …and nothing is imported → a global ambient script
+    expect(r.dts).toMatch(/^interface \w+ /m); // the declarations are bare (global) interfaces
   });
 
   it('emits the endpoint-name union from the plan, verbatim', async () => {
     const { ctx } = writerCtx();
     const r = await emit(ctx, CONTRACT);
-    const union = /export type EndpointName =\n([\s\S]*?);/.exec(r.dts);
+    const union = /(?<!export )type EndpointName =\n([\s\S]*?);/.exec(r.dts);
     expect(union).not.toBeNull();
     // The exact strings `useApi`/`useApiMutation`/`apiCall` take and each handler's
     // `export const name` — hyphens intact, never re-derived or re-cased.
@@ -252,7 +255,7 @@ describe('build_live_project — emit_types (09-emit_types.ts)', () => {
     expect(r.ok).toBe(false);
     expect(r.written).toBe(false);
     expect(r.error).toContain('writeProjectFile');
-    expect(r.dts).toContain('export interface TripsRow {'); // the text is still carried downstream
+    expect(r.dts).toContain('interface TripsRow {'); // the text is still carried downstream
   });
 
   it('never throws — not on an empty contract, a writer fault, or a malformed one', async () => {
@@ -270,7 +273,7 @@ describe('build_live_project — emit_types (09-emit_types.ts)', () => {
     // A contract whose lists are the wrong SHAPE (bare names, nulls) is ignored, not guessed at.
     const junk = await emit(writerCtx().ctx, { plan_tables: { tables: ['trips', null] }, plan_endpoints: { endpoints: 'nope' } });
     expect(junk.tableCount).toBe(0);
-    expect(junk.dts).toContain('export type EndpointName = never;');
+    expect(junk.dts).toContain('type EndpointName = never;');
   });
 });
 
@@ -296,10 +299,10 @@ describe('build_live_project — reconcile_tables (11-reconcile_tables.ts)', () 
     expect(r.missing).toEqual([]);
     expect(r.landed.sort()).toEqual(['cost_lines', 'trips']);
     expect(written['types/contract.d.ts']).toBe(r.dts);
-    expect(r.dts).toContain('export interface TripsRow {');
+    expect(r.dts).toContain('interface TripsRow {');
     // The endpoint + component sections survive the re-emit.
-    expect(r.dts).toContain('export interface CostLinesOutput { items: CostLinesItem[]; }');
-    expect(r.dts).toContain('export interface TripCardProps {');
+    expect(r.dts).toContain('interface CostLinesOutput { items: CostLinesItem[]; }');
+    expect(r.dts).toContain('interface TripCardProps {');
   });
 
   it('reconciles an EXTRA landed column silently — types follow disk, and ok stays true', async () => {
@@ -329,7 +332,7 @@ describe('build_live_project — reconcile_tables (11-reconcile_tables.ts)', () 
     expect(r.missing).toEqual(['cost_lines']);
     expect(r.missingCount).toBe(1);
     // The types still describe reality — the row type of the table that IS there.
-    expect(r.dts).toContain('export interface TripsRow {');
+    expect(r.dts).toContain('interface TripsRow {');
     expect(r.dts).not.toContain('export interface CostLinesRow {');
   });
 
@@ -343,7 +346,7 @@ describe('build_live_project — reconcile_tables (11-reconcile_tables.ts)', () 
     });
     const r = await reconcile(ctx, CONTRACT);
     expect(r.ok).toBe(true);
-    expect(r.dts).toContain('export interface ReceiptsRow {');
+    expect(r.dts).toContain('interface ReceiptsRow {');
     expect(r.drift).toContainEqual({ table: 'receipts', kind: 'unplanned-table' });
   });
 
@@ -359,9 +362,9 @@ describe('build_live_project — reconcile_tables (11-reconcile_tables.ts)', () 
     const r = await reconcile(ctx, { plan_tables: { tables: [TRIPS, COSTS] } });
 
     expect(r.ok).toBe(true);
-    expect(r.dts).toContain('export interface CostLinesOutput { items: CostLinesItem[]; }');
+    expect(r.dts).toContain('interface CostLinesOutput { items: CostLinesItem[]; }');
     expect(r.dts).toContain("| 'trips-detail'");
-    expect(r.dts).toContain('export interface TripCardProps {');
+    expect(r.dts).toContain('interface TripCardProps {');
   });
 
   it('never throws — not on a corrupt schema file, an empty database/, or a writer fault', async () => {
@@ -369,7 +372,7 @@ describe('build_live_project — reconcile_tables (11-reconcile_tables.ts)', () 
     const corrupt = await reconcile(ctx, CONTRACT);
     expect(corrupt.ok).toBe(true); // the table EXISTS — a corrupt declaration is not a missing table
     expect(corrupt.drift.some((d) => d.kind === 'unreadable-schema')).toBe(true);
-    expect(corrupt.dts).toContain('export interface TripsRow {');
+    expect(corrupt.dts).toContain('interface TripsRow {');
 
     const empty = await reconcile(writerCtx().ctx, CONTRACT);
     expect(empty.ok).toBe(false);
@@ -399,7 +402,7 @@ describe('build_live_project — reconcile_tables (11-reconcile_tables.ts)', () 
     };
     const r = await reconcile(asyncCtx, CONTRACT);
     expect(r.ok).toBe(true);
-    expect(r.dts).toContain('export interface TripsRow {');
+    expect(r.dts).toContain('interface TripsRow {');
     expect(base.written['types/contract.d.ts']).toBe(r.dts);
   });
 });

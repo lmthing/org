@@ -361,6 +361,29 @@ export default async function handler(): Promise<Output> {
     expect(await typecheckProjectApp(root)).toEqual([]);
   }, 30_000);
 
+  it('loads types/contract.d.ts as a GLOBAL ambient — a page uses its types with NO import', async () => {
+    // The appbuilder's emit_types writes a global (no-export) contract.d.ts. It must be a program
+    // ROOT so the author writes `useApi<ListItemsOutput>(...)` with no import, no relative-depth math,
+    // and no "Cannot find module" to panic over (which made 06-tanzania run 36 abandon the contract).
+    const root = await projectCalling(pageReading(`useApi<ListItemsOutput>('listItems')`));
+    await mkdir(join(root, 'types'), { recursive: true });
+    await writeFile(
+      join(root, 'types', 'contract.d.ts'),
+      `interface ListItemsItem { id: string }\ninterface ListItemsOutput { items: ListItemsItem[] }\n`,
+      'utf8',
+    );
+    expect(await typecheckProjectApp(root)).toEqual([]);
+  }, 30_000);
+
+  it('a diagnostic INSIDE contract.d.ts is dropped — build-generated, not author-fixable', async () => {
+    const root = await projectCalling(pageReading(`useApi<{ x: number }>('listItems')`));
+    await mkdir(join(root, 'types'), { recursive: true });
+    // A self-referential garbage type: an error the author of a PAGE cannot fix.
+    await writeFile(join(root, 'types', 'contract.d.ts'), `type Broken = Broken['nope'];\n`, 'utf8');
+    const errs = await typecheckProjectApp(root);
+    expect(errs.every((e) => !e.file.includes('contract.d.ts'))).toBe(true);
+  }, 30_000);
+
   it('keeps the generic signatures for a project with no api/ dir at all', async () => {
     // An app mid-authoring (pages before endpoints) must still compile.
     const root = await scratch('lm-typecheck-noapi-');

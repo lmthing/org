@@ -79,21 +79,20 @@ statement:
 
 ## Satisfy the emitted type contract
 
-`emit_types` wrote `types/contract.d.ts` from the plan BEFORE any code was authored. Every endpoint this
-page reads has a declared `<Name>Output` / `<Name>Item`, and every component a declared `<Name>Props`
-(`<Name>` = the name in PascalCase: `cost-lines` → `CostLines`). Type the hook with the declared type
-rather than re-describing the shape inline:
+`emit_types` wrote `types/contract.d.ts` from the plan BEFORE any code was authored, and the typecheck
+loads it as a GLOBAL ambient — its types are in scope with **NO import**. Every endpoint this page reads
+has a declared `<Name>Output` / `<Name>Item`, every component a declared `<Name>Props` (`<Name>` =
+PascalCase: `cost-lines` → `CostLines`). Type the hook with the declared type directly:
 
 ```typescript
-import type { CostLinesOutput } from '../types/contract';
-const { data } = useApi<CostLinesOutput>('cost-lines');
+const { data } = useApi<CostLinesOutput>('cost-lines');   // global — no import
 ```
 
-Then a field you rename, drop or read at the wrong type is a COMPILER error here, instead of an empty
-card in the shipped app. Count the relative segments for the page's own depth
-(`pages/index.tsx` → `../types/contract`; `pages/trips/[id].tsx` → `../../types/contract`). The import is
-TYPE-ONLY, so esbuild erases it. Never import from `@app/types` — that is hard-mapped to
-`types/generated.d.ts`, a build artifact regenerated on every build.
+Then a field you rename, drop or read at the wrong type is a COMPILER error here, not an empty card in
+the shipped app. NEVER write `import ... from '../types/contract'` or emit any project import as a
+statement: `@app/runtime`, `../types/...` are app/ambient modules that do not exist in your authoring
+VM, so importing one is a guaranteed "Cannot find module" that says nothing about the app build. Use the
+type name alone; never drop it for an inline shape because a name looked missing.
 
 
 ```typescript

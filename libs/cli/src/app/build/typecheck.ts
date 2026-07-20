@@ -363,6 +363,13 @@ export async function typecheckProjectApp(projectRoot: string): Promise<AppCheck
 
   const generatedDtsPath = join(projectRoot, 'types', 'generated.d.ts');
   const hasGeneratedDts = existsSync(generatedDtsPath);
+  // The appbuilder's `emit_types` writes `types/contract.d.ts` as a GLOBAL ambient script (no
+  // export), so its interfaces are in scope in every page/component/api with NO import — which is
+  // why it must be a program ROOT here. Without this, `useApi<CostLinesOutput>(...)` is a "Cannot
+  // find name" error and the author is pushed back onto a relative import (and the depth math + the
+  // "Cannot find module" panic that made 06-tanzania run 36 abandon the contract).
+  const contractDtsPath = join(projectRoot, 'types', 'contract.d.ts');
+  const hasContractDts = existsSync(contractDtsPath);
 
   // Nothing to typecheck (no pages/components/api at all) — a db/api-only or
   // spaces-only project has no project-app source.
@@ -391,6 +398,7 @@ export async function typecheckProjectApp(projectRoot: string): Promise<AppCheck
   const rootNames = [
     AMBIENT_FILE_NAME,
     ...(hasGeneratedDts ? [generatedDtsPath] : []),
+    ...(hasContractDts ? [contractDtsPath] : []),
     ...sourceFiles,
   ];
 
@@ -404,7 +412,7 @@ export async function typecheckProjectApp(projectRoot: string): Promise<AppCheck
   for (const diag of diagnostics) {
     if (!diag.file) continue; // a global (non-file) diagnostic — nothing author-fixable to point at
     const fileName = diag.file.fileName;
-    if (fileName === AMBIENT_FILE_NAME || fileName === generatedDtsPath) continue;
+    if (fileName === AMBIENT_FILE_NAME || fileName === generatedDtsPath || fileName === contractDtsPath) continue;
 
     const message = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
     if (diag.start === undefined) {
