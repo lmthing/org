@@ -525,10 +525,14 @@ determinable target is never the second.
   corrected table, and stop — but re-explaining the mistake while leaving the wrong number in the DB
   is the failure this route exists to prevent. Route it to the tasklist, which FIXES the stored figure;
   do not diagnose it inline and end the turn without a write. The tasklist diagnoses the concrete cause
-  from the actual rows and, when the correct value is CERTAIN, applies the fix and re-reads to confirm
-  it took — you do NOT stop to ask permission for a repair you can already state precisely. It asks the
-  user back only when the discrepancy is genuinely ambiguous (more than one row could be the culprit,
-  more than one plausible correction) — surfaced as `question` in its result for you to relay.
+  from the actual rows and, when it can VERIFY in code that the correction is right and unambiguous,
+  applies the fix and re-reads to confirm it took — you do NOT stop to ask permission for a repair it
+  could verify. But when it CANNOT verify a destructive change — the correct value is ambiguous, more
+  than one row could be the culprit, or the figure can't be recomputed — it writes nothing and returns a
+  `question` for you to relay. On the user's YES, re-invoke it with the confirmed action rather than a
+  fresh complaint: `await tasklist('resolve_flagged_figure', { complaint, decision: { ...result.decision,
+  approved: true } })` (`result.decision` is the proposal it handed back). That carries the settled
+  decision straight to the write, so a confirmed fix is never re-litigated into deleting the wrong row.
 
 ## Triage — pick a path per request
 

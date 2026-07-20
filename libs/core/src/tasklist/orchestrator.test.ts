@@ -492,8 +492,20 @@ describe('user-thing resolve_flagged_figure — confidence-gated diagnose → fi
   const userThingDir = join(__dirname, '..', '..', 'system-spaces', 'user-thing');
   // report branches on diagnose.confidence and writes only the ONE matching resolve — the low path
   // never references the skipped `fix` (it is absent from that fork's inputs AND its ambient DTS).
-  const REPORT_LOW = `currentTask.resolve({ ok: false, applied: false, question: diagnose.question, detail: diagnose.detail });`;
-  const REPORT_HIGH = `currentTask.resolve({ ok: fix.applied, applied: fix.applied, question: '', detail: fix.detail });`;
+  const REPORT_LOW = `currentTask.resolve({ ok: false, applied: false, question: diagnose.question, decision: {}, detail: diagnose.detail });`;
+  const REPORT_HIGH = `currentTask.resolve({ ok: fix.applied, applied: fix.applied, question: fix.question, decision: fix.decision, detail: fix.detail });`;
+
+  // The fix node is now a kind:'code' node — the host runs its module. These DAG-wiring
+  // tests stub the host factory (the real interlock logic is unit-tested in
+  // spaces/resolve-flagged-figure-fix.test.ts); `ran` records that fix was dispatched.
+  function codeFixFactory(state: { ran: boolean }): (node: unknown) => { runCodeNode: (inputs: unknown) => Promise<Record<string, unknown>> } {
+    return () => ({
+      runCodeNode: async () => {
+        state.ran = true;
+        return { applied: true, changed: 1, before: '10', after: '9', question: '', proposedAction: '', decision: {}, detail: 'removed the duplicated row' };
+      },
+    });
+  }
 
   function rffEngine(answers: Array<{ token: string; code: string }>, seen: string[]): ForkEngine {
     const streamFn = createMockStreamFn((o: StreamOpts) => {
@@ -523,19 +535,21 @@ describe('user-thing resolve_flagged_figure — confidence-gated diagnose → fi
       [
         {
           token: 'Investigate the flagged figure',
-          code: `currentTask.resolve({ cause: "more than one row could be the culprit", table: "", targetIds: [], fixAction: "none", targetValue: "", confidence: "low", question: "Which of the two entries is the wrong one?", detail: "genuinely ambiguous" });`,
+          code: `currentTask.resolve({ cause: "more than one row could be the culprit", table: "", targetIds: [], fixAction: "none", targetValue: "", figureSpec: {}, assertedTarget: "", duplicateOf: [], confidence: "low", question: "Which of the two entries is the wrong one?", detail: "genuinely ambiguous" });`,
         },
         { token: 'Report the outcome to the caller', code: REPORT_LOW },
       ],
       seen,
     );
     // Must NOT throw: report is the unconditional goal, so a skipped fix never trips the skipped-goal throw.
+    const fixState = { ran: false };
     const goal = await runTasklist({
       name: 'resolve_flagged_figure', space, forkEngine: engine, seed: { complaint: 'that total looks too high' },
+      codeNodeCtxFactory: codeFixFactory(fixState),
     });
     expect(seen).toContain('Investigate the flagged figure');
     expect(seen).toContain('Report the outcome to the caller');
-    expect(seen).not.toContain('Carry out exactly the correction'); // fix fork was never dispatched
+    expect(fixState.ran).toBe(false); // fix code node was SKIPPED on the low-confidence condition
     expect(goal.data).toMatchObject({ ok: false, applied: false });
     expect((goal.data as { question: string }).question).toBe('Which of the two entries is the wrong one?');
   });
@@ -547,20 +561,18 @@ describe('user-thing resolve_flagged_figure — confidence-gated diagnose → fi
       [
         {
           token: 'Investigate the flagged figure',
-          code: `currentTask.resolve({ cause: "a duplicated line item", table: "cost_items", targetIds: ["row-1"], fixAction: "remove", targetValue: "", confidence: "high", question: "", detail: "one clear duplicate" });`,
-        },
-        {
-          token: 'Carry out exactly the correction',
-          code: `currentTask.resolve({ applied: true, changed: 1, before: "the old figure", after: "the corrected figure", detail: "removed the duplicated row" });`,
+          code: `currentTask.resolve({ cause: "a duplicated line item", table: "cost_items", targetIds: ["row-1"], fixAction: "remove", targetValue: "", figureSpec: {}, assertedTarget: "", duplicateOf: [], confidence: "high", question: "", detail: "one clear duplicate" });`,
         },
         { token: 'Report the outcome to the caller', code: REPORT_HIGH },
       ],
       seen,
     );
+    const fixState = { ran: false };
     const goal = await runTasklist({
       name: 'resolve_flagged_figure', space, forkEngine: engine, seed: { complaint: 'the maths does not add up' },
+      codeNodeCtxFactory: codeFixFactory(fixState),
     });
-    expect(seen).toContain('Carry out exactly the correction'); // fix DID run on high confidence
+    expect(fixState.ran).toBe(true); // fix code node DID run on high confidence
     expect(goal.data).toMatchObject({ ok: true, applied: true });
   });
 });

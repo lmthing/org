@@ -158,7 +158,9 @@ describe('shipped system spaces load + validate', () => {
     const rff = await loadTasklistFromSpace(space, 'resolve_flagged_figure');
 
     expect(() => validateDag(rff), 'resolve_flagged_figure DAG').not.toThrow();
-    expect(space.tasklists['resolve_flagged_figure']!.input).toEqual({ complaint: 'string' });
+    // `decision` is the optional confirm-carry input: on the user's YES to a proposed destructive fix,
+    // THING re-invokes with the settled action so diagnose is echoed, not re-litigated (the run-32 vector).
+    expect(space.tasklists['resolve_flagged_figure']!.input).toEqual({ complaint: 'string', decision: 'object?' });
     expect(Object.keys(rff).sort()).toEqual(['diagnose', 'fix', 'report']);
 
     // diagnose is read-only reasoning: role explore (write withheld at injection) and NO db:write cap.
@@ -181,10 +183,16 @@ describe('shipped system spaces load + validate', () => {
     expect(diag).toMatch(/two\s+tables\s+that\s+both\s+feed\s+the\s+total/i);
     expect(diag).toMatch(/wrong\s+unit\/currency/i);
 
-    // fix is the SOLE writer, and it runs ONLY on a high-confidence diagnosis. Dropping the condition
-    // (so it could write on a low-confidence guess) OR removing db:write both turn this RED.
-    expect(rff['fix']!.role).toBe('general');
-    expect(rff['fix']!.capabilities).toContain('db:write');
+    // fix is now a HOST-RUN CODE node (kind:'code', 02-fix.ts), not a model fork. Step-9 run-32 proved a
+    // model fix node stochastically SKIPS the recompute guard and destructively deletes a correct row
+    // (data loss); a prose "verify before delete" guard came back RED 6/8. The guard now runs in host code
+    // that cannot be skipped: recompute the figure, and only delete when it verifiably moves to the
+    // asserted target with no ambiguous equal-value twin — else report "already correct" or return a
+    // question. Reverting fix to a model node (role/capabilities instead of kind:'code') turns this RED.
+    expect(rff['fix']!.kind).toBe('code');
+    expect(rff['fix']!.codeModulePath).toMatch(/resolve_flagged_figure\/02-fix\.ts$/);
+    expect(rff['fix']!.role).toBeUndefined();
+    expect(rff['fix']!.capabilities).toBeUndefined();
     expect(rff['fix']!.condition).toMatch(/diagnose\.confidence\s*==\s*'high'/);
     expect(rff['fix']!.dependsOn).toEqual(['diagnose']);
     expect(rff['fix']!.goal).toBeFalsy();
