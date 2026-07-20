@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EndpointContract } from './schema.js';
-import { buildApiCallDts, buildApiToolSignatures } from './apicall-dts.js';
+import { buildApiCallDts, buildApiToolSignatures, buildClientApiDts } from './apicall-dts.js';
 
 function contract(over: Partial<EndpointContract> = {}): EndpointContract {
   return {
@@ -67,5 +67,54 @@ describe('buildApiToolSignatures', () => {
   it('returns all endpoints when no allow-list is given', () => {
     const sigs = buildApiToolSignatures([contract(), contract({ name: 'archive' })]);
     expect(sigs.map((s) => s.name)).toEqual(['markRead', 'archive']);
+  });
+});
+
+describe('buildClientApiDts', () => {
+  const ep = (name: string, paramNames: string[] = []) => ({ name, paramNames });
+
+  it('types the endpoint name as a literal union so an unknown name cannot compile', () => {
+    const dts = buildClientApiDts([ep('costs-list'), ep('trip-summary')]);
+    expect(dts).toContain("export type EndpointName = 'costs-list' | 'trip-summary';");
+    expect(dts).toContain(
+      "export function useApi<T = unknown>(name: 'costs-list' | 'trip-summary', input?: Record<string, unknown>, opts?: UseApiOptions): QueryResult<T>;",
+    );
+  });
+
+  it('KEEPS the T type parameter — pages author useApi<Alert[]>(…) and must not break', () => {
+    // Binding the return type to the endpoint's Output would reject every existing
+    // call site in the shipped store apps. Names are narrowed; shapes are not.
+    const dts = buildClientApiDts([ep('costs-list')]);
+    expect(dts).toContain('useApi<T = unknown>');
+    expect(dts).toContain('QueryResult<T>');
+  });
+
+  it('requires the route params of a [id] endpoint as a dedicated overload', () => {
+    const dts = buildClientApiDts([ep('trips-detail', ['id']), ep('costs-list')]);
+    // `input` is REQUIRED (no `?`) and spells out the param — calling it bare is an error.
+    expect(dts).toContain(
+      "export function useApi<T = unknown>(name: 'trips-detail', input: { id: string | number; [k: string]: unknown }, opts?: UseApiOptions): QueryResult<T>;",
+    );
+    // …and the param endpoint is EXCLUDED from the optional-input overload, so it can
+    // never fall through to it.
+    expect(dts).toContain(
+      "export function useApi<T = unknown>(name: 'costs-list', input?: Record<string, unknown>, opts?: UseApiOptions): QueryResult<T>;",
+    );
+  });
+
+  it('spells out every param of a multi-param route', () => {
+    const dts = buildClientApiDts([ep('leg-day', ['legId', 'day'])]);
+    expect(dts).toContain('input: { legId: string | number; day: string | number; [k: string]: unknown }');
+  });
+
+  it('narrows useApiMutation and its invalidates list to real endpoint names', () => {
+    const dts = buildClientApiDts([ep('costs-create')]);
+    expect(dts).toContain('useApiMutation<T = unknown>(name: EndpointName');
+    expect(dts).toContain('invalidates?: EndpointName[]');
+  });
+
+  it('returns empty for a project with no endpoints, so the generic fallback is kept', () => {
+    // An app mid-authoring (pages written before api/) must still compile.
+    expect(buildClientApiDts([])).toBe('');
   });
 });

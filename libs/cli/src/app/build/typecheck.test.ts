@@ -4,8 +4,11 @@
  *
  * TEST 1 (positive, non-negotiable): a KNOWN-GOOD app must typecheck with ZERO
  * errors, and `runProjectAppCheck` must report `{ ok:true, built:true }`. If this
- * ever goes red, the ambient is wrong (a false positive on correct code) — fix the
- * ambient in `./typecheck.ts`, never the fixture.
+ * ever goes red, first decide WHICH it is: a false positive on correct code means the
+ * ambient in `./typecheck.ts` is wrong and the fixture must not be touched; a TRUE
+ * positive means the fixture was never actually good. (It has been the latter once —
+ * the page called `useApi('listItems')` while the project's only endpoint was `ping`,
+ * which went unnoticed while `name` was typed as a bare `string`.)
  *
  * TEST 2 (negative, revert-proven): three classes of real author mistakes must
  * each produce a typecheck error naming the offending file, AND we prove the
@@ -85,6 +88,18 @@ export default function Home() {
 }
 `;
 
+/** The endpoint \`GOOD_INDEX_PAGE\` reads. The page names it verbatim; since the client
+ *  data hooks are typed from the project's OWN endpoints, a page may only name an endpoint
+ *  that actually exists — so the good fixture has to ship it. */
+const GOOD_LIST_ITEMS_HANDLER = `export const name = 'listItems';
+
+export interface Output { items: { id: string; title: string; amount: number }[] }
+
+export default async function handler(): Promise<Output> {
+  return { items: [] };
+}
+`;
+
 const GOOD_PING_HANDLER = `export const name = 'ping';
 
 export interface Output { pong: boolean }
@@ -100,10 +115,12 @@ async function goodProject(): Promise<string> {
   await mkdir(join(root, 'pages'), { recursive: true });
   await mkdir(join(root, 'components'), { recursive: true });
   await mkdir(join(root, 'api', 'ping'), { recursive: true });
+  await mkdir(join(root, 'api', 'listItems'), { recursive: true });
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'good-scratch', version: '0.0.0' }));
   await writeFile(join(root, 'components', 'CostCard.tsx'), GOOD_COST_CARD, 'utf8');
   await writeFile(join(root, 'pages', 'index.tsx'), GOOD_INDEX_PAGE, 'utf8');
   await writeFile(join(root, 'api', 'ping', 'GET.ts'), GOOD_PING_HANDLER, 'utf8');
+  await writeFile(join(root, 'api', 'listItems', 'GET.ts'), GOOD_LIST_ITEMS_HANDLER, 'utf8');
   return root;
 }
 
@@ -241,5 +258,110 @@ describe('typecheckProjectApp — negative', () => {
     const esbuildOnly = await buildProjectPagesChecked(root, { minify: false });
     expect(esbuildOnly.errors).toEqual([]);
     expect(esbuildOnly.built).toBe(true);
+  }, 30_000);
+});
+
+/**
+ * TEST 3 (endpoint wiring): the two ways a page can name an endpoint wrongly and still
+ * build clean today. Both are invisible to esbuild AND to an HTTP-status probe:
+ * `apiCall` rejects an unknown name BEFORE issuing any request, and a `[id]` route
+ * called without its param stringifies `undefined` into the URL, which still matches on
+ * segment count and returns a plausible 200. Typing the client hooks from the project's
+ * own routes turns both into typecheck errors.
+ *
+ * Drawn from a real build: run 32 of the 06-tanzania scenario shipped `useApi('costs-summary')`
+ * on three pages (no such endpoint — the Costs page rendered "Could not load cost data."),
+ * `useApi('trips-detail')` with no id, and several names carrying the HTTP method or a
+ * query string (`'trips-list/GET'`, `'contacts-list/GET?trip_id=…'`).
+ */
+describe('typecheckProjectApp — endpoint wiring', () => {
+  /** A project whose single endpoint is `listItems`, plus one page of the caller's choosing. */
+  async function projectCalling(pageSource: string, extraApi?: { dir: string; source: string }) {
+    const root = await scratch('lm-typecheck-wiring-');
+    await mkdir(join(root, 'pages'), { recursive: true });
+    await mkdir(join(root, 'api', 'listItems'), { recursive: true });
+    await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'wiring-scratch', version: '0.0.0' }));
+    await writeFile(join(root, 'api', 'listItems', 'GET.ts'), GOOD_LIST_ITEMS_HANDLER, 'utf8');
+    if (extraApi) {
+      await mkdir(join(root, 'api', extraApi.dir), { recursive: true });
+      await writeFile(join(root, 'api', extraApi.dir, 'GET.ts'), extraApi.source, 'utf8');
+    }
+    await writeFile(join(root, 'pages', 'index.tsx'), pageSource, 'utf8');
+    return root;
+  }
+
+  const pageReading = (call: string) => `import { useApi } from '@app/runtime';
+
+export default function Home() {
+  const { data } = ${call};
+  return <main>{JSON.stringify(data)}</main>;
+}
+`;
+
+  it('rejects a page naming an endpoint that does not exist', async () => {
+    const root = await projectCalling(pageReading(`useApi<{ items: unknown[] }>('costs-summary')`));
+    const errors = await typecheckProjectApp(root);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.file).toBe('pages/index.tsx');
+    expect(errors[0]!.message).toContain('costs-summary');
+  }, 30_000);
+
+  it('rejects an endpoint name carrying its HTTP method or a query string', async () => {
+    const root = await projectCalling(pageReading(`useApi<{ items: unknown[] }>('listItems/GET')`));
+    const errors = await typecheckProjectApp(root);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toContain('listItems/GET');
+  }, 30_000);
+
+  it('rejects a [id] route called without its param', async () => {
+    // The bug this prevents: the client stringifies the missing value, so the request
+    // goes to `/api/trips/undefined`, matches, passes ajv, and 200s with the wrong row.
+    const detail = `export const name = 'trips-detail';
+
+export interface Output { id: string }
+
+export default async function handler(): Promise<Output> {
+  return { id: '' };
+}
+`;
+    const root = await projectCalling(pageReading(`useApi<{ id: string }>('trips-detail')`), {
+      dir: 'trips/[id]',
+      source: detail,
+    });
+    const errors = await typecheckProjectApp(root);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.file).toBe('pages/index.tsx');
+  }, 30_000);
+
+  it('ACCEPTS the same [id] route once its param is supplied', async () => {
+    const detail = `export const name = 'trips-detail';
+
+export interface Output { id: string }
+
+export default async function handler(): Promise<Output> {
+  return { id: '' };
+}
+`;
+    const root = await projectCalling(pageReading(`useApi<{ id: string }>('trips-detail', { id: 'abc' })`), {
+      dir: 'trips/[id]',
+      source: detail,
+    });
+    expect(await typecheckProjectApp(root)).toEqual([]);
+  }, 30_000);
+
+  it('still accepts a page that passes its own generic — the T parameter is preserved', async () => {
+    // 140 call sites across the shipped store apps author `useApi<Alert[]>('name')`.
+    // Narrowing the NAME must never cost them the generic.
+    const root = await projectCalling(pageReading(`useApi<{ items: { id: string }[] }>('listItems', {})`));
+    expect(await typecheckProjectApp(root)).toEqual([]);
+  }, 30_000);
+
+  it('keeps the generic signatures for a project with no api/ dir at all', async () => {
+    // An app mid-authoring (pages before endpoints) must still compile.
+    const root = await scratch('lm-typecheck-noapi-');
+    await mkdir(join(root, 'pages'), { recursive: true });
+    await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'noapi', version: '0.0.0' }));
+    await writeFile(join(root, 'pages', 'index.tsx'), pageReading(`useApi<{ x: number }>('anything')`), 'utf8');
+    expect(await typecheckProjectApp(root)).toEqual([]);
   }, 30_000);
 });

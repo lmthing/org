@@ -57,6 +57,8 @@ import type { Dirent } from 'node:fs';
 import ts from 'typescript';
 
 import type { AppCheckError } from './check.js';
+import { loadApiRoutes } from '../api/loader.js';
+import { buildClientApiDts } from './apicall-dts.js';
 
 /** The three project source roots the typecheck program covers. */
 const SOURCE_DIRS = ['pages', 'components', 'api'];
@@ -74,7 +76,27 @@ const AMBIENT_FILE_NAME = '__lmthing_app_ambient__.d.ts';
  * Hand-matched against `./runtime/client.ts`, `./runtime/hooks.tsx`,
  * `./runtime/router.tsx`, `./runtime/chat.tsx`.
  */
-const AMBIENT_DTS = `
+const GENERIC_DATA_HOOKS = `  export function useApi<T = unknown>(
+    name: string,
+    input?: Record<string, unknown>,
+    opts?: UseApiOptions,
+  ): QueryResult<T>;
+
+  export function useApiMutation<T = unknown>(
+    name: string,
+    opts?: { invalidates?: string[] },
+  ): { mutate: (input?: Record<string, unknown>) => Promise<T>; isPending: boolean; error: HttpError | undefined };
+
+  export function apiCall(name: string, input?: Record<string, unknown>): Promise<unknown>;`;
+
+/**
+ * The ambient text for one project. `dataHooks` carries the `useApi`/`useApiMutation`/
+ * `apiCall` declarations: for a project with an `api/` dir these are narrowed to its OWN
+ * endpoint names (string-literal unions, with `[id]` routes requiring their params — see
+ * {@link buildClientApiDts}); a project with no endpoints falls back to the generic
+ * `name: string` signatures so an app mid-authoring still compiles.
+ */
+const buildAmbientDts = (dataHooks: string): string => `
 declare module 'react/jsx-runtime' {
   export const jsx: any;
   export const jsxs: any;
@@ -178,18 +200,7 @@ declare module '@app/runtime' {
     isLoading: boolean;
     refetch: () => void;
   }
-  export function useApi<T = unknown>(
-    name: string,
-    input?: Record<string, unknown>,
-    opts?: { enabled?: boolean },
-  ): { data: T | undefined; error: HttpError | undefined; isLoading: boolean; refetch: () => void };
-
-  export function useApiMutation<T = unknown>(
-    name: string,
-    opts?: { invalidates?: string[] },
-  ): { mutate: (input?: Record<string, unknown>) => Promise<T>; isPending: boolean; error: HttpError | undefined };
-
-  export function apiCall(name: string, input?: Record<string, unknown>): Promise<unknown>;
+${dataHooks}
 
   export function useParams(): Record<string, string>;
 
@@ -256,6 +267,7 @@ function toProjectRelative(projectRoot: string, absPath: string): string {
 function createProgramHost(
   options: ts.CompilerOptions,
   generatedDtsPath: string | undefined,
+  ambientDts: string,
 ): ts.CompilerHost {
   const host = ts.createCompilerHost(options, true);
   const realGetSourceFile = host.getSourceFile.bind(host);
@@ -263,10 +275,10 @@ function createProgramHost(
   const realFileExists = host.fileExists.bind(host);
 
   host.fileExists = (fileName) => (fileName === AMBIENT_FILE_NAME ? true : realFileExists(fileName));
-  host.readFile = (fileName) => (fileName === AMBIENT_FILE_NAME ? AMBIENT_DTS : realReadFile(fileName));
+  host.readFile = (fileName) => (fileName === AMBIENT_FILE_NAME ? ambientDts : realReadFile(fileName));
   host.getSourceFile = (fileName, languageVersionOrOptions, onError, shouldCreateNewSourceFile) => {
     if (fileName === AMBIENT_FILE_NAME) {
-      return ts.createSourceFile(AMBIENT_FILE_NAME, AMBIENT_DTS, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS);
+      return ts.createSourceFile(AMBIENT_FILE_NAME, ambientDts, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS);
     }
     return realGetSourceFile(fileName, languageVersionOrOptions, onError, shouldCreateNewSourceFile);
   };
@@ -323,6 +335,26 @@ export async function typecheckProjectApp(projectRoot: string): Promise<AppCheck
   // spaces-only project has no project-app source.
   if (sourceFiles.length === 0) return [];
 
+  // Narrow the client data hooks to THIS project's endpoints, so a page naming an
+  // endpoint that does not exist — or calling a `[id]` route without its param — is a
+  // typecheck error rather than a clean build that fails silently at runtime. Uses the
+  // cheap static route loader (regex over `export const name`), never the heavy schema
+  // generator. A project whose `api/` is unreadable or empty keeps the generic
+  // signatures: mid-authoring code must still compile.
+  let dataHooks = GENERIC_DATA_HOOKS;
+  try {
+    const table = await loadApiRoutes(projectRoot);
+    const clientDts = buildClientApiDts(
+      table.endpoints.map((ep) => ({ name: ep.name, paramNames: ep.paramNames })),
+    );
+    if (clientDts) dataHooks = clientDts;
+  } catch {
+    // A malformed api/ (duplicate name, missing `export const name`) throws in the
+    // loader. That is the API loader's own fail-loud contract and is reported when the
+    // app is served; it must not masquerade here as a page typecheck error.
+  }
+  const ambientDts = buildAmbientDts(dataHooks);
+
   const rootNames = [
     AMBIENT_FILE_NAME,
     ...(hasGeneratedDts ? [generatedDtsPath] : []),
@@ -330,7 +362,7 @@ export async function typecheckProjectApp(projectRoot: string): Promise<AppCheck
   ];
 
   const options = compilerOptions();
-  const host = createProgramHost(options, hasGeneratedDts ? generatedDtsPath : undefined);
+  const host = createProgramHost(options, hasGeneratedDts ? generatedDtsPath : undefined, ambientDts);
   const program = ts.createProgram({ rootNames, options, host });
 
   const diagnostics = ts.getPreEmitDiagnostics(program);
