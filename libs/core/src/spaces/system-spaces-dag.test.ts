@@ -362,9 +362,11 @@ describe('shipped system spaces load + validate', () => {
     expect(live['user_stories']!.dependsOn).toEqual(['read_sources']);
     expect(live['plan_app']!.dependsOn).toEqual(['read_sources', 'user_stories']);
     expect(live['plan_tables']!.dependsOn).toEqual(['plan_app', 'read_sources', 'user_stories']);
-    // Endpoints are planned from the FULL written tables + the stories.
+    // CONTRACT-FIRST: the whole design is settled before anything is written, so `plan_endpoints`
+    // grounds on `plan_tables` (the contract) — NOT on `implement_tables`. Interleaving planning
+    // with implementation is what let four independent design turns disagree with each other.
     expect(live['plan_endpoints']!.dependsOn).toEqual([
-      'plan_app', 'plan_tables', 'implement_tables', 'user_stories',
+      'plan_app', 'plan_tables', 'user_stories',
     ]);
     expect(live['plan_components']!.dependsOn).toEqual(['plan_app', 'plan_endpoints', 'user_stories']);
     expect(live['plan_pages']!.dependsOn).toEqual([
@@ -381,12 +383,48 @@ describe('shipped system spaces load + validate', () => {
     expect(live['implement_pages']!.forEach).toBe('plan_pages');
     // Pages know the endpoints they read AND the reusable components they import.
     expect(live['implement_pages']!.dependsOn).toEqual([
-      'plan_pages', 'plan_endpoints', 'plan_components', 'implement_components',
+      'plan_pages', 'plan_endpoints', 'plan_components', 'implement_components', 'emit_types',
     ]);
-    // Endpoints are grounded in the real tables being written.
+    // Implementation hangs off the VALIDATED contract and the EMITTED types, so every generated
+    // file is typechecked against declarations that already exist — plus `reconcile_tables`, which
+    // is what re-grounds endpoints in the tables that actually reached disk.
     expect(live['implement_endpoints']!.dependsOn).toEqual([
-      'plan_endpoints', 'plan_tables', 'implement_tables',
+      'plan_endpoints', 'plan_tables', 'emit_types', 'reconcile_tables',
     ]);
+    expect(live['implement_tables']!.dependsOn).toEqual(['plan_tables', 'emit_types']);
+    expect(live['implement_components']!.dependsOn).toEqual(['plan_components', 'emit_types']);
+
+    // The four HOST-RUN code nodes. A code node cannot fail to reproduce its own logic, which is
+    // the whole reason these are not prose (`gateErrors is not defined` cascades were 35% of the
+    // errors across run 32's build steps).
+    for (const id of ['validate_contract', 'emit_types', 'reconcile_tables', 'smoke_endpoints', 'verify']) {
+      expect(live[id]!.kind, `${id} must be a code node`).toBe('code');
+    }
+    // The contract is cross-checked BEFORE any code exists, and a failure resumes the DESIGN
+    // carrying the reasons — `carry` is the point: getUpstreamOutputs only passes `dependsOn`, and
+    // the resumed node cannot depend on its own checker without making the graph cyclic.
+    expect(live['validate_contract']!.dependsOn).toEqual([
+      'plan_tables', 'plan_endpoints', 'plan_components', 'plan_pages',
+    ]);
+    expect(live['validate_contract']!.onFail).toEqual({
+      goto: 'plan_tables',
+      when: 'validate_contract.ok == false',
+      carry: 'errors',
+      maxAttempts: 2,
+    });
+    // Types exist before the first line of app code. The plan nodes are listed EXPLICITLY even
+    // though `validate_contract` already depends on them: `getUpstreamOutputs` passes only a node's
+    // OWN `dependsOn`, not the transitive closure, so a contract it did not name would arrive
+    // undefined.
+    expect(live['emit_types']!.dependsOn).toEqual([
+      'validate_contract', 'plan_tables', 'plan_endpoints', 'plan_components',
+    ]);
+    expect(live['reconcile_tables']!.dependsOn).toEqual([
+      'implement_tables', 'plan_tables', 'plan_endpoints', 'plan_components',
+    ]);
+    // Nothing else in the pipeline ever RUNS an endpoint; a handler returning structurally-valid
+    // zeros passes typecheck, esbuild and every static scan.
+    expect(live['smoke_endpoints']!.dependsOn).toEqual(['implement_endpoints']);
     // GATE-AND-RETRY: after every file is written, `verify` — a HOST-RUN code node — compiles the
     // app (buildProjectApp = typecheck → esbuild) AND runs the mechanical scans the compiler cannot
     // (endpoint→table, page→endpoint, param arity, the { type, props } descriptor shape, a surface
@@ -396,13 +434,13 @@ describe('shipped system spaces load + validate', () => {
     // and capped the retry budget at however many copies were written).
     expect(live['verify']!.kind).toBe('code');
     expect(live['verify']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'implement_components', 'implement_pages',
+      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages',
     ]);
     expect(live['fix']!.forEach).toBe('verify.offending');
     expect(live['fix']!.onFail).toEqual({ goto: 'verify', when: 'verify.ok == false', maxAttempts: 3 });
     // finalize runs after the loop settles and is the sole authoritative build-invoker.
     expect(live['finalize']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'implement_components', 'implement_pages', 'verify', 'fix',
+      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages', 'verify', 'fix',
     ]);
     // Every implement node is model-driven (a code node would need codeNodeCtxFactory threaded through
     // the delegate path THING uses; a model node needs no host factory and writes via writeProjectTable).

@@ -4,7 +4,7 @@ output:
   route: string
   ok: boolean
   error: string
-dependsOn: [plan_pages, plan_endpoints, plan_components, implement_components]
+dependsOn: [plan_pages, plan_endpoints, plan_components, implement_components, emit_types]
 forEach: plan_pages
 role: general
 functions: []
@@ -76,6 +76,25 @@ dropped-data guard), build a CORRECTED source that fixes THAT fault (not the sam
 and call `writeProjectPage` a SECOND time before resolving. Resolve the FINAL outcome honestly, carrying
 `w.error` when it still failed so the loss is visible downstream, never a stale `ok: true`. Emit one
 statement:
+
+## Satisfy the emitted type contract
+
+`emit_types` wrote `types/contract.d.ts` from the plan BEFORE any code was authored. Every endpoint this
+page reads has a declared `<Name>Output` / `<Name>Item`, and every component a declared `<Name>Props`
+(`<Name>` = the name in PascalCase: `cost-lines` → `CostLines`). Type the hook with the declared type
+rather than re-describing the shape inline:
+
+```typescript
+import type { CostLinesOutput } from '../types/contract';
+const { data } = useApi<CostLinesOutput>('cost-lines');
+```
+
+Then a field you rename, drop or read at the wrong type is a COMPILER error here, instead of an empty
+card in the shipped app. Count the relative segments for the page's own depth
+(`pages/index.tsx` → `../types/contract`; `pages/trips/[id].tsx` → `../../types/contract`). The import is
+TYPE-ONLY, so esbuild erases it. Never import from `@app/types` — that is hard-mapped to
+`types/generated.d.ts`, a build artifact regenerated on every build.
+
 
 ```typescript
 const pg = item;

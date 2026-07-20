@@ -3,7 +3,7 @@ id: implement_components
 output:
   name: string
   ok: boolean
-dependsOn: [plan_components]
+dependsOn: [plan_components, emit_types]
 forEach: plan_components.components
 role: general
 functions: []
@@ -33,6 +33,21 @@ the FIRST attempt without reading `w.error` and retrying: a component that never
 still gets imported by a page downstream (`implement_pages` doesn't re-verify), and one dangling import
 fails the WHOLE app's build, not just this component — the entire app becomes unopenable over one
 unwritten file. Emit one statement:
+
+## Satisfy the emitted type contract
+
+`emit_types` wrote `types/contract.d.ts` from the plan BEFORE any code was authored, including a
+`<Name>Props` interface for THIS component (PascalCase of `item.name`). Use it as the props type rather
+than re-declaring one, so a prop the page feeds under a different name is a compiler error:
+
+```typescript
+import type { CostRowProps } from '../types/contract';
+export default function CostRow(props: CostRowProps) { … }
+```
+
+The import is TYPE-ONLY (esbuild erases it). Never import from `@app/types` — hard-mapped to
+`types/generated.d.ts`, a build artifact regenerated on every build.
+
 
 ```typescript
 const c = item;

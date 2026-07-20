@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
 /**
- * The build gate — `12-verify.ts`, a HOST-RUN code node — driven against a mocked project
+ * The build gate — `16-verify.ts`, a HOST-RUN code node — driven against a mocked project
  * filesystem.
  *
  * This file used to extract the fenced ```typescript block out of `12-compile_pass1.md` and eval
@@ -31,7 +31,7 @@ let run: (ctx: unknown, inputs: Record<string, unknown>) => Promise<GateResult>;
 beforeAll(async () => {
   const mod = (await import(
     new URL(
-      '../../system-spaces/system-appbuilder/tasklists/build_live_project/12-verify.ts',
+      '../../system-spaces/system-appbuilder/tasklists/build_live_project/16-verify.ts',
       import.meta.url,
     ).href
   )) as { run: typeof run };
@@ -84,7 +84,50 @@ const CLEAN = {
   'api/costs-list/GET.ts': LIST_ENDPOINT,
 };
 
-describe('build_live_project — the verify gate (12-verify.ts)', () => {
+/** The ctx the node ACTUALLY gets: every authoring global proxied as an async RPC stub. */
+function asyncCtxFor(files: Record<string, string>, build?: Record<string, unknown>) {
+  const sync = ctxFor(files, build);
+  return {
+    buildProjectApp: sync.buildProjectApp,
+    listProjectDir: async (dir: string) => sync.listProjectDir(dir),
+    readProjectFile: async (path: string) => sync.readProjectFile(path),
+  };
+}
+
+describe('build_live_project — the verify gate (16-verify.ts)', () => {
+  it('LOAD-BEARING: scans still run when ctx is ASYNC — the real worker shape', async () => {
+    // `worker-load-entry.ts` proxies every authoring global as an RPC stub returning a PROMISE, so
+    // a synchronous `ctx.listProjectDir(dir).entries` reads a property off a Promise (undefined) and
+    // every scan silently finds nothing. The node still resolves and still reports the compiler's
+    // errors, so the pipeline reads "no scan findings" as "the scans were clean" — the exact
+    // silent-and-load-bearing failure this gate exists to end. A sync-mock test cannot see it.
+    const r = await run(
+      asyncCtxFor({
+        ...CLEAN,
+        'pages/index.tsx': page(`  const { data } = useApi('costs-summary');
+  return <p className="text-muted">{JSON.stringify(data)}</p>;`),
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    const msg = findingsFor(r, 'pages/index.tsx');
+    expect(msg).toContain('costs-summary'); // page→endpoint scan ran
+    expect(msg).toContain('text-muted'); // surface-token scan ran
+  });
+
+  it('finds nothing to report on a clean project through an ASYNC ctx', async () => {
+    const r = await run(
+      asyncCtxFor({
+        ...CLEAN,
+        'pages/index.tsx': page(`  const { data } = useApi('costs-list');
+  return <div className="text-muted-foreground">{JSON.stringify(data)}</div>;`),
+      }),
+      {},
+    );
+    expect(r.offending).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
   it('passes a clean project', async () => {
     const r = await run(
       ctxFor({

@@ -18,7 +18,7 @@
 
 export const node = {
   id: 'verify',
-  dependsOn: ['implement_tables', 'implement_endpoints', 'implement_components', 'implement_pages'],
+  dependsOn: ['implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages'],
   output: {
     ok: 'boolean',
     built: 'boolean',
@@ -28,6 +28,19 @@ export const node = {
   },
 };
 
+type Await<T> = T | Promise<T>;
+
+/**
+ * EVERY member here must be `await`ed, including the ones that look synchronous.
+ *
+ * `worker-load-entry.ts` proxies each authoring global into the worker as an RPC stub returning a
+ * PROMISE, so `ctx.listProjectDir(dir).entries` reads a property off a Promise — `undefined` — and
+ * `walkFiles` silently returns `[]`. The node still resolves, still reports `buildProjectApp`'s
+ * compiler errors, and contributes ZERO scan findings, which the pipeline reads as "the scans were
+ * clean". That is exactly the silent-and-load-bearing failure this gate exists to end, and it is
+ * invisible to a unit test that injects a synchronous mock — which is why one test below drives an
+ * all-async ctx.
+ */
 interface Ctx {
   buildProjectApp: () => Promise<{
     ok: boolean;
@@ -35,8 +48,8 @@ interface Ctx {
     routes: string[];
     errors: Array<{ phase: string; file: string; line?: number; column?: number; message: string }>;
   }>;
-  listProjectDir: (dir: string) => { ok: boolean; entries: string[]; error?: string };
-  readProjectFile: (path: string) => { ok: boolean; content: string; error?: string };
+  listProjectDir: (dir: string) => Await<{ ok: boolean; entries: string[]; error?: string }>;
+  readProjectFile: (path: string) => Await<{ ok: boolean; content: string; error?: string }>;
 }
 
 interface Finding {
@@ -46,29 +59,32 @@ interface Finding {
 }
 
 /** Every `.ts`/`.tsx` file under `dir`, walked breadth-first. */
-function walkFiles(ctx: Ctx, dir: string): string[] {
+async function walkFiles(ctx: Ctx, dir: string): Promise<string[]> {
   const out: string[] = [];
-  const queue = (ctx.listProjectDir(dir).entries || []).map((n) => `${dir}/${n}`);
+  const listed = await ctx.listProjectDir(dir);
+  const queue = (listed?.entries || []).map((n) => `${dir}/${n}`);
   while (queue.length > 0) {
     const p = queue.shift() as string;
     if (p.endsWith('.ts') || p.endsWith('.tsx')) {
       out.push(p);
       continue;
     }
-    for (const child of ctx.listProjectDir(p).entries || []) queue.push(`${p}/${child}`);
+    const sub = await ctx.listProjectDir(p);
+    for (const child of sub?.entries || []) queue.push(`${p}/${child}`);
   }
   return out;
 }
 
-function read(ctx: Ctx, path: string): string {
-  return ctx.readProjectFile(path).content || '';
+async function read(ctx: Ctx, path: string): Promise<string> {
+  const r = await ctx.readProjectFile(path);
+  return r?.content || '';
 }
 
 /** Endpoint names the project's `api/` actually exports, with the route params each needs. */
-function realEndpoints(ctx: Ctx): Map<string, string[]> {
+async function realEndpoints(ctx: Ctx): Promise<Map<string, string[]>> {
   const found = new Map<string, string[]>();
-  for (const path of walkFiles(ctx, 'api')) {
-    const src = read(ctx, path);
+  for (const path of await walkFiles(ctx, 'api')) {
+    const src = await read(ctx, path);
     const m = /export\s+const\s+name\s*=\s*['"`]([A-Za-z0-9_-]+)['"`]/.exec(src);
     if (!m) continue;
     // Params come from the ROUTE (the directory path), e.g. api/trips/[id]/GET.ts → ['id'].
@@ -83,8 +99,9 @@ function realEndpoints(ctx: Ctx): Map<string, string[]> {
 }
 
 /** Table names on disk (`database/<name>.json`). */
-function realTables(ctx: Ctx): string[] {
-  return (ctx.listProjectDir('database').entries || [])
+async function realTables(ctx: Ctx): Promise<string[]> {
+  const listed = await ctx.listProjectDir('database');
+  return (listed?.entries || [])
     .filter((n) => n.endsWith('.json'))
     .map((n) => n.replace(/\.json$/, ''));
 }
@@ -121,15 +138,15 @@ export async function run(ctx: Ctx, _inputs: Record<string, unknown>): Promise<R
     add(e.file, { line: e.line, phase: e.phase, message: e.message });
   }
 
-  const endpoints = realEndpoints(ctx);
+  const endpoints = await realEndpoints(ctx);
   const endpointNames = [...endpoints.keys()];
-  const tables = realTables(ctx);
+  const tables = await realTables(ctx);
   const known = endpointNames.length > 0 ? endpointNames.join(', ') : 'none';
 
   // (1) An api module querying a table that does not exist. The db surface is dynamically
   // typed, so this builds CLEAN and 500s on every call — as broken as an unresolved import.
-  for (const path of walkFiles(ctx, 'api')) {
-    const src = read(ctx, path);
+  for (const path of await walkFiles(ctx, 'api')) {
+    const src = await read(ctx, path);
     const ref = /\bdb\s*\.\s*(?:query|insert|update|remove)\s*\(\s*['"`]([A-Za-z0-9_-]+)['"`]/g;
     for (let m = ref.exec(src); m; m = ref.exec(src)) {
       if (tables.includes(m[1] as string)) continue;
@@ -143,8 +160,8 @@ export async function run(ctx: Ctx, _inputs: Record<string, unknown>): Promise<R
   }
 
   // (2)+(3)+(4) Client-side scans over pages/ and components/.
-  for (const path of [...walkFiles(ctx, 'pages'), ...walkFiles(ctx, 'components')]) {
-    const src = read(ctx, path);
+  for (const path of [...(await walkFiles(ctx, 'pages')), ...(await walkFiles(ctx, 'components'))]) {
+    const src = await read(ctx, path);
 
     const apiRef =
       /\b(useApiMutation|useApi|apiCall)\s*(?:<[^(]*>)?\s*\(\s*['"`]([A-Za-z0-9_/?=&.-]+)['"`]\s*(,?)/g;

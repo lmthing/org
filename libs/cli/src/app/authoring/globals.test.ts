@@ -637,3 +637,52 @@ describe('writeProjectPage / writeProjectComponent save-time checks', () => {
     expect(pa.writeProjectPage('shell', page("const { data } = useApi('notYetAuthored');")).ok).toBe(true);
   });
 });
+
+describe('writeProjectFile — the narrowly-scoped escape hatch', () => {
+  const roots: string[] = [];
+  const mkTmp = (): string => {
+    const d = mkdtempSync(join(tmpdir(), 'lm-writefile-'));
+    roots.push(d);
+    return d;
+  };
+  afterEach(() => {
+    for (const d of roots.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+
+  // Every other artifact goes through a TYPED writer that validates its contract at write time.
+  // This one exists only because `emit_types` produces a contract `.d.ts` that no typed writer
+  // accepts (`writeProjectComponent` throws a LintError for source with no default-exported React
+  // component, and a throw in a code node aborts the tasklist). It stays as small as that job needs.
+  it('writes types/contract.d.ts', () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    expect(g.writeProjectFile('types/contract.d.ts', 'export interface A { x: string }')).toEqual({ ok: true });
+    expect(readFileSync(join(root, 'types', 'contract.d.ts'), 'utf8')).toContain('interface A');
+  });
+
+  it('REFUSES types/generated.d.ts — a build artifact the next build erases', () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const r = g.writeProjectFile('types/generated.d.ts', 'export interface A { x: string }');
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain('BUILD ARTIFACT');
+    expect(r.error).toContain('types/contract.d.ts'); // names what to write instead
+  });
+
+  it('REFUSES anything outside types/*.d.ts, naming the typed writer to use', () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    for (const bad of ['pages/index.tsx', 'api/x/GET.ts', 'database/costs.json', 'types/notes.md', 'README.md']) {
+      const r = g.writeProjectFile(bad, 'x');
+      expect(r.ok, bad).toBe(false);
+      expect(r.error, bad).toContain('writeProjectPage');
+    }
+  });
+
+  it('cannot escape the project root', () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    expect(g.writeProjectFile('../../types/evil.d.ts', 'x').ok).toBe(false);
+    expect(g.writeProjectFile('/types/contract.d.ts', 'export type A = 1;').ok).toBe(true); // leading / is stripped, not absolute
+  });
+});

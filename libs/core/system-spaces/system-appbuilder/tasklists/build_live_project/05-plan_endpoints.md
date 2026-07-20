@@ -2,7 +2,7 @@
 id: plan_endpoints
 output:
   endpoints: array
-dependsOn: [plan_app, plan_tables, implement_tables, user_stories]
+dependsOn: [plan_app, plan_tables, user_stories]
 role: general
 functions: []
 ---
@@ -24,11 +24,17 @@ Each endpoint is `{ name, route, purpose, tables, fields }`:
   list before resolving and rename any collision.
 - `route` — the file route with its HTTP method LAST (`cost-lines/GET`, `bookings/[id]/PATCH`); methods
   GET|POST|PUT|PATCH|DELETE.
-- `tables` — the table name(s) it reads/writes, using the names `implement_tables` actually RESOLVED
-  (the written ground truth — a write-time correction may have altered a planned name). Fall back to
-  `plan_tables.tables` only for a name `implement_tables` confirms `ok`. An endpoint planned against a
-  table that never landed ships a handler that builds clean and 500s at runtime.
-- `fields` — the EXACT keys of ONE item in the response (`items[0]`), each as `'key: type'`. This is the
+- `tables` — the table name(s) it reads/writes, copied VERBATIM from `plan_tables.tables`. The whole
+  contract is settled BEFORE anything is written, so `plan_tables` is the authority here; a
+  host-run `validate_contract` rejects any table name it does not declare, and after the tables land
+  a host-run `reconcile_tables` re-checks the contract against what actually reached disk. Do not
+  invent a table name and do not re-case one — an endpoint planned against a table that never landed
+  ships a handler that builds clean and 500s at runtime.
+- `fields` — the EXACT keys of ONE item in the response (`items[0]`), each as `'key: type'`. The TYPE
+  half is REQUIRED and binding: a host-run `emit_types` writes these into the project's `.d.ts` BEFORE
+  any handler or page is authored, so the compiler — not a later reviewer — is what catches a field
+  the page reads at the wrong type. Use real TypeScript (`string`, `number`, `boolean`, `string[]`,
+  `string | null`), never a vague `any`. This is the
   SINGLE SOURCE OF TRUTH for the response shape: `implement_endpoints` emits exactly these keys and
   `implement_pages` reads exactly these keys — so the two never disagree on a name. For a table-backed
   read, list the real `plan_tables` column names you return (snake_case, verbatim — do NOT re-case them
@@ -37,6 +43,19 @@ Each endpoint is `{ name, route, purpose, tables, fields }`:
 
 Read endpoints return `{ items: [...] }` (an aggregate is the single summary at `items[0]`), so plan
 read endpoints the pages consume as `data.items`. Emit one statement:
+
+## If you are being RE-RUN (`feedback` is in scope)
+
+A host-run `validate_contract` cross-checked the whole design and REJECTED it, so this node is running
+again with `feedback` bound to its `errors` (and `attempt` to the pass number). Each entry is
+`{ node, ref, message }`: `node` is which design node must change, `ref` is the exact offending
+reference, `message` says what broke AND names the real options.
+
+Read every entry that names THIS node and fix precisely that — do not redesign what was not faulted,
+and do not re-emit the same reference and hope. An entry naming a different node is context: it tells
+you what the rest of the contract must line up with. If `feedback` is not in scope, this is the first
+pass; ignore this section.
+
 
 ```typescript
 currentTask.resolve({

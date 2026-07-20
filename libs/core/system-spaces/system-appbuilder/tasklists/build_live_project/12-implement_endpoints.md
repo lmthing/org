@@ -4,7 +4,7 @@ output:
   route: string
   name: string
   ok: boolean
-dependsOn: [plan_endpoints, plan_tables, implement_tables]
+dependsOn: [plan_endpoints, plan_tables, emit_types, reconcile_tables]
 forEach: plan_endpoints.endpoints
 role: general
 functions: []
@@ -31,6 +31,29 @@ element of the array (`return { items: [summary] };`), NEVER as a bare object (`
 scalar. Pages read every endpoint as `data.items` (and an aggregate as `data.items[0]`), so a non-array
 `items` silently gives the page nothing. `writeProjectApi` returns `{ ok, error? }`
 and validates the module at write time; rewrite and retry if `w.ok` is false. Emit one statement:
+
+## Satisfy the emitted type contract
+
+`emit_types` already wrote `types/contract.d.ts` from the plan, BEFORE this node ran. For the endpoint
+`item.name` it declares `<Name>Item` (one row's exact fields), `<Name>Output` (`{ items: <Name>Item[] }`)
+and `<Name>Input` — `<Name>` being the endpoint name in PascalCase (`cost-lines` → `CostLines`).
+
+Do NOT re-declare `Output` inline. Import the declared one and alias it, so the compiler — not a later
+reviewer — is what catches a field you renamed, dropped or typed wrong:
+
+```typescript
+import type { CostLinesOutput } from '../../types/contract';
+export const name = 'cost-lines';
+export type Output = CostLinesOutput;
+```
+
+The relative depth depends on the route (`api/cost-lines/GET.ts` → `../../types/contract`;
+`api/bookings/[id]/PATCH.ts` → `../../../types/contract`) — count the segments and get it right, a wrong
+path is a hard build error. The import is TYPE-ONLY, so esbuild erases it and the bundle is unaffected.
+Import from `../types/contract`, never from `@app/types` — that specifier is hard-mapped to
+`types/generated.d.ts`, a BUILD ARTIFACT the next `buildApp()` regenerates from the handlers you write,
+so a contract placed there would be erased exactly when it should be enforcing something.
+
 
 ```typescript
 const ep = item;

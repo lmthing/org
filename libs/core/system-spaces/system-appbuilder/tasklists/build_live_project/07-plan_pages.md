@@ -32,6 +32,19 @@ the component anyway and leave its data need unmet; a page that ships a total/su
 nothing to feed it renders a **hardcoded zero**, indistinguishable from broken to the person looking at
 it. Emit one statement:
 
+## If you are being RE-RUN (`feedback` is in scope)
+
+A host-run `validate_contract` cross-checked the whole design and REJECTED it, so this node is running
+again with `feedback` bound to its `errors` (and `attempt` to the pass number). Each entry is
+`{ node, ref, message }`: `node` is which design node must change, `ref` is the exact offending
+reference, `message` says what broke AND names the real options.
+
+Read every entry that names THIS node and fix precisely that — do not redesign what was not faulted,
+and do not re-emit the same reference and hope. An entry naming a different node is context: it tells
+you what the rest of the contract must line up with. If `feedback` is not in scope, this is the first
+pass; ignore this section.
+
+
 ```typescript
 const pg = item; // { route, purpose } — this page, from the binding plan_app.pages list
 currentTask.resolve({

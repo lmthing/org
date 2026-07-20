@@ -545,6 +545,10 @@ export class SessionManager {
       connectionResolver: this.getConnectionResolver(projectRoot),
       // Give CODE nodes the SAME typed live-project writers the agent nodes hold, so an
       // implement_* node can deterministically author tables/endpoints/pages/components.
+      // `callProjectApi` rides in on this object rather than as its own factory dep: the worker
+      // proxy protocol has a FIXED `ProxyKind` union with no `apiCall` member, and the worker's
+      // method list is derived from `Object.keys(handlers.authoring)` — so a top-level handler key
+      // would be silently dropped, while an authoring key surfaces on `ctx` automatically.
       projectAuthoring: this.buildProjectAuthoring(root, projectId),
     });
   }
@@ -556,6 +560,14 @@ export class SessionManager {
   private buildProjectAuthoring(root: string, projectId: string): ProjectAuthoringGlobals {
     return createProjectAuthoringGlobals({
       projectRoot: join(root, projectId),
+      // Lets a code node PROVE an endpoint works instead of inferring it from a clean compile.
+      // Resolved per call (not captured) so a node that runs right after `implement_endpoints`
+      // sees the runtime rebuilt around the handlers this run just wrote.
+      callProjectApi: async (name, input) => {
+        const rt = await this.getApiRuntime(root, projectId);
+        if (!rt) throw new Error(`callProjectApi("${name}"): project "${projectId}" has no api/ runtime`);
+        return rt.callByName(name, input);
+      },
       republish: () => {
         // Fire-and-forget from the synchronous writer; a republish failure never fails
         // the write (the file already landed — the next boot picks it up regardless).

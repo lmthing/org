@@ -428,23 +428,23 @@ describe('system-appbuilder live-project build action', () => {
 
     // Each implement node is model-driven and uses the LIVE writers (not the catalog ones).
     // implement_tables forwards the plan's schema + rows through writeProjectTable.
-    expect(read('05-implement_tables.md')).toMatch(/writeProjectTable\(/);
-    expect(read('05-implement_tables.md')).toMatch(/forEach: plan_tables\.tables/);
-    expect(read('07-implement_endpoints.md')).toMatch(/writeProjectApi\(/);
+    expect(read('10-implement_tables.md')).toMatch(/writeProjectTable\(/);
+    expect(read('10-implement_tables.md')).toMatch(/forEach: plan_tables\.tables/);
+    expect(read('12-implement_endpoints.md')).toMatch(/writeProjectApi\(/);
     // Endpoint name is the single source of truth: plan_endpoints ASSIGNS a unique `name`,
     // implement_endpoints uses `item.name` VERBATIM (never re-derives from the route), and pages
     // reference that exact name — the fix for the cross-node name-drift + duplicate-name failures.
-    expect(read('06-plan_endpoints.md')).toMatch(/UNIQUE lowercase-hyphen id/);
-    expect(read('07-implement_endpoints.md')).toMatch(/const name = ep\.name;/);
-    expect(read('07-implement_endpoints.md')).toMatch(/VERBATIM/);
-    expect(read('10-plan_pages.md')).toMatch(/plan_endpoints\.endpoints\[\]\.name/);
+    expect(read('05-plan_endpoints.md')).toMatch(/UNIQUE lowercase-hyphen id/);
+    expect(read('12-implement_endpoints.md')).toMatch(/const name = ep\.name;/);
+    expect(read('12-implement_endpoints.md')).toMatch(/VERBATIM/);
+    expect(read('07-plan_pages.md')).toMatch(/plan_endpoints\.endpoints\[\]\.name/);
 
     // Reusable components are their own plan → implement pair.
-    expect(read('09-implement_components.md')).toMatch(/writeProjectComponent\(/);
-    expect(read('09-implement_components.md')).toMatch(/PascalCase/);
+    expect(read('14-implement_components.md')).toMatch(/writeProjectComponent\(/);
+    expect(read('14-implement_components.md')).toMatch(/PascalCase/);
 
     // Pages read endpoints via useApi AND import the reusable components.
-    const pages = read('11-implement_pages.md');
+    const pages = read('15-implement_pages.md');
     expect(pages).toMatch(/writeProjectPage\(/);
     expect(pages).toMatch(/useApi/);
     expect(pages).toMatch(/components\//);
@@ -458,7 +458,7 @@ describe('system-appbuilder live-project build action', () => {
 
     // Every model-authored implement node carries ✅do/❌never code examples grounded in real
     // generated-code failures — the NO-DOM `console` trap being the recurring one.
-    for (const f of ['07-implement_endpoints.md', '09-implement_components.md', '11-implement_pages.md']) {
+    for (const f of ['12-implement_endpoints.md', '14-implement_components.md', '15-implement_pages.md']) {
       expect(read(f)).toMatch(/console/);
       expect(read(f)).toMatch(/NO-DOM ambient/);
       expect(read(f)).toMatch(/❌/);
@@ -473,20 +473,20 @@ describe('system-appbuilder live-project build action', () => {
     // The endpoint response SHAPE is a single source of truth: plan_endpoints declares each endpoint's
     // `fields`, implement_endpoints emits exactly those keys, implement_pages reads exactly those keys
     // (verbatim, never re-cased) — the fix for the endpoint↔page field-name mismatch that crashed pages.
-    expect(read('06-plan_endpoints.md')).toMatch(/`fields`/);
-    expect(read('06-plan_endpoints.md')).toMatch(/EXACT keys of ONE item/);
-    expect(read('07-implement_endpoints.md')).toMatch(/item\.fields/);
-    expect(read('11-implement_pages.md')).toMatch(/plan_endpoints\.endpoints/);
-    expect(read('11-implement_pages.md')).toMatch(/verbatim/i);
+    expect(read('05-plan_endpoints.md')).toMatch(/`fields`/);
+    expect(read('05-plan_endpoints.md')).toMatch(/EXACT keys of ONE item/);
+    expect(read('12-implement_endpoints.md')).toMatch(/item\.fields/);
+    expect(read('15-implement_pages.md')).toMatch(/plan_endpoints\.endpoints/);
+    expect(read('15-implement_pages.md')).toMatch(/verbatim/i);
 
     // finalize writes the persistent chat dock layout.
-    expect(read('14-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
-    expect(read('14-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
+    expect(read('18-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
+    expect(read('18-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
 
     // Pages are detailed ONE per node too: plan_pages fans out over the binding page list, so no
     // single node holds every page's detail (the "split the monolithic page node" fix).
-    expect(read('10-plan_pages.md')).toMatch(/forEach: plan_app\.pages/);
-    expect(read('11-implement_pages.md')).toMatch(/forEach: plan_pages\b/);
+    expect(read('07-plan_pages.md')).toMatch(/forEach: plan_app\.pages/);
+    expect(read('15-implement_pages.md')).toMatch(/forEach: plan_pages\b/);
 
     // A page write that returns `{ ok: false }` (a TSX parse slip RETURNS, it does not throw) is read
     // and RETRIED with a corrected source before resolving — the fix for the silent 1-of-N page drop
@@ -498,9 +498,9 @@ describe('system-appbuilder live-project build action', () => {
 
     // finalize reports pages HONESTLY from disk and surfaces any planned page that went missing — it
     // does NOT declare a clean `ok` on a partial build (the reporting half of the silent-drop fix).
-    expect(read('14-finalize.md')).toMatch(/listProjectDir\('pages'\)/);
-    expect(read('14-finalize.md')).toMatch(/const missing =/);
-    expect(read('14-finalize.md')).toMatch(/missing\.length === 0/);
+    expect(read('18-finalize.md')).toMatch(/listProjectDir\('pages'\)/);
+    expect(read('18-finalize.md')).toMatch(/const missing =/);
+    expect(read('18-finalize.md')).toMatch(/missing\.length === 0/);
 
     // GATE-AND-RETRY (durable completeness): after every file is written the app is compiled against the
     // REAL toolchain via buildApp() (lint → typecheck → esbuild), and each offending FILE is routed to a
@@ -508,10 +508,10 @@ describe('system-appbuilder live-project build action', () => {
     // self-assessment. This is what turns "built but broken" into "type-correct or fail loud".
     // The gate is a HOST-RUN code node, so the scan cannot fail to be reproduced (see
     // build-live-project-gate.test.ts, which drives its real run()). `fix` loops back to it.
-    const verify = read('12-verify.ts');
+    const verify = read('16-verify.ts');
     expect(verify).toMatch(/ctx\.buildProjectApp\(\)/);
     expect(verify).toMatch(/offending/); // groups findings by file for the fix fan-out
-    const fix = read('13-fix.md');
+    const fix = read('17-fix.md');
     expect(fix).toMatch(/forEach: verify\.offending/);
     expect(fix).toMatch(/goto: verify/); // resumes the gate instead of a hand-unrolled second pass
     expect(fix).toMatch(/readProjectFile\(/); // reads the failing file before fixing it
@@ -525,7 +525,7 @@ describe('system-appbuilder live-project build action', () => {
     // finalize CARRIES their residue rather than re-implementing them: a non-empty verify.offending
     // means the fix loop exhausted its attempts with faults still open, and gates `ok` the same as a
     // compiler error.
-    const finalize = read('14-finalize.md');
+    const finalize = read('18-finalize.md');
     expect(finalize).toMatch(/const check = await buildApp\(\)/);
     expect(finalize).toMatch(/check\.ok && check\.built/);
     expect(finalize).toMatch(/verify\.offending/); // carries the gate's residue
@@ -541,7 +541,7 @@ describe('system-appbuilder live-project build action', () => {
     // not defined cascades) — and a gate that fails to execute contributes no findings, which the
     // pipeline reads as "clean". They are now one host-run code node; its behaviour is tested for
     // real in build-live-project-gate.test.ts. Here we only pin WHERE they live.
-    const verify = read('12-verify.ts');
+    const verify = read('16-verify.ts');
     expect(verify, 'page→endpoint scan').toContain('useApiMutation|useApi|apiCall');
     expect(verify, 'reads real endpoint names off api/').toContain('export\\s+const\\s+name\\s*=');
     expect(verify, 'names the unknown-endpoint failure mode').toContain('BEFORE issuing any request');
@@ -553,14 +553,14 @@ describe('system-appbuilder live-project build action', () => {
 
     // The duplication is GONE: finalize consumes verify's result instead of re-scanning, and the
     // second compile/fix pair no longer exists at all.
-    const finalize = read('14-finalize.md');
+    const finalize = read('18-finalize.md');
     expect(finalize, 'finalize must not re-implement the scans').not.toContain('is not a generated endpoint name');
     expect(finalize, 'finalize consumes the gate result').toMatch(/verify\.offending/);
     expect(existsSync(join(dir, '14-compile_pass2.md')), 'the unrolled second pass is removed').toBe(false);
     expect(existsSync(join(dir, '15-fix_pass2.md')), 'the unrolled second fix is removed').toBe(false);
 
     // The fix node carries repair guidance for each gate-error class.
-    const fix = read('13-fix.md');
+    const fix = read('17-fix.md');
     expect(fix, 'repair guidance for a bad endpoint reference').toMatch(/plan_endpoints\.endpoints[\s\S]{0,200}VERBATIM/);
     expect(fix, 'repair guidance rewrites the descriptor as JSX').toMatch(/rewrite/i);
     expect(fix, 'repair guidance names JSX as the target shape').toMatch(/\bJSX\b/);

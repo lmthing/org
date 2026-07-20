@@ -10,7 +10,7 @@ output:
   routes: array
   missing: array
   errors: array
-dependsOn: [implement_tables, implement_endpoints, implement_components, implement_pages, verify, fix]
+dependsOn: [implement_tables, implement_endpoints, smoke_endpoints, implement_components, implement_pages, verify, fix]
 goal: true
 role: general
 functions: []

@@ -3,7 +3,7 @@ id: implement_tables
 output:
   name: string
   ok: boolean
-dependsOn: [plan_tables]
+dependsOn: [plan_tables, emit_types]
 forEach: plan_tables.tables
 role: general
 functions: []
