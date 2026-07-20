@@ -1,0 +1,60 @@
+{
+  "title": "Insurance Policies",
+  "description": "Every car, home, and health insurance policy held by the household. Stores insurer, policy number, type, coverage details, premium, renewal date, broker, and notes.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "description": "Policy type: car, home, or health"
+    },
+    "insurer": {
+      "type": "string",
+      "description": "Insurance company — AXA, Piraeus, MetLife, etc."
+    },
+    "policy_number": {
+      "type": "string",
+      "description": "Unique policy identifier, e.g. AX-7741-VAULT, PIR-HOME-882"
+    },
+    "coverage_details": {
+      "type": "string",
+      "description": "What and who is covered — vehicle plates, property address, perils, co-pay details, coverage amounts"
+    },
+    "premium_eur": {
+      "type": "number",
+      "description": "Annual premium in euros"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Currency code, e.g. EUR"
+    },
+    "renewal_date": {
+      "type": "string",
+      "description": "Next renewal date in ISO 8601 format"
+    },
+    "broker": {
+      "type": "string",
+      "description": "Broker name and agency, e.g. Nikoleta @ Asfalia Pros"
+    },
+    "broker_phone": {
+      "type": "string",
+      "description": "Broker phone number, if known"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-text notes — policyholder name, AFM, vehicle details, special clauses"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 last-update timestamp"
+    }
+  }
+}

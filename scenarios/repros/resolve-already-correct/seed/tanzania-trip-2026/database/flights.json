@@ -1,0 +1,80 @@
+{
+  "title": "Flights",
+  "description": "All 6 flight legs for Vasileios & Athina, Aug 3–20 2026 — airline, flight number, departure/arrival times, booking references, and per-leg notes.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "leg_number": {
+      "type": "number",
+      "description": "Sequential leg number 1–6"
+    },
+    "departure_date": {
+      "type": "date",
+      "description": "Departure date"
+    },
+    "departure_time": {
+      "type": "string",
+      "description": "Scheduled departure time HH:MM"
+    },
+    "arrival_date": {
+      "type": "date",
+      "description": "Arrival date"
+    },
+    "arrival_time": {
+      "type": "string",
+      "description": "Scheduled arrival time HH:MM"
+    },
+    "origin_airport": {
+      "type": "string",
+      "description": "Origin airport IATA code"
+    },
+    "destination_airport": {
+      "type": "string",
+      "description": "Destination airport IATA code"
+    },
+    "airline": {
+      "type": "string",
+      "description": "Airline name e.g. Aegean, EgyptAir, Precision Air"
+    },
+    "flight_number": {
+      "type": "string",
+      "description": "Flight number e.g. A3932, TC144"
+    },
+    "booking_ref": {
+      "type": "string",
+      "description": "Booking reference / PNR"
+    },
+    "travelers": {
+      "type": "number",
+      "description": "Number of travelers on this leg"
+    },
+    "cost_eur": {
+      "type": "number",
+      "description": "Cost of this flight leg in EUR (aggregated from total EUR 2,707 if per-leg not stated)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes e.g. soft-bag requirement"
+    },
+    "origin": {
+      "type": "string",
+      "description": "Origin airport code"
+    },
+    "destination": {
+      "type": "string",
+      "description": "Destination airport code"
+    },
+    "travellers": {
+      "type": "number",
+      "description": "Number of travellers on this leg"
+    },
+    "leg_order": {
+      "type": "number",
+      "description": "Chronological leg order 1-6"
+    }
+  }
+}

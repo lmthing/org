@@ -1,0 +1,108 @@
+{
+  "title": "Dining",
+  "description": "Dining bookings: The Rock Restaurant Zanzibar Aug 15 18:00–20:00, 2 adults, $46 paid, 2x Tropical Passion Fruit Cheesecake pre-ordered, outdoor sunset seating, contact +255 776 591 360.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "restaurant_name": {
+      "type": "string",
+      "description": "Restaurant name"
+    },
+    "location": {
+      "type": "string",
+      "description": "City / island"
+    },
+    "reservation_date": {
+      "type": "string",
+      "description": "Date of reservation YYYY-MM-DD"
+    },
+    "time_slot": {
+      "type": "string",
+      "description": "Reserved time e.g. 18:00–20:00"
+    },
+    "party_size": {
+      "type": "number",
+      "description": "Number of adults"
+    },
+    "menu_notes": {
+      "type": "string",
+      "description": "Menu items noted"
+    },
+    "seating_request": {
+      "type": "string",
+      "description": "Seating preference"
+    },
+    "cost_usd": {
+      "type": "number",
+      "description": "Total cost in USD"
+    },
+    "payment_status": {
+      "type": "string",
+      "description": "paid / deposit / unpaid"
+    },
+    "contact_phone_1": {
+      "type": "string",
+      "description": "Primary contact phone"
+    },
+    "contact_phone_2": {
+      "type": "string",
+      "description": "Secondary contact phone"
+    },
+    "contact_email": {
+      "type": "string",
+      "description": "Contact email address"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "date": {
+      "type": "date",
+      "description": "Booking date"
+    },
+    "time": {
+      "type": "string",
+      "description": "Reservation time, e.g. 18:00–20:00"
+    },
+    "guests": {
+      "type": "number",
+      "description": "Number of guests"
+    },
+    "items": {
+      "type": "string",
+      "description": "Pre-ordered items or menu notes"
+    },
+    "special_requests": {
+      "type": "string",
+      "description": "Seating or other special requests"
+    },
+    "paid": {
+      "type": "boolean",
+      "description": "Whether fully paid"
+    },
+    "amount_paid_usd": {
+      "type": "number",
+      "description": "Amount already paid in USD"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Restaurant contact phone"
+    },
+    "email": {
+      "type": "string",
+      "description": "Restaurant contact email"
+    },
+    "pre_orders": {
+      "type": "string",
+      "description": "Pre-ordered items"
+    },
+    "contact_phone": {
+      "type": "string",
+      "description": "Contact phone number(s)"
+    }
+  }
+}

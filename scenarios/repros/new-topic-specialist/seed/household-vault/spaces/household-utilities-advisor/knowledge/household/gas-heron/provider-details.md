@@ -1,0 +1,3 @@
+# provider-details
+
+Natural gas is supplied by Heron Thermansi and delivered via the EDA Attikis distribution network to the household at Filolaou 41, 11537 Athens. The gas fuels a Bosch Condens 5000 W gas condensing combi boiler, model ZWB 30-2 A, serial number BLR-ZWB30-208841, installed on 2022-09-10. The boiler's manufacturer warranty expired on 2024-09-10; it is now maintained under an annual legal service contract. The research summary mentions no Heron account number or contact telephone number, and the real household documents contain none — these details have not yet been recorded.

@@ -1,0 +1,3 @@
+# meter-readings
+
+No natural-gas meter readings have been recorded in the household ledger, policies document, or boiler service manual. The research summary likewise does not contain any historical meter-reading values. The gas meter is the point where EDA Attikis measures consumption for Heron billing. To enable consumption tracking, the household should begin recording periodic meter readings (e.g., monthly) and comparing them against billed kWh or cubic-metre figures on each Heron invoice. The Bosch Condens 5000 W boiler's turbine (flow sensor) measures DHW flow rate internally for modulation purposes, but this is not a substitute for the utility meter.

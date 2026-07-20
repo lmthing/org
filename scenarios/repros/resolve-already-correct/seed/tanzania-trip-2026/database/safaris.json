@@ -1,0 +1,72 @@
+{
+  "title": "Safaris",
+  "description": "Safari bookings — the Suricata Safaris 3-day package (Tarangire → Lake Manyara → Ngorongoro Crater, Aug 7–9). Serves safari and costs pages.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "operator": {
+      "type": "string",
+      "description": "Safari operator name"
+    },
+    "contact_name": {
+      "type": "string",
+      "description": "Primary contact person"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Contact phone number"
+    },
+    "email": {
+      "type": "string",
+      "description": "Contact email"
+    },
+    "payment_portal": {
+      "type": "string",
+      "description": "Online payment portal URL"
+    },
+    "route": {
+      "type": "string",
+      "description": "Safari route description (parks in order)"
+    },
+    "start_date": {
+      "type": "string",
+      "description": "Safari start date ISO 8601"
+    },
+    "end_date": {
+      "type": "string",
+      "description": "Safari end date ISO 8601"
+    },
+    "total_cost_usd": {
+      "type": "number",
+      "description": "Total safari package cost in USD"
+    },
+    "deposit_paid_usd": {
+      "type": "number",
+      "description": "Deposit already paid in USD"
+    },
+    "balance_due_usd": {
+      "type": "number",
+      "description": "Remaining balance due in USD"
+    },
+    "payment_method": {
+      "type": "string",
+      "description": "How the balance must be paid (e.g. cash, online)"
+    },
+    "payment_notes": {
+      "type": "string",
+      "description": "Payment notes (surcharge, currency preferences, etc.)"
+    },
+    "packing_tips": {
+      "type": "string",
+      "description": "Packing and preparation tips"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes about the safari"
+    }
+  }
+}

@@ -14,6 +14,7 @@
  *   db <table> where <col>=<val> exists | absent
  *   db <table> where <col>=<val> <field> empty | nonempty
  *   db <table> where <col>=<val> <field> == <v2>       # (or !=)
+ *   spaces count <op> <n>                              # how many specialist spaces are registered
  *   knowledge <spaceSubstr|*> matches /<regex>/[i]     # some space-knowledge file body matches
  *   reply not_raw                                       # the final reply is not a raw data dump
  *   reply matches | not_matches /<regex>/[i]            # over the reply's RENDERED (flattened) text
@@ -187,6 +188,13 @@ export function evaluate(line, ctx) {
         }
       }
       return { pass: false, actual: line, error: 'unrecognized db assert' };
+    }
+    // spaces count <op> <n>   — how many specialist spaces are registered on the project (the
+    // new-specialist oracle: an incremental topic that deserves its own space must grow this past
+    // the seeded baseline; a bug that lands rows/pages but no space leaves it flat).
+    if (t[0] === 'spaces' && t[1] === 'count') {
+      const count = Array.isArray(ctx.state?.spaces) ? ctx.state.spaces.length : 0;
+      return { pass: cmpNum(t[2], count, Number(t[3])), actual: `spaces.count=${count}` };
     }
     // knowledge <space|*> fileCount <op> <n>   — the persistence oracle: a research finding that WAS
     // stored adds a knowledge file, so `fileCount` grows past the seed baseline; a persistence FAILURE

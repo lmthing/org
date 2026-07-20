@@ -1,0 +1,40 @@
+{
+  "title": "Cairo Sightseeing",
+  "description": "Both Cairo stopover plans for the outbound (Aug 3–4) and return (Aug 19–20) layovers. Serves the itinerary page.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "stopover_number": {
+      "type": "number",
+      "description": "Stopover 1 (outbound) or 2 (return)"
+    },
+    "date_range": {
+      "type": "string",
+      "description": "Date range, e.g. Aug 3–4"
+    },
+    "title": {
+      "type": "string",
+      "description": "Summary title for this stopover"
+    },
+    "base_hotel": {
+      "type": "string",
+      "description": "Hotel used as base"
+    },
+    "attractions": {
+      "type": "string",
+      "description": "Attractions to visit, comma-separated"
+    },
+    "transport_notes": {
+      "type": "string",
+      "description": "Transport tips (e.g. taxi needed)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional planning notes"
+    }
+  }
+}

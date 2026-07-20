@@ -1,0 +1,32 @@
+{
+  "title": "Trip Rules & Practical Tips",
+  "description": "Collected trip rules and practical tips: Ngorongoro cold/warm layers, Zanzibar tides, Decathlon Forclaz gear, DEET repellent, Zanzibar driving permit ~$15 + IDP, police checkpoints, NCAA speed limits 50/25kph, no plastic bags, crater gate hours 16:00 close/18:00 exit, soft bags for Precision Air.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "category": {
+      "type": "string",
+      "description": "Category: packing, driving, park-rule, zanzibar, flight, general"
+    },
+    "title": {
+      "type": "string",
+      "description": "Rule / tip short title"
+    },
+    "detail": {
+      "type": "string",
+      "description": "Full rule or tip description"
+    },
+    "source": {
+      "type": "string",
+      "description": "Where this rule comes from: read_sources, NCAA-tariff, user"
+    },
+    "display_order": {
+      "type": "number",
+      "description": "Sort order for display"
+    }
+  }
+}

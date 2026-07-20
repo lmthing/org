@@ -1,0 +1,7 @@
+# annual-legal-contract
+
+The 2-year manufacturer warranty for the Bosch Condens 5000 W (ZWB 30-2 A) expired on 2024-09-10 (per the household warranty ledger: serial BLR-ZWB30-208841, purchased 2022-09-10). The boiler is now maintained under an annual legal service contract with an authorised contractor.
+
+The household warranty sheet explicitly notes: "manufacturer std EU warranty is 2yrs (Bosch, Samsung, LG) - boiler is past its warranty, only under the annual legal service contract now." The Bosch service manual (6 720 644 143, Section 15) recommends taking out an inspection/servicing contract with an authorised contractor covering an annual inspection, and servicing at other times as required, to ensure gas consumption and environmental impact remain as low as possible over an extended period.
+
+This means the owner must maintain a valid annual service contract with a qualified heating contractor. The contract covers the mandatory annual inspection, fault-code retrieval, and all the checks detailed in the manufacturer's 16-point checklist (Section 15.1 of the manual). Failure to maintain the contract or perform annual servicing could void any remaining liability coverage and risk safe operation of the appliance.

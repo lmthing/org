@@ -1,0 +1,32 @@
+{
+  "title": "NCA Contacts",
+  "description": "Official Ngorongoro Conservation Area contact details. Serves the park-fees reference page.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "office": {
+      "type": "string",
+      "description": "Office or department name"
+    },
+    "contact_type": {
+      "type": "string",
+      "description": "Type: phone, email, postal, web, fax"
+    },
+    "value": {
+      "type": "string",
+      "description": "Contact value (phone number, email address, etc.)"
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable label for display"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes about this contact"
+    }
+  }
+}

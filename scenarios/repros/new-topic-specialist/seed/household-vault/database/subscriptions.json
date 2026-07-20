@@ -1,0 +1,60 @@
+{
+  "title": "Subscriptions",
+  "description": "Recurring subscriptions — streaming, software, media, gym, telecom — with name, amount, frequency, renewal date, and who pays.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "Subscription name, e.g. Netflix, Spotify, Adobe CC"
+    },
+    "category": {
+      "type": "string",
+      "description": "Category: streaming, software, media, fitness, telecom, cloud"
+    },
+    "amount_eur": {
+      "type": "number",
+      "description": "Cost per billing period in euros"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Currency code, e.g. EUR"
+    },
+    "frequency": {
+      "type": "string",
+      "description": "Billing frequency: monthly or yearly"
+    },
+    "monthly_equivalent_eur": {
+      "type": "number",
+      "description": "Normalized monthly cost — annual amounts divided by 12"
+    },
+    "renewal_date": {
+      "type": "string",
+      "description": "Next renewal date, ISO 8601 — for monthly subscriptions this is the next billing date; leave null if unknown"
+    },
+    "paid_by": {
+      "type": "string",
+      "description": "Who pays — Dimitris, Vasilis, or shared"
+    },
+    "status": {
+      "type": "string",
+      "description": "active, paused, or cancelled"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra notes"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 last-update timestamp"
+    }
+  }
+}

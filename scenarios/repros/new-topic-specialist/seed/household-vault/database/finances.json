@@ -1,0 +1,80 @@
+{
+  "title": "Finances",
+  "description": "Financial instruments beyond the property mortgage: private and state pensions, savings accounts, and bank cards. Grouped by category — pension, savings, account.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "category": {
+      "type": "string",
+      "description": "pension, savings, or account"
+    },
+    "name": {
+      "type": "string",
+      "description": "Instrument name — MetLife Silver Private Pension, IKA State Pension, Piraeus savings, Revolut, Alpha Wallet"
+    },
+    "provider": {
+      "type": "string",
+      "description": "Institution — MetLife, IKA, Piraeus, Revolut, Alpha Bank"
+    },
+    "reference": {
+      "type": "string",
+      "description": "Policy number, IBAN, or account identifier"
+    },
+    "balance_eur": {
+      "type": "number",
+      "description": "Current balance or projected value in euros"
+    },
+    "monthly_contribution_eur": {
+      "type": "number",
+      "description": "Monthly contribution if a pension, or 0"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Currency code, e.g. EUR"
+    },
+    "beneficiary": {
+      "type": "string",
+      "description": "Beneficiary for pensions — spouse, self"
+    },
+    "projected_annuity_age": {
+      "type": "number",
+      "description": "Age at which annuity starts, e.g. 65"
+    },
+    "projected_annuity_year": {
+      "type": "number",
+      "description": "Year annuity starts, e.g. 2042"
+    },
+    "years_of_contributions": {
+      "type": "number",
+      "description": "For state pensions — number of contribution years (stamps)"
+    },
+    "card_ending": {
+      "type": "string",
+      "description": "Last 4 digits of bank card, if applicable"
+    },
+    "card_type": {
+      "type": "string",
+      "description": "Mastercard, Visa — if a card is associated"
+    },
+    "status": {
+      "type": "string",
+      "description": "active, inactive, or projected"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra info — usage notes, tags"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 last-update timestamp"
+    }
+  }
+}

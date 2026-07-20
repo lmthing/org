@@ -1,0 +1,3 @@
+# tariff-g1n
+
+The household is on the Oikiako G1/G1N tariff — the Greek government-mandated Green tariff for residential customers. The recorded unit rate is €0.1384/kWh for consumption up to 200 kWh per billing period (pricing noted as "July 2026 pricing" in the ledger, though actual bills from May and June 2026 are already recorded at this rate). This is a single-rate tariff meaning the same price applies regardless of time of day. No standing charge or additional regulated charges are itemised in the available records. The tariff name "G1/G1N" appears in the ledger's provider column alongside every electricity row.

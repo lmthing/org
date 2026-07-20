@@ -1,0 +1,36 @@
+{
+  "title": "Travelers",
+  "description": "Travelers on the Tanzania trip (Aug 3–20, 2026). Serves all pages that reference traveler names.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "Full name of the traveler"
+    },
+    "role": {
+      "type": "string",
+      "description": "Trip role, e.g. lead or co-traveller"
+    },
+    "first_name": {
+      "type": "string",
+      "description": "Traveler's first name"
+    },
+    "last_name": {
+      "type": "string",
+      "description": "Traveler's last name"
+    },
+    "full_name": {
+      "type": "string",
+      "description": "Full name as displayed in the app"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes about this traveler (e.g. holds IDP)"
+    }
+  }
+}

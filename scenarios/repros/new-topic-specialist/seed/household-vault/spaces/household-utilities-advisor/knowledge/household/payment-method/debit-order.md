@@ -1,0 +1,3 @@
+# debit-order
+
+None of the household's three utility providers — PPC (electricity), EYDAP (water), or Heron (natural gas) — have a recorded debit-order or direct-debit mandate in any source document. Bills appear to be paid manually from the Piraeus account GR49 0172 0123 0044 8719 2230. The only recurring direct debit on that account is the mortgage payment (€1,042 monthly on the 5th). Setting up automated debit orders for utilities would be an improvement the dashboard could help track, but no such arrangement exists yet.

@@ -1,0 +1,26 @@
+{
+  "scenario": "resolve-already-correct",
+  "run": 1,
+  "project": "tanzania-trip-2026",
+  "ranSteps": 1,
+  "ofSteps": 1,
+  "startedAtStep": 1,
+  "sessionStats": {
+    "events": 266,
+    "llmCalls": 30,
+    "tokens": {
+      "in": 93709,
+      "out": 1500
+    },
+    "errors": 3,
+    "unrecoveredErrors": 0,
+    "delegates": [],
+    "yieldKinds": [
+      "inspect",
+      "tasklist"
+    ]
+  },
+  "outDir": "/home/vasilis/LMTHING/lmthing/sdk/org/scenarios/repros/resolve-already-correct/runs/1",
+  "runDir": "/home/vasilis/LMTHING/lmthing/sdk/org/scenarios/repros/resolve-already-correct/runs/1",
+  "finishedAt": "2026-07-20T03:28:53.548Z"
+}

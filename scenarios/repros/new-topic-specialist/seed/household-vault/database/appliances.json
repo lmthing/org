@@ -1,0 +1,56 @@
+{
+  "title": "Appliances",
+  "description": "Every household appliance with brand, model, purchase date, warranty expiry, serial number, and current warranty status.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "Descriptive name, e.g. Washing machine, Dishwasher"
+    },
+    "brand": {
+      "type": "string",
+      "description": "Brand — Bosch, Samsung, LG"
+    },
+    "model": {
+      "type": "string",
+      "description": "Model identifier, e.g. WGG254Z0GR, SMS4HVW33E"
+    },
+    "category": {
+      "type": "string",
+      "description": "Appliance category: laundry, kitchen, heating, entertainment"
+    },
+    "purchase_date": {
+      "type": "string",
+      "description": "Purchase date in ISO 8601 format"
+    },
+    "warranty_expiry": {
+      "type": "string",
+      "description": "Warranty expiry date in ISO 8601 format"
+    },
+    "serial_number": {
+      "type": "string",
+      "description": "Serial number, e.g. WM-BSH-774120"
+    },
+    "warranty_status": {
+      "type": "string",
+      "description": "active or expired — derived from expiry date vs today"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra info — service contract, EU warranty note"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 last-update timestamp"
+    }
+  }
+}

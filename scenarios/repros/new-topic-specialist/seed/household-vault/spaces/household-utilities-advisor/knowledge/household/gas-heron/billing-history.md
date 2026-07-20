@@ -1,0 +1,3 @@
+# billing-history
+
+The household ledger records one natural-gas bill to date: June 2026, amount €58.20, due 2026-07-18, provider Heron Thermansi (via EDA Attikis). No earlier gas bills appear in the ledger, which may mean the household switched to Heron recently or older records were not transcribed. Payment is made from the main Piraeus household account (GR49 0172 0123 0044 8719 2230). The due date falls in the second half of the month — payment reminders should fire at least 3–5 days before the deadline.

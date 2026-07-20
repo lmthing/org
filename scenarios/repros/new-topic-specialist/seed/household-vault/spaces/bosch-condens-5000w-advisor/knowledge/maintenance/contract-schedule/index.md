@@ -1,0 +1,6 @@
+---
+type: string
+variable: contract-scheduleKnowledge
+---
+
+Service contract schedule and inspection requirements for the Bosch Condens 5000 W (ZWB 30-2 A) gas condensing combi boiler. This field splits on the contractual and procedural axis — what the legal service contract covers (now that the 2-year manufacturer warranty has expired), the manufacturer-recommended annual inspection checklist per Section 15 of the Bosch service manual (6 720 644 143, 2016/04), and the upcoming service deadline. The manual recommends an annual inspection and servicing contract with an authorised contractor to keep gas consumption and environmental impact low. The 16-point checklist includes fault retrieval (service function 6.A), electrode and heat exchanger checks, burner inspection, condensate trap cleaning, expansion vessel pre-charge verification, and gas-air ratio adjustment. Annual servicing is required under the ongoing legal service contract, with a hard next-service deadline confirmed from the service records.

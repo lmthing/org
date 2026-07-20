@@ -1,0 +1,56 @@
+{
+  "title": "Contacts",
+  "description": "Important contacts directory — insurance broker, bank advisor, lawyer, boiler engineer, plumbing merchant, and the householder. Each contact has a name, role, organization, phone, and type.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "description": "Full name or primary identifier"
+    },
+    "organization": {
+      "type": "string",
+      "description": "Company or affiliation, e.g. Asfalia Pros, Piraeus Bank"
+    },
+    "role": {
+      "type": "string",
+      "description": "Role label — Insurance Broker, Bank Advisor, Lawyer, Boiler Engineer, Plumbing Merchant, Householder"
+    },
+    "contact_type": {
+      "type": "string",
+      "description": "Category: insurance, banking, legal, trades, personal"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Primary phone number, international format"
+    },
+    "email": {
+      "type": "string",
+      "description": "Email address, if known"
+    },
+    "address": {
+      "type": "string",
+      "description": "Physical address, if known"
+    },
+    "afm": {
+      "type": "string",
+      "description": "Tax identification number (AFM), if known"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra notes or hours"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 last-update timestamp"
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# provider-details
+
+Electricity is supplied by PPC (Public Power Corporation, also branded DEH), the incumbent Greek utility. The service address is Filolaou 41, 11537 Athens. The household operates under a standard residential connection. The provider identifier in the household ledger is "PPC (DEH) — Oikiako G1/G1N tariff." No account number, customer reference, or contact details are recorded in the available documents — these should be collected for completeness.

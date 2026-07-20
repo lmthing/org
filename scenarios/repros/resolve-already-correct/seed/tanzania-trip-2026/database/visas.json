@@ -1,0 +1,44 @@
+{
+  "title": "Visas",
+  "description": "Visa records for Tanzania and Egypt. Serves costs page and visa/insurance reference.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "country": {
+      "type": "string",
+      "description": "Country issuing the visa"
+    },
+    "type": {
+      "type": "string",
+      "description": "Visa type, e.g. e-visa, multiple-entry"
+    },
+    "cost_per_person_usd": {
+      "type": "number",
+      "description": "Cost per person in USD"
+    },
+    "travelers": {
+      "type": "number",
+      "description": "Number of travelers covered"
+    },
+    "total_cost_usd": {
+      "type": "number",
+      "description": "Total cost (cost_per_person × travelers)"
+    },
+    "application_url": {
+      "type": "string",
+      "description": "URL for online application"
+    },
+    "instructions": {
+      "type": "string",
+      "description": "Key instructions (printed copy required, etc.)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  }
+}

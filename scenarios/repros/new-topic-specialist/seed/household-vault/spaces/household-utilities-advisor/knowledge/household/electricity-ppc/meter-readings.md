@@ -1,0 +1,3 @@
+# meter-readings
+
+No meter-reading numbers, reading dates, or kWh consumption figures are recorded in the available documents for either the May or June 2026 bills. The household ledger records only the billed amount and due date, not the underlying consumption. PPC in Greece typically bills monthly for the Green tariff, with meter readings either self-reported by the customer (via the PPC app or website) or taken by the distribution network operator (DEDDIE). For accurate tracking and to enable usage-pattern insights, recording the kWh reading, reading date, and whether it was estimated or actual, alongside each bill, is recommended.

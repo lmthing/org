@@ -1,0 +1,80 @@
+{
+  "title": "Bills",
+  "description": "Stores utility bills with account holder, period, amount, currency, and meter reading data for tracking and reconciliation.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key — system-generated UUID",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "provider": {
+      "type": "string",
+      "description": "Utility provider — PPC, EYDAP, Heron, Cosmote, Vodafone"
+    },
+    "category": {
+      "type": "string",
+      "description": "Utility category: electricity, water, gas, internet, mobile"
+    },
+    "billing_period": {
+      "type": "string",
+      "description": "Billing period label, e.g. June 2026"
+    },
+    "amount_eur": {
+      "type": "number",
+      "description": "Total bill amount in euros"
+    },
+    "currency": {
+      "type": "string",
+      "description": "ISO 4217 currency code, e.g. 'EUR'"
+    },
+    "due_date": {
+      "type": "string",
+      "description": "Payment due date, ISO 8601"
+    },
+    "status": {
+      "type": "string",
+      "description": "Payment status: unpaid, paid, overdue"
+    },
+    "tariff_details": {
+      "type": "string",
+      "description": "Tariff name or rate details if known"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra notes — account holder, meter ref"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 last-update timestamp"
+    },
+    "vendor": {
+      "type": "string",
+      "description": "Vendor or utility provider name, e.g. Heron Thermansi"
+    },
+    "amount": {
+      "type": "string",
+      "description": "Bill amount with currency symbol, e.g. '€58.20'"
+    },
+    "bill_type": {
+      "type": "string",
+      "description": "Type of utility bill, e.g. gas, electricity, water"
+    },
+    "meter_reading": {
+      "type": "string",
+      "description": "Actual meter reading value for the billing period; may be null when not yet recorded"
+    },
+    "account_holder": {
+      "type": "string",
+      "description": "Name of the person responsible for the bill account"
+    },
+    "period": {
+      "type": "string",
+      "description": "Billing period identifier, e.g. 'June 2026'"
+    }
+  }
+}

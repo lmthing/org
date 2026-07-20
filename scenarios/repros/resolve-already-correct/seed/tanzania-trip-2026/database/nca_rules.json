@@ -1,0 +1,24 @@
+{
+  "title": "NCA Visitor Rules",
+  "description": "Visitor rules and regulations for the Ngorongoro Conservation Area. Serves the park-fees reference page.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "category": {
+      "type": "string",
+      "description": "Rule category: Entry, Vehicle, Driving, Behaviour, Camping, General"
+    },
+    "rule": {
+      "type": "string",
+      "description": "Full text of the rule"
+    },
+    "priority": {
+      "type": "string",
+      "description": "Priority: critical, important, or informational"
+    }
+  }
+}

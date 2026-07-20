@@ -1,0 +1,13 @@
+{
+  "runId": 1,
+  "scenarioId": "resolve-already-correct",
+  "projectId": "tanzania-trip-2026",
+  "port": 44253,
+  "base": "http://localhost:44253",
+  "serverPid": 4118229,
+  "createdAt": 1784518030897,
+  "completedSteps": 1,
+  "seededFrom": "/home/vasilis/LMTHING/lmthing/sdk/org/scenarios/repros/resolve-already-correct/seed",
+  "stepCount": 1,
+  "createdProject": null
+}

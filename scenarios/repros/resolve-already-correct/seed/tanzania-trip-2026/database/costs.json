@@ -1,0 +1,48 @@
+{
+  "title": "Cost Ledger",
+  "description": "Master cost ledger — every expense line item with currency (EUR/USD/TZS), amount, paid/pending status, category, and notes. EUR flights €2,707 separated from USD total $3,344.20.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "category": {
+      "type": "string",
+      "description": "Expense category: flights, safari, dining, park-fees, visas, insurance, lodging, transport, shopping, tips"
+    },
+    "description": {
+      "type": "string",
+      "description": "Line-item description"
+    },
+    "currency": {
+      "type": "string",
+      "description": "EUR, USD, or TZS"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Amount in the stated currency"
+    },
+    "paid": {
+      "type": "boolean",
+      "description": "Whether this item has been paid"
+    },
+    "payment_status": {
+      "type": "string",
+      "description": "paid, deposit-paid, balance-due, pending, to-confirm"
+    },
+    "subcategory": {
+      "type": "string",
+      "description": "Finer grouping: flight-leg, deposit, balance, entry-fee, service-fee, vehicle-fee"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional context e.g. Pesapal surcharge note, voice-note origin"
+    },
+    "display_order": {
+      "type": "number",
+      "description": "Sort order for display"
+    }
+  }
+}

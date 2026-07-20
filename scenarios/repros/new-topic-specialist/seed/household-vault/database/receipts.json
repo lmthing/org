@@ -1,0 +1,100 @@
+{
+  "title": "Receipts",
+  "description": "Major purchases and receipts for returns, warranty claims, and household expense tracking. Each receipt has a merchant, date, total, payment method, and item breakdown.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "merchant": {
+      "type": "string",
+      "description": "Store or merchant name"
+    },
+    "merchant_address": {
+      "type": "string",
+      "description": "Merchant street address"
+    },
+    "receipt_number": {
+      "type": "string",
+      "description": "Receipt or invoice number, e.g. #2273, STE-042455-P42455"
+    },
+    "receipt_series": {
+      "type": "string",
+      "description": "Receipt series code, e.g. TDL"
+    },
+    "purchase_date": {
+      "type": "string",
+      "description": "Date of purchase or receipt issue, ISO 8601"
+    },
+    "purchase_time": {
+      "type": "string",
+      "description": "Time of purchase, HH:MM format if recorded"
+    },
+    "total_eur": {
+      "type": "number",
+      "description": "Total amount paid, including tax, in euros"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Currency code, e.g. EUR"
+    },
+    "vat_eur": {
+      "type": "number",
+      "description": "VAT amount if itemized, in euros"
+    },
+    "vat_rate_pct": {
+      "type": "number",
+      "description": "VAT rate percentage if itemized"
+    },
+    "payment_method": {
+      "type": "string",
+      "description": "How it was paid — card, cash, transfer"
+    },
+    "items": {
+      "type": "string",
+      "description": "JSON string or text breakdown of line items — name, quantity, unit price, subtotal"
+    },
+    "customer_name": {
+      "type": "string",
+      "description": "Name of the customer on the receipt if recorded"
+    },
+    "customer_afm": {
+      "type": "string",
+      "description": "Tax identification number (AFM) if on the receipt"
+    },
+    "customer_phone": {
+      "type": "string",
+      "description": "Customer phone if on the receipt"
+    },
+    "customer_address": {
+      "type": "string",
+      "description": "Customer address if on the receipt"
+    },
+    "delivery_estimate": {
+      "type": "string",
+      "description": "Estimated delivery window, e.g. 21-25 July 2026"
+    },
+    "product_code": {
+      "type": "string",
+      "description": "Merchant SKU or product code"
+    },
+    "category": {
+      "type": "string",
+      "description": "Purchase category — plumbing, home decor, electronics, etc."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra observations"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 last-update timestamp"
+    }
+  }
+}

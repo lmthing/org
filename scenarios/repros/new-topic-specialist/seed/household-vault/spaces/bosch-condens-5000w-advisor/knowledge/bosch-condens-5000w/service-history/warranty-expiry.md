@@ -1,0 +1,3 @@
+# warranty-expiry
+
+The Bosch Condens 5000 W (ZWB 30-2 A), serial BLR-ZWB30-208841, was purchased on **2022-09-10** and carries the standard EU manufacturer warranty of 2 years. That warranty expired on **2024-09-10**. The household warranty ledger (see "warranties" sheet of the household-ledger) confirms these dates and notes explicitly: "boiler is past its warranty, only under the annual legal service contract now." There is no longer any manufacturer warranty coverage; the boiler is maintained under the mandatory annual service contract required by local regulation.

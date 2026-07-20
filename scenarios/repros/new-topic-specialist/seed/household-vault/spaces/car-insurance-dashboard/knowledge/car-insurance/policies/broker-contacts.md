@@ -1,0 +1,3 @@
+# broker-contacts
+
+AXA Hull policy broker: Nikoleta at Asfalia Pros, phone +30 210 555 1182. Suzuki Ignis policy brokers: All4Insurance Ε.Ε. (partner code 1463615/1057, AFM 802916022, Special Register EEA/10238), supervised by Protect Insurance Consultants (partner code 1463615, AFM 800919514, Special Register EEA/6452) and F.I.LEADERS Ι.Κ.Ε. (partner code 1480037, AFM 801317377, Special Register EEA/1182). 24/7 assistance line for the Suzuki policy: 210 9310807.

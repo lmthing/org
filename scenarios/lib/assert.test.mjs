@@ -60,6 +60,20 @@ describe('db asserts', () => {
   });
 });
 
+describe('spaces asserts', () => {
+  it('count with each operator (the new-specialist oracle)', () => {
+    const c = ctx({ state: { appTables: {}, spaces: ['Alpha Advisor', 'Beta Advisor', 'Gamma Advisor'] } });
+    expect(evaluate('spaces count >= 2', c).pass).toBe(true);
+    expect(evaluate('spaces count >= 99', c).pass).toBe(false);
+    expect(evaluate('spaces count == 3', c).pass).toBe(true);
+    expect(evaluate('spaces count < 3', c).pass).toBe(false);
+    expect(evaluate('spaces count != 1', c).pass).toBe(true);
+  });
+  it('a missing spaces array is zero, not a throw', () => {
+    expect(evaluate('spaces count == 0', { state: {}, turns: [] }).pass).toBe(true);
+  });
+});
+
 describe('reply asserts', () => {
   it('not_raw: a raw data dump fails, a component AST / prose passes', () => {
     const raw = ctx({ turns: [{ lastText: JSON.stringify({ ok: true, entries: ['.data', 'api', 'database'] }), yieldKinds: [] }] });

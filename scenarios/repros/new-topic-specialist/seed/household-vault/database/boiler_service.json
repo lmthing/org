@@ -1,0 +1,52 @@
+{
+  "title": "Boiler Service History",
+  "description": "Service history and upcoming schedule for the Bosch Condens 5000 W gas boiler. Each record captures the service date, engineer, gas meter reading, any findings, and the next scheduled service date.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "appliance_id": {
+      "type": "string",
+      "description": "Reference to the appliances table entry for the Bosch Condens 5000 W"
+    },
+    "service_date": {
+      "type": "string",
+      "description": "Date the service was performed, ISO 8601"
+    },
+    "engineer_name": {
+      "type": "string",
+      "description": "Name of the engineer who performed the service"
+    },
+    "engineer_company": {
+      "type": "string",
+      "description": "Company the engineer works for, e.g. ThermoFix Akis"
+    },
+    "gas_meter_reading_m3": {
+      "type": "number",
+      "description": "Gas meter reading in cubic meters at time of service"
+    },
+    "next_service_due": {
+      "type": "string",
+      "description": "Next service deadline, ISO 8601 — typically one year after the service date"
+    },
+    "findings": {
+      "type": "string",
+      "description": "Any issues found or notes from the service visit"
+    },
+    "contract_active": {
+      "type": "boolean",
+      "description": "Whether the annual service contract is currently active"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 last-update timestamp"
+    }
+  }
+}

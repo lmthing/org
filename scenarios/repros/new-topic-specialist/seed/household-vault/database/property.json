@@ -1,0 +1,84 @@
+{
+  "title": "Property & Mortgage",
+  "description": "Real estate holdings — the Filolaou 41 apartment in Athens. Tracks mortgage balance, monthly payment, interest rate, fixed-rate expiry, title deed, and linked emergency savings.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "address": {
+      "type": "string",
+      "description": "Property address, e.g. Filolaou 41, 11537 Athens"
+    },
+    "property_type": {
+      "type": "string",
+      "description": "Type: apartment, house, plot, etc."
+    },
+    "mortgage_lender": {
+      "type": "string",
+      "description": "Bank providing the mortgage"
+    },
+    "mortgage_reference": {
+      "type": "string",
+      "description": "Mortgage loan reference number, e.g. GR-VAULT-002"
+    },
+    "mortgage_original_eur": {
+      "type": "number",
+      "description": "Original loan amount in euros"
+    },
+    "mortgage_remaining_eur": {
+      "type": "number",
+      "description": "Outstanding mortgage balance in euros"
+    },
+    "monthly_payment_eur": {
+      "type": "number",
+      "description": "Monthly direct-debit payment amount in euros"
+    },
+    "payment_day": {
+      "type": "number",
+      "description": "Day of the month the mortgage payment is debited, e.g. 5"
+    },
+    "interest_rate_pct": {
+      "type": "number",
+      "description": "Current fixed interest rate"
+    },
+    "fixed_rate_until": {
+      "type": "string",
+      "description": "Date the fixed-rate period expires, ISO 8601"
+    },
+    "title_deed_ref": {
+      "type": "string",
+      "description": "Title deed reference — plot, deed number, registry"
+    },
+    "land_registry": {
+      "type": "string",
+      "description": "Land registry office, e.g. Kallithea"
+    },
+    "emergency_fund_eur": {
+      "type": "number",
+      "description": "Emergency savings balance in euros"
+    },
+    "emergency_fund_account": {
+      "type": "string",
+      "description": "IBAN or account identifier for the emergency fund"
+    },
+    "equity_pct": {
+      "type": "number",
+      "description": "Current equity percentage — (original - remaining) / original * 100"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Extra notes"
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO 8601 creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "ISO 8601 last-update timestamp"
+    }
+  }
+}

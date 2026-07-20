@@ -1,0 +1,36 @@
+id: resolve-already-correct
+from: 06-tanzania#9
+bug: >
+  resolve_flagged_figure destructively deletes a REAL, correct, unrelated row when the flagged total
+  is ALREADY CORRECT — no fix was needed. Seeded state: costs sums to $3,344.20 across 13 USD rows
+  (already matching the user's spreadsheet); a 14th row (EUR 2,707, flights) is tracked separately by
+  design and is NOT part of that total. A "the total doesn't match, should be ~3344" complaint names
+  the figure that IS already right. Correct behaviour: diagnose confirms the total is correct (no fix
+  needed) and/or asks how to treat the separately-tracked EUR row; it must NEVER hard-delete that row.
+  Live on HEAD (06-tanzania run 32 step 9): costs 16→15, the €2,707 flights row GONE, falsely reported
+  as "the fix."
+seed: ./seed
+seedProject: tanzania-trip-2026
+runs: 8
+
+# VALIDATED (2026-07-20, on HEAD before the fix): the original trigger wording ("should be around
+# 3344. Can you check the maths?") measured RED 2/8 and RED 1/4 in an earlier lane — too noisy to
+# trust a GREEN. Sharpened to state the target insistently ("should be exactly 3344.20 and what I'm
+# seeing doesn't match that") and name the EUR flights row as a plausible-but-wrong culprit ("I bet
+# that EUR flights charge got mixed into the total by mistake") — this raised the rate to RED 4/8.
+# RED>0 required before a fix is trustworthy; GREEN 0/8 after the fix is the oracle.
+
+# Seeded from 06-tanzania run 32's step-08 snapshot (the state BEFORE step-9's destructive delete):
+# 16 costs rows, 13 in USD summing to exactly $3,344.20, one EUR flights row (2707.0,
+# id d1283d99-4f01-4627-bb56-33ba810be147) tracked separately, plus a TZS souvenir row and a TZS
+# ranger-tip row. Pruned to database/ + .data/app.db (checkpointed) + project.json — no spaces/app
+# pages/sessions (unneeded for this bug; keeps a FRESH session light).
+steps:
+  - say: "Hang on, my spreadsheet says the trip total should be exactly 3344.20 and what I'm seeing doesn't match that. I bet that EUR flights charge got mixed into the total by mistake — can you dig in and fix it?"
+    expect:
+      - it confirms the total is already correct (or asks how to treat the separately-tracked EUR row) — it does NOT delete any costs row
+      - the EUR flights row (tracked separately by design) survives untouched
+
+assert:
+  - db costs count == 16                                                  # COLLATERAL guard — no row deleted
+  - db costs where id=d1283d99-4f01-4627-bb56-33ba810be147 exists         # the correct EUR flights row specifically survives

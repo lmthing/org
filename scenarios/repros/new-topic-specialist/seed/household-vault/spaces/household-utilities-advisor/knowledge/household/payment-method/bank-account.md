@@ -1,0 +1,3 @@
+# bank-account
+
+The household's main transactional account is held at Piraeus Bank with IBAN GR49 0172 0123 0044 8719 2230. This account is used for all recorded utility payments — electricity (PPC), water (EYDAP), and natural gas (Heron). It is designated as the rainy-day fund (recorded balance €11,400 in the policies seed) and also handles the mortgage direct debit (monthly €1,042 on the 5th). No other bank account is cited for utility bill settlement in any source document.

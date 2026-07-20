@@ -1,0 +1,40 @@
+{
+  "title": "Insurance & Permits",
+  "description": "Zanzibar mandatory insurance and driving permit records. Serves costs page and permit reference.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "item_name": {
+      "type": "string",
+      "description": "Name of the insurance or permit"
+    },
+    "category": {
+      "type": "string",
+      "description": "Category: insurance or permit"
+    },
+    "cost_per_person_usd": {
+      "type": "number",
+      "description": "Cost per person in USD"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Number of people or permits"
+    },
+    "total_cost_usd": {
+      "type": "number",
+      "description": "Total cost in USD"
+    },
+    "instructions": {
+      "type": "string",
+      "description": "Key instructions for compliance"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# meter-readings
+
+No water meter number, meter-reading dates, or consumption figures (in cubic metres) appear in any of the household documents or research material. EYDAP typically reads meters in the field or accepts self-reported readings from customers, but the specific practice for this property is not recorded. The billed amount of €46.80 for the March/April 2026 period is the only consumption proxy available, though it reflects both water and sewage charges combined, making it impossible to derive a per-unit water rate from the available data.

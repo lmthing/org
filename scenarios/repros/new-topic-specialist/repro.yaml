@@ -1,0 +1,42 @@
+id: new-topic-specialist
+from: 07-life-admin#11
+bug: >
+  A brand-new, distinct life topic introduced mid-conversation (with concrete facts, not just a
+  passing mention) lands DB rows and an app page — but THING never creates a specialist SPACE for
+  the topic, so `spaceCount` stays flat. The same organize principle that splits an initial bulk
+  dump into per-topic specialists (organize_material) does not apply INCREMENTALLY: THING's
+  mid-conversation write path routes straight to the automator (db/pages only) with nothing
+  evaluating "does this new topic deserve its own specialist?". Later topic questions then have no
+  owning space to route to. Confirmed OPEN on HEAD (07-life-admin run 19 step 11, reconfirmed run 22).
+seed: ./seed
+seedProject: household-vault
+runs: 4
+
+# Seeded from 07 run 19 step-10 (the last-good state before the real observed failure at step 11),
+# SHRUNK for boot reliability: the real snapshot's 8 specialist spaces + full built app (pages/api/
+# components/types) made the pod's per-project preload heavy enough to occasionally race the
+# harness's first send (a session created, then evicted before a single trace event — the SAME
+# "disappeared before doing any work" class as the harness's own documented vanish-guard, not a
+# seed-data error: the server log showed a clean boot with no exception on every occurrence). This
+# seed keeps only 3 of the 8 specialist spaces (car insurance / household utilities / boiler) and
+# the full `database/` (9 tables with real rows, so the project reads as an established app) but
+# drops pages/api/components/types entirely — the app UI is not what this repro's oracle checks.
+# The trigger states the SAME facts the real step 11 attached voice memo transcribes to (see
+# 07-life-admin/fixtures/voice-memo-vet-el.txt) inline as already-transcribed text — this sidesteps
+# a live audio-transcription call (a second, unrelated source of variance) while exercising the
+# EXACT routing decision under test: a distinct new topic, with concrete facts, that no existing
+# space covers. The oracle is the new-specialist count: a correct incremental organize creates (at
+# least) one new space; the bug leaves the 3-space baseline untouched.
+steps:
+  - say: >
+      Πήραμε σκύλο! Τον λένε Άργο. Να τα γράψω πριν τα ξεχάσω, απ' το βιβλιάριό του: ο αριθμός του
+      μικροτσίπ είναι 941273905618264, το αντιλυσσικό λήγει 12 Μαρτίου 2027, η κτηνίατρος είναι η
+      κυρία Παπαδάκη στο Παγκράτι, και ζυγίστηκε 18 κιλά την τελευταία φορά. Θέλω κάπου να κρατάω
+      τα εμβόλιά του και να μου θυμίζεις πότε λήγουν.
+    expect:
+      - it adds a NEW specialist space for the pet on top of the already-built app, because a pet is a new kind of thing the vault had no place for — a table+page alone is not enough
+      - the microchip number 941273905618264 and the rabies vaccine expiry (12 March 2027) reach real state (a DB row and/or the new space's knowledge)
+      - the 3 existing specialist spaces are still present (no-clobber growth)
+
+assert:
+  - spaces count >= 4   # the new-specialist oracle: the 3-space baseline must grow; a flat count is the bug

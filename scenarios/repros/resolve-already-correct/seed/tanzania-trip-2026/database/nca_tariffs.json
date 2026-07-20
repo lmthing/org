@@ -1,0 +1,44 @@
+{
+  "title": "NCA Tariffs",
+  "description": "Full Ngorongoro Conservation Area tariff catalogue (sections A–P) with fees for every category. Serves the park-fees reference page.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "section": {
+      "type": "string",
+      "description": "Tariff section letter (A–P)"
+    },
+    "section_title": {
+      "type": "string",
+      "description": "Full section title, e.g. Entry Permit, Motor Vehicle Permit"
+    },
+    "category": {
+      "type": "string",
+      "description": "Visitor category: Non-EA Adult, EA Citizen, Child, Expatriate/Resident, etc."
+    },
+    "sub_category": {
+      "type": "string",
+      "description": "Further sub-category if applicable (age bracket, vehicle weight class, etc.)"
+    },
+    "unit": {
+      "type": "string",
+      "description": "Unit of measure: per person, per vehicle/trip, per landing, etc."
+    },
+    "amount": {
+      "type": "number",
+      "description": "Fee amount (in USD for foreign rates, TZS for local rates)"
+    },
+    "currency": {
+      "type": "string",
+      "description": "Currency: USD or TZS"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Special conditions or notes"
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# tariff-info
+
+The specific Heron Thermansi tariff name has not been recorded in the household ledger or policies document. The research summary likewise does not cite a tariff name, rate per kWh, or standing charge for the Heron gas supply. The only recorded billing data point is the June 2026 bill of €58.20 (due 2026-07-18). The Bosch Condens 5000 W boiler (ZWB 30-2 A) operates on natural gas (gas type 23 per the appliance type plate, with a Wobbe index of 12.2–55.0 MJ/m³) and has a maximum rated heat output of 30.0 kW at 80/60 °C. Until a Heron tariff sheet or contract is added to the household file, the exact pricing structure remains unconfirmed.

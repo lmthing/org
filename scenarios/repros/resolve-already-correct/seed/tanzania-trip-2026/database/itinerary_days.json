@@ -1,0 +1,52 @@
+{
+  "title": "Itinerary — Day by Day",
+  "description": "Day-by-day timeline Aug 3–20 2026: one row per day with date, day-of-week, description, linked flight/accommodation/activity references, and morning/afternoon/evening blocks.",
+  "columns": {
+    "id": {
+      "type": "string",
+      "description": "Primary key",
+      "primaryKey": true,
+      "generated": "uuid"
+    },
+    "date": {
+      "type": "date",
+      "description": "Calendar date"
+    },
+    "day_of_week": {
+      "type": "string",
+      "description": "Day of the week e.g. Monday"
+    },
+    "title": {
+      "type": "string",
+      "description": "Short day title/label"
+    },
+    "description": {
+      "type": "string",
+      "description": "Full day description / narrative"
+    },
+    "morning_block": {
+      "type": "string",
+      "description": "Morning activities / notes"
+    },
+    "afternoon_block": {
+      "type": "string",
+      "description": "Afternoon activities / notes"
+    },
+    "evening_block": {
+      "type": "string",
+      "description": "Evening activities / notes"
+    },
+    "flight_id_ref": {
+      "type": "string",
+      "description": "Foreign key — linked flight leg id (optional)"
+    },
+    "accommodation_id_ref": {
+      "type": "string",
+      "description": "Foreign key — linked accommodation id (optional)"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags: flight, checkin, safari, dining, transit, rest"
+    }
+  }
+}
