@@ -28,12 +28,25 @@ data that must land. If after a genuine search a planned table truly has no rows
 it with an empty `rows: []` and a complete schema rather than dropping it — the plan is binding — but
 that should be rare; a planned table almost always has rows if you look.
 
-Every table schema needs a `title`, a `description`, and `columns` where each column has a real
-TypeScript `type` (`string`, `number`, `boolean`, `string[]`, `string | null` — never a vague `any`), a
-`description`, and exactly one uuid primary key. Keys in each row object MUST match the column names.
+Every table schema needs a `title`, a `description`, and `columns` where each column has a `type` that
+is EXACTLY ONE of the five base kinds the writer accepts — `string`, `number`, `boolean`, `date`, `json`
+— NEVER a TypeScript union and NEVER an array shape (no `'string | null'`, no `'string[]'`, no `'string
+| number'`). `date` is for any date/time value (an ISO string on disk); `json` is for a list or any
+structured value (an array of tags, a nested object) — reach for `json` instead of inventing an array
+type. A column that may be absent or empty sets `required: false` (or simply omits `required` — that is
+the default), and the value is just missing/null at runtime; a column that must always be present on
+insert sets `required: true`. Nullability is a FLAG (`required`), never encoded in `type`. Every column
+also needs a non-empty `description` — the write-time validator rejects a column with no description as
+loudly as it rejects a bad `type`. Keys in each row object MUST match the column names, and exactly one
+column is the uuid primary key.
+
 The types are binding, not decoration: a host-run `emit_types` writes a row interface per table into
-the project's `.d.ts` BEFORE any handler or page is authored, so every downstream file is typechecked
-against THESE declarations.
+the project's `.d.ts` BEFORE any handler or page is authored — deriving each field's optionality from
+`required`/`primaryKey`, not from `type` — so every downstream file is typechecked against THESE
+declarations. A `type` outside the five base kinds does not degrade gracefully: the write-time validator
+(`writeProjectTable` → `validateTableSchema`) throws `unknown column type "<whatever you wrote>"` and the
+WHOLE TABLE silently fails to write — no rows, no schema, and every endpoint planned against it still
+compiles clean and 500s at runtime. There is no other way to express "this field can be empty."
 
 **Never author the `id` primary key in a row.** It is `generated: 'uuid'` — the SYSTEM fills it on
 insert. OMIT `id` from every row object (a row that carries `id: ''` collapses the whole table onto one
@@ -66,7 +79,13 @@ currentTask.resolve({
         description: '<what this table stores>',
         columns: {
           id: { type: 'string', description: 'Primary key', primaryKey: true, generated: 'uuid' },
-          // …one column per field the record carries, each with a real description.
+          // …one column per field the record carries, each with a real description. `type` is ALWAYS
+          // one of string/number/boolean/date/json — nullability is `required: false` (or omitted),
+          // never a union or array in `type`:
+          // label: { type: 'string', description: 'display name', required: true },
+          // checked_in_at: { type: 'date', description: 'arrival date/time', required: false },
+          // amount_usd: { type: 'number', description: 'stated cost in USD', required: false },
+          // tags: { type: 'json', description: 'list of topic tags', required: false },
         },
       },
       // One object per record READ FROM THE MATERIAL. NO `id` key (the system generates it),

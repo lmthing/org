@@ -3,6 +3,7 @@ id: implement_tables
 output:
   name: string
   ok: boolean
+  error: string?
 dependsOn: [plan_tables, emit_types]
 forEach: plan_tables.tables
 role: general
@@ -39,14 +40,19 @@ if (w.ok) {
   // w.error names the concrete fault. The most common: an invalid table NAME — table names are
   // snake_case identifiers (underscores), and the writer REJECTS any other shape, so a
   // hyphenated/kebab-case name never lands. Or a schema fault: a column missing its description,
-  // a bad relation. Fix exactly that fault (e.g. rewrite the name in snake_case) and write ONCE more.
+  // a bad relation, or a column `type` outside string/number/boolean/date/json (nullability is
+  // `required: false`, never a union or array in `type` — see 04-plan_tables.md). Read w.error,
+  // fix EXACTLY that fault on the name/schema, and write ONCE more — a base-type schema out of a
+  // contract-validated plan will now pass, so this is a real retry, not a blind re-emit.
   const fixedName = t.name; // corrected for w.error (e.g. the snake_case form of a rejected name)
-  const fixedSchema = t.schema; // corrected if w.error named a schema fault
+  const fixedSchema = t.schema; // corrected for w.error (e.g. a bad column `type` fixed to a base kind)
   const w2 = already
     ? writeProjectTable(fixedName, fixedSchema)
     : writeProjectTable(fixedName, fixedSchema, Array.isArray(t.rows) ? t.rows : []);
   // Resolve the name that ACTUALLY landed — downstream nodes wire endpoints to THIS name; a stale
-  // name here ships handlers that query a table that does not exist.
-  currentTask.resolve({ name: fixedName, ok: w2.ok });
+  // name here ships handlers that query a table that does not exist. Carry the REAL error (from the
+  // retry if it also failed, else the original) so `reconcile_tables`/`finalize` get a genuine
+  // diagnostic instead of a hardcoded placeholder.
+  currentTask.resolve({ name: fixedName, ok: w2.ok, error: w2.ok ? undefined : (w2.error ?? w.error) });
 }
 ```

@@ -39,8 +39,13 @@ export const node = {
   },
 };
 
+interface ColumnSpec {
+  type?: string;
+  description?: string;
+}
 interface TableSpec {
   name?: string;
+  schema?: { columns?: Record<string, ColumnSpec> };
 }
 interface EndpointSpec {
   name?: string;
@@ -91,6 +96,15 @@ function routeParams(route: string): string[] {
 
 const list = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
+/** The ONLY column `type`s the write-time schema validator accepts — mirrors
+ *  `libs/core/src/db/validate.ts#COLUMN_TYPES` (canonical kind: `libs/core/src/db/schema.ts#ColumnType`)
+ *  exactly. Anything else — a TS union (`'string | null'`) or an array shape (`'string[]'`) — throws
+ *  `unknown column type` at write time and the WHOLE table silently fails to land (caught by
+ *  `writeProjectTable`'s try/catch as `{ ok:false, error }`, with no log line before this check
+ *  existed). `04-plan_tables.md` teaches base types + `required` for nullability; this is the
+ *  write-time safety net for a plan that still drifts. */
+const BASE_COLUMN_TYPES: ReadonlySet<string> = new Set(['string', 'number', 'boolean', 'date', 'json']);
+
 export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
   const tables = list<TableSpec>((inputs['plan_tables'] as { tables?: unknown } | undefined)?.tables);
   const endpoints = list<EndpointSpec>((inputs['plan_endpoints'] as { endpoints?: unknown } | undefined)?.endpoints);
@@ -114,6 +128,31 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
   const knownEndpoints = [...endpointNames].join(', ') || 'none';
   const knownComponents = [...componentNames].join(', ') || 'none';
   const knownTables = [...tableNames].join(', ') || 'none';
+
+  // (0) A planned column `type` outside the five base kinds `writeProjectTable` accepts. This is the
+  // grammar mismatch that stalled a real build forever: `04-plan_tables.md` used to teach a TS union
+  // or array (`'string | null'`, `'string[]'`) as a legal column `type`, but the write-time validator
+  // exact-matches against BASE_COLUMN_TYPES and throws — silently failing the whole table (no rows,
+  // no schema) with no log line, so `implement_tables` kept "succeeding" against a table that was
+  // never on disk and the downstream repair loop never had a real fault to fix. Caught HERE, at plan
+  // time, instead of as a silent write-time failure discovered only when the app 500s.
+  for (const t of tables) {
+    const tableName = String(t.name ?? '(unnamed)');
+    const columns = t.schema?.columns;
+    if (!columns || typeof columns !== 'object') continue;
+    for (const [columnName, col] of Object.entries(columns)) {
+      const type = String(col?.type ?? '');
+      if (BASE_COLUMN_TYPES.has(type)) continue;
+      add(
+        'plan_tables',
+        `${tableName}.${columnName}`,
+        `table "${tableName}" column "${columnName}" has type "${type}" — a column \`type\` must be ` +
+          `exactly one of string|number|boolean|date|json (never a TypeScript union or an array shape). ` +
+          `Use a base type and, if the value may be absent or empty, set \`required: false\` (or omit ` +
+          `\`required\`) — nullability is a flag, never encoded in \`type\`.`,
+      );
+    }
+  }
 
   // (1) Duplicate endpoint names / routes. `name` is what a page passes to useApi and what the
   // module exports; two endpoints sharing one means whichever loads second silently wins.

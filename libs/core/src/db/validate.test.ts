@@ -95,6 +95,30 @@ describe('validateTableSchema — per-table failures', () => {
     expect(() => validateTableSchema('feed_items', t)).toThrow(/feed_items\.score: unknown column type "integer"/);
   });
 
+  // A column `type` is exactly one of string/number/boolean/date/json — nullability is expressed
+  // via `required`, never a TS union or array in `type`. `04-plan_tables.md` used to teach the
+  // union/array shape, which throws here and silently fails the whole table's write.
+  it('throws on a TS union column type ("string | null")', () => {
+    const t = feedItems();
+    (t.columns.score as { type: string }).type = 'string | null';
+    expect(() => validateTableSchema('feed_items', t)).toThrow(/feed_items\.score: unknown column type "string \| null"/);
+  });
+
+  it('throws on an array-shape column type ("string[]")', () => {
+    const t = feedItems();
+    (t.columns.tags as { type: string }).type = 'string[]';
+    expect(() => validateTableSchema('feed_items', t)).toThrow(/feed_items\.tags: unknown column type "string\[\]"/);
+  });
+
+  it('accepts every base type, with nullability expressed via `required` instead', () => {
+    const t = feedItems();
+    // `feedItems()` already exercises string/number/boolean/date/json across its columns, and
+    // `score`/`tags` are optional (no `required`) — i.e. nullable via the flag, not the type.
+    expect(() => validateTableSchema('feed_items', t)).not.toThrow();
+    expect(t.columns.score!.required).toBeUndefined();
+    expect(t.columns.tags!.type).toBe('json');
+  });
+
   it('throws on a bad generated kind', () => {
     const t = feedItems();
     (t.columns.id as { generated?: string }).generated = 'serial';

@@ -248,6 +248,43 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
     expect(Array.isArray(junk2.errors)).toBe(true);
   });
 
+  // ── COLUMN TYPE GRAMMAR — the root cause of the build-blocking defect ────────────────────────
+  // `04-plan_tables.md` used to teach a TS union/array (`'string | null'`, `'string[]'`) as a legal
+  // column `type`. The write-time validator (`libs/core/src/db/validate.ts#validateColumn`) exact-
+  // matches `type` against string|number|boolean|date|json and THROWS on anything else, so
+  // `writeProjectTable` silently failed the whole table with no log line, and the downstream repair
+  // loop had nothing concrete to fix. This check catches the mismatch at PLAN time instead.
+  it('flags a column typed as a TS union ("string | null") instead of a base type', async () => {
+    const c = clone();
+    c.plan_tables.tables[0]!.schema.columns['label'] = { type: 'string | null', description: 'label' };
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(false);
+    expect(refs(r)).toContain('costs.label');
+    expect(msgs(r)).toContain('string | null');
+    expect(msgs(r)).toContain('required: false');
+    for (const e of r.errors.filter((x) => x.ref === 'costs.label')) expect(e.node).toBe('plan_tables');
+  });
+
+  it('flags a column typed as an array shape ("string[]") instead of a base type', async () => {
+    const c = clone();
+    c.plan_tables.tables[0]!.schema.columns['tags'] = { type: 'string[]', description: 'tags' };
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(false);
+    expect(refs(r)).toContain('costs.tags');
+    expect(msgs(r)).toContain('string[]');
+  });
+
+  it('accepts a clean base-type schema with required:false for nullability', async () => {
+    const c = clone();
+    const columns = c.plan_tables.tables[0]!.schema.columns as Record<string, { type: string; description: string; required?: boolean }>;
+    columns['notes'] = { type: 'string', description: 'optional notes', required: false };
+    columns['due_at'] = { type: 'date', description: 'due date' };
+    columns['extra'] = { type: 'json', description: 'structured extra data' };
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
   it('emits a SCALAR ok — the condition DSL cannot read array length', async () => {
     // `getAtPath` returns undefined for arrays, so `validate_contract.errors.length > 0` is not
     // expressible in a `when:`. The onFail predicate compares `ok`.

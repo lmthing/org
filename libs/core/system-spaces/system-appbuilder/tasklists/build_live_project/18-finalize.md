@@ -87,7 +87,7 @@ const diskPages = (listProjectDir('pages').entries || []).filter((e: string) => 
 // Anything planned that failed to LAND — a page OR a table — is missing; surface it, do not hide it.
 const missing = [
   ...pageResults.filter((x: { ok: boolean }) => !x.ok).map((x: { route: string; error: string }) => ({ kind: 'page', route: x.route, error: x.error })),
-  ...(Array.isArray(implement_tables) ? implement_tables : []).filter((x: { ok: boolean }) => !x.ok).map((x: { name: string }) => ({ kind: 'table', name: x.name, error: 'planned table failed to write' })),
+  ...(Array.isArray(implement_tables) ? implement_tables : []).filter((x: { ok: boolean }) => !x.ok).map((x: { name: string; error?: string }) => ({ kind: 'table', name: x.name, error: x.error || 'planned table failed to write' })),
   // A planned automation that failed to write — a story's automatic behaviour silently gone.
   ...automationResults.filter((x: { ok: boolean }) => !x.ok).map((x: { slug: string }) => ({ kind: 'automation', slug: x.slug, error: 'planned automation failed to write' })),
 ];
