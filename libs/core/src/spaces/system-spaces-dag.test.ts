@@ -494,7 +494,7 @@ describe('shipped system spaces load + validate', () => {
     // machine-checkable floors; `check_acceptance` (host-run) calls each endpoint against the SEEDED
     // data and evaluates them — SHAPE is not MEANING. It needs the data landed (implement_tables), not
     // just the endpoints, and splits CODE faults (routed to fix via verify) from extraction DATA gaps.
-    expect(live['plan_acceptance']!.dependsOn).toEqual(['plan_endpoints', 'user_stories', 'read_sources']);
+    expect(live['plan_acceptance']!.dependsOn).toEqual(['plan_endpoints', 'plan_pages', 'user_stories', 'read_sources']);
     expect(live['plan_acceptance']!.forEach).toBeUndefined();
     expect(live['check_acceptance']!.kind).toBe('code');
     expect(live['check_acceptance']!.dependsOn).toEqual(['plan_acceptance', 'implement_endpoints', 'implement_tables']);

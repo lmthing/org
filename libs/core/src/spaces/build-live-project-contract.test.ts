@@ -285,6 +285,83 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
     expect(r.errors).toEqual([]);
   });
 
+  // ── DUPLICATE-ENTITY TABLES (P1) — two tables modelling one real-world thing ─────────────────
+  // 07-life-admin run 26 step-14: the app built `receipts` + `receipts_purchases` over the SAME two
+  // receipts (and `boiler_service` + `service_records`, `household` + `household_info`). A retract then
+  // deleted the row from only one copy — the other lingered and the total re-inflated. The guard flags a
+  // pair whose SUBSTANTIVE (non-id) column sets overlap ≥60% so the redesign collapses them into one
+  // canonical table. The 3-substantive-column floor keeps a legitimate FK child clear.
+  it('flags twin tables that model the same entity (receipts + receipts_purchases)', async () => {
+    const c = {
+      plan_tables: {
+        tables: [
+          table('receipts', ['id', 'vendor', 'amount_usd', 'purchased_on']),
+          table('receipts_purchases', ['id', 'vendor', 'amount_usd', 'purchased_on']),
+        ],
+      },
+      plan_endpoints: {
+        endpoints: [
+          { name: 'receipts-list', route: 'receipts-list/GET', tables: ['receipts'], fields: ['vendor: string'] },
+          { name: 'purchases-list', route: 'purchases-list/GET', tables: ['receipts_purchases'], fields: ['vendor: string'] },
+        ],
+      },
+      plan_components: { components: [] },
+      plan_pages: [{ route: 'receipts', endpoints: ['receipts-list', 'purchases-list'], components: [] }],
+    };
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(false);
+    expect(refs(r)).toContain('receipts ~ receipts_purchases');
+    expect(msgs(r)).toContain('model the same entity');
+    expect(msgs(r)).toContain('double-counts');
+    for (const e of r.errors.filter((x) => x.ref.includes('~'))) expect(e.node).toBe('plan_tables');
+  });
+
+  it('does NOT flag a legitimate parent/child FK pair (pets + pet_vaccinations)', async () => {
+    // A child table shares FEW substantive columns with its parent (a foreign key + its own fields), so
+    // the overlap stays well under the 0.6 floor — the guard must never fold a real one-to-many apart.
+    const c = {
+      plan_tables: {
+        tables: [
+          table('pets', ['id', 'name', 'species', 'birth_date']),
+          table('pet_vaccinations', ['id', 'pet_id', 'vaccine', 'administered_on', 'due_on']),
+        ],
+      },
+      plan_endpoints: {
+        endpoints: [
+          { name: 'pets-list', route: 'pets-list/GET', tables: ['pets'], fields: ['name: string'] },
+          { name: 'vax-list', route: 'vax-list/GET', tables: ['pet_vaccinations'], fields: ['vaccine: string'] },
+        ],
+      },
+      plan_components: { components: [] },
+      plan_pages: [{ route: 'pets', endpoints: ['pets-list', 'vax-list'], components: [] }],
+    };
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(refs(r).some((x) => x.includes('~'))).toBe(false);
+    expect(r.ok).toBe(true);
+  });
+
+  // ── ORPHAN ENDPOINTS (P5b) — an endpoint no page reads is dead weight a later acceptance pass can
+  // falsely green. 07-life-admin run 26 step-3: four dashboard-* endpoints existed, the page used two,
+  // and plan_acceptance "verified" an orphaned one while the page's real dashboard-stats was broken.
+  it('flags an unparameterized endpoint no page reads and no automation runs', async () => {
+    const c = clone();
+    c.plan_endpoints.endpoints.push({ name: 'dashboard-upcoming', route: 'dashboard-upcoming/GET', tables: ['costs'], fields: ['label: string'] });
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(false);
+    expect(refs(r)).toContain('dashboard-upcoming');
+    expect(msgs(r)).toContain('no page reads it');
+    for (const e of r.errors.filter((x) => x.ref === 'dashboard-upcoming')) expect(e.node).toBe('plan_endpoints');
+  });
+
+  it('does NOT flag an endpoint a page actually reads', async () => {
+    const c = clone();
+    c.plan_endpoints.endpoints.push({ name: 'costs-summary', route: 'costs-summary/GET', tables: ['costs'], fields: ['total: number'] });
+    c.plan_pages[0]!.endpoints = ['costs-list', 'costs-summary'];
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(refs(r)).not.toContain('costs-summary');
+    expect(r.ok).toBe(true);
+  });
+
   it('emits a SCALAR ok — the condition DSL cannot read array length', async () => {
     // `getAtPath` returns undefined for arrays, so `validate_contract.errors.length > 0` is not
     // expressible in a `when:`. The onFail predicate compares `ok`.

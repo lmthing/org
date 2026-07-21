@@ -213,6 +213,18 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
     add('plan_endpoints', String(e.name), `endpoint "${e.name}" takes ${params.map((x) => `[${x}]`).join('')} but no page declares it — either a page must read it (and supply the param) or it should not be in the contract`);
   }
 
+  // (5b) An endpoint no page reads and no automation runs is dead weight — and worse, plan_acceptance may
+  // "verify" it, greenlighting an endpoint the user never hits while the page's real one is broken.
+  for (const e of endpoints) {
+    const name = String(e.name ?? '');
+    if (!name) continue;
+    const calledByPage = pages.some((p) => list<string>(p.endpoints).includes(name));
+    const usedByAuto = automations.some((a) => String(a.run ?? '') === name);
+    if (!calledByPage && !usedByAuto) {
+      add('plan_endpoints', name, `endpoint "${name}" is declared but no page reads it and no automation runs it — drop it, or have a page use it. An unused endpoint is never seen and cannot be meaningfully acceptance-checked.`);
+    }
+  }
+
   // (6) A component whose props no page-visible endpoint can feed. Props are the contract between a
   // page and a component; one nothing supplies renders permanently blank.
   for (const c of components) {
@@ -234,6 +246,28 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
     const read = endpoints.some((e) => list<string>(e.tables).includes(name));
     if (read) continue;
     add('plan_tables', name, `table "${name}" is declared but no endpoint reads it — nothing in the app can ever show it. Add an endpoint, or drop the table.`);
+  }
+
+  // (9) Two tables that hold the SAME real-world entity — duplicate tables make a retract non-atomic
+  // (a delete removes the row from only one; the other lingers and any total double-counts). Flag a pair
+  // whose SUBSTANTIVE (non-id) column sets overlap heavily so the redesign collapses them to one table.
+  // The 3-column floor + 0.6 overlap keeps a legitimate FK child (few shared substantive columns) clear.
+  const colSet = (t: TableSpec): Set<string> =>
+    new Set(Object.keys(t.schema?.columns ?? {}).filter((c) => c !== 'id'));
+  for (let i = 0; i < tables.length; i++) {
+    for (let j = i + 1; j < tables.length; j++) {
+      const a = colSet(tables[i]!), b = colSet(tables[j]!);
+      if (a.size < 3 || b.size < 3) continue;
+      const shared = [...a].filter((c) => b.has(c)).length;
+      const overlap = shared / Math.min(a.size, b.size);
+      if (overlap >= 0.6) {
+        const na = String(tables[i]!.name), nb = String(tables[j]!.name);
+        add('plan_tables', `${na} ~ ${nb}`,
+          `tables "${na}" and "${nb}" share ${Math.round(overlap * 100)}% of their columns — they model the same entity. ` +
+          `Two tables for one thing means a later delete/retract removes the row from only one, and any total double-counts. ` +
+          `Merge them into ONE canonical table (keep the superset of columns) and point every endpoint at it.`);
+      }
+    }
   }
 
   // (8) AUTOMATIONS — a cron/event hook is authored ONLY when a user story needs it, and MOST apps

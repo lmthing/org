@@ -39,7 +39,11 @@ Each endpoint is `{ name, route, purpose, tables, fields }`:
   `implement_pages` reads exactly these keys — so the two never disagree on a name. For a table-backed
   read, list the real `plan_tables` column names you return (snake_case, verbatim — do NOT re-case them
   to camelCase). For an aggregate/dashboard, list the computed keys you invent (still the exact strings
-  the page will read). Every field a page needs must appear here.
+  the page will read). Every field a page needs must appear here. When a user story asks for a single
+  RUNNING TOTAL — "how much am I paying", one figure that spans several tables — plan exactly ONE
+  dedicated aggregate endpoint whose `tables` lists EVERY table that total draws from (not one of them),
+  so it computes the whole figure in a single query. It is the one number the app shows AND the number
+  THING reads back; two endpoints each covering part of the span give two answers that drift.
 
 Read endpoints return `{ items: [...] }` (an aggregate is the single summary at `items[0]`), so plan
 read endpoints the pages consume as `data.items`. Emit one statement:

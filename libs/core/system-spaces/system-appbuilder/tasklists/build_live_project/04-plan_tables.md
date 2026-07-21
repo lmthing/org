@@ -10,7 +10,9 @@ functions:
 
 Detail EVERY table `plan_app` planned into a source-grounded data model — one entry per
 `plan_app.tables`, same set, no additions and no drops (membership was decided upstream where the whole
-app was in view). `query`, `read_sources` (`read_sources.summary`, the build brief), `user_stories`
+app was in view). ONE table per real-world entity — never a singular plus a `_purchases`/`_records`/`_info`
+twin that holds the SAME records, because two tables for one thing make a later delete non-atomic (it
+removes the row from only one copy and any total double-counts). `query`, `read_sources` (`read_sources.summary`, the build brief), `user_stories`
 (`user_stories.stories` — the jobs each table must support), and `plan_app` (`plan_app.tables`, the
 BINDING list) are in scope. This is still a THINKING step — no writers.
 
