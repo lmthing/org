@@ -26,6 +26,7 @@ import { validateTableSchema, type TableSchema } from '@lmthing/core';
 import {
   LintError,
   apiCallSites,
+  apiHandlerTypingError,
   braceBody,
   existingApiNames,
   lintApiHandler,
@@ -615,6 +616,10 @@ export function createProjectAuthoringGlobals(opts: {
       if (cols) return { ok: false, error: cols };
       // Loader contract: every endpoint needs a unique `export const name` + a default/handler fn.
       throwLint(lintApiHandler(src, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)) }));
+      // Typed boundary: the handler's `input`/return must be REAL types — never `any`/`Promise<any>` —
+      // and the return must BE the contract's `<Base>Output`, so the endpoint↔page field divergence
+      // that the vacuous `Promise<any>` hides (the €0.00/"undefined" dashboard defect) is caught here.
+      throwLint(apiHandlerTypingError(src, { projectRoot }));
       throwLint(saveTypecheckError({ projectRoot, relPath: `api/${[...segments, method].join('/')}.ts`, src, kind: 'api endpoint' }));
     } catch (e) {
       if (e instanceof LintError) throw e;

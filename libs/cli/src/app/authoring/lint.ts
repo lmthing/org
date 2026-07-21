@@ -16,6 +16,7 @@
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 import { apiEndpointContractError, parseExportedString } from '../api/loader.js';
 import { evalHookDefaultFromSource } from '../hooks/loader.js';
 import { INVISIBLE_AS_TEXT, textTokenFor } from './tokens.js';
@@ -178,6 +179,201 @@ export function lintApiHandler(src: string, opts: { existingNames?: Map<string, 
         'names are unique per project. Pick a different `export const name` (or edit that file).'
       );
     }
+  }
+  return null;
+}
+
+/** `cost-lines` / `dashboard-stats` → `CostLines` / `DashboardStats` — the PascalCase base the
+ *  contract keys `<Base>Input`/`<Base>Output`/`<Base>Item` on (mirrors `09-emit_types.ts#pascal`). */
+function pascalCase(raw: string): string {
+  const parts = String(raw ?? '')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+  const joined = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join('');
+  return /^[0-9]/.test(joined) ? `T${joined}` : joined;
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Read the emitted global-ambient contract (`types/contract.d.ts`), or `null` when absent/unreadable. */
+function readContractDts(projectRoot?: string): string | null {
+  if (!projectRoot) return null;
+  try {
+    const p = join(projectRoot, 'types', 'contract.d.ts');
+    return existsSync(p) ? readFileSync(p, 'utf8') : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Locate the endpoint's request handler — the default export (a function or arrow), else a `handler`
+ * function/const. Mirrors the runtime's handler resolution
+ * (`api/handler-module.ts#loadHandlerFromCode`: default export first, then `handler`), so what this
+ * check reads is exactly what will run.
+ */
+function findHandlerFn(sf: ts.SourceFile): ts.FunctionLikeDeclaration | null {
+  const asFn = (n: ts.Node): ts.FunctionLikeDeclaration | null =>
+    ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n)
+      ? (n as ts.FunctionLikeDeclaration)
+      : null;
+  let defaultFn: ts.FunctionLikeDeclaration | null = null;
+  let defaultRef: string | null = null;
+  const named = new Map<string, ts.FunctionLikeDeclaration>();
+  for (const st of sf.statements) {
+    if (ts.isFunctionDeclaration(st) && st.name) named.set(st.name.text, st);
+    if (ts.isVariableStatement(st)) {
+      for (const d of st.declarationList.declarations) {
+        if (ts.isIdentifier(d.name) && d.initializer) {
+          const sig = asFn(d.initializer);
+          if (sig) named.set(d.name.text, sig);
+        }
+      }
+    }
+    // `export default function …() {}` (named or anonymous).
+    const mods = ts.canHaveModifiers(st) ? ts.getModifiers(st) : undefined;
+    if (ts.isFunctionDeclaration(st) && mods?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) {
+      defaultFn = st;
+    }
+    // `export default <expr>` — an inline function/arrow, or a reference to a named one.
+    if (ts.isExportAssignment(st) && !st.isExportEquals) {
+      const sig = asFn(st.expression);
+      if (sig) defaultFn = sig;
+      else if (ts.isIdentifier(st.expression)) defaultRef = st.expression.text;
+    }
+  }
+  if (defaultFn) return defaultFn;
+  if (defaultRef && named.has(defaultRef)) return named.get(defaultRef)!;
+  return named.get('handler') ?? null;
+}
+
+/** True when a return annotation is `any` or `Promise<any>` — the vacuous shapes that satisfy every
+ *  Output type and let a divergent response compile clean. */
+function isAnyReturn(ret: ts.TypeNode): boolean {
+  if (ret.kind === ts.SyntaxKind.AnyKeyword) return true;
+  if (ts.isTypeReferenceNode(ret) && ts.isIdentifier(ret.typeName) && ret.typeName.text === 'Promise') {
+    const arg = ret.typeArguments?.[0];
+    if (arg && arg.kind === ts.SyntaxKind.AnyKeyword) return true;
+  }
+  return false;
+}
+
+/** Every `TypeReference` name mentioned inside `node` (e.g. `Promise`, `Output`, `CostLinesOutput`). */
+function typeRefNames(node: ts.Node): string[] {
+  const names: string[] = [];
+  const visit = (n: ts.Node): void => {
+    if (ts.isTypeReferenceNode(n)) {
+      names.push(ts.isIdentifier(n.typeName) ? n.typeName.text : n.typeName.getText());
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(node);
+  return names;
+}
+
+/** True when the return type IS the contract's `<Base>Output`, directly (`Promise<CostLinesOutput>`)
+ *  or through a local alias (`export type Output = CostLinesOutput;` + `Promise<Output>`). */
+function returnReferencesOutput(ret: ts.TypeNode, src: string, outputType: string): boolean {
+  const refs = typeRefNames(ret);
+  if (refs.includes(outputType)) return true;
+  for (const r of refs) {
+    if (r === 'Promise') continue;
+    const alias = new RegExp(`\\btype\\s+${escapeRe(r)}\\s*=\\s*([^;\\n]+)`).exec(src);
+    if (alias && new RegExp(`\\b${escapeRe(outputType)}\\b`).test(alias[1]!)) return true;
+  }
+  return false;
+}
+
+/**
+ * Reject an API handler whose typed boundary is not REAL — the write-time gate the €0.00/"undefined"
+ * dashboard defect needed (scenario 07-life-admin, run 26).
+ *
+ * `emit_types` (node 09) declares `<Base>Input`/`<Base>Output`/`<Base>Item` in the global-ambient
+ * `types/contract.d.ts` from the plan's `fields`, BEFORE this endpoint is written, and the same
+ * contract's `<Base>Output` is what the page reads via `useApi<<Base>Output>(...)`. So the endpoint and
+ * the page agree ONLY if the endpoint's declared response IS that `<Base>Output`. A handler typed
+ * `(input: any, ctx: ApiCtx): Promise<any>` satisfies that vacuously — `any` is assignable to and from
+ * everything, so the body's return is never checked against ANY Output and the field names it emits can
+ * silently diverge from the field names the page reads. It typechecks, esbuild bundles, every gate is
+ * green, and the landing page renders `undefined` over a fully-populated db. Only 1 of the run's 19
+ * endpoints used `Promise<any>` — but it was the dashboard, so the most-visible endpoint was the broken
+ * one.
+ *
+ * Three rejections, each teaching the fix and each still allowing every handler that WORKS at runtime
+ * (a correct response just has to be typed to its real Output — which it compiles against once it is):
+ *  1. `input` annotated `any` (or untyped) — a field read off an `any` input is unchecked.
+ *  2. the return annotated `any`/`Promise<any>` (or unannotated) — the vacuous escape hatch itself.
+ *  3. the return is a concrete-but-WRONG type (an inline/invented Output) when the contract declares a
+ *     `<Base>Output` for this endpoint — so the model cannot dodge (2) by inventing a divergent shape.
+ * Once the return is pinned to `<Base>Output`, the save-time typecheck (`./save-typecheck.ts`, which
+ * loads `contract.d.ts` as a root) does the rest: a body whose fields don't match `<Base>Output` is a
+ * hard error on the `return` statement, so the endpoint↔page divergence is caught in the SAME turn.
+ *
+ * Conservative: silent for a handler shape it cannot resolve (the existence lint owns "no handler"), and
+ * when the endpoint has no `<Base>Output` in the contract (mid-life endpoint, no plan) only the `any`
+ * ban applies — the explicit-typed escape for a genuinely dynamic endpoint is a concrete type
+ * (`Record<string, unknown>`, `{ items: unknown[] }`, …), never `any`.
+ */
+export function apiHandlerTypingError(src: string, opts: { projectRoot?: string } = {}): string | null {
+  const name = parseExportedString(src, 'name');
+  if (!name) return null; // `lintApiHandler` owns the missing-name case
+  const base = pascalCase(name);
+  const outputType = `${base}Output`;
+  const inputType = `${base}Input`;
+  const contract = readContractDts(opts.projectRoot);
+  const hasOutput = contract ? new RegExp(`\\b${escapeRe(outputType)}\\b`).test(contract) : false;
+
+  const sf = ts.createSourceFile('handler.ts', src, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS);
+  const fn = findHandlerFn(sf);
+  if (!fn) return null; // an unusual handler shape — the existence lint owns "no handler"
+
+  const REJ = (msg: string): string => `api endpoint rejected (not saved): ${msg}`;
+  const ret = fn.type;
+
+  // 1 — a PRESENT input parameter must be a real type, never `any` (explicit) or unannotated
+  //     (implicit any). A zero-parameter handler declares it takes nothing and is left alone.
+  const inputParam = fn.parameters[0];
+  if (inputParam) {
+    const inputAnn = inputParam.type;
+    if (!inputAnn || inputAnn.kind === ts.SyntaxKind.AnyKeyword) {
+      return REJ(
+        `the handler's first parameter (\`input\`) is ${!inputAnn ? 'not typed (implicit `any`)' : 'typed `any`'} — ` +
+        'a request field read off an `any` input is never checked, so this endpoint and the page can silently ' +
+        `disagree on names. Type it \`input: ${hasOutput ? inputType : '<Endpoint>Input'}\` (the global \`emit_types\` ` +
+        'declared), never `any`. An endpoint that truly takes no input types it `Record<string, unknown>` — an ' +
+        'explicit type, not `any`.',
+      );
+    }
+  }
+
+  // 2 — the return must never be `any` / `Promise<any>`, the vacuous shape that satisfies every Output
+  //     type and lets a divergent response compile clean.
+  if (ret && isAnyReturn(ret)) {
+    return REJ(
+      `the handler's return type is \`${ret.getText(sf)}\` — an \`any\`/\`Promise<any>\` return is assignable ` +
+      'to anything, so a response shape that does not match what the page reads compiles clean and every field ' +
+      'silently comes back `undefined` (the €0.00 / "undefined" dashboard defect). Annotate it ' +
+      `\`Promise<${hasOutput ? outputType : '<Endpoint>Output'}>\` — the contract's real Output type, whose ` +
+      "fields ARE the response — never `Promise<any>` or `any`.",
+    );
+  }
+
+  // 3 — when the contract declares this endpoint's `<Base>Output`, the return MUST be it (present, and
+  //     referencing it) — so an inline/invented Output can't dodge the divergence check and the page
+  //     (which reads `useApi<<Base>Output>`) and this endpoint share ONE shape. Once pinned, the
+  //     save-time typecheck (`./save-typecheck.ts`) catches a body whose fields don't match.
+  if (hasOutput && (!ret || !returnReferencesOutput(ret, src, outputType))) {
+    return REJ(
+      `the handler returns \`${ret ? ret.getText(sf) : '(no return annotation)'}\`, but the contract declares ` +
+      `this endpoint's response as \`${outputType}\` (\`emit_types\` wrote it into types/contract.d.ts from the ` +
+      "plan's `fields`, and the page reads it via `useApi<" + outputType + '>(...)`). Return the contract type ' +
+      `so the endpoint and the page share ONE shape: \`export type Output = ${outputType};\` then ` +
+      `\`): Promise<Output>\` (or \`Promise<${outputType}>\` directly). An inline or invented Output lets this ` +
+      'endpoint drift from what the page reads — the exact divergence that ships a page rendering `undefined` ' +
+      'over real data.',
+    );
   }
   return null;
 }

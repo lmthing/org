@@ -386,10 +386,11 @@ interface ApiCtx {
 }
 
 /** The exact signature of an \`api/**\` handler's default export. Every handler is
- *  \`export default async function handler(input: SomeInput, ctx: ApiCtx): Promise<SomeOutput>\`.
- *  The writer appends \`const _typecheck: ApiHandler<Input, Output> = handler\` at SAVE, so a
- *  one-arg \`(ctx)\` handler, or one typing \`ctx\` as anything but \`ApiCtx\`, is rejected in the same
- *  turn it is written. */
+ *  \`export default async function handler(input: <Base>Input, ctx: ApiCtx): Promise<<Base>Output>\`.
+ *  The writer REJECTS a handler whose \`input\`/return is \`any\`/\`Promise<any>\` and one whose return is
+ *  not this endpoint's contract \`<Base>Output\` (\`lint.ts#apiHandlerTypingError\`) — so a vacuous
+ *  \`(input: any): Promise<any>\` that hides an endpoint↔page field divergence can no longer save. Once
+ *  the return is pinned to \`<Base>Output\`, the save-time typecheck checks the body against it. */
 type ApiHandler<Input = Record<string, unknown>, Output = { items: unknown[] }> = (
   input: Input,
   ctx: ApiCtx,

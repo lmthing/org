@@ -276,8 +276,8 @@ describe('createProjectAuthoringGlobals', () => {
         pa.writeProjectApi(
           'recipes-create/POST',
           `export const name = 'recipesCreate';
-           export default async function handler({ body, db }: any) {
-             await db.insert('recipes', { title_gr: body.title });
+           export default async function handler(input: Record<string, unknown>, ctx: any) {
+             await ctx.db.insert('recipes', { title_gr: input.title });
              return { ok: true };
            }`,
         ).ok,
@@ -817,6 +817,73 @@ describe('writeProjectPage / writeProjectComponent / writeProjectApi save-time t
     ].join('\n');
     expect(pa.writeProjectPage('index', src).ok).toBe(true);
     expect(existsSync(join(projectRoot, 'pages', 'index.tsx'))).toBe(true);
+  });
+});
+
+describe('writeProjectApi — the endpoint boundary is TYPED and CHECKED at save (no `any` escape)', () => {
+  // Reproduces the €0.00/"undefined" dashboard defect (scenario 07-life-admin run 26): a handler typed
+  // `(input: any, ctx: ApiCtx): Promise<any>` returning fields the contract Output never declared
+  // typechecked clean and shipped a landing page rendering `undefined` over a full database.
+  let projectRoot: string;
+  beforeEach(() => {
+    projectRoot = mkdtempSync(join(tmpdir(), 'lm-apiboundary-'));
+    // emit_types (node 09) writes this from the plan BEFORE endpoints are authored. The plan's
+    // `dashboard-stats` fields are `total_monthly` — the name the PAGE reads.
+    mkdirSync(join(projectRoot, 'types'), { recursive: true });
+    writeFileSync(
+      join(projectRoot, 'types', 'contract.d.ts'),
+      [
+        'interface DashboardStatsItem { total_monthly: number; }',
+        'interface DashboardStatsOutput { items: DashboardStatsItem[]; }',
+        'type DashboardStatsInput = Record<string, unknown>;',
+        'interface AppQueryOpts { where?: Record<string, unknown>; }',
+        'interface TableRows { [t: string]: Record<string, unknown>; }',
+        'interface AppDb { query<K extends keyof TableRows>(t: K, o?: AppQueryOpts): Promise<TableRows[K][]>; }',
+        'interface ApiCtx { db: AppDb; apiCall: (n: string, i?: Record<string, unknown>) => Promise<unknown>; spawn: (r: string) => Promise<{ runId: string }>; }',
+      ].join('\n') + '\n',
+    );
+  });
+  afterEach(() => rmSync(projectRoot, { recursive: true, force: true }));
+  const make = () => createProjectAuthoringGlobals({ projectRoot });
+
+  it('REJECTS the live escape — `(input: any, ctx: ApiCtx): Promise<any>` — and writes nothing', () => {
+    const pa = make();
+    const escape =
+      "export const name = 'dashboard-stats';\n" +
+      'export default async function handler(input: any, ctx: ApiCtx): Promise<any> {\n' +
+      '  return { items: [{ monthly_total: 5 }] };\n' + // field the contract Output does NOT declare
+      '}';
+    expect(() => pa.writeProjectApi('dashboard-stats/GET', escape)).toThrow(LintError);
+    expect(() => pa.writeProjectApi('dashboard-stats/GET', escape)).toThrow(/any/);
+    expect(existsSync(join(projectRoot, 'api', 'dashboard-stats', 'GET.ts'))).toBe(false);
+  });
+
+  it('REJECTS a handler pinned to the contract Output but returning a DIVERGENT shape (save-typecheck)', () => {
+    // No `any`, and it DOES name the contract Output — so it passes the typing lint, and the field
+    // divergence is now a real compile error caught by the save-time typecheck.
+    const pa = make();
+    const diverged =
+      "export const name = 'dashboard-stats';\n" +
+      'export type Input = DashboardStatsInput;\n' +
+      'export type Output = DashboardStatsOutput;\n' +
+      'export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {\n' +
+      '  return { items: [{ monthly_total: 5 }] };\n' + // `monthly_total` ≠ contract `total_monthly`
+      '}';
+    expect(() => pa.writeProjectApi('dashboard-stats/GET', diverged)).toThrow(LintError);
+    expect(existsSync(join(projectRoot, 'api', 'dashboard-stats', 'GET.ts'))).toBe(false);
+  });
+
+  it('ACCEPTS a correctly-typed handler returning the contract Output shape', () => {
+    const pa = make();
+    const ok =
+      "export const name = 'dashboard-stats';\n" +
+      'export type Input = DashboardStatsInput;\n' +
+      'export type Output = DashboardStatsOutput;\n' +
+      'export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {\n' +
+      '  return { items: [{ total_monthly: 5 }] };\n' +
+      '}';
+    expect(pa.writeProjectApi('dashboard-stats/GET', ok).ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'api', 'dashboard-stats', 'GET.ts'))).toBe(true);
   });
 });
 

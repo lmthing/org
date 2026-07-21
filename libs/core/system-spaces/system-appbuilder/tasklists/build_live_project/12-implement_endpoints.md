@@ -49,6 +49,18 @@ export type Input = CostLinesInput;     // global — carries the route [param]s
 export type Output = CostLinesOutput;   // global — no import, no path to compute
 ```
 
+**The handler MUST be `handler(input: Input, ctx: ApiCtx): Promise<Output>` — NEVER `input: any`, NEVER
+`Promise<any>`, NEVER an unannotated parameter or return.** The writer REJECTS an `any`/`Promise<any>`
+boundary, and rejects a return that is not this endpoint's contract `<Pascal>Output`. This is not
+style — it is the ONE thing that keeps the endpoint and the page in agreement. A handler typed
+`Promise<any>` satisfies every Output type VACUOUSLY: the object you return is checked against nothing,
+so if you return `{ items: [{ monthly_total }] }` while the page reads `total_monthly` (the two names
+the plan's `fields` never reconciled), it compiles clean, every gate is green, and the page renders
+`undefined` / "0.00" over a fully-populated database. Typing the return `Promise<Output>` makes that
+exact mismatch a compile error on the `return` statement, in THIS turn. If an endpoint is genuinely
+dynamic, its explicit escape is a concrete type (`Record<string, unknown>`, `{ items: unknown[] }`) —
+never `any`.
+
 ### `ctx` is `ApiCtx`, and route params arrive on `input` — NOT on `ctx`
 
 Type the second parameter `ctx: ApiCtx` — the global the contract emitted. `ApiCtx` is
@@ -146,6 +158,15 @@ export default async function handler(input: Input, ctx: ApiCtx): Promise<Output
 
 ```typescript
 export const name = 'costLines';        // ✗ re-derived / renamed from the route → loader rejects the app
+export default async function handler(input: any, ctx: ApiCtx): Promise<any> { /* … */ }
+                                        // ✗ `input: any` / `Promise<any>` — the vacuous escape hatch: the
+                                        //   returned object is checked against NOTHING, so a response whose
+                                        //   fields differ from what the page reads compiles clean and the
+                                        //   page shows `undefined`/"0.00" over real data. Writer REJECTS.
+                                        //   Type it `(input: Input, ctx: ApiCtx): Promise<Output>`.
+return { total_monthly: t };            // ✗ a field the contract Output does not declare (page reads a
+                                        //   different name) — a real compile error ONCE the return is
+                                        //   `Promise<Output>`; invisible under `Promise<any>`
 import { db } from '@app/database';     // ✗ no such module — the db is the injected ctx param; writer REJECTS
 const rows = await fetch('/api/costs'); // ✗ fetch EXISTS, but never fetch your OWN api — read ctx.db (an EXTERNAL fetch is fine)
 const id = ctx.params.id;               // ✗ there is NO ctx.params — the [id] value is on INPUT: input.id

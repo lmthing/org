@@ -333,8 +333,9 @@ interface ApiCtx {
 }
 
 /** The exact signature of an \`api/**\` handler's default export. Every handler is
- *  \`export default async function handler(input: SomeInput, ctx: ApiCtx): Promise<SomeOutput>\`.
- *  The writer appends \`const _typecheck: ApiHandler<Input, Output> = handler\` at SAVE. */
+ *  \`export default async function handler(input: <Base>Input, ctx: ApiCtx): Promise<<Base>Output>\`.
+ *  The writer REJECTS an \`any\`/\`Promise<any>\` boundary and a return that is not the endpoint's
+ *  contract \`<Base>Output\` (\`lint.ts#apiHandlerTypingError\`). */
 type ApiHandler<Input = Record<string, unknown>, Output = { items: unknown[] }> = (
   input: Input,
   ctx: ApiCtx,

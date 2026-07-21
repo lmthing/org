@@ -11,6 +11,7 @@ import {
   LintError,
   apiCallSiteError,
   apiCallSites,
+  apiHandlerTypingError,
   discoverApiEndpoints,
   absentGlobalUse,
   displayDescriptorReturn,
@@ -43,6 +44,102 @@ describe('lintApiHandler', () => {
   });
   it('allows a name that belongs to no other file', () => {
     expect(lintApiHandler(named, { existingNames: new Map() })).toBeNull();
+  });
+});
+
+describe('apiHandlerTypingError — the handler boundary must be REAL, never `any`/`Promise<any>`', () => {
+  let projectRoot: string;
+  beforeEach(() => {
+    projectRoot = mkdtempSync(join(tmpdir(), 'lm-apitype-'));
+    // The global-ambient contract emit_types wrote from the plan: `dashboard-stats` returns exactly
+    // `total_monthly` — NOT the `monthly_total` the broken handler emitted.
+    mkdirSync(join(projectRoot, 'types'), { recursive: true });
+    writeFileSync(
+      join(projectRoot, 'types', 'contract.d.ts'),
+      [
+        'interface DashboardStatsItem { total_monthly: number; }',
+        'interface DashboardStatsOutput { items: DashboardStatsItem[]; }',
+        'type DashboardStatsInput = Record<string, unknown>;',
+        'interface ApiCtx { db: unknown }',
+      ].join('\n') + '\n',
+    );
+  });
+  afterEach(() => rmSync(projectRoot, { recursive: true, force: true }));
+
+  // The exact escape that shipped the €0.00/"undefined" dashboard (scenario 07-life-admin run 26):
+  // an `(input: any, ctx: ApiCtx): Promise<any>` handler returning fields the contract never declared.
+  const ESCAPE =
+    "export const name = 'dashboard-stats';\n" +
+    'export default async function handler(input: any, ctx: ApiCtx): Promise<any> {\n' +
+    '  return { items: [{ monthly_total: 5 }] };\n' +
+    '}';
+
+  it('REJECTS the live escape — `input: any` / `Promise<any>` returning a divergent shape', () => {
+    const msg = apiHandlerTypingError(ESCAPE, { projectRoot });
+    expect(msg).not.toBeNull();
+    expect(msg).toMatch(/any/);
+  });
+
+  it('REJECTS `Promise<any>` even when the input IS typed (the return is the vacuous escape)', () => {
+    const src =
+      "export const name = 'dashboard-stats';\n" +
+      'export type Input = DashboardStatsInput;\n' +
+      'export default async function handler(input: Input, ctx: ApiCtx): Promise<any> {\n' +
+      '  return { items: [{ monthly_total: 5 }] };\n' +
+      '}';
+    expect(apiHandlerTypingError(src, { projectRoot })).toMatch(/Promise<any>|`any`|return/);
+  });
+
+  it('REJECTS a concrete-but-INVENTED Output that is not the contract `<Base>Output`', () => {
+    // No `any` anywhere, so it dodges the `any` ban — but an inline Output lets the endpoint drift
+    // from the page, so it must still be rejected in favour of the contract type.
+    const src =
+      "export const name = 'dashboard-stats';\n" +
+      'export type Input = DashboardStatsInput;\n' +
+      'export default async function handler(input: Input, ctx: ApiCtx): Promise<{ items: { monthly_total: number }[] }> {\n' +
+      '  return { items: [{ monthly_total: 5 }] };\n' +
+      '}';
+    expect(apiHandlerTypingError(src, { projectRoot })).toMatch(/DashboardStatsOutput|contract/);
+  });
+
+  it('ACCEPTS a handler typed to the contract `<Base>Output` directly', () => {
+    const src =
+      "export const name = 'dashboard-stats';\n" +
+      'export default async function handler(input: DashboardStatsInput, ctx: ApiCtx): Promise<DashboardStatsOutput> {\n' +
+      '  return { items: [{ total_monthly: 5 }] };\n' +
+      '}';
+    expect(apiHandlerTypingError(src, { projectRoot })).toBeNull();
+  });
+
+  it('ACCEPTS the doc form — `export type Output = <Base>Output` + `Promise<Output>` (aliased)', () => {
+    const src =
+      "export const name = 'dashboard-stats';\n" +
+      'export type Input = DashboardStatsInput;\n' +
+      'export type Output = DashboardStatsOutput;\n' +
+      'export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {\n' +
+      '  return { items: [{ total_monthly: 5 }] };\n' +
+      '}';
+    expect(apiHandlerTypingError(src, { projectRoot })).toBeNull();
+  });
+
+  it('bans `any` even with NO contract for the endpoint — an explicit type is the only escape', () => {
+    const src =
+      "export const name = 'no-plan-endpoint';\n" + // no <Base>Output in the contract
+      'export default async function handler(input: any, ctx: ApiCtx): Promise<any> {\n' +
+      '  return { items: [] };\n' +
+      '}';
+    expect(apiHandlerTypingError(src, { projectRoot })).toMatch(/any/);
+    // …but a concrete explicit type (not the contract, which does not exist here) passes.
+    const ok =
+      "export const name = 'no-plan-endpoint';\n" +
+      'export default async function handler(input: Record<string, unknown>, ctx: ApiCtx): Promise<{ items: unknown[] }> {\n' +
+      '  return { items: [] };\n' +
+      '}';
+    expect(apiHandlerTypingError(ok, { projectRoot })).toBeNull();
+  });
+
+  it('stays silent when there is no `export const name` (the name lint owns that)', () => {
+    expect(apiHandlerTypingError('export default async (input: any) => ({});', { projectRoot })).toBeNull();
   });
 });
 

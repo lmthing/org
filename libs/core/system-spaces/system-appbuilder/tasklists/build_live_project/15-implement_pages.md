@@ -88,6 +88,19 @@ PascalCase: `cost-lines` → `CostLines`). Type the hook with the declared type 
 const { data } = useApi<CostLinesOutput>('cost-lines');   // global — no import
 ```
 
+**Use the endpoint's declared `<Name>Output` for EVERY `useApi` — NEVER an inline `useApi<{ … }>(…)`
+shape you write out yourself.** An inline object type is you RE-TYPING the response from memory, and the
+field names you invent (`total_monthly_subs`) routinely differ from the ones the endpoint actually
+returns (`monthly_total`): the inline type makes your own guess "true", so every one of those reads is
+`undefined` at runtime and the card shows "0.00"/"undefined" over a full database — with zero compile
+errors. `<Name>Output` is the SAME type the endpoint's handler returns `Promise<<Name>Output>` against,
+so naming it on both sides is what makes a mismatch a compiler error instead of a blank card.
+
+The exact fields of each `<Name>Output` / `<Name>Item` are declared in `types/contract.d.ts` (and
+mirrored in `emit_types`'s output, an upstream dependency in scope). If you are unsure what fields an
+endpoint returns, `readProjectFile('types/contract.d.ts')` and read its `<Name>Item` — read ONLY the
+fields it declares, EXACTLY as named (snake_case, verbatim). Never invent, re-case, or camelCase one.
+
 Then a field you rename, drop or read at the wrong type is a COMPILER error here, not an empty card in
 the shipped app. NEVER write `import ... from '../types/contract'` or emit any project import as a
 statement: `@app/runtime`, `../types/...` are app/ambient modules that do not exist in your authoring
@@ -165,6 +178,11 @@ import { useRoute } from 'react-router';          // ✗ react-router is not in 
 import * as Dialog from '@radix-ui/react-dialog'; // ✗ no @radix-ui
 import { useApi } from '../use-api';              // ✗ hooks come ONLY from '@app/runtime'
 useApi('costLines');                              // ✗ invented / transformed name — use item.endpoints verbatim
+useApi<{ items: { total_monthly_subs: number }[] }>('dashboard-stats');
+                                                  // ✗ inline shape — you re-typed the response from memory;
+                                                  //   the endpoint returns different field names, so this
+                                                  //   compiles clean and every read is undefined. Name the
+                                                  //   contract type: useApi<DashboardStatsOutput>('dashboard-stats')
 const total = data?.total_cost_usd;               // ✗ read data.items[0].total_cost_usd — never a field off data
 const t = data?.items?.[0]?.grandTotalUSD;        // ✗ re-cased guess — read the endpoint's exact field: grand_total_usd
 {row.amount.toLocaleString()}                     // ✗ amount may be null → crashes the whole page; use (row.amount ?? 0).toLocaleString()
