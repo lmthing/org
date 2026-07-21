@@ -40,13 +40,32 @@ the endpoint `item.name` it declares `<Name>Item` (one row's exact fields), `<Na
 (`{ items: <Name>Item[] }`) and `<Name>Input` — `<Name>` = the endpoint name in PascalCase
 (`cost-lines` → `CostLines`).
 
-Use the declared `Output` directly, so the compiler — not a later reviewer — catches a field you
-renamed, dropped or typed wrong:
+Use the declared `Input` and `Output` directly, so the compiler — not a later reviewer — catches a
+field you renamed, dropped or typed wrong:
 
 ```typescript
 export const name = 'cost-lines';
+export type Input = CostLinesInput;     // global — carries the route [param]s (empty for a plain route)
 export type Output = CostLinesOutput;   // global — no import, no path to compute
 ```
+
+### `ctx` is `ApiCtx`, and route params arrive on `input` — NOT on `ctx`
+
+Type the second parameter `ctx: ApiCtx` — the global the contract emitted. `ApiCtx` is
+`{ db, apiCall, spawn }`, and **there is deliberately no `ctx.params`**: a route `[id]` value is
+assembled by the runtime onto the handler's FIRST argument, so you read `input.id`, never
+`ctx.params.id` (which is a compile error, by design — it was a live 400 on every day-detail page).
+Because `ctx.db` is now typed to THIS app's tables, three faults are caught the moment you write them
+instead of 500ing on the first real call:
+
+- `ctx.db.query('costs')` returns `CostsRow[]` with each column's real type. Comparing a column
+  against a value outside its declared domain — `r.status === 'still-owed'` when the `status` domain
+  is `paid | owed | unconfirmed` — is a no-overlap compile error (the live owed-balance-$0 defect,
+  where the filter said `still-owed` but the rows stored `owed`, so every total came back $0).
+- `ctx.db.query('trips')` takes a TABLE NAME. A raw SQL string (`ctx.db.query('SELECT * FROM …')`) is
+  not a table name and does not compile.
+- `ctx.db.query` / `insert` / `update` / `remove` are all keyed on the real tables, so a typo'd table
+  or column is a compile error, not an empty result.
 
 NEVER write `import ... from '../types/contract'` or emit any project import (`@app/runtime`,
 `../types/...`) as a statement: these are AMBIENT/app modules that do not exist in your authoring VM,
@@ -58,14 +77,19 @@ of truth — never abandon the typed contract for an inline shape.
 ```typescript
 const ep = item;
 const name = ep.name;
+const Pascal = name.split(/[^A-Za-z0-9]+/).filter(Boolean).map((s) => s[0].toUpperCase() + s.slice(1)).join('');
 const table = Array.isArray(ep.tables) && ep.tables[0] ? ep.tables[0] : (plan_tables.tables[0] ? plan_tables.tables[0].name : 'items');
+const param = (String(ep.route).match(/\[(\w+)\]/) || [])[1]; // e.g. 'id' for trips/[id]/GET
 const src = [
   "export const name = '" + name + "';",
   "export const description = '" + String(ep.purpose).replace(/'/g, '') + "';",
-  "export interface Input {}",
-  "export interface Output { items: any[] }",
-  "export default async function handler(_input: Input, ctx: { db: any }): Promise<Output> {",
-  "  const items = await ctx.db.query('" + table + "');",
+  "export type Input = " + Pascal + "Input;",   // global — carries the route [param]s
+  "export type Output = " + Pascal + "Output;", // global — no import, no path to compute
+  "export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {",
+  param
+    // a [param] route reads its value off INPUT (there is NO ctx.params) and filters:
+    ? "  const items = (await ctx.db.query('" + table + "')).filter((r) => r.id === input." + param + ");"
+    : "  const items = await ctx.db.query('" + table + "');",
   "  return { items };",
   "}",
 ].join("\n");
@@ -94,27 +118,27 @@ as an array or call `.length` on it.
 ```typescript
 export const name = 'cost-lines';                      // === item.name, character-for-character
 export const description = 'Every cost line for the trip';
-export interface Input {}
-export interface Output { items: any[] }
-export default async function handler(_input: Input, ctx: { db: any }): Promise<Output> {
-  const items = await ctx.db.query('costs');
+export type Input = CostLinesInput;                    // global
+export type Output = CostLinesOutput;                  // global
+export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {
+  const items = await ctx.db.query('costs');           // typed CostsRow[] — no `: any` needed
   return { items };
 }
 ```
 
 ✅ **An aggregate** types `Output` from `item.fields` and returns the summary as the ONE array element —
-the exact keys the page will read:
+the exact keys the page will read. The row is already typed, so the reduce needs no `any`:
 
 ```typescript
 export const name = 'dashboard-summary';
 export const description = 'One-object trip summary for the home page';
-export interface Input {}
-// item.fields was ['trip_name: string', 'grand_total_usd: number', 'paid_total_usd: number']:
-export interface Output { items: { trip_name: string; grand_total_usd: number; paid_total_usd: number }[] }
-export default async function handler(_input: Input, ctx: { db: any }): Promise<Output> {
+export type Input = DashboardSummaryInput;
+export type Output = DashboardSummaryOutput; // items: { trip_name; grand_total_usd; paid_total_usd }[]
+export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {
   const costs = await ctx.db.query('costs');
-  const grand_total_usd = costs.reduce((s: number, c: any) => s + (c.amount_usd || 0), 0);
-  return { items: [{ trip_name: 'My Trip', grand_total_usd, paid_total_usd: 0 }] };
+  const grand_total_usd = costs.reduce((s, c) => s + (c.amount_usd ?? 0), 0);
+  const paid_total_usd = costs.filter((c) => c.status === 'paid').reduce((s, c) => s + (c.amount_usd ?? 0), 0);
+  return { items: [{ trip_name: 'My Trip', grand_total_usd, paid_total_usd }] };
 }
 ```
 
@@ -124,6 +148,8 @@ export default async function handler(_input: Input, ctx: { db: any }): Promise<
 export const name = 'costLines';        // ✗ re-derived / renamed from the route → loader rejects the app
 import { db } from '@app/database';     // ✗ no such module — the db is the injected ctx param; writer REJECTS
 const rows = await fetch('/api/costs'); // ✗ fetch EXISTS, but never fetch your OWN api — read ctx.db (an EXTERNAL fetch is fine)
+const id = ctx.params.id;               // ✗ there is NO ctx.params — the [id] value is on INPUT: input.id
+await ctx.db.query('SELECT * FROM costs'); // ✗ query takes a TABLE NAME, not SQL — ctx.db.query('costs')
 return { items } as const;              // ✗ orphaned `as const` on the return → typecheck fails, write lost
 return { items: { total: 5 } };         // ✗ items must be an ARRAY — an aggregate is items: [summary]
 if (w.length) { /* … */ }               // ✗ w is { ok, error? }, not an array — use w.ok

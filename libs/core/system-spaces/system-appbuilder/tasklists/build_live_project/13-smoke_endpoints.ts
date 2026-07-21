@@ -69,15 +69,25 @@ interface Ctx {
    * rejects for a handler fault (a throwing handler is a 500 response), but the host proxy itself
    * can reject (no api runtime, worker timeout), so every call below is still guarded.
    *
-   * NOT WIRED TODAY — see the report accompanying this node. `createCodeNodeCtxFactory`
-   * (`libs/cli/src/server/tasklist-runner.ts`) hands a code node only `db`, `delegate`,
-   * `callConnection` and the `authoring` writers, and `ProjectAuthoringGlobals`
-   * (`libs/cli/src/app/authoring/globals.ts`) has no api-invoking member — `buildProjectApp` is its
-   * closest sibling and the exact precedent for adding one. Until it is threaded, this node
-   * reports `unavailable: true` LOUDLY rather than returning an empty finding list, because an
-   * empty finding list is precisely what the pipeline reads as "clean".
+   * Wired via `ProjectAuthoringGlobals.callProjectApi` (`libs/cli/src/app/authoring/globals.ts`),
+   * implemented in `session-manager.ts` (resolves the project's `ApiRuntime` and calls `callByName`)
+   * and spread onto the code-node ctx as `authoring` by `createCodeNodeCtxFactory`
+   * (`libs/cli/src/server/tasklist-runner.ts`). It is ABSENT only for a project with no `api/`
+   * runtime; this node then reports `unavailable: true` LOUDLY rather than returning an empty finding
+   * list, because an empty finding list is precisely what the pipeline reads as "clean".
    */
   callProjectApi?: (name: string, input?: unknown) => Promise<ApiResponse>;
+  /**
+   * The project's async data API — the SAME `db` the handlers see, injected onto the code-node ctx
+   * (`tasklist-runner.ts#createCodeNodeCtxFactory` spreads `deps.getDb().async`). Used ONLY to count
+   * rows, so the dead-list probe can tell "this list is empty because the source has nothing" (fine)
+   * from "this list is empty while its backing table holds rows" (a wrong/empty-table read). Every
+   * method is an async RPC stub — it MUST be awaited. Absent for a project with no tables.
+   */
+  db?: {
+    tables: () => Promise<string[]>;
+    query: (table: string, opts?: unknown) => Promise<unknown[]>;
+  };
 }
 
 interface Finding {
@@ -119,6 +129,17 @@ interface EndpointRef {
   method: string;
   /** Declared `export interface Input` fields as `name -> declared type text`. */
   input: Record<string, string>;
+  /** Table names the handler reads via `ctx.db.query('<table>')` — the dead-list probe's backing set. */
+  queries: string[];
+}
+
+/** Table names a handler passes to `db.query('<table>')` — a literal first argument only (a computed
+ *  name is not a wrong-table smell we can prove). Powers the dead-list probe. */
+function parseQueriedTables(src: string): string[] {
+  const out = new Set<string>();
+  const re = /\bdb\s*\.\s*query\s*\(\s*['"`]([A-Za-z0-9_]+)['"`]/g;
+  for (let m = re.exec(src); m; m = re.exec(src)) out.add(m[1] as string);
+  return [...out];
 }
 
 /** Fields of `export interface Input { … }`, as `name -> type text`. Optional `?` is stripped. */
@@ -147,7 +168,7 @@ async function realEndpoints(ctx: Ctx): Promise<EndpointRef[]> {
       if (p) params.push(p[1] as string);
     }
     const method = (segs[segs.length - 1] as string).replace(/\.tsx?$/, '').toUpperCase();
-    found.push({ path, name: m[1] as string, params, method, input: parseInputFields(src) });
+    found.push({ path, name: m[1] as string, params, method, input: parseInputFields(src), queries: parseQueriedTables(src) });
   }
   return found;
 }
@@ -251,6 +272,26 @@ export async function run(ctx: Ctx, _inputs: Record<string, unknown>): Promise<R
   }
   const call = ctx.callProjectApi;
 
+  // Row counts, memoised, for the dead-list probe. `db` is absent for a table-less project — the
+  // probe then simply never fires (it can prove nothing without counts).
+  const rowCountCache = new Map<string, number>();
+  const rowCount = async (table: string): Promise<number | null> => {
+    if (!ctx.db) return null;
+    if (rowCountCache.has(table)) return rowCountCache.get(table) as number;
+    try {
+      const rows = await ctx.db.query(table);
+      const n = Array.isArray(rows) ? rows.length : 0;
+      rowCountCache.set(table, n);
+      return n;
+    } catch {
+      return null; // an unqueryable table proves nothing about the endpoint
+    }
+  };
+  /** A plain list is a GET with no route params and no declared Input — nothing can legitimately
+   *  narrow its result to empty, so 0 rows over a populated backing table is a wrong/empty-table read. */
+  const isPlainList = (ep: EndpointRef): boolean =>
+    ep.method === 'GET' && ep.params.length === 0 && Object.keys(ep.input).length === 0;
+
   const byFile: Record<string, Finding[]> = {};
   const nameOf: Record<string, string> = {};
   const add = (file: string, f: Finding): void => {
@@ -317,6 +358,28 @@ export async function run(ctx: Ctx, _inputs: Record<string, unknown>): Promise<R
               `array (an aggregate is the ONE element: \`return { items: [summary] }\`). Pages read ` +
               `\`data.items\`, so a non-array \`items\` silently gives the page nothing.`,
           });
+        }
+        // DEAD-LIST probe: a plain list that answers 0 rows while EVERY table it queries is populated
+        // is reading the wrong (or an empty) table — a valid-envelope, valid-bundle, 200 response that
+        // renders an empty page over a full db. Only fires when the emptiness cannot be legitimate:
+        // no route params, no input filter, and the backing tables provably hold rows. An aggregate
+        // (itemCount === 1) is never flagged here — a zero total is a domain/data concern the
+        // contract's column unions and the source-fidelity checks own, not a wrong-table smell.
+        else if (isPlainList(ep) && itemCount(res.body) === 0 && ep.queries.length > 0) {
+          const counts = await Promise.all(ep.queries.map(async (t) => ({ t, n: await rowCount(t) })));
+          const known = counts.filter((c) => c.n !== null) as Array<{ t: string; n: number }>;
+          if (known.length === ep.queries.length && known.every((c) => c.n > 0)) {
+            add(ep.path, {
+              phase: 'smoke',
+              probe: probe.label,
+              message:
+                `answered 200 with ZERO rows, but the table(s) it queries hold data ` +
+                `(${known.map((c) => `${c.t}=${c.n}`).join(', ')}). A no-filter list over a populated ` +
+                `table returning nothing means the handler reads the wrong table, an unpopulated column, ` +
+                `or filters on a value the rows never use — the page will render empty over a full db. ` +
+                `Query the table that actually holds these rows and return them.`,
+            });
+          }
         }
       }
 

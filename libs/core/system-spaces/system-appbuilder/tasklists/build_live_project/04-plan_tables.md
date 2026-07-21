@@ -37,7 +37,19 @@ type. A column that may be absent or empty sets `required: false` (or simply omi
 the default), and the value is just missing/null at runtime; a column that must always be present on
 insert sets `required: true`. Nullability is a FLAG (`required`), never encoded in `type`. Every column
 also needs a non-empty `description` — the write-time validator rejects a column with no description as
-loudly as it rejects a bad `type`. Keys in each row object MUST match the column names, and exactly one
+loudly as it rejects a bad `type`.
+
+**Closed domains — set `enum` on a `string` column whose values are a small, FIXED set the source
+makes explicit** (a `status` of `['paid', 'owed', 'unconfirmed']`, a `currency`, a `category`). List
+EXACTLY the values the source states, spelled the way you will also seed them in `rows`, and nothing
+more. `emit_types` renders an `enum` column as a string-literal UNION, so an endpoint that later
+compares the column against a value the domain never had — `r.status === 'still-owed'` when the domain
+is `owed` — is a COMPILE error instead of a silently-empty result (the live bug where the owed total
+came back $0 because the filter and the data disagreed on one word). This makes the plan the single
+vocabulary both the seeded rows and every handler share. Declare `enum` ONLY when the set is genuinely
+closed and evident: an open-ended text column (a name, a note, a free-form location) has NO `enum` and
+stays plain `string` — a partial or guessed domain would wrongly reject a valid value the data uses.
+Make sure your own `rows` only ever use values inside a column's declared `enum`. Keys in each row object MUST match the column names, and exactly one
 column is the uuid primary key.
 
 The types are binding, not decoration: a host-run `emit_types` writes a row interface per table into

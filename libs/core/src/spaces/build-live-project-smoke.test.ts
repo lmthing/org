@@ -50,7 +50,12 @@ type Handlers = Record<string, (input: Record<string, unknown>) => ApiResponse>;
 
 /** A project as a flat `path -> contents` map plus a scripted api runtime. `listProjectDir` returns
  *  BARE entry names for ONE directory level, exactly like the real authoring global. */
-function ctxFor(files: Record<string, string>, handlers: Handlers, calls?: Array<[string, unknown]>) {
+function ctxFor(
+  files: Record<string, string>,
+  handlers: Handlers,
+  calls?: Array<[string, unknown]>,
+  tableRows?: Record<string, unknown[]>,
+) {
   const paths = Object.keys(files);
   return {
     listProjectDir: (dir: string) => {
@@ -68,6 +73,16 @@ function ctxFor(files: Record<string, string>, handlers: Handlers, calls?: Array
       if (!h) return { status: 404, body: { error: `no endpoint named "${name}"` } };
       return h((input ?? {}) as Record<string, unknown>);
     },
+    // `db` is present only when the test supplies table data — the dead-list probe needs row counts,
+    // and its ABSENCE (a table-less project) must simply make the probe never fire.
+    ...(tableRows
+      ? {
+          db: {
+            tables: async () => Object.keys(tableRows),
+            query: async (table: string) => tableRows[table] ?? [],
+          },
+        }
+      : {}),
   };
 }
 
@@ -274,6 +289,37 @@ describe('build_live_project — the endpoint smoke gate (13-smoke_endpoints.ts)
     expect(r.ok).toBe(false);
     expect(Array.isArray(r.offending)).toBe(true);
     expect(messagesFor(r, 'api/costs-list/GET.ts')).toContain('worker timed out');
+  });
+
+  it('DEAD-LIST: flags a no-filter list that answers 0 rows while its backing table is populated', async () => {
+    // The run-32 blind spot generalised: a valid 200 envelope over a full db that renders an empty
+    // page. `costs-list` queries `costs`, has no params/input, yet returns [] — while `costs` holds 2.
+    const r = await run(
+      ctxFor({ 'api/costs-list/GET.ts': LIST_ENDPOINT }, { 'costs-list': () => ok([]) }, undefined, {
+        costs: [{ id: 'a' }, { id: 'b' }],
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    const msg = messagesFor(r, 'api/costs-list/GET.ts');
+    expect(msg).toContain('ZERO rows');
+    expect(msg).toContain('costs=2'); // names the populated table it should have read
+  });
+
+  it('DEAD-LIST: does NOT flag an empty list when its backing table is genuinely empty', async () => {
+    // A false positive would teach the fixer to "repair" a correct list over a table with no rows.
+    const r = await run(
+      ctxFor({ 'api/costs-list/GET.ts': LIST_ENDPOINT }, { 'costs-list': () => ok([]) }, undefined, { costs: [] }),
+      {},
+    );
+    expect(r.offending).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
+  it('DEAD-LIST: never fires without db — the probe can prove nothing about row counts', async () => {
+    const r = await run(ctxFor({ 'api/costs-list/GET.ts': LIST_ENDPOINT }, { 'costs-list': () => ok([]) }), {});
+    expect(r.offending).toEqual([]);
+    expect(r.ok).toBe(true);
   });
 
   it('passes cleanly when the project defines no endpoints at all', async () => {

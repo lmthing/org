@@ -67,7 +67,10 @@ beforeAll(async () => {
 // ── fixtures ────────────────────────────────────────────────────────────────
 
 /** A `plan_tables.tables[]` entry — `{ name, schema: { title, description, columns }, rows }`. */
-const table = (name: string, columns: Record<string, { type: string; primaryKey?: boolean; required?: boolean }>) => ({
+const table = (
+  name: string,
+  columns: Record<string, { type: string; primaryKey?: boolean; required?: boolean; enum?: string[] }>,
+) => ({
   name,
   schema: {
     title: name,
@@ -88,6 +91,7 @@ const TRIPS = table('trips', {
 const COSTS = table('cost_lines', {
   id: { type: 'string', primaryKey: true },
   amount_usd: { type: 'number' },
+  status: { type: 'string', enum: ['paid', 'owed', 'unconfirmed'] },
   meta: { type: 'json' },
 });
 
@@ -210,6 +214,34 @@ describe('build_live_project — emit_types (09-emit_types.ts)', () => {
     // `export const name` — hyphens intact, never re-derived or re-cased.
     expect(union![1]!.match(/'[^']+'/g)).toEqual(["'cost-lines'", "'trips-detail'"]);
     expect(r.endpointNames).toEqual(['cost-lines', 'trips-detail']);
+  });
+
+  it('renders a CLOSED enum column as a string-literal union (RC-2), leaving open columns plain', async () => {
+    const { ctx } = writerCtx();
+    const r = await emit(ctx, CONTRACT);
+    // `status` declares a domain → a union: a handler comparing it against a value the domain never
+    // had (`=== 'still-owed'`) is then a no-overlap compile error, the live owed-balance-$0 defect.
+    expect(r.dts).toContain("  status?: 'paid' | 'owed' | 'unconfirmed';");
+    // A column with no enum is unconstrained — the domain is strictly opt-in, never forced.
+    expect(r.dts).toContain('  amount_usd?: number;');
+  });
+
+  it('emits the server surface (RC-1): a table-keyed ctx.db, an ApiCtx with NO params, an ApiHandler', async () => {
+    const { ctx } = writerCtx();
+    const r = await emit(ctx, CONTRACT);
+    // TableRows maps each real table name to its row interface, so `ctx.db.query('cost_lines')`
+    // resolves to `CostLinesRow[]` and a raw SQL string / unknown table name is a compile error.
+    expect(r.dts).toContain('interface TableRows {');
+    expect(r.dts).toContain('  cost_lines: CostLinesRow;');
+    expect(r.dts).toContain('  trips: TripsRow;');
+    expect(r.dts).toContain('query<K extends keyof TableRows>(table: K, opts?: AppQueryOpts): Promise<TableRows[K][]>;');
+    // The handler ctx is `{ db, apiCall, spawn }` — mirroring `worker.ts#WorkerCtx`. There is NO
+    // `params`: the `[id]` value arrives on the handler's FIRST argument, so `ctx.params` must error.
+    expect(r.dts).toContain('interface ApiCtx {');
+    expect(r.dts).toMatch(/interface ApiCtx \{[\s\S]*?\bdb: AppDb;[\s\S]*?\}/);
+    expect(r.dts).not.toMatch(/interface ApiCtx \{[\s\S]*?\bparams\b[\s\S]*?\}/);
+    // The exact signature every handler is `= handler` against: `(input, ctx: ApiCtx) => …`.
+    expect(r.dts).toContain('type ApiHandler<Input = Record<string, unknown>, Output = { items: unknown[] }>');
   });
 
   it('degrades to unknown for a field type it cannot verify, and never pastes plan prose into the file', async () => {

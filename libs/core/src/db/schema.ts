@@ -50,6 +50,16 @@ export interface ColumnSchema {
   required?: boolean;
   /** Whether values in this column must be unique across rows. */
   unique?: boolean;
+  /**
+   * A CLOSED value domain for a `string` column — the exhaustive set of values this column may
+   * hold (e.g. a `status` of `['paid', 'owed', 'unconfirmed']`). Purely advisory to storage, but
+   * the appbuilder's `emit_types` renders it as a string-literal UNION on the row interface, so a
+   * handler that compares the column against a value the domain does not contain
+   * (`r.status === 'still-owed'` when the domain is `owed`) is a compile error. Declare it ONLY
+   * when the full set is evident from the source; an open-ended text column omits it and stays
+   * `string`.
+   */
+  enum?: string[];
   /** A literal default value used when none is supplied on insert. */
   default?: unknown;
   /** Auto-generate the value on insert (`uuid` or `now`). */

@@ -98,7 +98,10 @@ interface ContractTable {
   schema?: {
     title?: string;
     description?: string;
-    columns?: Record<string, { type?: string; description?: string; primaryKey?: boolean; required?: boolean }>;
+    columns?: Record<
+      string,
+      { type?: string; description?: string; primaryKey?: boolean; required?: boolean; enum?: unknown }
+    >;
     relations?: Record<string, unknown>;
   };
 }
@@ -155,6 +158,21 @@ const PLAN_TS: Record<string, string> = {
   float: 'number',
   bool: 'boolean',
 };
+
+/** A column's TS type: a string-literal UNION when it declares a CLOSED `enum` domain (only
+ *  meaningful for a `string` column), otherwise the base-kind mapping. This is the RC-2 mechanism —
+ *  a domain column emitted as `'paid' | 'owed' | 'unconfirmed'` makes a handler comparing it against
+ *  a value the domain never had (`r.status === 'still-owed'`) a compile error, the exact live defect
+ *  where `costs-summary` filtered `'still-owed'` while the table stored `'owed'` and every "owed"
+ *  total came back $0. An enum with a non-string member, or on a non-string column, is IGNORED —
+ *  the domain is strictly opt-in and prose must never widen a mistyped plan into a garbage union. */
+function columnTsType(spec: { type?: string; enum?: unknown } | undefined): string {
+  const base = COLUMN_TS[String(spec?.type)] ?? 'unknown';
+  if (base !== 'string') return base;
+  const values = Array.isArray(spec?.enum) ? (spec as { enum: unknown[] }).enum : [];
+  const literals = [...new Set(values.filter((v): v is string => typeof v === 'string' && v !== ''))];
+  return literals.length > 0 ? literals.map((v) => quote(v)).join(' | ') : base;
+}
 
 /** Map one plan-declared type string to a safe TS type (`string[]`, `number | null`, …). */
 function tsTypeOf(raw: unknown): string {
@@ -248,6 +266,7 @@ function doc(text: unknown): string {
 const MARK = {
   rows: '// ─────────── rows (database/*.json) ───────────',
   endpoints: '// ─────────── endpoints (api/**) ───────────',
+  server: '// ─────────── server (api/** handler surface: ctx.db, ApiCtx, ApiHandler) ───────────',
   components: '// ─────────── components ───────────',
 };
 
@@ -270,15 +289,21 @@ const HEADER = [
   '',
 ].join('\n');
 
-function renderRows(tables: ContractTable[]): string {
+/** The row section text PLUS the `table name → its emitted interface name` map — the latter is
+ *  what `renderServer` keys `TableRows`/`AppDb` on, so `ctx.db.query('costs')` resolves to the very
+ *  interface rendered here. */
+function renderRows(tables: ContractTable[]): { text: string; rowTypeByTable: Record<string, string> } {
   const name = uniqueNamer();
   const blocks: string[] = [];
+  const rowTypeByTable: Record<string, string> = {};
   for (const table of [...tables].sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
     const columns = table.schema?.columns ?? {};
     const lines: string[] = [];
     const description = doc(table.schema?.description ?? table.schema?.title ?? `Row of ${table.name}`);
+    const rowType = name(`${pascal(table.name)}Row`);
+    rowTypeByTable[String(table.name)] = rowType;
     lines.push(`/** ${description} (table \`${table.name}\`) */`);
-    lines.push(`interface ${name(`${pascal(table.name)}Row`)} {`);
+    lines.push(`interface ${rowType} {`);
     const entries = Object.entries(columns);
     if (entries.length === 0) {
       lines.push('  [column: string]: unknown;');
@@ -289,12 +314,88 @@ function renderRows(tables: ContractTable[]): string {
       const optional = spec?.primaryKey || spec?.required ? '' : '?';
       const description2 = doc(spec?.description);
       if (description2) lines.push(`  /** ${description2} */`);
-      lines.push(`  ${propKey(column)}${optional}: ${COLUMN_TS[String(spec?.type)] ?? 'unknown'};`);
+      lines.push(`  ${propKey(column)}${optional}: ${columnTsType(spec)};`);
     }
     lines.push('}');
     blocks.push(lines.join('\n'));
   }
-  return blocks.length > 0 ? blocks.join('\n\n') : '// (no tables in the contract)';
+  return {
+    text: blocks.length > 0 ? blocks.join('\n\n') : '// (no tables in the contract)',
+    rowTypeByTable,
+  };
+}
+
+/**
+ * The SERVER section — the typed surface every `api/**` handler authors against, RC-1's core. Its
+ * shapes mirror the REAL runtime exactly (`worker.ts#WorkerCtx` = `{ db, apiCall, spawn }` with NO
+ * `params`; `AsyncDbApi`/`QueryOpts`/`UpdateOpts`/`RemoveOpts` in `libs/core/src/db/types.ts`) so a
+ * handler that satisfies `ApiHandler` cannot fail at runtime for a shape reason.
+ *
+ * Three live defects this kills, none catchable before:
+ *  - `visa-insurance` shipped `handler(ctx)` — ONE arg — so `ctx` was really the INPUT and
+ *    `ctx.db` was `undefined`: a 500 on the first call. With `ApiHandler` a one-arg handler, or one
+ *    typing `ctx` as anything but `ApiCtx`, no longer compiles.
+ *  - `itinerary/[id]` read `ctx.params.id`; there is no `ctx.params` — the `[id]` value arrives on
+ *    the handler's FIRST argument. `ApiCtx` has no `params`, so `ctx.params` is a compile error.
+ *  - the same handler ran `ctx.db.query('SELECT * FROM …')`; `db.query` takes a TABLE NAME, and
+ *    `keyof TableRows` rejects an arbitrary SQL string.
+ *
+ * `TableRows` is keyed on the app's real tables; when there are none it degrades to an index
+ * signature so `keyof` stays `string` and a table-less app's handlers are unconstrained rather than
+ * uncompilable.
+ */
+function renderServer(rowTypeByTable: Record<string, string>): string {
+  const entries = Object.entries(rowTypeByTable);
+  const tableRows =
+    entries.length > 0
+      ? `interface TableRows {\n${entries
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([table, rowType]) => `  ${propKey(table)}: ${rowType};`)
+          .join('\n')}\n}`
+      : `interface TableRows { [table: string]: Record<string, unknown>; }`;
+
+  // Static, parameterised only by `TableRows`. `apiCall`'s name is `EndpointName` (rendered in the
+  // endpoints section) so a handler calling a sibling endpoint is checked against the real set too.
+  const STATIC = `/** \`ctx.db.query\`'s options — mirrors \`QueryOpts\` (libs/core/src/db/types.ts). */
+interface AppQueryOpts {
+  where?: Record<string, unknown>;
+  include?: string[];
+  orderBy?: string | { column: string; dir?: 'asc' | 'desc' } | Record<string, 'asc' | 'desc'>;
+  limit?: number;
+  offset?: number;
+}
+
+/** The typed data API on \`ctx.db\` inside an \`api/**\` handler — the async mirror of \`AsyncDbApi\`,
+ *  keyed by the app's REAL table names. \`ctx.db.query('costs')\` returns \`CostsRow[]\`; a raw SQL
+ *  string or an unknown table name is a compile error. */
+interface AppDb {
+  query<K extends keyof TableRows>(table: K, opts?: AppQueryOpts): Promise<TableRows[K][]>;
+  tables(): Promise<string[]>;
+  insert<K extends keyof TableRows>(table: K, values: Partial<TableRows[K]> | Partial<TableRows[K]>[]): Promise<TableRows[K] | TableRows[K][]>;
+  update<K extends keyof TableRows>(table: K, opts: { where: Partial<TableRows[K]>; set: Partial<TableRows[K]> }): Promise<number>;
+  remove<K extends keyof TableRows>(table: K, opts: { where: Partial<TableRows[K]> }): Promise<number>;
+}
+
+/** The SECOND argument every \`api/**\` handler receives. There is deliberately NO \`params\` — a
+ *  route \`[id]\` value arrives on the FIRST argument (the handler's \`Input\`), assembled from the
+ *  path by the runtime. Reading \`ctx.params\` is therefore a compile error, by design. */
+interface ApiCtx {
+  db: AppDb;
+  apiCall: (name: EndpointName, input?: Record<string, unknown>) => Promise<unknown>;
+  spawn: (ref: string, input?: unknown, opts?: { onError?: (err: unknown) => void | Promise<void> }) => Promise<{ runId: string }>;
+}
+
+/** The exact signature of an \`api/**\` handler's default export. Every handler is
+ *  \`export default async function handler(input: SomeInput, ctx: ApiCtx): Promise<SomeOutput>\`.
+ *  The writer appends \`const _typecheck: ApiHandler<Input, Output> = handler\` at SAVE, so a
+ *  one-arg \`(ctx)\` handler, or one typing \`ctx\` as anything but \`ApiCtx\`, is rejected in the same
+ *  turn it is written. */
+type ApiHandler<Input = Record<string, unknown>, Output = { items: unknown[] }> = (
+  input: Input,
+  ctx: ApiCtx,
+) => Output | Promise<Output>;`;
+
+  return `${tableRows}\n\n${STATIC}`;
 }
 
 function renderEndpoints(endpoints: ContractEndpoint[]): string {
@@ -354,7 +455,7 @@ function renderComponents(components: ContractComponent[]): string {
 /** Assemble the three marked sections into the final file. Pre-rendered section text can be
  *  passed straight through — that is how `11-reconcile_tables` preserves sections it cannot
  *  rebuild from its own inputs. */
-function assembleDts(sections: { rows: string; endpoints: string; components: string }): string {
+function assembleDts(sections: { rows: string; endpoints: string; server: string; components: string }): string {
   return [
     HEADER,
     MARK.rows,
@@ -365,6 +466,10 @@ function assembleDts(sections: { rows: string; endpoints: string; components: st
     '',
     sections.endpoints,
     '',
+    MARK.server,
+    '',
+    sections.server,
+    '',
     MARK.components,
     '',
     sections.components,
@@ -374,9 +479,11 @@ function assembleDts(sections: { rows: string; endpoints: string; components: st
 
 /** The contract → the full `.d.ts` text. Pure: same contract in, same bytes out. */
 export function emitContractDts(contract: Contract): string {
+  const rows = renderRows(contract.tables);
   return assembleDts({
-    rows: renderRows(contract.tables),
+    rows: rows.text,
     endpoints: renderEndpoints(contract.endpoints),
+    server: renderServer(rows.rowTypeByTable),
     components: renderComponents(contract.components),
   });
 }
