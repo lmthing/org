@@ -92,6 +92,45 @@ export class ThingSession {
   }
 
   /**
+   * Wait for a freshly-seeded HEAVY pod to finish booting before the first turn, re-establishing the
+   * session if boot dropped it. A `--resume` seeds a whole built project (tables + spaces + hooks +
+   * cron/event automations); on boot the pod runs db-warm and OVERDUE-CRON agent turns on the single
+   * Node thread, which starves the first `/api/sessions` probe — the session created by `start()` then
+   * appears to "disappear before doing any work (pod restart mid-init?)" and the turn loop throws on
+   * that first 404. Here we (1) wait until the pod answers `GET /api/sessions` at all, then (2) confirm
+   * OUR session is listed, re-establishing it if the boot sequence wiped it, before any step is sent.
+   * Idempotent for a light/quick boot (returns on the first stable poll); only the heavy path waits.
+   */
+  async waitBootReady({ resumeSessionId, timeoutMs = 150_000 } = {}) {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const deadline = Date.now() + timeoutMs;
+    // (1) Wait until the pod is responsive to a plain listing (boot's blocking work has yielded).
+    while (Date.now() < deadline) {
+      try { await this.pod.req('GET', '/api/sessions'); break; } catch { await sleep(2_000); }
+    }
+    // (2) Confirm our session is live; if boot dropped it, re-establish once and re-confirm. Require
+    //     it stably listed across two polls so we don't race a session about to be wiped by late boot.
+    let stable = 0;
+    while (Date.now() < deadline) {
+      let listed = false;
+      try {
+        const { sessions } = await this.pod.req('GET', '/api/sessions');
+        listed = (sessions ?? []).some((s) => s.sessionId === this.sessionId);
+      } catch { /* transient during boot — treat as not-listed and retry */ }
+      if (listed) {
+        if (++stable >= 2) return;
+      } else {
+        stable = 0;
+        // Re-establish; carry resumeSessionId so a LIGHT reconnect (--from 1, needs history) is not
+        // silently downgraded to a fresh session. For the heavy fresh case resumeSessionId is null.
+        await this.start({ ...(resumeSessionId ? { resumeSessionId } : {}), spaceRef: this.spaceRef }).catch(() => {});
+      }
+      await sleep(2_500);
+    }
+    this.log('waitBootReady', 'timed out — proceeding; the turn loop will surface a real failure if any');
+  }
+
+  /**
    * Fast-forward past a RESUMED session's existing trace without attributing it to the next turn.
    *
    * A scenario that runs Act-by-Act (`--acts=`) resumes the same session from a FRESH process, where

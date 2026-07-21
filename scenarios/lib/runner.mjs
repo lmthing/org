@@ -390,6 +390,11 @@ export class ScenarioRunner {
       const resumeSessionId = this.resumeFrom ? latestSessionId(run, activeProjectId) : null;
       thing = new ThingSession(pod, { projectId: activeProjectId, onAsk: this.asks.onAsk, verbose: this.verbose });
       await thing.start(resumeSessionId ? { resumeSessionId } : {});
+      // A resumed pod seeds a whole built project; its boot (db-warm + overdue-cron agent turns on the
+      // single Node thread) can starve the first session probe so the just-created session appears to
+      // "disappear before doing any work". Wait for boot to settle (re-establishing if it dropped the
+      // session) BEFORE the first step, so a heavy --from 3 resume no longer dies at the first turn.
+      if (this.resumeFrom) await thing.waitBootReady({ resumeSessionId });
       if (resumeSessionId) await thing.syncToTail();
 
       for (let n = startIndex; n < Math.min(through, steps.length); n++) {
