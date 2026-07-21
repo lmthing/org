@@ -198,6 +198,85 @@ describe('generateEndpointContracts', () => {
     expect(c.inputTsType).toBe('{ id: string }');
     expect(c.outputTsType).toBe('{ id: string; title: string }');
   });
+
+  // Regression: `types/contract.d.ts` (emitted by the appbuilder's `emit_types` BEFORE any
+  // implementation code — see `system-appbuilder/tasklists/build_live_project/09-emit_types.ts`)
+  // is a GLOBAL AMBIENT script (no `export`) — a handler references its names with NO import
+  // (`export type Output = FlightsOutput;`). Before `buildGeneratorConfig` gave the per-file
+  // `ts-json-schema-generator` program a second root, this threw "Unhandled error while creating
+  // Base Type." for every endpoint referencing the contract, so NO app with a global-contract-typed
+  // endpoint could build (`POST .../app/build` → 400).
+  it('resolves a global-ambient type from types/contract.d.ts (no import) for Output/Input', async () => {
+    const root = await scratch();
+    await mkdir(join(root, 'api', 'flights'), { recursive: true });
+    await mkdir(join(root, 'types'), { recursive: true });
+    await writeFile(
+      join(root, 'types', 'contract.d.ts'),
+      [
+        '// GLOBAL AMBIENT — no export, no import, in scope everywhere.',
+        'interface FlightsItem { id: string; date: string; origin: string; destination: string }',
+        'interface FlightsOutput { items: FlightsItem[] }',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    await writeFile(
+      join(root, 'api', 'flights', 'GET.ts'),
+      [
+        `export const name = 'flights';`,
+        `export interface Input {}`,
+        `export type Output = FlightsOutput;`,
+        `export default async function handler(): Promise<Output> { return { items: [] }; }`,
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const routes = await loadApiRoutes(root);
+    const [c] = await generateEndpointContracts(root, routes.endpoints);
+    expect(c.name).toBe('flights');
+    // `Output = FlightsOutput` is a type ALIAS to a separately-named global interface, which
+    // `ts-json-schema-generator` roots at a `$ref` into `definitions` rather than inlining (a
+    // pre-existing, orthogonal characteristic of `resolveRootSchema` — unrelated to this fix;
+    // ajv resolves a local `$ref`/`definitions` pair natively, same as `makeInputValidator`
+    // already relies on for e.g. `Input = AccommodationsInput`-style aliases). The regression
+    // this test guards is that generation SUCCEEDS AT ALL and reaches the right shape — not the
+    // root schema's exact ref/inline form.
+    expect(c.outputSchema).toMatchObject({
+      $ref: '#/definitions/FlightsOutput',
+      definitions: {
+        FlightsOutput: {
+          type: 'object',
+          properties: { items: { type: 'array', items: { $ref: '#/definitions/FlightsItem' } } },
+        },
+        FlightsItem: {
+          type: 'object',
+          properties: { id: { type: 'string' }, date: { type: 'string' } },
+        },
+      },
+    });
+    // The compact TS-type string (what 4B's `apiCall` overload + `generated.d.ts` actually use)
+    // fully resolves the referenced global type's shape.
+    expect(c.outputTsType).toBe(
+      '{ items: { date: string; destination: string; id: string; origin: string }[] }',
+    );
+  });
+
+  // Endpoints WITHOUT a global-contract dependency must be unaffected by the presence of
+  // `types/contract.d.ts` elsewhere in the project (the fast, single-file `path` glob is used
+  // whenever a handler doesn't need the extra root — see `buildGeneratorConfig`).
+  it('an endpoint using only local types is unaffected by a sibling types/contract.d.ts', async () => {
+    const root = await scratch();
+    await mkdir(join(root, 'api', 'mark-read'), { recursive: true });
+    await mkdir(join(root, 'types'), { recursive: true });
+    await writeFile(join(root, 'types', 'contract.d.ts'), 'interface Unrelated { x: string }\n', 'utf8');
+    await writeFile(join(root, 'api', 'mark-read', 'POST.ts'), MARK_READ_HANDLER, 'utf8');
+
+    const routes = await loadApiRoutes(root);
+    const [c] = await generateEndpointContracts(root, routes.endpoints);
+    expect(c.inputTsType).toBe('{ id: string }');
+    expect(c.outputTsType).toBe('{ ok: boolean }');
+  });
 });
 
 describe('escapeGlobPath', () => {

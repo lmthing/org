@@ -19,8 +19,10 @@
  * generation is called on save/boot, never per request.
  */
 
+import { existsSync } from 'node:fs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import ts from 'typescript';
 import { createGenerator, type Config } from 'ts-json-schema-generator';
 
 import {
@@ -174,25 +176,33 @@ function emptyObjectSchema(): JsonSchema {
  * inlined, any nested `definitions` retained) so it is directly `ajv`-usable, and
  * a compact TS-type string is derived from it for 4B's `apiCall` overload.
  *
+ * When the project carries a `types/contract.d.ts` (the appbuilder's global-ambient
+ * type contract — see {@link buildGeneratorConfig}), every handler file's generator
+ * program includes it as a second root so `export type Output = FlightsOutput` (a
+ * bare global name, no import) resolves. Checked once per call, not once per file.
+ *
  * Endpoints are returned sorted by `name` for cache-friendly determinism.
  */
 export async function generateEndpointContracts(
   projectRoot: string,
   routes: Endpoint[],
 ): Promise<EndpointContract[]> {
-  void projectRoot; // routes already carry absolute handler paths; kept for symmetry
-  const contracts = await Promise.all(routes.map((ep) => buildContract(ep)));
+  const contractDtsPath = join(projectRoot, 'types', 'contract.d.ts');
+  const hasContractDts = existsSync(contractDtsPath);
+  const contracts = await Promise.all(
+    routes.map((ep) => buildContract(ep, hasContractDts ? contractDtsPath : undefined)),
+  );
   return contracts.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function buildContract(ep: Endpoint): Promise<EndpointContract> {
+async function buildContract(ep: Endpoint, contractDtsPath: string | undefined): Promise<EndpointContract> {
   const source = await readFile(ep.file, 'utf8');
   const hasInput = hasExportedType(source, INPUT_TYPE);
   const hasOutput = hasExportedType(source, OUTPUT_TYPE);
 
   // One generator per handler file (heavy) — reused for both Input and Output.
   const generator =
-    hasInput || hasOutput ? createGenerator(generatorConfig(ep.file)) : null;
+    hasInput || hasOutput ? createGenerator(buildGeneratorConfig(ep.file, contractDtsPath)) : null;
 
   const inputRaw = hasInput && generator ? generator.createSchema(INPUT_TYPE) : null;
   const outputRaw = hasOutput && generator ? generator.createSchema(OUTPUT_TYPE) : null;
@@ -226,6 +236,61 @@ async function buildContract(ep: Endpoint): Promise<EndpointContract> {
  */
 export function escapeGlobPath(file: string): string {
   return file.replace(/[[\]{}()*?]/g, '[$&]');
+}
+
+/**
+ * Compiler options for the two-root `ts.Program` {@link buildGeneratorConfig} builds when a
+ * project has `types/contract.d.ts`. Mirrors `ts-json-schema-generator`'s own no-`tsconfig`
+ * default (its `factory/program.js#getTsConfig`) so behavior is unchanged from the plain
+ * `generatorConfig(file)` path for everything the generator itself would have produced.
+ */
+function contractProgramOptions(): ts.CompilerOptions {
+  return {
+    noEmit: true,
+    emitDecoratorMetadata: true,
+    experimentalDecorators: true,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.CommonJS,
+    strictNullChecks: false,
+    skipLibCheck: true,
+    skipDefaultLibCheck: true,
+    esModuleInterop: true,
+  };
+}
+
+/**
+ * Build the `ts-json-schema-generator` {@link Config} for one handler file.
+ *
+ * Plain case (no `types/contract.d.ts`): a single-file `path` glob, as before.
+ *
+ * Contract case: `ts-json-schema-generator` runs the per-file `Config.path` glob through
+ * its OWN `ts.createProgram([file], …)` (`factory/program.js`) — a program of exactly the
+ * one handler file. The appbuilder's `emit_types` (`system-appbuilder/tasklists/
+ * build_live_project/09-emit_types.ts`) writes `types/contract.d.ts` as a GLOBAL AMBIENT
+ * script (no `export`) declaring names like `FlightsOutput`; a handler references it with
+ * NO import (`export type Output = FlightsOutput;`), by design (see that file's doc — an
+ * import forces relative-depth math an agent abandons on the first wrong `../`). A
+ * single-file program never sees that ambient, so the name is unresolved and the generator
+ * throws `"Unhandled error while creating Base Type."` for EVERY endpoint that references
+ * the contract — which, since `emit_types` is what the appbuilder always runs, is every
+ * project it builds. `typecheckProjectApp` (`./typecheck.ts`) already treats
+ * `types/contract.d.ts` as a second program root for exactly this reason; passing our OWN
+ * pre-built two-root `ts.Program` via `Config.tsProgram` (which `createGenerator` prefers
+ * over building one from `path` — `factory/generator.js`: `config.tsProgram ||
+ * createProgram(completedConfig)`) gets the same resolution here. `skipTypeCheck` is kept
+ * `true` for parity with the plain path, though it has no effect once `tsProgram` is
+ * supplied (`Config.skipTypeCheck` is only read by the generator's OWN `createProgram`,
+ * which a caller-supplied `tsProgram` bypasses entirely).
+ */
+function buildGeneratorConfig(file: string, contractDtsPath: string | undefined): Config {
+  if (!contractDtsPath) return generatorConfig(file);
+  const tsProgram = ts.createProgram([file, contractDtsPath], contractProgramOptions());
+  return {
+    tsProgram,
+    skipTypeCheck: true,
+    expose: 'all',
+    additionalProperties: false,
+  };
 }
 
 function generatorConfig(file: string): Config {

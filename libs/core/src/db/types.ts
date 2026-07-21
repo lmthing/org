@@ -143,16 +143,29 @@ export type ApiCallFn = (name: string, input?: unknown) => Promise<unknown>;
  * GROUND TRUTH a build gate reads (never a model self-assessment). `phase` names the
  * check that produced it; `file` is project-relative (`pages/index.tsx`).
  *
- * There are exactly TWO phases, and typecheck SHORT-CIRCUITS: a failing typecheck means the bundle
- * never runs, so a clean `build` phase is not evidence of anything on a failed check
- * (`sdk/org/libs/cli/src/app/build/check.ts#runProjectAppCheck`). A third `'lint'` member used to be
- * declared here and was never emitted by anything — the write-time contract lint is real
- * (`app/authoring/lint.ts`) but it throws a `LintError` at the WRITER, in the authoring turn; it is
- * not a phase of `buildApp()`. Prompts that promised "buildApp runs the lint" were describing a
- * check that would never appear in this list.
+ * There are exactly THREE phases, run cheapest-first, and each SHORT-CIRCUITS the next: a
+ * failing `typecheck` means `contract` never runs, and a failing `contract` means the esbuild
+ * `build` never runs — so a clean later phase is never evidence of anything on a failed check
+ * (`sdk/org/libs/cli/src/app/build/check.ts#runProjectAppCheck`). `contract` is
+ * `generateProjectContracts` (`app/build/contracts.ts`) — the SAME per-endpoint
+ * `ts-json-schema-generator` pass `POST .../app/build` runs — reported as its OWN phase because it
+ * is a real, distinct failure mode from a different program than `typecheck`'s: `typecheck` runs
+ * ONE whole-program `tsc` pass over `pages/`/`components/`/`api/` PLUS `types/contract.d.ts` as a
+ * root, so a project with a well-formed contract typechecks clean even when this phase used to
+ * throw — `ts-json-schema-generator` builds its OWN program per handler FILE (`app/build/
+ * schema.ts#buildGeneratorConfig`) and, until it was also given `contract.d.ts` as a root, could
+ * not resolve a bare global name like `Output = FlightsOutput` even though `tsc` could. Before
+ * this phase existed, a contract-generation throw propagated UNCAUGHT out of `buildApp()` — the
+ * model saw a raw exception instead of a retryable `{ok:false, errors:[...]}`, and
+ * `POST .../app/check` returned a clean `ok:true` for a project that could not actually build
+ * (`POST .../app/build` failed). A third `'lint'` member used to be declared here and was never
+ * emitted by anything — the write-time contract lint is real (`app/authoring/lint.ts`) but it
+ * throws a `LintError` at the WRITER, in the authoring turn; it is not a phase of `buildApp()`.
+ * Prompts that promised "buildApp runs the lint" were describing a check that would never appear
+ * in this list.
  */
 export interface AppCheckError {
-  phase: 'typecheck' | 'build';
+  phase: 'typecheck' | 'contract' | 'build';
   file: string;
   line?: number;
   column?: number;
