@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ReplRpcClient, type ReplClientConfig } from './rpc-client.js';
+import { buildModel, emptyModel, type SessionModel, type WireEvent } from '../store/model.js';
 
 export interface ReplBlock {
   id: string;
@@ -33,8 +34,27 @@ interface ErrorEvent {
   message: string;
 }
 
+// The same `/api/ws?sessionId=` socket that carries display/ask/variables also
+// streams the full execution trace (`trace_snapshot` on connect, then live
+// `trace` events) — the source the full /chat surface builds its node tree
+// from. We accumulate those here so the embedded chat can surface the same
+// delegate/fork/tasklist activity.
+interface TraceSnapshotEvent {
+  type: 'trace_snapshot';
+  events: WireEvent[];
+}
+
+interface TraceEventMsg {
+  type: 'trace';
+  seq: number;
+  event: WireEvent['event'];
+}
+
 export function useReplSession(target: string | ReplClientConfig): {
   blocks: ReplBlock[];
+  /** Live execution-tree model (nodes for forks/delegates/tasklists) rebuilt
+   *  from the session's trace stream. Empty until trace events arrive. */
+  model: SessionModel;
   sendMessage: (content: string) => void;
   submitForm: (id: string, value: unknown) => void;
   cancelAsk: (id: string) => void;
@@ -42,10 +62,14 @@ export function useReplSession(target: string | ReplClientConfig): {
   isDone: boolean;
 } {
   const [blocks, setBlocks] = useState<ReplBlock[]>([]);
+  const [model, setModel] = useState<SessionModel>(emptyModel);
   const [isConnected, setIsConnected] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const clientRef = useRef<ReplRpcClient | null>(null);
   const blockIdCounter = useRef(0);
+  // Wire events keyed by seq (dedupe snapshot vs live overlap); the model is
+  // rebuilt from the seq-ordered values on every batch.
+  const wireBySeq = useRef<Map<number, WireEvent>>(new Map());
 
   const nextId = () => {
     blockIdCounter.current++;
@@ -67,9 +91,29 @@ export function useReplSession(target: string | ReplClientConfig): {
     }
     const client = new ReplRpcClient(target);
     clientRef.current = client;
+    // Fresh session/target — drop any accumulated tree from a prior binding.
+    wireBySeq.current = new Map();
+    setModel(emptyModel());
+
+    const rebuildModel = () => {
+      const ordered = [...wireBySeq.current.values()].sort((a, b) => a.seq - b.seq);
+      setModel(buildModel(ordered));
+    };
 
     client.on('connect', () => setIsConnected(true));
     client.on('disconnect', () => setIsConnected(false));
+
+    client.on('trace_snapshot', (data) => {
+      const event = data as TraceSnapshotEvent;
+      for (const we of event.events ?? []) wireBySeq.current.set(we.seq, we);
+      rebuildModel();
+    });
+
+    client.on('trace', (data) => {
+      const event = data as TraceEventMsg;
+      wireBySeq.current.set(event.seq, { seq: event.seq, event: event.event });
+      rebuildModel();
+    });
 
     client.on('display', (data) => {
       const event = data as DisplayEvent;
@@ -134,5 +178,5 @@ export function useReplSession(target: string | ReplClientConfig): {
     clientRef.current?.cancelAsk(id);
   }, []);
 
-  return { blocks, sendMessage, submitForm, cancelAsk, isConnected, isDone };
+  return { blocks, model, sendMessage, submitForm, cancelAsk, isConnected, isDone };
 }

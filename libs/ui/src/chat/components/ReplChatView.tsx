@@ -3,6 +3,15 @@ import { useReplSession } from '../client/useReplSession.js';
 import { DisplayBlock } from './DisplayBlock.js';
 import { AskBlock } from './AskBlock.js';
 import { VariablesBlock } from './VariablesBlock.js';
+import {
+  selectActiveWork,
+  latestSubtreeStatement,
+  narrationOf,
+  workDepth,
+  KIND_ICON,
+  fmtDuration,
+} from '../app/node-meta.js';
+import type { SessionModel } from '../store/model.js';
 
 export interface ReplChatViewProps {
   /** HTTP/WS origin of the pod (e.g. https://computer.test). */
@@ -48,11 +57,22 @@ export function ReplChatView({
   const [userMsgs, setUserMsgs] = useState<{ id: string; text: string; afterBlock: number }[]>([]);
   const blocksEndRef = useRef<HTMLDivElement | null>(null);
 
-  const { blocks, sendMessage, submitForm, cancelAsk, isConnected, isDone } = useReplSession({
+  const { blocks, model, sendMessage, submitForm, cancelAsk, isConnected, isDone } = useReplSession({
     baseUrl,
     sessionId,
     accessToken,
   });
+
+  const activeWork = selectActiveWork(model);
+
+  // Keep the elapsed timers ticking while work is in flight, even between
+  // trace events (which is what would otherwise re-render this view).
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (activeWork.length === 0) return;
+    const t = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [activeWork.length]);
 
   useEffect(() => {
     blocksEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -133,6 +153,21 @@ export function ReplChatView({
         <div ref={blocksEndRef} />
       </div>
 
+      {activeWork.length > 0 && (
+        <div style={styles.activityBox} data-testid="repl-live-activity" aria-label="sub-agent activity">
+          <div style={styles.activityHeader}>
+            <span style={styles.activityPulse}>●</span>
+            <span>working…</span>
+            <span style={{ opacity: 0.6 }}>{activeWork.length} active</span>
+          </div>
+          <div style={styles.activityList}>
+            {activeWork.map((n) => (
+              <WorkRow key={n.id} node={n} model={model} />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={styles.inputRow}>
         <textarea
           value={inputValue}
@@ -146,6 +181,34 @@ export function ReplChatView({
         <button onClick={handleSend} disabled={!isConnected || !inputValue.trim()} style={styles.sendButton}>
           Send
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** One in-flight sub-agent (delegate/fork/tasklist/task): kind icon, label,
+ *  its current narration, and elapsed time. Mirrors the full chat's WorkBlock
+ *  in a compact, inline-styled row for the embedded surface. */
+function WorkRow({
+  node,
+  model,
+}: {
+  node: ReturnType<typeof selectActiveWork>[number];
+  model: SessionModel;
+}): React.ReactElement {
+  const depth = workDepth(model, node.id);
+  const narration =
+    node.activity?.trim() || narrationOf(latestSubtreeStatement(model, node.id)?.code ?? '');
+  const elapsed = node.startTs ? fmtDuration(Date.now() - node.startTs) : '';
+  return (
+    <div style={{ ...styles.workRow, paddingLeft: 12 + depth * 14 }}>
+      <span style={styles.workIcon}>{KIND_ICON[node.kind] ?? '•'}</span>
+      <div style={styles.workBody}>
+        <div style={styles.workLabelLine}>
+          <span style={styles.workLabel}>{node.label}</span>
+          {elapsed && <span style={styles.workElapsed}>{elapsed}</span>}
+        </div>
+        {narration && <div style={styles.workNarration}>{narration}</div>}
       </div>
     </div>
   );
@@ -204,6 +267,74 @@ const styles = {
     color: 'var(--destructive)',
     fontFamily: 'monospace',
     fontSize: 13,
+  } as React.CSSProperties,
+  activityBox: {
+    margin: '0 12px 8px',
+    borderRadius: 8,
+    border: '1px solid var(--border)',
+    background: 'color-mix(in srgb, var(--muted) 30%, transparent)',
+    flexShrink: 0,
+    overflow: 'hidden',
+  } as React.CSSProperties,
+  activityHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '6px 12px',
+    borderBottom: '1px solid var(--border)',
+    fontSize: 12,
+    color: 'var(--muted-foreground)',
+  } as React.CSSProperties,
+  activityPulse: {
+    color: 'var(--brand-2, var(--primary))',
+  } as React.CSSProperties,
+  activityList: {
+    maxHeight: '40vh',
+    overflowY: 'auto' as const,
+    padding: '4px 0',
+  } as React.CSSProperties,
+  workRow: {
+    display: 'flex',
+    gap: 8,
+    alignItems: 'flex-start',
+    padding: '4px 12px',
+  } as React.CSSProperties,
+  workIcon: {
+    color: 'var(--brand-2, var(--primary))',
+    fontSize: 13,
+    lineHeight: '18px',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  workBody: {
+    minWidth: 0,
+    flex: 1,
+  } as React.CSSProperties,
+  workLabelLine: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 8,
+  } as React.CSSProperties,
+  workLabel: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: 'var(--foreground)',
+    fontFamily: 'monospace',
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  } as React.CSSProperties,
+  workElapsed: {
+    fontSize: 11,
+    color: 'var(--muted-foreground)',
+    marginLeft: 'auto',
+    flexShrink: 0,
+  } as React.CSSProperties,
+  workNarration: {
+    fontSize: 12,
+    color: 'var(--muted-foreground)',
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   } as React.CSSProperties,
   inputRow: {
     display: 'flex',
