@@ -92,8 +92,12 @@ const CACHE_FILE = join('.data', 'pages-cache.json');
  *       (`stripPagesPrefix`): `matchRoutes` falls back to the prefix-stripped route
  *       and `toHref` normalizes it out (previously `<Link to="/pages/park-fees">`
  *       rendered "No page for /pages/park-fees" — live: scenario 06 index page).
+ * `7` = `<Chat>` is self-floating: it now renders its own fixed-position launcher
+ *       button and responsive open/close panel instead of filling its parent's
+ *       box, so an already-built app's hand-rolled `_layout` dock chrome would
+ *       double up with it until rebuilt.
  */
-const BUILDER_VERSION = '6';
+const BUILDER_VERSION = '7';
 
 interface CacheMeta {
   hash: string;

@@ -492,40 +492,30 @@ only to the section you just added has orphaned all the others.
 
 An app is a LIVING surface, not a static dashboard: from inside it the user must be able to ask
 for a new table, a new page, a new section — and get it, without going back to `/chat`. So every
-app you build carries a persistent chat dock, on EVERY page. `@app/runtime` exports `<Chat>`;
+app you build carries a persistent chat widget, on EVERY page. `@app/runtime` exports `<Chat>`;
 `agent="thing"` (a bare slug — NOT `space/agent`) opens a real session with the project's own
 THING, the same agent with the same authoring power, scoped to this project.
+
+`<Chat>` is SELF-FLOATING — it renders its own fixed-position launcher button and, once clicked,
+its own responsive panel (a full-screen sheet on narrow viewports, a corner card on wide ones),
+including the open/close chrome and the header. Do NOT hand-roll a dock `<div>`/toggle button/
+`useState` around it — that duplicates chrome `<Chat>` already owns and produces two overlapping
+launcher buttons. Just drop the bare tag.
 
 Write it ONCE into `pages/_layout` — the persistent chrome the router wraps every page in — so it
 is there on every route by construction (never page-by-page, which forgets a page):
 
 ```typescript
 const l = writeProjectPage('_layout', [
-  "import React, { useState } from 'react';",
   "import { Chat } from '@app/runtime';",
   "export default function Layout({ children }: { children: React.ReactNode }) {",
-  "  const [open, setOpen] = useState(false);",
-  "  return (<>",
-  "    {children}",
-  "    {open ? (",
-  "      <div className=\"fixed bottom-5 right-5 z-40 flex h-[32rem] w-96 flex-col rounded-lg border border-border bg-background shadow-xl\">",
-  "        <div className=\"flex items-center justify-between border-b border-border px-3 py-2\">",
-  "          <span className=\"text-sm font-medium text-foreground\">Assistant</span>",
-  "          <button onClick={() => setOpen(false)} aria-label=\"Close the assistant\" className=\"text-muted-foreground\">×</button>",
-  "        </div>",
-  "        <Chat agent=\"thing\" className=\"flex-1\" />",
-  "      </div>",
-  "    ) : (",
-  "      <button onClick={() => setOpen(true)} aria-label=\"Open the assistant\"",
-  "        className=\"fixed bottom-5 right-5 z-40 rounded-full bg-primary px-4 py-3 text-sm text-primary-foreground shadow-lg\">Ask</button>",
-  "    )}",
-  "  </>);",
+  "  return (<>{children}<Chat agent=\"thing\" title=\"Assistant\" /></>);",
   "}",
 ].join("\n"));
 ```
 
-Never link back to `/chat` instead — a link is not a dock. An app with no `_layout` dock is not
-finished.
+Never link back to `/chat` instead — a link is not a dock. An app with no `_layout` `<Chat>` is
+not finished.
 
 ## Authoring a table (when the automation stores data)
 
