@@ -330,7 +330,11 @@ function spawnServer(run) {
   // Detached → own process group → the whole pnpm→tsx→node tree is one killable unit.
   const child = spawn(
     'pnpm',
-    [...BIN_ARGS, '--cwd', run.dataDir, '--port', String(run.port), '--env-file', ENV_FILE, '--adopt-system-spaces', '--max-sessions', '80'],
+    // --max-sessions caps concurrent agent sessions (forks). 80 overwhelmed the local model provider —
+    // the contract-first build's forEach stages fan out hard, and ~64 concurrent stalled streams wedged
+    // the whole build (idle pod, frozen log). 24 keeps the fan-out within the provider's throughput.
+    // Override with SCENARIO_MAX_SESSIONS to tune.
+    [...BIN_ARGS, '--cwd', run.dataDir, '--port', String(run.port), '--env-file', ENV_FILE, '--adopt-system-spaces', '--max-sessions', String(process.env.SCENARIO_MAX_SESSIONS || '24')],
     {
       cwd: SDK_ORG,
       env: { ...process.env, LM_STORE_APPS_DIR: join(run.dataDir, 'store-apps') },
