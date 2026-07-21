@@ -3,6 +3,7 @@ id: write_tasks
 output:
   ok: boolean
 dependsOn: [design, write_agent, build_field]
+condition: design.reused != true
 role: general
 functions:
   - writeTaskFile

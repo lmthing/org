@@ -154,6 +154,61 @@ describe('shipped system spaces load + validate', () => {
     expect(resolveGoalTask(organize)!.id).toBe('build_live_app');
   });
 
+  it('THING add_area builds the app AND deterministically creates a new-area specialist (07-life-admin#11)', async () => {
+    // 07-life-admin run 26 step-11 (repro new-topic-specialist): a brand-new life area introduced
+    // mid-conversation landed DB rows + a page but NEVER a specialist space — THING's own choice to
+    // evaluate "does this new area deserve a specialist?" was a stochastic in-turn afterthought (an L1
+    // prose fix moved it RED 4/4 → RED 2/4 but never green). The judgment now lives IN a DAG: once
+    // THING routes a new-area add to `add_area`, the specialist decision is a FIXED node — assess
+    // (always runs) decides isNewArea; add_specialist (condition-gated on it) delegates to the
+    // architect; build_app builds the app part; report merges both. Reverting to a bare automator
+    // delegate (no add_area route) or dropping add_specialist turns the repro RED again.
+    const space = await loadSpace(resolve(SYS, 'user-thing'), { requireAgents: false });
+    const add = await loadTasklistFromSpace(space, 'add_area');
+
+    expect(() => validateDag(add), 'add_area DAG').not.toThrow();
+    expect(space.tasklists['add_area']!.input).toEqual({
+      request: 'string', registeredSpaces: 'string', attachmentIds: 'array', specialistFacts: 'string',
+    });
+    expect(Object.keys(add).sort()).toEqual(['add_specialist', 'assess', 'build_app', 'report']);
+
+    // assess is read-only reasoning (role explore, no write cap), always runs, and emits isNewArea +
+    // the grounding needed to build the specialist and the app without re-reading. It applies the same
+    // loadable split heuristic organize_material uses (no inline domain literals).
+    expect(add['assess']!.role).toBe('explore');
+    expect(add['assess']!.capabilities).toBeUndefined();
+    expect(add['assess']!.dependsOn ?? []).toEqual([]);
+    expect(Object.keys(add['assess']!.output)).toEqual(
+      expect.arrayContaining(['topic', 'goal', 'isNewArea', 'groundingFacts', 'appRequest']),
+    );
+    expect(add['assess']!.instruction).toMatch(/loadKnowledge\('organizing', ?'split'\)/);
+
+    // add_specialist is the UNAVOIDABLE structural step — a condition-gated fork that delegates ONLY to
+    // the architect's synthesize_and_run (idempotent, so a same-topic space is reused not duplicated).
+    // Making it a plain instruct sentence THING may skip is exactly the exhausted L1 rung.
+    expect(add['add_specialist']!.dependsOn).toEqual(['assess']);
+    expect(add['add_specialist']!.condition).toMatch(/assess\.isNewArea\s*==\s*true/);
+    expect(add['add_specialist']!.role).toBe('general');
+    expect(add['add_specialist']!.canDelegateTo).toEqual(['system-architect/architect#synthesize_and_run']);
+    expect(add['add_specialist']!.instruction).toContain('synthesize_and_run');
+    expect(add['add_specialist']!.goal).toBeFalsy();
+
+    // build_app builds the app part via the automator (depends on add_specialist so a skipped
+    // conditional dep still satisfies — findReadyTasks treats skipped as done).
+    expect(add['build_app']!.dependsOn).toEqual(['assess', 'add_specialist']);
+    expect(add['build_app']!.canDelegateTo).toEqual(['system-appbuilder/automator#build_live_project']);
+    expect(add['build_app']!.instruction).toContain('build_live_project');
+    expect(add['build_app']!.goal).toBeFalsy();
+
+    // report is the UNCONDITIONAL goal terminal merging both branches (assess always, add_specialist
+    // maybe-skipped, build_app always) — a condition-gated goal that gets skipped throws "produced no
+    // result", so the goal must never be the conditional node.
+    expect(resolveGoalTask(add)!.id).toBe('report');
+    expect(add['report']!.condition).toBeUndefined();
+    expect(add['report']!.dependsOn).toEqual(['assess', 'add_specialist', 'build_app']);
+    expect(add['report']!.role).toBe('explore');
+  });
+
   it('THING resolve_flagged_figure isolates db:write to the confidence-gated fix node', async () => {
     // Step-9 L2 (06-tanzania run 21): THING diagnosed a double-counted figure PERFECTLY, computed the
     // exact correct total, then ended the turn asking "want me to fix it?" — zero db mutations. Two L1

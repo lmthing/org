@@ -4,6 +4,7 @@ output:
   ok: boolean
   agentSlug: string
 dependsOn: [design, build_field, build_function]
+condition: design.reused != true
 role: general
 functions:
   - writeAgentFile

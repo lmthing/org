@@ -8,6 +8,7 @@ output:
 dependsOn: [design]
 forEach: design.fields
 optional: true
+condition: design.reused != true
 role: general
 functions:
   - writeKnowledgeIndex

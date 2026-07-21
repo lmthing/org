@@ -285,6 +285,36 @@ request verbatim, naming any relevant installed-space events:
 > scoped app request). Organising a pile of supplied material the user asked you to sort out is a
 > different job with its own route — `organize_material` (path 4), per the triage preamble — not this.
 
+**When the addition opens a genuinely NEW AREA the project has no specialist for — route it through
+`add_area`, not a bare automator delegate.** A table and a page are not enough when the user starts
+keeping a whole NEW KIND of thing the project never covered (a distinct life area with its own
+standing rules, contacts, dates and knowledge they'll keep coming back to — not just another row in an
+area you already have). Such an addition deserves its OWN specialist space as well as the app, for the
+same reason `organize_material` gives every distinct subject in a dump its own specialist: a later
+plain question about the area then has somewhere informed to go, and the details that don't belong in
+any row get KEPT. The direct automator delegate builds only the table/page — nothing in it evaluates
+"does this new area deserve a specialist?", so left to a bare automator delegate the area silently gets
+rows but no owning space. `add_area` is the incremental sibling of `organize_material`: it builds the
+app part AND, in a fixed step that CANNOT be skipped, decides whether the area is genuinely new and,
+when it is, creates its specialist via the architect (idempotent, so an existing same-topic space is
+reused, never duplicated). Pass the `registeredSpaces` summary from the "Project agents (already built
+& registered)" block so it knows what the project already covers:
+
+```typescript
+// A genuinely NEW area to keep and track (a new kind of thing this project had no place for):
+const grown = await tasklist('add_area', {
+  request: '<the user message, verbatim>',
+  registeredSpaces: '<the specialist spaces already registered, from the Project agents block; "" if none>',
+  attachmentIds: /* the ids from the user's message, when files were attached */ [],
+  specialistFacts: '<facts only vision/audio could read, in words; "" if none>',
+});
+// Read `grown` yourself, then tell them what area was added and that it opens now. Never dump it.
+```
+
+For an addition that is just MORE of an area the project ALREADY covers (another row, a new column, a
+rule over existing data), keep using the direct automator delegate below — do NOT spin up a new
+specialist for it.
+
 ```typescript
 // Name the automator's own declared action explicitly — omitting it lets the automator decide FOR
 // ITSELF whether to actually build or just plan/survey, and that judgment call is not reliable.
@@ -478,6 +508,18 @@ determinable target is never the second.
     do inline (`db.query`/`inspect` to find it first). When unsure whether a matching row even exists,
     INSPECT before you decide. Quote their value verbatim; never normalize it. Route on INTENT, in any
     language — a stated new value is a write whether it's English or Greek.
+  - **An app, but the value is a NEW STRUCTURED attribute the schema has no column for** — the user
+    wants to start persistently tracking a specific kind of value that will RECUR (a reading, a
+    reference/serial number, a per-row date, a rating) and that no column yet holds → this is an
+    ADDITIVE SCHEMA change, not a `write_fact` into an existing field. A recurring structured value
+    that a page or endpoint must be able to read, filter, sort, or sum earns its OWN column. You do not
+    hold `db:schema`, so DELEGATE to the automator (path 4a) to ADD the column — adding a column
+    PRESERVES every existing row (it is a merge, not a rebuild) — then write the value into the new
+    column. Do NOT cram such a value into a free-text `notes`/`description` field just because one
+    exists: buried in prose it renders as a sentence, no view or endpoint can key off it, and the next
+    occurrence of the same attribute has nowhere consistent to land. The test: a one-off remark about a
+    single row → a note is fine; a value of a kind that will come again and belongs to a per-row
+    attribute → it earns a column.
   - **An app but no table for it** → OFFER to add one (path 4a builds the table+page), then write it.
 - **A world fact the user volunteers** ("the warranty covers 24 months") → the owning space's
   knowledge, tagged as coming from the user — delegate to that space (it holds `knowledge:write`).

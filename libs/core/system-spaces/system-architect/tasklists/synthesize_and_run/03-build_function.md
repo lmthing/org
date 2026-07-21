@@ -6,6 +6,7 @@ output:
 dependsOn: [design]
 forEach: design.functions
 optional: true
+condition: design.reused != true
 role: general
 functions:
   - writeFunctionFile

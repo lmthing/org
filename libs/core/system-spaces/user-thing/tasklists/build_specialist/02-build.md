@@ -7,6 +7,7 @@ output:
   query: string
   ok: boolean
   errors: string
+  reused: boolean
 dependsOn: [research]
 goal: true
 role: general
@@ -26,10 +27,11 @@ const t = await delegate('system-architect', 'architect', 'synthesize_and_run', 
 `research: {}` in `context` instead.)
 
 `t` is the architect's envelope `{ ok, degraded, data }`; `t.data` is the build result
-({ spaceKey, agentSlug, actionId, query, ok, errors }). Package it field-for-field — on a
+({ spaceKey, agentSlug, actionId, query, ok, errors, reused }). Package it field-for-field — on a
 missing/failed result, resolve empty coordinates with `ok: false` and the error in `errors`
-(never fabricate coordinates). Emit:
+(never fabricate coordinates). `reused` is true when the architect found an existing same-topic space
+and re-pointed at it instead of minting a second one — pass it through so the caller can say so. Emit:
 
-const built = (t && t.data) ? t.data : { spaceKey: "", agentSlug: "", actionId: "", query: "", ok: false, errors: "the architect returned no result" };
+const built = (t && t.data) ? t.data : { spaceKey: "", agentSlug: "", actionId: "", query: "", ok: false, errors: "the architect returned no result", reused: false };
 
-currentTask.resolve({ spaceKey: String(built.spaceKey || ""), agentSlug: String(built.agentSlug || ""), actionId: String(built.actionId || ""), query: String(built.query || request), ok: !!(t && t.ok === true && built.ok === true), errors: String(built.errors || "") });
+currentTask.resolve({ spaceKey: String(built.spaceKey || ""), agentSlug: String(built.agentSlug || ""), actionId: String(built.actionId || ""), query: String(built.query || request), ok: !!(t && t.ok === true && built.ok === true), errors: String(built.errors || ""), reused: built.reused === true });

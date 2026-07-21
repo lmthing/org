@@ -68,8 +68,8 @@ describe('build_specialist mock e2e: degraded research → build still runs', ()
         }
         // Mirrors 02-build.md's packaging + resolve statements verbatim.
         return [
-          'const built = (t && t.data) ? t.data : { spaceKey: "", agentSlug: "", actionId: "", query: "", ok: false, errors: "the architect returned no result" };',
-          'currentTask.resolve({ spaceKey: String(built.spaceKey || ""), agentSlug: String(built.agentSlug || ""), actionId: String(built.actionId || ""), query: String(built.query || request), ok: !!(t && t.ok === true && built.ok === true), errors: String(built.errors || "") });',
+          'const built = (t && t.data) ? t.data : { spaceKey: "", agentSlug: "", actionId: "", query: "", ok: false, errors: "the architect returned no result", reused: false };',
+          'currentTask.resolve({ spaceKey: String(built.spaceKey || ""), agentSlug: String(built.agentSlug || ""), actionId: String(built.actionId || ""), query: String(built.query || request), ok: !!(t && t.ok === true && built.ok === true), errors: String(built.errors || ""), reused: built.reused === true });',
         ].join('\n');
       }
 
@@ -95,7 +95,7 @@ describe('build_specialist mock e2e: degraded research → build still runs', ()
           return {
             ok: true,
             degraded: false,
-            data: { spaceKey: 'user/dog-expert', agentSlug: 'dog-expert', actionId: 'answer', query: 'a dog breed helper', ok: true, errors: '' },
+            data: { spaceKey: 'user/dog-expert', agentSlug: 'dog-expert', actionId: 'answer', query: 'a dog breed helper', ok: true, errors: '', reused: false },
           };
         }
         throw new Error(`unexpected delegate target in mock: ${pkg}/${agent}#${action}`);
@@ -130,7 +130,7 @@ describe('build_specialist mock e2e: degraded research → build still runs', ()
     // and — the whole point of Phase 3's envelope redesign — no alarming
     // "(unavailable …)" placeholder text anywhere in the data plane.
     const data = env.data as Record<string, unknown>;
-    expect(Object.keys(data).sort()).toEqual(['actionId', 'agentSlug', 'errors', 'ok', 'query', 'spaceKey']);
+    expect(Object.keys(data).sort()).toEqual(['actionId', 'agentSlug', 'errors', 'ok', 'query', 'reused', 'spaceKey']);
     expect(data).toEqual({
       spaceKey: 'user/dog-expert',
       agentSlug: 'dog-expert',
@@ -138,6 +138,7 @@ describe('build_specialist mock e2e: degraded research → build still runs', ()
       query: 'a dog breed helper',
       ok: true,
       errors: '',
+      reused: false,
     });
     for (const v of Object.values(data)) {
       if (typeof v === 'string') expect(v.toLowerCase()).not.toContain('unavailable');
