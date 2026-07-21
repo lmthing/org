@@ -84,7 +84,7 @@ const AMBIENT_FILE_NAME = '__lmthing_app_ambient__.d.ts';
  * Hand-matched against `./runtime/client.ts`, `./runtime/hooks.tsx`,
  * `./runtime/router.tsx`, `./runtime/chat.tsx`.
  */
-const GENERIC_DATA_HOOKS = `  export function useApi<T = unknown>(
+export const GENERIC_DATA_HOOKS = `  export function useApi<T = unknown>(
     name: string,
     input?: Record<string, unknown>,
     opts?: UseApiOptions,
@@ -104,7 +104,7 @@ const GENERIC_DATA_HOOKS = `  export function useApi<T = unknown>(
  * {@link buildClientApiDts}); a project with no endpoints falls back to the generic
  * `name: string` signatures so an app mid-authoring still compiles.
  */
-const buildAmbientDts = (dataHooks: string): string => `
+export const buildAmbientDts = (dataHooks: string): string => `
 declare module 'react/jsx-runtime' {
   export const jsx: any;
   export const jsxs: any;
@@ -135,6 +135,58 @@ declare function clearInterval(handle?: any): void;
  *  author toward an UNBOUNDED external call, which is worse than not allowing it. */
 declare const AbortSignal: { timeout(ms: number): any; abort(reason?: any): any };
 declare class AbortController { signal: any; abort(reason?: any): void; }
+/** The rest of the same "exists at runtime, no sanctioned alternative" family, measured against the
+ *  shipped store apps: an endpoint reads its API keys from \`process.env\` (\`blog/api/newsletters/[id]/
+ *  send/POST.ts\`, \`homes/api/rates/GET.ts\`), builds an external request URL with \`URLSearchParams\`/
+ *  \`URL\` (\`homes/api/geocode/GET.ts\`) and types the \`fetch\` result as \`Response\`; a page offers a
+ *  download by wrapping text in a \`Blob\` (\`trips/pages/trips/[tripId]/timeline.tsx\`, \`blog/pages/
+ *  preferences.tsx\`). Every one is live and correct — leaving them undeclared makes working code a
+ *  permanent \`Cannot find name\`. Typed loosely, like the block above; still NO DOM (\`window\`/
+ *  \`document\` stay undeclared, so the \`typeof window\` browser-guard idiom remains a real error and an
+ *  author is pushed to the typed \`@app/runtime\` surface). */
+declare const process: { env: Record<string, string | undefined>; [k: string]: any };
+declare class URLSearchParams {
+  constructor(init?: any);
+  append(name: string, value: string): void;
+  set(name: string, value: string): void;
+  get(name: string): string | null;
+  getAll(name: string): string[];
+  has(name: string): boolean;
+  delete(name: string): void;
+  forEach(cb: (value: string, key: string) => void): void;
+  toString(): string;
+}
+declare class URL {
+  constructor(url: string, base?: string);
+  href: string;
+  origin: string;
+  protocol: string;
+  host: string;
+  hostname: string;
+  pathname: string;
+  search: string;
+  searchParams: URLSearchParams;
+  toString(): string;
+}
+declare class Blob {
+  constructor(parts?: any[], options?: { type?: string });
+  readonly size: number;
+  readonly type: string;
+  text(): Promise<string>;
+  arrayBuffer(): Promise<any>;
+}
+interface Response {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  headers: any;
+  url: string;
+  json(): Promise<any>;
+  text(): Promise<string>;
+  arrayBuffer(): Promise<any>;
+  blob(): Promise<Blob>;
+}
+declare const Response: { new (body?: any, init?: any): Response; json(data: any, init?: any): Response };
 
 declare namespace JSX {
   interface IntrinsicElements { [elem: string]: any }
@@ -222,6 +274,10 @@ declare module '@app/runtime' {
   export class HttpError extends Error {
     status: number;
     details?: unknown;
+    // Hand-matched to the real signature (\`runtime/client.ts#HttpError\`): a handler throws
+    // \`new HttpError(404, 'not found')\` / \`new HttpError(400, 'bad', details)\`. Without this the
+    // class inherits \`Error\`'s 0-1-arg constructor and every real 2-3-arg throw false-positives.
+    constructor(status: number, message: string, details?: unknown);
   }
 
   export interface UseApiOptions {
@@ -237,7 +293,7 @@ ${dataHooks}
 
   export function useParams(): Record<string, string>;
 
-  export const Link: (props: { to: string; href?: string; children?: any; className?: string; [k: string]: any }) => any;
+  export const Link: (props: { to?: string; href?: string; children?: any; className?: string; [k: string]: any }) => any;
 
   export function navigate(to: string): void;
 
@@ -245,8 +301,10 @@ ${dataHooks}
 }
 `;
 
-/** Compiler options for the project-app typecheck program — see the module doc. */
-function compilerOptions(): ts.CompilerOptions {
+/** Compiler options for the project-app typecheck program — see the module doc. Exported so the
+ *  save-time single-file check (`../authoring/save-typecheck.ts`) shares the exact base (lib version,
+ *  target, strictness) and cannot drift, layering only its own `esModuleInterop` on top. */
+export function compilerOptions(): ts.CompilerOptions {
   return {
     noEmit: true,
     jsx: ts.JsxEmit.ReactJSX,

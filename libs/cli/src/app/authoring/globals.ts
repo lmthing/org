@@ -34,6 +34,7 @@ import {
   lintPageSource,
   topLevelKeys,
 } from './lint.js';
+import { saveTypecheckError } from './save-typecheck.js';
 
 /** Throw a {@link LintError} when a lint check returned a message, so it surfaces to the model as a
  *  retryable error (like a typecheck failure) instead of a `{ ok:false }` a node might ignore. Each
@@ -568,6 +569,7 @@ export function createProjectAuthoringGlobals(opts: {
       if (!rel.endsWith('.tsx')) rel = `${rel}.tsx`;
       assertSourceParses(src, 'tsx');
       throwLint(lintPageSource(src, { projectRoot }));
+      throwLint(saveTypecheckError({ projectRoot, relPath: `pages/${rel}`, src, kind: 'page' }));
     } catch (e) {
       if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
@@ -613,6 +615,7 @@ export function createProjectAuthoringGlobals(opts: {
       if (cols) return { ok: false, error: cols };
       // Loader contract: every endpoint needs a unique `export const name` + a default/handler fn.
       throwLint(lintApiHandler(src, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)) }));
+      throwLint(saveTypecheckError({ projectRoot, relPath: `api/${[...segments, method].join('/')}.ts`, src, kind: 'api endpoint' }));
     } catch (e) {
       if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
@@ -642,6 +645,7 @@ export function createProjectAuthoringGlobals(opts: {
       }
       assertSourceParses(src, 'tsx');
       throwLint(lintComponentSource(src, { projectRoot }));
+      throwLint(saveTypecheckError({ projectRoot, relPath: `components/${name}.tsx`, src, kind: 'component' }));
     } catch (e) {
       if (e instanceof LintError) throw e;
       return { ok: false, error: String(e instanceof Error ? e.message : e) };

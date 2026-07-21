@@ -637,7 +637,10 @@ describe('writeProjectPage / writeProjectComponent save-time checks', () => {
     );
   }
 
-  const page = (body: string) => `export default function Page() {\n  ${body}\n  return <div />;\n}`;
+  // A realistic page: real code always imports the data hooks it uses (a page using `useApi`
+  // without importing it is itself a typecheck error — save-time now enforces that).
+  const page = (body: string) =>
+    `import { useApi, useApiMutation } from '@app/runtime';\nexport default function Page() {\n  ${body}\n  return <div />;\n}`;
 
   it('rejects a page calling an endpoint name nothing exports — as a retryable LintError', () => {
     endpoint(['trips'], 'GET', 'tripsList');
@@ -659,7 +662,7 @@ describe('writeProjectPage / writeProjectComponent save-time checks', () => {
     expect(() => pa.writeProjectPage('trip', page("const { data } = useApi('tripsDetail');"))).toThrow(
       /parameterized and needs "id"/,
     );
-    expect(pa.writeProjectPage('trip', page("const { data } = useApi('tripsDetail', { id });")).ok).toBe(true);
+    expect(pa.writeProjectPage('trip', page("const id = 'abc'; const { data } = useApi('tripsDetail', { id });")).ok).toBe(true);
   });
 
   it('rejects a component that returns a { type, props } display descriptor', () => {
@@ -698,6 +701,122 @@ describe('writeProjectPage / writeProjectComponent save-time checks', () => {
   it('still accepts a page written before any endpoint exists (no api/ dir yet)', () => {
     const pa = make();
     expect(pa.writeProjectPage('shell', page("const { data } = useApi('notYetAuthored');")).ok).toBe(true);
+  });
+});
+
+// ── Save-time PARTIAL TYPECHECK: hook-API misuse caught in the writer, not deferred to appCheck ──
+//
+// The five type faults that shipped a dead app in 06-tanzania run 34 — none of which needs an
+// endpoint body or a sibling component to detect — are rejected at WRITE time so the model fixes
+// them in the same turn. Valid incremental authoring (a not-yet-written sibling component) still
+// saves; an unknown endpoint NAME does not (the pipeline authors endpoints before pages).
+describe('writeProjectPage / writeProjectComponent / writeProjectApi save-time typecheck', () => {
+  let projectRoot: string;
+  beforeEach(() => {
+    projectRoot = mkdtempSync(join(tmpdir(), 'lm-savetc-'));
+  });
+  afterEach(() => {
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+  function make() {
+    return createProjectAuthoringGlobals({ projectRoot });
+  }
+  function endpoint(dirSegs: string[], method: string, name: string) {
+    mkdirSync(join(projectRoot, 'api', ...dirSegs), { recursive: true });
+    writeFileSync(
+      join(projectRoot, 'api', ...dirSegs, `${method}.ts`),
+      `export const name = '${name}';\nexport default () => ({ items: [] });`,
+    );
+  }
+  const page = (body: string) =>
+    `import { useApi, useApiMutation } from '@app/runtime';\nexport default function Page() {\n${body}\n  return <div />;\n}`;
+
+  it('REJECTS `.mutateAsync(...)` on a useApiMutation result (it only has `mutate`)', () => {
+    endpoint(['trips'], 'POST', 'tripsCreate');
+    const pa = make();
+    expect(() =>
+      pa.writeProjectPage('new', page("  const m = useApiMutation('tripsCreate');\n  m.mutateAsync({});")),
+    ).toThrow(LintError);
+    expect(() =>
+      pa.writeProjectPage('new', page("  const m = useApiMutation('tripsCreate');\n  m.mutateAsync({});")),
+    ).toThrow(/mutateAsync/);
+    expect(existsSync(join(projectRoot, 'pages', 'new.tsx'))).toBe(false);
+  });
+
+  it('REJECTS `.isLoading` on a useApiMutation result (a mutation exposes `isPending`)', () => {
+    endpoint(['trips'], 'POST', 'tripsCreate');
+    const pa = make();
+    expect(() =>
+      pa.writeProjectPage('new', page("  const m = useApiMutation('tripsCreate');\n  const busy = m.isLoading;")),
+    ).toThrow(/isLoading/);
+  });
+
+  it('REJECTS `data.items` on an untyped useApi result (data is `unknown` — needs a generic)', () => {
+    endpoint(['trips'], 'GET', 'tripsList');
+    const pa = make();
+    expect(() =>
+      pa.writeProjectPage('list', page("  const { data } = useApi('tripsList');\n  const n = data.items;")),
+    ).toThrow(LintError);
+    expect(() =>
+      pa.writeProjectPage('list', page("  const { data } = useApi('tripsList');\n  const n = data.items;")),
+    ).toThrow(/unknown|data/i);
+  });
+
+  it('REJECTS an api handler using `apiHandler` (an invented wrapper — should be `handler`)', () => {
+    endpoint(['trips'], 'GET', 'tripsList'); // another endpoint present so the project is mid-build
+    const pa = make();
+    expect(() =>
+      pa.writeProjectApi(
+        'itinerary/[id]/GET',
+        "export const name = 'itineraryGet';\nexport default apiHandler(async (req, ctx) => ({ id: req.id }));",
+      ),
+    ).toThrow(/apiHandler/);
+    expect(existsSync(join(projectRoot, 'api', 'itinerary', '[id]', 'GET.ts'))).toBe(false);
+  });
+
+  it('REJECTS a page naming an endpoint that does not exist WHEN the project already has endpoints', () => {
+    endpoint(['trips'], 'GET', 'tripsList');
+    const pa = make();
+    // Narrowed: the only endpoint is `tripsList`, so `costs-summary` is a hard error at save
+    // (the original 06-tanzania dead-endpoint defect). This is caught by both the name lint and
+    // the narrowed typecheck; either way it throws a retryable LintError and nothing lands.
+    expect(() => pa.writeProjectPage('costs', page("  const { data } = useApi('costs-summary');"))).toThrow(
+      LintError,
+    );
+    expect(existsSync(join(projectRoot, 'pages', 'costs.tsx'))).toBe(false);
+  });
+
+  it('ACCEPTS a component importing a not-yet-written sibling component (forEach authoring order)', () => {
+    const pa = make();
+    const src = [
+      "import Missing from '../components/NotWrittenYet';",
+      'export default function Card() {',
+      '  return <div className="p-4"><Missing /></div>;',
+      '}',
+    ].join('\n');
+    expect(pa.writeProjectComponent('Card', src).ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'components', 'Card.tsx'))).toBe(true);
+  });
+
+  it('ACCEPTS correct usage — `.mutate(...)`, a generic `useApi<T>`, and null-guarded `data?.items`', () => {
+    endpoint(['trips'], 'GET', 'tripsList');
+    endpoint(['trips'], 'POST', 'tripsCreate');
+    const pa = make();
+    const src = [
+      "import { useApi, useApiMutation } from '@app/runtime';",
+      'export default function Page() {',
+      "  const { data } = useApi<{ items: { id: string }[] }>('tripsList');",
+      "  const create = useApiMutation('tripsCreate');",
+      '  return (',
+      '    <div className="p-4">',
+      '      <span>{(data?.items ?? []).length}</span>',
+      '      <button onClick={() => create.mutate({})}>Add</button>',
+      '    </div>',
+      '  );',
+      '}',
+    ].join('\n');
+    expect(pa.writeProjectPage('index', src).ok).toBe(true);
+    expect(existsSync(join(projectRoot, 'pages', 'index.tsx'))).toBe(true);
   });
 });
 
