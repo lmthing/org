@@ -41,6 +41,15 @@ write each page (importing the components, reading the endpoints) → write each
 `hooks/<slug>.ts` — a `cron`/`event` hook whose imperative `handler` reads and writes the real tables
 in deterministic Node code, so "a schedule fires code" is delivered with no agent and no LLM.
 
+Beyond SHAPE, one gate proves the app is RIGHT: `plan_acceptance` (a design-pass thinking node) distils
+the user stories and the source FIGURES into a few machine-checkable checks — a row-count floor or an
+aggregate-value floor on a named endpoint, each grounded in something the brief actually states — and
+`check_acceptance` (host-run) CALLS each endpoint against the seeded data and evaluates them, catching a
+handler that answers a valid shape with meaningless numbers (a €0 total over a €2,707 trip). It splits
+its findings by cause: an endpoint reporting the wrong value while its backing table holds the data is a
+CODE fault routed to `fix` like any other; a check that failed because the data itself is short is an
+upstream EXTRACTION gap the fixer cannot touch, so it is reported by `finalize`, never chased in code.
+
 Detailing AND writing pages are both per-page host fan-outs, so a slip on one page is salvaged on its
 own and can never zero the rest. Once every file is written, a HOST-RUN GATE (`verify`) compiles the
 WHOLE app against the real toolchain — the project-app typecheck (a NO-DOM ambient; data only through

@@ -18,7 +18,7 @@
 
 export const node = {
   id: 'verify',
-  dependsOn: ['implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages', 'implement_automations'],
+  dependsOn: ['implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_components', 'implement_pages', 'implement_automations'],
   output: {
     ok: 'boolean',
     built: 'boolean',
@@ -148,6 +148,20 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     add('api', { phase: 'smoke', message: `endpoint smoke probes did not run: ${smoke.reason ?? 'unavailable'}` });
   }
   for (const entry of smoke?.offending ?? []) {
+    for (const e of entry.errors ?? []) add(String(entry.path ?? 'api'), e);
+  }
+
+  // FOLD IN the acceptance gate the same way. `check_acceptance` calls each endpoint against the
+  // seeded data and evaluates the source-grounded checks; its `offending` is ONLY the code faults
+  // (data exists, endpoint reports it wrong) — the extraction gaps it found go to `finalize` as
+  // `dataGaps`, never to `fix`, so this fold is safe to route straight at the per-file fixer.
+  const acceptance = inputs['check_acceptance'] as
+    | { offending?: Array<{ path?: string; errors?: Finding[] }>; unavailable?: boolean; reason?: string }
+    | undefined;
+  if (acceptance?.unavailable) {
+    add('api', { phase: 'acceptance', message: `acceptance checks did not run: ${acceptance.reason ?? 'unavailable'}` });
+  }
+  for (const entry of acceptance?.offending ?? []) {
     for (const e of entry.errors ?? []) add(String(entry.path ?? 'api'), e);
   }
 

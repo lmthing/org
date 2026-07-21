@@ -11,7 +11,7 @@ output:
   routes: array
   missing: array
   errors: array
-dependsOn: [implement_tables, implement_endpoints, smoke_endpoints, implement_components, implement_pages, implement_automations, verify, fix]
+dependsOn: [implement_tables, implement_endpoints, smoke_endpoints, check_acceptance, implement_components, implement_pages, implement_automations, verify, fix]
 goal: true
 role: general
 functions: []
@@ -44,6 +44,14 @@ node, and its findings were driven to zero by the `fix` loop. Do NOT re-implemen
 (in scope by its task id) carries the last pass's `{ ok, built, routes, offending, offendingCount }`,
 and a non-empty `verify.offending` means the loop exhausted its attempts with faults still open — fold
 that into your report rather than declaring success.
+
+`check_acceptance` (in scope by its task id) called each endpoint against the seeded data and evaluated
+the source-grounded checks. Its CODE faults already flowed through `verify.offending` → `fix`; but its
+`dataGaps` are a DIFFERENT class the fixer cannot touch — a check that failed because the backing data
+was short, i.e. the source was under-mined upstream (a table with fewer rows than the brief states, an
+aggregate reading a column the seed never filled). Each `dataGaps` entry is a real shortfall between what
+the source promised and what the app can show, so add it to `missing` (it is exactly the kind of silent
+data-loss that reads as a working-but-empty app). An EMPTY `dataGaps` list is the healthy norm.
 
 Then report HONESTLY, and NEVER declare success on a partial or broken app. Read the pages that ACTUALLY
 landed with `listProjectDir('pages').entries` (ground truth) and compare against what `implement_pages`

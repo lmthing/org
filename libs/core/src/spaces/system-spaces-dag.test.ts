@@ -397,7 +397,7 @@ describe('shipped system spaces load + validate', () => {
     // The four HOST-RUN code nodes. A code node cannot fail to reproduce its own logic, which is
     // the whole reason these are not prose (`gateErrors is not defined` cascades were 35% of the
     // errors across run 32's build steps).
-    for (const id of ['validate_contract', 'emit_types', 'reconcile_tables', 'smoke_endpoints', 'verify']) {
+    for (const id of ['validate_contract', 'emit_types', 'reconcile_tables', 'smoke_endpoints', 'check_acceptance', 'verify']) {
       expect(live[id]!.kind, `${id} must be a code node`).toBe('code');
     }
     // The contract is cross-checked BEFORE any code exists, and a failure resumes the DESIGN
@@ -435,6 +435,14 @@ describe('shipped system spaces load + validate', () => {
     // Nothing else in the pipeline ever RUNS an endpoint; a handler returning structurally-valid
     // zeros passes typecheck, esbuild and every static scan.
     expect(live['smoke_endpoints']!.dependsOn).toEqual(['implement_endpoints']);
+    // ACCEPTANCE: `plan_acceptance` (a thinking node) distils the stories + source figures into
+    // machine-checkable floors; `check_acceptance` (host-run) calls each endpoint against the SEEDED
+    // data and evaluates them — SHAPE is not MEANING. It needs the data landed (implement_tables), not
+    // just the endpoints, and splits CODE faults (routed to fix via verify) from extraction DATA gaps.
+    expect(live['plan_acceptance']!.dependsOn).toEqual(['plan_endpoints', 'user_stories', 'read_sources']);
+    expect(live['plan_acceptance']!.forEach).toBeUndefined();
+    expect(live['check_acceptance']!.kind).toBe('code');
+    expect(live['check_acceptance']!.dependsOn).toEqual(['plan_acceptance', 'implement_endpoints', 'implement_tables']);
     // GATE-AND-RETRY: after every file is written, `verify` — a HOST-RUN code node — compiles the
     // app (buildProjectApp = typecheck → esbuild) AND runs the mechanical scans the compiler cannot
     // (endpoint→table, page→endpoint, param arity, the { type, props } descriptor shape, a surface
@@ -444,13 +452,13 @@ describe('shipped system spaces load + validate', () => {
     // and capped the retry budget at however many copies were written).
     expect(live['verify']!.kind).toBe('code');
     expect(live['verify']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages', 'implement_automations',
+      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_components', 'implement_pages', 'implement_automations',
     ]);
     expect(live['fix']!.forEach).toBe('verify.offending');
     expect(live['fix']!.onFail).toEqual({ goto: 'verify', when: 'verify.ok == false', maxAttempts: 3 });
     // finalize runs after the loop settles and is the sole authoritative build-invoker.
     expect(live['finalize']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'implement_components', 'implement_pages', 'implement_automations', 'verify', 'fix',
+      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_components', 'implement_pages', 'implement_automations', 'verify', 'fix',
     ]);
     // Every implement node is model-driven (a code node would need codeNodeCtxFactory threaded through
     // the delegate path THING uses; a model node needs no host factory and writes via writeProjectTable).

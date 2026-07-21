@@ -44,6 +44,15 @@ EACH error `item.errors` names, grounded in the real artifacts, NOT a guess:
   handler answered 2xx with rows when its `[id]` was missing; it must validate the param and return
   an error instead of silently matching everything, because a plausible 200 carrying the wrong row
   is worse than a failure.
+- A `phase: 'acceptance'` error — the endpoint was CALLED against the seeded data and its numbers were
+  WRONG: it answered a valid shape but the wrong value (a row count below what the source states, or an
+  aggregate reading €0 while the table holds rows). The message tells you the backing table has real
+  data, so this is never a page fix and never a data-seeding fix — the HANDLER reads the wrong table or
+  column, or filters on a value the rows never use (the classic `status === 'still-owed'` when the rows
+  store `owed`, or summing a column the seed left null). Re-read the endpoint's real backing columns in
+  `plan_tables.tables`, and re-point the query/aggregation at the column that actually holds these
+  numbers. (An extraction gap — the table itself being short — never reaches you here; it is reported by
+  `finalize`, not routed to this fixer.)
 - A `phase: 'gate'` error — the file references a TABLE that does not exist in `database/` (the handler
   builds clean but every call 500s at runtime) → decide which side is wrong, grounded in
   `plan_tables.tables` and `listProjectDir('database').entries`: if an EXISTING table already holds this
