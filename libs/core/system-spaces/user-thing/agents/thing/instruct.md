@@ -12,6 +12,7 @@ capabilities:
   - api:call: { allow: ['*'] }
 canDelegateTo:
   - system-research/researcher
+  - system-browser/browser
   - system-architect/architect
   - system-engineer/engineer
   - system-appbuilder/automator
