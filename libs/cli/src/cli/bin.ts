@@ -55,6 +55,7 @@ import { createStream } from '../stream/stream.js';
 import { InkRenderHost } from '../render/ink-renderer.js';
 import { WebRenderHost } from '../rpc/server.js';
 import { startWebServer } from '../web/serve.js';
+import { ensureBrowserBackend } from '../browser/lightpanda.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -309,6 +310,12 @@ async function main(): Promise<void> {
     );
     return;
   }
+
+  // Make the CLI able to browse: ensure a Lightpanda MCP endpoint is available
+  // (connect to LIGHTPANDA_MCP_URL, or spawn `lightpanda serve` when a binary is
+  // present) for the `system-browser` space's functions. Best-effort — a missing
+  // browser never blocks a session; the browser functions surface a setup hint.
+  await ensureBrowserBackend((msg) => process.stderr.write(`${msg}\n`));
 
   // Mock mode: skip resolveModel/createStream entirely so no API key is required.
   const mockPath = args.mock ?? process.env['LM_MOCK'];
