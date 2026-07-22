@@ -44,6 +44,21 @@ Each endpoint is `{ name, route, purpose, tables, fields }`:
   dedicated aggregate endpoint whose `tables` lists EVERY table that total draws from (not one of them),
   so it computes the whole figure in a single query. It is the one number the app shows AND the number
   THING reads back; two endpoints each covering part of the span give two answers that drift.
+- **A field that carries a LIST the page renders as rows/cards, or a structured RECORD the page reads
+  keyed sub-fields off of, MUST be typed STRUCTURALLY — an array/object of a NAMED item shape, NEVER a
+  pre-formatted display `string`.** Declare its item shape inline with an `item` array (each entry a
+  `'subkey: type'`), and mark a LIST with `list: true` and a maybe-absent RECORD with `nullable: true`:
+    - `{ name: 'lineItems', list: true, item: [ 'label: string', 'value: number', 'date: string' ] }`
+    - `{ name: 'latest', nullable: true, item: [ 'label: string', 'date: string' ] }`
+  `emit_types` turns each into a named interface the page MAPS/reads with real field types
+  (`lineItems: LineItemsItem[]`, `latest: LatestItem | null`). The ENDPOINT returns the
+  structured rows/object; the PAGE does the formatting. A plain `'key: string'` field is ONLY for a
+  genuine SCALAR the page prints verbatim (a title, a single status word) — the moment the page would
+  `.map` a field or read `.someKey` off it, that field is a list/record and needs an `item` shape. Typing
+  list data as a pre-formatted `string` (a `join('\n')`) is the defect that ships a page whose every row
+  renders its EMPTY state over a full database: the handler returns display text, the page tries to treat
+  it as data (and often `JSON.parse`s it — which throws on the text and silently falls back to `[]`), and
+  the compiler cannot see the mismatch because both sides just call it `string`.
 
 Read endpoints return `{ items: [...] }` (an aggregate is the single summary at `items[0]`), so plan
 read endpoints the pages consume as `data.items`. Emit one statement:

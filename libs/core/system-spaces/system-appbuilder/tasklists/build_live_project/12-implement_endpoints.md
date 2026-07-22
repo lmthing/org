@@ -154,6 +154,24 @@ export default async function handler(input: Input, ctx: ApiCtx): Promise<Output
 }
 ```
 
+**A LIST or RECORD field returns STRUCTURED data, never a pre-formatted display string.** When the
+contract types a field as `<Name>Item[]` or `<Name>Item | null` (the plan declared it with a nested
+`item` shape), the handler MUST return the ROWS/object — an array of item objects, or the record (or
+`null`) — and let the PAGE do the formatting. Returning `rows.map(...).join('\n')` (one display string)
+is a compile error on the `return` once it is typed `Promise<Output>`, and under any looser type it
+ships a page whose list renders its EMPTY state over a full database:
+
+```typescript
+export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {
+  const rows = await ctx.db.query('<table>');
+  const lineItems = rows                                     // ✅ structured rows — the page maps them
+    .sort((a, b) => (b.date > a.date ? 1 : -1))
+    .slice(0, 3)
+    .map((r) => ({ label: r.label, value: r.value, date: r.date }));
+  return { items: [{ lineItems }] };
+}
+```
+
 ❌ **Never emit any of these** — each one has burned a real build:
 
 ```typescript
@@ -167,6 +185,13 @@ export default async function handler(input: any, ctx: ApiCtx): Promise<any> { /
 return { total_monthly: t };            // ✗ a field the contract Output does not declare (page reads a
                                         //   different name) — a real compile error ONCE the return is
                                         //   `Promise<Output>`; invisible under `Promise<any>`
+return { items: [{ lineItems: rows.map(fmt).join('\n') }] };  // ✗ a LIST field returned as a
+                                        //   pre-formatted display STRING — the contract types
+                                        //   `lineItems` as `LineItemsItem[]`, so this is a compile
+                                        //   error on the return; under a loose type it ships a page
+                                        //   whose list renders EMPTY over real rows (the page maps the
+                                        //   array and the string is not one). Return the ROWS as
+                                        //   objects; the PAGE formats each for display.
 import { db } from '@app/database';     // ✗ no such module — the db is the injected ctx param; writer REJECTS
 const rows = await fetch('/api/costs'); // ✗ fetch EXISTS, but never fetch your OWN api — read ctx.db (an EXTERNAL fetch is fine)
 const id = ctx.params.id;               // ✗ there is NO ctx.params — the [id] value is on INPUT: input.id

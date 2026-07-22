@@ -171,11 +171,32 @@ function tsTypeOf(raw: unknown): string {
   return unique.length > 0 ? unique.join(' | ') : 'unknown';
 }
 
-function parseField(entry: unknown): { key: string; type: string } | null {
-  if (entry && typeof entry === 'object') {
-    const o = entry as { name?: unknown; key?: unknown; type?: unknown };
+/** A parsed `fields`/`props` entry — verbatim twin of `09-emit_types.ts#ParsedField`. */
+interface ParsedField {
+  key: string;
+  type: string;
+  nested?: { item: ParsedField[]; list: boolean; nullable: boolean };
+}
+
+function parseField(entry: unknown): ParsedField | null {
+  if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+    const o = entry as {
+      name?: unknown; key?: unknown; type?: unknown;
+      item?: unknown; fields?: unknown; list?: unknown; array?: unknown; nullable?: unknown;
+    };
     const key = String(o.name ?? o.key ?? '').trim();
-    return key ? { key, type: tsTypeOf(o.type) } : null;
+    if (!key) return null;
+    const rawItem = Array.isArray(o.item) ? o.item : Array.isArray(o.fields) ? o.fields : null;
+    if (rawItem) {
+      const item = rawItem.map(parseField).filter(Boolean) as ParsedField[];
+      if (item.length > 0) {
+        const typeText = String(o.type ?? '');
+        const list = o.list === true || o.array === true || typeText.endsWith('[]');
+        const nullable = o.nullable === true || /\|\s*null\b/.test(typeText);
+        return { key, type: '', nested: { item, list, nullable } };
+      }
+    }
+    return { key, type: tsTypeOf(o.type) };
   }
   const text = String(entry ?? '').trim();
   if (!text) return null;
@@ -344,21 +365,47 @@ type ApiHandler<Input = Record<string, unknown>, Output = { items: unknown[] }> 
   return `${tableRows}\n\n${STATIC}`;
 }
 
+/** Verbatim twin of `09-emit_types.ts#renderShape` — render an object shape to a NAMED interface plus
+ *  the interfaces its nested `item` fields need, so list/record data is structural, never a `string`. */
+function renderShape(
+  topName: string,
+  childPrefix: string,
+  fields: ParsedField[],
+  name: (base: string) => string,
+  placeholder: string,
+): { typeName: string; preBlocks: string[]; block: string } {
+  const preBlocks: string[] = [];
+  const body: string[] = [];
+  for (const field of fields) {
+    if (field.nested) {
+      const prefix = `${childPrefix}${pascal(field.key)}`;
+      const child = renderShape(`${prefix}Item`, prefix, field.nested.item, name, 'field');
+      preBlocks.push(...child.preBlocks, child.block);
+      const suffix = `${field.nested.list ? '[]' : ''}${field.nested.nullable ? ' | null' : ''}`;
+      body.push(`  ${propKey(field.key)}: ${child.typeName}${suffix};`);
+    } else {
+      body.push(`  ${propKey(field.key)}: ${field.type};`);
+    }
+  }
+  if (body.length === 0) body.push(`  [${placeholder}: string]: unknown;`);
+  const typeName = name(topName);
+  return { typeName, preBlocks, block: [`interface ${typeName} {`, ...body, '}'].join('\n') };
+}
+
 function renderEndpoints(endpoints: ContractEndpoint[]): string {
   const name = uniqueNamer();
   const blocks: string[] = [];
   for (const endpoint of endpoints) {
     const base = name(pascal(endpoint.name));
     const params = routeParams(endpoint.route);
-    const fields = (endpoint.fields ?? []).map(parseField).filter(Boolean) as Array<{ key: string; type: string }>;
+    const fields = (endpoint.fields ?? []).map(parseField).filter(Boolean) as ParsedField[];
+    const item = renderShape(`${base}Item`, base, fields, name, 'field');
     const lines: string[] = [];
+    for (const pre of item.preBlocks) lines.push(pre, '');
     const purpose = doc(endpoint.purpose);
     lines.push(`/** \`${endpoint.name}\`${endpoint.route ? ` — ${endpoint.route}` : ''}${purpose ? `: ${purpose}` : ''} */`);
-    lines.push(`interface ${base}Item {`);
-    if (fields.length === 0) lines.push('  [field: string]: unknown;');
-    for (const field of fields) lines.push(`  ${propKey(field.key)}: ${field.type};`);
-    lines.push('}');
-    lines.push(`interface ${base}Output { items: ${base}Item[]; }`);
+    lines.push(item.block);
+    lines.push(`interface ${base}Output { items: ${item.typeName}[]; }`);
     lines.push(
       params.length > 0
         ? `interface ${base}Input {\n${params.map((p) => `  ${propKey(p)}: string;`).join('\n')}\n}`
@@ -383,14 +430,14 @@ function renderComponents(components: ContractComponent[]): string {
   const name = uniqueNamer();
   const blocks: string[] = [];
   for (const component of components) {
-    const props = (component.props ?? []).map(parseField).filter(Boolean) as Array<{ key: string; type: string }>;
+    const props = (component.props ?? []).map(parseField).filter(Boolean) as ParsedField[];
+    const top = `${pascal(component.name)}Props`;
+    const shape = renderShape(top, top, props, name, 'prop');
     const lines: string[] = [];
+    for (const pre of shape.preBlocks) lines.push(pre, '');
     const purpose = doc(component.purpose);
     lines.push(`/** Props of \`<${component.name} />\`${purpose ? ` — ${purpose}` : ''} */`);
-    lines.push(`interface ${name(`${pascal(component.name)}Props`)} {`);
-    if (props.length === 0) lines.push('  [prop: string]: unknown;');
-    for (const prop of props) lines.push(`  ${propKey(prop.key)}: ${prop.type};`);
-    lines.push('}');
+    lines.push(shape.block);
     blocks.push(lines.join('\n'));
   }
   return blocks.length > 0 ? blocks.join('\n\n') : '// (no shared components in the contract)';

@@ -266,6 +266,52 @@ describe('build_live_project — emit_types (09-emit_types.ts)', () => {
     expect(r.dts).not.toContain('a */ terminator');
   });
 
+  it('types a LIST/RECORD field structurally, emitting a NAMED item interface (never a display string)', async () => {
+    // The run-27 defect: a dashboard aggregate typed its LIST fields as `string` and returned
+    // pre-formatted display text (`billLines.join('\n')`), so the page's `parseJSON(...).map(...)`
+    // caught a JSON.parse throw and rendered its empty state over a full db. A field carrying a
+    // rendered list/record MUST be typed as an array/object of a NAMED item shape — declared with a
+    // nested `item` — so the endpoint returns structured rows the page maps with real field types,
+    // and a `string`-returning handler no longer typechecks.
+    const { ctx } = writerCtx();
+    const r = await emit(ctx, {
+      plan_endpoints: {
+        endpoints: [
+          {
+            name: 'dashboard',
+            route: 'dashboard/GET',
+            purpose: 'Home dashboard',
+            tables: ['cost_lines'],
+            fields: [
+              'headline: string', // a genuine scalar label — stays `string`
+              { name: 'lineItems', list: true, item: ['label: string', 'value: number', 'date: string'] },
+              { name: 'latest', nullable: true, item: ['label: string', 'date: string'] },
+            ],
+          },
+        ],
+      },
+    });
+
+    // The nested item shapes become their OWN named interfaces …
+    expect(r.dts).toContain('interface DashboardLineItemsItem {');
+    expect(r.dts).toContain('  value: number;');
+    expect(r.dts).toContain('interface DashboardLatestItem {');
+    expect(r.dts).toContain('  label: string;');
+    // … and the aggregate references them as an ARRAY / a nullable RECORD — never `string`.
+    expect(r.dts).toContain('  lineItems: DashboardLineItemsItem[];');
+    expect(r.dts).toContain('  latest: DashboardLatestItem | null;');
+    expect(r.dts).not.toMatch(/\blineItems: string;/);
+    expect(r.dts).not.toMatch(/\blatest: string;/);
+    // A genuine scalar label is still a plain `string` — the discipline is opt-in per field.
+    expect(r.dts).toContain('  headline: string;');
+
+    // The output must still be a `.d.ts` the compiler parses cleanly (nested interfaces and all).
+    const ts = await import('typescript');
+    const source = ts.createSourceFile('contract.d.ts', r.dts, ts.ScriptTarget.ES2020, true, ts.ScriptKind.TS);
+    const syntax = (source as unknown as { parseDiagnostics: unknown[] }).parseDiagnostics ?? [];
+    expect(syntax).toEqual([]);
+  });
+
   it('emits a file the TypeScript compiler actually parses', async () => {
     // The whole point is that implementation code is checked AGAINST this file. A `.d.ts` with a
     // syntax error would surface as a compiler error in every page that imports it, blamed on the
