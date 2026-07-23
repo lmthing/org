@@ -25,6 +25,11 @@ await build({
   nodePaths: [join(here, '../../libs/ui/node_modules'), join(here, '../../node_modules')],
   loader: { '.css': 'css' },
   define: { 'process.env.NODE_ENV': '"production"', __DEV__: 'false' },
+  // Tamagui (and React RN shims) reference bare `process`/`global` at runtime; shim them for the
+  // browser bundle so the primitives' Tamagui internals load.
+  banner: {
+    js: 'window.process=window.process||{env:{NODE_ENV:"production"},platform:"web"};window.global=window.global||window;',
+  },
   logLevel: 'info',
 })
 

@@ -1,8 +1,12 @@
 # Migrating `chat` + `studio` to Tamagui (universal / RN-compatible) — **without breaking web styles**
 
 > Status: **Phase 0 COMPLETE** (de-HTML of chat + studio + computer, RN-safety lint enforced) +
-> the Phase-1 token pipeline foundation. Phase 1 (Tamagui swap + native) is next — see
-> "Implementation status" and "Fresh-session handoff" below.
+> **Phase-1 foundation COMPLETE** (token pipeline, `createTamagui` config shell, and the L2/L3
+> visual/computed-style harness with passthrough baselines — all node/browser-tested). The
+> primitive **swap itself (Phase 1c) is BLOCKED pending an architecture decision** — the surfaces'
+> layout is 100% Tailwind-className-driven on `Box`, which a Tamagui web swap can't preserve
+> as-is. See "Phase 1c decision" in the handoff and
+> `.issues/tamagui-web-swap-blocked-by-className-layout.md`.
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
 > `claude/tamagui-migration-plan-66u8sw`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
@@ -121,25 +125,45 @@ beyond the pre-existing lucide/tanstack noise) · `@lmthing/web-app` typecheck (
 
 ## Fresh-session handoff — what's next (Phase 1)
 
-Phase 0 is done and enforced; the surfaces now speak only `Prim.*` primitives. Remaining work,
-in order, each still gated by the parity contract:
+Phase 0 is done and enforced; the surfaces now speak only `Prim.*` primitives. Status of the
+Phase-1 work:
 
-1. **Playwright visual harness + `main` L2/L3 baselines (§3.1–3.2).** NOT started — needs a
-   browser (Chromium at `/opt/pw-browsers`; do **not** run `playwright install`) + `vp preview`
-   prod build. This is the browser-level L2 (computed-style) + L3 (screenshot) proof; so far
-   parity is proven at the jsdom byte-level (primitives + the EmptyState golden), which is
-   strictly stronger at the DOM level but does not catch pure paint differences. Add
-   `playwright.config.ts`, the `__visual/` fixtures route, capture goldens from `origin/main`.
-2. **Real `tamagui.config.ts` `createTamagui` shell (§5/§6).** Feed `@lmthing/css/tamagui-tokens`
-   into `createTamagui`; add `@tamagui/vite-plugin` alongside the existing Vite plugins. (Tamagui
-   deps are NOT yet installed.)
-3. **Swap the primitives' internals to Tamagui `styled()` (§4, §7 steps 6–7).** ONLY the ~2 dozen
-   files in `elements/primitives/**` change — the surfaces are already done and must not be
-   re-edited. Apply the block-compat box-model resets (§1 table); each primitive re-proven by its
-   L2/L3 gate. Then Radix→Tamagui in the shared `elements/` overlays (§6), and the native leaf
-   forks (Tree→FlatList, WebFrame/IFrame→react-native-webview, terminal `.native.tsx`).
-4. **Browser-global shims (§7 step 8)** behind a `platform/` module, then **delete superseded CSS**
-   (§7 step 9), then **`apps/mobile`** Expo shell (§6).
+1. **Playwright visual harness + L2/L3 baselines (§3.1–3.2).** ✅ **DONE** — `tests/visual/`
+   (self-contained esbuild harness, not the full app; details in the implementation-status log
+   above). Baselines captured from the passthrough primitives (== `main`).
+2. **`tamagui.config.ts` `createTamagui` shell (§5/§6).** ✅ **DONE** —
+   `libs/ui/src/theme/tamagui.config.ts` + runtime parity test. (`@tamagui/vite-plugin` NOT yet
+   added — see the decision below; it belongs to option B.)
+3. **Swap the primitives' internals to Tamagui `styled()` (§4, §7 steps 6–7).** ⛔ **BLOCKED —
+   decision required.** See "Phase 1c decision" immediately below and
+   `.issues/tamagui-web-swap-blocked-by-className-layout.md`.
+4. **Browser-global shims / delete CSS / `apps/mobile` Expo shell.** Gated on the §1c decision
+   (the native styling story determines the shape of the mobile app).
+
+### Phase 1c decision — the layout primitives can't be swapped to Tamagui on web as-is
+
+**Grounded finding (this checkout).** The de-HTML codemod mapped **everything to `Box`** (`Row`/`Col`
+are used 0 times) and layout is **100% Tailwind-className-driven**: **87** `Box` usages contain
+`flex`, and **61** of those rely on Tailwind's default **flex-direction: row**. A Tamagui
+`styled(View)` base is flex-direction **column**, so swapping `Box` would flip those 61 layouts;
+and a runtime probe showed Tamagui's atomic `display` **overriding** an equal-specificity className
+`display:flex` by source order — so the plan's "className wins during coexistence" (§5) does not
+hold without build-time specificity/order control. On **native**, the surfaces' classNames are inert
+(no Tailwind runtime), and Tamagui primitives don't interpret className — so the current surfaces
+don't render natively via Tamagui primitives alone. This is a structural tension between what Phase 0
+produced (className-driven layout on `Box`) and what the Tamagui swap needs (layout as props).
+
+**Options (pick one before continuing steps 3–4):**
+- **A — NativeWind for layout.** Keep the className surfaces verbatim (web literally unchanged); add
+  NativeWind so the same classes style RN. Use Tamagui only for the universal overlay components if
+  wanted. Best fit for the current surfaces; lowest web risk. *(Recommended.)*
+- **B — Tamagui compiler + surface layout migration.** Add `@tamagui/vite-plugin` and migrate the 87
+  flex `Box`es' layout from className to Tamagui props / `Row`/`Col`. Delivers the plan's Tamagui
+  vision but re-edits surfaces and must be verified against a real app build.
+- **C — Keep web passthrough; defer native.** Ship the done+verified work and pause the swap.
+
+**Safe & done regardless of the choice:** the `createTamagui` shell + its parity test, the
+`tests/visual/` L2/L3 harness + baselines, and the proven passthrough web primitives/surfaces.
 
 **Gotchas for the next session:**
 - libs/ui is NOT in the `pnpm typecheck` gate (it has no `typecheck` script) and carries ~270
