@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/status-card.css'
 import { Card, CardHeader, CardBody } from '../elements/content/card'
 import { Badge } from '../elements/content/badge'
@@ -31,22 +32,22 @@ function StatusCard({ status, tier, uptime }: StatusCardProps) {
         <Heading level={4}>Status</Heading>
       </CardHeader>
       <CardBody>
-        <div className="computer-status-card">
-          <span className={cn(
+        <Prim.Box className="computer-status-card">
+          <Prim.Text className={cn(
             'computer-status-card__indicator',
             `computer-status-card__indicator--${status}`,
           )}>
-            <span className={cn(
+            <Prim.Text className={cn(
               'computer-status-card__dot',
               `computer-status-card__dot--${status}`,
             )} />
             {status}
-          </span>
+          </Prim.Text>
           <Badge variant={tier === 'flyio' ? 'primary' : 'muted'}>
             {tier === 'flyio' ? 'Computer' : 'Free'}
           </Badge>
           <Caption muted>Uptime: {formatUptime(uptime)}</Caption>
-        </div>
+        </Prim.Box>
       </CardBody>
     </Card>
   )

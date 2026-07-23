@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/ide-preview.css'
 import { useState, useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
@@ -27,26 +28,26 @@ function IdePreview({ url }: IdePreviewProps) {
   }
 
   return (
-    <div className="ide-preview">
-      <div className="ide-preview__header">
-        <button
+    <Prim.Box className="ide-preview">
+      <Prim.Box className="ide-preview__header">
+        <Prim.Pressable
           className="ide-preview__refresh"
           title="Refresh"
           onClick={() => setIframeKey((k) => k + 1)}
           disabled={!iframeSrc}
         >
           <RefreshCw size={13} />
-        </button>
-        <input
+        </Prim.Pressable>
+        <Prim.TextField
           className="ide-preview__url"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') navigate() }}
           placeholder="Starting dev server..."
         />
-      </div>
+      </Prim.Box>
       {iframeSrc ? (
-        <iframe
+        <Prim.IFrame
           key={iframeKey}
           src={iframeSrc}
           className="ide-preview__iframe"
@@ -54,9 +55,9 @@ function IdePreview({ url }: IdePreviewProps) {
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
         />
       ) : (
-        <div className="ide-preview__loading">Starting dev server...</div>
+        <Prim.Box className="ide-preview__loading">Starting dev server...</Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }
 

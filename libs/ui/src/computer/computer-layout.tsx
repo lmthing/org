@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/computer-layout.css'
 import { CozyThingText } from '../elements/branding/cozy-text'
 import { Sidebar, SidebarItem } from '../elements/nav/sidebar'
@@ -32,9 +33,9 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
     : 'connected' as const
 
   return (
-    <div className="computer-layout">
+    <Prim.Box className="computer-layout">
       <Sidebar style={{ justifyContent: 'space-between' }}>
-        <div>
+        <Prim.Box>
           {navItems.map((item) => (
             <SidebarItem
               key={item.path}
@@ -45,10 +46,10 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
               {item.label}
             </SidebarItem>
           ))}
-        </div>
-        <div>
+        </Prim.Box>
+        <Prim.Box>
           {otherAppLinks('computer').map((link) => (
-            <a
+            <Prim.Link
               key={link.app}
               href={link.url}
               className="sidebar__item"
@@ -56,7 +57,7 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
               style={{ display: 'block', textDecoration: 'none' }}
             >
               {link.emoji} {link.label}
-            </a>
+            </Prim.Link>
           ))}
           {onRestart && (
             <SidebarItem
@@ -67,9 +68,9 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
               {restarting ? '↻ Restarting…' : '⏻ Restart'}
             </SidebarItem>
           )}
-        </div>
+        </Prim.Box>
       </Sidebar>
-      <div className="computer-layout__content">
+      <Prim.Box className="computer-layout__content">
         <TopBar
           title={<CozyThingText text="lmthing.computer" />}
           actions={
@@ -86,11 +87,11 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
           error={error}
           onRetry={onRetry}
         />
-        <div className="computer-layout__main">
+        <Prim.Box className="computer-layout__main">
           {children}
-        </div>
-      </div>
-    </div>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

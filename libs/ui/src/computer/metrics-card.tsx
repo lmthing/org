@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/metrics-card.css'
 import { Card, CardHeader, CardBody } from '../elements/content/card'
 import { Caption } from '../elements/typography/caption'
@@ -20,30 +21,30 @@ function MetricsCard({ cpuPercent, memoryUsedMB, memoryTotalMB }: MetricsCardPro
         <Heading level={4}>Metrics</Heading>
       </CardHeader>
       <CardBody>
-        <div className="computer-metrics-card">
-          <div className="computer-metrics-card__row">
+        <Prim.Box className="computer-metrics-card">
+          <Prim.Box className="computer-metrics-card__row">
             <Caption muted>CPU</Caption>
             <Caption>{cpuPercent != null ? `${cpuPercent}%` : 'N/A'}</Caption>
-          </div>
+          </Prim.Box>
           {cpuPercent != null && (
-            <div className="computer-metrics-card__bar">
-              <div className="computer-metrics-card__bar-fill" style={{ width: `${cpuPercent}%` }} />
-            </div>
+            <Prim.Box className="computer-metrics-card__bar">
+              <Prim.Box className="computer-metrics-card__bar-fill" style={{ width: `${cpuPercent}%` }} />
+            </Prim.Box>
           )}
-          <div className="computer-metrics-card__row">
+          <Prim.Box className="computer-metrics-card__row">
             <Caption muted>Memory</Caption>
             <Caption>
               {memoryUsedMB != null
                 ? `${memoryUsedMB} MB${memoryTotalMB != null ? ` / ${memoryTotalMB} MB` : ''}`
                 : 'N/A'}
             </Caption>
-          </div>
+          </Prim.Box>
           {memPercent != null && (
-            <div className="computer-metrics-card__bar">
-              <div className="computer-metrics-card__bar-fill" style={{ width: `${memPercent}%` }} />
-            </div>
+            <Prim.Box className="computer-metrics-card__bar">
+              <Prim.Box className="computer-metrics-card__bar-fill" style={{ width: `${memPercent}%` }} />
+            </Prim.Box>
           )}
-        </div>
+        </Prim.Box>
       </CardBody>
     </Card>
   )

@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/ide-terminal.css'
 import { Terminal } from '../elements/content/terminal'
 import type { TerminalSession } from '../elements/content/terminal'
@@ -22,43 +23,43 @@ function IdeTerminal({ tabs, activeTabId, onTabSelect, onTabClose, onAddTab }: I
   const resolvedActiveId = activeTabId ?? tabs[0]?.id ?? null
 
   return (
-    <div className="ide-terminal">
-      <div className="ide-terminal__tabs">
+    <Prim.Box className="ide-terminal">
+      <Prim.Box className="ide-terminal__tabs">
         {tabs.map((tab) => (
-          <div
+          <Prim.Box
             key={tab.id}
             className={`ide-terminal__tab${tab.id === resolvedActiveId ? ' ide-terminal__tab--active' : ''}`}
             onClick={() => onTabSelect(tab.id)}
           >
             {tab.label}
             {onTabClose && !tab.readonly && tabs.filter(t => !t.readonly).length > 0 && (
-              <button
+              <Prim.Pressable
                 className="ide-terminal__tab-close"
                 onClick={(e) => { e.stopPropagation(); onTabClose(tab.id) }}
                 aria-label="Close tab"
               >
                 <X size={10} />
-              </button>
+              </Prim.Pressable>
             )}
-          </div>
+          </Prim.Box>
         ))}
         {onAddTab && (
-          <div className="ide-terminal__add" onClick={onAddTab} title="New terminal">
+          <Prim.Box className="ide-terminal__add" onClick={onAddTab} title="New terminal">
             <Plus size={13} />
-          </div>
+          </Prim.Box>
         )}
-      </div>
-      <div className="ide-terminal__body">
+      </Prim.Box>
+      <Prim.Box className="ide-terminal__body">
         {tabs.map((tab) => (
-          <div
+          <Prim.Box
             key={tab.id}
             className={`ide-terminal__pane${tab.id !== resolvedActiveId ? ' ide-terminal__pane--hidden' : ''}`}
           >
             <Terminal session={tab.session} readonly={tab.readonly} />
-          </div>
+          </Prim.Box>
         ))}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

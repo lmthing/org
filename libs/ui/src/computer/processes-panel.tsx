@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/processes-panel.css'
 import { Panel, PanelHeader, PanelBody } from '../elements/content/panel'
 import { ListItem } from '../elements/content/list-item'
@@ -23,9 +24,9 @@ function ProcessesPanel({ processes }: ProcessesPanelProps) {
         <Caption muted>{processes.length} running</Caption>
       </PanelHeader>
       <PanelBody>
-        <div className="computer-processes-panel">
+        <Prim.Box className="computer-processes-panel">
           {processes.length === 0 ? (
-            <div className="computer-processes-panel__empty">No processes</div>
+            <Prim.Box className="computer-processes-panel__empty">No processes</Prim.Box>
           ) : (
             processes.map((proc) => (
               <ListItem
@@ -35,7 +36,7 @@ function ProcessesPanel({ processes }: ProcessesPanelProps) {
               />
             ))
           )}
-        </div>
+        </Prim.Box>
       </PanelBody>
     </Panel>
   )

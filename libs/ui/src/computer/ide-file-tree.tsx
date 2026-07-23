@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/ide-file-tree.css'
 import { useState } from 'react'
 import {
@@ -64,10 +65,10 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
   }
 
   return (
-    <div>
+    <Prim.Box>
       <ContextMenu.Root>
         <ContextMenu.Trigger asChild>
-          <div
+          <Prim.Box
             className={cn('ide-file-tree__item', isActive && 'ide-file-tree__item--active')}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             onClick={handleClick}
@@ -83,12 +84,12 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
               </>
             ) : (
               <>
-                <span style={{ width: 16 }} />
+                <Prim.Text style={{ width: 16 }} />
                 <File size={16} className="ide-file-tree__icon" />
               </>
             )}
-            <span className="ide-file-tree__name">{node.name}</span>
-          </div>
+            <Prim.Text className="ide-file-tree__name">{node.name}</Prim.Text>
+          </Prim.Box>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Content className="ide-file-tree__context-menu">
@@ -113,7 +114,7 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
             <Dialog.Title className="ide-file-tree__dialog-title">
               New {dialogType === 'folder' ? 'Folder' : 'File'}
             </Dialog.Title>
-            <input
+            <Prim.TextField
               className="ide-file-tree__dialog-input"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
@@ -121,10 +122,10 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
               placeholder={dialogType === 'folder' ? 'folder-name' : 'filename.txt'}
               autoFocus
             />
-            <div className="ide-file-tree__dialog-actions">
-              <button className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</button>
-              <button className="btn btn--primary btn--sm" onClick={handleCreate}>Create</button>
-            </div>
+            <Prim.Box className="ide-file-tree__dialog-actions">
+              <Prim.Pressable className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</Prim.Pressable>
+              <Prim.Pressable className="btn btn--primary btn--sm" onClick={handleCreate}>Create</Prim.Pressable>
+            </Prim.Box>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
@@ -141,7 +142,7 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
           onDelete={onDelete}
         />
       ))}
-    </div>
+    </Prim.Box>
   )
 }
 
@@ -158,19 +159,19 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
   }
 
   return (
-    <div className="ide-file-tree">
-      <div className="ide-file-tree__header">
-        <span className="ide-file-tree__header-title">Files</span>
-        <div className="ide-file-tree__header-actions">
-          <button className="ide-file-tree__action-btn" title="New File" onClick={() => setDialogType('file')}>
+    <Prim.Box className="ide-file-tree">
+      <Prim.Box className="ide-file-tree__header">
+        <Prim.Text className="ide-file-tree__header-title">Files</Prim.Text>
+        <Prim.Box className="ide-file-tree__header-actions">
+          <Prim.Pressable className="ide-file-tree__action-btn" title="New File" onClick={() => setDialogType('file')}>
             <FilePlus size={16} />
-          </button>
-          <button className="ide-file-tree__action-btn" title="New Folder" onClick={() => setDialogType('folder')}>
+          </Prim.Pressable>
+          <Prim.Pressable className="ide-file-tree__action-btn" title="New Folder" onClick={() => setDialogType('folder')}>
             <FolderPlus size={16} />
-          </button>
-        </div>
-      </div>
-      <div>
+          </Prim.Pressable>
+        </Prim.Box>
+      </Prim.Box>
+      <Prim.Box>
         {fileTree.map((node) => (
           <IdeFileTreeItem
             key={node.path}
@@ -183,7 +184,7 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
             onDelete={onDelete}
           />
         ))}
-      </div>
+      </Prim.Box>
 
       <Dialog.Root open={dialogType !== null} onOpenChange={(open) => { if (!open) setDialogType(null) }}>
         <Dialog.Portal>
@@ -192,7 +193,7 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
             <Dialog.Title className="ide-file-tree__dialog-title">
               New {dialogType === 'folder' ? 'Folder' : 'File'}
             </Dialog.Title>
-            <input
+            <Prim.TextField
               className="ide-file-tree__dialog-input"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
@@ -200,14 +201,14 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
               placeholder={dialogType === 'folder' ? 'folder-name' : 'filename.txt'}
               autoFocus
             />
-            <div className="ide-file-tree__dialog-actions">
-              <button className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</button>
-              <button className="btn btn--primary btn--sm" onClick={handleCreate}>Create</button>
-            </div>
+            <Prim.Box className="ide-file-tree__dialog-actions">
+              <Prim.Pressable className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</Prim.Pressable>
+              <Prim.Pressable className="btn btn--primary btn--sm" onClick={handleCreate}>Create</Prim.Pressable>
+            </Prim.Box>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-    </div>
+    </Prim.Box>
   )
 }
 

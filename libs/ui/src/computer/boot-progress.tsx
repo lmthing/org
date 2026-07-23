@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/boot-progress.css'
 import { cn } from '../lib/utils'
 
@@ -36,14 +37,14 @@ function BootProgress({ tier, stage }: BootProgressProps) {
     : 'Starting browser runtime...'
 
   return (
-    <div className="computer-boot-progress">
-      <div className="computer-boot-progress__spinner" />
-      <span className="computer-boot-progress__label">{label}</span>
-      <div className="computer-boot-progress__steps">
+    <Prim.Box className="computer-boot-progress">
+      <Prim.Box className="computer-boot-progress__spinner" />
+      <Prim.Text className="computer-boot-progress__label">{label}</Prim.Text>
+      <Prim.Box className="computer-boot-progress__steps">
         {steps.map((step) => {
           const state = getStepState(step.key, stage, steps)
           return (
-            <span
+            <Prim.Text
               key={step.key}
               className={cn(
                 'computer-boot-progress__step',
@@ -52,11 +53,11 @@ function BootProgress({ tier, stage }: BootProgressProps) {
               )}
             >
               {state === 'done' ? '\u2713' : state === 'active' ? '\u25CB' : '\u00B7'} {step.label}
-            </span>
+            </Prim.Text>
           )
         })}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 
