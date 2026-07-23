@@ -22,6 +22,13 @@
 > layout entirely and move all box-model layout to Tamagui props (~137 files). Per Part III's B0 gate,
 > the A-vs-B decision is re-opened for the user before that maximal migration proceeds. Grounded
 > evidence + reproducible probe: Part III "B0 — RESULT" + `apps/web/b0-probe/`.**
+>
+> **B1 PRE-PROOF DONE:** the Tamagui `styled(View)` `Row`/`Col`/`Box` definitions (with web
+> block-compat resets) are proven to compute **identically** to plain-HTML flex-row/flex-col/block
+> `<div>`s via new equivalence fixtures — `tests/visual/equivalence.spec.ts` 8/8 green (L2 24/24,
+> L3 22/22 unchanged). The actual `index.tsx` swap stays coupled to the B2 surface migration (it
+> can't coexist with the surfaces' Tailwind per B0), so it waits on the A-vs-B decision. Details:
+> Part III "B1 — PRE-PROOF DONE".
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
 > `claude/tamagui-migration-plan-66u8sw`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
@@ -1036,6 +1043,42 @@ deliverables; wiring the plugin into `createViteConfig` is deferred until the di
 (Option A would not need it).
 
 ## B1 — make `Row`/`Col` (then `Box`) real Tamagui, proven equal on the harness
+
+### B1 — PRE-PROOF DONE (harness equivalence green); the primitive SWAP stays coupled to B2.
+
+The §4 "prove the primitive before migrating" step is **done and green**, independent of the `main`
+capture:
+- **Candidate `styled(View)` definitions** (the exact shape the real `row/col/box` `index.tsx` will
+  take) live in `tests/visual/harness/eq-fixtures.tsx`: `Row = styled(View,{ flexDirection:'row',
+  …webBlockCompat })`, `Col = { flexDirection:'column', … }`, `Box = { display:'block', … }`, where
+  `webBlockCompat = { flexShrink:1, minWidth:'auto', minHeight:'auto' }` overrides the three RN-base
+  values (`.is_View` forces `flexShrink:0`, `minWidth/minHeight:0`) that differ from a browser `<div>`.
+  Nothing else needs overriding: `.is_View` already emits `box-sizing:border-box` + `flex-basis:auto`,
+  which match, and the harness applies `* { box-sizing:border-box }` (as Tailwind preflight does).
+- **Equivalence gate** `tests/visual/equivalence.spec.ts` renders each candidate next to a plain-HTML
+  reference (`<div style="display:flex;flex-direction:row">`, `…column`, and a block `<div>`) in the
+  SAME page and asserts **equal** computed styles on the audited set, both themes. **Green: 8/8**, with
+  L2 still 24/24 and L3 22/22. Two — and only two — documented normalizations (everything else exact):
+  (1) `align-items: normal` ≡ `stretch` (same used behavior on a flex container); (2) the flex-only
+  props are dropped on a non-flex `display` (they compute stale-but-inert on a `display:block` Box).
+- **Harness isolation gotcha (important):** the eq fixtures mount Tamagui behind a **minimal
+  harness-local config** (`tests/visual/harness/eq-tamagui.config.ts`), NOT the real
+  `libs/ui/tamagui.config`. The real config's themes inject CSS custom properties named
+  `--background`/`--color`/… (from the same `tokens.json`) which, being unlayered/`:root`-boosted,
+  override the harness's own `--background`/`--foreground` and corrupt the dark passthrough baselines.
+  The box model under test is config-independent (themes carry only colors, not the `View` base), and
+  the real theme values are already proven byte-equal to `theme.css` by the Layer-1 tests, so a minimal
+  non-colliding config is the correct isolation. The `TamaguiProvider` also wraps ONLY the eq fixtures,
+  never the passthrough ones.
+
+**Why the real `index.tsx` swap is NOT in this step:** per B0, a Tamagui `styled(View)` primitive's
+`.is_View` base is unlayered and beats the surfaces' Tailwind layout classes, so swapping the shared
+web primitives **changes what the real surfaces render** and cannot coexist — the swap must land
+**together with** the B2 surface migration (surfaces off Tailwind layout) and be verified against a
+full-app build/screenshot, which is the maximal-migration work gated on the A-vs-B decision. This
+pre-proof de-risks that swap (the `styled()` defs are proven correct) without touching the surfaces.
+
+### Original B1 plan (for when the swap proceeds)
 
 Do `Row`/`Col` first (lowest risk — explicit direction), then `Box`.
 
