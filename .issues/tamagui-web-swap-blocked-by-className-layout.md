@@ -1,8 +1,10 @@
 # Tamagui web-swap of the layout primitives is blocked by the Tailwind-className surfaces
 
-**Status:** open — architectural decision needed. Found 2026-07-23 while starting Phase 1c
-(swap primitives' internals to Tamagui `styled()`) of the Tamagui migration
-(`docs/react-native-tamagui-migration.md`).
+**Status:** DECIDED → **Option B** (Tamagui compiler + migrate the surfaces' layout onto Tamagui
+props / `Row`/`Col`). The zero-context execution plan is **Part III** of
+`docs/react-native-tamagui-migration.md` — start at "B0" (the pivotal spike: does className win
+over Tamagui atomic styles with `@tamagui/vite-plugin`?). This issue stays open until B lands or
+B0 forces re-opening the decision. Found 2026-07-23 while starting Phase 1c.
 
 ## Summary
 The Phase-0 de-HTML produced surfaces whose layout is **100% Tailwind-className-driven**, with
