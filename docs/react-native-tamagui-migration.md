@@ -199,6 +199,21 @@ produced (className-driven layout on `Box`) and what the Tamagui swap needs (lay
 - **NOT done:** not `expo install`ed / run on a device here (no native toolchain). Expo Router nav
   + the real chat/studio screens + `PodTransport` wiring are follow-up, gated on the §1c decision.
 
+**PHASE 1e — browser-global shims behind `platform/` (§7 step 8) — ✅ module DONE (web-safe).**
+- `libs/ui/src/platform/`: each capability is a `*.ts` (web, current behavior verbatim) +
+  `*.native.ts` (RN) pair — `storage` (localStorage ↔ AsyncStorage), `clipboard`
+  (navigator.clipboard ↔ RN Clipboard), `dimensions` (window resize ↔ RN `Dimensions`). `index.ts`
+  re-exports. Metro prefers `.native.ts`; web keeps `.ts`. The seam is Promise-based (AsyncStorage
+  is async) so one API fits both.
+- **`platform.test.ts` (5 tests, jsdom)** verifies the WEB shims round-trip vs the raw browser APIs
+  they replace (storage set/get/remove, clipboard→boolean, dimensions numeric + resize
+  subscribe/unsubscribe). Native mirrors verified in the mobile app.
+- **NOT done:** the shims are *additive* — surfaces still call raw `localStorage`/`window` and are
+  migrated onto this seam incrementally (that migration edits surfaces and needs surface-level web
+  verification, so it is follow-up). `document`/`AppState` listeners + `getBoundingClientRect`→
+  `onLayout` are not yet covered. **§7 step 9 (delete superseded CSS) is a no-op so far** — web
+  keeps its passthrough primitives + Tailwind, so no CSS has been superseded to delete.
+
 **Gotchas for the next session:**
 - libs/ui is NOT in the `pnpm typecheck` gate (it has no `typecheck` script) and carries ~270
   PRE-EXISTING tsc errors (lucide-react vs the hoisted `@types/react@19`, missing
