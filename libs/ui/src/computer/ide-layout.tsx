@@ -1,6 +1,5 @@
 import '@lmthing/css/components/computer/ide-layout.css'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { Badge } from '../elements/content/badge'
 import { Loader2 } from 'lucide-react'
 import { IdeFileTree, type FileTreeNode } from './ide-file-tree'
@@ -87,8 +86,8 @@ function IdeLayout(props: IdeLayoutProps) {
         </div>
       </div>
       <div className="ide-layout__body">
-        <PanelGroup direction="horizontal">
-          <Panel defaultSize={15} minSize={10} maxSize={30}>
+        <div className="ide-layout__split ide-layout__split--horizontal">
+          <div className="ide-layout__pane ide-layout__pane--sidebar">
             <IdeFileTree
               fileTree={props.fileTree}
               activeFile={props.activeFile}
@@ -97,13 +96,13 @@ function IdeLayout(props: IdeLayoutProps) {
               onCreateDirectory={props.onCreateDirectory}
               onDelete={props.onDelete}
             />
-          </Panel>
+          </div>
 
-          <PanelResizeHandle className="ide-layout__resize-handle--horizontal" />
+          <div className="ide-layout__divider ide-layout__divider--horizontal" />
 
-          <Panel defaultSize={85} minSize={50}>
-            <PanelGroup direction="vertical">
-              <Panel defaultSize={70} minSize={30}>
+          <div className="ide-layout__pane ide-layout__pane--main">
+            <div className="ide-layout__split ide-layout__split--vertical">
+              <div className="ide-layout__pane ide-layout__pane--editor">
                 <IdeEditor
                   openFiles={props.openFiles}
                   activeFile={props.activeFile}
@@ -112,11 +111,11 @@ function IdeLayout(props: IdeLayoutProps) {
                   onFileClose={props.onFileClose}
                   onContentChange={props.onContentChange}
                 />
-              </Panel>
+              </div>
 
-              <PanelResizeHandle className="ide-layout__resize-handle--vertical" />
+              <div className="ide-layout__divider ide-layout__divider--vertical" />
 
-              <Panel defaultSize={30} minSize={15}>
+              <div className="ide-layout__pane ide-layout__pane--terminal">
                 <IdeTerminal
                   tabs={props.terminalTabs}
                   activeTabId={props.activeTerminalTabId}
@@ -124,11 +123,11 @@ function IdeLayout(props: IdeLayoutProps) {
                   onTabClose={props.onTerminalTabClose}
                   onAddTab={props.onAddTerminalTab}
                 />
-              </Panel>
-            </PanelGroup>
-          </Panel>
+              </div>
+            </div>
+          </div>
 
-        </PanelGroup>
+        </div>
       </div>
     </div>
   )

@@ -2,11 +2,12 @@
 
 > Status: proposal / plan. Target branch: `claude/react-native-mobile-exploration-vafu9o`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
-> **both** web (unchanged) and React Native, by moving them onto Tamagui universal primitives. Three
-> irreducibly-web widgets — **Monaco** (`computer/ide-editor`), **xterm** (`elements/content/terminal`), and
-> **react-resizable-panels** (`computer/ide-layout`) — are **web-only**: they render fully on web and show a
-> documented "not available on mobile" fallback on native, isolated behind `.web.tsx`/`.native.tsx` seams.
-> Everything else in `computer/*` is migrated like `chat`/`studio`.
+> **both** web (unchanged) and React Native, by moving them onto Tamagui universal primitives. Two
+> irreducibly-web widgets — **Monaco** (`computer/ide-editor`) and **xterm** (`elements/content/terminal`) —
+> are **web-only**: they render fully on web and show a documented "not available on mobile" fallback on
+> native, isolated behind `.web.tsx`/`.native.tsx` seams. Everything else in `computer/*` is migrated like
+> `chat`/`studio`. (**`react-resizable-panels` has been retired** — `computer/ide-layout` now uses a static
+> flex split, so there is no resizable-panels dependency to fork or replace.)
 
 ---
 
@@ -152,14 +153,18 @@ de-HTML'd as the code evolves — including for all future features.
 ## 1.6 `computer/*` and the three web-only widgets (render on web, fallback on native)
 
 `computer/*` is **in scope** and migrated exactly like `chat`/`studio` (de-HTML → Tamagui) — it is small
-(15 components: ~60 `div`, 17 `span`, 11 `button`). The only exception is three irreducibly-web widgets that
+(15 components: ~60 `div`, 17 `span`, 11 `button`). The only exception is two irreducibly-web widgets that
 have no RN equivalent and must **stay web-only**, visible on web but not on mobile:
 
 | Widget | File | Web-only because |
 |---|---|---|
 | **Monaco** code editor | `computer/ide-editor.tsx` | DOM-based editor; no RN build |
 | **xterm** terminal | `elements/content/terminal/**` (used by `computer/ide-terminal.tsx` + `elements/nav/settings-dialog`) | canvas/DOM terminal; no RN build |
-| **resizable-panels** | `computer/ide-layout.tsx` | mouse-drag DOM splitters; desktop idiom |
+
+> **`react-resizable-panels` retired.** `computer/ide-layout.tsx` previously used it for the drag-resizable
+> IDE panes; it now uses a **static flex split** (sidebar 15% · editor fill · terminal 30%, thin dividers) —
+> same at-rest layout, no drag. The dependency is removed from `libs/ui` and `apps/web`. This is one fewer
+> web-only widget to fork, and the static split is universal (renders identically on web and RN).
 
 ### The fork pattern (how "web-only, not on mobile" is enforced)
 

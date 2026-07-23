@@ -288,9 +288,9 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
 ### `components/computer/ide-layout.css`
 
-- **.ide-layout** — `.ide-layout` `.ide-layout__body` `.ide-layout__header` `.ide-layout__nav` `.ide-layout__nav-btn` `.ide-layout__resize-handle--horizontal` `.ide-layout__resize-handle--vertical` `.ide-layout__restart-btn` `.ide-layout__status` `.ide-layout__title`
+- **.ide-layout** — `.ide-layout` `.ide-layout__body` `.ide-layout__divider--horizontal` `.ide-layout__divider--vertical` `.ide-layout__header` `.ide-layout__nav` `.ide-layout__nav-btn` `.ide-layout__pane` `.ide-layout__pane--editor` `.ide-layout__pane--main` `.ide-layout__pane--sidebar` `.ide-layout__pane--terminal` `.ide-layout__restart-btn` `.ide-layout__split` `.ide-layout__split--horizontal` `.ide-layout__split--vertical` `.ide-layout__status` `.ide-layout__title`
 
-  Tokens: `background`, `border`, `card`, `foreground`, `muted-foreground`, `primary`
+  Tokens: `background`, `border`, `card`, `foreground`, `muted-foreground`
 
 ### `components/computer/ide-preview.css`
 
