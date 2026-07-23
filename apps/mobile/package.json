@@ -1,0 +1,35 @@
+{
+  "name": "@lmthing/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LMThing mobile shell (Expo + React Native) — renders the shared @lmthing/ui screens on Tamagui. Excluded from the pnpm workspace; bootstrap standalone (see README).",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lmthing/css": "file:../../libs/css",
+    "@lmthing/state": "file:../../libs/state",
+    "@lmthing/ui": "file:../../libs/ui",
+    "@tamagui/core": "^2.5.1",
+    "@tamagui/lucide-icons": "^2.5.1",
+    "expo": "^52.0.0",
+    "expo-font": "^13.0.0",
+    "expo-status-bar": "^2.0.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-native": "0.76.0",
+    "react-native-svg": "^15.0.0",
+    "react-native-web": "^0.19.0",
+    "react-native-webview": "^13.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@tamagui/babel-plugin": "^2.5.1",
+    "@types/react": "^18.3.1",
+    "typescript": "^5.4.0"
+  }
+}

@@ -186,6 +186,19 @@ produced (className-driven layout on `Box`) and what the Tamagui swap needs (lay
   `className` — native surface styling still needs the §1c decision (NativeWind or a props
   migration). The forks are the element seam that story plugs into.
 
+**PHASE 2 — `apps/mobile` Expo shell (§6) — ✅ scaffold DONE (excluded from the workspace).**
+- `apps/mobile/`: `App.tsx` (`TamaguiProvider` with the SHARED `tamagui.config` + system light/dark)
+  → `src/screens/DemoScreen.tsx` (exercises the `Box`/`Text`/`Row`/`Col`/`Pressable` native forks).
+  `babel.config.js` (`babel-preset-expo` + `@tamagui/babel-plugin` → the shared config),
+  `metro.config.js` (watches the repo root; Metro's `*.native.tsx` preference selects the forks),
+  `app.json`, `index.js`, `tsconfig.json`, `README.md`.
+- **Excluded from the pnpm workspace** (`pnpm-workspace.yaml` `- '!apps/mobile'`) so its large
+  Expo/RN/Tamagui tree never touches the shared install/lockfile; it consumes the shared libs by
+  `file:` path. Verified: `pnpm install` still resolves 11 projects (mobile absent), libs/ui 26/26,
+  L2 harness green. `@lmthing/ui` now also exports `./theme/tamagui.config` + `./elements/primitives`.
+- **NOT done:** not `expo install`ed / run on a device here (no native toolchain). Expo Router nav
+  + the real chat/studio screens + `PodTransport` wiring are follow-up, gated on the §1c decision.
+
 **Gotchas for the next session:**
 - libs/ui is NOT in the `pnpm typecheck` gate (it has no `typecheck` script) and carries ~270
   PRE-EXISTING tsc errors (lucide-react vs the hoisted `@types/react@19`, missing

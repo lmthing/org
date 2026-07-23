@@ -1,6 +1,11 @@
 packages:
   - 'libs/*'
   - 'apps/*'
+  # apps/mobile (the Expo/React Native shell) is intentionally EXCLUDED from the workspace: its
+  # Expo + react-native + Tamagui dependency tree is large and native-toolchain-specific, and
+  # pulling it into the shared install/lockfile would slow every web/core session for no benefit.
+  # Bootstrap it standalone — see apps/mobile/README.md. It consumes the shared libs by path.
+  - '!apps/mobile'
   # The scenario harness is a script-free package (name @lmthing/scenario-harness) — it declares
   # no build/typecheck/test scripts, so turbo/pnpm -r skip it and it stays a raw-`node` `.mjs`
   # runner with no build step. Membership only makes it resolvable + `pnpm install`-linkable.

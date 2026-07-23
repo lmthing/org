@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "LMThing",
+    "slug": "lmthing-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "lmthing",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true },
+    "android": {}
+  }
+}
