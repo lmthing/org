@@ -462,3 +462,198 @@ order**:
 This exercises the de-HTML seam, the lint gate, the token pipeline, the Radix replacement, the dual build, and
 all three proof layers — and proves the surfaces are edited only once (Phase 0) and never again during the
 risky Tamagui swap.
+
+---
+---
+
+# Part II — Implementation handoff (for a fresh session with **zero prior context**)
+
+> Everything below was gathered by inspecting the codebase directly. It is here so an implementer who has
+> never seen this repo can execute Part I without re-deriving the architecture. Where a fact cites a file,
+> the file is the ground truth — verify against it, it may have moved.
+
+## H1. Repo, branch, workspace, commands
+
+- **Working dir / pnpm workspace root:** `/home/user/org` (this checkout — *not* `sdk/org`; the `CLAUDE.md`
+  references to `sdk/org` and `../../org/docs` describe a larger superrepo that is **not present here**). The
+  `org/docs` tree is a sibling repo and is **absent** in this checkout — this file lives at `docs/` instead.
+- **`pnpm-workspace.yaml`** packages: `libs/*`, `apps/*`, `scenarios`.
+- **Branch to work on:** `claude/react-native-mobile-exploration-vafu9o` (do all work here; commit + push here).
+- **Commands (run from repo root `/home/user/org`):**
+  - `pnpm install` — from lockfile. (Note: `esbuild` postinstall is skipped by default; harmless for UI work.)
+  - `pnpm typecheck` — `turbo run typecheck` (tsc --noEmit, strict, all packages). ~18s warm.
+  - `pnpm test` — `vitest run` (root `vitest.config.ts`). Co-located `*.test.ts(x)`.
+  - `pnpm build` — `turbo run build`.
+  - `pnpm --filter @lmthing/css generate` — regenerate `theme.css` + `COMPONENTS.md` from `tokens.json`.
+  - `pnpm --filter @lmthing/css lint:tokens` — the design-token CI gate (no raw colors).
+  - Web app dev/preview: in `apps/web`, `pnpm dev` (`vp dev`) / `pnpm preview` (`vp preview`) — Vite via
+    `vite-plus`; config is `createViteConfig(__dirname)` from `@lmthing/utils/vite`. **Playwright should target
+    `vp preview`** (production build → real minified `theme.css`, deterministic).
+- **Browser for Playwright:** Chromium is pre-installed at `/opt/pw-browsers` (`PLAYWRIGHT_BROWSERS_PATH`).
+  **Do NOT run `playwright install`.**
+
+## H2. Architecture you must understand before touching the UI
+
+This is *why* the plan is a client-only Tamagui refactor and not a runtime port.
+
+- **Thin client / pod-server split.** The heavy agent runtime runs **entirely server-side** in the pod
+  (`libs/cli`). `apps/web` bundles **zero** runtime — it imports `@lmthing/core` only as `import type`. All
+  three surfaces are **WebSocket/REST clients** of the pod. Verified: `grep` for `quickjs`/`WebAssembly` in
+  `apps/web/src` → none.
+- **What lives server-side and must NEVER be pulled onto the phone:** the QuickJS **WASM** sandbox
+  (`libs/core/src/sandbox/quickjs.ts`, `newQuickJSAsyncWASMModule()`), the **per-statement TypeScript
+  compiler** (`libs/core/src/typecheck/transpile.ts` + `tsc.ts` — loads `node:fs` at import), **esbuild**, and
+  Node **`worker_threads`** (`libs/cli/src/app/worker-load*.ts`, `api/worker.ts`, `server/emitter-manifests.ts`).
+  React Native (Hermes/JSC) has no WebAssembly and no `node:*`; none of this is in the mobile app, and that is
+  fine because it all stays in the pod.
+- **The reuse seam (this is what the mobile app is built on):**
+  - `libs/state/src/lib/pod/transport.ts` — **`PodTransport`**, a DOM-free `fetch`-based REST client
+    (`baseUrl` + `getAccessToken`, 401→refresh). Works **unchanged** in RN.
+  - WS clients: `apps/web/src/lib/runtime/{pod.ts, ws-protocol.ts, pod-connection.ts}` and
+    `libs/ui/src/chat/store/ws-client.ts` (`connectLive(wsUrl)`). The protocol + zustand store + trace-event
+    model port; the transport is already framework-agnostic.
+  - Much of `@lmthing/state` (VFS parsers, event bus, pure hooks) is React-but-DOM-free and likely ports.
+- **The mobile app** = Expo shell + `PodTransport` + reused `@lmthing/state` logic + `@lmthing/ui` screens on
+  Tamagui + native nav (**Expo Router**; TanStack Router is web-only and does not port — routing is thin glue,
+  the screens are the shared unit). New package suggested: `@lmthing/mobile-client` re-exporting the seams;
+  new app: `apps/mobile`.
+- **"Self-evolution" (app generation on demand) is server-side and already works.** The appbuilder / architect
+  / engineer **system spaces** (`libs/core/system-spaces/system-{appbuilder,architect,engineer}/`) generate a
+  project (= an app: `database/ api/ pages/ hooks/ events/ components/`). Pages are built by **esbuild in the
+  Node host** (`libs/cli/src/app/build/pages.ts` → `buildProjectPages`) into a **browser React** bundle mounted
+  with `react-dom/client`, served static at `/app/<project>/` (`libs/cli/src/app/pages-serve.ts`). API handlers
+  run in `worker_threads` (`libs/cli/src/app/api/runtime.ts`). Live hot-reload without restart is wired in
+  `libs/cli/src/server/session-manager.ts` (~L588–626: `onAppWrite`/`onSchemaWrite` invalidate caches). The
+  agent-facing build entry is `libs/core/src/globals/build-app.ts` (`buildApp`). **Consequence for mobile:**
+  generated apps are **web** apps → on native they are shown via **WebView** (`react-native-webview`) pointed at
+  `/app/<project>/`. Generating *native* screens on demand is **out of scope** for this plan (would need a new
+  build target + `@app/runtime` RN renderer).
+
+## H3. Exact file map (every path this plan touches or references)
+
+**Surfaces to migrate (in `libs/ui/src/`):**
+- `chat/**` — ~44 `.tsx`. Entry `@lmthing/ui/chat` → `chat/app/ChatShell.tsx`. Store: `chat/store/` (incl.
+  `ws-client.ts`, `model.ts`). Most portable surface.
+- `studio/**` — ~48 index components. Sub-surfaces: `agent/ component-editor/ functions/ integrations/
+  knowledge/ presentation/ shell/ space/ thing/ workflow/`. Code editing is **`<textarea>`** (no Monaco);
+  workflow editor is forms + **icon** SVGs (not a canvas).
+- `computer/**` — 15 `.tsx` (dashboards/panels/cards/logs/metrics/agents + the IDE assembly).
+- Route glue (in `apps/web/src/routes/{chat,studio,computer}/`) — thin; the components live in `libs/ui`.
+
+**Existing shared UI vocabulary (`libs/ui/src/elements/`, ~39 index components):**
+`branding/{cozy-text}` · `content/{avatar,badge,card,list-item,markdown,panel,separator,terminal}` ·
+`forms/{button,input,select,textarea}` · `layouts/{page,split-pane,stack}` · `nav/{app-links,app-sidebar,
+breadcrumb,settings-dialog,sidebar,sidebar-footer,tab-bar,top-bar}` · `overlays/{dialog,dropdown,sheet}` ·
+`typography/{caption,code,heading,label}`.
+Note: `layouts/split-pane` is a **static CSS** split (no dep); `content/terminal` wraps **xterm** (web-only).
+
+**Vocabulary GAPS to build in Phase 0** (plain-HTML wrappers first): `Box`, `Text`, `Row`/`Col`, `List`,
+`Table` family, `Image`, `Icon`, `Link`, `Form`. (`Button`/`TextField`/`TextArea`/`Select`/`Label`/`Heading`/
+`Code`/`Card`/`Panel`/`Stack`/`Separator`/`ListItem` already exist.)
+
+**Web-only deps — exact locations (these are the ONLY hard blockers):**
+| Dep | Only location(s) | Disposition |
+|---|---|---|
+| `@monaco-editor/react` | `libs/ui/src/computer/ide-editor.tsx` | web-only, `.web.tsx` fork |
+| `@xterm/*` | `libs/ui/src/elements/content/terminal/**` (consumers: `computer/ide-terminal.tsx`, `elements/nav/settings-dialog`) | web-only, `.web.tsx` fork |
+| `react-arborist` | `libs/ui/src/studio/knowledge/field/field-tree/index.tsx` | rebuild on `FlatList` behind a `Tree` component |
+| `iframe` | `apps/web/src/routes/studio/$projectId/app/preview/index.tsx` | `WebFrame` → `react-native-webview` on native |
+| `@radix-ui/*` (8 files) | see breakdown in H4 | → Tamagui universal components |
+| `react-resizable-panels` | **RETIRED this session** (was `computer/ide-layout.tsx`) | gone — see H5 |
+
+**Design system:**
+- `libs/css/src/tokens/tokens.json` — single source of truth (theme-first: each color has `light`/`dark`;
+  `radius-*`, `font-*`; a 50-stop `spectrum` ramp; `darkSelector: [data-theme="dark"]`).
+- `libs/css/scripts/generate-theme.mjs` → `libs/css/src/theme.css` (generated; **never hand-edit**).
+- `libs/css/scripts/generate-components-catalog.mjs` → `libs/css/COMPONENTS.md`.
+- `libs/css/scripts/lint-design-tokens.mjs` — the token gate (mirror it for the RN-safety lint).
+- Component CSS (`libs/css/src/{elements,components}/**/*.css`) is hand-written but **token-only** (Tailwind
+  `@apply` + token utilities like `bg-border`; no raw colors).
+- Font: `apps/web/src/index.css` imports `@lmthing/css/theme.css` and declares `@font-face` for
+  **`TypeMates Cera Round Pro Bold`** — screenshot determinism must `await document.fonts.ready`.
+
+**Server (context only — do not edit for this plan):** `libs/cli/src/server/serve.ts` (HTTP+WS,
+`upgrade` handler), `session-manager.ts` (imports `@lmthing/core`; live-invalidation ~L588–626),
+`routes/*` (REST surface: `/api/sessions`, `/api/projects`, `/api/fs`, `/api/apps`, app-admin, …).
+
+## H4. Inventories (so scope is known cold)
+
+**Raw host tags to remove from the surfaces (`.tsx`):**
+| | `div` | `span`+`p`+inline | `button` | `input`/`textarea` | `svg`/`img` | tables/lists/etc. |
+|---|---|---|---|---|---|---|
+| chat | 202 | ~145 | 48 | 35 | 12 | ul/li 14, table 9, a 6, pre/code 12, h* 13 |
+| studio | 439 | ~90 | 43 | 12 | 39 | select/opt 16, h* 16, br 15, section 6 |
+| computer | ~60 | 17 | 11 | 3 | — | nav 1, a 1 |
+
+**Radix breakdown (8 files, all in shared `elements/` except one in `computer/`):**
+`overlays/dialog`←react-dialog · `overlays/sheet`←react-dialog · `overlays/dropdown`←react-dropdown-menu ·
+`forms/button`←react-slot (`asChild`) · `typography/label`←react-label · `content/separator`←react-separator ·
+`content/avatar`←react-avatar · `computer/ide-file-tree`←react-context-menu. → all map to Tamagui's own
+`Dialog`/`Sheet`/`Select`/`Popover`/`Label`/`Separator`/`Avatar` + `asChild`.
+
+**Icons:** `lucide-react` used in ~30 `libs/ui` files (→ `@tamagui/lucide-icons`, near-mechanical swap);
+inline `<svg>` in ~15 files (→ `react-native-svg` / lucide equivalents).
+
+**Browser-global touchpoints in chat+studio (~small, shim in Phase 1):** `window` 11, `document` 7,
+`localStorage` 3, `navigator` 4, `getBoundingClientRect` 1. **No** `createPortal`, **no** drag-and-drop,
+**no** `ResizeObserver` (the nasty ones are absent).
+
+## H5. Work already completed THIS session (do NOT redo)
+
+On branch `claude/react-native-mobile-exploration-vafu9o`:
+1. **`5a2ce6d`** — this plan (Part I) added.
+2. **`73de93a`** — de-HTML-first sequencing; `computer/*` brought into scope.
+3. **`f0b0d0e`** — **`react-resizable-panels` retired.** `computer/ide-layout.tsx` now uses a **static flex
+   split** (classes `ide-layout__split` / `__pane--sidebar|main|editor|terminal` / `__divider--horizontal|
+   vertical`; sidebar 15%, editor fills, terminal 30%, thin `bg-border` dividers). Dep removed from
+   `libs/ui/package.json` + `apps/web/package.json`; lockfile + `COMPONENTS.md` regenerated. **Verified:**
+   `pnpm typecheck` 6/6, `lint:tokens` clean, no source refs remain. Drag-resize is intentionally gone; the
+   split is universal (web + RN).
+
+So: **web-only widgets are now just Monaco + xterm.** Open follow-up (not yet done): the
+`@radix-ui/react-context-menu` in `computer/ide-file-tree.tsx` is still a web-only dep — decide swap-to-Tamagui
+vs retire during the computer migration.
+
+## H6. Rules you MUST obey (from `CLAUDE.md`)
+
+- **Design system is mandatory.** Any web styling uses `@lmthing/css` tokens — **never a raw color**. Change
+  colors only via `tokens.json` + `pnpm --filter @lmthing/css generate` (never hand-edit `theme.css`). Enforced
+  by `lint:tokens` (hard CI gate). The Tamagui config generator (Part I §5) must read `tokens.json` and the
+  L1 token-parity test proves equality.
+- **A change to code is not done until the matching doc is updated in the same change** (this doc is the doc
+  for this workstream — keep it current).
+- **Always test every fix.** For this workstream "test" = the three parity layers (L1/L2/L3) + `pnpm typecheck`
+  + `lint:tokens`.
+- **`.issues/`** is the live bug list; file an entry when a bug is found, delete when fixed+tested.
+
+## H7. Environment / secrets
+
+- `.env` is read from `process.cwd()` only. In Claude Code web sessions, keys are decrypted from
+  `.env.encrypted` by `.claude/hooks/session-start.sh`; **if a secret is missing, ask the user for
+  `ENV_DECRYPT_KEY`.** Pure UI/visual-parity work needs no LLM keys. If you must exercise the runtime, use
+  keyless mocking: `--mock <file>` / `LM_MOCK=<file>` (scripted `streamFn`).
+
+## H8. The first PR to open (concrete, in de-HTML-first order)
+
+1. **Add Playwright + the visual harness** (Part I §3, §3.1–3.2). Route `apps/web/src/routes/__visual/`
+   (prod-excluded), fixtures for the Button set + one container-heavy chat component (e.g. a `Message`), both
+   themes. `playwright.config.ts` targeting `vp preview`, pinned Chromium (`/opt/pw-browsers`).
+2. **Capture `main` baselines** — check out `origin/main`, run the harness, commit golden screenshots +
+   computed-style JSON. This is the immovable reference; do it before any component change.
+3. **Phase-0 proof:** add `Box` + `Text` as **plain-HTML** wrappers; de-HTML that one `Message` (every
+   `div`/`span` → `Box`/`Text`). Show **L2 exact + L3 = 0 diff** and the no-raw-HTML lint passing on that file.
+4. **Phase-1 proof:** add `libs/css/scripts/generate-tamagui-config.mjs` (from `tokens.json`) + the L1
+   token-parity test; swap `Box`/`Text`/`Button` (incl. Radix `Slot`→`asChild`) internals to Tamagui. The
+   `Message` + Button fixtures are **not edited**. Show L1+L2+L3 green on web **and** the same components in a
+   minimal Expo screen (`apps/mobile`).
+
+Then proceed through Part I §7 (Phase 0 de-HTML of chat → studio → computer with the lint gate turned on;
+Phase 1 Tamagui swap of the ~24 components; native forks of the leaves).
+
+## H9. Definition of done — recap
+
+Per component: no raw HTML (lint green) · L1 (if introducing tokens) + L2 (exact, both themes) + L3 (≤0.001) ·
+old CSS removed · renders in Expo (or documented native fallback). Overall: `chat`+`studio`+`computer` render
+on web within the parity contract vs the pre-migration `main` baseline **and** natively in `apps/mobile`;
+Monaco + xterm render on web with native fallbacks; three CI parity jobs + the no-raw-HTML/RN-safety lint
+enforced on the default branch.
