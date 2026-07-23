@@ -83,6 +83,22 @@ beyond the pre-existing lucide/tanstack noise) · `@lmthing/web-app` typecheck (
   `:root`, resolved `[data-theme="dark"]` cascade) + a staleness guard. The root guarantee.
 - `lint-design-tokens.mjs` allows `tokens.generated.ts` (a token-definition artifact).
 
+**PHASE 1 — `createTamagui` config shell (§5/§6, handoff step 2) — ✅ DONE & node-testable.**
+- `@tamagui/core@2.5.1` + `@tamagui/lucide-icons` installed in `libs/ui`.
+- `libs/ui/src/theme/tamagui.config.ts`: the buildable runtime shell — feeds
+  `@lmthing/css/tamagui-tokens` (`radius`, `fonts`, `themes.{light,dark}`) into `createTamagui`.
+  Themes map design-token names → resolved hex verbatim; color palette, radius (exact rem/px
+  strings), a conventional 4px `space`/`size` scale (NOT part of the token contract — tokens.json
+  carries no spacing scale), a 3-face font set (body=sans, heading=display, mono=mono), and the
+  `TamaguiCustomConfig` module augmentation for typed `$token`s. `createTamagui` runs headless in
+  node (no browser/RNW needed), so the shell is unit-testable.
+- **Runtime token-parity test** `libs/ui/src/theme/tamagui-config.test.ts` (5 tests, libs/ui
+  vitest): asserts `config.themes.{light,dark}` and `config.tokens.radius`/font families equal the
+  generated (theme.css-parity) values **byte-for-byte**, and that no design-token color name is
+  dropped. Chains onto the Layer-1 proof: tokens.json === theme.css === tamagui.config.
+- libs/ui vitest `include` widened to `src/theme/**/*.test.ts`. Full libs/ui suite 24/24 green;
+  RN-safety lint clean; root typecheck 6/6.
+
 ---
 
 ## Fresh-session handoff — what's next (Phase 1)
