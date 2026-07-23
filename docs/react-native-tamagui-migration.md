@@ -1,6 +1,8 @@
 # Migrating `chat` + `studio` to Tamagui (universal / RN-compatible) — **without breaking web styles**
 
-> Status: proposal / plan. Target branch: `claude/react-native-mobile-exploration-vafu9o`.
+> Status: **in progress** — foundation landed (see "Implementation status" below).
+> Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation
+> continues on `claude/tamagui-migration-plan-66u8sw`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
 > **both** web (unchanged) and React Native, by moving them onto Tamagui universal primitives. Two
 > irreducibly-web widgets — **Monaco** (`computer/ide-editor`) and **xterm** (`elements/content/terminal`) —
@@ -8,6 +10,46 @@
 > native, isolated behind `.web.tsx`/`.native.tsx` seams. Everything else in `computer/*` is migrated like
 > `chat`/`studio`. (**`react-resizable-panels` has been retired** — `computer/ide-layout` now uses a static
 > flex split, so there is no resizable-panels dependency to fork or replace.)
+
+---
+
+## Implementation status (living log)
+
+What has actually landed, in the plan's own de-HTML-first order. Each item cites the code so
+this stays grounded; verify against the files, they may have moved.
+
+**Phase 1 foundation — the token pipeline (§5 + §3 Layer 1) — DONE & CI-gated.**
+- `libs/css/scripts/generate-tamagui-config.mjs` (+ shared pure logic in
+  `libs/css/scripts/tamagui-tokens.mjs`): sibling of `generate-theme.mjs`, reads the **same**
+  `src/tokens/tokens.json`, emits `libs/css/src/tamagui/tokens.generated.ts` — a pure-data
+  module (`radius`, `fonts`, `themes.{light,dark}`) with **no `@tamagui/core` import** so the
+  parity test can load it in a node env. Wired into `libs/css` `generate`/`prebuild`.
+- **Layer 1 token-parity test** `libs/css/src/__tests__/token-parity.test.ts`: asserts every
+  generated token/theme value equals the `theme.css` value **byte-for-byte** — radius, fonts,
+  `:root` (light) and the fully-resolved `[data-theme="dark"]` cascade — **plus a staleness
+  guard** that the checked-in module matches the generator output. Runs in the root vitest
+  (no browser). Green (6 tests). This is the root guarantee that must hold before any swap.
+- `lint-design-tokens.mjs` allows `tokens.generated.ts` (a token-definition artifact, like
+  `theme.css`); the config is exported as `@lmthing/css/tamagui-tokens`.
+
+**Phase 0 start — vocabulary primitives (§1.5) — DONE (the missing gaps only).**
+- `libs/ui/src/elements/primitives/{box,text,row,col,image,link,form,list}` — plain-HTML
+  **pure-passthrough** wrappers (emit the same tag + props/className verbatim ⇒ byte-identical
+  HTML). `Box` has an `as` escape hatch; `Text` an `as`/`block` selector. Phase 1 swaps only
+  these components' internals to Tamagui; the surfaces are not edited again.
+- Stood up the **libs/ui vitest harness** the repo lacked (`libs/ui/vitest.config.ts` +
+  `vitest.setup.ts`, jsdom + esbuild automatic JSX + jest-dom), scoped to
+  `elements/primitives/**` with a `test` script. Render-parity tests
+  (`elements/primitives/index.test.tsx`, 10 tests, green) prove each primitive is
+  byte-identical to its raw tag — the Appendix step-2 in-isolation proof.
+
+**Not yet done (next):** the Playwright visual harness + `main` L2/L3 baselines (§3.1–3.2)
+— needs a browser + prod build, so L2/L3 are still pending; the RN-safety / no-raw-HTML lint
+gate (§8) is not yet enabled (turns on at the end of Phase 0); the de-HTML sweep of the
+chat/studio/computer surfaces onto these primitives (§7 steps 3–4b); the real
+`tamagui.config.ts` `createTamagui` shell + the primitives' Tamagui internals (§7 steps 5–7);
+and `apps/mobile` (§6). Widening the libs/ui vitest include to the Radix-dependent suites is
+follow-up once those peers are installed.
 
 ---
 
