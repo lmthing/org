@@ -33,6 +33,8 @@ export type BoxAs =
 export type BoxProps = React.HTMLAttributes<HTMLElement> & {
   /** Semantic host tag to render. Defaults to `div`. */
   as?: BoxAs
+  /** `<details open>` support (Box covers the details/summary disclosure tags). */
+  open?: boolean
 }
 
 const Box = React.forwardRef<HTMLElement, BoxProps>(({ as, ...props }, ref) =>

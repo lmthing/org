@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -18,26 +19,26 @@ export function DeleteModal({ isOpen, onClose, onConfirm, nodePath, isDirectory 
   const name = nodePath.split('/').pop() || nodePath
 
   return (
-    <div className="dialog__backdrop" onClick={onClose}>
-      <div
+    <Prim.Box className="dialog__backdrop" onClick={onClose}>
+      <Prim.Box
         className="dialog delete-modal"
         onClick={e => e.stopPropagation()}
         onKeyDown={e => { if (e.key === 'Escape') onClose() }}
       >
-        <div className="dialog__header delete-modal__header">
-          <div className="delete-modal__header-content">
+        <Prim.Box className="dialog__header delete-modal__header">
+          <Prim.Box className="delete-modal__header-content">
             <AlertTriangle className="delete-modal__warning-icon" />
             <Heading level={3} className="delete-modal__title">Delete {isDirectory ? 'Folder' : 'File'}</Heading>
-          </div>
+          </Prim.Box>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="delete-modal__close-icon" />
           </Button>
-        </div>
+        </Prim.Box>
 
-        <div className="dialog__content">
-          <div className="delete-modal__body">
+        <Prim.Box className="dialog__content">
+          <Prim.Box className="delete-modal__body">
             <Caption>
-              Are you sure you want to delete <strong>{name}</strong>?
+              Are you sure you want to delete <Prim.Text as="strong">{name}</Prim.Text>?
             </Caption>
             {isDirectory && (
               <Caption muted className="delete-modal__note">
@@ -49,14 +50,14 @@ export function DeleteModal({ isOpen, onClose, onConfirm, nodePath, isDirectory 
                 This action cannot be undone.
               </Caption>
             )}
-          </div>
+          </Prim.Box>
 
-          <div className="delete-modal__footer">
+          <Prim.Box className="delete-modal__footer">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button variant="destructive" onClick={onConfirm}>Delete</Button>
-          </div>
-        </div>
-      </div>
-    </div>
+          </Prim.Box>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

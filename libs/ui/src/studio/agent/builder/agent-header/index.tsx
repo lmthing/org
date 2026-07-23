@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import '@lmthing/css/components/agent/builder/index.css'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -24,7 +25,7 @@ export function AgentHeader({
   onBack,
 }: AgentHeaderProps) {
   return (
-    <header className="agent-header">
+    <Prim.Box as="header" className="agent-header">
       <Stack row className="agent-header__left">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="agent-header__icon" />
@@ -43,6 +44,6 @@ export function AgentHeader({
           </Button>
         )}
       </Stack>
-    </header>
+    </Prim.Box>
   )
 }

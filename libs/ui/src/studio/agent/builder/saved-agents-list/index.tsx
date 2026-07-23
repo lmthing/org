@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import '@lmthing/css/components/agent/builder/index.css'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Card, CardBody, CardFooter } from '@lmthing/ui/elements/content/card'
@@ -51,25 +52,25 @@ function AgentCard({ agent, fields, onLoad, onDuplicate, onDelete }: {
     <Card interactive>
       <CardBody>
         <Stack row className="saved-agents-list__card-header">
-          <div className="saved-agents-list__card-content">
+          <Prim.Box className="saved-agents-list__card-content">
             <Label className="saved-agents-list__card-name">{agent.name}</Label>
             <Caption muted className="saved-agents-list__card-description">
               {agent.description}
             </Caption>
-          </div>
+          </Prim.Box>
           <Stack row gap="sm">
             <Button onClick={onDuplicate} variant="ghost" size="sm" title="Duplicate">⧉</Button>
             <Button onClick={onDelete} variant="ghost" size="sm" title="Delete">🗑</Button>
           </Stack>
         </Stack>
-        <div className="saved-agents-list__card-badges">
+        <Prim.Box className="saved-agents-list__card-badges">
           {agentFields.slice(0, 3).map(field => (
             <Badge key={field.id} variant="muted" className="saved-agents-list__badge-sm">{field.name}</Badge>
           ))}
           {agentFields.length > 3 && (
             <Badge variant="muted" className="saved-agents-list__badge-sm">+{agentFields.length - 3} more</Badge>
           )}
-        </div>
+        </Prim.Box>
         <CardFooter className="saved-agents-list__card-footer">
           <Stack row gap="sm">
             <Caption muted>🔧 {agent.enabledTools.length} tools</Caption>
@@ -88,23 +89,23 @@ export function SavedAgentsList({ fields, savedAgents, onLoadAgent, onDuplicateA
   return (
     <PageBody className="saved-agents-list">
       <Stack row className="saved-agents-list__header">
-        <div>
+        <Prim.Box>
           <Heading level={2}>Saved Agents</Heading>
           <Caption muted className="saved-agents-list__subtitle">{savedAgents.length} saved agent{savedAgents.length !== 1 ? 's' : ''}</Caption>
-        </div>
+        </Prim.Box>
         <Button onClick={onNewAgent} variant="primary">+ New Agent</Button>
       </Stack>
 
       {savedAgents.length === 0 ? (
         <Stack className="saved-agents-list__empty">
-          <div className="saved-agents-list__empty-icon">📦</div>
+          <Prim.Box className="saved-agents-list__empty-icon">📦</Prim.Box>
           <Heading level={3}>No saved agents yet</Heading>
           <Caption muted className="saved-agents-list__empty-caption">
             Create your first agent and save it for quick access later.
           </Caption>
         </Stack>
       ) : (
-        <div className="saved-agents-list__grid">
+        <Prim.Box className="saved-agents-list__grid">
           {sortedAgents.map(agent => (
             <AgentCard
               key={agent.id}
@@ -115,7 +116,7 @@ export function SavedAgentsList({ fields, savedAgents, onLoadAgent, onDuplicateA
               onDelete={() => onDeleteAgent?.(agent.id)}
             />
           ))}
-        </div>
+        </Prim.Box>
       )}
     </PageBody>
   )

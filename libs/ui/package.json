@@ -23,7 +23,8 @@
   "scripts": {
     "test": "vitest run",
     "lint:tokens": "lmthing-lint-tokens src",
-    "lint": "eslint . && lmthing-lint-tokens src",
+    "lint:rn": "node scripts/lint-rn-safety.mjs",
+    "lint": "eslint . && lmthing-lint-tokens src && node scripts/lint-rn-safety.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {

@@ -3,6 +3,7 @@
  * Uses composite hooks and element CSS classes.
  * Orchestrates the sidebar, content area, and settings/knowledge views.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import { useCallback, useMemo } from 'react'
 import { useToggle } from '@lmthing/state'
 import { useParams, useLocation, useNavigate } from '@tanstack/react-router'
@@ -89,7 +90,7 @@ export function StudioShell({
   const isSettingsOpen = pathname.includes('/settings')
 
   return (
-    <div className="split-pane studio-shell">
+    <Prim.Box className="split-pane studio-shell">
       {/* Outer shared sidebar: project dropdown + collapsible spaces (same in chat). */}
       <StudioAppSidebar className="shrink-0" />
 
@@ -107,27 +108,27 @@ export function StudioShell({
         onToggleThing={rightPanel ? toggleThingOpen : undefined}
       />
 
-      <div className="split-pane__primary">
+      <Prim.Box className="split-pane__primary">
         {isSettingsOpen ? (
           <SettingsView isOpen={true} />
         ) : (
           children || (
-            <div className="page__body studio-shell__empty">
-              <div className="studio-shell__empty-content">
-                <p className="studio-shell__empty-title">
+            <Prim.Box className="page__body studio-shell__empty">
+              <Prim.Box className="studio-shell__empty-content">
+                <Prim.Text as="p" className="studio-shell__empty-title">
                   Select a knowledge field or agent
-                </p>
-                <p className="studio-shell__empty-subtitle">
+                </Prim.Text>
+                <Prim.Text as="p" className="studio-shell__empty-subtitle">
                   {knowledgeFields.length} knowledge fields, {agentList.length} agents, {workflowList.length} tasklists
-                </p>
-              </div>
-            </div>
+                </Prim.Text>
+              </Prim.Box>
+            </Prim.Box>
           )
         )}
-      </div>
+      </Prim.Box>
 
       {rightPanel && thingOpen && (
-        <div
+        <Prim.Box
           className="studio-shell__thing-dock"
           style={{
             width: 400,
@@ -141,8 +142,8 @@ export function StudioShell({
           }}
         >
           {rightPanel}
-        </div>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }

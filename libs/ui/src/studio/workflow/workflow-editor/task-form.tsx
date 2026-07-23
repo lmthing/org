@@ -2,6 +2,7 @@
  * TaskForm — the editor card for a single task within the tasklist:
  * id/instruction/input/output/dependsOn/goal/optional/condition.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -46,35 +47,35 @@ export function TaskForm({
   }
 
   return (
-    <div className={cn('tasklist-editor__task-form', draft.goal && 'tasklist-editor__task-form--goal')}>
+    <Prim.Box className={cn('tasklist-editor__task-form', draft.goal && 'tasklist-editor__task-form--goal')}>
       {/* Order + controls header */}
-      <div className="tasklist-editor__task-header">
-        <span className="tasklist-editor__task-order">{index + 1}</span>
+      <Prim.Box className="tasklist-editor__task-header">
+        <Prim.Text className="tasklist-editor__task-order">{index + 1}</Prim.Text>
         {draft.goal && (
-          <span className="tasklist-editor__goal-badge">goal</span>
+          <Prim.Text className="tasklist-editor__goal-badge">goal</Prim.Text>
         )}
-        <div className="tasklist-editor__task-controls">
+        <Prim.Box className="tasklist-editor__task-controls">
           <Button variant="ghost" size="icon" onClick={onMoveUp} disabled={isFirst} title="Move up">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
+            <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
+              <Prim.Path d="M12 19V5M5 12l7-7 7 7" />
+            </Prim.Svg>
           </Button>
           <Button variant="ghost" size="icon" onClick={onMoveDown} disabled={isLast} title="Move down">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
-              <path d="M12 5v14M5 12l7 7 7-7" />
-            </svg>
+            <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
+              <Prim.Path d="M12 5v14M5 12l7 7 7-7" />
+            </Prim.Svg>
           </Button>
           <Button variant="ghost" size="icon" onClick={onDelete} title="Delete task">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
-              <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-            </svg>
+            <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
+              <Prim.Path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            </Prim.Svg>
           </Button>
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
-      <div className="tasklist-editor__task-body">
+      <Prim.Box className="tasklist-editor__task-body">
         {/* id */}
-        <div>
+        <Prim.Box>
           <Label compact required>ID</Label>
           <Input
             type="text"
@@ -83,10 +84,10 @@ export function TaskForm({
             placeholder="task_id (snake_case)"
           />
           <Caption muted>Used as the filename suffix (NN-id.md) and in dependsOn references.</Caption>
-        </div>
+        </Prim.Box>
 
         {/* instruction */}
-        <div>
+        <Prim.Box>
           <Label compact required>Instruction</Label>
           <Textarea
             value={draft.instruction}
@@ -94,10 +95,10 @@ export function TaskForm({
             placeholder="Describe what this task should accomplish..."
             compact
           />
-        </div>
+        </Prim.Box>
 
         {/* input */}
-        <div>
+        <Prim.Box>
           <Label compact>Input fields</Label>
           <SchemaEditor
             rows={draft.input}
@@ -106,10 +107,10 @@ export function TaskForm({
             emptyHint="No input fields. Add fields if this task requires specific inputs."
           />
           <Caption muted>Declare the fields this task expects as input (field name → type).</Caption>
-        </div>
+        </Prim.Box>
 
         {/* output */}
-        <div>
+        <Prim.Box>
           <Label compact>Output fields</Label>
           <SchemaEditor
             rows={draft.output}
@@ -117,15 +118,15 @@ export function TaskForm({
             addLabel="+ Add output field"
           />
           <Caption muted>Declare the fields this task produces (field name → type).</Caption>
-        </div>
+        </Prim.Box>
 
         {/* dependsOn */}
         {otherTaskIds.length > 0 && (
-          <div>
+          <Prim.Box>
             <Label compact>Depends on</Label>
-            <div className="tasklist-editor__depends-grid">
+            <Prim.Box className="tasklist-editor__depends-grid">
               {otherTaskIds.map((taskId) => (
-                <button
+                <Prim.Pressable
                   key={taskId}
                   onClick={() => toggleDepends(taskId)}
                   className={cn(
@@ -136,17 +137,17 @@ export function TaskForm({
                   )}
                 >
                   {taskId}
-                </button>
+                </Prim.Pressable>
               ))}
-            </div>
-          </div>
+            </Prim.Box>
+          </Prim.Box>
         )}
 
         {/* goal / optional / condition row */}
-        <div className="tasklist-editor__flags-row">
+        <Prim.Box className="tasklist-editor__flags-row">
           {/* goal radio */}
-          <div className="tasklist-editor__flag-item">
-            <button
+          <Prim.Box className="tasklist-editor__flag-item">
+            <Prim.Pressable
               onClick={onSetGoal}
               className={cn(
                 'tasklist-editor__toggle',
@@ -154,33 +155,33 @@ export function TaskForm({
               )}
               title="Mark as goal task (exactly one per tasklist)"
             >
-              <span className={cn(
+              <Prim.Text className={cn(
                 'tasklist-editor__toggle-knob',
                 draft.goal ? 'tasklist-editor__toggle-knob--on' : 'tasklist-editor__toggle-knob--off'
               )} />
-            </button>
+            </Prim.Pressable>
             <Label compact>Goal</Label>
-          </div>
+          </Prim.Box>
 
           {/* optional toggle */}
-          <div className="tasklist-editor__flag-item">
-            <button
+          <Prim.Box className="tasklist-editor__flag-item">
+            <Prim.Pressable
               onClick={() => onChange({ ...draft, optional: !draft.optional })}
               className={cn(
                 'tasklist-editor__toggle',
                 draft.optional ? 'tasklist-editor__toggle--on' : 'tasklist-editor__toggle--off'
               )}
             >
-              <span className={cn(
+              <Prim.Text className={cn(
                 'tasklist-editor__toggle-knob',
                 draft.optional ? 'tasklist-editor__toggle-knob--on' : 'tasklist-editor__toggle-knob--off'
               )} />
-            </button>
+            </Prim.Pressable>
             <Label compact>Optional</Label>
-          </div>
+          </Prim.Box>
 
           {/* condition */}
-          <div className="tasklist-editor__flag-condition">
+          <Prim.Box className="tasklist-editor__flag-condition">
             <Label compact>Condition</Label>
             <Input
               type="text"
@@ -188,9 +189,9 @@ export function TaskForm({
               onChange={(e) => onChange({ ...draft, condition: e.target.value })}
               placeholder="e.g. outputs.previous.success === true"
             />
-          </div>
-        </div>
-      </div>
-    </div>
+          </Prim.Box>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

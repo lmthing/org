@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useSpaceFS } from '@lmthing/state'
 import { parseFrontmatter, serializeFrontmatter } from '@lmthing/state'
@@ -162,10 +163,10 @@ export const TopicEditor = forwardRef<TopicEditorHandle, TopicEditorProps>(
     return (
       <Stack gap="sm">
         <Stack row className="topic-editor__header">
-          <div>
+          <Prim.Box>
             <Heading level={3}>{topicName}</Heading>
             <Caption muted>{topicPath}</Caption>
-          </div>
+          </Prim.Box>
           <Stack row gap="sm" className="topic-editor__header-actions">
             {hasUnsavedChanges && <Badge variant="muted">Unsaved changes</Badge>}
             <Button
@@ -185,11 +186,11 @@ export const TopicEditor = forwardRef<TopicEditorHandle, TopicEditorProps>(
 
         {showMetadata && <FileMetadataPanel topicPath={topicPath} />}
 
-        <div className="topic-editor__container">
+        <Prim.Box className="topic-editor__container">
           <MarkdownToolbar mode={mode} onFormat={applyFormat} onModeChange={setMode} />
 
           {mode === 'edit' ? (
-            <textarea
+            <Prim.TextArea
               ref={textareaRef}
               className="input topic-editor__textarea"
               value={draftBody}
@@ -201,7 +202,7 @@ export const TopicEditor = forwardRef<TopicEditorHandle, TopicEditorProps>(
           ) : (
             <MarkdownPreview markdown={draftBody} />
           )}
-        </div>
+        </Prim.Box>
       </Stack>
     )
   }

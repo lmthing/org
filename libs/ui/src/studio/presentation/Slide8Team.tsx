@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import { colors } from './constants'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 
@@ -30,37 +31,37 @@ const members = [
 
 export default function Slide7Team() {
   return (
-    <div
+    <Prim.Box
       className="flex h-full w-full flex-col items-center justify-center"
       style={{ background: colors.bg }}
     >
-      <h2 className="mb-16 flex items-center justify-center gap-3 text-7xl font-bold" style={{ color: colors.text }}>
+      <Prim.Text as="h2" className="mb-16 flex items-center justify-center gap-3 text-7xl font-bold" style={{ color: colors.text }}>
         Team behind the <CozyThingText text="thing" className="text-7xl leading-loose" />
-      </h2>
+      </Prim.Text>
 
-      <div className="flex gap-16">
+      <Prim.Box className="flex gap-16">
         {members.map((m) => (
-          <div key={m.name} className="flex flex-col items-center">
-            <img
+          <Prim.Box key={m.name} className="flex flex-col items-center">
+            <Prim.Image
               src={m.image}
               alt={m.name}
               className="size-40 rounded-full border-4 object-cover"
               style={{ borderColor: colors.brand }}
             />
-            <p className="mt-6 text-2xl font-bold" style={{ color: colors.text }}>
+            <Prim.Text as="p" className="mt-6 text-2xl font-bold" style={{ color: colors.text }}>
               {m.name}
-            </p>
-            <p className="mt-2 text-base" style={{ color: colors.muted }}>
+            </Prim.Text>
+            <Prim.Text as="p" className="mt-2 text-base" style={{ color: colors.muted }}>
               {m.role}
-            </p>
+            </Prim.Text>
             {m.subtitle && (
-              <p className="mt-1 text-sm" style={{ color: colors.muted }}>
+              <Prim.Text as="p" className="mt-1 text-sm" style={{ color: colors.muted }}>
                 {m.subtitle}
-              </p>
+              </Prim.Text>
             )}
-          </div>
+          </Prim.Box>
         ))}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

@@ -7,6 +7,7 @@
  * `use-thing-session.ts` (and the hooks it composes), JSX chunks live in the
  * sibling `Thing*` components.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import { useNavigate } from '@tanstack/react-router'
 
 import '@lmthing/css/elements/forms/button/index.css'
@@ -46,7 +47,7 @@ export function ThingPanel({ fullPage, onStatusChange }: ThingPanelProps) {
   } = useThingSession({ onStatusChange })
 
   return (
-    <div className={`thing-panel ${fullPage ? 'thing-panel--full' : 'thing-panel--embedded'}`}>
+    <Prim.Box className={`thing-panel ${fullPage ? 'thing-panel--full' : 'thing-panel--embedded'}`}>
       <ThingSidebar
         fullPage={fullPage}
         onBack={() => navigate({ to: '/' })}
@@ -58,7 +59,7 @@ export function ThingPanel({ fullPage, onStatusChange }: ThingPanelProps) {
       />
 
       {/* Main chat area */}
-      <div className="thing-panel__main">
+      <Prim.Box className="thing-panel__main">
         <ThingChatHeader
           title={currentConversation?.title || 'Chat'}
           isWorking={isWorking}
@@ -80,8 +81,8 @@ export function ThingPanel({ fullPage, onStatusChange }: ThingPanelProps) {
           isWorking={isWorking}
           onSubmit={handleSubmit}
         />
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

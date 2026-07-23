@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { hostPrimitive } from './_host.tsx'
+import { hostPrimitive } from './_host'
 
 /**
  * Table-family passthrough primitives (Phase 0): `<table>`/`<thead>`/`<tbody>`/`<tfoot>`/

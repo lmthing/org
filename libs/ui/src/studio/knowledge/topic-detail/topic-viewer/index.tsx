@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useCallback, useEffect } from 'react'
 import { useUIState, useSpaceFS } from '@lmthing/state'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
@@ -65,10 +66,10 @@ export function TopicViewer({ optionPath, topicPath }: TopicViewerProps) {
   return (
     <Page full>
       <PageHeader className="topic-viewer__header">
-        <div>
+        <Prim.Box>
           <Heading level={3}>{name}</Heading>
           <Caption muted>{effectivePath}</Caption>
-        </div>
+        </Prim.Box>
         <Stack row gap="sm" className="topic-viewer__header-actions">
           {hasUnsavedChanges && <Badge variant="muted">Unsaved changes</Badge>}
           {savedAt && <Caption muted>Saved at {savedAt}</Caption>}
@@ -79,7 +80,7 @@ export function TopicViewer({ optionPath, topicPath }: TopicViewerProps) {
       </PageHeader>
 
       <PageBody>
-        <textarea
+        <Prim.TextArea
           className="input topic-viewer__textarea"
           value={draft}
           onChange={e => handleChange(e.target.value)}

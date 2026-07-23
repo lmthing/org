@@ -3,6 +3,7 @@
  * file, following the draft/save pattern shared with the agent-builder and
  * topic-editor.
  */
+import * as Prim from '../../elements/primitives/index.js';
 import { useCallback, useEffect, useRef } from 'react'
 import { useSpaceFS, useFile, useUIState } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -55,13 +56,13 @@ export function ComponentCodeEditor({ componentPath, kind }: ComponentCodeEditor
   }, [handleSave])
 
   return (
-    <div className="component-editor__pane">
-      <div className="component-editor__pane-header">
+    <Prim.Box className="component-editor__pane">
+      <Prim.Box className="component-editor__pane-header">
         <Stack row gap="sm">
           <Label>{name}.tsx</Label>
-          <span className={`component-editor__kind-badge component-editor__kind-badge--${kind}`}>
+          <Prim.Text className={`component-editor__kind-badge component-editor__kind-badge--${kind}`}>
             {kind}
-          </span>
+          </Prim.Text>
           <Caption muted>{componentPath}</Caption>
         </Stack>
         <Stack row gap="sm">
@@ -75,9 +76,9 @@ export function ComponentCodeEditor({ componentPath, kind }: ComponentCodeEditor
             Save
           </Button>
         </Stack>
-      </div>
+      </Prim.Box>
 
-      <textarea
+      <Prim.TextArea
         className="input component-editor__textarea"
         value={draft}
         onChange={e => handleChange(e.target.value)}
@@ -85,6 +86,6 @@ export function ComponentCodeEditor({ componentPath, kind }: ComponentCodeEditor
         spellCheck={false}
         placeholder="// Write TSX source here — import only from '@lmthing/ui'…"
       />
-    </div>
+    </Prim.Box>
   )
 }

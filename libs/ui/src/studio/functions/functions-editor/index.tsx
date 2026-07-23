@@ -7,6 +7,7 @@
  * source in a code textarea — matching the same draft/save pattern used by
  * the agent-builder and topic-editor.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import '@lmthing/css/components/functions/index.css'
 import { useCallback, useEffect, useRef } from 'react'
 import { useSpaceFS, useGlob, useFile, useUIState, P } from '@lmthing/state'
@@ -91,7 +92,7 @@ function FunctionListItem({ name, isActive, onSelect, onDelete, onRename }: Func
   }, [renameValue, name, onRename, setRenaming])
 
   return (
-    <div
+    <Prim.Box
       className={`functions-editor__list-item${isActive ? ' functions-editor__list-item--active' : ''}`}
       onClick={() => { if (!renaming) onSelect() }}
     >
@@ -109,17 +110,17 @@ function FunctionListItem({ name, isActive, onSelect, onDelete, onRename }: Func
           style={{ flex: 1 }}
         />
       ) : (
-        <span className="functions-editor__list-item-name">
+        <Prim.Text className="functions-editor__list-item-name">
           {name}.ts
           {requiresConsent && (
             <Badge variant="primary" title="Runs only after the user approves a consent card (@consent)" style={{ marginLeft: 6 }}>
               consent
             </Badge>
           )}
-        </span>
+        </Prim.Text>
       )}
 
-      <div className="functions-editor__list-item-actions" onClick={e => e.stopPropagation()}>
+      <Prim.Box className="functions-editor__list-item-actions" onClick={e => e.stopPropagation()}>
         <Button
           variant="ghost"
           size="icon"
@@ -136,8 +137,8 @@ function FunctionListItem({ name, isActive, onSelect, onDelete, onRename }: Func
         >
           ✕
         </Button>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 
@@ -186,8 +187,8 @@ function FunctionCodeEditor({ functionPath }: FunctionCodeEditorProps) {
   }, [handleSave])
 
   return (
-    <div className="functions-editor__pane">
-      <div className="functions-editor__pane-header">
+    <Prim.Box className="functions-editor__pane">
+      <Prim.Box className="functions-editor__pane-header">
         <Stack row gap="sm">
           <Label>{name}.ts</Label>
           <Caption muted>{functionPath}</Caption>
@@ -203,9 +204,9 @@ function FunctionCodeEditor({ functionPath }: FunctionCodeEditorProps) {
             Save
           </Button>
         </Stack>
-      </div>
+      </Prim.Box>
 
-      <textarea
+      <Prim.TextArea
         className="input functions-editor__textarea"
         value={draft}
         onChange={e => handleChange(e.target.value)}
@@ -213,7 +214,7 @@ function FunctionCodeEditor({ functionPath }: FunctionCodeEditorProps) {
         spellCheck={false}
         placeholder="// Write TypeScript source here…"
       />
-    </div>
+    </Prim.Box>
   )
 }
 
@@ -287,9 +288,9 @@ export function FunctionsEditor({ onChanged }: FunctionsEditorProps) {
   const selectedPath = selectedName ? P.functionFile(selectedName) : null
 
   return (
-    <div className="functions-editor">
+    <Prim.Box className="functions-editor">
       {/* Header */}
-      <div className="functions-editor__header">
+      <Prim.Box className="functions-editor__header">
         <Label>Functions ({functionNames.length})</Label>
         <Button
           variant="ghost"
@@ -301,11 +302,11 @@ export function FunctionsEditor({ onChanged }: FunctionsEditorProps) {
         >
           + New function
         </Button>
-      </div>
+      </Prim.Box>
 
       {/* New-function inline form */}
       {showNewForm && (
-        <div className="functions-editor__new-form">
+        <Prim.Box className="functions-editor__new-form">
           <Input
             ref={newInputRef}
             value={newName}
@@ -324,15 +325,15 @@ export function FunctionsEditor({ onChanged }: FunctionsEditorProps) {
           <Button size="sm" variant="ghost" onClick={() => { setShowNewForm(false); setNewName('') }}>
             Cancel
           </Button>
-        </div>
+        </Prim.Box>
       )}
 
       {/* File list */}
-      <div className="functions-editor__list">
+      <Prim.Box className="functions-editor__list">
         {functionNames.length === 0 ? (
-          <div className="functions-editor__empty">
+          <Prim.Box className="functions-editor__empty">
             <Caption muted>No functions yet. Create one to get started.</Caption>
-          </div>
+          </Prim.Box>
         ) : (
           functionNames.map(name => (
             <FunctionListItem
@@ -345,13 +346,13 @@ export function FunctionsEditor({ onChanged }: FunctionsEditorProps) {
             />
           ))
         )}
-      </div>
+      </Prim.Box>
 
       {/* Code editor pane */}
       {selectedPath && (
         <FunctionCodeEditor key={selectedPath} functionPath={selectedPath} />
       )}
-    </div>
+    </Prim.Box>
   )
 }
 

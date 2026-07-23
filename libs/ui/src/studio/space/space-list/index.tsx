@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import { Search, UserPlus, Clock, Mail } from 'lucide-react'
 import { useUIState, useToggle } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -82,15 +83,15 @@ function InviteDialog({ isOpen, onClose, onInvite }: InviteDialogProps) {
   }
 
   return (
-    <div className="dialog__backdrop">
-      <div className="dialog__content space-list__invite-dialog">
-        <div className="dialog__header">
+    <Prim.Box className="dialog__backdrop">
+      <Prim.Box className="dialog__content space-list__invite-dialog">
+        <Prim.Box className="dialog__header">
           <Heading level={3}>Invite User</Heading>
           <Caption muted>Add a new member to your space</Caption>
-        </div>
-        <form onSubmit={handleSubmit}>
+        </Prim.Box>
+        <Prim.Form onSubmit={handleSubmit}>
           <Stack gap="md" className="space-list__invite-form-body">
-            <div>
+            <Prim.Box>
               <Label compact>Email Address</Label>
               <Input
                 type="email"
@@ -99,8 +100,8 @@ function InviteDialog({ isOpen, onClose, onInvite }: InviteDialogProps) {
                 placeholder="colleague@organization.org"
                 autoFocus
               />
-            </div>
-            <div>
+            </Prim.Box>
+            <Prim.Box>
               <Label compact>Role</Label>
               <Stack gap="sm">
                 {[
@@ -108,9 +109,9 @@ function InviteDialog({ isOpen, onClose, onInvite }: InviteDialogProps) {
                   { value: 'editor' as const, label: 'Editor', desc: 'Can create and modify' },
                   { value: 'admin' as const, label: 'Admin', desc: 'Full access including users' }
                 ].map((r) => (
-                  <label key={r.value}>
+                  <Prim.Text as="label" key={r.value}>
                     <ListItem selected={role === r.value} className="space-list__invite-role-item">
-                      <input
+                      <Prim.TextField
                         type="radio"
                         name="role"
                         value={r.value}
@@ -118,23 +119,23 @@ function InviteDialog({ isOpen, onClose, onInvite }: InviteDialogProps) {
                         onChange={(e) => setRole(e.target.value as SpaceUserRole)}
                         className="space-list__invite-role-radio"
                       />
-                      <div>
+                      <Prim.Box>
                         <Label>{r.label}</Label>
                         <Caption muted>{r.desc}</Caption>
-                      </div>
+                      </Prim.Box>
                     </ListItem>
-                  </label>
+                  </Prim.Text>
                 ))}
               </Stack>
-            </div>
+            </Prim.Box>
             <Stack row gap="sm" className="space-list__invite-actions">
               <Button type="button" onClick={onClose} variant="ghost" className="space-list__invite-action-btn">Cancel</Button>
               <Button type="submit" variant="primary" className="space-list__invite-action-btn">Send Invite</Button>
             </Stack>
           </Stack>
-        </form>
-      </div>
-    </div>
+        </Prim.Form>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 
@@ -172,15 +173,15 @@ export function SpaceList({
       <Sidebar>
         <PanelHeader>
           <Stack row className="space-list__header">
-            <div>
+            <Prim.Box>
               <Heading level={3}>Members</Heading>
               <Caption muted>{users.length} {users.length === 1 ? 'member' : 'members'}</Caption>
-            </div>
+            </Prim.Box>
             <Button onClick={() => setShowInvite(true)} variant="primary" size="sm" aria-label="Add user">
               <UserPlus className="space-list__invite-icon" />
             </Button>
           </Stack>
-          <div className="space-list__search-wrapper">
+          <Prim.Box className="space-list__search-wrapper">
             <Search className="space-list__search-icon" />
             <Input
               type="text"
@@ -189,10 +190,10 @@ export function SpaceList({
               placeholder="Search by name or email..."
               className="input--sm space-list__search-input"
             />
-          </div>
+          </Prim.Box>
         </PanelHeader>
 
-        <div className="space-list__body">
+        <Prim.Box className="space-list__body">
           {filteredUsers.length === 0 ? (
             <Stack className="space-list__empty">
               <Search className="space-list__empty-icon" />
@@ -201,24 +202,24 @@ export function SpaceList({
           ) : (
             <Stack gap="sm" className="space-list__user-list">
               {filteredUsers.map((user) => (
-                <button
+                <Prim.Pressable
                   key={user.id}
                   onClick={() => onSelectUser?.(user.id)}
                   className="space-list__user-btn"
                 >
                   <ListItem selected={selectedUserId === user.id}>
-                    <div className="space-list__avatar-wrapper">
+                    <Prim.Box className="space-list__avatar-wrapper">
                       <Avatar>
                         {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
                         <AvatarFallback className="space-list__avatar-fallback" colorKey={user.id}>
                           {user.name.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <div className={`${getStatusColor(user.status)} space-list__status-dot`} />
-                    </div>
-                    <div className="space-list__user-info">
+                      <Prim.Box className={`${getStatusColor(user.status)} space-list__status-dot`} />
+                    </Prim.Box>
+                    <Prim.Box className="space-list__user-info">
                       <Stack row gap="sm" className="space-list__user-name-row">
-                        <span className="space-list__user-name">{user.name}</span>
+                        <Prim.Text className="space-list__user-name">{user.name}</Prim.Text>
                         <Badge className={`${getRoleBadgeColor(user.role)} space-list__role-badge`}>
                           {user.role.charAt(0).toUpperCase()}
                         </Badge>
@@ -227,8 +228,8 @@ export function SpaceList({
                         <Mail className="space-list__email-icon" />
                         <Caption muted className="space-list__email">{user.email}</Caption>
                       </Stack>
-                    </div>
-                    <div className="space-list__status-col">
+                    </Prim.Box>
+                    <Prim.Box className="space-list__status-col">
                       <Badge variant={user.status === 'active' ? 'success' : user.status === 'invited' ? 'primary' : 'muted'} className="space-list__status-badge">
                         {user.status}
                       </Badge>
@@ -238,13 +239,13 @@ export function SpaceList({
                           {formatDate(user.lastActive)}
                         </Caption>
                       )}
-                    </div>
+                    </Prim.Box>
                   </ListItem>
-                </button>
+                </Prim.Pressable>
               ))}
             </Stack>
           )}
-        </div>
+        </Prim.Box>
       </Sidebar>
 
       {onInviteUser && (

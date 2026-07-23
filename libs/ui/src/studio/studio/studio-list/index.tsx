@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import { Card, CardBody } from '@lmthing/ui/elements/content/card'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
@@ -24,10 +25,10 @@ export function StudioList() {
     <Page full>
       <PageHeader>
         <Stack row className="studio-list__header">
-          <div>
+          <Prim.Box>
             <Heading level={2}>Projects</Heading>
             <Caption muted>Browse and manage your projects</Caption>
-          </div>
+          </Prim.Box>
           <Badge variant="muted">{projects.length} project{projects.length !== 1 ? 's' : ''}</Badge>
         </Stack>
       </PageHeader>

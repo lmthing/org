@@ -1,6 +1,7 @@
 /**
  * TasklistList — list view for all tasklists in the current space.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import { useMemo } from 'react'
 import { useUIState } from '@lmthing/state'
 import type { TasklistListItem as TLItem } from '@lmthing/state'
@@ -43,38 +44,38 @@ export function TasklistList({
   return (
     <Page>
       <PageHeader>
-        <div className="workflow-list__header-inner">
-          <div className="workflow-list__title-row">
-            <div>
+        <Prim.Box className="workflow-list__header-inner">
+          <Prim.Box className="workflow-list__title-row">
+            <Prim.Box>
               <Heading level={1}>Tasklists</Heading>
               <Caption muted>Define ordered task DAGs for agent action flows</Caption>
-            </div>
+            </Prim.Box>
             <Button variant="primary" onClick={onCreateTasklist}>
-              <svg className="workflow-list__create-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
+              <Prim.Svg className="workflow-list__create-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <Prim.Path d="M12 5v14M5 12h14" />
+              </Prim.Svg>
               New Tasklist
             </Button>
-          </div>
+          </Prim.Box>
 
           {/* Stats */}
           <Stack row gap="lg" className="workflow-list__stats">
             <Stack row gap="sm" className="workflow-list__stat-row">
-              <span className="workflow-list__stat-count">{tasklists.length}</span>
+              <Prim.Text className="workflow-list__stat-count">{tasklists.length}</Prim.Text>
               <Caption muted>total</Caption>
             </Stack>
           </Stack>
 
           {/* Search + view toggle */}
           <Stack row gap="md" className="workflow-list__filters">
-            <div className="workflow-list__search-wrapper">
-              <svg
+            <Prim.Box className="workflow-list__search-wrapper">
+              <Prim.Svg
                 className="workflow-list__search-icon"
                 viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               >
-                <circle cx="11" cy="11" r="8" />
-                <path d="M21 21l-4.35-4.35" />
-              </svg>
+                <Prim.Circle cx="11" cy="11" r="8" />
+                <Prim.Path d="M21 21l-4.35-4.35" />
+              </Prim.Svg>
               <Input
                 type="text"
                 value={searchQuery}
@@ -82,67 +83,67 @@ export function TasklistList({
                 placeholder="Search tasklists…"
                 className="workflow-list__search-input"
               />
-            </div>
+            </Prim.Box>
 
             {/* View toggle */}
-            <div className="workflow-list__view-toggle">
-              <button
+            <Prim.Box className="workflow-list__view-toggle">
+              <Prim.Pressable
                 onClick={() => setViewMode('grid')}
                 className={cn('workflow-list__view-btn', viewMode === 'grid' && 'workflow-list__view-btn--active')}
                 title="Grid view"
               >
-                <svg className="workflow-list__view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="7" height="7" />
-                  <rect x="14" y="3" width="7" height="7" />
-                  <rect x="14" y="14" width="7" height="7" />
-                  <rect x="3" y="14" width="7" height="7" />
-                </svg>
-              </button>
-              <button
+                <Prim.Svg className="workflow-list__view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <Prim.Rect x="3" y="3" width="7" height="7" />
+                  <Prim.Rect x="14" y="3" width="7" height="7" />
+                  <Prim.Rect x="14" y="14" width="7" height="7" />
+                  <Prim.Rect x="3" y="14" width="7" height="7" />
+                </Prim.Svg>
+              </Prim.Pressable>
+              <Prim.Pressable
                 onClick={() => setViewMode('list')}
                 className={cn('workflow-list__view-btn', viewMode === 'list' && 'workflow-list__view-btn--active')}
                 title="List view"
               >
-                <svg className="workflow-list__view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-                </svg>
-              </button>
-            </div>
+                <Prim.Svg className="workflow-list__view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <Prim.Path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                </Prim.Svg>
+              </Prim.Pressable>
+            </Prim.Box>
           </Stack>
-        </div>
+        </Prim.Box>
       </PageHeader>
 
       <PageBody>
-        <div className="workflow-list__body-inner">
+        <Prim.Box className="workflow-list__body-inner">
           {filteredTasklists.length === 0 ? (
             tasklists.length === 0 ? (
-              <div className="workflow-list__empty-first">
-                <div className="workflow-list__empty-first-icon-wrapper">
-                  <svg className="workflow-list__empty-first-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-                    <rect x="9" y="3" width="6" height="4" rx="1" />
-                    <path d="M9 12h6M9 16h4" />
-                  </svg>
-                </div>
+              <Prim.Box className="workflow-list__empty-first">
+                <Prim.Box className="workflow-list__empty-first-icon-wrapper">
+                  <Prim.Svg className="workflow-list__empty-first-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <Prim.Path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+                    <Prim.Rect x="9" y="3" width="6" height="4" rx="1" />
+                    <Prim.Path d="M9 12h6M9 16h4" />
+                  </Prim.Svg>
+                </Prim.Box>
                 <Heading level={2}>Create your first tasklist</Heading>
                 <Caption muted className="workflow-list__empty-first-caption">
                   Tasklists define the ordered steps agents execute when a slash action is triggered.
                 </Caption>
                 <Button variant="primary" onClick={onCreateTasklist}>
-                  <svg className="workflow-list__create-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
+                  <Prim.Svg className="workflow-list__create-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <Prim.Path d="M12 5v14M5 12h14" />
+                  </Prim.Svg>
                   Create Tasklist
                 </Button>
-              </div>
+              </Prim.Box>
             ) : (
-              <div className="workflow-list__empty-no-match">
+              <Prim.Box className="workflow-list__empty-no-match">
                 <Heading level={3}>No tasklists match your search</Heading>
                 <Caption muted>Try a different name</Caption>
-              </div>
+              </Prim.Box>
             )
           ) : (
-            <div className={viewMode === 'grid' ? 'workflow-list__grid' : 'workflow-list__list'}>
+            <Prim.Box className={viewMode === 'grid' ? 'workflow-list__grid' : 'workflow-list__list'}>
               {filteredTasklists.map((tl) =>
                 viewMode === 'grid' ? (
                   <TasklistCard
@@ -162,9 +163,9 @@ export function TasklistList({
                   />
                 )
               )}
-            </div>
+            </Prim.Box>
           )}
-        </div>
+        </Prim.Box>
       </PageBody>
     </Page>
   )

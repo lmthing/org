@@ -5,6 +5,7 @@
  * the manifest, per-task form, and field-schema rows are rendered by
  * ManifestSection / TaskForm / SchemaEditor.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
@@ -32,26 +33,26 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
   } = useTasklistEditor(name)
 
   return (
-    <div className="tasklist-editor">
+    <Prim.Box className="tasklist-editor">
       {/* Header */}
-      <div className="tasklist-editor__header">
-        <div className="tasklist-editor__header-inner">
+      <Prim.Box className="tasklist-editor__header">
+        <Prim.Box className="tasklist-editor__header-inner">
           <Stack row gap="md" className="tasklist-editor__header-top">
             {onBack && (
               <Button variant="ghost" size="icon" onClick={onBack} title="Back">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
-                  <path d="M19 12H5M12 19l-7-7 7-7" />
-                </svg>
+                <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
+                  <Prim.Path d="M19 12H5M12 19l-7-7 7-7" />
+                </Prim.Svg>
               </Button>
             )}
-            <div>
+            <Prim.Box>
               <Heading level={2}>{name}</Heading>
               <Caption muted>
                 {drafts.length} task{drafts.length !== 1 ? 's' : ''}
                 {isDirty && ' • unsaved changes'}
               </Caption>
-            </div>
-            <div className="tasklist-editor__header-actions">
+            </Prim.Box>
+            <Prim.Box className="tasklist-editor__header-actions">
               <Button
                 variant="primary"
                 onClick={handleSave}
@@ -59,13 +60,13 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
               >
                 {isSaving ? 'Saving…' : 'Save'}
               </Button>
-            </div>
+            </Prim.Box>
           </Stack>
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
       {/* Body */}
-      <div className="tasklist-editor__body">
+      <Prim.Box className="tasklist-editor__body">
         {/* Manifest section (index.md) */}
         <ManifestSection
           draft={manifestDraft}
@@ -73,17 +74,17 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
         />
 
         {/* Divider */}
-        <div className="tasklist-editor__section-divider" />
+        <Prim.Box className="tasklist-editor__section-divider" />
 
         {/* Tasks */}
         {drafts.length === 0 ? (
-          <div className="tasklist-editor__empty">
+          <Prim.Box className="tasklist-editor__empty">
             <Heading level={3}>No tasks yet</Heading>
             <Caption muted>Add your first task to get started.</Caption>
             <Button variant="primary" onClick={addTask}>Add Task</Button>
-          </div>
+          </Prim.Box>
         ) : (
-          <div className="tasklist-editor__task-list">
+          <Prim.Box className="tasklist-editor__task-list">
             {drafts.map((draft, index) => (
               <TaskForm
                 key={`${index}-${draft.id}`}
@@ -99,17 +100,17 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
                 onSetGoal={() => setGoal(index)}
               />
             ))}
-          </div>
+          </Prim.Box>
         )}
 
-        <button className="tasklist-editor__add-task-btn" onClick={addTask}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
-            <path d="M12 5v14M5 12h14" />
-          </svg>
+        <Prim.Pressable className="tasklist-editor__add-task-btn" onClick={addTask}>
+          <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
+            <Prim.Path d="M12 5v14M5 12h14" />
+          </Prim.Svg>
           Add Task
-        </button>
-      </div>
-    </div>
+        </Prim.Pressable>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

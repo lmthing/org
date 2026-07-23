@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { hostPrimitive } from '../_host.tsx'
+import { hostPrimitive } from '../_host'
 
 /**
  * List / ListItem — the `<ul>`/`<ol>` + `<li>` primitives (Phase 0). Pure passthrough.

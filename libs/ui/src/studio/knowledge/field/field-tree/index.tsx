@@ -2,6 +2,7 @@
  * FieldTree - Simple expandable 3-level domain→field→option tree for knowledge management.
  * Replaces the react-arborist based tree with a lightweight React state implementation.
  */
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useState, useCallback, forwardRef, useImperativeHandle } from 'react'
 import type { Ref } from 'react'
 import {
@@ -59,35 +60,35 @@ function ContextMenu({
 }) {
   return (
     <>
-      <div className="field-tree-context-menu__backdrop" onClick={onClose} />
-      <div
+      <Prim.Box className="field-tree-context-menu__backdrop" onClick={onClose} />
+      <Prim.Box
         className="field-tree-context-menu"
         style={{ left: position.x, top: position.y }}
       >
         {onCreateChild && (
-          <button
+          <Prim.Pressable
             onClick={() => { onCreateChild(); onClose() }}
             className="field-tree-context-menu__item"
           >
             <Plus className="field-tree-context-menu__item-icon" />
             {node.type === 'domain' ? 'New Field' : 'New Option'}
-          </button>
+          </Prim.Pressable>
         )}
-        <button
+        <Prim.Pressable
           onClick={() => { onRename(); onClose() }}
           className="field-tree-context-menu__item"
         >
           <Edit3 className="field-tree-context-menu__item-icon" />
           Rename
-        </button>
-        <button
+        </Prim.Pressable>
+        <Prim.Pressable
           onClick={() => { onDelete(); onClose() }}
           className="field-tree-context-menu__item field-tree-context-menu__item--destructive"
         >
           <Trash2 className="field-tree-context-menu__item-icon" />
           Delete
-        </button>
-      </div>
+        </Prim.Pressable>
+      </Prim.Box>
     </>
   )
 }
@@ -106,18 +107,18 @@ function OptionNode({
   const isSelected = node.path === selectedPath
 
   return (
-    <div
+    <Prim.Box
       className={cn(
         'field-tree-node field-tree-node--option',
         isSelected && 'field-tree-node--selected',
       )}
       onClick={() => onSelect(node.path, 'option')}
     >
-      <span className="field-tree-node__spacer" />
-      <span className="field-tree-node__spacer" />
+      <Prim.Text className="field-tree-node__spacer" />
+      <Prim.Text className="field-tree-node__spacer" />
       <FileText className="field-tree-node__icon field-tree-node__icon--file" />
-      <span className="field-tree-node__label">{node.slug}</span>
-      <div className="field-tree-node__actions">
+      <Prim.Text className="field-tree-node__label">{node.slug}</Prim.Text>
+      <Prim.Box className="field-tree-node__actions">
         <Button
           variant="ghost"
           size="icon"
@@ -129,8 +130,8 @@ function OptionNode({
         >
           <MoreVertical className="field-tree-node__icon" />
         </Button>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 
@@ -153,15 +154,15 @@ function FieldNode({
   const hasChildren = node.children && node.children.length > 0
 
   return (
-    <div>
-      <div
+    <Prim.Box>
+      <Prim.Box
         className={cn(
           'field-tree-node field-tree-node--field',
           isSelected && 'field-tree-node--selected',
         )}
         onClick={() => { onToggle(); onSelect(node.path, 'field') }}
       >
-        <span className="field-tree-node__spacer" />
+        <Prim.Text className="field-tree-node__spacer" />
         {hasChildren ? (
           isExpanded ? (
             <ChevronDown className="field-tree-node__icon--chevron" />
@@ -169,11 +170,11 @@ function FieldNode({
             <ChevronRight className="field-tree-node__icon--chevron" />
           )
         ) : (
-          <span className="field-tree-node__spacer" />
+          <Prim.Text className="field-tree-node__spacer" />
         )}
         <Layers className="field-tree-node__icon field-tree-node__icon--folder" />
-        <span className="field-tree-node__label">{node.slug}</span>
-        <div className="field-tree-node__actions">
+        <Prim.Text className="field-tree-node__label">{node.slug}</Prim.Text>
+        <Prim.Box className="field-tree-node__actions">
           <Button
             variant="ghost"
             size="icon"
@@ -185,10 +186,10 @@ function FieldNode({
           >
             <MoreVertical className="field-tree-node__icon" />
           </Button>
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
       {isExpanded && hasChildren && (
-        <div>
+        <Prim.Box>
           {node.children!.map(opt => (
             <OptionNode
               key={opt.path}
@@ -198,9 +199,9 @@ function FieldNode({
               onContextMenu={onContextMenu}
             />
           ))}
-        </div>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }
 
@@ -227,8 +228,8 @@ function DomainNode({
   const hasChildren = node.children && node.children.length > 0
 
   return (
-    <div>
-      <div
+    <Prim.Box>
+      <Prim.Box
         className={cn(
           'field-tree-node field-tree-node--domain',
           isSelected && 'field-tree-node--selected',
@@ -242,11 +243,11 @@ function DomainNode({
             <ChevronRight className="field-tree-node__icon--chevron" />
           )
         ) : (
-          <span className="field-tree-node__spacer" />
+          <Prim.Text className="field-tree-node__spacer" />
         )}
         <Database className="field-tree-node__icon field-tree-node__icon--folder" />
-        <span className="field-tree-node__label">{node.slug}</span>
-        <div className="field-tree-node__actions">
+        <Prim.Text className="field-tree-node__label">{node.slug}</Prim.Text>
+        <Prim.Box className="field-tree-node__actions">
           <Button
             variant="ghost"
             size="icon"
@@ -258,10 +259,10 @@ function DomainNode({
           >
             <MoreVertical className="field-tree-node__icon" />
           </Button>
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
       {isExpanded && hasChildren && (
-        <div>
+        <Prim.Box>
           {node.children!.map(fieldNode => (
             <FieldNode
               key={fieldNode.path}
@@ -273,9 +274,9 @@ function DomainNode({
               onToggle={() => onToggleField(fieldNode.path)}
             />
           ))}
-        </div>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }
 
@@ -355,7 +356,7 @@ function FieldTreeInner(
   const canCreateChild = contextMenu.node?.type === 'domain' || contextMenu.node?.type === 'field'
 
   return (
-    <div className="field-tree">
+    <Prim.Box className="field-tree">
       {tree.map((domainNode: KnowledgeTreeNode) => (
         <DomainNode
           key={domainNode.path}
@@ -380,7 +381,7 @@ function FieldTreeInner(
           onCreateChild={canCreateChild ? handleCreateChild : undefined}
         />
       )}
-    </div>
+    </Prim.Box>
   )
 }
 

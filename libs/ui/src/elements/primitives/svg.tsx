@@ -1,4 +1,4 @@
-import { svgPrimitive } from './_host.tsx'
+import { svgPrimitive } from './_host'
 
 /**
  * SVG-family passthrough primitives (Phase 0): `<svg>` and its inline children. Named to mirror

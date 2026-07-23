@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 
@@ -12,28 +13,28 @@ export function MultiSelectField({ label, available, selected, onChange }: {
     onChange(selected.includes(item) ? selected.filter(x => x !== item) : [...selected, item])
   }
   return (
-    <div className="panel">
-      <div className="panel__header">
+    <Prim.Box className="panel">
+      <Prim.Box className="panel__header">
         <Label>{label} ({selected.length}/{available.length})</Label>
-      </div>
-      <div className="panel__body">
+      </Prim.Box>
+      <Prim.Box className="panel__body">
         {available.length === 0 ? (
           <Caption muted>None available in this space.</Caption>
         ) : (
-          <div className="agent-builder__pill-grid">
+          <Prim.Box className="agent-builder__pill-grid">
             {available.map(item => (
-              <button
+              <Prim.Pressable
                 key={item}
                 type="button"
                 onClick={() => toggle(item)}
                 className={`badge ${selected.includes(item) ? 'badge--primary' : 'badge--muted'} agent-builder__pill`}
               >
                 {item}
-              </button>
+              </Prim.Pressable>
             ))}
-          </div>
+          </Prim.Box>
         )}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

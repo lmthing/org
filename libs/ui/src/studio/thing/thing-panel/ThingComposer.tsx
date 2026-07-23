@@ -2,6 +2,7 @@
  * The message composer: auto-growing textarea (Enter to send, Shift+Enter
  * for newline) plus the send button.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import type { FormEvent } from 'react'
 
 export interface ThingComposerProps {
@@ -14,8 +15,8 @@ export interface ThingComposerProps {
 
 export function ThingComposer({ input, setInput, hasEnv, isWorking, onSubmit }: ThingComposerProps) {
   return (
-    <form onSubmit={onSubmit} className="thing-panel__input-form">
-      <textarea
+    <Prim.Form onSubmit={onSubmit} className="thing-panel__input-form">
+      <Prim.TextArea
         className="input thing-panel__textarea"
         value={input}
         onChange={e => setInput(e.target.value)}
@@ -29,13 +30,13 @@ export function ThingComposer({ input, setInput, hasEnv, isWorking, onSubmit }: 
         placeholder={hasEnv ? 'Ask THING anything... (Enter to send, Shift+Enter for newline)' : 'Configure API keys to enable THING...'}
         disabled={!hasEnv}
       />
-      <button
+      <Prim.Pressable
         type="submit"
         className="btn btn--primary"
         disabled={!hasEnv || isWorking || !input.trim()}
       >
         Send
-      </button>
-    </form>
+      </Prim.Pressable>
+    </Prim.Form>
   )
 }

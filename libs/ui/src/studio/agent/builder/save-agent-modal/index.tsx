@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import '@lmthing/css/components/agent/builder/index.css'
 import { useCallback, useEffect } from 'react'
 import { useUIState } from '@lmthing/state'
@@ -41,32 +42,32 @@ export function SaveAgentModal({ isOpen, onClose, onSave }: SaveAgentModalProps)
   if (!isOpen) return null
 
   return (
-    <div className="dialog__backdrop">
-      <div className="dialog__content save-agent-modal__content">
-        <div className="dialog__header">
+    <Prim.Box className="dialog__backdrop">
+      <Prim.Box className="dialog__content save-agent-modal__content">
+        <Prim.Box className="dialog__header">
           <Stack row gap="sm" className="save-agent-modal__header-row">
-            <div className="save-agent-modal__icon-wrap">
-              <svg className="save-agent-modal__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-              </svg>
-            </div>
-            <div>
+            <Prim.Box className="save-agent-modal__icon-wrap">
+              <Prim.Svg className="save-agent-modal__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <Prim.Path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </Prim.Svg>
+            </Prim.Box>
+            <Prim.Box>
               <Heading level={3}>Save Agent</Heading>
               <Caption muted>Save this agent configuration for future reuse</Caption>
-            </div>
+            </Prim.Box>
           </Stack>
           <Button onClick={onClose} variant="ghost" size="sm">✕</Button>
-        </div>
+        </Prim.Box>
 
         <Stack gap="md" className="save-agent-modal__form">
-          <div>
+          <Prim.Box>
             <Label compact required>Agent Name</Label>
             <Input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Security Auditor" autoFocus />
-          </div>
-          <div>
+          </Prim.Box>
+          <Prim.Box>
             <Label compact>Description</Label>
             <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Briefly describe what this agent does..." rows={3} />
-          </div>
+          </Prim.Box>
           <Caption muted>Saved agents can be loaded from the Saved Agents view</Caption>
         </Stack>
 
@@ -74,7 +75,7 @@ export function SaveAgentModal({ isOpen, onClose, onSave }: SaveAgentModalProps)
           <Button onClick={onClose} variant="ghost">Cancel</Button>
           <Button onClick={handleSave} disabled={!name.trim()} variant="primary">Save Agent</Button>
         </CardFooter>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useEffect, useCallback } from 'react'
 import {
   useUIState,
@@ -66,17 +67,17 @@ export function DomainMetadataPanel({ domain }: DomainMetadataPanelProps) {
   }, [spaceFS, indexPath, domainLabel, icon, color, renderAs, description])
 
   return (
-    <div className="dir-metadata">
+    <Prim.Box className="dir-metadata">
       <Stack gap="md">
         <Stack row className="dir-metadata__header">
           <BookOpen className="dir-metadata__icon" />
-          <div>
+          <Prim.Box>
             <Heading level={3}>{domain}</Heading>
             <Caption muted>{indexPath}</Caption>
-          </div>
+          </Prim.Box>
         </Stack>
 
-        <div>
+        <Prim.Box>
           <Label compact>Label</Label>
           <Input
             type="text"
@@ -84,9 +85,9 @@ export function DomainMetadataPanel({ domain }: DomainMetadataPanelProps) {
             onChange={e => { setDomainLabel(e.target.value); markDirty() }}
             placeholder="Human-readable domain name (optional)"
           />
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Icon</Label>
           <Input
             type="text"
@@ -94,9 +95,9 @@ export function DomainMetadataPanel({ domain }: DomainMetadataPanelProps) {
             onChange={e => { setIcon(e.target.value); markDirty() }}
             placeholder="Emoji or icon name (optional)"
           />
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Color</Label>
           <Input
             type="text"
@@ -104,23 +105,23 @@ export function DomainMetadataPanel({ domain }: DomainMetadataPanelProps) {
             onChange={e => { setColor(e.target.value); markDirty() }}
             placeholder="CSS color or token (optional)"
           />
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Render As</Label>
-          <select
+          <Prim.Select
             className="input"
             value={renderAs}
             onChange={e => { setRenderAs(e.target.value); markDirty() }}
           >
             {RENDER_AS_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+              <Prim.Option key={opt.value} value={opt.value}>{opt.label}</Prim.Option>
             ))}
-          </select>
+          </Prim.Select>
           <Caption muted>Studio UI hint: how to display this domain's fields.</Caption>
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Description</Label>
           <Textarea
             value={description}
@@ -129,14 +130,14 @@ export function DomainMetadataPanel({ domain }: DomainMetadataPanelProps) {
             compact
           />
           <Caption muted>Injected into the agent system prompt when this domain is referenced.</Caption>
-        </div>
+        </Prim.Box>
 
-        <div className="dir-metadata__footer">
+        <Prim.Box className="dir-metadata__footer">
           <Button variant="primary" size="sm" disabled={!isDirty} onClick={handleSave}>
             Save
           </Button>
-        </div>
+        </Prim.Box>
       </Stack>
-    </div>
+    </Prim.Box>
   )
 }

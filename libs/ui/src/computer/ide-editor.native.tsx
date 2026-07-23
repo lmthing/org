@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { UnavailableOnMobile } from '../elements/content/unavailable-on-mobile/index.tsx'
+import { UnavailableOnMobile } from '../elements/content/unavailable-on-mobile/index'
 import type { IdeEditorProps } from './ide-editor.web'
 
 /**

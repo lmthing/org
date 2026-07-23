@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import { colors } from './constants'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 
@@ -35,73 +36,73 @@ const tiers = [
 
 export default function Slide6Scalability() {
   return (
-    <div
+    <Prim.Box
       className="relative flex h-full w-full flex-col items-center justify-center"
       style={{ background: colors.bg, padding: '44px 64px 48px' }}
     >
       {/* TOP */}
-      <div className="mb-8 flex flex-col items-center">
-        <div
+      <Prim.Box className="mb-8 flex flex-col items-center">
+        <Prim.Box
           className="mb-3 text-lg font-bold uppercase tracking-[0.16em]"
           style={{ color: colors.brand }}
         >
           Scalability & Business Model
-        </div>
-        <h1
+        </Prim.Box>
+        <Prim.Text as="h1"
           className="text-center text-6xl font-extrabold leading-[1.15]"
           style={{ color: colors.text, letterSpacing: '-0.025em' }}
         >
           Open source core.{' '}
-          <em className="not-italic" style={{ color: colors.brand }}>
+          <Prim.Text as="em" className="not-italic" style={{ color: colors.brand }}>
             Enterprise ready.
-          </em>
-        </h1>
-      </div>
+          </Prim.Text>
+        </Prim.Text>
+      </Prim.Box>
 
       {/* BODY */}
-      <div className="mb-7 grid w-full grid-cols-[1fr_1px_1fr] gap-x-9">
+      <Prim.Box className="mb-7 grid w-full grid-cols-[1fr_1px_1fr] gap-x-9">
         {/* LEFT — Platform points */}
-        <div className="flex flex-col justify-center gap-5">
+        <Prim.Box className="flex flex-col justify-center gap-5">
           {points.map((p) => (
-            <div key={p.title} className="flex items-start gap-3">
-              <div
+            <Prim.Box key={p.title} className="flex items-start gap-3">
+              <Prim.Box
                 className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[9px] border text-xl"
                 style={{ background: colors.bgCard, borderColor: colors.cardBorder }}
               >
                 {p.icon}
-              </div>
-              <div>
-                <div className="mb-0.5 text-lg font-bold" style={{ color: colors.text }}>
+              </Prim.Box>
+              <Prim.Box>
+                <Prim.Box className="mb-0.5 text-lg font-bold" style={{ color: colors.text }}>
                   {p.title}
-                </div>
-                <div className="text-base leading-[1.55]" style={{ color: colors.textSecondary }}>
+                </Prim.Box>
+                <Prim.Box className="text-base leading-[1.55]" style={{ color: colors.textSecondary }}>
                   {p.highlight90 ? (
                     <>
                       Train models on your own datasets. Cut LLM usage costs by up to{' '}
-                      <strong style={{ color: colors.text }}>90%</strong> at scale.
+                      <Prim.Text as="strong" style={{ color: colors.text }}>90%</Prim.Text> at scale.
                     </>
                   ) : (
                     p.desc
                   )}
-                </div>
-              </div>
-            </div>
+                </Prim.Box>
+              </Prim.Box>
+            </Prim.Box>
           ))}
-        </div>
+        </Prim.Box>
 
         {/* DIVIDER */}
-        <div style={{ background: colors.cardBorder }} />
+        <Prim.Box style={{ background: colors.cardBorder }} />
 
         {/* RIGHT — Pricing tiers */}
-        <div className="flex flex-col justify-center gap-2">
-          <div
+        <Prim.Box className="flex flex-col justify-center gap-2">
+          <Prim.Box
             className="mb-2 text-sm font-bold uppercase tracking-[0.12em]"
             style={{ color: colors.brand }}
           >
             Business Model
-          </div>
+          </Prim.Box>
           {tiers.map((tier) => (
-            <div
+            <Prim.Box
               key={tier.name}
               className="flex items-center gap-3 rounded-xl border px-4 py-3"
               style={{
@@ -113,47 +114,47 @@ export default function Slide6Scalability() {
                   : colors.cardBorder,
               }}
             >
-              <div
+              <Prim.Box
                 className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
                 style={{ background: tier.featured ? colors.brand : colors.cardBorder }}
               />
-              <div
+              <Prim.Box
                 className="w-28 flex-shrink-0 text-base font-bold"
                 style={{ color: colors.text }}
               >
                 {tier.name}
-              </div>
-              <div className="flex-1 text-sm leading-snug" style={{ color: colors.textSecondary }}>
+              </Prim.Box>
+              <Prim.Box className="flex-1 text-sm leading-snug" style={{ color: colors.textSecondary }}>
                 {tier.desc}
-              </div>
+              </Prim.Box>
               {tier.tag && (
-                <span
+                <Prim.Text
                   className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold"
                   style={{ background: `color-mix(in srgb, ${colors.brand} 10%, transparent)`, color: colors.brand }}
                 >
                   {tier.tag}
-                </span>
+                </Prim.Text>
               )}
-            </div>
+            </Prim.Box>
           ))}
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
       {/* BOTTOM STRIP */}
-      <div
+      <Prim.Box
         className="flex items-center gap-2.5 rounded-full px-8 py-3.5"
         style={{ background: colors.bgDark }}
       >
-        <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-        <div className="text-base font-medium tracking-wide text-white">
+        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+        <Prim.Box className="text-base font-medium tracking-wide text-white">
           Next:{' '}
-          <em className="not-italic font-bold" style={{ color: colors.brand }}>
+          <Prim.Text as="em" className="not-italic font-bold" style={{ color: colors.brand }}>
             Ship Matilda · Open-source lm
             <CozyThingText text="thing" className="text-base font-bold" /> · Launch enterprise pilot
-          </em>
-        </div>
-        <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-      </div>
-    </div>
+          </Prim.Text>
+        </Prim.Box>
+        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+      </Prim.Box>
+    </Prim.Box>
   )
 }

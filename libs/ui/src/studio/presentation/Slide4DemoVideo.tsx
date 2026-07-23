@@ -1,31 +1,32 @@
+import * as Prim from '../../elements/primitives/index.js';
 import { colors } from './constants'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 
 export default function Slide6DemoVideo() {
   return (
-    <div
+    <Prim.Box
       className="relative flex h-full w-full flex-col items-center justify-center"
       style={{ background: colors.bg, padding: '48px 72px 52px' }}
     >
       {/* TOP */}
-      <div className="mb-8 flex flex-col items-center">
-        <div
+      <Prim.Box className="mb-8 flex flex-col items-center">
+        <Prim.Box
           className="mb-4 text-lg font-bold uppercase tracking-[0.16em]"
           style={{ color: colors.brand }}
         >
           See it in action
-        </div>
-        <h1
+        </Prim.Box>
+        <Prim.Text as="h1"
           className="text-center text-6xl font-extrabold leading-[1.15]"
           style={{ color: colors.text, letterSpacing: '-0.025em' }}
         >
           lm<CozyThingText text="thing" className="text-6xl font-extrabold" /> demo
-        </h1>
-      </div>
+        </Prim.Text>
+      </Prim.Box>
 
       {/* VIDEO CONTAINER */}
-      <div className="flex w-full max-w-6xl items-center justify-center">
-        <video
+      <Prim.Box className="flex w-full max-w-6xl items-center justify-center">
+        <Prim.Video
           src="/lmthing.mp4"
           controls
           autoPlay
@@ -37,19 +38,19 @@ export default function Slide6DemoVideo() {
             maxHeight: '65vh',
           }}
         />
-      </div>
+      </Prim.Box>
 
       {/* BOTTOM STRIP */}
-      <div
+      <Prim.Box
         className="mt-8 flex items-center gap-2.5 rounded-full px-8 py-3.5"
         style={{ background: colors.bgSection }}
       >
-        <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-        <div className="text-base font-medium tracking-wide" style={{ color: colors.textSecondary }}>
+        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+        <Prim.Box className="text-base font-medium tracking-wide" style={{ color: colors.textSecondary }}>
           Build custom AI agents in minutes, not days
-        </div>
-        <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-      </div>
-    </div>
+        </Prim.Box>
+        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+      </Prim.Box>
+    </Prim.Box>
   )
 }

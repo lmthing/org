@@ -2,6 +2,7 @@
  * ComponentListItem — a single row in the view/form component list, with
  * inline rename and delete controls.
  */
+import * as Prim from '../../elements/primitives/index.js';
 import { useCallback, useEffect, useRef } from 'react'
 import { useUIState } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -37,7 +38,7 @@ export function ComponentListItem({ name, kind, isActive, onSelect, onDelete, on
   }, [renameValue, name, onRename, setRenaming])
 
   return (
-    <div
+    <Prim.Box
       className={`component-editor__list-item${isActive ? ' component-editor__list-item--active' : ''}`}
       onClick={() => { if (!renaming) onSelect() }}
     >
@@ -55,10 +56,10 @@ export function ComponentListItem({ name, kind, isActive, onSelect, onDelete, on
           style={{ flex: 1 }}
         />
       ) : (
-        <span className="component-editor__list-item-name">{name}.tsx</span>
+        <Prim.Text className="component-editor__list-item-name">{name}.tsx</Prim.Text>
       )}
 
-      <div className="component-editor__list-item-actions" onClick={e => e.stopPropagation()}>
+      <Prim.Box className="component-editor__list-item-actions" onClick={e => e.stopPropagation()}>
         <Button
           variant="ghost"
           size="icon"
@@ -75,7 +76,7 @@ export function ComponentListItem({ name, kind, isActive, onSelect, onDelete, on
         >
           ✕
         </Button>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

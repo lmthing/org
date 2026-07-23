@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useUIState, useToggle } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
@@ -28,31 +29,31 @@ const TYPE_ICON_CLASS: Record<PropertyType, string> = {
 function TypeIcon({ type }: { type: PropertyType }) {
   const icons = {
     string: (
-      <svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M4 7V4h16v3M9 20h6M12 4v16" />
-      </svg>
+      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <Prim.Path d="M4 7V4h16v3M9 20h6M12 4v16" />
+      </Prim.Svg>
     ),
     number: (
-      <svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M4 7V4h3M17 4h3v3M21 17v3h-3M7 20H4v-3M8 9h8M12 9v6" />
-      </svg>
+      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <Prim.Path d="M4 7V4h3M17 4h3v3M21 17v3h-3M7 20H4v-3M8 9h8M12 9v6" />
+      </Prim.Svg>
     ),
     boolean: (
-      <svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" />
-        <path d="M2 17l10 5 10-5" />
-        <path d="M2 12l10 5 10-5" />
-      </svg>
+      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <Prim.Path d="M12 2L2 7l10 5 10-5-10-5z" />
+        <Prim.Path d="M2 17l10 5 10-5" />
+        <Prim.Path d="M2 12l10 5 10-5" />
+      </Prim.Svg>
     ),
     object: (
-      <svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M7 7h10M7 12h10M7 17h6" />
-      </svg>
+      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <Prim.Path d="M7 7h10M7 12h10M7 17h6" />
+      </Prim.Svg>
     ),
     array: (
-      <svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-      </svg>
+      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <Prim.Path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+      </Prim.Svg>
     ),
   }
   return icons[type] || icons.string
@@ -86,34 +87,34 @@ export function PropertyRow({
   const showTypeSpecific = property.type === 'string' || property.type === 'number'
 
   return (
-    <div className="property-row">
+    <Prim.Box className="property-row">
       {/* Main row */}
-      <div className={cn(
+      <Prim.Box className={cn(
              'property-row__main',
              hasNestedConfig && 'property-row__main--clickable'
            )}
            onClick={() => hasNestedConfig && toggleIsExpanded()}>
         {/* Move buttons */}
-        <div className="property-row__move-buttons" onClick={(e) => e.stopPropagation()}>
+        <Prim.Box className="property-row__move-buttons" onClick={(e) => e.stopPropagation()}>
           <Button variant="ghost" size="icon" onClick={onMoveUp} disabled={isFirst}>
-            <svg className="property-row__move-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
+            <Prim.Svg className="property-row__move-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <Prim.Path d="M12 19V5M5 12l7-7 7 7" />
+            </Prim.Svg>
           </Button>
           <Button variant="ghost" size="icon" onClick={onMoveDown} disabled={isLast}>
-            <svg className="property-row__move-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M12 5v14M5 12l7 7 7-7" />
-            </svg>
+            <Prim.Svg className="property-row__move-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <Prim.Path d="M12 5v14M5 12l7 7 7-7" />
+            </Prim.Svg>
           </Button>
-        </div>
+        </Prim.Box>
 
         {/* Expand/collapse for nested types */}
         {hasNestedConfig && (
-          <button className="property-row__expand-btn" onClick={(e) => { e.stopPropagation(); toggleIsExpanded() }}>
-            <svg className={cn('property-row__expand-icon', isExpanded && 'property-row__expand-icon--open')} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </button>
+          <Prim.Pressable className="property-row__expand-btn" onClick={(e) => { e.stopPropagation(); toggleIsExpanded() }}>
+            <Prim.Svg className={cn('property-row__expand-icon', isExpanded && 'property-row__expand-icon--open')} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <Prim.Path d="M9 18l6-6-6-6" />
+            </Prim.Svg>
+          </Prim.Pressable>
         )}
 
         {/* Property name */}
@@ -138,12 +139,12 @@ export function PropertyRow({
         </Select>
 
         {/* Type icon badge */}
-        <span className={cn('property-row__type-icon', TYPE_ICON_CLASS[property.type])}>
+        <Prim.Text className={cn('property-row__type-icon', TYPE_ICON_CLASS[property.type])}>
           <TypeIcon type={property.type} />
-        </span>
+        </Prim.Text>
 
         {/* Required toggle */}
-        <button
+        <Prim.Pressable
           onClick={(e) => { e.stopPropagation(); onToggleRequired() }}
           className={cn(
             'property-row__required-btn',
@@ -151,7 +152,7 @@ export function PropertyRow({
           )}
         >
           {property.required ? 'required' : 'optional'}
-        </button>
+        </Prim.Pressable>
 
         {/* Description hint */}
         {property.description && (
@@ -161,19 +162,19 @@ export function PropertyRow({
         )}
 
         {/* Actions */}
-        <div className="property-row__actions">
+        <Prim.Box className="property-row__actions">
           <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
-            <svg className="property-row__delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-            </svg>
+            <Prim.Svg className="property-row__delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <Prim.Path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            </Prim.Svg>
           </Button>
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
       {/* Type-specific options panel */}
       {showTypeSpecific && (
-        <div className="property-row__type-options">
-          <div className="property-row__type-options-inner">
+        <Prim.Box className="property-row__type-options">
+          <Prim.Box className="property-row__type-options-inner">
             {property.type === 'string' && (
               <Select
                 value={property.format || ''}
@@ -187,7 +188,7 @@ export function PropertyRow({
             )}
 
             {property.type === 'string' && (
-              <div className="property-row__enum-input">
+              <Prim.Box className="property-row__enum-input">
                 <Input
                   type="text"
                   value={enumInput}
@@ -198,11 +199,11 @@ export function PropertyRow({
                   }}
                   placeholder="enum: value1, value2, value3"
                 />
-              </div>
+              </Prim.Box>
             )}
 
             {property.type === 'number' && (
-              <div className="property-row__range-inputs">
+              <Prim.Box className="property-row__range-inputs">
                 <Input
                   type="number"
                   value={property.minimum ?? ''}
@@ -210,7 +211,7 @@ export function PropertyRow({
                   placeholder="Min"
                   className="property-row__range-input"
                 />
-                <span className="property-row__range-arrow">&rarr;</span>
+                <Prim.Text className="property-row__range-arrow">&rarr;</Prim.Text>
                 <Input
                   type="number"
                   value={property.maximum ?? ''}
@@ -218,7 +219,7 @@ export function PropertyRow({
                   placeholder="Max"
                   className="property-row__range-input"
                 />
-              </div>
+              </Prim.Box>
             )}
 
             <Input
@@ -228,27 +229,27 @@ export function PropertyRow({
               placeholder="Description"
               className="property-row__description-input"
             />
-          </div>
-        </div>
+          </Prim.Box>
+        </Prim.Box>
       )}
 
       {/* Nested properties (object type) */}
       {property.type === 'object' && isExpanded && (
-        <div className="property-row__nested">
+        <Prim.Box className="property-row__nested">
           <NestedPropertiesEditor
             properties={property.properties || {}}
             onChange={(props) => onUpdate({ ...property, properties: props })}
           />
-        </div>
+        </Prim.Box>
       )}
 
       {/* Array items */}
       {property.type === 'array' && isExpanded && (
-        <div className="property-row__nested">
+        <Prim.Box className="property-row__nested">
           <Label compact>Array Item Type</Label>
           {property.items ? (
-            <div className="property-row__array-item">
-              <div className="property-row__array-item-inner">
+            <Prim.Box className="property-row__array-item">
+              <Prim.Box className="property-row__array-item-inner">
                 <Caption muted>Type</Caption>
                 <Select
                   value={property.items.type}
@@ -262,30 +263,30 @@ export function PropertyRow({
                   ))}
                 </Select>
 
-                <span className={cn('property-row__type-icon', TYPE_ICON_CLASS[property.items.type])}>
+                <Prim.Text className={cn('property-row__type-icon', TYPE_ICON_CLASS[property.items.type])}>
                   <TypeIcon type={property.items.type} />
-                </span>
+                </Prim.Text>
 
-                <div className="property-row__array-spacer" />
+                <Prim.Box className="property-row__array-spacer" />
 
                 <Button variant="ghost" size="icon" onClick={() => onUpdate({ ...property, items: undefined })}>
-                  <svg className="property-row__delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                  </svg>
+                  <Prim.Svg className="property-row__delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <Prim.Path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                  </Prim.Svg>
                 </Button>
-              </div>
-            </div>
+              </Prim.Box>
+            </Prim.Box>
           ) : (
-            <button
+            <Prim.Pressable
               onClick={() => onUpdate({ ...property, items: { type: 'string' } })}
               className="property-row__add-item-btn"
             >
               + Define array item type
-            </button>
+            </Prim.Pressable>
           )}
-        </div>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }
 
@@ -340,7 +341,7 @@ function NestedPropertiesEditor({
   }
 
   return (
-    <div className="nested-properties">
+    <Prim.Box className="nested-properties">
       {entries.map(([key, prop], index) => (
         <PropertyRow
           key={key}
@@ -361,11 +362,11 @@ function NestedPropertiesEditor({
         />
       ))}
       <Button variant="ghost" onClick={handleAddProperty} className="nested-properties__add-btn">
-        <svg className="nested-properties__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
+        <Prim.Svg className="nested-properties__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <Prim.Path d="M12 5v14M5 12h14" />
+        </Prim.Svg>
         Add nested property
       </Button>
-    </div>
+    </Prim.Box>
   )
 }
