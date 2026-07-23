@@ -14,6 +14,14 @@
 > layout onto Tamagui props / `Row`/`Col`). The full, zero-context execution plan for B is
 > **Part III** at the very bottom of this file — a fresh session should start there. See also the
 > "Phase 1c decision" in the handoff and `.issues/tamagui-web-swap-blocked-by-className-layout.md`.
+>
+> **⛔ B0 SPIKE DONE — pivotal result (2026-07): with the real Tamagui compiler, a Tailwind className
+> CANNOT override a Tamagui `styled(View)` for box-model props (Tamagui's `.is_View` base is injected
+> UNLAYERED, beating Tailwind's `@layer utilities`; explicit props additionally get a hard-coded
+> `:root` specificity boost). So Option B can only be the MAXIMAL migration — surfaces drop Tailwind
+> layout entirely and move all box-model layout to Tamagui props (~137 files). Per Part III's B0 gate,
+> the A-vs-B decision is re-opened for the user before that maximal migration proceeds. Grounded
+> evidence + reproducible probe: Part III "B0 — RESULT" + `apps/web/b0-probe/`.**
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
 > `claude/tamagui-migration-plan-66u8sw`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
@@ -975,6 +983,57 @@ This is a spike + the §6 build integration. It decides B's migration *scope*.
      spacing; only `display`/`direction` move to `Row`/`Col`. This is the cheap, good path.
    - **Tamagui wins / unreliable** → *maximal migration*: ALL layout+paint must move to Tamagui
      props (surfaces drop Tailwind layout classes entirely). Much larger; reconsider vs Option A.
+
+### B0 — RESULT (spike DONE, grounded): **Tamagui wins; className does NOT coexist.** ⛔
+
+Ran the pivotal spike with the **real optimizing compiler** and it is conclusive: with
+`@tamagui/vite-plugin` (extraction ON) + `@tailwindcss/vite` in the same Vite build, a Tailwind
+`className` **cannot** override a Tamagui `styled(View)` primitive for any box-model property the
+React-Native base controls. **The "className wins during coexistence" premise (§5) is false, and the
+compiler does not change it.** Therefore the minimal migration is not viable; per the decision tree
+above this triggers *maximal migration* / *reconsider Option A* — and the B "definition of done"
+gate says to **STOP and re-open A-vs-B with the user before the maximal migration** (done — see the
+top-of-file status).
+
+**The spike** (reproducible under `apps/web/b0-probe/`, throwaway; `node_modules`/`dist` gitignored,
+rebuild via `apps/web/b0-probe/README.md`): four `styled(@tamagui/core View)` components, each given a
+conflicting Tailwind class, built through the compiler and measured with `getComputedStyle` in the
+pre-installed Chromium. Measured (candidate ← what won):
+
+| primitive | Tamagui prop | Tailwind class | computed | winner |
+|---|---|---|---|---|
+| align-items | `alignItems:'stretch'` | `items-center` | `stretch` | **Tamagui** |
+| justify-content | `justifyContent:'flex-start'` | `justify-end` | `flex-start` | **Tamagui** |
+| flex-direction | *(base default)* | `flex-row` | `column` | **Tamagui** |
+| display | *(base default)* | `hidden` (`display:none`) | `flex` | **Tamagui** |
+
+**Why (two independent, grounded reasons — either alone is decisive):**
+1. **Cascade layers.** Tailwind v4 emits every utility inside `@layer utilities {…}`. Tamagui injects
+   its rules **unlayered** — both the compiler's atomic classes in the built CSS
+   (`:root ._alignItems-stretch{…}`) and the runtime base rule
+   `.is_View { display:flex; align-items:stretch; flex-direction:column; flex-basis:auto;
+   box-sizing:border-box; min-height:0; min-width:0; flex-shrink:0 }`. **Any unlayered declaration
+   beats any layered one**, regardless of source order or specificity — so `.is_View` (and every
+   `_prop` atomic) wins over every Tailwind utility, always.
+2. **Specificity boost.** Explicit-prop atomics are emitted as `:root ._prop-value` (the `:root`
+   prefix is **hard-coded** in `@tamagui/web@2.5.1` — `helpers/getCSSStylesAtomic.mjs:140`,
+   ``:root ${cls}``), giving (0,2,0) > a Tailwind utility's (0,1,0). Not configurable via a Tamagui
+   setting (no `specificityPrefix`/layer option in this version).
+
+**What still works:** Tailwind classes for properties the RN base does **not** set — `justify-content`
+(when the primitive leaves it unset), `gap`, `padding`, `margin`, `color`/`background`, `width` — do
+apply (nothing unlayered competes). So the tension is specifically the **box-model** set
+(`display`, `flex-direction`, `align-items`, `flex-shrink`, `flex-basis`, `box-sizing`, `min-*`), which
+every `styled(View)` forces via `.is_View` and which the surfaces' `items-*`/`flex`/`flex-row` classes
+rely on. That is exactly what makes a *keep-Tailwind-for-alignment* minimal path break.
+
+**Consequence for scope:** Option B can only be the *maximal* migration — move **all** box-model layout
+onto Tamagui props on the primitives and per-usage (surfaces stop styling layout via Tailwind), which
+re-edits ~137 surface files and deletes their layout CSS. That is the exact cost the plan flagged for
+user sign-off. **Decision escalated to the user (A vs. maximal-B); implementation paused at B0 until
+answered.** The `@tamagui/vite-plugin` install (in `libs/utils`) and this spike are the durable B0
+deliverables; wiring the plugin into `createViteConfig` is deferred until the direction is confirmed
+(Option A would not need it).
 
 ## B1 — make `Row`/`Col` (then `Box`) real Tamagui, proven equal on the harness
 
