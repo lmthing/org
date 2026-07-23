@@ -1,12 +1,18 @@
 # Migrating `chat` + `studio` to Tamagui (universal / RN-compatible) — **without breaking web styles**
 
-> Status: **Phase 0 COMPLETE** (de-HTML of chat + studio + computer, RN-safety lint enforced) +
-> **Phase-1 foundation COMPLETE** (token pipeline, `createTamagui` config shell, and the L2/L3
-> visual/computed-style harness with passthrough baselines — all node/browser-tested). The
-> primitive **swap itself (Phase 1c) is BLOCKED pending an architecture decision** — the surfaces'
-> layout is 100% Tailwind-className-driven on `Box`, which a Tamagui web swap can't preserve
-> as-is. See "Phase 1c decision" in the handoff and
-> `.issues/tamagui-web-swap-blocked-by-className-layout.md`.
+> Status: **Phase 0 COMPLETE**; **Phase 1 foundation + native side COMPLETE**; **Phase 2 scaffold
+> COMPLETE**. Landed & tested: token pipeline · `createTamagui` config shell (+ runtime parity
+> test) · the L2/L3 visual harness with passthrough baselines · React Native forks for **every**
+> primitive (core + grouped, so the whole `elements/primitives` index is RN-safe) · the xterm
+> terminal native seam · the `platform/` browser-global shims · the `apps/mobile` Expo shell.
+> **Web is byte-unchanged throughout** (L2 24/24, L3 22/22, libs/ui 32/32, root typecheck 6/6,
+> RN-safety + tokens lint clean).
+>
+> **The one thing still BLOCKED: the WEB Tamagui swap of the layout primitives + the Radix→Tamagui
+> web overlays** — the surfaces' layout is 100% Tailwind-className-driven on `Box`, which a Tamagui
+> web swap can't preserve as-is. This needs an architecture decision (NativeWind vs Tamagui-compiler
+> + surface migration vs defer). The native forks are the seam whichever path plugs into. See
+> "Phase 1c decision" in the handoff and `.issues/tamagui-web-swap-blocked-by-className-layout.md`.
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
 > `claude/tamagui-migration-plan-66u8sw`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
