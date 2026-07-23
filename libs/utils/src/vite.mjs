@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite-plus'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { tamaguiPlugin } from '@tamagui/vite-plugin'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -108,6 +109,23 @@ export function createViteConfig(dirname, overrides) {
       }),
       react(),
       tailwindcss(),
+      // Tamagui plugin (§6 build integration). Loads the SHARED config so the RNW aliases + theme
+      // are wired; coexists with Tailwind. No-op on output until a web component uses Tamagui.
+      tamaguiPlugin({
+        config: path.resolve(orgRoot, 'libs/ui/src/theme/tamagui.config.ts'),
+        // `@tamagui/core` (not the `tamagui` kit, which isn't installed) is the component source the
+        // extractor bundles; `@lmthing/ui` can't be listed here — config-bundling the whole package
+        // pulls in app-only deps (@tanstack/react-query, @/…) that don't resolve. Surfaces import
+        // Row/Col/Box from `@lmthing/ui`, which the extractor won't statically optimize; those fall
+        // back to Tamagui's runtime, which injects the same `:root`-boosted unlayered CSS the
+        // compiler would (B0) — web correctness is identical, extraction is just a perf win.
+        components: ['@tamagui/core'],
+        // Extraction OFF: the extractor can't optimize @lmthing/ui components anyway (they run via
+        // runtime fallback) and its per-file worker ~3×'d the build for no benefit. Runtime Tamagui
+        // is correctness-equivalent (B0). The config still loads (aliases/theme). Re-enable if a
+        // future config-bundle of the design-system package makes extraction worthwhile.
+        disableExtraction: true,
+      }),
       {
         name: 'resolve-workspace-deps',
         enforce: 'pre',
