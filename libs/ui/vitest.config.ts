@@ -18,6 +18,7 @@ export default defineConfig({
       'src/elements/primitives/**/*.test.tsx',
       'src/**/*.parity.test.tsx',
       'src/theme/**/*.test.ts',
+      'src/platform/**/*.test.ts',
     ],
     setupFiles: ['./vitest.setup.ts'],
     css: false,
