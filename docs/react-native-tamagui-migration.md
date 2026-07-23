@@ -26,9 +26,17 @@
 > **B1 PRE-PROOF DONE:** the Tamagui `styled(View)` `Row`/`Col`/`Box` definitions (with web
 > block-compat resets) are proven to compute **identically** to plain-HTML flex-row/flex-col/block
 > `<div>`s via new equivalence fixtures — `tests/visual/equivalence.spec.ts` 8/8 green (L2 24/24,
-> L3 22/22 unchanged). The actual `index.tsx` swap stays coupled to the B2 surface migration (it
-> can't coexist with the surfaces' Tailwind per B0), so it waits on the A-vs-B decision. Details:
-> Part III "B1 — PRE-PROOF DONE".
+> L3 22/22 unchanged). Details: Part III "B1 — PRE-PROOF DONE".
+>
+> **DECISION: user chose maximal Option B (2026-07).** Execution progress this session:
+> **`@tamagui/vite-plugin` wired into `createViteConfig`** (apps/web builds green, runtime mode —
+> see B0-finalize); **B2 codemod rules EMPIRICALLY VERIFIED** (`items-*`/`flex-1`/`min-w-*` → Tamagui
+> props, `justify-*`/`gap-*` → keep className) via a ref-vs-candidate proof, 9/9 box-model props match
+> (`apps/web/b0-probe/` `lay-*` + `measure-layout.mjs`). **Remaining (the bulk):** the real primitive
+> swaps, the codemod run across ~137 surfaces, a real-CSS surface verification harness (§3.1), Radix,
+> CSS deletion. **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** — it has the
+> grounded ordering (global swap; Row/Col first; codemod flex Boxes; then Box; Text/Pressable last)
+> and the constraint that the surface harness must be built to verify surfaces under the parity contract.
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
 > `claude/tamagui-migration-plan-66u8sw`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
@@ -1150,6 +1158,46 @@ unaffected; only the flex Boxes must migrate here.
 - **§7 step 9 — delete superseded CSS**: once a component is fully on Tamagui, remove the now-dead
   `libs/css/src/{elements,components}/**` rules and Tailwind classes it used; re-run the full suite
   + `lint:tokens`. Do this per-component, after its parity gate is green — never ahead of it.
+
+## B — EXECUTION ORDER & VERIFICATION (learned this session — read before running B2)
+
+Hard constraints discovered while grounding B0/B1/B2, that dictate the execution order:
+
+1. **The primitive swap is GLOBAL and can't be done per-component.** The moment `box`/`row`/`col`/
+   `text`/`pressable` `index.tsx` becomes Tamagui, EVERY surface using it changes at once, and (B0) a
+   Tamagui primitive's `.is_View` base overrides the surfaces' Tailwind layout. So you cannot swap a
+   shared primitive and verify only one surface — either migrate all its usages in the same change, or
+   keep the primitive passthrough until then.
+2. **Safe swap ordering (each step keeps web buildable):**
+   a. **`Row`/`Col` first** — 0 surface usages today, so making them real Tamagui breaks nothing. (It
+      does change the `tests/visual` `row-explicit`/`col-explicit`/`composite-card` fixtures, which
+      then need a real `TamaguiProvider`; drive its theme by `?theme` so the real config's injected
+      `--background`/… vars — which collide with the harness vars but are byte-equal by token parity —
+      stay correct, and re-capture the passthrough baselines as a reviewed act.)
+   b. **Codemod all flex `Box`es → `Row`/`Col`** across chat+studio+computer in ONE pass (the verified
+      rule table above), then they render on the now-real `Row`/`Col`. Block `Box`es are untouched.
+   c. **Swap `Box` → `styled(View,{display:'block', …webBlockCompat})`** only after (b): now no flex
+      `Box` remains, so block Boxes (Tailwind paint/spacing kept as className) render like block divs.
+   d. **`Text`/`Pressable` (B3)** — these carry typography; `.is_Text` forces font-family/size, so
+      `font-*`/`text-*`/`leading-*`/`tracking-*`/`font-weight` classes must move to props too (same
+      unlayered-base logic). Prove each with a ref-vs-candidate fixture like B2's before swapping.
+3. **Verification requires a REAL-CSS surface harness (still to build).** The `tests/visual` harness is
+   self-contained (no Tailwind/theme.css) and the jsdom `EmptyState.parity.test` asserts byte-identical
+   HTML — neither can verify a Tamagui migration (Tamagui adds its own classes, so byte-identity is
+   gone by construction; only computed-style/screenshot parity holds). Build the §3.1 dev harness that
+   renders real surface components under the compiled `theme.css` + Tailwind and diffs each against a
+   `main` baseline (computed-style exact + screenshot ≤0.001). The B2 rule proof
+   (`apps/web/b0-probe/` `lay-*` + `measure-layout.mjs`) is the minimal pattern; scale it to real
+   fixtures (start: EmptyState, a chat Message, a studio panel), capture `main` baselines FIRST.
+4. **`flex-1` etc. need exact props, not `flex={1}`** — `flex={1}` emits `flex-basis:0px` vs Tailwind's
+   `0%`; the codemod must emit `flexGrow={1} flexShrink={1} flexBasis="0%"` (verified).
+
+**State at this handoff:** B0 done (className can't coexist — maximal migration confirmed); B1 pre-proof
+green (Row/Col/Box `styled()` defs proven ≡ plain HTML); `@tamagui/vite-plugin` wired into
+`createViteConfig` (apps/web builds, runtime mode); B2 codemod rules empirically verified. **Not yet
+done:** the real primitive swaps, the codemod run on surfaces, the real-CSS surface harness, Radix, CSS
+deletion — i.e. the bulk of the maximal migration, which needs the surface harness (item 3) to proceed
+under the parity contract.
 
 ## B — definition of done
 
