@@ -1,3 +1,15 @@
+# Tamagui migration probes — B0 (coexistence) + B2 (migration rules)
+
+> This dir now hosts two reproducible proofs: the original B0 spike (below) and the B2
+> migration-rule proof. **B2:** `main.tsx` renders `lay-ref-*` (plain Tailwind flex divs) next to
+> `lay-cand-*` (migrated Tamagui `Row`/`Col` with the class-vs-prop split), and
+> `measure-layout.mjs` asserts both match 9/9 box-model props — verifying the exact codemod rules
+> (`items-*`/`flex-1`/`min-w-*` → props; `justify-*`/`gap-*` → keep className). Run:
+> `node ../node_modules/vite/bin/vite.js build --config vite.config.mts && node measure-layout.mjs`.
+> See `docs/react-native-tamagui-migration.md` Part III / "B2 — codemod rules, EMPIRICALLY VERIFIED".
+
+---
+
 # B0 probe — "does a Tailwind className win over Tamagui with the compiler?"
 
 Throwaway spike for **Part III / B0** of `docs/react-native-tamagui-migration.md`. It builds four
