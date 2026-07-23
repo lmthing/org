@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { useStore } from '../store/store.js';
 import { selectActiveWork } from './node-meta.js';
@@ -21,23 +22,23 @@ export function LiveActivity(): React.ReactElement | null {
   if (active.length === 0) return null;
 
   return (
-    <div
+    <Prim.Box
       className="mx-4 mb-2 rounded-lg border border-border bg-muted/30 lm-fade-in"
       data-testid="live-activity"
       aria-label="sub-agent activity"
     >
-      <div className="flex items-center gap-1.5 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
-        <span className="lm-pulse text-brand-2">●</span>
-        <span>working…</span>
-        <span className="opacity-60">{active.length} active</span>
-      </div>
+      <Prim.Box className="flex items-center gap-1.5 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+        <Prim.Text className="lm-pulse text-brand-2">●</Prim.Text>
+        <Prim.Text>working…</Prim.Text>
+        <Prim.Text className="opacity-60">{active.length} active</Prim.Text>
+      </Prim.Box>
       {/* Bounded, internally-scrollable list so a large parallel tasklist can't
           push the composer off-screen. */}
-      <div className="max-h-[40vh] overflow-y-auto py-1">
+      <Prim.Box className="max-h-[40vh] overflow-y-auto py-1">
         {active.map((n) => (
           <WorkBlock key={n.id} nodeId={n.id} />
         ))}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   );
 }

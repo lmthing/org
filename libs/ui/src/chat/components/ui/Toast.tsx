@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../../lib/cn.js';
 
@@ -37,12 +38,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastCtx.Provider value={{ toast }}>
       {children}
-      <div
+      <Prim.Box
         className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
         aria-live="polite"
       >
         {items.map(t => (
-          <div
+          <Prim.Box
             key={t.id}
             className={cn(
               'px-4 py-3 rounded-xl border shadow-lg text-sm lm-fade-in max-w-sm',
@@ -50,9 +51,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             )}
           >
             {t.message}
-          </div>
+          </Prim.Box>
         ))}
-      </div>
+      </Prim.Box>
     </ToastCtx.Provider>
   );
 }

@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { useStore } from '../store/store.js';
 import type { ConvoBlock, UploadedAttachment } from '../store/model.js';
@@ -31,10 +32,10 @@ function ConnectionDot() {
   const dot = mode === 'replay' ? '⏵' : c === 'open' ? '●' : c === 'connecting' ? '◌' : '○';
   const label = mode === 'replay' ? 'replay' : c;
   return (
-    <span className={`flex items-center gap-1 text-xs ${color}`}>
-      <span>{dot}</span>
-      <span className="text-muted-foreground">{label}</span>
-    </span>
+    <Prim.Text className={`flex items-center gap-1 text-xs ${color}`}>
+      <Prim.Text>{dot}</Prim.Text>
+      <Prim.Text className="text-muted-foreground">{label}</Prim.Text>
+    </Prim.Text>
   );
 }
 
@@ -174,47 +175,47 @@ export function ChatView({
   const title = sessionTitle || fallbackTitle;
 
   return (
-    <div className={cn('flex flex-col h-full bg-background', className)}>
+    <Prim.Box className={cn('flex flex-col h-full bg-background', className)}>
       {/* Header */}
-      <header
+      <Prim.Box as="header"
         className="flex items-center gap-3 pl-12 md:pl-4 pr-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm shrink-0"
         aria-label="chat header"
       >
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-foreground truncate">{title}</div>
+        <Prim.Box className="flex-1 min-w-0">
+          <Prim.Box className="text-sm font-medium text-foreground truncate">{title}</Prim.Box>
           {/* THING's live "currently doing" line (setActivity, session scope). Sub-agent
               activities are shown by the LiveActivity/WorkBlock panel, not here. */}
           {activity && (
-            <div
+            <Prim.Box
               className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground min-w-0"
               aria-live="polite"
               data-testid="activity"
               title={activity}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-agent animate-pulse shrink-0" aria-hidden />
-              <span className="truncate italic">{activity}</span>
-            </div>
+              <Prim.Text className="w-1.5 h-1.5 rounded-full bg-agent animate-pulse shrink-0" aria-hidden />
+              <Prim.Text className="truncate italic">{activity}</Prim.Text>
+            </Prim.Box>
           )}
-        </div>
+        </Prim.Box>
         {sessionCostUsd > 0 && (
-          <span className="text-xs text-muted-foreground shrink-0" title="Session cost">
+          <Prim.Text className="text-xs text-muted-foreground shrink-0" title="Session cost">
             {formatCost(sessionCostUsd)}
-          </span>
+          </Prim.Text>
         )}
-        <div className="flex items-center gap-2 shrink-0">
+        <Prim.Box className="flex items-center gap-2 shrink-0">
           {mode === 'live' && (
-            <button
+            <Prim.Pressable
               onClick={() => setFollow(!follow)}
               data-testid="follow-toggle"
               className={`text-xs ${follow ? 'text-agent' : 'text-muted-foreground hover:text-foreground'}`}
               title="Follow mode"
             >
               {follow ? '⊙' : '○'}
-            </button>
+            </Prim.Pressable>
           )}
           <ConnectionDot />
           <TraceLoader />
-          <button
+          <Prim.Pressable
             onClick={() => onOpenDevPanel?.()}
             className={cn(
               'text-xs px-2 py-1 rounded-lg transition-colors',
@@ -225,37 +226,37 @@ export function ChatView({
             title="Toggle DevPanel (⌥I)"
           >
             Inspect
-          </button>
-          <button
+          </Prim.Pressable>
+          <Prim.Pressable
             onClick={() => { void openBugReport(); }}
             className="text-xs text-muted-foreground hover:text-foreground"
             title="Report a bug"
           >
             Report bug
-          </button>
-          <button
+          </Prim.Pressable>
+          <Prim.Pressable
             onClick={toggleTheme}
             data-testid="theme-toggle"
             className="text-xs text-muted-foreground hover:text-foreground"
             title="Toggle theme"
           >
             {theme === 'light' ? '☾' : '☀'}
-          </button>
+          </Prim.Pressable>
           {mode === 'live' && (
-            <button
+            <Prim.Pressable
               onClick={() => { void handleRestart(); }}
               disabled={restarting}
               className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
               title="Restart CLI process (reloads .env)"
             >
               {restarting ? '↻' : '⏻'}
-            </button>
+            </Prim.Pressable>
           )}
-        </div>
-      </header>
+        </Prim.Box>
+      </Prim.Box>
 
       {/* Messages */}
-      <main
+      <Prim.Box as="main"
         ref={scrollRef}
         className="flex-1 overflow-y-auto"
         onScroll={handleScroll}
@@ -263,7 +264,7 @@ export function ChatView({
         aria-live="polite"
         aria-atomic="false"
       >
-        <div className="max-w-3xl mx-auto py-6 min-h-full flex flex-col">
+        <Prim.Box className="max-w-3xl mx-auto py-6 min-h-full flex flex-col">
           {groups.length === 0 ? (
             <EmptyState
               projectName={!singleSession && spaceLabel ? spaceLabel : undefined}
@@ -278,9 +279,9 @@ export function ChatView({
               ),
             )
           )}
-          <div ref={bottomRef} />
-        </div>
-      </main>
+          <Prim.Box ref={bottomRef} />
+        </Prim.Box>
+      </Prim.Box>
 
       {/* Ephemeral sub-agent activity (delegates/forks/tasklists). Pinned above
           the composer; renders nothing and takes no space when nothing runs, and
@@ -289,19 +290,19 @@ export function ChatView({
 
       {/* Scroll to bottom button */}
       {!atBottom && (
-        <button
+        <Prim.Pressable
           onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
           className="absolute bottom-24 right-6 w-8 h-8 rounded-full bg-card border border-border shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors z-10"
           aria-label="Scroll to bottom"
         >
           ↓
-        </button>
+        </Prim.Pressable>
       )}
 
       {/* Composer */}
       <Composer onSend={handleSend} projectId={projectId} />
 
       <BugReportDialog open={bugOpen} onClose={() => setBugOpen(false)} screenshot={shot} />
-    </div>
+    </Prim.Box>
   );
 }

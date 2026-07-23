@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../../lib/cn.js';
 
@@ -19,7 +20,7 @@ export function Badge({
   ...props
 }: React.HTMLAttributes<HTMLSpanElement> & { variant?: BadgeVariant }) {
   return (
-    <span
+    <Prim.Text
       {...props}
       className={cn(
         'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium',
@@ -28,6 +29,6 @@ export function Badge({
       )}
     >
       {children}
-    </span>
+    </Prim.Text>
   );
 }

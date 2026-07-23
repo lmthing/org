@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 
 interface VariablesBlockProps {
@@ -8,7 +9,7 @@ export function VariablesBlock({ vars }: VariablesBlockProps): React.ReactElemen
   const entries = Object.entries(vars);
 
   return (
-    <div
+    <Prim.Box
       className="repl-variables"
       style={{
         backgroundColor: 'var(--muted)',
@@ -19,16 +20,16 @@ export function VariablesBlock({ vars }: VariablesBlockProps): React.ReactElemen
         fontSize: 13,
       }}
     >
-      <div style={{ fontWeight: 'bold', marginBottom: 8, color: 'var(--muted-foreground)' }}>VARIABLES</div>
+      <Prim.Box style={{ fontWeight: 'bold', marginBottom: 8, color: 'var(--muted-foreground)' }}>VARIABLES</Prim.Box>
       {entries.map(([name, value]) => (
-        <div key={name} style={{ marginBottom: 4 }}>
-          <span style={{ color: 'var(--agent)' }}>{name}</span>
+        <Prim.Box key={name} style={{ marginBottom: 4 }}>
+          <Prim.Text style={{ color: 'var(--agent)' }}>{name}</Prim.Text>
           {': '}
-          <span style={{ color: 'var(--knowledge)' }}>
+          <Prim.Text style={{ color: 'var(--knowledge)' }}>
             {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-          </span>
-        </div>
+          </Prim.Text>
+        </Prim.Box>
       ))}
-    </div>
+    </Prim.Box>
   );
 }

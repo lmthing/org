@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ReplRpcClient } from '../client/rpc-client.js';
 import { ReplChatView } from './ReplChatView.js';
@@ -138,11 +139,11 @@ export function AgentChatPanel({
 
   if (sessionError) {
     return (
-      <div style={{ ...styles.container, ...styles.center, ...style }} className={className}>
-        <p style={{ color: 'var(--destructive)', textAlign: 'center', marginBottom: 8 }}>
+      <Prim.Box style={{ ...styles.container, ...styles.center, ...style }} className={className}>
+        <Prim.Text as="p" style={{ color: 'var(--destructive)', textAlign: 'center', marginBottom: 8 }}>
           Failed to start session: {sessionError}
-        </p>
-        <button
+        </Prim.Text>
+        <Prim.Pressable
           onClick={() => {
             startedOnceRef.current = false;
             void startSession();
@@ -150,8 +151,8 @@ export function AgentChatPanel({
           style={styles.sendButton}
         >
           Retry
-        </button>
-      </div>
+        </Prim.Pressable>
+      </Prim.Box>
     );
   }
 
@@ -159,9 +160,9 @@ export function AgentChatPanel({
 
   if (!sessionId) {
     return (
-      <div style={{ ...styles.container, ...styles.center, ...style }} className={className}>
-        <span style={{ color: 'var(--muted-foreground)' }}>{PHASE_LABEL[phase]}</span>
-      </div>
+      <Prim.Box style={{ ...styles.container, ...styles.center, ...style }} className={className}>
+        <Prim.Text style={{ color: 'var(--muted-foreground)' }}>{PHASE_LABEL[phase]}</Prim.Text>
+      </Prim.Box>
     );
   }
 

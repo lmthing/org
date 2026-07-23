@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../lib/cn.js';
 import { useStore } from '../store/store.js';
@@ -72,80 +73,80 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
   };
 
   return (
-    <div
+    <Prim.Box
       className="py-1 lm-fade-in"
       style={{ paddingLeft: 16 + depth * 14, paddingRight: 16 }}
       data-testid="work-block"
       data-node-id={nodeId}
     >
-      <div className="flex items-center gap-1.5 text-xs">
-        <button
+      <Prim.Box className="flex items-center gap-1.5 text-xs">
+        <Prim.Pressable
           onClick={() => setExpanded((v) => !v)}
           className="w-3 shrink-0 text-muted-foreground hover:text-foreground"
           aria-label={expanded ? 'Collapse work block' : 'Expand work block'}
         >
           {expanded ? '▾' : '▸'}
-        </button>
-        <span className="shrink-0" aria-hidden="true">
+        </Prim.Pressable>
+        <Prim.Text className="shrink-0" aria-hidden="true">
           {KIND_ICON[node.kind] ?? '◦'}
-        </span>
-        <button
+        </Prim.Text>
+        <Prim.Pressable
           onClick={openInspector}
           className="max-w-[180px] shrink min-w-0 truncate text-left font-mono text-muted-foreground transition-colors hover:text-foreground"
           title={`${node.label} — open in inspector`}
         >
           {node.label}
-        </button>
+        </Prim.Pressable>
         {headline && (
-          <span className="flex-1 min-w-0 truncate text-muted-foreground opacity-70" title={headline}>
+          <Prim.Text className="flex-1 min-w-0 truncate text-muted-foreground opacity-70" title={headline}>
             {headline}
-          </span>
+          </Prim.Text>
         )}
-        <span
+        <Prim.Text
           className={cn(
             'inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5',
             STATUS_COLOR[colorKey] ?? STATUS_COLOR.done,
           )}
         >
-          {isRunning && <span className="lm-pulse">{STATUS_GLYPH[node.status] ?? '●'}</span>}
-          {!isRunning && <span>{STATUS_GLYPH[node.status] ?? '◦'}</span>}
-          <span className="capitalize">{node.status}</span>
-        </span>
+          {isRunning && <Prim.Text className="lm-pulse">{STATUS_GLYPH[node.status] ?? '●'}</Prim.Text>}
+          {!isRunning && <Prim.Text>{STATUS_GLYPH[node.status] ?? '◦'}</Prim.Text>}
+          <Prim.Text className="capitalize">{node.status}</Prim.Text>
+        </Prim.Text>
         {dur != null && (
-          <span className="shrink-0 text-muted-foreground opacity-70">{fmtDuration(dur)}</span>
+          <Prim.Text className="shrink-0 text-muted-foreground opacity-70">{fmtDuration(dur)}</Prim.Text>
         )}
-      </div>
+      </Prim.Box>
 
       {expanded && (
-        <div className="mt-1 space-y-0.5 pl-[26px] text-xs text-muted-foreground">
+        <Prim.Box className="mt-1 space-y-0.5 pl-[26px] text-xs text-muted-foreground">
           {stmts.length > 0 ? (
             stmts.map((s, i) => {
               const text = narrationOf(s.code);
               return (
-                <div
+                <Prim.Box
                   key={`${s.ts}-${i}`}
                   className={cn('truncate', s.errors.length > 0 && 'text-destructive')}
                   title={text}
                 >
                   {text || '(no narration)'}
-                </div>
+                </Prim.Box>
               );
             })
           ) : (
-            <div className="italic opacity-70">{isRunning ? 'working…' : ''}</div>
+            <Prim.Box className="italic opacity-70">{isRunning ? 'working…' : ''}</Prim.Box>
           )}
           {count > 0 && (
-            <div className="opacity-60">
+            <Prim.Box className="opacity-60">
               {count} statement{count === 1 ? '' : 's'}
-            </div>
+            </Prim.Box>
           )}
           {node.error && (
-            <div className="truncate font-mono text-destructive" title={node.error}>
+            <Prim.Box className="truncate font-mono text-destructive" title={node.error}>
               {node.error}
-            </div>
+            </Prim.Box>
           )}
-        </div>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   );
 }

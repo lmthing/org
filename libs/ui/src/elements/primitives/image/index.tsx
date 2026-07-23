@@ -1,16 +1,14 @@
 import * as React from 'react'
+import { hostPrimitive } from '../_host.tsx'
 
 /**
- * Image — the `<img>` primitive (Phase 0). Pure passthrough. Phase 1 swaps its internals to
- * a Tamagui `Image` (web `<img>`, native `react-native` Image).
+ * Image — the `<img>` primitive (Phase 0). Pure passthrough. Phase 1 swaps its internals to a
+ * Tamagui `Image` (web `<img>`, native `react-native` Image).
  *
  * See docs/react-native-tamagui-migration.md §1.5.
  */
 export type ImageProps = React.ImgHTMLAttributes<HTMLImageElement>
 
-function Image(props: ImageProps) {
-  // eslint-disable-next-line jsx-a11y/alt-text -- passthrough; alt is the caller's responsibility
-  return <img {...props} />
-}
+const Image = hostPrimitive<HTMLImageElement, ImageProps>('img', 'Image')
 
 export { Image }

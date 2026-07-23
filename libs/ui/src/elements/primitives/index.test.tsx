@@ -1,6 +1,35 @@
 import { render } from '@testing-library/react'
+import * as React from 'react'
 import { describe, it, expect } from 'vitest'
-import { Box, Text, Pressable, Row, Col, Image, Link, Form, List, ListItem } from './index.ts'
+import {
+  Box,
+  Text,
+  Pressable,
+  Row,
+  Col,
+  Image,
+  Link,
+  Form,
+  List,
+  ListItem,
+  TextField,
+  TextArea,
+  Select,
+  Option,
+  Audio,
+  IFrame,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Svg,
+  Path,
+  Pre,
+  Br,
+  Hr,
+} from './index.ts'
 
 /**
  * Phase-0 parity: each vocabulary primitive is a PURE PASSTHROUGH wrapper — it must emit the
@@ -101,5 +130,72 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(html(<ListItem className="li" data-i="1">c</ListItem>)).toBe(
       html(<li className="li" data-i="1">c</li>),
     )
+  })
+
+  it('form controls emit input/textarea/select/option verbatim', () => {
+    expect(html(<TextField type="text" className="i" placeholder="p" defaultValue="v" />)).toBe(
+      html(<input type="text" className="i" placeholder="p" defaultValue="v" />),
+    )
+    expect(html(<TextArea className="t" rows={3} defaultValue="v" />)).toBe(
+      html(<textarea className="t" rows={3} defaultValue="v" />),
+    )
+    expect(html(<Select className="s" defaultValue="a"><Option value="a">A</Option></Select>)).toBe(
+      html(<select className="s" defaultValue="a"><option value="a">A</option></select>),
+    )
+  })
+
+  it('media + misc + table primitives emit their tags verbatim', () => {
+    expect(html(<Audio controls src="/a.mp3" className="a" />)).toBe(
+      html(<audio controls src="/a.mp3" className="a" />),
+    )
+    expect(html(<IFrame src="/x" title="t" className="f" />)).toBe(
+      html(<iframe src="/x" title="t" className="f" />),
+    )
+    expect(html(<Pre className="p">x</Pre>)).toBe(html(<pre className="p">x</pre>))
+    expect(html(<Br />)).toBe(html(<br />))
+    expect(html(<Hr className="h" />)).toBe(html(<hr className="h" />))
+    expect(
+      html(
+        <Table className="t"><Thead><Tr><Th>H</Th></Tr></Thead><Tbody><Tr><Td>D</Td></Tr></Tbody></Table>,
+      ),
+    ).toBe(
+      html(
+        <table className="t"><thead><tr><th>H</th></tr></thead><tbody><tr><td>D</td></tr></tbody></table>,
+      ),
+    )
+  })
+
+  it('svg primitives emit svg/path verbatim (react-native-svg-compatible names)', () => {
+    expect(
+      html(
+        <Svg width="13" height="13" viewBox="0 0 24 24" className="ic">
+          <Path d="M5 15H4" strokeWidth="2" />
+        </Svg>,
+      ),
+    ).toBe(
+      html(
+        <svg width="13" height="13" viewBox="0 0 24 24" className="ic">
+          <path d="M5 15H4" strokeWidth="2" />
+        </svg>,
+      ),
+    )
+  })
+
+  it('primitives forward refs to their host node (drop-in for ref-bearing tags)', () => {
+    const boxRef = React.createRef<HTMLElement>()
+    render(<Box ref={boxRef as React.Ref<HTMLElement>}>x</Box>)
+    expect(boxRef.current?.tagName).toBe('DIV')
+
+    const inputRef = React.createRef<HTMLInputElement>()
+    render(<TextField ref={inputRef} defaultValue="v" />)
+    expect(inputRef.current?.tagName).toBe('INPUT')
+
+    const btnRef = React.createRef<HTMLButtonElement>()
+    render(<Pressable ref={btnRef as React.Ref<HTMLElement>}>x</Pressable>)
+    expect(btnRef.current?.tagName).toBe('BUTTON')
+
+    const taRef = React.createRef<HTMLTextAreaElement>()
+    render(<TextArea ref={taRef} defaultValue="v" />)
+    expect(taRef.current?.tagName).toBe('TEXTAREA')
   })
 })

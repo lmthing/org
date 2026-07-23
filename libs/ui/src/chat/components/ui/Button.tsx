@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../../lib/cn.js';
 
@@ -26,7 +27,7 @@ const sizes: Record<ButtonSize, string> = {
 
 export function Button({ variant = 'default', size = 'md', loading, className, children, disabled, ...props }: ButtonProps) {
   return (
-    <button
+    <Prim.Pressable
       {...props}
       disabled={disabled || loading}
       className={cn(
@@ -36,9 +37,9 @@ export function Button({ variant = 'default', size = 'md', loading, className, c
         className,
       )}
     >
-      {loading && <span className="lm-spin w-3.5 h-3.5 border border-current border-t-transparent rounded-full" />}
+      {loading && <Prim.Text className="lm-spin w-3.5 h-3.5 border border-current border-t-transparent rounded-full" />}
       {children}
-    </button>
+    </Prim.Pressable>
   );
 }
 

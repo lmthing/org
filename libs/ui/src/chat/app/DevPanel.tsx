@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { useStore } from '../store/store.js';
 import { ExecutionTree } from './tree.js';
@@ -20,7 +21,7 @@ function Resizer({ onDrag }: { onDrag: (dx: number) => void }) {
     window.addEventListener('mouseup', up);
   };
   return (
-    <div
+    <Prim.Box
       onMouseDown={down}
       className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-agent/40 transition-colors"
     />
@@ -33,7 +34,7 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
   const [treeH, setTreeH] = React.useState(240);
 
   return (
-    <aside
+    <Prim.Box as="aside"
       aria-label="developer tools"
       className={cn(
         'relative flex flex-col bg-lm-panel border-l border-lm-border overflow-hidden shrink-0',
@@ -44,24 +45,24 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
       <Resizer onDrag={(dx) => setWidth(w => Math.max(280, Math.min(700, w - dx)))} />
 
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-lm-border shrink-0">
-        <span className="text-xs font-semibold text-lm-text flex-1">DevTools</span>
-        <button
+      <Prim.Box className="flex items-center gap-2 px-3 py-2 border-b border-lm-border shrink-0">
+        <Prim.Text className="text-xs font-semibold text-lm-text flex-1">DevTools</Prim.Text>
+        <Prim.Pressable
           onClick={onClose}
           className="text-lm-muted hover:text-lm-text text-base leading-none"
           aria-label="Close DevPanel"
         >
           ×
-        </button>
-      </div>
+        </Prim.Pressable>
+      </Prim.Box>
 
       {/* Execution tree */}
-      <div className="overflow-hidden shrink-0" style={{ height: treeH }}>
+      <Prim.Box className="overflow-hidden shrink-0" style={{ height: treeH }}>
         <ExecutionTree />
-      </div>
+      </Prim.Box>
 
       {/* Tree/inspector resizer */}
-      <div
+      <Prim.Box
         className="h-1 cursor-row-resize bg-lm-border hover:bg-lm-accent/40 shrink-0"
         onMouseDown={(e) => {
           e.preventDefault();
@@ -74,16 +75,16 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
       />
 
       {/* Inspector */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <Prim.Box className="flex-1 min-h-0 overflow-hidden">
         <Inspector />
-      </div>
+      </Prim.Box>
 
       {/* Replay bar */}
       {mode === 'replay' && (
-        <div className="shrink-0 border-t border-lm-border">
+        <Prim.Box className="shrink-0 border-t border-lm-border">
           <PlaybackBar />
-        </div>
+        </Prim.Box>
       )}
-    </aside>
+    </Prim.Box>
   );
 }

@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../lib/cn.js';
 import { useStore, connectLive } from '../store/store.js';
@@ -188,19 +189,19 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
   const grouped = groupSessionsByRecency(filteredSessions);
 
   const conversations = (
-    <div className="flex flex-col gap-2">
-      <input
+    <Prim.Box className="flex flex-col gap-2">
+      <Prim.TextField
         value={searchQuery}
         onChange={e => setSearchQuery(e.target.value)}
         placeholder="Search chats…"
         className="w-full bg-muted border-0 rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
       />
       {grouped.length === 0 && activeProjectId && (
-        <p className="px-2 text-sm text-muted-foreground">No chats yet.</p>
+        <Prim.Text as="p" className="px-2 text-sm text-muted-foreground">No chats yet.</Prim.Text>
       )}
       {grouped.map(group => (
-        <div key={group.label}>
-          <p className="px-2 py-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</p>
+        <Prim.Box key={group.label}>
+          <Prim.Text as="p" className="px-2 py-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</Prim.Text>
           {group.sessions.map(s => {
             const isActive = s.sessionId === activeSessionId;
             // The active session's title can change live (agent setSessionMeta) before
@@ -210,8 +211,8 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
             const cost = isActive ? sessionCostUsd : s.totalCostUsd;
             const costLabel = cost !== undefined && cost > 0 ? formatCost(cost) : '';
             return (
-              <div key={s.sessionId} className="group flex items-center gap-1">
-                <button
+              <Prim.Box key={s.sessionId} className="group flex items-center gap-1">
+                <Prim.Pressable
                   onClick={() => void resumeSession(s.sessionId)}
                   className={cn(
                     'flex-1 text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors',
@@ -221,23 +222,23 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                   )}
                   title={displayTitle || s.sessionId}
                 >
-                  <span className="block truncate">{label}</span>
-                  <span className="block text-xs text-muted-foreground/70 font-normal">
+                  <Prim.Text className="block truncate">{label}</Prim.Text>
+                  <Prim.Text className="block text-xs text-muted-foreground/70 font-normal">
                     {relativeTime(s.lastActivity)}
-                    {costLabel && <span className="ml-1.5 text-muted-foreground/50">{costLabel}</span>}
-                  </span>
-                </button>
-                <button
+                    {costLabel && <Prim.Text className="ml-1.5 text-muted-foreground/50">{costLabel}</Prim.Text>}
+                  </Prim.Text>
+                </Prim.Pressable>
+                <Prim.Pressable
                   onClick={() => void deleteSession(s.sessionId)}
                   className="hidden group-hover:flex w-5 h-5 items-center justify-center text-muted-foreground hover:text-destructive rounded text-xs shrink-0"
                   title="Delete"
-                >×</button>
-              </div>
+                >×</Prim.Pressable>
+              </Prim.Box>
             );
           })}
-        </div>
+        </Prim.Box>
       ))}
-    </div>
+    </Prim.Box>
   );
 
   const footer = <SidebarFooter current="chat" />;

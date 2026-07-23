@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../../lib/cn.js';
 
@@ -24,7 +25,7 @@ export function Textarea({ className, autosize, onChange, ...props }: TextareaPr
   }, [props.value, autosize]);
 
   return (
-    <textarea
+    <Prim.TextArea
       ref={ref}
       {...props}
       onChange={handleChange}

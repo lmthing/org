@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import type { NodeStatus, NodeKind } from '../store/model.js';
 
@@ -30,22 +31,22 @@ export function StatusIcon({ status }: { status: NodeStatus }): React.ReactEleme
   const cls = STATUS_COLOR[status];
   const glyph = STATUS_GLYPH[status];
   return (
-    <span className={`${cls} ${status === 'running' ? 'lm-spin' : ''}`} aria-label={status} data-status={status}>
+    <Prim.Text className={`${cls} ${status === 'running' ? 'lm-spin' : ''}`} aria-label={status} data-status={status}>
       {glyph}
-    </span>
+    </Prim.Text>
   );
 }
 
 export function KindBadge({ kind }: { kind: NodeKind }): React.ReactElement {
-  return <span className={`${KIND_COLOR[kind]} font-mono text-[10px] uppercase tracking-wide`}>{kind}</span>;
+  return <Prim.Text className={`${KIND_COLOR[kind]} font-mono text-[10px] uppercase tracking-wide`}>{kind}</Prim.Text>;
 }
 
 export function Badge({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'amber' | 'red' }): React.ReactElement {
   const cls = tone === 'amber' ? 'text-lm-amber border-lm-amber/40' : tone === 'red' ? 'text-lm-red border-lm-red/40' : 'text-lm-muted border-lm-border';
   return (
-    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono border ${cls}`}>
+    <Prim.Text className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono border ${cls}`}>
       {children}
-    </span>
+    </Prim.Text>
   );
 }
 
@@ -57,17 +58,17 @@ export function fmtDuration(ms?: number): string {
 
 export function CodeBlock({ code }: { code: string }): React.ReactElement {
   return (
-    <pre className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words bg-lm-bg border border-lm-border rounded p-2 overflow-x-auto text-lm-text">
+    <Prim.Pre className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words bg-lm-bg border border-lm-border rounded p-2 overflow-x-auto text-lm-text">
       {code}
-    </pre>
+    </Prim.Pre>
   );
 }
 
 export function Tabs<T extends string>({ tabs, active, onChange }: { tabs: readonly T[]; active: T; onChange: (t: T) => void }): React.ReactElement {
   return (
-    <div className="flex gap-1 border-b border-lm-border" role="tablist">
+    <Prim.Box className="flex gap-1 border-b border-lm-border" role="tablist">
       {tabs.map((t) => (
-        <button
+        <Prim.Pressable
           key={t}
           role="tab"
           aria-selected={active === t}
@@ -78,9 +79,9 @@ export function Tabs<T extends string>({ tabs, active, onChange }: { tabs: reado
           }`}
         >
           {t}
-        </button>
+        </Prim.Pressable>
       ))}
-    </div>
+    </Prim.Box>
   );
 }
 

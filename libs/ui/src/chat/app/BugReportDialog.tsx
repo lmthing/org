@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { Dialog } from '../components/ui/Dialog.js';
 import { Input } from '../components/ui/Input.js';
@@ -83,26 +84,26 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
   return (
     <Dialog open={open} onClose={handleClose} title="Report a bug">
       {result ? (
-        <div className="flex flex-col gap-3 text-sm">
-          <p className="text-foreground">
+        <Prim.Box className="flex flex-col gap-3 text-sm">
+          <Prim.Text as="p" className="text-foreground">
             Thanks — issue #{result.number} was filed.
-          </p>
-          <a
+          </Prim.Text>
+          <Prim.Link
             href={result.url}
             target="_blank"
             rel="noreferrer"
             className="text-agent hover:underline"
           >
             View issue
-          </a>
-          <div className="flex justify-end">
+          </Prim.Link>
+          <Prim.Box className="flex justify-end">
             <Button variant="outline" size="sm" onClick={handleClose}>Close</Button>
-          </div>
-        </div>
+          </Prim.Box>
+        </Prim.Box>
       ) : (
-        <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground" htmlFor="bug-title">Title</label>
+        <Prim.Form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+          <Prim.Box className="flex flex-col gap-1">
+            <Prim.Text as="label" className="text-xs text-muted-foreground" htmlFor="bug-title">Title</Prim.Text>
             <Input
               id="bug-title"
               value={title}
@@ -110,9 +111,9 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
               placeholder="Short summary of the bug"
               disabled={submitting}
             />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-muted-foreground" htmlFor="bug-message">What happened?</label>
+          </Prim.Box>
+          <Prim.Box className="flex flex-col gap-1">
+            <Prim.Text as="label" className="text-xs text-muted-foreground" htmlFor="bug-message">What happened?</Prim.Text>
             <Textarea
               id="bug-message"
               value={message}
@@ -121,38 +122,38 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
               rows={4}
               disabled={submitting}
             />
-          </div>
+          </Prim.Box>
 
           {screenshot ? (
-            <div className="flex flex-col gap-2">
-              <img src={screenshot} className="max-h-40 rounded-lg border border-border" alt="Screenshot preview" />
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input
+            <Prim.Box className="flex flex-col gap-2">
+              <Prim.Image src={screenshot} className="max-h-40 rounded-lg border border-border" alt="Screenshot preview" />
+              <Prim.Text as="label" className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Prim.TextField
                   type="checkbox"
                   checked={attachScreenshot}
                   onChange={(e) => setAttachScreenshot(e.target.checked)}
                   disabled={submitting}
                 />
                 Attach this screenshot
-              </label>
-            </div>
+              </Prim.Text>
+            </Prim.Box>
           ) : (
-            <p className="text-xs text-muted-foreground">Screenshot unavailable</p>
+            <Prim.Text as="p" className="text-xs text-muted-foreground">Screenshot unavailable</Prim.Text>
           )}
 
-          <p className="text-xs text-muted-foreground">The full session trace will be attached.</p>
+          <Prim.Text as="p" className="text-xs text-muted-foreground">The full session trace will be attached.</Prim.Text>
 
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && <Prim.Text as="p" className="text-xs text-destructive">{error}</Prim.Text>}
 
-          <div className="flex justify-end gap-2">
+          <Prim.Box className="flex justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={handleClose} disabled={submitting}>
               Cancel
             </Button>
             <Button type="submit" size="sm" loading={submitting} disabled={disabled}>
               Submit
             </Button>
-          </div>
-        </form>
+          </Prim.Box>
+        </Prim.Form>
       )}
     </Dialog>
   );

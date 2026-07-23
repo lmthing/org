@@ -5,6 +5,7 @@
  * value (single control) or an object keyed by field name (Form). Mirrors the
  * terminal `InkForm` so `ask(<Form>…</Form>)` behaves identically on both.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import React from 'react';
 import { flattenForm, coerceValue, defaultFor } from '@lmthing/core/ui';
 import type { FieldSpec } from '@lmthing/core/ui';
@@ -36,66 +37,66 @@ function Control({
 
   switch (k) {
     case 'textarea':
-      return <textarea style={{ ...inputStyle, minHeight: (field.rows ?? 3) * 20 }} value={String(value ?? '')} placeholder={field.placeholder} onChange={(e) => onChange(e.target.value)} />;
+      return <Prim.TextArea style={{ ...inputStyle, minHeight: (field.rows ?? 3) * 20 }} value={String(value ?? '')} placeholder={field.placeholder} onChange={(e) => onChange(e.target.value)} />;
     case 'select': case 'combobox':
       return (
-        <select style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
-          {field.options?.map((o, i) => <option key={i} value={String(o.value)}>{o.label}</option>)}
-        </select>
+        <Prim.Select style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
+          {field.options?.map((o, i) => <Prim.Option key={i} value={String(o.value)}>{o.label}</Prim.Option>)}
+        </Prim.Select>
       );
     case 'multiselect': case 'checkboxgroup': {
       const arr = Array.isArray(value) ? value : [];
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {field.options?.map((o, i) => (
-            <label key={i} style={{ display: 'flex', gap: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={arr.includes(o.value)} onChange={(e) => onChange(e.target.checked ? [...arr, o.value] : arr.filter((v) => v !== o.value))} />
-              <span>{o.label}</span>
-            </label>
+            <Prim.Text as="label" key={i} style={{ display: 'flex', gap: 6, cursor: 'pointer' }}>
+              <Prim.TextField type="checkbox" checked={arr.includes(o.value)} onChange={(e) => onChange(e.target.checked ? [...arr, o.value] : arr.filter((v) => v !== o.value))} />
+              <Prim.Text>{o.label}</Prim.Text>
+            </Prim.Text>
           ))}
-        </div>
+        </Prim.Box>
       );
     }
     case 'radio':
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {field.options?.map((o, i) => (
-            <label key={i} style={{ display: 'flex', gap: 6, cursor: 'pointer' }}>
-              <input type="radio" name={field.name} checked={value === o.value} onChange={() => onChange(o.value)} />
-              <span>{o.label}</span>
-            </label>
+            <Prim.Text as="label" key={i} style={{ display: 'flex', gap: 6, cursor: 'pointer' }}>
+              <Prim.TextField type="radio" name={field.name} checked={value === o.value} onChange={() => onChange(o.value)} />
+              <Prim.Text>{o.label}</Prim.Text>
+            </Prim.Text>
           ))}
-        </div>
+        </Prim.Box>
       );
     case 'checkbox': case 'switch':
-      return <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />;
+      return <Prim.TextField type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />;
     case 'slider':
-      return <input type="range" style={{ width: '100%' }} min={field.min ?? 0} max={field.max ?? 100} step={field.step ?? 1} value={Number(value ?? 0)} onChange={(e) => onChange(Number(e.target.value))} />;
+      return <Prim.TextField type="range" style={{ width: '100%' }} min={field.min ?? 0} max={field.max ?? 100} step={field.step ?? 1} value={Number(value ?? 0)} onChange={(e) => onChange(Number(e.target.value))} />;
     case 'number': case 'stepper': case 'currency':
-      return <input type="number" style={inputStyle} min={field.min} max={field.max} step={field.step} value={value === undefined || value === '' ? '' : Number(value)} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+      return <Prim.TextField type="number" style={inputStyle} min={field.min} max={field.max} step={field.step} value={value === undefined || value === '' ? '' : Number(value)} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
     case 'rating': {
       const max = field.max ?? 5;
       const cur = Number(value ?? 0);
       return (
-        <div style={{ display: 'flex', gap: 2 }}>
+        <Prim.Box style={{ display: 'flex', gap: 2 }}>
           {Array.from({ length: max }, (_, i) => (
-            <button key={i} onClick={() => onChange(i + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: i < cur ? 'var(--lm-amber)' : 'var(--lm-muted)', fontSize: 16 }}>★</button>
+            <Prim.Pressable key={i} onClick={() => onChange(i + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: i < cur ? 'var(--lm-amber)' : 'var(--lm-muted)', fontSize: 16 }}>★</Prim.Pressable>
           ))}
-        </div>
+        </Prim.Box>
       );
     }
-    case 'date': return <input type="date" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
-    case 'time': return <input type="time" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
-    case 'datetime': return <input type="datetime-local" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
-    case 'color': return <input type="color" value={String(value || '#000000')} onChange={(e) => onChange(e.target.value)} />; // ds-lint-ok: default value for a native color picker, not a UI theme color
-    case 'file': return <input type="text" style={inputStyle} placeholder={field.placeholder ?? 'path…'} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+    case 'date': return <Prim.TextField type="date" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
+    case 'time': return <Prim.TextField type="time" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
+    case 'datetime': return <Prim.TextField type="datetime-local" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
+    case 'color': return <Prim.TextField type="color" value={String(value || '#000000')} onChange={(e) => onChange(e.target.value)} />; // ds-lint-ok: default value for a native color picker, not a UI theme color
+    case 'file': return <Prim.TextField type="text" style={inputStyle} placeholder={field.placeholder ?? 'path…'} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
     case 'taginput':
-      return <input type="text" style={inputStyle} placeholder="comma,separated" value={Array.isArray(value) ? value.join(', ') : String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
-    case 'password': return <input type="password" style={inputStyle} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
-    case 'email': return <input type="email" style={inputStyle} placeholder={field.placeholder} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
-    case 'otp': return <input type="text" inputMode="numeric" style={{ ...inputStyle, letterSpacing: 4 }} maxLength={field.length ?? 6} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+      return <Prim.TextField type="text" style={inputStyle} placeholder="comma,separated" value={Array.isArray(value) ? value.join(', ') : String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+    case 'password': return <Prim.TextField type="password" style={inputStyle} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+    case 'email': return <Prim.TextField type="email" style={inputStyle} placeholder={field.placeholder} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+    case 'otp': return <Prim.TextField type="text" inputMode="numeric" style={{ ...inputStyle, letterSpacing: 4 }} maxLength={field.length ?? 6} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
     default:
-      return <input type="text" style={inputStyle} placeholder={field.placeholder} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+      return <Prim.TextField type="text" style={inputStyle} placeholder={field.placeholder} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
   }
 }
 
@@ -139,30 +140,30 @@ export function CatalogForm({
   if (spec.single && only && (only.kind === 'confirm' || only.kind === 'buttongroup')) {
     if (only.kind === 'confirm') {
       return (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={btnStyle(true)} onClick={() => onSubmit(true)}>Yes</button>
-          <button style={btnStyle(false)} onClick={() => onSubmit(false)}>No</button>
-        </div>
+        <Prim.Box style={{ display: 'flex', gap: 8 }}>
+          <Prim.Pressable style={btnStyle(true)} onClick={() => onSubmit(true)}>Yes</Prim.Pressable>
+          <Prim.Pressable style={btnStyle(false)} onClick={() => onSubmit(false)}>No</Prim.Pressable>
+        </Prim.Box>
       );
     }
     return (
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {only.options?.map((o, i) => <button key={i} style={btnStyle(i === 0)} onClick={() => onSubmit(o.value)}>{o.label}</button>)}
-      </div>
+      <Prim.Box style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {only.options?.map((o, i) => <Prim.Pressable key={i} style={btnStyle(i === 0)} onClick={() => onSubmit(o.value)}>{o.label}</Prim.Pressable>)}
+      </Prim.Box>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {spec.fields.map((f) => (
-        <label key={f.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {f.label ? <span style={{ fontSize: 12, color: 'var(--lm-text)' }}>{f.label}</span> : null}
+        <Prim.Text as="label" key={f.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {f.label ? <Prim.Text style={{ fontSize: 12, color: 'var(--lm-text)' }}>{f.label}</Prim.Text> : null}
           <Control field={f} value={values[f.name]} onChange={(v) => set(f.name, v)} onEnter={submit} />
-          {f.help ? <span style={{ fontSize: 10, color: 'var(--lm-muted)' }}>{f.help}</span> : null}
-          {f.error ? <span style={{ fontSize: 10, color: 'var(--lm-red)' }}>{f.error}</span> : null}
-        </label>
+          {f.help ? <Prim.Text style={{ fontSize: 10, color: 'var(--lm-muted)' }}>{f.help}</Prim.Text> : null}
+          {f.error ? <Prim.Text style={{ fontSize: 10, color: 'var(--lm-red)' }}>{f.error}</Prim.Text> : null}
+        </Prim.Text>
       ))}
-      <button style={{ ...btnStyle(true), alignSelf: 'flex-start' }} onClick={submit}>{spec.submitLabel}</button>
-    </div>
+      <Prim.Pressable style={{ ...btnStyle(true), alignSelf: 'flex-start' }} onClick={submit}>{spec.submitLabel}</Prim.Pressable>
+    </Prim.Box>
   );
 }
