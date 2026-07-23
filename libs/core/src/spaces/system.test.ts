@@ -170,6 +170,27 @@ describe('system spaces', () => {
     expect(instruct).toMatch(/Do NOT scaffold an app on a vague or exploratory request/);
   });
 
+  // Adding the browser agent to canDelegateTo only makes it ALLOWED; THING also has to KNOW
+  // when/how to reach it. Its instruct must route interactive browsing to system-browser/browser
+  // (distinct from the read-only researcher) with the correct no-action 3-arg delegate call — the
+  // auto-generated Delegatable-Agents example is a broken `delegate(..., actionId)` for an
+  // action-less agent, so the prose is the only correct call the model sees.
+  it('THING can delegate to the browser agent AND is told when/how to call it', async () => {
+    const spaces = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'user-thing')]);
+    const thing = spaces[0]?.agents['thing'];
+    expect(thing, 'user-thing must ship a "thing" agent').toBeDefined();
+
+    // Allowed to delegate to the browser space.
+    expect(thing!.canDelegateTo).toContain('system-browser/browser');
+
+    // Told when to prefer it and how to call it (action-less: the 3-arg form).
+    const instruct = thing!.instructBody;
+    expect(instruct).toMatch(/Interactive browsing/);
+    expect(instruct).toMatch(/delegate\('system-browser', 'browser', \{/);
+    // The distinction from read-only research must be spelled out both ways.
+    expect(instruct).toMatch(/navigating or\s+interacting with a particular site/);
+  });
+
   // Live-prod evidence (scenario 06, Act V): asked a question his own files did NOT answer (how
   // long a policy actually covers him for), THING delegated it to the domain space it had just
   // built FROM THOSE SAME FILES — zero web yields. The space cannot know what was never in the
