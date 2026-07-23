@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
-import { Box, Text, Row, Col, Image, Link, Form, List, ListItem } from './index.ts'
+import { Box, Text, Pressable, Row, Col, Image, Link, Form, List, ListItem } from './index.ts'
 
 /**
  * Phase-0 parity: each vocabulary primitive is a PURE PASSTHROUGH wrapper — it must emit the
@@ -44,6 +44,34 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(html(<Text as="small">s</Text>)).toBe(html(<small>s</small>))
     expect(html(<Text as="code">c</Text>)).toBe(html(<code>c</code>))
     expect(html(<Text as="label" htmlFor="f">L</Text>)).toBe(html(<label htmlFor="f">L</label>))
+  })
+
+  it('Text renders heading tags via `as` (h1–h6)', () => {
+    for (const as of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const) {
+      expect(html(<Text as={as} className="h">t</Text>)).toBe(
+        html(<Text as={as} className="h">t</Text>),
+      )
+      const { container } = render(<Text as={as}>t</Text>)
+      expect(container.firstElementChild!.tagName).toBe(as.toUpperCase())
+    }
+    expect(html(<Text as="h1" className="title">t</Text>)).toBe(html(<h1 className="title">t</h1>))
+  })
+
+  it('Pressable emits <button> by default and <a>/<div> via `as`, matching raw tags', () => {
+    const btn = { className: 'b', disabled: true, title: 't' } as const
+    expect(html(<Pressable {...btn}>go</Pressable>)).toBe(html(<button {...btn}>go</button>))
+    expect(html(<Pressable as="a" href="/x" className="l">go</Pressable>)).toBe(
+      html(<a href="/x" className="l">go</a>),
+    )
+    expect(html(<Pressable as="div" role="button" className="d">go</Pressable>)).toBe(
+      html(<div role="button" className="d">go</div>),
+    )
+  })
+
+  it('Pressable adds NO type attribute by default (matches a raw <button>)', () => {
+    const el = render(<Pressable>x</Pressable>).container.firstElementChild!
+    expect(el.tagName).toBe('BUTTON')
+    expect(el.hasAttribute('type')).toBe(false)
   })
 
   it('Row and Col emit a plain <div> (identical DOM to Box in Phase 0)', () => {

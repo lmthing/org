@@ -33,15 +33,24 @@ this stays grounded; verify against the files, they may have moved.
   `theme.css`); the config is exported as `@lmthing/css/tamagui-tokens`.
 
 **Phase 0 start — vocabulary primitives (§1.5) — DONE (the missing gaps only).**
-- `libs/ui/src/elements/primitives/{box,text,row,col,image,link,form,list}` — plain-HTML
-  **pure-passthrough** wrappers (emit the same tag + props/className verbatim ⇒ byte-identical
-  HTML). `Box` has an `as` escape hatch; `Text` an `as`/`block` selector. Phase 1 swaps only
-  these components' internals to Tamagui; the surfaces are not edited again.
+- `libs/ui/src/elements/primitives/{box,text,pressable,row,col,image,link,form,list}` —
+  plain-HTML **pure-passthrough** wrappers (emit the same tag + props/className verbatim ⇒
+  byte-identical HTML). `Box` has an `as` escape hatch for semantic tags; `Text` an `as`
+  (inline **and** `h1`–`h6`) / `block` selector; `Pressable` renders `<button>` (or `<a>`/
+  `<div>` via `as`). Phase 1 swaps only these components' internals to Tamagui; the surfaces
+  are not edited again.
 - Stood up the **libs/ui vitest harness** the repo lacked (`libs/ui/vitest.config.ts` +
-  `vitest.setup.ts`, jsdom + esbuild automatic JSX + jest-dom), scoped to
-  `elements/primitives/**` with a `test` script. Render-parity tests
-  (`elements/primitives/index.test.tsx`, 10 tests, green) prove each primitive is
-  byte-identical to its raw tag — the Appendix step-2 in-isolation proof.
+  `vitest.setup.ts`, jsdom + esbuild automatic JSX + jest-dom), with a `test` script scoped to
+  `elements/primitives/**` and `**/*.parity.test.tsx`. Render-parity tests
+  (`elements/primitives/index.test.tsx`, 13 tests) prove each primitive is byte-identical to
+  its raw tag — the Appendix step-2 in-isolation proof.
+
+**Phase 0 — first real surface de-HTML'd (§7 step 3) — DONE for one component.**
+- `chat/app/EmptyState.tsx` (a container-heavy component: div/h1/p/button) fully routed
+  through `Box`/`Text`/`Pressable` — **zero raw host tags left**. `chat/app/EmptyState.parity.test.tsx`
+  captures the exact pre-migration innerHTML as an immovable golden and asserts the migrated
+  component renders **byte-identical** HTML (the jsdom-level L2+L3 proof for one real
+  component). Green. This validates the whole de-HTML seam end-to-end on real product code.
 
 **Not yet done (next):** the Playwright visual harness + `main` L2/L3 baselines (§3.1–3.2)
 — needs a browser + prod build, so L2/L3 are still pending; the RN-safety / no-raw-HTML lint

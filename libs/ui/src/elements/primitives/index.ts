@@ -4,6 +4,7 @@
 // See docs/react-native-tamagui-migration.md §1.5.
 export { Box, type BoxProps, type BoxAs } from './box/index.tsx'
 export { Text, type TextProps, type TextAs } from './text/index.tsx'
+export { Pressable, type PressableProps, type PressableAs } from './pressable/index.tsx'
 export { Row, type RowProps } from './row/index.tsx'
 export { Col, type ColProps } from './col/index.tsx'
 export { Image, type ImageProps } from './image/index.tsx'
