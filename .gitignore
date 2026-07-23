@@ -25,3 +25,10 @@ fixtures/*/work/
 dist-web/
 .turbo/
 scenarios/repros/*/runs/
+
+# Playwright visual-harness runtime artifacts (baselines under tests/visual/__computed__ and
+# __screenshots__ ARE committed; these are transient)
+tests/visual/dist/
+tests/visual/test-results/
+tests/visual/playwright-report/
+test-results/

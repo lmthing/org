@@ -99,6 +99,24 @@ beyond the pre-existing lucide/tanstack noise) · `@lmthing/web-app` typecheck (
 - libs/ui vitest `include` widened to `src/theme/**/*.test.ts`. Full libs/ui suite 24/24 green;
   RN-safety lint clean; root typecheck 6/6.
 
+**PHASE 1 — L2/L3 visual harness + passthrough baselines (§3.1–3.2, handoff step 1) — ✅ DONE.**
+- `tests/visual/` — a **self-contained** esbuild-bundled Playwright harness (no Vite/Tailwind).
+  `harness/fixtures.tsx` renders the primitives (`Box`/`Text`/`Pressable`/`Row`/`Col`/`List`/`Link`
+  + a nested composite) against frozen fixtures that deliberately exercise the §1 box-model swap
+  risk; `harness/entry.tsx` mounts each in a labeled stage; `build.mjs`/`serve.mjs` bundle + serve
+  it for the `playwright.config.ts` webServer.
+- **L2 — `computed-style.spec.ts`**: walks each fixture subtree and compares `getComputedStyle`
+  for the audited property set (`audited-properties.ts`) **exactly** vs the committed baseline in
+  `__computed__/`. **L3 — `visual.spec.ts`**: screenshot per fixture vs `__screenshots__/` at
+  `maxDiffPixelRatio: 0.001`. Both projects (light + dark), viewport 1280×800, dSF 1,
+  `document.fonts.ready`-gated.
+- Baselines captured from the **passthrough** primitives (== `main`): **L2 24/24 + L3 22/22
+  green**. These are the immovable reference for the Phase-1c swap. Chromium = pre-installed
+  `/opt/pw-browsers` (config points `executablePath` at it; do NOT run `playwright install`).
+- Scripts: `pnpm test:computed-style` / `test:visual` / `test:visual:all` / `test:visual:update`.
+  The harness is decoupled from token *values* (Layer 1 owns those); it proves only that the swap
+  does not change output GIVEN IDENTICAL INPUTS. See `tests/visual/README.md`.
+
 ---
 
 ## Fresh-session handoff — what's next (Phase 1)

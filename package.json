@@ -12,12 +12,18 @@
     "lmthing": "tsx libs/cli/src/cli/bin.ts",
     "lmthing:watch": "tsx watch libs/cli/src/cli/bin.ts",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "visual:build": "node tests/visual/build.mjs",
+    "test:computed-style": "node tests/visual/build.mjs && playwright test --config tests/visual/playwright.config.ts computed-style",
+    "test:visual": "node tests/visual/build.mjs && playwright test --config tests/visual/playwright.config.ts visual.spec",
+    "test:visual:all": "node tests/visual/build.mjs && playwright test --config tests/visual/playwright.config.ts",
+    "test:visual:update": "node tests/visual/build.mjs && UPDATE_VISUAL_BASELINE=1 playwright test --config tests/visual/playwright.config.ts computed-style && playwright test --config tests/visual/playwright.config.ts visual.spec --update-snapshots"
   },
   "devDependencies": {
     "@lmthing/config": "workspace:*",
     "@playwright/test": "^1.61.1",
     "@vitest/coverage-v8": "^1.6.0",
+    "esbuild": "0.21.5",
     "tsup": "^8.1.0",
     "tsx": "^4.19.0",
     "turbo": "latest",
