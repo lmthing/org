@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../lib/cn.js';
 import { useStore } from '../store/store.js';
@@ -262,55 +263,55 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
 
   if (mode === 'replay') {
     return (
-      <div className={cn('px-4 py-3 text-sm text-muted-foreground text-center border-t border-border', className)}>
+      <Prim.Box className={cn('px-4 py-3 text-sm text-muted-foreground text-center border-t border-border', className)}>
         Replay mode — input disabled
-      </div>
+      </Prim.Box>
     );
   }
 
   return (
-    <div className={cn('px-4 pb-4 pt-2', className)}>
+    <Prim.Box className={cn('px-4 pb-4 pt-2', className)}>
       {/* Staged attachments */}
       {(attachments.length > 0 || attaching || attachError || recording) && (
-        <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Prim.Box className="mb-2 flex flex-wrap items-center gap-2">
           {attachments.map((a) => (
-            <span
+            <Prim.Text
               key={a.id}
               className="inline-flex items-center gap-1.5 max-w-[220px] rounded-lg border border-border bg-muted px-2 py-1 text-xs text-foreground"
               title={a.filename ?? a.mediaType}
             >
               {a.kind === 'image' ? (
-                <img src={withAuthToken(a.url)} alt={a.filename ?? 'image'} className="h-5 w-5 rounded object-cover" />
+                <Prim.Image src={withAuthToken(a.url)} alt={a.filename ?? 'image'} className="h-5 w-5 rounded object-cover" />
               ) : (
-                <span className="text-muted-foreground">{a.kind === 'audio' ? '♪' : '📎'}</span>
+                <Prim.Text className="text-muted-foreground">{a.kind === 'audio' ? '♪' : '📎'}</Prim.Text>
               )}
-              <span className="truncate">{a.kind === 'audio' && a.transcript ? a.transcript : (a.filename ?? a.kind)}</span>
-              <button
+              <Prim.Text className="truncate">{a.kind === 'audio' && a.transcript ? a.transcript : (a.filename ?? a.kind)}</Prim.Text>
+              <Prim.Pressable
                 onClick={() => removeAttachment(a.id)}
                 className="shrink-0 text-muted-foreground hover:text-foreground"
                 aria-label="Remove attachment"
               >
                 ×
-              </button>
-            </span>
+              </Prim.Pressable>
+            </Prim.Text>
           ))}
           {recording && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-destructive">
-              <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+            <Prim.Text className="inline-flex items-center gap-1.5 text-xs text-destructive">
+              <Prim.Text className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
               Recording… tap ■ to stop
-            </span>
+            </Prim.Text>
           )}
-          {attaching && <span className="text-xs text-muted-foreground">Transcribing…</span>}
-          {attachError && <span className="text-xs text-destructive">{attachError}</span>}
-        </div>
+          {attaching && <Prim.Text className="text-xs text-muted-foreground">Transcribing…</Prim.Text>}
+          {attachError && <Prim.Text className="text-xs text-destructive">{attachError}</Prim.Text>}
+        </Prim.Box>
       )}
 
-      <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-ring transition-shadow">
+      <Prim.Box className="relative flex items-end gap-2 bg-card border border-border rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-ring transition-shadow">
         {/* Dropdown */}
         {dropdownOpen && (
-          <ul ref={dropdownRef} className="absolute bottom-full left-4 mb-2 max-h-60 overflow-auto bg-popover text-popover-foreground border border-border rounded-md shadow-lg z-50 min-w-[200px] text-sm py-1">
+          <Prim.List ref={dropdownRef} className="absolute bottom-full left-4 mb-2 max-h-60 overflow-auto bg-popover text-popover-foreground border border-border rounded-md shadow-lg z-50 min-w-[200px] text-sm py-1">
             {filteredCompletions.map((c, i) => (
-              <li
+              <Prim.ListItem
                 key={c}
                 className={cn(
                   "px-3 py-1.5 cursor-pointer",
@@ -323,26 +324,26 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
                 onMouseEnter={() => setSelectedIndex(i)}
               >
                 {c}
-              </li>
+              </Prim.ListItem>
             ))}
-          </ul>
+          </Prim.List>
         )}
 
         {/* Attach image / audio / file to the message — the paperclip is the
             universal "attach to my message" affordance users reach for first. */}
-        <label
+        <Prim.Text as="label"
           className={cn(
             'shrink-0 mb-0.5 p-1 -m-1 text-muted-foreground hover:text-foreground cursor-pointer transition-colors',
             (attaching || isDisabled) && 'opacity-50 pointer-events-none',
           )}
           title="Attach image, audio, or file to your message"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          <input ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple className="hidden" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
-        </label>
+          <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></Prim.Svg>
+          <Prim.TextField ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple className="hidden" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
+        </Prim.Text>
 
         {/* Voice: record → transcribe → stage as an attachment (talk to THING) */}
-        <button
+        <Prim.Pressable
           type="button"
           onClick={() => void toggleRecord()}
           disabled={(isDisabled || attaching) && !recording}
@@ -355,14 +356,14 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           data-testid="mic-button"
         >
           {recording ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+            <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><Prim.Rect x="6" y="6" width="12" height="12" rx="2" /></Prim.Svg>
           ) : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+            <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" /><Prim.Path d="M19 10v2a7 7 0 0 1-14 0v-2" /><Prim.Line x1="12" y1="19" x2="12" y2="23" /><Prim.Line x1="8" y1="23" x2="16" y2="23" /></Prim.Svg>
           )}
-        </button>
+        </Prim.Pressable>
 
         {/* Textarea */}
-        <textarea
+        <Prim.TextArea
           ref={textareaRef}
           value={text}
           onChange={handleChange}
@@ -375,19 +376,19 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         />
 
         {/* Send */}
-        <button
+        <Prim.Pressable
           onClick={handleSend}
           disabled={isDisabled || attaching || (!text.trim() && attachments.length === 0)}
           className="shrink-0 mb-0.5 w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center transition-all disabled:opacity-40 hover:opacity-90"
           aria-label="Send message"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="m3 3 3 9-3 9 19-9Z"/></svg>
-        </button>
-      </div>
-      <p className="mt-1.5 text-xs text-muted-foreground text-center">
+          <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>
+        </Prim.Pressable>
+      </Prim.Box>
+      <Prim.Text as="p" className="mt-1.5 text-xs text-muted-foreground text-center">
         Enter to send · Shift+Enter for newline
-      </p>
+      </Prim.Text>
       <BudgetWindows />
-    </div>
+    </Prim.Box>
   );
 }

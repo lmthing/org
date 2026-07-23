@@ -10,6 +10,7 @@
  * `serve.ts` aliases `ink` / `ink-text-input` / `ink-select-input` to this
  * module, and `@lmthing/agent-ui/compat` re-exports it for direct authoring.
  */
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 
 // ─── color + dimension helpers ───────────────────────────────────────────────
@@ -140,7 +141,7 @@ export function Box(props: BoxProps): React.ReactElement {
       : {}),
     ...props.style,
   };
-  return <div style={s}>{props.children}</div>;
+  return <Prim.Box style={s}>{props.children}</Prim.Box>;
 }
 
 function cell(v: number | undefined): number | undefined {
@@ -182,17 +183,17 @@ export function Text(props: TextProps): React.ReactElement {
     textOverflow: truncate ? 'ellipsis' : undefined,
     ...props.style,
   };
-  return <span style={s}>{props.children}</span>;
+  return <Prim.Text style={s}>{props.children}</Prim.Text>;
 }
 
 // ─── layout helpers ───────────────────────────────────────────────────────────
 
 export function Spacer(): React.ReactElement {
-  return <div style={{ flexGrow: 1 }} />;
+  return <Prim.Box style={{ flexGrow: 1 }} />;
 }
 
 export function Newline({ count = 1 }: { count?: number }): React.ReactElement {
-  return <>{Array.from({ length: count }, (_, i) => <br key={i} />)}</>;
+  return <>{Array.from({ length: count }, (_, i) => <Prim.Br key={i} />)}</>;
 }
 
 /** Ink renders <Static> output once above the live frame; on web it's a plain block. */
@@ -213,7 +214,7 @@ export function Transform({
   transform: (s: string) => string;
   children: React.ReactNode;
 }): React.ReactElement {
-  return <span>{typeof children === 'string' ? transform(children) : children}</span>;
+  return <Prim.Text>{typeof children === 'string' ? transform(children) : children}</Prim.Text>;
 }
 
 // ─── hooks (browser-safe shims) ───────────────────────────────────────────────

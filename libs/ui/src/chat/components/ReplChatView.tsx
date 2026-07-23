@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useReplSession } from '../client/useReplSession.js';
 import { DisplayBlock } from './DisplayBlock.js';
@@ -106,17 +107,17 @@ export function ReplChatView({
       return <VariablesBlock key={block.id} vars={block.data as Record<string, unknown>} />;
     if (block.type === 'error')
       return (
-        <div key={block.id} style={styles.errorBlock}>
+        <Prim.Box key={block.id} style={styles.errorBlock}>
           {String(block.data)}
-        </div>
+        </Prim.Box>
       );
     return null;
   };
 
   const userBubble = (m: { id: string; text: string }): React.ReactNode => (
-    <div key={m.id} style={styles.userMsg}>
+    <Prim.Box key={m.id} style={styles.userMsg}>
       {m.text}
-    </div>
+    </Prim.Box>
   );
 
   const transcript: React.ReactNode[] = [];
@@ -128,48 +129,48 @@ export function ReplChatView({
   while (u < userMsgs.length) transcript.push(userBubble(userMsgs[u++]!));
 
   return (
-    <div style={{ ...styles.container, ...style }} className={className}>
-      <div style={styles.statusBar}>
-        <span style={{ color: isConnected ? 'var(--success)' : 'var(--destructive)', fontSize: 12 }}>
+    <Prim.Box style={{ ...styles.container, ...style }} className={className}>
+      <Prim.Box style={styles.statusBar}>
+        <Prim.Text style={{ color: isConnected ? 'var(--success)' : 'var(--destructive)', fontSize: 12 }}>
           {isConnected ? '● Connected' : '○ Connecting…'}
-        </span>
+        </Prim.Text>
         {isDone && (
-          <span style={{ marginLeft: 12, color: 'var(--muted-foreground)', fontSize: 12 }}>Done</span>
+          <Prim.Text style={{ marginLeft: 12, color: 'var(--muted-foreground)', fontSize: 12 }}>Done</Prim.Text>
         )}
         {onRestart && (
-          <button
+          <Prim.Pressable
             onClick={onRestart}
             disabled={restartDisabled}
             style={styles.resyncButton}
             title="Restart the agent session"
           >
             ↻ Restart
-          </button>
+          </Prim.Pressable>
         )}
-      </div>
+      </Prim.Box>
 
-      <div style={styles.blocks}>
+      <Prim.Box style={styles.blocks}>
         {transcript}
-        <div ref={blocksEndRef} />
-      </div>
+        <Prim.Box ref={blocksEndRef} />
+      </Prim.Box>
 
       {activeWork.length > 0 && (
-        <div style={styles.activityBox} data-testid="repl-live-activity" aria-label="sub-agent activity">
-          <div style={styles.activityHeader}>
-            <span style={styles.activityPulse}>●</span>
-            <span>working…</span>
-            <span style={{ opacity: 0.6 }}>{activeWork.length} active</span>
-          </div>
-          <div style={styles.activityList}>
+        <Prim.Box style={styles.activityBox} data-testid="repl-live-activity" aria-label="sub-agent activity">
+          <Prim.Box style={styles.activityHeader}>
+            <Prim.Text style={styles.activityPulse}>●</Prim.Text>
+            <Prim.Text>working…</Prim.Text>
+            <Prim.Text style={{ opacity: 0.6 }}>{activeWork.length} active</Prim.Text>
+          </Prim.Box>
+          <Prim.Box style={styles.activityList}>
             {activeWork.map((n) => (
               <WorkRow key={n.id} node={n} model={model} />
             ))}
-          </div>
-        </div>
+          </Prim.Box>
+        </Prim.Box>
       )}
 
-      <div style={styles.inputRow}>
-        <textarea
+      <Prim.Box style={styles.inputRow}>
+        <Prim.TextArea
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -178,11 +179,11 @@ export function ReplChatView({
           style={styles.textarea}
           rows={2}
         />
-        <button onClick={handleSend} disabled={!isConnected || !inputValue.trim()} style={styles.sendButton}>
+        <Prim.Pressable onClick={handleSend} disabled={!isConnected || !inputValue.trim()} style={styles.sendButton}>
           Send
-        </button>
-      </div>
-    </div>
+        </Prim.Pressable>
+      </Prim.Box>
+    </Prim.Box>
   );
 }
 
@@ -201,16 +202,16 @@ function WorkRow({
     node.activity?.trim() || narrationOf(latestSubtreeStatement(model, node.id)?.code ?? '');
   const elapsed = node.startTs ? fmtDuration(Date.now() - node.startTs) : '';
   return (
-    <div style={{ ...styles.workRow, paddingLeft: 12 + depth * 14 }}>
-      <span style={styles.workIcon}>{KIND_ICON[node.kind] ?? '•'}</span>
-      <div style={styles.workBody}>
-        <div style={styles.workLabelLine}>
-          <span style={styles.workLabel}>{node.label}</span>
-          {elapsed && <span style={styles.workElapsed}>{elapsed}</span>}
-        </div>
-        {narration && <div style={styles.workNarration}>{narration}</div>}
-      </div>
-    </div>
+    <Prim.Box style={{ ...styles.workRow, paddingLeft: 12 + depth * 14 }}>
+      <Prim.Text style={styles.workIcon}>{KIND_ICON[node.kind] ?? '•'}</Prim.Text>
+      <Prim.Box style={styles.workBody}>
+        <Prim.Box style={styles.workLabelLine}>
+          <Prim.Text style={styles.workLabel}>{node.label}</Prim.Text>
+          {elapsed && <Prim.Text style={styles.workElapsed}>{elapsed}</Prim.Text>}
+        </Prim.Box>
+        {narration && <Prim.Box style={styles.workNarration}>{narration}</Prim.Box>}
+      </Prim.Box>
+    </Prim.Box>
   );
 }
 

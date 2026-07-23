@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../../lib/cn.js';
 
@@ -10,9 +11,9 @@ interface TabsProps {
 
 export function Tabs({ tabs, active, onChange, className }: TabsProps) {
   return (
-    <div className={cn('flex border-b border-border', className)} role="tablist">
+    <Prim.Box className={cn('flex border-b border-border', className)} role="tablist">
       {tabs.map(t => (
-        <button
+        <Prim.Pressable
           key={t.id}
           role="tab"
           aria-selected={t.id === active}
@@ -25,8 +26,8 @@ export function Tabs({ tabs, active, onChange, className }: TabsProps) {
           )}
         >
           {t.label}
-        </button>
+        </Prim.Pressable>
       ))}
-    </div>
+    </Prim.Box>
   );
 }

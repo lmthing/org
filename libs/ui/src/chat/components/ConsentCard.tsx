@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { isDescriptor } from './render-descriptor.js';
 import type { Descriptor } from './render-descriptor.js';
@@ -41,7 +42,7 @@ export interface ConsentCardProps {
 
 function ShieldIcon(): React.ReactElement {
   return (
-    <svg
+    <Prim.Svg
       width="18"
       height="18"
       viewBox="0 0 24 24"
@@ -53,9 +54,9 @@ function ShieldIcon(): React.ReactElement {
       className="shrink-0 mt-0.5 text-agent"
       aria-hidden="true"
     >
-      <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
-      <path d="M9 12l2 2 4-4" />
-    </svg>
+      <Prim.Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+      <Prim.Path d="M9 12l2 2 4-4" />
+    </Prim.Svg>
   );
 }
 
@@ -68,37 +69,37 @@ export function ConsentCard({
   onDeny,
 }: ConsentCardProps): React.ReactElement {
   return (
-    <div
+    <Prim.Box
       data-testid="consent-card"
       className="border border-agent/50 bg-agent/5 rounded-xl p-4 my-1"
     >
-      <div className="flex items-start gap-2">
+      <Prim.Box className="flex items-start gap-2">
         <ShieldIcon />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-foreground">
+        <Prim.Box className="min-w-0 flex-1">
+          <Prim.Box className="text-sm font-semibold text-foreground">
             THING wants to run{' '}
-            <code className="font-mono text-agent break-all">{fn}</code>
-          </div>
+            <Prim.Text as="code" className="font-mono text-agent break-all">{fn}</Prim.Text>
+          </Prim.Box>
           {space && (
-            <div className="text-xs text-muted-foreground mt-0.5">
-              space: <span className="font-mono">{space}</span>
-            </div>
+            <Prim.Box className="text-xs text-muted-foreground mt-0.5">
+              space: <Prim.Text className="font-mono">{space}</Prim.Text>
+            </Prim.Box>
           )}
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
       {argsSummary && (
-        <pre className="text-xs font-mono text-muted-foreground bg-muted rounded-lg px-2 py-1.5 mt-2 overflow-x-auto whitespace-pre-wrap break-words">
+        <Prim.Pre className="text-xs font-mono text-muted-foreground bg-muted rounded-lg px-2 py-1.5 mt-2 overflow-x-auto whitespace-pre-wrap break-words">
           {argsSummary}
-        </pre>
+        </Prim.Pre>
       )}
 
-      <div className="text-xs text-muted-foreground mt-2 mb-3">
+      <Prim.Box className="text-xs text-muted-foreground mt-2 mb-3">
         Approve to let THING run this once, or deny to refuse it.
-      </div>
+      </Prim.Box>
 
-      <div className="flex gap-2">
-        <button
+      <Prim.Box className="flex gap-2">
+        <Prim.Pressable
           type="button"
           disabled={inert}
           onClick={onApprove}
@@ -106,8 +107,8 @@ export function ConsentCard({
           className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
         >
           Approve
-        </button>
-        <button
+        </Prim.Pressable>
+        <Prim.Pressable
           type="button"
           disabled={inert}
           onClick={onDeny}
@@ -115,9 +116,9 @@ export function ConsentCard({
           className="px-3 py-1.5 border border-border text-foreground rounded-lg text-sm disabled:opacity-50 hover:bg-muted transition-colors"
         >
           Deny
-        </button>
-      </div>
-    </div>
+        </Prim.Pressable>
+      </Prim.Box>
+    </Prim.Box>
   );
 }
 

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { hostPrimitive } from '../_host.tsx'
 
 /**
  * List / ListItem — the `<ul>`/`<ol>` + `<li>` primitives (Phase 0). Pure passthrough.
@@ -14,15 +15,13 @@ export type ListProps = React.HTMLAttributes<HTMLElement> & {
   ordered?: boolean
 }
 
-function List({ ordered, ...props }: ListProps) {
-  const Tag = (ordered ? 'ol' : 'ul') as React.ElementType
-  return <Tag {...props} />
-}
+const List = React.forwardRef<HTMLElement, ListProps>(({ ordered, ...props }, ref) =>
+  React.createElement((ordered ? 'ol' : 'ul') as string, { ...props, ref }),
+)
+List.displayName = 'List'
 
 export type ListItemProps = React.LiHTMLAttributes<HTMLLIElement>
 
-function ListItem(props: ListItemProps) {
-  return <li {...props} />
-}
+const ListItem = hostPrimitive<HTMLLIElement, ListItemProps>('li', 'ListItem')
 
 export { List, ListItem }

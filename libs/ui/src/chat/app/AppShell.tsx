@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { useStore } from '../store/store.js';
 import { ChatView } from './ChatView.js';
@@ -107,12 +108,12 @@ export function AppShell({ singleSession }: AppShellProps) {
   );
 
   return (
-    <div className="h-full flex overflow-hidden bg-background">
+    <Prim.Box className="h-full flex overflow-hidden bg-background">
       {/* Sidebar — docked on desktop, drawer on mobile */}
       {showSidebar && !sidebarAsDrawer && sidebarOpen && (
-        <div className="shrink-0 h-full">
+        <Prim.Box className="shrink-0 h-full">
           {sidebarContent}
-        </div>
+        </Prim.Box>
       )}
       {showSidebar && sidebarAsDrawer && (
         <Drawer
@@ -126,25 +127,25 @@ export function AppShell({ singleSession }: AppShellProps) {
       )}
 
       {/* Main: chat */}
-      <div className="flex-1 min-w-0 relative flex flex-col overflow-hidden">
+      <Prim.Box className="flex-1 min-w-0 relative flex flex-col overflow-hidden">
         {/* Hamburger for mobile */}
         {showSidebar && sidebarAsDrawer && (
-          <button
+          <Prim.Pressable
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="md:hidden absolute top-3 left-3 z-10 w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted"
             aria-label="Toggle sidebar"
           >
             ☰
-          </button>
+          </Prim.Pressable>
         )}
 
         {/* No session selected in project mode */}
         {showSidebar && !activeSessionId ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+          <Prim.Box className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
             {activeProjectId
               ? 'Select or start a chat from the sidebar.'
               : 'Select or create a project to get started.'}
-          </div>
+          </Prim.Box>
         ) : (
           <ChatView
             onOpenDevPanel={() => setDevPanelOpen(!devPanelOpen)}
@@ -154,7 +155,7 @@ export function AppShell({ singleSession }: AppShellProps) {
             className="flex-1 min-h-0"
           />
         )}
-      </div>
+      </Prim.Box>
 
       {/* DevPanel — docked on desktop, drawer on tablet */}
       {showDevPanel && !devPanelAsDrawer && devPanelContent}
@@ -180,6 +181,6 @@ export function AppShell({ singleSession }: AppShellProps) {
           onIntegrationConfigured={onIntegrationConfigured}
         />
       )}
-    </div>
+    </Prim.Box>
   );
 }

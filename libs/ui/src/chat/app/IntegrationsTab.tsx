@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { Button } from '../components/ui/Button.js';
 import { Spinner } from '../components/ui/Spinner.js';
@@ -220,49 +221,49 @@ export function IntegrationsTab({
 
   if (integrations === null && !loadError) {
     return (
-      <div className="flex items-center justify-center p-6">
+      <Prim.Box className="flex items-center justify-center p-6">
         <Spinner />
-      </div>
+      </Prim.Box>
     );
   }
-  if (loadError) return <p className="p-4 text-sm text-destructive">{loadError}</p>;
+  if (loadError) return <Prim.Text as="p" className="p-4 text-sm text-destructive">{loadError}</Prim.Text>;
   if (integrations !== null && integrations.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted-foreground">
+      <Prim.Text as="p" className="p-4 text-sm text-muted-foreground">
         No integrations installed in this project yet. Ask THING to add one from the store.
-      </p>
+      </Prim.Text>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <Prim.Box className="flex flex-col gap-4 p-4">
       {(integrations ?? []).map((integration) => {
         const keys = schemaKeys(integration.settings);
         const bindings = (inbound?.bindings ?? []).filter((b) => b.projectId === projectId);
         const st = resume[integration.spaceId] ?? { kind: 'idle' };
         return (
-          <div key={integration.spaceId} className="border border-border rounded-xl bg-card p-3 flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              {integration.icon && <span aria-hidden="true">{integration.icon}</span>}
-              <span className="text-sm font-medium text-foreground flex-1 truncate">{integration.title}</span>
+          <Prim.Box key={integration.spaceId} className="border border-border rounded-xl bg-card p-3 flex flex-col gap-3">
+            <Prim.Box className="flex items-center gap-2">
+              {integration.icon && <Prim.Text aria-hidden="true">{integration.icon}</Prim.Text>}
+              <Prim.Text className="text-sm font-medium text-foreground flex-1 truncate">{integration.title}</Prim.Text>
               {integration.configured ? (
-                <span className="text-xs bg-success/15 text-success px-1.5 py-0.5 rounded-full">configured</span>
+                <Prim.Text className="text-xs bg-success/15 text-success px-1.5 py-0.5 rounded-full">configured</Prim.Text>
               ) : (
-                <span className="text-xs bg-warning/15 text-warning px-1.5 py-0.5 rounded-full">
+                <Prim.Text className="text-xs bg-warning/15 text-warning px-1.5 py-0.5 rounded-full">
                   {integration.missingRequired.length} key{integration.missingRequired.length !== 1 && 's'} needed
-                </span>
+                </Prim.Text>
               )}
-            </div>
+            </Prim.Box>
 
             {integration.readme ? (
-              <details className="rounded-lg border border-border bg-muted/40 px-3 py-2">
-                <summary className="text-xs text-muted-foreground cursor-pointer select-none">
+              <Prim.Box as="details" className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+                <Prim.Box as="summary" className="text-xs text-muted-foreground cursor-pointer select-none">
                   Setup guide — how to get your keys
-                </summary>
-                <div className="mt-2 text-sm text-foreground">
+                </Prim.Box>
+                <Prim.Box className="mt-2 text-sm text-foreground">
                   <Markdown source={integration.readme} />
-                </div>
-              </details>
+                </Prim.Box>
+              </Prim.Box>
             ) : null}
 
             {keys.length > 0 ? (
@@ -272,32 +273,32 @@ export function IntegrationsTab({
                 onChange={(key, value) => setFields((prev) => ({ ...prev, [key]: value }))}
               />
             ) : (
-              <p className="text-xs text-muted-foreground">This integration has no configurable settings.</p>
+              <Prim.Text as="p" className="text-xs text-muted-foreground">This integration has no configurable settings.</Prim.Text>
             )}
 
             {bindings.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <p className="text-xs text-muted-foreground">
+              <Prim.Box className="flex flex-col gap-1.5">
+                <Prim.Text as="p" className="text-xs text-muted-foreground">
                   Inbound webhook URL{bindings.length !== 1 && 's'} — paste into the provider:
-                </p>
+                </Prim.Text>
                 {bindings.map((b) => {
                   const url = `${inbound?.baseUrl ?? ''}/${b.path}`;
                   const key = `${b.projectId}/${b.path}`;
                   return (
-                    <div key={key} className="flex items-center gap-2">
-                      <code className="flex-1 min-w-0 text-xs font-mono text-foreground bg-background border border-border rounded px-2 py-1 overflow-x-auto whitespace-nowrap">
+                    <Prim.Box key={key} className="flex items-center gap-2">
+                      <Prim.Text as="code" className="flex-1 min-w-0 text-xs font-mono text-foreground bg-background border border-border rounded px-2 py-1 overflow-x-auto whitespace-nowrap">
                         {url}
-                      </code>
+                      </Prim.Text>
                       <Button variant="outline" size="sm" onClick={() => copy(key, url)}>
                         {copied === key ? 'Copied' : 'Copy'}
                       </Button>
-                    </div>
+                    </Prim.Box>
                   );
                 })}
-              </div>
+              </Prim.Box>
             )}
 
-            <div className="flex items-center gap-3 flex-wrap">
+            <Prim.Box className="flex items-center gap-3 flex-wrap">
               <Button
                 variant="default"
                 size="sm"
@@ -308,24 +309,24 @@ export function IntegrationsTab({
                 {st.kind === 'saving' ? 'Saving…' : 'Save keys'}
               </Button>
               {st.kind === 'waiting' && (
-                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Prim.Text className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Spinner size={12} /> Waiting for the pod to restart…
-                </span>
+                </Prim.Text>
               )}
-              {st.kind === 'done' && <span className="text-xs text-success">Saved — THING notified.</span>}
-              {st.kind === 'error' && <span className="text-xs text-destructive">{st.message}</span>}
+              {st.kind === 'done' && <Prim.Text className="text-xs text-success">Saved — THING notified.</Prim.Text>}
+              {st.kind === 'error' && <Prim.Text className="text-xs text-destructive">{st.message}</Prim.Text>}
               {st.kind === 'timeout' && (
-                <span className="text-xs text-muted-foreground flex items-center gap-2">
+                <Prim.Text className="text-xs text-muted-foreground flex items-center gap-2">
                   {st.message}
                   <Button variant="outline" size="sm" onClick={() => retryResume(integration.spaceId)}>
                     Retry
                   </Button>
-                </span>
+                </Prim.Text>
               )}
-            </div>
-          </div>
+            </Prim.Box>
+          </Prim.Box>
         );
       })}
-    </div>
+    </Prim.Box>
   );
 }

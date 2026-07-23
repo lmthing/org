@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { useStore } from '../store/store.js';
 import { authHeaders } from './auth.js';
@@ -61,22 +62,22 @@ export function BudgetWindows(): React.ReactElement | null {
   if (mode === 'replay' || !windows) return null;
 
   return (
-    <p className="mt-1 text-xs text-muted-foreground text-center" aria-label="Budget remaining">
-      <span>Budget</span>
+    <Prim.Text as="p" className="mt-1 text-xs text-muted-foreground text-center" aria-label="Budget remaining">
+      <Prim.Text>Budget</Prim.Text>
       {windows.map((w) => {
         const pct = w.remainingPct;
         const low = pct != null && pct < 15;
         return (
-          <span key={w.duration}>
+          <Prim.Text key={w.duration}>
             {' · '}
             {w.label}{' '}
-            <span className={low ? 'text-destructive' : undefined}>
+            <Prim.Text className={low ? 'text-destructive' : undefined}>
               {pct == null ? '—' : pct === 0 ? '0%' : `${Math.max(1, Math.round(pct))}%`}
-            </span>
-          </span>
+            </Prim.Text>
+          </Prim.Text>
         );
       })}
       {' left'}
-    </p>
+    </Prim.Text>
   );
 }

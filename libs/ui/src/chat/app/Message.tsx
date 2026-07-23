@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { marked } from 'marked';
 import { isFormDescriptor } from '@lmthing/core/ui';
@@ -27,7 +28,7 @@ function MarkdownText({ text }: { text: string }) {
   const html = React.useMemo(() => {
     try { return marked.parse(text) as string; } catch { return text; }
   }, [text]);
-  return <div className="lm-prose" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <Prim.Box className="lm-prose" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 // ─── Ask form ─────────────────────────────────────────────────────────────────
@@ -42,7 +43,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
   const onSubmit = (value: unknown) => send?.({ type: 'submitForm', id: block.askId, value });
 
   return (
-    <div
+    <Prim.Box
       data-testid="ask-form"
       data-ask-id={block.askId}
       className={cn(
@@ -51,12 +52,12 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
       )}
     >
       {block.state === 'answered' && (
-        <div className="text-xs text-knowledge font-mono mb-2">✓ {preview(block.answer, 200)}</div>
+        <Prim.Box className="text-xs text-knowledge font-mono mb-2">✓ {preview(block.answer, 200)}</Prim.Box>
       )}
       {block.state === 'cancelled' && (
-        <div className="text-xs text-muted-foreground font-mono mb-2">cancelled</div>
+        <Prim.Box className="text-xs text-muted-foreground font-mono mb-2">cancelled</Prim.Box>
       )}
-      <div style={inert ? { pointerEvents: 'none' } : undefined}>
+      <Prim.Box style={inert ? { pointerEvents: 'none' } : undefined}>
         {d && isConsentDescriptor(d) ? (
           <ConsentCard
             {...consentPropsFromDescriptor(d)}
@@ -69,8 +70,8 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
         ) : d && isFormDescriptor(d) ? (
           <CatalogForm descriptor={d} onSubmit={onSubmit} />
         ) : (
-          <div className="flex gap-2">
-            <input
+          <Prim.Box className="flex gap-2">
+            <Prim.TextField
               className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               value={text}
               disabled={inert}
@@ -78,17 +79,17 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
               onKeyDown={(e) => { if (e.key === 'Enter') onSubmit(text); }}
               placeholder={typeof d?.props?.['prompt'] === 'string' ? String(d.props['prompt']) : 'your answer…'}
             />
-            <button
+            <Prim.Pressable
               disabled={inert}
               onClick={() => onSubmit(text)}
               className="px-3 py-1.5 bg-agent text-agent-foreground rounded-lg text-sm disabled:opacity-50 hover:opacity-90 transition-opacity"
             >
               Send
-            </button>
-          </div>
+            </Prim.Pressable>
+          </Prim.Box>
         )}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   );
 }
 
@@ -98,13 +99,13 @@ function AttributionButton({ nodeId, label }: { nodeId: string; label: string })
   const selectNode = useStore((s) => s.selectNode);
   const setDevPanelOpen = useStore((s) => s.setDevPanelOpen);
   return (
-    <button
+    <Prim.Pressable
       onClick={() => { selectNode(nodeId, true); setDevPanelOpen(true); }}
       className="text-xs text-muted-foreground hover:text-foreground font-mono mb-1 block transition-colors"
       data-node-id={nodeId}
     >
       {label}
-    </button>
+    </Prim.Pressable>
   );
 }
 
@@ -120,22 +121,22 @@ function CopyButton({ text }: { text: string }) {
     } catch { /* */ }
   };
   return (
-    <button
+    <Prim.Pressable
       onClick={() => void copy()}
       className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-1 rounded"
       title="Copy"
       aria-label="Copy message"
     >
       {copied
-        ? <span className="text-knowledge text-xs">✓</span>
+        ? <Prim.Text className="text-knowledge text-xs">✓</Prim.Text>
         : (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <rect x="9" y="9" width="13" height="13" rx="2" />
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-          </svg>
+          <Prim.Svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <Prim.Rect x="9" y="9" width="13" height="13" rx="2" />
+            <Prim.Path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </Prim.Svg>
         )
       }
-    </button>
+    </Prim.Pressable>
   );
 }
 
@@ -148,38 +149,38 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
   const url = withAuthToken(att.url);
   if (att.kind === 'image') {
     return (
-      <a href={url} target="_blank" rel="noreferrer">
-        <img
+      <Prim.Link href={url} target="_blank" rel="noreferrer">
+        <Prim.Image
           src={url}
           alt={att.filename ?? 'image attachment'}
           className="max-w-[260px] max-h-[260px] rounded-xl border border-border object-cover"
         />
-      </a>
+      </Prim.Link>
     );
   }
   if (att.kind === 'audio') {
     return (
-      <div className="flex flex-col items-end gap-1">
+      <Prim.Box className="flex flex-col items-end gap-1">
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <audio controls src={url} className="max-w-[260px]" />
+        <Prim.Audio controls src={url} className="max-w-[260px]" />
         {att.transcript && (
-          <div className="max-w-[260px] text-xs text-muted-foreground italic text-right">
+          <Prim.Box className="max-w-[260px] text-xs text-muted-foreground italic text-right">
             “{att.transcript}”
-          </div>
+          </Prim.Box>
         )}
-      </div>
+      </Prim.Box>
     );
   }
   return (
-    <a
+    <Prim.Link
       href={url}
       target="_blank"
       rel="noreferrer"
       className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground hover:opacity-90"
     >
-      <span className="text-muted-foreground">📎</span>
-      <span className="truncate max-w-[200px]">{att.filename ?? att.mediaType}</span>
-    </a>
+      <Prim.Text className="text-muted-foreground">📎</Prim.Text>
+      <Prim.Text className="truncate max-w-[200px]">{att.filename ?? att.mediaType}</Prim.Text>
+    </Prim.Link>
   );
 }
 
@@ -198,25 +199,25 @@ export function Message({ block }: MessageProps) {
   if (block.type === 'user') {
     const attachments = block.attachments ?? [];
     return (
-      <div className="flex justify-end px-4 py-2 lm-fade-in group">
-        <div className="max-w-[75%] flex items-start gap-1.5">
+      <Prim.Box className="flex justify-end px-4 py-2 lm-fade-in group">
+        <Prim.Box className="max-w-[75%] flex items-start gap-1.5">
           <CopyButton text={block.content} />
-          <div className="flex flex-col items-end gap-1.5">
+          <Prim.Box className="flex flex-col items-end gap-1.5">
             {attachments.length > 0 && (
-              <div className="flex flex-col items-end gap-1.5">
+              <Prim.Box className="flex flex-col items-end gap-1.5">
                 {attachments.map((a, i) => (
                   <UserAttachment key={i} att={a} />
                 ))}
-              </div>
+              </Prim.Box>
             )}
             {block.content && (
-              <div className="bg-muted text-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
+              <Prim.Box className="bg-muted text-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
                 {block.content}
-              </div>
+              </Prim.Box>
             )}
-          </div>
-        </div>
-      </div>
+          </Prim.Box>
+        </Prim.Box>
+      </Prim.Box>
     );
   }
 
@@ -225,9 +226,9 @@ export function Message({ block }: MessageProps) {
     const isString = typeof block.descriptor === 'string';
     const textForCopy = isString ? (block.descriptor as string) : preview(block.descriptor, 500);
     return (
-      <div className="px-4 py-2 lm-fade-in group" data-testid="block">
-        <div className="flex items-start gap-1.5">
-          <div className="flex-1 min-w-0 text-sm text-foreground">
+      <Prim.Box className="px-4 py-2 lm-fade-in group" data-testid="block">
+        <Prim.Box className="flex items-start gap-1.5">
+          <Prim.Box className="flex-1 min-w-0 text-sm text-foreground">
             {showAttribution && (
               <AttributionButton nodeId={block.nodeId} label={node.label} />
             )}
@@ -235,33 +236,33 @@ export function Message({ block }: MessageProps) {
               ? <MarkdownText text={block.descriptor as string} />
               : renderDescriptor(block.descriptor)
             }
-          </div>
+          </Prim.Box>
           <CopyButton text={textForCopy} />
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
     );
   }
 
   // Error callout
   if (block.type === 'error') {
     return (
-      <div className="px-4 py-2 lm-fade-in" data-testid="block">
-        <div className="border border-destructive/30 bg-destructive/10 rounded-lg px-3 py-2 text-sm text-destructive font-mono">
+      <Prim.Box className="px-4 py-2 lm-fade-in" data-testid="block">
+        <Prim.Box className="border border-destructive/30 bg-destructive/10 rounded-lg px-3 py-2 text-sm text-destructive font-mono">
           {block.message}
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
     );
   }
 
   // Ask form
   return (
-    <div className="px-4 py-2 lm-fade-in" data-testid="block">
+    <Prim.Box className="px-4 py-2 lm-fade-in" data-testid="block">
       {showAttribution && (
         <AttributionButton nodeId={block.nodeId} label={node.label} />
       )}
       <AskForm block={block} />
       <ActivityStrip nodeIds={childNodeIds} />
-    </div>
+    </Prim.Box>
   );
 }
 
@@ -276,21 +277,21 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
     .join('\n\n');
 
   return (
-    <div className="py-1 group relative lm-fade-in">
-      <div className="flex items-start gap-2 px-4">
-        <span className="shrink-0 mt-3 w-6 h-6 rounded-full bg-brand-2/20 flex items-center justify-center text-xs select-none" aria-hidden="true">
+    <Prim.Box className="py-1 group relative lm-fade-in">
+      <Prim.Box className="flex items-start gap-2 px-4">
+        <Prim.Text className="shrink-0 mt-3 w-6 h-6 rounded-full bg-brand-2/20 flex items-center justify-center text-xs select-none" aria-hidden="true">
           ✦
-        </span>
-        <div className="flex-1 min-w-0">
+        </Prim.Text>
+        <Prim.Box className="flex-1 min-w-0">
           {blocks.map((b) => <Message key={b.id} block={b} />)}
           {nodeIds && nodeIds.length > 0 && (
-            <div className="px-0 pb-2">
+            <Prim.Box className="px-0 pb-2">
               <ActivityStrip nodeIds={nodeIds} />
-            </div>
+            </Prim.Box>
           )}
-        </div>
+        </Prim.Box>
         {textContent && <CopyButton text={textContent} />}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   );
 }

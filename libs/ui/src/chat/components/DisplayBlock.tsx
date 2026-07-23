@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { marked } from 'marked';
 
@@ -23,7 +24,7 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
   if (typeof node === 'number') return String(node);
 
   if (!isDescriptor(node)) {
-    return <span key={key}>{JSON.stringify(node)}</span>;
+    return <Prim.Text key={key}>{JSON.stringify(node)}</Prim.Text>;
   }
 
   const { type, props, children } = node;
@@ -31,22 +32,22 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
 
   switch (type.toLowerCase()) {
     case 'h1':
-      return <h1 key={key} {...omitChildren(props)}>{renderedChildren}</h1>;
+      return <Prim.Text as="h1" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
     case 'h2':
-      return <h2 key={key} {...omitChildren(props)}>{renderedChildren}</h2>;
+      return <Prim.Text as="h2" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
     case 'h3':
-      return <h3 key={key} {...omitChildren(props)}>{renderedChildren}</h3>;
+      return <Prim.Text as="h3" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
     case 'p':
-      return <p key={key} {...omitChildren(props)}>{renderedChildren}</p>;
+      return <Prim.Text as="p" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
     case 'span':
-      return <span key={key} {...omitChildren(props)}>{renderedChildren}</span>;
+      return <Prim.Text key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
     case 'code':
-      return <code key={key} {...omitChildren(props)}>{renderedChildren}</code>;
+      return <Prim.Text as="code" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
     case 'card':
       return (
-        <div key={key} style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 12 }} {...omitChildren(props)}>
+        <Prim.Box key={key} style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 12 }} {...omitChildren(props)}>
           {renderedChildren}
-        </div>
+        </Prim.Box>
       );
     case 'alert': {
       const variant = props['variant'] as string | undefined;
@@ -57,38 +58,38 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
             ? 'color-mix(in srgb, var(--warning) 15%, transparent)'
             : 'color-mix(in srgb, var(--success) 15%, transparent)';
       return (
-        <div key={key} style={{ backgroundColor: color, padding: 12, borderRadius: 4 }} {...omitChildren(props)}>
+        <Prim.Box key={key} style={{ backgroundColor: color, padding: 12, borderRadius: 4 }} {...omitChildren(props)}>
           {renderedChildren}
-        </div>
+        </Prim.Box>
       );
     }
     case 'badge': {
       const color = props['color'] as string | undefined;
       return (
-        <span
+        <Prim.Text
           key={key}
           style={{ backgroundColor: color ?? 'var(--agent)', color: 'var(--agent-foreground)', padding: '2px 6px', borderRadius: 4 }}
           {...omitChildren(props)}
         >
           {renderedChildren}
-        </span>
+        </Prim.Text>
       );
     }
     case 'button':
       return (
-        <button key={key} {...omitChildren(props)}>
+        <Prim.Pressable key={key} {...omitChildren(props)}>
           {renderedChildren}
-        </button>
+        </Prim.Pressable>
       );
     case 'markdown': {
       const text = props['text'] as string | undefined;
       const markdown = text || (renderedChildren.length > 0 ? renderedChildren.join('') : '');
       const html = marked.parse(String(markdown)) as string;
-      return <div key={key} className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: html }} />;
+      return <Prim.Box key={key} className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: html }} />;
     }
     case 'text':
     default:
-      return <span key={key}>{renderedChildren}</span>;
+      return <Prim.Text key={key}>{renderedChildren}</Prim.Text>;
   }
 }
 
@@ -102,5 +103,5 @@ interface DisplayBlockProps {
 }
 
 export function DisplayBlock({ descriptor }: DisplayBlockProps): React.ReactElement {
-  return <div className="repl-display">{renderNode(descriptor)}</div>;
+  return <Prim.Box className="repl-display">{renderNode(descriptor)}</Prim.Box>;
 }

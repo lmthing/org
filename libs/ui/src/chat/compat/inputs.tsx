@@ -4,6 +4,7 @@
  * TextInput), `ink-select-input` (SelectInput), plus ConfirmInput / MultiSelect.
  * Same prop shape as the terminal packages so single-source components work.
  */
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { Box, Text, inkColor } from './ink.js';
 
@@ -31,7 +32,7 @@ export function TextInput({
     if (focus) ref.current?.focus();
   }, [focus]);
   return (
-    <input
+    <Prim.TextField
       ref={ref}
       type={mask ? 'password' : 'text'}
       value={value}
@@ -93,7 +94,7 @@ export function SelectInput<V = unknown>({
       {items.map((it, i) => {
         const selected = i === active;
         return (
-          <div
+          <Prim.Box
             key={it.key ?? String(i)}
             role="option"
             aria-selected={selected}
@@ -109,7 +110,7 @@ export function SelectInput<V = unknown>({
           >
             <Text color={selected ? 'cyan' : undefined}>{selected ? '❯' : ' '}</Text>
             <Text color={selected ? 'cyan' : undefined}>{it.label}</Text>
-          </div>
+          </Prim.Box>
         );
       })}
     </Box>
@@ -138,18 +139,18 @@ export function MultiSelect<V = unknown>({
       {items.map((it, i) => {
         const on = checked.has(it.value);
         return (
-          <label key={it.key ?? String(i)} style={{ display: 'flex', gap: 6, cursor: 'pointer', padding: '1px 0' }}>
-            <input type="checkbox" checked={on} onChange={() => toggle(it.value)} />
+          <Prim.Text as="label" key={it.key ?? String(i)} style={{ display: 'flex', gap: 6, cursor: 'pointer', padding: '1px 0' }}>
+            <Prim.TextField type="checkbox" checked={on} onChange={() => toggle(it.value)} />
             <Text>{it.label}</Text>
-          </label>
+          </Prim.Text>
         );
       })}
-      <button
+      <Prim.Pressable
         onClick={() => onSubmit?.(items.filter((it) => checked.has(it.value)))}
         style={{ marginTop: 6, alignSelf: 'flex-start', background: inkColor('blue'), color: 'var(--lm-bg)', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
       >
         Submit
-      </button>
+      </Prim.Pressable>
     </Box>
   );
 }
@@ -167,8 +168,8 @@ export function ConfirmInput({
 }): React.ReactElement {
   return (
     <Box gap={2}>
-      <button onClick={() => onConfirm?.()} style={btn(defaultChoice === 'confirm')}>Yes</button>
-      <button onClick={() => onCancel?.()} style={btn(defaultChoice === 'cancel')}>No</button>
+      <Prim.Pressable onClick={() => onConfirm?.()} style={btn(defaultChoice === 'confirm')}>Yes</Prim.Pressable>
+      <Prim.Pressable onClick={() => onCancel?.()} style={btn(defaultChoice === 'cancel')}>No</Prim.Pressable>
     </Box>
   );
 }

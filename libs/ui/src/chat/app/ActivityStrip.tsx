@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../lib/cn.js';
 import { useStore } from '../store/store.js';
@@ -29,12 +30,12 @@ export function ActivityStrip({ nodeIds, className }: ActivityStripProps) {
   };
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-1.5 mt-2', className)}>
+    <Prim.Box className={cn('flex flex-wrap items-center gap-1.5 mt-2', className)}>
       {visible.map((node) => {
         if (!node) return null;
         const dur = node.endTs && node.startTs ? fmtDuration(node.endTs - node.startTs) : null;
         return (
-          <button
+          <Prim.Pressable
             key={node.id}
             onClick={() => handleChip(node.id)}
             data-node-id={node.id}
@@ -43,21 +44,21 @@ export function ActivityStrip({ nodeIds, className }: ActivityStripProps) {
               STATUS_COLOR[node.status] ?? STATUS_COLOR.done,
             )}
           >
-            <span>{KIND_ICON[node.kind] ?? '◦'}</span>
-            <span className="max-w-[120px] truncate">{node.label}</span>
-            {node.status === 'running' && <span className="lm-pulse">…</span>}
-            {dur && <span className="opacity-60">{dur}</span>}
-          </button>
+            <Prim.Text>{KIND_ICON[node.kind] ?? '◦'}</Prim.Text>
+            <Prim.Text className="max-w-[120px] truncate">{node.label}</Prim.Text>
+            {node.status === 'running' && <Prim.Text className="lm-pulse">…</Prim.Text>}
+            {dur && <Prim.Text className="opacity-60">{dur}</Prim.Text>}
+          </Prim.Pressable>
         );
       })}
       {!expanded && hidden > 0 && (
-        <button
+        <Prim.Pressable
           onClick={() => setExpanded(true)}
           className="text-xs text-muted-foreground hover:text-foreground px-2 py-0.5 rounded-full border border-border"
         >
           +{hidden} more
-        </button>
+        </Prim.Pressable>
       )}
-    </div>
+    </Prim.Box>
   );
 }

@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import React from 'react';
 import { cn } from '../../lib/cn.js';
 
@@ -22,22 +23,22 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex">
-      <div className={cn('absolute inset-0 bg-foreground/10', side === 'left' ? 'right-0' : 'left-0')} onClick={onClose} />
-      <div className={cn(
+    <Prim.Box className="fixed inset-0 z-40 flex">
+      <Prim.Box className={cn('absolute inset-0 bg-foreground/10', side === 'left' ? 'right-0' : 'left-0')} onClick={onClose} />
+      <Prim.Box className={cn(
         'relative flex flex-col bg-card border-border shadow-lg h-full lm-slide-in-right',
         width,
         side === 'right' ? 'ml-auto border-l' : 'mr-auto border-r',
         className,
       )}>
         {title && (
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-            <span className="font-semibold text-sm text-foreground">{title}</span>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
-          </div>
+          <Prim.Box className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+            <Prim.Text className="font-semibold text-sm text-foreground">{title}</Prim.Text>
+            <Prim.Pressable onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</Prim.Pressable>
+          </Prim.Box>
         )}
-        <div className="flex-1 overflow-auto">{children}</div>
-      </div>
-    </div>
+        <Prim.Box className="flex-1 overflow-auto">{children}</Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   );
 }

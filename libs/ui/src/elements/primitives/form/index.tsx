@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { hostPrimitive } from '../_host.tsx'
 
 /**
  * Form — the `<form>` primitive (Phase 0). Pure passthrough. On native there is no `<form>`;
@@ -8,8 +9,6 @@ import * as React from 'react'
  */
 export type FormProps = React.FormHTMLAttributes<HTMLFormElement>
 
-function Form(props: FormProps) {
-  return <form {...props} />
-}
+const Form = hostPrimitive<HTMLFormElement, FormProps>('form', 'Form')
 
 export { Form }

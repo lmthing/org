@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import React from 'react';
 import { useStore } from '../store/store.js';
 import type { WireEvent } from '../store/model.js';
@@ -30,15 +31,15 @@ export function TraceLoader(): React.ReactElement {
     loadReplay(parseTrace(text));
   };
   return (
-    <label className="text-[11px] text-lm-muted cursor-pointer hover:text-lm-text">
-      <input
+    <Prim.Text as="label" className="text-[11px] text-lm-muted cursor-pointer hover:text-lm-text">
+      <Prim.TextField
         type="file"
         accept=".jsonl,.json,.ndjson"
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); }}
       />
       📂 Load trace
-    </label>
+    </Prim.Text>
   );
 }
 
@@ -66,11 +67,11 @@ export function PlaybackBar(): React.ReactElement | null {
   if (!replay) return null;
   const total = replay.events.length;
   return (
-    <div className="flex items-center gap-2 px-3 py-2 border-t border-lm-border bg-lm-panel">
-      <button onClick={() => (replay.playing ? pause() : play())} className="text-lm-accent text-[13px] w-6">
+    <Prim.Box className="flex items-center gap-2 px-3 py-2 border-t border-lm-border bg-lm-panel">
+      <Prim.Pressable onClick={() => (replay.playing ? pause() : play())} className="text-lm-accent text-[13px] w-6">
         {replay.playing ? '⏸' : '▶'}
-      </button>
-      <input
+      </Prim.Pressable>
+      <Prim.TextField
         type="range"
         min={0}
         max={total}
@@ -79,15 +80,15 @@ export function PlaybackBar(): React.ReactElement | null {
         className="flex-1 accent-[var(--agent)]"
         data-testid="replay-scrubber"
       />
-      <span className="text-[10px] font-mono text-lm-muted w-20 text-right">{replay.cursor}/{total}</span>
-      <select
+      <Prim.Text className="text-[10px] font-mono text-lm-muted w-20 text-right">{replay.cursor}/{total}</Prim.Text>
+      <Prim.Select
         value={replay.speed}
         onChange={(e) => setSpeed(Number(e.target.value))}
         className="bg-lm-bg border border-lm-border rounded text-[11px] text-lm-text px-1 py-0.5"
       >
-        {[1, 2, 4, 8].map((s) => <option key={s} value={s}>{s}×</option>)}
-      </select>
-      <button onClick={exitReplay} className="text-[11px] text-lm-muted hover:text-lm-text">✕ live</button>
-    </div>
+        {[1, 2, 4, 8].map((s) => <Prim.Option key={s} value={s}>{s}×</Prim.Option>)}
+      </Prim.Select>
+      <Prim.Pressable onClick={exitReplay} className="text-[11px] text-lm-muted hover:text-lm-text">✕ live</Prim.Pressable>
+    </Prim.Box>
   );
 }
