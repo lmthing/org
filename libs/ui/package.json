@@ -13,8 +13,10 @@
     "./computer": "./src/computer/index.ts",
     "./components/*": "./src/components/*/index.ts",
     "./elements/*": "./src/elements/*",
+    "./elements/primitives": "./src/elements/primitives/index.ts",
     "./lib/*": "./src/lib/*",
-    "./theme": "./src/theme/index.ts"
+    "./theme": "./src/theme/index.ts",
+    "./theme/tamagui.config": "./src/theme/tamagui.config.ts"
   },
   "files": [
     "src"
