@@ -165,6 +165,27 @@ produced (className-driven layout on `Box`) and what the Tamagui swap needs (lay
 **Safe & done regardless of the choice:** the `createTamagui` shell + its parity test, the
 `tests/visual/` L2/L3 harness + baselines, and the proven passthrough web primitives/surfaces.
 
+**PHASE 1c — native primitive forks (`*.native.tsx`, handoff step 7) — ✅ core set DONE (web-safe).**
+- `libs/ui/src/elements/primitives/_native.tsx` — shared factory: `NativeView`/`NativeText` built on
+  the `tamagui.config` `styled(View/Text)` (so native draws from the SAME tokens), widened to
+  `React.ComponentType<any>` to stay compilable while the tree carries both `@types/react@18`
+  (libs/ui) and `@types/react@19` (react-native 0.86); `toPressHandler` (onClick→onPress).
+- Native forks: **`box` `text` `pressable` `row` `col` `list` `image` `link`**. Each keeps the
+  web file as `index.tsx` (Metro prefers `*.native.tsx`; web bundlers keep `index.tsx` — the same
+  seam Monaco uses) and exports the SAME symbol + prop shape as the web primitive, so a surface
+  component is cross-target. `row`/`col` set an explicit `flexDirection`; `image`→RN `Image`,
+  `link`→`Linking.openURL`.
+- **Verification:** the 6 RN-independent forks + base + config **typecheck clean in isolation**
+  (`image`/`link` import `react-native` → verified in the mobile app); `native-forks.test.tsx`
+  loads them in jsdom and asserts same-symbol/same-`displayName` parity with web. Web is untouched:
+  L2 24/24, libs/ui suite 26/26, RN-safety lint clean.
+- **NOT done / honest gaps:** these forks are **typecheck-/load-verified, not runtime-verified**
+  (no Metro/device here). The **grouped** primitives (`controls`/`media`/`table`/`svg`/`misc`/`form`)
+  have no native fork yet (svg → `react-native-svg`, table → View rows, controls → `TextInput`).
+  And a native fork renders **structurally** but does **not** apply the surfaces' Tailwind
+  `className` — native surface styling still needs the §1c decision (NativeWind or a props
+  migration). The forks are the element seam that story plugs into.
+
 **Gotchas for the next session:**
 - libs/ui is NOT in the `pnpm typecheck` gate (it has no `typecheck` script) and carries ~270
   PRE-EXISTING tsc errors (lucide-react vs the hoisted `@types/react@19`, missing
