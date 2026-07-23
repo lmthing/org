@@ -17,13 +17,13 @@
  */
 import ts from 'typescript';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, extname, basename } from 'node:path';
+import { join, extname, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const DEFAULT_DIRS = [
-  'libs/ui/src/chat',
-  'libs/ui/src/studio',
-  'libs/ui/src/computer',
-];
+// Anchored to this script's location (libs/ui/scripts/) so it works from any cwd — e.g. both
+// `node libs/ui/scripts/lint-rn-safety.mjs` (repo root) and `pnpm --filter @lmthing/ui lint:rn`.
+const uiSrc = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
+const DEFAULT_DIRS = [join(uiSrc, 'chat'), join(uiSrc, 'studio'), join(uiSrc, 'computer')];
 
 const isExempt = (p) =>
   p.endsWith('.web.tsx') || p.endsWith('.native.tsx') || p.endsWith('.test.tsx');
