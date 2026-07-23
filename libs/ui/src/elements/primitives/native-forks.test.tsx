@@ -20,6 +20,9 @@ import * as RowNative from './row/index.native'
 import * as ColNative from './col/index.native'
 import * as ListWeb from './list/index'
 import * as ListNative from './list/index.native'
+import * as MiscNative from './misc.native'
+import * as TableNative from './table.native'
+import * as FormNative from './form/index.native'
 
 describe('native primitive forks', () => {
   it('load without throwing and are valid components (Tamagui configured)', () => {
@@ -30,6 +33,13 @@ describe('native primitive forks', () => {
     expect(ColNative.Col).toBeTruthy()
     expect(ListNative.List).toBeTruthy()
     expect(ListNative.ListItem).toBeTruthy()
+  })
+
+  it('grouped forks (misc/table/form, @tamagui/core-only) load with all their symbols', () => {
+    for (const s of ['Pre', 'Br', 'Hr']) expect(MiscNative).toHaveProperty(s)
+    for (const s of ['Table', 'Thead', 'Tbody', 'Tfoot', 'Tr', 'Th', 'Td', 'Caption'])
+      expect(TableNative).toHaveProperty(s)
+    expect(FormNative.Form).toBeTruthy()
   })
 
   it('export the same symbols + displayName as the web primitive (cross-target API)', () => {
