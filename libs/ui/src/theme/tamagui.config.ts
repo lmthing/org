@@ -119,6 +119,15 @@ export const tamaguiConfig = createTamagui({
 
 export type TamaguiConfig = typeof tamaguiConfig
 
+// Re-export the styled runtime FROM this module so a primitive that does
+// `import { styled, View } from '…/theme/tamagui.config'` transitively retains this module —
+// and thus the `createTamagui()` call above that registers the config. A bare side-effect
+// `import '…/tamagui.config'` would be tree-shaken away because @lmthing/ui declares
+// `"sideEffects": false`, leaving Tamagui unconfigured (getConfig → "Err0") at render time.
+// Every Tamagui primitive MUST import its styled/View/Text from here, never from '@tamagui/core'.
+export { styled, View, Text } from '@tamagui/core'
+export type { GetProps } from '@tamagui/core'
+
 // Ambient module augmentation so `styled()` calls get typed `$token` autocompletion.
 declare module '@tamagui/core' {
   interface TamaguiCustomConfig extends TamaguiConfig {}
