@@ -31,6 +31,7 @@ const ALLOW_FILE = (p) =>
   /(^|\/)theme\.css$/.test(p) ||
   /(^|\/)tokens\.json$/.test(p) ||
   /(^|\/)tokens\.manifest\.json$/.test(p) ||
+  /(^|\/)tokens\.generated\.ts$/.test(p) || // generated Tamagui token module — token defs, like theme.css
   /(^|\/)scripts\//.test(p);
 
 const STOCK = 'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose';
