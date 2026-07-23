@@ -1102,10 +1102,37 @@ Do `Row`/`Col` first (lowest risk — explicit direction), then `Box`.
 Mechanical, once B1's primitives are proven. Mirror the existing AST codemod
 (`libs/ui/scripts/dehtml-codemod.mjs`).
 
+### B2 — codemod rules, EMPIRICALLY VERIFIED (not just derived)
+
+The exact class-vs-prop split below was proven under **real Tailwind** (same `@layer` structure as
+`theme.css`) by a ref-vs-candidate computed-style proof: `apps/web/b0-probe/main.tsx`
+(`lay-ref/lay-cand` pairs) + `measure-layout.mjs` — **both pairs match 9/9 box-model props**. The
+split follows directly from what Tamagui's unlayered `.is_View` base sets vs. leaves unset (B0):
+
+| Tailwind on the flex `Box` | Migrated form | Why |
+|---|---|---|
+| `flex` (row) | → `<Row>` | base owns `display:flex` + `flex-direction:row` |
+| `flex flex-col` | → `<Col>` | base owns `display:flex` + `flex-direction:column` |
+| `items-*` (align-items) | **→ prop** `alignItems="center\|flex-start\|…"` | base sets `align-items:stretch` **unlayered** → a `items-*` className loses; the prop (`:root`-boosted) wins |
+| `flex-1` | **→ props** `flexGrow={1} flexShrink={1} flexBasis="0%"` | base sets `flex-basis:auto`/`flex-shrink` unlayered; `flex={1}` alone emits `flex-basis:0px` (a `0%` vs `0px` mismatch), so set `flexBasis="0%"` explicitly to match `flex-1` byte-for-byte |
+| `min-w-0` / `min-w-*` | **→ prop** `minWidth={0}` | base sets `min-width` unlayered (RN `0`; the web block-compat reset makes a bare Row `auto`) → a `min-w-*` className loses |
+| `shrink-*`/`grow-*`/`basis-*`/`self-*` | **→ props** | same reason: `.is_View` sets `flex-shrink`/`flex-basis` (and `align-self` is safest as a prop) |
+| `justify-*` (justify-content) | **KEEP as className** | `.is_View` does **not** set `justify-content` → the layered Tailwind rule wins uncontested |
+| `gap-*` / `gap-x-*` / `gap-y-*` | **KEEP as className** | `.is_View` does **not** set `gap` → Tailwind wins uncontested |
+| everything else (padding, margin, colors, `w-*`/`h-*`, `rounded-*`, `text-*`, `bg-*`, borders, `overflow-*`, …) | **KEEP as className** | not a box-model prop `.is_View` touches |
+
+So the codemod is NOT "strip only the display class" — it strips `flex`/`flex-row`/`flex-col`, and
+additionally **lifts `items-*`, `flex-1`/`flex-*`, `min-w-*`, `self-*` to props**, while keeping
+`justify-*`, `gap-*`, and all paint/spacing/size classes as className. `Box` (block) can stay a
+passthrough `<div>` on web until its own swap — a block `<div>` with kept Tailwind classes is
+unaffected; only the flex Boxes must migrate here.
+
+### Original B2 notes
+
 - `<Box className="flex ...">` (no `flex-col`) → `<Row className="...">` (strip `flex`; `Row` owns
   display+row). `<Box className="flex flex-col ...">` → `<Col className="...">` (strip `flex flex-col`).
-  Keep all non-layout classes (`items-*`/`justify-*`/`gap-*`/spacing/colors) **iff** B0 showed
-  className wins; otherwise move them to props too.
+  Move `items-*`/`flex-1`/`min-w-*`/`self-*` to props (see the verified table above); keep
+  `justify-*`/`gap-*`/spacing/colors as className.
 - The surfaces import `Row`/`Col` from the primitives (already exported in
   `elements/primitives/index.ts`). The RN-safety lint (`lint:rn`) already forbids raw host tags and
   is unaffected. Gate every batch with `pnpm test:visual:all` + `pnpm --filter @lmthing/ui test`.
