@@ -179,10 +179,16 @@ produced (className-driven layout on `Box`) and what the Tamagui swap needs (lay
   (`image`/`link` import `react-native` → verified in the mobile app); `native-forks.test.tsx`
   loads them in jsdom and asserts same-symbol/same-`displayName` parity with web. Web is untouched:
   L2 24/24, libs/ui suite 26/26, RN-safety lint clean.
+- **Grouped primitive forks — ✅ DONE too.** `misc.native.tsx` (Pre→mono Text, Br→null, Hr→hairline
+  View), `table.native.tsx` (Table family → flex Views/rows/cells + Text caption), `form/index.native.tsx`
+  (Form→View) are @tamagui/core-only and **typecheck clean in isolation** + load in the
+  `native-forks.test`. `controls.native.tsx` (TextField/TextArea → RN `TextInput`),
+  `media.native.tsx` (IFrame → `react-native-webview`), `svg.native.tsx` (direct re-export of
+  `react-native-svg` — the primitives were named to mirror it) use RN deps → verified in the mobile
+  app. So the WHOLE `elements/primitives` index is native-safe (Metro won't pull a raw web `<svg>`/
+  `<table>` into the RN bundle).
 - **NOT done / honest gaps:** these forks are **typecheck-/load-verified, not runtime-verified**
-  (no Metro/device here). The **grouped** primitives (`controls`/`media`/`table`/`svg`/`misc`/`form`)
-  have no native fork yet (svg → `react-native-svg`, table → View rows, controls → `TextInput`).
-  And a native fork renders **structurally** but does **not** apply the surfaces' Tailwind
+  (no Metro/device here). A native fork renders **structurally** but does **not** apply the surfaces' Tailwind
   `className` — native surface styling still needs the §1c decision (NativeWind or a props
   migration). The forks are the element seam that story plugs into.
 
