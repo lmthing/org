@@ -1,9 +1,12 @@
 # Migrating `chat` + `studio` to Tamagui (universal / RN-compatible) — **without breaking web styles**
 
 > Status: proposal / plan. Target branch: `claude/react-native-mobile-exploration-vafu9o`.
-> Scope: make `libs/ui/src/chat/**` and `libs/ui/src/studio/**` render on **both** web (unchanged)
-> and React Native, by moving them onto Tamagui universal primitives. `computer/*` (Monaco, xterm,
-> resizable-panels) stays web-only and is explicitly **out of scope**.
+> Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
+> **both** web (unchanged) and React Native, by moving them onto Tamagui universal primitives. Three
+> irreducibly-web widgets — **Monaco** (`computer/ide-editor`), **xterm** (`elements/content/terminal`), and
+> **react-resizable-panels** (`computer/ide-layout`) — are **web-only**: they render fully on web and show a
+> documented "not available on mobile" fallback on native, isolated behind `.web.tsx`/`.native.tsx` seams.
+> Everything else in `computer/*` is migrated like `chat`/`studio`.
 
 ---
 
@@ -15,6 +18,28 @@ that its rendered web output still matches the pre-migration baseline. Nothing m
 
 This document is therefore ~60% about the **proof harness** and ~40% about the migration itself, because
 the proof harness is what makes the migration safe.
+
+### The migration is split into two macro-phases — **de-HTML first, Tamagui second**
+
+The single most important structural decision: **`chat`, `studio`, and `computer` must not touch raw HTML tags
+at all.** Everything routes through the `@lmthing/ui` component layer first, as a pure web-only refactor,
+*before* Tamagui is introduced.
+
+- **Phase 0 — de-HTML (web only, no Tamagui, no behavior change).** Replace every raw JSX host tag
+  (`<div>`, `<span>`, `<button>`, `<input>`, `<svg>`, `<table>`, …) in `chat` + `studio` + `computer` with a UI
+  component. The components are, at this stage, **thin wrappers that emit the exact same HTML** — so the
+  rendered web output is byte-for-byte the current output. A lint gate then forbids any raw host tag in those
+  surfaces forever. This is the strongest-possible parity story: the HTML literally does not change.
+- **Phase 1+ — the Tamagui swap (change the components, not the surfaces).** Only the ~2 dozen UI components'
+  *implementations* change from HTML to Tamagui primitives. The surfaces are **not edited again** — they
+  already speak only the component vocabulary. The blast radius of the risky change shrinks from ~105 surface
+  files to ~24 component files, each with its own parity gate. (The three web-only IDE widgets — Monaco, xterm,
+  resizable-panels — are the sole carve-out: isolated behind `.web.tsx`/`.native.tsx` seams, §1.6.)
+
+Why this ordering matters: it converts "migrate ~700 divs + ~270 spans across ~105 files to Tamagui and hope
+the box model holds" into two independently-verifiable steps — a mechanical HTML-preserving refactor (near-zero
+visual risk), then a localized implementation swap behind a stable component API. Phase 0 is valuable on its
+own even if the RN work is deferred: it establishes the component seam and the lint gate.
 
 ### What "the same style" means precisely
 
@@ -63,6 +88,105 @@ The mitigation is a **compatibility primitive layer** (§4): the codemod does **
 `<div>` into `<YStack>`. It maps to primitives whose web output is configured to reproduce the *previous*
 box model, and the computed-style test (§3, layer 2) asserts we got it right on every element. This turns an
 invisible risk into a caught-at-CI failure.
+
+---
+
+## 1.5 Phase 0 — de-HTML `chat` + `studio` through the UI component layer
+
+**Goal:** zero raw JSX host tags in `libs/ui/src/chat/**` and `libs/ui/src/studio/**`. Every element goes
+through a `@lmthing/ui` component. No Tamagui yet; no visual change.
+
+### Current raw-tag load (what must be routed through components)
+
+Measured across `chat` + `studio` (`.tsx`):
+
+| Tag(s) | chat | studio | Target component |
+|---|---|---|---|
+| `div` | 202 | 439 | `Box` (+ existing `Stack`/`Card`/`Panel`/`Page` where semantic) |
+| `span`, `p`, `strong`, `em`, `b`, `i`, `small` | ~145 | ~90 | `Text` (variant/weight/tone props) |
+| `button` | 48 | 43 | `Button` *(exists)* |
+| `input` | 29 | 4 | `TextField` *(exists: `forms/input`)* |
+| `textarea` | 6 | 8 | `TextArea` *(exists)* |
+| `select`, `option` | 7 | 16 | `Select` *(exists)* |
+| `label` | 13 | 6 | `Label` *(exists)* |
+| `svg`, `img` | 12 | 39 | `Icon` (lucide/inline) · `Image` |
+| `a` | 6 | 2 | `Link` |
+| `ul`, `ol`, `li` | 14 | 4 | `List` / `ListItem` *(has `content/list-item`)* |
+| `table`, `thead`, `tbody`, `tr`, `td`, `th` | 9 | 0 | `Table` family |
+| `pre`, `code` | 12 | 4 | `Code` *(exists: `typography/code`)* |
+| `h1`–`h6` | 13 | 16 | `Heading` *(exists)* |
+| `form` | 3 | 5 | `Form` |
+| `hr`, `br` | 1 | 16 | `Divider` *(has `content/separator`)* / layout gap |
+| `nav`, `header`, `footer`, `section`, `aside`, `article` | ~6 | ~13 | `Box` semantic variants |
+
+### Vocabulary gaps to build (small, plain-HTML wrappers)
+
+Most of the vocabulary already exists (`Button`, `TextField`/`input`, `TextArea`, `Select`, `Label`,
+`Heading`, `Code`, `Card`, `Panel`, `Stack`, `Page`, `Separator`, `ListItem`). The **missing** primitives to
+add — each a thin wrapper emitting the same HTML it replaces — are:
+
+- `Box` — generic container. Renders `<div>` (with an `as`/`role` escape hatch for `section`/`nav`/`header`/
+  `aside`). This absorbs the ~641 `<div>`s.
+- `Text` — generic inline/body text. Renders `<span>`/`<p>` per `block` prop; `weight`/`tone`/`size` props
+  cover `strong`/`em`/`small`. Absorbs ~235 tags.
+- `Row` / `Col` — explicit flex containers (or thin presets over the existing `Stack`), so no layout relies on
+  an implicit `<div>` default (this is what de-risks the Phase-1 box-model swap).
+- `List` / `ListItem` (container for the existing item), `Table` family, `Image`, `Icon`, `Link`, `Form`.
+
+### How Phase 0 stays provably identical
+
+Because each new component **emits the same tag with the same className passthrough** it replaced, Phase 0's
+web output is unchanged by construction. It is still gated by the full proof harness (§3): the `main`
+baselines are captured before Phase 0, and each de-HTML PR must pass L1 (n/a), **L2 computed-style = exact**,
+and **L3 visual ≤ 0.001** against those baselines. In practice L2/L3 for Phase 0 should be a perfect match;
+any diff means a wrapper changed the DOM/className and is a bug to fix, not a threshold to relax.
+
+### Completion gate
+
+Phase 0 is done when the **RN-safety lint rule** (no raw JSX host tags, no `@radix-ui/*`, no web-only deps in
+`chat`/`studio`; see §8) passes with zero violations. That lint rule is what guarantees the surfaces *stay*
+de-HTML'd as the code evolves — including for all future features.
+
+---
+
+## 1.6 `computer/*` and the three web-only widgets (render on web, fallback on native)
+
+`computer/*` is **in scope** and migrated exactly like `chat`/`studio` (de-HTML → Tamagui) — it is small
+(15 components: ~60 `div`, 17 `span`, 11 `button`). The only exception is three irreducibly-web widgets that
+have no RN equivalent and must **stay web-only**, visible on web but not on mobile:
+
+| Widget | File | Web-only because |
+|---|---|---|
+| **Monaco** code editor | `computer/ide-editor.tsx` | DOM-based editor; no RN build |
+| **xterm** terminal | `elements/content/terminal/**` (used by `computer/ide-terminal.tsx` + `elements/nav/settings-dialog`) | canvas/DOM terminal; no RN build |
+| **resizable-panels** | `computer/ide-layout.tsx` | mouse-drag DOM splitters; desktop idiom |
+
+### The fork pattern (how "web-only, not on mobile" is enforced)
+
+Each web-only widget is isolated behind a **platform-resolved module** so it is *physically impossible* to
+bundle into the native app:
+
+```
+elements/content/terminal/
+  index.tsx          → re-exports from the platform file (metro/vite pick .native or .web)
+  index.web.tsx      → the real xterm implementation (current code, unchanged)
+  index.native.tsx   → <UnavailableOnMobile feature="Terminal" />  (no xterm import at all)
+```
+
+- The `.native.tsx` file **does not import** Monaco/xterm/resizable-panels — Metro never sees those deps, so
+  they can't break or bloat the native bundle.
+- On web, `.web.tsx` is the current implementation verbatim → web parity is trivially exact (the file is
+  unchanged; it just moved).
+- `<UnavailableOnMobile>` is a small Tamagui component (a themed empty-state: "Available on the web app").
+- Consumers (`ide-editor`, `ide-terminal`, `ide-layout`, and the settings-dialog terminal) import the
+  seam, never the widget directly — so the *surrounding* `computer` layout still renders natively, with just
+  those panels replaced by the fallback.
+- The no-raw-HTML / RN-safety lint (§8) **allows** these `.web.tsx` files to use their web deps (they are the
+  designated exception), but forbids any web-only import from leaking into a non-`.web` file.
+
+Net: on web, `computer` is unchanged (Monaco + terminal + split-panes intact); on mobile, `computer` renders
+its dashboards/panels/logs/metrics/agents natively and shows a clean "open the web app" fallback where the IDE
+widgets would be.
 
 ---
 
@@ -147,7 +271,7 @@ built-in pixel diff; no extra deps. Threshold is a noise budget, not a license t
 ### 3.1 The visual harness (how components are rendered in isolation, deterministically)
 
 A dev-only route `apps/web/src/routes/__visual/` (excluded from production builds) mounts every `chat`/`studio`
-/`elements` component against **frozen fixtures**:
+/`computer`/`elements` component against **frozen fixtures**:
 
 - One `Fixture` entry per component × per meaningful variant/state (e.g. Button: default/hover-static/disabled/
   loading/`asChild`; Message: user/assistant/tool/error; each Studio panel with seeded data).
@@ -172,11 +296,14 @@ minified, deterministic), pinned Chromium, one project per theme. Baselines live
 
 ---
 
-## 4. The compatibility primitive layer (`@lmthing/ui-primitives`)
+## 4. The compatibility primitive layer (the components' Phase-1 implementation)
 
-The heart of "won't break web." Instead of hand-mapping 1,000 tags to raw Tamagui components, we define a
-thin primitive set whose **web output reproduces the current box model**, and whose **native output is
-correct RN**. Tamagui `styled()` factories, one config, two render targets.
+The heart of "won't break web." **This is a Phase-1 change to the components built/filled in Phase 0 — not a
+new thing `chat`/`studio` import.** After Phase 0, the surfaces already speak only the component vocabulary
+(`Box`, `Text`, `Button`, …); Phase 1 swaps those components' *internals* from plain HTML to Tamagui
+`styled()` factories whose **web output reproduces the current box model** and whose **native output is
+correct RN**. One config, two render targets. Because only the ~24 component implementations change, the
+box-model risk is contained to them and proven by their own L2/L3 tests.
 
 | Primitive | Replaces | Web behavior (must match today) | Native behavior |
 |---|---|---|---|
@@ -234,38 +361,56 @@ Rules that keep this honest:
 
 ## 7. Migration sequence (strangler-fig, each step CI-gated)
 
-Order chosen so the foundation is proven before anything depends on it:
+Order chosen so the foundation is proven before anything depends on it. **Steps 1–4 are Phase 0 (de-HTML,
+web-only, no Tamagui); steps 5–9 are Phase 1+ (the Tamagui swap).**
+
+**Phase 0 — de-HTML (no visual change, no Tamagui):**
 
 1. **Harness + Playwright + baselines from `main`** (§3). Capture golden screenshots + computed styles for
-   every current `chat`/`studio`/`elements` fixture. **No product code changes.** This PR is pure safety net.
-2. **`tamagui.config.ts` generator + Layer-1 token-parity test** (§5). Green before any component moves.
-3. **`@lmthing/ui-primitives` + its own parity tests** (§4). Prove `Block`/`Text`/`Pressable`/`TextField`/
-   `Icon` match `div`/`span`/`button`/`input`/`svg` in isolation.
-4. **Shared `elements/` layer** (39 components) — the base others compose from. Button (+`Slot`→`asChild`),
-   overlays (Radix→Tamagui), typography, forms, layouts. Each gated.
-5. **`chat`** (~44 components) — most self-contained; migrate leaf→root, each gated.
-6. **`studio`** (~48 components) — forms/lists/textareas/lucide via the same primitives. Forked leaves:
-   - `studio/knowledge/field/field-tree` (arborist) → `FlatList`-based tree; parity vs baseline on web.
-   - `apps/web/src/routes/studio/$projectId/app/preview` (iframe) → `.web.tsx` keeps `iframe`,
-     `.native.tsx` uses `react-native-webview`. Web fixture proves the iframe render is unchanged.
-   - `component-editor` / app `files` textareas → `<TextArea>`; parity vs `.input` baseline.
-7. **Browser-global shims** (~15–20 touchpoints: `localStorage`→AsyncStorage, `window`/`document` listeners
-   →`Dimensions`/`AppState`, `navigator.clipboard`→RN `Clipboard`, `getBoundingClientRect`→`onLayout`). Behind
-   a tiny `platform/` module with `.web`/`.native` files; web implementations are the current code verbatim
-   (so web is provably unchanged).
-8. **Delete superseded CSS** for fully-migrated components; re-run full suite.
+   every current `chat`/`studio`/`computer`/`elements` fixture. **No product code changes.** This PR is pure safety net.
+2. **Build the vocabulary gaps** (§1.5): `Box`, `Text`, `Row`/`Col`, `List`, `Table`, `Image`, `Icon`,
+   `Link`, `Form` — plain-HTML wrappers emitting the same tags. Each proven to match its raw tag in isolation.
+3. **De-HTML `chat`** (~44 files): codemod + hand-finish every raw tag → component. Each PR gated by exact
+   L2 + L3 vs the `main` baseline (should be a perfect match).
+4. **De-HTML `studio`** (~48 files) the same way, including the leaves that stay web-specific but still get
+   wrapped: `field-tree` (arborist) behind a `Tree` component, the app-preview `iframe` behind a `WebFrame`
+   component, textareas behind `TextArea`.
+4b. **De-HTML `computer`** (~15 files) the same way. Isolate the three web-only widgets behind their platform
+   seams now (§1.6): move Monaco/xterm/resizable-panels into `.web.tsx` files (unchanged code) with
+   placeholder `.native.tsx` stubs; everything else de-HTML'd to components. **Turn on the RN-safety lint
+   gate** (§8) across all three surfaces — Phase 0 complete when it is violation-free.
 
-Each of steps 4–6 is many small PRs (a few components each), every one blocked by the three parity layers.
+**Phase 1+ — Tamagui swap (components change; `chat`/`studio` are not edited again):**
+
+5. **`tamagui.config.ts` generator + Layer-1 token-parity test** (§5). Green before any implementation swaps.
+6. **Swap shared primitive/`elements` implementations to Tamagui** (§4): `Box`/`Text`/`Pressable`/`TextField`/
+   `Icon` + Button (`Slot`→`asChild`) + overlays (Radix→Tamagui). Each gated by its own L2/L3 vs baseline.
+7. **Swap remaining `chat`/`studio`/`computer`-specific components** to Tamagui internals, plus native forks
+   of the leaves: `Tree` → `FlatList`; `WebFrame` → `.native.tsx` `react-native-webview` (web keeps `iframe`);
+   `TextArea` → RN `TextInput`. For `computer`, fill in the three web-only widgets' `.native.tsx` fallbacks
+   (`<UnavailableOnMobile>`); their `.web.tsx` stays as-is. Web parity re-proven at each.
+8. **Browser-global shims** (~15–20: `localStorage`→AsyncStorage, `window`/`document` listeners→`Dimensions`/
+   `AppState`, `navigator.clipboard`→RN `Clipboard`, `getBoundingClientRect`→`onLayout`). Behind a `platform/`
+   module with `.web`/`.native` files; web implementations are the current code verbatim.
+9. **Delete superseded CSS** for fully-swapped components; re-run full suite.
+
+Each of steps 3–4 and 6–7 is many small PRs (a few components each), every one blocked by the three parity
+layers.
 
 ---
 
 ## 8. CI gates & guardrails
 
 - **New CI jobs:** `test:token-parity` (L1), `test:computed-style` (L2), `test:visual` (L3). All three
-  required on every PR touching `chat`/`studio`/`elements`/`ui-primitives`/`css`.
-- **RN-safety lint** (mirrors the existing `lint:tokens` gate): an ESLint/AST rule forbidding
-  `libs/ui/src/chat/**` and `libs/ui/src/studio/**` from importing raw JSX host tags, `@radix-ui/*`, or any
-  web-only dep. Once a subtree is migrated, this keeps it RN-safe forever. `computer/*` is exempt.
+  required on every PR touching `chat`/`studio`/`computer`/`elements`/`ui-primitives`/`css`.
+- **RN-safety / no-raw-HTML lint** (mirrors the existing `lint:tokens` gate) — the enforcement backbone of
+  Phase 0. An ESLint rule (`react/forbid-elements` for the host-tag ban + a `no-restricted-imports` for
+  `@radix-ui/*` and web-only deps) applied to `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and
+  `libs/ui/src/computer/**`**. It forbids **every** JSX intrinsic/host tag there — the surfaces may only use
+  `@lmthing/ui` components. Turned on at the end of Phase 0 (step 4b) and required on every PR thereafter, so
+  the surfaces stay de-HTML'd and RN-safe for all future features. **The only exception is the designated
+  `*.web.tsx` widget files** (Monaco/xterm/resizable-panels, §1.6), which may use their web deps and host
+  tags; the rule still forbids any web-only import from leaking into a non-`.web` file.
 - **Baseline update is a deliberate, reviewed act:** golden files change only via an explicit
   `--update-snapshots` PR with visual diff images in the description — never silently.
 
@@ -285,23 +430,30 @@ Each of steps 4–6 is many small PRs (a few components each), every one blocked
 
 ## 10. Definition of done
 
-- **Per component:** L1 (if it introduces tokens) + L2 (exact, both themes) + L3 (≤0.001) all green; old CSS
-  removed; RN-safety lint passing; renders in the Expo app.
-- **Overall:** `chat` + `studio` render on web **within the parity contract vs the pre-migration `main`
-  baseline** and render natively in `apps/mobile`; `computer/*` unchanged and web-only; all three CI parity
-  jobs + RN-safety lint enforced on the default branch.
+- **Per component:** no raw HTML tags (lint green); L1 (if it introduces tokens) + L2 (exact, both themes) +
+  L3 (≤0.001) all green; old CSS removed; RN-safety lint passing; renders in the Expo app (or, for a web-only
+  leaf, renders its documented native fallback).
+- **Overall:** `chat`, `studio`, **and `computer`** render on web **within the parity contract vs the
+  pre-migration `main` baseline** and render natively in `apps/mobile`; the three web-only widgets (Monaco,
+  xterm, resizable-panels) render on web and show their native fallbacks on mobile; all three CI parity jobs +
+  the no-raw-HTML / RN-safety lint enforced on the default branch across all three surfaces.
 
 ---
 
 ## Appendix — first, smallest provable slice
 
-To validate the entire pipeline on one real component before committing to the full sweep:
+To validate the entire pipeline on one real slice before committing to the full sweep — **in the de-HTML-first
+order**:
 
-1. Harness + Playwright + baseline for the **Button** fixture set (default/disabled/loading/`asChild`), both themes.
-2. `tamagui.config.ts` generator + L1 token-parity test.
-3. `@lmthing/ui-primitives` with `Pressable` + `Text`.
-4. Migrate `elements/forms/button` (exercises the Radix `Slot`→`asChild` path) onto the primitives.
-5. Show L1+L2+L3 green on web **and** the same Button rendering in a minimal Expo screen.
+1. Harness + Playwright + baseline for the **Button** fixture set (default/disabled/loading/`asChild`) and one
+   real container-heavy component (e.g. a chat `Message`), both themes. Captured from `main`.
+2. **Phase 0 proof:** add `Box` + `Text` as plain-HTML wrappers; de-HTML that one `Message` component (every
+   `div`/`span` → `Box`/`Text`). Show **L2 exact + L3 = 0 diff** — proving wrappers change nothing — and the
+   no-raw-HTML lint passing on that file.
+3. **Phase 1 proof:** `tamagui.config.ts` generator + L1 token-parity test; swap `Box`/`Text`/`Button`
+   (incl. `Slot`→`asChild`) internals to Tamagui. `Message` and the Button fixtures are **not edited**.
+4. Show L1+L2+L3 green on web **and** the same Button + `Message` rendering in a minimal Expo screen.
 
-This exercises the token pipeline, the primitive layer, the Radix replacement, the dual build, and all three
-proof layers in a single vertical slice.
+This exercises the de-HTML seam, the lint gate, the token pipeline, the Radix replacement, the dual build, and
+all three proof layers — and proves the surfaces are edited only once (Phase 0) and never again during the
+risky Tamagui swap.
