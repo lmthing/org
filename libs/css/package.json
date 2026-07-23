@@ -6,6 +6,7 @@
   "exports": {
     "./theme": "./src/theme.css",
     "./tokens.json": "./src/tokens/tokens.json",
+    "./tamagui-tokens": "./src/tamagui/tokens.generated.ts",
     "./tokens.manifest.json": "./tokens.manifest.json",
     "./elements/*": "./src/elements/*",
     "./components/*": "./src/components/*"
@@ -23,8 +24,8 @@
     "**/*.css"
   ],
   "scripts": {
-    "generate": "node scripts/generate-theme.mjs && node scripts/generate-components-catalog.mjs",
-    "prebuild": "node scripts/generate-theme.mjs && node scripts/generate-components-catalog.mjs",
+    "generate": "node scripts/generate-theme.mjs && node scripts/generate-tamagui-config.mjs && node scripts/generate-components-catalog.mjs",
+    "prebuild": "node scripts/generate-theme.mjs && node scripts/generate-tamagui-config.mjs && node scripts/generate-components-catalog.mjs",
     "lint:tokens": "node scripts/lint-design-tokens.mjs src",
     "lint": "eslint . && node scripts/lint-design-tokens.mjs src",
     "format": "prettier --write ."
