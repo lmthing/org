@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/computer-dashboard.css'
 import { StatusCard, type RuntimeStatus, type RuntimeTier } from './status-card'
 import { MetricsCard } from './metrics-card'
@@ -32,7 +33,7 @@ function ComputerDashboard({
   network,
 }: ComputerDashboardProps) {
   return (
-    <div className="computer-dashboard">
+    <Prim.Box className="computer-dashboard">
       <StatusCard status={status} tier={tier} uptime={uptime} />
       <MetricsCard
         cpuPercent={cpuPercent}
@@ -41,13 +42,13 @@ function ComputerDashboard({
       />
       <ProcessesPanel processes={processes} />
       <AgentsPanel agents={agents} />
-      <div className="computer-dashboard__full-width">
+      <Prim.Box className="computer-dashboard__full-width">
         <LogsViewer logs={logs} />
-      </div>
-      <div className="computer-dashboard__full-width">
+      </Prim.Box>
+      <Prim.Box className="computer-dashboard__full-width">
         <NetworkPanel network={network} unavailable={tier === 'webcontainer'} />
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

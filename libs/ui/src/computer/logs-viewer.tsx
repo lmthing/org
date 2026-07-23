@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/logs-viewer.css'
 import { useRef, useEffect, useState } from 'react'
 import { Panel, PanelHeader } from '../elements/content/panel'
@@ -40,8 +41,8 @@ function LogsViewer({ logs }: LogsViewerProps) {
       <PanelHeader>
         <Heading level={4}>Logs</Heading>
       </PanelHeader>
-      <div className="computer-logs-viewer">
-        <div className="computer-logs-viewer__toolbar">
+      <Prim.Box className="computer-logs-viewer">
+        <Prim.Box className="computer-logs-viewer__toolbar">
           {(['all', 'info', 'warn', 'error', 'debug'] as const).map((f) => (
             <Button
               key={f}
@@ -52,27 +53,27 @@ function LogsViewer({ logs }: LogsViewerProps) {
               {f}
             </Button>
           ))}
-        </div>
-        <div ref={listRef} className="computer-logs-viewer__list">
+        </Prim.Box>
+        <Prim.Box ref={listRef} className="computer-logs-viewer__list">
           {filtered.length === 0 ? (
-            <div className="computer-logs-viewer__empty">No logs</div>
+            <Prim.Box className="computer-logs-viewer__empty">No logs</Prim.Box>
           ) : (
             filtered.map((entry, i) => (
-              <div key={i} className="computer-logs-viewer__entry">
-                <span className="computer-logs-viewer__timestamp">{formatTime(entry.timestamp)}</span>
-                <span className="computer-logs-viewer__source">[{entry.source}]</span>
-                <span className={cn(
+              <Prim.Box key={i} className="computer-logs-viewer__entry">
+                <Prim.Text className="computer-logs-viewer__timestamp">{formatTime(entry.timestamp)}</Prim.Text>
+                <Prim.Text className="computer-logs-viewer__source">[{entry.source}]</Prim.Text>
+                <Prim.Text className={cn(
                   'computer-logs-viewer__message',
                   entry.level === 'warn' && 'computer-logs-viewer__message--warn',
                   entry.level === 'error' && 'computer-logs-viewer__message--error',
                 )}>
                   {entry.message}
-                </span>
-              </div>
+                </Prim.Text>
+              </Prim.Box>
             ))
           )}
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
     </Panel>
   )
 }

@@ -1,3 +1,4 @@
+import * as Prim from '../elements/primitives/index.js';
 import '@lmthing/css/components/computer/ide-layout.css'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 import { Badge } from '../elements/content/badge'
@@ -54,19 +55,19 @@ function IdeLayout(props: IdeLayoutProps) {
   const { status, isBooting, isInstalling, onNavigate, onRestart, restarting } = props
 
   return (
-    <div className="ide-layout">
-      <div className="ide-layout__header">
-        <span className="ide-layout__title"><CozyThingText text="lmthing.computer" /></span>
+    <Prim.Box className="ide-layout">
+      <Prim.Box className="ide-layout__header">
+        <Prim.Text className="ide-layout__title"><CozyThingText text="lmthing.computer" /></Prim.Text>
         {onNavigate && (
-          <nav className="ide-layout__nav">
+          <Prim.Box as="nav" className="ide-layout__nav">
             {navItems.map((item) => (
-              <button key={item.path} onClick={() => onNavigate(item.path)} className="ide-layout__nav-btn">
+              <Prim.Pressable key={item.path} onClick={() => onNavigate(item.path)} className="ide-layout__nav-btn">
                 {item.label}
-              </button>
+              </Prim.Pressable>
             ))}
-          </nav>
+          </Prim.Box>
         )}
-        <div className="ide-layout__status">
+        <Prim.Box className="ide-layout__status">
           {(isBooting || isInstalling) && <Loader2 size={14} className="animate-spin" />}
           {isBooting && 'Booting...'}
           {isInstalling && 'Installing dependencies...'}
@@ -74,20 +75,20 @@ function IdeLayout(props: IdeLayoutProps) {
             <Badge variant={status === 'running' ? 'success' : 'muted'}>{status}</Badge>
           )}
           {onRestart && (
-            <button
+            <Prim.Pressable
               onClick={restarting ? undefined : onRestart}
               disabled={restarting}
               className="ide-layout__restart-btn"
               title="Restart CLI process (reloads .env)"
             >
               {restarting ? '↻' : '⏻'}
-            </button>
+            </Prim.Pressable>
           )}
-        </div>
-      </div>
-      <div className="ide-layout__body">
-        <div className="ide-layout__split ide-layout__split--horizontal">
-          <div className="ide-layout__pane ide-layout__pane--sidebar">
+        </Prim.Box>
+      </Prim.Box>
+      <Prim.Box className="ide-layout__body">
+        <Prim.Box className="ide-layout__split ide-layout__split--horizontal">
+          <Prim.Box className="ide-layout__pane ide-layout__pane--sidebar">
             <IdeFileTree
               fileTree={props.fileTree}
               activeFile={props.activeFile}
@@ -96,13 +97,13 @@ function IdeLayout(props: IdeLayoutProps) {
               onCreateDirectory={props.onCreateDirectory}
               onDelete={props.onDelete}
             />
-          </div>
+          </Prim.Box>
 
-          <div className="ide-layout__divider ide-layout__divider--horizontal" />
+          <Prim.Box className="ide-layout__divider ide-layout__divider--horizontal" />
 
-          <div className="ide-layout__pane ide-layout__pane--main">
-            <div className="ide-layout__split ide-layout__split--vertical">
-              <div className="ide-layout__pane ide-layout__pane--editor">
+          <Prim.Box className="ide-layout__pane ide-layout__pane--main">
+            <Prim.Box className="ide-layout__split ide-layout__split--vertical">
+              <Prim.Box className="ide-layout__pane ide-layout__pane--editor">
                 <IdeEditor
                   openFiles={props.openFiles}
                   activeFile={props.activeFile}
@@ -111,11 +112,11 @@ function IdeLayout(props: IdeLayoutProps) {
                   onFileClose={props.onFileClose}
                   onContentChange={props.onContentChange}
                 />
-              </div>
+              </Prim.Box>
 
-              <div className="ide-layout__divider ide-layout__divider--vertical" />
+              <Prim.Box className="ide-layout__divider ide-layout__divider--vertical" />
 
-              <div className="ide-layout__pane ide-layout__pane--terminal">
+              <Prim.Box className="ide-layout__pane ide-layout__pane--terminal">
                 <IdeTerminal
                   tabs={props.terminalTabs}
                   activeTabId={props.activeTerminalTabId}
@@ -123,13 +124,13 @@ function IdeLayout(props: IdeLayoutProps) {
                   onTabClose={props.onTerminalTabClose}
                   onAddTab={props.onAddTerminalTab}
                 />
-              </div>
-            </div>
-          </div>
+              </Prim.Box>
+            </Prim.Box>
+          </Prim.Box>
 
-        </div>
-      </div>
-    </div>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 
