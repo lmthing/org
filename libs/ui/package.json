@@ -57,7 +57,6 @@
     "@xterm/addon-fit": "*",
     "@xterm/addon-web-links": "*",
     "@monaco-editor/react": "*",
-    "react-resizable-panels": "*",
     "@radix-ui/react-context-menu": "*"
   },
   "author": "LMThing",
