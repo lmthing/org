@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { hostPrimitive } from '../_host.tsx'
+import { hostPrimitive } from '../_host'
 
 /**
  * Form — the `<form>` primitive (Phase 0). Pure passthrough. On native there is no `<form>`;

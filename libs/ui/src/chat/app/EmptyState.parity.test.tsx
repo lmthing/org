@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
-import { EmptyState } from './EmptyState.tsx'
+import { EmptyState } from './EmptyState'
 
 /**
  * Phase-0 de-HTML parity proof (the plan's Appendix step 2 / H8 step 3).

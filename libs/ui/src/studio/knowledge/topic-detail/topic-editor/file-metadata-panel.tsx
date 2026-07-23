@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useEffect, useCallback } from 'react'
 import { useSpaceFS } from '@lmthing/state'
 import { parseKnowledgeOption, serializeKnowledgeOption } from '@lmthing/state'
@@ -86,12 +87,12 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
   const filename = topicPath.split('/').pop() || ''
 
   return (
-    <div className="file-metadata">
+    <Prim.Box className="file-metadata">
       <Stack gap="sm">
-        <div>
+        <Prim.Box>
           <Label compact>Filename</Label>
           <Caption muted>{filename}</Caption>
-        </div>
+        </Prim.Box>
 
         {parseError && (
           <Caption muted style={{ color: 'var(--destructive)' }}>
@@ -99,7 +100,7 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
           </Caption>
         )}
 
-        <div>
+        <Prim.Box>
           <Label compact>Description *</Label>
           <Input
             type="text"
@@ -107,9 +108,9 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
             onChange={handleChange(setDescription)}
             placeholder="Required — shown to the model in the system block"
           />
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Icon</Label>
           <Input
             type="text"
@@ -117,9 +118,9 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
             onChange={handleChange(setIcon)}
             placeholder="Emoji or icon identifier (e.g. 🍳)"
           />
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Color</Label>
           <Input
             type="text"
@@ -127,9 +128,9 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
             onChange={handleChange(setColor)}
             placeholder={COLOR_PLACEHOLDER}
           />
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Label</Label>
           <Input
             type="text"
@@ -137,14 +138,14 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
             onChange={handleChange(setLabel)}
             placeholder="Display name"
           />
-        </div>
+        </Prim.Box>
 
-        <div className="file-metadata__footer">
+        <Prim.Box className="file-metadata__footer">
           <Button variant="primary" size="sm" disabled={!isDirty} onClick={handleSave}>
             Save Metadata
           </Button>
-        </div>
+        </Prim.Box>
       </Stack>
-    </div>
+    </Prim.Box>
   )
 }

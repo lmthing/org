@@ -10,6 +10,7 @@
  * GET-merge-PUT convention the former global Integrations tab used
  * (`elements/settings/integrations`, now removed).
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import '@lmthing/css/elements/layouts/split-pane/index.css'
 import '@lmthing/css/elements/layouts/page/index.css'
 import '@lmthing/css/elements/content/panel/index.css'
@@ -132,10 +133,10 @@ export function ProjectSettingsView() {
   }
 
   return (
-    <div className="split-pane studio-shell">
+    <Prim.Box className="split-pane studio-shell">
       <StudioAppSidebar className="shrink-0" />
-      <div className="split-pane__primary">
-        <div className="page__body">
+      <Prim.Box className="split-pane__primary">
+        <Prim.Box className="page__body">
           <Stack gap="lg">
             <Stack gap="sm">
               <Heading level={2}>Project Settings</Heading>
@@ -176,21 +177,21 @@ export function ProjectSettingsView() {
                     <Panel key={integration.spaceId}>
                       <PanelHeader>
                         <Stack row gap="sm" style={{ alignItems: 'center' }}>
-                          {integration.icon && <span aria-hidden="true">{integration.icon}</span>}
-                          <span>{integration.title}</span>
+                          {integration.icon && <Prim.Text aria-hidden="true">{integration.icon}</Prim.Text>}
+                          <Prim.Text>{integration.title}</Prim.Text>
                         </Stack>
                       </PanelHeader>
                       <PanelBody>
                         <Stack gap="md">
                           {integration.readme ? (
-                            <details className="lm-setup-guide" open>
-                              <summary className="lm-setup-guide__summary">
+                            <Prim.Box as="details" className="lm-setup-guide" open>
+                              <Prim.Box as="summary" className="lm-setup-guide__summary">
                                 How to get your keys — setup guide
-                              </summary>
-                              <div className="lm-setup-guide__body">
+                              </Prim.Box>
+                              <Prim.Box className="lm-setup-guide__body">
                                 <Markdown source={integration.readme} />
-                              </div>
-                            </details>
+                              </Prim.Box>
+                            </Prim.Box>
                           ) : null}
                           {integration.settings && schemaKeys(integration.settings).length > 0 ? (
                             <SettingsSchemaForm
@@ -225,9 +226,9 @@ export function ProjectSettingsView() {
               </Stack>
             )}
           </Stack>
-        </div>
-      </div>
-    </div>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

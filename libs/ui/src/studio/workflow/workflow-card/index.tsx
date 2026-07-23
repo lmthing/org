@@ -1,6 +1,7 @@
 /**
  * TasklistCard / TasklistListItem — card components for the tasklist list view.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import type { TasklistListItem } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Label } from '@lmthing/ui/elements/typography/label'
@@ -20,18 +21,18 @@ interface TasklistCardProps {
 
 export function TasklistCard({ tasklist, isSelected, onSelect, onDelete }: TasklistCardProps) {
   return (
-    <div
+    <Prim.Box
       onClick={onSelect}
       className={cn('workflow-card', isSelected && 'workflow-card--selected')}
     >
-      <div className="workflow-card__body">
+      <Prim.Box className="workflow-card__body">
         {/* Header row */}
-        <div className="workflow-card__header">
-          <div className="workflow-card__header-content">
-            <div className="workflow-card__title-row">
+        <Prim.Box className="workflow-card__header">
+          <Prim.Box className="workflow-card__header-content">
+            <Prim.Box className="workflow-card__title-row">
               <Label>{tasklist.name}</Label>
-            </div>
-          </div>
+            </Prim.Box>
+          </Prim.Box>
 
           {/* Delete button */}
           <Button
@@ -39,29 +40,29 @@ export function TasklistCard({ tasklist, isSelected, onSelect, onDelete }: Taskl
             size="icon"
             onClick={(e) => { e.stopPropagation(); onDelete() }}
           >
-            <svg className="workflow-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 6h18" />
-              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-            </svg>
+            <Prim.Svg className="workflow-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <Prim.Path d="M3 6h18" />
+              <Prim.Path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <Prim.Path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            </Prim.Svg>
           </Button>
-        </div>
+        </Prim.Box>
 
         {/* Footer */}
-        <div className="workflow-card__footer">
+        <Prim.Box className="workflow-card__footer">
           <Caption muted>{tasklist.path}</Caption>
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
       {/* Selection indicator */}
       {isSelected && (
-        <div className="workflow-card__check">
-          <svg className="workflow-card__check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-            <path d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
+        <Prim.Box className="workflow-card__check">
+          <Prim.Svg className="workflow-card__check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <Prim.Path d="M5 13l4 4L19 7" />
+          </Prim.Svg>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }
 
@@ -76,17 +77,17 @@ interface TasklistListItemProps {
 
 export function TasklistListItem({ tasklist, isSelected, onSelect, onDelete }: TasklistListItemProps) {
   return (
-    <div
+    <Prim.Box
       onClick={onSelect}
       className={cn('workflow-list-item', isSelected && 'workflow-list-item--selected')}
     >
       {/* Workflow info */}
-      <div className="workflow-list-item__content">
-        <div className="workflow-list-item__title-row">
+      <Prim.Box className="workflow-list-item__content">
+        <Prim.Box className="workflow-list-item__title-row">
           <Label>{tasklist.name}</Label>
-        </div>
+        </Prim.Box>
         <Caption muted>{tasklist.path}</Caption>
-      </div>
+      </Prim.Box>
 
       {/* Delete button */}
       <Button
@@ -94,21 +95,21 @@ export function TasklistListItem({ tasklist, isSelected, onSelect, onDelete }: T
         size="icon"
         onClick={(e) => { e.stopPropagation(); onDelete() }}
       >
-        <svg className="workflow-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 6h18" />
-          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-        </svg>
+        <Prim.Svg className="workflow-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <Prim.Path d="M3 6h18" />
+          <Prim.Path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+          <Prim.Path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+        </Prim.Svg>
       </Button>
 
       {/* Chevron */}
-      <svg
+      <Prim.Svg
         className={cn('workflow-list-item__chevron', isSelected && 'workflow-list-item__chevron--open')}
         viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
       >
-        <path d="M9 18l6-6-6-6" />
-      </svg>
-    </div>
+        <Prim.Path d="M9 18l6-6-6-6" />
+      </Prim.Svg>
+    </Prim.Box>
   )
 }
 

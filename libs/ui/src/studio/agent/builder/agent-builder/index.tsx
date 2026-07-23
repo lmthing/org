@@ -3,6 +3,7 @@
  * Edits agents/<slug>/instruct.md ONLY.
  * Fields: title, body, actions[], defaultAction, functions[], components[], knowledge[], canDelegateTo[]
  */
+import * as Prim from '../../../../elements/primitives/index.js';
 import '@lmthing/css/components/agent/builder/index.css'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { AgentHeader } from '../agent-header'
@@ -17,7 +18,7 @@ export function AgentBuilder() {
   const form = useAgentForm()
 
   return (
-    <div className="agent-builder">
+    <Prim.Box className="agent-builder">
       <AgentHeader
         title={form.draftTitle}
         isNew={form.isNew}
@@ -28,9 +29,9 @@ export function AgentBuilder() {
         onBack={form.handleBack}
       />
 
-      <div className="agent-builder__content">
-        <main className="agent-builder__main">
-          <div className="agent-builder__main-inner">
+      <Prim.Box className="agent-builder__content">
+        <Prim.Box as="main" className="agent-builder__main">
+          <Prim.Box className="agent-builder__main-inner">
             <Stack gap="lg">
 
               <SystemPromptPanel body={form.draftBody} onChange={form.setDraftBody} />
@@ -75,10 +76,10 @@ export function AgentBuilder() {
               <CanDelegateToField refs={form.draftCanDelegateTo} onChange={form.setDraftCanDelegateTo} />
 
             </Stack>
-          </div>
-        </main>
-      </div>
-    </div>
+          </Prim.Box>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

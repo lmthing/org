@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 /**
  * Chat pane header: current conversation title plus a status dot reflecting
  * error / working / ready / needs-config state.
@@ -19,16 +20,16 @@ export function ThingChatHeader({ title, isWorking, hasError, hasEnv }: ThingCha
   }`
 
   return (
-    <div className="thing-panel__chat-header">
-      <span className="thing-panel__chat-title">
+    <Prim.Box className="thing-panel__chat-header">
+      <Prim.Text className="thing-panel__chat-title">
         {title}
-      </span>
-      <div className="thing-panel__chat-status">
+      </Prim.Text>
+      <Prim.Box className="thing-panel__chat-status">
         {isWorking && (
-          <span className="thing-panel__chat-status-text">Processing...</span>
+          <Prim.Text className="thing-panel__chat-status-text">Processing...</Prim.Text>
         )}
-        <span className={statusDotClass} />
-      </div>
-    </div>
+        <Prim.Text className={statusDotClass} />
+      </Prim.Box>
+    </Prim.Box>
   )
 }

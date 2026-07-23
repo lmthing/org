@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useUIState } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
@@ -19,9 +20,9 @@ export function CanDelegateToField({ refs, onChange }: {
   const remove = (ref: string) => onChange(refs.filter(d => d !== ref))
 
   return (
-    <div className="panel">
-      <div className="panel__header"><Label>Can Delegate To ({refs.length})</Label></div>
-      <div className="panel__body">
+    <Prim.Box className="panel">
+      <Prim.Box className="panel__header"><Label>Can Delegate To ({refs.length})</Label></Prim.Box>
+      <Prim.Box className="panel__body">
         <Stack gap="sm">
           {refs.map(ref => (
             <Stack key={ref} row gap="sm" className="agent-builder__dep-row">
@@ -40,7 +41,7 @@ export function CanDelegateToField({ refs, onChange }: {
             <Button variant="ghost" size="sm" onClick={add} disabled={!newRef.trim()}>Add</Button>
           </Stack>
         </Stack>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

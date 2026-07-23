@@ -12,8 +12,14 @@ import * as React from 'react'
  */
 export type PressableAs = 'button' | 'a' | 'div'
 
+// Button-based (the default tag) plus the anchor-specific attributes used when `as="a"`. Kept a
+// button base rather than a button&anchor intersection so spreading plain button props (the
+// common case, e.g. chat's <Button>) stays assignable — the intersection over-constrains.
 export type PressableProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
-  React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+  Pick<
+    React.AnchorHTMLAttributes<HTMLAnchorElement>,
+    'href' | 'target' | 'rel' | 'download' | 'referrerPolicy' | 'hrefLang'
+  > & {
     /** Host tag to render. Defaults to `button`. Use `a` for links, `div` for clickable boxes. */
     as?: PressableAs
   }

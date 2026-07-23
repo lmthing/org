@@ -1,3 +1,4 @@
+import * as Prim from '../../elements/primitives/index.js';
 import { colors } from './constants'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 
@@ -10,11 +11,11 @@ const cards = [
     body: (
       <>
         Dimitris uploaded past Panhellenic exam material.{' '}
-        <strong><CozyThingText text="THING" className="text-base font-semibold" /> structured his knowledge.</strong> His custom agent now produces verified
+        <Prim.Text as="strong"><CozyThingText text="THING" className="text-base font-semibold" /> structured his knowledge.</Prim.Text> His custom agent now produces verified
         material on demand.
-        <br />
-        <br />
-        What used to take a <strong>full day of trial-and-error prompting</strong> — done in under
+        <Prim.Br />
+        <Prim.Br />
+        What used to take a <Prim.Text as="strong">full day of trial-and-error prompting</Prim.Text> — done in under
         an hour, with guaranteed accuracy.
       </>
     ),
@@ -25,12 +26,12 @@ const cards = [
     title: 'Mentors validated',
     body: (
       <>
-        Pitched and stress-tested the idea with <strong>5 domain experts and mentors</strong> during
+        Pitched and stress-tested the idea with <Prim.Text as="strong">5 domain experts and mentors</Prim.Text> during
         the hackathon.
-        <br />
-        <br />
+        <Prim.Br />
+        <Prim.Br />
         Real feedback. Real signal. The problem resonated across{' '}
-        <strong>education, legal, and consulting</strong> verticals.
+        <Prim.Text as="strong">education, legal, and consulting</Prim.Text> verticals.
       </>
     ),
   },
@@ -41,14 +42,14 @@ const cards = [
     body: (
       <>
         Built the complete pitch deck — architecture, positioning, narrative — as a{' '}
-        <strong>
+        <Prim.Text as="strong">
           working proof of lm
           <CozyThingText text="thing" className="text-lg font-semibold" />
           's value.
-        </strong>
-        <br />
-        <br />
-        The platform that helped build this pitch <strong>is the platform we're pitching.</strong>
+        </Prim.Text>
+        <Prim.Br />
+        <Prim.Br />
+        The platform that helped build this pitch <Prim.Text as="strong">is the platform we're pitching.</Prim.Text>
       </>
     ),
   },
@@ -56,31 +57,31 @@ const cards = [
 
 export default function Slide5BuiltIn3Days() {
   return (
-    <div
+    <Prim.Box
       className="relative flex h-full w-full flex-col items-center justify-center"
       style={{ background: colors.bg, padding: '48px 72px 52px' }}
     >
       {/* TOP */}
-      <div className="mb-10 flex flex-col items-center">
-        <div
+      <Prim.Box className="mb-10 flex flex-col items-center">
+        <Prim.Box
           className="mb-4 text-lg font-bold uppercase tracking-[0.16em]"
           style={{ color: colors.brand }}
         >
           What we achieved in 3 days
-        </div>
-        <h1
+        </Prim.Box>
+        <Prim.Text as="h1"
           className="text-center text-6xl font-extrabold leading-[1.15]"
           style={{ color: colors.text, letterSpacing: '-0.025em' }}
         >
-          Built it. <em className="not-italic" style={{ color: colors.brand }}>Validated it.</em>{' '}
+          Built it. <Prim.Text as="em" className="not-italic" style={{ color: colors.brand }}>Validated it.</Prim.Text>{' '}
           Shipped it.
-        </h1>
-      </div>
+        </Prim.Text>
+      </Prim.Box>
 
       {/* CARDS */}
-      <div className="mb-9 grid w-full grid-cols-3 gap-5">
+      <Prim.Box className="mb-9 grid w-full grid-cols-3 gap-5">
         {cards.map((card) => (
-          <div
+          <Prim.Box
             key={card.title}
             className="relative flex flex-col overflow-hidden rounded-2xl border p-7 pb-8"
             style={{
@@ -93,7 +94,7 @@ export default function Slide5BuiltIn3Days() {
             }}
           >
             {/* accent top bar */}
-            <div
+            <Prim.Box
               className="absolute left-0 right-0 top-0 h-[3px]"
               style={{
                 background: card.highlight ? colors.brand : colors.cardBorder,
@@ -101,9 +102,9 @@ export default function Slide5BuiltIn3Days() {
               }}
             />
 
-            <div className="mb-3 text-5xl">{card.icon}</div>
+            <Prim.Box className="mb-3 text-5xl">{card.icon}</Prim.Box>
 
-            <div
+            <Prim.Box
               className="mb-1 text-6xl font-extrabold leading-none"
               style={{
                 color: card.highlight ? colors.brand : colors.text,
@@ -111,13 +112,13 @@ export default function Slide5BuiltIn3Days() {
               }}
             >
               {card.stat}
-            </div>
+            </Prim.Box>
 
-            <div className="mb-3 text-2xl font-bold" style={{ color: colors.text }}>
+            <Prim.Box className="mb-3 text-2xl font-bold" style={{ color: colors.text }}>
               {card.title}
-            </div>
+            </Prim.Box>
 
-            <div
+            <Prim.Box
               className="mb-4 h-[1.5px] w-8"
               style={{
                 background: card.highlight
@@ -126,28 +127,28 @@ export default function Slide5BuiltIn3Days() {
               }}
             />
 
-            <div className="text-lg leading-[1.65]" style={{ color: colors.textSecondary }}>
+            <Prim.Box className="text-lg leading-[1.65]" style={{ color: colors.textSecondary }}>
               {card.body}
-            </div>
-          </div>
+            </Prim.Box>
+          </Prim.Box>
         ))}
-      </div>
+      </Prim.Box>
 
       {/* BOTTOM STRIP */}
-      <div
+      <Prim.Box
         className="flex items-center gap-2.5 rounded-full px-8 py-3.5"
         style={{ background: colors.bgDark }}
       >
-        <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-        <div className="text-base font-medium tracking-wide text-white">
+        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+        <Prim.Box className="text-base font-medium tracking-wide text-white">
           Three days.{' '}
-          <em className="not-italic font-bold" style={{ color: colors.brand }}>
+          <Prim.Text as="em" className="not-italic font-bold" style={{ color: colors.brand }}>
             One use case shipped.
-          </em>{' '}
+          </Prim.Text>{' '}
           Five experts convinced.
-        </div>
-        <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-      </div>
-    </div>
+        </Prim.Box>
+        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+      </Prim.Box>
+    </Prim.Box>
   )
 }

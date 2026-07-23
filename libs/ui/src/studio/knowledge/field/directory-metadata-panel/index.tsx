@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useEffect, useCallback } from 'react'
 import { useUIState, useSpaceFS, useKnowledgeFieldIndex, serializeKnowledgeFieldIndex } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -82,32 +83,32 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
   }, [spaceFS, indexPath, type, label, variable, defaultVal, fieldType, required, description])
 
   return (
-    <div className="dir-metadata">
+    <Prim.Box className="dir-metadata">
       <Stack gap="md">
         <Stack row className="dir-metadata__header">
           <BookOpen className="dir-metadata__icon" />
-          <div>
+          <Prim.Box>
             <Heading level={3}>{field}</Heading>
             <Caption muted>{indexPath}</Caption>
-          </div>
+          </Prim.Box>
         </Stack>
 
-        <div>
+        <Prim.Box>
           <Label compact>Type</Label>
-          <select
+          <Prim.Select
             className="input"
             value={type}
             onChange={e => { setType(e.target.value); markDirty() }}
           >
-            <option value="string">string</option>
-            <option value="number">number</option>
-            <option value="boolean">boolean</option>
-            <option value="object">object</option>
-            <option value="array">array</option>
-          </select>
-        </div>
+            <Prim.Option value="string">string</Prim.Option>
+            <Prim.Option value="number">number</Prim.Option>
+            <Prim.Option value="boolean">boolean</Prim.Option>
+            <Prim.Option value="object">object</Prim.Option>
+            <Prim.Option value="array">array</Prim.Option>
+          </Prim.Select>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Label</Label>
           <Input
             type="text"
@@ -116,9 +117,9 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
             placeholder="Human-readable label (optional)"
           />
           <Caption muted>Display name shown in studio UI. If blank, the field dir name is used.</Caption>
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Variable</Label>
           <Input
             type="text"
@@ -127,9 +128,9 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
             placeholder="camelCaseVar"
           />
           <Caption muted>JS identifier injected into agent context. If blank, inferred from the field directory name.</Caption>
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Default Option</Label>
           <Input
             type="text"
@@ -137,35 +138,35 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
             onChange={e => { setDefaultVal(e.target.value); markDirty() }}
             placeholder="option-slug (optional)"
           />
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Field Type</Label>
-          <select
+          <Prim.Select
             className="input"
             value={fieldType}
             onChange={e => { setFieldType(e.target.value); markDirty() }}
           >
             {FIELD_TYPE_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+              <Prim.Option key={opt.value} value={opt.value}>{opt.label}</Prim.Option>
             ))}
-          </select>
+          </Prim.Select>
           <Caption muted>UI hint: how studio/chat should render or ask for this field. Must name a catalog form control.</Caption>
-        </div>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Required</Label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-            <input
+          <Prim.Text as="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <Prim.TextField
               type="checkbox"
               checked={required}
               onChange={e => { setRequired(e.target.checked); markDirty() }}
             />
-            <span className="caption">This field must be filled before the agent runs</span>
-          </label>
-        </div>
+            <Prim.Text className="caption">This field must be filled before the agent runs</Prim.Text>
+          </Prim.Text>
+        </Prim.Box>
 
-        <div>
+        <Prim.Box>
           <Label compact>Description</Label>
           <Textarea
             value={description}
@@ -173,15 +174,15 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
             placeholder="Describe what this field controls..."
             compact
           />
-        </div>
+        </Prim.Box>
 
-        <div className="dir-metadata__footer">
+        <Prim.Box className="dir-metadata__footer">
           <Button variant="primary" size="sm" disabled={!isDirty} onClick={handleSave}>
             Save
           </Button>
-        </div>
+        </Prim.Box>
       </Stack>
-    </div>
+    </Prim.Box>
   )
 }
 

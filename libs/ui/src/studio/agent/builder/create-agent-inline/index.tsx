@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import '@lmthing/css/components/agent/builder/index.css'
 import { useUIState } from '@lmthing/state'
 import { Bot, X } from 'lucide-react'
@@ -26,30 +27,30 @@ export function CreateAgentInline({ onSubmit, onCancel }: CreateAgentInlineProps
       <CardHeader>
         <Stack row className="create-agent-inline__header-row">
           <Stack row gap="sm" className="create-agent-inline__header-left">
-            <div className="create-agent-inline__avatar">
+            <Prim.Box className="create-agent-inline__avatar">
               <Bot className="create-agent-inline__avatar-icon" />
-            </div>
-            <div>
+            </Prim.Box>
+            <Prim.Box>
               <Label>New Agent</Label>
               <Caption muted>Define a new AI agent</Caption>
-            </div>
+            </Prim.Box>
           </Stack>
           <Button onClick={onCancel} variant="ghost" size="sm"><X className="create-agent-inline__close-icon" /></Button>
         </Stack>
       </CardHeader>
       <CardBody>
-        <form onSubmit={handleSubmit}>
+        <Prim.Form onSubmit={handleSubmit}>
           <Stack gap="sm">
-            <div>
+            <Prim.Box>
               <Label compact required>Title</Label>
               <Input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Assessment Agent" autoFocus required />
-            </div>
+            </Prim.Box>
             <Stack row gap="sm" className="create-agent-inline__actions">
               <Button type="button" onClick={onCancel} variant="ghost" className="create-agent-inline__btn">Cancel</Button>
               <Button type="submit" disabled={!title.trim()} variant="primary" className="create-agent-inline__btn">Create</Button>
             </Stack>
           </Stack>
-        </form>
+        </Prim.Form>
       </CardBody>
     </Card>
   )

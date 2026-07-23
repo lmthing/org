@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Box, Text } from '../../primitives/index.tsx'
+import { Box, Text } from '../../primitives/index'
 
 /**
  * UnavailableOnMobile — the native fallback for the two irreducibly-web IDE widgets

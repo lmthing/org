@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -12,25 +13,25 @@ export function ActionRow({ action, tasklistNames, onChange, onRemove }: {
   onRemove: () => void
 }) {
   return (
-    <div className="panel agent-builder__action-row">
-      <div className="panel__body">
+    <Prim.Box className="panel agent-builder__action-row">
+      <Prim.Box className="panel__body">
         <Stack gap="sm">
           <Stack row gap="sm">
-            <div style={{ flex: 1 }}>
+            <Prim.Box style={{ flex: 1 }}>
               <Label compact>ID</Label>
               <Input value={action.id} onChange={e => onChange({ ...action, id: e.target.value })} placeholder="action-id" />
-            </div>
-            <div style={{ flex: 2 }}>
+            </Prim.Box>
+            <Prim.Box style={{ flex: 2 }}>
               <Label compact>Label</Label>
               <Input value={action.label} onChange={e => onChange({ ...action, label: e.target.value })} placeholder="Action label" />
-            </div>
+            </Prim.Box>
             <Button variant="ghost" size="sm" onClick={onRemove} style={{ alignSelf: 'flex-end' }}>✕</Button>
           </Stack>
-          <div>
+          <Prim.Box>
             <Label compact>Description</Label>
             <Input value={action.description} onChange={e => onChange({ ...action, description: e.target.value })} placeholder="What does this action do?" />
-          </div>
-          <div>
+          </Prim.Box>
+          <Prim.Box>
             <Label compact>Tasklist</Label>
             <Select value={action.tasklist} onChange={e => onChange({ ...action, tasklist: e.target.value })}>
               <SelectOption value="">— select tasklist —</SelectOption>
@@ -38,9 +39,9 @@ export function ActionRow({ action, tasklistNames, onChange, onRemove }: {
                 <SelectOption key={name} value={name}>{name}</SelectOption>
               ))}
             </Select>
-          </div>
+          </Prim.Box>
         </Stack>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

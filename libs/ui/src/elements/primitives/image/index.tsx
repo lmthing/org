@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { hostPrimitive } from '../_host.tsx'
+import { hostPrimitive } from '../_host'
 
 /**
  * Image — the `<img>` primitive (Phase 0). Pure passthrough. Phase 1 swaps its internals to a

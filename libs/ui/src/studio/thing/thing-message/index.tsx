@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import { cn } from '@lmthing/ui/lib/utils'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import '@lmthing/css/components/thing/thing-message/index.css'
@@ -12,24 +13,24 @@ export function ThingMessage({ role, content }: ThingMessageProps) {
   const isUser = role === 'user'
 
   return (
-    <div
+    <Prim.Box
       className={cn(
         'card',
         'thing-message',
         isUser ? 'thing-message--user' : 'thing-message--assistant',
       )}
     >
-      <div className="card__body">
+      <Prim.Box className="card__body">
         <Caption
           muted={!isUser}
           className={cn('thing-message__role', isUser && 'thing-message__role--user')}
         >
           {isUser ? 'You' : 'Agent'}
         </Caption>
-        <div className="thing-message__content">
+        <Prim.Box className="thing-message__content">
           {content}
-        </div>
-      </div>
-    </div>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

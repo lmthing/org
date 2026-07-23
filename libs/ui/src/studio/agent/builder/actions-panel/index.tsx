@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import '@lmthing/css/components/agent/builder/index.css'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Card, CardBody, CardFooter } from '@lmthing/ui/elements/content/card'
@@ -37,21 +38,21 @@ export function ActionsPanel({
   onOpenWorkflowBuilder,
 }: ActionsPanelProps) {
   return (
-    <div className="actions-panel">
+    <Prim.Box className="actions-panel">
       <PanelHeader>
         <Stack row className="actions-panel__header-row">
-          <div>
+          <Prim.Box>
             <Label compact>Slash Actions</Label>
             <Caption muted>Attach workflows with custom triggers</Caption>
-          </div>
+          </Prim.Box>
           <Button onClick={onOpenWorkflowBuilder} variant="primary" size="sm">+ Attach Workflow</Button>
         </Stack>
       </PanelHeader>
 
-      <div className="actions-panel__body">
+      <Prim.Box className="actions-panel__body">
         {attachedWorkflows.length === 0 ? (
           <Stack className="actions-panel__empty">
-            <div className="actions-panel__empty-icon">⚡</div>
+            <Prim.Box className="actions-panel__empty-icon">⚡</Prim.Box>
             <Label>No actions attached</Label>
             <Caption muted className="actions-panel__empty-caption">
               Attach workflows to give users quick access to multi-step tasks
@@ -71,14 +72,14 @@ export function ActionsPanel({
             ))}
           </Stack>
         )}
-      </div>
+      </Prim.Box>
 
       <CardFooter>
         <Caption muted className="actions-panel__footer-caption">
           Actions are invoked with <Code>/action</Code>
         </Caption>
       </CardFooter>
-    </div>
+    </Prim.Box>
   )
 }
 
@@ -92,8 +93,8 @@ function SlashActionCard({ workflow, onToggleEnabled, onEdit, onDetach }: {
     <Card interactive>
       <CardBody>
         <Stack row gap="sm" className="actions-panel__card-row">
-          <div className="actions-panel__card-icon">⚡</div>
-          <div className="actions-panel__card-content">
+          <Prim.Box className="actions-panel__card-icon">⚡</Prim.Box>
+          <Prim.Box className="actions-panel__card-content">
             <Stack row gap="sm" className="actions-panel__card-title-row">
               <Code>/{workflow.slashAction.actionId}</Code>
               <Badge variant={workflow.slashAction.enabled ? 'success' : 'muted'} className="actions-panel__badge-sm">
@@ -106,7 +107,7 @@ function SlashActionCard({ workflow, onToggleEnabled, onEdit, onDetach }: {
               <Badge variant="muted" className="actions-panel__badge-sm">{workflow.stepCount} step{workflow.stepCount > 1 ? 's' : ''}</Badge>
               <Caption muted>{workflow.workflowName}</Caption>
             </Stack>
-          </div>
+          </Prim.Box>
           <Stack gap="sm">
             <Button
               onClick={() => onToggleEnabled(workflow.slashAction.id, !workflow.slashAction.enabled)}

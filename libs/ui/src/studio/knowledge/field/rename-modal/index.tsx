@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useEffect, useCallback, useRef } from 'react'
 import { useUIState } from '@lmthing/state'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
@@ -65,20 +66,20 @@ export function RenameModal({ isOpen, onClose, onRename, currentName, isDirector
   if (!isOpen) return null
 
   return (
-    <div className="dialog__backdrop" onClick={onClose}>
-      <div
+    <Prim.Box className="dialog__backdrop" onClick={onClose}>
+      <Prim.Box
         className="dialog rename-modal"
         onClick={e => e.stopPropagation()}
       >
-        <div className="dialog__header">
+        <Prim.Box className="dialog__header">
           <Heading level={3}>Rename {isDirectory ? 'Folder' : 'File'}</Heading>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="rename-modal__close-icon" />
           </Button>
-        </div>
+        </Prim.Box>
 
-        <div className="dialog__content">
-          <div className="rename-modal__body">
+        <Prim.Box className="dialog__content">
+          <Prim.Box className="rename-modal__body">
             <Label>New name</Label>
             <Input
               ref={inputRef}
@@ -94,14 +95,14 @@ export function RenameModal({ isOpen, onClose, onRename, currentName, isDirector
                 {error}
               </Caption>
             )}
-          </div>
+          </Prim.Box>
 
-          <div className="rename-modal__footer">
+          <Prim.Box className="rename-modal__footer">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button variant="primary" onClick={handleSubmit} disabled={!name.trim()}>Rename</Button>
-          </div>
-        </div>
-      </div>
-    </div>
+          </Prim.Box>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

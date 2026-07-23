@@ -2,6 +2,7 @@
  * SettingsView - Space settings panel (env files, package.json).
  * Uses new hooks from Phase 3 and element components.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import { useEffect, useMemo } from 'react'
 import { useLocation, useNavigate, useParams } from '@tanstack/react-router'
 import { Shield, FileCode2 } from 'lucide-react'
@@ -12,6 +13,7 @@ import '@lmthing/css/elements/content/panel/index.css'
 import '@lmthing/css/elements/layouts/page/index.css'
 import '@lmthing/css/components/shell/index.css'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
+import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { useUIState } from '@lmthing/state'
@@ -77,84 +79,84 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
     <Page full>
       <PageHeader>
         <Stack row className="settings-view__header">
-          <div>
+          <Prim.Box>
             <Heading level={2}>Space Settings</Heading>
             <Caption muted>{spaceId || 'No space selected'}</Caption>
-          </div>
+          </Prim.Box>
         </Stack>
       </PageHeader>
 
-      <div className="settings-view__tabs">
-        <button
+      <Prim.Box className="settings-view__tabs">
+        <Prim.Pressable
           onClick={() => handleTabChange('env')}
           className={`btn btn--ghost settings-view__tab ${activeTab === 'env' ? 'settings-view__tab--active' : 'settings-view__tab--inactive'}`}
         >
           <Shield className="settings-view__tab-icon" /> Environment
-        </button>
-        <button
+        </Prim.Pressable>
+        <Prim.Pressable
           onClick={() => handleTabChange('packages')}
           className={`btn btn--ghost settings-view__tab ${activeTab === 'packages' ? 'settings-view__tab--active' : 'settings-view__tab--inactive'}`}
         >
           <FileCode2 className="settings-view__tab-icon" /> package.json
-        </button>
-      </div>
+        </Prim.Pressable>
+      </Prim.Box>
 
       <PageBody>
         {activeTab === 'env' && (
-          <div className="settings-view__panel-container">
-            <div className={cn('panel', 'settings-view__panel-container--env')}>
-              <div className="panel__header"><span>Environment Variables</span></div>
-              <div className="panel__body">
-                <div className="settings-view__env-grid">
-                  <div>
-                    <label className="settings-view__env-label">File</label>
-                    <input className="input" value={selectedEnvFile} onChange={e => setSelectedEnvFile(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="settings-view__env-label">Password</label>
-                    <input className="input" type="password" value={envPassword} onChange={e => setEnvPassword(e.target.value)} placeholder="Enter password" />
-                  </div>
-                </div>
-                <div>
-                  <label className="settings-view__env-label">Variables</label>
-                  <textarea
+          <Prim.Box className="settings-view__panel-container">
+            <Prim.Box className={cn('panel', 'settings-view__panel-container--env')}>
+              <Prim.Box className="panel__header"><Prim.Text>Environment Variables</Prim.Text></Prim.Box>
+              <Prim.Box className="panel__body">
+                <Prim.Box className="settings-view__env-grid">
+                  <Prim.Box>
+                    <Prim.Text as="label" className="settings-view__env-label">File</Prim.Text>
+                    <Prim.TextField className="input" value={selectedEnvFile} onChange={e => setSelectedEnvFile(e.target.value)} />
+                  </Prim.Box>
+                  <Prim.Box>
+                    <Prim.Text as="label" className="settings-view__env-label">Password</Prim.Text>
+                    <Prim.TextField className="input" type="password" value={envPassword} onChange={e => setEnvPassword(e.target.value)} placeholder="Enter password" />
+                  </Prim.Box>
+                </Prim.Box>
+                <Prim.Box>
+                  <Prim.Text as="label" className="settings-view__env-label">Variables</Prim.Text>
+                  <Prim.TextArea
                     className={cn('input', 'settings-view__env-textarea')}
                     value={envContent}
                     onChange={e => setEnvContent(e.target.value)}
                     placeholder="KEY=value"
                   />
-                </div>
-                <div className="settings-view__env-actions">
-                  <button className="btn btn--outline" onClick={() => setEnvStatus('Loaded from session')}>Load</button>
-                  <button className="btn btn--primary" onClick={() => setEnvStatus('Saved')}>Save</button>
-                </div>
+                </Prim.Box>
+                <Prim.Box className="settings-view__env-actions">
+                  <Prim.Pressable className="btn btn--outline" onClick={() => setEnvStatus('Loaded from session')}>Load</Prim.Pressable>
+                  <Prim.Pressable className="btn btn--primary" onClick={() => setEnvStatus('Saved')}>Save</Prim.Pressable>
+                </Prim.Box>
                 {envError && <Caption className="settings-view__status--error">{envError}</Caption>}
                 {envStatus && <Caption className="settings-view__status--success">{envStatus}</Caption>}
-              </div>
-            </div>
-          </div>
+              </Prim.Box>
+            </Prim.Box>
+          </Prim.Box>
         )}
 
         {activeTab === 'packages' && (
-          <div className="settings-view__panel-container">
-            <div className="panel">
-              <div className="panel__header"><span>package.json</span></div>
-              <div className="panel__body">
+          <Prim.Box className="settings-view__panel-container">
+            <Prim.Box className="panel">
+              <Prim.Box className="panel__header"><Prim.Text>package.json</Prim.Text></Prim.Box>
+              <Prim.Box className="panel__body">
                 <Caption muted className="settings-view__pkg-caption">
                   Inline metadata and dependency editor. Save when ready.
                 </Caption>
-                <textarea
+                <Prim.TextArea
                   className={cn('input', 'settings-view__pkg-textarea')}
                   value={packageJsonDraft || packageJsonSerialized}
                   onChange={e => { setPackageJsonDraft(e.target.value); setPackageJsonError(null); setPackageJsonSavedAt(null) }}
                   spellCheck={false}
                 />
-                <div className="settings-view__pkg-footer">
+                <Prim.Box className="settings-view__pkg-footer">
                   <Caption muted>
-                    {packageJsonError ? <span className="settings-view__pkg-error">{packageJsonError}</span>
+                    {packageJsonError ? <Prim.Text className="settings-view__pkg-error">{packageJsonError}</Prim.Text>
                     : packageJsonSavedAt ? `Saved at ${packageJsonSavedAt}` : 'Ready to save'}
                   </Caption>
-                  <button className="btn btn--primary" onClick={() => {
+                  <Prim.Pressable className="btn btn--primary" onClick={() => {
                     try {
                       JSON.parse(packageJsonDraft || packageJsonSerialized)
                       setPackageJsonError(null)
@@ -162,11 +164,11 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                     } catch {
                       setPackageJsonError('Invalid JSON format.')
                     }
-                  }}>Save package.json</button>
-                </div>
-              </div>
-            </div>
-          </div>
+                  }}>Save package.json</Prim.Pressable>
+                </Prim.Box>
+              </Prim.Box>
+            </Prim.Box>
+          </Prim.Box>
         )}
       </PageBody>
     </Page>

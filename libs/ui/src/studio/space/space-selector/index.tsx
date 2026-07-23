@@ -1,3 +1,4 @@
+import * as Prim from '../../../elements/primitives/index.js';
 import { useCallback, useMemo } from 'react'
 import { useUIState, useToggle } from '@lmthing/state'
 import { ChevronDown, Plus, Search, FolderOpen } from 'lucide-react'
@@ -37,7 +38,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
   }, [newSpaceName, onCreateSpace])
 
   return (
-    <div className="space-selector">
+    <Prim.Box className="space-selector">
       <Button onClick={toggleIsOpen} variant="ghost" className="space-selector__trigger">
         <Label className="space-selector__trigger-label">
           {currentSpace ? currentSpace.name : 'Select Space'}
@@ -46,9 +47,9 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
       </Button>
 
       {isOpen && (
-        <div className="dropdown__content space-selector__dropdown">
-          <div className="space-selector__search-section">
-            <div className="space-selector__search-wrapper">
+        <Prim.Box className="dropdown__content space-selector__dropdown">
+          <Prim.Box className="space-selector__search-section">
+            <Prim.Box className="space-selector__search-wrapper">
               <Search className="space-selector__search-icon" />
               <Input
                 type="text"
@@ -58,29 +59,29 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
                 className="input--sm space-selector__search-input"
                 autoFocus
               />
-            </div>
-          </div>
+            </Prim.Box>
+          </Prim.Box>
 
-          <div className="space-selector__list">
+          <Prim.Box className="space-selector__list">
             {filteredSpaces.length === 0 ? (
               <Caption muted className="space-selector__empty">No spaces found</Caption>
             ) : (
               filteredSpaces.map((space) => (
-                <button
+                <Prim.Pressable
                   key={space.id}
                   onClick={() => handleSelect(space.id)}
                   className={`dropdown__item space-selector__item ${space.id === currentSpaceId ? 'list-item--selected' : ''}`}
                 >
                   <FolderOpen className="space-selector__item-icon" />
-                  <span className="space-selector__item-name">{space.name}</span>
-                </button>
+                  <Prim.Text className="space-selector__item-name">{space.name}</Prim.Text>
+                </Prim.Pressable>
               ))
             )}
-          </div>
+          </Prim.Box>
 
-          <div className="space-selector__footer">
+          <Prim.Box className="space-selector__footer">
             {showCreate ? (
-              <form onSubmit={handleCreate}>
+              <Prim.Form onSubmit={handleCreate}>
                 <Stack gap="sm" className="space-selector__create-form">
                   <Input type="text" value={newSpaceName} onChange={(e) => setNewSpaceName(e.target.value)} placeholder="Space name..." className="input--sm" autoFocus />
                   <Stack row gap="sm">
@@ -88,15 +89,15 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
                     <Button type="button" onClick={() => setShowCreate(false)} variant="ghost" size="sm" className="space-selector__create-btn">Cancel</Button>
                   </Stack>
                 </Stack>
-              </form>
+              </Prim.Form>
             ) : (
-              <button onClick={() => setShowCreate(true)} className="dropdown__item space-selector__new-btn">
-                <Plus className="space-selector__new-icon" /><span>New Space</span>
-              </button>
+              <Prim.Pressable onClick={() => setShowCreate(true)} className="dropdown__item space-selector__new-btn">
+                <Plus className="space-selector__new-icon" /><Prim.Text>New Space</Prim.Text>
+              </Prim.Pressable>
             )}
-          </div>
-        </div>
+          </Prim.Box>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }

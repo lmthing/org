@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { hostPrimitive } from '../_host.tsx'
+import { hostPrimitive } from '../_host'
 
 /**
  * Col — an explicit vertical flex container (Phase 0).

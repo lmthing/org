@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import type { AgentInstruct } from '@lmthing/state'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Select, SelectOption } from '@lmthing/ui/elements/forms/select'
@@ -9,16 +10,16 @@ export function DefaultActionPanel({ actions, value, onChange }: {
   onChange: (next: string) => void
 }) {
   return (
-    <div className="panel">
-      <div className="panel__header"><Label>Default Action (optional)</Label></div>
-      <div className="panel__body">
+    <Prim.Box className="panel">
+      <Prim.Box className="panel__header"><Label>Default Action (optional)</Label></Prim.Box>
+      <Prim.Box className="panel__body">
         <Select value={value} onChange={e => onChange(e.target.value)}>
           <SelectOption value="">— none —</SelectOption>
           {actions.filter(a => a.id).map(a => (
             <SelectOption key={a.id} value={a.id}>{a.label || a.id}</SelectOption>
           ))}
         </Select>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

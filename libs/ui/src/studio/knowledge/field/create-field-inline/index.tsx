@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useUIState } from '@lmthing/state'
 import { FolderPlus, X } from 'lucide-react'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -28,25 +29,25 @@ export function CreateFieldInline({ onSubmit, onCancel }: CreateFieldInlineProps
     }
 
     return (
-        <div className="panel create-field-inline">
-            <div className="panel__header">
+        <Prim.Box className="panel create-field-inline">
+            <Prim.Box className="panel__header">
                 <Stack row gap="md" className="create-field-inline__header-row">
                     <Stack row gap="md" className="create-field-inline__title-row">
                         <FolderPlus className="create-field-inline__icon" />
-                        <div>
+                        <Prim.Box>
                             <Heading level={3}>Create Knowledge Field</Heading>
                             <Caption muted>Define a new field of knowledge</Caption>
-                        </div>
+                        </Prim.Box>
                     </Stack>
                     <Button variant="ghost" size="icon" onClick={onCancel}>
                         <X className="create-field-inline__close-icon" />
                     </Button>
                 </Stack>
-            </div>
-            <div className="panel__body">
-                <form onSubmit={handleSubmit}>
+            </Prim.Box>
+            <Prim.Box className="panel__body">
+                <Prim.Form onSubmit={handleSubmit}>
                     <Stack gap="md">
-                        <div>
+                        <Prim.Box>
                             <Label compact required>Name</Label>
                             <Input
                                 type="text"
@@ -56,8 +57,8 @@ export function CreateFieldInline({ onSubmit, onCancel }: CreateFieldInlineProps
                                 autoFocus
                                 required
                             />
-                        </div>
-                        <div>
+                        </Prim.Box>
+                        <Prim.Box>
                             <Label compact>Description (Optional)</Label>
                             <Textarea
                                 value={description}
@@ -65,7 +66,7 @@ export function CreateFieldInline({ onSubmit, onCancel }: CreateFieldInlineProps
                                 placeholder="Brief description of this knowledge field"
                                 compact
                             />
-                        </div>
+                        </Prim.Box>
                         <Stack row gap="sm" className="create-field-inline__actions">
                             <Button variant="outline" onClick={onCancel} className="create-field-inline__action-btn">
                                 Cancel
@@ -75,8 +76,8 @@ export function CreateFieldInline({ onSubmit, onCancel }: CreateFieldInlineProps
                             </Button>
                         </Stack>
                     </Stack>
-                </form>
-            </div>
-        </div>
+                </Prim.Form>
+            </Prim.Box>
+        </Prim.Box>
     )
 }

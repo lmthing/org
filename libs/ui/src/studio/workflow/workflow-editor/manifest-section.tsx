@@ -2,6 +2,7 @@
  * ManifestSection — editor for the tasklist-level manifest (index.md):
  * description + input schema.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Label } from '@lmthing/ui/elements/typography/label'
@@ -16,14 +17,14 @@ export interface ManifestSectionProps {
 
 export function ManifestSection({ draft, onChange }: ManifestSectionProps) {
   return (
-    <div className="tasklist-editor__manifest">
-      <div className="tasklist-editor__manifest-header">
+    <Prim.Box className="tasklist-editor__manifest">
+      <Prim.Box className="tasklist-editor__manifest-header">
         <Heading level={3}>Manifest</Heading>
         <Caption muted>Tasklist-level input schema and description (index.md)</Caption>
-      </div>
-      <div className="tasklist-editor__manifest-body">
+      </Prim.Box>
+      <Prim.Box className="tasklist-editor__manifest-body">
         {/* description */}
-        <div>
+        <Prim.Box>
           <Label compact>Description</Label>
           <Textarea
             value={draft.description}
@@ -31,10 +32,10 @@ export function ManifestSection({ draft, onChange }: ManifestSectionProps) {
             placeholder="Describe what this tasklist accomplishes..."
             compact
           />
-        </div>
+        </Prim.Box>
 
         {/* input schema */}
-        <div>
+        <Prim.Box>
           <Label compact>Input fields</Label>
           <SchemaEditor
             rows={draft.input}
@@ -43,8 +44,8 @@ export function ManifestSection({ draft, onChange }: ManifestSectionProps) {
             emptyHint="No input fields defined. Add fields if this tasklist requires external inputs."
           />
           <Caption muted>Declare the fields callers must supply when running this tasklist.</Caption>
-        </div>
-      </div>
-    </div>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

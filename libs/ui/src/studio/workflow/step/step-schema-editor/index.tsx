@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { Label } from '@lmthing/ui/elements/typography/label'
@@ -27,12 +28,12 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
   } = useSchemaModel(value, onChange)
 
   return (
-    <div className="schema-editor">
+    <Prim.Box className="schema-editor">
       {/* Header with mode toggle */}
-      <div className="schema-editor__header">
+      <Prim.Box className="schema-editor__header">
         <Label compact>Schema Properties</Label>
-        <div className="schema-editor__mode-toggle">
-          <button
+        <Prim.Box className="schema-editor__mode-toggle">
+          <Prim.Pressable
             onClick={() => setViewMode('visual')}
             className={cn(
               'schema-editor__mode-btn',
@@ -40,8 +41,8 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
             )}
           >
             Visual
-          </button>
-          <button
+          </Prim.Pressable>
+          <Prim.Pressable
             onClick={handleSwitchToCode}
             className={cn(
               'schema-editor__mode-btn',
@@ -49,30 +50,30 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
             )}
           >
             Code
-          </button>
-        </div>
-      </div>
+          </Prim.Pressable>
+        </Prim.Box>
+      </Prim.Box>
 
       {/* Visual editor */}
       {viewMode === 'visual' && (
-        <div className="schema-editor__body">
+        <Prim.Box className="schema-editor__body">
           {properties.length === 0 ? (
-            <div className="schema-editor__empty">
-              <div className="schema-editor__empty-icon-wrapper">
-                <svg className="schema-editor__empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 18V5l12 7-12 7z" />
-                </svg>
-              </div>
+            <Prim.Box className="schema-editor__empty">
+              <Prim.Box className="schema-editor__empty-icon-wrapper">
+                <Prim.Svg className="schema-editor__empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <Prim.Path d="M9 18V5l12 7-12 7z" />
+                </Prim.Svg>
+              </Prim.Box>
               <Caption muted className="schema-editor__empty-caption">No properties defined yet</Caption>
               <Button variant="primary" onClick={handleAddProperty}>
-                <svg className="schema-editor__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
+                <Prim.Svg className="schema-editor__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <Prim.Path d="M12 5v14M5 12h14" />
+                </Prim.Svg>
                 Add Property
               </Button>
-            </div>
+            </Prim.Box>
           ) : (
-            <div className="schema-editor__property-list">
+            <Prim.Box className="schema-editor__property-list">
               {properties.map((property, index) => (
                 <PropertyRow
                   key={property.id}
@@ -109,23 +110,23 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
                   }}
                 />
               ))}
-              <button
+              <Prim.Pressable
                 onClick={handleAddProperty}
                 className="schema-editor__add-btn"
               >
-                <svg className="schema-editor__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
+                <Prim.Svg className="schema-editor__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <Prim.Path d="M12 5v14M5 12h14" />
+                </Prim.Svg>
                 Add Property
-              </button>
-            </div>
+              </Prim.Pressable>
+            </Prim.Box>
           )}
-        </div>
+        </Prim.Box>
       )}
 
       {/* Code editor */}
       {viewMode === 'code' && (
-        <div className="schema-editor__body">
+        <Prim.Box className="schema-editor__body">
           <Textarea
             value={codeValue}
             onChange={(e) => handleCodeChange(e.target.value)}
@@ -144,8 +145,8 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
               )
             }
           })()}
-        </div>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }

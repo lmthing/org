@@ -4,6 +4,7 @@
  * On save it creates tasklists/<name>/ (as a directory; the caller or
  * the editor adds actual task files).
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import { useCallback, useEffect } from 'react'
 import { useUIState, useSpaceFS } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -74,23 +75,23 @@ export function SaveTasklistModal({ isOpen, onClose, existingName, onSaved }: Sa
   const isValid = slug.length > 0
 
   return (
-    <div className="dialog__backdrop">
-      <div className="dialog__content save-workflow-modal__dialog">
-        <div className="dialog__header">
-          <div>
+    <Prim.Box className="dialog__backdrop">
+      <Prim.Box className="dialog__content save-workflow-modal__dialog">
+        <Prim.Box className="dialog__header">
+          <Prim.Box>
             <Heading level={3}>{existingName ? 'Rename Tasklist' : 'New Tasklist'}</Heading>
             <Caption muted>
               {existingName
                 ? `Rename "${existingName}" to a new name`
                 : 'Create a new tasklist directory under tasklists/'}
             </Caption>
-          </div>
+          </Prim.Box>
           <Button onClick={onClose} variant="ghost" size="sm">✕</Button>
-        </div>
+        </Prim.Box>
 
         <Stack gap="md" className="save-workflow-modal__body">
-          <div>
-            <label className="label">Tasklist Name</label>
+          <Prim.Box>
+            <Prim.Text as="label" className="label">Tasklist Name</Prim.Text>
             <Input
               type="text"
               value={name}
@@ -99,9 +100,9 @@ export function SaveTasklistModal({ isOpen, onClose, existingName, onSaved }: Sa
               autoFocus
             />
             {name && slug !== name.trim() && (
-              <Caption muted>Will be saved as: <strong>{slug}</strong></Caption>
+              <Caption muted>Will be saved as: <Prim.Text as="strong">{slug}</Prim.Text></Caption>
             )}
-          </div>
+          </Prim.Box>
         </Stack>
 
         <CardFooter className="save-workflow-modal__footer">
@@ -110,8 +111,8 @@ export function SaveTasklistModal({ isOpen, onClose, existingName, onSaved }: Sa
             {existingName ? 'Rename' : 'Create'}
           </Button>
         </CardFooter>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

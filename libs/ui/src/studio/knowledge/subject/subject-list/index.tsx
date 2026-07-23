@@ -2,6 +2,7 @@
 // Renders as TABS when the domain's index.md sets `renderAs: tabs`, otherwise
 // (default) as a flat LIST. This is a studio-only UI hint — the agent runtime
 // does not use it.
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useMemo, useState } from 'react'
 import { useGlob, useKnowledgeDomainIndex } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -48,10 +49,10 @@ export function SubjectList({ domain }: SubjectListProps) {
 
   return (
     <Stack gap="md">
-      <div>
+      <Prim.Box>
         <Heading level={3}>Fields</Heading>
         <Caption muted>{fields.length} field{fields.length !== 1 ? 's' : ''} in {domain}</Caption>
-      </div>
+      </Prim.Box>
       {fields.length === 0 ? (
         <Caption muted>No fields in this domain.</Caption>
       ) : renderAs === 'tabs' ? (

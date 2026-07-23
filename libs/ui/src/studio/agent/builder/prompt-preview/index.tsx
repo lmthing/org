@@ -3,6 +3,7 @@
  * Phase 3: Auto-generates from instructions + selected knowledge content,
  * shows token count, copy to clipboard, collapsible.
  */
+import * as Prim from '../../../../elements/primitives/index.js';
 import '@lmthing/css/components/agent/builder/index.css'
 import { useMemo, useCallback } from 'react'
 import { useToggle, useUIState, useGlobRead } from '@lmthing/state'
@@ -64,7 +65,7 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
   }, [generatedPrompt])
 
   return (
-    <div className="panel prompt-preview">
+    <Prim.Box className="panel prompt-preview">
       <PanelHeader
         onClick={toggleExpanded}
         className="prompt-preview__header"
@@ -76,15 +77,15 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
               <Badge variant="muted">~{tokenCount} tokens</Badge>
             )}
           </Stack>
-          <span className={`prompt-preview__chevron ${isExpanded ? 'prompt-preview__chevron--expanded' : ''}`}>
+          <Prim.Text className={`prompt-preview__chevron ${isExpanded ? 'prompt-preview__chevron--expanded' : ''}`}>
             ▼
-          </span>
+          </Prim.Text>
         </Stack>
       </PanelHeader>
 
       {isExpanded && (
         <>
-          <div className="panel__body">
+          <Prim.Box className="panel__body">
             {!hasContent ? (
               <Stack className="prompt-preview__empty">
                 <Caption muted>
@@ -92,20 +93,20 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
                 </Caption>
               </Stack>
             ) : (
-              <div>
+              <Prim.Box>
                 {selectedFieldIds.length > 0 && (
-                  <div className="prompt-preview__badges">
+                  <Prim.Box className="prompt-preview__badges">
                     {selectedFieldIds.map(fieldId => (
                       <Badge key={fieldId} variant="muted" className="prompt-preview__badge">{fieldId}</Badge>
                     ))}
-                  </div>
+                  </Prim.Box>
                 )}
                 <Code block className="prompt-preview__code">
                   {generatedPrompt}
                 </Code>
-              </div>
+              </Prim.Box>
             )}
-          </div>
+          </Prim.Box>
 
           {hasContent && (
             <CardFooter>
@@ -119,6 +120,6 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
           )}
         </>
       )}
-    </div>
+    </Prim.Box>
   )
 }

@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { Button } from '@lmthing/ui/elements/forms/button'
 import '@lmthing/css/components/knowledge/index.css'
 import {
@@ -37,7 +38,7 @@ interface MarkdownToolbarProps {
 
 export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolbarProps) {
   return (
-    <div className="markdown-toolbar">
+    <Prim.Box className="markdown-toolbar">
       <Button variant="ghost" size="icon" onClick={() => onFormat('bold')} title="Bold (Ctrl+B)" disabled={mode === 'preview'}>
         <Bold className="markdown-toolbar__icon" />
       </Button>
@@ -48,7 +49,7 @@ export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolba
         <Heading1 className="markdown-toolbar__icon" />
       </Button>
 
-      <span className="markdown-toolbar__separator" />
+      <Prim.Text className="markdown-toolbar__separator" />
 
       <Button variant="ghost" size="icon" onClick={() => onFormat('bullet-list')} title="Bullet list" disabled={mode === 'preview'}>
         <List className="markdown-toolbar__icon" />
@@ -60,7 +61,7 @@ export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolba
         <Quote className="markdown-toolbar__icon" />
       </Button>
 
-      <span className="markdown-toolbar__separator" />
+      <Prim.Text className="markdown-toolbar__separator" />
 
       <Button variant="ghost" size="icon" onClick={() => onFormat('inline-code')} title="Inline code" disabled={mode === 'preview'}>
         <Code className="markdown-toolbar__icon" />
@@ -75,9 +76,9 @@ export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolba
         <Minus className="markdown-toolbar__icon" />
       </Button>
 
-      <div className="markdown-toolbar__spacer" />
+      <Prim.Box className="markdown-toolbar__spacer" />
 
-      <div className="markdown-toolbar__modes">
+      <Prim.Box className="markdown-toolbar__modes">
         <Button
           variant={mode === 'edit' ? 'outline' : 'ghost'}
           size="sm"
@@ -96,7 +97,7 @@ export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolba
           <Eye className="markdown-toolbar__mode-icon" />
           Preview
         </Button>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

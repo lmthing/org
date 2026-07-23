@@ -29,7 +29,7 @@ import {
   Pre,
   Br,
   Hr,
-} from './index.ts'
+} from './index'
 
 /**
  * Phase-0 parity: each vocabulary primitive is a PURE PASSTHROUGH wrapper — it must emit the

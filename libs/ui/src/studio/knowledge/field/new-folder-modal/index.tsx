@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import { useCallback } from 'react'
 import { useUIState } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -37,21 +38,21 @@ export function NewFolderModal({ isOpen, onClose, onCreate, folders, defaultLoca
   if (!isOpen) return null
 
   return (
-    <div className="dialog__backdrop" onClick={onClose} onKeyDown={handleKeyDown}>
-      <div
+    <Prim.Box className="dialog__backdrop" onClick={onClose} onKeyDown={handleKeyDown}>
+      <Prim.Box
         className="dialog new-file-modal"
         onClick={e => e.stopPropagation()}
       >
-        <div className="dialog__header">
+        <Prim.Box className="dialog__header">
           <Heading level={3} className="new-file-modal__title">New Folder</Heading>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="new-file-modal__close-icon" />
           </Button>
-        </div>
+        </Prim.Box>
 
-        <div className="dialog__content">
+        <Prim.Box className="dialog__content">
           <Stack gap="md" className="new-file-modal__fields">
-            <div>
+            <Prim.Box>
               <Label>Folder Name</Label>
               <Input
                 type="text"
@@ -63,26 +64,26 @@ export function NewFolderModal({ isOpen, onClose, onCreate, folders, defaultLoca
                   if (e.key === 'Enter') handleCreate()
                 }}
               />
-            </div>
+            </Prim.Box>
 
-            <div>
+            <Prim.Box>
               <Label>Parent Location</Label>
-              <select
+              <Prim.Select
                 className="input new-file-modal__select"
                 value={parentLocation}
                 onChange={e => setParentLocation(e.target.value)}
               >
-                <option value={defaultLocation}>/  (root)</option>
+                <Prim.Option value={defaultLocation}>/  (root)</Prim.Option>
                 {folders.map(f => (
-                  <option key={f.path} value={f.path}>
+                  <Prim.Option key={f.path} value={f.path}>
                     {f.label}
-                  </option>
+                  </Prim.Option>
                 ))}
-              </select>
-            </div>
+              </Prim.Select>
+            </Prim.Box>
           </Stack>
 
-          <div className="new-file-modal__footer">
+          <Prim.Box className="new-file-modal__footer">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button
               variant="primary"
@@ -92,10 +93,10 @@ export function NewFolderModal({ isOpen, onClose, onCreate, folders, defaultLoca
             >
               Create
             </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+          </Prim.Box>
+        </Prim.Box>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

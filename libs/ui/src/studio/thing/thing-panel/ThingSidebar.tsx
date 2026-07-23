@@ -2,6 +2,7 @@
  * THING panel sidebar: brand header (with optional back button for
  * full-page mode), "new chat" action, and the conversation switcher list.
  */
+import * as Prim from '../../../elements/primitives/index.js';
 import { Bot, Plus, ArrowLeft } from 'lucide-react'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 import type { ThingConversation } from './types'
@@ -26,45 +27,45 @@ export function ThingSidebar({
   isWorking,
 }: ThingSidebarProps) {
   return (
-    <div className="thing-panel__sidebar">
+    <Prim.Box className="thing-panel__sidebar">
       {/* Sidebar header */}
-      <div className="thing-panel__sidebar-header">
-        <div className="thing-panel__sidebar-title">
+      <Prim.Box className="thing-panel__sidebar-header">
+        <Prim.Box className="thing-panel__sidebar-title">
           {fullPage && (
-            <button
+            <Prim.Pressable
               className="btn btn--ghost btn--sm"
               onClick={onBack}
             >
               <ArrowLeft size={16} />
-            </button>
+            </Prim.Pressable>
           )}
-          <div className="thing-panel__sidebar-brand">
+          <Prim.Box className="thing-panel__sidebar-brand">
             <Bot size={18} />
-            <span className="thing-panel__sidebar-brand-name">
+            <Prim.Text className="thing-panel__sidebar-brand-name">
               <CozyThingText text="THING" />
-            </span>
-          </div>
-        </div>
-        <button className="btn btn--ghost btn--sm" onClick={onNewChat} disabled={isWorking}>
+            </Prim.Text>
+          </Prim.Box>
+        </Prim.Box>
+        <Prim.Pressable className="btn btn--ghost btn--sm" onClick={onNewChat} disabled={isWorking}>
           <Plus size={14} />
-        </button>
-      </div>
+        </Prim.Pressable>
+      </Prim.Box>
 
       {/* Conversation list */}
-      <div className="thing-panel__sidebar-list">
+      <Prim.Box className="thing-panel__sidebar-list">
         {conversations.map(conv => {
           const isCurrent = conv.id === currentConversationId
           return (
-            <button
+            <Prim.Pressable
               key={conv.id}
               onClick={() => onSelectConversation(conv.id)}
               className={`thing-panel__conv-btn ${isCurrent ? 'thing-panel__conv-btn--active' : ''}`}
             >
               {conv.title}
-            </button>
+            </Prim.Pressable>
           )
         })}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

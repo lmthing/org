@@ -1,3 +1,4 @@
+import * as Prim from '../../../../elements/primitives/index.js';
 import '@lmthing/css/components/knowledge/index.css'
 
 interface MarkdownPreviewProps {
@@ -60,7 +61,7 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
   const html = renderMarkdown(markdown)
 
   return (
-    <div
+    <Prim.Box
       dangerouslySetInnerHTML={{ __html: html }}
       className="markdown-preview"
     />

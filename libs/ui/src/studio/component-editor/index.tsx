@@ -9,6 +9,7 @@
  * Provides create / rename / delete / raw-source editing in a code textarea,
  * following the same draft/save pattern as the agent-builder and topic-editor.
  */
+import * as Prim from '../../elements/primitives/index.js';
 import '@lmthing/css/components/component-editor/index.css'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
@@ -60,9 +61,9 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
   } = useComponentEditor({ onChanged })
 
   return (
-    <div className="component-editor">
+    <Prim.Box className="component-editor">
       {/* Header */}
-      <div className="component-editor__header">
+      <Prim.Box className="component-editor__header">
         <Label>Components ({viewNames.length + formNames.length})</Label>
         <Button
           variant="ghost"
@@ -74,11 +75,11 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
         >
           + New component
         </Button>
-      </div>
+      </Prim.Box>
 
       {/* New-component inline form */}
       {showNewForm && (
-        <div className="component-editor__new-form">
+        <Prim.Box className="component-editor__new-form">
           <Input
             ref={newInputRef}
             value={newName}
@@ -105,20 +106,20 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
           <Button size="sm" variant="ghost" onClick={() => { setShowNewForm(false); setNewName('') }}>
             Cancel
           </Button>
-        </div>
+        </Prim.Box>
       )}
 
       {/* View components section */}
-      <div>
-        <div className="component-editor__section-title">
+      <Prim.Box>
+        <Prim.Box className="component-editor__section-title">
           <Label compact>View</Label>
-          <span className="component-editor__kind-badge component-editor__kind-badge--view">display()</span>
-        </div>
-        <div className="component-editor__list">
+          <Prim.Text className="component-editor__kind-badge component-editor__kind-badge--view">display()</Prim.Text>
+        </Prim.Box>
+        <Prim.Box className="component-editor__list">
           {viewNames.length === 0 ? (
-            <div className="component-editor__empty">
+            <Prim.Box className="component-editor__empty">
               <Caption muted>No view components yet.</Caption>
-            </div>
+            </Prim.Box>
           ) : (
             viewNames.map(name => (
               <ComponentListItem
@@ -132,20 +133,20 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
               />
             ))
           )}
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
       {/* Form components section */}
-      <div>
-        <div className="component-editor__section-title">
+      <Prim.Box>
+        <Prim.Box className="component-editor__section-title">
           <Label compact>Form</Label>
-          <span className="component-editor__kind-badge component-editor__kind-badge--form">ask()</span>
-        </div>
-        <div className="component-editor__list">
+          <Prim.Text className="component-editor__kind-badge component-editor__kind-badge--form">ask()</Prim.Text>
+        </Prim.Box>
+        <Prim.Box className="component-editor__list">
           {formNames.length === 0 ? (
-            <div className="component-editor__empty">
+            <Prim.Box className="component-editor__empty">
               <Caption muted>No form components yet.</Caption>
-            </div>
+            </Prim.Box>
           ) : (
             formNames.map(name => (
               <ComponentListItem
@@ -159,8 +160,8 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
               />
             ))
           )}
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
       {/* Code editor pane */}
       {selectedPath && (
@@ -170,7 +171,7 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
           kind={selectedKind}
         />
       )}
-    </div>
+    </Prim.Box>
   )
 }
 
