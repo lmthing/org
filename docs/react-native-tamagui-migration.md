@@ -8,10 +8,11 @@
 > **Web is byte-unchanged throughout** (L2 24/24, L3 22/22, libs/ui 32/32, root typecheck 6/6,
 > RN-safety + tokens lint clean).
 >
-> **The one thing still BLOCKED: the WEB Tamagui swap of the layout primitives + the Radix→Tamagui
+> **The one thing still open: the WEB Tamagui swap of the layout primitives + the Radix→Tamagui
 > web overlays** — the surfaces' layout is 100% Tailwind-className-driven on `Box`, which a Tamagui
-> web swap can't preserve as-is. This needs an architecture decision (NativeWind vs Tamagui-compiler
-> + surface migration vs defer). The native forks are the seam whichever path plugs into. See
+> web swap can't preserve as-is. **DECISION MADE: Option B** (Tamagui compiler + migrate the surfaces'
+> layout onto Tamagui props / `Row`/`Col`). The full, zero-context execution plan for B is
+> **Part III** at the very bottom of this file — a fresh session should start there. See also the
 > "Phase 1c decision" in the handoff and `.issues/tamagui-web-swap-blocked-by-className-layout.md`.
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
 > `claude/tamagui-migration-plan-66u8sw`.
@@ -905,3 +906,126 @@ old CSS removed · renders in Expo (or documented native fallback). Overall: `ch
 on web within the parity contract vs the pre-migration `main` baseline **and** natively in `apps/mobile`;
 Monaco + xterm render on web with native fallbacks; three CI parity jobs + the no-raw-HTML/RN-safety lint
 enforced on the default branch.
+
+---
+---
+
+# Part III — Option B execution plan (Tamagui compiler + surface layout migration)
+
+> **This is the durable handoff for continuing the WEB Tamagui swap in a fresh session.**
+> The decision is made: **Option B**. Everything below is grounded in the current code; verify
+> against the files, they may have moved. Start at "B0" and go in order. Web must stay within the
+> parity contract (§0) at every commit — the `tests/visual/` harness is the gate.
+
+## B — the decision, in one paragraph
+
+Make the layout primitives (`Box`/`Row`/`Col`/`Text`/`Pressable`) **real Tamagui `styled()`
+components on web** and move the surfaces' **layout** from Tailwind `className` onto Tamagui
+props / the `Row`/`Col` primitives, so one styling system (Tamagui) drives both web and native.
+Add `@tamagui/vite-plugin` (the optimizing compiler) so Tamagui's web CSS has controlled ordering
+/specificity. This is the plan's original vision; the cost is re-editing the surfaces (which Phase 0
+said it wouldn't — that constraint is explicitly traded away by choosing B).
+
+## What is already landed (build on it — do NOT redo)
+
+- **`libs/ui/src/theme/tamagui.config.ts`** — `createTamagui` shell from the shared tokens. Import
+  `styled`/`View`/`Text` **from here** (not `@tamagui/core`) so the config side-effect isn't
+  tree-shaken (`@lmthing/ui` is `sideEffects:false`). Runtime parity test:
+  `libs/ui/src/theme/tamagui-config.test.ts`.
+- **`tests/visual/`** — the L2 (computed-style, exact) + L3 (screenshot) harness. Baselines in
+  `__computed__/` + `__screenshots__/` are captured from the **passthrough** primitives. Run:
+  `pnpm test:computed-style` / `pnpm test:visual` / `pnpm test:visual:all` /
+  `pnpm test:visual:update`. Chromium is pre-installed (`/opt/pw-browsers`, config points
+  `executablePath` at it — do NOT run `playwright install`). esbuild bundler shims `process`/`global`.
+- **Native forks** — `*.native.tsx` for **every** primitive (core + grouped) on the Tamagui config;
+  `platform/` browser-global shims; `apps/mobile` Expo shell (excluded from the pnpm workspace).
+  These are the native seam B's web changes feed; they don't need re-doing for B.
+
+## The grounded facts B must respect (so you don't re-derive them)
+
+1. **Layout is 100% Tailwind-className-driven and everything is `Box`.** `Row`/`Col` are used **0×**
+   in `chat`/`studio`/`computer`; **87** `Box` usages contain `flex`; **61** of those rely on
+   Tailwind's default **flex-direction: row** (no `flex-col`/`flex-row`). Measure:
+   `grep -rhoE 'Prim\.Box className="[^"]*"' libs/ui/src/{chat,studio,computer}`.
+2. **Tamagui `View` base ≠ browser `div`.** A bare `styled(View)` computes `display:flex;
+   flex-direction:column; flex-shrink:0; align-items:stretch; box-sizing:border-box`. A `div` is
+   `display:block` (flex props inert/initial). The §1 table is the risk map.
+3. **Without the compiler, Tamagui's atomic CSS overrode an equal-specificity className by source
+   order** (runtime probe: `styled(View,{display:'block'})` + `className` with `.x{display:flex}`
+   computed `display:block`). **Whether the compiler fixes this is the pivotal B0 question.**
+4. **Some computed-style differences are semantic no-ops** but fail an exact string match:
+   `align-items: normal` (a bare flex div) ≡ `stretch` (Tamagui) for flex; `display:block` vs
+   `flex`+block-compat resets differ texturally. Decide how the L2 gate treats these (see B1).
+
+## B0 — add `@tamagui/vite-plugin`; answer "does className win with the compiler?" (PIVOTAL)
+
+This is a spike + the §6 build integration. It decides B's migration *scope*.
+
+1. Install `@tamagui/vite-plugin@2.5.1` (matches `@tamagui/core@2.5.1`) into `libs/utils` (the
+   shared vite config lives at `libs/utils/src/vite.mjs`, consumed by `apps/web/vite.config.ts` via
+   `createViteConfig`). Add it to the `plugins` array with
+   `{ config: '<path>/libs/ui/src/theme/tamagui.config.ts', components: ['@lmthing/ui'], optimize: true }`.
+   Keep `@vitejs/plugin-react` + `@tailwindcss/vite` — Tamagui and Tailwind coexist.
+2. Confirm `apps/web` still builds: `cd apps/web && pnpm build` (`vp build`). It's a no-op transform
+   until a component uses Tamagui, so this only proves the integration doesn't break the build.
+3. **The spike:** make ONE throwaway component a `styled(View)` that sets `display` (or
+   `align-items`) AND is given a Tailwind className setting the same property. Build with the plugin,
+   inspect `getComputedStyle` (extend the harness or a one-off page). **Result determines scope:**
+   - **className wins** → *minimal migration*: surfaces keep Tailwind for align/justify/gap/color/
+     spacing; only `display`/`direction` move to `Row`/`Col`. This is the cheap, good path.
+   - **Tamagui wins / unreliable** → *maximal migration*: ALL layout+paint must move to Tamagui
+     props (surfaces drop Tailwind layout classes entirely). Much larger; reconsider vs Option A.
+
+## B1 — make `Row`/`Col` (then `Box`) real Tamagui, proven equal on the harness
+
+Do `Row`/`Col` first (lowest risk — explicit direction), then `Box`.
+
+- Implement `row/index.tsx` / `col/index.tsx` as `styled(View,{ flexDirection:'row'|'column',
+  flexShrink:1, ... })` importing `styled`/`View` from `../../theme/tamagui.config`. Apply the §4
+  block-compat resets so a `<Row>` computes like `<div class="flex">` and `<Col>` like
+  `<div class="flex flex-col">`. `Box` → `styled(View,{ display:'block' })` (proven to emit
+  `display:block` on web at runtime) so block Boxes stay `display:block`.
+- **Extend the harness with EQUIVALENCE fixtures** (`tests/visual/harness/fixtures.tsx`): render a
+  plain-HTML reference (`<div style={{display:'flex',flexDirection:'row',...}}>`) next to the
+  Tamagui candidate (`<Row .../>`) and assert **equal** computed styles (stronger than baseline
+  files, and independent of the `main` capture). Add these fixtures + names in `fixture-names.ts`.
+- **Resolve the semantic-equivalence question** in `computed-style.spec.ts`: either set the Tamagui
+  components' props so the computed strings match exactly, or normalize the known equivalences
+  (`align-items: normal`↔`stretch` on flex) in the comparator — documented, not blanket-loosened.
+  Keep everything else exact. `pnpm test:visual:all` must be green (re-capture baselines only via
+  `pnpm test:visual:update` as a reviewed act, §8).
+
+## B2 — codemod the surfaces: flex `Box` → `Row`/`Col` (drop the display className)
+
+Mechanical, once B1's primitives are proven. Mirror the existing AST codemod
+(`libs/ui/scripts/dehtml-codemod.mjs`).
+
+- `<Box className="flex ...">` (no `flex-col`) → `<Row className="...">` (strip `flex`; `Row` owns
+  display+row). `<Box className="flex flex-col ...">` → `<Col className="...">` (strip `flex flex-col`).
+  Keep all non-layout classes (`items-*`/`justify-*`/`gap-*`/spacing/colors) **iff** B0 showed
+  className wins; otherwise move them to props too.
+- The surfaces import `Row`/`Col` from the primitives (already exported in
+  `elements/primitives/index.ts`). The RN-safety lint (`lint:rn`) already forbids raw host tags and
+  is unaffected. Gate every batch with `pnpm test:visual:all` + `pnpm --filter @lmthing/ui test`.
+- Because there are 87 flex Boxes across chat/studio/computer, do it in small reviewed batches
+  (per surface / per directory), each green before the next.
+
+## B3 — Text/Pressable → Tamagui, Radix overlays → Tamagui, delete superseded CSS
+
+- `text/index.tsx` → `styled(Text,{...})` mapping font tokens; `pressable/index.tsx` →
+  Tamagui pressable (`<button>`/role on web, `onPress`). Each gated by its harness fixture.
+- **Radix → Tamagui universal** (8 files in shared `elements/`: dialog/sheet/dropdown/label/
+  separator/avatar + button `Slot`→`asChild`; see H4). Each replacement gets its own L2/L3 fixture
+  (needs the Radix peers installed in the libs/ui harness — widen the libs/ui vitest include as
+  those land). `computer/ide-file-tree` context-menu is out of scope.
+- **§7 step 9 — delete superseded CSS**: once a component is fully on Tamagui, remove the now-dead
+  `libs/css/src/{elements,components}/**` rules and Tailwind classes it used; re-run the full suite
+  + `lint:tokens`. Do this per-component, after its parity gate is green — never ahead of it.
+
+## B — definition of done
+
+`chat`+`studio`+`computer` render on web **within the parity contract vs the `main` baseline** with
+layout driven by Tamagui (not Tailwind classes), `apps/mobile` renders the same screens natively,
+Radix is gone from the shared `elements/`, superseded CSS is deleted, and L1+L2+L3 + RN-safety +
+tokens lint are all green on the branch. If B0 reveals the compiler can't make className coexist
+reliably, STOP and re-open the A-vs-B decision with the user before the maximal migration.
