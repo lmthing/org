@@ -14,7 +14,11 @@ export default defineConfig({
   esbuild: { jsx: 'automatic', jsxImportSource: 'react' },
   test: {
     environment: 'jsdom',
-    include: ['src/elements/primitives/**/*.test.tsx', 'src/**/*.parity.test.tsx'],
+    include: [
+      'src/elements/primitives/**/*.test.tsx',
+      'src/**/*.parity.test.tsx',
+      'src/theme/**/*.test.ts',
+    ],
     setupFiles: ['./vitest.setup.ts'],
     css: false,
   },
