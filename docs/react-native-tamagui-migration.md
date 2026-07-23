@@ -199,6 +199,24 @@ produced (className-driven layout on `Box`) and what the Tamagui swap needs (lay
 - **NOT done:** not `expo install`ed / run on a device here (no native toolchain). Expo Router nav
   + the real chat/studio screens + `PodTransport` wiring are follow-up, gated on the §1c decision.
 
+**PHASE 1d — native leaf forks + Radix status (§6, §7 step 7) — ✅ leaves DONE; Radix deferred.**
+- **xterm terminal** → platform seam (mirrors Monaco): `elements/content/terminal/index.tsx` is now
+  a pure re-export of `./index.web` (the verbatim xterm impl, moved), with `index.native.tsx` →
+  `<UnavailableOnMobile feature="Terminal" />` (imports NO `@xterm/*`, so Metro never sees it). Web
+  bundlers resolve `index.tsx` → `index.web` (unchanged); Metro prefers `index.native`. libs/ui
+  31/31, RN lint clean. (The one tsc error in `index.web.tsx` is pre-existing in the moved xterm
+  code — a readonly `ref.current` assign — not introduced here.)
+- **Monaco** was already forked in Phase 0. **`Tree`→`FlatList` is moot:** `studio/…/field-tree`
+  already dropped react-arborist for a primitives-based React-state tree (it inherits the primitive
+  native forks). **`WebFrame`/iframe** lives in web-only *route glue*
+  (`apps/web/…/app/preview`), not a `libs/ui` leaf — the mobile app gets its own
+  `react-native-webview` preview screen.
+- **Radix → Tamagui overlays (dialog/sheet/dropdown/label/separator/avatar/slot) DEFERRED.** These
+  shared `elements/` components are className-styled too, so swapping them on web hits the SAME
+  coexistence blocker as the layout primitives (§1c). They stay Radix on web until the §1c decision;
+  the native app will use Tamagui's universal overlays (or the chosen engine's) behind the same
+  component names.
+
 **PHASE 1e — browser-global shims behind `platform/` (§7 step 8) — ✅ module DONE (web-safe).**
 - `libs/ui/src/platform/`: each capability is a `*.ts` (web, current behavior verbatim) +
   `*.native.ts` (RN) pair — `storage` (localStorage ↔ AsyncStorage), `clipboard`
