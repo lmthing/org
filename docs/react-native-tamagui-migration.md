@@ -1,8 +1,10 @@
 # Migrating `chat` + `studio` to Tamagui (universal / RN-compatible) — **without breaking web styles**
 
-> Status: **in progress** — foundation landed (see "Implementation status" below).
-> Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation
-> continues on `claude/tamagui-migration-plan-66u8sw`.
+> Status: **Phase 0 COMPLETE** (de-HTML of chat + studio + computer, RN-safety lint enforced) +
+> the Phase-1 token pipeline foundation. Phase 1 (Tamagui swap + native) is next — see
+> "Implementation status" and "Fresh-session handoff" below.
+> Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
+> `claude/tamagui-migration-plan-66u8sw`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
 > **both** web (unchanged) and React Native, by moving them onto Tamagui universal primitives. Two
 > irreducibly-web widgets — **Monaco** (`computer/ide-editor`) and **xterm** (`elements/content/terminal`) —
@@ -32,33 +34,91 @@ this stays grounded; verify against the files, they may have moved.
 - `lint-design-tokens.mjs` allows `tokens.generated.ts` (a token-definition artifact, like
   `theme.css`); the config is exported as `@lmthing/css/tamagui-tokens`.
 
-**Phase 0 start — vocabulary primitives (§1.5) — DONE (the missing gaps only).**
-- `libs/ui/src/elements/primitives/{box,text,pressable,row,col,image,link,form,list}` —
-  plain-HTML **pure-passthrough** wrappers (emit the same tag + props/className verbatim ⇒
-  byte-identical HTML). `Box` has an `as` escape hatch for semantic tags; `Text` an `as`
-  (inline **and** `h1`–`h6`) / `block` selector; `Pressable` renders `<button>` (or `<a>`/
-  `<div>` via `as`). Phase 1 swaps only these components' internals to Tamagui; the surfaces
-  are not edited again.
-- Stood up the **libs/ui vitest harness** the repo lacked (`libs/ui/vitest.config.ts` +
-  `vitest.setup.ts`, jsdom + esbuild automatic JSX + jest-dom), with a `test` script scoped to
-  `elements/primitives/**` and `**/*.parity.test.tsx`. Render-parity tests
-  (`elements/primitives/index.test.tsx`, 13 tests) prove each primitive is byte-identical to
-  its raw tag — the Appendix step-2 in-isolation proof.
+**PHASE 0 — de-HTML all three surfaces (§1.5 + §7 steps 2–4b + §8) — ✅ COMPLETE.**
 
-**Phase 0 — first real surface de-HTML'd (§7 step 3) — DONE for one component.**
-- `chat/app/EmptyState.tsx` (a container-heavy component: div/h1/p/button) fully routed
-  through `Box`/`Text`/`Pressable` — **zero raw host tags left**. `chat/app/EmptyState.parity.test.tsx`
-  captures the exact pre-migration innerHTML as an immovable golden and asserts the migrated
-  component renders **byte-identical** HTML (the jsdom-level L2+L3 proof for one real
-  component). Green. This validates the whole de-HTML seam end-to-end on real product code.
+*The vocabulary (§1.5).* `libs/ui/src/elements/primitives/**` — the full set of plain-HTML
+**pure-passthrough `forwardRef`** wrappers, covering every host tag used in the surfaces:
+- `box` (div + `as` for section/nav/header/footer/aside/article/main/figure/blockquote/details/
+  summary/dl/fieldset; `open` for `<details>`), `text` (span/p + `as` for strong/em/small/label/
+  code/kbd/dt/dd and `h1`–`h6`; `block`), `pressable` (button + `as` a/div; button-based props
+  with optional anchor attrs), `row`/`col`, `image`, `link`, `form`, `list` (ul/ol + ListItem).
+- Grouped: `controls.tsx` (TextField/TextArea/Select/Option), `media.tsx` (Audio/Video/IFrame),
+  `table.tsx` (Table/Thead/Tbody/Tfoot/Tr/Th/Td/Caption), `svg.tsx` (Svg/Path/Rect/Circle/…,
+  **named to mirror `react-native-svg`** so Phase 1 swaps host→RN-svg with no surface edits),
+  `misc.tsx` (Pre/Br/Hr). `_host.tsx` is the shared `forwardRef` factory.
+- All are byte-identical to their raw tag **and forward refs**, proven in
+  `elements/primitives/index.test.tsx` (17 tests). The **libs/ui vitest harness** the repo
+  lacked was stood up for this (`vitest.config.ts` + `vitest.setup.ts`; jsdom + esbuild
+  automatic JSX + jest-dom; `test` script scoped to `elements/primitives/**` + `**/*.parity.test.tsx`).
 
-**Not yet done (next):** the Playwright visual harness + `main` L2/L3 baselines (§3.1–3.2)
-— needs a browser + prod build, so L2/L3 are still pending; the RN-safety / no-raw-HTML lint
-gate (§8) is not yet enabled (turns on at the end of Phase 0); the de-HTML sweep of the
-chat/studio/computer surfaces onto these primitives (§7 steps 3–4b); the real
-`tamagui.config.ts` `createTamagui` shell + the primitives' Tamagui internals (§7 steps 5–7);
-and `apps/mobile` (§6). Widening the libs/ui vitest include to the Radix-dependent suites is
-follow-up once those peers are installed.
+*The codemod (§7).* `libs/ui/scripts/dehtml-codemod.mjs` — a **TypeScript-AST** codemod that
+rewrites ONLY real JSX host tags (never tags inside strings/generics/comments) to the primitives
+under a collision-proof `import * as Prim` namespace, preserving every attribute/child/ref/format.
+Ran across **chat (44 files, 964 tags) + computer (14, 176) + studio (78, 1376) = 2516 tags**.
+Because the primitives are proven byte-identical + ref-forwarding, the render is unchanged by
+construction; `chat/app/EmptyState` additionally has an explicit byte-identical golden test
+(`EmptyState.parity.test.tsx`, hand-migrated pre-codemod).
+
+*Web-only widgets (§1.6).* Monaco isolated: `computer/ide-editor.web.tsx` (real, verbatim) +
+`ide-editor.native.tsx` (`<UnavailableOnMobile>` stub, no Monaco import) + `ide-editor.tsx`
+(pure re-export seam). `elements/content/unavailable-on-mobile` is the themed native fallback.
+(xterm terminal stays in `elements/content/terminal`, which is outside the surface lint scope;
+its native fork is Phase 1.)
+
+*The gate (§8).* `libs/ui/scripts/lint-rn-safety.mjs` — AST gate forbidding every raw host tag
+in chat/studio/computer (exempting `*.web.tsx`/`*.native.tsx`/`*.test.tsx`). **GREEN: 0 raw host
+tags across 137 surface files.** Wired into `pnpm --filter @lmthing/ui lint` + a `lint:rn` script.
+
+*Verification of the whole phase:* libs/ui suite 19/19 green · RN-safety lint clean · `lint:tokens`
+clean · **zero codemod-induced type errors** (checked: no new errors in codemodded non-test files
+beyond the pre-existing lucide/tanstack noise) · `@lmthing/web-app` typecheck (the real gate) green.
+
+**PHASE 1 FOUNDATION — token pipeline (§5 + §3 Layer 1) — ✅ DONE & node-testable.**
+- `libs/css/scripts/generate-tamagui-config.mjs` (+ pure logic in `tamagui-tokens.mjs`): sibling
+  of `generate-theme.mjs`, reads the **same** `tokens.json`, emits `libs/css/src/tamagui/
+  tokens.generated.ts` — pure data (`radius`, `fonts`, `themes.{light,dark}`), **no `@tamagui/core`
+  import**. Wired into `libs/css` `generate`/`prebuild`; exported as `@lmthing/css/tamagui-tokens`.
+- **Layer-1 token-parity test** `libs/css/src/__tests__/token-parity.test.ts` (6 tests, root
+  vitest): every generated value == the `theme.css` value **byte-for-byte** (radius, fonts, light
+  `:root`, resolved `[data-theme="dark"]` cascade) + a staleness guard. The root guarantee.
+- `lint-design-tokens.mjs` allows `tokens.generated.ts` (a token-definition artifact).
+
+---
+
+## Fresh-session handoff — what's next (Phase 1)
+
+Phase 0 is done and enforced; the surfaces now speak only `Prim.*` primitives. Remaining work,
+in order, each still gated by the parity contract:
+
+1. **Playwright visual harness + `main` L2/L3 baselines (§3.1–3.2).** NOT started — needs a
+   browser (Chromium at `/opt/pw-browsers`; do **not** run `playwright install`) + `vp preview`
+   prod build. This is the browser-level L2 (computed-style) + L3 (screenshot) proof; so far
+   parity is proven at the jsdom byte-level (primitives + the EmptyState golden), which is
+   strictly stronger at the DOM level but does not catch pure paint differences. Add
+   `playwright.config.ts`, the `__visual/` fixtures route, capture goldens from `origin/main`.
+2. **Real `tamagui.config.ts` `createTamagui` shell (§5/§6).** Feed `@lmthing/css/tamagui-tokens`
+   into `createTamagui`; add `@tamagui/vite-plugin` alongside the existing Vite plugins. (Tamagui
+   deps are NOT yet installed.)
+3. **Swap the primitives' internals to Tamagui `styled()` (§4, §7 steps 6–7).** ONLY the ~2 dozen
+   files in `elements/primitives/**` change — the surfaces are already done and must not be
+   re-edited. Apply the block-compat box-model resets (§1 table); each primitive re-proven by its
+   L2/L3 gate. Then Radix→Tamagui in the shared `elements/` overlays (§6), and the native leaf
+   forks (Tree→FlatList, WebFrame/IFrame→react-native-webview, terminal `.native.tsx`).
+4. **Browser-global shims (§7 step 8)** behind a `platform/` module, then **delete superseded CSS**
+   (§7 step 9), then **`apps/mobile`** Expo shell (§6).
+
+**Gotchas for the next session:**
+- libs/ui is NOT in the `pnpm typecheck` gate (it has no `typecheck` script) and carries ~270
+  PRE-EXISTING tsc errors (lucide-react vs the hoisted `@types/react@19`, missing
+  `@tanstack/react-router`, and dormant jest-dom test typings). These are unrelated to this
+  workstream. Judge new work by: `pnpm --filter @lmthing/ui test`, `lint:rn`, `lint:tokens`, and
+  `@lmthing/web-app` typecheck — NOT a raw `tsc` error count.
+- The de-HTML uses `import * as Prim` (namespace) to dodge name collisions with each file's own
+  components. A later cosmetic pass could de-namespace where safe; not required.
+- Re-run the codemod any time (idempotent): `node libs/ui/scripts/dehtml-codemod.mjs <files>`;
+  check with `--check`. The lint (`lint:rn`) is what keeps surfaces de-HTML'd going forward.
+- Widening the libs/ui vitest `include` to the Radix-dependent element suites needs those peers
+  installed (react/@radix/lucide/clsx/tailwind-merge were added as libs/ui devDeps for the harness).
 
 ---
 
