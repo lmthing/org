@@ -38,7 +38,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
   }, [newSpaceName, onCreateSpace])
 
   return (
-    <Prim.Box className="space-selector">
+    <Prim.Box position="relative">
       <Button onClick={toggleIsOpen} variant="ghost" className="space-selector__trigger">
         <Label className="space-selector__trigger-label">
           {currentSpace ? currentSpace.name : 'Select Space'}
@@ -47,9 +47,9 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
       </Button>
 
       {isOpen && (
-        <Prim.Box className="dropdown__content space-selector__dropdown">
-          <Prim.Box className="space-selector__search-section">
-            <Prim.Box className="space-selector__search-wrapper">
+        <Prim.Box className="dropdown__content" position="absolute" top="100%" left={0} right={0} zIndex={50} marginTop="$1">
+          <Prim.Box padding="$2" borderBottomWidth={1} borderBottomColor="$border">
+            <Prim.Box position="relative">
               <Search className="space-selector__search-icon" />
               <Input
                 type="text"
@@ -62,7 +62,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
             </Prim.Box>
           </Prim.Box>
 
-          <Prim.Box className="space-selector__list">
+          <Prim.Box maxHeight="$64" overflowY="auto">
             {filteredSpaces.length === 0 ? (
               <Caption muted className="space-selector__empty">No spaces found</Caption>
             ) : (
@@ -70,16 +70,18 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
                 <Prim.Pressable
                   key={space.id}
                   onClick={() => handleSelect(space.id)}
-                  className={`dropdown__item space-selector__item ${space.id === currentSpaceId ? 'list-item--selected' : ''}`}
+                  className={`dropdown__item ${space.id === currentSpaceId ? 'list-item--selected' : ''}`}
+                  width="100%"
+                  textAlign="left"
                 >
                   <FolderOpen className="space-selector__item-icon" />
-                  <Prim.Text className="space-selector__item-name">{space.name}</Prim.Text>
+                  <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{space.name}</Prim.Text>
                 </Prim.Pressable>
               ))
             )}
           </Prim.Box>
 
-          <Prim.Box className="space-selector__footer">
+          <Prim.Box borderTopWidth={1} borderTopColor="$border" padding="$2">
             {showCreate ? (
               <Prim.Form onSubmit={handleCreate}>
                 <Stack gap="sm" className="space-selector__create-form">
@@ -91,7 +93,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
                 </Stack>
               </Prim.Form>
             ) : (
-              <Prim.Pressable onClick={() => setShowCreate(true)} className="dropdown__item space-selector__new-btn">
+              <Prim.Pressable onClick={() => setShowCreate(true)} className="dropdown__item" width="100%">
                 <Plus className="space-selector__new-icon" /><Prim.Text>New Space</Prim.Text>
               </Prim.Pressable>
             )}

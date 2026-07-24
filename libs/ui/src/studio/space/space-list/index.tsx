@@ -48,13 +48,11 @@ interface InviteDialogProps {
   onInvite: (email: string, role: SpaceUserRole) => void
 }
 
-function getStatusColor(status: SpaceUser['status']) {
-  switch (status) {
-    case 'active': return 'space-list__status-dot--active'
-    case 'invited': return 'space-list__status-dot--invited'
-    case 'pending': return 'space-list__status-dot--pending'
-    default: return 'space-list__status-dot--pending'
-  }
+// .space-list__status-dot--<status> fill modifier → token lookup (space.styled.tsx `status` variant).
+const STATUS_DOT_BG: Record<SpaceUser['status'], string> = {
+  active: '$brand-2',
+  invited: '$brand-2',
+  pending: '$neutral',
 }
 
 function getRoleBadgeColor(role: SpaceUserRole) {
@@ -84,7 +82,7 @@ function InviteDialog({ isOpen, onClose, onInvite }: InviteDialogProps) {
 
   return (
     <Prim.Box className="dialog__backdrop">
-      <Prim.Box className="dialog__content space-list__invite-dialog">
+      <Prim.Box className="dialog__content" maxWidth={448}>
         <Prim.Box className="dialog__header">
           <Heading level={3}>Invite User</Heading>
           <Caption muted>Add a new member to your space</Caption>
@@ -181,7 +179,7 @@ export function SpaceList({
               <UserPlus className="space-list__invite-icon" />
             </Button>
           </Stack>
-          <Prim.Box className="space-list__search-wrapper">
+          <Prim.Box position="relative" marginTop="$4">
             <Search className="space-list__search-icon" />
             <Input
               type="text"
@@ -193,7 +191,7 @@ export function SpaceList({
           </Prim.Box>
         </PanelHeader>
 
-        <Prim.Box className="space-list__body">
+        <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflowY="auto">
           {filteredUsers.length === 0 ? (
             <Stack className="space-list__empty">
               <Search className="space-list__empty-icon" />
@@ -205,21 +203,34 @@ export function SpaceList({
                 <Prim.Pressable
                   key={user.id}
                   onClick={() => onSelectUser?.(user.id)}
-                  className="space-list__user-btn"
+                  cursor="pointer"
+                  display="block"
+                  width="100%"
                 >
                   <ListItem selected={selectedUserId === user.id}>
-                    <Prim.Box className="space-list__avatar-wrapper">
+                    <Prim.Box position="relative" flexShrink={0}>
                       <Avatar>
                         {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
                         <AvatarFallback className="space-list__avatar-fallback" colorKey={user.id}>
                           {user.name.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <Prim.Box className={`${getStatusColor(user.status)} space-list__status-dot`} />
+                      <Prim.Box
+                        position="absolute"
+                        bottom={-2}
+                        right={-2}
+                        width="$3.5"
+                        height="$3.5"
+                        borderRadius="$radius-full"
+                        borderWidth={2}
+                        borderStyle="solid"
+                        borderColor="white"
+                        backgroundColor={STATUS_DOT_BG[user.status]}
+                      />
                     </Prim.Box>
-                    <Prim.Box className="space-list__user-info">
+                    <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0} textAlign="left">
                       <Stack row gap="sm" className="space-list__user-name-row">
-                        <Prim.Text className="space-list__user-name">{user.name}</Prim.Text>
+                        <Prim.Text fontWeight="$medium" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{user.name}</Prim.Text>
                         <Badge className={`${getRoleBadgeColor(user.role)} space-list__role-badge`}>
                           {user.role.charAt(0).toUpperCase()}
                         </Badge>
@@ -229,7 +240,7 @@ export function SpaceList({
                         <Caption muted className="space-list__email">{user.email}</Caption>
                       </Stack>
                     </Prim.Box>
-                    <Prim.Box className="space-list__status-col">
+                    <Prim.Box display="flex" flexDirection="column" alignItems="flex-end" gap="$1">
                       <Badge variant={user.status === 'active' ? 'success' : user.status === 'invited' ? 'primary' : 'muted'} className="space-list__status-badge">
                         {user.status}
                       </Badge>

@@ -86,16 +86,31 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
         </Stack>
       </PageHeader>
 
-      <Prim.Box className="settings-view__tabs">
+      <Prim.Box
+        display="flex"
+        gap="$1"
+        paddingVertical="$0"
+        paddingHorizontal="$6"
+        borderBottomWidth={1}
+        borderBottomColor="$border"
+      >
         <Prim.Pressable
           onClick={() => handleTabChange('env')}
-          className={`btn btn--ghost settings-view__tab ${activeTab === 'env' ? 'settings-view__tab--active' : 'settings-view__tab--inactive'}`}
+          className="btn btn--ghost"
+          borderRadius="$0"
+          {...(activeTab === 'env'
+            ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }
+            : { borderBottomWidth: 2, borderBottomColor: 'transparent' })}
         >
           <Shield className="settings-view__tab-icon" /> Environment
         </Prim.Pressable>
         <Prim.Pressable
           onClick={() => handleTabChange('packages')}
-          className={`btn btn--ghost settings-view__tab ${activeTab === 'packages' ? 'settings-view__tab--active' : 'settings-view__tab--inactive'}`}
+          className="btn btn--ghost"
+          borderRadius="$0"
+          {...(activeTab === 'packages'
+            ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }
+            : { borderBottomWidth: 2, borderBottomColor: 'transparent' })}
         >
           <FileCode2 className="settings-view__tab-icon" /> package.json
         </Prim.Pressable>
@@ -103,22 +118,22 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
 
       <PageBody>
         {activeTab === 'env' && (
-          <Prim.Box className="settings-view__panel-container">
-            <Prim.Box className={cn('panel', 'settings-view__panel-container--env')}>
+          <Prim.Box maxWidth={1024} marginTop="$0" marginBottom="$0" marginHorizontal="auto">
+            <Prim.Box className="panel" marginBottom="$4">
               <Prim.Box className="panel__header"><Prim.Text>Environment Variables</Prim.Text></Prim.Box>
               <Prim.Box className="panel__body">
-                <Prim.Box className="settings-view__env-grid">
+                <Prim.Box display="grid" gridTemplateColumns="1fr 1fr" gap="$3" marginBottom="$4">
                   <Prim.Box>
-                    <Prim.Text as="label" className="settings-view__env-label">File</Prim.Text>
+                    <Prim.Text as="label" display="block" fontSize="$xs" fontWeight="$medium" marginBottom="$1">File</Prim.Text>
                     <Prim.TextField className="input" value={selectedEnvFile} onChange={e => setSelectedEnvFile(e.target.value)} />
                   </Prim.Box>
                   <Prim.Box>
-                    <Prim.Text as="label" className="settings-view__env-label">Password</Prim.Text>
+                    <Prim.Text as="label" display="block" fontSize="$xs" fontWeight="$medium" marginBottom="$1">Password</Prim.Text>
                     <Prim.TextField className="input" type="password" value={envPassword} onChange={e => setEnvPassword(e.target.value)} placeholder="Enter password" />
                   </Prim.Box>
                 </Prim.Box>
                 <Prim.Box>
-                  <Prim.Text as="label" className="settings-view__env-label">Variables</Prim.Text>
+                  <Prim.Text as="label" display="block" fontSize="$xs" fontWeight="$medium" marginBottom="$1">Variables</Prim.Text>
                   <Prim.TextArea
                     className={cn('input', 'settings-view__env-textarea')}
                     value={envContent}
@@ -126,7 +141,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                     placeholder="KEY=value"
                   />
                 </Prim.Box>
-                <Prim.Box className="settings-view__env-actions">
+                <Prim.Box display="flex" gap="$2" marginTop="$3">
                   <Prim.Pressable className="btn btn--outline" onClick={() => setEnvStatus('Loaded from session')}>Load</Prim.Pressable>
                   <Prim.Pressable className="btn btn--primary" onClick={() => setEnvStatus('Saved')}>Save</Prim.Pressable>
                 </Prim.Box>
@@ -138,7 +153,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
         )}
 
         {activeTab === 'packages' && (
-          <Prim.Box className="settings-view__panel-container">
+          <Prim.Box maxWidth={1024} marginTop="$0" marginBottom="$0" marginHorizontal="auto">
             <Prim.Box className="panel">
               <Prim.Box className="panel__header"><Prim.Text>package.json</Prim.Text></Prim.Box>
               <Prim.Box className="panel__body">
@@ -151,9 +166,9 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                   onChange={e => { setPackageJsonDraft(e.target.value); setPackageJsonError(null); setPackageJsonSavedAt(null) }}
                   spellCheck={false}
                 />
-                <Prim.Box className="settings-view__pkg-footer">
+                <Prim.Box display="flex" justifyContent="space-between" alignItems="center" marginTop="$3">
                   <Caption muted>
-                    {packageJsonError ? <Prim.Text className="settings-view__pkg-error">{packageJsonError}</Prim.Text>
+                    {packageJsonError ? <Prim.Text color="$destructive">{packageJsonError}</Prim.Text>
                     : packageJsonSavedAt ? `Saved at ${packageJsonSavedAt}` : 'Ready to save'}
                   </Caption>
                   <Prim.Pressable className="btn btn--primary" onClick={() => {

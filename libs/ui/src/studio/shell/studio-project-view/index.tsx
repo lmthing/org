@@ -9,7 +9,6 @@ import * as Prim from '../../../elements/primitives/index.js';
 import '@lmthing/css/elements/layouts/split-pane/index.css'
 import '@lmthing/css/elements/layouts/page/index.css'
 import '@lmthing/css/elements/content/panel/index.css'
-import '@lmthing/css/components/shell/studio-shell/index.css'
 import { useProject } from '@lmthing/state'
 import { StudioAppSidebar } from '../studio-app-sidebar'
 
@@ -17,13 +16,13 @@ export function StudioProjectView() {
   const { spaces, isLoadingSpaces } = useProject()
 
   return (
-    <Prim.Box className="split-pane studio-shell">
+    <Prim.Box className="split-pane" height="100vh">
       <StudioAppSidebar className="shrink-0" />
       <Prim.Box className="split-pane__primary">
-        <Prim.Box className="page__body studio-shell__empty">
-          <Prim.Box className="studio-shell__empty-content">
-            <Prim.Text as="p" className="studio-shell__empty-title">Select a space to begin</Prim.Text>
-            <Prim.Text as="p" className="studio-shell__empty-subtitle">
+        <Prim.Box className="page__body" display="flex" alignItems="center" justifyContent="center">
+          <Prim.Box textAlign="center" opacity={0.5}>
+            <Prim.Text as="p" fontSize="$lg" fontWeight="$semibold" marginBottom="$2">Select a space to begin</Prim.Text>
+            <Prim.Text as="p" fontSize="$sm">
               {isLoadingSpaces
                 ? 'Loading spaces…'
                 : spaces.length > 0

@@ -65,7 +65,7 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
   }, [generatedPrompt])
 
   return (
-    <Prim.Box className="panel prompt-preview">
+    <Prim.Box className="panel" overflow="hidden">
       <PanelHeader
         onClick={toggleExpanded}
         className="prompt-preview__header"
@@ -77,7 +77,12 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
               <Badge variant="muted">~{tokenCount} tokens</Badge>
             )}
           </Stack>
-          <Prim.Text className={`prompt-preview__chevron ${isExpanded ? 'prompt-preview__chevron--expanded' : ''}`}>
+          <Prim.Text
+            fontSize={12}
+            color="$muted-foreground"
+            // transition: transform awaits the P4 animation driver
+            {...(isExpanded ? { transform: 'rotate(180deg)' } : {})}
+          >
             ▼
           </Prim.Text>
         </Stack>
@@ -95,7 +100,7 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
             ) : (
               <Prim.Box>
                 {selectedFieldIds.length > 0 && (
-                  <Prim.Box className="prompt-preview__badges">
+                  <Prim.Box display="flex" flexWrap="wrap" gap="$1.5" marginBottom="$3">
                     {selectedFieldIds.map(fieldId => (
                       <Badge key={fieldId} variant="muted" className="prompt-preview__badge">{fieldId}</Badge>
                     ))}

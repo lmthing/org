@@ -52,7 +52,7 @@ function AgentCard({ agent, fields, onLoad, onDuplicate, onDelete }: {
     <Card interactive>
       <CardBody>
         <Stack row className="saved-agents-list__card-header">
-          <Prim.Box className="saved-agents-list__card-content">
+          <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
             <Label className="saved-agents-list__card-name">{agent.name}</Label>
             <Caption muted className="saved-agents-list__card-description">
               {agent.description}
@@ -63,7 +63,7 @@ function AgentCard({ agent, fields, onLoad, onDuplicate, onDelete }: {
             <Button onClick={onDelete} variant="ghost" size="sm" title="Delete">🗑</Button>
           </Stack>
         </Stack>
-        <Prim.Box className="saved-agents-list__card-badges">
+        <Prim.Box display="flex" flexWrap="wrap" gap="$1.5" marginBottom="$4">
           {agentFields.slice(0, 3).map(field => (
             <Badge key={field.id} variant="muted" className="saved-agents-list__badge-sm">{field.name}</Badge>
           ))}
@@ -98,14 +98,14 @@ export function SavedAgentsList({ fields, savedAgents, onLoadAgent, onDuplicateA
 
       {savedAgents.length === 0 ? (
         <Stack className="saved-agents-list__empty">
-          <Prim.Box className="saved-agents-list__empty-icon">📦</Prim.Box>
+          <Prim.Text marginBottom="$4" fontSize={40}>📦</Prim.Text>
           <Heading level={3}>No saved agents yet</Heading>
           <Caption muted className="saved-agents-list__empty-caption">
             Create your first agent and save it for quick access later.
           </Caption>
         </Stack>
       ) : (
-        <Prim.Box className="saved-agents-list__grid">
+        <Prim.Box display="grid" gridTemplateColumns="repeat(auto-fill, minmax(300px, 1fr))" gap="$4">
           {sortedAgents.map(agent => (
             <AgentCard
               key={agent.id}

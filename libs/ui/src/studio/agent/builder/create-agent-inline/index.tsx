@@ -27,7 +27,7 @@ export function CreateAgentInline({ onSubmit, onCancel }: CreateAgentInlineProps
       <CardHeader>
         <Stack row className="create-agent-inline__header-row">
           <Stack row gap="sm" className="create-agent-inline__header-left">
-            <Prim.Box className="create-agent-inline__avatar">
+            <Prim.Box display="flex" alignItems="center" justifyContent="center" padding="$2" backgroundColor="$agent" borderRadius={8}>
               <Bot className="create-agent-inline__avatar-icon" />
             </Prim.Box>
             <Prim.Box>

@@ -25,7 +25,7 @@ export function AgentHeader({
   onBack,
 }: AgentHeaderProps) {
   return (
-    <Prim.Box as="header" className="agent-header">
+    <Prim.Box as="header" display="flex" alignItems="center" justifyContent="space-between" flexShrink={0} paddingVertical="$3" paddingHorizontal="$4" borderBottomWidth={1} borderBottomColor="$border">
       <Stack row className="agent-header__left">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="agent-header__icon" />

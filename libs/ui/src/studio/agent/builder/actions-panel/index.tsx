@@ -38,7 +38,7 @@ export function ActionsPanel({
   onOpenWorkflowBuilder,
 }: ActionsPanelProps) {
   return (
-    <Prim.Box className="actions-panel">
+    <Prim.Box display="flex" flexDirection="column" height="100%">
       <PanelHeader>
         <Stack row className="actions-panel__header-row">
           <Prim.Box>
@@ -49,10 +49,10 @@ export function ActionsPanel({
         </Stack>
       </PanelHeader>
 
-      <Prim.Box className="actions-panel__body">
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflowY="auto" padding="$4">
         {attachedWorkflows.length === 0 ? (
           <Stack className="actions-panel__empty">
-            <Prim.Box className="actions-panel__empty-icon">⚡</Prim.Box>
+            <Prim.Text fontSize={32} marginBottom="$2">⚡</Prim.Text>
             <Label>No actions attached</Label>
             <Caption muted className="actions-panel__empty-caption">
               Attach workflows to give users quick access to multi-step tasks
@@ -93,8 +93,8 @@ function SlashActionCard({ workflow, onToggleEnabled, onEdit, onDetach }: {
     <Card interactive>
       <CardBody>
         <Stack row gap="sm" className="actions-panel__card-row">
-          <Prim.Box className="actions-panel__card-icon">⚡</Prim.Box>
-          <Prim.Box className="actions-panel__card-content">
+          <Prim.Box flexShrink={0} fontSize={20}>⚡</Prim.Box>
+          <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
             <Stack row gap="sm" className="actions-panel__card-title-row">
               <Code>/{workflow.slashAction.actionId}</Code>
               <Badge variant={workflow.slashAction.enabled ? 'success' : 'muted'} className="actions-panel__badge-sm">

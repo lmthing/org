@@ -232,107 +232,17 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `--destructive`
 
-### `components/chat/chat-panel/index.css`
-
-- **.chat-bubble** — `.chat-bubble` `.chat-bubble--assistant` `.chat-bubble--user` `.chat-bubble__content` `.chat-bubble__content--user` `.chat-bubble__cursor` `.chat-bubble__slash-action` `.chat-bubble__slash-params` `.chat-bubble__slash-tag` `.chat-bubble__structured-output` `.chat-bubble__text` `.chat-bubble__timestamp`
-- **.chat-input** — `.chat-input__autocomplete` `.chat-input__autocomplete-item` `.chat-input__hint` `.chat-input__wrapper`
-- **.chat-loading-dot** — `.chat-loading-dot`
-- **.chat-loading-dots** — `.chat-loading-dots`
-- **.chat-panel** — `.chat-panel` `.chat-panel__empty` `.chat-panel__empty-icon` `.chat-panel__header` `.chat-panel__messages`
-
-  Tokens: `--agent`, `--agent-foreground`, `--brand-2`, `--muted-foreground`
-
 ### `components/component-editor/index.css`
 
 - **.component-editor** — `.component-editor` `.component-editor__empty` `.component-editor__header` `.component-editor__kind-badge` `.component-editor__kind-badge--form` `.component-editor__kind-badge--view` `.component-editor__list` `.component-editor__list-item` `.component-editor__list-item--active` `.component-editor__list-item-actions` `.component-editor__list-item-name` `.component-editor__new-form` `.component-editor__pane` `.component-editor__pane-header` `.component-editor__section-title` `.component-editor__textarea`
 
   Tokens: `--color-border`, `--color-success`, `--color-surface-active`, `--color-surface-hover`, `--color-surface-subtle`, `--font-mono`, `--knowledge`, `--success`
 
-### `components/computer/agents-panel.css`
-
-- **.computer-agents-panel** — `.computer-agents-panel` `.computer-agents-panel__empty`
-
-  Tokens: `muted-foreground`
-
-### `components/computer/boot-progress.css`
-
-- **.computer-boot-progress** — `.computer-boot-progress` `.computer-boot-progress__label` `.computer-boot-progress__spinner` `.computer-boot-progress__step` `.computer-boot-progress__step--active` `.computer-boot-progress__step--done` `.computer-boot-progress__steps`
-
-  Tokens: `foreground`, `muted-foreground`, `success`
-
-### `components/computer/computer-dashboard.css`
-
-- **.computer-dashboard** — `.computer-dashboard` `.computer-dashboard__full-width`
-
-### `components/computer/computer-layout.css`
-
-- **.computer-layout** — `.computer-layout` `.computer-layout__content` `.computer-layout__main`
-
-### `components/computer/connection-banner.css`
-
-- **.computer-connection-banner** — `.computer-connection-banner` `.computer-connection-banner--booting` `.computer-connection-banner--error` `.computer-connection-banner__dot` `.computer-connection-banner__dot--booting` `.computer-connection-banner__dot--error` `.computer-connection-banner__message`
-
-  Tokens: `destructive`, `warning`
-
-### `components/computer/ide-editor.css`
-
-- **.ide-editor** — `.ide-editor` `.ide-editor__content` `.ide-editor__empty` `.ide-editor__tab` `.ide-editor__tab--active` `.ide-editor__tab-close` `.ide-editor__tabs`
-
-  Tokens: `accent`, `background`, `border`, `card`, `foreground`, `muted-foreground`
-
 ### `components/computer/ide-file-tree.css`
 
 - **.ide-file-tree** — `.ide-file-tree` `.ide-file-tree__action-btn` `.ide-file-tree__context-item` `.ide-file-tree__context-item--danger` `.ide-file-tree__context-menu` `.ide-file-tree__dialog-actions` `.ide-file-tree__dialog-content` `.ide-file-tree__dialog-input` `.ide-file-tree__dialog-overlay` `.ide-file-tree__dialog-title` `.ide-file-tree__header` `.ide-file-tree__header-actions` `.ide-file-tree__header-title` `.ide-file-tree__icon` `.ide-file-tree__icon--folder` `.ide-file-tree__item` `.ide-file-tree__item--active` `.ide-file-tree__name`
 
   Tokens: `accent`, `background`, `border`, `card`, `destructive`, `foreground`, `muted-foreground`, `popover`, `primary`
-
-### `components/computer/ide-layout.css`
-
-- **.ide-layout** — `.ide-layout` `.ide-layout__body` `.ide-layout__divider--horizontal` `.ide-layout__divider--vertical` `.ide-layout__header` `.ide-layout__nav` `.ide-layout__nav-btn` `.ide-layout__pane` `.ide-layout__pane--editor` `.ide-layout__pane--main` `.ide-layout__pane--sidebar` `.ide-layout__pane--terminal` `.ide-layout__restart-btn` `.ide-layout__split` `.ide-layout__split--horizontal` `.ide-layout__split--vertical` `.ide-layout__status` `.ide-layout__title`
-
-  Tokens: `background`, `border`, `card`, `foreground`, `muted-foreground`
-
-### `components/computer/ide-preview.css`
-
-- **.ide-preview** — `.ide-preview` `.ide-preview__header` `.ide-preview__iframe` `.ide-preview__loading` `.ide-preview__refresh` `.ide-preview__url`
-
-  Tokens: `accent`, `background`, `border`, `card`, `foreground`, `muted-foreground`, `primary`
-
-### `components/computer/ide-terminal.css`
-
-- **.ide-terminal** — `.ide-terminal` `.ide-terminal__add` `.ide-terminal__body` `.ide-terminal__pane` `.ide-terminal__pane--hidden` `.ide-terminal__tab` `.ide-terminal__tab--active` `.ide-terminal__tab-close` `.ide-terminal__tabs`
-
-  Tokens: `accent`, `background`, `border`, `card`, `foreground`, `muted`, `muted-foreground`
-
-### `components/computer/logs-viewer.css`
-
-- **.computer-logs-viewer** — `.computer-logs-viewer` `.computer-logs-viewer__empty` `.computer-logs-viewer__entry` `.computer-logs-viewer__list` `.computer-logs-viewer__message` `.computer-logs-viewer__message--error` `.computer-logs-viewer__message--warn` `.computer-logs-viewer__source` `.computer-logs-viewer__timestamp` `.computer-logs-viewer__toolbar`
-
-  Tokens: `border`, `destructive`, `muted-foreground`, `primary`, `warning`
-
-### `components/computer/metrics-card.css`
-
-- **.computer-metrics-card** — `.computer-metrics-card` `.computer-metrics-card__bar` `.computer-metrics-card__bar-fill` `.computer-metrics-card__row`
-
-  Tokens: `muted`, `primary`
-
-### `components/computer/network-panel.css`
-
-- **.computer-network-panel** — `.computer-network-panel` `.computer-network-panel__empty` `.computer-network-panel__entry` `.computer-network-panel__method` `.computer-network-panel__status--error` `.computer-network-panel__status--ok` `.computer-network-panel__url`
-
-  Tokens: `destructive`, `muted-foreground`, `success`
-
-### `components/computer/processes-panel.css`
-
-- **.computer-processes-panel** — `.computer-processes-panel` `.computer-processes-panel__empty`
-
-  Tokens: `muted-foreground`
-
-### `components/computer/status-card.css`
-
-- **.computer-status-card** — `.computer-status-card` `.computer-status-card__dot` `.computer-status-card__dot--booting` `.computer-status-card__dot--error` `.computer-status-card__dot--running` `.computer-status-card__dot--stopped` `.computer-status-card__indicator` `.computer-status-card__indicator--booting` `.computer-status-card__indicator--error` `.computer-status-card__indicator--running` `.computer-status-card__indicator--stopped`
-
-  Tokens: `destructive`, `muted-foreground`, `success`, `warning`
 
 ### `components/functions/index.css`
 
@@ -387,10 +297,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `--agent`, `--background`, `--border`, `--destructive`, `--knowledge`, `--primary`, `--success`
 
-### `components/shell/studio-shell/index.css`
-
-- **.studio-shell** — `.studio-shell` `.studio-shell__empty` `.studio-shell__empty-content` `.studio-shell__empty-subtitle` `.studio-shell__empty-title`
-
 ### `components/space/index.css`
 
 - **.confirm-dialog** — `.confirm-dialog__action-btn` `.confirm-dialog__content` `.confirm-dialog__icon` `.confirm-dialog__icon-wrapper`
@@ -403,17 +309,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 ### `components/studio/index.css`
 
 - **.studio-list** — `.studio-list__empty` `.studio-list__header`
-
-### `components/thing/thing-chat/index.css`
-
-- **.thing-chat** — `.thing-chat` `.thing-chat__booting` `.thing-chat__booting-label` `.thing-chat__computer-btn` `.thing-chat__computer-label` `.thing-chat__header` `.thing-chat__header-actions` `.thing-chat__header-title` `.thing-chat__input-form` `.thing-chat__messages` `.thing-chat__send-btn` `.thing-chat__status` `.thing-chat__status-label` `.thing-chat__textarea`
-- **.thing-code-block** — `.thing-code-block` `.thing-code-block__cursor` `.thing-code-block__inner`
-- **.thing-error-block** — `.thing-error-block`
-- **.thing-hook-block** — `.thing-hook-block`
-- **.thing-task-complete** — `.thing-task-complete`
-- **.thing-tasklist-block** — `.thing-tasklist-block` `.thing-tasklist-block__task` `.thing-tasklist-block__title`
-
-  Tokens: `--background`, `--border`, `--destructive`, `--foreground`, `--muted`, `--primary`, `--primary-foreground`, `--ring`
 
 ### `components/thing/thing-message/index.css`
 
@@ -441,12 +336,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `--border`, `--brand-1`, `--brand-2`, `--brand-3`, `--card`, `--destructive`, `--foreground`, `--muted`, `--muted-foreground`, `brand-3`
 
-### `components/workflow/step-config-panel/index.css`
-
-- **.step-config-panel** — `.step-config-panel__add-fragment-btn` `.step-config-panel__backdrop` `.step-config-panel__close-icon` `.step-config-panel__config-section` `.step-config-panel__content` `.step-config-panel__content-sections` `.step-config-panel__footer` `.step-config-panel__fragment-item` `.step-config-panel__fragment-list` `.step-config-panel__fragment-remove-icon` `.step-config-panel__header` `.step-config-panel__instructions-wrapper` `.step-config-panel__model-grid` `.step-config-panel__overlay` `.step-config-panel__panel` `.step-config-panel__passes-data-icon` `.step-config-panel__pushable-row` `.step-config-panel__range-input` `.step-config-panel__range-labels` `.step-config-panel__template-vars` `.step-config-panel__template-vars-list` `.step-config-panel__toggle` `.step-config-panel__toggle--off` `.step-config-panel__toggle--on` `.step-config-panel__toggle-knob` `.step-config-panel__toggle-knob--off` `.step-config-panel__toggle-knob--on` `.step-config-panel__tool-btn` `.step-config-panel__tool-btn--selected` `.step-config-panel__tools-grid` `.step-config-panel__type-btn` `.step-config-panel__type-btn--selected` `.step-config-panel__type-btn-content` `.step-config-panel__type-grid`
-
-  Tokens: `--border`, `--brand-2`, `--brand-3`, `--card`, `--destructive`, `--muted`, `--muted-foreground`
-
 ### `components/workflow/step-schema-editor/index.css`
 
 - **.nested-properties** — `.nested-properties` `.nested-properties__add-btn` `.nested-properties__add-icon`
@@ -461,13 +350,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.workflow-list-item** — `.workflow-list-item` `.workflow-list-item--selected` `.workflow-list-item__chevron` `.workflow-list-item__chevron--open` `.workflow-list-item__content` `.workflow-list-item__status-dot` `.workflow-list-item__status-dot--active` `.workflow-list-item__status-dot--archived` `.workflow-list-item__status-dot--draft` `.workflow-list-item__tags` `.workflow-list-item__tags--responsive` `.workflow-list-item__title-row`
 
   Tokens: `--border`, `--brand-2`, `--brand-3`, `--card`, `--muted`, `--muted-foreground`
-
-### `components/workflow/workflow-editor/index.css`
-
-- **.group** — `.group`
-- **.workflow-editor** — `.workflow-editor` `.workflow-editor__add-icon` `.workflow-editor__back-icon` `.workflow-editor__empty` `.workflow-editor__empty-caption` `.workflow-editor__empty-icon` `.workflow-editor__empty-icon-wrapper` `.workflow-editor__header` `.workflow-editor__header-inner` `.workflow-editor__header-top` `.workflow-editor__icon-box` `.workflow-editor__icon-box-svg` `.workflow-editor__insert-btn` `.workflow-editor__insert-btn-icon` `.workflow-editor__insert-btn-wrapper` `.workflow-editor__main` `.workflow-editor__meta-form` `.workflow-editor__meta-full` `.workflow-editor__output-caption` `.workflow-editor__output-field` `.workflow-editor__output-panel` `.workflow-editor__stats` `.workflow-editor__step-wrapper` `.workflow-editor__steps-header` `.workflow-editor__steps-list` `.workflow-editor__steps-section` `.workflow-editor__tag-btn` `.workflow-editor__tag-btn--active` `.workflow-editor__tag-btn--inactive` `.workflow-editor__tag-list` `.workflow-editor__title-area` `.workflow-editor__title-row`
-
-  Tokens: `--border`, `--brand-2`, `--brand-5`, `--card`, `--muted`, `--muted-foreground`
 
 ### `components/workflow/workflow-list/index.css`
 
