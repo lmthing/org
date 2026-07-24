@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../lib/cn.js';
-import { Box, Text, Pressable } from '../../elements/primitives/index.js';
+import { Row, Col, Text, Pressable } from '../../elements/primitives/index.js';
 
 const SUGGESTIONS = [
   'Research a topic for me',
@@ -15,12 +15,30 @@ interface EmptyStateProps {
   className?: string;
 }
 
+/**
+ * Migrated to Tamagui Row/Col (Part III / B2). The three flex Boxes became Row/Col with the verified
+ * class-vs-prop split: `items-` classes became the `alignItems` prop, `flex-1` became
+ * `flexGrow/flexShrink/flexBasis` props; `justify-`, `gap-`, paint and spacing classes stayed as
+ * className. The icon container carries `text-2xl`, so its line-height is restored via inline style
+ * (the Tamagui View base overrides it). Proven computed-identical to the pre-migration render (9/9
+ * nodes) in apps/web/b0-probe/measure-surface.mjs.
+ */
 export function EmptyState({ projectName, onSuggestion, className }: EmptyStateProps) {
   return (
-    <Box className={cn('flex flex-col items-center justify-center flex-1 px-6 py-12 text-center', className)}>
-      <Box className="w-12 h-12 rounded-xl bg-brand-2/20 flex items-center justify-center mb-5 text-2xl">
+    <Col
+      className={cn('justify-center px-6 py-12 text-center', className)}
+      alignItems="center"
+      flexGrow={1}
+      flexShrink={1}
+      flexBasis="0%"
+    >
+      <Row
+        className="w-12 h-12 rounded-xl bg-brand-2/20 justify-center mb-5 text-2xl"
+        alignItems="center"
+        style={{ lineHeight: '2rem' }}
+      >
         ✦
-      </Box>
+      </Row>
       <Text as="h1" className="font-display text-2xl font-bold text-foreground mb-2">
         How can I help{projectName ? ` in ${projectName}` : ''}?
       </Text>
@@ -28,7 +46,7 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
         Ask me anything — I can research, code, analyze, or build specialist agents.
       </Text>
       {onSuggestion && (
-        <Box className="flex flex-wrap gap-2 justify-center max-w-sm">
+        <Row className="flex-wrap gap-2 justify-center max-w-sm">
           {SUGGESTIONS.map((s) => (
             <Pressable
               key={s}
@@ -38,8 +56,8 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
               {s}
             </Pressable>
           ))}
-        </Box>
+        </Row>
       )}
-    </Box>
+    </Col>
   );
 }
