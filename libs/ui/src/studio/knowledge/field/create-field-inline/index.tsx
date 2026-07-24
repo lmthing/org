@@ -9,6 +9,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import '@lmthing/css/components/knowledge/index.css'
+import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index.js'
 
 interface CreateFieldInlineProps {
     onSubmit: (name: string, description: string) => void
@@ -29,8 +30,8 @@ export function CreateFieldInline({ onSubmit, onCancel }: CreateFieldInlineProps
     }
 
     return (
-        <Prim.Box className="panel" marginBottom="$6">
-            <Prim.Box className="panel__header">
+        <Prim.Box {...PANEL_BASE} marginBottom="$6">
+            <Prim.Box {...PANEL_HEADER}>
                 <Stack row gap="md" className="create-field-inline__header-row">
                     <Stack row gap="md" className="create-field-inline__title-row">
                         <FolderPlus className="create-field-inline__icon" />
@@ -44,7 +45,7 @@ export function CreateFieldInline({ onSubmit, onCancel }: CreateFieldInlineProps
                     </Button>
                 </Stack>
             </Prim.Box>
-            <Prim.Box className="panel__body">
+            <Prim.Box {...PANEL_BODY}>
                 <Prim.Form onSubmit={handleSubmit}>
                     <Stack gap="md">
                         <Prim.Box>

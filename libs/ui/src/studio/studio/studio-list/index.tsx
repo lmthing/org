@@ -6,7 +6,6 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Badge } from '@lmthing/ui/elements/content/badge'
 import { useProjects } from '@lmthing/state'
-import '@lmthing/css/elements/content/card/index.css'
 import '@lmthing/css/components/studio/index.css'
 
 /**

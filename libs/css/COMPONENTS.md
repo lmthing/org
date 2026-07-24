@@ -7,30 +7,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
 ## Elements (primitives)
 
-### `elements/content/avatar/index.css`
-
-- **.avatar** — `.avatar` `.avatar--lg` `.avatar--sm` `.avatar__fallback` `.avatar__image`
-
-  Tokens: `muted`, `muted-foreground`
-
-### `elements/content/card/index.css`
-
-- **.card** — `.card` `.card--interactive` `.card__body` `.card__footer` `.card__header`
-
-  Tokens: `border`, `card`, `card-foreground`
-
-### `elements/content/panel/index.css`
-
-- **.panel** — `.panel` `.panel--split` `.panel__body` `.panel__header`
-
-  Tokens: `background`, `border`, `foreground`
-
-### `elements/content/terminal/index.css`
-
-- **.terminal** — `.terminal` `.terminal--loading` `.terminal__viewport`
-
-  Tokens: `background`
-
 ### `elements/forms/input/index.css`
 
 - **.input** — `.input` `.input--error` `.input--sm`
