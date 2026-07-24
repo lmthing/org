@@ -1,32 +1,15 @@
-import * as React from 'react'
-
 /**
- * Pressable — the clickable primitive (Phase 0): a `<button>` (or `<a>`/`<div>` via `as`).
+ * Pressable — the clickable primitive, now a real Tamagui primitive (Part III / B3.2).
  *
- * PURE PASSTHROUGH `forwardRef` wrapper — renders the tag with the caller's props verbatim, so
- * replacing a raw `<button>` (or a clickable `<div>`) produces byte-identical HTML. In Phase 1
- * its internals become a Tamagui `Pressable`: on web it still renders `<button>`/role and maps
- * `onPress`→`onClick`; on native it is an RN `Pressable` (§4).
+ * Renders a real `<button>` (default) / `<a>` / `<div>` via per-tag `createComponent` (so the host
+ * element is runtime-guaranteed — Tamagui's `tag` prop is compile-only), with `isText: true` so the
+ * `.is_Text` base leaves font/line-height alone (a button carries `text-sm`; the `.is_View` base would
+ * force them — the B2 collision). Web output computes like a plain (preflight-reset) button/anchor,
+ * proven ≡ raw tags (tag NAME + computed style) in `apps/web/b0-probe/pressable-variants.mjs`. Accepts
+ * the surfaces' DOM props (className/onClick/disabled/href/…) PLUS the `display`/text-flow style props
+ * the codemod / wrapper components lift out of the Tailwind display classes `.is_Text` fights. The
+ * `index.native.tsx` fork is the RN target (maps `onPress`).
  *
- * See docs/react-native-tamagui-migration.md §1.5 / §4.
+ * See docs/react-native-tamagui-migration.md §1.5 / §4 / Part III B3.2.
  */
-export type PressableAs = 'button' | 'a' | 'div'
-
-// Button-based (the default tag) plus the anchor-specific attributes used when `as="a"`. Kept a
-// button base rather than a button&anchor intersection so spreading plain button props (the
-// common case, e.g. chat's <Button>) stays assignable — the intersection over-constrains.
-export type PressableProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
-  Pick<
-    React.AnchorHTMLAttributes<HTMLAnchorElement>,
-    'href' | 'target' | 'rel' | 'download' | 'referrerPolicy' | 'hrefLang'
-  > & {
-    /** Host tag to render. Defaults to `button`. Use `a` for links, `div` for clickable boxes. */
-    as?: PressableAs
-  }
-
-const Pressable = React.forwardRef<HTMLElement, PressableProps>(({ as, ...props }, ref) =>
-  React.createElement((as ?? 'button') as string, { ...props, ref }),
-)
-Pressable.displayName = 'Pressable'
-
-export { Pressable }
+export { Pressable, type PressablePrimitiveProps as PressableProps, type PressableAs } from '../_tamagui'

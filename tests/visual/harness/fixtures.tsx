@@ -1,25 +1,25 @@
 import * as React from 'react'
 import {
   Box,
-  Pressable,
   Link,
   List,
   ListItem,
 } from '../../../libs/ui/src/elements/primitives/index'
 
-// NOTE: Row/Col (Part III / B2) AND Text (B3.1) are now real Tamagui primitives. Their box-model /
-// text-flow parity is proven where it can be proven FAITHFULLY — under the real theme.css + Tailwind
-// PREFLIGHT (which resets box-sizing/margins), i.e. the apps/web/b0-probe slices (surface + text-
-// variants) and the eq-fixtures. This self-contained harness has NO preflight, so a real Tamagui
-// primitive rendered bare here would diff from a raw tag on preflight-owned props (box-sizing,
-// heading margins) — noise that never occurs in production. So the bare fixtures below keep using
-// still-passthrough primitives (Box + the fx-row/fx-col classes; a local `PassText` for text), which
-// KEEP their `main` baselines byte-valid. The real Tamagui Text proof lives in b0-probe/text-variants.
+// NOTE: Row/Col (B2), Text (B3.1) AND Pressable (B3.2) are now real Tamagui primitives. Their
+// box-model / text-flow parity is proven where it can be proven FAITHFULLY — under the real theme.css
+// + Tailwind PREFLIGHT (which resets box-sizing/margins/the button UA styling), i.e. the
+// apps/web/b0-probe slices (surface + text-variants + pressable-variants) and the eq-fixtures. This
+// self-contained harness has NO preflight, so a real Tamagui primitive rendered bare here would diff
+// from a raw tag on preflight-owned props (box-sizing, heading margins, button border/appearance) —
+// noise that never occurs in production. So the bare fixtures below keep using still-passthrough
+// primitives (Box + the fx-row/fx-col classes; local `PassText`/`PassPressable`), which KEEP their
+// `main` baselines byte-valid. The real Tamagui proofs live in b0-probe/{text,pressable}-variants.
 
 /**
- * PassText — a local passthrough copy of the PRE-swap `Text` primitive (renders the raw tag with
- * props verbatim), used only by the bare fixtures so their passthrough `main` baselines stay valid
- * now that the real `Text` is Tamagui. Same rationale as the Row/Col → `Box` swap above.
+ * Local passthrough copies of the PRE-swap `Text`/`Pressable` primitives (render the raw tag with
+ * props verbatim), used only by the bare fixtures so their passthrough `main` baselines stay valid now
+ * that the real primitives are Tamagui. Same rationale as the Row/Col → `Box` swap above.
  */
 const PassText = React.forwardRef<
   HTMLElement,
@@ -29,6 +29,13 @@ const PassText = React.forwardRef<
 )
 PassText.displayName = 'PassText'
 const Text = PassText
+
+const PassPressable = React.forwardRef<
+  HTMLElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { as?: string; href?: string }
+>(({ as, ...props }, ref) => React.createElement((as ?? 'button') as string, { ...props, ref }))
+PassPressable.displayName = 'PassPressable'
+const Pressable = PassPressable
 
 /**
  * Frozen fixtures for the visual/computed-style harness (§3.1).

@@ -214,8 +214,11 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
               <Prim.Row key={s.sessionId} className="group gap-1" alignItems="center">
                 <Prim.Pressable
                   onClick={() => void resumeSession(s.sessionId)}
+                  overflow="hidden"
+                  textOverflow="ellipsis"
+                  whiteSpace="nowrap"
                   className={cn(
-                    'flex-1 text-left px-2 py-1.5 rounded-lg text-sm truncate transition-colors',
+                    'flex-1 text-left px-2 py-1.5 rounded-lg text-sm transition-colors',
                     isActive
                       ? 'bg-muted text-foreground font-medium'
                       : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
@@ -230,7 +233,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                 </Prim.Pressable>
                 <Prim.Pressable
                   onClick={() => void deleteSession(s.sessionId)}
-                  className="hidden group-hover:flex w-5 h-5 items-center justify-center text-muted-foreground hover:text-destructive rounded text-xs shrink-0"
+                  className="!hidden group-hover:!flex w-5 h-5 items-center justify-center text-muted-foreground hover:text-destructive rounded text-xs shrink-0"
                   title="Delete"
                 >×</Prim.Pressable>
               </Prim.Row>

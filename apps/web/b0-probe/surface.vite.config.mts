@@ -35,6 +35,7 @@ export default defineConfig({
         'theme-check': path.join(here, 'theme-check.html'),
         'text-probe': path.join(here, 'text-probe.html'),
         'text-variants': path.join(here, 'text-variants.html'),
+        'pressable-variants': path.join(here, 'pressable-variants.html'),
       },
     },
   },

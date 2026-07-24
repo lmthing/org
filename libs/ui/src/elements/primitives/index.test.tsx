@@ -100,19 +100,26 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     }
   })
 
-  it('Pressable emits <button> by default and <a>/<div> via `as`, matching raw tags', () => {
-    const btn = { className: 'b', disabled: true, title: 't' } as const
-    expect(html(<Pressable {...btn}>go</Pressable>)).toBe(html(<button {...btn}>go</button>))
-    expect(html(<Pressable as="a" href="/x" className="l">go</Pressable>)).toBe(
-      html(<a href="/x" className="l">go</a>),
-    )
-    expect(html(<Pressable as="div" role="button" className="d">go</Pressable>)).toBe(
-      html(<div role="button" className="d">go</div>),
-    )
+  // Part III / B3.2: Pressable is now a real Tamagui primitive (per-tag `createComponent`, `isText`).
+  // It renders the real `<button>`/`<a>`/`<div>` (tag runtime-guaranteed) and passes DOM props through;
+  // computed-style parity vs the raw tag is proven in apps/web/b0-probe/pressable-variants.mjs.
+  it('Pressable renders <button> by default and <a>/<div> via `as`, keeping DOM props + children', () => {
+    const btn = withProvider(<Pressable className="b" disabled title="t" data-x="1">go</Pressable>)
+      .container.querySelector('[data-x]')!
+    expect(btn.tagName).toBe('BUTTON')
+    expect(btn.className).toContain('b')
+    expect((btn as HTMLButtonElement).disabled).toBe(true)
+    expect(btn.textContent).toBe('go')
+    const a = withProvider(<Pressable as="a" href="/x" data-x="2">go</Pressable>).container.querySelector('[data-x]')!
+    expect(a.tagName).toBe('A')
+    expect(a.getAttribute('href')).toBe('/x')
+    const div = withProvider(<Pressable as="div" role="button" data-x="3">go</Pressable>).container.querySelector('[data-x]')!
+    expect(div.tagName).toBe('DIV')
+    expect(div.getAttribute('role')).toBe('button')
   })
 
   it('Pressable adds NO type attribute by default (matches a raw <button>)', () => {
-    const el = render(<Pressable>x</Pressable>).container.firstElementChild!
+    const el = withProvider(<Pressable data-x="1">x</Pressable>).container.querySelector('[data-x]')!
     expect(el.tagName).toBe('BUTTON')
     expect(el.hasAttribute('type')).toBe(false)
   })
@@ -218,7 +225,8 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(inputRef.current?.tagName).toBe('INPUT')
 
     const btnRef = React.createRef<HTMLButtonElement>()
-    render(<Pressable ref={btnRef as React.Ref<HTMLElement>}>x</Pressable>)
+    // Pressable is Tamagui now → needs the provider; it still forwards its ref to the host <button>.
+    withProvider(<Pressable ref={btnRef as React.Ref<HTMLElement>}>x</Pressable>)
     expect(btnRef.current?.tagName).toBe('BUTTON')
 
     const taRef = React.createRef<HTMLTextAreaElement>()
