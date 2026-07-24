@@ -1,13 +1,27 @@
 import * as Prim from '../elements/primitives/index.js';
-import '@lmthing/css/components/computer/status-card.css'
 import { Card, CardHeader, CardBody } from '../elements/content/card'
 import { Badge } from '../elements/content/badge'
 import { Caption } from '../elements/typography/caption'
 import { Heading } from '../elements/typography/heading'
-import { cn } from '../lib/utils'
 
 export type RuntimeStatus = 'booting' | 'running' | 'stopped' | 'error'
 export type RuntimeTier = 'webcontainer' | 'flyio'
+
+// .computer-status-card__indicator--<status> / __dot--<status> color modifiers → conditional props
+// (status-card.styled.tsx proof). The booting dot's `animate-pulse` is a Tailwind builtin (not from
+// this component's CSS) so it stays a residual className until the P4 animation driver.
+const INDICATOR_COLOR: Record<RuntimeStatus, string> = {
+  running: '$success',
+  booting: '$warning',
+  stopped: '$muted-foreground',
+  error: '$destructive',
+}
+const DOT_BG: Record<RuntimeStatus, string> = {
+  running: '$success',
+  booting: '$warning',
+  stopped: '$muted-foreground',
+  error: '$destructive',
+}
 
 export interface StatusCardProps {
   status: RuntimeStatus
@@ -32,15 +46,22 @@ function StatusCard({ status, tier, uptime }: StatusCardProps) {
         <Heading level={4}>Status</Heading>
       </CardHeader>
       <CardBody>
-        <Prim.Box className="computer-status-card">
-          <Prim.Text className={cn(
-            'computer-status-card__indicator',
-            `computer-status-card__indicator--${status}`,
-          )}>
-            <Prim.Text className={cn(
-              'computer-status-card__dot',
-              `computer-status-card__dot--${status}`,
-            )} />
+        <Prim.Box display="flex" flexDirection="column" gap="$2">
+          <Prim.Text
+            display="inline-flex"
+            alignItems="center"
+            gap="$1.5"
+            fontSize="$sm"
+            fontWeight="$medium"
+            color={INDICATOR_COLOR[status]}
+          >
+            <Prim.Text
+              width="$2"
+              height="$2"
+              borderRadius="$radius-full"
+              backgroundColor={DOT_BG[status]}
+              className={status === 'booting' ? 'animate-pulse' : undefined}
+            />
             {status}
           </Prim.Text>
           <Badge variant={tier === 'flyio' ? 'primary' : 'muted'}>
