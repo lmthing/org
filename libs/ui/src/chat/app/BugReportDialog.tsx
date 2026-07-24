@@ -101,7 +101,7 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
           </Prim.Row>
         </Prim.Col>
       ) : (
-        <Prim.Form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+        <Prim.Form className="flex-col gap-3" display="flex" onSubmit={handleSubmit}>
           <Prim.Col className="gap-1">
             <Prim.Text as="label" className="text-xs text-muted-foreground" htmlFor="bug-title">Title</Prim.Text>
             <Input

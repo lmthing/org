@@ -1,11 +1,6 @@
 import * as React from 'react'
-import {
-  Link,
-  List,
-  ListItem,
-} from '../../../libs/ui/src/elements/primitives/index'
 
-// NOTE: Row/Col (B2), Text (B3.1), Pressable (B3.2) AND Box (B3.3) are now real Tamagui primitives. Their
+// NOTE: Row/Col (B2), Text (B3.1), Pressable (B3.2), Box (B3.3), Link/List/ListItem (B3.4-leaf) are now real Tamagui primitives. Their
 // box-model / text-flow parity is proven where it can be proven FAITHFULLY — under the real theme.css
 // + Tailwind PREFLIGHT (which resets box-sizing/margins/the button UA styling), i.e. the
 // apps/web/b0-probe slices (surface + text-variants + pressable-variants) and the eq-fixtures. This
@@ -42,6 +37,19 @@ const PassBox = React.forwardRef<
 >(({ as, ...props }, ref) => React.createElement((as ?? 'div') as string, { ...props, ref }))
 PassBox.displayName = 'PassBox'
 const Box = PassBox
+
+const Link = React.forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchorElement>>(
+  (props, ref) => React.createElement('a', { ...props, ref }),
+)
+Link.displayName = 'PassLink'
+const List = React.forwardRef<HTMLElement, React.HTMLAttributes<HTMLElement> & { ordered?: boolean }>(
+  ({ ordered, ...props }, ref) => React.createElement(ordered ? 'ol' : 'ul', { ...props, ref }),
+)
+List.displayName = 'PassList'
+const ListItem = React.forwardRef<HTMLLIElement, React.LiHTMLAttributes<HTMLLIElement>>(
+  (props, ref) => React.createElement('li', { ...props, ref }),
+)
+ListItem.displayName = 'PassListItem'
 
 /**
  * Frozen fixtures for the visual/computed-style harness (§3.1).

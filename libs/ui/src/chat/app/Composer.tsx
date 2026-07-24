@@ -309,7 +309,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
       <Prim.Row className="relative gap-2 bg-card border border-border rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-ring transition-shadow" alignItems="flex-end">
         {/* Dropdown */}
         {dropdownOpen && (
-          <Prim.List ref={dropdownRef} className="absolute bottom-full left-4 mb-2 max-h-60 overflow-auto bg-popover text-popover-foreground border border-border rounded-md shadow-lg z-50 min-w-[200px] text-sm py-1">
+          <Prim.List ref={dropdownRef} className="absolute bottom-full left-4 max-h-60 overflow-auto bg-popover text-popover-foreground border border-border rounded-md shadow-lg z-50 min-w-[200px] text-sm py-1" marginBottom="0.5rem">
             {filteredCompletions.map((c, i) => (
               <Prim.ListItem
                 key={c}

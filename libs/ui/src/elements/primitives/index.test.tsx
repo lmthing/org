@@ -139,23 +139,29 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(html(<Image {...props} />)).toBe(html(<img {...props} />))
   })
 
-  it('Link emits <a> verbatim', () => {
-    const props = { href: '/x', target: '_blank', rel: 'noreferrer', className: 'l' } as const
-    expect(html(<Link {...props}>go</Link>)).toBe(html(<a {...props}>go</a>))
+  // Part III B3.4-leaf: Link/Form/List/ListItem are real Tamagui primitives now — assert the DOM tag +
+  // prop passthrough (not byte-identity). Computed parity proven under real CSS in the b0-probe slices.
+  it('Link renders <a>, keeping href/DOM props + children', () => {
+    const a = withProvider(<Link href="/x" target="_blank" rel="noreferrer" className="l" data-x="1">go</Link>)
+      .container.querySelector('[data-x]')!
+    expect(a.tagName).toBe('A')
+    expect(a.getAttribute('href')).toBe('/x')
+    expect(a.className).toContain('l')
+    expect(a.textContent).toBe('go')
   })
 
-  it('Form emits <form> verbatim', () => {
-    expect(html(<Form className="f" method="post">c</Form>)).toBe(
-      html(<form className="f" method="post">c</form>),
-    )
+  it('Form renders <form>, keeping method/DOM props', () => {
+    const f = withProvider(<Form className="f" method="post" data-x="1">c</Form>).container.querySelector('[data-x]')!
+    expect(f.tagName).toBe('FORM')
+    expect(f.getAttribute('method')).toBe('post')
   })
 
-  it('List emits <ul>/<ol> and ListItem emits <li>, matching raw tags', () => {
-    expect(html(<List className="l">c</List>)).toBe(html(<ul className="l">c</ul>))
-    expect(html(<List ordered className="l">c</List>)).toBe(html(<ol className="l">c</ol>))
-    expect(html(<ListItem className="li" data-i="1">c</ListItem>)).toBe(
-      html(<li className="li" data-i="1">c</li>),
-    )
+  it('List renders <ul>/<ol> and ListItem renders <li>', () => {
+    expect(withProvider(<List data-x="1">c</List>).container.querySelector('[data-x]')!.tagName).toBe('UL')
+    expect(withProvider(<List ordered data-x="2">c</List>).container.querySelector('[data-x]')!.tagName).toBe('OL')
+    const li = withProvider(<ListItem className="li" data-i="1">c</ListItem>).container.querySelector('[data-i]')!
+    expect(li.tagName).toBe('LI')
+    expect(li.className).toContain('li')
   })
 
   it('form controls emit input/textarea/select/option verbatim', () => {

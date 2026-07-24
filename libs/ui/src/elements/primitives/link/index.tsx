@@ -1,14 +1,7 @@
-import * as React from 'react'
-import { hostPrimitive } from '../_host'
-
 /**
- * Link — the `<a>` primitive (Phase 0). Pure passthrough. Phase 1 maps `onPress`→`onClick` on
- * web and to a native pressable/linking handler on RN.
- *
- * See docs/react-native-tamagui-migration.md §1.5.
+ * Link — the anchor primitive, now a real Tamagui primitive (Part III / B3.4-leaf). Renders a real
+ * `<a>` via per-tag `createComponent` (`isText`, display inline), reproducing a plain anchor
+ * (font/line-height inherit; margins/display lift to props). The `index.native.tsx` fork is the RN
+ * target (`Linking.openURL`). See docs/react-native-tamagui-migration.md §1.5 / §4.
  */
-export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement>
-
-const Link = hostPrimitive<HTMLAnchorElement, LinkProps>('a', 'Link')
-
-export { Link }
+export { Link, type LinkProps } from '../_tamagui'

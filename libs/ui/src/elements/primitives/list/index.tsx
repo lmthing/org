@@ -1,27 +1,7 @@
-import * as React from 'react'
-import { hostPrimitive } from '../_host'
-
 /**
- * List / ListItem — the `<ul>`/`<ol>` + `<li>` primitives (Phase 0). Pure passthrough.
- * `ordered` renders `<ol>`. Phase 1 maps these to Tamagui `YStack`/list rows (native
- * `FlatList` where virtualization matters — see the `Tree`→`FlatList` note in §7).
- *
- * (Distinct from the styled `elements/content/list-item` row component, which is a themed item.)
- *
- * See docs/react-native-tamagui-migration.md §1.5.
+ * List / ListItem — the `<ul>`/`<ol>`/`<li>` primitives, now real Tamagui primitives (Part III /
+ * B3.4-leaf). Per-tag `createComponent` (`isText`; List → display block, ListItem → display list-item).
+ * `.is_Text` sets no list-style, so `list-disc`/`list-decimal`/`ml-*` classes work (margins lifted).
+ * `ordered` renders `<ol>`. The `index.native.tsx` fork renders RN Views. See docs §1.5 / §4.
  */
-export type ListProps = React.HTMLAttributes<HTMLElement> & {
-  /** Render an ordered `<ol>` instead of an unordered `<ul>`. */
-  ordered?: boolean
-}
-
-const List = React.forwardRef<HTMLElement, ListProps>(({ ordered, ...props }, ref) =>
-  React.createElement((ordered ? 'ol' : 'ul') as string, { ...props, ref }),
-)
-List.displayName = 'List'
-
-export type ListItemProps = React.LiHTMLAttributes<HTMLLIElement>
-
-const ListItem = hostPrimitive<HTMLLIElement, ListItemProps>('li', 'ListItem')
-
-export { List, ListItem }
+export { List, type ListProps, ListItem, type ListItemProps } from '../_tamagui'
