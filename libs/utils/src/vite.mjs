@@ -154,6 +154,10 @@ export function createViteConfig(dirname, overrides) {
         '@lmthing/ui': path.resolve(orgRoot, 'libs/ui/src'),
         // @lmthing/agent-ui is now a shim for @lmthing/ui/chat; alias to chat source.
         '@lmthing/agent-ui': path.resolve(orgRoot, 'libs/ui/src/chat'),
+        // Specific subpath before the generic alias: the package `exports` maps this to a nested
+        // file the naive `@lmthing/css` prefix alias can't resolve (bundled once the Tamagui
+        // primitives pull in tamagui.config → @lmthing/css/tamagui-tokens).
+        '@lmthing/css/tamagui-tokens': path.resolve(orgRoot, 'libs/css/src/tamagui/tokens.generated.ts'),
         '@lmthing/css': path.resolve(orgRoot, 'libs/css/src'),
         '@lmthing/state': path.resolve(orgRoot, 'libs/state/src'),
         '@lmthing/auth': path.resolve(orgRoot, 'libs/auth/src'),

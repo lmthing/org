@@ -3,12 +3,16 @@ import {
   Box,
   Text,
   Pressable,
-  Row,
-  Col,
   Link,
   List,
   ListItem,
 } from '../../../libs/ui/src/elements/primitives/index'
+
+// NOTE: Row/Col are now real Tamagui primitives (Part III / B2). This harness's Row/Col box-model
+// coverage moved to the EQUIVALENCE fixtures (eq-fixtures.tsx) + the apps/web/b0-probe surface slice,
+// which prove the real styled() defs ≡ plain flex divs. The flex-container fixtures below therefore
+// use the still-passthrough Box + the fx-row/fx-col classes (an identical `<div class="flex …">`), so
+// their `main` baselines stay valid without a TamaguiProvider in this self-contained harness.
 
 /**
  * Frozen fixtures for the visual/computed-style harness (§3.1).
@@ -84,21 +88,21 @@ export const fixtures: Fixture[] = [
   {
     name: 'row-explicit',
     render: () => (
-      <Row className="fx-row">
+      <Box className="fx-row">
         <Box className="fx-chip">one</Box>
         <Box className="fx-chip">two</Box>
         <Box className="fx-chip">three</Box>
-      </Row>
+      </Box>
     ),
   },
   {
     name: 'col-explicit',
     render: () => (
-      <Col className="fx-col">
+      <Box className="fx-col">
         <Box className="fx-chip">alpha</Box>
         <Box className="fx-chip">beta</Box>
         <Box className="fx-chip">gamma</Box>
-      </Col>
+      </Box>
     ),
   },
   {
@@ -122,29 +126,29 @@ export const fixtures: Fixture[] = [
     name: 'composite-card',
     render: () => (
       <Box as="article" className="fx-card">
-        <Row className="fx-card-head">
+        <Box className="fx-card-head">
           <Box className="fx-avatar" />
-          <Col className="fx-card-meta">
+          <Box className="fx-card-meta">
             <Text as="strong" className="fx-title">
               Composite Card
             </Text>
             <Text as="small" className="fx-muted">
               nested rows, cols, text and a pressable
             </Text>
-          </Col>
-        </Row>
+          </Box>
+        </Box>
         <Text block className="fx-prose">
           Body copy that exercises nested flex containers with a constrained width so overflow
           and shrink behavior is observable.
         </Text>
-        <Row className="fx-card-actions">
+        <Box className="fx-card-actions">
           <Pressable className="fx-btn" type="button">
             Confirm
           </Pressable>
           <Pressable className="fx-btn fx-btn--ghost" type="button">
             Cancel
           </Pressable>
-        </Row>
+        </Box>
       </Box>
     ),
   },
