@@ -1,5 +1,4 @@
 import * as Prim from '../elements/primitives/index.js';
-import '@lmthing/css/components/computer/ide-layout.css'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 import { Badge } from '../elements/content/badge'
 import { Loader2 } from 'lucide-react'
@@ -55,19 +54,55 @@ function IdeLayout(props: IdeLayoutProps) {
   const { status, isBooting, isInstalling, onNavigate, onRestart, restarting } = props
 
   return (
-    <Prim.Box className="ide-layout">
-      <Prim.Box className="ide-layout__header">
-        <Prim.Text className="ide-layout__title"><CozyThingText text="lmthing.computer" /></Prim.Text>
+    <Prim.Box
+      display="flex"
+      flexDirection="column"
+      height="100vh"
+      overflow="hidden"
+      backgroundColor="$background"
+      color="$foreground"
+    >
+      <Prim.Box
+        height="$10"
+        display="flex"
+        alignItems="center"
+        gap="$3"
+        paddingHorizontal="$4"
+        borderBottomWidth={1}
+        borderBottomColor="$border"
+        backgroundColor="$card"
+        flexShrink={0}
+      >
+        <Prim.Text fontSize="$sm" fontWeight="$semibold"><CozyThingText text="lmthing.computer" /></Prim.Text>
         {onNavigate && (
-          <Prim.Box as="nav" className="ide-layout__nav">
+          <Prim.Box as="nav" display="flex" alignItems="center" gap="$1" marginLeft="$4">
             {navItems.map((item) => (
-              <Prim.Pressable key={item.path} onClick={() => onNavigate(item.path)} className="ide-layout__nav-btn">
+              <Prim.Pressable
+                key={item.path}
+                onClick={() => onNavigate(item.path)}
+                fontSize="$xs"
+                color="$muted-foreground"
+                paddingHorizontal="$2"
+                paddingVertical="$1"
+                borderRadius="$radius"
+                cursor="pointer"
+                backgroundColor="transparent"
+                borderWidth={0}
+                hoverStyle={{ color: '$foreground' }}
+              >
                 {item.label}
               </Prim.Pressable>
             ))}
           </Prim.Box>
         )}
-        <Prim.Box className="ide-layout__status">
+        <Prim.Box
+          display="flex"
+          alignItems="center"
+          gap="$2"
+          marginLeft="auto"
+          fontSize="$sm"
+          color="$muted-foreground"
+        >
           {(isBooting || isInstalling) && <Loader2 size={14} className="animate-spin" />}
           {isBooting && 'Booting...'}
           {isInstalling && 'Installing dependencies...'}
@@ -78,7 +113,14 @@ function IdeLayout(props: IdeLayoutProps) {
             <Prim.Pressable
               onClick={restarting ? undefined : onRestart}
               disabled={restarting}
-              className="ide-layout__restart-btn"
+              fontSize="$xs"
+              color="$muted-foreground"
+              cursor="pointer"
+              backgroundColor="transparent"
+              borderWidth={0}
+              padding="$0"
+              hoverStyle={{ color: '$foreground' }}
+              disabledStyle={{ opacity: 0.4 }}
               title="Restart CLI process (reloads .env)"
             >
               {restarting ? '↻' : '⏻'}
@@ -86,9 +128,9 @@ function IdeLayout(props: IdeLayoutProps) {
           )}
         </Prim.Box>
       </Prim.Box>
-      <Prim.Box className="ide-layout__body">
-        <Prim.Box className="ide-layout__split ide-layout__split--horizontal">
-          <Prim.Box className="ide-layout__pane ide-layout__pane--sidebar">
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden">
+        <Prim.Box display="flex" width="100%" height="100%" minHeight={0} minWidth={0} flexDirection="row">
+          <Prim.Box minHeight={0} minWidth={0} overflow="hidden" flexShrink={0} flexBasis="15%">
             <IdeFileTree
               fileTree={props.fileTree}
               activeFile={props.activeFile}
@@ -99,11 +141,11 @@ function IdeLayout(props: IdeLayoutProps) {
             />
           </Prim.Box>
 
-          <Prim.Box className="ide-layout__divider ide-layout__divider--horizontal" />
+          <Prim.Box width="$1" backgroundColor="$border" flexShrink={0} />
 
-          <Prim.Box className="ide-layout__pane ide-layout__pane--main">
-            <Prim.Box className="ide-layout__split ide-layout__split--vertical">
-              <Prim.Box className="ide-layout__pane ide-layout__pane--editor">
+          <Prim.Box minHeight={0} minWidth={0} overflow="hidden" flexGrow={1} flexShrink={1} flexBasis="0%">
+            <Prim.Box display="flex" width="100%" height="100%" minHeight={0} minWidth={0} flexDirection="column">
+              <Prim.Box minHeight={0} minWidth={0} overflow="hidden" flexGrow={1} flexShrink={1} flexBasis="0%">
                 <IdeEditor
                   openFiles={props.openFiles}
                   activeFile={props.activeFile}
@@ -114,9 +156,9 @@ function IdeLayout(props: IdeLayoutProps) {
                 />
               </Prim.Box>
 
-              <Prim.Box className="ide-layout__divider ide-layout__divider--vertical" />
+              <Prim.Box height="$1" backgroundColor="$border" flexShrink={0} />
 
-              <Prim.Box className="ide-layout__pane ide-layout__pane--terminal">
+              <Prim.Box minHeight={0} minWidth={0} overflow="hidden" flexShrink={0} flexBasis="30%">
                 <IdeTerminal
                   tabs={props.terminalTabs}
                   activeTabId={props.activeTerminalTabId}

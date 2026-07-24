@@ -1,5 +1,4 @@
 import * as Prim from '../elements/primitives/index.js';
-import '@lmthing/css/components/computer/agents-panel.css'
 import { Panel, PanelHeader, PanelBody } from '../elements/content/panel'
 import { ListItem } from '../elements/content/list-item'
 import { Badge } from '../elements/content/badge'
@@ -25,9 +24,16 @@ function AgentsPanel({ agents }: AgentsPanelProps) {
         <Caption muted>{agents.length} active</Caption>
       </PanelHeader>
       <PanelBody>
-        <Prim.Box className="computer-agents-panel">
+        <Prim.Box display="flex" flexDirection="column" gap="$1">
           {agents.length === 0 ? (
-            <Prim.Box className="computer-agents-panel__empty">No agents running</Prim.Box>
+            <Prim.Text
+              fontSize="$sm"
+              color="$muted-foreground"
+              paddingVertical="$4"
+              textAlign="center"
+            >
+              No agents running
+            </Prim.Text>
           ) : (
             agents.map((agent) => (
               <ListItem

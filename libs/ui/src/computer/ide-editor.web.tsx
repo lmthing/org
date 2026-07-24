@@ -1,7 +1,6 @@
-import '@lmthing/css/components/computer/ide-editor.css'
+import * as Prim from '../elements/primitives/index.js';
 import MonacoEditor from '@monaco-editor/react'
 import { X } from 'lucide-react'
-import { cn } from '../lib/utils'
 
 export interface IdeEditorProps {
   openFiles: string[]
@@ -26,31 +25,72 @@ function getLanguage(filename: string): string {
 
 function IdeEditor({ openFiles, activeFile, fileContents, onFileSelect, onFileClose, onContentChange }: IdeEditorProps) {
   return (
-    <div className="ide-editor">
-      <div className="ide-editor__tabs">
+    <Prim.Box
+      height="100%"
+      display="flex"
+      flexDirection="column"
+      backgroundColor="$background"
+    >
+      <Prim.Box
+        display="flex"
+        alignItems="center"
+        backgroundColor="$card"
+        borderBottomWidth={1}
+        borderBottomColor="$border"
+        overflowX="auto"
+        flexShrink={0}
+      >
         {openFiles.length === 0 ? (
-          <div className="ide-editor__empty" style={{ padding: '0.5rem 1rem' }}>
+          <Prim.Text
+            flexGrow={1}
+            flexShrink={1}
+            flexBasis="0%"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            color="$muted-foreground"
+            fontSize="$sm"
+            style={{ padding: '0.5rem 1rem' }}
+          >
             Select a file to edit
-          </div>
+          </Prim.Text>
         ) : (
           openFiles.map((file) => (
-            <div
+            <Prim.Box
               key={file}
-              className={cn('ide-editor__tab', activeFile === file && 'ide-editor__tab--active')}
+              display="flex"
+              alignItems="center"
+              gap="$2"
+              paddingHorizontal="$3"
+              paddingVertical="$1.5"
+              borderRightWidth={1}
+              borderRightColor="$border"
+              cursor="pointer"
+              fontSize="$sm"
+              color="$muted-foreground"
+              hoverStyle={{ color: '$foreground' }}
+              {...(activeFile === file ? { backgroundColor: '$background', color: '$foreground' } : {})}
               onClick={() => onFileSelect(file)}
             >
               <span>{file.split('/').pop()}</span>
-              <button
-                className="ide-editor__tab-close"
+              <Prim.Pressable
+                padding="$0.5"
+                borderRadius="$radius"
+                hoverStyle={{ backgroundColor: '$accent' }}
                 onClick={(e) => { e.stopPropagation(); onFileClose(file) }}
               >
                 <X size={14} />
-              </button>
-            </div>
+              </Prim.Pressable>
+            </Prim.Box>
           ))
         )}
-      </div>
-      <div className="ide-editor__content">
+      </Prim.Box>
+      <Prim.Box
+        flexGrow={1}
+        flexShrink={1}
+        flexBasis="0%"
+        minHeight={0}
+      >
         {activeFile ? (
           <MonacoEditor
             height="100%"
@@ -70,10 +110,21 @@ function IdeEditor({ openFiles, activeFile, fileContents, onFileSelect, onFileCl
             }}
           />
         ) : (
-          <div className="ide-editor__empty">No file open</div>
+          <Prim.Text
+            flexGrow={1}
+            flexShrink={1}
+            flexBasis="0%"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            color="$muted-foreground"
+            fontSize="$sm"
+          >
+            No file open
+          </Prim.Text>
         )}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 
