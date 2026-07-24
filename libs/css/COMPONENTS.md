@@ -7,24 +7,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
 ## Elements (primitives)
 
-### `elements/forms/input/index.css`
-
-- **.input** — `.input` `.input--error` `.input--sm`
-
-  Tokens: `background`, `destructive`, `input`, `muted-foreground`, `ring`
-
-### `elements/forms/select/index.css`
-
-- **.select** — `.select` `.select__content` `.select__trigger`
-
-  Tokens: `background`, `border`, `input`, `muted-foreground`, `popover`, `popover-foreground`, `ring`
-
-### `elements/forms/textarea/index.css`
-
-- **.textarea** — `.textarea` `.textarea--sm`
-
-  Tokens: `background`, `input`, `muted-foreground`, `ring`
-
 ### `elements/nav/app-sidebar/index.css`
 
 - **.app-sidebar** — `.app-sidebar` `.app-sidebar--collapsed` `.app-sidebar--fixed` `.app-sidebar__brand` `.app-sidebar__collapse-btn` `.app-sidebar__content` `.app-sidebar__dropdown` `.app-sidebar__dropdown-add` `.app-sidebar__dropdown-chevron` `.app-sidebar__dropdown-create` `.app-sidebar__dropdown-delete` `.app-sidebar__dropdown-input` `.app-sidebar__dropdown-item` `.app-sidebar__dropdown-item--active` `.app-sidebar__dropdown-label` `.app-sidebar__dropdown-list` `.app-sidebar__dropdown-menu` `.app-sidebar__dropdown-row` `.app-sidebar__dropdown-trigger` `.app-sidebar__empty` `.app-sidebar__footer` `.app-sidebar__header` `.app-sidebar__icon` `.app-sidebar__item` `.app-sidebar__item--active` `.app-sidebar__new-chat` `.app-sidebar__project-row` `.app-sidebar__project-settings` `.app-sidebar__rail` `.app-sidebar__rail-brand` `.app-sidebar__rail-btn` `.app-sidebar__section` `.app-sidebar__section-body` `.app-sidebar__section-count` `.app-sidebar__section-header` `.app-sidebar__section-icon` `.app-sidebar__section-label` `.app-sidebar__top`

@@ -498,20 +498,57 @@ const TextFieldComp = makeControl('input', 'Input')
 const TextAreaComp = makeControl('textarea', 'TextArea')
 const SelectComp = makeControl('select', 'Select')
 
+/**
+ * Three control style props have no Tamagui style-prop path on a `createComponent` host tag and
+ * would otherwise be forwarded to the DOM as unknown attributes (`placeholdertextcolor="$muted-…"`,
+ * which React warns about and browsers ignore):
+ *
+ * - `placeholderTextColor` / `selectionColor` target PSEUDO-ELEMENTS. Tamagui's own base stylesheet
+ *   already carries `.is_Input::placeholder, .is_TextArea::placeholder { color: var(--t_placeholderColor) }`
+ *   (and the `::selection` twin), so the value is delivered by setting that CSS VAR on the element —
+ *   which is why these components are named `Input`/`TextArea` (the selector is `.is_<componentName>`).
+ * - `resize` is a web-only CSS property with no React Native analogue, so Tamagui has no style key
+ *   for it; it goes straight to `style`.
+ *
+ * `$token` values resolve through the SPIKE-A1 var-backed colors (`$muted-foreground` →
+ * `var(--muted-foreground)`), so runtime/per-space themes keep working.
+ */
+const cssValue = (v: string) => (v.startsWith('$') ? `var(--${v.slice(1)})` : v)
+
+function withControlShim<T extends Record<string, unknown>>(props: T): T {
+  const { placeholderTextColor, selectionColor, resize, style, ...rest } = props as Record<string, unknown>
+  if (placeholderTextColor === undefined && selectionColor === undefined && resize === undefined) {
+    return props
+  }
+  return {
+    ...rest,
+    style: {
+      ...(placeholderTextColor !== undefined
+        ? { '--t_placeholderColor': cssValue(String(placeholderTextColor)) }
+        : {}),
+      ...(selectionColor !== undefined
+        ? { '--t_selectionColor': cssValue(String(selectionColor)) }
+        : {}),
+      ...(resize !== undefined ? { resize } : {}),
+      ...(style as object),
+    },
+  } as unknown as T
+}
+
 export type TextFieldPrimitiveProps = React.InputHTMLAttributes<HTMLInputElement> & ControlStyleProps
 export const TextField = React.forwardRef<HTMLInputElement, TextFieldPrimitiveProps>((props, ref) =>
-  React.createElement(TextFieldComp, { ...withFontScale(props), ref }),
+  React.createElement(TextFieldComp, { ...withFontScale(withControlShim(props)), ref }),
 )
 TextField.displayName = 'TextField'
 
 export type TextAreaPrimitiveProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & ControlStyleProps
 export const TextArea = React.forwardRef<HTMLTextAreaElement, TextAreaPrimitiveProps>((props, ref) =>
-  React.createElement(TextAreaComp, { ...withFontScale(props), ref }),
+  React.createElement(TextAreaComp, { ...withFontScale(withControlShim(props)), ref }),
 )
 TextArea.displayName = 'TextArea'
 
 export type SelectPrimitiveProps = React.SelectHTMLAttributes<HTMLSelectElement> & ControlStyleProps
 export const Select = React.forwardRef<HTMLSelectElement, SelectPrimitiveProps>((props, ref) =>
-  React.createElement(SelectComp, { ...withFontScale(props), ref }),
+  React.createElement(SelectComp, { ...withFontScale(withControlShim(props)), ref }),
 )
 Select.displayName = 'Select'

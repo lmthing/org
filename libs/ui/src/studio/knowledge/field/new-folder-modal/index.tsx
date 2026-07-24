@@ -9,6 +9,7 @@ import { Input } from '@lmthing/ui/elements/forms/input'
 import { X } from 'lucide-react'
 import { collectFolders } from '../new-file-modal'
 import '@lmthing/css/components/knowledge/index.css'
+import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
 
 interface NewFolderModalProps {
   isOpen: boolean
@@ -70,7 +71,7 @@ export function NewFolderModal({ isOpen, onClose, onCreate, folders, defaultLoca
             <Prim.Box>
               <Label>Parent Location</Label>
               <Prim.Select
-                className="input new-file-modal__select"
+                {...INPUT_BASE} className="new-file-modal__select"
                 value={parentLocation}
                 onChange={e => setParentLocation(e.target.value)}
               >

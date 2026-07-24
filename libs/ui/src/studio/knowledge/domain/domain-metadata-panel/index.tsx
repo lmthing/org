@@ -16,6 +16,7 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { BookOpen } from 'lucide-react'
 import '@lmthing/css/components/knowledge/index.css'
+import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
 
 export interface DomainMetadataPanelProps {
   domain: string
@@ -110,7 +111,7 @@ export function DomainMetadataPanel({ domain }: DomainMetadataPanelProps) {
         <Prim.Box>
           <Label compact>Render As</Label>
           <Prim.Select
-            className="input"
+            {...INPUT_BASE}
             value={renderAs}
             onChange={e => { setRenderAs(e.target.value); markDirty() }}
           >

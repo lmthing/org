@@ -12,9 +12,18 @@ describe('Select', () => {
     expect(screen.getByRole('combobox')).toBeInTheDocument()
   })
 
-  it('applies select__trigger class to the select element', () => {
+  it('is a real <select> carrying the trigger tokens', () => {
     render(<Select aria-label="choose" data-testid="select" />)
-    expect(screen.getByTestId('select')).toHaveClass('select__trigger')
+    const el = screen.getByTestId('select')
+    expect(el.tagName).toBe('SELECT')
+    expect(el).toHaveClass(
+      '_dsp-flex', '_height-c-size-9', '_backgroundColor-background', '_fs-f-size-sm',
+    )
+  })
+
+  it('sits inside the relatively-positioned wrapper', () => {
+    const { container } = render(<Select aria-label="choose" data-testid="select" />)
+    expect(container.querySelector('.\\_pos-relative')).toBeTruthy()
   })
 
   it('renders options', () => {

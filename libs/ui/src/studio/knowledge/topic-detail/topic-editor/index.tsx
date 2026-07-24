@@ -23,6 +23,7 @@ import {
 } from './markdown-utils'
 import { Settings } from 'lucide-react'
 import '@lmthing/css/components/knowledge/index.css'
+import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
 
 export interface TopicEditorHandle {
   save: () => void
@@ -192,7 +193,7 @@ export const TopicEditor = forwardRef<TopicEditorHandle, TopicEditorProps>(
           {mode === 'edit' ? (
             <Prim.TextArea
               ref={textareaRef}
-              className="input topic-editor__textarea"
+              {...INPUT_BASE} className="topic-editor__textarea"
               value={draftBody}
               onChange={e => handleChange(e.target.value)}
               onKeyDown={handleKeyDown}
