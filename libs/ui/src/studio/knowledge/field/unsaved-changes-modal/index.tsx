@@ -18,12 +18,13 @@ export function UnsavedChangesModal({ isOpen, onDiscard, onCancel, onSave }: Uns
   return (
     <Prim.Box className="dialog__backdrop" onClick={onCancel}>
       <Prim.Box
-        className="dialog unsaved-modal"
+        className="dialog"
+        maxWidth={384}
         onClick={e => e.stopPropagation()}
         onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
       >
         <Prim.Box className="dialog__header">
-          <Prim.Box className="unsaved-modal__header-content">
+          <Prim.Box display="flex" alignItems="center" gap="$2">
             <AlertTriangle className="unsaved-modal__warning-icon" />
             <Heading level={3}>Unsaved Changes</Heading>
           </Prim.Box>
@@ -33,13 +34,13 @@ export function UnsavedChangesModal({ isOpen, onDiscard, onCancel, onSave }: Uns
         </Prim.Box>
 
         <Prim.Box className="dialog__content">
-          <Prim.Box className="unsaved-modal__body">
+          <Prim.Box paddingVertical={0} paddingHorizontal="$6">
             <Caption muted>
               You have unsaved changes. Do you want to save them before switching files?
             </Caption>
           </Prim.Box>
 
-          <Prim.Box className="unsaved-modal__footer">
+          <Prim.Box display="flex" justifyContent="flex-end" gap="$3" paddingVertical="$4" paddingHorizontal="$6" borderTopWidth={1} borderTopColor="$border" marginTop="$4">
             <Button variant="destructive" onClick={onDiscard}>Discard</Button>
             <Button variant="ghost" onClick={onCancel}>Cancel</Button>
             <Button variant="primary" onClick={onSave}>Save</Button>

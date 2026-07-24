@@ -8,18 +8,28 @@ import { splitToolEventContent } from './use-tool-events'
 export function ToolCallDisplay({ content }: { content: string }) {
   const segments = splitToolEventContent(content)
   return (
-    <Prim.Box className="thing-msg__text">
+    <Prim.Text whiteSpace="pre-wrap" wordBreak="break-word">
       {segments.map(segment => {
         if (segment.kind === 'text') return <Prim.Text key={segment.key}>{segment.text}</Prim.Text>
         return (
           <Prim.Text key={segment.key}>
-            <Prim.Box className="thing-tool-event">
+            <Prim.Box
+              marginVertical="$2"
+              padding="$2"
+              borderRadius="$radius-md"
+              fontSize="$xs"
+              fontFamily="monospace"
+              backgroundColor="$muted"
+              borderWidth={1}
+              borderColor="$border"
+              opacity={0.8}
+            >
               {segment.toolContent}
             </Prim.Box>
             {segment.rest}
           </Prim.Text>
         )
       })}
-    </Prim.Box>
+    </Prim.Text>
   )
 }

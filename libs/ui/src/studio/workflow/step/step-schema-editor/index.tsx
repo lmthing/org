@@ -3,7 +3,6 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { cn } from '@lmthing/ui/lib/utils'
 import '@lmthing/css/components/workflow/step-schema-editor/index.css'
 import { useSchemaModel, type JSONSchema } from './use-schema-model'
 import { PropertyRow } from './property-row'
@@ -28,26 +27,52 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
   } = useSchemaModel(value, onChange)
 
   return (
-    <Prim.Box className="schema-editor">
+    <Prim.Box backgroundColor="$muted" borderRadius="0.75rem" overflow="hidden">
       {/* Header with mode toggle */}
-      <Prim.Box className="schema-editor__header">
+      <Prim.Box display="flex" alignItems="center" justifyContent="space-between" paddingVertical="$2" paddingHorizontal="$4" borderBottomWidth={1} borderBottomColor="$border">
         <Label compact>Schema Properties</Label>
-        <Prim.Box className="schema-editor__mode-toggle">
+        <Prim.Box display="flex" alignItems="center" gap="$1" backgroundColor="$muted" borderRadius="0.5rem" padding="$1">
           <Prim.Pressable
             onClick={() => setViewMode('visual')}
-            className={cn(
-              'schema-editor__mode-btn',
-              viewMode === 'visual' && 'schema-editor__mode-btn--active'
-            )}
+            fontSize="$sm"
+            fontWeight="$medium"
+            paddingVertical="$1"
+            paddingHorizontal="$3"
+            borderRadius="0.375rem"
+            color="$muted-foreground"
+            // transition-all awaits the animation driver (§5/P4)
+            hoverStyle={{ color: '$foreground' }}
+            {...(viewMode === 'visual'
+              ? {
+                  backgroundColor: '$card',
+                  color: '$foreground',
+                  shadowColor: 'rgba(0,0,0,0.05)',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowRadius: 2,
+                }
+              : {})}
           >
             Visual
           </Prim.Pressable>
           <Prim.Pressable
             onClick={handleSwitchToCode}
-            className={cn(
-              'schema-editor__mode-btn',
-              viewMode === 'code' && 'schema-editor__mode-btn--active'
-            )}
+            fontSize="$sm"
+            fontWeight="$medium"
+            paddingVertical="$1"
+            paddingHorizontal="$3"
+            borderRadius="0.375rem"
+            color="$muted-foreground"
+            // transition-all awaits the animation driver (§5/P4)
+            hoverStyle={{ color: '$foreground' }}
+            {...(viewMode === 'code'
+              ? {
+                  backgroundColor: '$card',
+                  color: '$foreground',
+                  shadowColor: 'rgba(0,0,0,0.05)',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowRadius: 2,
+                }
+              : {})}
           >
             Code
           </Prim.Pressable>
@@ -56,10 +81,20 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
 
       {/* Visual editor */}
       {viewMode === 'visual' && (
-        <Prim.Box className="schema-editor__body">
+        <Prim.Box padding="$3">
           {properties.length === 0 ? (
-            <Prim.Box className="schema-editor__empty">
-              <Prim.Box className="schema-editor__empty-icon-wrapper">
+            <Prim.Box textAlign="center" paddingVertical="$8" paddingHorizontal={0}>
+              <Prim.Box
+                width="$12"
+                height="$12"
+                borderRadius="$radius-full"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                marginHorizontal="auto"
+                backgroundColor="$muted"
+                marginBottom="$3"
+              >
                 <Prim.Svg className="schema-editor__empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <Prim.Path d="M9 18V5l12 7-12 7z" />
                 </Prim.Svg>
@@ -73,7 +108,7 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
               </Button>
             </Prim.Box>
           ) : (
-            <Prim.Box className="schema-editor__property-list">
+            <Prim.Box display="flex" flexDirection="column" gap="$2">
               {properties.map((property, index) => (
                 <PropertyRow
                   key={property.id}
@@ -112,7 +147,20 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
               ))}
               <Prim.Pressable
                 onClick={handleAddProperty}
-                className="schema-editor__add-btn"
+                width="100%"
+                fontSize="$sm"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                gap="$2"
+                padding="$3"
+                borderRadius="0.75rem"
+                borderWidth={2}
+                borderStyle="dashed"
+                borderColor="$border"
+                color="$muted-foreground"
+                // transition-colors awaits the animation driver (§5/P4)
+                hoverStyle={{ borderColor: '$brand-3', color: '$brand-3' }}
               >
                 <Prim.Svg className="schema-editor__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <Prim.Path d="M12 5v14M5 12h14" />
@@ -126,7 +174,7 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
 
       {/* Code editor */}
       {viewMode === 'code' && (
-        <Prim.Box className="schema-editor__body">
+        <Prim.Box padding="$3">
           <Textarea
             value={codeValue}
             onChange={(e) => handleCodeChange(e.target.value)}

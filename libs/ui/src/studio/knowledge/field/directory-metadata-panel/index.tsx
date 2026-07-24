@@ -83,7 +83,7 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
   }, [spaceFS, indexPath, type, label, variable, defaultVal, fieldType, required, description])
 
   return (
-    <Prim.Box className="dir-metadata">
+    <Prim.Box padding="$6" maxWidth={512}>
       <Stack gap="md">
         <Stack row className="dir-metadata__header">
           <BookOpen className="dir-metadata__icon" />
@@ -176,7 +176,7 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
           />
         </Prim.Box>
 
-        <Prim.Box className="dir-metadata__footer">
+        <Prim.Box display="flex" justifyContent="flex-end" paddingTop="$2">
           <Button variant="primary" size="sm" disabled={!isDirty} onClick={handleSave}>
             Save
           </Button>

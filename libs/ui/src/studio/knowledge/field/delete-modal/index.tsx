@@ -21,12 +21,13 @@ export function DeleteModal({ isOpen, onClose, onConfirm, nodePath, isDirectory 
   return (
     <Prim.Box className="dialog__backdrop" onClick={onClose}>
       <Prim.Box
-        className="dialog delete-modal"
+        className="dialog"
+        maxWidth={384}
         onClick={e => e.stopPropagation()}
         onKeyDown={e => { if (e.key === 'Escape') onClose() }}
       >
-        <Prim.Box className="dialog__header delete-modal__header">
-          <Prim.Box className="delete-modal__header-content">
+        <Prim.Box className="dialog__header" borderBottomWidth={2} borderBottomColor="$destructive">
+          <Prim.Box display="flex" alignItems="center" gap="$2">
             <AlertTriangle className="delete-modal__warning-icon" />
             <Heading level={3} className="delete-modal__title">Delete {isDirectory ? 'Folder' : 'File'}</Heading>
           </Prim.Box>
@@ -36,7 +37,7 @@ export function DeleteModal({ isOpen, onClose, onConfirm, nodePath, isDirectory 
         </Prim.Box>
 
         <Prim.Box className="dialog__content">
-          <Prim.Box className="delete-modal__body">
+          <Prim.Box paddingVertical={0} paddingHorizontal="$6">
             <Caption>
               Are you sure you want to delete <Prim.Text as="strong">{name}</Prim.Text>?
             </Caption>
@@ -52,7 +53,7 @@ export function DeleteModal({ isOpen, onClose, onConfirm, nodePath, isDirectory 
             )}
           </Prim.Box>
 
-          <Prim.Box className="delete-modal__footer">
+          <Prim.Box display="flex" justifyContent="flex-end" gap="$3" paddingVertical="$4" paddingHorizontal="$6" borderTopWidth={1} borderTopColor="$border" marginTop="$4">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button variant="destructive" onClick={onConfirm}>Delete</Button>
           </Prim.Box>

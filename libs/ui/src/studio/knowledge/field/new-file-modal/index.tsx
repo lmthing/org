@@ -47,7 +47,8 @@ export function NewFileModal({ isOpen, onClose, onCreate, folders, defaultLocati
   return (
     <Prim.Box className="dialog__backdrop" onClick={onClose} onKeyDown={handleKeyDown}>
       <Prim.Box
-        className="dialog new-file-modal"
+        className="dialog"
+        maxWidth={448}
         onClick={e => e.stopPropagation()}
       >
         <Prim.Box className="dialog__header">
@@ -71,7 +72,7 @@ export function NewFileModal({ isOpen, onClose, onCreate, folders, defaultLocati
                   if (e.key === 'Enter') handleCreate()
                 }}
               />
-              <Prim.Text className="new-file-modal__hint">
+              <Prim.Text fontSize="$xs" color="$muted-foreground" marginTop="$1" display="block">
                 .md extension will be added automatically
               </Prim.Text>
             </Prim.Box>
@@ -93,7 +94,7 @@ export function NewFileModal({ isOpen, onClose, onCreate, folders, defaultLocati
             </Prim.Box>
           </Stack>
 
-          <Prim.Box className="new-file-modal__footer">
+          <Prim.Box display="flex" justifyContent="flex-end" gap="$3" paddingVertical="$4" paddingHorizontal="$6" borderTopWidth={1} borderTopColor="$border" marginTop="$4">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button
               variant="primary"

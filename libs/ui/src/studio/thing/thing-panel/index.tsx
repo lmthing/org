@@ -47,7 +47,11 @@ export function ThingPanel({ fullPage, onStatusChange }: ThingPanelProps) {
   } = useThingSession({ onStatusChange })
 
   return (
-    <Prim.Box className={`thing-panel ${fullPage ? 'thing-panel--full' : 'thing-panel--embedded'}`}>
+    <Prim.Box
+      display="flex"
+      backgroundColor="$background"
+      height={fullPage ? '100vh' : '100%'}
+    >
       <ThingSidebar
         fullPage={fullPage}
         onBack={() => navigate({ to: '/' })}
@@ -59,7 +63,7 @@ export function ThingPanel({ fullPage, onStatusChange }: ThingPanelProps) {
       />
 
       {/* Main chat area */}
-      <Prim.Box className="thing-panel__main">
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" display="flex" flexDirection="column" minWidth={0}>
         <ThingChatHeader
           title={currentConversation?.title || 'Chat'}
           isWorking={isWorking}

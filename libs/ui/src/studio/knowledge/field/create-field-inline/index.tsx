@@ -29,7 +29,7 @@ export function CreateFieldInline({ onSubmit, onCancel }: CreateFieldInlineProps
     }
 
     return (
-        <Prim.Box className="panel create-field-inline">
+        <Prim.Box className="panel" marginBottom="$6">
             <Prim.Box className="panel__header">
                 <Stack row gap="md" className="create-field-inline__header-row">
                     <Stack row gap="md" className="create-field-inline__title-row">

@@ -188,7 +188,7 @@ export function ProjectSettingsView() {
                               <Prim.Box as="summary" className="lm-setup-guide__summary">
                                 How to get your keys — setup guide
                               </Prim.Box>
-                              <Prim.Box className="lm-setup-guide__body">
+                              <Prim.Box backgroundColor="$background" borderColor="$border" borderTopWidth={1} borderTopStyle="solid" paddingVertical={13.6} paddingHorizontal="$4">
                                 <Markdown source={integration.readme} />
                               </Prim.Box>
                             </Prim.Box>

@@ -27,10 +27,24 @@ export function ThingSidebar({
   isWorking,
 }: ThingSidebarProps) {
   return (
-    <Prim.Box className="thing-panel__sidebar">
+    <Prim.Box
+      width="$64"
+      borderRightWidth={1}
+      borderRightColor="$border"
+      display="flex"
+      flexDirection="column"
+      flexShrink={0}
+    >
       {/* Sidebar header */}
-      <Prim.Box className="thing-panel__sidebar-header">
-        <Prim.Box className="thing-panel__sidebar-title">
+      <Prim.Box
+        padding="$4"
+        borderBottomWidth={1}
+        borderBottomColor="$border"
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+      >
+        <Prim.Box display="flex" alignItems="center" gap="$2">
           {fullPage && (
             <Prim.Pressable
               className="btn btn--ghost btn--sm"
@@ -39,9 +53,9 @@ export function ThingSidebar({
               <ArrowLeft size={16} />
             </Prim.Pressable>
           )}
-          <Prim.Box className="thing-panel__sidebar-brand">
+          <Prim.Box display="flex" alignItems="center" gap="$1.5">
             <Bot size={18} />
-            <Prim.Text className="thing-panel__sidebar-brand-name">
+            <Prim.Text fontWeight="$semibold" fontSize="$sm">
               <CozyThingText text="THING" />
             </Prim.Text>
           </Prim.Box>
@@ -52,14 +66,29 @@ export function ThingSidebar({
       </Prim.Box>
 
       {/* Conversation list */}
-      <Prim.Box className="thing-panel__sidebar-list">
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflowY="auto" padding="$2">
         {conversations.map(conv => {
           const isCurrent = conv.id === currentConversationId
           return (
             <Prim.Pressable
               key={conv.id}
               onClick={() => onSelectConversation(conv.id)}
-              className={`thing-panel__conv-btn ${isCurrent ? 'thing-panel__conv-btn--active' : ''}`}
+              display="block"
+              width="100%"
+              textAlign="left"
+              paddingVertical="$2"
+              paddingHorizontal="$3"
+              borderRadius="$radius-md"
+              borderWidth={0}
+              backgroundColor="transparent"
+              cursor="pointer"
+              fontSize={13}
+              fontWeight="$normal"
+              overflow="hidden"
+              textOverflow="ellipsis"
+              whiteSpace="nowrap"
+              marginBottom="$0.5"
+              {...(isCurrent ? { backgroundColor: '$muted', fontWeight: '$semibold' } : {})}
             >
               {conv.title}
             </Prim.Pressable>

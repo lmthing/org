@@ -38,7 +38,7 @@ interface MarkdownToolbarProps {
 
 export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolbarProps) {
   return (
-    <Prim.Box className="markdown-toolbar">
+    <Prim.Box display="flex" alignItems="center" flexWrap="wrap" gap="$0.5" paddingVertical="$1" paddingHorizontal="$2" borderBottomWidth={1} borderBottomColor="$border">
       <Button variant="ghost" size="icon" onClick={() => onFormat('bold')} title="Bold (Ctrl+B)" disabled={mode === 'preview'}>
         <Bold className="markdown-toolbar__icon" />
       </Button>
@@ -49,7 +49,7 @@ export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolba
         <Heading1 className="markdown-toolbar__icon" />
       </Button>
 
-      <Prim.Text className="markdown-toolbar__separator" />
+      <Prim.Text width={1} height="$5" backgroundColor="$border" marginVertical={0} marginHorizontal="$1" />
 
       <Button variant="ghost" size="icon" onClick={() => onFormat('bullet-list')} title="Bullet list" disabled={mode === 'preview'}>
         <List className="markdown-toolbar__icon" />
@@ -61,7 +61,7 @@ export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolba
         <Quote className="markdown-toolbar__icon" />
       </Button>
 
-      <Prim.Text className="markdown-toolbar__separator" />
+      <Prim.Text width={1} height="$5" backgroundColor="$border" marginVertical={0} marginHorizontal="$1" />
 
       <Button variant="ghost" size="icon" onClick={() => onFormat('inline-code')} title="Inline code" disabled={mode === 'preview'}>
         <Code className="markdown-toolbar__icon" />
@@ -76,9 +76,9 @@ export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolba
         <Minus className="markdown-toolbar__icon" />
       </Button>
 
-      <Prim.Box className="markdown-toolbar__spacer" />
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" />
 
-      <Prim.Box className="markdown-toolbar__modes">
+      <Prim.Box display="flex" gap="$0.5">
         <Button
           variant={mode === 'edit' ? 'outline' : 'ghost'}
           size="sm"
