@@ -17,6 +17,10 @@ export default defineConfig({
     include: [
       'src/elements/primitives/**/*.test.tsx',
       'src/elements/overlays/**/*.test.tsx',
+      // P2 — the BEM→styled() variant conversions (elements/forms/**/*-styled.test.tsx). See §4.
+      // (The pre-existing forms `index.test.tsx` suites predate the Phase-1 primitive swap and have
+      // unrelated DOM-structure drift; reactivating them is tracked separately, not part of P2.)
+      'src/elements/forms/**/*-styled.test.tsx',
       'src/**/*.parity.test.tsx',
       'src/theme/**/*.test.ts',
       'src/platform/**/*.test.ts',
