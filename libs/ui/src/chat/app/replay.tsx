@@ -67,7 +67,7 @@ export function PlaybackBar(): React.ReactElement | null {
   if (!replay) return null;
   const total = replay.events.length;
   return (
-    <Prim.Box className="flex items-center gap-2 px-3 py-2 border-t border-lm-border bg-lm-panel">
+    <Prim.Row className="gap-2 px-3 py-2 border-t border-lm-border bg-lm-panel" alignItems="center">
       <Prim.Pressable onClick={() => (replay.playing ? pause() : play())} className="text-lm-accent text-[13px] w-6">
         {replay.playing ? '⏸' : '▶'}
       </Prim.Pressable>
@@ -89,6 +89,6 @@ export function PlaybackBar(): React.ReactElement | null {
         {[1, 2, 4, 8].map((s) => <Prim.Option key={s} value={s}>{s}×</Prim.Option>)}
       </Prim.Select>
       <Prim.Pressable onClick={exitReplay} className="text-[11px] text-lm-muted hover:text-lm-text">✕ live</Prim.Pressable>
-    </Prim.Box>
+    </Prim.Row>
   );
 }

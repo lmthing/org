@@ -14,7 +14,7 @@ const techniques = ['RAG', 'Structured Prompt Engineering', 'Multi-Agent Orchest
 
 function Arrow() {
   return (
-    <Prim.Box className="flex items-center px-5" style={{ height: 76 }}>
+    <Prim.Row className="px-5" alignItems="center" style={{ height: 76 }}>
       <Prim.Svg
         width="38"
         height="38"
@@ -27,18 +27,18 @@ function Arrow() {
       >
         <Prim.Path d="M5 12h14M13 6l6 6-6 6" />
       </Prim.Svg>
-    </Prim.Box>
+    </Prim.Row>
   )
 }
 
 export default function Slide4Technology() {
   return (
-    <Prim.Box
-      className="relative flex h-full w-full flex-col items-center justify-center"
+    <Prim.Col
+      className="relative h-full w-full justify-center" alignItems="center"
       style={{ background: colors.bg, padding: '60px 80px 56px' }}
     >
       {/* TOP: headline */}
-      <Prim.Box className="mb-16 flex flex-col items-center">
+      <Prim.Col className="mb-16" alignItems="center">
         <Prim.Box
           className="mb-5 text-xl font-bold uppercase tracking-[0.16em]"
           style={{ color: colors.brand }}
@@ -53,17 +53,19 @@ export default function Slide4Technology() {
           <Prim.Br />
           that <Prim.Text as="em" className="not-italic" style={{ color: colors.brand }}>actually know your domain.</Prim.Text>
         </Prim.Text>
-      </Prim.Box>
+      </Prim.Col>
 
       {/* MIDDLE: flow strip */}
-      <Prim.Box className="mb-16 flex w-full items-start justify-center">
+      <Prim.Row className="mb-16 w-full justify-center" alignItems="flex-start">
         {flowNodes.map((node, i) => (
-          <Prim.Box key={node.label} className="flex items-start">
-            <Prim.Box className="flex flex-col items-center gap-2.5">
-              <Prim.Box
-                className="flex items-center justify-center whitespace-nowrap rounded-2xl border-2 text-xl font-semibold"
-                style={
-                  node.hero
+          <Prim.Row key={node.label} alignItems="flex-start">
+            <Prim.Col className="gap-2.5" alignItems="center">
+              <Prim.Row
+                className="justify-center whitespace-nowrap rounded-2xl border-2 text-xl font-semibold"
+                alignItems="center"
+                style={{
+                  lineHeight: '1.75rem',
+                  ...(node.hero
                     ? {
                         background: colors.bgSection,
                         borderColor: colors.cardBorder,
@@ -83,10 +85,10 @@ export default function Slide4Technology() {
                         padding: '0 32px',
                         height: 76,
                       }
-                }
+                  ) }}
               >
                 {node.isThing ? <CozyThingText text={node.label} className="font-extrabold text-4xl" /> : node.label}
-              </Prim.Box>
+              </Prim.Row>
               <Prim.Box
                 className="max-w-[160px] text-center text-base leading-snug"
                 style={
@@ -103,17 +105,17 @@ export default function Slide4Technology() {
               >
                 {node.sub}
               </Prim.Box>
-            </Prim.Box>
+            </Prim.Col>
             {i < flowNodes.length - 1 && <Arrow />}
-          </Prim.Box>
+          </Prim.Row>
         ))}
-      </Prim.Box>
+      </Prim.Row>
 
       {/* Divider */}
       <Prim.Box className="mb-9 h-px w-full" style={{ background: colors.cardBorder }} />
 
       {/* BOTTOM: technique badges */}
-      <Prim.Box className="flex items-center gap-5">
+      <Prim.Row className="gap-5" alignItems="center">
         {techniques.map((t) => (
           <Prim.Text
             key={t}
@@ -123,7 +125,7 @@ export default function Slide4Technology() {
             {t}
           </Prim.Text>
         ))}
-      </Prim.Box>
-    </Prim.Box>
+      </Prim.Row>
+    </Prim.Col>
   )
 }

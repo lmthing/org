@@ -73,7 +73,7 @@ export function ConsentCard({
       data-testid="consent-card"
       className="border border-agent/50 bg-agent/5 rounded-xl p-4 my-1"
     >
-      <Prim.Box className="flex items-start gap-2">
+      <Prim.Row className="gap-2" alignItems="flex-start">
         <ShieldIcon />
         <Prim.Box className="min-w-0 flex-1">
           <Prim.Box className="text-sm font-semibold text-foreground">
@@ -86,7 +86,7 @@ export function ConsentCard({
             </Prim.Box>
           )}
         </Prim.Box>
-      </Prim.Box>
+      </Prim.Row>
 
       {argsSummary && (
         <Prim.Pre className="text-xs font-mono text-muted-foreground bg-muted rounded-lg px-2 py-1.5 mt-2 overflow-x-auto whitespace-pre-wrap break-words">
@@ -98,7 +98,7 @@ export function ConsentCard({
         Approve to let THING run this once, or deny to refuse it.
       </Prim.Box>
 
-      <Prim.Box className="flex gap-2">
+      <Prim.Row className="gap-2">
         <Prim.Pressable
           type="button"
           disabled={inert}
@@ -117,7 +117,7 @@ export function ConsentCard({
         >
           Deny
         </Prim.Pressable>
-      </Prim.Box>
+      </Prim.Row>
     </Prim.Box>
   );
 }

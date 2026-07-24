@@ -12,11 +12,11 @@ function LlmTab({ node }: { node: ExecNode }): React.ReactElement {
     <Prim.Box className="space-y-3">
       {node.llmCalls.map((c, i) => (
         <Prim.Box key={i} className="border border-lm-border rounded">
-          <Prim.Box className="flex items-center gap-2 px-2 py-1 bg-lm-panel2 text-[11px]">
+          <Prim.Row className="gap-2 px-2 py-1 bg-lm-panel2 text-[11px]" alignItems="center">
             <Prim.Text className="font-mono text-lm-muted">call {i}</Prim.Text>
             {c.model && <Badge>{c.model}</Badge>}
             {c.responses.length > 1 && <Badge tone="amber">×{c.responses.length} attempts</Badge>}
-          </Prim.Box>
+          </Prim.Row>
           <Prim.Box as="details" className="px-2 py-1">
             <Prim.Box as="summary" className="cursor-pointer text-[11px] text-lm-muted">system + {c.messages.length} messages</Prim.Box>
             <Prim.Pre className="font-mono text-[10px] whitespace-pre-wrap text-lm-muted mt-1 max-h-48 overflow-y-auto">{c.system}</Prim.Pre>
@@ -63,10 +63,10 @@ function YieldsTab({ node }: { node: ExecNode }): React.ReactElement {
     <Prim.Box className="space-y-2">
       {node.yields.map((y, i) => (
         <Prim.Box key={i} className="border border-lm-border rounded px-2 py-1">
-          <Prim.Box className="flex items-center gap-2 text-[11px]">
+          <Prim.Row className="gap-2 text-[11px]" alignItems="center">
             <Prim.Text className={y.resolved ? 'text-lm-green' : 'text-lm-accent lm-spin'}>{y.resolved ? '✓' : '⟳'}</Prim.Text>
             <Prim.Text className="font-mono text-lm-cyan">{y.kind}</Prim.Text>
-          </Prim.Box>
+          </Prim.Row>
           <Prim.Box className="text-[10px] text-lm-muted font-mono mt-1">args: {preview(y.args, 300)}</Prim.Box>
           {y.resolved && <Prim.Box className="text-[10px] text-lm-text font-mono mt-1">→ {preview(y.value, 400)}</Prim.Box>}
         </Prim.Box>
@@ -116,18 +116,18 @@ export function Inspector(): React.ReactElement {
   const setTab = useStore((s) => s.setTab);
 
   if (!node) {
-    return <Prim.Box as="aside" aria-label="inspector" className="h-full flex items-center justify-center text-lm-muted text-[12px]">Select a node to inspect.</Prim.Box>;
+    return <Prim.Row as="aside" aria-label="inspector" className="h-full justify-center text-lm-muted text-[12px]" alignItems="center">Select a node to inspect.</Prim.Row>;
   }
 
   return (
-    <Prim.Box as="aside" aria-label="inspector" className="h-full flex flex-col">
+    <Prim.Col as="aside" aria-label="inspector" className="h-full">
       <Prim.Box className="px-3 py-2 border-b border-lm-border">
-        <Prim.Box className="flex items-center gap-2">
+        <Prim.Row className="gap-2" alignItems="center">
           <StatusIcon status={node.status} />
           <Prim.Text className="font-mono text-[12px] text-lm-text truncate" title={node.label}>{node.label}</Prim.Text>
           <KindBadge kind={node.kind} />
           {node.durationMs !== undefined && <Prim.Text className="ml-auto text-[10px] text-lm-muted font-mono">{fmtDuration(node.durationMs)}</Prim.Text>}
-        </Prim.Box>
+        </Prim.Row>
         <Prim.Box className="text-[10px] text-lm-muted font-mono mt-1 truncate" title={node.id}>{node.id}</Prim.Box>
         {node.detail && Object.keys(node.detail).length > 0 && (
           <Prim.Box className="text-[10px] text-lm-muted font-mono mt-1">{preview(node.detail, 200)}</Prim.Box>
@@ -143,6 +143,6 @@ export function Inspector(): React.ReactElement {
         {tab === 'variables' && <VariablesTab node={node} />}
         {tab === 'raw' && <RawTab node={node} />}
       </Prim.Box>
-    </Prim.Box>
+    </Prim.Col>
   );
 }

@@ -221,9 +221,9 @@ export function IntegrationsTab({
 
   if (integrations === null && !loadError) {
     return (
-      <Prim.Box className="flex items-center justify-center p-6">
+      <Prim.Row className="justify-center p-6" alignItems="center">
         <Spinner />
-      </Prim.Box>
+      </Prim.Row>
     );
   }
   if (loadError) return <Prim.Text as="p" className="p-4 text-sm text-destructive">{loadError}</Prim.Text>;
@@ -236,14 +236,14 @@ export function IntegrationsTab({
   }
 
   return (
-    <Prim.Box className="flex flex-col gap-4 p-4">
+    <Prim.Col className="gap-4 p-4">
       {(integrations ?? []).map((integration) => {
         const keys = schemaKeys(integration.settings);
         const bindings = (inbound?.bindings ?? []).filter((b) => b.projectId === projectId);
         const st = resume[integration.spaceId] ?? { kind: 'idle' };
         return (
-          <Prim.Box key={integration.spaceId} className="border border-border rounded-xl bg-card p-3 flex flex-col gap-3">
-            <Prim.Box className="flex items-center gap-2">
+          <Prim.Col key={integration.spaceId} className="border border-border rounded-xl bg-card p-3 gap-3">
+            <Prim.Row className="gap-2" alignItems="center">
               {integration.icon && <Prim.Text aria-hidden="true">{integration.icon}</Prim.Text>}
               <Prim.Text className="text-sm font-medium text-foreground flex-1 truncate">{integration.title}</Prim.Text>
               {integration.configured ? (
@@ -253,7 +253,7 @@ export function IntegrationsTab({
                   {integration.missingRequired.length} key{integration.missingRequired.length !== 1 && 's'} needed
                 </Prim.Text>
               )}
-            </Prim.Box>
+            </Prim.Row>
 
             {integration.readme ? (
               <Prim.Box as="details" className="rounded-lg border border-border bg-muted/40 px-3 py-2">
@@ -277,7 +277,7 @@ export function IntegrationsTab({
             )}
 
             {bindings.length > 0 && (
-              <Prim.Box className="flex flex-col gap-1.5">
+              <Prim.Col className="gap-1.5">
                 <Prim.Text as="p" className="text-xs text-muted-foreground">
                   Inbound webhook URL{bindings.length !== 1 && 's'} — paste into the provider:
                 </Prim.Text>
@@ -285,20 +285,20 @@ export function IntegrationsTab({
                   const url = `${inbound?.baseUrl ?? ''}/${b.path}`;
                   const key = `${b.projectId}/${b.path}`;
                   return (
-                    <Prim.Box key={key} className="flex items-center gap-2">
+                    <Prim.Row key={key} className="gap-2" alignItems="center">
                       <Prim.Text as="code" className="flex-1 min-w-0 text-xs font-mono text-foreground bg-background border border-border rounded px-2 py-1 overflow-x-auto whitespace-nowrap">
                         {url}
                       </Prim.Text>
                       <Button variant="outline" size="sm" onClick={() => copy(key, url)}>
                         {copied === key ? 'Copied' : 'Copy'}
                       </Button>
-                    </Prim.Box>
+                    </Prim.Row>
                   );
                 })}
-              </Prim.Box>
+              </Prim.Col>
             )}
 
-            <Prim.Box className="flex items-center gap-3 flex-wrap">
+            <Prim.Row className="gap-3 flex-wrap" alignItems="center">
               <Button
                 variant="default"
                 size="sm"
@@ -323,10 +323,10 @@ export function IntegrationsTab({
                   </Button>
                 </Prim.Text>
               )}
-            </Prim.Box>
-          </Prim.Box>
+            </Prim.Row>
+          </Prim.Col>
         );
       })}
-    </Prim.Box>
+    </Prim.Col>
   );
 }

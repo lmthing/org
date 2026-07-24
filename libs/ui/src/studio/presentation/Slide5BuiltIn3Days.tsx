@@ -57,12 +57,12 @@ const cards = [
 
 export default function Slide5BuiltIn3Days() {
   return (
-    <Prim.Box
-      className="relative flex h-full w-full flex-col items-center justify-center"
+    <Prim.Col
+      className="relative h-full w-full justify-center" alignItems="center"
       style={{ background: colors.bg, padding: '48px 72px 52px' }}
     >
       {/* TOP */}
-      <Prim.Box className="mb-10 flex flex-col items-center">
+      <Prim.Col className="mb-10" alignItems="center">
         <Prim.Box
           className="mb-4 text-lg font-bold uppercase tracking-[0.16em]"
           style={{ color: colors.brand }}
@@ -76,14 +76,14 @@ export default function Slide5BuiltIn3Days() {
           Built it. <Prim.Text as="em" className="not-italic" style={{ color: colors.brand }}>Validated it.</Prim.Text>{' '}
           Shipped it.
         </Prim.Text>
-      </Prim.Box>
+      </Prim.Col>
 
       {/* CARDS */}
       <Prim.Box className="mb-9 grid w-full grid-cols-3 gap-5">
         {cards.map((card) => (
-          <Prim.Box
+          <Prim.Col
             key={card.title}
-            className="relative flex flex-col overflow-hidden rounded-2xl border p-7 pb-8"
+            className="relative overflow-hidden rounded-2xl border p-7 pb-8"
             style={{
               background: card.highlight
                 ? `color-mix(in srgb, ${colors.brand} 6%, var(--card))`
@@ -130,13 +130,13 @@ export default function Slide5BuiltIn3Days() {
             <Prim.Box className="text-lg leading-[1.65]" style={{ color: colors.textSecondary }}>
               {card.body}
             </Prim.Box>
-          </Prim.Box>
+          </Prim.Col>
         ))}
       </Prim.Box>
 
       {/* BOTTOM STRIP */}
-      <Prim.Box
-        className="flex items-center gap-2.5 rounded-full px-8 py-3.5"
+      <Prim.Row
+        className="gap-2.5 rounded-full px-8 py-3.5" alignItems="center"
         style={{ background: colors.bgDark }}
       >
         <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
@@ -148,7 +148,7 @@ export default function Slide5BuiltIn3Days() {
           Five experts convinced.
         </Prim.Box>
         <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-      </Prim.Box>
-    </Prim.Box>
+      </Prim.Row>
+    </Prim.Col>
   )
 }

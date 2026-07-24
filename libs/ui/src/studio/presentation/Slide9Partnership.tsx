@@ -5,8 +5,8 @@ import qrCode from '@/assets/qr-code.png'
 
 export default function Slide8Partnership() {
   return (
-    <Prim.Box
-      className="flex h-full w-full flex-col items-center justify-center"
+    <Prim.Col
+      className="h-full w-full justify-center" alignItems="center"
       style={{ background: colors.bg }}
     >
       <Prim.Text as="h1" className="text-center text-5xl font-bold leading-tight tracking-tight sm:text-7xl" style={{ color: colors.text }}>
@@ -18,14 +18,14 @@ export default function Slide8Partnership() {
         and join the community!
       </Prim.Text>
 
-      <Prim.Box className="mt-16 flex flex-col items-center">
+      <Prim.Col className="mt-16" alignItems="center">
         <Prim.Image
           src={qrCode}
           alt="Scan to visit lmthing.studio"
           className="h-80 w-80 rounded-3xl shadow-xl"
           style={{ boxShadow: `0 10px 40px color-mix(in srgb, ${colors.brand} 20%, transparent)` }}
         />
-      </Prim.Box>
-    </Prim.Box>
+      </Prim.Col>
+    </Prim.Col>
   )
 }

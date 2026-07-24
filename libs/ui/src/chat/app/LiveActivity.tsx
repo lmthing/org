@@ -27,11 +27,11 @@ export function LiveActivity(): React.ReactElement | null {
       data-testid="live-activity"
       aria-label="sub-agent activity"
     >
-      <Prim.Box className="flex items-center gap-1.5 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+      <Prim.Row className="gap-1.5 border-b border-border px-3 py-1.5 text-xs text-muted-foreground" alignItems="center" style={{ lineHeight: '1rem' }}>
         <Prim.Text className="lm-pulse text-brand-2">●</Prim.Text>
         <Prim.Text>working…</Prim.Text>
         <Prim.Text className="opacity-60">{active.length} active</Prim.Text>
-      </Prim.Box>
+      </Prim.Row>
       {/* Bounded, internally-scrollable list so a large parallel tasklist can't
           push the composer off-screen. */}
       <Prim.Box className="max-h-[40vh] overflow-y-auto py-1">

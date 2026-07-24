@@ -189,7 +189,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
   const grouped = groupSessionsByRecency(filteredSessions);
 
   const conversations = (
-    <Prim.Box className="flex flex-col gap-2">
+    <Prim.Col className="gap-2">
       <Prim.TextField
         value={searchQuery}
         onChange={e => setSearchQuery(e.target.value)}
@@ -211,7 +211,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
             const cost = isActive ? sessionCostUsd : s.totalCostUsd;
             const costLabel = cost !== undefined && cost > 0 ? formatCost(cost) : '';
             return (
-              <Prim.Box key={s.sessionId} className="group flex items-center gap-1">
+              <Prim.Row key={s.sessionId} className="group gap-1" alignItems="center">
                 <Prim.Pressable
                   onClick={() => void resumeSession(s.sessionId)}
                   className={cn(
@@ -233,12 +233,12 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                   className="hidden group-hover:flex w-5 h-5 items-center justify-center text-muted-foreground hover:text-destructive rounded text-xs shrink-0"
                   title="Delete"
                 >×</Prim.Pressable>
-              </Prim.Box>
+              </Prim.Row>
             );
           })}
         </Prim.Box>
       ))}
-    </Prim.Box>
+    </Prim.Col>
   );
 
   const footer = <SidebarFooter current="chat" />;

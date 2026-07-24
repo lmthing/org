@@ -70,7 +70,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
         ) : d && isFormDescriptor(d) ? (
           <CatalogForm descriptor={d} onSubmit={onSubmit} />
         ) : (
-          <Prim.Box className="flex gap-2">
+          <Prim.Row className="gap-2">
             <Prim.TextField
               className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               value={text}
@@ -86,7 +86,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
             >
               Send
             </Prim.Pressable>
-          </Prim.Box>
+          </Prim.Row>
         )}
       </Prim.Box>
     </Prim.Box>
@@ -160,7 +160,7 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
   }
   if (att.kind === 'audio') {
     return (
-      <Prim.Box className="flex flex-col items-end gap-1">
+      <Prim.Col className="gap-1" alignItems="flex-end">
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <Prim.Audio controls src={url} className="max-w-[260px]" />
         {att.transcript && (
@@ -168,7 +168,7 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
             “{att.transcript}”
           </Prim.Box>
         )}
-      </Prim.Box>
+      </Prim.Col>
     );
   }
   return (
@@ -199,25 +199,25 @@ export function Message({ block }: MessageProps) {
   if (block.type === 'user') {
     const attachments = block.attachments ?? [];
     return (
-      <Prim.Box className="flex justify-end px-4 py-2 lm-fade-in group">
-        <Prim.Box className="max-w-[75%] flex items-start gap-1.5">
+      <Prim.Row className="justify-end px-4 py-2 lm-fade-in group">
+        <Prim.Row className="max-w-[75%] gap-1.5" alignItems="flex-start">
           <CopyButton text={block.content} />
-          <Prim.Box className="flex flex-col items-end gap-1.5">
+          <Prim.Col className="gap-1.5" alignItems="flex-end">
             {attachments.length > 0 && (
-              <Prim.Box className="flex flex-col items-end gap-1.5">
+              <Prim.Col className="gap-1.5" alignItems="flex-end">
                 {attachments.map((a, i) => (
                   <UserAttachment key={i} att={a} />
                 ))}
-              </Prim.Box>
+              </Prim.Col>
             )}
             {block.content && (
               <Prim.Box className="bg-muted text-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
                 {block.content}
               </Prim.Box>
             )}
-          </Prim.Box>
-        </Prim.Box>
-      </Prim.Box>
+          </Prim.Col>
+        </Prim.Row>
+      </Prim.Row>
     );
   }
 
@@ -227,7 +227,7 @@ export function Message({ block }: MessageProps) {
     const textForCopy = isString ? (block.descriptor as string) : preview(block.descriptor, 500);
     return (
       <Prim.Box className="px-4 py-2 lm-fade-in group" data-testid="block">
-        <Prim.Box className="flex items-start gap-1.5">
+        <Prim.Row className="gap-1.5" alignItems="flex-start">
           <Prim.Box className="flex-1 min-w-0 text-sm text-foreground">
             {showAttribution && (
               <AttributionButton nodeId={block.nodeId} label={node.label} />
@@ -238,7 +238,7 @@ export function Message({ block }: MessageProps) {
             }
           </Prim.Box>
           <CopyButton text={textForCopy} />
-        </Prim.Box>
+        </Prim.Row>
       </Prim.Box>
     );
   }
@@ -278,7 +278,7 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
 
   return (
     <Prim.Box className="py-1 group relative lm-fade-in">
-      <Prim.Box className="flex items-start gap-2 px-4">
+      <Prim.Row className="gap-2 px-4" alignItems="flex-start">
         <Prim.Text className="shrink-0 mt-3 w-6 h-6 rounded-full bg-brand-2/20 flex items-center justify-center text-xs select-none" aria-hidden="true">
           ✦
         </Prim.Text>
@@ -291,7 +291,7 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
           )}
         </Prim.Box>
         {textContent && <CopyButton text={textContent} />}
-      </Prim.Box>
+      </Prim.Row>
     </Prim.Box>
   );
 }

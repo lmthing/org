@@ -7,12 +7,12 @@ const pills = ['No code', 'Any domain', 'Your knowledge', 'Any AI model']
 
 export default function Slide3Solution() {
   return (
-    <Prim.Box
-      className="relative flex h-full w-full items-center px-16 py-12"
+    <Prim.Row
+      className="relative h-full w-full px-16 py-12" alignItems="center"
       style={{ background: colors.bg }}
     >
       {/* Left column */}
-      <Prim.Box className="flex w-1/2 flex-col gap-6 pr-12">
+      <Prim.Col className="w-1/2 gap-6 pr-12">
         <Prim.Box className="text-2xl font-bold tracking-widest" style={{ color: colors.brand }}>
           THE SOLUTION
         </Prim.Box>
@@ -32,7 +32,7 @@ export default function Slide3Solution() {
           with just their knowledge. No engineers required.
         </Prim.Text>
 
-        <Prim.Box className="flex flex-wrap gap-4">
+        <Prim.Row className="flex-wrap gap-4">
           {pills.map((pill) => (
             <Prim.Text
               key={pill}
@@ -42,11 +42,11 @@ export default function Slide3Solution() {
               {pill}
             </Prim.Text>
           ))}
-        </Prim.Box>
-      </Prim.Box>
+        </Prim.Row>
+      </Prim.Col>
 
       {/* Right column */}
-      <Prim.Box className="flex w-1/2 items-center justify-center">
+      <Prim.Row className="w-1/2 justify-center" alignItems="center">
         <Prim.Box
           className="rounded-2xl border p-2"
           style={{
@@ -57,8 +57,8 @@ export default function Slide3Solution() {
         >
           <Prim.Image src={screenshotUrl} alt="lmthing studio screenshot" className="w-full rounded-2xl" />
         </Prim.Box>
-      </Prim.Box>
+      </Prim.Row>
 
-    </Prim.Box>
+    </Prim.Row>
   )
 }

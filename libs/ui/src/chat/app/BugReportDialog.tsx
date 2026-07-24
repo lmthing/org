@@ -84,7 +84,7 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
   return (
     <Dialog open={open} onClose={handleClose} title="Report a bug">
       {result ? (
-        <Prim.Box className="flex flex-col gap-3 text-sm">
+        <Prim.Col className="gap-3 text-sm" style={{ lineHeight: '1.25rem' }}>
           <Prim.Text as="p" className="text-foreground">
             Thanks — issue #{result.number} was filed.
           </Prim.Text>
@@ -96,13 +96,13 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
           >
             View issue
           </Prim.Link>
-          <Prim.Box className="flex justify-end">
+          <Prim.Row className="justify-end">
             <Button variant="outline" size="sm" onClick={handleClose}>Close</Button>
-          </Prim.Box>
-        </Prim.Box>
+          </Prim.Row>
+        </Prim.Col>
       ) : (
         <Prim.Form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-          <Prim.Box className="flex flex-col gap-1">
+          <Prim.Col className="gap-1">
             <Prim.Text as="label" className="text-xs text-muted-foreground" htmlFor="bug-title">Title</Prim.Text>
             <Input
               id="bug-title"
@@ -111,8 +111,8 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
               placeholder="Short summary of the bug"
               disabled={submitting}
             />
-          </Prim.Box>
-          <Prim.Box className="flex flex-col gap-1">
+          </Prim.Col>
+          <Prim.Col className="gap-1">
             <Prim.Text as="label" className="text-xs text-muted-foreground" htmlFor="bug-message">What happened?</Prim.Text>
             <Textarea
               id="bug-message"
@@ -122,10 +122,10 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
               rows={4}
               disabled={submitting}
             />
-          </Prim.Box>
+          </Prim.Col>
 
           {screenshot ? (
-            <Prim.Box className="flex flex-col gap-2">
+            <Prim.Col className="gap-2">
               <Prim.Image src={screenshot} className="max-h-40 rounded-lg border border-border" alt="Screenshot preview" />
               <Prim.Text as="label" className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Prim.TextField
@@ -136,7 +136,7 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
                 />
                 Attach this screenshot
               </Prim.Text>
-            </Prim.Box>
+            </Prim.Col>
           ) : (
             <Prim.Text as="p" className="text-xs text-muted-foreground">Screenshot unavailable</Prim.Text>
           )}
@@ -145,14 +145,14 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
 
           {error && <Prim.Text as="p" className="text-xs text-destructive">{error}</Prim.Text>}
 
-          <Prim.Box className="flex justify-end gap-2">
+          <Prim.Row className="justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={handleClose} disabled={submitting}>
               Cancel
             </Button>
             <Button type="submit" size="sm" loading={submitting} disabled={disabled}>
               Submit
             </Button>
-          </Prim.Box>
+          </Prim.Row>
         </Prim.Form>
       )}
     </Dialog>

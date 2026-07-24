@@ -79,7 +79,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
       data-testid="work-block"
       data-node-id={nodeId}
     >
-      <Prim.Box className="flex items-center gap-1.5 text-xs">
+      <Prim.Row className="gap-1.5 text-xs" alignItems="center" style={{ lineHeight: '1rem' }}>
         <Prim.Pressable
           onClick={() => setExpanded((v) => !v)}
           className="w-3 shrink-0 text-muted-foreground hover:text-foreground"
@@ -115,7 +115,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
         {dur != null && (
           <Prim.Text className="shrink-0 text-muted-foreground opacity-70">{fmtDuration(dur)}</Prim.Text>
         )}
-      </Prim.Box>
+      </Prim.Row>
 
       {expanded && (
         <Prim.Box className="mt-1 space-y-0.5 pl-[26px] text-xs text-muted-foreground">

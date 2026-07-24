@@ -19,8 +19,8 @@ function Arrow() {
 
 export default function Slide2Problem() {
   return (
-    <Prim.Box
-      className="flex h-full w-full flex-col"
+    <Prim.Col
+      className="h-full w-full"
       style={{ background: colors.bgSection, padding: '3rem 4rem 3rem' }}
     >
       {/* Slide title — top-left */}
@@ -40,7 +40,7 @@ export default function Slide2Problem() {
           </Prim.Box>
 
           {/* Flow diagram */}
-          <Prim.Box className="flex items-center" style={{ gap: '1.5rem' }}>
+          <Prim.Row alignItems="center" style={{ gap: '1.5rem' }}>
             <Prim.Box
               className="rounded-full border"
               style={{
@@ -79,10 +79,10 @@ export default function Slide2Problem() {
             >
               ❌ Can't Build
             </Prim.Box>
-          </Prim.Box>
+          </Prim.Row>
 
           {/* Chips */}
-          <Prim.Box className="flex" style={{ gap: '1rem' }}>
+          <Prim.Row  style={{ gap: '1rem' }}>
             {chips.map((chip) => (
               <Prim.Box
                 key={chip}
@@ -100,7 +100,7 @@ export default function Slide2Problem() {
                 {chip}
               </Prim.Box>
             ))}
-          </Prim.Box>
+          </Prim.Row>
         </Prim.Box>
 
 
@@ -119,11 +119,11 @@ export default function Slide2Problem() {
           >
             The Opportunity
           </Prim.Box>
-          <Prim.Box className="flex flex-col items-center" style={{ gap: '1.1rem' }}>
+          <Prim.Col alignItems="center" style={{ gap: '1.1rem' }}>
             {domains.map((row, ri) => (
-              <Prim.Box
+              <Prim.Row
                 key={ri}
-                className="flex"
+                
                 style={{ gap: '1.1rem' }}
               >
                 {row.map((label) => (
@@ -142,12 +142,12 @@ export default function Slide2Problem() {
                     {label}
                   </Prim.Box>
                 ))}
-              </Prim.Box>
+              </Prim.Row>
             ))}
-          </Prim.Box>
+          </Prim.Col>
         </Prim.Box>
 
       </Prim.Box>
-    </Prim.Box>
+    </Prim.Col>
   )
 }

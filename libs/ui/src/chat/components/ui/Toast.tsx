@@ -38,8 +38,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastCtx.Provider value={{ toast }}>
       {children}
-      <Prim.Box
-        className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
+      <Prim.Col
+        className="fixed bottom-4 right-4 z-50 gap-2 pointer-events-none"
         aria-live="polite"
       >
         {items.map(t => (
@@ -53,7 +53,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             {t.message}
           </Prim.Box>
         ))}
-      </Prim.Box>
+      </Prim.Col>
     </ToastCtx.Provider>
   );
 }

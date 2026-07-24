@@ -36,17 +36,17 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
   if (!open) return null;
 
   return (
-    <Prim.Box className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <Prim.Row className="fixed inset-0 z-50 justify-center p-4" alignItems="center" role="dialog" aria-modal="true">
       <Prim.Box className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" onClick={onClose} />
       <Prim.Box ref={ref} className={cn('relative bg-card border border-border rounded-xl shadow-lg max-w-lg w-full max-h-[85vh] flex flex-col', className)}>
         {title && (
-          <Prim.Box className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+          <Prim.Row className="justify-between px-4 py-3 border-b border-border" alignItems="center" flexShrink={0}>
             <Prim.Text as="h2" className="font-semibold text-sm text-foreground">{title}</Prim.Text>
             <Prim.Pressable onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</Prim.Pressable>
-          </Prim.Box>
+          </Prim.Row>
         )}
         <Prim.Box className="flex-1 overflow-auto p-4">{children}</Prim.Box>
       </Prim.Box>
-    </Prim.Box>
+    </Prim.Row>
   );
 }
