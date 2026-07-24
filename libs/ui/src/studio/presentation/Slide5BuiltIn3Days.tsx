@@ -58,11 +58,11 @@ const cards = [
 export default function Slide5BuiltIn3Days() {
   return (
     <Prim.Col
-      className="relative h-full w-full justify-center" alignItems="center"
+      position="relative" height="100%" width="100%" justifyContent="center" alignItems="center"
       style={{ background: colors.bg, padding: '48px 72px 52px' }}
     >
       {/* TOP */}
-      <Prim.Col className="mb-10" alignItems="center">
+      <Prim.Col marginBottom="$10" alignItems="center">
         <Prim.Box
           className="text-lg font-bold uppercase tracking-[0.16em]" marginBottom="1rem"
           style={{ color: colors.brand }}
@@ -70,10 +70,10 @@ export default function Slide5BuiltIn3Days() {
           What we achieved in 3 days
         </Prim.Box>
         <Prim.Text as="h1"
-          className="text-center text-6xl font-extrabold leading-[1.15]"
+          textAlign="center" fontSize="$6xl" fontWeight="$extrabold" lineHeight="1.15"
           style={{ color: colors.text, letterSpacing: '-0.025em' }}
         >
-          Built it. <Prim.Text as="em" className="not-italic" style={{ color: colors.brand }}>Validated it.</Prim.Text>{' '}
+          Built it. <Prim.Text as="em" fontStyle="normal" style={{ color: colors.brand }}>Validated it.</Prim.Text>{' '}
           Shipped it.
         </Prim.Text>
       </Prim.Col>
@@ -83,7 +83,7 @@ export default function Slide5BuiltIn3Days() {
         {cards.map((card) => (
           <Prim.Col
             key={card.title}
-            className="relative overflow-hidden rounded-2xl border p-7 pb-8"
+            position="relative" overflow="hidden" borderRadius="$radius-xl" borderWidth={1} padding="$7" paddingBottom="$8"
             style={{
               background: card.highlight
                 ? `color-mix(in srgb, ${colors.brand} 6%, var(--card))`
@@ -95,14 +95,14 @@ export default function Slide5BuiltIn3Days() {
           >
             {/* accent top bar */}
             <Prim.Box
-              className="absolute left-0 right-0 top-0 h-[3px]"
+              position="absolute" left="$0" right="$0" top="$0" height="3px"
               style={{
                 background: card.highlight ? colors.brand : colors.cardBorder,
                 borderRadius: '16px 16px 0 0',
               }}
             />
 
-            <Prim.Box className="text-5xl" marginBottom="0.75rem">{card.icon}</Prim.Box>
+            <Prim.Box fontSize="$5xl" marginBottom="0.75rem">{card.icon}</Prim.Box>
 
             <Prim.Box
               className="text-6xl font-extrabold leading-none" marginBottom="0.25rem"
@@ -114,12 +114,12 @@ export default function Slide5BuiltIn3Days() {
               {card.stat}
             </Prim.Box>
 
-            <Prim.Box className="text-2xl font-bold" marginBottom="0.75rem" style={{ color: colors.text }}>
+            <Prim.Box fontSize="$2xl" fontWeight="$bold" marginBottom="0.75rem" style={{ color: colors.text }}>
               {card.title}
             </Prim.Box>
 
             <Prim.Box
-              className="h-[1.5px] w-8" marginBottom="1rem"
+              height="1.5px" width="$8" marginBottom="1rem"
               style={{
                 background: card.highlight
                   ? `color-mix(in srgb, ${colors.brand} 40%, transparent)`
@@ -127,7 +127,7 @@ export default function Slide5BuiltIn3Days() {
               }}
             />
 
-            <Prim.Box className="text-lg leading-[1.65]" style={{ color: colors.textSecondary }}>
+            <Prim.Box fontSize="$lg" lineHeight="1.65" style={{ color: colors.textSecondary }}>
               {card.body}
             </Prim.Box>
           </Prim.Col>
@@ -136,13 +136,13 @@ export default function Slide5BuiltIn3Days() {
 
       {/* BOTTOM STRIP */}
       <Prim.Row
-        className="gap-2.5 rounded-full px-8 py-3.5" alignItems="center"
+        gap="$2.5" borderRadius="$radius-full" paddingHorizontal="$8" paddingVertical="$3.5" alignItems="center"
         style={{ background: colors.bgDark }}
       >
         <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-        <Prim.Box className="text-base font-medium tracking-wide text-white">
+        <Prim.Box fontSize="$base" fontWeight="$medium" letterSpacing="$wide" color="#fff" /* ds-lint-ok: literal text-white on the colored slide bg (theme-independent) */>
           Three days.{' '}
-          <Prim.Text as="em" className="not-italic font-bold" style={{ color: colors.brand }}>
+          <Prim.Text as="em" fontStyle="normal" fontWeight="$bold" style={{ color: colors.brand }}>
             One use case shipped.
           </Prim.Text>{' '}
           Five experts convinced.

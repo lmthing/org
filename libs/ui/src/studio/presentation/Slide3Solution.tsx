@@ -8,16 +8,16 @@ const pills = ['No code', 'Any domain', 'Your knowledge', 'Any AI model']
 export default function Slide3Solution() {
   return (
     <Prim.Row
-      className="relative h-full w-full px-16 py-12" alignItems="center"
+      position="relative" height="100%" width="100%" paddingHorizontal="$16" paddingVertical="$12" alignItems="center"
       style={{ background: colors.bg }}
     >
       {/* Left column */}
-      <Prim.Col className="w-1/2 gap-6 pr-12">
-        <Prim.Box className="text-2xl font-bold tracking-widest" style={{ color: colors.brand }}>
+      <Prim.Col width="50%" gap="$6" paddingRight="$12">
+        <Prim.Box fontSize="$2xl" fontWeight="$bold" letterSpacing="$widest" style={{ color: colors.brand }}>
           THE SOLUTION
         </Prim.Box>
 
-        <Prim.Box className="text-4xl font-bold">
+        <Prim.Box fontSize="$4xl" fontWeight="$bold">
           lm<CozyThingText text="thing" className="text-4xl font-bold" />
         </Prim.Box>
 
@@ -32,11 +32,11 @@ export default function Slide3Solution() {
           with just their knowledge. No engineers required.
         </Prim.Text>
 
-        <Prim.Row className="flex-wrap gap-4">
+        <Prim.Row flexWrap="wrap" gap="$4">
           {pills.map((pill) => (
             <Prim.Text
               key={pill}
-              className="rounded-full border-2 px-6 py-3 text-lg font-medium"
+              borderRadius="$radius-full" borderWidth={2} paddingHorizontal="$6" paddingVertical="$3" fontSize="$lg" fontWeight="$medium"
               style={{ borderColor: colors.brand, color: colors.brand }}
             >
               {pill}
@@ -46,16 +46,16 @@ export default function Slide3Solution() {
       </Prim.Col>
 
       {/* Right column */}
-      <Prim.Row className="w-1/2 justify-center" alignItems="center">
+      <Prim.Row width="50%" justifyContent="center" alignItems="center">
         <Prim.Box
-          className="rounded-2xl border p-2"
+          borderRadius="$radius-xl" borderWidth={1} padding="$2"
           style={{
             background: colors.white,
             borderColor: colors.cardBorder,
             boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
           }}
         >
-          <Prim.Image src={screenshotUrl} alt="lmthing studio screenshot" className="w-full rounded-2xl" />
+          <Prim.Image src={screenshotUrl} alt="lmthing studio screenshot" width="100%" borderRadius="$radius-xl" />
         </Prim.Box>
       </Prim.Row>
 

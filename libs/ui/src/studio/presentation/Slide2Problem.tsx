@@ -20,7 +20,7 @@ function Arrow() {
 export default function Slide2Problem() {
   return (
     <Prim.Col
-      className="h-full w-full"
+      height="100%" width="100%"
       style={{ background: colors.bgSection, padding: '3rem 4rem 3rem' }}
     >
       {/* Slide title — top-left */}
@@ -33,7 +33,7 @@ export default function Slide2Problem() {
         {/* Top — The Opportunity */}
         <Prim.Box style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.75rem' }}>
           <Prim.Box
-            className="font-bold uppercase"
+            fontWeight="$bold" textTransform="uppercase"
             style={{ color: colors.brand, fontSize: '2rem', letterSpacing: '0.15em' }}
           >
             The Problem
@@ -42,7 +42,7 @@ export default function Slide2Problem() {
           {/* Flow diagram */}
           <Prim.Row alignItems="center" style={{ gap: '1.5rem' }}>
             <Prim.Box
-              className="rounded-full border"
+              borderRadius="$radius-full" borderWidth={1}
               style={{
                 background: colors.bgCard,
                 borderColor: colors.cardBorder,
@@ -55,7 +55,7 @@ export default function Slide2Problem() {
             </Prim.Box>
             <Arrow />
             <Prim.Box
-              className="rounded-full border-2"
+              borderRadius="$radius-full" borderWidth={2}
               style={{
                 background: colors.bgCard,
                 borderColor: colors.brand,
@@ -68,7 +68,7 @@ export default function Slide2Problem() {
             </Prim.Box>
             <Arrow />
             <Prim.Box
-              className="rounded-full border"
+              borderRadius="$radius-full" borderWidth={1}
               style={{
                 background: colors.bgCard,
                 borderColor: colors.cardBorder,
@@ -86,7 +86,7 @@ export default function Slide2Problem() {
             {chips.map((chip) => (
               <Prim.Box
                 key={chip}
-                className="rounded-lg"
+                borderRadius="$radius-lg"
                 style={{
                   background: `linear-gradient(135deg, color-mix(in srgb, ${colors.brand} 8%, transparent), color-mix(in srgb, ${colors.brand} 15%, transparent))`,
                   color: colors.brandDark,
@@ -114,7 +114,7 @@ export default function Slide2Problem() {
         {/* Bottom — The Wall */}
         <Prim.Box style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
           <Prim.Box
-            className="font-bold uppercase"
+            fontWeight="$bold" textTransform="uppercase"
             style={{ color: colors.brand, fontSize: '2rem', letterSpacing: '0.15em' }}
           >
             The Opportunity
@@ -129,7 +129,7 @@ export default function Slide2Problem() {
                 {row.map((label) => (
                   <Prim.Box
                     key={label}
-                    className="rounded-full border"
+                    borderRadius="$radius-full" borderWidth={1}
                     style={{
                       background: colors.bgCard,
                       borderColor: colors.cardBorder,
