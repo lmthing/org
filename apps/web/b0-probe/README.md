@@ -16,6 +16,14 @@
 > (`.is_View` imposes `line-height`, and `lineHeight` is not a Tamagui View style prop). Run:
 > `node ../node_modules/vite/bin/vite.js build --config surface.vite.config.mts && node measure-surface.mjs`.
 
+> **B3 typography probe:** `text-probe-main.tsx` / `text-probe.mjs` render a Tamagui `styled(Text)`
+> and `styled(View)` next to a plain `<span>`/`<div>` with the same typography classes. Finding: a
+> Tamagui **Text ≡ span on all typography props** (so the B3 Text swap keeps every `font-*`/`text-*`
+> className), while a **View forces line-height** (validating the B2 text-container inline-style fix).
+> **Provider-collision probe:** `theme-check-main.tsx` / `theme-check2.mjs` prove the empty-theme web
+> provider injects no colliding vars (bg-background correct in light AND dark). Build all probes:
+> `node ../node_modules/vite/bin/vite.js build --config surface.vite.config.mts`.
+
 ---
 
 # B0 probe — "does a Tailwind className win over Tamagui with the compiler?"

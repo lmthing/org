@@ -48,12 +48,16 @@
 > provider). Verification model = Phase-0's (proven primitives + mechanical AST codemod + full gate
 > battery), with exact computed parity proven on `EmptyState` (9/9) + the `lay-*` rule proof.
 >
-> **Remaining = B3 (typography + overlays + cleanup), a large follow-up:** swap `Text`/`Pressable` to
-> Tamagui (their `.is_Text` base overrides `font-*`/`text-*`/`leading-*`/`tracking-*`, so ~hundreds of
-> text elements must move those to props — the big one); swap block `Box` → Tamagui (needs a second
-> codemod pass for block Boxes that are flex CHILDREN carrying `min-*`/`shrink-*`); Radix→Tamagui (8
-> `elements/` components); delete superseded CSS. Web renders correctly TODAY without these (Text/
-> Pressable/Box stay passthrough on web, native uses their `.native.tsx` forks). **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** — it has the
+> **➡ NEXT SESSION: start at "B3 — FRESH-SESSION HANDOFF"** (near the bottom). Remaining = B3
+> (typography + overlays + cleanup). **Good news found this session:** a Tamagui `Text` computes
+> IDENTICAL to a `<span>` on all typography props (`.is_Text` does NOT collide, unlike `.is_View`),
+> so the `Text` swap keeps every `font-*`/`text-*`/`leading-*` className as-is — **easy, no
+> per-element prop migration**. Remaining B3: swap `Text` (easy) and `Pressable` (probe first — button
+> display) to Tamagui; swap block `Box` (needs a 2nd codemod pass for block Boxes that are flex
+> CHILDREN carrying `min-*`/`shrink-*`/`items-*`); Radix→Tamagui (8 shared `elements/`); delete
+> superseded CSS. Web renders correctly TODAY without these (Text/Pressable/Box stay passthrough on
+> web; native uses their `.native.tsx` forks). Tools already built: `flexbox-codemod.mjs` +
+> `apps/web/b0-probe/` ref-vs-candidate probes + `tamagui-web.config.ts`. **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** — it has the
 > grounded ordering (global swap; Row/Col first; codemod flex Boxes; then Box; Text/Pressable last)
 > and the constraint that the surface harness must be built to verify surfaces under the parity contract.
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
@@ -1186,17 +1190,95 @@ unaffected; only the flex Boxes must migrate here.
 - Because there are 87 flex Boxes across chat/studio/computer, do it in small reviewed batches
   (per surface / per directory), each green before the next.
 
-## B3 — Text/Pressable → Tamagui, Radix overlays → Tamagui, delete superseded CSS
+## B3 — FRESH-SESSION HANDOFF (Text/Pressable → Tamagui, block Box, Radix, CSS)
 
-- `text/index.tsx` → `styled(Text,{...})` mapping font tokens; `pressable/index.tsx` →
-  Tamagui pressable (`<button>`/role on web, `onPress`). Each gated by its harness fixture.
-- **Radix → Tamagui universal** (8 files in shared `elements/`: dialog/sheet/dropdown/label/
-  separator/avatar + button `Slot`→`asChild`; see H4). Each replacement gets its own L2/L3 fixture
-  (needs the Radix peers installed in the libs/ui harness — widen the libs/ui vitest include as
-  those land). `computer/ide-file-tree` context-menu is out of scope.
-- **§7 step 9 — delete superseded CSS**: once a component is fully on Tamagui, remove the now-dead
-  `libs/css/src/{elements,components}/**` rules and Tailwind classes it used; re-run the full suite
-  + `lint:tokens`. Do this per-component, after its parity gate is green — never ahead of it.
+> **Start here in a new session. B0–B2 are DONE + verified (see the top-of-file status).** The
+> layout migration is complete: `Row`/`Col` are real Tamagui, the app root has the empty-theme
+> `TamaguiProvider`, and all 106 flex Boxes are migrated. Everything below is the remaining work,
+> **de-risked and ordered**, with the tools already built. The web renders correctly TODAY without
+> B3 — so B3 can land incrementally, each step gated, never blocking a green tree.
+
+### The tools you already have (do NOT rebuild)
+
+- **`libs/ui/scripts/flexbox-codemod.mjs`** — the AST codemod (edit-span, formatting-preserving,
+  static-className-only, skips+reports ambiguous). Adapt its `classify()` for the block-Box pass.
+- **`apps/web/b0-probe/`** — the real-CSS ref-vs-candidate harness (its `node_modules`/`dist*` are
+  gitignored; rebuild symlinks per its README). Build with
+  `node ../node_modules/vite/bin/vite.js build --config surface.vite.config.mts`, then run a probe:
+  - `measure-surface.mjs` — walks two subtrees, asserts computed-style parity (the EmptyState proof).
+  - `text-probe.mjs` / `text-probe-main.tsx` — the Text-vs-span / View-vs-div typography probe below.
+  - `theme-check2.mjs` — the provider-collision probe (bg-background in light+dark).
+  Copy the pattern for each new primitive: render the REAL pre-migration element (from `origin/main`
+  or a frozen copy) as `[data-ref]` next to the migrated candidate as `[data-cand]`, assert 0 diffs.
+- **The empty-theme web config** `libs/ui/src/theme/tamagui-web.config.ts` — import `styled`/`View`/
+  `Text` FROM HERE in every web primitive (so its `createTamagui` side-effect isn't tree-shaken and
+  no theme vars are injected). Native forks keep `tamagui.config.ts` (colored).
+
+### B3.1 — `Text` → Tamagui  (EASY — the hard part is already answered)
+
+**Grounded finding (this session, `text-probe.mjs`): a Tamagui `styled(Text)` computes IDENTICAL to a
+plain `<span>` on ALL typography props** (`font-family`, `font-size`, `font-weight`, `line-height`,
+`letter-spacing`, `color`, `text-transform`) — **`.is_Text` does NOT impose colliding typography**,
+unlike `.is_View` (which forces `line-height`: the same probe shows `View vs div: line-height 32px vs
+36px`, validating the EmptyState icon's inline-`style` fix). **So the Text swap keeps ALL typography
+classNames as-is** — no prop migration of `font-*`/`text-*`/`leading-*`/`tracking-*` is needed.
+
+Implement in `_tamagui.tsx` (add a `Text` next to `Row`/`Col`): a `forwardRef` around
+`styled(Text)` that maps the current `text/index.tsx` API — `as` (span/p/strong/…/h1–h6) → Tamagui
+`tag`, `block` → `tag="p"`, and keeps `htmlFor` for `as="label"`. Repoint `text/index.tsx` to it.
+The prop TYPE stays `React.HTMLAttributes<HTMLElement> & { as?; block?; htmlFor? }` (surfaces already
+pass exactly these; no surface edits). Gate: a `text-probe` fixture per `as` variant (span, p, h1,
+strong, small, code, label) proving ≡ the raw tag; then `libs/ui` test + `test:visual:all` + app
+build + typecheck. **No surface codemod needed** — the surfaces already call `Prim.Text`.
+Caveat to check: if any surface passes a `style`/color via a Tamagui-reserved prop name it'll be read
+as a style prop — grep for oddities; the probe catches diffs.
+
+### B3.2 — `Pressable` → Tamagui  (PROBE FIRST)
+
+Not yet probed. A `<button>` defaults to `display:inline-block`; a Tamagui `View` base is `flex`, so
+`styled(View,{tag:'button'})` will change `display` (+ the button reset). **Before swapping, run the
+ref-vs-candidate probe** (mirror `text-probe`): render the real `<button class="…">` vs the Tamagui
+candidate and diff. Likely outcome: set `display` + button-reset props on the Pressable styled def to
+match, OR keep `tag:'button'` and add the box-model resets. Map `as` (button/a/div) → `tag`; keep
+`onClick` (Tamagui passes DOM handlers on web); the `.native.tsx` fork already maps `onPress`. Gate as
+B3.1. Pressable is used heavily (chat's `<Button>` spreads button props), so verify a few real ones.
+
+### B3.3 — block `Box` → Tamagui  (needs a SECOND codemod pass)
+
+`Box` (block) is `styled(View,{display:'block', …webBlockCompat})` (proven ≡ a block `<div>` in
+`equivalence.spec` `eq-box`). Repoint `box/index.tsx` to `_tamagui.tsx`'s `BoxStyled` behind a
+forwardRef keeping `BoxProps` (`as`, `open`). **But**: a block `Box` that is a flex CHILD carrying
+`min-w-0`/`min-h-*`/`shrink-*`/`self-*`/`items-*` will have those overridden by the `.is_View` base
+(same reason as B2). So FIRST run a codemod pass over the surfaces that lifts those exact classes on
+`Prim.Box` to props (reuse `flexbox-codemod.mjs`'s `classify` logic, but WITHOUT requiring the `flex`
+token and WITHOUT renaming the tag — just move `min-*`/`shrink-*`/`self-*`/`items-*` to props on
+`Prim.Box`). Measure the population first: `grep -rn 'Prim\.Box' … | grep -E 'min-w|min-h|shrink|self-|items-'`.
+Then swap `box/index.tsx`. Gate as above. (Pure block Boxes with only paint/spacing classes are safe.)
+
+### B3.4 — Radix overlays → Tamagui universal  (8 files in shared `elements/`)
+
+`overlays/dialog` `overlays/sheet` `overlays/dropdown` `typography/label` `content/separator`
+`content/avatar` + `forms/button`'s `Slot`→`asChild` (see H4). Replace each `@radix-ui/*` with
+Tamagui's `Dialog`/`Sheet`/`Popover`/`Label`/`Separator`/`Avatar` + `asChild`. These are the shared
+`elements/` layer (used by all surfaces), so each swap is global — gate each with its own harness
+fixture (behavioral + L2/L3) and the app build. Install the Tamagui overlay packages as needed.
+`computer/ide-file-tree`'s `react-context-menu` is OUT of scope (stays Radix). This is the most
+involved B3 piece (interaction + a11y), so do one component per PR.
+
+### B3.5 — delete superseded CSS  (per-component, AFTER its gate is green)
+
+Once a component is fully on Tamagui, remove the now-dead `libs/css/src/{elements,components}/**`
+rules and the Tailwind classes it used; re-run `test:visual:all` + `lint:tokens` + app build. Never
+ahead of the parity gate. Most layout CSS is already superseded by B2 (the surfaces drive layout via
+Row/Col props now) — audit `libs/css/src` for rules only the migrated components used.
+
+### B3 definition of done
+
+`Text`/`Pressable`/block `Box` are Tamagui; Radix is gone from shared `elements/`; superseded CSS
+deleted; the full gate battery green (typecheck 6/6 · libs/ui · `test:visual:all` · `lint:rn` ·
+`lint:tokens` · app build) and each migrated component proven ≡ its pre-migration render via a
+`b0-probe` ref-vs-candidate probe. Then `apps/mobile` is the native verification (needs a device/
+Metro — out of this web env).
 
 ## B — EXECUTION ORDER & VERIFICATION (learned this session — read before running B2)
 
