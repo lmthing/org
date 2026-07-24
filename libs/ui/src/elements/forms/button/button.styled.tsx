@@ -74,7 +74,7 @@ export const ButtonFrame = styled(View, {
       },
       destructive: {
         backgroundColor: '$destructive',
-        color: '#fff',
+        color: '#fff', // ds-lint-ok: `.btn--destructive` uses literal `text-white` (theme-independent), not the dark-flipping $destructive-foreground
         hoverStyle: { backgroundColor: 'color-mix(in srgb, var(--destructive) 90%, transparent)' },
       },
     },
