@@ -81,7 +81,7 @@ function DropdownItem({ className, onClick, ...props }: React.HTMLAttributes<HTM
 }
 
 function DropdownSeparator(props: React.HTMLAttributes<HTMLDivElement>) {
-  return <Prim.Box role="separator" className="separator" marginVertical="0.25rem" {...props} />
+  return <Prim.Box role="separator" height={1} width="100%" backgroundColor="$border" marginVertical="0.25rem" {...props} />
 }
 
 export { Dropdown, DropdownTrigger, DropdownContent, DropdownItem, DropdownSeparator }

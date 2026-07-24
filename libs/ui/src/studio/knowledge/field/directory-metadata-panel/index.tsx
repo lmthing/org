@@ -162,7 +162,7 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
               checked={required}
               onChange={e => { setRequired(e.target.checked); markDirty() }}
             />
-            <Prim.Text className="caption">This field must be filled before the agent runs</Prim.Text>
+            <Caption>This field must be filled before the agent runs</Caption>
           </Prim.Text>
         </Prim.Box>
 
