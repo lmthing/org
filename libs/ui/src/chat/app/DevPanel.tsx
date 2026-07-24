@@ -37,14 +37,14 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
     <Prim.Box as="aside"
       aria-label="developer tools"
       display="flex"
-      className={className} position="relative" flexDirection="column" backgroundColor="$lm-panel" borderLeftWidth={1} borderColor="$lm-border" overflow="hidden" flexShrink={0}
+      className={cn("bg-lm-panel border-lm-border", className)} position="relative" flexDirection="column" borderLeftWidth={1} overflow="hidden" flexShrink={0}
       style={{ width }}
     >
       <Resizer onDrag={(dx) => setWidth(w => Math.max(280, Math.min(700, w - dx)))} />
 
       {/* Header */}
-      <Prim.Row gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderBottomWidth={1} borderColor="$lm-border" alignItems="center" flexShrink={0}>
-        <Prim.Text fontSize="$xs" fontWeight="$semibold" color="$lm-text" flexGrow={1} flexShrink={1} flexBasis="0%">DevTools</Prim.Text>
+      <Prim.Row className="border-lm-border" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderBottomWidth={1} alignItems="center" flexShrink={0}>
+        <Prim.Text className="text-lm-text" fontSize="$xs" fontWeight="$semibold" flexGrow={1} flexShrink={1} flexBasis="0%">DevTools</Prim.Text>
         <Prim.Pressable
           onClick={onClose}
           className="text-lm-muted hover:text-lm-text text-base leading-none"
@@ -79,7 +79,7 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
 
       {/* Replay bar */}
       {mode === 'replay' && (
-        <Prim.Box flexShrink={0} borderTopWidth={1} borderColor="$lm-border">
+        <Prim.Box className="border-lm-border" flexShrink={0} borderTopWidth={1}>
           <PlaybackBar />
         </Prim.Box>
       )}
