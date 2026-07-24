@@ -19,6 +19,21 @@ B0 forces re-opening the decision. Found 2026-07-23 while starting Phase 1c.
 > This issue stays open until the surface sweep + config convergence (§5–§7) actually land across the
 > app — the tooling is ready but the shipped surfaces are not yet migrated (per-slice, harness-gated).
 
+> **Update 2026-07-24 (later) — surface sweep UNDERWAY, the block is being drained.**
+> The `Box`-carries-layout-via-className concern (this issue's core) is being resolved surface by
+> surface: the primitives now accept the full Tamagui style-prop surface
+> (`libs/ui/src/elements/primitives/_tamagui.tsx#BoxStyleProps`), the P3 codemod was applied to
+> `chat` (228 elements) + `studio` (73 elements), and every div-based BEM block on a `Prim.*` element
+> across the **whole `computer` surface** + the `studio` component surfaces was converted to props,
+> deleting **17 of 68** component/element CSS files (CSS bundle 171→153 KB), all with 496 `libs/ui`
+> tests green + `apps/web` building. Confirms the Option-B thesis empirically at surface scale: with
+> the widened `createComponent`-based primitives, a div renders a real `<div>` at runtime and the
+> props win over Tailwind by injection order — **no compiler needed for div layout**. Still open: the
+> residual tail (dynamic `cn()`, `hover:`/`transition-*` awaiting an animation driver, BEM on shared
+> non-`Prim` elements), the **element-layer swap** (button/input — blocked on compiler extraction ON,
+> since `styled(View,{tag})` renders `<div>` at runtime), config convergence, and the `theme.css`/
+> Tailwind deletion. See `docs/tamagui-idiomatic-migration.md` progress log.
+
 ## Summary
 The Phase-0 de-HTML produced surfaces whose layout is **100% Tailwind-className-driven**, with
 **everything mapped to `Box`** (114 files use `Box`; **`Row`/`Col` are used 0 times**). Swapping
