@@ -48,5 +48,5 @@ export const tamaguiWebConfig = createTamagui({
 
 export type TamaguiWebConfig = typeof tamaguiWebConfig
 
-export { styled, View, Text } from '@tamagui/core'
+export { styled, View, Text, createComponent } from '@tamagui/core'
 export default tamaguiWebConfig

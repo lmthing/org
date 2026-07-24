@@ -48,18 +48,38 @@
 > provider). Verification model = Phase-0's (proven primitives + mechanical AST codemod + full gate
 > battery), with exact computed parity proven on `EmptyState` (9/9) + the `lay-*` rule proof.
 >
-> **➡ NEXT SESSION: start at "B3 — FRESH-SESSION HANDOFF"** (near the bottom). Remaining = B3
-> (typography + overlays + cleanup). **Good news found this session:** a Tamagui `Text` computes
-> IDENTICAL to a `<span>` on all typography props (`.is_Text` does NOT collide, unlike `.is_View`),
-> so the `Text` swap keeps every `font-*`/`text-*`/`leading-*` className as-is — **easy, no
-> per-element prop migration**. Remaining B3: swap `Text` (easy) and `Pressable` (probe first — button
-> display) to Tamagui; swap block `Box` (needs a 2nd codemod pass for block Boxes that are flex
-> CHILDREN carrying `min-*`/`shrink-*`/`items-*`); Radix→Tamagui (8 shared `elements/`); delete
-> superseded CSS. Web renders correctly TODAY without these (Text/Pressable/Box stay passthrough on
-> web; native uses their `.native.tsx` forks). Tools already built: `flexbox-codemod.mjs` +
-> `apps/web/b0-probe/` ref-vs-candidate probes + `tamagui-web.config.ts`. **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** — it has the
-> grounded ordering (global swap; Row/Col first; codemod flex Boxes; then Box; Text/Pressable last)
-> and the constraint that the surface harness must be built to verify surfaces under the parity contract.
+> **✅ B3.1 TEXT MIGRATION COMPLETE.** `Text` is now a real Tamagui primitive and — importantly —
+> **the prior "Text is EASY / no prop migration" claim was WRONG** (it rested on an incomplete probe
+> that measured only 6 typography props). Grounded truth this session: Tamagui's `.is_Text` base is
+> injected UNLAYERED and so BEATS Tailwind for the THREE props it sets — `display:inline`,
+> `white-space:pre-wrap`, `word-wrap:break-word` — exactly the B0 coexistence rule, now for text-flow.
+> So Text needed the same treatment as B2's layout: (1) the primitive neutralises those three back to
+> plain-tag semantics (per-tag `display`; `white-space`/`word-wrap`→`inherit`), and (2) a
+> `text-codemod.mjs` lifts the surfaces' conflicting Tailwind classes (`block`/`inline-block`/`hidden`/
+> `inline-flex`/`whitespace-*`/`break-words`/`truncate`) onto Tamagui props (22 auto + 9 manual across
+> chat/studio); `break-all` (`word-break`) stays a class (base doesn't touch it). A SECOND grounded
+> gotcha: **Tamagui's `tag` prop is COMPILE-TIME only** — at runtime (jsdom/SSR/non-extracted) a
+> `styled(Text)` renders `<span>` regardless, silently dropping heading/label semantics. Fixed by
+> building one component PER host tag with `createComponent({ Component: tag, isText: true })` (real
+> `<h1>`/`<p>`/`<label>` guaranteed at runtime; `isText` avoids the `.is_View` font/line-height
+> collision). Proven ≡ raw tags (tag NAME + computed style) across every `as` variant + every conflict
+> class under real theme.css+preflight: `apps/web/b0-probe/text-variants.mjs` **21/21**. Gates green:
+> libs/ui 32/32 · visual 54/54 · typecheck 6/6 · libs/ui tsc zero net-new · lint:rn · lint:tokens ·
+> app build.
+>
+> **➡ NEXT SESSION: start at "B3.2 — Pressable" (Part III).** Remaining B3: `Pressable` (probe first —
+> a `<button>`/`<a>` is inline-block/inline, the View base is flex; likely the same lift pattern as
+> Text, and note the compile-only-`tag` gotcha applies → use the per-tag `createComponent` approach);
+> block `Box` (B3.3 — a 2nd codemod pass for block Boxes that are flex CHILDREN carrying
+> `min-*`/`shrink-*`/`items-*`; `BoxStyled` is already defined in `_tamagui.tsx`); Radix→Tamagui (8
+> shared `elements/`, B3.4); delete superseded CSS (B3.5). Web renders correctly TODAY (Pressable/Box
+> stay passthrough on web; native uses their `.native.tsx` forks). Tools built: `flexbox-codemod.mjs`,
+> **`text-codemod.mjs`**, `apps/web/b0-probe/` ref-vs-candidate probes (+ **`text-variants`**),
+> `tamagui-web.config.ts`. **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** —
+> it has the grounded ordering and the two hard, learned-the-hard-way rules now proven for Text: the
+> unlayered-base coexistence rule (lift conflict classes to props) and the compile-only-`tag` rule
+> (per-tag `createComponent`). A probe that measures only computed style is INSUFFICIENT — it must also
+> assert the host tag name (that is how the `tag` regression hid).
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
 > `claude/tamagui-migration-plan-66u8sw`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
@@ -1206,42 +1226,68 @@ unaffected; only the flex Boxes must migrate here.
   gitignored; rebuild symlinks per its README). Build with
   `node ../node_modules/vite/bin/vite.js build --config surface.vite.config.mts`, then run a probe:
   - `measure-surface.mjs` — walks two subtrees, asserts computed-style parity (the EmptyState proof).
-  - `text-probe.mjs` / `text-probe-main.tsx` — the Text-vs-span / View-vs-div typography probe below.
+  - **`text-variants.mjs` / `text-variants-main.tsx`** — the authoritative B3.1 Text proof: the REAL
+    `Prim.Text` vs the raw tag for every `as` variant + every conflict class, asserting tag NAME AND
+    computed style (21/21). This is the template to copy for B3.2/B3.3 — it asserts the host tag, which
+    `text-probe.mjs` (the older, computed-style-only typography spike) did NOT, letting a tag bug slip.
   - `theme-check2.mjs` — the provider-collision probe (bg-background in light+dark).
-  Copy the pattern for each new primitive: render the REAL pre-migration element (from `origin/main`
-  or a frozen copy) as `[data-ref]` next to the migrated candidate as `[data-cand]`, assert 0 diffs.
+  Copy the pattern for each new primitive: render the REAL migrated primitive as `[data-cand]` next to
+  the raw pre-migration tag as `[data-ref]`, and assert **0 diffs on tag name AND computed style**.
 - **The empty-theme web config** `libs/ui/src/theme/tamagui-web.config.ts` — import `styled`/`View`/
   `Text` FROM HERE in every web primitive (so its `createTamagui` side-effect isn't tree-shaken and
   no theme vars are injected). Native forks keep `tamagui.config.ts` (colored).
 
-### B3.1 — `Text` → Tamagui  (EASY — the hard part is already answered)
+### B3.1 — `Text` → Tamagui  ✅ **DONE (and it was NOT easy — see the correction)**
 
-**Grounded finding (this session, `text-probe.mjs`): a Tamagui `styled(Text)` computes IDENTICAL to a
-plain `<span>` on ALL typography props** (`font-family`, `font-size`, `font-weight`, `line-height`,
-`letter-spacing`, `color`, `text-transform`) — **`.is_Text` does NOT impose colliding typography**,
-unlike `.is_View` (which forces `line-height`: the same probe shows `View vs div: line-height 32px vs
-36px`, validating the EmptyState icon's inline-`style` fix). **So the Text swap keeps ALL typography
-classNames as-is** — no prop migration of `font-*`/`text-*`/`leading-*`/`tracking-*` is needed.
+⚠️ **Correction of the earlier handoff.** The prior session labelled this "EASY, no prop migration"
+off `text-probe.mjs`, which measured only 6 typography props on a `<span>` — it MISSED `display`,
+`white-space` and `word-wrap`, and never checked the semantic TAG. Both omissions hid real problems.
 
-Implement in `_tamagui.tsx` (add a `Text` next to `Row`/`Col`): a `forwardRef` around
-`styled(Text)` that maps the current `text/index.tsx` API — `as` (span/p/strong/…/h1–h6) → Tamagui
-`tag`, `block` → `tag="p"`, and keeps `htmlFor` for `as="label"`. Repoint `text/index.tsx` to it.
-The prop TYPE stays `React.HTMLAttributes<HTMLElement> & { as?; block?; htmlFor? }` (surfaces already
-pass exactly these; no surface edits). Gate: a `text-probe` fixture per `as` variant (span, p, h1,
-strong, small, code, label) proving ≡ the raw tag; then `libs/ui` test + `test:visual:all` + app
-build + typecheck. **No surface codemod needed** — the surfaces already call `Prim.Text`.
-Caveat to check: if any surface passes a `style`/color via a Tamagui-reserved prop name it'll be read
-as a style prop — grep for oddities; the probe catches diffs.
+**Grounded truth (this session, `text-variants.mjs`, 21/21 under real theme.css+preflight):**
 
-### B3.2 — `Pressable` → Tamagui  (PROBE FIRST)
+1. **`.is_Text` fights three box/text-flow props, unlayered — the B0 coexistence rule, for text.**
+   The base rule is `.is_Text { display:inline; box-sizing:border-box; word-wrap:break-word;
+   white-space:pre-wrap; margin:0 }` (`@tamagui/web` `createDesignSystem.ts`). Being UNLAYERED it beats
+   Tailwind utilities, so a plain `<Text>` gets `pre-wrap`/`break-word` (not a span's `normal`) and a
+   block tag collapses to `display:inline`. `box-sizing`/`margin` already match under Tailwind preflight.
+   - **Fix in the primitive:** `white-space`/`word-wrap` → `'inherit'` (both INHERITED props — at the
+     root they resolve to `normal`, and a nested Text inherits its parent, exactly like a `<span>` with
+     no rule of its own; the `ws-default` + `ws-inherit` probe cases pin this). `display` is baked PER
+     TAG (inline tags→`inline`, block tags→`block`).
+   - **Fix in the surfaces — `libs/ui/scripts/text-codemod.mjs`:** lifts the conflicting classes on
+     `Prim.Text` to props (`block`/`inline-block`/`hidden`/`inline-flex`→`display`; `whitespace-*`→
+     `whiteSpace`; `break-words`→`wordWrap`; `truncate`→`overflow`+`textOverflow`+`whiteSpace`). **22
+     auto + 9 manual** (the 9 had the class inside a `cn()`/template — lifted by hand). `break-all`
+     (`word-break`) STAYS a class: `.is_Text` never sets `word-break`, so there is no conflict.
+2. **Tamagui's `tag` prop is COMPILE-TIME only.** `styled(Text)` + a runtime `tag` prop renders
+   `<span>` in jsdom/SSR/any non-extracted path — silently dropping heading/label semantics (an a11y
+   regression). This is why the primitive builds ONE component per host tag with
+   `createComponent({ Component: tag, isText: true, acceptsClassName: true })` — the real `<h1>`/`<p>`/
+   `<label>` is bound at component-build time (runtime-guaranteed), and `isText:true` gives the
+   `.is_Text` text base (NOT `.is_View`, which would force `font-family`+`line-height` — the B2
+   collision). The probe now asserts the tag NAME too, so this class of bug can't hide behind matching
+   computed style again.
 
-Not yet probed. A `<button>` defaults to `display:inline-block`; a Tamagui `View` base is `flex`, so
-`styled(View,{tag:'button'})` will change `display` (+ the button reset). **Before swapping, run the
-ref-vs-candidate probe** (mirror `text-probe`): render the real `<button class="…">` vs the Tamagui
-candidate and diff. Likely outcome: set `display` + button-reset props on the Pressable styled def to
-match, OR keep `tag:'button'` and add the box-model resets. Map `as` (button/a/div) → `tag`; keep
-`onClick` (Tamagui passes DOM handlers on web); the `.native.tsx` fork already maps `onPress`. Gate as
-B3.1. Pressable is used heavily (chat's `<Button>` spreads button props), so verify a few real ones.
+Landed: `Text`/`TextPrimitiveProps` in `_tamagui.tsx`; `text/index.tsx` repointed; `createComponent`
+re-exported from `tamagui-web.config.ts`; the 3 Phase-0 byte-identity Text tests in
+`primitives/index.test.tsx` rewritten to structural (byte-identity is gone by construction — Tamagui
+adds classes); the bare `tests/visual` Text fixtures moved to a local `PassText` passthrough (that
+harness has NO preflight, so a real Tamagui Text there would diff on preflight-owned props — the
+faithful proof is `b0-probe/text-variants` under real theme.css). Gates: libs/ui 32/32 · visual 54/54 ·
+typecheck 6/6 · libs/ui tsc zero net-new · lint:rn · lint:tokens · app build · probe 21/21.
+
+### B3.2 — `Pressable` → Tamagui  (PROBE FIRST — apply B3.1's two lessons)
+
+Not yet done. A `<button>`/`<a>` is `display:inline-block`/`inline`; a Tamagui `View` base is `flex`,
+so the display + button reset collide the same way. **Mirror B3.1 exactly:** (1) build the ref-vs-cand
+probe FIRST and have it assert the **tag name** as well as computed style (the `tag` prop is
+compile-only — use the per-tag `createComponent` approach, `isText:false`/View base for a button, or
+test whether a button wants text vs view semantics); (2) expect to lift `display` (and any
+`inline-*`/`hidden`) conflict classes to props via a `pressable-codemod` in the same shape as
+`text-codemod.mjs`. Map `as` (button/a/div) → the per-tag component; keep `onClick` (Tamagui passes DOM
+handlers on web); the `.native.tsx` fork already maps `onPress`. Pressable is used heavily (chat's
+`<Button>` spreads button props), so verify a few real ones. **Do NOT trust a computed-style-only
+probe** — B3.1 proved that lets a tag regression through.
 
 ### B3.3 — block `Box` → Tamagui  (needs a SECOND codemod pass)
 

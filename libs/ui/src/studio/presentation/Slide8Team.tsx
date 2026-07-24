@@ -35,7 +35,7 @@ export default function Slide7Team() {
       className="h-full w-full justify-center" alignItems="center"
       style={{ background: colors.bg }}
     >
-      <Prim.Text as="h2" className="mb-16 flex items-center justify-center gap-3 text-7xl font-bold" style={{ color: colors.text }}>
+      <Prim.Text as="h2" className="mb-16 items-center justify-center gap-3 text-7xl font-bold" display="flex" style={{ color: colors.text }}>
         Team behind the <CozyThingText text="thing" className="text-7xl leading-loose" />
       </Prim.Text>
 

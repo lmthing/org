@@ -1,7 +1,7 @@
 import * as React from 'react'
 // WEB primitives use the WEB config (empty theme → no theme-var injection; colors come from
 // theme.css/Tailwind). The `*.native.tsx` forks use the colored `tamagui.config`. See tamagui-web.config.ts.
-import { styled, View, Text as TamaguiText } from '../../theme/tamagui-web.config'
+import { styled, View, createComponent } from '../../theme/tamagui-web.config'
 
 /**
  * Shared factory for the WEB Tamagui primitives (Phase-1 / Part III of the migration).
@@ -68,4 +68,80 @@ export const Col = React.forwardRef<HTMLDivElement, LayoutPrimitiveProps>((props
 )
 Col.displayName = 'Col'
 
-export { BoxStyled, TamaguiText }
+// ── Text ────────────────────────────────────────────────────────────────────────────────────────
+//
+// A Tamagui `styled(Text)` that reproduces a plain host tag's typography + text-flow on web.
+//
+// `.is_Text` (the unlayered Tamagui base) imposes THREE props a plain `<span>`/`<p>` does NOT have —
+// `display: inline`, `white-space: pre-wrap`, `word-wrap: break-word` — and, being unlayered, they beat
+// Tailwind utilities (the same coexistence rule B0 found for `.is_View`). So the primitive neutralises
+// exactly those three back to plain-tag semantics, PROVEN ≡ raw tags across every `as` variant + the
+// conflict classes in `apps/web/b0-probe/text-variants.mjs` (21/21 match):
+//   - `white-space`/`word-wrap` → `'inherit'` reproduces "the tag has no rule of its own" (both are
+//     INHERITED CSS props: at the root they resolve to `normal`, and a nested Text inherits its parent
+//     just like a `<span>` — the inheritance case is in the probe).
+//   - `display` is set PER TAG below (block tags → `block`; inline tags → `inline`), so `as="p"`/`h1`
+//     match a real (preflight-reset) `<p>`/`<h1>` instead of collapsing to inline.
+// A caller-passed style prop overrides the default (spread AFTER `display`), which is how the B3.1
+// codemod lifts the conflicting Tailwind classes (`block`/`hidden`/`whitespace-*`/`break-words`/
+// `truncate`) onto props. `word-break` (`break-all`) is NOT touched by `.is_Text`, so it stays a class.
+export type TextStyleProps = {
+  display?: 'inline' | 'block' | 'inline-block' | 'flex' | 'inline-flex' | 'none' | 'contents'
+  whiteSpace?: 'normal' | 'nowrap' | 'pre' | 'pre-wrap' | 'pre-line' | 'break-spaces' | 'inherit'
+  wordWrap?: 'normal' | 'break-word' | 'inherit'
+  overflow?: 'visible' | 'hidden' | 'clip' | 'scroll' | 'auto'
+  textOverflow?: 'clip' | 'ellipsis'
+}
+
+export type TextAs =
+  | 'span' | 'p' | 'strong' | 'em' | 'b' | 'i' | 'small' | 'label'
+  | 'code' | 'kbd' | 'dt' | 'dd' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
+
+export type TextPrimitiveProps = React.HTMLAttributes<HTMLElement> &
+  TextStyleProps & {
+    /** Inline text tag to render. Defaults to `span` (or `p` when `block`). */
+    as?: TextAs
+    /** Convenience: render a block `<p>` instead of an inline `<span>`. */
+    block?: boolean
+    /** Passed through when `as="label"`. */
+    htmlFor?: string
+  }
+
+// One Tamagui component PER host tag, built with `createComponent({ Component: tag, isText: true })`.
+// Why per-tag and not one `styled(Text)` + a runtime `tag` prop: Tamagui's `tag` prop is a COMPILE-TIME
+// hint (consumed by @tamagui/static); at runtime — jsdom tests, SSR, any non-extracted path — a
+// `styled(Text)` renders `<span>` regardless, silently dropping the semantic tag (headings/labels →
+// a11y regression). `createComponent({ Component: 'h1', isText: true, acceptsClassName: true })` binds
+// the REAL host element at build of the component, so `<h1>`/`<p>`/`<label>` are runtime-guaranteed,
+// while `isText: true` gives the `.is_Text` text base (NOT `.is_View`, which would force
+// font-family + line-height — the B2 collision). `display` is baked per tag (inline tags → `inline`,
+// block tags → `block`) so `as="p"`/`h1` match a preflight-reset `<p>`/`<h1>`; a caller-lifted
+// `display`/`whiteSpace`/… (from the B3.1 codemod) overrides it (spread AFTER the defaults).
+const INLINE_TAGS = ['span', 'strong', 'em', 'b', 'i', 'small', 'label', 'code', 'kbd'] as const
+const BLOCK_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'dt', 'dd'] as const
+const baseTextResets = { whiteSpace: 'inherit', wordWrap: 'inherit' } as const
+
+const makeTextTag = (tag: string, display: 'inline' | 'block') =>
+  createComponent({
+    // A host-tag string as `Component` is exactly what Tamagui's own `styledHtml` passes (it renders
+    // that real element); the public type wants a component, so cast like `styledHtml` does.
+    Component: tag as never,
+    isText: true,
+    isReactNative: false,
+    acceptsClassName: true,
+    componentName: 'Text',
+    defaultProps: { display, ...baseTextResets },
+  }) as unknown as React.ComponentType<any>
+
+const TAG_COMPONENTS: Record<string, React.ComponentType<any>> = {}
+for (const t of INLINE_TAGS) TAG_COMPONENTS[t] = makeTextTag(t, 'inline')
+for (const t of BLOCK_TAGS) TAG_COMPONENTS[t] = makeTextTag(t, 'block')
+
+export const Text = React.forwardRef<HTMLElement, TextPrimitiveProps>(({ as, block, ...props }, ref) => {
+  const tag = as ?? (block ? 'p' : 'span')
+  const Comp = TAG_COMPONENTS[tag] ?? TAG_COMPONENTS.span
+  return React.createElement(Comp, { ...props, ref })
+})
+Text.displayName = 'Text'
+
+export { BoxStyled }

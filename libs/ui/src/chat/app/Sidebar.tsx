@@ -222,8 +222,8 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                   )}
                   title={displayTitle || s.sessionId}
                 >
-                  <Prim.Text className="block truncate">{label}</Prim.Text>
-                  <Prim.Text className="block text-xs text-muted-foreground/70 font-normal">
+                  <Prim.Text display="block" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{label}</Prim.Text>
+                  <Prim.Text className="text-xs text-muted-foreground/70 font-normal" display="block">
                     {relativeTime(s.lastActivity)}
                     {costLabel && <Prim.Text className="ml-1.5 text-muted-foreground/50">{costLabel}</Prim.Text>}
                   </Prim.Text>

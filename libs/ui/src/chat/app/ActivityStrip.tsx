@@ -45,7 +45,7 @@ export function ActivityStrip({ nodeIds, className }: ActivityStripProps) {
             )}
           >
             <Prim.Text>{KIND_ICON[node.kind] ?? '◦'}</Prim.Text>
-            <Prim.Text className="max-w-[120px] truncate">{node.label}</Prim.Text>
+            <Prim.Text className="max-w-[120px]" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{node.label}</Prim.Text>
             {node.status === 'running' && <Prim.Text className="lm-pulse">…</Prim.Text>}
             {dur && <Prim.Text className="opacity-60">{dur}</Prim.Text>}
           </Prim.Pressable>

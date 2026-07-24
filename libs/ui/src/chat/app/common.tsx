@@ -44,7 +44,7 @@ export function KindBadge({ kind }: { kind: NodeKind }): React.ReactElement {
 export function Badge({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'amber' | 'red' }): React.ReactElement {
   const cls = tone === 'amber' ? 'text-lm-amber border-lm-amber/40' : tone === 'red' ? 'text-lm-red border-lm-red/40' : 'text-lm-muted border-lm-border';
   return (
-    <Prim.Text className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono border ${cls}`}>
+    <Prim.Text display="inline-flex" className={`items-center rounded px-1.5 py-0.5 text-[10px] font-mono border ${cls}`}>
       {children}
     </Prim.Text>
   );

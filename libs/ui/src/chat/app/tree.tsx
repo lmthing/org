@@ -53,7 +53,7 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
           <Prim.Text className="w-3 shrink-0" />
         )}
         <StatusIcon status={node.status} />
-        <Prim.Text className="truncate text-lm-text" title={node.label}>{node.label}</Prim.Text>
+        <Prim.Text className="text-lm-text" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
         <KindBadge kind={node.kind} />
         {dur && <Prim.Text className="text-lm-muted text-[10px] font-mono ml-auto shrink-0">{dur}</Prim.Text>}
         {retries > 0 && <Prim.Text className="text-lm-amber text-[10px] font-mono shrink-0" title={`${retries} retries`}>×{retries}</Prim.Text>}

@@ -245,7 +245,7 @@ export function IntegrationsTab({
           <Prim.Col key={integration.spaceId} className="border border-border rounded-xl bg-card p-3 gap-3">
             <Prim.Row className="gap-2" alignItems="center">
               {integration.icon && <Prim.Text aria-hidden="true">{integration.icon}</Prim.Text>}
-              <Prim.Text className="text-sm font-medium text-foreground flex-1 truncate">{integration.title}</Prim.Text>
+              <Prim.Text className="text-sm font-medium text-foreground flex-1" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{integration.title}</Prim.Text>
               {integration.configured ? (
                 <Prim.Text className="text-xs bg-success/15 text-success px-1.5 py-0.5 rounded-full">configured</Prim.Text>
               ) : (
@@ -286,7 +286,7 @@ export function IntegrationsTab({
                   const key = `${b.projectId}/${b.path}`;
                   return (
                     <Prim.Row key={key} className="gap-2" alignItems="center">
-                      <Prim.Text as="code" className="flex-1 min-w-0 text-xs font-mono text-foreground bg-background border border-border rounded px-2 py-1 overflow-x-auto whitespace-nowrap">
+                      <Prim.Text as="code" className="flex-1 min-w-0 text-xs font-mono text-foreground bg-background border border-border rounded px-2 py-1 overflow-x-auto" whiteSpace="nowrap">
                         {url}
                       </Prim.Text>
                       <Button variant="outline" size="sm" onClick={() => copy(key, url)}>
@@ -309,14 +309,14 @@ export function IntegrationsTab({
                 {st.kind === 'saving' ? 'Saving…' : 'Save keys'}
               </Button>
               {st.kind === 'waiting' && (
-                <Prim.Text className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Prim.Text className="text-xs text-muted-foreground items-center gap-1.5" display="flex">
                   <Spinner size={12} /> Waiting for the pod to restart…
                 </Prim.Text>
               )}
               {st.kind === 'done' && <Prim.Text className="text-xs text-success">Saved — THING notified.</Prim.Text>}
               {st.kind === 'error' && <Prim.Text className="text-xs text-destructive">{st.message}</Prim.Text>}
               {st.kind === 'timeout' && (
-                <Prim.Text className="text-xs text-muted-foreground flex items-center gap-2">
+                <Prim.Text className="text-xs text-muted-foreground items-center gap-2" display="flex">
                   {st.message}
                   <Button variant="outline" size="sm" onClick={() => retryResume(integration.spaceId)}>
                     Retry

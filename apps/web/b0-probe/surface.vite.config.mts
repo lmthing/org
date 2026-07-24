@@ -34,6 +34,7 @@ export default defineConfig({
         surface: path.join(here, 'surface.html'),
         'theme-check': path.join(here, 'theme-check.html'),
         'text-probe': path.join(here, 'text-probe.html'),
+        'text-variants': path.join(here, 'text-variants.html'),
       },
     },
   },

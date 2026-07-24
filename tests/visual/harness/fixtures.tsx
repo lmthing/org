@@ -1,18 +1,34 @@
 import * as React from 'react'
 import {
   Box,
-  Text,
   Pressable,
   Link,
   List,
   ListItem,
 } from '../../../libs/ui/src/elements/primitives/index'
 
-// NOTE: Row/Col are now real Tamagui primitives (Part III / B2). This harness's Row/Col box-model
-// coverage moved to the EQUIVALENCE fixtures (eq-fixtures.tsx) + the apps/web/b0-probe surface slice,
-// which prove the real styled() defs ≡ plain flex divs. The flex-container fixtures below therefore
-// use the still-passthrough Box + the fx-row/fx-col classes (an identical `<div class="flex …">`), so
-// their `main` baselines stay valid without a TamaguiProvider in this self-contained harness.
+// NOTE: Row/Col (Part III / B2) AND Text (B3.1) are now real Tamagui primitives. Their box-model /
+// text-flow parity is proven where it can be proven FAITHFULLY — under the real theme.css + Tailwind
+// PREFLIGHT (which resets box-sizing/margins), i.e. the apps/web/b0-probe slices (surface + text-
+// variants) and the eq-fixtures. This self-contained harness has NO preflight, so a real Tamagui
+// primitive rendered bare here would diff from a raw tag on preflight-owned props (box-sizing,
+// heading margins) — noise that never occurs in production. So the bare fixtures below keep using
+// still-passthrough primitives (Box + the fx-row/fx-col classes; a local `PassText` for text), which
+// KEEP their `main` baselines byte-valid. The real Tamagui Text proof lives in b0-probe/text-variants.
+
+/**
+ * PassText — a local passthrough copy of the PRE-swap `Text` primitive (renders the raw tag with
+ * props verbatim), used only by the bare fixtures so their passthrough `main` baselines stay valid
+ * now that the real `Text` is Tamagui. Same rationale as the Row/Col → `Box` swap above.
+ */
+const PassText = React.forwardRef<
+  HTMLElement,
+  React.HTMLAttributes<HTMLElement> & { as?: string; block?: boolean }
+>(({ as, block, ...props }, ref) =>
+  React.createElement((as ?? (block ? 'p' : 'span')) as string, { ...props, ref }),
+)
+PassText.displayName = 'PassText'
+const Text = PassText
 
 /**
  * Frozen fixtures for the visual/computed-style harness (§3.1).

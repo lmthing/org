@@ -82,7 +82,7 @@ function VariablesTab({ node }: { node: ExecNode }): React.ReactElement {
     <Prim.Box className="space-y-1 font-mono text-[11px]">
       {entries.map(([k, v]) => (
         <Prim.Box key={k} className="border-b border-lm-border/50 py-1">
-          <Prim.Text className="text-lm-accent">{k}</Prim.Text>: <Prim.Text className="text-lm-green break-words">{preview(v, 600)}</Prim.Text>
+          <Prim.Text className="text-lm-accent">{k}</Prim.Text>: <Prim.Text className="text-lm-green" wordWrap="break-word">{preview(v, 600)}</Prim.Text>
         </Prim.Box>
       ))}
     </Prim.Box>
@@ -124,7 +124,7 @@ export function Inspector(): React.ReactElement {
       <Prim.Box className="px-3 py-2 border-b border-lm-border">
         <Prim.Row className="gap-2" alignItems="center">
           <StatusIcon status={node.status} />
-          <Prim.Text className="font-mono text-[12px] text-lm-text truncate" title={node.label}>{node.label}</Prim.Text>
+          <Prim.Text className="font-mono text-[12px] text-lm-text" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
           <KindBadge kind={node.kind} />
           {node.durationMs !== undefined && <Prim.Text className="ml-auto text-[10px] text-lm-muted font-mono">{fmtDuration(node.durationMs)}</Prim.Text>}
         </Prim.Row>

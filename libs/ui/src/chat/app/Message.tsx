@@ -179,7 +179,7 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
       className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground hover:opacity-90"
     >
       <Prim.Text className="text-muted-foreground">📎</Prim.Text>
-      <Prim.Text className="truncate max-w-[200px]">{att.filename ?? att.mediaType}</Prim.Text>
+      <Prim.Text className="max-w-[200px]" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{att.filename ?? att.mediaType}</Prim.Text>
     </Prim.Link>
   );
 }
@@ -279,7 +279,7 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
   return (
     <Prim.Box className="py-1 group relative lm-fade-in">
       <Prim.Row className="gap-2 px-4" alignItems="flex-start">
-        <Prim.Text className="shrink-0 mt-3 w-6 h-6 rounded-full bg-brand-2/20 flex items-center justify-center text-xs select-none" aria-hidden="true">
+        <Prim.Text className="shrink-0 mt-3 w-6 h-6 rounded-full bg-brand-2/20 items-center justify-center text-xs select-none" display="flex" aria-hidden="true">
           ✦
         </Prim.Text>
         <Prim.Box className="flex-1 min-w-0">
