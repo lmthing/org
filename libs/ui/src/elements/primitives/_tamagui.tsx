@@ -84,7 +84,9 @@ Col.displayName = 'Col'
 // codemod lifts the conflicting Tailwind classes (`block`/`hidden`/`whitespace-*`/`break-words`/
 // `truncate`) onto props. `word-break` (`break-all`) is NOT touched by `.is_Text`, so it stays a class.
 export type TextStyleProps = {
-  display?: 'inline' | 'block' | 'inline-block' | 'flex' | 'inline-flex' | 'none' | 'contents'
+  display?:
+    | 'inline' | 'block' | 'inline-block' | 'flex' | 'inline-flex' | 'grid' | 'inline-grid'
+    | 'table' | 'list-item' | 'flow-root' | 'contents' | 'none'
   whiteSpace?: 'normal' | 'nowrap' | 'pre' | 'pre-wrap' | 'pre-line' | 'break-spaces' | 'inherit'
   wordWrap?: 'normal' | 'break-word' | 'inherit'
   overflow?: 'visible' | 'hidden' | 'clip' | 'scroll' | 'auto'

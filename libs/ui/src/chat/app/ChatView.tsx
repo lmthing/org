@@ -32,7 +32,7 @@ function ConnectionDot() {
   const dot = mode === 'replay' ? '⏵' : c === 'open' ? '●' : c === 'connecting' ? '◌' : '○';
   const label = mode === 'replay' ? 'replay' : c;
   return (
-    <Prim.Text className={`flex items-center gap-1 text-xs ${color}`}>
+    <Prim.Text display="flex" className={`items-center gap-1 text-xs ${color}`}>
       <Prim.Text>{dot}</Prim.Text>
       <Prim.Text className="text-muted-foreground">{label}</Prim.Text>
     </Prim.Text>
@@ -175,7 +175,7 @@ export function ChatView({
   const title = sessionTitle || fallbackTitle;
 
   return (
-    <Prim.Box className={cn('flex flex-col h-full bg-background', className)}>
+    <Prim.Box display="flex" className={cn('flex-col h-full bg-background', className)}>
       {/* Header */}
       <Prim.Row as="header"
         className="gap-3 pl-12 md:pl-4 pr-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm" alignItems="center" flexShrink={0}

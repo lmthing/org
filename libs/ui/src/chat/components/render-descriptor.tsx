@@ -74,7 +74,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const ai = a === 'center' ? 'center' : a === 'end' ? 'flex-end' : 'flex-start';
       return <Prim.Row key={key} className="my-1" style={{ gap: ((props['gap'] as number) ?? 1) * 4, justifyContent: jc, alignItems: ai }}>{body}</Prim.Row>;
     }
-    case 'columns': return <Prim.Box key={key} className="grid" marginVertical="0.25rem" style={{ gridTemplateColumns: `repeat(${(d.children ?? []).length || 1}, minmax(0,1fr))`, gap: ((props['gap'] as number) ?? 2) * 4 }}>{body}</Prim.Box>;
+    case 'columns': return <Prim.Box key={key} display="grid" marginVertical="0.25rem" style={{ gridTemplateColumns: `repeat(${(d.children ?? []).length || 1}, minmax(0,1fr))`, gap: ((props['gap'] as number) ?? 2) * 4 }}>{body}</Prim.Box>;
     case 'spacer': return <Prim.Box key={key} style={{ flexGrow: 1 }} />;
     case 'divider': return (
       <Prim.Row key={key} className="gap-2 my-2 text-lm-muted text-[11px]" alignItems="center">

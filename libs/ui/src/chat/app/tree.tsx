@@ -36,7 +36,8 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
         data-node-id={node.id}
         data-status={node.status}
         onClick={() => selectNode(node.id, true)}
-        className={`flex items-center gap-1.5 px-2 py-1 cursor-pointer rounded text-[12px] ${
+        display="flex"
+        className={`items-center gap-1.5 px-2 py-1 cursor-pointer rounded text-[12px] ${
           selected ? 'bg-lm-accent/15 ring-1 ring-lm-accent/40' : 'hover:bg-lm-panel2'
         }`}
         style={{ paddingLeft: `${depth * 14 + 8}px` }}
