@@ -30,7 +30,7 @@ export function ActivityStrip({ nodeIds, className }: ActivityStripProps) {
   };
 
   return (
-    <Prim.Box display="flex" marginTop="0.5rem" className={cn('flex-wrap items-center gap-1.5', className)}>
+    <Prim.Box display="flex" marginTop="0.5rem" className={className} flexWrap="wrap" alignItems="center" gap="$1.5">
       {visible.map((node) => {
         if (!node) return null;
         const dur = node.endTs && node.startTs ? fmtDuration(node.endTs - node.startTs) : null;

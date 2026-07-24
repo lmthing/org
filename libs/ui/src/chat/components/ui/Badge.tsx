@@ -23,11 +23,7 @@ export function Badge({
     <Prim.Text
       {...props}
       display="inline-flex"
-      className={cn(
-        'items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium',
-        bv[variant],
-        className
-      )}
+      className={cn(bv[variant], className)} alignItems="center" gap="$1" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full" fontSize="$xs" fontWeight="$medium"
     >
       {children}
     </Prim.Text>

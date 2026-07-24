@@ -28,7 +28,7 @@ function LlmTab({ node }: { node: ExecNode }): React.ReactElement {
             ))}
           </Prim.Box>
           {c.responses.map((r, j) => (
-            <Prim.Box key={j} paddingHorizontal="$2" paddingVertical="$1" borderColor="$lm-border">
+            <Prim.Box key={j} paddingHorizontal="$2" paddingVertical="$1" borderTopWidth={1} borderColor="$lm-border">
               <Prim.Text color="$lm-muted" fontFamily="$mono">response (attempt {r.attempt})</Prim.Text>
               <CodeBlock code={r.text} />
             </Prim.Box>
@@ -81,7 +81,7 @@ function VariablesTab({ node }: { node: ExecNode }): React.ReactElement {
   return (
     <Prim.Box className="space-y-1 font-mono text-[11px]">
       {entries.map(([k, v]) => (
-        <Prim.Box key={k} className="border-lm-border/50" borderColor="$b" paddingVertical="$1">
+        <Prim.Box key={k} className="border-lm-border/50" borderBottomWidth={1} paddingVertical="$1">
           <Prim.Text color="$lm-accent">{k}</Prim.Text>: <Prim.Text color="$lm-green" wordWrap="break-word">{preview(v, 600)}</Prim.Text>
         </Prim.Box>
       ))}
@@ -121,7 +121,7 @@ export function Inspector(): React.ReactElement {
 
   return (
     <Prim.Col as="aside" aria-label="inspector" height="100%">
-      <Prim.Box paddingHorizontal="$3" paddingVertical="$2" borderColor="$lm-border">
+      <Prim.Box paddingHorizontal="$3" paddingVertical="$2" borderBottomWidth={1} borderColor="$lm-border">
         <Prim.Row gap="$2" alignItems="center">
           <StatusIcon status={node.status} />
           <Prim.Text fontFamily="$mono" color="$lm-text" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>

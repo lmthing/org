@@ -40,7 +40,7 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
       <Prim.Box className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" onClick={onClose} />
       <Prim.Box ref={ref} display="flex" className={cn('relative bg-card border border-border rounded-xl shadow-lg max-w-lg w-full max-h-[85vh] flex-col', className)}>
         {title && (
-          <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderColor="$border" alignItems="center" flexShrink={0}>
+          <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderBottomWidth={1} borderColor="$border" alignItems="center" flexShrink={0}>
             <Prim.Text as="h2" fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>
             <Prim.Pressable onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</Prim.Pressable>
           </Prim.Row>

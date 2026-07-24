@@ -263,14 +263,14 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
 
   if (mode === 'replay') {
     return (
-      <Prim.Box className={cn('px-4 py-3 text-sm text-muted-foreground text-center border-t border-border', className)}>
+      <Prim.Box className={className} paddingHorizontal="$4" paddingVertical="$3" fontSize="$sm" color="$muted-foreground" textAlign="center" borderTopWidth={1} borderColor="$border">
         Replay mode — input disabled
       </Prim.Box>
     );
   }
 
   return (
-    <Prim.Box className={cn('px-4 pb-4 pt-2', className)}>
+    <Prim.Box className={className} paddingHorizontal="$4" paddingBottom="$4" paddingTop="$2">
       {/* Staged attachments */}
       {(attachments.length > 0 || attaching || attachError || recording) && (
         <Prim.Row marginBottom="$2" flexWrap="wrap" gap="$2" alignItems="center">

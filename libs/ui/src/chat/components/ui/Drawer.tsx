@@ -24,7 +24,7 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
 
   return (
     <Prim.Row position="fixed" top="$0" right="$0" bottom="$0" left="$0" zIndex={40}>
-      <Prim.Box className={cn('absolute inset-0 bg-foreground/10', side === 'left' ? 'right-0' : 'left-0')} onClick={onClose} />
+      <Prim.Box className={cn("bg-foreground/10", side === 'left' ? 'right-0' : 'left-0')} position="absolute" top="$0" right="$0" bottom="$0" left="$0" onClick={onClose} />
       <Prim.Box
         display="flex"
         {...(side === 'right' ? { marginLeft: 'auto' } : { marginRight: 'auto' })}
@@ -35,7 +35,7 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
         className,
       )}>
         {title && (
-          <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderColor="$border" alignItems="center" flexShrink={0}>
+          <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderBottomWidth={1} borderColor="$border" alignItems="center" flexShrink={0}>
             <Prim.Text fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>
             <Prim.Pressable onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</Prim.Pressable>
           </Prim.Row>

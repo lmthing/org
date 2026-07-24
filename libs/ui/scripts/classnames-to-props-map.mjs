@@ -128,12 +128,24 @@ function baseClass(cls) {
     if (['left', 'center', 'right', 'justify', 'start', 'end'].includes(m[1])) return { textAlign: m[1] }
     const v = colorToken(m[1]); return v == null ? 'keep' : { color: v }
   }
+  // border WIDTH — `border` | `border-{0,2,4,8}` | directional `border-{t,r,b,l,x,y}(-{0,2,4,8})?`.
+  // Must run BEFORE the border-<color> fallback, else `border-t` is misread as the color token `$t`.
+  if ((m = cls.match(/^border(?:-([trblxy]))?(?:-(\d+))?$/))) {
+    const W = { '0': 0, '1': 1, '2': 2, '4': 4, '8': 8 }
+    const side = m[1]
+    const w = m[2] == null ? 1 : (m[2] in W ? W[m[2]] : null)
+    if (w == null) return 'keep'
+    if (!side) return { borderWidth: w }
+    const SIDES = {
+      t: ['borderTopWidth'], r: ['borderRightWidth'], b: ['borderBottomWidth'], l: ['borderLeftWidth'],
+      x: ['borderLeftWidth', 'borderRightWidth'], y: ['borderTopWidth', 'borderBottomWidth'],
+    }
+    const out = {}; for (const k of SIDES[side]) out[k] = w; return out
+  }
+  // border COLOR — `border-<token>` (bare token name → $token, else keep).
   if ((m = cls.match(/^border-(.+)$/))) {
-    const W = { '0': 0, '2': 2, '4': 4, '8': 8 }
-    if (m[1] in W) return { borderWidth: W[m[1]] }
     const v = colorToken(m[1]); return v == null ? 'keep' : { borderColor: v }
   }
-  if (cls === 'border') return { borderWidth: 1 }
 
   // typography
   if ((m = cls.match(/^font-(\w+)$/))) {

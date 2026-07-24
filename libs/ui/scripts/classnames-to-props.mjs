@@ -75,35 +75,76 @@ function transform(file, text, targets) {
     const line = sf.getLineAndCharacterOfPosition(opening.getStart(sf)).line + 1
     const tag = opening.tagName.getText(sf)
 
-    if (!attr.initializer || !ts.isStringLiteral(attr.initializer)) {
-      const raw = attr.initializer ? attr.initializer.getText(sf) : ''
-      skips.push({ line, why: `dynamic className on <${tag}> — migrate to conditional prop objects: ${raw.slice(0, 60)}` })
-      return
-    }
-
-    const { props, keep, skip } = classToProps(attr.initializer.text)
-    if (skip.length) {
-      skips.push({ line, why: `<${tag}> has unmapped classes ${JSON.stringify(skip)} — migrate manually` })
-      return
-    }
-    if (Object.keys(props).length === 0) return // nothing to lift (all kept)
-
-    // Don't duplicate a prop the element already sets.
+    // The set of props the element already sets (used to detect merge collisions).
     const existing = new Set(
       opening.attributes.properties
         .filter((p) => ts.isJsxAttribute(p))
         .map((p) => p.name.getText(sf)),
     )
-    const collisions = Object.keys(props).filter((k) => existing.has(k))
-    if (collisions.length) {
-      skips.push({ line, why: `<${tag}> already sets ${collisions.join('/')} — merge lifted prop(s) manually` })
+
+    // Lift `classes` to props, then splice the residual back with `rebuildClassName(keep)`.
+    // rebuildClassName returns the FULL `className=…` attribute source (or '' for none).
+    const lift = (classes, rebuildClassName) => {
+      const { props, keep, skip } = classToProps(classes)
+      if (skip.length) {
+        skips.push({ line, why: `<${tag}> has unmapped classes ${JSON.stringify(skip)} — migrate manually` })
+        return
+      }
+      if (Object.keys(props).length === 0) return // nothing to lift (all kept)
+      const collisions = Object.keys(props).filter((k) => existing.has(k))
+      if (collisions.length) {
+        skips.push({ line, why: `<${tag}> already sets ${collisions.join('/')} — merge lifted prop(s) manually` })
+        return
+      }
+      const propStr = Object.entries(props).map(([k, v]) => serialize(k, v)).join(' ')
+      const classAttr = rebuildClassName(keep)
+      edits.push({ start: attr.getStart(sf), end: attr.getEnd(), replacement: (classAttr ? classAttr + ' ' : '') + propStr })
+      count++
+    }
+
+    // 1) Plain static string: `className="a b c"`.
+    if (attr.initializer && ts.isStringLiteral(attr.initializer)) {
+      lift(attr.initializer.text, (keep) => (keep.length ? `className=${JSON.stringify(keep.join(' '))}` : ''))
       return
     }
 
-    const propStr = Object.entries(props).map(([k, v]) => serialize(k, v)).join(' ')
-    const keepAttr = keep.length ? `className=${JSON.stringify(keep.join(' '))} ` : ''
-    edits.push({ start: attr.getStart(sf), end: attr.getEnd(), replacement: keepAttr + propStr })
-    count++
+    // 2) `className={cn("static literal", ...rest)}` — lift the literal, keep the dynamic rest.
+    //    The residual static classes + the passthrough args are re-wrapped in `cn(...)` (or, when a
+    //    single arg survives, inlined). This drains the most common dynamic-className shape (§5).
+    if (attr.initializer && ts.isJsxExpression(attr.initializer)) {
+      const expr = attr.initializer.expression
+      const isCn =
+        expr &&
+        ts.isCallExpression(expr) &&
+        ts.isIdentifier(expr.expression) &&
+        expr.expression.text === 'cn' &&
+        expr.arguments.length >= 1 &&
+        ts.isStringLiteral(expr.arguments[0])
+      if (isCn) {
+        const rest = expr.arguments.slice(1).map((a) => a.getText(sf))
+        lift(expr.arguments[0].text, (keep) => {
+          const cnArgs = []
+          if (keep.length) cnArgs.push(JSON.stringify(keep.join(' ')))
+          cnArgs.push(...rest)
+          if (cnArgs.length === 0) return ''
+          if (cnArgs.length === 1) {
+            const a = cnArgs[0]
+            const isStr = a.startsWith('"') || a.startsWith("'")
+            return isStr ? `className=${a}` : `className={${a}}`
+          }
+          return `className={cn(${cnArgs.join(', ')})}`
+        })
+        return
+      }
+      const raw = attr.initializer.getText(sf)
+      skips.push({ line, why: `dynamic className on <${tag}> — migrate to conditional prop objects: ${raw.slice(0, 60)}` })
+      return
+    }
+
+    if (attr.initializer) {
+      const raw = attr.initializer.getText(sf)
+      skips.push({ line, why: `dynamic className on <${tag}> — migrate to conditional prop objects: ${raw.slice(0, 60)}` })
+    }
   }
 
   const visit = (node) => {

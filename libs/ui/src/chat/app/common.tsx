@@ -66,7 +66,7 @@ export function CodeBlock({ code }: { code: string }): React.ReactElement {
 
 export function Tabs<T extends string>({ tabs, active, onChange }: { tabs: readonly T[]; active: T; onChange: (t: T) => void }): React.ReactElement {
   return (
-    <Prim.Row gap="$1" borderColor="$lm-border" role="tablist">
+    <Prim.Row gap="$1" borderBottomWidth={1} borderColor="$lm-border" role="tablist">
       {tabs.map((t) => (
         <Prim.Pressable
           key={t}

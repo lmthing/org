@@ -67,7 +67,7 @@ export function PlaybackBar(): React.ReactElement | null {
   if (!replay) return null;
   const total = replay.events.length;
   return (
-    <Prim.Row gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderColor="$lm-border" backgroundColor="$lm-panel" alignItems="center">
+    <Prim.Row gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderTopWidth={1} borderColor="$lm-border" backgroundColor="$lm-panel" alignItems="center">
       <Prim.Pressable onClick={() => (replay.playing ? pause() : play())} color="13px" width="$6">
         {replay.playing ? '⏸' : '▶'}
       </Prim.Pressable>
