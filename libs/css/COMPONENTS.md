@@ -25,12 +25,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `background`, `border`, `foreground`
 
-### `elements/content/separator/index.css`
-
-- **.separator** — `.separator` `.separator--vertical`
-
-  Tokens: `border`
-
 ### `elements/content/terminal/index.css`
 
 - **.terminal** — `.terminal` `.terminal--loading` `.terminal__viewport`
@@ -131,18 +125,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.sheet** — `.sheet` `.sheet--right` `.sheet__content` `.sheet__header`
 
   Tokens: `background`, `border`
-
-### `elements/typography/caption/index.css`
-
-- **.caption** — `.caption` `.caption--muted`
-
-  Tokens: `muted-foreground`
-
-### `elements/typography/label/index.css`
-
-- **.label** — `.label` `.label--required` `.label--sm`
-
-  Tokens: `destructive`, `foreground`
 
 ## Components (features)
 

@@ -5,6 +5,7 @@
  * the editor adds actual task files).
  */
 import * as Prim from '../../../elements/primitives/index.js';
+import { Label } from '@lmthing/ui/elements/typography/label'
 import { useCallback, useEffect } from 'react'
 import { useUIState, useSpaceFS } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -90,7 +91,7 @@ export function SaveTasklistModal({ isOpen, onClose, existingName, onSaved }: Sa
 
         <Stack gap="md" className="save-workflow-modal__body">
           <Prim.Box>
-            <Prim.Text as="label" className="label">Tasklist Name</Prim.Text>
+            <Label>Tasklist Name</Label>
             <Input
               type="text"
               value={name}

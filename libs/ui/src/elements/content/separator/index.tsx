@@ -1,13 +1,9 @@
-import '@lmthing/css/elements/content/separator/index.css'
 import * as React from 'react'
 import * as Prim from '../../primitives/index'
-import { cn } from '../../../lib/utils'
 
 /**
- * Separator — a themed rule. Migrated off `@radix-ui/react-separator` to the universal Tamagui `Box`
- * (Part III / B3.4): a Radix Separator.Root is just a `<div role="separator" aria-orientation>`, which
- * `Prim.Box` reproduces exactly — and being a Tamagui primitive it renders on native via the Box fork.
- * Keeps the `separator` CSS classes and the `vertical`/`orientation` API.
+ * Separator — the idiomatic `.separator`, a themed rule. Renders `Prim.Box` (a real
+ * `<div role="separator">`) styled by `$`-token PROPS from separator.styled.tsx. CSS deleted.
  */
 export interface SeparatorProps extends React.HTMLAttributes<HTMLDivElement> {
   vertical?: boolean
@@ -16,14 +12,15 @@ export interface SeparatorProps extends React.HTMLAttributes<HTMLDivElement> {
   decorative?: boolean
 }
 
-function Separator({ className, vertical, orientation, decorative = true, ...props }: SeparatorProps) {
+function Separator({ vertical, orientation, decorative = true, ...props }: SeparatorProps) {
   const isVertical = vertical || orientation === 'vertical'
   return (
     <Prim.Box
       role={decorative ? 'none' : 'separator'}
       aria-orientation={isVertical ? 'vertical' : 'horizontal'}
-      className={cn('separator', isVertical && 'separator--vertical', className)}
-      {...props}
+      backgroundColor="$border"
+      {...(isVertical ? { height: '100%', width: 1 } : { height: 1, width: '100%' })}
+      {...(props as Record<string, unknown>)}
     />
   )
 }
