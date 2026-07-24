@@ -11,8 +11,8 @@
  * (`elements/settings/integrations`, now removed).
  */
 import * as Prim from '../../../elements/primitives/index.js';
-import '@lmthing/css/elements/layouts/split-pane/index.css'
-import '@lmthing/css/elements/layouts/page/index.css'
+import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index.js'
+import { PAGE_BODY } from '../../../elements/layouts/page/index.js'
 import '@lmthing/css/elements/content/panel/index.css'
 import '@lmthing/css/components/setup-guide/index.css'
 import { useEffect, useMemo, useState } from 'react'
@@ -132,10 +132,10 @@ export function ProjectSettingsView() {
   }
 
   return (
-    <Prim.Box className="split-pane" height="100vh">
+    <Prim.Box {...SPLIT_PANE_BASE} height="100vh">
       <StudioAppSidebar className="shrink-0" />
-      <Prim.Box className="split-pane__primary">
-        <Prim.Box className="page__body">
+      <Prim.Box {...SPLIT_PANE_PRIMARY}>
+        <Prim.Box {...PAGE_BODY}>
           <Stack gap="lg">
             <Stack gap="sm">
               <Heading level={2}>Project Settings</Heading>

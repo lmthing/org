@@ -4,12 +4,12 @@
  * Orchestrates the sidebar, content area, and settings/knowledge views.
  */
 import * as Prim from '../../../elements/primitives/index.js';
+import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index.js'
+import { PAGE_BODY } from '../../../elements/layouts/page/index.js'
 import { useCallback, useMemo } from 'react'
 import { useToggle } from '@lmthing/state'
 import { useParams, useLocation, useNavigate } from '@tanstack/react-router'
 import { buildSpacePath } from '@lmthing/ui/lib/space-path'
-import '@lmthing/css/elements/layouts/split-pane/index.css'
-import '@lmthing/css/elements/layouts/page/index.css'
 import { StudioSidebar } from '../studio-sidebar'
 import { StudioAppSidebar } from '../studio-app-sidebar'
 import { SettingsView } from '../settings-view'
@@ -89,7 +89,7 @@ export function StudioShell({
   const isSettingsOpen = pathname.includes('/settings')
 
   return (
-    <Prim.Box className="split-pane" height="100vh">
+    <Prim.Box {...SPLIT_PANE_BASE} height="100vh">
       {/* Outer shared sidebar: project dropdown + collapsible spaces (same in chat). */}
       <StudioAppSidebar className="shrink-0" />
 
@@ -107,12 +107,12 @@ export function StudioShell({
         onToggleThing={rightPanel ? toggleThingOpen : undefined}
       />
 
-      <Prim.Box className="split-pane__primary">
+      <Prim.Box {...SPLIT_PANE_PRIMARY}>
         {isSettingsOpen ? (
           <SettingsView isOpen={true} />
         ) : (
           children || (
-            <Prim.Box className="page__body" display="flex" alignItems="center" justifyContent="center">
+            <Prim.Box {...PAGE_BODY} display="flex" alignItems="center" justifyContent="center">
               <Prim.Box textAlign="center" opacity={0.5}>
                 <Prim.Text as="p" fontSize="$lg" fontWeight="$semibold" marginBottom="$2">
                   Select a knowledge field or agent

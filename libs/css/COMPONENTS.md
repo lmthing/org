@@ -49,22 +49,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `background`, `input`, `muted-foreground`, `ring`
 
-### `elements/layouts/page/index.css`
-
-- **.page** — `.page` `.page--full` `.page__body` `.page__header`
-
-  Tokens: `background`, `border`
-
-### `elements/layouts/split-pane/index.css`
-
-- **.split-pane** — `.split-pane` `.split-pane__primary` `.split-pane__secondary`
-
-  Tokens: `border`
-
-### `elements/layouts/stack/index.css`
-
-- **.stack** — `.stack` `.stack--gap-lg` `.stack--gap-md` `.stack--gap-sm` `.stack--row`
-
 ### `elements/nav/app-links/index.css`
 
 - **.app-links** — `.app-links` `.app-links--bordered` `.app-links__link`
