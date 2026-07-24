@@ -1,3 +1,6 @@
+// The `.sidebar` shell is props now, but `SidebarItem` still emits `sidebar__item` (router-
+// `<Link>` residual — see below), so this element still owns that stylesheet import.
+import '@lmthing/css/elements/nav/sidebar/index.css'
 import * as React from 'react'
 import * as Prim from '../../primitives/index'
 import { cn } from '../../../lib/utils'

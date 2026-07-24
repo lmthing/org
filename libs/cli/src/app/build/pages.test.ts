@@ -116,9 +116,9 @@ describe('buildProjectPages', () => {
     await writeFile(join(dir, 'package.json'), JSON.stringify({ name: 'css-scratch', version: '0.0.0' }));
     await writeFile(
       join(dir, 'pages', 'index.tsx'),
-      `import { Card } from '@lmthing/ui/elements/content/card/index.tsx';
+      `import { SidebarItem } from '@lmthing/ui/elements/nav/sidebar/index.tsx';
 export default function Home() {
-  return <Card className="p-4 bg-background text-foreground">styled</Card>;
+  return <SidebarItem className="p-4 bg-background text-foreground">styled</SidebarItem>;
 }
 `,
     );
@@ -139,7 +139,11 @@ export default function Home() {
     expect(css).toMatch(/\.p-4\b/);
     expect(css).toMatch(/\.bg-background\b/);
     // The `@apply` element styles from `@lmthing/ui` were expanded, not passed through.
-    expect(css).toContain('.card');
+    // NB: this needs an element that still SHIPS a BEM stylesheet. Most of `elements/**` has moved
+    // to Tamagui `$`-token style props and has no CSS left to compile
+    // (docs/tamagui-idiomatic-migration.md §4/§6); `sidebar__item` is one of the documented
+    // residuals — its call sites are router `<Link>`s, which take only `className`.
+    expect(css).toContain('.sidebar__item');
     expect(css).not.toMatch(/@apply\b/);
     expect(css).not.toMatch(/@reference\b/);
   }, 60_000);
