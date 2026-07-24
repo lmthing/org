@@ -2,3 +2,4 @@
    and scans the fixtures for utility classes, exactly like apps/web/src/index.css. */
 @import '@lmthing/css/theme.css';
 @source inline("bg-background items-center");
+@source inline("text-2xl font-bold text-foreground");
