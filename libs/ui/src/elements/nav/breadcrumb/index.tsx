@@ -1,7 +1,15 @@
-import '@lmthing/css/elements/nav/breadcrumb/index.css'
 import * as React from 'react'
-import { cn } from '../../../lib/utils'
+import * as Prim from '../../primitives/index'
 
+/**
+ * Breadcrumb — the idiomatic `.breadcrumb`. Renders `Prim.Box as="nav"` / `Prim.Text` (real host
+ * tags at runtime via `createComponent`) with the styling as `$`-token PROPS from
+ * breadcrumb.styled.tsx (docs/tamagui-idiomatic-migration.md §4). `breadcrumb/index.css` is deleted.
+ *
+ * The stylesheet's `.breadcrumb__segment:last-child` rule becomes an explicit `isCurrent` branch —
+ * the component already knows which segment is last (it sets `aria-current` from the same test), so
+ * the positional selector needs no CSS. (`transition-colors` awaits the animation driver, §5/P4.)
+ */
 export interface BreadcrumbSegment {
   label: string
   onClick?: () => void
@@ -12,31 +20,48 @@ export interface BreadcrumbProps extends React.ComponentProps<'nav'> {
   separator?: React.ReactNode
 }
 
-function Breadcrumb({
-  className,
-  segments,
-  separator = '/',
-  ...props
-}: BreadcrumbProps) {
+/** `.breadcrumb` — flex, items-center, gap-1, text-sm, text-muted-foreground. */
+const BREADCRUMB = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '$1',
+  fontSize: '$sm',
+  color: '$muted-foreground',
+} as const
+
+/** `.breadcrumb__segment` — clickable, hovers to foreground. */
+const SEGMENT = { cursor: 'pointer', hoverStyle: { color: '$foreground' } } as const
+
+/** `.breadcrumb__segment:last-child` — the current page: foreground, not clickable. */
+const SEGMENT_CURRENT = { color: '$foreground', cursor: 'default' } as const
+
+/** `.breadcrumb__separator` — muted, unselectable. */
+const SEPARATOR = { color: '$muted-foreground', userSelect: 'none' } as const
+
+function Breadcrumb({ segments, separator = '/', ...props }: BreadcrumbProps) {
   return (
-    <nav aria-label="breadcrumb" className={cn('breadcrumb', className)} {...props}>
-      {segments.map((segment, index) => (
-        <React.Fragment key={index}>
-          {index > 0 && (
-            <span className="breadcrumb__separator" aria-hidden="true">
-              {separator}
-            </span>
-          )}
-          <span
-            className="breadcrumb__segment"
-            onClick={segment.onClick}
-            aria-current={index === segments.length - 1 ? 'page' : undefined}
-          >
-            {segment.label}
-          </span>
-        </React.Fragment>
-      ))}
-    </nav>
+    <Prim.Box as="nav" aria-label="breadcrumb" {...BREADCRUMB} {...(props as Record<string, unknown>)}>
+      {segments.map((segment, index) => {
+        const isCurrent = index === segments.length - 1
+        return (
+          <React.Fragment key={index}>
+            {index > 0 && (
+              <Prim.Text {...SEPARATOR} aria-hidden="true">
+                {separator}
+              </Prim.Text>
+            )}
+            <Prim.Text
+              {...SEGMENT}
+              {...(isCurrent ? SEGMENT_CURRENT : {})}
+              onClick={segment.onClick}
+              aria-current={isCurrent ? 'page' : undefined}
+            >
+              {segment.label}
+            </Prim.Text>
+          </React.Fragment>
+        )
+      })}
+    </Prim.Box>
   )
 }
 

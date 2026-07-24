@@ -1,6 +1,7 @@
 import { render, screen } from '../../../test-utils/index'
 import { userEvent } from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
+// Post-swap: $-token PROPS → Tamagui atomic classes, not `.tab-bar*` BEM classNames.
 import { TabBar } from './index'
 
 const tabs = [
@@ -9,21 +10,24 @@ const tabs = [
 ]
 
 describe('TabBar', () => {
-  it('renders all tabs', () => {
+  it('renders all tabs as real buttons', () => {
     render(<TabBar tabs={tabs} />)
-    expect(screen.getByRole('tab', { name: 'Tab 1' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Tab 1' }).tagName).toBe('BUTTON')
     expect(screen.getByRole('tab', { name: 'Tab 2' })).toBeInTheDocument()
   })
 
-  it('applies tab-bar class to container', () => {
+  it('is a gapped row with a bottom border', () => {
     render(<TabBar tabs={tabs} data-testid="tabbar" />)
-    expect(screen.getByTestId('tabbar')).toHaveClass('tab-bar')
+    expect(screen.getByTestId('tabbar')).toHaveClass(
+      '_dsp-flex', '_alignItems-center', '_gap-c-space-1', '_borderBottomWidth-1px',
+    )
   })
 
-  it('marks active tab with tab-bar__tab--active', () => {
+  it('underlines only the active tab with the primary token', () => {
     render(<TabBar tabs={tabs} activeTab="tab1" />)
-    expect(screen.getByRole('tab', { name: 'Tab 1' })).toHaveClass('tab-bar__tab--active')
-    expect(screen.getByRole('tab', { name: 'Tab 2' })).not.toHaveClass('tab-bar__tab--active')
+    expect(screen.getByRole('tab', { name: 'Tab 1' })).toHaveClass('_borderBottomColor-primary')
+    expect(screen.getByRole('tab', { name: 'Tab 2' }).className)
+      .not.toMatch(/_borderBottomColor-primary/)
   })
 
   it('calls onTabChange when a tab is clicked', async () => {

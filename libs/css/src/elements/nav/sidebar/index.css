@@ -1,12 +1,10 @@
 @reference "../../../theme.css";
 
-.sidebar {
-  @apply flex! flex-col h-full w-64 bg-sidebar border-r border-sidebar-border transition-all duration-200;
-}
-
-.sidebar--collapsed {
-  @apply w-12;
-}
+/* TRIMMED for the P4 element-layer swap (docs/tamagui-idiomatic-migration.md §4): the `.sidebar`
+   shell + `--collapsed` are now `$`-token props on the Sidebar element. Only the item rules remain,
+   because most `sidebar__item` call sites are TanStack Router `<Link>`s — they render their own
+   `<a>` and accept `className` only (no `asChild`, no style props), so this stays the ONE definition
+   of the item look rather than being duplicated as a prop bag. */
 
 .sidebar__item {
   @apply flex! items-center gap-2 px-3 py-2 rounded-md text-sm text-sidebar-foreground
