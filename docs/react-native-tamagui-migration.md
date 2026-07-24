@@ -1,6 +1,10 @@
 # Migrating `chat` + `studio` to Tamagui (universal / RN-compatible) — **without breaking web styles**
 
-> Status: **Phase 0 COMPLETE**; **Phase 1 foundation + native side COMPLETE**; **Phase 2 scaffold
+> **➡ Phase 2 (idiomatic "the Tamagui way", zero-Tailwind) is planned separately in
+> [`tamagui-idiomatic-migration.md`](./tamagui-idiomatic-migration.md)** — it replaces the Tailwind/
+> `theme.css`/BEM styling engine this migration KEEPS underneath, with Tamagui tokens+props+themes.
+>
+> > Status: **Phase 0 COMPLETE**; **Phase 1 foundation + native side COMPLETE**; **Phase 2 scaffold
 > COMPLETE**. Landed & tested: token pipeline · `createTamagui` config shell (+ runtime parity
 > test) · the L2/L3 visual harness with passthrough baselines · React Native forks for **every**
 > primitive (core + grouped, so the whole `elements/primitives` index is RN-safe) · the xterm
