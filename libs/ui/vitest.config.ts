@@ -20,6 +20,9 @@ export default defineConfig({
       'src/**/*.parity.test.tsx',
       'src/theme/**/*.test.ts',
       'src/platform/**/*.test.ts',
+      // Pure codemod-mapping tests (node-safe, no DOM) — the objective correctness gate for the
+      // P3 classnames-to-props codemod. See docs/tamagui-idiomatic-migration.md §5.
+      'scripts/**/*.test.mjs',
     ],
     setupFiles: ['./vitest.setup.ts'],
     css: false,
