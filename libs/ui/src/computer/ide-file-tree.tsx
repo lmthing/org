@@ -11,8 +11,8 @@ import {
   FolderPlus,
   Trash2,
 } from 'lucide-react'
-import * as ContextMenu from '@radix-ui/react-context-menu'
-import * as Dialog from '@radix-ui/react-dialog'
+import * as ContextMenu from '../elements/overlays/context-menu'
+import { Dialog, DialogContent, DialogTitle } from '../elements/overlays/dialog'
 import { cn } from '../lib/utils'
 
 export interface FileTreeNode {
@@ -107,28 +107,25 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
         </ContextMenu.Portal>
       </ContextMenu.Root>
 
-      <Dialog.Root open={dialogType !== null} onOpenChange={(open) => { if (!open) setDialogType(null) }}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="ide-file-tree__dialog-overlay" />
-          <Dialog.Content className="ide-file-tree__dialog-content">
-            <Dialog.Title className="ide-file-tree__dialog-title">
-              New {dialogType === 'folder' ? 'Folder' : 'File'}
-            </Dialog.Title>
-            <Prim.TextField
-              className="ide-file-tree__dialog-input"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              placeholder={dialogType === 'folder' ? 'folder-name' : 'filename.txt'}
-              autoFocus
-            />
-            <Prim.Box className="ide-file-tree__dialog-actions">
-              <Prim.Pressable className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</Prim.Pressable>
-              <Prim.Pressable className="btn btn--primary btn--sm" onClick={handleCreate}>Create</Prim.Pressable>
-            </Prim.Box>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <Dialog open={dialogType !== null} onOpenChange={(open) => { if (!open) setDialogType(null) }}>
+        <DialogContent className="ide-file-tree__dialog-content">
+          <DialogTitle className="ide-file-tree__dialog-title">
+            New {dialogType === 'folder' ? 'Folder' : 'File'}
+          </DialogTitle>
+          <Prim.TextField
+            className="ide-file-tree__dialog-input"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            placeholder={dialogType === 'folder' ? 'folder-name' : 'filename.txt'}
+            autoFocus
+          />
+          <Prim.Box className="ide-file-tree__dialog-actions">
+            <Prim.Pressable className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</Prim.Pressable>
+            <Prim.Pressable className="btn btn--primary btn--sm" onClick={handleCreate}>Create</Prim.Pressable>
+          </Prim.Box>
+        </DialogContent>
+      </Dialog>
 
       {node.type === 'directory' && expanded && node.children?.map((child) => (
         <IdeFileTreeItem
@@ -186,28 +183,25 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
         ))}
       </Prim.Box>
 
-      <Dialog.Root open={dialogType !== null} onOpenChange={(open) => { if (!open) setDialogType(null) }}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="ide-file-tree__dialog-overlay" />
-          <Dialog.Content className="ide-file-tree__dialog-content">
-            <Dialog.Title className="ide-file-tree__dialog-title">
-              New {dialogType === 'folder' ? 'Folder' : 'File'}
-            </Dialog.Title>
-            <Prim.TextField
-              className="ide-file-tree__dialog-input"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              placeholder={dialogType === 'folder' ? 'folder-name' : 'filename.txt'}
-              autoFocus
-            />
-            <Prim.Box className="ide-file-tree__dialog-actions">
-              <Prim.Pressable className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</Prim.Pressable>
-              <Prim.Pressable className="btn btn--primary btn--sm" onClick={handleCreate}>Create</Prim.Pressable>
-            </Prim.Box>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <Dialog open={dialogType !== null} onOpenChange={(open) => { if (!open) setDialogType(null) }}>
+        <DialogContent className="ide-file-tree__dialog-content">
+          <DialogTitle className="ide-file-tree__dialog-title">
+            New {dialogType === 'folder' ? 'Folder' : 'File'}
+          </DialogTitle>
+          <Prim.TextField
+            className="ide-file-tree__dialog-input"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            placeholder={dialogType === 'folder' ? 'folder-name' : 'filename.txt'}
+            autoFocus
+          />
+          <Prim.Box className="ide-file-tree__dialog-actions">
+            <Prim.Pressable className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</Prim.Pressable>
+            <Prim.Pressable className="btn btn--primary btn--sm" onClick={handleCreate}>Create</Prim.Pressable>
+          </Prim.Box>
+        </DialogContent>
+      </Dialog>
     </Prim.Box>
   )
 }
