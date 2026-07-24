@@ -16,7 +16,19 @@
  * the Tamagui theme keys below are consumed by the primitives' block-compat resets and by native.
  */
 import { createTamagui } from '@tamagui/core'
-import { radius, fonts, themes } from '@lmthing/css/tamagui-tokens'
+import {
+  radius,
+  fonts,
+  themes,
+  space as spaceTokens,
+  size as sizeTokens,
+  fontSizes,
+  lineHeights,
+  fontWeights,
+  letterSpacings,
+  zIndex as zIndexTokens,
+  media as mediaConfig,
+} from '@lmthing/css/tamagui-tokens'
 
 // ── Color palette token ────────────────────────────────────────────────────────────────────
 // Tamagui's `tokens.color` is a flat palette; our themes reference raw hex directly, but a
@@ -29,71 +41,31 @@ const color = { ...themes.light } as Record<string, string>
 // so web output equals `--radius-*`; a numeric alias `true` gives styled() a sane default.
 const radiusTokens = { ...radius, true: radius['radius-md'] } as Record<string, string | number>
 
-// ── Space / size scale ─────────────────────────────────────────────────────────────────────
-// tokens.json defines NO spacing scale (only color/radius/font), so this is a conventional
-// 4px-based scale local to Tamagui — it is NOT part of the token-parity contract. The surfaces
-// keep expressing spacing via Tailwind classes; these exist only so `createTamagui` has a valid
-// space/size token group and native has a scale to draw on.
-const spaceScale = {
-  0: 0,
-  0.5: 2,
-  1: 4,
-  1.5: 6,
-  2: 8,
-  2.5: 10,
-  3: 12,
-  3.5: 14,
-  4: 16,
-  5: 20,
-  6: 24,
-  7: 28,
-  8: 32,
-  9: 36,
-  10: 40,
-  12: 48,
-  14: 56,
-  16: 64,
-  20: 80,
-  true: 16,
-} as const
+// ── Space / size scale (SPIKE B — Tailwind parity) ───────────────────────────────────────────
+// The Tailwind spacing scale, generated from `libs/css/scripts/tamagui-tokens.mjs` and proven
+// 1:1 with Tailwind by `scale-parity.test.ts`. `$4` === `p-4` === 16px, so the P3 class→prop
+// codemod is mechanical. Cast to a plain map for createTamagui's token typing.
+const spaceScale = { ...spaceTokens } as Record<string, number>
+const sizeScale = { ...sizeTokens } as Record<string, number>
+const zIndexScale = { ...zIndexTokens } as Record<string, number>
 
-// ── Fonts ──────────────────────────────────────────────────────────────────────────────────
-// Family strings are the exact `--font-*` values. Tamagui requires a size/lineHeight scale per
-// font face; these mirror a conventional type ramp (not part of the token contract — tokens.json
-// carries no font-size scale). `body` is sans, `heading` is the display face, `mono` monospace.
-const fontSize = {
-  1: 11,
-  2: 12,
-  3: 13,
-  4: 14,
-  5: 16,
-  6: 18,
-  7: 20,
-  8: 24,
-  9: 30,
-  10: 36,
-  true: 14,
-} as const
-const lineHeight = {
-  1: 16,
-  2: 16,
-  3: 18,
-  4: 20,
-  5: 24,
-  6: 26,
-  7: 28,
-  8: 32,
-  9: 38,
-  10: 44,
-  true: 20,
-} as const
-const weight = { 4: '400', 6: '600', 7: '700', true: '400' } as const
-
-const makeFont = (family: string) => ({ family, size: fontSize, lineHeight, weight })
+// ── Fonts (SPIKE B — Tailwind type ramp + weight + tracking) ──────────────────────────────────
+// Family strings are the exact `--font-*` values. size/lineHeight are Tailwind's `text-*` ramp
+// (`$sm` === `text-sm`); `weight` is Tailwind's `font-*` weights; `letterSpacing` is `tracking-*`.
+// All keyed by Tailwind's names so the codemod maps class→prop without a lookup table.
+const makeFont = (family: string) => ({
+  family,
+  size: { ...fontSizes } as Record<string, number>,
+  lineHeight: { ...lineHeights } as Record<string, number>,
+  weight: { ...fontWeights } as Record<string, string>,
+  letterSpacing: { ...letterSpacings } as Record<string, string>,
+})
 
 export const tamaguiConfig = createTamagui({
   // `themes.light`/`themes.dark` map design-token names → resolved hex, verbatim from the
   // generated module. `background`, `foreground`, `border`, … are directly usable as `$token`.
+  // These are the NATIVE render target (resolved hex). The WEB config uses the `var(--name)`
+  // indirection (SPIKE A1, see tamagui-web.config.ts) so runtime space themes keep working.
   themes: {
     light: themes.light as Record<string, string>,
     dark: themes.dark as Record<string, string>,
@@ -102,14 +74,16 @@ export const tamaguiConfig = createTamagui({
     color,
     radius: radiusTokens,
     space: spaceScale,
-    size: spaceScale,
-    zIndex: { 0: 0, 1: 100, 2: 200, 3: 300, 4: 400, 5: 500, true: 0 },
+    size: sizeScale,
+    zIndex: zIndexScale,
   },
   fonts: {
     body: makeFont(fonts['font-sans']),
     heading: makeFont(fonts['font-display']),
     mono: makeFont(fonts['font-mono']),
   },
+  // Tailwind breakpoints (SPIKE B) so `md:`→`$md`/`$gtSm` media props resolve identically.
+  media: mediaConfig as Record<string, { minWidth: number }>,
   settings: {
     // Web coexistence: allow className passthrough on all primitives so the surfaces' existing
     // Tailwind/theme.css classes keep applying alongside Tamagui's output.

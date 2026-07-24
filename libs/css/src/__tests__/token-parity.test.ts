@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
-import { radius, fonts, themes } from '../tamagui/tokens.generated';
+import { radius, fonts, themes, webThemes } from '../tamagui/tokens.generated';
 import { renderTokensModule } from '../../scripts/tamagui-tokens.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -94,6 +94,37 @@ describe('Layer 1 — Tamagui ⇄ theme.css token parity', () => {
   it('every :root color also has a distinct-or-inherited dark value (no gaps)', () => {
     for (const name of Object.keys(themes.light)) {
       expect(themes.dark, `dark theme has --${name}`).toHaveProperty(name);
+    }
+  });
+});
+
+describe('SPIKE A1 — webThemes are the var(--name) indirection over :root', () => {
+  it('every color name has a web value of exactly var(--<name>)', () => {
+    for (const name of Object.keys(themes.light)) {
+      // theme.css defines `--<name>` under :root/[data-theme=dark]; the Tamagui web theme
+      // points AT that var, so light/dark flips (and runtime space-theme overrides of the
+      // same var) resolve through the CSS cascade without a rebuild — SPIKE A1.
+      expect(webThemes.light[name as keyof typeof webThemes.light], `web light --${name}`).toBe(
+        `var(--${name})`,
+      );
+      expect(webThemes.dark[name as keyof typeof webThemes.dark], `web dark --${name}`).toBe(
+        `var(--${name})`,
+      );
+    }
+  });
+
+  it('web themes cover exactly the same token names as the native (hex) themes', () => {
+    expect(Object.keys(webThemes.light)).toEqual(Object.keys(themes.light));
+    expect(Object.keys(webThemes.dark)).toEqual(Object.keys(themes.dark));
+  });
+
+  it('each webTheme var resolves (in theme.css) to the resolved hex the native theme carries', () => {
+    // Close the loop: var(--background) → rootBlock[background] === themes.light[background].
+    for (const [name, hex] of Object.entries(themes.light)) {
+      expect(rootBlock[name], `--${name} :root value backs web light`).toBe(hex);
+    }
+    for (const [name, hex] of Object.entries(themes.dark)) {
+      expect(resolvedDark[name], `--${name} dark value backs web dark`).toBe(hex);
     }
   });
 });
