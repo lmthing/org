@@ -1,16 +1,20 @@
 import * as Prim from '../elements/primitives/index.js';
-import '@lmthing/css/components/computer/logs-viewer.css'
 import { useRef, useEffect, useState } from 'react'
 import { Panel, PanelHeader } from '../elements/content/panel'
 import { Button } from '../elements/forms/button'
 import { Heading } from '../elements/typography/heading'
-import { cn } from '../lib/utils'
 
 export interface LogEntry {
   timestamp: number
   level: 'info' | 'warn' | 'error' | 'debug'
   source: string
   message: string
+}
+
+// `.computer-logs-viewer__message` `--warn`/`--error` modifiers driven by entry.level.
+const MESSAGE_COLOR: Partial<Record<LogEntry['level'], string>> = {
+  warn: '$warning',
+  error: '$destructive',
 }
 
 export interface LogsViewerProps {
@@ -41,8 +45,16 @@ function LogsViewer({ logs }: LogsViewerProps) {
       <PanelHeader>
         <Heading level={4}>Logs</Heading>
       </PanelHeader>
-      <Prim.Box className="computer-logs-viewer">
-        <Prim.Box className="computer-logs-viewer__toolbar">
+      <Prim.Box display="flex" flexDirection="column" height="100%">
+        <Prim.Box
+          display="flex"
+          alignItems="center"
+          gap="$2"
+          paddingHorizontal="$3"
+          paddingVertical="$2"
+          borderBottomWidth={1}
+          borderBottomColor="$border"
+        >
           {(['all', 'info', 'warn', 'error', 'debug'] as const).map((f) => (
             <Button
               key={f}
@@ -54,19 +66,24 @@ function LogsViewer({ logs }: LogsViewerProps) {
             </Button>
           ))}
         </Prim.Box>
-        <Prim.Box ref={listRef} className="computer-logs-viewer__list">
+        <Prim.Box
+          ref={listRef}
+          flexGrow={1}
+          flexShrink={1}
+          flexBasis="0%"
+          overflow="auto"
+          fontFamily="monospace"
+          fontSize="$xs"
+          padding="$3"
+        >
           {filtered.length === 0 ? (
-            <Prim.Box className="computer-logs-viewer__empty">No logs</Prim.Box>
+            <Prim.Text fontSize="$sm" color="$muted-foreground" paddingVertical="$4" textAlign="center">No logs</Prim.Text>
           ) : (
             filtered.map((entry, i) => (
-              <Prim.Box key={i} className="computer-logs-viewer__entry">
-                <Prim.Text className="computer-logs-viewer__timestamp">{formatTime(entry.timestamp)}</Prim.Text>
-                <Prim.Text className="computer-logs-viewer__source">[{entry.source}]</Prim.Text>
-                <Prim.Text className={cn(
-                  'computer-logs-viewer__message',
-                  entry.level === 'warn' && 'computer-logs-viewer__message--warn',
-                  entry.level === 'error' && 'computer-logs-viewer__message--error',
-                )}>
+              <Prim.Box key={i} display="flex" gap="$2">
+                <Prim.Text color="$muted-foreground" flexShrink={0}>{formatTime(entry.timestamp)}</Prim.Text>
+                <Prim.Text color="$primary" flexShrink={0}>[{entry.source}]</Prim.Text>
+                <Prim.Text wordBreak="break-all" color={MESSAGE_COLOR[entry.level]}>
                   {entry.message}
                 </Prim.Text>
               </Prim.Box>

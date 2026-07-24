@@ -1,5 +1,4 @@
 import * as Prim from '../elements/primitives/index.js';
-import '@lmthing/css/components/computer/ide-preview.css'
 import { useState, useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
 
@@ -28,10 +27,32 @@ function IdePreview({ url }: IdePreviewProps) {
   }
 
   return (
-    <Prim.Box className="ide-preview">
-      <Prim.Box className="ide-preview__header">
+    <Prim.Box
+      height="100%"
+      display="flex"
+      flexDirection="column"
+      backgroundColor="$background"
+    >
+      <Prim.Box
+        display="flex"
+        alignItems="center"
+        gap="$1.5"
+        paddingHorizontal="$2"
+        paddingVertical="$1.5"
+        backgroundColor="$card"
+        borderBottomWidth={1}
+        borderBottomColor="$border"
+        flexShrink={0}
+      >
         <Prim.Pressable
-          className="ide-preview__refresh"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          padding="$1"
+          borderRadius="$radius"
+          color="$muted-foreground"
+          flexShrink={0}
+          hoverStyle={{ backgroundColor: '$accent', color: '$foreground' }}
           title="Refresh"
           onClick={() => setIframeKey((k) => k + 1)}
           disabled={!iframeSrc}
@@ -39,7 +60,21 @@ function IdePreview({ url }: IdePreviewProps) {
           <RefreshCw size={13} />
         </Prim.Pressable>
         <Prim.TextField
-          className="ide-preview__url"
+          flexGrow={1}
+          flexShrink={1}
+          flexBasis="0%"
+          minWidth={0}
+          paddingHorizontal="$2"
+          paddingVertical="$0.5"
+          fontSize="$xs"
+          backgroundColor="$background"
+          borderWidth={1}
+          borderColor="$border"
+          borderRadius="$radius"
+          fontFamily="monospace"
+          color="$foreground"
+          placeholderTextColor="$muted-foreground"
+          focusStyle={{ outlineWidth: 1, outlineStyle: 'solid', outlineColor: '$primary' }}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') navigate() }}
@@ -50,12 +85,28 @@ function IdePreview({ url }: IdePreviewProps) {
         <Prim.IFrame
           key={iframeKey}
           src={iframeSrc}
-          className="ide-preview__iframe"
+          flexGrow={1}
+          flexShrink={1}
+          flexBasis="0%"
+          width="100%"
+          borderWidth={0}
+          backgroundColor="white"
           title="Preview"
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
         />
       ) : (
-        <Prim.Box className="ide-preview__loading">Starting dev server...</Prim.Box>
+        <Prim.Text
+          flexGrow={1}
+          flexShrink={1}
+          flexBasis="0%"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          color="$muted-foreground"
+          fontSize="$sm"
+        >
+          Starting dev server...
+        </Prim.Text>
       )}
     </Prim.Box>
   )

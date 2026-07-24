@@ -1,5 +1,4 @@
 import * as Prim from '../elements/primitives/index.js';
-import '@lmthing/css/components/computer/computer-layout.css'
 import { CozyThingText } from '../elements/branding/cozy-text'
 import { Sidebar, SidebarItem } from '../elements/nav/sidebar'
 import { TopBar } from '../elements/nav/top-bar'
@@ -33,7 +32,7 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
     : 'connected' as const
 
   return (
-    <Prim.Box className="computer-layout">
+    <Prim.Box display="flex" height="100vh" overflow="hidden">
       <Sidebar style={{ justifyContent: 'space-between' }}>
         <Prim.Box>
           {navItems.map((item) => (
@@ -70,7 +69,14 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
           )}
         </Prim.Box>
       </Sidebar>
-      <Prim.Box className="computer-layout__content">
+      <Prim.Box
+        flexGrow={1}
+        flexShrink={1}
+        flexBasis="0%"
+        display="flex"
+        flexDirection="column"
+        minWidth={0}
+      >
         <TopBar
           title={<CozyThingText text="lmthing.computer" />}
           actions={
@@ -87,7 +93,7 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
           error={error}
           onRetry={onRetry}
         />
-        <Prim.Box className="computer-layout__main">
+        <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflow="auto">
           {children}
         </Prim.Box>
       </Prim.Box>

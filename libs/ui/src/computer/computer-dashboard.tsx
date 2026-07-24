@@ -1,5 +1,4 @@
 import * as Prim from '../elements/primitives/index.js';
-import '@lmthing/css/components/computer/computer-dashboard.css'
 import { StatusCard, type RuntimeStatus, type RuntimeTier } from './status-card'
 import { MetricsCard } from './metrics-card'
 import { ProcessesPanel, type RuntimeProcess } from './processes-panel'
@@ -33,7 +32,14 @@ function ComputerDashboard({
   network,
 }: ComputerDashboardProps) {
   return (
-    <Prim.Box className="computer-dashboard">
+    <Prim.Box
+      display="grid"
+      gridTemplateColumns="repeat(1, minmax(0, 1fr))"
+      gap="$4"
+      padding="$4"
+      $gtSm={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
+      $gtLg={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
+    >
       <StatusCard status={status} tier={tier} uptime={uptime} />
       <MetricsCard
         cpuPercent={cpuPercent}
@@ -42,10 +48,16 @@ function ComputerDashboard({
       />
       <ProcessesPanel processes={processes} />
       <AgentsPanel agents={agents} />
-      <Prim.Box className="computer-dashboard__full-width">
+      <Prim.Box
+        $gtSm={{ gridColumn: 'span 2 / span 2' }}
+        $gtLg={{ gridColumn: 'span 3 / span 3' }}
+      >
         <LogsViewer logs={logs} />
       </Prim.Box>
-      <Prim.Box className="computer-dashboard__full-width">
+      <Prim.Box
+        $gtSm={{ gridColumn: 'span 2 / span 2' }}
+        $gtLg={{ gridColumn: 'span 3 / span 3' }}
+      >
         <NetworkPanel network={network} unavailable={tier === 'webcontainer'} />
       </Prim.Box>
     </Prim.Box>
