@@ -2,29 +2,19 @@ import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import { Badge } from './index'
 
+// NB: not in the libs/ui vitest include (only *-styled.test.tsx run in CI); kept in sync by hand.
+// Post-swap the Badge renders a real <span> (Prim.Text) styled by $-token PROPS, not `badge*`
+// classNames — so these assert rendering/variants; badge.styled.tsx pins the variant table.
 describe('Badge', () => {
   it('renders children', () => {
     render(<Badge>Active</Badge>)
     expect(screen.getByText('Active')).toBeInTheDocument()
   })
 
-  it('applies badge class', () => {
-    render(<Badge data-testid="badge">Active</Badge>)
-    expect(screen.getByTestId('badge')).toHaveClass('badge')
-  })
-
-  it('applies badge--primary for primary variant', () => {
-    render(<Badge data-testid="badge" variant="primary">Active</Badge>)
-    expect(screen.getByTestId('badge')).toHaveClass('badge--primary')
-  })
-
-  it('applies badge--muted for muted variant', () => {
-    render(<Badge data-testid="badge" variant="muted">Draft</Badge>)
-    expect(screen.getByTestId('badge')).toHaveClass('badge--muted')
-  })
-
-  it('applies badge--success for success variant', () => {
-    render(<Badge data-testid="badge" variant="success">Done</Badge>)
-    expect(screen.getByTestId('badge')).toHaveClass('badge--success')
+  it('renders each variant without error', () => {
+    for (const variant of ['default', 'primary', 'muted', 'success'] as const) {
+      render(<Badge variant={variant}>{variant}</Badge>)
+      expect(screen.getByText(variant)).toBeInTheDocument()
+    }
   })
 })
