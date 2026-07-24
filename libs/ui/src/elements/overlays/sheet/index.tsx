@@ -1,58 +1,76 @@
 import '@lmthing/css/elements/overlays/sheet/index.css'
 import * as React from 'react'
-import * as DialogPrimitive from '@radix-ui/react-dialog'
+import * as ReactDOM from 'react-dom'
+import * as Prim from '../../primitives/index'
 import { cn } from '../../../lib/utils'
 
-function Sheet(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root {...props} />
+/**
+ * Sheet — a side-anchored modal panel, migrated off `@radix-ui/react-dialog` to the universal Tamagui
+ * primitives + an open-state context (Part III / B3.4), mirroring the Dialog: portal to body, ESC +
+ * backdrop dismiss. Keeps the `sheet*` CSS classes and the compound API. Native takes a `.native.tsx`
+ * fork. (No web consumers today; kept as the universal Sheet vocabulary.)
+ */
+type Ctx = { open: boolean; setOpen: (o: boolean) => void }
+const SheetContext = React.createContext<Ctx>({ open: false, setOpen: () => {} })
+
+export interface SheetProps {
+  open?: boolean
+  defaultOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+  children?: React.ReactNode
 }
 
-function SheetTrigger(props: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
-  return <DialogPrimitive.Trigger {...props} />
+function Sheet({ open: openProp, defaultOpen = false, onOpenChange, children }: SheetProps) {
+  const [uncontrolled, setUncontrolled] = React.useState(defaultOpen)
+  const open = openProp ?? uncontrolled
+  const setOpen = React.useCallback(
+    (o: boolean) => { if (openProp === undefined) setUncontrolled(o); onOpenChange?.(o) },
+    [openProp, onOpenChange],
+  )
+  return <SheetContext.Provider value={{ open, setOpen }}>{children}</SheetContext.Provider>
 }
 
-function SheetClose(props: React.ComponentProps<typeof DialogPrimitive.Close>) {
-  return <DialogPrimitive.Close {...props} />
+function SheetTrigger({ asChild, children, ...props }: { asChild?: boolean; children: React.ReactNode } & Record<string, unknown>) {
+  const { setOpen } = React.useContext(SheetContext)
+  const open = () => setOpen(true)
+  if (asChild && React.isValidElement(children)) return React.cloneElement(children as React.ReactElement<any>, { onClick: open })
+  return <Prim.Pressable onClick={open} {...props}>{children}</Prim.Pressable>
 }
 
-function SheetOverlay({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
-  return (
-    <DialogPrimitive.Overlay
-      className={cn('dialog__backdrop', className)}
-      {...props}
-    />
+function SheetClose({ asChild, children, ...props }: { asChild?: boolean; children?: React.ReactNode } & Record<string, unknown>) {
+  const { setOpen } = React.useContext(SheetContext)
+  const close = () => setOpen(false)
+  if (asChild && React.isValidElement(children)) return React.cloneElement(children as React.ReactElement<any>, { onClick: close })
+  return <Prim.Pressable onClick={close} {...props}>{children}</Prim.Pressable>
+}
+
+function SheetContent({ className, children, side = 'right', ...props }: React.HTMLAttributes<HTMLDivElement> & { side?: 'right' | 'left' }) {
+  const { open, setOpen } = React.useContext(SheetContext)
+  React.useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, setOpen])
+  if (!open || typeof document === 'undefined') return null
+  return ReactDOM.createPortal(
+    <Prim.Box className="fixed inset-0 z-50" role="dialog" aria-modal="true">
+      <Prim.Box className="dialog__backdrop" onClick={() => setOpen(false)} />
+      <Prim.Box className={cn('sheet', side === 'right' ? 'sheet--right' : 'sheet--left', className)} {...props}>
+        <Prim.Box className="sheet__content">{children}</Prim.Box>
+      </Prim.Box>
+    </Prim.Box>,
+    document.body,
   )
 }
 
-function SheetContent({
-  className,
-  children,
-  side = 'right',
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & { side?: 'right' | 'left' }) {
-  return (
-    <DialogPrimitive.Portal>
-      <SheetOverlay />
-      <DialogPrimitive.Content
-        className={cn(
-          'sheet',
-          side === 'right' && 'sheet--right',
-          className
-        )}
-        {...props}
-      >
-        <div className="sheet__content">{children}</div>
-      </DialogPrimitive.Content>
-    </DialogPrimitive.Portal>
-  )
+function SheetHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <Prim.Box className={cn('sheet__header', className)} {...props} />
 }
 
-function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('sheet__header', className)} {...props} />
-}
-
-function SheetTitle(props: React.ComponentProps<typeof DialogPrimitive.Title>) {
-  return <DialogPrimitive.Title {...props} />
+function SheetTitle({ asChild, children, ...props }: { asChild?: boolean; children?: React.ReactNode } & Record<string, unknown>) {
+  if (asChild && React.isValidElement(children)) return children
+  return <Prim.Text as="h2" {...props}>{children}</Prim.Text>
 }
 
 export { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger }

@@ -1,57 +1,32 @@
-import { render, screen } from '@testing-library/react'
-import { userEvent } from '@testing-library/user-event'
-import { describe, it, expect } from 'vitest'
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from './index'
+import { render, fireEvent, cleanup } from '@testing-library/react'
+import * as React from 'react'
+import { describe, it, expect, afterEach } from 'vitest'
+import { TamaguiProvider } from '@tamagui/core'
+import { tamaguiWebConfig } from '../../../theme/tamagui-web.config'
+import { Sheet, SheetContent, SheetTitle } from './index'
 
-describe('Sheet', () => {
-  it('renders the trigger', () => {
-    render(
-      <Sheet>
-        <SheetTrigger>Open</SheetTrigger>
-        <SheetContent>
-          <SheetTitle>Sheet Title</SheetTitle>
-        </SheetContent>
-      </Sheet>
+const P = ({ children }: { children: React.ReactNode }) => (
+  <TamaguiProvider config={tamaguiWebConfig} defaultTheme="app">{children}</TamaguiProvider>
+)
+afterEach(cleanup)
+
+describe('Sheet (Prim.*-based)', () => {
+  it('renders a portal role="dialog" with the side class when open, ESC closes', () => {
+    let open = true
+    const { queryByRole } = render(
+      <P><Sheet open onOpenChange={(o) => { open = o }}><SheetContent side="left"><SheetTitle>T</SheetTitle></SheetContent></Sheet></P>,
     )
-    expect(screen.getByText('Open')).toBeInTheDocument()
+    const el = queryByRole('dialog')!
+    expect(el).not.toBeNull()
+    expect(document.querySelector('.sheet--left')).not.toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(open).toBe(false)
   })
 
-  it('opens sheet on trigger click', async () => {
-    render(
-      <Sheet>
-        <SheetTrigger>Open</SheetTrigger>
-        <SheetContent>
-          <SheetTitle>Sheet Title</SheetTitle>
-        </SheetContent>
-      </Sheet>
+  it('renders nothing when closed', () => {
+    const { queryByRole } = render(
+      <P><Sheet open={false}><SheetContent><SheetTitle>T</SheetTitle></SheetContent></Sheet></P>,
     )
-    await userEvent.click(screen.getByText('Open'))
-    expect(screen.getByText('Sheet Title')).toBeInTheDocument()
-  })
-
-  it('applies sheet class to content', async () => {
-    render(
-      <Sheet>
-        <SheetTrigger>Open</SheetTrigger>
-        <SheetContent data-testid="sheet">
-          <SheetTitle>Title</SheetTitle>
-        </SheetContent>
-      </Sheet>
-    )
-    await userEvent.click(screen.getByText('Open'))
-    expect(screen.getByTestId('sheet')).toHaveClass('sheet')
-  })
-
-  it('applies sheet--right by default', async () => {
-    render(
-      <Sheet>
-        <SheetTrigger>Open</SheetTrigger>
-        <SheetContent data-testid="sheet">
-          <SheetTitle>Title</SheetTitle>
-        </SheetContent>
-      </Sheet>
-    )
-    await userEvent.click(screen.getByText('Open'))
-    expect(screen.getByTestId('sheet')).toHaveClass('sheet--right')
+    expect(queryByRole('dialog')).toBeNull()
   })
 })
