@@ -189,7 +189,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
   const grouped = groupSessionsByRecency(filteredSessions);
 
   const conversations = (
-    <Prim.Col className="gap-2">
+    <Prim.Col gap="$2">
       <Prim.TextField
         value={searchQuery}
         onChange={e => setSearchQuery(e.target.value)}
@@ -197,11 +197,11 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
         className="w-full bg-muted border-0 rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
       />
       {grouped.length === 0 && activeProjectId && (
-        <Prim.Text as="p" className="px-2 text-sm text-muted-foreground">No chats yet.</Prim.Text>
+        <Prim.Text as="p" paddingHorizontal="$2" fontSize="$sm" color="$muted-foreground">No chats yet.</Prim.Text>
       )}
       {grouped.map(group => (
         <Prim.Box key={group.label}>
-          <Prim.Text as="p" className="px-2 py-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</Prim.Text>
+          <Prim.Text as="p" paddingHorizontal="$2" paddingVertical="$0.5" fontSize="$xs" fontWeight="$semibold" color="$muted-foreground" textTransform="uppercase" letterSpacing="$wider">{group.label}</Prim.Text>
           {group.sessions.map(s => {
             const isActive = s.sessionId === activeSessionId;
             // The active session's title can change live (agent setSessionMeta) before
@@ -226,7 +226,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                   title={displayTitle || s.sessionId}
                 >
                   <Prim.Text display="block" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{label}</Prim.Text>
-                  <Prim.Text className="text-xs text-muted-foreground/70 font-normal" display="block">
+                  <Prim.Text className="text-muted-foreground/70" fontSize="$xs" fontWeight="$normal" display="block">
                     {relativeTime(s.lastActivity)}
                     {costLabel && <Prim.Text className="text-muted-foreground/50" marginLeft="0.375rem">{costLabel}</Prim.Text>}
                   </Prim.Text>

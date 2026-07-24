@@ -71,18 +71,18 @@ export function ConsentCard({
   return (
     <Prim.Box
       data-testid="consent-card"
-      className="border border-agent/50 bg-agent/5 rounded-xl p-4" marginVertical="0.25rem"
+      className="border-agent/50 bg-agent/5" borderWidth={1} borderRadius="$radius-xl" padding="$4" marginVertical="0.25rem"
     >
-      <Prim.Row className="gap-2" alignItems="flex-start">
+      <Prim.Row gap="$2" alignItems="flex-start">
         <ShieldIcon />
-        <Prim.Box className="min-w-0 flex-1">
-          <Prim.Box className="text-sm font-semibold text-foreground">
+        <Prim.Box minWidth={0} flexGrow={1} flexShrink={1} flexBasis="0%">
+          <Prim.Box fontSize="$sm" fontWeight="$semibold" color="$foreground">
             THING wants to run{' '}
             <Prim.Text as="code" className="font-mono text-agent break-all">{fn}</Prim.Text>
           </Prim.Box>
           {space && (
-            <Prim.Box className="text-xs text-muted-foreground" marginTop="0.125rem">
-              space: <Prim.Text className="font-mono">{space}</Prim.Text>
+            <Prim.Box fontSize="$xs" color="$muted-foreground" marginTop="0.125rem">
+              space: <Prim.Text fontFamily="$mono">{space}</Prim.Text>
             </Prim.Box>
           )}
         </Prim.Box>
@@ -94,11 +94,11 @@ export function ConsentCard({
         </Prim.Pre>
       )}
 
-      <Prim.Box className="text-xs text-muted-foreground" marginTop="0.5rem" marginBottom="0.75rem">
+      <Prim.Box fontSize="$xs" color="$muted-foreground" marginTop="0.5rem" marginBottom="0.75rem">
         Approve to let THING run this once, or deny to refuse it.
       </Prim.Box>
 
-      <Prim.Row className="gap-2">
+      <Prim.Row gap="$2">
         <Prim.Pressable
           type="button"
           disabled={inert}

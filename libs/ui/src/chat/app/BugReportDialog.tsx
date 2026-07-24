@@ -84,26 +84,26 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
   return (
     <Dialog open={open} onClose={handleClose} title="Report a bug">
       {result ? (
-        <Prim.Col className="gap-3 text-sm" style={{ lineHeight: '1.25rem' }}>
-          <Prim.Text as="p" className="text-foreground">
+        <Prim.Col gap="$3" fontSize="$sm" style={{ lineHeight: '1.25rem' }}>
+          <Prim.Text as="p" color="$foreground">
             Thanks — issue #{result.number} was filed.
           </Prim.Text>
           <Prim.Link
             href={result.url}
             target="_blank"
             rel="noreferrer"
-            className="text-agent hover:underline"
+            color="$agent" hoverStyle={{ textDecorationLine: "underline" }}
           >
             View issue
           </Prim.Link>
-          <Prim.Row className="justify-end">
+          <Prim.Row justifyContent="flex-end">
             <Button variant="outline" size="sm" onClick={handleClose}>Close</Button>
           </Prim.Row>
         </Prim.Col>
       ) : (
-        <Prim.Form className="flex-col gap-3" display="flex" onSubmit={handleSubmit}>
-          <Prim.Col className="gap-1">
-            <Prim.Text as="label" className="text-xs text-muted-foreground" htmlFor="bug-title">Title</Prim.Text>
+        <Prim.Form flexDirection="column" gap="$3" display="flex" onSubmit={handleSubmit}>
+          <Prim.Col gap="$1">
+            <Prim.Text as="label" fontSize="$xs" color="$muted-foreground" htmlFor="bug-title">Title</Prim.Text>
             <Input
               id="bug-title"
               value={title}
@@ -112,8 +112,8 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
               disabled={submitting}
             />
           </Prim.Col>
-          <Prim.Col className="gap-1">
-            <Prim.Text as="label" className="text-xs text-muted-foreground" htmlFor="bug-message">What happened?</Prim.Text>
+          <Prim.Col gap="$1">
+            <Prim.Text as="label" fontSize="$xs" color="$muted-foreground" htmlFor="bug-message">What happened?</Prim.Text>
             <Textarea
               id="bug-message"
               value={message}
@@ -125,9 +125,9 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
           </Prim.Col>
 
           {screenshot ? (
-            <Prim.Col className="gap-2">
-              <Prim.Image src={screenshot} className="max-h-40 rounded-lg border border-border" alt="Screenshot preview" />
-              <Prim.Text as="label" className="items-center gap-2 text-xs text-muted-foreground" display="flex">
+            <Prim.Col gap="$2">
+              <Prim.Image src={screenshot} maxHeight="$40" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" alt="Screenshot preview" />
+              <Prim.Text as="label" alignItems="center" gap="$2" fontSize="$xs" color="$muted-foreground" display="flex">
                 <Prim.TextField
                   type="checkbox"
                   checked={attachScreenshot}
@@ -138,14 +138,14 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
               </Prim.Text>
             </Prim.Col>
           ) : (
-            <Prim.Text as="p" className="text-xs text-muted-foreground">Screenshot unavailable</Prim.Text>
+            <Prim.Text as="p" fontSize="$xs" color="$muted-foreground">Screenshot unavailable</Prim.Text>
           )}
 
-          <Prim.Text as="p" className="text-xs text-muted-foreground">The full session trace will be attached.</Prim.Text>
+          <Prim.Text as="p" fontSize="$xs" color="$muted-foreground">The full session trace will be attached.</Prim.Text>
 
-          {error && <Prim.Text as="p" className="text-xs text-destructive">{error}</Prim.Text>}
+          {error && <Prim.Text as="p" fontSize="$xs" color="$destructive">{error}</Prim.Text>}
 
-          <Prim.Row className="justify-end gap-2">
+          <Prim.Row justifyContent="flex-end" gap="$2">
             <Button type="button" variant="outline" size="sm" onClick={handleClose} disabled={submitting}>
               Cancel
             </Button>

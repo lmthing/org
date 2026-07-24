@@ -273,22 +273,22 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     <Prim.Box className={cn('px-4 pb-4 pt-2', className)}>
       {/* Staged attachments */}
       {(attachments.length > 0 || attaching || attachError || recording) && (
-        <Prim.Row className="mb-2 flex-wrap gap-2" alignItems="center">
+        <Prim.Row marginBottom="$2" flexWrap="wrap" gap="$2" alignItems="center">
           {attachments.map((a) => (
             <Prim.Text
               key={a.id}
-              className="items-center gap-1.5 max-w-[220px] rounded-lg border border-border bg-muted px-2 py-1 text-xs text-foreground" display="inline-flex"
+              alignItems="center" gap="$1.5" maxWidth="220px" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$muted" paddingHorizontal="$2" paddingVertical="$1" fontSize="$xs" color="$foreground" display="inline-flex"
               title={a.filename ?? a.mediaType}
             >
               {a.kind === 'image' ? (
                 <Prim.Image src={withAuthToken(a.url)} alt={a.filename ?? 'image'} className="h-5 w-5 rounded object-cover" />
               ) : (
-                <Prim.Text className="text-muted-foreground">{a.kind === 'audio' ? '♪' : '📎'}</Prim.Text>
+                <Prim.Text color="$muted-foreground">{a.kind === 'audio' ? '♪' : '📎'}</Prim.Text>
               )}
               <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{a.kind === 'audio' && a.transcript ? a.transcript : (a.filename ?? a.kind)}</Prim.Text>
               <Prim.Pressable
                 onClick={() => removeAttachment(a.id)}
-                className="shrink-0 text-muted-foreground hover:text-foreground"
+                flexShrink={0} color="$muted-foreground" hoverStyle={{ color: "$foreground" }}
                 aria-label="Remove attachment"
               >
                 ×
@@ -296,13 +296,13 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
             </Prim.Text>
           ))}
           {recording && (
-            <Prim.Text className="items-center gap-1.5 text-xs text-destructive" display="inline-flex">
+            <Prim.Text alignItems="center" gap="$1.5" fontSize="$xs" color="$destructive" display="inline-flex">
               <Prim.Text className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
               Recording… tap ■ to stop
             </Prim.Text>
           )}
-          {attaching && <Prim.Text className="text-xs text-muted-foreground">Transcribing…</Prim.Text>}
-          {attachError && <Prim.Text className="text-xs text-destructive">{attachError}</Prim.Text>}
+          {attaching && <Prim.Text fontSize="$xs" color="$muted-foreground">Transcribing…</Prim.Text>}
+          {attachError && <Prim.Text fontSize="$xs" color="$destructive">{attachError}</Prim.Text>}
         </Prim.Row>
       )}
 
@@ -388,7 +388,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>
         </Prim.Pressable>
       </Prim.Row>
-      <Prim.Text as="p" className="text-xs text-muted-foreground text-center" marginTop="0.375rem">
+      <Prim.Text as="p" fontSize="$xs" color="$muted-foreground" textAlign="center" marginTop="0.375rem">
         Enter to send · Shift+Enter for newline
       </Prim.Text>
       <BudgetWindows />

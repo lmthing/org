@@ -33,20 +33,20 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
       flexBasis="0%"
     >
       <Row
-        className="w-12 h-12 rounded-xl bg-brand-2/20 justify-center mb-5 text-2xl"
+        className="bg-brand-2/20" width="$12" height="$12" borderRadius="$radius-xl" justifyContent="center" marginBottom="$5" fontSize="$2xl"
         alignItems="center"
         style={{ lineHeight: '2rem' }}
       >
         ✦
       </Row>
-      <Text as="h1" className="font-display text-2xl font-bold text-foreground mb-2">
+      <Text as="h1" fontFamily="$heading" fontSize="$2xl" fontWeight="$bold" color="$foreground" marginBottom="$2">
         How can I help{projectName ? ` in ${projectName}` : ''}?
       </Text>
-      <Text as="p" className="text-muted-foreground text-sm max-w-xs mb-8">
+      <Text as="p" color="$muted-foreground" fontSize="$sm" maxWidth={320} marginBottom="$8">
         Ask me anything — I can research, code, analyze, or build specialist agents.
       </Text>
       {onSuggestion && (
-        <Row className="flex-wrap gap-2 justify-center max-w-sm">
+        <Row flexWrap="wrap" gap="$2" justifyContent="center" maxWidth={384}>
           {SUGGESTIONS.map((s) => (
             <Pressable
               key={s}

@@ -53,10 +53,10 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
       )}
     >
       {block.state === 'answered' && (
-        <Prim.Box className="text-xs text-knowledge font-mono" marginBottom="0.5rem">✓ {preview(block.answer, 200)}</Prim.Box>
+        <Prim.Box fontSize="$xs" color="$knowledge" fontFamily="$mono" marginBottom="0.5rem">✓ {preview(block.answer, 200)}</Prim.Box>
       )}
       {block.state === 'cancelled' && (
-        <Prim.Box className="text-xs text-muted-foreground font-mono" marginBottom="0.5rem">cancelled</Prim.Box>
+        <Prim.Box fontSize="$xs" color="$muted-foreground" fontFamily="$mono" marginBottom="0.5rem">cancelled</Prim.Box>
       )}
       <Prim.Box style={inert ? { pointerEvents: 'none' } : undefined}>
         {d && isConsentDescriptor(d) ? (
@@ -71,7 +71,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
         ) : d && isFormDescriptor(d) ? (
           <CatalogForm descriptor={d} onSubmit={onSubmit} />
         ) : (
-          <Prim.Row className="gap-2">
+          <Prim.Row gap="$2">
             <Prim.TextField
               className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               value={text}
@@ -129,7 +129,7 @@ function CopyButton({ text }: { text: string }) {
       aria-label="Copy message"
     >
       {copied
-        ? <Prim.Text className="text-knowledge text-xs">✓</Prim.Text>
+        ? <Prim.Text color="$knowledge" fontSize="$xs">✓</Prim.Text>
         : (
           <Prim.Svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <Prim.Rect x="9" y="9" width="13" height="13" rx="2" />
@@ -161,11 +161,11 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
   }
   if (att.kind === 'audio') {
     return (
-      <Prim.Col className="gap-1" alignItems="flex-end">
+      <Prim.Col gap="$1" alignItems="flex-end">
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <Prim.Audio controls src={url} className="max-w-[260px]" />
         {att.transcript && (
-          <Prim.Box className="max-w-[260px] text-xs text-muted-foreground italic text-right">
+          <Prim.Box maxWidth="260px" fontSize="$xs" color="$muted-foreground" fontStyle="italic" textAlign="right">
             “{att.transcript}”
           </Prim.Box>
         )}
@@ -177,10 +177,10 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground hover:opacity-90" display="inline-flex"
+      alignItems="center" gap="$1.5" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$muted" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$foreground" hoverStyle={{ opacity: 0.9 }} display="inline-flex"
     >
-      <Prim.Text className="text-muted-foreground">📎</Prim.Text>
-      <Prim.Text className="max-w-[200px]" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{att.filename ?? att.mediaType}</Prim.Text>
+      <Prim.Text color="$muted-foreground">📎</Prim.Text>
+      <Prim.Text maxWidth="200px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{att.filename ?? att.mediaType}</Prim.Text>
     </Prim.Link>
   );
 }
@@ -201,11 +201,11 @@ export function Message({ block }: MessageProps) {
     const attachments = block.attachments ?? [];
     return (
       <Prim.Row className="justify-end px-4 py-2 lm-fade-in group">
-        <Prim.Row className="max-w-[75%] gap-1.5" alignItems="flex-start">
+        <Prim.Row maxWidth="75%" gap="$1.5" alignItems="flex-start">
           <CopyButton text={block.content} />
-          <Prim.Col className="gap-1.5" alignItems="flex-end">
+          <Prim.Col gap="$1.5" alignItems="flex-end">
             {attachments.length > 0 && (
-              <Prim.Col className="gap-1.5" alignItems="flex-end">
+              <Prim.Col gap="$1.5" alignItems="flex-end">
                 {attachments.map((a, i) => (
                   <UserAttachment key={i} att={a} />
                 ))}
@@ -228,8 +228,8 @@ export function Message({ block }: MessageProps) {
     const textForCopy = isString ? (block.descriptor as string) : preview(block.descriptor, 500);
     return (
       <Prim.Box className="px-4 py-2 lm-fade-in group" data-testid="block">
-        <Prim.Row className="gap-1.5" alignItems="flex-start">
-          <Prim.Box className="flex-1 min-w-0 text-sm text-foreground">
+        <Prim.Row gap="$1.5" alignItems="flex-start">
+          <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0} fontSize="$sm" color="$foreground">
             {showAttribution && (
               <AttributionButton nodeId={block.nodeId} label={node.label} />
             )}
@@ -248,7 +248,7 @@ export function Message({ block }: MessageProps) {
   if (block.type === 'error') {
     return (
       <Prim.Box className="px-4 py-2 lm-fade-in" data-testid="block">
-        <Prim.Box className="border border-destructive/30 bg-destructive/10 rounded-lg px-3 py-2 text-sm text-destructive font-mono">
+        <Prim.Box className="border-destructive/30 bg-destructive/10" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$destructive" fontFamily="$mono">
           {block.message}
         </Prim.Box>
       </Prim.Box>
@@ -279,14 +279,14 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
 
   return (
     <Prim.Box className="py-1 group relative lm-fade-in">
-      <Prim.Row className="gap-2 px-4" alignItems="flex-start">
+      <Prim.Row gap="$2" paddingHorizontal="$4" alignItems="flex-start">
         <Prim.Text className="shrink-0 w-6 h-6 rounded-full bg-brand-2/20 items-center justify-center text-xs select-none" marginTop="0.75rem" display="flex" aria-hidden="true">
           ✦
         </Prim.Text>
-        <Prim.Box className="flex-1 min-w-0">
+        <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
           {blocks.map((b) => <Message key={b.id} block={b} />)}
           {nodeIds && nodeIds.length > 0 && (
-            <Prim.Box className="px-0 pb-2">
+            <Prim.Box paddingHorizontal="$0" paddingBottom="$2">
               <ActivityStrip nodeIds={nodeIds} />
             </Prim.Box>
           )}

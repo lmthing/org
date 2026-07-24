@@ -23,7 +23,7 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
   if (!open) return null;
 
   return (
-    <Prim.Row className="fixed inset-0 z-40">
+    <Prim.Row position="fixed" top="$0" right="$0" bottom="$0" left="$0" zIndex={40}>
       <Prim.Box className={cn('absolute inset-0 bg-foreground/10', side === 'left' ? 'right-0' : 'left-0')} onClick={onClose} />
       <Prim.Box
         display="flex"
@@ -35,12 +35,12 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
         className,
       )}>
         {title && (
-          <Prim.Row className="justify-between px-4 py-3 border-b border-border" alignItems="center" flexShrink={0}>
-            <Prim.Text className="font-semibold text-sm text-foreground">{title}</Prim.Text>
+          <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderColor="$border" alignItems="center" flexShrink={0}>
+            <Prim.Text fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>
             <Prim.Pressable onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</Prim.Pressable>
           </Prim.Row>
         )}
-        <Prim.Box className="flex-1 overflow-auto">{children}</Prim.Box>
+        <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflow="auto">{children}</Prim.Box>
       </Prim.Box>
     </Prim.Row>
   );
