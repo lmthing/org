@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test-utils/index'
 import { describe, it, expect } from 'vitest'
 // NB: not in the libs/ui vitest include; post-swap these elements are styled by $-token props, not classNames.
 import { Label } from './index'
