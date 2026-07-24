@@ -3,11 +3,11 @@
  * Uses new hooks from Phase 3 and element components.
  */
 import * as Prim from '../../../elements/primitives/index.js';
+import { Button } from '../../../elements/forms/button'
 import { useEffect, useMemo } from 'react'
 import { useLocation, useNavigate, useParams } from '@tanstack/react-router'
 import { Shield, FileCode2 } from 'lucide-react'
 import { buildSpacePath } from '@lmthing/ui/lib/space-path'
-import '@lmthing/css/elements/forms/button/index.css'
 import '@lmthing/css/elements/forms/input/index.css'
 import '@lmthing/css/elements/content/panel/index.css'
 import '@lmthing/css/elements/layouts/page/index.css'
@@ -96,7 +96,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
       >
         <Prim.Pressable
           onClick={() => handleTabChange('env')}
-          className="btn btn--ghost"
+          variant="ghost"
           borderRadius="$0"
           {...(activeTab === 'env'
             ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }
@@ -106,7 +106,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
         </Prim.Pressable>
         <Prim.Pressable
           onClick={() => handleTabChange('packages')}
-          className="btn btn--ghost"
+          variant="ghost"
           borderRadius="$0"
           {...(activeTab === 'packages'
             ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }
@@ -142,8 +142,8 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                   />
                 </Prim.Box>
                 <Prim.Box display="flex" gap="$2" marginTop="$3">
-                  <Prim.Pressable className="btn btn--outline" onClick={() => setEnvStatus('Loaded from session')}>Load</Prim.Pressable>
-                  <Prim.Pressable className="btn btn--primary" onClick={() => setEnvStatus('Saved')}>Save</Prim.Pressable>
+                  <Button variant="outline" onClick={() => setEnvStatus('Loaded from session')}>Load</Button>
+                  <Button variant="primary" onClick={() => setEnvStatus('Saved')}>Save</Button>
                 </Prim.Box>
                 {envError && <Caption className="settings-view__status--error">{envError}</Caption>}
                 {envStatus && <Caption className="settings-view__status--success">{envStatus}</Caption>}
@@ -171,7 +171,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                     {packageJsonError ? <Prim.Text color="$destructive">{packageJsonError}</Prim.Text>
                     : packageJsonSavedAt ? `Saved at ${packageJsonSavedAt}` : 'Ready to save'}
                   </Caption>
-                  <Prim.Pressable className="btn btn--primary" onClick={() => {
+                  <Button variant="primary" onClick={() => {
                     try {
                       JSON.parse(packageJsonDraft || packageJsonSerialized)
                       setPackageJsonError(null)
@@ -179,7 +179,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                     } catch {
                       setPackageJsonError('Invalid JSON format.')
                     }
-                  }}>Save package.json</Prim.Pressable>
+                  }}>Save package.json</Button>
                 </Prim.Box>
               </Prim.Box>
             </Prim.Box>

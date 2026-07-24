@@ -10,7 +10,6 @@
 import * as Prim from '../../../elements/primitives/index.js';
 import { useNavigate } from '@tanstack/react-router'
 
-import '@lmthing/css/elements/forms/button/index.css'
 import '@lmthing/css/elements/forms/input/index.css'
 import '@lmthing/css/components/thing/thing-panel/index.css'
 

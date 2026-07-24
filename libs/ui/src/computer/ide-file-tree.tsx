@@ -1,4 +1,5 @@
 import * as Prim from '../elements/primitives/index.js';
+import { Button } from '../elements/forms/button'
 import '@lmthing/css/components/computer/ide-file-tree.css'
 import { useState } from 'react'
 import {
@@ -129,8 +130,8 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
             autoFocus
           />
           <Prim.Box display="flex" justifyContent="flex-end" gap="$2" marginTop="$4">
-            <Prim.Pressable className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</Prim.Pressable>
-            <Prim.Pressable className="btn btn--primary btn--sm" onClick={handleCreate}>Create</Prim.Pressable>
+            <Button variant="ghost" size="sm" onClick={() => setDialogType(null)}>Cancel</Button>
+            <Button variant="primary" size="sm" onClick={handleCreate}>Create</Button>
           </Prim.Box>
         </DialogContent>
       </Dialog>
@@ -235,8 +236,8 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
             autoFocus
           />
           <Prim.Box display="flex" justifyContent="flex-end" gap="$2" marginTop="$4">
-            <Prim.Pressable className="btn btn--ghost btn--sm" onClick={() => setDialogType(null)}>Cancel</Prim.Pressable>
-            <Prim.Pressable className="btn btn--primary btn--sm" onClick={handleCreate}>Create</Prim.Pressable>
+            <Button variant="ghost" size="sm" onClick={() => setDialogType(null)}>Cancel</Button>
+            <Button variant="primary" size="sm" onClick={handleCreate}>Create</Button>
           </Prim.Box>
         </DialogContent>
       </Dialog>

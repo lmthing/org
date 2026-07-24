@@ -3,6 +3,7 @@
  * for newline) plus the send button.
  */
 import * as Prim from '../../../elements/primitives/index.js';
+import { Button } from '../../../elements/forms/button'
 import type { FormEvent } from 'react'
 
 export interface ThingComposerProps {
@@ -30,13 +31,13 @@ export function ThingComposer({ input, setInput, hasEnv, isWorking, onSubmit }: 
         placeholder={hasEnv ? 'Ask THING anything... (Enter to send, Shift+Enter for newline)' : 'Configure API keys to enable THING...'}
         disabled={!hasEnv}
       />
-      <Prim.Pressable
+      <Button
         type="submit"
-        className="btn btn--primary"
+        variant="primary"
         disabled={!hasEnv || isWorking || !input.trim()}
       >
         Send
-      </Prim.Pressable>
+      </Button>
     </Prim.Form>
   )
 }
