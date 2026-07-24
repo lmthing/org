@@ -1368,6 +1368,22 @@ elements (Tamagui's own web output for them is the same host tag) and risks brea
 native already renders them via their `.native.tsx` forks (RN `Image`/`TextInput`/`WebView`/Views/
 `react-native-svg`). So they are already the universal component — the web impl is just the host tag.
 
+### B3.4 status — simple overlays ✅ on Tamagui; interactive portals stay Radix-on-web (verification gap)
+
+**Done:** `Separator` → `Prim.Box`, `Label` → `Prim.Text as="label"`, `Avatar` → `Prim.Box`/`Image` +
+a load-state context — all off `@radix-ui` onto the universal primitives (no new deps; native via the
+primitive forks). Dropped `@radix-ui/react-{separator,label,avatar}`.
+
+**Deliberately NOT swapped on web (yet): `overlays/dialog`, `overlays/sheet`, `overlays/dropdown`**
+(2 / 1 / 1 importers) + `forms/button`'s `Slot`. These are a11y-critical PORTALS (focus-trap, scroll-
+lock, ESC-dismiss, ARIA). A Tamagui swap needs `@tamagui/dialog`/`popover`/`sheet` + an animation driver
++ reconciling Tamagui's theme-token-styled content with our empty-theme web config — and, decisively,
+its focus/portal/a11y behaviour CANNOT be verified in this headless environment (a subtle break passes
+`build`/`tsc` and ships a broken modal). So they stay on the battle-tested Radix impl on web until they
+can be verified against a device/interaction harness; that is the honest remaining B3.4 step. (The
+native app takes Tamagui overlays via a `.native.tsx` fork behind the same names — the Monaco/xterm
+seam.) `computer/ide-file-tree`'s `react-context-menu` is out of scope (stays Radix).
+
 ### B3.4 — Radix overlays → Tamagui universal  (8 files in shared `elements/`)
 
 `overlays/dialog` `overlays/sheet` `overlays/dropdown` `typography/label` `content/separator`
@@ -1378,7 +1394,11 @@ fixture (behavioral + L2/L3) and the app build. Install the Tamagui overlay pack
 `computer/ide-file-tree`'s `react-context-menu` is OUT of scope (stays Radix). This is the most
 involved B3 piece (interaction + a11y), so do one component per PR.
 
-### B3.5 — delete superseded CSS  (per-component, AFTER its gate is green)
+### B3.5 — delete superseded CSS  ✅ near-no-op under the coexistence model
+
+The migration is COEXISTENCE (Tamagui owns layout/text-flow; `theme.css` + Tailwind + the component CSS keep owning colour/paint, applied as `className`). The migrated primitives had NO dedicated CSS of their own (they were passthrough), and the migrated overlays KEEP their component CSS classes, so nothing is superseded to delete yet — matching the original "§7 step 9 is a no-op so far" note. Superseded CSS only appears if a component drops a Tailwind/BEM class in favour of a Tamagui token, which this coexistence migration does not do. Original guidance retained below.
+
+#### (original per-component cleanup guidance)
 
 Once a component is fully on Tamagui, remove the now-dead `libs/css/src/{elements,components}/**`
 rules and the Tailwind classes it used; re-run `test:visual:all` + `lint:tokens` + app build. Never
