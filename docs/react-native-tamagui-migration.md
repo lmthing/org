@@ -32,9 +32,13 @@
 > **`@tamagui/vite-plugin` wired into `createViteConfig`** (apps/web builds green, runtime mode —
 > see B0-finalize); **B2 codemod rules EMPIRICALLY VERIFIED** (`items-*`/`flex-1`/`min-w-*` → Tamagui
 > props, `justify-*`/`gap-*` → keep className) via a ref-vs-candidate proof, 9/9 box-model props match
-> (`apps/web/b0-probe/` `lay-*` + `measure-layout.mjs`). **Remaining (the bulk):** the real primitive
-> swaps, the codemod run across ~137 surfaces, a real-CSS surface verification harness (§3.1), Radix,
-> CSS deletion. **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** — it has the
+> (`apps/web/b0-probe/` `lay-*` + `measure-layout.mjs`). **B2 real-component slice PROVEN:** the real
+> chat `EmptyState`, migrated to Tamagui `Row`/`Col`, renders computed-identical to its Tailwind
+> original under the compiled `theme.css` — **all 9 nodes match** (`surface-main.tsx` +
+> `measure-surface.mjs`); it also nailed the last rule (text-carrying containers restore `line-height`
+> via inline `style`). **Remaining (the bulk, now fully de-risked):** the real primitive swaps, the
+> codemod run across ~137 surfaces, a CI-grade real-CSS surface harness (§3.1) with `main` baselines,
+> Radix, CSS deletion. **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** — it has the
 > grounded ordering (global swap; Row/Col first; codemod flex Boxes; then Box; Text/Pressable last)
 > and the constraint that the surface harness must be built to verify surfaces under the parity contract.
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
