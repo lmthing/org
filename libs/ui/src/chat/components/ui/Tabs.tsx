@@ -11,7 +11,7 @@ interface TabsProps {
 
 export function Tabs({ tabs, active, onChange, className }: TabsProps) {
   return (
-    <Prim.Box className={cn('flex border-b border-border', className)} role="tablist">
+    <Prim.Box display="flex" className={cn('border-b border-border', className)} role="tablist">
       {tabs.map(t => (
         <Prim.Pressable
           key={t.id}

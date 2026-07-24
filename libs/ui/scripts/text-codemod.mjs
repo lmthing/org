@@ -57,6 +57,8 @@ const marginValue = (raw) => {
 const DISPLAY = {
   block: 'block', 'inline-block': 'inline-block', inline: 'inline',
   hidden: 'none', flex: 'flex', 'inline-flex': 'inline-flex',
+  grid: 'grid', 'inline-grid': 'inline-grid', contents: 'contents',
+  'flow-root': 'flow-root', table: 'table', 'list-item': 'list-item',
 }
 const WHITESPACE = {
   'whitespace-normal': 'normal', 'whitespace-nowrap': 'nowrap', 'whitespace-pre': 'pre',
@@ -126,7 +128,12 @@ function transform(file, text) {
     if (!attr.initializer || !ts.isStringLiteral(attr.initializer)) {
       // Dynamic className: only report if it textually contains a conflict class worth a human look.
       const raw = attr.initializer ? attr.initializer.getText(sf) : ''
-      if (/\b(block|inline-block|hidden|inline-flex|truncate|break-words|whitespace-|-?m[trblxy]?-(?:\d|auto|\[))/.test(raw))
+      // NOTE: the display set here MUST include bare `flex`/`grid`/etc. — a dynamic `cn('flex …')`
+      // carries a display the `.is_Text`/boosted-default base overrides, and missing it silently breaks
+      // layout (e.g. a tablist collapsing to block). Lookarounds exclude `-`/word so `flex-col`/`grid-cols`
+      // (NOT display) don't false-match, while `flex`/`inline-flex`/`grid` (display) do.
+      const DYN = /(?<![\w-])(inline-flex|inline-grid|inline-block|flow-root|list-item|flex|grid|block|inline|hidden|contents|table|truncate|break-words)(?![\w-])|whitespace-|(?<![\w-])-?m[trblxy]?-(?:\d|auto|\[)/
+      if (DYN.test(raw))
         skips.push({ line, why: `dynamic className may carry a conflict class (migrate manually): ${raw.slice(0, 60)}` })
       return
     }

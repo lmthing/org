@@ -60,7 +60,7 @@ export default function Slide6Scalability() {
       </Prim.Col>
 
       {/* BODY */}
-      <Prim.Box className="grid w-full grid-cols-[1fr_1px_1fr] gap-x-9" marginBottom="1.75rem">
+      <Prim.Box className="w-full grid-cols-[1fr_1px_1fr] gap-x-9" display="grid" marginBottom="1.75rem">
         {/* LEFT — Platform points */}
         <Prim.Col className="justify-center gap-5">
           {points.map((p) => (
