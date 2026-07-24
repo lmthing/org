@@ -158,6 +158,36 @@ export const Col = React.forwardRef<HTMLDivElement, LayoutPrimitiveProps>((props
 )
 Col.displayName = 'Col'
 
+
+// ── Font-scale token resolution ──────────────────────────────────────────────────────────────────
+//
+// Tamagui keys the `$`-named FONT scales (`fontSize`/`fontWeight`/`lineHeight`/`letterSpacing`) off
+// the component's font FAMILY — `$sm` means "the `sm` step of this component's font". With no
+// `fontFamily` assigned there is no scale to look `$sm` up in, so Tamagui resolves it to nothing and
+// **silently drops the prop** (no class emitted, no warning). A raw number still works, and — worse
+// — a numeric-looking token like `$5` falls through to the SPACE scale and yields a wrong size.
+//
+// That makes `fontSize="$sm"` a silent no-op, which is exactly the shape the P3 codemod and the
+// element-layer swap emit when they lift `text-sm`/`font-medium`/`leading-*`/`tracking-*` off a
+// className. So the primitives default `fontFamily` to `$body` — but ONLY when the caller passes a
+// `$`-token font-scale prop and no family of its own. Scoping it that way keeps the fix to the
+// call sites that are broken today: a primitive with no font props still INHERITS its font exactly
+// as `.is_Text` intends (the whole reason these primitives avoid the `.is_View` base), and an
+// explicit `fontFamily="$mono"` (the Code element, terminals) still wins.
+//
+// See docs/tamagui-idiomatic-migration.md §5/§6.
+const FONT_SCALE_PROPS = ['fontSize', 'fontWeight', 'lineHeight', 'letterSpacing'] as const
+
+function withFontScale<T extends Record<string, unknown>>(props: T): T {
+  if (props['fontFamily'] !== undefined) return props
+  const needsFamily = FONT_SCALE_PROPS.some(
+    (k) => typeof props[k] === 'string' && (props[k] as string).startsWith('$'),
+  )
+  // fontFamily must come FIRST: Tamagui resolves props in order, and a `$` font-scale token is
+  // looked up against whatever family is already set — a family applied afterwards is too late.
+  return needsFamily ? ({ fontFamily: '$body', ...props } as T) : props
+}
+
 // ── Text ────────────────────────────────────────────────────────────────────────────────────────
 //
 // A Tamagui `styled(Text)` that reproduces a plain host tag's typography + text-flow on web.
@@ -254,7 +284,7 @@ for (const t of BLOCK_TAGS) TAG_COMPONENTS[t] = makeTextTag(t, 'block')
 export const Text = React.forwardRef<HTMLElement, TextPrimitiveProps>(({ as, block, ...props }, ref) => {
   const tag = as ?? (block ? 'p' : 'span')
   const Comp = TAG_COMPONENTS[tag] ?? TAG_COMPONENTS.span
-  return React.createElement(Comp, { ...props, ref })
+  return React.createElement(Comp, { ...withFontScale(props), ref })
 })
 Text.displayName = 'Text'
 
@@ -310,7 +340,7 @@ const PRESSABLE_COMPONENTS: Record<PressableAs, React.ComponentType<any>> = {
 
 export const Pressable = React.forwardRef<HTMLElement, PressablePrimitiveProps>(({ as, ...props }, ref) => {
   const Comp = PRESSABLE_COMPONENTS[as ?? 'button'] ?? PRESSABLE_COMPONENTS.button
-  return React.createElement(Comp, { ...props, ref })
+  return React.createElement(Comp, { ...withFontScale(props), ref })
 })
 Pressable.displayName = 'Pressable'
 
@@ -362,7 +392,7 @@ for (const t of BOX_TAGS) BOX_COMPONENTS[t] = makeBoxTag(t)
 
 export const Box = React.forwardRef<HTMLElement, BoxPrimitiveProps>(({ as, ...props }, ref) => {
   const Comp = BOX_COMPONENTS[as ?? 'div'] ?? BOX_COMPONENTS.div
-  return React.createElement(Comp, { ...props, ref })
+  return React.createElement(Comp, { ...withFontScale(props), ref })
 })
 Box.displayName = 'Box'
 
@@ -388,14 +418,14 @@ const makeLeaf = (tag: string, display: string, name: string) =>
 export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & TextStyleProps & MarginStyleProps & LayoutStyleProps & BoxStyleProps
 const LinkComp = makeLeaf('a', 'inline', 'Link')
 export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>((props, ref) =>
-  React.createElement(LinkComp, { ...props, ref }),
+  React.createElement(LinkComp, { ...withFontScale(props), ref }),
 )
 Link.displayName = 'Link'
 
 export type FormProps = React.FormHTMLAttributes<HTMLFormElement> & TextStyleProps & MarginStyleProps & LayoutStyleProps & BoxStyleProps
 const FormComp = makeLeaf('form', 'block', 'Form')
 export const Form = React.forwardRef<HTMLFormElement, FormProps>((props, ref) =>
-  React.createElement(FormComp, { ...props, ref }),
+  React.createElement(FormComp, { ...withFontScale(props), ref }),
 )
 Form.displayName = 'Form'
 
@@ -406,13 +436,82 @@ export type ListProps = React.HTMLAttributes<HTMLElement> &
 const UlComp = makeLeaf('ul', 'block', 'List')
 const OlComp = makeLeaf('ol', 'block', 'List')
 export const List = React.forwardRef<HTMLElement, ListProps>(({ ordered, ...props }, ref) =>
-  React.createElement(ordered ? OlComp : UlComp, { ...props, ref }),
+  React.createElement(ordered ? OlComp : UlComp, { ...withFontScale(props), ref }),
 )
 List.displayName = 'List'
 
 export type ListItemProps = React.LiHTMLAttributes<HTMLLIElement> & TextStyleProps & MarginStyleProps & LayoutStyleProps & BoxStyleProps
 const LiComp = makeLeaf('li', 'list-item', 'ListItem')
 export const ListItem = React.forwardRef<HTMLLIElement, ListItemProps>((props, ref) =>
-  React.createElement(LiComp, { ...props, ref }),
+  React.createElement(LiComp, { ...withFontScale(props), ref }),
 )
 ListItem.displayName = 'ListItem'
+
+// ── Form controls (TextField / TextArea / Select) ────────────────────────────────────────────────
+//
+// The idiomatic element layer needs `elements/forms/{input,textarea,select}` to carry their design
+// tokens as style PROPS rather than a BEM className, and a prop only reaches the DOM if the control
+// is a Tamagui component. These were the last pure-host passthroughs on the styling path.
+//
+// Built with the same per-tag `createComponent` as Text/Pressable/Box — the real `<input>`/
+// `<textarea>`/`<select>` is bound at component-build time, so the semantics and form behaviour are
+// runtime-guaranteed (Tamagui's `tag` prop is compile-time only). The difference is
+// **`isInput: true`** instead of `isText`: it gives the `.is_Input` base, which is what wires
+// `placeholderTextColor`/`selectionColor` through to `::placeholder`/`::selection` — the
+// `placeholder:text-muted-foreground` utility the form BEM blocks relied on has no other expression
+// as a prop. Font/line-height are left to inherit, exactly as `.is_Text` does for the other leaves.
+//
+// `<input>` is a void element: `defaultProps` set no `display`-driven children and callers pass
+// none. `<select>` DOES take children (its `<option>`s) and they pass straight through.
+// `Option` stays a pure host passthrough — it is never styled, and Tamagui wrapping an `<option>`
+// would only risk its parent-`<select>` semantics.
+//
+// See docs/tamagui-idiomatic-migration.md §6 (P4 — primitives go idiomatic).
+
+/** Style props valid on a form control — the Box surface plus the two Tamagui pseudo-element hooks. */
+export type ControlStyleProps = LayoutStyleProps &
+  MarginStyleProps &
+  BoxStyleProps & {
+    /** Colour of `::placeholder` (via the `.is_Input` base). Replaces `placeholder:text-*`. */
+    placeholderTextColor?: string
+    /** Colour of `::selection` (via the `.is_Input` base). */
+    selectionColor?: string
+    /** `resize` is web-only and has no RN analogue, so it is not in `BoxStyleProps`. */
+    resize?: 'none' | 'both' | 'horizontal' | 'vertical'
+  }
+
+// `componentName` is NOT cosmetic here: Tamagui emits the base class as `.is_<componentName>`, and
+// its built-in stylesheet wires the pseudo-elements through `.is_Input::placeholder,
+// .is_TextArea::placeholder` / `.is_Input::selection, .is_TextArea::selection`. Naming the input
+// component `Input` (not `TextField`) is what makes `placeholderTextColor`/`selectionColor` actually
+// reach `::placeholder`/`::selection`.
+const makeControl = (tag: 'input' | 'textarea' | 'select', name: string) =>
+  createComponent({
+    Component: tag as never,
+    isText: true,
+    isReactNative: false,
+    acceptsClassName: true,
+    componentName: name,
+  }) as unknown as React.ComponentType<any>
+
+const TextFieldComp = makeControl('input', 'Input')
+const TextAreaComp = makeControl('textarea', 'TextArea')
+const SelectComp = makeControl('select', 'Select')
+
+export type TextFieldPrimitiveProps = React.InputHTMLAttributes<HTMLInputElement> & ControlStyleProps
+export const TextField = React.forwardRef<HTMLInputElement, TextFieldPrimitiveProps>((props, ref) =>
+  React.createElement(TextFieldComp, { ...withFontScale(props), ref }),
+)
+TextField.displayName = 'TextField'
+
+export type TextAreaPrimitiveProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> & ControlStyleProps
+export const TextArea = React.forwardRef<HTMLTextAreaElement, TextAreaPrimitiveProps>((props, ref) =>
+  React.createElement(TextAreaComp, { ...withFontScale(props), ref }),
+)
+TextArea.displayName = 'TextArea'
+
+export type SelectPrimitiveProps = React.SelectHTMLAttributes<HTMLSelectElement> & ControlStyleProps
+export const Select = React.forwardRef<HTMLSelectElement, SelectPrimitiveProps>((props, ref) =>
+  React.createElement(SelectComp, { ...withFontScale(props), ref }),
+)
+Select.displayName = 'Select'

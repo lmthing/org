@@ -164,16 +164,40 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(li.className).toContain('li')
   })
 
-  it('form controls emit input/textarea/select/option verbatim', () => {
-    expect(html(<TextField type="text" className="i" placeholder="p" defaultValue="v" />)).toBe(
-      html(<input type="text" className="i" placeholder="p" defaultValue="v" />),
-    )
-    expect(html(<TextArea className="t" rows={3} defaultValue="v" />)).toBe(
-      html(<textarea className="t" rows={3} defaultValue="v" />),
-    )
-    expect(html(<Select className="s" defaultValue="a"><Option value="a">A</Option></Select>)).toBe(
-      html(<select className="s" defaultValue="a"><option value="a">A</option></select>),
-    )
+  // Form controls are Tamagui now (P4 — createComponent per tag, so `elements/forms/*` can carry
+  // design tokens as style PROPS instead of a BEM className). They therefore need the provider and
+  // no longer emit byte-identical HTML — they gain Tamagui's base classes. What must still hold is
+  // the part the surfaces depend on: the REAL host tag, and every DOM prop passed through untouched.
+  it('form controls emit the real input/textarea/select tag with their DOM props intact', () => {
+    const field = withProvider(
+      <TextField type="text" className="i" placeholder="p" defaultValue="v" />,
+    ).container.querySelector('input')!
+    expect(field.tagName).toBe('INPUT')
+    expect(field.type).toBe('text')
+    expect(field.placeholder).toBe('p')
+    expect(field.value).toBe('v')
+    expect(field).toHaveClass('i')
+
+    const area = withProvider(
+      <TextArea className="t" rows={3} defaultValue="v" />,
+    ).container.querySelector('textarea')!
+    expect(area.tagName).toBe('TEXTAREA')
+    expect(area.rows).toBe(3)
+    expect(area.value).toBe('v')
+    expect(area).toHaveClass('t')
+
+    const select = withProvider(
+      <Select className="s" defaultValue="a"><Option value="a">A</Option></Select>,
+    ).container.querySelector('select')!
+    expect(select.tagName).toBe('SELECT')
+    expect(select.value).toBe('a')
+    expect(select).toHaveClass('s')
+    // `<option>` stays a pure host passthrough: a real classless <option> inside the select.
+    const option = select.querySelector('option')!
+    expect(option.tagName).toBe('OPTION')
+    expect(option.value).toBe('a')
+    expect(option.textContent).toBe('A')
+    expect(option.className).toBe('')
   })
 
   it('media + misc + table primitives emit their tags verbatim', () => {
@@ -220,7 +244,8 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(boxRef.current?.tagName).toBe('DIV')
 
     const inputRef = React.createRef<HTMLInputElement>()
-    render(<TextField ref={inputRef} defaultValue="v" />)
+    // TextField is Tamagui now → needs the provider; it still forwards its ref to the host <input>.
+    withProvider(<TextField ref={inputRef} defaultValue="v" />)
     expect(inputRef.current?.tagName).toBe('INPUT')
 
     const btnRef = React.createRef<HTMLButtonElement>()
@@ -229,7 +254,8 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(btnRef.current?.tagName).toBe('BUTTON')
 
     const taRef = React.createRef<HTMLTextAreaElement>()
-    render(<TextArea ref={taRef} defaultValue="v" />)
+    // TextArea is Tamagui now → needs the provider; it still forwards its ref to the host <textarea>.
+    withProvider(<TextArea ref={taRef} defaultValue="v" />)
     expect(taRef.current?.tagName).toBe('TEXTAREA')
   })
 })

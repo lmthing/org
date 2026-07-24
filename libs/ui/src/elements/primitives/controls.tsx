@@ -1,25 +1,30 @@
-import * as React from 'react'
+/**
+ * Form-control primitives — `<input>`, `<textarea>`, `<select>`, `<option>`.
+ *
+ * `TextField`/`TextArea`/`Select` are real Tamagui components built per-tag with
+ * `createComponent({ isInput: true })` (see `_tamagui.tsx`), so the REAL host element and its form
+ * behaviour are runtime-guaranteed while the control also accepts the full Tamagui style-prop
+ * surface + `placeholderTextColor`. That is what lets `elements/forms/{input,textarea,select}` carry
+ * their design tokens as PROPS instead of a BEM className (P4 — docs/tamagui-idiomatic-migration.md
+ * §6). Refs still forward, which form controls depend on for focus/measure.
+ *
+ * `Option` stays a pure host passthrough: it is never styled, and wrapping an `<option>` would only
+ * risk its parent-`<select>` semantics.
+ *
+ * The `.native.tsx` fork maps these to RN `TextInput`/picker (§4).
+ */
+import type * as React from 'react'
 import { hostPrimitive } from './_host'
 
-/**
- * Form-control passthrough primitives (Phase 0): `<input>`, `<textarea>`, `<select>`,
- * `<option>`. Pure `forwardRef` passthroughs — byte-identical HTML AND ref-forwarding (form
- * controls are frequently ref'd for focus/measure). Phase 1 swaps internals to Tamagui
- * `Input`/`TextArea`/`Select` themed to match, and RN `TextInput`/picker on native (§4).
- *
- * (Distinct from the styled `elements/forms/{input,textarea,select}` components, which add
- * design-system classes; these primitives add nothing so the de-HTML stays byte-identical.)
- *
- * See docs/react-native-tamagui-migration.md §1.5 / §4.
- */
-export type TextFieldProps = React.InputHTMLAttributes<HTMLInputElement>
-export const TextField = hostPrimitive<HTMLInputElement, TextFieldProps>('input', 'TextField')
-
-export type TextAreaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>
-export const TextArea = hostPrimitive<HTMLTextAreaElement, TextAreaProps>('textarea', 'TextArea')
-
-export type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement>
-export const Select = hostPrimitive<HTMLSelectElement, SelectProps>('select', 'Select')
+export {
+  TextField,
+  type TextFieldPrimitiveProps as TextFieldProps,
+  TextArea,
+  type TextAreaPrimitiveProps as TextAreaProps,
+  Select,
+  type SelectPrimitiveProps as SelectProps,
+  type ControlStyleProps,
+} from './_tamagui'
 
 export type OptionProps = React.OptionHTMLAttributes<HTMLOptionElement>
 export const Option = hostPrimitive<HTMLOptionElement, OptionProps>('option', 'Option')
