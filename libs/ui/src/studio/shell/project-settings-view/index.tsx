@@ -14,7 +14,6 @@ import * as Prim from '../../../elements/primitives/index.js';
 import '@lmthing/css/elements/layouts/split-pane/index.css'
 import '@lmthing/css/elements/layouts/page/index.css'
 import '@lmthing/css/elements/content/panel/index.css'
-import '@lmthing/css/components/shell/studio-shell/index.css'
 import '@lmthing/css/components/setup-guide/index.css'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
@@ -133,7 +132,7 @@ export function ProjectSettingsView() {
   }
 
   return (
-    <Prim.Box className="split-pane studio-shell">
+    <Prim.Box className="split-pane" height="100vh">
       <StudioAppSidebar className="shrink-0" />
       <Prim.Box className="split-pane__primary">
         <Prim.Box className="page__body">

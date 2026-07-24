@@ -43,7 +43,7 @@ export function SaveAgentModal({ isOpen, onClose, onSave }: SaveAgentModalProps)
 
   return (
     <Prim.Box className="dialog__backdrop">
-      <Prim.Box className="dialog__content save-agent-modal__content">
+      <Prim.Box className="dialog__content" maxWidth={448}>
         <Prim.Box className="dialog__header">
           <Stack row gap="sm" className="save-agent-modal__header-row">
             <Prim.Box className="save-agent-modal__icon-wrap">

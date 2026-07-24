@@ -10,7 +10,6 @@ import { useParams, useLocation, useNavigate } from '@tanstack/react-router'
 import { buildSpacePath } from '@lmthing/ui/lib/space-path'
 import '@lmthing/css/elements/layouts/split-pane/index.css'
 import '@lmthing/css/elements/layouts/page/index.css'
-import '@lmthing/css/components/shell/studio-shell/index.css'
 import { StudioSidebar } from '../studio-sidebar'
 import { StudioAppSidebar } from '../studio-app-sidebar'
 import { SettingsView } from '../settings-view'
@@ -90,7 +89,7 @@ export function StudioShell({
   const isSettingsOpen = pathname.includes('/settings')
 
   return (
-    <Prim.Box className="split-pane studio-shell">
+    <Prim.Box className="split-pane" height="100vh">
       {/* Outer shared sidebar: project dropdown + collapsible spaces (same in chat). */}
       <StudioAppSidebar className="shrink-0" />
 
@@ -113,12 +112,12 @@ export function StudioShell({
           <SettingsView isOpen={true} />
         ) : (
           children || (
-            <Prim.Box className="page__body studio-shell__empty">
-              <Prim.Box className="studio-shell__empty-content">
-                <Prim.Text as="p" className="studio-shell__empty-title">
+            <Prim.Box className="page__body" display="flex" alignItems="center" justifyContent="center">
+              <Prim.Box textAlign="center" opacity={0.5}>
+                <Prim.Text as="p" fontSize="$lg" fontWeight="$semibold" marginBottom="$2">
                   Select a knowledge field or agent
                 </Prim.Text>
-                <Prim.Text as="p" className="studio-shell__empty-subtitle">
+                <Prim.Text as="p" fontSize="$sm">
                   {knowledgeFields.length} knowledge fields, {agentList.length} agents, {workflowList.length} tasklists
                 </Prim.Text>
               </Prim.Box>

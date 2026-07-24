@@ -18,7 +18,7 @@ export function AgentBuilder() {
   const form = useAgentForm()
 
   return (
-    <Prim.Box className="agent-builder">
+    <Prim.Box display="flex" flexDirection="column" height="100%" overflow="hidden">
       <AgentHeader
         title={form.draftTitle}
         isNew={form.isNew}
@@ -29,9 +29,9 @@ export function AgentBuilder() {
         onBack={form.handleBack}
       />
 
-      <Prim.Box className="agent-builder__content">
-        <Prim.Box as="main" className="agent-builder__main">
-          <Prim.Box className="agent-builder__main-inner">
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" display="flex" overflow="hidden">
+        <Prim.Box as="main" flexGrow={1} flexShrink={1} flexBasis="0%" overflowY="auto">
+          <Prim.Box marginHorizontal="auto" maxWidth={768} paddingVertical="$8" paddingHorizontal="$6">
             <Stack gap="lg">
 
               <SystemPromptPanel body={form.draftBody} onChange={form.setDraftBody} />

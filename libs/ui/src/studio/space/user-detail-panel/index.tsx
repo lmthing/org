@@ -26,9 +26,18 @@ function ConfirmDialog({ isOpen, userName, onConfirm, onClose }: { isOpen: boole
   if (!isOpen) return null
   return (
     <Prim.Box className="dialog__backdrop">
-      <Prim.Box className="dialog__content space-list__invite-dialog">
+      <Prim.Box className="dialog__content" maxWidth={448}>
         <Stack gap="md" className="confirm-dialog__content">
-          <Prim.Box className="confirm-dialog__icon-wrapper">
+          <Prim.Box
+            width="$12"
+            height="$12"
+            borderRadius="$radius-full"
+            backgroundColor="color-mix(in srgb, var(--destructive) 12%, transparent)"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            marginHorizontal="auto"
+          >
             <Trash2 className="confirm-dialog__icon" />
           </Prim.Box>
           <Heading level={3}>Remove User</Heading>
@@ -67,7 +76,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
   if (!user) {
     return (
       <Panel className="user-detail__empty">
-        <Prim.Box className="user-detail__empty-inner">
+        <Prim.Box textAlign="center">
           <Avatar size="lg" className="user-detail__empty-avatar">
             <AvatarFallback><UserIcon className="user-detail__empty-icon" /></AvatarFallback>
           </Avatar>
@@ -112,7 +121,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
       <Panel className="user-detail__panel">
         <PanelHeader>
           <Stack row gap="md" className="user-detail__header-row">
-            <Prim.Box className="user-detail__avatar-col">
+            <Prim.Box flexShrink={0}>
               <Avatar size="lg">
                 {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
                 <AvatarFallback className="user-detail__avatar-fallback">
@@ -120,7 +129,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
                 </AvatarFallback>
               </Avatar>
             </Prim.Box>
-            <Prim.Box className="user-detail__header-info">
+            <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
               <Heading level={2} className="user-detail__name">{user.name}</Heading>
               {!isEditing && (
                 <Badge className={`${getRoleBadgeClass(user.role)} user-detail__role-badge`}>
@@ -133,7 +142,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
         </PanelHeader>
 
         <PanelBody className="user-detail__body">
-          <Prim.Box className="user-detail__info-grid">
+          <Prim.Box display="grid" gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="$4" marginBottom="$8">
             <CardBody>
               <Stack row gap="sm" className="user-detail__info-card-row">
                 <Mail className="user-detail__info-icon" />
@@ -154,7 +163,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
             </CardBody>
           </Prim.Box>
 
-          <Prim.Box className="user-detail__section">
+          <Prim.Box marginBottom="$8">
             <Heading level={4} className="user-detail__permissions-heading">
               <Shield className="user-detail__icon-sm" /> Permissions & Role
             </Heading>
@@ -164,12 +173,22 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
                   const Icon = role.value === 'admin' ? Crown : role.value === 'editor' ? Edit3 : Eye
                   const isSelected = selectedRole === role.value
                   return (
-                    <Prim.Pressable key={role.value} onClick={() => setSelectedRole(role.value as SpaceUserRole)} className="user-detail__role-btn">
+                    <Prim.Pressable key={role.value} onClick={() => setSelectedRole(role.value as SpaceUserRole)} cursor="pointer" display="block" width="100%">
                       <ListItem selected={isSelected}>
                         <Icon className="user-detail__role-icon" />
-                        <Prim.Box className="user-detail__role-info"><Label>{role.label}</Label><Caption muted>{role.description}</Caption></Prim.Box>
+                        <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%"><Label>{role.label}</Label><Caption muted>{role.description}</Caption></Prim.Box>
                         {isSelected && (
-                          <Prim.Box className="user-detail__role-check">
+                          <Prim.Box
+                            width="$6"
+                            height="$6"
+                            borderRadius="$radius-full"
+                            backgroundColor="$agent"
+                            color="white"
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                            flexShrink={0}
+                          >
                             <Check className="user-detail__role-check-icon" />
                           </Prim.Box>
                         )}
