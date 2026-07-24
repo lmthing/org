@@ -14,7 +14,7 @@ const techniques = ['RAG', 'Structured Prompt Engineering', 'Multi-Agent Orchest
 
 function Arrow() {
   return (
-    <Prim.Row className="px-5" alignItems="center" style={{ height: 76 }}>
+    <Prim.Row paddingHorizontal="$5" alignItems="center" style={{ height: 76 }}>
       <Prim.Svg
         width="38"
         height="38"
@@ -34,11 +34,11 @@ function Arrow() {
 export default function Slide4Technology() {
   return (
     <Prim.Col
-      className="relative h-full w-full justify-center" alignItems="center"
+      position="relative" height="100%" width="100%" justifyContent="center" alignItems="center"
       style={{ background: colors.bg, padding: '60px 80px 56px' }}
     >
       {/* TOP: headline */}
-      <Prim.Col className="mb-16" alignItems="center">
+      <Prim.Col marginBottom="$16" alignItems="center">
         <Prim.Box
           className="text-xl font-bold uppercase tracking-[0.16em]" marginBottom="1.25rem"
           style={{ color: colors.brand }}
@@ -46,20 +46,20 @@ export default function Slide4Technology() {
           How it works
         </Prim.Box>
         <Prim.Text as="h1"
-          className="text-center text-6xl font-extrabold leading-[1.3]"
+          textAlign="center" fontSize="$6xl" fontWeight="$extrabold" lineHeight="1.3"
           style={{ color: colors.text, letterSpacing: '-0.025em' }}
         >
           <CozyThingText text="THING" className="text-6xl font-extrabold leading-[1.3]" /> turns your knowledge into agents
           <Prim.Br />
-          that <Prim.Text as="em" className="not-italic" style={{ color: colors.brand }}>actually know your domain.</Prim.Text>
+          that <Prim.Text as="em" fontStyle="normal" style={{ color: colors.brand }}>actually know your domain.</Prim.Text>
         </Prim.Text>
       </Prim.Col>
 
       {/* MIDDLE: flow strip */}
-      <Prim.Row className="mb-16 w-full justify-center" alignItems="flex-start">
+      <Prim.Row marginBottom="$16" width="100%" justifyContent="center" alignItems="flex-start">
         {flowNodes.map((node, i) => (
           <Prim.Row key={node.label} alignItems="flex-start">
-            <Prim.Col className="gap-2.5" alignItems="center">
+            <Prim.Col gap="$2.5" alignItems="center">
               <Prim.Row
                 className="justify-center whitespace-nowrap rounded-2xl border-2 text-xl font-semibold"
                 alignItems="center"
@@ -112,14 +112,14 @@ export default function Slide4Technology() {
       </Prim.Row>
 
       {/* Divider */}
-      <Prim.Box className="h-px w-full" marginBottom="2.25rem" style={{ background: colors.cardBorder }} />
+      <Prim.Box height="$px" width="100%" marginBottom="2.25rem" style={{ background: colors.cardBorder }} />
 
       {/* BOTTOM: technique badges */}
-      <Prim.Row className="gap-5" alignItems="center">
+      <Prim.Row gap="$5" alignItems="center">
         {techniques.map((t) => (
           <Prim.Text
             key={t}
-            className="rounded-full border-2 bg-card px-7 py-3.5 text-lg font-semibold"
+            borderRadius="$radius-full" borderWidth={2} backgroundColor="$card" paddingHorizontal="$7" paddingVertical="$3.5" fontSize="$lg" fontWeight="$semibold"
             style={{ borderColor: colors.brand, color: colors.text }}
           >
             {t}

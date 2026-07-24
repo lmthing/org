@@ -32,14 +32,14 @@ const members = [
 export default function Slide7Team() {
   return (
     <Prim.Col
-      className="h-full w-full justify-center" alignItems="center"
+      height="100%" width="100%" justifyContent="center" alignItems="center"
       style={{ background: colors.bg }}
     >
-      <Prim.Text as="h2" className="items-center justify-center gap-3 text-7xl font-bold" marginBottom="4rem" display="flex" style={{ color: colors.text }}>
+      <Prim.Text as="h2" alignItems="center" justifyContent="center" gap="$3" fontSize="$7xl" fontWeight="$bold" marginBottom="4rem" display="flex" style={{ color: colors.text }}>
         Team behind the <CozyThingText text="thing" className="text-7xl leading-loose" />
       </Prim.Text>
 
-      <Prim.Row className="gap-16">
+      <Prim.Row gap="$16">
         {members.map((m) => (
           <Prim.Col key={m.name} alignItems="center">
             <Prim.Image
@@ -48,14 +48,14 @@ export default function Slide7Team() {
               className="size-40 rounded-full border-4 object-cover"
               style={{ borderColor: colors.brand }}
             />
-            <Prim.Text as="p" className="text-2xl font-bold" marginTop="1.5rem" style={{ color: colors.text }}>
+            <Prim.Text as="p" fontSize="$2xl" fontWeight="$bold" marginTop="1.5rem" style={{ color: colors.text }}>
               {m.name}
             </Prim.Text>
-            <Prim.Text as="p" className="text-base" marginTop="0.5rem" style={{ color: colors.muted }}>
+            <Prim.Text as="p" fontSize="$base" marginTop="0.5rem" style={{ color: colors.muted }}>
               {m.role}
             </Prim.Text>
             {m.subtitle && (
-              <Prim.Text as="p" className="text-sm" marginTop="0.25rem" style={{ color: colors.muted }}>
+              <Prim.Text as="p" fontSize="$sm" marginTop="0.25rem" style={{ color: colors.muted }}>
                 {m.subtitle}
               </Prim.Text>
             )}
