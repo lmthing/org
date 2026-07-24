@@ -12,8 +12,11 @@
 
 ## Progress log
 
-The load-bearing, fully-testable foundation is landed and green; the bulk per-surface sweep + native
-remain (they are per-slice human/harness-gated and, for native, need a device toolchain).
+The load-bearing, fully-testable foundation is landed and green, and **P2's BEM→`styled()`
+conversion now covers all 68 component/element blocks** (proofs + tests alongside the shipped
+className components). What remains is the shipped-surface SWAP (className→`<Styled*>`/props + `.css`
+deletion, per-slice harness-gated), the surface `className`→props sweep (P3), and native (device
+toolchain).
 
 | Item | Status | Where |
 |---|---|---|
@@ -21,7 +24,7 @@ remain (they are per-slice human/harness-gated and, for native, need a device to
 | **SPIKE B — token-scale reconciliation** | ✅ done | Tailwind `space`/`size`/`fontSizes`/`lineHeights`/`fontWeights`/`letterSpacings`/`zIndex`/`media` generated + pinned to Tailwind by `libs/css/src/__tests__/scale-parity.test.ts` |
 | **SPIKE C — react 18/19 types** | ⬜ open | not attempted; casts retained (documented in `_tamagui.tsx`). Blocks nothing above |
 | **P1 — token + theme foundation** | ✅ done | full Tamagui token set from `tokens.json`; `tamagui.config.ts` (native hex) + `tamagui-web.config.ts` (var-backed) both carry it; parity tests green. Config CONVERGENCE (one config, delete web config) deferred — it changes output, see §7 |
-| **P2 — BEM → styled()+variants** | 🟡 all 24 `elements/**` landed (bar overlays) | Every non-overlay `elements/**` BEM block → a `*.styled.tsx` `styled()`+variants, each with a `*-styled.test.tsx` gate (structure + tokens + jsdom render, all green): forms (button/input/select/textarea), content (avatar/badge/card/list-item/panel/separator/terminal), typography (caption/code/heading/label), branding (cozy-text), layouts (page/split-pane/stack), nav (breadcrumb/tab-bar/top-bar/app-links/sidebar). **24/68** CSS files. Remaining 44 = the composite `components/**` (39) + `nav/app-sidebar` + `nav/settings-dialog` + the 3 overlays (dialog/dropdown/sheet, on the P4 track): per-slice |
+| **P2 — BEM → styled()+variants** | ✅ **all 68 blocks converted** (proofs landed) | Every BEM block in `libs/css/src/{elements,components}/**` now has a `*.styled.tsx` `styled()`+variants proof with a `*-styled.test.tsx` gate (structure + tokens + jsdom render). **68/68** CSS files, 68 test suites, all green (496 `libs/ui` tests, `lint:tokens`+`lint:rn` clean). Elements co-located (`elements/**/…styled.tsx`); the 39 composite `components/**` in a flat mirror tree `libs/ui/src/components-styled/<area>/`. The 3 overlays (dialog/dropdown/sheet) are chrome-only here — the interactive overlay moves to `@tamagui/*` in P4. **Remaining P2 work is the shipped-surface SWAP + CSS deletion** (replace `className="…"` with `<Styled*>`/props and delete the `.css` + its import), which is per-slice, harness-gated (§4 end, §5), and the `!important`/`@apply` retirement. Known per-file approximations (animations→P4 driver, gradients, `-webkit-line-clamp`, `max-width` media, `all:unset`, off-scale px) are annotated inline in each proof for the swap review |
 | **P3 — className → props codemod** | ✅ tool built | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + 31-test mapping gate; `--check` over the chat surface: 228 elements migratable across 44 files, 110 reported for manual review. Applying to shipped surfaces is per-slice harness-gated |
 | **P0 — real-surface visual harness** | 🟡 mechanism proven | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining |
 | **P4/P5 — primitives/overlays idiomatic, compiler ON, delete pipeline** | ⬜ remaining | needs the surface sweep done first |
