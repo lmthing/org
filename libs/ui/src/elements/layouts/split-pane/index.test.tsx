@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test-utils/index'
 import { describe, it, expect } from 'vitest'
+// Post-swap: $-token PROPS → Tamagui atomic classes, not `.split-pane*` BEM classNames.
 import { SplitPane, SplitPanePrimary, SplitPaneSecondary } from './index'
 
 describe('SplitPane', () => {
@@ -8,22 +9,28 @@ describe('SplitPane', () => {
     expect(screen.getByText('Content')).toBeInTheDocument()
   })
 
-  it('applies split-pane class', () => {
+  it('is a full-height flex row that clips', () => {
     render(<SplitPane data-testid="pane">Content</SplitPane>)
-    expect(screen.getByTestId('pane')).toHaveClass('split-pane')
+    expect(screen.getByTestId('pane')).toHaveClass(
+      '_dsp-flex', '_fd-row', '_height-10037', '_ox-hidden', '_oy-hidden',
+    )
   })
 })
 
 describe('SplitPanePrimary', () => {
-  it('applies split-pane__primary class', () => {
+  it('flexes to fill and scrolls', () => {
     render(<SplitPanePrimary data-testid="primary">Primary</SplitPanePrimary>)
-    expect(screen.getByTestId('primary')).toHaveClass('split-pane__primary')
+    expect(screen.getByTestId('primary')).toHaveClass(
+      '_flexGrow-1', '_flexShrink-1', '_ox-auto', '_oy-auto',
+    )
   })
 })
 
 describe('SplitPaneSecondary', () => {
-  it('applies split-pane__secondary class', () => {
+  it('does not shrink and carries the left border', () => {
     render(<SplitPaneSecondary data-testid="secondary">Secondary</SplitPaneSecondary>)
-    expect(screen.getByTestId('secondary')).toHaveClass('split-pane__secondary')
+    expect(screen.getByTestId('secondary')).toHaveClass(
+      '_flexShrink-0', '_ox-auto', '_oy-auto', '_borderLeftWidth-1px', '_borderLeftColor-border',
+    )
   })
 })

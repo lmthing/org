@@ -15,7 +15,6 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { CardFooter } from '@lmthing/ui/elements/content/card'
 import '@lmthing/css/elements/forms/input/index.css'
-import '@lmthing/css/elements/layouts/stack/index.css'
 import '@lmthing/css/components/workflow/save-workflow-modal/index.css'
 
 interface SaveTasklistModalProps {

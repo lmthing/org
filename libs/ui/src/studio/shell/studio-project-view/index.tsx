@@ -6,8 +6,8 @@
  * space. Replaces the former project/space grid landings.
  */
 import * as Prim from '../../../elements/primitives/index.js';
-import '@lmthing/css/elements/layouts/split-pane/index.css'
-import '@lmthing/css/elements/layouts/page/index.css'
+import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index.js'
+import { PAGE_BODY } from '../../../elements/layouts/page/index.js'
 import '@lmthing/css/elements/content/panel/index.css'
 import { useProject } from '@lmthing/state'
 import { StudioAppSidebar } from '../studio-app-sidebar'
@@ -16,10 +16,10 @@ export function StudioProjectView() {
   const { spaces, isLoadingSpaces } = useProject()
 
   return (
-    <Prim.Box className="split-pane" height="100vh">
+    <Prim.Box {...SPLIT_PANE_BASE} height="100vh">
       <StudioAppSidebar className="shrink-0" />
-      <Prim.Box className="split-pane__primary">
-        <Prim.Box className="page__body" display="flex" alignItems="center" justifyContent="center">
+      <Prim.Box {...SPLIT_PANE_PRIMARY}>
+        <Prim.Box {...PAGE_BODY} display="flex" alignItems="center" justifyContent="center">
           <Prim.Box textAlign="center" opacity={0.5}>
             <Prim.Text as="p" fontSize="$lg" fontWeight="$semibold" marginBottom="$2">Select a space to begin</Prim.Text>
             <Prim.Text as="p" fontSize="$sm">
