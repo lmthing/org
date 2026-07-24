@@ -1,5 +1,4 @@
 import * as Prim from '../elements/primitives/index.js';
-import '@lmthing/css/components/computer/metrics-card.css'
 import { Card, CardHeader, CardBody } from '../elements/content/card'
 import { Caption } from '../elements/typography/caption'
 import { Heading } from '../elements/typography/heading'
@@ -21,17 +20,23 @@ function MetricsCard({ cpuPercent, memoryUsedMB, memoryTotalMB }: MetricsCardPro
         <Heading level={4}>Metrics</Heading>
       </CardHeader>
       <CardBody>
-        <Prim.Box className="computer-metrics-card">
-          <Prim.Box className="computer-metrics-card__row">
+        <Prim.Box display="flex" flexDirection="column" gap="$3">
+          <Prim.Box display="flex" alignItems="center" justifyContent="space-between">
             <Caption muted>CPU</Caption>
             <Caption>{cpuPercent != null ? `${cpuPercent}%` : 'N/A'}</Caption>
           </Prim.Box>
           {cpuPercent != null && (
-            <Prim.Box className="computer-metrics-card__bar">
-              <Prim.Box className="computer-metrics-card__bar-fill" style={{ width: `${cpuPercent}%` }} />
+            <Prim.Box height="$2" width="100%" borderRadius="$radius-full" backgroundColor="$muted" overflow="hidden">
+              <Prim.Box
+                height="100%"
+                borderRadius="$radius-full"
+                backgroundColor="$primary"
+                // transition-all duration-300 stays inline until the P4 animation driver lands
+                style={{ width: `${cpuPercent}%`, transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+              />
             </Prim.Box>
           )}
-          <Prim.Box className="computer-metrics-card__row">
+          <Prim.Box display="flex" alignItems="center" justifyContent="space-between">
             <Caption muted>Memory</Caption>
             <Caption>
               {memoryUsedMB != null
@@ -40,8 +45,14 @@ function MetricsCard({ cpuPercent, memoryUsedMB, memoryTotalMB }: MetricsCardPro
             </Caption>
           </Prim.Box>
           {memPercent != null && (
-            <Prim.Box className="computer-metrics-card__bar">
-              <Prim.Box className="computer-metrics-card__bar-fill" style={{ width: `${memPercent}%` }} />
+            <Prim.Box height="$2" width="100%" borderRadius="$radius-full" backgroundColor="$muted" overflow="hidden">
+              <Prim.Box
+                height="100%"
+                borderRadius="$radius-full"
+                backgroundColor="$primary"
+                // transition-all duration-300 stays inline until the P4 animation driver lands
+                style={{ width: `${memPercent}%`, transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+              />
             </Prim.Box>
           )}
         </Prim.Box>
