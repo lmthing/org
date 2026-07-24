@@ -1129,9 +1129,29 @@ split follows directly from what Tamagui's unlayered `.is_View` base sets vs. le
 | `gap-*` / `gap-x-*` / `gap-y-*` | **KEEP as className** | `.is_View` does **not** set `gap` → Tailwind wins uncontested |
 | everything else (padding, margin, colors, `w-*`/`h-*`, `rounded-*`, `text-*`, `bg-*`, borders, `overflow-*`, …) | **KEEP as className** | not a box-model prop `.is_View` touches |
 
+**One more rule, found by the real-component slice (below):** a migrated container that carries a
+`text-{size}` class (e.g. `text-2xl`) must **restore its line-height via inline `style`** —
+`.is_View` sets `line-height` from the config font (an undefined font var → `normal`, e.g. 36px for a
+24px glyph), which overrides the `text-{size}` line-height; and `lineHeight` is **not** a Tamagui
+`View` style prop (it's silently dropped), so the pass-through `style={{ lineHeight: '2rem' }}` is the
+reliable override (inline wins). `font-size` from `text-{size}` still applies (the base doesn't set
+it). This only bites containers that both are flex AND hold text with a size class.
+
+### B2 — real-component slice PROVEN (EmptyState, under real theme.css)
+
+The full migration technique is proven end-to-end on a real chat surface component:
+`apps/web/b0-probe/surface-main.tsx` renders the REAL `libs/ui/src/chat/app/EmptyState` (reference,
+Tailwind) next to `EmptyStateCandidate.tsx` (its 3 flex `Box`es migrated to `Row`/`Col` by the rules
+above), both under the **compiled `@lmthing/css/theme.css` + Tailwind**; `measure-surface.mjs` walks
+both subtrees and asserts computed-style parity — **all 9 nodes match**. This is the §Appendix
+"smallest provable slice" and the pattern the real-CSS surface harness scales to (author fixtures,
+capture `main` baselines, diff). Text/Pressable were kept as the passthrough primitives here so the
+slice isolates the layout migration; their swap is B3.
+
 So the codemod is NOT "strip only the display class" — it strips `flex`/`flex-row`/`flex-col`, and
-additionally **lifts `items-*`, `flex-1`/`flex-*`, `min-w-*`, `self-*` to props**, while keeping
-`justify-*`, `gap-*`, and all paint/spacing/size classes as className. `Box` (block) can stay a
+additionally **lifts `items-*`, `flex-1`/`flex-*`, `min-w-*`, `self-*` to props** (and restores
+`line-height` via inline `style` for text-carrying containers), while keeping `justify-*`, `gap-*`,
+and all paint/spacing/size classes as className. `Box` (block) can stay a
 passthrough `<div>` on web until its own swap — a block `<div>` with kept Tailwind classes is
 unaffected; only the flex Boxes must migrate here.
 

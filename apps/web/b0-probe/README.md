@@ -7,6 +7,14 @@
 > (`items-*`/`flex-1`/`min-w-*` → props; `justify-*`/`gap-*` → keep className). Run:
 > `node ../node_modules/vite/bin/vite.js build --config vite.config.mts && node measure-layout.mjs`.
 > See `docs/react-native-tamagui-migration.md` Part III / "B2 — codemod rules, EMPIRICALLY VERIFIED".
+>
+> **B2 surface slice (real component, real theme.css):** `surface.html` / `surface-main.tsx` render
+> the REAL chat `EmptyState` (reference, Tailwind) next to `EmptyStateCandidate.tsx` (migrated to
+> Tamagui `Row`/`Col`), both under the compiled `@lmthing/css/theme.css`. `measure-surface.mjs` walks
+> both subtrees and asserts computed-style parity — **all 9 nodes match**. Surfaced one extra rule:
+> a migrated container carrying a `text-{size}` class must restore its line-height via inline `style`
+> (`.is_View` imposes `line-height`, and `lineHeight` is not a Tamagui View style prop). Run:
+> `node ../node_modules/vite/bin/vite.js build --config surface.vite.config.mts && node measure-surface.mjs`.
 
 ---
 
