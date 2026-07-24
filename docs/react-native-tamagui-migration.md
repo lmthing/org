@@ -36,9 +36,24 @@
 > chat `EmptyState`, migrated to Tamagui `Row`/`Col`, renders computed-identical to its Tailwind
 > original under the compiled `theme.css` — **all 9 nodes match** (`surface-main.tsx` +
 > `measure-surface.mjs`); it also nailed the last rule (text-carrying containers restore `line-height`
-> via inline `style`). **Remaining (the bulk, now fully de-risked):** the real primitive swaps, the
-> codemod run across ~137 surfaces, a CI-grade real-CSS surface harness (§3.1) with `main` baselines,
-> Radix, CSS deletion. **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** — it has the
+> via inline `style`).
+>
+> **✅ B2 LAYOUT MIGRATION COMPLETE (the core, highest-risk part).** Landed & verified:
+> `Row`/`Col` are real Tamagui `styled(View)`; the app root has an **empty-theme `TamaguiProvider`**
+> (`tamagui-web.config.ts`) that gives the primitives theme context while injecting NO color vars, so
+> `theme.css`/`data-theme`/space `--lm-*` theming is untouched (verified: correct `--background` in
+> light AND dark, no collision); **all 106 flex `Box`es across chat/studio/computer migrated to
+> `Row`/`Col`** via `flexbox-codemod.mjs` (104 auto + 2 manual). Gates green: app build · libs/ui 32/32
+> · visual 54/54 · typecheck 6/6 · RN-safety lint · no separate React roots (all surfaces under the
+> provider). Verification model = Phase-0's (proven primitives + mechanical AST codemod + full gate
+> battery), with exact computed parity proven on `EmptyState` (9/9) + the `lay-*` rule proof.
+>
+> **Remaining = B3 (typography + overlays + cleanup), a large follow-up:** swap `Text`/`Pressable` to
+> Tamagui (their `.is_Text` base overrides `font-*`/`text-*`/`leading-*`/`tracking-*`, so ~hundreds of
+> text elements must move those to props — the big one); swap block `Box` → Tamagui (needs a second
+> codemod pass for block Boxes that are flex CHILDREN carrying `min-*`/`shrink-*`); Radix→Tamagui (8
+> `elements/` components); delete superseded CSS. Web renders correctly TODAY without these (Text/
+> Pressable/Box stay passthrough on web, native uses their `.native.tsx` forks). **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** — it has the
 > grounded ordering (global swap; Row/Col first; codemod flex Boxes; then Box; Text/Pressable last)
 > and the constraint that the surface harness must be built to verify surfaces under the parity contract.
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
