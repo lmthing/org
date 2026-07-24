@@ -7,12 +7,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
 ## Elements (primitives)
 
-### `elements/branding/cozy-text/index.css`
-
-- **.cozy-text** — `.cozy-text` `.cozy-text--brand-1` `.cozy-text--brand-2` `.cozy-text--brand-3` `.cozy-text--brand-4` `.cozy-text--brand-5` `.cozy-text--neutral`
-
-  Tokens: `--brand-1`, `--brand-2`, `--brand-3`, `--brand-4`, `--brand-5`, `--foreground`
-
 ### `elements/content/avatar/index.css`
 
 - **.avatar** — `.avatar` `.avatar--lg` `.avatar--sm` `.avatar__fallback` `.avatar__image`
@@ -24,12 +18,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.card** — `.card` `.card--interactive` `.card__body` `.card__footer` `.card__header`
 
   Tokens: `border`, `card`, `card-foreground`
-
-### `elements/content/list-item/index.css`
-
-- **.list-item** — `.list-item` `.list-item--selected` `.list-item__label` `.list-item__meta`
-
-  Tokens: `accent`, `accent-foreground`, `foreground`, `muted-foreground`
 
 ### `elements/content/panel/index.css`
 
@@ -149,23 +137,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.caption** — `.caption` `.caption--muted`
 
   Tokens: `muted-foreground`
-
-### `elements/typography/code/index.css`
-
-- **.code-block** — `.code-block`
-- **.code-inline** — `.code-inline`
-
-  Tokens: `foreground`, `muted`
-
-### `elements/typography/heading/index.css`
-
-- **.heading** — `.heading--muted`
-- **.heading-1** — `.heading-1`
-- **.heading-2** — `.heading-2`
-- **.heading-3** — `.heading-3`
-- **.heading-4** — `.heading-4`
-
-  Tokens: `foreground`, `muted-foreground`
 
 ### `elements/typography/label/index.css`
 
