@@ -36,6 +36,7 @@ export default defineConfig({
         'text-probe': path.join(here, 'text-probe.html'),
         'text-variants': path.join(here, 'text-variants.html'),
         'pressable-variants': path.join(here, 'pressable-variants.html'),
+        'box-variants': path.join(here, 'box-variants.html'),
       },
     },
   },

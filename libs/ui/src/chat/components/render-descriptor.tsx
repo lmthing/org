@@ -28,9 +28,9 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const Tag = (`h${Math.min(Math.max(level, 1), 4)}`) as 'h1';
       return <Tag key={key} className={`${cls} font-semibold text-lm-text my-1`}>{body}</Tag>;
     }
-    case 'h2': return <Prim.Text as="h2" key={key} className="text-base font-semibold text-lm-text my-1">{body}</Prim.Text>;
-    case 'h3': return <Prim.Text as="h3" key={key} className="text-sm font-semibold text-lm-text my-1">{body}</Prim.Text>;
-    case 'p': case 'paragraph': return <Prim.Text as="p" key={key} className="my-1 text-lm-text">{body}</Prim.Text>;
+    case 'h2': return <Prim.Text as="h2" key={key} className="text-base font-semibold text-lm-text" marginVertical="0.25rem">{body}</Prim.Text>;
+    case 'h3': return <Prim.Text as="h3" key={key} className="text-sm font-semibold text-lm-text" marginVertical="0.25rem">{body}</Prim.Text>;
+    case 'p': case 'paragraph': return <Prim.Text as="p" key={key} className="text-lm-text" marginVertical="0.25rem">{body}</Prim.Text>;
     case 'text': return <Prim.Text key={key} style={color ? { color: `var(--lm-${color}, ${color})` } : undefined} className={`${props['bold'] ? 'font-semibold' : ''} ${props['dim'] ? 'text-lm-muted' : ''} ${props['italic'] ? 'italic' : ''}`}>{body}</Prim.Text>;
     case 'strong': return <Prim.Text as="strong" key={key} className="font-semibold">{body}</Prim.Text>;
     case 'em': return <Prim.Text as="em" key={key}>{body}</Prim.Text>;
@@ -125,7 +125,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     }
     case 'timeline': {
       const items = (props['items'] as { title: string; time?: string; detail?: string }[]) ?? [];
-      return <Prim.List key={key} className="my-1 border-l border-lm-border pl-3">{items.map((it, i) => <Prim.ListItem key={i} className="mb-1"><Prim.Box className="text-lm-text">{it.title}{it.time ? <Prim.Text className="text-lm-muted text-[10px] ml-2">{it.time}</Prim.Text> : null}</Prim.Box>{it.detail ? <Prim.Box className="text-lm-muted text-[11px]">{it.detail}</Prim.Box> : null}</Prim.ListItem>)}</Prim.List>;
+      return <Prim.List key={key} className="my-1 border-l border-lm-border pl-3">{items.map((it, i) => <Prim.ListItem key={i} className="mb-1"><Prim.Box className="text-lm-text">{it.title}{it.time ? <Prim.Text className="text-lm-muted text-[10px]" marginLeft="0.5rem">{it.time}</Prim.Text> : null}</Prim.Box>{it.detail ? <Prim.Box className="text-lm-muted text-[11px]">{it.detail}</Prim.Box> : null}</Prim.ListItem>)}</Prim.List>;
     }
 
     // ── indicators ──

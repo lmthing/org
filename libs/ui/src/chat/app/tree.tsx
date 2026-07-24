@@ -55,7 +55,7 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
         <StatusIcon status={node.status} />
         <Prim.Text className="text-lm-text" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
         <KindBadge kind={node.kind} />
-        {dur && <Prim.Text className="text-lm-muted text-[10px] font-mono ml-auto shrink-0">{dur}</Prim.Text>}
+        {dur && <Prim.Text className="text-lm-muted text-[10px] font-mono shrink-0" marginLeft="auto">{dur}</Prim.Text>}
         {retries > 0 && <Prim.Text className="text-lm-amber text-[10px] font-mono shrink-0" title={`${retries} retries`}>×{retries}</Prim.Text>}
       </Prim.Box>
       {expanded && childIds.map((cid) => <TreeRowById key={cid} id={cid} depth={depth + 1} now={now} />)}

@@ -50,6 +50,11 @@ const cases: Case[] = [
   ['lift-break-words', <span className="break-words text-sm">{T}</span>, <Cand wordWrap="break-word" className="text-sm">{T}</Cand>],
   // KEEP break-all as className: it sets word-break, which .is_Text does NOT touch (no conflict).
   ['keep-break-all', <code className="break-all font-mono">{T}</code>, <Cand as="code" className="break-all font-mono">{T}</Cand>],
+  // MARGIN: .is_Text sets `margin:0` UNLAYERED and zeroes Tailwind mb-/mt-/ml- utilities → lift margin
+  // classes to Tamagui props (rem strings matching the Tailwind scale). Verifies the B3.1/B3.2 fix:
+  ['margin-p', <p className="mb-2 mt-3">{T}</p>, <Cand as="p" marginBottom="0.5rem" marginTop="0.75rem">{T}</Cand>],
+  ['margin-span', <span className="ml-2 mr-1.5">{T}</span>, <Cand marginLeft="0.5rem" marginRight="0.375rem">{T}</Cand>],
+  ['margin-auto', <span className="ml-auto">{T}</span>, <Cand marginLeft="auto">{T}</Cand>],
   // lift: truncate => overflow/textOverflow/whiteSpace props (+ keep max-w class)
   [
     'lift-truncate',

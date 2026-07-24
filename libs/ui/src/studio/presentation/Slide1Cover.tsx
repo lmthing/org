@@ -10,7 +10,7 @@ export default function Slide1Cover() {
     >
       {/* Hackathon badge */}
       <Prim.Text
-        className="mb-10 rounded-full border-2 px-5 py-1.5 text-sm font-semibold tracking-wide"
+        className="rounded-full border-2 px-5 py-1.5 text-sm font-semibold tracking-wide" marginBottom="2.5rem"
         style={{ borderColor: colors.brand, color: colors.brand }}
       >
         AI Hackathon
@@ -24,7 +24,7 @@ export default function Slide1Cover() {
       </Prim.Text>
 
       {/* Subtitle */}
-      <Prim.Text as="p" className="mt-6 text-center text-xl" style={{ color: colors.textSecondary }}>
+      <Prim.Text as="p" className="text-center text-xl" marginTop="1.5rem" style={{ color: colors.textSecondary }}>
         A no-code platform to turn domain expertise into specialized AI agents
       </Prim.Text>
 

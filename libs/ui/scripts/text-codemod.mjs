@@ -37,9 +37,22 @@
 import ts from 'typescript'
 import { readFileSync, writeFileSync } from 'node:fs'
 
-// The `Prim.*` primitives whose `.is_Text` base fights display/white-space/word-wrap (B3.1 Text, B3.2
-// Pressable). Both take the same lifted props (their primitive prop types include TextStyleProps).
+// The `Prim.*` primitives whose `.is_Text` base fights display/white-space/word-wrap AND `margin:0`
+// (B3.1 Text, B3.2 Pressable). Both take the lifted props (TextStyleProps + MarginStyleProps).
 const PRIM_NAMES = new Set(['Text', 'Pressable'])
+
+// Tailwind margin class → Tamagui margin prop. `.is_Text` sets `margin:0` UNLAYERED, so any margin
+// utility is beaten and must move to a prop (rem value = token × 0.25rem, matching the Tailwind scale;
+// verified byte-for-byte in apps/web/b0-probe/text-variants.mjs `margin-*`).
+const MARGIN_PROP = { m: 'margin', mt: 'marginTop', mr: 'marginRight', mb: 'marginBottom', ml: 'marginLeft', mx: 'marginHorizontal', my: 'marginVertical' }
+const marginValue = (raw) => {
+  if (raw === 'auto') return 'auto'
+  if (raw === 'px') return '1px'
+  const arb = raw.match(/^\[(.+)\]$/)
+  if (arb) return arb[1]
+  if (/^\d+(\.\d+)?$/.test(raw)) return `${Number(raw) * 0.25}rem`
+  return null // unrecognized → skip for manual review
+}
 
 const DISPLAY = {
   block: 'block', 'inline-block': 'inline-block', inline: 'inline',
@@ -50,7 +63,8 @@ const WHITESPACE = {
   'whitespace-pre-wrap': 'pre-wrap', 'whitespace-pre-line': 'pre-line',
   'whitespace-break-spaces': 'break-spaces',
 }
-const TARGET_PROPS = ['display', 'whiteSpace', 'wordWrap', 'overflow', 'textOverflow']
+const MARGIN_PROPS = ['margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'marginHorizontal', 'marginVertical']
+const TARGET_PROPS = ['display', 'whiteSpace', 'wordWrap', 'overflow', 'textOverflow', ...MARGIN_PROPS]
 
 /** Classify one className string. null → no conflict class (skip). {skip} → manual review. */
 function classify(cls) {
@@ -58,6 +72,7 @@ function classify(cls) {
   const keep = []
   const props = {} // ordered
   let touched = false
+  let m
   for (const t of tokens) {
     // responsive/state variants of a conflict class can't become a static prop → bail for review.
     if (t.includes(':')) {
@@ -76,12 +91,19 @@ function classify(cls) {
       if (props.whiteSpace && props.whiteSpace !== '"nowrap"')
         return { skip: `conflicting white-space classes (truncate + whitespace-*) — migrate manually` }
       props.overflow = '"hidden"'; props.textOverflow = '"ellipsis"'; props.whiteSpace = '"nowrap"'; touched = true
+    } else if (/^(ms|me)-/.test(t)) {
+      return { skip: `logical margin class '${t}' (margin-inline-start/end) — .is_Text zeroes it; lift manually` }
+    } else if ((m = t.match(/^(-)?(m[trblxy]?)-(.+)$/)) && m[2] in MARGIN_PROP) {
+      const val = marginValue(m[3])
+      if (val === null) return { skip: `unrecognized margin class '${t}' — .is_Text zeroes it; lift manually` }
+      const signed = m[1] && val !== 'auto' ? `-${val}` : val
+      props[MARGIN_PROP[m[2]]] = `"${signed}"`; touched = true
     } else keep.push(t)
   }
   if (!touched) return null
-  const order = ['display', 'overflow', 'textOverflow', 'whiteSpace', 'wordWrap']
+  const order = ['display', 'overflow', 'textOverflow', 'whiteSpace', 'wordWrap', ...MARGIN_PROPS]
   const propStr = order.filter((k) => k in props).map((k) => `${k}=${props[k]}`).join(' ')
-  return { className: keep.join(' '), propStr }
+  return { className: keep.join(' '), propStr, propKeys: Object.keys(props) }
 }
 
 function transform(file, text) {
@@ -104,19 +126,21 @@ function transform(file, text) {
     if (!attr.initializer || !ts.isStringLiteral(attr.initializer)) {
       // Dynamic className: only report if it textually contains a conflict class worth a human look.
       const raw = attr.initializer ? attr.initializer.getText(sf) : ''
-      if (/\b(block|inline-block|hidden|inline-flex|truncate|break-words|whitespace-)\b/.test(raw))
+      if (/\b(block|inline-block|hidden|inline-flex|truncate|break-words|whitespace-|-?m[trblxy]?-(?:\d|auto|\[))/.test(raw))
         skips.push({ line, why: `dynamic className may carry a conflict class (migrate manually): ${raw.slice(0, 60)}` })
       return
     }
     const res = classify(attr.initializer.text)
     if (!res) return
     if (res.skip) { skips.push({ line, why: res.skip }); return }
-    // Don't duplicate a target prop the element already sets explicitly.
-    const existing = opening.attributes.properties.filter(
-      (p) => ts.isJsxAttribute(p) && TARGET_PROPS.includes(p.name.getText(sf)),
-    )
-    if (existing.length && res.propStr) {
-      skips.push({ line, why: `element already sets ${existing.map((p) => p.name.getText(sf)).join('/')} — merge lifted props manually` })
+    // Don't duplicate a prop the element already sets — but only skip on a REAL collision (same prop
+    // name). An element that already has `display=` may still receive a lifted `marginTop` cleanly.
+    const existingNames = opening.attributes.properties
+      .filter((p) => ts.isJsxAttribute(p) && TARGET_PROPS.includes(p.name.getText(sf)))
+      .map((p) => p.name.getText(sf))
+    const collision = (res.propKeys || []).filter((k) => existingNames.includes(k))
+    if (collision.length) {
+      skips.push({ line, why: `element already sets ${collision.join('/')} — merge lifted prop(s) manually` })
       return
     }
     count++

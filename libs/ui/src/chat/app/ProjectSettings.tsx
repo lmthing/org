@@ -138,7 +138,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
           <Prim.Text className="text-sm text-foreground flex-1" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={d}>{d}</Prim.Text>
         </Prim.Row>
       ))}
-      <Prim.Text as="label" className={cn('mt-2 self-start cursor-pointer', uploading && 'opacity-50 pointer-events-none')}>
+      <Prim.Text as="label" marginTop="0.5rem" className={cn('self-start cursor-pointer', uploading && 'opacity-50 pointer-events-none')}>
         <Button variant="outline" size="sm" loading={uploading}>
           {uploading ? 'Uploading…' : '+ Upload file'}
         </Button>
@@ -171,7 +171,7 @@ function SpacesTab({ projectId }: { projectId: string }) {
               <Prim.Text className="text-sm font-medium text-foreground flex-1" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{s.name}</Prim.Text>
               <Prim.Text className="text-xs text-muted-foreground font-mono">{s.id}</Prim.Text>
             </Prim.Row>
-            {s.description && <Prim.Text as="p" className="text-xs text-muted-foreground mb-2 line-clamp-2">{s.description}</Prim.Text>}
+            {s.description && <Prim.Text as="p" className="text-xs text-muted-foreground line-clamp-2" marginBottom="0.5rem">{s.description}</Prim.Text>}
             <Prim.Row className="flex-wrap gap-1">
               <Prim.Text className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{s.agents.length} agent{s.agents.length !== 1 && 's'}</Prim.Text>
               {s.functionCount > 0 && <Prim.Text className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{s.functionCount} fn</Prim.Text>}
