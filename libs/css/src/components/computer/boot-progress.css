@@ -1,7 +1,7 @@
 @reference "../../theme.css";
 
 .computer-boot-progress {
-  @apply flex flex-col items-center justify-center gap-4 p-8 h-full min-h-[300px];
+  @apply flex! flex-col items-center justify-center gap-4 p-8 h-full min-h-[300px];
 }
 
 .computer-boot-progress__spinner {
@@ -13,11 +13,11 @@
 }
 
 .computer-boot-progress__steps {
-  @apply flex flex-col gap-1 text-xs text-muted-foreground/60;
+  @apply flex! flex-col gap-1 text-xs text-muted-foreground/60;
 }
 
 .computer-boot-progress__step {
-  @apply flex items-center gap-2;
+  @apply flex! items-center gap-2;
 }
 
 .computer-boot-progress__step--done {

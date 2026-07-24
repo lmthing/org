@@ -1,15 +1,15 @@
 @reference "../../theme.css";
 
 .ide-preview {
-  @apply h-full flex flex-col bg-background;
+  @apply h-full flex! flex-col bg-background;
 }
 
 .ide-preview__header {
-  @apply flex items-center gap-1.5 px-2 py-1.5 bg-card border-b border-border shrink-0;
+  @apply flex! items-center gap-1.5 px-2 py-1.5 bg-card border-b border-border shrink-0;
 }
 
 .ide-preview__refresh {
-  @apply flex items-center justify-center p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0;
+  @apply flex! items-center justify-center p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shrink-0;
 }
 
 .ide-preview__url {
@@ -21,5 +21,5 @@
 }
 
 .ide-preview__loading {
-  @apply flex-1 flex items-center justify-center text-muted-foreground text-sm;
+  @apply flex-1 flex! items-center justify-center text-muted-foreground text-sm;
 }

@@ -3,10 +3,10 @@
 /* ── StudioList ──────────────────────────────────────────────────── */
 
 .studio-list__header {
-  @apply flex justify-between items-center;
+  @apply flex! justify-between items-center;
 }
 
 .studio-list__empty {
-  @apply flex flex-col items-center justify-center;
+  @apply flex! flex-col items-center justify-center;
   padding: 3rem;
 }

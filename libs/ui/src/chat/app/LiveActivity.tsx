@@ -23,7 +23,7 @@ export function LiveActivity(): React.ReactElement | null {
 
   return (
     <Prim.Box
-      className="mx-4 mb-2 rounded-lg border border-border bg-muted/30 lm-fade-in"
+      className="rounded-lg border border-border bg-muted/30 lm-fade-in" marginBottom="0.5rem" marginHorizontal="1rem"
       data-testid="live-activity"
       aria-label="sub-agent activity"
     >

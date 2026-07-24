@@ -11,7 +11,7 @@ export default function Slide6DemoVideo() {
       {/* TOP */}
       <Prim.Col className="mb-8" alignItems="center">
         <Prim.Box
-          className="mb-4 text-lg font-bold uppercase tracking-[0.16em]"
+          className="text-lg font-bold uppercase tracking-[0.16em]" marginBottom="1rem"
           style={{ color: colors.brand }}
         >
           See it in action

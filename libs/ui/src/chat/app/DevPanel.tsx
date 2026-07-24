@@ -36,8 +36,9 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
   return (
     <Prim.Box as="aside"
       aria-label="developer tools"
+      display="flex"
       className={cn(
-        'relative flex flex-col bg-lm-panel border-l border-lm-border overflow-hidden shrink-0',
+        'relative flex-col bg-lm-panel border-l border-lm-border overflow-hidden shrink-0',
         className,
       )}
       style={{ width }}

@@ -1,7 +1,7 @@
 @reference "../../../theme.css";
 
 .terminal {
-  @apply flex flex-col w-full h-full bg-background overflow-hidden rounded-md;
+  @apply flex! flex-col w-full h-full bg-background overflow-hidden rounded-md;
 }
 
 .terminal__viewport {

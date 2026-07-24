@@ -9,7 +9,7 @@
 }
 
 .card__header {
-  @apply flex flex-col gap-1.5 p-4 pb-0;
+  @apply flex! flex-col gap-1.5 p-4 pb-0;
 }
 
 .card__body {
@@ -17,5 +17,5 @@
 }
 
 .card__footer {
-  @apply flex items-center p-4 pt-0;
+  @apply flex! items-center p-4 pt-0;
 }

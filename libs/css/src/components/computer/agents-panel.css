@@ -1,7 +1,7 @@
 @reference "../../theme.css";
 
 .computer-agents-panel {
-  @apply flex flex-col gap-1;
+  @apply flex! flex-col gap-1;
 }
 
 .computer-agents-panel__empty {

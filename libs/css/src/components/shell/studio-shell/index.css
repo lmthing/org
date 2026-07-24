@@ -7,7 +7,7 @@
 }
 
 .studio-shell__empty {
-  @apply flex items-center justify-center;
+  @apply flex! items-center justify-center;
 }
 
 .studio-shell__empty-content {

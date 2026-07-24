@@ -1,11 +1,11 @@
 @reference "../../theme.css";
 
 .computer-logs-viewer {
-  @apply flex flex-col h-full;
+  @apply flex! flex-col h-full;
 }
 
 .computer-logs-viewer__toolbar {
-  @apply flex items-center gap-2 px-3 py-2 border-b border-border;
+  @apply flex! items-center gap-2 px-3 py-2 border-b border-border;
 }
 
 .computer-logs-viewer__list {
@@ -13,7 +13,7 @@
 }
 
 .computer-logs-viewer__entry {
-  @apply flex gap-2;
+  @apply flex! gap-2;
 }
 
 .computer-logs-viewer__timestamp {

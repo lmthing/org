@@ -119,14 +119,17 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
       </Prim.Row>
 
       {expanded && (
-        <Prim.Box className="mt-1 space-y-0.5 pl-[26px] text-xs text-muted-foreground">
+        <Prim.Box className="space-y-0.5 pl-[26px] text-xs text-muted-foreground" marginTop="0.25rem">
           {stmts.length > 0 ? (
             stmts.map((s, i) => {
               const text = narrationOf(s.code);
               return (
                 <Prim.Box
                   key={`${s.ts}-${i}`}
-                  className={cn('truncate', s.errors.length > 0 && 'text-destructive')}
+                  overflow="hidden"
+                  textOverflow="ellipsis"
+                  whiteSpace="nowrap"
+                  className={cn(s.errors.length > 0 && 'text-destructive')}
                   title={text}
                 >
                   {text || '(no narration)'}
@@ -142,7 +145,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
             </Prim.Box>
           )}
           {node.error && (
-            <Prim.Box className="truncate font-mono text-destructive" title={node.error}>
+            <Prim.Box className="font-mono text-destructive" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.error}>
               {node.error}
             </Prim.Box>
           )}

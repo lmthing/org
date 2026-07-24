@@ -1,7 +1,7 @@
 @reference "../../../theme.css";
 
 .avatar {
-  @apply relative flex size-8 shrink-0 overflow-hidden rounded-full
+  @apply relative flex! size-8 shrink-0 overflow-hidden rounded-full
          bg-muted text-muted-foreground;
 }
 
@@ -18,5 +18,5 @@
 }
 
 .avatar__fallback {
-  @apply flex h-full w-full items-center justify-center text-sm font-medium;
+  @apply flex! h-full w-full items-center justify-center text-sm font-medium;
 }

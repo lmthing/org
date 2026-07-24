@@ -1,7 +1,7 @@
 @reference "../../../theme.css";
 
 .breadcrumb {
-  @apply flex items-center gap-1 text-sm text-muted-foreground;
+  @apply flex! items-center gap-1 text-sm text-muted-foreground;
 }
 
 .breadcrumb__segment {

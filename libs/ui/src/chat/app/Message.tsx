@@ -46,16 +46,17 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
     <Prim.Box
       data-testid="ask-form"
       data-ask-id={block.askId}
+      marginVertical="0.25rem"
       className={cn(
-        'border rounded-xl p-3 my-1 transition-colors',
+        'border rounded-xl p-3 transition-colors',
         inert ? 'border-border opacity-70' : 'border-agent/50 bg-agent/5',
       )}
     >
       {block.state === 'answered' && (
-        <Prim.Box className="text-xs text-knowledge font-mono mb-2">✓ {preview(block.answer, 200)}</Prim.Box>
+        <Prim.Box className="text-xs text-knowledge font-mono" marginBottom="0.5rem">✓ {preview(block.answer, 200)}</Prim.Box>
       )}
       {block.state === 'cancelled' && (
-        <Prim.Box className="text-xs text-muted-foreground font-mono mb-2">cancelled</Prim.Box>
+        <Prim.Box className="text-xs text-muted-foreground font-mono" marginBottom="0.5rem">cancelled</Prim.Box>
       )}
       <Prim.Box style={inert ? { pointerEvents: 'none' } : undefined}>
         {d && isConsentDescriptor(d) ? (
@@ -211,7 +212,7 @@ export function Message({ block }: MessageProps) {
               </Prim.Col>
             )}
             {block.content && (
-              <Prim.Box className="bg-muted text-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">
+              <Prim.Box className="bg-muted text-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed" whiteSpace="pre-wrap">
                 {block.content}
               </Prim.Box>
             )}

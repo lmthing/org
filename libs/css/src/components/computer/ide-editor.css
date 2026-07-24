@@ -1,15 +1,15 @@
 @reference "../../theme.css";
 
 .ide-editor {
-  @apply h-full flex flex-col bg-background;
+  @apply h-full flex! flex-col bg-background;
 }
 
 .ide-editor__tabs {
-  @apply flex items-center bg-card border-b border-border overflow-x-auto shrink-0;
+  @apply flex! items-center bg-card border-b border-border overflow-x-auto shrink-0;
 }
 
 .ide-editor__tab {
-  @apply flex items-center gap-2 px-3 py-1.5 border-r border-border cursor-pointer text-sm text-muted-foreground hover:text-foreground transition-colors;
+  @apply flex! items-center gap-2 px-3 py-1.5 border-r border-border cursor-pointer text-sm text-muted-foreground hover:text-foreground transition-colors;
 }
 
 .ide-editor__tab--active {
@@ -21,7 +21,7 @@
 }
 
 .ide-editor__empty {
-  @apply flex-1 flex items-center justify-center text-muted-foreground text-sm;
+  @apply flex-1 flex! items-center justify-center text-muted-foreground text-sm;
 }
 
 .ide-editor__content {

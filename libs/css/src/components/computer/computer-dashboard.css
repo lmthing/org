@@ -1,7 +1,7 @@
 @reference "../../theme.css";
 
 .computer-dashboard {
-  @apply grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4;
+  @apply grid! grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4;
 }
 
 .computer-dashboard__full-width {

@@ -25,7 +25,7 @@
 }
 
 .workflow-card__header {
-  @apply flex items-start justify-between gap-4 mb-3;
+  @apply flex! items-start justify-between gap-4 mb-3;
 }
 
 .workflow-card__header-content {
@@ -33,24 +33,24 @@
 }
 
 .workflow-card__title-row {
-  @apply flex items-center gap-2 mb-1;
+  @apply flex! items-center gap-2 mb-1;
 }
 
 .workflow-card__tags {
-  @apply flex flex-wrap gap-1.5 mb-4;
+  @apply flex! flex-wrap gap-1.5 mb-4;
 }
 
 .workflow-card__footer {
-  @apply flex items-center justify-between pt-3;
+  @apply flex! items-center justify-between pt-3;
   border-top: 1px solid var(--border);
 }
 
 .workflow-card__footer-stats {
-  @apply flex items-center gap-4;
+  @apply flex! items-center gap-4;
 }
 
 .workflow-card__stat {
-  @apply flex items-center gap-1.5;
+  @apply flex! items-center gap-1.5;
 }
 
 .workflow-card__icon {
@@ -63,7 +63,7 @@
 }
 
 .workflow-card__check {
-  @apply absolute top-4 right-4 w-5 h-5 rounded-full flex items-center justify-center;
+  @apply absolute top-4 right-4 w-5 h-5 rounded-full flex! items-center justify-center;
   background: var(--brand-3);
 }
 
@@ -74,7 +74,7 @@
 /* ── WorkflowListItem ──────────────────────────────────────────────── */
 
 .workflow-list-item {
-  @apply flex items-center gap-4 p-4 rounded-lg border transition-all duration-150 cursor-pointer;
+  @apply flex! items-center gap-4 p-4 rounded-lg border transition-all duration-150 cursor-pointer;
   background: var(--card);
   border-color: var(--border);
 }
@@ -111,15 +111,15 @@
 }
 
 .workflow-list-item__title-row {
-  @apply flex items-center gap-2;
+  @apply flex! items-center gap-2;
 }
 
 .workflow-list-item__tags {
-  @apply flex flex-wrap gap-1;
+  @apply flex! flex-wrap gap-1;
 }
 
 .workflow-list-item__tags--responsive {
-  @apply hidden sm:flex;
+  @apply hidden! sm:flex!;
 }
 
 .workflow-list-item__chevron {
