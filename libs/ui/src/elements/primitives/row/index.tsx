@@ -1,18 +1,10 @@
-import * as React from 'react'
-import { hostPrimitive } from '../_host'
-
 /**
- * Row — an explicit horizontal flex container (Phase 0).
+ * Row — an explicit horizontal flex container, now a real Tamagui `styled(View)` (Part III / B2).
  *
- * Pure passthrough in Phase 0 (emits a `<div>` with the caller's props verbatim, identical
- * DOM to `Box`). Distinct migration seam: flex-row `<div>`s become `<Row>` so no layout relies
- * on an implicit box-model default; Phase 1 gives Row's internals an EXPLICIT
- * `flexDirection: 'row'` (§1 table, §4).
- *
- * See docs/react-native-tamagui-migration.md §1.5 / §4.
+ * Web output computes byte-for-byte like `<div class="flex">` (block-compat resets), proven in
+ * `tests/visual/equivalence.spec.ts` + the `apps/web/b0-probe` surface slice. Accepts the surfaces'
+ * DOM props (className/onClick/style/…) PLUS the Tamagui layout props the B2 codemod lifts out of
+ * Tailwind classes (`alignItems`, `justifyContent`, `flexGrow/Shrink/Basis`, `flexWrap`, `minWidth`,
+ * …). The `index.native.tsx` fork is the RN target. See docs/react-native-tamagui-migration.md.
  */
-export type RowProps = React.HTMLAttributes<HTMLDivElement>
-
-const Row = hostPrimitive<HTMLDivElement, RowProps>('div', 'Row')
-
-export { Row }
+export { Row, type LayoutPrimitiveProps as RowProps } from '../_tamagui'
