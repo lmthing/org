@@ -25,23 +25,11 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `background`, `input`, `muted-foreground`, `ring`
 
-### `elements/nav/app-links/index.css`
-
-- **.app-links** — `.app-links` `.app-links--bordered` `.app-links__link`
-
-  Tokens: `foreground`, `muted`, `muted-foreground`, `sidebar-border`
-
 ### `elements/nav/app-sidebar/index.css`
 
 - **.app-sidebar** — `.app-sidebar` `.app-sidebar--collapsed` `.app-sidebar--fixed` `.app-sidebar__brand` `.app-sidebar__collapse-btn` `.app-sidebar__content` `.app-sidebar__dropdown` `.app-sidebar__dropdown-add` `.app-sidebar__dropdown-chevron` `.app-sidebar__dropdown-create` `.app-sidebar__dropdown-delete` `.app-sidebar__dropdown-input` `.app-sidebar__dropdown-item` `.app-sidebar__dropdown-item--active` `.app-sidebar__dropdown-label` `.app-sidebar__dropdown-list` `.app-sidebar__dropdown-menu` `.app-sidebar__dropdown-row` `.app-sidebar__dropdown-trigger` `.app-sidebar__empty` `.app-sidebar__footer` `.app-sidebar__header` `.app-sidebar__icon` `.app-sidebar__item` `.app-sidebar__item--active` `.app-sidebar__new-chat` `.app-sidebar__project-row` `.app-sidebar__project-settings` `.app-sidebar__rail` `.app-sidebar__rail-brand` `.app-sidebar__rail-btn` `.app-sidebar__section` `.app-sidebar__section-body` `.app-sidebar__section-count` `.app-sidebar__section-header` `.app-sidebar__section-icon` `.app-sidebar__section-label` `.app-sidebar__top`
 
   Tokens: `border`, `destructive`, `foreground`, `muted`, `muted-foreground`, `popover`, `primary`, `primary-foreground`, `ring`, `sidebar`, `sidebar-border`
-
-### `elements/nav/breadcrumb/index.css`
-
-- **.breadcrumb** — `.breadcrumb` `.breadcrumb__segment` `.breadcrumb__separator`
-
-  Tokens: `foreground`, `muted-foreground`
 
 ### `elements/nav/settings-dialog/index.css`
 
@@ -52,21 +40,10 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
 ### `elements/nav/sidebar/index.css`
 
-- **.sidebar** — `.sidebar` `.sidebar--collapsed` `.sidebar__item` `.sidebar__item--active`
+- **.md** — `.md`
+- **.sidebar** — `.sidebar` `.sidebar__item` `.sidebar__item--active`
 
-  Tokens: `sidebar`, `sidebar-accent`, `sidebar-accent-foreground`, `sidebar-border`, `sidebar-foreground`
-
-### `elements/nav/tab-bar/index.css`
-
-- **.tab-bar** — `.tab-bar` `.tab-bar__tab` `.tab-bar__tab--active`
-
-  Tokens: `border`, `foreground`, `muted-foreground`, `primary`
-
-### `elements/nav/top-bar/index.css`
-
-- **.top-bar** — `.top-bar` `.top-bar__actions` `.top-bar__title`
-
-  Tokens: `background`, `border`, `foreground`
+  Tokens: `sidebar-accent`, `sidebar-accent-foreground`, `sidebar-foreground`
 
 ### `elements/overlays/dialog/index.css`
 

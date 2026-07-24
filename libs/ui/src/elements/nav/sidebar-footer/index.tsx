@@ -27,7 +27,7 @@ export function SidebarFooter({ current, children, className }: SidebarFooterPro
 
   return (
     <div className={cn('flex flex-col', className)}>
-      <AppLinks current={current} className="app-links--bordered" />
+      <AppLinks current={current} bordered />
 
       {children}
 

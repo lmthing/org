@@ -1,5 +1,7 @@
 import { render, screen } from '../../../test-utils/index'
 import { describe, it, expect } from 'vitest'
+// Post-swap: $-token PROPS → Tamagui atomic classes, not `.breadcrumb*` BEM classNames. The old
+// `:last-child` rule is now an explicit `isCurrent` branch, so it is asserted on the real segment.
 import { Breadcrumb } from './index'
 
 const segments = [
@@ -16,19 +18,27 @@ describe('Breadcrumb', () => {
     expect(screen.getByText('Space')).toBeInTheDocument()
   })
 
-  it('applies breadcrumb class', () => {
+  it('is a gapped, muted row', () => {
     render(<Breadcrumb segments={segments} />)
-    expect(screen.getByRole('navigation', { name: 'breadcrumb' })).toHaveClass('breadcrumb')
+    expect(screen.getByRole('navigation', { name: 'breadcrumb' })).toHaveClass(
+      '_dsp-flex', '_alignItems-center', '_gap-c-space-1',
+    )
   })
 
-  it('renders separators between segments', () => {
+  it('renders a separator between each pair of segments', () => {
     render(<Breadcrumb segments={segments} />)
-    const separators = document.querySelectorAll('.breadcrumb__separator')
-    expect(separators).toHaveLength(2)
+    expect(document.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2)
   })
 
-  it('marks last segment as current page', () => {
+  it('marks the last segment as the current page and makes it unclickable', () => {
     render(<Breadcrumb segments={segments} />)
-    expect(screen.getByText('Space')).toHaveAttribute('aria-current', 'page')
+    const last = screen.getByText('Space')
+    expect(last).toHaveAttribute('aria-current', 'page')
+    expect(last).toHaveClass('_cur-default')
+  })
+
+  it('leaves earlier segments clickable', () => {
+    render(<Breadcrumb segments={segments} />)
+    expect(screen.getByText('Home')).toHaveClass('_cur-pointer')
   })
 })

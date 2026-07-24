@@ -1,5 +1,6 @@
 import { render, screen } from '../../../test-utils/index'
 import { describe, it, expect } from 'vitest'
+// Post-swap: $-token PROPS → Tamagui atomic classes, not `.top-bar*` BEM classNames.
 import { TopBar } from './index'
 
 describe('TopBar', () => {
@@ -8,14 +9,18 @@ describe('TopBar', () => {
     expect(screen.getByRole('banner')).toBeInTheDocument()
   })
 
-  it('applies top-bar class', () => {
+  it('is a space-between bar of $12 height with a bottom border', () => {
     render(<TopBar data-testid="topbar" />)
-    expect(screen.getByTestId('topbar')).toHaveClass('top-bar')
+    expect(screen.getByTestId('topbar')).toHaveClass(
+      '_dsp-flex', '_alignItems-center', '_height-c-size-12',
+      '_borderBottomWidth-1px', '_backgroundColor-background',
+    )
   })
 
-  it('renders title when provided', () => {
+  it('renders a truncating title when provided', () => {
     render(<TopBar title="My Studio" />)
-    expect(screen.getByText('My Studio')).toHaveClass('top-bar__title')
+    const title = screen.getByText('My Studio')
+    expect(title).toHaveClass('_ox-hidden', '_ws-nowrap')
   })
 
   it('renders actions when provided', () => {

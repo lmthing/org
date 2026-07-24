@@ -28,6 +28,7 @@ import {
   MessageSquare,
 } from 'lucide-react'
 import '@lmthing/css/elements/nav/sidebar/index.css'
+import { SIDEBAR_BASE, SIDEBAR_COLLAPSED } from '../../../elements/nav/sidebar/index.js'
 import '@lmthing/css/components/shell/index.css'
 import { buildSpacePath } from '@lmthing/ui/lib/space-path'
 import { useAgentList } from '@lmthing/ui/hooks/agent/useAgentList'
@@ -133,7 +134,7 @@ export function StudioSidebar({
   )
 
   return (
-    <Prim.Box as="aside" className={`sidebar ${isCollapsed ? 'sidebar--collapsed' : ''}`}>
+    <Prim.Box as="aside" {...SIDEBAR_BASE} {...(isCollapsed ? SIDEBAR_COLLAPSED : {})}>
       {!asRail && (
         <Prim.Box padding="$0" borderBottomWidth={1} borderBottomColor="$border">
           <Prim.Box display="flex" alignItems="center" gap="$8" paddingLeft="$3">
