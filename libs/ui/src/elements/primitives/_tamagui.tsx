@@ -208,6 +208,7 @@ export type TextAs =
 export type TextPrimitiveProps = React.HTMLAttributes<HTMLElement> &
   TextStyleProps &
   MarginStyleProps &
+  LayoutStyleProps &
   BoxStyleProps & {
     /** Inline text tag to render. Defaults to `span` (or `p` when `block`). */
     as?: TextAs
@@ -381,14 +382,14 @@ const makeLeaf = (tag: string, display: string, name: string) =>
     defaultProps: { display, ...baseTextResets },
   }) as unknown as React.ComponentType<any>
 
-export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & TextStyleProps & MarginStyleProps & BoxStyleProps
+export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & TextStyleProps & MarginStyleProps & LayoutStyleProps & BoxStyleProps
 const LinkComp = makeLeaf('a', 'inline', 'Link')
 export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>((props, ref) =>
   React.createElement(LinkComp, { ...props, ref }),
 )
 Link.displayName = 'Link'
 
-export type FormProps = React.FormHTMLAttributes<HTMLFormElement> & TextStyleProps & MarginStyleProps & BoxStyleProps
+export type FormProps = React.FormHTMLAttributes<HTMLFormElement> & TextStyleProps & MarginStyleProps & LayoutStyleProps & BoxStyleProps
 const FormComp = makeLeaf('form', 'block', 'Form')
 export const Form = React.forwardRef<HTMLFormElement, FormProps>((props, ref) =>
   React.createElement(FormComp, { ...props, ref }),
@@ -406,7 +407,7 @@ export const List = React.forwardRef<HTMLElement, ListProps>(({ ordered, ...prop
 )
 List.displayName = 'List'
 
-export type ListItemProps = React.LiHTMLAttributes<HTMLLIElement> & TextStyleProps & MarginStyleProps & BoxStyleProps
+export type ListItemProps = React.LiHTMLAttributes<HTMLLIElement> & TextStyleProps & MarginStyleProps & LayoutStyleProps & BoxStyleProps
 const LiComp = makeLeaf('li', 'list-item', 'ListItem')
 export const ListItem = React.forwardRef<HTMLLIElement, ListItemProps>((props, ref) =>
   React.createElement(LiComp, { ...props, ref }),
