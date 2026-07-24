@@ -1,5 +1,7 @@
 import * as React from 'react'
-import { styled, View, Text as TamaguiText } from '../../theme/tamagui.config'
+// WEB primitives use the WEB config (empty theme → no theme-var injection; colors come from
+// theme.css/Tailwind). The `*.native.tsx` forks use the colored `tamagui.config`. See tamagui-web.config.ts.
+import { styled, View, Text as TamaguiText } from '../../theme/tamagui-web.config'
 
 /**
  * Shared factory for the WEB Tamagui primitives (Phase-1 / Part III of the migration).

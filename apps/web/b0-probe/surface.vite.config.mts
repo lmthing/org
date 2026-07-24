@@ -19,6 +19,7 @@ export default defineConfig({
     alias: {
       // Specific subpath before the generic prefix.
       '@lmthing/css/theme.css': path.join(org, 'libs/css/src/theme.css'),
+      '@lmthing/css/tamagui-tokens': path.join(org, 'libs/css/src/tamagui/tokens.generated.ts'),
       '@lmthing/ui': path.join(org, 'libs/ui/src'),
       '@lmthing/css': path.join(org, 'libs/css/src'),
       '@tamagui/core': path.join(org, 'libs/ui/node_modules/@tamagui/core'),
@@ -28,6 +29,11 @@ export default defineConfig({
     outDir: path.join(here, 'dist-surface'),
     emptyOutDir: true,
     minify: false,
-    rollupOptions: { input: path.join(here, 'surface.html') },
+    rollupOptions: {
+      input: {
+        surface: path.join(here, 'surface.html'),
+        'theme-check': path.join(here, 'theme-check.html'),
+      },
+    },
   },
 })
