@@ -23,15 +23,57 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
   const outputFields = Object.entries(task.output)
 
   return (
-    <Prim.Box className={`step-card ${isExpanded ? 'step-card--expanded' : ''}`}>
-      <Prim.Box className="step-card__connector-top" />
+    <Prim.Box
+      position="relative"
+      // transition-all duration-200 awaits the animation driver (§5/P4)
+      {...(isExpanded
+        ? { outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$brand-3', outlineOffset: 2 }
+        : {})}
+    >
+      <Prim.Box
+        position="absolute"
+        width={1}
+        top="-1rem"
+        left="$6"
+        height="$4"
+        backgroundImage="linear-gradient(to bottom, transparent, var(--border), var(--border))"
+      />
 
-      <Prim.Box onClick={onClick} className="step-card__body">
-        <Prim.Box className="step-card__inner">
-          <Prim.Box className="step-card__content">
+      <Prim.Box
+        onClick={onClick}
+        position="relative"
+        cursor="pointer"
+        backgroundColor="$card"
+        borderRadius="0.75rem"
+        borderWidth={2}
+        borderColor="$border"
+        // transition-all duration-200 awaits the animation driver (§5/P4)
+        hoverStyle={{
+          borderColor: 'color-mix(in srgb, var(--brand-3) 50%, transparent)',
+          shadowColor: 'color-mix(in srgb, var(--brand-3) 5%, transparent)',
+          shadowOffset: { width: 0, height: 10 },
+          shadowRadius: 15,
+        }}
+      >
+        <Prim.Box padding="$4" $gtXs={{ padding: '$5' }}>
+          <Prim.Box display="flex" alignItems="flex-start" gap="$4">
             {/* Drag handle */}
             {isDraggable && (
-              <Prim.Box className="step-card__drag-handle">
+              <Prim.Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                width="$8"
+                height="$8"
+                borderRadius="$radius-lg"
+                cursor="grab"
+                marginTop="$1"
+                backgroundColor="$muted"
+                color="$muted-foreground"
+                // transition-colors awaits the animation driver (§5/P4)
+                hoverStyle={{ backgroundColor: '$muted' }}
+                pressStyle={{ cursor: 'grabbing' }}
+              >
                 <Prim.Svg className="step-card__drag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <Prim.Circle cx="9" cy="6" r="1.5" />
                   <Prim.Circle cx="15" cy="6" r="1.5" />
@@ -44,8 +86,8 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
             )}
 
             {/* Task info */}
-            <Prim.Box className="step-card__info">
-              <Prim.Box className="step-card__title-row">
+            <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
+              <Prim.Box display="flex" alignItems="center" flexWrap="wrap" gap="$2" marginBottom="$1">
                 <Label>{task.id}</Label>
                 {task.goal && <Badge variant="success">goal</Badge>}
                 {task.optional && <Badge variant="muted">optional</Badge>}
@@ -80,7 +122,7 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
 
           {/* Expanded: output fields + dependsOn */}
           {isExpanded && (
-            <Prim.Box className="step-card__expanded-content">
+            <Prim.Box marginTop="$4" paddingTop="$4" borderTopWidth={1} borderTopColor="$border">
               {outputFields.length > 0 && (
                 <Prim.Box>
                   <Caption muted>Output:</Caption>
@@ -109,7 +151,24 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
         </Prim.Box>
 
         {/* Order badge */}
-        <Prim.Box className="step-card__order-badge">{task.order}</Prim.Box>
+        <Prim.Box
+          position="absolute"
+          width="$6"
+          height="$6"
+          borderRadius="$radius-full"
+          color="#fff" /* ds-lint-ok: literal text-white on the colored order badge (theme-independent) */
+          fontSize="$xs"
+          fontWeight="$bold"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          top="-0.75rem"
+          left="-0.75rem"
+          backgroundColor="$brand-3"
+          shadowColor="rgba(0,0,0,0.1)"
+          shadowOffset={{ width: 0, height: 10 }}
+          shadowRadius={15}
+        >{task.order}</Prim.Box>
       </Prim.Box>
     </Prim.Box>
   )

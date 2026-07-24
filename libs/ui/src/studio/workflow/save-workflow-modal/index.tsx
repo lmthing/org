@@ -76,7 +76,7 @@ export function SaveTasklistModal({ isOpen, onClose, existingName, onSaved }: Sa
 
   return (
     <Prim.Box className="dialog__backdrop">
-      <Prim.Box className="dialog__content save-workflow-modal__dialog">
+      <Prim.Box className="dialog__content" maxWidth="28rem">
         <Prim.Box className="dialog__header">
           <Prim.Box>
             <Heading level={3}>{existingName ? 'Rename Tasklist' : 'New Tasklist'}</Heading>

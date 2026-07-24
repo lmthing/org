@@ -87,7 +87,7 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
   const filename = topicPath.split('/').pop() || ''
 
   return (
-    <Prim.Box className="file-metadata">
+    <Prim.Box borderBottomWidth={1} borderBottomColor="$border" paddingVertical="$3" paddingHorizontal="$4" backgroundColor="$muted">
       <Stack gap="sm">
         <Prim.Box>
           <Label compact>Filename</Label>
@@ -140,7 +140,7 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
           />
         </Prim.Box>
 
-        <Prim.Box className="file-metadata__footer">
+        <Prim.Box display="flex" justifyContent="flex-end">
           <Button variant="primary" size="sm" disabled={!isDirty} onClick={handleSave}>
             Save Metadata
           </Button>

@@ -110,7 +110,7 @@ function FunctionListItem({ name, isActive, onSelect, onDelete, onRename }: Func
           style={{ flex: 1 }}
         />
       ) : (
-        <Prim.Text className="functions-editor__list-item-name">
+        <Prim.Text fontFamily="monospace" fontSize="$sm">
           {name}.ts
           {requiresConsent && (
             <Badge variant="primary" title="Runs only after the user approves a consent card (@consent)" style={{ marginLeft: 6 }}>
@@ -187,8 +187,8 @@ function FunctionCodeEditor({ functionPath }: FunctionCodeEditorProps) {
   }, [handleSave])
 
   return (
-    <Prim.Box className="functions-editor__pane">
-      <Prim.Box className="functions-editor__pane-header">
+    <Prim.Box display="flex" flexDirection="column" flexGrow={1} flexShrink={1} flexBasis="0%" gap="$2">
+      <Prim.Box display="flex" alignItems="center" justifyContent="space-between">
         <Stack row gap="sm">
           <Label>{name}.ts</Label>
           <Caption muted>{functionPath}</Caption>
@@ -288,9 +288,9 @@ export function FunctionsEditor({ onChanged }: FunctionsEditorProps) {
   const selectedPath = selectedName ? P.functionFile(selectedName) : null
 
   return (
-    <Prim.Box className="functions-editor">
+    <Prim.Box display="flex" flexDirection="column" height="100%" gap="$4">
       {/* Header */}
-      <Prim.Box className="functions-editor__header">
+      <Prim.Box display="flex" alignItems="center" justifyContent="space-between" paddingTop={0} paddingHorizontal={0} paddingBottom="$2" borderBottomWidth={1} borderBottomStyle="solid" borderBottomColor="$border">
         <Label>Functions ({functionNames.length})</Label>
         <Button
           variant="ghost"
@@ -306,7 +306,7 @@ export function FunctionsEditor({ onChanged }: FunctionsEditorProps) {
 
       {/* New-function inline form */}
       {showNewForm && (
-        <Prim.Box className="functions-editor__new-form">
+        <Prim.Box display="flex" alignItems="center" gap="$2" padding="$2" backgroundColor="var(--color-surface-subtle, rgba(0,0,0,0.02))" borderRadius="$radius-md" borderWidth={1} borderStyle="dashed" borderColor="$border">
           <Input
             ref={newInputRef}
             value={newName}
@@ -329,9 +329,9 @@ export function FunctionsEditor({ onChanged }: FunctionsEditorProps) {
       )}
 
       {/* File list */}
-      <Prim.Box className="functions-editor__list">
+      <Prim.Box display="flex" flexDirection="column" gap="$1" minHeight="$8">
         {functionNames.length === 0 ? (
-          <Prim.Box className="functions-editor__empty">
+          <Prim.Box paddingVertical="$4" paddingHorizontal={0}>
             <Caption muted>No functions yet. Create one to get started.</Caption>
           </Prim.Box>
         ) : (

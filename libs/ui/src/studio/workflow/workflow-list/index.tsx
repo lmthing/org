@@ -12,7 +12,6 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { cn } from '@lmthing/ui/lib/utils'
 import '@lmthing/css/components/workflow/workflow-list/index.css'
 
 interface TasklistListProps {
@@ -44,8 +43,16 @@ export function TasklistList({
   return (
     <Page>
       <PageHeader>
-        <Prim.Box className="workflow-list__header-inner">
-          <Prim.Box className="workflow-list__title-row">
+        <Prim.Box
+          maxWidth="72rem"
+          marginHorizontal="auto"
+          paddingVertical="$6"
+          paddingLeft="$4"
+          paddingRight="$4"
+          $gtXs={{ paddingLeft: '$6', paddingRight: '$6' }}
+          $gtMd={{ paddingLeft: '$8', paddingRight: '$8' }}
+        >
+          <Prim.Box display="flex" justifyContent="space-between" alignItems="center" marginBottom="$6">
             <Prim.Box>
               <Heading level={1}>Tasklists</Heading>
               <Caption muted>Define ordered task DAGs for agent action flows</Caption>
@@ -61,14 +68,14 @@ export function TasklistList({
           {/* Stats */}
           <Stack row gap="lg" className="workflow-list__stats">
             <Stack row gap="sm" className="workflow-list__stat-row">
-              <Prim.Text className="workflow-list__stat-count">{tasklists.length}</Prim.Text>
+              <Prim.Text fontSize="$2xl" fontWeight="$bold" color="$foreground">{tasklists.length}</Prim.Text>
               <Caption muted>total</Caption>
             </Stack>
           </Stack>
 
           {/* Search + view toggle */}
           <Stack row gap="md" className="workflow-list__filters">
-            <Prim.Box className="workflow-list__search-wrapper">
+            <Prim.Box position="relative" flexGrow={1} flexShrink={1} flexBasis="0%" maxWidth="28rem">
               <Prim.Svg
                 className="workflow-list__search-icon"
                 viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -86,10 +93,21 @@ export function TasklistList({
             </Prim.Box>
 
             {/* View toggle */}
-            <Prim.Box className="workflow-list__view-toggle">
+            <Prim.Box display="flex" alignItems="center" gap="$1" padding="$1" backgroundColor="$muted" borderRadius="0.5rem">
               <Prim.Pressable
                 onClick={() => setViewMode('grid')}
-                className={cn('workflow-list__view-btn', viewMode === 'grid' && 'workflow-list__view-btn--active')}
+                padding="$2"
+                borderRadius="$radius-md"
+                // transition-all awaits the animation driver (§5/P4)
+                {...(viewMode === 'grid'
+                  ? {
+                      backgroundColor: '$card',
+                      color: '$brand-3',
+                      shadowColor: 'rgba(0,0,0,0.05)',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowRadius: 2,
+                    }
+                  : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })}
                 title="Grid view"
               >
                 <Prim.Svg className="workflow-list__view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -101,7 +119,18 @@ export function TasklistList({
               </Prim.Pressable>
               <Prim.Pressable
                 onClick={() => setViewMode('list')}
-                className={cn('workflow-list__view-btn', viewMode === 'list' && 'workflow-list__view-btn--active')}
+                padding="$2"
+                borderRadius="$radius-md"
+                // transition-all awaits the animation driver (§5/P4)
+                {...(viewMode === 'list'
+                  ? {
+                      backgroundColor: '$card',
+                      color: '$brand-3',
+                      shadowColor: 'rgba(0,0,0,0.05)',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowRadius: 2,
+                    }
+                  : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })}
                 title="List view"
               >
                 <Prim.Svg className="workflow-list__view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -114,11 +143,40 @@ export function TasklistList({
       </PageHeader>
 
       <PageBody>
-        <Prim.Box className="workflow-list__body-inner">
+        <Prim.Box
+          maxWidth="72rem"
+          marginHorizontal="auto"
+          paddingVertical="$8"
+          paddingLeft="$4"
+          paddingRight="$4"
+          $gtXs={{ paddingLeft: '$6', paddingRight: '$6' }}
+          $gtMd={{ paddingLeft: '$8', paddingRight: '$8' }}
+        >
           {filteredTasklists.length === 0 ? (
             tasklists.length === 0 ? (
-              <Prim.Box className="workflow-list__empty-first">
-                <Prim.Box className="workflow-list__empty-first-icon-wrapper">
+              <Prim.Box
+                textAlign="center"
+                backgroundColor="$card"
+                borderRadius="1rem"
+                borderWidth={2}
+                borderStyle="dashed"
+                borderColor="$border"
+                padding="$16"
+              >
+                <Prim.Box
+                  width="$20"
+                  height="$20"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  marginHorizontal="auto"
+                  borderRadius="1rem"
+                  backgroundColor="$brand-3"
+                  marginBottom="$6"
+                  shadowColor="color-mix(in srgb, var(--brand-3) 25%, transparent)"
+                  shadowOffset={{ width: 0, height: 20 }}
+                  shadowRadius={25}
+                >
                   <Prim.Svg className="workflow-list__empty-first-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <Prim.Path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
                     <Prim.Rect x="9" y="3" width="6" height="4" rx="1" />
@@ -137,13 +195,23 @@ export function TasklistList({
                 </Button>
               </Prim.Box>
             ) : (
-              <Prim.Box className="workflow-list__empty-no-match">
+              <Prim.Box textAlign="center" backgroundColor="$card" borderRadius="0.75rem" padding="$12">
                 <Heading level={3}>No tasklists match your search</Heading>
                 <Caption muted>Try a different name</Caption>
               </Prim.Box>
             )
           ) : (
-            <Prim.Box className={viewMode === 'grid' ? 'workflow-list__grid' : 'workflow-list__list'}>
+            <Prim.Box
+              {...(viewMode === 'grid'
+                ? {
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(1, minmax(0, 1fr))',
+                    gap: '$4',
+                    $gtSm: { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' },
+                    $gtMd: { gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' },
+                  }
+                : { display: 'flex', flexDirection: 'column', gap: '$2' })}
+            >
               {filteredTasklists.map((tl) =>
                 viewMode === 'grid' ? (
                   <TasklistCard

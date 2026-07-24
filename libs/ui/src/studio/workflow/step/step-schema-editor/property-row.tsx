@@ -18,12 +18,13 @@ const TYPE_OPTIONS: { value: PropertyType; label: string }[] = [
 
 const STRING_FORMATS = ['date', 'date-time', 'email', 'uri', 'uuid', 'time', 'duration']
 
-const TYPE_ICON_CLASS: Record<PropertyType, string> = {
-  string: 'property-row__type-icon--string',
-  number: 'property-row__type-icon--number',
-  boolean: 'property-row__type-icon--boolean',
-  object: 'property-row__type-icon--object',
-  array: 'property-row__type-icon--array',
+// .property-row__type-icon--<type> color modifiers → style lookup (step-schema-editor.styled.tsx proof)
+const TYPE_ICON_STYLE: Record<PropertyType, { backgroundColor: string; color: string }> = {
+  string: { backgroundColor: 'color-mix(in srgb, var(--brand-1) 15%, transparent)', color: '$brand-1' },
+  number: { backgroundColor: 'color-mix(in srgb, var(--brand-2) 15%, transparent)', color: '$brand-2' },
+  boolean: { backgroundColor: 'color-mix(in srgb, var(--brand-2) 15%, transparent)', color: '$brand-2' },
+  object: { backgroundColor: 'color-mix(in srgb, var(--brand-3) 15%, transparent)', color: '$brand-3' },
+  array: { backgroundColor: 'color-mix(in srgb, var(--destructive) 15%, transparent)', color: '$destructive' },
 }
 
 function TypeIcon({ type }: { type: PropertyType }) {
@@ -87,15 +88,18 @@ export function PropertyRow({
   const showTypeSpecific = property.type === 'string' || property.type === 'number'
 
   return (
-    <Prim.Box className="property-row">
+    <Prim.Box borderWidth={1} borderColor="$border" borderRadius="0.75rem" overflow="hidden" backgroundColor="$card">
       {/* Main row */}
-      <Prim.Box className={cn(
-             'property-row__main',
-             hasNestedConfig && 'property-row__main--clickable'
-           )}
-           onClick={() => hasNestedConfig && toggleIsExpanded()}>
+      <Prim.Box
+        display="flex"
+        alignItems="center"
+        gap="$3"
+        padding="$3"
+        {...(hasNestedConfig ? { cursor: 'pointer', hoverStyle: { backgroundColor: '$muted' } } : {})}
+        onClick={() => hasNestedConfig && toggleIsExpanded()}
+      >
         {/* Move buttons */}
-        <Prim.Box className="property-row__move-buttons" onClick={(e) => e.stopPropagation()}>
+        <Prim.Box display="flex" flexDirection="column" gap="$0.5" onClick={(e) => e.stopPropagation()}>
           <Button variant="ghost" size="icon" onClick={onMoveUp} disabled={isFirst}>
             <Prim.Svg className="property-row__move-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <Prim.Path d="M12 19V5M5 12l7-7 7 7" />
@@ -110,7 +114,7 @@ export function PropertyRow({
 
         {/* Expand/collapse for nested types */}
         {hasNestedConfig && (
-          <Prim.Pressable className="property-row__expand-btn" onClick={(e) => { e.stopPropagation(); toggleIsExpanded() }}>
+          <Prim.Pressable padding="$1" borderRadius="$radius" color="$muted-foreground" hoverStyle={{ backgroundColor: '$muted' }} onClick={(e) => { e.stopPropagation(); toggleIsExpanded() }}>
             <Prim.Svg className={cn('property-row__expand-icon', isExpanded && 'property-row__expand-icon--open')} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <Prim.Path d="M9 18l6-6-6-6" />
             </Prim.Svg>
@@ -139,17 +143,32 @@ export function PropertyRow({
         </Select>
 
         {/* Type icon badge */}
-        <Prim.Text className={cn('property-row__type-icon', TYPE_ICON_CLASS[property.type])}>
+        <Prim.Text padding="$1.5" borderRadius="$radius-lg" {...TYPE_ICON_STYLE[property.type]}>
           <TypeIcon type={property.type} />
         </Prim.Text>
 
         {/* Required toggle */}
         <Prim.Pressable
           onClick={(e) => { e.stopPropagation(); onToggleRequired() }}
-          className={cn(
-            'property-row__required-btn',
-            property.required ? 'property-row__required-btn--required' : 'property-row__required-btn--optional'
-          )}
+          fontSize="$xs"
+          fontWeight="$medium"
+          paddingVertical="$1.5"
+          paddingHorizontal="$2.5"
+          borderRadius="0.5rem"
+          // transition-all awaits the animation driver (§5/P4)
+          {...(property.required
+            ? {
+                backgroundColor: 'color-mix(in srgb, var(--destructive) 15%, transparent)',
+                color: '$destructive',
+                outlineWidth: 1,
+                outlineStyle: 'solid',
+                outlineColor: 'color-mix(in srgb, var(--destructive) 30%, transparent)',
+              }
+            : {
+                backgroundColor: '$muted',
+                color: '$muted-foreground',
+                hoverStyle: { backgroundColor: '$muted' },
+              })}
         >
           {property.required ? 'required' : 'optional'}
         </Prim.Pressable>
@@ -162,7 +181,7 @@ export function PropertyRow({
         )}
 
         {/* Actions */}
-        <Prim.Box className="property-row__actions">
+        <Prim.Box display="flex" alignItems="center" gap="$1">
           <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
             <Prim.Svg className="property-row__delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <Prim.Path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
@@ -173,8 +192,8 @@ export function PropertyRow({
 
       {/* Type-specific options panel */}
       {showTypeSpecific && (
-        <Prim.Box className="property-row__type-options">
-          <Prim.Box className="property-row__type-options-inner">
+        <Prim.Box paddingTop={0} paddingHorizontal="$3" paddingBottom="$3" borderTopWidth={1} borderTopColor="$border">
+          <Prim.Box display="flex" alignItems="center" gap="$4" paddingTop="$3">
             {property.type === 'string' && (
               <Select
                 value={property.format || ''}
@@ -188,7 +207,7 @@ export function PropertyRow({
             )}
 
             {property.type === 'string' && (
-              <Prim.Box className="property-row__enum-input">
+              <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%">
                 <Input
                   type="text"
                   value={enumInput}
@@ -203,7 +222,7 @@ export function PropertyRow({
             )}
 
             {property.type === 'number' && (
-              <Prim.Box className="property-row__range-inputs">
+              <Prim.Box display="flex" alignItems="center" gap="$2">
                 <Input
                   type="number"
                   value={property.minimum ?? ''}
@@ -211,7 +230,7 @@ export function PropertyRow({
                   placeholder="Min"
                   className="property-row__range-input"
                 />
-                <Prim.Text className="property-row__range-arrow">&rarr;</Prim.Text>
+                <Prim.Text color="$muted-foreground">&rarr;</Prim.Text>
                 <Input
                   type="number"
                   value={property.maximum ?? ''}
@@ -235,7 +254,7 @@ export function PropertyRow({
 
       {/* Nested properties (object type) */}
       {property.type === 'object' && isExpanded && (
-        <Prim.Box className="property-row__nested">
+        <Prim.Box borderTopWidth={1} borderTopColor="$border" padding="$3" backgroundColor="color-mix(in srgb, var(--muted) 50%, transparent)">
           <NestedPropertiesEditor
             properties={property.properties || {}}
             onChange={(props) => onUpdate({ ...property, properties: props })}
@@ -245,11 +264,11 @@ export function PropertyRow({
 
       {/* Array items */}
       {property.type === 'array' && isExpanded && (
-        <Prim.Box className="property-row__nested">
+        <Prim.Box borderTopWidth={1} borderTopColor="$border" padding="$3" backgroundColor="color-mix(in srgb, var(--muted) 50%, transparent)">
           <Label compact>Array Item Type</Label>
           {property.items ? (
-            <Prim.Box className="property-row__array-item">
-              <Prim.Box className="property-row__array-item-inner">
+            <Prim.Box backgroundColor="$card" borderRadius="0.5rem" borderWidth={1} borderColor="$border" padding="$3" marginTop="$2">
+              <Prim.Box display="flex" alignItems="center" gap="$3">
                 <Caption muted>Type</Caption>
                 <Select
                   value={property.items.type}
@@ -263,11 +282,11 @@ export function PropertyRow({
                   ))}
                 </Select>
 
-                <Prim.Text className={cn('property-row__type-icon', TYPE_ICON_CLASS[property.items.type])}>
+                <Prim.Text padding="$1.5" borderRadius="$radius-lg" {...TYPE_ICON_STYLE[property.items.type]}>
                   <TypeIcon type={property.items.type} />
                 </Prim.Text>
 
-                <Prim.Box className="property-row__array-spacer" />
+                <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" />
 
                 <Button variant="ghost" size="icon" onClick={() => onUpdate({ ...property, items: undefined })}>
                   <Prim.Svg className="property-row__delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -279,7 +298,17 @@ export function PropertyRow({
           ) : (
             <Prim.Pressable
               onClick={() => onUpdate({ ...property, items: { type: 'string' } })}
-              className="property-row__add-item-btn"
+              width="100%"
+              fontSize="$sm"
+              padding="$2"
+              marginTop="$2"
+              borderRadius="0.5rem"
+              borderWidth={2}
+              borderStyle="dashed"
+              borderColor="$border"
+              color="$muted-foreground"
+              // transition-colors awaits the animation driver (§5/P4)
+              hoverStyle={{ borderColor: '$brand-3', color: '$brand-3' }}
             >
               + Define array item type
             </Prim.Pressable>
@@ -341,7 +370,7 @@ function NestedPropertiesEditor({
   }
 
   return (
-    <Prim.Box className="nested-properties">
+    <Prim.Box display="flex" flexDirection="column" gap="$2">
       {entries.map(([key, prop], index) => (
         <PropertyRow
           key={key}

@@ -186,7 +186,7 @@ export const TopicEditor = forwardRef<TopicEditorHandle, TopicEditorProps>(
 
         {showMetadata && <FileMetadataPanel topicPath={topicPath} />}
 
-        <Prim.Box className="topic-editor__container">
+        <Prim.Box borderWidth={1} borderColor="$border" borderRadius={6} overflow="hidden">
           <MarkdownToolbar mode={mode} onFormat={applyFormat} onModeChange={setMode} />
 
           {mode === 'edit' ? (

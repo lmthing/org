@@ -56,7 +56,7 @@ export function ComponentListItem({ name, kind, isActive, onSelect, onDelete, on
           style={{ flex: 1 }}
         />
       ) : (
-        <Prim.Text className="component-editor__list-item-name">{name}.tsx</Prim.Text>
+        <Prim.Text fontFamily="monospace" fontSize="$sm">{name}.tsx</Prim.Text>
       )}
 
       <Prim.Box className="component-editor__list-item-actions" onClick={e => e.stopPropagation()}>

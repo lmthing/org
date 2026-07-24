@@ -14,11 +14,15 @@ export function ThingMessage({ role, content }: ThingMessageProps) {
 
   return (
     <Prim.Box
-      className={cn(
-        'card',
-        'thing-message',
-        isUser ? 'thing-message--user' : 'thing-message--assistant',
-      )}
+      className="card"
+      maxWidth="80%"
+      {...(isUser
+        ? {
+            marginLeft: 'auto',
+            backgroundColor: '$primary',
+            color: 'white', // ds-lint-ok: `.thing-message--user` uses literal `white`, not the theme-flipping $primary-foreground
+          }
+        : { marginRight: 'auto' })}
     >
       <Prim.Box className="card__body">
         <Caption
@@ -27,9 +31,9 @@ export function ThingMessage({ role, content }: ThingMessageProps) {
         >
           {isUser ? 'You' : 'Agent'}
         </Caption>
-        <Prim.Box className="thing-message__content">
+        <Prim.Text whiteSpace="pre-wrap" fontSize="$sm" lineHeight={'1.5' as unknown as number}>
           {content}
-        </Prim.Box>
+        </Prim.Text>
       </Prim.Box>
     </Prim.Box>
   )

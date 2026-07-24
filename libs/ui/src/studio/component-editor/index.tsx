@@ -61,9 +61,9 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
   } = useComponentEditor({ onChanged })
 
   return (
-    <Prim.Box className="component-editor">
+    <Prim.Box display="flex" flexDirection="column" height="100%" gap="$4">
       {/* Header */}
-      <Prim.Box className="component-editor__header">
+      <Prim.Box display="flex" alignItems="center" justifyContent="space-between" paddingTop={0} paddingHorizontal={0} paddingBottom="$2" borderBottomWidth={1} borderBottomStyle="solid" borderBottomColor="$border">
         <Label>Components ({viewNames.length + formNames.length})</Label>
         <Button
           variant="ghost"
@@ -79,7 +79,7 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
 
       {/* New-component inline form */}
       {showNewForm && (
-        <Prim.Box className="component-editor__new-form">
+        <Prim.Box display="flex" alignItems="center" gap="$2" padding="$2" backgroundColor="var(--color-surface-subtle, rgba(0,0,0,0.02))" borderRadius="$radius-md" borderWidth={1} borderStyle="dashed" borderColor="$border">
           <Input
             ref={newInputRef}
             value={newName}
@@ -111,13 +111,13 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
 
       {/* View components section */}
       <Prim.Box>
-        <Prim.Box className="component-editor__section-title">
+        <Prim.Box display="flex" alignItems="center" gap="$2" marginBottom="$1.5">
           <Label compact>View</Label>
-          <Prim.Text className="component-editor__kind-badge component-editor__kind-badge--view">display()</Prim.Text>
+          <Prim.Text fontSize={11} paddingVertical="$0.5" paddingHorizontal="$1.5" borderRadius="$radius-full" fontWeight="$semibold" textTransform="uppercase" letterSpacing="0.04em" backgroundColor="color-mix(in srgb, var(--knowledge) 15%, transparent)" color="$knowledge">display()</Prim.Text>
         </Prim.Box>
-        <Prim.Box className="component-editor__list">
+        <Prim.Box display="flex" flexDirection="column" gap="$1" minHeight="$8">
           {viewNames.length === 0 ? (
-            <Prim.Box className="component-editor__empty">
+            <Prim.Box paddingVertical="$3" paddingHorizontal={0}>
               <Caption muted>No view components yet.</Caption>
             </Prim.Box>
           ) : (
@@ -138,13 +138,13 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
 
       {/* Form components section */}
       <Prim.Box>
-        <Prim.Box className="component-editor__section-title">
+        <Prim.Box display="flex" alignItems="center" gap="$2" marginBottom="$1.5">
           <Label compact>Form</Label>
-          <Prim.Text className="component-editor__kind-badge component-editor__kind-badge--form">ask()</Prim.Text>
+          <Prim.Text fontSize={11} paddingVertical="$0.5" paddingHorizontal="$1.5" borderRadius="$radius-full" fontWeight="$semibold" textTransform="uppercase" letterSpacing="0.04em" backgroundColor="color-mix(in srgb, var(--success) 15%, transparent)" color="$success">ask()</Prim.Text>
         </Prim.Box>
-        <Prim.Box className="component-editor__list">
+        <Prim.Box display="flex" flexDirection="column" gap="$1" minHeight="$8">
           {formNames.length === 0 ? (
-            <Prim.Box className="component-editor__empty">
+            <Prim.Box paddingVertical="$3" paddingHorizontal={0}>
               <Caption muted>No form components yet.</Caption>
             </Prim.Box>
           ) : (

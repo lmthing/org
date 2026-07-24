@@ -40,7 +40,8 @@ export function NewFolderModal({ isOpen, onClose, onCreate, folders, defaultLoca
   return (
     <Prim.Box className="dialog__backdrop" onClick={onClose} onKeyDown={handleKeyDown}>
       <Prim.Box
-        className="dialog new-file-modal"
+        className="dialog"
+        maxWidth={448}
         onClick={e => e.stopPropagation()}
       >
         <Prim.Box className="dialog__header">
@@ -83,7 +84,7 @@ export function NewFolderModal({ isOpen, onClose, onCreate, folders, defaultLoca
             </Prim.Box>
           </Stack>
 
-          <Prim.Box className="new-file-modal__footer">
+          <Prim.Box display="flex" justifyContent="flex-end" gap="$3" paddingVertical="$4" paddingHorizontal="$6" borderTopWidth={1} borderTopColor="$border" marginTop="$4">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button
               variant="primary"

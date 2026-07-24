@@ -63,7 +63,14 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
   return (
     <Prim.Box
       dangerouslySetInnerHTML={{ __html: html }}
-      className="markdown-preview"
+      padding="$4"
+      lineHeight="1.7"
+      fontSize="$sm"
+      fontFamily={'-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'}
+      color="$foreground"
+      height="calc(100vh - 14rem)"
+      overflow="auto"
+      wordWrap="break-word"
     />
   )
 }

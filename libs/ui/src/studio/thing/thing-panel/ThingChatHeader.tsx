@@ -12,23 +12,35 @@ export interface ThingChatHeaderProps {
 }
 
 export function ThingChatHeader({ title, isWorking, hasError, hasEnv }: ThingChatHeaderProps) {
-  const statusDotClass = `thing-panel__status-dot ${
-    hasError ? 'thing-panel__status-dot--error'
-    : isWorking ? 'thing-panel__status-dot--working'
-    : hasEnv ? 'thing-panel__status-dot--ready'
-    : 'thing-panel__status-dot--warn'
-  }`
+  const dotColor = hasError ? '$destructive'
+    : isWorking ? '$agent'
+    : hasEnv ? '$knowledge'
+    : '$brand-2'
 
   return (
-    <Prim.Box className="thing-panel__chat-header">
-      <Prim.Text className="thing-panel__chat-title">
+    <Prim.Box
+      paddingVertical="$3"
+      paddingHorizontal="$4"
+      borderBottomWidth={1}
+      borderBottomColor="$border"
+      display="flex"
+      alignItems="center"
+      justifyContent="space-between"
+    >
+      <Prim.Text fontSize="$sm" fontWeight="$medium">
         {title}
       </Prim.Text>
-      <Prim.Box className="thing-panel__chat-status">
+      <Prim.Box display="flex" alignItems="center" gap="$2">
         {isWorking && (
-          <Prim.Text className="thing-panel__chat-status-text">Processing...</Prim.Text>
+          <Prim.Text fontSize="$xs" opacity={0.6}>Processing...</Prim.Text>
         )}
-        <Prim.Text className={statusDotClass} />
+        <Prim.Text
+          width={8}
+          height={8}
+          borderRadius="$radius-full"
+          display="inline-block"
+          backgroundColor={dotColor}
+        />
       </Prim.Box>
     </Prim.Box>
   )

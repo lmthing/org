@@ -68,7 +68,8 @@ export function RenameModal({ isOpen, onClose, onRename, currentName, isDirector
   return (
     <Prim.Box className="dialog__backdrop" onClick={onClose}>
       <Prim.Box
-        className="dialog rename-modal"
+        className="dialog"
+        maxWidth={384}
         onClick={e => e.stopPropagation()}
       >
         <Prim.Box className="dialog__header">
@@ -79,7 +80,7 @@ export function RenameModal({ isOpen, onClose, onRename, currentName, isDirector
         </Prim.Box>
 
         <Prim.Box className="dialog__content">
-          <Prim.Box className="rename-modal__body">
+          <Prim.Box paddingVertical={0} paddingHorizontal="$6">
             <Label>New name</Label>
             <Input
               ref={inputRef}
@@ -97,7 +98,7 @@ export function RenameModal({ isOpen, onClose, onRename, currentName, isDirector
             )}
           </Prim.Box>
 
-          <Prim.Box className="rename-modal__footer">
+          <Prim.Box display="flex" justifyContent="flex-end" gap="$3" paddingVertical="$4" paddingHorizontal="$6" borderTopWidth={1} borderTopColor="$border" marginTop="$4">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button variant="primary" onClick={handleSubmit} disabled={!name.trim()}>Rename</Button>
           </Prim.Box>

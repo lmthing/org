@@ -356,7 +356,7 @@ function FieldTreeInner(
   const canCreateChild = contextMenu.node?.type === 'domain' || contextMenu.node?.type === 'field'
 
   return (
-    <Prim.Box className="field-tree">
+    <Prim.Box position="relative" height="100%" width="100%">
       {tree.map((domainNode: KnowledgeTreeNode) => (
         <DomainNode
           key={domainNode.path}
