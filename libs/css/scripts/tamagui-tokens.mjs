@@ -240,6 +240,12 @@ export function buildTamaguiTokens(tokens) {
     fonts,
     themes: { light, dark },
     webThemes: { light: webLight, dark: webDark },
+    // Flat var(--name) color-token map for the WEB config's `tokens.color`. Because
+    // theme.css's `@theme inline` already declares `--color-<name>: var(--<name>)`, Tamagui
+    // injecting the same `--color-<name>: var(--<name>)` is byte-identical — no cycle, no
+    // collision — so `backgroundColor="$background"` resolves through theme.css's cascade
+    // (data-theme light/dark + runtime `--<name>` space-theme overrides). SPIKE A1.
+    webColorTokens: { ...webLight },
     space: buildSpaceScale(),
     size: buildSpaceScale(),
     fontSizes: buildFontSizeScale(),
@@ -301,6 +307,15 @@ export const webThemes = {
   dark: ${ji(t.webThemes.dark)},
 } as const;
 
+/**
+ * SPIKE A1 — flat color-token map for the WEB \`createTamagui\` \`tokens.color\`. Every value is
+ * \`var(--<name>)\`. theme.css's \`@theme inline\` already declares \`--color-<name>: var(--<name>)\`,
+ * so Tamagui injecting the identical decl is a no-op collision — \`$background\` (prop) resolves
+ * to \`var(--color-background)\` → \`var(--background)\` → theme.css cascade, keeping runtime space
+ * themes AND data-theme light/dark working with idiomatic props. Native uses \`themes\` (hex).
+ */
+export const webColorTokens = ${j(t.webColorTokens)} as const;
+
 /** Tailwind spacing scale (unit = 4px). Used for space AND size. \`p-4 → $4\`. */
 export const space = ${j(t.space)} as const;
 
@@ -333,6 +348,7 @@ export default {
   fonts,
   themes,
   webThemes,
+  webColorTokens,
   space,
   size,
   fontSizes,

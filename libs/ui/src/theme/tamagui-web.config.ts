@@ -1,48 +1,79 @@
 /**
- * tamagui-web.config.ts — the WEB-only Tamagui config (Part III / B2).
+ * tamagui-web.config.ts — the WEB Tamagui config.
  *
- * On web, the surfaces get ALL their colors from `theme.css` + Tailwind classes (the app's theming
- * is CSS-var + `data-theme` driven, including arbitrary space themes and runtime `--lm-*` overrides).
- * The Tamagui web primitives (`Row`/`Col`/`Box`/…) are **layout-only** — they use no theme color
- * tokens — so the web config deliberately defines a SINGLE EMPTY theme (`app`) with no color vars.
+ * ## Theming model (SPIKE A / A1 — the #1 risk of the idiomatic migration)
  *
- * Why a separate config (not the shared `tamagui.config.ts`): a `TamaguiProvider` renders its theme
- * and Tamagui injects that theme's vars as `--background`/… scoped to a `.t_<name>` class on the
- * provider wrapper. With the colored `light`/`dark` themes present, an empty `app` theme INHERITS
- * `light`, so `--background` resolves to the light value inside the provider and **overrides
- * `theme.css` in dark mode** (verified: `apps/web/b0-probe/theme-check`). A config whose ONLY theme
- * is empty injects nothing that collides — `theme.css` keeps full control in every theme (verified:
- * `bg-background` resolves correctly in both light and dark). The colored `tamagui.config.ts` stays
- * the NATIVE render target (via the `*.native.tsx` forks) and the token-parity test's subject.
+ * The app themes at RUNTIME: `data-theme` on <html> flips light↔dark, and a space can inject
+ * arbitrary `--<name>` overrides (`libs/ui/src/theme/theme.ts` `applyThemeTokens`). Tamagui
+ * themes are STATIC (baked at `createTamagui`), so they cannot represent an arbitrary
+ * user-supplied runtime theme. SPIKE A1 resolves this WITHOUT giving up idiomatic props:
  *
- * Import `styled`/`View`/`Text` FROM HERE in the web primitives so this config's `createTamagui`
- * side-effect isn't tree-shaken (`@lmthing/ui` is `sideEffects:false`).
+ *   - Colors are exposed as `tokens.color` whose values are `var(--<name>)` (the generated
+ *     `webColorTokens`). theme.css's `@theme inline` block already declares
+ *     `--color-<name>: var(--<name>)`, so Tamagui injecting the SAME `--color-<name>` decl is
+ *     byte-identical — no cycle, no collision. `backgroundColor="$background"` therefore emits
+ *     atomic CSS referencing `var(--color-background)` → `var(--background)` → whatever
+ *     theme.css (or a runtime space override) currently resolves it to. Idiomatic props AND
+ *     runtime space themes, both preserved. Empirically verified in
+ *     `apps/web/b0-probe/spike-a-runtime-theme.spec.ts`.
+ *   - The theme stays a SINGLE EMPTY `app` theme, exactly as before: a colored `light`/`dark`
+ *     theme would inject `.t_light`-scoped vars that override theme.css in dark mode (see
+ *     `.issues` history + `theme-check` probe). Colors come from the var-backed TOKENS, not
+ *     from an injected Tamagui theme, so nothing collides.
+ *
+ * The colored, resolved-hex `tamagui.config.ts` stays the NATIVE render target (via the
+ * `*.native.tsx` forks) and the token-parity test's subject. Import `styled`/`View`/`Text`
+ * FROM HERE in the web primitives so this config's `createTamagui` side-effect isn't
+ * tree-shaken (`@lmthing/ui` is `sideEffects:false`).
  */
 import { createTamagui } from '@tamagui/core'
-import { radius, fonts } from '@lmthing/css/tamagui-tokens'
+import {
+  radius,
+  fonts,
+  webColorTokens,
+  space as spaceTokens,
+  size as sizeTokens,
+  fontSizes,
+  lineHeights,
+  fontWeights,
+  letterSpacings,
+  zIndex as zIndexTokens,
+  media as mediaConfig,
+} from '@lmthing/css/tamagui-tokens'
 
 const radiusTokens = { ...radius, true: radius['radius-md'] } as Record<string, string | number>
 
-const spaceScale = { 0: 0, 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32, 10: 40, 12: 48, 16: 64, true: 16 } as const
-const fontSize = { 1: 11, 2: 12, 3: 13, 4: 14, 5: 16, 6: 18, 7: 20, 8: 24, 9: 30, 10: 36, true: 14 } as const
-const lineHeight = { 1: 16, 2: 16, 3: 18, 4: 20, 5: 24, 6: 26, 7: 28, 8: 32, 9: 38, 10: 44, true: 20 } as const
-const makeFont = (family: string) => ({ family, size: fontSize, lineHeight })
+// SPIKE B — the Tailwind-parity scales (same source as the native config): `$4` === `p-4`.
+const spaceScale = { ...spaceTokens } as Record<string, number>
+const sizeScale = { ...sizeTokens } as Record<string, number>
+const zIndexScale = { ...zIndexTokens } as Record<string, number>
+
+const makeFont = (family: string) => ({
+  family,
+  size: { ...fontSizes } as Record<string, number>,
+  lineHeight: { ...lineHeights } as Record<string, number>,
+  weight: { ...fontWeights } as Record<string, string>,
+  letterSpacing: { ...letterSpacings } as Record<string, string>,
+})
 
 export const tamaguiWebConfig = createTamagui({
-  // ONE empty theme — no color keys → no `--*` injection that collides with theme.css.
+  // ONE empty theme — no theme-scoped `--*` injection that would collide with theme.css.
   themes: { app: {} as Record<string, string> },
   tokens: {
-    color: {},
+    // SPIKE A1: var(--name)-backed colors → idiomatic `$token` props that resolve through
+    // theme.css's runtime cascade. Identical to theme.css's own `@theme inline` decls.
+    color: { ...webColorTokens } as Record<string, string>,
     radius: radiusTokens,
     space: spaceScale,
-    size: spaceScale,
-    zIndex: { 0: 0, 1: 100, 2: 200, 3: 300, 4: 400, 5: 500, true: 0 },
+    size: sizeScale,
+    zIndex: zIndexScale,
   },
   fonts: {
     body: makeFont(fonts['font-sans']),
     heading: makeFont(fonts['font-display']),
     mono: makeFont(fonts['font-mono']),
   },
+  media: mediaConfig as Record<string, { minWidth: number }>,
   settings: { allowedStyleValues: 'somewhat-strict' },
 })
 
