@@ -3,8 +3,8 @@
 import { useAuth } from '@lmthing/auth'
 
 import '@lmthing/css/components/auth/index.css'
-import '@lmthing/css/elements/forms/button/index.css'
 import * as Prim from '@lmthing/ui/elements/primitives'
+import { Button } from '@lmthing/ui/elements/forms/button'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 
 export function LoginScreen() {
@@ -22,15 +22,15 @@ export function LoginScreen() {
           </Prim.Text>
         </Prim.Box>
 
-        <Prim.Pressable
+        <Button
           type="button"
-          className="btn btn--primary"
+          variant="primary"
           width="100%"
           marginTop="$1"
           onClick={() => login()}
         >
           Sign in
-        </Prim.Pressable>
+        </Button>
       </Prim.Box>
     </Prim.Box>
   )

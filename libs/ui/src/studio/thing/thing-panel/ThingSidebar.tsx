@@ -3,6 +3,7 @@
  * full-page mode), "new chat" action, and the conversation switcher list.
  */
 import * as Prim from '../../../elements/primitives/index.js';
+import { Button } from '../../../elements/forms/button'
 import { Bot, Plus, ArrowLeft } from 'lucide-react'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 import type { ThingConversation } from './types'
@@ -46,12 +47,13 @@ export function ThingSidebar({
       >
         <Prim.Box display="flex" alignItems="center" gap="$2">
           {fullPage && (
-            <Prim.Pressable
-              className="btn btn--ghost btn--sm"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={onBack}
             >
               <ArrowLeft size={16} />
-            </Prim.Pressable>
+            </Button>
           )}
           <Prim.Box display="flex" alignItems="center" gap="$1.5">
             <Bot size={18} />
@@ -60,9 +62,9 @@ export function ThingSidebar({
             </Prim.Text>
           </Prim.Box>
         </Prim.Box>
-        <Prim.Pressable className="btn btn--ghost btn--sm" onClick={onNewChat} disabled={isWorking}>
+        <Button variant="ghost" size="sm" onClick={onNewChat} disabled={isWorking}>
           <Plus size={14} />
-        </Prim.Pressable>
+        </Button>
       </Prim.Box>
 
       {/* Conversation list */}

@@ -55,12 +55,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `background`
 
-### `elements/forms/button/index.css`
-
-- **.btn** — `.btn` `.btn--destructive` `.btn--ghost` `.btn--icon` `.btn--lg` `.btn--outline` `.btn--primary` `.btn--sm`
-
-  Tokens: `accent`, `accent-foreground`, `background`, `destructive`, `input`, `primary`, `primary-foreground`, `ring`
-
 ### `elements/forms/input/index.css`
 
 - **.input** — `.input` `.input--error` `.input--sm`

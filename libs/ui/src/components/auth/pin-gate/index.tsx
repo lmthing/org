@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { useAuth } from '@lmthing/auth'
 
 import '@lmthing/css/components/auth/index.css'
-import '@lmthing/css/elements/forms/button/index.css'
 import * as Prim from '@lmthing/ui/elements/primitives'
+import { Button } from '@lmthing/ui/elements/forms/button'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 
 export function PinGate({ children }: { children: React.ReactNode }) {
@@ -72,15 +72,15 @@ export function PinGate({ children }: { children: React.ReactNode }) {
               letterSpacing: '0.25em',
             }}
           />
-          <Prim.Pressable
+          <Button
             type="submit"
             disabled={loading}
-            className="btn btn--primary"
+            variant="primary"
             width="100%"
             marginTop="$1"
           >
             {loading ? 'Unlocking...' : 'Unlock'}
-          </Prim.Pressable>
+          </Button>
         </form>
       </Prim.Box>
     </Prim.Box>
