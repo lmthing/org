@@ -1,13 +1,31 @@
 # Phase 2 — the idiomatic-Tamagui migration ("the Tamagui way", zero-Tailwind)
 
-> **Status: PLAN (not started).** Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every
-> surface primitive + overlay *onto Tamagui components* while **keeping the Tailwind + `theme.css` +
-> BEM styling engine** underneath (coexistence). This Phase 2 replaces that styling engine with
-> **idiomatic Tamagui** — style props + `$` design tokens + real themes + `styled()` variants + the
-> optimizing compiler — and deletes Tailwind/`theme.css`/the empty-theme config/the `!important` pass/
-> the base resets. **This CHANGES web output** and so abandons Phase 1's §0 byte-stability contract on
-> purpose; that is the single biggest reason it needs an explicit go decision and a different
-> verification model (baseline-first + human review, not "must match `main`").
+> **Status: FOUNDATION LANDED — spikes cleared, tooling built, bulk surface sweep remaining.**
+> Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every surface primitive + overlay
+> *onto Tamagui components* while **keeping the Tailwind + `theme.css` + BEM styling engine**
+> underneath (coexistence). This Phase 2 replaces that styling engine with **idiomatic Tamagui** —
+> style props + `$` design tokens + real themes + `styled()` variants + the optimizing compiler — and
+> deletes Tailwind/`theme.css`/the empty-theme config/the `!important` pass/the base resets. **This
+> CHANGES web output** and so abandons Phase 1's §0 byte-stability contract on purpose; that is the
+> single biggest reason it needs an explicit go decision and a different verification model
+> (baseline-first + human review, not "must match `main`").
+
+## Progress log
+
+The load-bearing, fully-testable foundation is landed and green; the bulk per-surface sweep + native
+remain (they are per-slice human/harness-gated and, for native, need a device toolchain).
+
+| Item | Status | Where |
+|---|---|---|
+| **SPIKE A — runtime/per-space theming** | ✅ **PASS via A1** | `webColorTokens` (values `var(--<name>)`) in `libs/css/scripts/tamagui-tokens.mjs`; wired in `libs/ui/src/theme/tamagui-web.config.ts`; EMPIRICALLY proven in `apps/web/b0-probe/spike-a-runtime-theme.spec.ts` (real Chromium, real `theme.css`): `$background`/`$foreground` resolve light/dark + a runtime space override |
+| **SPIKE B — token-scale reconciliation** | ✅ done | Tailwind `space`/`size`/`fontSizes`/`lineHeights`/`fontWeights`/`letterSpacings`/`zIndex`/`media` generated + pinned to Tailwind by `libs/css/src/__tests__/scale-parity.test.ts` |
+| **SPIKE C — react 18/19 types** | ⬜ open | not attempted; casts retained (documented in `_tamagui.tsx`). Blocks nothing above |
+| **P1 — token + theme foundation** | ✅ done | full Tamagui token set from `tokens.json`; `tamagui.config.ts` (native hex) + `tamagui-web.config.ts` (var-backed) both carry it; parity tests green. Config CONVERGENCE (one config, delete web config) deferred — it changes output, see §7 |
+| **P2 — BEM → styled()+variants** | 🟡 proof landed | `.btn` → `libs/ui/src/elements/forms/button/button.styled.tsx` (the §4 example), variant-structure test green. Remaining 67 CSS files: per-slice |
+| **P3 — className → props codemod** | ✅ tool built | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + 31-test mapping gate; `--check` over the chat surface: 228 elements migratable across 44 files, 110 reported for manual review. Applying to shipped surfaces is per-slice harness-gated |
+| **P0 — real-surface visual harness** | 🟡 mechanism proven | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining |
+| **P4/P5 — primitives/overlays idiomatic, compiler ON, delete pipeline** | ⬜ remaining | needs the surface sweep done first |
+| **P6 — types + native on device** | ⬜ remaining | native needs a Metro/device toolchain (out of the headless env) |
 
 ---
 
