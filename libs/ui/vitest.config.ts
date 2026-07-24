@@ -23,6 +23,8 @@ export default defineConfig({
       // (The pre-existing `index.test.tsx` suites predate the Phase-1 primitive swap and have
       // unrelated DOM-structure drift; reactivating them is tracked separately, not part of P2.)
       'src/elements/**/*-styled.test.tsx',
+      // P2 composite `components/**` conversions live in a flat mirror tree, components-styled/**.
+      'src/components-styled/**/*-styled.test.tsx',
       'src/**/*.parity.test.tsx',
       'src/theme/**/*.test.ts',
       'src/platform/**/*.test.ts',
