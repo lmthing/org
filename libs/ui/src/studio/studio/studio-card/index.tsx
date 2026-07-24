@@ -1,7 +1,6 @@
 import { Card, CardBody } from '@lmthing/ui/elements/content/card'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import '@lmthing/css/elements/content/card/index.css'
 
 interface StudioCardProps {
   id: string

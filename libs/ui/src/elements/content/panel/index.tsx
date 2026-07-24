@@ -1,23 +1,66 @@
-import '@lmthing/css/elements/content/panel/index.css'
 import * as React from 'react'
-import { cn } from '../../../lib/utils'
+import * as Prim from '../../primitives/index'
 
+/**
+ * Panel — the idiomatic `.panel`. Renders `Prim.Box` (real `<div>`s at runtime via
+ * `createComponent`) with the styling as `$`-token PROPS from panel.styled.tsx
+ * (docs/tamagui-idiomatic-migration.md §4). `panel/index.css` is deleted; the prop bags are
+ * exported because nine studio surfaces carried `panel`/`panel__header`/`panel__body` directly on a
+ * `Prim.Box` instead of going through this element — they now spread the same bag.
+ */
 export interface PanelProps extends React.ComponentProps<'div'> {
   split?: boolean
 }
 
-function Panel({ className, split, ...props }: PanelProps) {
+/** `.panel` base — flex, flex-col, bg-background, border-border, rounded-md, overflow-hidden. */
+export const PANEL_BASE = {
+  display: 'flex',
+  flexDirection: 'column',
+  backgroundColor: '$background',
+  borderWidth: 1,
+  borderColor: '$border',
+  borderRadius: '$radius-md',
+  overflow: 'hidden',
+} as const
+
+/** `.panel--split` — flex-row. */
+export const PANEL_SPLIT = { flexDirection: 'row' } as const
+
+/** `.panel__header` — flex, items-center, justify-between, px-4, py-2, border-b, text-sm, font-medium. */
+export const PANEL_HEADER = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingHorizontal: '$4',
+  paddingVertical: '$2',
+  borderBottomWidth: 1,
+  borderBottomColor: '$border',
+  fontSize: '$sm',
+  fontWeight: '$medium',
+  color: '$foreground',
+} as const
+
+/** `.panel__body` — flex-1, overflow-auto, p-4. */
+export const PANEL_BODY = {
+  flexGrow: 1,
+  flexShrink: 1,
+  flexBasis: '0%',
+  overflow: 'auto',
+  padding: '$4',
+} as const
+
+function Panel({ split, ...props }: PanelProps) {
   return (
-    <div className={cn('panel', split && 'panel--split', className)} {...props} />
+    <Prim.Box {...PANEL_BASE} {...(split ? PANEL_SPLIT : {})} {...(props as Record<string, unknown>)} />
   )
 }
 
-function PanelHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('panel__header', className)} {...props} />
+function PanelHeader(props: React.ComponentProps<'div'>) {
+  return <Prim.Box {...PANEL_HEADER} {...(props as Record<string, unknown>)} />
 }
 
-function PanelBody({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('panel__body', className)} {...props} />
+function PanelBody(props: React.ComponentProps<'div'>) {
+  return <Prim.Box {...PANEL_BODY} {...(props as Record<string, unknown>)} />
 }
 
 export { Panel, PanelHeader, PanelBody }

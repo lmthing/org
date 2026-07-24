@@ -13,7 +13,6 @@
 import * as Prim from '../../../elements/primitives/index.js';
 import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index.js'
 import { PAGE_BODY } from '../../../elements/layouts/page/index.js'
-import '@lmthing/css/elements/content/panel/index.css'
 import '@lmthing/css/components/setup-guide/index.css'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from '@tanstack/react-router'

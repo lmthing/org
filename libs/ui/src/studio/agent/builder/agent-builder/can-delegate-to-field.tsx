@@ -5,6 +5,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
+import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index.js'
 
 /** Delegation editor (add/remove canDelegateTo string entries) */
 export function CanDelegateToField({ refs, onChange }: {
@@ -20,9 +21,9 @@ export function CanDelegateToField({ refs, onChange }: {
   const remove = (ref: string) => onChange(refs.filter(d => d !== ref))
 
   return (
-    <Prim.Box className="panel">
-      <Prim.Box className="panel__header"><Label>Can Delegate To ({refs.length})</Label></Prim.Box>
-      <Prim.Box className="panel__body">
+    <Prim.Box {...PANEL_BASE}>
+      <Prim.Box {...PANEL_HEADER}><Label>Can Delegate To ({refs.length})</Label></Prim.Box>
+      <Prim.Box {...PANEL_BODY}>
         <Stack gap="sm">
           {refs.map(ref => (
             <Stack key={ref} row gap="sm" className="agent-builder__dep-row">

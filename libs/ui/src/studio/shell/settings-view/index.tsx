@@ -9,7 +9,6 @@ import { useLocation, useNavigate, useParams } from '@tanstack/react-router'
 import { Shield, FileCode2 } from 'lucide-react'
 import { buildSpacePath } from '@lmthing/ui/lib/space-path'
 import '@lmthing/css/elements/forms/input/index.css'
-import '@lmthing/css/elements/content/panel/index.css'
 import '@lmthing/css/components/shell/index.css'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -18,6 +17,7 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { useUIState } from '@lmthing/state'
 import { useFile } from '@lmthing/ui/hooks/fs/useFile'
 import { cn } from '@lmthing/ui/lib/utils'
+import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../elements/content/panel/index.js'
 
 interface SettingsViewProps {
   isOpen: boolean
@@ -118,9 +118,9 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
       <PageBody>
         {activeTab === 'env' && (
           <Prim.Box maxWidth={1024} marginTop="$0" marginBottom="$0" marginHorizontal="auto">
-            <Prim.Box className="panel" marginBottom="$4">
-              <Prim.Box className="panel__header"><Prim.Text>Environment Variables</Prim.Text></Prim.Box>
-              <Prim.Box className="panel__body">
+            <Prim.Box {...PANEL_BASE} marginBottom="$4">
+              <Prim.Box {...PANEL_HEADER}><Prim.Text>Environment Variables</Prim.Text></Prim.Box>
+              <Prim.Box {...PANEL_BODY}>
                 <Prim.Box display="grid" gridTemplateColumns="1fr 1fr" gap="$3" marginBottom="$4">
                   <Prim.Box>
                     <Prim.Text as="label" display="block" fontSize="$xs" fontWeight="$medium" marginBottom="$1">File</Prim.Text>
@@ -153,9 +153,9 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
 
         {activeTab === 'packages' && (
           <Prim.Box maxWidth={1024} marginTop="$0" marginBottom="$0" marginHorizontal="auto">
-            <Prim.Box className="panel">
-              <Prim.Box className="panel__header"><Prim.Text>package.json</Prim.Text></Prim.Box>
-              <Prim.Box className="panel__body">
+            <Prim.Box {...PANEL_BASE}>
+              <Prim.Box {...PANEL_HEADER}><Prim.Text>package.json</Prim.Text></Prim.Box>
+              <Prim.Box {...PANEL_BODY}>
                 <Caption muted className="settings-view__pkg-caption">
                   Inline metadata and dependency editor. Save when ready.
                 </Caption>

@@ -2,7 +2,6 @@ import { Card, CardBody } from '@lmthing/ui/elements/content/card'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Badge } from '@lmthing/ui/elements/content/badge'
 import { useAgent } from '@lmthing/state'
-import '@lmthing/css/elements/content/card/index.css'
 
 interface AgentCardProps {
   id: string

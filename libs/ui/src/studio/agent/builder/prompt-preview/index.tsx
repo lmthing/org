@@ -15,6 +15,7 @@ import { PanelHeader } from '@lmthing/ui/elements/content/panel'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Code } from '@lmthing/ui/elements/typography/code'
+import { PANEL_BASE, PANEL_BODY } from '../../../../elements/content/panel/index.js'
 
 interface PromptPreviewPanelProps {
   instructions: string
@@ -65,7 +66,7 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
   }, [generatedPrompt])
 
   return (
-    <Prim.Box className="panel" overflow="hidden">
+    <Prim.Box {...PANEL_BASE} overflow="hidden">
       <PanelHeader
         onClick={toggleExpanded}
         className="prompt-preview__header"
@@ -90,7 +91,7 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
 
       {isExpanded && (
         <>
-          <Prim.Box className="panel__body">
+          <Prim.Box {...PANEL_BODY}>
             {!hasContent ? (
               <Stack className="prompt-preview__empty">
                 <Caption muted>

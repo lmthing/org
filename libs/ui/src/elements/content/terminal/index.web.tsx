@@ -1,10 +1,9 @@
-import '@lmthing/css/elements/content/terminal/index.css'
 import '@xterm/xterm/css/xterm.css'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { cn } from '../../../lib/utils'
+import * as Prim from '../../primitives/index'
 
 export interface TerminalSession {
   write(data: string): void
@@ -18,6 +17,27 @@ export interface TerminalProps {
   fontSize?: number
   readonly?: boolean
 }
+
+/**
+ * `.terminal` container — flex, flex-col, w-full, h-full, bg-background, overflow-hidden,
+ * rounded-md — as `$`-token PROPS from terminal.styled.tsx (docs/tamagui-idiomatic-migration.md §4).
+ * `terminal/index.css` is deleted. (The xterm stylesheet is a vendor import and stays.)
+ */
+const TERMINAL_BASE = {
+  display: 'flex',
+  flexDirection: 'column',
+  width: '100%',
+  height: '100%',
+  backgroundColor: '$background',
+  overflow: 'hidden',
+  borderRadius: '$radius-md',
+} as const
+
+/** `.terminal--loading` — centres the placeholder while there is no session. */
+const TERMINAL_LOADING = { alignItems: 'center', justifyContent: 'center' } as const
+
+/** `.terminal__viewport` — flex-1, min-h-0 (the xterm mount target). */
+const TERMINAL_VIEWPORT = { flexGrow: 1, flexShrink: 1, flexBasis: '0%', minHeight: 0 } as const
 
 function Terminal({ session, className, fontSize = 14, readonly }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -120,9 +140,9 @@ function Terminal({ session, className, fontSize = 14, readonly }: TerminalProps
   }, [xterm, session])
 
   return (
-    <div className={cn('terminal', !session && 'terminal--loading', className)}>
-      <div ref={initRef} className="terminal__viewport" />
-    </div>
+    <Prim.Box {...TERMINAL_BASE} {...(!session ? TERMINAL_LOADING : {})} className={className}>
+      <Prim.Box ref={initRef} {...TERMINAL_VIEWPORT} />
+    </Prim.Box>
   )
 }
 

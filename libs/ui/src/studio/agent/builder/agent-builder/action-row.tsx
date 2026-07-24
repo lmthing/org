@@ -4,6 +4,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { Select, SelectOption } from '@lmthing/ui/elements/forms/select'
+import { PANEL_BASE, PANEL_BODY } from '../../../../elements/content/panel/index.js'
 
 /** One action row */
 export function ActionRow({ action, tasklistNames, onChange, onRemove }: {
@@ -13,8 +14,8 @@ export function ActionRow({ action, tasklistNames, onChange, onRemove }: {
   onRemove: () => void
 }) {
   return (
-    <Prim.Box className="panel agent-builder__action-row">
-      <Prim.Box className="panel__body">
+    <Prim.Box {...PANEL_BASE} className="agent-builder__action-row">
+      <Prim.Box {...PANEL_BODY}>
         <Stack gap="sm">
           <Stack row gap="sm">
             <Prim.Box style={{ flex: 1 }}>

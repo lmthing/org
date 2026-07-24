@@ -1,6 +1,7 @@
 import * as Prim from '../../../../elements/primitives/index.js';
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index.js'
 
 /** Multiselect pill grid */
 export function MultiSelectField({ label, available, selected, onChange }: {
@@ -13,11 +14,11 @@ export function MultiSelectField({ label, available, selected, onChange }: {
     onChange(selected.includes(item) ? selected.filter(x => x !== item) : [...selected, item])
   }
   return (
-    <Prim.Box className="panel">
-      <Prim.Box className="panel__header">
+    <Prim.Box {...PANEL_BASE}>
+      <Prim.Box {...PANEL_HEADER}>
         <Label>{label} ({selected.length}/{available.length})</Label>
       </Prim.Box>
-      <Prim.Box className="panel__body">
+      <Prim.Box {...PANEL_BODY}>
         {available.length === 0 ? (
           <Caption muted>None available in this space.</Caption>
         ) : (
