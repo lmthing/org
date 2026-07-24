@@ -2,7 +2,7 @@ import { render } from '@testing-library/react'
 import * as React from 'react'
 import { describe, it, expect } from 'vitest'
 import { TamaguiProvider } from '@tamagui/core'
-import { tamaguiConfig } from '../../theme/tamagui.config'
+import { tamaguiWebConfig } from '../../theme/tamagui-web.config'
 import {
   Box,
   Text,
@@ -110,7 +110,7 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     // adds its own atomic classes, so we assert the DOM element/tag + that the caller's className,
     // data-attrs and children pass through (not byte-identity, which Tamagui breaks by construction).
     const P = ({ children }: { children: React.ReactNode }) => (
-      <TamaguiProvider config={tamaguiConfig} defaultTheme="light">{children}</TamaguiProvider>
+      <TamaguiProvider config={tamaguiWebConfig} defaultTheme="app">{children}</TamaguiProvider>
     )
     const row = render(<P><Row className="r" data-x="1">c</Row></P>).container.querySelector('div[data-x]')!
     expect(row.tagName).toBe('DIV')
