@@ -54,9 +54,6 @@
   },
   "peerDependencies": {
     "@monaco-editor/react": "*",
-    "@radix-ui/react-context-menu": "*",
-    "@radix-ui/react-dialog": "*",
-    "@radix-ui/react-tabs": "*",
     "@xterm/addon-fit": "*",
     "@xterm/addon-web-links": "*",
     "@xterm/xterm": "*",

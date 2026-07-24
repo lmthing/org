@@ -1386,10 +1386,13 @@ driver + theme-token reconciliation) wasn't warranted; rebuilding on `Prim.*` is
 the primitive forks), pulls in no new deps, and — crucially — is **unit-testable in jsdom**: open/close,
 ESC, backdrop, portal `role="dialog"`, select-to-close, `asChild` are all asserted in
 `overlays/{dialog,sheet,dropdown}/index.test.tsx` (the vitest include was widened to `elements/overlays/**`).
-Dropped `@radix-ui/react-{separator,label,avatar,slot,dropdown-menu}`. `@radix-ui/react-{dialog,
-context-menu}` remain ONLY for `computer/ide-file-tree` (explicitly out of scope) and `react-tabs` for
-the chat Tabs (not a B3.4 target). A11y note: the `Prim.*` dialog matches the shipping chat modal
-(focus-first + ESC, no full focus-trap) — a focus-trap can be layered on later if required.
+**Radix is now 100% removed** — `computer/ide-file-tree` (the last holdout) was migrated too: its
+`@radix-ui/react-context-menu` → a new `Prim.*` `elements/overlays/context-menu` (right-click opens at
+the cursor, portal, select/ESC/click-outside close, jsdom-tested) and its `@radix-ui/react-dialog` →
+the new `Prim.*` `overlays/dialog`. `@radix-ui/react-tabs` was an UNUSED dep (chat Tabs was already
+hand-rolled on `Prim.*`) and was dropped. Net: **ALL `@radix-ui/*` packages removed from `libs/ui`**.
+A11y note: the `Prim.*` dialog matches the shipping chat modal (focus-first + ESC, no full focus-trap)
+— a focus-trap can be layered on later if required.
 
 ### B3.4 — Radix overlays → Tamagui universal  (8 files in shared `elements/`)
 
