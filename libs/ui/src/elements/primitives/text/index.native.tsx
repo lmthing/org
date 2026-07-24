@@ -25,6 +25,7 @@ export type TextAs =
   | 'h4'
   | 'h5'
   | 'h6'
+  | 'pre'
 
 export type TextProps = React.HTMLAttributes<HTMLElement> & {
   as?: TextAs

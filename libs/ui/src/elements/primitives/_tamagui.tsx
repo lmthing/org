@@ -203,7 +203,7 @@ export type MarginStyleProps = {
 
 export type TextAs =
   | 'span' | 'p' | 'strong' | 'em' | 'b' | 'i' | 'small' | 'label'
-  | 'code' | 'kbd' | 'dt' | 'dd' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
+  | 'code' | 'kbd' | 'dt' | 'dd' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'pre'
 
 export type TextPrimitiveProps = React.HTMLAttributes<HTMLElement> &
   TextStyleProps &
@@ -229,7 +229,10 @@ export type TextPrimitiveProps = React.HTMLAttributes<HTMLElement> &
 // block tags → `block`) so `as="p"`/`h1` match a preflight-reset `<p>`/`<h1>`; a caller-lifted
 // `display`/`whiteSpace`/… (from the B3.1 codemod) overrides it (spread AFTER the defaults).
 const INLINE_TAGS = ['span', 'strong', 'em', 'b', 'i', 'small', 'label', 'code', 'kbd'] as const
-const BLOCK_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'dt', 'dd'] as const
+// `pre` is a BLOCK text tag: the idiomatic `Code block` renders `<Prim.Text as="pre">`, and an
+// unmapped `as` silently falls back to `span` — which drops both the `<pre>` semantics and its
+// `white-space: pre` text-flow. (`elements/typography/code` regression-tested in its index.test.tsx.)
+const BLOCK_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'dt', 'dd', 'pre'] as const
 const baseTextResets = { whiteSpace: 'inherit', wordWrap: 'inherit' } as const
 
 const makeTextTag = (tag: string, display: 'inline' | 'block') =>

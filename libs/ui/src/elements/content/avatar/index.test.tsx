@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '../../../test-utils/index'
 import { describe, it, expect } from 'vitest'
 import { Avatar, AvatarFallback } from './index'
 
