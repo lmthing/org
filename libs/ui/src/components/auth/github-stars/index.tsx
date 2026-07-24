@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
+import * as Prim from '@lmthing/ui/elements/primitives'
+import { BADGE_BASE } from '@lmthing/ui/elements/content/badge'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 
 interface GithubStarsProps {
@@ -28,10 +30,10 @@ export function GithubStars({ repo }: GithubStarsProps) {
   const formattedStars = stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : stars.toString()
 
   return (
-    <a href={`https://github.com/${repo}`} target="_blank" rel="noopener noreferrer" className="badge">
+    <Prim.Link href={`https://github.com/${repo}`} target="_blank" rel="noopener noreferrer" {...BADGE_BASE}>
       <Star className="size-4" />
-      <span>{formattedStars}</span>
+      <Prim.Text>{formattedStars}</Prim.Text>
       <Caption muted>stars</Caption>
-    </a>
+    </Prim.Link>
   )
 }

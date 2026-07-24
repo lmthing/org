@@ -19,12 +19,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `muted`, `muted-foreground`
 
-### `elements/content/badge/index.css`
-
-- **.badge** — `.badge` `.badge--muted` `.badge--primary` `.badge--success`
-
-  Tokens: `border`, `brand-1`, `muted`, `muted-foreground`, `primary`, `primary-foreground`, `secondary`, `secondary-foreground`
-
 ### `elements/content/card/index.css`
 
 - **.card** — `.card` `.card--interactive` `.card__body` `.card__footer` `.card__header`

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react'
-import { Badge } from '@lmthing/ui/elements/content/badge'
+import * as Prim from '@lmthing/ui/elements/primitives'
+import { Badge, BADGE_BASE, BADGE_VARIANT } from '@lmthing/ui/elements/content/badge'
 
 interface GithubDeploymentStatusProps {
   repo: string
@@ -69,9 +70,9 @@ export function GithubDeploymentStatus({
 
   if (error || !data) {
     return (
-      <a href={workflowsUrl} target="_blank" rel="noopener noreferrer" className="badge badge--muted" title="Deployment status unavailable. Open GitHub Actions workflows.">
+      <Prim.Link href={workflowsUrl} target="_blank" rel="noopener noreferrer" {...BADGE_BASE} {...BADGE_VARIANT.muted} title="Deployment status unavailable. Open GitHub Actions workflows.">
         <AlertCircle className="size-4" />
-      </a>
+      </Prim.Link>
     )
   }
 
