@@ -1368,21 +1368,28 @@ elements (Tamagui's own web output for them is the same host tag) and risks brea
 native already renders them via their `.native.tsx` forks (RN `Image`/`TextInput`/`WebView`/Views/
 `react-native-svg`). So they are already the universal component — the web impl is just the host tag.
 
-### B3.4 status — simple overlays ✅ on Tamagui; interactive portals stay Radix-on-web (verification gap)
+### B3.4 — Radix overlays → Tamagui ✅ **DONE** (rebuilt on `Prim.*`, not on `@tamagui/dialog`)
 
-**Done:** `Separator` → `Prim.Box`, `Label` → `Prim.Text as="label"`, `Avatar` → `Prim.Box`/`Image` +
-a load-state context — all off `@radix-ui` onto the universal primitives (no new deps; native via the
-primitive forks). Dropped `@radix-ui/react-{separator,label,avatar}`.
+ALL 7 shared overlays are off `@radix-ui`, onto the already-Tamagui `Prim.*` primitives:
+- `Separator` → `Prim.Box role="separator"`; `Label` → `Prim.Text as="label"`; `Avatar` →
+  `Prim.Box`/`Image` + a load-state context.
+- `overlays/dialog` / `overlays/sheet` / `overlays/dropdown` → compound components on `Prim.*` + an
+  open-state context: dialog/sheet portal to `document.body` (web) with focus-first / ESC / backdrop
+  dismiss (the exact pattern already shipping in chat `components/ui/Dialog`); dropdown is an
+  anchored menu with click-outside / ESC / select-to-close. `forms/button`'s `Slot` → a tiny local
+  asChild slot (merges className onto the child) on `Prim.Pressable`.
 
-**Deliberately NOT swapped on web (yet): `overlays/dialog`, `overlays/sheet`, `overlays/dropdown`**
-(2 / 1 / 1 importers) + `forms/button`'s `Slot`. These are a11y-critical PORTALS (focus-trap, scroll-
-lock, ESC-dismiss, ARIA). A Tamagui swap needs `@tamagui/dialog`/`popover`/`sheet` + an animation driver
-+ reconciling Tamagui's theme-token-styled content with our empty-theme web config — and, decisively,
-its focus/portal/a11y behaviour CANNOT be verified in this headless environment (a subtle break passes
-`build`/`tsc` and ships a broken modal). So they stay on the battle-tested Radix impl on web until they
-can be verified against a device/interaction harness; that is the honest remaining B3.4 step. (The
-native app takes Tamagui overlays via a `.native.tsx` fork behind the same names — the Monaco/xterm
-seam.) `computer/ide-file-tree`'s `react-context-menu` is out of scope (stays Radix).
+**Why NOT `@tamagui/dialog`/`popover`/`sheet`:** the key discovery is that these overlays are barely
+used — **dialog has 1 importer (`settings-dialog`), sheet and dropdown have ZERO**, and the chat
+surface dialog was ALREADY hand-rolled on `Prim.*`. So the heavy Tamagui-overlay integration (animation
+driver + theme-token reconciliation) wasn't warranted; rebuilding on `Prim.*` is universal (native via
+the primitive forks), pulls in no new deps, and — crucially — is **unit-testable in jsdom**: open/close,
+ESC, backdrop, portal `role="dialog"`, select-to-close, `asChild` are all asserted in
+`overlays/{dialog,sheet,dropdown}/index.test.tsx` (the vitest include was widened to `elements/overlays/**`).
+Dropped `@radix-ui/react-{separator,label,avatar,slot,dropdown-menu}`. `@radix-ui/react-{dialog,
+context-menu}` remain ONLY for `computer/ide-file-tree` (explicitly out of scope) and `react-tabs` for
+the chat Tabs (not a B3.4 target). A11y note: the `Prim.*` dialog matches the shipping chat modal
+(focus-first + ESC, no full focus-trap) — a focus-trap can be layered on later if required.
 
 ### B3.4 — Radix overlays → Tamagui universal  (8 files in shared `elements/`)
 

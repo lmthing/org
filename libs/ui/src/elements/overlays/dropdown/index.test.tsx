@@ -1,45 +1,42 @@
-import { render, screen } from '@testing-library/react'
-import { userEvent } from '@testing-library/user-event'
-import { describe, it, expect } from 'vitest'
+import { render, fireEvent, cleanup } from '@testing-library/react'
+import * as React from 'react'
+import { describe, it, expect, afterEach } from 'vitest'
+import { TamaguiProvider } from '@tamagui/core'
+import { tamaguiWebConfig } from '../../../theme/tamagui-web.config'
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from './index'
 
-describe('Dropdown', () => {
-  it('renders the trigger', () => {
-    render(
-      <Dropdown>
-        <DropdownTrigger>Options</DropdownTrigger>
-        <DropdownContent>
-          <DropdownItem>Edit</DropdownItem>
-        </DropdownContent>
-      </Dropdown>
+const P = ({ children }: { children: React.ReactNode }) => (
+  <TamaguiProvider config={tamaguiWebConfig} defaultTheme="app">{children}</TamaguiProvider>
+)
+afterEach(cleanup)
+
+describe('Dropdown (Prim.*-based)', () => {
+  it('toggles the menu on trigger click and selecting an item closes it', () => {
+    let picked = false
+    const { getByText, queryByRole } = render(
+      <P>
+        <Dropdown>
+          <DropdownTrigger>Menu</DropdownTrigger>
+          <DropdownContent>
+            <DropdownItem onClick={() => { picked = true }}>Item A</DropdownItem>
+          </DropdownContent>
+        </Dropdown>
+      </P>,
     )
-    expect(screen.getByText('Options')).toBeInTheDocument()
+    expect(queryByRole('menu')).toBeNull() // closed by default
+    fireEvent.click(getByText('Menu'))
+    expect(queryByRole('menu')).not.toBeNull() // open
+    fireEvent.click(getByText('Item A'))
+    expect(picked).toBe(true)
+    expect(queryByRole('menu')).toBeNull() // selecting closes
   })
 
-  it('applies dropdown__trigger class', () => {
-    render(
-      <Dropdown>
-        <DropdownTrigger data-testid="trigger">Options</DropdownTrigger>
-        <DropdownContent>
-          <DropdownItem>Edit</DropdownItem>
-        </DropdownContent>
-      </Dropdown>
+  it('sets aria-expanded/haspopup on the trigger', () => {
+    const { getByText } = render(
+      <P><Dropdown><DropdownTrigger>Menu</DropdownTrigger><DropdownContent><DropdownItem>x</DropdownItem></DropdownContent></Dropdown></P>,
     )
-    expect(screen.getByTestId('trigger')).toHaveClass('dropdown__trigger')
-  })
-
-  it('opens dropdown on trigger click and shows items', async () => {
-    render(
-      <Dropdown>
-        <DropdownTrigger>Options</DropdownTrigger>
-        <DropdownContent>
-          <DropdownItem>Edit</DropdownItem>
-          <DropdownItem>Delete</DropdownItem>
-        </DropdownContent>
-      </Dropdown>
-    )
-    await userEvent.click(screen.getByText('Options'))
-    expect(screen.getByText('Edit')).toBeInTheDocument()
-    expect(screen.getByText('Delete')).toBeInTheDocument()
+    const trigger = getByText('Menu').closest('[aria-haspopup]')!
+    expect(trigger.getAttribute('aria-haspopup')).toBe('menu')
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
   })
 })

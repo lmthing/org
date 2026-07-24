@@ -16,6 +16,7 @@ export default defineConfig({
     environment: 'jsdom',
     include: [
       'src/elements/primitives/**/*.test.tsx',
+      'src/elements/overlays/**/*.test.tsx',
       'src/**/*.parity.test.tsx',
       'src/theme/**/*.test.ts',
       'src/platform/**/*.test.ts',
