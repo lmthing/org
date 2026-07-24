@@ -47,7 +47,99 @@ export type LayoutStyleProps = {
   gap?: number | string
 }
 
-export type LayoutPrimitiveProps = React.HTMLAttributes<HTMLDivElement> & LayoutStyleProps
+/**
+ * A Tamagui pseudo-style object (`hoverStyle`/`pressStyle`/`focusStyle`/`focusVisibleStyle`/
+ * `disabledStyle`) — a permissive bag of style props, so the manual `hover:`/`focus:`/`active:`/
+ * `disabled:` variant migrations (§5) type-check without re-listing the whole style surface.
+ */
+export type PseudoStyleProps = { [prop: string]: string | number | undefined }
+
+/**
+ * The remaining Tamagui style props the P3 codemod (`classnames-to-props`) can lift onto a
+ * primitive, on top of the layout/text/margin trio: spacing, dimensions, borders, colors, position,
+ * per-face typography, transforms and the pseudo-style props. Values are `number | string` so a
+ * literal (`width={200}`) and a `$token` (`padding="$4"`) both type-check. This is what widens the
+ * primitives to the idiomatic Tamagui style-prop surface (docs/tamagui-idiomatic-migration.md §5/§6).
+ * `display`/`whiteSpace`/`wordWrap`/`overflow*`/`textOverflow` deliberately stay in `TextStyleProps`
+ * (their curated unions) — every primitive mixes BOTH, so the surfaces get the union there and the
+ * open surface here without an intersection clash.
+ */
+export type BoxStyleProps = {
+  // spacing (padding; margins live in MarginStyleProps)
+  padding?: number | string
+  paddingTop?: number | string
+  paddingRight?: number | string
+  paddingBottom?: number | string
+  paddingLeft?: number | string
+  paddingHorizontal?: number | string
+  paddingVertical?: number | string
+  paddingStart?: number | string
+  paddingEnd?: number | string
+  // dimensions
+  width?: number | string
+  height?: number | string
+  // flex extras beyond LayoutStyleProps
+  flexDirection?: 'row' | 'column' | 'row-reverse' | 'column-reverse'
+  alignContent?:
+    | 'flex-start' | 'flex-end' | 'center' | 'stretch' | 'space-between' | 'space-around'
+  columnGap?: number | string
+  rowGap?: number | string
+  // borders
+  borderWidth?: number | string
+  borderTopWidth?: number | string
+  borderRightWidth?: number | string
+  borderBottomWidth?: number | string
+  borderLeftWidth?: number | string
+  borderColor?: string
+  borderTopColor?: string
+  borderRightColor?: string
+  borderBottomColor?: string
+  borderLeftColor?: string
+  borderRadius?: number | string
+  borderStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
+  // colors / effects
+  backgroundColor?: string
+  color?: string
+  opacity?: number
+  cursor?: string
+  pointerEvents?: 'auto' | 'none' | 'box-none' | 'box-only'
+  // typography (per-face; also valid on a `.is_Text` Box)
+  fontFamily?: string
+  fontSize?: number | string
+  fontWeight?: number | string
+  fontStyle?: 'normal' | 'italic'
+  lineHeight?: number | string
+  letterSpacing?: number | string
+  textAlign?: 'left' | 'right' | 'center' | 'justify' | 'start' | 'end'
+  textDecorationLine?: 'none' | 'underline' | 'line-through' | 'underline line-through'
+  textTransform?: 'none' | 'capitalize' | 'uppercase' | 'lowercase'
+  // position
+  position?: 'absolute' | 'relative' | 'fixed' | 'static' | 'sticky'
+  top?: number | string
+  right?: number | string
+  bottom?: number | string
+  left?: number | string
+  inset?: number | string
+  zIndex?: number | string
+  // transforms
+  transform?: string
+  x?: number
+  y?: number
+  scale?: number
+  rotate?: string
+  // pseudo-styles (state variants, §5)
+  hoverStyle?: PseudoStyleProps
+  pressStyle?: PseudoStyleProps
+  focusStyle?: PseudoStyleProps
+  focusVisibleStyle?: PseudoStyleProps
+  disabledStyle?: PseudoStyleProps
+}
+
+export type LayoutPrimitiveProps = React.HTMLAttributes<HTMLDivElement> &
+  LayoutStyleProps &
+  TextStyleProps &
+  MarginStyleProps &
+  BoxStyleProps
 
 const webBlockCompat = { flexShrink: 1, minWidth: 'auto', minHeight: 'auto' } as const
 
@@ -115,7 +207,8 @@ export type TextAs =
 
 export type TextPrimitiveProps = React.HTMLAttributes<HTMLElement> &
   TextStyleProps &
-  MarginStyleProps & {
+  MarginStyleProps &
+  BoxStyleProps & {
     /** Inline text tag to render. Defaults to `span` (or `p` when `block`). */
     as?: TextAs
     /** Convenience: render a block `<p>` instead of an inline `<span>`. */
@@ -183,7 +276,8 @@ export type PressablePrimitiveProps = React.ButtonHTMLAttributes<HTMLButtonEleme
   > &
   TextStyleProps &
   LayoutStyleProps &
-  MarginStyleProps & {
+  MarginStyleProps &
+  BoxStyleProps & {
     /** Host tag to render. Defaults to `button`. Use `a` for links, `div` for clickable boxes. */
     as?: PressableAs
   }
@@ -236,7 +330,8 @@ export type BoxAs =
 export type BoxPrimitiveProps = React.HTMLAttributes<HTMLElement> &
   TextStyleProps &
   LayoutStyleProps &
-  MarginStyleProps & {
+  MarginStyleProps &
+  BoxStyleProps & {
     /** Semantic host tag to render. Defaults to `div`. */
     as?: BoxAs
     /** `<details open>` support. */
@@ -286,14 +381,14 @@ const makeLeaf = (tag: string, display: string, name: string) =>
     defaultProps: { display, ...baseTextResets },
   }) as unknown as React.ComponentType<any>
 
-export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & TextStyleProps & MarginStyleProps
+export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & TextStyleProps & MarginStyleProps & BoxStyleProps
 const LinkComp = makeLeaf('a', 'inline', 'Link')
 export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>((props, ref) =>
   React.createElement(LinkComp, { ...props, ref }),
 )
 Link.displayName = 'Link'
 
-export type FormProps = React.FormHTMLAttributes<HTMLFormElement> & TextStyleProps & MarginStyleProps
+export type FormProps = React.FormHTMLAttributes<HTMLFormElement> & TextStyleProps & MarginStyleProps & BoxStyleProps
 const FormComp = makeLeaf('form', 'block', 'Form')
 export const Form = React.forwardRef<HTMLFormElement, FormProps>((props, ref) =>
   React.createElement(FormComp, { ...props, ref }),
@@ -302,7 +397,8 @@ Form.displayName = 'Form'
 
 export type ListProps = React.HTMLAttributes<HTMLElement> &
   TextStyleProps &
-  MarginStyleProps & { /** Render an ordered `<ol>` instead of an unordered `<ul>`. */ ordered?: boolean }
+  MarginStyleProps &
+  BoxStyleProps & { /** Render an ordered `<ol>` instead of an unordered `<ul>`. */ ordered?: boolean }
 const UlComp = makeLeaf('ul', 'block', 'List')
 const OlComp = makeLeaf('ol', 'block', 'List')
 export const List = React.forwardRef<HTMLElement, ListProps>(({ ordered, ...props }, ref) =>
@@ -310,7 +406,7 @@ export const List = React.forwardRef<HTMLElement, ListProps>(({ ordered, ...prop
 )
 List.displayName = 'List'
 
-export type ListItemProps = React.LiHTMLAttributes<HTMLLIElement> & TextStyleProps & MarginStyleProps
+export type ListItemProps = React.LiHTMLAttributes<HTMLLIElement> & TextStyleProps & MarginStyleProps & BoxStyleProps
 const LiComp = makeLeaf('li', 'list-item', 'ListItem')
 export const ListItem = React.forwardRef<HTMLLIElement, ListItemProps>((props, ref) =>
   React.createElement(LiComp, { ...props, ref }),
