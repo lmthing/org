@@ -1,11 +1,11 @@
 @reference "../../theme.css";
 
 .computer-network-panel {
-  @apply flex flex-col gap-1;
+  @apply flex! flex-col gap-1;
 }
 
 .computer-network-panel__entry {
-  @apply flex items-center gap-3 text-sm;
+  @apply flex! items-center gap-3 text-sm;
 }
 
 .computer-network-panel__method {

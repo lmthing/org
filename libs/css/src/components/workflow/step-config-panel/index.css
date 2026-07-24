@@ -3,7 +3,7 @@
 /* ── StepConfigPanel ──────────────────────────────────────────────── */
 
 .step-config-panel__overlay {
-  @apply fixed inset-0 z-50 flex items-end justify-center;
+  @apply fixed inset-0 z-50 flex! items-end justify-center;
 }
 
 @media (min-width: 640px) {
@@ -19,7 +19,7 @@
 }
 
 .step-config-panel__panel {
-  @apply relative w-full flex flex-col;
+  @apply relative w-full flex! flex-col;
   max-width: 42rem;
   max-height: 90vh;
   background: var(--card);
@@ -34,7 +34,7 @@
 }
 
 .step-config-panel__header {
-  @apply flex items-center justify-between;
+  @apply flex! items-center justify-between;
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border);
 }
@@ -55,7 +55,7 @@
 }
 
 .step-config-panel__type-grid {
-  @apply grid grid-cols-1;
+  @apply grid! grid-cols-1;
   gap: 0.75rem;
   margin-top: 0.5rem;
 }
@@ -78,7 +78,7 @@
 }
 
 .step-config-panel__type-btn-content {
-  @apply flex justify-between items-center;
+  @apply flex! justify-between items-center;
 }
 
 .step-config-panel__passes-data-icon {
@@ -94,7 +94,7 @@
 }
 
 .step-config-panel__pushable-row {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.75rem;
   padding: 1rem;
   background: var(--muted);
@@ -137,7 +137,7 @@
 }
 
 .step-config-panel__fragment-item {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
   padding: 0.75rem;
   background: var(--muted);
@@ -163,7 +163,7 @@
 }
 
 .step-config-panel__tools-grid {
-  @apply grid grid-cols-2;
+  @apply grid! grid-cols-2;
   gap: 0.5rem;
   margin-top: 0.5rem;
 }
@@ -199,14 +199,14 @@
 }
 
 .step-config-panel__template-vars-list {
-  @apply flex flex-wrap;
+  @apply flex! flex-wrap;
   column-gap: 0.75rem;
   row-gap: 0.25rem;
   margin-top: 0.25rem;
 }
 
 .step-config-panel__model-grid {
-  @apply grid grid-cols-2;
+  @apply grid! grid-cols-2;
   gap: 1rem;
 }
 
@@ -217,11 +217,11 @@
 }
 
 .step-config-panel__range-labels {
-  @apply flex justify-between;
+  @apply flex! justify-between;
 }
 
 .step-config-panel__footer {
-  @apply flex items-center justify-end;
+  @apply flex! items-center justify-end;
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border);

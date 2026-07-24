@@ -40,7 +40,7 @@ export default function Slide4Technology() {
       {/* TOP: headline */}
       <Prim.Col className="mb-16" alignItems="center">
         <Prim.Box
-          className="mb-5 text-xl font-bold uppercase tracking-[0.16em]"
+          className="text-xl font-bold uppercase tracking-[0.16em]" marginBottom="1.25rem"
           style={{ color: colors.brand }}
         >
           How it works
@@ -112,7 +112,7 @@ export default function Slide4Technology() {
       </Prim.Row>
 
       {/* Divider */}
-      <Prim.Box className="mb-9 h-px w-full" style={{ background: colors.cardBorder }} />
+      <Prim.Box className="h-px w-full" marginBottom="2.25rem" style={{ background: colors.cardBorder }} />
 
       {/* BOTTOM: technique badges */}
       <Prim.Row className="gap-5" alignItems="center">

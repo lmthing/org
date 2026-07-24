@@ -8,7 +8,7 @@
 }
 
 .agent-list__header-row {
-  @apply flex justify-between items-center;
+  @apply flex! justify-between items-center;
 }
 
 .agent-list__body {
@@ -17,12 +17,12 @@
 }
 
 .agent-list__loading {
-  @apply flex items-center justify-center;
+  @apply flex! items-center justify-center;
   padding: 3rem;
 }
 
 .agent-list__empty {
-  @apply flex flex-col;
+  @apply flex! flex-col;
   text-align: center;
   padding: 3rem;
 }
@@ -38,7 +38,7 @@
 }
 
 .agent-list__grid {
-  @apply grid;
+  @apply grid!;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1rem;
 }
@@ -71,7 +71,7 @@
 }
 
 .agent-card__meta-row {
-  @apply flex justify-between;
+  @apply flex! justify-between;
   font-size: 0.75rem;
 }
 
@@ -88,7 +88,7 @@
 }
 
 .agent-card__tools {
-  @apply flex flex-wrap;
+  @apply flex! flex-wrap;
   gap: 0.375rem;
   margin-top: 0.5rem;
 }
@@ -99,18 +99,18 @@
   width: 18rem;
   flex-shrink: 0;
   border-left: 1px solid var(--color-border);
-  @apply flex flex-col;
+  @apply flex! flex-col;
   overflow: hidden;
 }
 
 .runtime-fields__panel {
   height: 100%;
-  @apply flex flex-col;
+  @apply flex! flex-col;
   overflow: hidden;
 }
 
 .runtime-fields__header-row {
-  @apply flex items-center;
+  @apply flex! items-center;
 }
 
 .runtime-fields__header-label {
@@ -137,7 +137,7 @@
 /* ── RuntimeField (individual field) ──────────────────────────────── */
 
 .runtime-fields__field-header {
-  @apply flex items-center;
+  @apply flex! items-center;
   margin-bottom: 0.25rem;
 }
 
@@ -158,7 +158,7 @@
 /* ── MultiSelectPills ─────────────────────────────────────────────── */
 
 .runtime-fields__pills {
-  @apply flex flex-wrap;
+  @apply flex! flex-wrap;
   gap: 0.375rem;
 }
 
@@ -211,7 +211,7 @@
 
 .runtime-panel {
   height: 100%;
-  @apply flex flex-col;
+  @apply flex! flex-col;
   overflow: hidden;
 }
 
@@ -224,7 +224,7 @@
 }
 
 .runtime-panel__tags {
-  @apply flex flex-wrap;
+  @apply flex! flex-wrap;
   gap: 0.375rem;
   margin-top: 0.75rem;
 }
@@ -252,7 +252,7 @@
 }
 
 .runtime-panel__field-header {
-  @apply flex justify-between;
+  @apply flex! justify-between;
   margin-bottom: 0.5rem;
 }
 
@@ -262,7 +262,7 @@
 
 .runtime-panel__tools-toggle {
   width: 100%;
-  @apply flex justify-between;
+  @apply flex! justify-between;
   margin-bottom: 0.75rem;
 }
 
@@ -372,7 +372,7 @@
 }
 
 .tool-call-display__collapsible-btn {
-  @apply flex w-full items-center rounded-md transition-colors;
+  @apply flex! w-full items-center rounded-md transition-colors;
   gap: 0.375rem;
   padding: 0.25rem 0.5rem;
   font-size: 11px;
@@ -509,13 +509,13 @@
 }
 
 .tool-call-card__header {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.625rem;
   padding: 0.75rem 0.75rem 0.375rem;
 }
 
 .tool-call-card__icon {
-  @apply flex shrink-0 items-center justify-center rounded-md;
+  @apply flex! shrink-0 items-center justify-center rounded-md;
   width: 1.75rem;
   height: 1.75rem;
   color: var(--primary-foreground);
@@ -553,7 +553,7 @@
 }
 
 .tool-call-card__title-row {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
 }
 
@@ -584,7 +584,7 @@
 }
 
 .tool-call-card__status-badge {
-  @apply flex items-center rounded-full;
+  @apply flex! items-center rounded-full;
   gap: 0.25rem;
   padding: 0.125rem 0.5rem;
 }
@@ -630,7 +630,7 @@
 /* ── ToolRunningPill ──────────────────────────────────────────────── */
 
 .tool-running-pill {
-  @apply inline-flex items-center rounded-full border;
+  @apply inline-flex! items-center rounded-full border;
   border-color: var(--border);
   background: linear-gradient(to right, var(--muted), var(--muted));
   gap: 0.5rem;
@@ -638,7 +638,7 @@
 }
 
 .tool-running-pill__dots {
-  @apply flex;
+  @apply flex!;
   gap: 0.125rem;
 }
 
@@ -664,12 +664,12 @@
 }
 
 .tool-running-pill__list {
-  @apply flex flex-wrap;
+  @apply flex! flex-wrap;
   gap: 0.375rem;
 }
 
 .tool-running-pill__item {
-  @apply inline-flex items-center rounded-full border ring-1;
+  @apply inline-flex! items-center rounded-full border ring-1;
   gap: 0.375rem;
   padding: 0.25rem 0.625rem;
   border-color: color-mix(in srgb, var(--border) 80%, transparent);
@@ -677,7 +677,7 @@
 }
 
 .tool-running-pill__item-icon {
-  @apply flex items-center justify-center rounded-full;
+  @apply flex! items-center justify-center rounded-full;
   width: 1rem;
   height: 1rem;
   color: var(--primary-foreground);
@@ -690,7 +690,7 @@
 }
 
 .tool-running-pill__item-dots {
-  @apply flex;
+  @apply flex!;
   gap: 0.125rem;
 }
 
@@ -715,18 +715,18 @@
   width: 16rem;
   flex-shrink: 0;
   border-right: 1px solid var(--color-border);
-  @apply flex flex-col;
+  @apply flex! flex-col;
   overflow: hidden;
 }
 
 .conversation-sidebar__panel {
   height: 100%;
-  @apply flex flex-col;
+  @apply flex! flex-col;
   overflow: hidden;
 }
 
 .conversation-sidebar__header-row {
-  @apply flex items-center justify-between;
+  @apply flex! items-center justify-between;
 }
 
 .conversation-sidebar__header-label {
@@ -778,7 +778,7 @@
 }
 
 .conversation-sidebar__item-meta {
-  @apply flex items-center justify-between;
+  @apply flex! items-center justify-between;
   margin-top: 0.25rem;
 }
 

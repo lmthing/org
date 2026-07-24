@@ -1,7 +1,7 @@
 @reference "../../../theme.css";
 
 .stack {
-  @apply flex flex-col;
+  @apply flex! flex-col;
 }
 
 .stack--row {

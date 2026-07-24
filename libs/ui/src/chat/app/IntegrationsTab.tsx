@@ -260,7 +260,7 @@ export function IntegrationsTab({
                 <Prim.Box as="summary" className="text-xs text-muted-foreground cursor-pointer select-none">
                   Setup guide — how to get your keys
                 </Prim.Box>
-                <Prim.Box className="mt-2 text-sm text-foreground">
+                <Prim.Box className="text-sm text-foreground" marginTop="0.5rem">
                   <Markdown source={integration.readme} />
                 </Prim.Box>
               </Prim.Box>

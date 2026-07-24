@@ -15,9 +15,9 @@
 }
 
 .dialog__content {
-  @apply grid gap-4;
+  @apply grid! gap-4;
 }
 
 .dialog__header {
-  @apply flex flex-col gap-2;
+  @apply flex! flex-col gap-2;
 }

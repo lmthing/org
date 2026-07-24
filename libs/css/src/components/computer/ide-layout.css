@@ -1,11 +1,11 @@
 @reference "../../theme.css";
 
 .ide-layout {
-  @apply flex flex-col h-screen overflow-hidden bg-background text-foreground;
+  @apply flex! flex-col h-screen overflow-hidden bg-background text-foreground;
 }
 
 .ide-layout__header {
-  @apply h-10 flex items-center gap-3 px-4 border-b border-border bg-card shrink-0;
+  @apply h-10 flex! items-center gap-3 px-4 border-b border-border bg-card shrink-0;
 }
 
 .ide-layout__title {
@@ -13,7 +13,7 @@
 }
 
 .ide-layout__status {
-  @apply flex items-center gap-2 ml-auto text-sm text-muted-foreground;
+  @apply flex! items-center gap-2 ml-auto text-sm text-muted-foreground;
 }
 
 .ide-layout__body {
@@ -21,7 +21,7 @@
 }
 
 .ide-layout__nav {
-  @apply flex items-center gap-1 ml-4;
+  @apply flex! items-center gap-1 ml-4;
 }
 
 .ide-layout__nav-btn {
@@ -33,7 +33,7 @@
 }
 
 .ide-layout__split {
-  @apply flex w-full h-full min-h-0 min-w-0;
+  @apply flex! w-full h-full min-h-0 min-w-0;
 }
 
 .ide-layout__split--horizontal {

@@ -34,7 +34,7 @@
 }
 
 .workflow-editor__header-top {
-  @apply flex items-center gap-4;
+  @apply flex! items-center gap-4;
   margin-bottom: 1rem;
 }
 
@@ -47,11 +47,11 @@
 }
 
 .workflow-editor__title-row {
-  @apply flex items-center gap-4;
+  @apply flex! items-center gap-4;
 }
 
 .workflow-editor__icon-box {
-  @apply w-10 h-10 flex items-center justify-center;
+  @apply w-10 h-10 flex! items-center justify-center;
   border-radius: 0.75rem;
   background: linear-gradient(to bottom right, var(--brand-5), var(--brand-5));
   box-shadow: 0 10px 15px -3px color-mix(in srgb, var(--brand-5) 25%, transparent);
@@ -62,7 +62,7 @@
 }
 
 .workflow-editor__meta-form {
-  @apply grid grid-cols-1 gap-4 p-4;
+  @apply grid! grid-cols-1 gap-4 p-4;
   background: var(--muted);
   border-radius: 0.75rem;
 }
@@ -84,7 +84,7 @@
 }
 
 .workflow-editor__tag-list {
-  @apply flex flex-wrap;
+  @apply flex! flex-wrap;
   gap: 0.5rem;
 }
 
@@ -131,7 +131,7 @@
 }
 
 .workflow-editor__stats {
-  @apply grid grid-cols-3 gap-4;
+  @apply grid! grid-cols-3 gap-4;
   margin-bottom: 2rem;
 }
 
@@ -140,7 +140,7 @@
 }
 
 .workflow-editor__steps-header {
-  @apply flex justify-between items-center;
+  @apply flex! justify-between items-center;
   margin-bottom: 1rem;
 }
 
@@ -157,7 +157,7 @@
 }
 
 .workflow-editor__empty-icon-wrapper {
-  @apply w-16 h-16 rounded-full flex items-center justify-center mx-auto;
+  @apply w-16 h-16 rounded-full flex! items-center justify-center mx-auto;
   background: var(--muted);
   margin-bottom: 1rem;
 }

@@ -12,9 +12,9 @@
 }
 
 .sheet__content {
-  @apply flex flex-col h-full;
+  @apply flex! flex-col h-full;
 }
 
 .sheet__header {
-  @apply flex items-center justify-between px-4 py-3 border-b border-border;
+  @apply flex! items-center justify-between px-4 py-3 border-b border-border;
 }

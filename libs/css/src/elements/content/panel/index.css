@@ -1,7 +1,7 @@
 @reference "../../../theme.css";
 
 .panel {
-  @apply flex flex-col bg-background border border-border rounded-md overflow-hidden;
+  @apply flex! flex-col bg-background border border-border rounded-md overflow-hidden;
 }
 
 .panel--split {
@@ -9,7 +9,7 @@
 }
 
 .panel__header {
-  @apply flex items-center justify-between px-4 py-2 border-b border-border
+  @apply flex! items-center justify-between px-4 py-2 border-b border-border
          text-sm font-medium text-foreground;
 }
 

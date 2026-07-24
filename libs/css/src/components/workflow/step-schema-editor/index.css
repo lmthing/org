@@ -9,13 +9,13 @@
 }
 
 .schema-editor__header {
-  @apply flex items-center justify-between;
+  @apply flex! items-center justify-between;
   padding: 0.5rem 1rem;
   border-bottom: 1px solid var(--border);
 }
 
 .schema-editor__mode-toggle {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.25rem;
   background: var(--muted);
   border-radius: 0.5rem;
@@ -49,7 +49,7 @@
 }
 
 .schema-editor__empty-icon-wrapper {
-  @apply w-12 h-12 rounded-full flex items-center justify-center mx-auto;
+  @apply w-12 h-12 rounded-full flex! items-center justify-center mx-auto;
   background: var(--muted);
   margin-bottom: 0.75rem;
 }
@@ -70,7 +70,7 @@
 }
 
 .schema-editor__add-btn {
-  @apply w-full text-sm transition-colors flex items-center justify-center;
+  @apply w-full text-sm transition-colors flex! items-center justify-center;
   gap: 0.5rem;
   padding: 0.75rem;
   border-radius: 0.75rem;
@@ -107,7 +107,7 @@
 }
 
 .property-row__main {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.75rem;
   padding: 0.75rem;
 }
@@ -121,7 +121,7 @@
 }
 
 .property-row__move-buttons {
-  @apply flex flex-col;
+  @apply flex! flex-col;
   gap: 0.125rem;
 }
 
@@ -210,7 +210,7 @@
 }
 
 .property-row__actions {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.25rem;
 }
 
@@ -225,7 +225,7 @@
 }
 
 .property-row__type-options-inner {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 1rem;
   padding-top: 0.75rem;
 }
@@ -235,7 +235,7 @@
 }
 
 .property-row__range-inputs {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
 }
 
@@ -266,7 +266,7 @@
 }
 
 .property-row__array-item-inner {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.75rem;
 }
 

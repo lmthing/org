@@ -43,7 +43,7 @@ export default function Slide6Scalability() {
       {/* TOP */}
       <Prim.Col className="mb-8" alignItems="center">
         <Prim.Box
-          className="mb-3 text-lg font-bold uppercase tracking-[0.16em]"
+          className="text-lg font-bold uppercase tracking-[0.16em]" marginBottom="0.75rem"
           style={{ color: colors.brand }}
         >
           Scalability & Business Model
@@ -60,7 +60,7 @@ export default function Slide6Scalability() {
       </Prim.Col>
 
       {/* BODY */}
-      <Prim.Box className="mb-7 grid w-full grid-cols-[1fr_1px_1fr] gap-x-9">
+      <Prim.Box className="grid w-full grid-cols-[1fr_1px_1fr] gap-x-9" marginBottom="1.75rem">
         {/* LEFT — Platform points */}
         <Prim.Col className="justify-center gap-5">
           {points.map((p) => (
@@ -74,7 +74,7 @@ export default function Slide6Scalability() {
                 {p.icon}
               </Prim.Row>
               <Prim.Box>
-                <Prim.Box className="mb-0.5 text-lg font-bold" style={{ color: colors.text }}>
+                <Prim.Box className="text-lg font-bold" marginBottom="0.125rem" style={{ color: colors.text }}>
                   {p.title}
                 </Prim.Box>
                 <Prim.Box className="text-base leading-[1.55]" style={{ color: colors.textSecondary }}>
@@ -98,7 +98,7 @@ export default function Slide6Scalability() {
         {/* RIGHT — Pricing tiers */}
         <Prim.Col className="justify-center gap-2">
           <Prim.Box
-            className="mb-2 text-sm font-bold uppercase tracking-[0.12em]"
+            className="text-sm font-bold uppercase tracking-[0.12em]" marginBottom="0.5rem"
             style={{ color: colors.brand }}
           >
             Business Model

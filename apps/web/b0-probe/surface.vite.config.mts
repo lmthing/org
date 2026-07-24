@@ -19,6 +19,7 @@ export default defineConfig({
     alias: {
       // Specific subpath before the generic prefix.
       '@lmthing/css/theme.css': path.join(org, 'libs/css/src/theme.css'),
+      '@lmthing/css/components/computer/computer-layout.css': path.join(org, 'libs/css/src/components/computer/computer-layout.css'),
       '@lmthing/css/tamagui-tokens': path.join(org, 'libs/css/src/tamagui/tokens.generated.ts'),
       '@lmthing/ui': path.join(org, 'libs/ui/src'),
       '@lmthing/css': path.join(org, 'libs/css/src'),
@@ -37,6 +38,7 @@ export default defineConfig({
         'text-variants': path.join(here, 'text-variants.html'),
         'pressable-variants': path.join(here, 'pressable-variants.html'),
         'box-variants': path.join(here, 'box-variants.html'),
+        'real-bem': path.join(here, 'real-bem.html'),
       },
     },
   },

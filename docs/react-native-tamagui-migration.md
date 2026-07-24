@@ -67,14 +67,21 @@
 > libs/ui 32/32 · visual 54/54 · typecheck 6/6 · libs/ui tsc zero net-new · lint:rn · lint:tokens ·
 > app build.
 >
-> **✅ B3.1 (Text) + B3.2 (Pressable) DONE. ⏸ B3.3 (block `Box`) INTENTIONALLY DEFERRED — Box stays
-> web-passthrough** (native already renders it via `box/index.native.tsx`). **Also landed: a margin
-> bug-fix** — Tamagui's `.is_Text` base sets `margin: 0` UNLAYERED, which was silently ZEROING Tailwind
-> `m*` classes on the already-shipped Text/Pressable (a real regression the earlier probes missed
-> because they carried no margin class). Fixed by lifting margin classes to Tamagui margin props (rem =
-> token × 0.25rem), via the generalised `text-codemod.mjs` (19 auto + 4 manual); proven in
-> `text-variants.mjs` `margin-*`. Custom-CSS margins (BEM `@apply`) are unaffected — they win by source
-> order; only inline Tailwind margin utilities collide.
+> **✅ B3.1 (Text) + B3.2 (Pressable) + B3.3 (block `Box`) DONE — the four layout/text primitives
+> (Row/Col already B2) are all real Tamagui now.** Box uses the SAME per-tag `createComponent` +
+> `isText:true` design (a `styled(View)` box would inherit the `.is_View` font-family+line-height force,
+> wrong for a plain `<div>`; `.is_Text` forces neither and flex-child classes just work). Two collisions
+> resolved: (a) `.is_Text`'s unlayered `margin:0` zeroed Tailwind `m*` classes on Text/Pressable/Box (a
+> real regression the earlier probes missed) → margin classes lifted to props (rem = token × 0.25rem) by
+> the generalised `text-codemod.mjs`; (b) **the boosted default `display` overrode the DESIGN SYSTEM's
+> OWN `@apply flex/grid` CSS** → `libs/css/scripts/apply-display-important.mjs` marked all 365 `@apply`
+> display utilities across 59 component/element CSS files `!important` (Tailwind `!`), so author CSS
+> wins. Proven end-to-end: real `Prim.Box` + real patched BEM class `computer-layout` → `display:flex`
+> matching a raw div (`apps/web/b0-probe/real-bem`), plus `box-variants` (`.is_Text` ≡ div incl.
+> font-mono) and `text-variants` `margin-*`. Custom-CSS margins were already fine (source order wins).
+> **RISK NOTE:** the `!important` pass is verified by mechanism + app build + primitives-visual, but
+> there is still NO real-SURFACE visual harness, so subtle per-surface display regressions from the
+> `!important` pass would not be auto-caught — the §3.1 surface harness remains the open verification gap.
 >
 > **Why B3.3 is deferred (grounded, `apps/web/b0-probe/box-variants.mjs`):** making block `Box` Tamagui
 > is the FIRST primitive where the base collides with the DESIGN SYSTEM'S OWN CSS, not just inline
@@ -89,7 +96,7 @@
 > design system with `!important`). **(b) needs an explicit product/design decision — do not do it
 > without one.** The `box-variants.mjs` probe reproduces all of this.
 >
-> **➡ NEXT: B3.4 — Radix overlays → Tamagui** (8 shared `elements/`), then B3.5 (delete superseded CSS).
+> **➡ NEXT: B3.4 — Radix overlays → Tamagui** (7 shared `elements/`) + the remaining leaf primitives (Image/Link/Form/List, grouped controls/media/table/misc), then B3.5 (delete superseded CSS).
 > Web renders correctly TODAY (Box stays passthrough; native uses `.native.tsx` forks). Tools built:
 > `flexbox-codemod.mjs`, **`text-codemod.mjs`** (Text/Pressable display/whitespace/wrap/margin lift),
 > `apps/web/b0-probe/` probes (**`text-variants`/`pressable-variants`/`box-variants`**),
@@ -1315,7 +1322,7 @@ normal declarations) — verified in `pressable-variants.mjs` (`important-hidden
 `Prim.Pressable`, tag NAME + computed style, incl. the text-size button font/line-height cases) — 9/9.
 Gates: libs/ui 32/32 · visual 54/54 · typecheck 6/6 · libs/ui tsc zero net-new · lint:rn · app build.
 
-### B3.3 — block `Box` → Tamagui  ⏸ **DEFERRED (grounded decision — needs product sign-off for the CSS patch)**
+### B3.3 — block `Box` → Tamagui  ✅ **DONE (with the design-system `!important` pass)**
 
 **Status: Box stays web-passthrough; native renders it via `box/index.native.tsx` (a Tamagui `View`).**
 The design work is done and the correct base is known, but completing the WEB swap requires a

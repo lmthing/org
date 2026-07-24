@@ -8,7 +8,7 @@
 }
 
 .space-list__header {
-  @apply flex justify-between items-center;
+  @apply flex! justify-between items-center;
 }
 
 .space-list__invite-icon {
@@ -36,7 +36,7 @@
 }
 
 .space-list__empty {
-  @apply flex flex-col items-center justify-center;
+  @apply flex! flex-col items-center justify-center;
   height: 12rem;
 }
 
@@ -121,12 +121,12 @@
 }
 
 .space-list__user-name-row {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.25rem;
 }
 
 .space-list__email-row {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.25rem;
   margin-top: 0.125rem;
 }
@@ -150,7 +150,7 @@
 }
 
 .space-list__status-col {
-  @apply flex flex-col items-end;
+  @apply flex! flex-col items-end;
   gap: 0.25rem;
 }
 
@@ -159,7 +159,7 @@
 }
 
 .space-list__last-active {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.25rem;
   font-size: 0.6875rem;
 }
@@ -307,7 +307,7 @@
 /* ── UserDetailPanel ──────────────────────────────────────────────── */
 
 .user-detail__empty {
-  @apply flex items-center justify-center;
+  @apply flex! items-center justify-center;
   height: 100%;
 }
 
@@ -332,12 +332,12 @@
 
 .user-detail__panel {
   height: 100%;
-  @apply flex flex-col;
+  @apply flex! flex-col;
   overflow: hidden;
 }
 
 .user-detail__header-row {
-  @apply flex items-start;
+  @apply flex! items-start;
   gap: 1rem;
 }
 
@@ -403,7 +403,7 @@
 }
 
 .user-detail__info-card-row {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.25rem;
 }
 
@@ -412,7 +412,7 @@
 }
 
 .user-detail__permissions-heading {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
@@ -440,7 +440,7 @@
   border-radius: 9999px;
   background: var(--agent);
   color: white;
-  @apply flex items-center justify-center;
+  @apply flex! items-center justify-center;
   flex-shrink: 0;
 }
 
@@ -460,7 +460,7 @@
   height: 3rem;
   border-radius: 9999px;
   background: color-mix(in srgb, var(--destructive) 12%, transparent);
-  @apply flex items-center justify-center;
+  @apply flex! items-center justify-center;
   margin: 0 auto;
 }
 

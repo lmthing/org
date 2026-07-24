@@ -1,7 +1,7 @@
 @reference "../../../theme.css";
 
 .separator {
-  @apply block h-px w-full bg-border;
+  @apply block! h-px w-full bg-border;
 }
 
 .separator--vertical {

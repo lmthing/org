@@ -44,33 +44,25 @@ import {
 const html = (node: React.ReactElement) => render(node).container.innerHTML
 
 describe('Phase-0 primitives — byte-identical passthrough', () => {
-  it('Box emits a plain <div> with props verbatim, matching a raw <div>', () => {
-    const props = { id: 'x', className: 'a b', role: 'group', 'data-k': '1', title: 't' } as const
-    expect(html(<Box {...props}>hi</Box>)).toBe(html(<div {...props}>hi</div>))
-  })
-
-  it('Box adds NO class attribute when none is passed (pure passthrough)', () => {
-    const { container } = render(<Box>hi</Box>)
-    const el = container.firstElementChild!
-    expect(el.tagName).toBe('DIV')
-    expect(el.hasAttribute('class')).toBe(false)
-  })
-
-  it('Box renders semantic tags via `as`', () => {
-    for (const as of ['section', 'nav', 'header', 'footer', 'aside', 'article', 'main'] as const) {
-      const { container } = render(<Box as={as}>c</Box>)
-      expect(container.firstElementChild!.tagName).toBe(as.toUpperCase())
-    }
-    expect(html(<Box as="section" className="s">c</Box>)).toBe(html(<section className="s">c</section>))
-  })
-
-  // Part III / B3.1: Text is now a real Tamagui styled(Text). On web it renders the chosen host tag
-  // (span/p/strong/…/h1–h6) but Tamagui adds its own atomic classes, so we assert the DOM tag + that
-  // the caller's className / htmlFor / children pass through — NOT byte-identity (broken by
-  // construction). Exact computed-style parity vs the raw tags is proven under real theme.css +
-  // preflight in apps/web/b0-probe/text-variants.mjs (21/21).
+  // Part III: Box (B3.3), Text (B3.1), Pressable (B3.2) are real Tamagui primitives now. They render
+  // the real host tag and pass DOM props through, but Tamagui adds its own atomic classes, so we assert
+  // the DOM tag + prop/child passthrough — NOT byte-identity (broken by construction). Exact
+  // computed-style parity vs raw tags is proven under real theme.css+preflight in the b0-probe slices.
   const withProvider = (node: React.ReactNode) =>
     render(<TamaguiProvider config={tamaguiWebConfig} defaultTheme="app">{node}</TamaguiProvider>)
+
+  it('Box renders a <div> by default and semantic tags via `as`, keeping DOM props + children', () => {
+    const el = withProvider(<Box id="x" className="a b" role="group" data-k="1" title="t">hi</Box>)
+      .container.querySelector('[data-k]')!
+    expect(el.tagName).toBe('DIV')
+    expect(el.className).toContain('a')
+    expect(el.getAttribute('role')).toBe('group')
+    expect(el.textContent).toBe('hi')
+    for (const as of ['section', 'nav', 'header', 'footer', 'aside', 'article', 'main'] as const) {
+      const s = withProvider(<Box as={as} data-t={as}>c</Box>).container.querySelector(`[data-t="${as}"]`)!
+      expect(s.tagName).toBe(as.toUpperCase())
+    }
+  })
 
   it('Text renders <span> by default and <p> when block, keeping className + children', () => {
     const span = withProvider(<Text className="t" data-x="1">hi</Text>).container.querySelector('[data-x]')!
@@ -217,7 +209,8 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
 
   it('primitives forward refs to their host node (drop-in for ref-bearing tags)', () => {
     const boxRef = React.createRef<HTMLElement>()
-    render(<Box ref={boxRef as React.Ref<HTMLElement>}>x</Box>)
+    // Box is Tamagui now → needs the provider; it still forwards its ref to the host <div>.
+    withProvider(<Box ref={boxRef as React.Ref<HTMLElement>}>x</Box>)
     expect(boxRef.current?.tagName).toBe('DIV')
 
     const inputRef = React.createRef<HTMLInputElement>()

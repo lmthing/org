@@ -1,11 +1,11 @@
 @reference "../../theme.css";
 
 .computer-metrics-card {
-  @apply flex flex-col gap-3;
+  @apply flex! flex-col gap-3;
 }
 
 .computer-metrics-card__row {
-  @apply flex items-center justify-between;
+  @apply flex! items-center justify-between;
 }
 
 .computer-metrics-card__bar {

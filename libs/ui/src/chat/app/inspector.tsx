@@ -21,7 +21,7 @@ function LlmTab({ node }: { node: ExecNode }): React.ReactElement {
             <Prim.Box as="summary" className="cursor-pointer text-[11px] text-lm-muted">system + {c.messages.length} messages</Prim.Box>
             <Prim.Pre className="font-mono text-[10px] whitespace-pre-wrap text-lm-muted mt-1 max-h-48 overflow-y-auto">{c.system}</Prim.Pre>
             {c.messages.map((m, j) => (
-              <Prim.Box key={j} className="mt-1">
+              <Prim.Box key={j} marginTop="0.25rem">
                 <Prim.Text className="text-[10px] uppercase text-lm-accent">{m.role}</Prim.Text>
                 <Prim.Pre className="font-mono text-[10px] whitespace-pre-wrap text-lm-text">{preview(m.content, 1000)}</Prim.Pre>
               </Prim.Box>
@@ -47,7 +47,7 @@ function StatementsTab({ node }: { node: ExecNode }): React.ReactElement {
         <Prim.Box key={i}>
           <CodeBlock code={s.code} />
           {s.errors.map((e, j) => (
-            <Prim.Box key={j} className="text-[11px] text-lm-red font-mono mt-1 pl-2">
+            <Prim.Box key={j} className="text-[11px] text-lm-red font-mono pl-2" marginTop="0.25rem">
               {e.phase} error{e.attempt ? ` (attempt ${e.attempt})` : ''}: {e.message}
             </Prim.Box>
           ))}
@@ -67,8 +67,8 @@ function YieldsTab({ node }: { node: ExecNode }): React.ReactElement {
             <Prim.Text className={y.resolved ? 'text-lm-green' : 'text-lm-accent lm-spin'}>{y.resolved ? '✓' : '⟳'}</Prim.Text>
             <Prim.Text className="font-mono text-lm-cyan">{y.kind}</Prim.Text>
           </Prim.Row>
-          <Prim.Box className="text-[10px] text-lm-muted font-mono mt-1">args: {preview(y.args, 300)}</Prim.Box>
-          {y.resolved && <Prim.Box className="text-[10px] text-lm-text font-mono mt-1">→ {preview(y.value, 400)}</Prim.Box>}
+          <Prim.Box className="text-[10px] text-lm-muted font-mono" marginTop="0.25rem">args: {preview(y.args, 300)}</Prim.Box>
+          {y.resolved && <Prim.Box className="text-[10px] text-lm-text font-mono" marginTop="0.25rem">→ {preview(y.value, 400)}</Prim.Box>}
         </Prim.Box>
       ))}
     </Prim.Box>
@@ -128,12 +128,12 @@ export function Inspector(): React.ReactElement {
           <KindBadge kind={node.kind} />
           {node.durationMs !== undefined && <Prim.Text className="text-[10px] text-lm-muted font-mono" marginLeft="auto">{fmtDuration(node.durationMs)}</Prim.Text>}
         </Prim.Row>
-        <Prim.Box className="text-[10px] text-lm-muted font-mono mt-1 truncate" title={node.id}>{node.id}</Prim.Box>
+        <Prim.Box className="text-[10px] text-lm-muted font-mono" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" marginTop="0.25rem" title={node.id}>{node.id}</Prim.Box>
         {node.detail && Object.keys(node.detail).length > 0 && (
-          <Prim.Box className="text-[10px] text-lm-muted font-mono mt-1">{preview(node.detail, 200)}</Prim.Box>
+          <Prim.Box className="text-[10px] text-lm-muted font-mono" marginTop="0.25rem">{preview(node.detail, 200)}</Prim.Box>
         )}
-        {node.error && <Prim.Box className="text-[11px] text-lm-red font-mono mt-1">{preview(node.error, 300)}</Prim.Box>}
-        {node.result !== undefined && <Prim.Box className="text-[10px] text-lm-green font-mono mt-1">result: {preview(node.result, 200)}</Prim.Box>}
+        {node.error && <Prim.Box className="text-[11px] text-lm-red font-mono" marginTop="0.25rem">{preview(node.error, 300)}</Prim.Box>}
+        {node.result !== undefined && <Prim.Box className="text-[10px] text-lm-green font-mono" marginTop="0.25rem">result: {preview(node.result, 200)}</Prim.Box>}
       </Prim.Box>
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
       <Prim.Box className="flex-1 overflow-y-auto p-2">

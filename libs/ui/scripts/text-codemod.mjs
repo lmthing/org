@@ -39,7 +39,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 
 // The `Prim.*` primitives whose `.is_Text` base fights display/white-space/word-wrap AND `margin:0`
 // (B3.1 Text, B3.2 Pressable). Both take the lifted props (TextStyleProps + MarginStyleProps).
-const PRIM_NAMES = new Set(['Text', 'Pressable'])
+const PRIM_NAMES = new Set(['Text', 'Pressable', 'Box'])
 
 // Tailwind margin class → Tamagui margin prop. `.is_Text` sets `margin:0` UNLAYERED, so any margin
 // utility is beaten and must move to a prop (rem value = token × 0.25rem, matching the Tailwind scale;

@@ -1,7 +1,7 @@
 @reference "../../../theme.css";
 
 .page {
-  @apply flex flex-col min-h-screen bg-background;
+  @apply flex! flex-col min-h-screen bg-background;
 }
 
 .page--full {
@@ -9,7 +9,7 @@
 }
 
 .page__header {
-  @apply flex items-center px-6 py-4 border-b border-border;
+  @apply flex! items-center px-6 py-4 border-b border-border;
 }
 
 .page__body {

@@ -3,7 +3,7 @@
 /* ── ThingPanel container ──────────────────────────────────────────── */
 
 .thing-panel {
-  @apply flex;
+  @apply flex!;
   background: var(--background);
 }
 

@@ -5,7 +5,7 @@
 }
 
 .dropdown__trigger {
-  @apply inline-flex items-center gap-1 cursor-pointer;
+  @apply inline-flex! items-center gap-1 cursor-pointer;
 }
 
 .dropdown__content {
@@ -17,7 +17,7 @@
 }
 
 .dropdown__item {
-  @apply relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm
+  @apply relative flex! cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm
          text-foreground outline-none transition-colors
          hover:bg-accent hover:text-accent-foreground
          data-[disabled]:pointer-events-none data-[disabled]:opacity-50;

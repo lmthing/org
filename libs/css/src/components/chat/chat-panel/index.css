@@ -3,12 +3,12 @@
 /* ── ChatPanel ─────────────────────────────────────────────────────── */
 
 .chat-panel {
-  @apply flex flex-col overflow-hidden;
+  @apply flex! flex-col overflow-hidden;
   height: 100%;
 }
 
 .chat-panel__header {
-  @apply flex justify-end;
+  @apply flex! justify-end;
 }
 
 .chat-panel__messages {
@@ -17,7 +17,7 @@
 }
 
 .chat-panel__empty {
-  @apply flex flex-col items-center justify-center text-center;
+  @apply flex! flex-col items-center justify-center text-center;
   height: 100%;
 }
 
@@ -29,7 +29,7 @@
 /* ── Message bubble ────────────────────────────────────────────────── */
 
 .chat-bubble {
-  @apply flex;
+  @apply flex!;
 }
 
 .chat-bubble--user {
@@ -102,7 +102,7 @@
 /* ── Loading dots ──────────────────────────────────────────────────── */
 
 .chat-loading-dots {
-  @apply flex;
+  @apply flex!;
   gap: 0.25rem;
 }
 

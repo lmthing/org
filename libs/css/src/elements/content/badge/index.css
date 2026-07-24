@@ -1,7 +1,7 @@
 @reference "../../../theme.css";
 
 .badge {
-  @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+  @apply inline-flex! items-center rounded-full px-2 py-0.5 text-xs font-medium
          border border-border bg-secondary text-secondary-foreground;
 }
 

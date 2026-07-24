@@ -64,7 +64,7 @@ export default function Slide5BuiltIn3Days() {
       {/* TOP */}
       <Prim.Col className="mb-10" alignItems="center">
         <Prim.Box
-          className="mb-4 text-lg font-bold uppercase tracking-[0.16em]"
+          className="text-lg font-bold uppercase tracking-[0.16em]" marginBottom="1rem"
           style={{ color: colors.brand }}
         >
           What we achieved in 3 days
@@ -79,7 +79,7 @@ export default function Slide5BuiltIn3Days() {
       </Prim.Col>
 
       {/* CARDS */}
-      <Prim.Box className="mb-9 grid w-full grid-cols-3 gap-5">
+      <Prim.Box className="grid w-full grid-cols-3 gap-5" marginBottom="2.25rem">
         {cards.map((card) => (
           <Prim.Col
             key={card.title}
@@ -102,10 +102,10 @@ export default function Slide5BuiltIn3Days() {
               }}
             />
 
-            <Prim.Box className="mb-3 text-5xl">{card.icon}</Prim.Box>
+            <Prim.Box className="text-5xl" marginBottom="0.75rem">{card.icon}</Prim.Box>
 
             <Prim.Box
-              className="mb-1 text-6xl font-extrabold leading-none"
+              className="text-6xl font-extrabold leading-none" marginBottom="0.25rem"
               style={{
                 color: card.highlight ? colors.brand : colors.text,
                 letterSpacing: '-0.03em',
@@ -114,12 +114,12 @@ export default function Slide5BuiltIn3Days() {
               {card.stat}
             </Prim.Box>
 
-            <Prim.Box className="mb-3 text-2xl font-bold" style={{ color: colors.text }}>
+            <Prim.Box className="text-2xl font-bold" marginBottom="0.75rem" style={{ color: colors.text }}>
               {card.title}
             </Prim.Box>
 
             <Prim.Box
-              className="mb-4 h-[1.5px] w-8"
+              className="h-[1.5px] w-8" marginBottom="1rem"
               style={{
                 background: card.highlight
                   ? `color-mix(in srgb, ${colors.brand} 40%, transparent)`

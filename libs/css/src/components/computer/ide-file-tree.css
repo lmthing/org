@@ -5,7 +5,7 @@
 }
 
 .ide-file-tree__header {
-  @apply flex items-center justify-between px-3 py-2 border-b border-border;
+  @apply flex! items-center justify-between px-3 py-2 border-b border-border;
 }
 
 .ide-file-tree__header-title {
@@ -13,7 +13,7 @@
 }
 
 .ide-file-tree__header-actions {
-  @apply flex gap-1;
+  @apply flex! gap-1;
 }
 
 .ide-file-tree__action-btn {
@@ -21,7 +21,7 @@
 }
 
 .ide-file-tree__item {
-  @apply flex items-center gap-1 px-2 py-1 cursor-pointer hover:bg-accent text-sm;
+  @apply flex! items-center gap-1 px-2 py-1 cursor-pointer hover:bg-accent text-sm;
 }
 
 .ide-file-tree__item--active {
@@ -45,7 +45,7 @@
 }
 
 .ide-file-tree__context-item {
-  @apply flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded outline-none;
+  @apply flex! items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded outline-none;
 }
 
 .ide-file-tree__context-item--danger {
@@ -69,5 +69,5 @@
 }
 
 .ide-file-tree__dialog-actions {
-  @apply flex justify-end gap-2 mt-4;
+  @apply flex! justify-end gap-2 mt-4;
 }

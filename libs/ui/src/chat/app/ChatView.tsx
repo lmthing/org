@@ -182,7 +182,7 @@ export function ChatView({
         aria-label="chat header"
       >
         <Prim.Box className="flex-1 min-w-0">
-          <Prim.Box className="text-sm font-medium text-foreground truncate">{title}</Prim.Box>
+          <Prim.Box className="text-sm font-medium text-foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{title}</Prim.Box>
           {/* THING's live "currently doing" line (setActivity, session scope). Sub-agent
               activities are shown by the LiveActivity/WorkBlock panel, not here. */}
           {activity && (

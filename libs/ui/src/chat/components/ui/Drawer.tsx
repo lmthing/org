@@ -25,10 +25,13 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
   return (
     <Prim.Row className="fixed inset-0 z-40">
       <Prim.Box className={cn('absolute inset-0 bg-foreground/10', side === 'left' ? 'right-0' : 'left-0')} onClick={onClose} />
-      <Prim.Box className={cn(
-        'relative flex flex-col bg-card border-border shadow-lg h-full lm-slide-in-right',
+      <Prim.Box
+        display="flex"
+        {...(side === 'right' ? { marginLeft: 'auto' } : { marginRight: 'auto' })}
+        className={cn(
+        'relative flex-col bg-card border-border shadow-lg h-full lm-slide-in-right',
         width,
-        side === 'right' ? 'ml-auto border-l' : 'mr-auto border-r',
+        side === 'right' ? 'border-l' : 'border-r',
         className,
       )}>
         {title && (

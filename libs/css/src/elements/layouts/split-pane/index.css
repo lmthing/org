@@ -1,7 +1,7 @@
 @reference "../../../theme.css";
 
 .split-pane {
-  @apply flex flex-row h-full overflow-hidden;
+  @apply flex! flex-row h-full overflow-hidden;
 }
 
 .split-pane__primary {

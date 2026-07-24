@@ -7,11 +7,11 @@
 }
 
 .create-field-inline__header-row {
-  @apply flex justify-between items-center;
+  @apply flex! justify-between items-center;
 }
 
 .create-field-inline__title-row {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.75rem;
 }
 
@@ -26,7 +26,7 @@
 }
 
 .create-field-inline__actions {
-  @apply flex;
+  @apply flex!;
 }
 
 .create-field-inline__action-btn {
@@ -44,7 +44,7 @@
 }
 
 .delete-modal__header-content {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
 }
 
@@ -73,7 +73,7 @@
 }
 
 .delete-modal__footer {
-  @apply flex justify-end;
+  @apply flex! justify-end;
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border);
@@ -99,7 +99,7 @@
 }
 
 .dir-metadata__color-row {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
 }
 
@@ -116,7 +116,7 @@
 }
 
 .dir-metadata__checkbox-row {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
 }
 
@@ -125,7 +125,7 @@
 }
 
 .dir-metadata__footer {
-  @apply flex justify-end;
+  @apply flex! justify-end;
   padding-top: 0.5rem;
 }
 
@@ -172,7 +172,7 @@
 }
 
 .new-file-modal__footer {
-  @apply flex justify-end;
+  @apply flex! justify-end;
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border);
@@ -205,7 +205,7 @@
 }
 
 .rename-modal__footer {
-  @apply flex justify-end;
+  @apply flex! justify-end;
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border);
@@ -219,7 +219,7 @@
 }
 
 .unsaved-modal__header-content {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
 }
 
@@ -239,7 +239,7 @@
 }
 
 .unsaved-modal__footer {
-  @apply flex justify-end;
+  @apply flex! justify-end;
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border);
@@ -249,11 +249,11 @@
 /* ── TopicEditor ──────────────────────────────────────────────────── */
 
 .topic-editor__header {
-  @apply flex justify-between items-center;
+  @apply flex! justify-between items-center;
 }
 
 .topic-editor__header-actions {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
 }
 
@@ -294,7 +294,7 @@
 }
 
 .file-metadata__footer {
-  @apply flex justify-end;
+  @apply flex! justify-end;
 }
 
 /* ── MarkdownPreview ──────────────────────────────────────────────── */
@@ -313,7 +313,7 @@
 /* ── MarkdownToolbar ──────────────────────────────────────────────── */
 
 .markdown-toolbar {
-  @apply flex items-center flex-wrap;
+  @apply flex! items-center flex-wrap;
   gap: 0.125rem;
   padding: 0.25rem 0.5rem;
   border-bottom: 1px solid var(--border);
@@ -331,7 +331,7 @@
 }
 
 .markdown-toolbar__modes {
-  @apply flex;
+  @apply flex!;
   gap: 0.125rem;
 }
 
@@ -352,7 +352,7 @@
 /* ── TopicViewer ──────────────────────────────────────────────────── */
 
 .topic-viewer__empty {
-  @apply flex flex-col items-center justify-center;
+  @apply flex! flex-col items-center justify-center;
   padding: 3rem;
 }
 
@@ -363,15 +363,15 @@
 
 .topic-viewer__empty-fields {
   margin-top: 1rem;
-  @apply flex flex-wrap justify-center;
+  @apply flex! flex-wrap justify-center;
 }
 
 .topic-viewer__header {
-  @apply flex justify-between items-center;
+  @apply flex! justify-between items-center;
 }
 
 .topic-viewer__header-actions {
-  @apply flex items-center;
+  @apply flex! items-center;
   gap: 0.5rem;
 }
 

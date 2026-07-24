@@ -1,12 +1,11 @@
 import * as React from 'react'
 import {
-  Box,
   Link,
   List,
   ListItem,
 } from '../../../libs/ui/src/elements/primitives/index'
 
-// NOTE: Row/Col (B2), Text (B3.1) AND Pressable (B3.2) are now real Tamagui primitives. Their
+// NOTE: Row/Col (B2), Text (B3.1), Pressable (B3.2) AND Box (B3.3) are now real Tamagui primitives. Their
 // box-model / text-flow parity is proven where it can be proven FAITHFULLY — under the real theme.css
 // + Tailwind PREFLIGHT (which resets box-sizing/margins/the button UA styling), i.e. the
 // apps/web/b0-probe slices (surface + text-variants + pressable-variants) and the eq-fixtures. This
@@ -36,6 +35,13 @@ const PassPressable = React.forwardRef<
 >(({ as, ...props }, ref) => React.createElement((as ?? 'button') as string, { ...props, ref }))
 PassPressable.displayName = 'PassPressable'
 const Pressable = PassPressable
+
+const PassBox = React.forwardRef<
+  HTMLElement,
+  React.HTMLAttributes<HTMLElement> & { as?: string; open?: boolean }
+>(({ as, ...props }, ref) => React.createElement((as ?? 'div') as string, { ...props, ref }))
+PassBox.displayName = 'PassBox'
+const Box = PassBox
 
 /**
  * Frozen fixtures for the visual/computed-style harness (§3.1).

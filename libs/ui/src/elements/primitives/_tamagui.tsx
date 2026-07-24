@@ -55,8 +55,6 @@ const webBlockCompat = { flexShrink: 1, minWidth: 'auto', minHeight: 'auto' } as
 const RowStyled = styled(View, { name: 'Row', flexDirection: 'row', ...webBlockCompat }) as unknown as React.ComponentType<any>
 /** Col — `styled(View,{flexDirection:'column'})` ≡ `<div class="flex flex-col">`. */
 const ColStyled = styled(View, { name: 'Col', flexDirection: 'column', ...webBlockCompat }) as unknown as React.ComponentType<any>
-/** Box — `styled(View,{display:'block'})` ≡ a block `<div>`. */
-const BoxStyled = styled(View, { name: 'Box', display: 'block', ...webBlockCompat }) as unknown as React.ComponentType<any>
 
 export const Row = React.forwardRef<HTMLDivElement, LayoutPrimitiveProps>((props, ref) =>
   React.createElement(RowStyled, { ...props, ref }),
@@ -216,4 +214,53 @@ export const Pressable = React.forwardRef<HTMLElement, PressablePrimitiveProps>(
 })
 Pressable.displayName = 'Pressable'
 
-export { BoxStyled }
+// ── Box (block container) ─────────────────────────────────────────────────────────────────────────
+//
+// SAME per-tag `createComponent` + **`isText: true`** design as Text/Pressable — deliberately NOT
+// `styled(View)`. A `styled(View)` block Box carries `.is_View`, whose shared rule ALSO forces
+// `font-family` + `line-height` onto EVERY box (wrong for a plain `<div>`, which INHERITS both; proven
+// in `apps/web/b0-probe/box-variants` — `.is_View` breaks a `font-mono`/`text-*` box, `.is_Text`
+// matches). `.is_Text` forces none of font/line-height/flex-shrink/min-width, so a block Box reproduces
+// a plain div AND the flex-child classes (`shrink-*`/`min-*`/`self-*`/`items-*`) just work as classes.
+// Its collisions are `.is_Text`'s unlayered `margin: 0` (lifted to props by the codemod) and — the
+// reason B3.3 needed a design-system change — the boosted default `display:block` overriding `display`
+// set by the design system's own `@apply flex/grid` component/BEM CSS; those `@apply` display utilities
+// were made `!important` (Tailwind `!` modifier) so author CSS wins. `display` defaults to `block`
+// (`summary` → `list-item`).
+export type BoxAs =
+  | 'div' | 'section' | 'nav' | 'header' | 'footer' | 'aside' | 'article' | 'main'
+  | 'figure' | 'figcaption' | 'blockquote' | 'details' | 'summary' | 'dl' | 'fieldset'
+
+export type BoxPrimitiveProps = React.HTMLAttributes<HTMLElement> &
+  TextStyleProps &
+  LayoutStyleProps &
+  MarginStyleProps & {
+    /** Semantic host tag to render. Defaults to `div`. */
+    as?: BoxAs
+    /** `<details open>` support. */
+    open?: boolean
+  }
+
+const BOX_TAGS: BoxAs[] = [
+  'div', 'section', 'nav', 'header', 'footer', 'aside', 'article', 'main',
+  'figure', 'figcaption', 'blockquote', 'details', 'summary', 'dl', 'fieldset',
+]
+
+const makeBoxTag = (tag: BoxAs) =>
+  createComponent({
+    Component: tag as never,
+    isText: true,
+    isReactNative: false,
+    acceptsClassName: true,
+    componentName: 'Box',
+    defaultProps: { display: tag === 'summary' ? 'list-item' : 'block', ...baseTextResets },
+  }) as unknown as React.ComponentType<any>
+
+const BOX_COMPONENTS: Record<string, React.ComponentType<any>> = {}
+for (const t of BOX_TAGS) BOX_COMPONENTS[t] = makeBoxTag(t)
+
+export const Box = React.forwardRef<HTMLElement, BoxPrimitiveProps>(({ as, ...props }, ref) => {
+  const Comp = BOX_COMPONENTS[as ?? 'div'] ?? BOX_COMPONENTS.div
+  return React.createElement(Comp, { ...props, ref })
+})
+Box.displayName = 'Box'
