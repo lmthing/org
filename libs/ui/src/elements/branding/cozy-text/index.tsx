@@ -1,91 +1,86 @@
-import '@lmthing/css/elements/branding/cozy-text/index.css'
-import { cn } from '../../../lib/utils'
+import * as React from 'react'
+import * as Prim from '../../primitives/index'
 
+/**
+ * CozyThingText — the idiomatic `.cozy-text`. Renders `Prim.Text` (real `<span>`s via
+ * `createComponent`) with the per-letter brand colors as `$`-token PROPS from cozy-text.styled.tsx
+ * (`.cozy-text--neutral`/`--brand-1..5` → the `tone` map). CSS deleted.
+ */
 export interface CozyThingTextProps {
   text?: string
   className?: string
 }
 
-function LmtBrand() {
-  return (
-    <>
-      <span className="cozy-text--neutral">lm</span>
-      <span className="cozy-text--brand-1">t</span>
-    </>
-  )
+type Tone = 'neutral' | 'brand-1' | 'brand-2' | 'brand-3' | 'brand-4' | 'brand-5'
+const TONE_COLOR: Record<Tone, string> = {
+  neutral: '$foreground',
+  'brand-1': '$brand-1',
+  'brand-2': '$brand-2',
+  'brand-3': '$brand-3',
+  'brand-4': '$brand-4',
+  'brand-5': '$brand-5',
 }
 
-function ThingBrand() {
-  return (
-    <>
-      <span className="cozy-text--brand-1">t</span>
-      <span className="cozy-text--brand-2">h</span>
-      <span className="cozy-text--brand-3">i</span>
-      <span className="cozy-text--brand-4">n</span>
-      <span className="cozy-text--brand-5">g</span>
-    </>
-  )
-}
+const Toned = ({ tone, children }: { tone: Tone; children: React.ReactNode }) => (
+  <Prim.Text color={TONE_COLOR[tone]}>{children}</Prim.Text>
+)
 
-function LmthingBrand() {
-  return (
-    <>
-      <span className="cozy-text--neutral">lm</span>
-      <ThingBrand />
-    </>
-  )
-}
+const LmtBrand = () => (
+  <>
+    <Toned tone="neutral">lm</Toned>
+    <Toned tone="brand-1">t</Toned>
+  </>
+)
+
+const ThingBrand = () => (
+  <>
+    <Toned tone="brand-1">t</Toned>
+    <Toned tone="brand-2">h</Toned>
+    <Toned tone="brand-3">i</Toned>
+    <Toned tone="brand-4">n</Toned>
+    <Toned tone="brand-5">g</Toned>
+  </>
+)
+
+const LmthingBrand = () => (
+  <>
+    <Toned tone="neutral">lm</Toned>
+    <ThingBrand />
+  </>
+)
+
+// The `.cozy-text` wrapper — a semibold span; `className` passes through (surface spacing/size).
+const Wrapper = ({ className, children }: { className?: string; children: React.ReactNode }) => (
+  <Prim.Text fontWeight="$semibold" className={className}>{children}</Prim.Text>
+)
 
 export function CozyThingText({ text = '', className }: CozyThingTextProps) {
   const lowerText = text.toLowerCase().trim()
 
-  if (lowerText === 'lmt') {
-    return (
-      <span className={cn('cozy-text', className)}>
-        <LmtBrand />
-      </span>
-    )
-  }
+  if (lowerText === 'lmt') return <Wrapper className={className}><LmtBrand /></Wrapper>
+  if (lowerText === 'lmthing') return <Wrapper className={className}><LmthingBrand /></Wrapper>
+  if (lowerText === 'thing') return <Wrapper className={className}><ThingBrand /></Wrapper>
 
-  if (lowerText === 'lmthing') {
-    return (
-      <span className={cn('cozy-text', className)}>
-        <LmthingBrand />
-      </span>
-    )
-  }
-
-  if (lowerText === 'thing') {
-    return (
-      <span className={cn('cozy-text', className)}>
-        <ThingBrand />
-      </span>
-    )
-  }
-
-  // Handle "lmthing.suffix" patterns (e.g. "lmthing.studio", "lmthing.computer")
   if (lowerText.startsWith('lmthing.')) {
     const suffix = text.trim().slice(8) // preserve original casing of suffix
     return (
-      <span className={cn('cozy-text', className)}>
+      <Wrapper className={className}>
         <LmthingBrand />
-        <span className="cozy-text--neutral">.{suffix}</span>
-      </span>
+        <Toned tone="neutral">.{suffix}</Toned>
+      </Wrapper>
     )
   }
-
-  // Handle "lmt.suffix" patterns (e.g. "lmt.studio")
   if (lowerText.startsWith('lmt.')) {
     const suffix = text.trim().slice(4)
     return (
-      <span className={cn('cozy-text', className)}>
+      <Wrapper className={className}>
         <LmtBrand />
-        <span className="cozy-text--neutral">.{suffix}</span>
-      </span>
+        <Toned tone="neutral">.{suffix}</Toned>
+      </Wrapper>
     )
   }
 
-  return <span className={className}>{text}</span>
+  return <Prim.Text className={className}>{text}</Prim.Text>
 }
 
 export default CozyThingText

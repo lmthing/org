@@ -1,7 +1,10 @@
-import '@lmthing/css/elements/typography/heading/index.css'
 import * as React from 'react'
-import { cn } from '../../../lib/utils'
+import * as Prim from '../../primitives/index'
 
+/**
+ * Heading — the idiomatic `.heading-{level}`. Renders `Prim.Text` as a real `<h1..h4>` (runtime tag
+ * via `createComponent`) with the styling as `$`-token PROPS from heading.styled.tsx. CSS deleted.
+ */
 export type HeadingLevel = 1 | 2 | 3 | 4
 
 export interface HeadingProps extends React.HTMLAttributes<HTMLHeadingElement> {
@@ -9,19 +12,20 @@ export interface HeadingProps extends React.HTMLAttributes<HTMLHeadingElement> {
   muted?: boolean
 }
 
-function Heading({ className, level = 2, muted, children, ...props }: HeadingProps) {
-  const Tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4'
+const LEVEL_SIZE: Record<HeadingLevel, string> = { 1: '$3xl', 2: '$2xl', 3: '$xl', 4: '$base' }
+
+function Heading({ level = 2, muted, children, ...props }: HeadingProps) {
   return (
-    <Tag
-      className={cn(
-        `heading-${level}`,
-        muted && 'heading--muted',
-        className
-      )}
-      {...props}
+    <Prim.Text
+      as={`h${level}` as 'h1' | 'h2' | 'h3' | 'h4'}
+      fontWeight="$semibold"
+      letterSpacing="$tight"
+      fontSize={LEVEL_SIZE[level]}
+      color={muted ? '$muted-foreground' : '$foreground'}
+      {...(props as Record<string, unknown>)}
     >
       {children}
-    </Tag>
+    </Prim.Text>
   )
 }
 
