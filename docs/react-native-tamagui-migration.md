@@ -67,9 +67,9 @@
 > libs/ui 32/32 · visual 54/54 · typecheck 6/6 · libs/ui tsc zero net-new · lint:rn · lint:tokens ·
 > app build.
 >
-> **➡ NEXT SESSION: start at "B3.2 — Pressable" (Part III).** Remaining B3: `Pressable` (probe first —
-> a `<button>`/`<a>` is inline-block/inline, the View base is flex; likely the same lift pattern as
-> Text, and note the compile-only-`tag` gotcha applies → use the per-tag `createComponent` approach);
+> **➡ NEXT: B3.3 — block `Box`.** ✅ B3.1 (Text) and ✅ B3.2 (Pressable) are DONE (per-tag
+> `createComponent`, `isText:true`, conflict-class lift; Pressable added the `!important` trick for
+> variant-display classes). Remaining B3:
 > block `Box` (B3.3 — a 2nd codemod pass for block Boxes that are flex CHILDREN carrying
 > `min-*`/`shrink-*`/`items-*`; `BoxStyled` is already defined in `_tamagui.tsx`); Radix→Tamagui (8
 > shared `elements/`, B3.4); delete superseded CSS (B3.5). Web renders correctly TODAY (Pressable/Box
@@ -1276,18 +1276,26 @@ harness has NO preflight, so a real Tamagui Text there would diff on preflight-o
 faithful proof is `b0-probe/text-variants` under real theme.css). Gates: libs/ui 32/32 · visual 54/54 ·
 typecheck 6/6 · libs/ui tsc zero net-new · lint:rn · lint:tokens · app build · probe 21/21.
 
-### B3.2 — `Pressable` → Tamagui  (PROBE FIRST — apply B3.1's two lessons)
+### B3.2 — `Pressable` → Tamagui  ✅ **DONE**
 
-Not yet done. A `<button>`/`<a>` is `display:inline-block`/`inline`; a Tamagui `View` base is `flex`,
-so the display + button reset collide the same way. **Mirror B3.1 exactly:** (1) build the ref-vs-cand
-probe FIRST and have it assert the **tag name** as well as computed style (the `tag` prop is
-compile-only — use the per-tag `createComponent` approach, `isText:false`/View base for a button, or
-test whether a button wants text vs view semantics); (2) expect to lift `display` (and any
-`inline-*`/`hidden`) conflict classes to props via a `pressable-codemod` in the same shape as
-`text-codemod.mjs`. Map `as` (button/a/div) → the per-tag component; keep `onClick` (Tamagui passes DOM
-handlers on web); the `.native.tsx` fork already maps `onPress`. Pressable is used heavily (chat's
-`<Button>` spreads button props), so verify a few real ones. **Do NOT trust a computed-style-only
-probe** — B3.1 proved that lets a tag regression through.
+Same design as `Text`, and the key decision was made for the same reason: **`isText: true`, NOT a View
+base.** A `<button>` carries `text-sm`/`text-xs`, and the `.is_View` base forces `font-family`+
+`line-height` (the B2 collision) — the `.is_Text` base leaves them alone, so the button inherits font
+like a preflight-reset `<button>`. `.is_Text` also sets no flex-shrink/min-width, so a button flex-child
+shrinks like a raw one (no compat resets). The button UA reset (border/background/appearance/cursor)
+comes from Tailwind PREFLIGHT on the real `<button>` tag — applied to the Tamagui button identically.
+Per-tag `createComponent` (button/a/div) with default `display` = the plain tag's default
+(`inline-block`/`inline`/`block`); conflict classes lifted to props by the (now generalised)
+`text-codemod.mjs` (**4 auto + 5 manual**: 3 were `inline-flex`/`truncate` inside a `cn()`).
+
+**New sub-finding — variant-display classes (`group-hover:flex`, `md:hidden`) can't be a static prop
+AND can't be a plain class** (the `:root`-boosted default display beats an unlayered→layered variant
+utility). The fix is Tailwind's **`!` important modifier** (`!hidden`, `group-hover:!flex`,
+`md:!hidden`, `!flex`): `!important` beats BOTH Tamagui's unlayered base AND the boosted default (both
+normal declarations) — verified in `pressable-variants.mjs` (`important-hidden`/`important-flex`). Only
+2 such cases exist in the whole surface set. Proof: `apps/web/b0-probe/pressable-variants.mjs` (real
+`Prim.Pressable`, tag NAME + computed style, incl. the text-size button font/line-height cases) — 9/9.
+Gates: libs/ui 32/32 · visual 54/54 · typecheck 6/6 · libs/ui tsc zero net-new · lint:rn · app build.
 
 ### B3.3 — block `Box` → Tamagui  (needs a SECOND codemod pass)
 

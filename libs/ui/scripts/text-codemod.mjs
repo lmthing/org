@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /**
- * text-codemod.mjs — Part III / B3.1 of the Tamagui migration.
+ * text-codemod.mjs — Part III / B3.1–B3.2 of the Tamagui migration.
  *
- * The web `Text` primitive is now a Tamagui `styled(Text)` whose `.is_Text` base is injected
+ * Handles BOTH `Prim.Text` (B3.1) and `Prim.Pressable` (B3.2) — they share the `.is_Text` base and so
+ * the SAME conflict-class → prop lift. Target elements are configured in `PRIM_NAMES` below.
+ *
+ * The web `Text`/`Pressable` primitives are Tamagui components whose `.is_Text` base is injected
  * UNLAYERED and so BEATS Tailwind utilities for the three props it sets — `display` (inline),
  * `white-space` (pre-wrap) and `word-wrap` (break-word). The primitive already neutralises those to
  * plain-tag semantics (per-tag `display`, `white-space`/`word-wrap` → `inherit`), which is correct for
@@ -33,6 +36,10 @@
  */
 import ts from 'typescript'
 import { readFileSync, writeFileSync } from 'node:fs'
+
+// The `Prim.*` primitives whose `.is_Text` base fights display/white-space/word-wrap (B3.1 Text, B3.2
+// Pressable). Both take the same lifted props (their primitive prop types include TextStyleProps).
+const PRIM_NAMES = new Set(['Text', 'Pressable'])
 
 const DISPLAY = {
   block: 'block', 'inline-block': 'inline-block', inline: 'inline',
@@ -83,12 +90,12 @@ function transform(file, text) {
   const skips = []
   let count = 0
 
-  const isPrimText = (t) =>
+  const isPrimTarget = (t) =>
     t && ts.isPropertyAccessExpression(t) && ts.isIdentifier(t.expression) &&
-    t.expression.text === 'Prim' && t.name.text === 'Text'
+    t.expression.text === 'Prim' && PRIM_NAMES.has(t.name.text)
 
   const handle = (opening) => {
-    if (!isPrimText(opening.tagName)) return
+    if (!isPrimTarget(opening.tagName)) return
     const attr = opening.attributes.properties.find(
       (p) => ts.isJsxAttribute(p) && p.name.getText(sf) === 'className',
     )
@@ -143,8 +150,8 @@ for (const file of files) {
   if (skips.length) { totalSkips += skips.length; for (const s of skips) console.log(`  SKIP ${file}:${s.line} — ${s.why}`) }
   if (changed) {
     total += count
-    if (check) console.log(`${file}: ${count} Prim.Text conflict-class → props`)
-    else { writeFileSync(file, text); console.log(`✓ ${file}: ${count} Prim.Text conflict-class → props`) }
+    if (check) console.log(`${file}: ${count} Prim.Text/Pressable conflict-class → props`)
+    else { writeFileSync(file, text); console.log(`✓ ${file}: ${count} Prim.Text/Pressable conflict-class → props`) }
   }
 }
 console.log(`[text-codemod] ${check ? 'would migrate' : 'migrated'} ${total} Prim.Text in ${files.length} files; ${totalSkips} skipped for manual review`)

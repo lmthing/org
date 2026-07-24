@@ -30,8 +30,9 @@ export function Button({ variant = 'default', size = 'md', loading, className, c
     <Prim.Pressable
       {...props}
       disabled={disabled || loading}
+      display="inline-flex"
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none select-none',
+        'items-center justify-center gap-1.5 font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none select-none',
         variants[variant],
         sizes[size],
         className,

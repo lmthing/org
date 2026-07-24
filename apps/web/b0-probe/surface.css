@@ -3,3 +3,4 @@
 @import '@lmthing/css/theme.css';
 @source inline("bg-background items-center");
 @source inline("text-2xl font-bold text-foreground");
+@source inline("!hidden !flex");

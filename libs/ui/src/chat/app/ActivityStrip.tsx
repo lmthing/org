@@ -39,8 +39,9 @@ export function ActivityStrip({ nodeIds, className }: ActivityStripProps) {
             key={node.id}
             onClick={() => handleChip(node.id)}
             data-node-id={node.id}
+            display="inline-flex"
             className={cn(
-              'inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs transition-all hover:opacity-80',
+              'items-center gap-1 px-2 py-0.5 rounded-full border text-xs transition-all hover:opacity-80',
               STATUS_COLOR[node.status] ?? STATUS_COLOR.done,
             )}
           >

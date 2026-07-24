@@ -292,7 +292,7 @@ export function ChatView({
       {!atBottom && (
         <Prim.Pressable
           onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
-          className="absolute bottom-24 right-6 w-8 h-8 rounded-full bg-card border border-border shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors z-10"
+          className="absolute bottom-24 right-6 w-8 h-8 rounded-full bg-card border border-border shadow-md items-center justify-center text-muted-foreground hover:text-foreground transition-colors z-10" display="flex"
           aria-label="Scroll to bottom"
         >
           ↓

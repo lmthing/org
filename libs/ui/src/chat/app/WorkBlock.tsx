@@ -92,7 +92,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
         </Prim.Text>
         <Prim.Pressable
           onClick={openInspector}
-          className="max-w-[180px] shrink min-w-0 truncate text-left font-mono text-muted-foreground transition-colors hover:text-foreground"
+          className="max-w-[180px] shrink min-w-0 text-left font-mono text-muted-foreground transition-colors hover:text-foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"
           title={`${node.label} — open in inspector`}
         >
           {node.label}

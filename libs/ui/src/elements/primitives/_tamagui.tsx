@@ -144,4 +144,58 @@ export const Text = React.forwardRef<HTMLElement, TextPrimitiveProps>(({ as, blo
 })
 Text.displayName = 'Text'
 
+// ── Pressable ───────────────────────────────────────────────────────────────────────────────────
+//
+// The clickable primitive (`<button>` / `<a>` / `<div role>`). Same design as `Text`, and for the
+// same two reasons: (1) per-tag `createComponent` so the REAL host element is runtime-guaranteed (the
+// `tag` prop is compile-only); (2) **`isText: true`** — a `<button>` carries `text-sm`/`text-xs`, and
+// the `.is_View` base would force `font-family` + `line-height` onto it (the B2 collision), whereas the
+// `.is_Text` base leaves font/line-height alone so the button inherits them like a preflight-reset
+// `<button>` does. `.is_Text` sets NO flex-shrink / min-width (unlike `.is_View`), so a button as a flex
+// child shrinks like a raw one with no compat resets needed. The button UA reset (border/background/
+// appearance/cursor) comes from Tailwind PREFLIGHT targeting the real `<button>` tag — applied to the
+// Tamagui button identically. `display` is baked per tag to a plain tag's default (button →
+// `inline-block`, a → `inline`, div → `block`); a caller-lifted `display`/`whiteSpace`/… (from the
+// codemod / wrapper components like chat's `<Button>`, which pass `display="inline-flex"`) overrides it.
+// `items-*`/`justify-*`/`gap-*` stay classes — `.is_Text` never sets them, so there is no conflict.
+export type PressableAs = 'button' | 'a' | 'div'
+export type PressablePrimitiveProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
+  Pick<
+    React.AnchorHTMLAttributes<HTMLAnchorElement>,
+    'href' | 'target' | 'rel' | 'download' | 'referrerPolicy' | 'hrefLang'
+  > &
+  TextStyleProps &
+  LayoutStyleProps & {
+    /** Host tag to render. Defaults to `button`. Use `a` for links, `div` for clickable boxes. */
+    as?: PressableAs
+  }
+
+const PRESSABLE_DISPLAY: Record<PressableAs, 'inline-block' | 'inline' | 'block'> = {
+  button: 'inline-block',
+  a: 'inline',
+  div: 'block',
+}
+
+const makePressableTag = (tag: PressableAs) =>
+  createComponent({
+    Component: tag as never,
+    isText: true,
+    isReactNative: false,
+    acceptsClassName: true,
+    componentName: 'Pressable',
+    defaultProps: { display: PRESSABLE_DISPLAY[tag], ...baseTextResets },
+  }) as unknown as React.ComponentType<any>
+
+const PRESSABLE_COMPONENTS: Record<PressableAs, React.ComponentType<any>> = {
+  button: makePressableTag('button'),
+  a: makePressableTag('a'),
+  div: makePressableTag('div'),
+}
+
+export const Pressable = React.forwardRef<HTMLElement, PressablePrimitiveProps>(({ as, ...props }, ref) => {
+  const Comp = PRESSABLE_COMPONENTS[as ?? 'button'] ?? PRESSABLE_COMPONENTS.button
+  return React.createElement(Comp, { ...props, ref })
+})
+Pressable.displayName = 'Pressable'
+
 export { BoxStyled }

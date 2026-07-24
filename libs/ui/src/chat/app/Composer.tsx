@@ -379,7 +379,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         <Prim.Pressable
           onClick={handleSend}
           disabled={isDisabled || attaching || (!text.trim() && attachments.length === 0)}
-          className="shrink-0 mb-0.5 w-7 h-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center transition-all disabled:opacity-40 hover:opacity-90"
+          className="shrink-0 mb-0.5 w-7 h-7 rounded-lg bg-primary text-primary-foreground items-center justify-center transition-all disabled:opacity-40 hover:opacity-90" display="flex"
           aria-label="Send message"
         >
           <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>

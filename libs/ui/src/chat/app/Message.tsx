@@ -101,7 +101,7 @@ function AttributionButton({ nodeId, label }: { nodeId: string; label: string })
   return (
     <Prim.Pressable
       onClick={() => { selectNode(nodeId, true); setDevPanelOpen(true); }}
-      className="text-xs text-muted-foreground hover:text-foreground font-mono mb-1 block transition-colors"
+      className="text-xs text-muted-foreground hover:text-foreground font-mono mb-1 transition-colors" display="block"
       data-node-id={nodeId}
     >
       {label}
