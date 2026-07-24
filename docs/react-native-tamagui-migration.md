@@ -67,19 +67,37 @@
 > libs/ui 32/32 · visual 54/54 · typecheck 6/6 · libs/ui tsc zero net-new · lint:rn · lint:tokens ·
 > app build.
 >
-> **➡ NEXT: B3.3 — block `Box`.** ✅ B3.1 (Text) and ✅ B3.2 (Pressable) are DONE (per-tag
-> `createComponent`, `isText:true`, conflict-class lift; Pressable added the `!important` trick for
-> variant-display classes). Remaining B3:
-> block `Box` (B3.3 — a 2nd codemod pass for block Boxes that are flex CHILDREN carrying
-> `min-*`/`shrink-*`/`items-*`; `BoxStyled` is already defined in `_tamagui.tsx`); Radix→Tamagui (8
-> shared `elements/`, B3.4); delete superseded CSS (B3.5). Web renders correctly TODAY (Pressable/Box
-> stay passthrough on web; native uses their `.native.tsx` forks). Tools built: `flexbox-codemod.mjs`,
-> **`text-codemod.mjs`**, `apps/web/b0-probe/` ref-vs-candidate probes (+ **`text-variants`**),
-> `tamagui-web.config.ts`. **Read Part III "B — EXECUTION ORDER & VERIFICATION" before continuing** —
-> it has the grounded ordering and the two hard, learned-the-hard-way rules now proven for Text: the
-> unlayered-base coexistence rule (lift conflict classes to props) and the compile-only-`tag` rule
-> (per-tag `createComponent`). A probe that measures only computed style is INSUFFICIENT — it must also
-> assert the host tag name (that is how the `tag` regression hid).
+> **✅ B3.1 (Text) + B3.2 (Pressable) DONE. ⏸ B3.3 (block `Box`) INTENTIONALLY DEFERRED — Box stays
+> web-passthrough** (native already renders it via `box/index.native.tsx`). **Also landed: a margin
+> bug-fix** — Tamagui's `.is_Text` base sets `margin: 0` UNLAYERED, which was silently ZEROING Tailwind
+> `m*` classes on the already-shipped Text/Pressable (a real regression the earlier probes missed
+> because they carried no margin class). Fixed by lifting margin classes to Tamagui margin props (rem =
+> token × 0.25rem), via the generalised `text-codemod.mjs` (19 auto + 4 manual); proven in
+> `text-variants.mjs` `margin-*`. Custom-CSS margins (BEM `@apply`) are unaffected — they win by source
+> order; only inline Tailwind margin utilities collide.
+>
+> **Why B3.3 is deferred (grounded, `apps/web/b0-probe/box-variants.mjs`):** making block `Box` Tamagui
+> is the FIRST primitive where the base collides with the DESIGN SYSTEM'S OWN CSS, not just inline
+> Tailwind. Two findings: (1) a `styled(View)` block Box gets the `.is_View` font-family + line-height
+> force (wrong for a plain `<div>`, which inherits both) → the correct base is `.is_Text` (matches). (2)
+> BUT with either base, the Box's boosted default `display:block` OVERRIDES `display` set by the ~59
+> `libs/css` component/element classes that `@apply flex/grid/…` (studio + computer BEM boxes) — a plain
+> `<div>` gains nothing visible from Tamagui on web, yet this breaks dozens of custom-CSS layouts. The
+> clean fixes are either (a) keep Box web-passthrough (chosen — zero design-system churn, native via the
+> fork), or (b) add Tailwind's `!` important modifier to every colliding `@apply` display utility across
+> ~59 design-system files (verified to work, `box-variants` `bem-bang`, but permanently peppers the
+> design system with `!important`). **(b) needs an explicit product/design decision — do not do it
+> without one.** The `box-variants.mjs` probe reproduces all of this.
+>
+> **➡ NEXT: B3.4 — Radix overlays → Tamagui** (8 shared `elements/`), then B3.5 (delete superseded CSS).
+> Web renders correctly TODAY (Box stays passthrough; native uses `.native.tsx` forks). Tools built:
+> `flexbox-codemod.mjs`, **`text-codemod.mjs`** (Text/Pressable display/whitespace/wrap/margin lift),
+> `apps/web/b0-probe/` probes (**`text-variants`/`pressable-variants`/`box-variants`**),
+> `tamagui-web.config.ts`. **Read Part III "B — EXECUTION ORDER & VERIFICATION" first** — the hard rules
+> now proven: the unlayered-base coexistence rule (lift conflict classes to props), the compile-only
+> `tag` rule (per-tag `createComponent`), the `isText:true` choice for text-carrying primitives (avoids
+> the `.is_View` font/line-height force), and that a probe must assert the host TAG NAME, not only
+> computed style (that is how the `tag` regression hid).
 > Target branch: `claude/react-native-mobile-exploration-vafu9o` (plan); implementation on
 > `claude/tamagui-migration-plan-66u8sw`.
 > Scope: make `libs/ui/src/chat/**`, `libs/ui/src/studio/**`, **and `libs/ui/src/computer/**`** render on
@@ -1297,17 +1315,39 @@ normal declarations) — verified in `pressable-variants.mjs` (`important-hidden
 `Prim.Pressable`, tag NAME + computed style, incl. the text-size button font/line-height cases) — 9/9.
 Gates: libs/ui 32/32 · visual 54/54 · typecheck 6/6 · libs/ui tsc zero net-new · lint:rn · app build.
 
-### B3.3 — block `Box` → Tamagui  (needs a SECOND codemod pass)
+### B3.3 — block `Box` → Tamagui  ⏸ **DEFERRED (grounded decision — needs product sign-off for the CSS patch)**
 
-`Box` (block) is `styled(View,{display:'block', …webBlockCompat})` (proven ≡ a block `<div>` in
-`equivalence.spec` `eq-box`). Repoint `box/index.tsx` to `_tamagui.tsx`'s `BoxStyled` behind a
-forwardRef keeping `BoxProps` (`as`, `open`). **But**: a block `Box` that is a flex CHILD carrying
-`min-w-0`/`min-h-*`/`shrink-*`/`self-*`/`items-*` will have those overridden by the `.is_View` base
-(same reason as B2). So FIRST run a codemod pass over the surfaces that lifts those exact classes on
-`Prim.Box` to props (reuse `flexbox-codemod.mjs`'s `classify` logic, but WITHOUT requiring the `flex`
-token and WITHOUT renaming the tag — just move `min-*`/`shrink-*`/`self-*`/`items-*` to props on
-`Prim.Box`). Measure the population first: `grep -rn 'Prim\.Box' … | grep -E 'min-w|min-h|shrink|self-|items-'`.
-Then swap `box/index.tsx`. Gate as above. (Pure block Boxes with only paint/spacing classes are safe.)
+**Status: Box stays web-passthrough; native renders it via `box/index.native.tsx` (a Tamagui `View`).**
+The design work is done and the correct base is known, but completing the WEB swap requires a
+design-system-wide CSS change that shouldn't be made without an explicit decision. Everything below is
+grounded in `apps/web/b0-probe/box-variants.mjs` (reproduces it all).
+
+**What was learned:**
+- `styled(View)` is the WRONG base for a block Box. The `.is_View` shared rule
+  (`.font_*, .is_View { font-family; line-height }`) forces `font-family` + `line-height` onto EVERY
+  box — wrong for a plain `<div>`, which INHERITS both. The probe shows `.is_View` breaks a
+  `font-mono`/`text-*` box; **`.is_Text` matches** (forces neither). So the design is: per-tag
+  `createComponent({ Component: tag, isText: true, display: tag==='summary'?'list-item':'block' })`,
+  same shape as Text/Pressable. (The old `eq-box` fixture's `styled(View)` CandBox is now stale — it
+  only ever tested the no-font case.)
+- With that base, the flex-child classes (`shrink-*`/`min-*`/`self-*`/`items-*`) **just work** —
+  `.is_Text` sets none of them, so NO second codemod pass for those is needed (the old plan was wrong).
+- The ONE `.is_Text` collision is its unlayered `margin: 0` — but that is the SAME margin lift now in
+  `text-codemod.mjs`, and it also applies to Text/Pressable (already fixed).
+- **The blocker: custom-CSS `display`.** Box is the first primitive whose boosted default `display:block`
+  collides with the design system's OWN CSS — the ~59 `libs/css` component/element classes that
+  `@apply flex/grid/…` (studio + computer BEM boxes). Their `display:flex` (0,1,0 unlayered) loses to
+  the boosted default (0,2,0), so those boxes would render `block`. Inline-Tailwind display is
+  codemoddable; `@apply`'d BEM display is not. (Custom-CSS MARGIN is fine — source order wins.)
+
+**The two ways to finish it (pick with the user):**
+- **A — keep Box web-passthrough (current).** A block `<div>` looks identical with Tailwind/BEM; native
+  uses the fork. Zero design-system churn. This is the shipped state.
+- **B — swap Box + patch the design system.** Repoint `box/index.tsx` to the `.is_Text` per-tag Box (the
+  implementation is straightforward and was prototyped), run `text-codemod.mjs` over `Prim.Box`
+  (display/whitespace/margin), then add Tailwind's `!` important modifier (`flex!`, `grid!`, …) to every
+  colliding `@apply` display utility in the ~59 `libs/css` files (verified to beat the base:
+  `box-variants` `bem-bang`). Cost: `!important` peppered through the design system permanently.
 
 ### B3.4 — Radix overlays → Tamagui universal  (8 files in shared `elements/`)
 

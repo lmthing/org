@@ -35,7 +35,7 @@ export default function Slide7Team() {
       className="h-full w-full justify-center" alignItems="center"
       style={{ background: colors.bg }}
     >
-      <Prim.Text as="h2" className="mb-16 items-center justify-center gap-3 text-7xl font-bold" display="flex" style={{ color: colors.text }}>
+      <Prim.Text as="h2" className="items-center justify-center gap-3 text-7xl font-bold" marginBottom="4rem" display="flex" style={{ color: colors.text }}>
         Team behind the <CozyThingText text="thing" className="text-7xl leading-loose" />
       </Prim.Text>
 
@@ -48,14 +48,14 @@ export default function Slide7Team() {
               className="size-40 rounded-full border-4 object-cover"
               style={{ borderColor: colors.brand }}
             />
-            <Prim.Text as="p" className="mt-6 text-2xl font-bold" style={{ color: colors.text }}>
+            <Prim.Text as="p" className="text-2xl font-bold" marginTop="1.5rem" style={{ color: colors.text }}>
               {m.name}
             </Prim.Text>
-            <Prim.Text as="p" className="mt-2 text-base" style={{ color: colors.muted }}>
+            <Prim.Text as="p" className="text-base" marginTop="0.5rem" style={{ color: colors.muted }}>
               {m.role}
             </Prim.Text>
             {m.subtitle && (
-              <Prim.Text as="p" className="mt-1 text-sm" style={{ color: colors.muted }}>
+              <Prim.Text as="p" className="text-sm" marginTop="0.25rem" style={{ color: colors.muted }}>
                 {m.subtitle}
               </Prim.Text>
             )}

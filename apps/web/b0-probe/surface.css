@@ -4,3 +4,4 @@
 @source inline("bg-background items-center");
 @source inline("text-2xl font-bold text-foreground");
 @source inline("!hidden !flex");
+@source inline("mb-2 mt-3 ml-2 mr-1.5 ml-auto");

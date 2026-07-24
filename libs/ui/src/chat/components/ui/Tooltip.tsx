@@ -16,9 +16,10 @@ export function Tooltip({ children, content, className, side = 'top' }: TooltipP
       <Prim.Text
         display="block"
         whiteSpace="nowrap"
+        {...(side === 'top' ? { marginBottom: '0.375rem' } : { marginTop: '0.375rem' })}
         className={cn(
           'pointer-events-none absolute z-50 px-2 py-1 text-xs rounded-md bg-foreground text-background opacity-0 group-hover:opacity-100 transition-opacity duration-150 -translate-x-1/2 left-1/2',
-          side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
+          side === 'top' ? 'bottom-full' : 'top-full',
         )}
       >
         {content}

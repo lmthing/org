@@ -332,8 +332,10 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         {/* Attach image / audio / file to the message — the paperclip is the
             universal "attach to my message" affordance users reach for first. */}
         <Prim.Text as="label"
+          margin="-0.25rem"
+          marginBottom="0.125rem"
           className={cn(
-            'shrink-0 mb-0.5 p-1 -m-1 text-muted-foreground hover:text-foreground cursor-pointer transition-colors',
+            'shrink-0 p-1 text-muted-foreground hover:text-foreground cursor-pointer transition-colors',
             (attaching || isDisabled) && 'opacity-50 pointer-events-none',
           )}
           title="Attach image, audio, or file to your message"
@@ -347,8 +349,9 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           type="button"
           onClick={() => void toggleRecord()}
           disabled={(isDisabled || attaching) && !recording}
+          marginBottom="0.125rem"
           className={cn(
-            'shrink-0 mb-0.5 transition-colors disabled:opacity-50',
+            'shrink-0 transition-colors disabled:opacity-50',
             recording ? 'text-destructive animate-pulse' : 'text-muted-foreground hover:text-foreground',
           )}
           title={recording ? 'Stop recording' : 'Record a voice message'}
@@ -379,13 +382,13 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         <Prim.Pressable
           onClick={handleSend}
           disabled={isDisabled || attaching || (!text.trim() && attachments.length === 0)}
-          className="shrink-0 mb-0.5 w-7 h-7 rounded-lg bg-primary text-primary-foreground items-center justify-center transition-all disabled:opacity-40 hover:opacity-90" display="flex"
+          className="shrink-0 w-7 h-7 rounded-lg bg-primary text-primary-foreground items-center justify-center transition-all disabled:opacity-40 hover:opacity-90" marginBottom="0.125rem" display="flex"
           aria-label="Send message"
         >
           <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>
         </Prim.Pressable>
       </Prim.Row>
-      <Prim.Text as="p" className="mt-1.5 text-xs text-muted-foreground text-center">
+      <Prim.Text as="p" className="text-xs text-muted-foreground text-center" marginTop="0.375rem">
         Enter to send · Shift+Enter for newline
       </Prim.Text>
       <BudgetWindows />

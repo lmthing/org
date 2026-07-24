@@ -101,7 +101,7 @@ function AttributionButton({ nodeId, label }: { nodeId: string; label: string })
   return (
     <Prim.Pressable
       onClick={() => { selectNode(nodeId, true); setDevPanelOpen(true); }}
-      className="text-xs text-muted-foreground hover:text-foreground font-mono mb-1 transition-colors" display="block"
+      className="text-xs text-muted-foreground hover:text-foreground font-mono transition-colors" marginBottom="0.25rem" display="block"
       data-node-id={nodeId}
     >
       {label}
@@ -279,7 +279,7 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
   return (
     <Prim.Box className="py-1 group relative lm-fade-in">
       <Prim.Row className="gap-2 px-4" alignItems="flex-start">
-        <Prim.Text className="shrink-0 mt-3 w-6 h-6 rounded-full bg-brand-2/20 items-center justify-center text-xs select-none" display="flex" aria-hidden="true">
+        <Prim.Text className="shrink-0 w-6 h-6 rounded-full bg-brand-2/20 items-center justify-center text-xs select-none" marginTop="0.75rem" display="flex" aria-hidden="true">
           ✦
         </Prim.Text>
         <Prim.Box className="flex-1 min-w-0">

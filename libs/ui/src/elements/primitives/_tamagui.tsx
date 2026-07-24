@@ -93,12 +93,29 @@ export type TextStyleProps = {
   textOverflow?: 'clip' | 'ellipsis'
 }
 
+/**
+ * Margin props the codemod lifts off `Prim.Text`/`Pressable`. The `.is_Text` base sets `margin: 0`
+ * UNLAYERED (beating Tailwind `m*` utilities), so a surface margin class must move to a prop (rem
+ * string matching the Tailwind scale). Custom-CSS margins (BEM `@apply`) are NOT affected — they win
+ * by source order. Proven ≡ Tailwind in `apps/web/b0-probe/text-variants.mjs` (`margin-*`).
+ */
+export type MarginStyleProps = {
+  margin?: number | string
+  marginTop?: number | string
+  marginRight?: number | string
+  marginBottom?: number | string
+  marginLeft?: number | string
+  marginHorizontal?: number | string
+  marginVertical?: number | string
+}
+
 export type TextAs =
   | 'span' | 'p' | 'strong' | 'em' | 'b' | 'i' | 'small' | 'label'
   | 'code' | 'kbd' | 'dt' | 'dd' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
 
 export type TextPrimitiveProps = React.HTMLAttributes<HTMLElement> &
-  TextStyleProps & {
+  TextStyleProps &
+  MarginStyleProps & {
     /** Inline text tag to render. Defaults to `span` (or `p` when `block`). */
     as?: TextAs
     /** Convenience: render a block `<p>` instead of an inline `<span>`. */
@@ -165,7 +182,8 @@ export type PressablePrimitiveProps = React.ButtonHTMLAttributes<HTMLButtonEleme
     'href' | 'target' | 'rel' | 'download' | 'referrerPolicy' | 'hrefLang'
   > &
   TextStyleProps &
-  LayoutStyleProps & {
+  LayoutStyleProps &
+  MarginStyleProps & {
     /** Host tag to render. Defaults to `button`. Use `a` for links, `div` for clickable boxes. */
     as?: PressableAs
   }

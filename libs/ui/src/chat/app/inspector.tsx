@@ -126,7 +126,7 @@ export function Inspector(): React.ReactElement {
           <StatusIcon status={node.status} />
           <Prim.Text className="font-mono text-[12px] text-lm-text" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
           <KindBadge kind={node.kind} />
-          {node.durationMs !== undefined && <Prim.Text className="ml-auto text-[10px] text-lm-muted font-mono">{fmtDuration(node.durationMs)}</Prim.Text>}
+          {node.durationMs !== undefined && <Prim.Text className="text-[10px] text-lm-muted font-mono" marginLeft="auto">{fmtDuration(node.durationMs)}</Prim.Text>}
         </Prim.Row>
         <Prim.Box className="text-[10px] text-lm-muted font-mono mt-1 truncate" title={node.id}>{node.id}</Prim.Box>
         {node.detail && Object.keys(node.detail).length > 0 && (
