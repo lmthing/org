@@ -5,8 +5,9 @@ import { cn } from '../../lib/cn.js';
 export function Spinner({ size = 16, className }: { size?: number; className?: string }) {
   return (
     <Prim.Text
+      display="inline-block"
       className={cn(
-        'lm-spin inline-block border-2 border-current border-t-transparent rounded-full',
+        'lm-spin border-2 border-current border-t-transparent rounded-full',
         className
       )}
       style={{ width: size, height: size }}

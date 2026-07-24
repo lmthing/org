@@ -17,8 +17,9 @@ export function Avatar({
 
   return (
     <Prim.Text
+      display="inline-flex"
       className={cn(
-        'inline-flex items-center justify-center rounded-full bg-brand-2/20 text-foreground font-medium shrink-0',
+        'items-center justify-center rounded-full bg-brand-2/20 text-foreground font-medium shrink-0',
         className
       )}
       style={style}

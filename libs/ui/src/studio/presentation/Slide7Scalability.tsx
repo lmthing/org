@@ -131,7 +131,7 @@ export default function Slide6Scalability() {
               </Prim.Box>
               {tier.tag && (
                 <Prim.Text
-                  className="flex-shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold"
+                  className="flex-shrink-0 rounded-full px-3 py-1 text-xs font-semibold" whiteSpace="nowrap"
                   style={{ background: `color-mix(in srgb, ${colors.brand} 10%, transparent)`, color: colors.brand }}
                 >
                   {tier.tag}

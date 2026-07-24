@@ -277,7 +277,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           {attachments.map((a) => (
             <Prim.Text
               key={a.id}
-              className="inline-flex items-center gap-1.5 max-w-[220px] rounded-lg border border-border bg-muted px-2 py-1 text-xs text-foreground"
+              className="items-center gap-1.5 max-w-[220px] rounded-lg border border-border bg-muted px-2 py-1 text-xs text-foreground" display="inline-flex"
               title={a.filename ?? a.mediaType}
             >
               {a.kind === 'image' ? (
@@ -285,7 +285,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
               ) : (
                 <Prim.Text className="text-muted-foreground">{a.kind === 'audio' ? '♪' : '📎'}</Prim.Text>
               )}
-              <Prim.Text className="truncate">{a.kind === 'audio' && a.transcript ? a.transcript : (a.filename ?? a.kind)}</Prim.Text>
+              <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{a.kind === 'audio' && a.transcript ? a.transcript : (a.filename ?? a.kind)}</Prim.Text>
               <Prim.Pressable
                 onClick={() => removeAttachment(a.id)}
                 className="shrink-0 text-muted-foreground hover:text-foreground"
@@ -296,7 +296,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
             </Prim.Text>
           ))}
           {recording && (
-            <Prim.Text className="inline-flex items-center gap-1.5 text-xs text-destructive">
+            <Prim.Text className="items-center gap-1.5 text-xs text-destructive" display="inline-flex">
               <Prim.Text className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
               Recording… tap ■ to stop
             </Prim.Text>

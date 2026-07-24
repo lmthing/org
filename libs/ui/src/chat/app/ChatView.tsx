@@ -193,7 +193,7 @@ export function ChatView({
               title={activity}
             >
               <Prim.Text className="w-1.5 h-1.5 rounded-full bg-agent animate-pulse shrink-0" aria-hidden />
-              <Prim.Text className="truncate italic">{activity}</Prim.Text>
+              <Prim.Text className="italic" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{activity}</Prim.Text>
             </Prim.Row>
           )}
         </Prim.Box>

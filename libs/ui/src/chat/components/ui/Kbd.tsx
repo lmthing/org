@@ -11,8 +11,9 @@ export function Kbd({
 }) {
   return (
     <Prim.Text as="kbd"
+      display="inline-flex"
       className={cn(
-        'inline-flex items-center px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground text-xs font-mono',
+        'items-center px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground text-xs font-mono',
         className
       )}
     >

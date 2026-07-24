@@ -135,7 +135,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
       {docs.map(d => (
         <Prim.Row key={d} className="gap-2 px-3 py-2 rounded-lg border border-border bg-muted/40" alignItems="center">
           <Prim.Text className="text-sm">📄</Prim.Text>
-          <Prim.Text className="text-sm text-foreground truncate flex-1" title={d}>{d}</Prim.Text>
+          <Prim.Text className="text-sm text-foreground flex-1" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={d}>{d}</Prim.Text>
         </Prim.Row>
       ))}
       <Prim.Text as="label" className={cn('mt-2 self-start cursor-pointer', uploading && 'opacity-50 pointer-events-none')}>
@@ -168,7 +168,7 @@ function SpacesTab({ projectId }: { projectId: string }) {
         return (
           <Prim.Box key={s.id} className="border border-border rounded-xl px-3 py-2.5 bg-card">
             <Prim.Row className="gap-2 mb-1" alignItems="center">
-              <Prim.Text className="text-sm font-medium text-foreground flex-1 truncate">{s.name}</Prim.Text>
+              <Prim.Text className="text-sm font-medium text-foreground flex-1" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{s.name}</Prim.Text>
               <Prim.Text className="text-xs text-muted-foreground font-mono">{s.id}</Prim.Text>
             </Prim.Row>
             {s.description && <Prim.Text as="p" className="text-xs text-muted-foreground mb-2 line-clamp-2">{s.description}</Prim.Text>}

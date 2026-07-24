@@ -16,10 +16,17 @@
 > (`.is_View` imposes `line-height`, and `lineHeight` is not a Tamagui View style prop). Run:
 > `node ../node_modules/vite/bin/vite.js build --config surface.vite.config.mts && node measure-surface.mjs`.
 
-> **B3 typography probe:** `text-probe-main.tsx` / `text-probe.mjs` render a Tamagui `styled(Text)`
-> and `styled(View)` next to a plain `<span>`/`<div>` with the same typography classes. Finding: a
-> Tamagui **Text ≡ span on all typography props** (so the B3 Text swap keeps every `font-*`/`text-*`
-> className), while a **View forces line-height** (validating the B2 text-container inline-style fix).
+> **B3.1 Text proof (authoritative):** `text-variants-main.tsx` / `text-variants.mjs` render the REAL
+> shipped `Prim.Text` next to the raw tag it replaces, for every `as` variant (span/p/h1/strong/code/
+> label/…) AND every conflict class (`block`/`inline-block`/`hidden`/`break-words`/`break-all`/
+> `truncate` + a whitespace-inheritance case), asserting **tag NAME and computed style** under the real
+> theme.css + Tailwind preflight — **21/21 match**. This is what proved B3.1 and is the template for
+> B3.2/B3.3. It supersedes the older `text-probe.mjs`, a computed-style-only typography spike that MISSED
+> `display`/`white-space`/`word-wrap` and the tag name (which is how the earlier "Text is easy" claim was
+> wrong — see docs Part III / B3.1 correction). Two hard findings it pins: `.is_Text` fights
+> `display`/`white-space`/`word-wrap` UNLAYERED (so those Tailwind classes are lifted to props by
+> `text-codemod.mjs`), and Tamagui's `tag` prop is compile-time-only (so the primitive uses one
+> `createComponent({Component:tag,isText:true})` per tag for a runtime-guaranteed host element).
 > **Provider-collision probe:** `theme-check-main.tsx` / `theme-check2.mjs` prove the empty-theme web
 > provider injects no colliding vars (bg-background correct in light AND dark). Build all probes:
 > `node ../node_modules/vite/bin/vite.js build --config surface.vite.config.mts`.

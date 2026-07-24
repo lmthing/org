@@ -127,7 +127,7 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
           {screenshot ? (
             <Prim.Col className="gap-2">
               <Prim.Image src={screenshot} className="max-h-40 rounded-lg border border-border" alt="Screenshot preview" />
-              <Prim.Text as="label" className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Prim.Text as="label" className="items-center gap-2 text-xs text-muted-foreground" display="flex">
                 <Prim.TextField
                   type="checkbox"
                   checked={attachScreenshot}

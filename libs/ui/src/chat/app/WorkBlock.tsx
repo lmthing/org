@@ -98,13 +98,14 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
           {node.label}
         </Prim.Pressable>
         {headline && (
-          <Prim.Text className="flex-1 min-w-0 truncate text-muted-foreground opacity-70" title={headline}>
+          <Prim.Text className="flex-1 min-w-0 text-muted-foreground opacity-70" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={headline}>
             {headline}
           </Prim.Text>
         )}
         <Prim.Text
+          display="inline-flex"
           className={cn(
-            'inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5',
+            'shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5',
             STATUS_COLOR[colorKey] ?? STATUS_COLOR.done,
           )}
         >

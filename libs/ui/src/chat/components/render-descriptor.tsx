@@ -96,7 +96,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'badge': case 'tag': case 'pill': {
       const rounded = d.type.toLowerCase() === 'pill' ? 'rounded-full' : 'rounded';
       const cv = color ? `bg-[var(--lm-${color})]/20 text-[var(--lm-${color})]` : 'bg-lm-accent/20 text-lm-accent';
-      return <Prim.Text key={key} className={`inline-block ${rounded} px-1.5 py-0.5 text-[10px] ${cv}`}>{body}</Prim.Text>;
+      return <Prim.Text key={key} display="inline-block" className={`${rounded} px-1.5 py-0.5 text-[10px] ${cv}`}>{body}</Prim.Text>;
     }
 
     // ── collections ──

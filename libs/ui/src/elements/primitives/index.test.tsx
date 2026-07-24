@@ -64,28 +64,40 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(html(<Box as="section" className="s">c</Box>)).toBe(html(<section className="s">c</section>))
   })
 
-  it('Text emits <span> by default and <p> when block, matching raw tags', () => {
-    expect(html(<Text className="t">hi</Text>)).toBe(html(<span className="t">hi</span>))
-    expect(html(<Text block className="t">hi</Text>)).toBe(html(<p className="t">hi</p>))
+  // Part III / B3.1: Text is now a real Tamagui styled(Text). On web it renders the chosen host tag
+  // (span/p/strong/…/h1–h6) but Tamagui adds its own atomic classes, so we assert the DOM tag + that
+  // the caller's className / htmlFor / children pass through — NOT byte-identity (broken by
+  // construction). Exact computed-style parity vs the raw tags is proven under real theme.css +
+  // preflight in apps/web/b0-probe/text-variants.mjs (21/21).
+  const withProvider = (node: React.ReactNode) =>
+    render(<TamaguiProvider config={tamaguiWebConfig} defaultTheme="app">{node}</TamaguiProvider>)
+
+  it('Text renders <span> by default and <p> when block, keeping className + children', () => {
+    const span = withProvider(<Text className="t" data-x="1">hi</Text>).container.querySelector('[data-x]')!
+    expect(span.tagName).toBe('SPAN')
+    expect(span.className).toContain('t')
+    expect(span.textContent).toBe('hi')
+    const p = withProvider(<Text block className="t" data-y="2">hi</Text>).container.querySelector('[data-y]')!
+    expect(p.tagName).toBe('P')
   })
 
-  it('Text renders inline tags via `as` (strong/em/small/label/code)', () => {
-    expect(html(<Text as="strong">b</Text>)).toBe(html(<strong>b</strong>))
-    expect(html(<Text as="em">i</Text>)).toBe(html(<em>i</em>))
-    expect(html(<Text as="small">s</Text>)).toBe(html(<small>s</small>))
-    expect(html(<Text as="code">c</Text>)).toBe(html(<code>c</code>))
-    expect(html(<Text as="label" htmlFor="f">L</Text>)).toBe(html(<label htmlFor="f">L</label>))
-  })
-
-  it('Text renders heading tags via `as` (h1–h6)', () => {
-    for (const as of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const) {
-      expect(html(<Text as={as} className="h">t</Text>)).toBe(
-        html(<Text as={as} className="h">t</Text>),
-      )
-      const { container } = render(<Text as={as}>t</Text>)
-      expect(container.firstElementChild!.tagName).toBe(as.toUpperCase())
+  it('Text renders inline tags via `as` (strong/em/small/code/label), keeping htmlFor + children', () => {
+    for (const as of ['strong', 'em', 'small', 'code'] as const) {
+      const el = withProvider(<Text as={as} data-t={as}>x</Text>).container.querySelector(`[data-t="${as}"]`)!
+      expect(el.tagName).toBe(as.toUpperCase())
+      expect(el.textContent).toBe('x')
     }
-    expect(html(<Text as="h1" className="title">t</Text>)).toBe(html(<h1 className="title">t</h1>))
+    const label = withProvider(<Text as="label" htmlFor="f" data-l="1">L</Text>).container.querySelector('[data-l]')!
+    expect(label.tagName).toBe('LABEL')
+    expect(label.getAttribute('for')).toBe('f')
+  })
+
+  it('Text renders heading tags via `as` (h1–h6), keeping className', () => {
+    for (const as of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const) {
+      const el = withProvider(<Text as={as} className="h" data-h={as}>t</Text>).container.querySelector(`[data-h="${as}"]`)!
+      expect(el.tagName).toBe(as.toUpperCase())
+      expect(el.className).toContain('h')
+    }
   })
 
   it('Pressable emits <button> by default and <a>/<div> via `as`, matching raw tags', () => {
