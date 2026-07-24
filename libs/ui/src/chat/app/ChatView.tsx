@@ -175,7 +175,7 @@ export function ChatView({
   const title = sessionTitle || fallbackTitle;
 
   return (
-    <Prim.Box display="flex" className={cn('flex-col h-full bg-background', className)}>
+    <Prim.Box display="flex" className={className} flexDirection="column" height="100%" backgroundColor="$background">
       {/* Header */}
       <Prim.Row as="header"
         className="gap-3 pl-12 md:pl-4 pr-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm" alignItems="center" flexShrink={0}

@@ -12,10 +12,7 @@ export function Kbd({
   return (
     <Prim.Text as="kbd"
       display="inline-flex"
-      className={cn(
-        'items-center px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground text-xs font-mono',
-        className
-      )}
+      className={className} alignItems="center" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius" borderWidth={1} borderColor="$border" backgroundColor="$muted" color="$muted-foreground" fontSize="$xs" fontFamily="$mono"
     >
       {children}
     </Prim.Text>

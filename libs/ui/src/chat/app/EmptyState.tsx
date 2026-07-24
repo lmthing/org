@@ -26,7 +26,7 @@ interface EmptyStateProps {
 export function EmptyState({ projectName, onSuggestion, className }: EmptyStateProps) {
   return (
     <Col
-      className={cn('justify-center px-6 py-12 text-center', className)}
+      className={className} justifyContent="center" paddingHorizontal="$6" paddingVertical="$12" textAlign="center"
       alignItems="center"
       flexGrow={1}
       flexShrink={1}

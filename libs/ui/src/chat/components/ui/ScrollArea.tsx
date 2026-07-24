@@ -9,7 +9,7 @@ interface ScrollAreaProps {
 
 export function ScrollArea({ children, className }: ScrollAreaProps) {
   return (
-    <Prim.Box className={cn('overflow-auto', className)}>
+    <Prim.Box className={className} overflow="auto">
       {children}
     </Prim.Box>
   );

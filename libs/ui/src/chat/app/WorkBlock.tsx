@@ -104,10 +104,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
         )}
         <Prim.Text
           display="inline-flex"
-          className={cn(
-            'shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5',
-            STATUS_COLOR[colorKey] ?? STATUS_COLOR.done,
-          )}
+          className={STATUS_COLOR[colorKey] ?? STATUS_COLOR.done} flexShrink={0} alignItems="center" gap="$1" borderRadius="$radius-full" borderWidth={1} paddingHorizontal="$1.5" paddingVertical="$0.5"
         >
           {isRunning && <Prim.Text className="lm-pulse">{STATUS_GLYPH[node.status] ?? '●'}</Prim.Text>}
           {!isRunning && <Prim.Text>{STATUS_GLYPH[node.status] ?? '◦'}</Prim.Text>}

@@ -27,7 +27,7 @@ export function LiveActivity(): React.ReactElement | null {
       data-testid="live-activity"
       aria-label="sub-agent activity"
     >
-      <Prim.Row gap="$1.5" borderColor="$border" paddingHorizontal="$3" paddingVertical="$1.5" fontSize="$xs" color="$muted-foreground" alignItems="center" style={{ lineHeight: '1rem' }}>
+      <Prim.Row gap="$1.5" borderBottomWidth={1} borderColor="$border" paddingHorizontal="$3" paddingVertical="$1.5" fontSize="$xs" color="$muted-foreground" alignItems="center" style={{ lineHeight: '1rem' }}>
         <Prim.Text className="lm-pulse text-brand-2">●</Prim.Text>
         <Prim.Text>working…</Prim.Text>
         <Prim.Text opacity={0.6}>{active.length} active</Prim.Text>

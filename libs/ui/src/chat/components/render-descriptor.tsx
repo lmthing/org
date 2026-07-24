@@ -48,7 +48,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       return <Prim.Box key={key} className="prose prose-sm max-w-none text-lm-text prose-headings:text-lm-text prose-a:text-lm-accent prose-code:text-lm-cyan prose-code:bg-lm-bg prose-pre:bg-lm-bg prose-pre:border prose-pre:border-lm-border" dangerouslySetInnerHTML={{ __html: html }} />;
     }
     case 'span': return <Prim.Text key={key}>{body}</Prim.Text>;
-    case 'quote': return <Prim.Box as="blockquote" key={key} borderColor="$lm-border" paddingLeft="$2" color="$lm-muted" fontStyle="italic" marginVertical="0.25rem">{body}</Prim.Box>;
+    case 'quote': return <Prim.Box as="blockquote" key={key} borderLeftWidth={2} borderColor="$lm-border" paddingLeft="$2" color="$lm-muted" fontStyle="italic" marginVertical="0.25rem">{body}</Prim.Box>;
     case 'link': return <Prim.Link key={key} href={String(props['href'] ?? '#')} target="_blank" rel="noreferrer" color="$lm-accent" textDecorationLine="underline">{body}</Prim.Link>;
 
     // ── media ──
@@ -78,7 +78,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'spacer': return <Prim.Box key={key} style={{ flexGrow: 1 }} />;
     case 'divider': return (
       <Prim.Row key={key} gap="$2" marginVertical="$2" color="11px" alignItems="center">
-        <Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" borderColor="$lm-border" />{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}<Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" borderColor="$lm-border" />
+        <Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} borderColor="$lm-border" />{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}<Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} borderColor="$lm-border" />
       </Prim.Row>
     );
 
@@ -125,7 +125,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     }
     case 'timeline': {
       const items = (props['items'] as { title: string; time?: string; detail?: string }[]) ?? [];
-      return <Prim.List key={key} borderColor="$lm-border" paddingLeft="$3" marginVertical="0.25rem">{items.map((it, i) => <Prim.ListItem key={i} marginBottom="0.25rem"><Prim.Box color="$lm-text">{it.title}{it.time ? <Prim.Text color="10px" marginLeft="0.5rem">{it.time}</Prim.Text> : null}</Prim.Box>{it.detail ? <Prim.Box color="11px">{it.detail}</Prim.Box> : null}</Prim.ListItem>)}</Prim.List>;
+      return <Prim.List key={key} borderLeftWidth={1} borderColor="$lm-border" paddingLeft="$3" marginVertical="0.25rem">{items.map((it, i) => <Prim.ListItem key={i} marginBottom="0.25rem"><Prim.Box color="$lm-text">{it.title}{it.time ? <Prim.Text color="10px" marginLeft="0.5rem">{it.time}</Prim.Text> : null}</Prim.Box>{it.detail ? <Prim.Box color="11px">{it.detail}</Prim.Box> : null}</Prim.ListItem>)}</Prim.List>;
     }
 
     // ── indicators ──
