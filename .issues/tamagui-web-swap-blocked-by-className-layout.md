@@ -6,6 +6,19 @@ props / `Row`/`Col`). The zero-context execution plan is **Part III** of
 over Tamagui atomic styles with `@tamagui/vite-plugin`?). This issue stays open until B lands or
 B0 forces re-opening the decision. Found 2026-07-23 while starting Phase 1c.
 
+> **Update 2026-07-24 — Phase-2 foundation landed; the two hard blockers are cleared.**
+> The idiomatic-Tamagui execution now has a plan (`docs/tamagui-idiomatic-migration.md`) and its
+> load-bearing pieces are done + tested:
+> - **Theming blocker (this issue's §"Why fundamental" point 1) is resolved by SPIKE A1**: web colors
+>   are `var(--<name>)`-backed Tamagui TOKENS (not injected themes), so `backgroundColor="$background"`
+>   is idiomatic AND keeps `theme.css`'s runtime cascade (data-theme + per-space overrides). The empty
+>   `app` theme stays, so nothing collides. Proven in `apps/web/b0-probe/spike-a-runtime-theme.spec.ts`.
+> - **The className→props migration (this issue's core) has a tool**: `libs/ui/scripts/classnames-to-props.mjs`
+>   (+ a 31-test mapping gate) mechanically lifts static Tailwind classes to props; `--check` over the
+>   chat surface = 228 elements migratable / 110 flagged for manual review.
+> This issue stays open until the surface sweep + config convergence (§5–§7) actually land across the
+> app — the tooling is ready but the shipped surfaces are not yet migrated (per-slice, harness-gated).
+
 ## Summary
 The Phase-0 de-HTML produced surfaces whose layout is **100% Tailwind-className-driven**, with
 **everything mapped to `Box`** (114 files use `Box`; **`Row`/`Col` are used 0 times**). Swapping
