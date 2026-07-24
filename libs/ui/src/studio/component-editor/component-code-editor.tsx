@@ -11,6 +11,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { componentNameFromPath, type ComponentKind } from './component-editor-utils'
+import { INPUT_BASE } from '../../elements/forms/input/index.js'
 
 /** `.component-editor__kind-badge--<kind>` tint modifier → per-kind style lookup. */
 const KIND_BADGE_STYLE: Record<ComponentKind, { backgroundColor: string; color: string }> = {
@@ -85,7 +86,7 @@ export function ComponentCodeEditor({ componentPath, kind }: ComponentCodeEditor
       </Prim.Box>
 
       <Prim.TextArea
-        className="input component-editor__textarea"
+        {...INPUT_BASE} className="component-editor__textarea"
         value={draft}
         onChange={e => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}

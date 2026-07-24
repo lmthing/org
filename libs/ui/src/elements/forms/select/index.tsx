@@ -1,24 +1,50 @@
-import '@lmthing/css/elements/forms/select/index.css'
 import * as React from 'react'
-import { cn } from '../../../lib/utils'
+import * as Prim from '../../primitives/index'
 
+/**
+ * Select — the idiomatic `.select`. Renders `Prim.Select` (a real `<select>` at runtime via
+ * `createComponent`) inside a positioned `Prim.Box`, with the styling as `$`-token PROPS from
+ * select.styled.tsx (docs/tamagui-idiomatic-migration.md §4/§6). `select/index.css` is deleted.
+ *
+ * `.select__content` went with it: this element renders a NATIVE `<select>`, whose option list is
+ * drawn by the browser, so the popover rules never applied to anything.
+ */
 export interface SelectProps extends React.ComponentProps<'select'> {}
 
-function Select({ className, children, ...props }: SelectProps) {
+/** `.select` — the positioning wrapper. */
+const WRAPPER = { position: 'relative' } as const
+
+/** `.select__trigger` — the control itself. Note `focus:`, not `focus-visible:`, per the stylesheet. */
+const TRIGGER = {
+  display: 'flex',
+  height: '$9',
+  width: '100%',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  borderRadius: '$radius-md',
+  borderWidth: 1,
+  borderColor: '$input',
+  backgroundColor: '$background',
+  paddingHorizontal: '$3',
+  paddingVertical: '$2',
+  fontSize: '$sm',
+  placeholderTextColor: '$muted-foreground',
+  focusStyle: { outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$ring' },
+  disabledStyle: { opacity: 0.5, cursor: 'not-allowed' },
+} as const
+
+function Select({ children, ...props }: SelectProps) {
   return (
-    <div className="select">
-      <select
-        className={cn('select__trigger', className)}
-        {...props}
-      >
+    <Prim.Box {...WRAPPER}>
+      <Prim.Select {...TRIGGER} {...(props as Record<string, unknown>)}>
         {children}
-      </select>
-    </div>
+      </Prim.Select>
+    </Prim.Box>
   )
 }
 
 function SelectOption(props: React.ComponentProps<'option'>) {
-  return <option {...props} />
+  return <Prim.Option {...props} />
 }
 
 export { Select, SelectOption }

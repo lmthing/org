@@ -4,6 +4,7 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { ArrowLeft } from 'lucide-react'
+import { INPUT_BASE, INPUT_SM } from '../../../../elements/forms/input/index.js'
 
 export interface AgentHeaderProps {
   title: string
@@ -34,7 +35,7 @@ export function AgentHeader({
           value={title}
           onChange={e => onTitleChange(e.target.value)}
           placeholder="Agent title"
-          className="input--sm agent-header__name-input"
+          {...INPUT_BASE} {...INPUT_SM} className="agent-header__name-input"
         />
       </Stack>
       <Stack row gap="sm" className="agent-header__right">

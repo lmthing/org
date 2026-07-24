@@ -8,6 +8,7 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { X } from 'lucide-react'
 import '@lmthing/css/components/knowledge/index.css'
+import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
 
 // Local type — replaces deprecated KnowledgeNode
 interface KnowledgeNode {
@@ -80,7 +81,7 @@ export function NewFileModal({ isOpen, onClose, onCreate, folders, defaultLocati
             <Prim.Box>
               <Label>Location</Label>
               <Prim.Select
-                className="input new-file-modal__select"
+                {...INPUT_BASE} className="new-file-modal__select"
                 value={location}
                 onChange={e => setLocation(e.target.value)}
               >

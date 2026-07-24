@@ -13,6 +13,7 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Avatar, AvatarImage, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
 import '@lmthing/css/components/space/index.css'
+import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index.js'
 
 export interface SpaceUser {
   id: string
@@ -186,7 +187,7 @@ export function SpaceList({
               value={searchQuery}
               onChange={(e) => onSearchChange?.(e.target.value)}
               placeholder="Search by name or email..."
-              className="input--sm space-list__search-input"
+              {...INPUT_BASE} {...INPUT_SM} className="space-list__search-input"
             />
           </Prim.Box>
         </PanelHeader>

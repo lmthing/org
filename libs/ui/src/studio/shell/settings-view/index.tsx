@@ -8,7 +8,6 @@ import { useEffect, useMemo } from 'react'
 import { useLocation, useNavigate, useParams } from '@tanstack/react-router'
 import { Shield, FileCode2 } from 'lucide-react'
 import { buildSpacePath } from '@lmthing/ui/lib/space-path'
-import '@lmthing/css/elements/forms/input/index.css'
 import '@lmthing/css/components/shell/index.css'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -18,6 +17,7 @@ import { useUIState } from '@lmthing/state'
 import { useFile } from '@lmthing/ui/hooks/fs/useFile'
 import { cn } from '@lmthing/ui/lib/utils'
 import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../elements/content/panel/index.js'
+import { INPUT_BASE } from '../../../elements/forms/input/index.js'
 
 interface SettingsViewProps {
   isOpen: boolean
@@ -124,17 +124,17 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                 <Prim.Box display="grid" gridTemplateColumns="1fr 1fr" gap="$3" marginBottom="$4">
                   <Prim.Box>
                     <Prim.Text as="label" display="block" fontSize="$xs" fontWeight="$medium" marginBottom="$1">File</Prim.Text>
-                    <Prim.TextField className="input" value={selectedEnvFile} onChange={e => setSelectedEnvFile(e.target.value)} />
+                    <Prim.TextField {...INPUT_BASE} value={selectedEnvFile} onChange={e => setSelectedEnvFile(e.target.value)} />
                   </Prim.Box>
                   <Prim.Box>
                     <Prim.Text as="label" display="block" fontSize="$xs" fontWeight="$medium" marginBottom="$1">Password</Prim.Text>
-                    <Prim.TextField className="input" type="password" value={envPassword} onChange={e => setEnvPassword(e.target.value)} placeholder="Enter password" />
+                    <Prim.TextField {...INPUT_BASE} type="password" value={envPassword} onChange={e => setEnvPassword(e.target.value)} placeholder="Enter password" />
                   </Prim.Box>
                 </Prim.Box>
                 <Prim.Box>
                   <Prim.Text as="label" display="block" fontSize="$xs" fontWeight="$medium" marginBottom="$1">Variables</Prim.Text>
                   <Prim.TextArea
-                    className={cn('input', 'settings-view__env-textarea')}
+                    {...INPUT_BASE} className="settings-view__env-textarea"
                     value={envContent}
                     onChange={e => setEnvContent(e.target.value)}
                     placeholder="KEY=value"
@@ -160,7 +160,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                   Inline metadata and dependency editor. Save when ready.
                 </Caption>
                 <Prim.TextArea
-                  className={cn('input', 'settings-view__pkg-textarea')}
+                  {...INPUT_BASE} className="settings-view__pkg-textarea"
                   value={packageJsonDraft || packageJsonSerialized}
                   onChange={e => { setPackageJsonDraft(e.target.value); setPackageJsonError(null); setPackageJsonSavedAt(null) }}
                   spellCheck={false}

@@ -10,6 +10,7 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { BookOpen } from 'lucide-react'
 import '@lmthing/css/components/knowledge/index.css'
+import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
 
 interface FieldIndexPanelProps {
   domain: string
@@ -96,7 +97,7 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
         <Prim.Box>
           <Label compact>Type</Label>
           <Prim.Select
-            className="input"
+            {...INPUT_BASE}
             value={type}
             onChange={e => { setType(e.target.value); markDirty() }}
           >
@@ -143,7 +144,7 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
         <Prim.Box>
           <Label compact>Field Type</Label>
           <Prim.Select
-            className="input"
+            {...INPUT_BASE}
             value={fieldType}
             onChange={e => { setFieldType(e.target.value); markDirty() }}
           >

@@ -17,6 +17,7 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { Badge } from '@lmthing/ui/elements/content/badge'
+import { INPUT_BASE } from '../../../elements/forms/input/index.js'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -207,7 +208,7 @@ function FunctionCodeEditor({ functionPath }: FunctionCodeEditorProps) {
       </Prim.Box>
 
       <Prim.TextArea
-        className="input functions-editor__textarea"
+        {...INPUT_BASE} className="functions-editor__textarea"
         value={draft}
         onChange={e => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}

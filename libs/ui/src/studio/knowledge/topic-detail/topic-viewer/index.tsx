@@ -9,6 +9,7 @@ import { Badge } from '@lmthing/ui/elements/content/badge'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { useFile } from '@lmthing/ui/hooks/fs/useFile'
 import '@lmthing/css/components/knowledge/index.css'
+import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
 
 export interface TopicViewerProps {
   optionPath?: string
@@ -81,7 +82,7 @@ export function TopicViewer({ optionPath, topicPath }: TopicViewerProps) {
 
       <PageBody>
         <Prim.TextArea
-          className="input topic-viewer__textarea"
+          {...INPUT_BASE} className="topic-viewer__textarea"
           value={draft}
           onChange={e => handleChange(e.target.value)}
           onKeyDown={e => {

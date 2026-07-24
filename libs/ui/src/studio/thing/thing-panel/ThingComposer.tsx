@@ -5,6 +5,7 @@
 import * as Prim from '../../../elements/primitives/index.js';
 import { Button } from '../../../elements/forms/button'
 import type { FormEvent } from 'react'
+import { INPUT_BASE } from '../../../elements/forms/input/index.js'
 
 export interface ThingComposerProps {
   input: string
@@ -18,7 +19,7 @@ export function ThingComposer({ input, setInput, hasEnv, isWorking, onSubmit }: 
   return (
     <Prim.Form onSubmit={onSubmit} className="thing-panel__input-form">
       <Prim.TextArea
-        className="input thing-panel__textarea"
+        {...INPUT_BASE} className="thing-panel__textarea"
         value={input}
         onChange={e => setInput(e.target.value)}
         onKeyDown={e => {

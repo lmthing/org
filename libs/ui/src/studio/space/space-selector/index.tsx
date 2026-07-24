@@ -8,6 +8,7 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import '@lmthing/css/components/space/index.css'
+import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index.js'
 
 export interface SpaceEntry {
   id: string
@@ -56,7 +57,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search spaces..."
-                className="input--sm space-selector__search-input"
+                {...INPUT_BASE} {...INPUT_SM} className="space-selector__search-input"
                 autoFocus
               />
             </Prim.Box>
@@ -85,7 +86,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
             {showCreate ? (
               <Prim.Form onSubmit={handleCreate}>
                 <Stack gap="sm" className="space-selector__create-form">
-                  <Input type="text" value={newSpaceName} onChange={(e) => setNewSpaceName(e.target.value)} placeholder="Space name..." className="input--sm" autoFocus />
+                  <Input type="text" value={newSpaceName} onChange={(e) => setNewSpaceName(e.target.value)} placeholder="Space name..." {...INPUT_BASE} {...INPUT_SM} autoFocus />
                   <Stack row gap="sm">
                     <Button type="submit" variant="primary" size="sm" className="space-selector__create-btn">Create</Button>
                     <Button type="button" onClick={() => setShowCreate(false)} variant="ghost" size="sm" className="space-selector__create-btn">Cancel</Button>
