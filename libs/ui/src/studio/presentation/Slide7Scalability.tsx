@@ -36,12 +36,12 @@ const tiers = [
 
 export default function Slide6Scalability() {
   return (
-    <Prim.Box
-      className="relative flex h-full w-full flex-col items-center justify-center"
+    <Prim.Col
+      className="relative h-full w-full justify-center" alignItems="center"
       style={{ background: colors.bg, padding: '44px 64px 48px' }}
     >
       {/* TOP */}
-      <Prim.Box className="mb-8 flex flex-col items-center">
+      <Prim.Col className="mb-8" alignItems="center">
         <Prim.Box
           className="mb-3 text-lg font-bold uppercase tracking-[0.16em]"
           style={{ color: colors.brand }}
@@ -57,20 +57,22 @@ export default function Slide6Scalability() {
             Enterprise ready.
           </Prim.Text>
         </Prim.Text>
-      </Prim.Box>
+      </Prim.Col>
 
       {/* BODY */}
       <Prim.Box className="mb-7 grid w-full grid-cols-[1fr_1px_1fr] gap-x-9">
         {/* LEFT — Platform points */}
-        <Prim.Box className="flex flex-col justify-center gap-5">
+        <Prim.Col className="justify-center gap-5">
           {points.map((p) => (
-            <Prim.Box key={p.title} className="flex items-start gap-3">
-              <Prim.Box
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-[9px] border text-xl"
-                style={{ background: colors.bgCard, borderColor: colors.cardBorder }}
+            <Prim.Row key={p.title} className="gap-3" alignItems="flex-start">
+              <Prim.Row
+                className="h-10 w-10 justify-center rounded-[9px] border text-xl"
+                alignItems="center"
+                flexShrink={0}
+                style={{ lineHeight: '1.75rem', background: colors.bgCard, borderColor: colors.cardBorder }}
               >
                 {p.icon}
-              </Prim.Box>
+              </Prim.Row>
               <Prim.Box>
                 <Prim.Box className="mb-0.5 text-lg font-bold" style={{ color: colors.text }}>
                   {p.title}
@@ -86,15 +88,15 @@ export default function Slide6Scalability() {
                   )}
                 </Prim.Box>
               </Prim.Box>
-            </Prim.Box>
+            </Prim.Row>
           ))}
-        </Prim.Box>
+        </Prim.Col>
 
         {/* DIVIDER */}
         <Prim.Box style={{ background: colors.cardBorder }} />
 
         {/* RIGHT — Pricing tiers */}
-        <Prim.Box className="flex flex-col justify-center gap-2">
+        <Prim.Col className="justify-center gap-2">
           <Prim.Box
             className="mb-2 text-sm font-bold uppercase tracking-[0.12em]"
             style={{ color: colors.brand }}
@@ -102,9 +104,9 @@ export default function Slide6Scalability() {
             Business Model
           </Prim.Box>
           {tiers.map((tier) => (
-            <Prim.Box
+            <Prim.Row
               key={tier.name}
-              className="flex items-center gap-3 rounded-xl border px-4 py-3"
+              className="gap-3 rounded-xl border px-4 py-3" alignItems="center"
               style={{
                 background: tier.featured
                   ? `color-mix(in srgb, ${colors.brand} 6%, var(--card))`
@@ -135,14 +137,14 @@ export default function Slide6Scalability() {
                   {tier.tag}
                 </Prim.Text>
               )}
-            </Prim.Box>
+            </Prim.Row>
           ))}
-        </Prim.Box>
+        </Prim.Col>
       </Prim.Box>
 
       {/* BOTTOM STRIP */}
-      <Prim.Box
-        className="flex items-center gap-2.5 rounded-full px-8 py-3.5"
+      <Prim.Row
+        className="gap-2.5 rounded-full px-8 py-3.5" alignItems="center"
         style={{ background: colors.bgDark }}
       >
         <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
@@ -154,7 +156,7 @@ export default function Slide6Scalability() {
           </Prim.Text>
         </Prim.Box>
         <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-      </Prim.Box>
-    </Prim.Box>
+      </Prim.Row>
+    </Prim.Col>
   )
 }

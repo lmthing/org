@@ -4,8 +4,8 @@ import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 
 export default function Slide1Cover() {
   return (
-    <Prim.Box
-      className="flex h-full w-full flex-col items-center justify-center"
+    <Prim.Col
+      className="h-full w-full justify-center" alignItems="center"
       style={{ background: colors.bg }}
     >
       {/* Hackathon badge */}
@@ -29,13 +29,13 @@ export default function Slide1Cover() {
       </Prim.Text>
 
       {/* Product tag */}
-      <Prim.Box className="mt-16 flex items-center gap-2 text-lg">
+      <Prim.Row className="mt-16 gap-2 text-lg" alignItems="center" style={{ lineHeight: '1.75rem' }}>
         <Prim.Text className="font-bold" style={{ color: colors.brand }}>Matilda</Prim.Text>
         <Prim.Text style={{ color: colors.muted }}>powered by</Prim.Text>
         <Prim.Text className="text-lg font-bold">
           lm<CozyThingText text="thing" className="text-lg font-bold" />
         </Prim.Text>
-      </Prim.Box>
-    </Prim.Box>
+      </Prim.Row>
+    </Prim.Col>
   )
 }

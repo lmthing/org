@@ -48,10 +48,10 @@ function EnvTab() {
     }
   };
 
-  if (!loaded) return <Prim.Box className="flex items-center justify-center p-6"><Spinner /></Prim.Box>;
+  if (!loaded) return <Prim.Row className="justify-center p-6" alignItems="center"><Spinner /></Prim.Row>;
 
   return (
-    <Prim.Box className="flex flex-col gap-3 p-4">
+    <Prim.Col className="gap-3 p-4">
       <Prim.Text as="p" className="text-xs text-muted-foreground">Environment variables loaded by the pod at startup.</Prim.Text>
       <Prim.TextArea
         className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
@@ -61,14 +61,14 @@ function EnvTab() {
         placeholder="KEY=value"
         spellCheck={false}
       />
-      <Prim.Box className="flex items-center gap-3 self-end">
+      <Prim.Row className="gap-3" alignItems="center" alignSelf="flex-end">
         {status === 'saved' && <Prim.Text className="text-xs text-success">Saved</Prim.Text>}
         {status === 'error' && <Prim.Text className="text-xs text-destructive">Error saving</Prim.Text>}
         <Button variant="default" size="sm" loading={saving} onClick={() => void save()}>
           Save env
         </Button>
-      </Prim.Box>
-    </Prim.Box>
+      </Prim.Row>
+    </Prim.Col>
   );
 }
 
@@ -90,10 +90,10 @@ function InstructionsTab({ projectId }: { projectId: string }) {
     finally { setSaving(false); }
   };
 
-  if (!loaded) return <Prim.Box className="flex items-center justify-center p-6"><Spinner /></Prim.Box>;
+  if (!loaded) return <Prim.Row className="justify-center p-6" alignItems="center"><Spinner /></Prim.Row>;
 
   return (
-    <Prim.Box className="flex flex-col gap-3 p-4">
+    <Prim.Col className="gap-3 p-4">
       <Prim.TextArea
         className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
         rows={12}
@@ -104,7 +104,7 @@ function InstructionsTab({ projectId }: { projectId: string }) {
       <Button variant="default" size="sm" loading={saving} onClick={() => void save()} className="self-end">
         Save instructions
       </Button>
-    </Prim.Box>
+    </Prim.Col>
   );
 }
 
@@ -130,13 +130,13 @@ function DocumentsTab({ projectId }: { projectId: string }) {
   };
 
   return (
-    <Prim.Box className="flex flex-col gap-2 p-4">
+    <Prim.Col className="gap-2 p-4">
       {docs.length === 0 && <Prim.Text as="p" className="text-sm text-muted-foreground">No documents yet.</Prim.Text>}
       {docs.map(d => (
-        <Prim.Box key={d} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/40">
+        <Prim.Row key={d} className="gap-2 px-3 py-2 rounded-lg border border-border bg-muted/40" alignItems="center">
           <Prim.Text className="text-sm">📄</Prim.Text>
           <Prim.Text className="text-sm text-foreground truncate flex-1" title={d}>{d}</Prim.Text>
-        </Prim.Box>
+        </Prim.Row>
       ))}
       <Prim.Text as="label" className={cn('mt-2 self-start cursor-pointer', uploading && 'opacity-50 pointer-events-none')}>
         <Button variant="outline" size="sm" loading={uploading}>
@@ -144,7 +144,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
         </Button>
         <Prim.TextField ref={fileRef} type="file" className="hidden" onChange={(e) => void handleFile(e)} />
       </Prim.Text>
-    </Prim.Box>
+    </Prim.Col>
   );
 }
 
@@ -158,31 +158,31 @@ function SpacesTab({ projectId }: { projectId: string }) {
       .then(r => setSpaces(r.spaces)).catch(() => setSpaces([]));
   }, [projectId]);
 
-  if (spaces === null) return <Prim.Box className="flex items-center justify-center p-6"><Spinner /></Prim.Box>;
+  if (spaces === null) return <Prim.Row className="justify-center p-6" alignItems="center"><Spinner /></Prim.Row>;
   if (spaces.length === 0) return <Prim.Text as="p" className="p-4 text-sm text-muted-foreground">No spaces yet. Ask THING to build a specialist.</Prim.Text>;
 
   return (
-    <Prim.Box className="flex flex-col gap-2 p-4">
+    <Prim.Col className="gap-2 p-4">
       {spaces.map(s => {
         const actions = s.agents.flatMap(a => a.actions);
         return (
           <Prim.Box key={s.id} className="border border-border rounded-xl px-3 py-2.5 bg-card">
-            <Prim.Box className="flex items-center gap-2 mb-1">
+            <Prim.Row className="gap-2 mb-1" alignItems="center">
               <Prim.Text className="text-sm font-medium text-foreground flex-1 truncate">{s.name}</Prim.Text>
               <Prim.Text className="text-xs text-muted-foreground font-mono">{s.id}</Prim.Text>
-            </Prim.Box>
+            </Prim.Row>
             {s.description && <Prim.Text as="p" className="text-xs text-muted-foreground mb-2 line-clamp-2">{s.description}</Prim.Text>}
-            <Prim.Box className="flex flex-wrap gap-1">
+            <Prim.Row className="flex-wrap gap-1">
               <Prim.Text className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{s.agents.length} agent{s.agents.length !== 1 && 's'}</Prim.Text>
               {s.functionCount > 0 && <Prim.Text className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{s.functionCount} fn</Prim.Text>}
               {s.componentCount > 0 && <Prim.Text className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">{s.componentCount} comp</Prim.Text>}
               {s.hasKnowledge && <Prim.Text className="text-xs bg-knowledge/15 text-knowledge px-1.5 py-0.5 rounded-full">knowledge</Prim.Text>}
               {actions.map(a => <Prim.Text key={a.id} className="text-xs bg-agent/15 text-agent px-1.5 py-0.5 rounded-full">/{a.id}</Prim.Text>)}
-            </Prim.Box>
+            </Prim.Row>
           </Prim.Box>
         );
       })}
-    </Prim.Box>
+    </Prim.Col>
   );
 }
 

@@ -273,7 +273,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     <Prim.Box className={cn('px-4 pb-4 pt-2', className)}>
       {/* Staged attachments */}
       {(attachments.length > 0 || attaching || attachError || recording) && (
-        <Prim.Box className="mb-2 flex flex-wrap items-center gap-2">
+        <Prim.Row className="mb-2 flex-wrap gap-2" alignItems="center">
           {attachments.map((a) => (
             <Prim.Text
               key={a.id}
@@ -303,10 +303,10 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           )}
           {attaching && <Prim.Text className="text-xs text-muted-foreground">Transcribing…</Prim.Text>}
           {attachError && <Prim.Text className="text-xs text-destructive">{attachError}</Prim.Text>}
-        </Prim.Box>
+        </Prim.Row>
       )}
 
-      <Prim.Box className="relative flex items-end gap-2 bg-card border border-border rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-ring transition-shadow">
+      <Prim.Row className="relative gap-2 bg-card border border-border rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-ring transition-shadow" alignItems="flex-end">
         {/* Dropdown */}
         {dropdownOpen && (
           <Prim.List ref={dropdownRef} className="absolute bottom-full left-4 mb-2 max-h-60 overflow-auto bg-popover text-popover-foreground border border-border rounded-md shadow-lg z-50 min-w-[200px] text-sm py-1">
@@ -384,7 +384,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         >
           <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>
         </Prim.Pressable>
-      </Prim.Box>
+      </Prim.Row>
       <Prim.Text as="p" className="mt-1.5 text-xs text-muted-foreground text-center">
         Enter to send · Shift+Enter for newline
       </Prim.Text>

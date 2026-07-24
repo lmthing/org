@@ -31,17 +31,17 @@ const members = [
 
 export default function Slide7Team() {
   return (
-    <Prim.Box
-      className="flex h-full w-full flex-col items-center justify-center"
+    <Prim.Col
+      className="h-full w-full justify-center" alignItems="center"
       style={{ background: colors.bg }}
     >
       <Prim.Text as="h2" className="mb-16 flex items-center justify-center gap-3 text-7xl font-bold" style={{ color: colors.text }}>
         Team behind the <CozyThingText text="thing" className="text-7xl leading-loose" />
       </Prim.Text>
 
-      <Prim.Box className="flex gap-16">
+      <Prim.Row className="gap-16">
         {members.map((m) => (
-          <Prim.Box key={m.name} className="flex flex-col items-center">
+          <Prim.Col key={m.name} alignItems="center">
             <Prim.Image
               src={m.image}
               alt={m.name}
@@ -59,9 +59,9 @@ export default function Slide7Team() {
                 {m.subtitle}
               </Prim.Text>
             )}
-          </Prim.Box>
+          </Prim.Col>
         ))}
-      </Prim.Box>
-    </Prim.Box>
+      </Prim.Row>
+    </Prim.Col>
   )
 }

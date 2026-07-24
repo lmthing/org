@@ -45,7 +45,7 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
       <Resizer onDrag={(dx) => setWidth(w => Math.max(280, Math.min(700, w - dx)))} />
 
       {/* Header */}
-      <Prim.Box className="flex items-center gap-2 px-3 py-2 border-b border-lm-border shrink-0">
+      <Prim.Row className="gap-2 px-3 py-2 border-b border-lm-border" alignItems="center" flexShrink={0}>
         <Prim.Text className="text-xs font-semibold text-lm-text flex-1">DevTools</Prim.Text>
         <Prim.Pressable
           onClick={onClose}
@@ -54,7 +54,7 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
         >
           ×
         </Prim.Pressable>
-      </Prim.Box>
+      </Prim.Row>
 
       {/* Execution tree */}
       <Prim.Box className="overflow-hidden shrink-0" style={{ height: treeH }}>

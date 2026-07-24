@@ -108,7 +108,7 @@ export function AppShell({ singleSession }: AppShellProps) {
   );
 
   return (
-    <Prim.Box className="h-full flex overflow-hidden bg-background">
+    <Prim.Row className="h-full overflow-hidden bg-background">
       {/* Sidebar — docked on desktop, drawer on mobile */}
       {showSidebar && !sidebarAsDrawer && sidebarOpen && (
         <Prim.Box className="shrink-0 h-full">
@@ -127,7 +127,7 @@ export function AppShell({ singleSession }: AppShellProps) {
       )}
 
       {/* Main: chat */}
-      <Prim.Box className="flex-1 min-w-0 relative flex flex-col overflow-hidden">
+      <Prim.Col className="relative overflow-hidden" flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
         {/* Hamburger for mobile */}
         {showSidebar && sidebarAsDrawer && (
           <Prim.Pressable
@@ -141,11 +141,11 @@ export function AppShell({ singleSession }: AppShellProps) {
 
         {/* No session selected in project mode */}
         {showSidebar && !activeSessionId ? (
-          <Prim.Box className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+          <Prim.Row className="justify-center text-muted-foreground text-sm" alignItems="center" flexGrow={1} flexShrink={1} flexBasis="0%" style={{ lineHeight: '1.25rem' }}>
             {activeProjectId
               ? 'Select or start a chat from the sidebar.'
               : 'Select or create a project to get started.'}
-          </Prim.Box>
+          </Prim.Row>
         ) : (
           <ChatView
             onOpenDevPanel={() => setDevPanelOpen(!devPanelOpen)}
@@ -155,7 +155,7 @@ export function AppShell({ singleSession }: AppShellProps) {
             className="flex-1 min-h-0"
           />
         )}
-      </Prim.Box>
+      </Prim.Col>
 
       {/* DevPanel — docked on desktop, drawer on tablet */}
       {showDevPanel && !devPanelAsDrawer && devPanelContent}
@@ -181,6 +181,6 @@ export function AppShell({ singleSession }: AppShellProps) {
           onIntegrationConfigured={onIntegrationConfigured}
         />
       )}
-    </Prim.Box>
+    </Prim.Row>
   );
 }

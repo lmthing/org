@@ -79,10 +79,10 @@ export function ExecutionTree(): React.ReactElement {
 
   return (
     <Prim.Box as="nav" aria-label="execution tree" className="h-full overflow-y-auto py-1">
-      <Prim.Box className="px-2 py-1 text-[10px] uppercase tracking-wider text-lm-muted flex items-center justify-between">
+      <Prim.Row className="px-2 py-1 text-[10px] uppercase tracking-wider text-lm-muted justify-between" alignItems="center">
         <Prim.Text>Execution</Prim.Text>
         {queue && <Prim.Text className="font-mono">q {queue.active}/{queue.max}</Prim.Text>}
-      </Prim.Box>
+      </Prim.Row>
       {rootId ? <TreeRowById id={rootId} depth={0} now={now} /> : (
         <Prim.Box className="px-3 py-4 text-lm-muted text-[12px]">No activity yet. Send a message to start.</Prim.Box>
       )}

@@ -4,12 +4,12 @@ import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 
 export default function Slide6DemoVideo() {
   return (
-    <Prim.Box
-      className="relative flex h-full w-full flex-col items-center justify-center"
+    <Prim.Col
+      className="relative h-full w-full justify-center" alignItems="center"
       style={{ background: colors.bg, padding: '48px 72px 52px' }}
     >
       {/* TOP */}
-      <Prim.Box className="mb-8 flex flex-col items-center">
+      <Prim.Col className="mb-8" alignItems="center">
         <Prim.Box
           className="mb-4 text-lg font-bold uppercase tracking-[0.16em]"
           style={{ color: colors.brand }}
@@ -22,10 +22,10 @@ export default function Slide6DemoVideo() {
         >
           lm<CozyThingText text="thing" className="text-6xl font-extrabold" /> demo
         </Prim.Text>
-      </Prim.Box>
+      </Prim.Col>
 
       {/* VIDEO CONTAINER */}
-      <Prim.Box className="flex w-full max-w-6xl items-center justify-center">
+      <Prim.Row className="w-full max-w-6xl justify-center" alignItems="center">
         <Prim.Video
           src="/lmthing.mp4"
           controls
@@ -38,11 +38,11 @@ export default function Slide6DemoVideo() {
             maxHeight: '65vh',
           }}
         />
-      </Prim.Box>
+      </Prim.Row>
 
       {/* BOTTOM STRIP */}
-      <Prim.Box
-        className="mt-8 flex items-center gap-2.5 rounded-full px-8 py-3.5"
+      <Prim.Row
+        className="mt-8 gap-2.5 rounded-full px-8 py-3.5" alignItems="center"
         style={{ background: colors.bgSection }}
       >
         <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
@@ -50,7 +50,7 @@ export default function Slide6DemoVideo() {
           Build custom AI agents in minutes, not days
         </Prim.Box>
         <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
-      </Prim.Box>
-    </Prim.Box>
+      </Prim.Row>
+    </Prim.Col>
   )
 }

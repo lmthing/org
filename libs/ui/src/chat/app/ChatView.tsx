@@ -177,8 +177,8 @@ export function ChatView({
   return (
     <Prim.Box className={cn('flex flex-col h-full bg-background', className)}>
       {/* Header */}
-      <Prim.Box as="header"
-        className="flex items-center gap-3 pl-12 md:pl-4 pr-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm shrink-0"
+      <Prim.Row as="header"
+        className="gap-3 pl-12 md:pl-4 pr-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm" alignItems="center" flexShrink={0}
         aria-label="chat header"
       >
         <Prim.Box className="flex-1 min-w-0">
@@ -186,15 +186,15 @@ export function ChatView({
           {/* THING's live "currently doing" line (setActivity, session scope). Sub-agent
               activities are shown by the LiveActivity/WorkBlock panel, not here. */}
           {activity && (
-            <Prim.Box
-              className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground min-w-0"
+            <Prim.Row
+              className="mt-0.5 gap-1.5 text-xs text-muted-foreground" alignItems="center" minWidth={0} style={{ lineHeight: '1rem' }}
               aria-live="polite"
               data-testid="activity"
               title={activity}
             >
               <Prim.Text className="w-1.5 h-1.5 rounded-full bg-agent animate-pulse shrink-0" aria-hidden />
               <Prim.Text className="truncate italic">{activity}</Prim.Text>
-            </Prim.Box>
+            </Prim.Row>
           )}
         </Prim.Box>
         {sessionCostUsd > 0 && (
@@ -202,7 +202,7 @@ export function ChatView({
             {formatCost(sessionCostUsd)}
           </Prim.Text>
         )}
-        <Prim.Box className="flex items-center gap-2 shrink-0">
+        <Prim.Row className="gap-2" alignItems="center" flexShrink={0}>
           {mode === 'live' && (
             <Prim.Pressable
               onClick={() => setFollow(!follow)}
@@ -252,8 +252,8 @@ export function ChatView({
               {restarting ? '↻' : '⏻'}
             </Prim.Pressable>
           )}
-        </Prim.Box>
-      </Prim.Box>
+        </Prim.Row>
+      </Prim.Row>
 
       {/* Messages */}
       <Prim.Box as="main"
@@ -264,7 +264,7 @@ export function ChatView({
         aria-live="polite"
         aria-atomic="false"
       >
-        <Prim.Box className="max-w-3xl mx-auto py-6 min-h-full flex flex-col">
+        <Prim.Col className="max-w-3xl mx-auto py-6" minHeight="100%">
           {groups.length === 0 ? (
             <EmptyState
               projectName={!singleSession && spaceLabel ? spaceLabel : undefined}
@@ -280,7 +280,7 @@ export function ChatView({
             )
           )}
           <Prim.Box ref={bottomRef} />
-        </Prim.Box>
+        </Prim.Col>
       </Prim.Box>
 
       {/* Ephemeral sub-agent activity (delegates/forks/tasklists). Pinned above
