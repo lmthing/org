@@ -184,3 +184,31 @@ describe('__internal helpers', () => {
     expect(__internal.spaceToken('999')).toBe(null)
   })
 })
+
+describe('regression: directional border WIDTH is not misread as a color token', () => {
+  it('border-t/r/b/l/x/y → directional widths (not $t/$b garbage)', () => {
+    expect(classToProps('border-t').props).toEqual({ borderTopWidth: 1 })
+    expect(classToProps('border-b').props).toEqual({ borderBottomWidth: 1 })
+    expect(classToProps('border-l').props).toEqual({ borderLeftWidth: 1 })
+    expect(classToProps('border-r').props).toEqual({ borderRightWidth: 1 })
+    expect(classToProps('border-x').props).toEqual({ borderLeftWidth: 1, borderRightWidth: 1 })
+    expect(classToProps('border-y').props).toEqual({ borderTopWidth: 1, borderBottomWidth: 1 })
+    expect(classToProps('border-t-2').props).toEqual({ borderTopWidth: 2 })
+  })
+  it('border width + border color on one element keep BOTH', () => {
+    expect(classToProps('border-t border-border').props).toEqual({ borderTopWidth: 1, borderColor: '$border' })
+    expect(classToProps('border border-border').props).toEqual({ borderWidth: 1, borderColor: '$border' })
+  })
+})
+
+describe('regression: lm-* runtime palette is kept as className, not a bogus $lm-* token', () => {
+  it('bg-/text-/border-lm-* stay residual', () => {
+    expect(classToProps('bg-lm-accent')).toMatchObject({ props: {}, keep: ['bg-lm-accent'] })
+    expect(classToProps('text-lm-text')).toMatchObject({ props: {}, keep: ['text-lm-text'] })
+    expect(classToProps('border-lm-border')).toMatchObject({ props: {}, keep: ['border-lm-border'] })
+  })
+  it('real design-token colors still lift', () => {
+    expect(classToProps('bg-primary').props).toEqual({ backgroundColor: '$primary' })
+    expect(classToProps('text-muted-foreground').props).toEqual({ color: '$muted-foreground' })
+  })
+})

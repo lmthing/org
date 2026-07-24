@@ -67,6 +67,11 @@ function colorToken(raw) {
   if (/^(inherit|current|transparent|white|black)$/.test(raw)) {
     return { inherit: 'inherit', current: 'currentColor', transparent: 'transparent', white: '#fff', black: '#000' }[raw]
   }
+  // `lm-*` is the app-root runtime debug/space-theme palette (--lm-* vars injected in
+  // apps/web/src/routes/__root.tsx + Tailwind `bg-lm-*` utilities). It is NOT a Tamagui color
+  // token, so `$lm-accent` would resolve to nothing — keep those as className (they paint via
+  // Tailwind → var(--lm-*)) until the runtime-theme bridge exposes them as real tokens.
+  if (/^lm-/.test(raw)) return null
   return `$${raw}`
 }
 
