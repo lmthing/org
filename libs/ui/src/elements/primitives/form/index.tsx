@@ -1,14 +1,6 @@
-import * as React from 'react'
-import { hostPrimitive } from '../_host'
-
 /**
- * Form — the `<form>` primitive (Phase 0). Pure passthrough. On native there is no `<form>`;
- * Phase 1's native fork renders a plain container and wires `onSubmit` to the submit control.
- *
- * See docs/react-native-tamagui-migration.md §1.5.
+ * Form — the `<form>` primitive, now a real Tamagui primitive (Part III / B3.4-leaf). Per-tag
+ * `createComponent` (`isText`, display block) reproducing a plain block `<form>`. The
+ * `index.native.tsx` fork renders an RN `View`. See docs/react-native-tamagui-migration.md §1.5 / §4.
  */
-export type FormProps = React.FormHTMLAttributes<HTMLFormElement>
-
-const Form = hostPrimitive<HTMLFormElement, FormProps>('form', 'Form')
-
-export { Form }
+export { Form, type FormProps } from '../_tamagui'

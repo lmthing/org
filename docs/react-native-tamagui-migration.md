@@ -1356,6 +1356,18 @@ grounded in `apps/web/b0-probe/box-variants.mjs` (reproduces it all).
   colliding `@apply` display utility in the ~59 `libs/css` files (verified to beat the base:
   `box-variants` `bem-bang`). Cost: `!important` peppered through the design system permanently.
 
+### Leaf primitives — container/text ✅ Tamagui; pure-host leaves stay web-passthrough + native-fork
+
+`Link` (`<a>`), `Form` (`<form>`), `List`/`ListItem` (`<ul>`/`<ol>`/`<li>`) are now real Tamagui
+primitives (same per-tag `createComponent` + `isText:true` design; added to `text-codemod.mjs` so their
+margin/display conflict classes lift to props). The **pure-host leaves — `Image` (`<img>`), the form
+controls (`TextField`/`TextArea`/`Select`/`Option`), `media` (`Audio`/`Video`/`IFrame`), the `Table`
+family, `Svg`, and `misc` (`Pre`/`Br`/`Hr`) — INTENTIONALLY stay web-passthrough + native-fork.** A
+Tamagui wrapper adds nothing on web for replaced-content / native-form-control / `display:table`
+elements (Tamagui's own web output for them is the same host tag) and risks breaking their semantics;
+native already renders them via their `.native.tsx` forks (RN `Image`/`TextInput`/`WebView`/Views/
+`react-native-svg`). So they are already the universal component — the web impl is just the host tag.
+
 ### B3.4 — Radix overlays → Tamagui universal  (8 files in shared `elements/`)
 
 `overlays/dialog` `overlays/sheet` `overlays/dropdown` `typography/label` `content/separator`

@@ -264,3 +264,53 @@ export const Box = React.forwardRef<HTMLElement, BoxPrimitiveProps>(({ as, ...pr
   return React.createElement(Comp, { ...props, ref })
 })
 Box.displayName = 'Box'
+
+// ── Link / Form / List / ListItem ────────────────────────────────────────────────────────────────
+//
+// Container/text leaf primitives, same per-tag `createComponent` + `isText:true` design (so a plain
+// `<a>`/`<form>`/`<ul>`/`<li>` is reproduced: font/line-height inherit, margins lift to props, display
+// per tag). `.is_Text` sets no list-style, so `list-disc`/`list-decimal`/`ml-*` on a List work as
+// classes (margins lifted). (The pure-host replaced/form/table leaves — Image/controls/media/table/svg
+// — stay web-passthrough + native-fork: a Tamagui wrapper adds nothing on web for those and would break
+// replaced-content/form/table semantics; native already renders them via their `.native.tsx` forks.)
+
+const makeLeaf = (tag: string, display: string, name: string) =>
+  createComponent({
+    Component: tag as never,
+    isText: true,
+    isReactNative: false,
+    acceptsClassName: true,
+    componentName: name,
+    defaultProps: { display, ...baseTextResets },
+  }) as unknown as React.ComponentType<any>
+
+export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & TextStyleProps & MarginStyleProps
+const LinkComp = makeLeaf('a', 'inline', 'Link')
+export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>((props, ref) =>
+  React.createElement(LinkComp, { ...props, ref }),
+)
+Link.displayName = 'Link'
+
+export type FormProps = React.FormHTMLAttributes<HTMLFormElement> & TextStyleProps & MarginStyleProps
+const FormComp = makeLeaf('form', 'block', 'Form')
+export const Form = React.forwardRef<HTMLFormElement, FormProps>((props, ref) =>
+  React.createElement(FormComp, { ...props, ref }),
+)
+Form.displayName = 'Form'
+
+export type ListProps = React.HTMLAttributes<HTMLElement> &
+  TextStyleProps &
+  MarginStyleProps & { /** Render an ordered `<ol>` instead of an unordered `<ul>`. */ ordered?: boolean }
+const UlComp = makeLeaf('ul', 'block', 'List')
+const OlComp = makeLeaf('ol', 'block', 'List')
+export const List = React.forwardRef<HTMLElement, ListProps>(({ ordered, ...props }, ref) =>
+  React.createElement(ordered ? OlComp : UlComp, { ...props, ref }),
+)
+List.displayName = 'List'
+
+export type ListItemProps = React.LiHTMLAttributes<HTMLLIElement> & TextStyleProps & MarginStyleProps
+const LiComp = makeLeaf('li', 'list-item', 'ListItem')
+export const ListItem = React.forwardRef<HTMLLIElement, ListItemProps>((props, ref) =>
+  React.createElement(LiComp, { ...props, ref }),
+)
+ListItem.displayName = 'ListItem'

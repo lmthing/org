@@ -105,8 +105,8 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const items = props['items'] as (string | number)[] | undefined;
       const lis = items ? items.map((it, i) => <Prim.ListItem key={i}>{String(it)}</Prim.ListItem>) : kids;
       return ordered
-        ? <Prim.List ordered key={key} className="list-decimal ml-5 my-1 text-lm-text">{lis}</Prim.List>
-        : <Prim.List key={key} className="list-disc ml-5 my-1 text-lm-text">{lis}</Prim.List>;
+        ? <Prim.List ordered key={key} className="list-decimal text-lm-text" marginLeft="1.25rem" marginVertical="0.25rem">{lis}</Prim.List>
+        : <Prim.List key={key} className="list-disc text-lm-text" marginLeft="1.25rem" marginVertical="0.25rem">{lis}</Prim.List>;
     }
     case 'listitem': return <Prim.ListItem key={key}>{body}</Prim.ListItem>;
     case 'table': {
@@ -125,7 +125,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     }
     case 'timeline': {
       const items = (props['items'] as { title: string; time?: string; detail?: string }[]) ?? [];
-      return <Prim.List key={key} className="my-1 border-l border-lm-border pl-3">{items.map((it, i) => <Prim.ListItem key={i} className="mb-1"><Prim.Box className="text-lm-text">{it.title}{it.time ? <Prim.Text className="text-lm-muted text-[10px]" marginLeft="0.5rem">{it.time}</Prim.Text> : null}</Prim.Box>{it.detail ? <Prim.Box className="text-lm-muted text-[11px]">{it.detail}</Prim.Box> : null}</Prim.ListItem>)}</Prim.List>;
+      return <Prim.List key={key} className="border-l border-lm-border pl-3" marginVertical="0.25rem">{items.map((it, i) => <Prim.ListItem key={i} marginBottom="0.25rem"><Prim.Box className="text-lm-text">{it.title}{it.time ? <Prim.Text className="text-lm-muted text-[10px]" marginLeft="0.5rem">{it.time}</Prim.Text> : null}</Prim.Box>{it.detail ? <Prim.Box className="text-lm-muted text-[11px]">{it.detail}</Prim.Box> : null}</Prim.ListItem>)}</Prim.List>;
     }
 
     // ── indicators ──

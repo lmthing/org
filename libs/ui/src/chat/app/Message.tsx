@@ -177,7 +177,7 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground hover:opacity-90"
+      className="items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground hover:opacity-90" display="inline-flex"
     >
       <Prim.Text className="text-muted-foreground">📎</Prim.Text>
       <Prim.Text className="max-w-[200px]" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{att.filename ?? att.mediaType}</Prim.Text>
