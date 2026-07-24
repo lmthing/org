@@ -221,46 +221,46 @@ export function IntegrationsTab({
 
   if (integrations === null && !loadError) {
     return (
-      <Prim.Row className="justify-center p-6" alignItems="center">
+      <Prim.Row justifyContent="center" padding="$6" alignItems="center">
         <Spinner />
       </Prim.Row>
     );
   }
-  if (loadError) return <Prim.Text as="p" className="p-4 text-sm text-destructive">{loadError}</Prim.Text>;
+  if (loadError) return <Prim.Text as="p" padding="$4" fontSize="$sm" color="$destructive">{loadError}</Prim.Text>;
   if (integrations !== null && integrations.length === 0) {
     return (
-      <Prim.Text as="p" className="p-4 text-sm text-muted-foreground">
+      <Prim.Text as="p" padding="$4" fontSize="$sm" color="$muted-foreground">
         No integrations installed in this project yet. Ask THING to add one from the store.
       </Prim.Text>
     );
   }
 
   return (
-    <Prim.Col className="gap-4 p-4">
+    <Prim.Col gap="$4" padding="$4">
       {(integrations ?? []).map((integration) => {
         const keys = schemaKeys(integration.settings);
         const bindings = (inbound?.bindings ?? []).filter((b) => b.projectId === projectId);
         const st = resume[integration.spaceId] ?? { kind: 'idle' };
         return (
-          <Prim.Col key={integration.spaceId} className="border border-border rounded-xl bg-card p-3 gap-3">
-            <Prim.Row className="gap-2" alignItems="center">
+          <Prim.Col key={integration.spaceId} borderWidth={1} borderColor="$border" borderRadius="$radius-xl" backgroundColor="$card" padding="$3" gap="$3">
+            <Prim.Row gap="$2" alignItems="center">
               {integration.icon && <Prim.Text aria-hidden="true">{integration.icon}</Prim.Text>}
-              <Prim.Text className="text-sm font-medium text-foreground flex-1" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{integration.title}</Prim.Text>
+              <Prim.Text fontSize="$sm" fontWeight="$medium" color="$foreground" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{integration.title}</Prim.Text>
               {integration.configured ? (
-                <Prim.Text className="text-xs bg-success/15 text-success px-1.5 py-0.5 rounded-full">configured</Prim.Text>
+                <Prim.Text className="bg-success/15" fontSize="$xs" color="$success" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">configured</Prim.Text>
               ) : (
-                <Prim.Text className="text-xs bg-warning/15 text-warning px-1.5 py-0.5 rounded-full">
+                <Prim.Text className="bg-warning/15" fontSize="$xs" color="$warning" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">
                   {integration.missingRequired.length} key{integration.missingRequired.length !== 1 && 's'} needed
                 </Prim.Text>
               )}
             </Prim.Row>
 
             {integration.readme ? (
-              <Prim.Box as="details" className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+              <Prim.Box as="details" className="bg-muted/40" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" paddingHorizontal="$3" paddingVertical="$2">
                 <Prim.Box as="summary" className="text-xs text-muted-foreground cursor-pointer select-none">
                   Setup guide — how to get your keys
                 </Prim.Box>
-                <Prim.Box className="text-sm text-foreground" marginTop="0.5rem">
+                <Prim.Box fontSize="$sm" color="$foreground" marginTop="0.5rem">
                   <Markdown source={integration.readme} />
                 </Prim.Box>
               </Prim.Box>
@@ -273,20 +273,20 @@ export function IntegrationsTab({
                 onChange={(key, value) => setFields((prev) => ({ ...prev, [key]: value }))}
               />
             ) : (
-              <Prim.Text as="p" className="text-xs text-muted-foreground">This integration has no configurable settings.</Prim.Text>
+              <Prim.Text as="p" fontSize="$xs" color="$muted-foreground">This integration has no configurable settings.</Prim.Text>
             )}
 
             {bindings.length > 0 && (
-              <Prim.Col className="gap-1.5">
-                <Prim.Text as="p" className="text-xs text-muted-foreground">
+              <Prim.Col gap="$1.5">
+                <Prim.Text as="p" fontSize="$xs" color="$muted-foreground">
                   Inbound webhook URL{bindings.length !== 1 && 's'} — paste into the provider:
                 </Prim.Text>
                 {bindings.map((b) => {
                   const url = `${inbound?.baseUrl ?? ''}/${b.path}`;
                   const key = `${b.projectId}/${b.path}`;
                   return (
-                    <Prim.Row key={key} className="gap-2" alignItems="center">
-                      <Prim.Text as="code" className="flex-1 min-w-0 text-xs font-mono text-foreground bg-background border border-border rounded px-2 py-1 overflow-x-auto" whiteSpace="nowrap">
+                    <Prim.Row key={key} gap="$2" alignItems="center">
+                      <Prim.Text as="code" flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0} fontSize="$xs" fontFamily="$mono" color="$foreground" backgroundColor="$background" borderWidth={1} borderColor="$border" borderRadius="$radius" paddingHorizontal="$2" paddingVertical="$1" overflowX="auto" whiteSpace="nowrap">
                         {url}
                       </Prim.Text>
                       <Button variant="outline" size="sm" onClick={() => copy(key, url)}>
@@ -298,7 +298,7 @@ export function IntegrationsTab({
               </Prim.Col>
             )}
 
-            <Prim.Row className="gap-3 flex-wrap" alignItems="center">
+            <Prim.Row gap="$3" flexWrap="wrap" alignItems="center">
               <Button
                 variant="default"
                 size="sm"
@@ -309,14 +309,14 @@ export function IntegrationsTab({
                 {st.kind === 'saving' ? 'Saving…' : 'Save keys'}
               </Button>
               {st.kind === 'waiting' && (
-                <Prim.Text className="text-xs text-muted-foreground items-center gap-1.5" display="flex">
+                <Prim.Text fontSize="$xs" color="$muted-foreground" alignItems="center" gap="$1.5" display="flex">
                   <Spinner size={12} /> Waiting for the pod to restart…
                 </Prim.Text>
               )}
-              {st.kind === 'done' && <Prim.Text className="text-xs text-success">Saved — THING notified.</Prim.Text>}
-              {st.kind === 'error' && <Prim.Text className="text-xs text-destructive">{st.message}</Prim.Text>}
+              {st.kind === 'done' && <Prim.Text fontSize="$xs" color="$success">Saved — THING notified.</Prim.Text>}
+              {st.kind === 'error' && <Prim.Text fontSize="$xs" color="$destructive">{st.message}</Prim.Text>}
               {st.kind === 'timeout' && (
-                <Prim.Text className="text-xs text-muted-foreground items-center gap-2" display="flex">
+                <Prim.Text fontSize="$xs" color="$muted-foreground" alignItems="center" gap="$2" display="flex">
                   {st.message}
                   <Button variant="outline" size="sm" onClick={() => retryResume(integration.spaceId)}>
                     Retry

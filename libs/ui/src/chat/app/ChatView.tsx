@@ -34,7 +34,7 @@ function ConnectionDot() {
   return (
     <Prim.Text display="flex" className={`items-center gap-1 text-xs ${color}`}>
       <Prim.Text>{dot}</Prim.Text>
-      <Prim.Text className="text-muted-foreground">{label}</Prim.Text>
+      <Prim.Text color="$muted-foreground">{label}</Prim.Text>
     </Prim.Text>
   );
 }
@@ -181,28 +181,28 @@ export function ChatView({
         className="gap-3 pl-12 md:pl-4 pr-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm" alignItems="center" flexShrink={0}
         aria-label="chat header"
       >
-        <Prim.Box className="flex-1 min-w-0">
-          <Prim.Box className="text-sm font-medium text-foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{title}</Prim.Box>
+        <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
+          <Prim.Box fontSize="$sm" fontWeight="$medium" color="$foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{title}</Prim.Box>
           {/* THING's live "currently doing" line (setActivity, session scope). Sub-agent
               activities are shown by the LiveActivity/WorkBlock panel, not here. */}
           {activity && (
             <Prim.Row
-              className="mt-0.5 gap-1.5 text-xs text-muted-foreground" alignItems="center" minWidth={0} style={{ lineHeight: '1rem' }}
+              marginTop="$0.5" gap="$1.5" fontSize="$xs" color="$muted-foreground" alignItems="center" minWidth={0} style={{ lineHeight: '1rem' }}
               aria-live="polite"
               data-testid="activity"
               title={activity}
             >
               <Prim.Text className="w-1.5 h-1.5 rounded-full bg-agent animate-pulse shrink-0" aria-hidden />
-              <Prim.Text className="italic" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{activity}</Prim.Text>
+              <Prim.Text fontStyle="italic" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{activity}</Prim.Text>
             </Prim.Row>
           )}
         </Prim.Box>
         {sessionCostUsd > 0 && (
-          <Prim.Text className="text-xs text-muted-foreground shrink-0" title="Session cost">
+          <Prim.Text fontSize="$xs" color="$muted-foreground" flexShrink={0} title="Session cost">
             {formatCost(sessionCostUsd)}
           </Prim.Text>
         )}
-        <Prim.Row className="gap-2" alignItems="center" flexShrink={0}>
+        <Prim.Row gap="$2" alignItems="center" flexShrink={0}>
           {mode === 'live' && (
             <Prim.Pressable
               onClick={() => setFollow(!follow)}
@@ -229,7 +229,7 @@ export function ChatView({
           </Prim.Pressable>
           <Prim.Pressable
             onClick={() => { void openBugReport(); }}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            fontSize="$xs" color="$muted-foreground" hoverStyle={{ color: "$foreground" }}
             title="Report a bug"
           >
             Report bug
@@ -237,7 +237,7 @@ export function ChatView({
           <Prim.Pressable
             onClick={toggleTheme}
             data-testid="theme-toggle"
-            className="text-xs text-muted-foreground hover:text-foreground"
+            fontSize="$xs" color="$muted-foreground" hoverStyle={{ color: "$foreground" }}
             title="Toggle theme"
           >
             {theme === 'light' ? '☾' : '☀'}
@@ -246,7 +246,7 @@ export function ChatView({
             <Prim.Pressable
               onClick={() => { void handleRestart(); }}
               disabled={restarting}
-              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
+              fontSize="$xs" color="$muted-foreground" hoverStyle={{ color: "$foreground" }} disabledStyle={{ opacity: 0.4 }}
               title="Restart CLI process (reloads .env)"
             >
               {restarting ? '↻' : '⏻'}
@@ -258,13 +258,13 @@ export function ChatView({
       {/* Messages */}
       <Prim.Box as="main"
         ref={scrollRef}
-        className="flex-1 overflow-y-auto"
+        flexGrow={1} flexShrink={1} flexBasis="0%" overflowY="auto"
         onScroll={handleScroll}
         aria-label="conversation"
         aria-live="polite"
         aria-atomic="false"
       >
-        <Prim.Col className="max-w-3xl mx-auto py-6" minHeight="100%">
+        <Prim.Col maxWidth={768} marginHorizontal="auto" paddingVertical="$6" minHeight="100%">
           {groups.length === 0 ? (
             <EmptyState
               projectName={!singleSession && spaceLabel ? spaceLabel : undefined}

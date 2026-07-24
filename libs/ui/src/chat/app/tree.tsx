@@ -45,19 +45,19 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
         {childIds.length > 0 ? (
           <Prim.Pressable
             onClick={(e) => { e.stopPropagation(); toggleExpand(node.id); }}
-            className="text-lm-muted w-3 text-center shrink-0"
+            color="$lm-muted" width="$3" textAlign="center" flexShrink={0}
             aria-label={expanded ? 'collapse' : 'expand'}
           >
             {expanded ? '▾' : '▸'}
           </Prim.Pressable>
         ) : (
-          <Prim.Text className="w-3 shrink-0" />
+          <Prim.Text width="$3" flexShrink={0} />
         )}
         <StatusIcon status={node.status} />
-        <Prim.Text className="text-lm-text" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
+        <Prim.Text color="$lm-text" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
         <KindBadge kind={node.kind} />
-        {dur && <Prim.Text className="text-lm-muted text-[10px] font-mono shrink-0" marginLeft="auto">{dur}</Prim.Text>}
-        {retries > 0 && <Prim.Text className="text-lm-amber text-[10px] font-mono shrink-0" title={`${retries} retries`}>×{retries}</Prim.Text>}
+        {dur && <Prim.Text color="10px" fontFamily="$mono" flexShrink={0} marginLeft="auto">{dur}</Prim.Text>}
+        {retries > 0 && <Prim.Text color="10px" fontFamily="$mono" flexShrink={0} title={`${retries} retries`}>×{retries}</Prim.Text>}
       </Prim.Box>
       {expanded && childIds.map((cid) => <TreeRowById key={cid} id={cid} depth={depth + 1} now={now} />)}
     </Prim.Box>
@@ -79,13 +79,13 @@ export function ExecutionTree(): React.ReactElement {
   const now = useNow(anyRunning);
 
   return (
-    <Prim.Box as="nav" aria-label="execution tree" className="h-full overflow-y-auto py-1">
-      <Prim.Row className="px-2 py-1 text-[10px] uppercase tracking-wider text-lm-muted justify-between" alignItems="center">
+    <Prim.Box as="nav" aria-label="execution tree" height="100%" overflowY="auto" paddingVertical="$1">
+      <Prim.Row paddingHorizontal="$2" paddingVertical="$1" color="$lm-muted" textTransform="uppercase" letterSpacing="$wider" justifyContent="space-between" alignItems="center">
         <Prim.Text>Execution</Prim.Text>
-        {queue && <Prim.Text className="font-mono">q {queue.active}/{queue.max}</Prim.Text>}
+        {queue && <Prim.Text fontFamily="$mono">q {queue.active}/{queue.max}</Prim.Text>}
       </Prim.Row>
       {rootId ? <TreeRowById id={rootId} depth={0} now={now} /> : (
-        <Prim.Box className="px-3 py-4 text-lm-muted text-[12px]">No activity yet. Send a message to start.</Prim.Box>
+        <Prim.Box paddingHorizontal="$3" paddingVertical="$4" color="12px">No activity yet. Send a message to start.</Prim.Box>
       )}
     </Prim.Box>
   );

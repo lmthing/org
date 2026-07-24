@@ -79,15 +79,15 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
       data-testid="work-block"
       data-node-id={nodeId}
     >
-      <Prim.Row className="gap-1.5 text-xs" alignItems="center" style={{ lineHeight: '1rem' }}>
+      <Prim.Row gap="$1.5" fontSize="$xs" alignItems="center" style={{ lineHeight: '1rem' }}>
         <Prim.Pressable
           onClick={() => setExpanded((v) => !v)}
-          className="w-3 shrink-0 text-muted-foreground hover:text-foreground"
+          width="$3" flexShrink={0} color="$muted-foreground" hoverStyle={{ color: "$foreground" }}
           aria-label={expanded ? 'Collapse work block' : 'Expand work block'}
         >
           {expanded ? '▾' : '▸'}
         </Prim.Pressable>
-        <Prim.Text className="shrink-0" aria-hidden="true">
+        <Prim.Text flexShrink={0} aria-hidden="true">
           {KIND_ICON[node.kind] ?? '◦'}
         </Prim.Text>
         <Prim.Pressable
@@ -98,7 +98,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
           {node.label}
         </Prim.Pressable>
         {headline && (
-          <Prim.Text className="flex-1 min-w-0 text-muted-foreground opacity-70" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={headline}>
+          <Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0} color="$muted-foreground" opacity={0.7} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={headline}>
             {headline}
           </Prim.Text>
         )}
@@ -111,10 +111,10 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
         >
           {isRunning && <Prim.Text className="lm-pulse">{STATUS_GLYPH[node.status] ?? '●'}</Prim.Text>}
           {!isRunning && <Prim.Text>{STATUS_GLYPH[node.status] ?? '◦'}</Prim.Text>}
-          <Prim.Text className="capitalize">{node.status}</Prim.Text>
+          <Prim.Text textTransform="capitalize">{node.status}</Prim.Text>
         </Prim.Text>
         {dur != null && (
-          <Prim.Text className="shrink-0 text-muted-foreground opacity-70">{fmtDuration(dur)}</Prim.Text>
+          <Prim.Text flexShrink={0} color="$muted-foreground" opacity={0.7}>{fmtDuration(dur)}</Prim.Text>
         )}
       </Prim.Row>
 
@@ -137,15 +137,15 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
               );
             })
           ) : (
-            <Prim.Box className="italic opacity-70">{isRunning ? 'working…' : ''}</Prim.Box>
+            <Prim.Box fontStyle="italic" opacity={0.7}>{isRunning ? 'working…' : ''}</Prim.Box>
           )}
           {count > 0 && (
-            <Prim.Box className="opacity-60">
+            <Prim.Box opacity={0.6}>
               {count} statement{count === 1 ? '' : 's'}
             </Prim.Box>
           )}
           {node.error && (
-            <Prim.Box className="font-mono text-destructive" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.error}>
+            <Prim.Box fontFamily="$mono" color="$destructive" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.error}>
               {node.error}
             </Prim.Box>
           )}

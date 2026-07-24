@@ -62,7 +62,7 @@ export function BudgetWindows(): React.ReactElement | null {
   if (mode === 'replay' || !windows) return null;
 
   return (
-    <Prim.Text as="p" className="text-xs text-muted-foreground text-center" marginTop="0.25rem" aria-label="Budget remaining">
+    <Prim.Text as="p" fontSize="$xs" color="$muted-foreground" textAlign="center" marginTop="0.25rem" aria-label="Budget remaining">
       <Prim.Text>Budget</Prim.Text>
       {windows.map((w) => {
         const pct = w.remainingPct;
