@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { tamaguiConfig } from './tamagui.config'
-import { themes as genThemes, radius as genRadius, fonts as genFonts } from '@lmthing/css/tamagui-tokens'
+import {
+  themes as genThemes,
+  radius as genRadius,
+  fonts as genFonts,
+  space as genSpace,
+  size as genSize,
+  fontSizes as genFontSizes,
+  fontWeights as genFontWeights,
+  zIndex as genZIndex,
+} from '@lmthing/css/tamagui-tokens'
 
 /**
  * Layer-1 (runtime) parity for the buildable Tamagui config shell.
@@ -56,5 +65,39 @@ describe('tamagui.config createTamagui shell', () => {
     expect(val(tamaguiConfig.fonts.body.family)).toBe(genFonts['font-sans'])
     expect(val(tamaguiConfig.fonts.heading.family)).toBe(genFonts['font-display'])
     expect(val(tamaguiConfig.fonts.mono.family)).toBe(genFonts['font-mono'])
+  })
+
+  it('carries the Tailwind-parity space + size scale (SPIKE B)', () => {
+    for (const [name, expected] of Object.entries(genSpace)) {
+      expect(val(tamaguiConfig.tokens.space[name]), `space.${name}`).toBe(String(expected))
+    }
+    for (const [name, expected] of Object.entries(genSize)) {
+      expect(val(tamaguiConfig.tokens.size[name]), `size.${name}`).toBe(String(expected))
+    }
+    // The load-bearing 1:1 mapping the codemod relies on.
+    expect(val(tamaguiConfig.tokens.space['4'])).toBe('16')
+    expect(val(tamaguiConfig.tokens.space['2'])).toBe('8')
+  })
+
+  it('carries the named z-index overlay scale', () => {
+    for (const [name, expected] of Object.entries(genZIndex)) {
+      expect(val(tamaguiConfig.tokens.zIndex[name]), `zIndex.${name}`).toBe(String(expected))
+    }
+  })
+
+  it('font faces carry the Tailwind type ramp + weights (SPIKE B)', () => {
+    // `$sm`/`$base` sizes and `$semibold`/`$bold` weights land on the body face.
+    for (const [name, expected] of Object.entries(genFontSizes)) {
+      expect(val(tamaguiConfig.fonts.body.size[name]), `body.size.${name}`).toBe(String(expected))
+    }
+    for (const [name, expected] of Object.entries(genFontWeights)) {
+      expect(val(tamaguiConfig.fonts.body.weight[name]), `body.weight.${name}`).toBe(expected)
+    }
+  })
+
+  it('registers the Tailwind breakpoint media config', () => {
+    expect(tamaguiConfig.media).toBeTruthy()
+    expect(tamaguiConfig.media.md).toEqual({ minWidth: 768 })
+    expect(tamaguiConfig.media.gtSm).toEqual({ minWidth: 768 })
   })
 })
