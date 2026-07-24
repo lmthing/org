@@ -23,19 +23,23 @@ sweep is now underway and partially landed**:
 - **P4 primitive types widened** — `BoxStyleProps` + `LayoutStyleProps` mixed into every primitive
   (`libs/ui/src/elements/primitives/_tamagui.tsx#BoxStyleProps`) so the full Tamagui style-prop
   surface is typed on `Box/Text/Pressable/Row/Col/Link/Form/List/ListItem`.
-- **Full BEM slices landed** (surface BEM classes → props from each `*.styled.tsx` proof, `.css`
-  deleted): the **entire `computer` surface** (14 of 15 files — only `ide-file-tree.css` kept,
-  its residual classes sit on lucide/Radix/`TextField`), plus `thing-chat`/`step-config-panel`/
-  `workflow-editor`. The `studio` component surfaces (`workflow`/`thing`/`knowledge`/`functions`/
-  `component-editor`/`setup-guide`) had every BEM class on a `Prim.Box/Text/Pressable` converted to
-  props; their `.css` is KEPT where residuals sit on shared element components (`Card/Badge/Heading/
-  Caption/Button/Select/TextArea/Form`), icons, or un-expressible CSS (hover-reveal descendant
-  combinators, `::before`, details markers). **17 of 68 CSS files deleted; CSS bundle 171→153 KB.**
+- **Component-surface BEM sweep COMPLETE** (surface BEM classes → props from each `*.styled.tsx`
+  proof): the **entire `computer` surface** plus every `components/**` area — `agent`, `shell`,
+  `space`, `studio`, `auth`, `workflow`, `thing`, `knowledge`, `functions`, `component-editor`,
+  `setup-guide`, `presentation` — had every BEM class on a `Prim.Box/Text/Pressable` converted to
+  props; several also had raw `<div>`/`<h1>`/`<button>` host tags lifted onto `Prim.*`. A block's
+  `.css` is DELETED when all its classes were on `Prim.*` (and nothing else references them), KEPT
+  when residuals sit on shared element components (`Card/Badge/Heading/Caption/Button/Select/TextArea/
+  Form/Stack/Avatar`), lucide/Radix, or un-expressible CSS (gradients, hover-reveal descendant
+  combinators, `::before`, `@media`). **20 of 68 CSS files deleted (68→48 stylesheets); CSS bundle
+  171→153 KB.** The `classnames-to-props` codemod was hardened mid-sweep (see P3) after it surfaced
+  two silent-drop bugs.
 
-What remains: the residual-className tail (dynamic `cn()`, `hover:`/`transition-*` awaiting an
-animation driver, and BEM on shared/non-`Prim` elements), the **element-layer swap** (blocked — see
-below), config convergence, compiler-ON extraction, the `theme.css`/Tailwind deletion, and native
-(device toolchain).
+What remains: the **element-layer swap** — the 29 shared `elements/**` CSS files (`btn`/`input`/
+  `card`/`panel`/`caption`/… , used directly across many surfaces AND through the element components)
+  are the last block, entangled and blocked (see below); plus the residual-className tail (dynamic
+  `cn()`, `hover:`/`transition-*` awaiting an animation driver), config convergence, compiler-ON
+  extraction, the `theme.css`/Tailwind deletion, and native (device toolchain).
 
 > **Element-layer swap is blocked on the compiler (P4/P5), not oversight.** The 68 `styled()` proofs
 > use `styled(View,{tag})`, and Tamagui's `tag` prop is **compile-time only** — at runtime (extraction
@@ -51,7 +55,7 @@ below), config convergence, compiler-ON extraction, the `theme.css`/Tailwind del
 | **SPIKE B — token-scale reconciliation** | ✅ done | Tailwind `space`/`size`/`fontSizes`/`lineHeights`/`fontWeights`/`letterSpacings`/`zIndex`/`media` generated + pinned to Tailwind by `libs/css/src/__tests__/scale-parity.test.ts` |
 | **SPIKE C — react 18/19 types** | ⬜ open | not attempted; casts retained (documented in `_tamagui.tsx`). Blocks nothing above |
 | **P1 — token + theme foundation** | ✅ done | full Tamagui token set from `tokens.json`; `tamagui.config.ts` (native hex) + `tamagui-web.config.ts` (var-backed) both carry it; parity tests green. Config CONVERGENCE (one config, delete web config) deferred — it changes output, see §7 |
-| **P2 — BEM → styled()+variants** | ✅ 68 proofs + 🟡 **shipped SWAP underway** (17/68 CSS deleted) | Every BEM block has a `*.styled.tsx` proof + `*-styled.test.tsx` gate. **The swap is landing**: the whole `computer` surface (14/15 CSS deleted) + `thing-chat`/`step-config-panel`/`workflow-editor`; `studio` `components/**` had every `Prim.*` BEM class → props. `.css` is deleted when a block's classes were all on `Prim.Box/Text/Pressable`; KEPT when residuals sit on shared element components / icons / un-expressible CSS. **51 CSS files remain** (22 component + 29 element — element CSS is shared across surfaces so it deletes LAST). 496 tests green, `lint:tokens`+`lint:rn` clean, `apps/web` builds. The `!important`/`@apply` retirement waits until `theme.css` deletion (P6) |
+| **P2 — BEM → styled()+variants** | ✅ 68 proofs + 🟡 **component sweep COMPLETE** (20/68 CSS deleted) | Every BEM block has a `*.styled.tsx` proof + `*-styled.test.tsx` gate. **Every `components/**` + `computer` surface is swept**: all BEM on `Prim.Box/Text/Pressable` → props. `.css` deleted when a block was fully on `Prim.*` (20 files); KEPT when residuals sit on shared element components / icons / un-expressible CSS. **48 stylesheets remain** (19 component — all residual-blocked — + 29 element). The **29 shared `elements/**` CSS files delete LAST** (element-layer swap, blocked below). 508 tests green, `lint:tokens`+`lint:rn` clean, `apps/web` builds. The `!important`/`@apply` retirement waits until `theme.css` deletion (P6) |
 | **P3 — className → props codemod** | ✅ tool built + hardened + 🟡 **applied to chat+studio** | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + a 43-test gate (map + a new `-transform` suite). **Run for real**: chat + studio. Hardened after the first run surfaced two silent-drop bugs (both fixed + regression-tested, re-migrated clean): (a) directional `border-t/r/b/l/x/y` were misread as color tokens (`$t`) → widths dropped; (b) the `lm-*` runtime palette (`bg-lm-accent` …) became bogus `$lm-*` tokens → now kept as className. Also **added `cn("literal", …rest)` lifting** (the common dynamic shape). Alpha modifiers/animations/`lm-*`/dynamic `cn()` stay residual. Remaining className: chat ~223, studio ~589 (mostly BEM on shared elements + dynamic `cn()`), computer ~24 |
 | **P0 — real-surface visual harness** | 🟡 mechanism proven | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining |
 | **P4/P5 — primitives/overlays idiomatic, compiler ON, delete pipeline** | 🟡 primitives widened; rest ⬜ | Primitive prop types widened to the full Tamagui style-prop surface (`_tamagui.tsx#BoxStyleProps`). Element-layer swap onto the `styled()` proofs is BLOCKED until compiler extraction is ON (runtime `tag` renders `<div>`, a11y regression — see the Progress-log note). Overlays/compiler/pipeline-delete still ⬜, need the surface sweep finished first |
