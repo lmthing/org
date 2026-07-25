@@ -73,14 +73,23 @@ describe('AppSidebar — the translated `.app-sidebar*` rules', () => {
   // The regression guard for the dedupe itself: if a second copy of React ever comes back, these
   // throw "Invalid hook call" and say so loudly, instead of the component quietly reverting to
   // being untestable.
+  // `activeProjectId`, `onSelectProject` and `onSelectSpace` are REQUIRED by `AppSidebarProps`;
+  // these cases omitted them and only got away with it because the package ran `tsc --noCheck`.
+  const REQUIRED = {
+    activeProjectId: null,
+    onSelectProject: () => {},
+    onSelectSpace: () => {},
+  }
+
   it('renders the expanded shell with its landmark label', () => {
-    render(<AppSidebar projects={[]} spaces={[]} />)
+    render(<AppSidebar projects={[]} spaces={[]} {...REQUIRED} />)
     expect(screen.getByLabelText('projects, spaces and conversations')).toBeInTheDocument()
   })
 
   it('renders projects and spaces passed to it', () => {
     render(
       <AppSidebar
+        {...REQUIRED}
         projects={[{ id: 'p1', name: 'Alpha' }]}
         activeProjectId="p1"
         spaces={[{ id: 's1', name: 'Notes' }]}
@@ -92,7 +101,7 @@ describe('AppSidebar — the translated `.app-sidebar*` rules', () => {
 
   it('honours the `flexShrink` prop phase 1 introduced', () => {
     // Three studio surfaces used to pass `className="shrink-0"`; there is no Tailwind after phase 4.
-    const { container } = render(<AppSidebar projects={[]} spaces={[]} flexShrink={0} />)
+    const { container } = render(<AppSidebar projects={[]} spaces={[]} {...REQUIRED} flexShrink={0} />)
     const nav = container.querySelector('nav')
     expect(nav).toBeTruthy()
     expect(nav!.className).toBeTruthy()
