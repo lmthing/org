@@ -1,12 +1,12 @@
 # Phase 2 — the idiomatic-Tamagui migration ("the Tamagui way", zero-Tailwind)
 
-> **Status: P5 COMPLETE across `libs/ui` AND `apps/web` — every element the codemod can reach IS
-> migrated, and the manual tail behind it is worked through. 12 stylesheets remain (two of them
-> permanent: react-arborist markup and `marked`-injected HTML); zero orphan BEM classNames; the
-> codemod's only remaining reports are 30 legitimate `{className}` passthroughs. `lint:rn` now
-> covers `elements` + `components` too, where it had been silently blind to 67 raw host tags. CSS
-> bundle 171 → 35.93 kB. Deleting Tailwind (P6) is blocked on ONE named thing — the animation
-> family — plus the composite passthroughs. See "What remains".**
+> **Status: P0 BUILT · the ANIMATION DRIVER is in · P5 complete across `libs/ui` and `apps/web` ·
+> the `styled()` proof tree is retired · inline `style` is being closed too.**
+> The className tail is **87 real Tailwind utilities** (from 945), the animation family is **27
+> keyframes** with zero Tailwind transitions left, inline `style` objects are **130** (from 404),
+> and every change since P0 landed has been reviewed as a computed-style delta over the shipped
+> components. CSS bundle **171 → 32.56 kB**. Tailwind itself is not deleted yet — see
+> "What remains" for the three things that still hold it.
 > Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every surface primitive + overlay
 > *onto Tamagui components* while **keeping the Tailwind + `theme.css` + BEM styling engine**
 > underneath (coexistence). This Phase 2 replaces that styling engine with **idiomatic Tamagui** —
@@ -240,17 +240,24 @@ is migrated.
 |---|---|---|
 | component stylesheets | 15 | **12** |
 | orphan BEM classNames (dead, no rule anywhere) | 20 | **0** |
-| codemod skips needing hand work | 120 | **0** (30 legitimate passthroughs remain) |
-| residual Tailwind utility classNames | ~945 → 539 | **261 across 55 files** ¹ |
-| …of which the animation family | — | **67** |
-| files gated by `lint:rn` | 138 | **230** |
-| raw host tags in `elements`+`components` | 67 (ungated) | **0** |
-| CSS bundle (`apps/web`) | 171 kB → 41.79 kB | **32.84 kB** |
-| `libs/ui` tests | 508 → 645 | **664** |
+| codemod skips needing hand work | 120 | **0** |
+| residual utility classNames | ~945 → 539 | **125** ¹ |
+| …real Tailwind utilities | — | **87** |
+| …the animation family | 67 | **27, all keyframes** (0 Tailwind transitions) |
+| inline `style={{…}}` objects | 404 (uncounted until now) | **130** |
+| files gated by `lint:rn` | 138 | **201** ² |
+| raw host tags in `elements`+`components`+`apps/web` | 67 + 221 (ungated) | **0** |
+| parallel `styled()` proof files | 146 | **0** (retired) |
+| CSS bundle (`apps/web`) | 171 kB → 41.79 kB | **32.56 kB** |
+| `libs/ui` tests | 508 → 645 | **284** ³ |
 
-¹ higher than the earlier 539 because that figure counted only static string classNames; this one
-also counts the literals inside `cn(...)`. It is the number the Tailwind deletion actually has to
-answer for. Roughly a fifth of it is the animation family.
+¹ counts the literals inside `cn(...)` as well as static strings — the number the Tailwind deletion
+actually has to answer for.
+² the count DROPPED because the 146-file proof tree went; the SCOPE grew (it now covers `elements`
+and `components`, where it had been blind to 67 raw host tags).
+³ likewise: 419 of the old tests gated the parallel `styled()` copy that nothing imported. Every
+test that remains gates shipped code, and five elements whose only coverage was a proof gate got
+real suites against the component the app renders.
 
 **The de-HTML gap this uncovered.** `lint:rn`'s default scope was `chat`/`studio`/`computer` only,
 so it reported clean while `elements/**` and `components/**` — the SHARED vocabulary layer, the part
@@ -276,11 +283,37 @@ idiomatic prop surface it found three props the primitives never declared: `grid
 index signature), and `LayoutStyleProps` on `ListProps`, the one primitive missing it, which is why
 a `<ul>` used as a flex or grid container could not take `gap`.
 
+**The animation driver is IN, and it cost two findings.** `@tamagui/animations-css` on web,
+`@tamagui/animations-react-native` on native, four shared names whose durations mirror Tailwind's
+1:1 (`quick` 150ms = Tailwind's default, `medium` 200, `slow` 300) and whose easing IS Tailwind's
+`cubic-bezier(0.4, 0, 0.2, 1)` — so the swap is a rename, not a redesign, and P0 confirms the two
+render identically for `all`, `opacity` and `box-shadow`.
+
+- **The prop is `transition`, NOT `animation`.** Tamagui 2.5 renamed it — `useComponentState` gates
+  on `'transition' in props` — and `animation` is silently ignored. A raw `View` with
+  `animation="quick"` emits nothing at all, which reads exactly like "the driver is inert".
+- **`animateOnly` entries must be HYPHENATED CSS property names.** Tamagui writes them straight
+  into the `transition` shorthand without hyphenating, so `backgroundColor` produces
+  `transition: backgroundColor 150ms` and the browser drops the declaration. `background-color`
+  works. Both are pinned in `primitives/index.test.tsx`.
+
+Also: the vite plugin bundles the config and imports it from the app root with `@tamagui/web`
+external, so the driver made every build log "No bundled config generated" 227 times.
+`@tamagui/web` is a devDependency of `apps/web` purely to make that import resolve.
+
+**Inline `style` is the other escape hatch, and it was the bigger one.** 404 objects across 75
+files — more than the classNames, and nobody had counted them. It bypasses the atomic-CSS path
+completely: no variants, no token resolution, no native translation.
+`scripts/inline-style-to-props.mjs` lifts a static object onto the element under the same safety
+rules (Tamagui-backed targets only; shorthands EXPANDED because Tamagui has no prop for `flex: 1`
+or `border: '1px solid …'`; one unknown key bails the whole object; `wordBreak`/`listStyleType`
+excluded because Tamagui drops them). 404 → 130.
+
 **What now blocks deleting Tailwind (P6).** Three things:
 
-1. **The animation family** — 67 of the 261 remaining utility classNames are `transition-*`,
-   `animate-*`, `lm-fade-in`, `lm-spin`. This is the single biggest bucket and the one P0 exists to
-   review, because the driver changes visible motion app-wide.
+1. **~87 utility classNames**, mostly on things the codemod cannot target: lucide icons (`size-4`,
+   `h-4`, `shrink-0` — these want lucide's own `size` prop, not a style prop), `space-y-*` (child
+   margins, not `gap`), `backdrop-blur-*`, and the dynamic `{className}` passthroughs.
 2. **Host-passthrough primitives** — `Pre`, `Br`, `Hr`, `DataList`, `Option`, and the `Table`/`Svg`
    families are `hostPrimitive`/`svgPrimitive` wrappers: they forward props to a raw host tag,
    which ignores every style prop. Converting a className on one would silently delete the styling,
@@ -288,14 +321,14 @@ a `<ul>` used as a flex or grid container could not take `gap`.
    tag itself becomes Tamagui-backed. (`TextField`/`TextArea`/`Select` ARE Tamagui-backed and were
    added to the target list; that took 296 off the count on its own.) `render-descriptor.tsx` is
    the single densest file left, and it is almost entirely `Prim.Pre` + `prose-*`.
-3. **Composite `className` passthroughs** — the two biggest, `Caption` and `CozyThingText`, are
-   done: both already spread their rest props straight onto a `Prim.*` primitive, so style props
-   worked at runtime and only `Caption`'s prop TYPE (`ComponentProps<'span'>`, not `Prim.TextProps`)
-   was stopping callers writing them. Both are in the codemod's target list now. What is left is a
-   long tail — lucide icons (`size-4` wants lucide's own `size` prop, not a style prop), `Tag`,
-   `Badge`, `DialogContent`, `AvatarFallback` — two or three call sites each, and each needs the
-   same read-the-component check before it can be added: many elements bind a FIXED prop set rather
-   than spreading, and adding one of those to the target list would delete its styling silently.
+3. **The keyframes need a home outside the Tailwind entry.** 27 `lm-*`/`animate-*` classNames
+   remain, all KEYFRAMES — not the transition driver's job. The `lm-*` ones are already
+   hand-written CSS, but they live in `libs/ui/src/chat/app/styles.css`, which is itself an
+   `@import "tailwindcss"` entry (the repo's second) loaded by the `/chat` route. They need moving
+   to a plain stylesheet, and `animate-spin`/`animate-pulse` (7 uses) need hand-written equivalents.
+   Also still Tailwind's: the PREFLIGHT resets the primitives rely on, and the `@theme`/`@theme
+   inline` blocks that generate the `--color-*` custom properties SPIKE A1 depends on — so
+   `theme.css` becomes a vars-only file rather than a deletion.
 
 **Two mapping decisions worth not re-litigating.** `lm-*` maps to `var(--lm-…)`, NOT to the token
 it aliases: `applyThemeTokens` (`theme/theme.ts`) overrides `--lm-*` directly from a space's
