@@ -164,7 +164,7 @@ export function Models() {
             <Select
               value={r.alias}
               onChange={e => setRow(i, { alias: e.target.value })}
-              style={{ flex: '1 1 9rem', minWidth: '8rem' }}
+              flexGrow={1} flexShrink={1} flexBasis="9rem" minWidth="8rem"
             >
               {aliasOptions(r.alias).map(a => (
                 <SelectOption key={a.code} value={a.code}>{a.label}</SelectOption>
@@ -190,7 +190,7 @@ export function Models() {
         <Select
           value={defaultAlias}
           onChange={e => setDefaultAlias(e.target.value)}
-          style={{ flex: '1 1 12rem', minWidth: '10rem', maxWidth: '18rem' }}
+          flexGrow={1} flexShrink={1} flexBasis="12rem" minWidth="10rem" maxWidth="18rem"
         >
           <SelectOption value="">— none —</SelectOption>
           {rows

@@ -88,7 +88,7 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
               if (e.key === 'Escape') { setShowNewForm(false); setNewName('') }
             }}
             placeholder="ComponentName"
-            style={{ flex: 1 }}
+            flexGrow={1} flexShrink={1} flexBasis={0}
           />
           <Select
             value={newKind}

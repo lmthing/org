@@ -161,7 +161,7 @@ export function ProjectSettingsView() {
                       <Button
                         variant="outline"
                         size="sm"
-                        style={{ alignSelf: 'flex-start' }}
+                        alignSelf="flex-start"
                         onClick={() => window.open(`${storeOrigin()}/spaces`, '_blank', 'noopener')}
                       >
                         Browse the store
@@ -217,7 +217,7 @@ export function ProjectSettingsView() {
                   size="sm"
                   onClick={save}
                   disabled={saving}
-                  style={{ alignSelf: 'flex-start' }}
+                  alignSelf="flex-start"
                 >
                   {saving ? 'Saving…' : 'Save & Restart Pod'}
                 </Button>

@@ -409,6 +409,21 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
         .not.toContain(full)
     })
 
+    // `transition` is the ONE style prop that is not a className. The animation driver writes it as
+    // an INLINE style, so a class-diff probe reports it as dropped — it is not. ~10 surfaces rely on
+    // `transition="quick"` as the replacement for Tailwind's `transition-colors`, and nothing pinned
+    // it until now. `animateOnly` entries must be HYPHENATED CSS names; `backgroundColor` there
+    // emits an invalid declaration the browser discards.
+    it('applies `transition` as an inline style, not a class (animation driver)', () => {
+      const el = withProvider(
+        <Box data-p="1" transition="quick" animateOnly={['color', 'background-color']} />,
+      ).container.querySelector('[data-p]') as HTMLElement
+      expect(el.className).toBe(withProvider(<Box data-p="2" />).container.querySelector('[data-p]')!.className)
+      expect(el.getAttribute('style')).toContain('color')
+      expect(el.getAttribute('style')).toContain('150ms')
+      expect(el.getAttribute('style')).toContain('background-color')
+    })
+
     it('SILENTLY DROPS these — so the codemod must NOT map them', () => {
       // `wordBreak` (≠ `wordWrap`), `listStyleType` and `listStyle` produce no atomic class at all.
       // `break-all` / `list-disc` / `list-decimal` therefore stay reported skips and get an inline

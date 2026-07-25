@@ -103,7 +103,7 @@ export function Triggers() {
                     variant="outline"
                     size="sm"
                     onClick={() => copy(b.path, url)}
-                    style={{ flexShrink: 0 }}
+                    flexShrink={0}
                   >
                     {isCopied ? 'Copied' : 'Copy'}
                   </Button>

@@ -40,7 +40,7 @@ export function DevPanel({ onClose, className, height }: DevPanelProps) {
       aria-label="developer tools"
       display="flex"
       className={className} {...(height !== undefined ? { height } : {})} backgroundColor="var(--lm-panel)" borderColor="var(--lm-border)" position="relative" flexDirection="column" borderLeftWidth={1} overflow="hidden" flexShrink={0}
-      style={{ width }}
+      width={width}
     >
       <Resizer onDrag={(dx) => setWidth(w => Math.max(280, Math.min(700, w - dx)))} />
 

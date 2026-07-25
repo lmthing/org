@@ -148,7 +148,7 @@ export function Hooks() {
                     size="sm"
                     disabled={busy.has(key)}
                     onClick={() => toggle(h)}
-                    style={{ flexShrink: 0 }}
+                    flexShrink={0}
                   >
                     {h.disabled ? 'Enable' : 'Disable'}
                   </Button>

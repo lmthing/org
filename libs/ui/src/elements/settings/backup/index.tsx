@@ -165,7 +165,7 @@ export function WorkspaceBackup() {
             variant="primary"
             size="sm"
             onClick={connect}
-            style={{ alignSelf: 'flex-start' }}
+            alignSelf="flex-start"
           >
             Connect GitHub
           </Button>
@@ -207,7 +207,7 @@ export function WorkspaceBackup() {
               value={repo}
               placeholder="owner/repo"
               onChange={(e) => setRepo(e.target.value)}
-              style={{ fontFamily: 'monospace' }}
+              fontFamily="monospace"
             />
             <Caption muted>
               Must be empty — a repo that already has commits is rejected so a backup can never
@@ -229,7 +229,7 @@ export function WorkspaceBackup() {
                 max={1440}
                 value={String(interval)}
                 onChange={(e) => setIntervalMin(Number(e.target.value) || 60)}
-                style={{ width: '6rem' }}
+                width="6rem"
               />
               <Caption muted>minutes</Caption>
             </Prim.Box>

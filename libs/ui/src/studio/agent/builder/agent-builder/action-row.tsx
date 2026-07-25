@@ -22,11 +22,11 @@ export function ActionRow({ action, tasklistNames, onChange, onRemove }: {
               <Label compact>ID</Label>
               <Input value={action.id} onChange={e => onChange({ ...action, id: e.target.value })} placeholder="action-id" />
             </Prim.Box>
-            <Prim.Box style={{ flex: 2 }}>
+            <Prim.Box flexGrow={2} flexShrink={1} flexBasis={0}>
               <Label compact>Label</Label>
               <Input value={action.label} onChange={e => onChange({ ...action, label: e.target.value })} placeholder="Action label" />
             </Prim.Box>
-            <Button variant="ghost" size="sm" onClick={onRemove} style={{ alignSelf: 'flex-end' }}>✕</Button>
+            <Button variant="ghost" size="sm" onClick={onRemove} alignSelf="flex-end">✕</Button>
           </Stack>
           <Prim.Box>
             <Label compact>Description</Label>
