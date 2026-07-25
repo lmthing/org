@@ -113,6 +113,25 @@ function parseRules(css) {
 export const bagName = (sel) =>
   sel.replace(/^\./, '').replace(/--/g, '_').replace(/__/g, '_').replace(/-/g, '_').toUpperCase()
 
+/**
+ * Serialize a prop bag, annotating raw color literals.
+ *
+ * A stock Tailwind color utility (`text-white`, `bg-black`) is allowed inside `@apply` but becomes
+ * a raw hex once it is a value in a `.ts` file, which `lint:tokens` rejects. These are genuinely
+ * theme-independent literals (white on a brand fill), so they carry the codebase's escape comment —
+ * emitted by the generator, since hand-adding it to generated output would be lost on the next run.
+ */
+export function serializeBag(props) {
+  const lines = JSON.stringify(props, null, 2).split('\n')
+  return lines
+    .map((l) =>
+      /:\s*"(#[0-9a-fA-F]{3,8}|rgba?\([^"]*\))"/.test(l)
+        ? `${l} // ds-lint-ok: literal from a stock Tailwind color utility, theme-independent`
+        : l,
+    )
+    .join('\n')
+}
+
 export function convertStylesheet(css) {
   const converted = []   // { selector, name, props }
   const blocked = []     // { selector, reason }
@@ -180,7 +199,7 @@ for (const f of files) {
     console.log(`${f}: kept ${blocked.length} blocked rule(s)${rest ? '' : ' → DELETED (all converted)'}`)
   } else if (emit) {
     for (const c of converted) {
-      console.log(`/** \`${c.selector}\` */\nexport const ${c.name} = ${JSON.stringify(c.props, null, 2)} as const\n`)
+      console.log(`/** \`${c.selector}\` */\nexport const ${c.name} = ${serializeBag(c.props)} as const\n`)
     }
   } else {
     console.log(`${f}: ${converted.length} convertible, ${blocked.length} blocked`)

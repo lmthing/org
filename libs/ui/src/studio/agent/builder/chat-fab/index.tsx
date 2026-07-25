@@ -3,8 +3,8 @@
  * US-208 / C9: Fixed bottom-right, violet accent, icon + label.
  */
 import * as Prim from '../../../../elements/primitives/index.js';
-import '@lmthing/css/components/agent/builder/index.css'
 import { MessageCircle } from 'lucide-react'
+import { CHAT_FAB_ICON } from '../../props.js'
 
 export interface ChatFABProps {
   onClick: () => void
@@ -43,7 +43,7 @@ export function ChatFAB({ onClick }: ChatFABProps) {
         shadowRadius: 20,
       }}
     >
-      <MessageCircle className="chat-fab__icon" />
+      <MessageCircle {...CHAT_FAB_ICON} />
       Chat
     </Prim.Pressable>
   )

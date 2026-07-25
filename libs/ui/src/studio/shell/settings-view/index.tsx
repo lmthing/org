@@ -8,7 +8,6 @@ import { useEffect, useMemo } from 'react'
 import { useLocation, useNavigate, useParams } from '@tanstack/react-router'
 import { Shield, FileCode2 } from 'lucide-react'
 import { buildSpacePath } from '@lmthing/ui/lib/space-path'
-import '@lmthing/css/components/shell/index.css'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
@@ -18,6 +17,7 @@ import { useFile } from '@lmthing/ui/hooks/fs/useFile'
 import { cn } from '@lmthing/ui/lib/utils'
 import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../elements/content/panel/index.js'
 import { INPUT_BASE } from '../../../elements/forms/input/index.js'
+import { SETTINGS_VIEW_ENV_TEXTAREA, SETTINGS_VIEW_HEADER, SETTINGS_VIEW_PKG_CAPTION, SETTINGS_VIEW_PKG_TEXTAREA, SETTINGS_VIEW_STATUS_ERROR, SETTINGS_VIEW_STATUS_SUCCESS, SETTINGS_VIEW_TAB_ICON } from '../props.js'
 
 interface SettingsViewProps {
   isOpen: boolean
@@ -77,7 +77,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
   return (
     <Page full>
       <PageHeader>
-        <Stack row className="settings-view__header">
+        <Stack row {...SETTINGS_VIEW_HEADER}>
           <Prim.Box>
             <Heading level={2}>Space Settings</Heading>
             <Caption muted>{spaceId || 'No space selected'}</Caption>
@@ -101,7 +101,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
             ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }
             : { borderBottomWidth: 2, borderBottomColor: 'transparent' })}
         >
-          <Shield className="settings-view__tab-icon" /> Environment
+          <Shield {...SETTINGS_VIEW_TAB_ICON} /> Environment
         </Prim.Pressable>
         <Prim.Pressable
           onClick={() => handleTabChange('packages')}
@@ -111,7 +111,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
             ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }
             : { borderBottomWidth: 2, borderBottomColor: 'transparent' })}
         >
-          <FileCode2 className="settings-view__tab-icon" /> package.json
+          <FileCode2 {...SETTINGS_VIEW_TAB_ICON} /> package.json
         </Prim.Pressable>
       </Prim.Box>
 
@@ -134,7 +134,7 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                 <Prim.Box>
                   <Prim.Text as="label" display="block" fontSize="$xs" fontWeight="$medium" marginBottom="$1">Variables</Prim.Text>
                   <Prim.TextArea
-                    {...INPUT_BASE} className="settings-view__env-textarea"
+                    {...INPUT_BASE} {...SETTINGS_VIEW_ENV_TEXTAREA}
                     value={envContent}
                     onChange={e => setEnvContent(e.target.value)}
                     placeholder="KEY=value"
@@ -144,8 +144,8 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
                   <Button variant="outline" onClick={() => setEnvStatus('Loaded from session')}>Load</Button>
                   <Button variant="primary" onClick={() => setEnvStatus('Saved')}>Save</Button>
                 </Prim.Box>
-                {envError && <Caption className="settings-view__status--error">{envError}</Caption>}
-                {envStatus && <Caption className="settings-view__status--success">{envStatus}</Caption>}
+                {envError && <Caption {...SETTINGS_VIEW_STATUS_ERROR}>{envError}</Caption>}
+                {envStatus && <Caption {...SETTINGS_VIEW_STATUS_SUCCESS}>{envStatus}</Caption>}
               </Prim.Box>
             </Prim.Box>
           </Prim.Box>
@@ -156,11 +156,11 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
             <Prim.Box {...PANEL_BASE}>
               <Prim.Box {...PANEL_HEADER}><Prim.Text>package.json</Prim.Text></Prim.Box>
               <Prim.Box {...PANEL_BODY}>
-                <Caption muted className="settings-view__pkg-caption">
+                <Caption muted {...SETTINGS_VIEW_PKG_CAPTION}>
                   Inline metadata and dependency editor. Save when ready.
                 </Caption>
                 <Prim.TextArea
-                  {...INPUT_BASE} className="settings-view__pkg-textarea"
+                  {...INPUT_BASE} {...SETTINGS_VIEW_PKG_TEXTAREA}
                   value={packageJsonDraft || packageJsonSerialized}
                   onChange={e => { setPackageJsonDraft(e.target.value); setPackageJsonError(null); setPackageJsonSavedAt(null) }}
                   spellCheck={false}

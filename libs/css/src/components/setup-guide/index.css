@@ -1,19 +1,5 @@
 @reference "../../theme.css";
 
-/*
- * .lm-setup-guide — a collapsible <details> wrapper for an integration's setup
- * README on the project settings page. The README body itself is styled by
- * `.lm-markdown` (components/markdown).
- */
-
-.lm-setup-guide {
-  @apply border-border bg-muted;
-  border-width: 1px;
-  border-style: solid;
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-
 .lm-setup-guide__summary {
   @apply text-foreground;
   cursor: pointer;
@@ -37,11 +23,4 @@
 
 .lm-setup-guide[open] .lm-setup-guide__summary::before {
   transform: rotate(90deg);
-}
-
-.lm-setup-guide__body {
-  @apply bg-background border-border;
-  border-top-width: 1px;
-  border-top-style: solid;
-  padding: 0.85rem 1rem;
 }

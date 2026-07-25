@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { convertStylesheet, declToProps, bagName } from './bem-to-props.mjs'
+import { convertStylesheet, declToProps, bagName, serializeBag, trimStylesheet } from './bem-to-props.mjs'
 
 /**
  * Gate for the BEM-stylesheet → prop-bag codemod (docs/tamagui-idiomatic-migration.md §4).
@@ -125,5 +125,33 @@ describe('bem-rewrite-callsites import placement', () => {
 
   it('prepends when the file has no imports', () => {
     expect(insertImport('const x = 1\n', "import { A } from './p.js'")).toMatch(/^import \{ A \}/)
+  })
+})
+
+describe('serializeBag', () => {
+  it('annotates raw colour literals so generated files pass lint:tokens', () => {
+    // `@apply text-white` is allowed inside CSS but becomes a raw hex once it is a value in a
+    // `.ts` file. Generated output must carry the escape itself — hand-adding it would be lost.
+    const out = serializeBag({ width: '$3', color: '#fff' })
+    expect(out).toMatch(/"color": "#fff" \/\/ ds-lint-ok:/)
+    expect(out).not.toMatch(/"width": "\$3" \/\//)
+  })
+
+  it('annotates rgba() literals too', () => {
+    expect(serializeBag({ color: 'rgba(0,0,0,0.5)' })).toMatch(/ds-lint-ok:/)
+  })
+})
+
+describe('trimStylesheet', () => {
+  it('keeps only the named rules, preserving their source', () => {
+    const css = `@reference "../t.css";\n\n.a { color: red; }\n\n.b { color: blue; }\n`
+    const out = trimStylesheet(css, ['.b'])
+    expect(out).toContain('.b {')
+    expect(out).not.toContain('.a {')
+    expect(out).toContain('@reference')
+  })
+
+  it('returns empty when nothing is kept, so the caller can delete the file', () => {
+    expect(trimStylesheet('.a { color: red; }', [])).toBe('')
   })
 })

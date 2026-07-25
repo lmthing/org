@@ -1,5 +1,4 @@
 import * as Prim from '../../../../elements/primitives/index.js';
-import '@lmthing/css/components/agent/builder/index.css'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Card, CardBody, CardFooter } from '@lmthing/ui/elements/content/card'
 import { Badge } from '@lmthing/ui/elements/content/badge'
@@ -8,6 +7,7 @@ import { PageBody } from '@lmthing/ui/elements/layouts/page'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { SAVED_AGENTS_LIST, SAVED_AGENTS_LIST_BADGE_SM, SAVED_AGENTS_LIST_CARD_DESCRIPTION, SAVED_AGENTS_LIST_CARD_FOOTER, SAVED_AGENTS_LIST_CARD_HEADER, SAVED_AGENTS_LIST_CARD_NAME, SAVED_AGENTS_LIST_EMPTY, SAVED_AGENTS_LIST_EMPTY_CAPTION, SAVED_AGENTS_LIST_HEADER, SAVED_AGENTS_LIST_SUBTITLE } from '../../props.js'
 
 interface KnowledgeField {
   id: string
@@ -51,10 +51,10 @@ function AgentCard({ agent, fields, onLoad, onDuplicate, onDelete }: {
   return (
     <Card interactive>
       <CardBody>
-        <Stack row className="saved-agents-list__card-header">
+        <Stack row {...SAVED_AGENTS_LIST_CARD_HEADER}>
           <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
-            <Label className="saved-agents-list__card-name">{agent.name}</Label>
-            <Caption muted className="saved-agents-list__card-description">
+            <Label {...SAVED_AGENTS_LIST_CARD_NAME}>{agent.name}</Label>
+            <Caption muted {...SAVED_AGENTS_LIST_CARD_DESCRIPTION}>
               {agent.description}
             </Caption>
           </Prim.Box>
@@ -65,13 +65,13 @@ function AgentCard({ agent, fields, onLoad, onDuplicate, onDelete }: {
         </Stack>
         <Prim.Box display="flex" flexWrap="wrap" gap="$1.5" marginBottom="$4">
           {agentFields.slice(0, 3).map(field => (
-            <Badge key={field.id} variant="muted" className="saved-agents-list__badge-sm">{field.name}</Badge>
+            <Badge key={field.id} variant="muted" {...SAVED_AGENTS_LIST_BADGE_SM}>{field.name}</Badge>
           ))}
           {agentFields.length > 3 && (
-            <Badge variant="muted" className="saved-agents-list__badge-sm">+{agentFields.length - 3} more</Badge>
+            <Badge variant="muted" {...SAVED_AGENTS_LIST_BADGE_SM}>+{agentFields.length - 3} more</Badge>
           )}
         </Prim.Box>
-        <CardFooter className="saved-agents-list__card-footer">
+        <CardFooter {...SAVED_AGENTS_LIST_CARD_FOOTER}>
           <Stack row gap="sm">
             <Caption muted>🔧 {agent.enabledTools.length} tools</Caption>
             <Caption muted>🕐 {formatDate(agent.updatedAt)}</Caption>
@@ -87,20 +87,20 @@ export function SavedAgentsList({ fields, savedAgents, onLoadAgent, onDuplicateA
   const sortedAgents = [...savedAgents].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 
   return (
-    <PageBody className="saved-agents-list">
-      <Stack row className="saved-agents-list__header">
+    <PageBody {...SAVED_AGENTS_LIST}>
+      <Stack row {...SAVED_AGENTS_LIST_HEADER}>
         <Prim.Box>
           <Heading level={2}>Saved Agents</Heading>
-          <Caption muted className="saved-agents-list__subtitle">{savedAgents.length} saved agent{savedAgents.length !== 1 ? 's' : ''}</Caption>
+          <Caption muted {...SAVED_AGENTS_LIST_SUBTITLE}>{savedAgents.length} saved agent{savedAgents.length !== 1 ? 's' : ''}</Caption>
         </Prim.Box>
         <Button onClick={onNewAgent} variant="primary">+ New Agent</Button>
       </Stack>
 
       {savedAgents.length === 0 ? (
-        <Stack className="saved-agents-list__empty">
+        <Stack {...SAVED_AGENTS_LIST_EMPTY}>
           <Prim.Text marginBottom="$4" fontSize={40}>📦</Prim.Text>
           <Heading level={3}>No saved agents yet</Heading>
-          <Caption muted className="saved-agents-list__empty-caption">
+          <Caption muted {...SAVED_AGENTS_LIST_EMPTY_CAPTION}>
             Create your first agent and save it for quick access later.
           </Caption>
         </Stack>

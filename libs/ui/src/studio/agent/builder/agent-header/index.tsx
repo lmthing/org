@@ -1,10 +1,10 @@
 import * as Prim from '../../../../elements/primitives/index.js';
-import '@lmthing/css/components/agent/builder/index.css'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { ArrowLeft } from 'lucide-react'
 import { INPUT_BASE, INPUT_SM } from '../../../../elements/forms/input/index.js'
+import { AGENT_HEADER_ICON, AGENT_HEADER_LEFT, AGENT_HEADER_RIGHT } from '../../props.js'
 
 export interface AgentHeaderProps {
   title: string
@@ -27,9 +27,9 @@ export function AgentHeader({
 }: AgentHeaderProps) {
   return (
     <Prim.Box as="header" display="flex" alignItems="center" justifyContent="space-between" flexShrink={0} paddingVertical="$3" paddingHorizontal="$4" borderBottomWidth={1} borderBottomColor="$border">
-      <Stack row className="agent-header__left">
+      <Stack row {...AGENT_HEADER_LEFT}>
         <Button variant="ghost" size="icon" onClick={onBack}>
-          <ArrowLeft className="agent-header__icon" />
+          <ArrowLeft {...AGENT_HEADER_ICON} />
         </Button>
         <Input
           value={title}
@@ -38,7 +38,7 @@ export function AgentHeader({
           {...INPUT_BASE} {...INPUT_SM} className="agent-header__name-input"
         />
       </Stack>
-      <Stack row gap="sm" className="agent-header__right">
+      <Stack row gap="sm" {...AGENT_HEADER_RIGHT}>
         {hasUnsavedChanges && (
           <Button variant="primary" size="sm" onClick={onSave} disabled={!isValid}>
             {isNew ? 'Create' : 'Save'}

@@ -9,45 +9,41 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
 ### `components/agent/builder/index.css`
 
-- **.actions-panel** — `.actions-panel` `.actions-panel__badge-sm` `.actions-panel__body` `.actions-panel__card-content` `.actions-panel__card-description` `.actions-panel__card-icon` `.actions-panel__card-label` `.actions-panel__card-meta-row` `.actions-panel__card-row` `.actions-panel__card-title-row` `.actions-panel__empty` `.actions-panel__empty-caption` `.actions-panel__empty-icon` `.actions-panel__footer-caption` `.actions-panel__header-row`
-- **.agent-builder** — `.agent-builder` `.agent-builder__aside` `.agent-builder__aside-body` `.agent-builder__content` `.agent-builder__main` `.agent-builder__main-inner` `.agent-builder__textarea`
-- **.agent-form** — `.agent-form__instructions-textarea` `.agent-form__workflow-card` `.agent-form__workflow-row`
-- **.agent-header** — `.agent-header` `.agent-header__btn-icon` `.agent-header__desc-input` `.agent-header__icon` `.agent-header__left` `.agent-header__name-input` `.agent-header__name-wrap` `.agent-header__right`
-- **.area-knowledge** — `.area-knowledge__card` `.area-knowledge__card-chevron` `.area-knowledge__card-count` `.area-knowledge__card-description` `.area-knowledge__card-folder-icon` `.area-knowledge__card-header` `.area-knowledge__card-title` `.area-knowledge__card-title-wrap` `.area-knowledge__empty-entries` `.area-knowledge__entries` `.area-knowledge__entries-list` `.area-knowledge__entry` `.area-knowledge__entry-dot` `.area-knowledge__heading` `.area-knowledge__list`
-- **.attach-workflow-modal** — `.attach-workflow-modal__body` `.attach-workflow-modal__card-icon` `.attach-workflow-modal__card-left` `.attach-workflow-modal__card-name` `.attach-workflow-modal__card-name-wrap` `.attach-workflow-modal__card-row` `.attach-workflow-modal__empty` `.attach-workflow-modal__footer` `.attach-workflow-modal__list` `.attach-workflow-modal__search-icon` `.attach-workflow-modal__search-input` `.attach-workflow-modal__search-wrap`
-- **.chat-fab** — `.chat-fab` `.chat-fab__icon`
-- **.configuration-form** — `.configuration-form__bulk-runtime-badge` `.configuration-form__category-label` `.configuration-form__field-description` `.configuration-form__field-header` `.configuration-form__field-label-row` `.configuration-form__multiselect-pills` `.configuration-form__pill-btn` `.configuration-form__required-mark` `.configuration-form__runtime-badge` `.configuration-form__runtime-box` `.configuration-form__runtime-hint` `.configuration-form__runtime-inner` `.configuration-form__schema-header` `.configuration-form__schema-label-row` `.configuration-form__section-header` `.configuration-form__section-label` `.configuration-form__toggle-knob` `.configuration-form__toggle-knob--off` `.configuration-form__toggle-knob--on` `.configuration-form__toggle-switch` `.configuration-form__toggle-switch--off` `.configuration-form__toggle-switch--on`
-- **.create-agent-inline** — `.create-agent-inline` `.create-agent-inline__actions` `.create-agent-inline__avatar` `.create-agent-inline__avatar-icon` `.create-agent-inline__btn` `.create-agent-inline__close-icon` `.create-agent-inline__header-left` `.create-agent-inline__header-row`
-- **.field-selector** — `.field-selector__card` `.field-selector__card-content` `.field-selector__card-count` `.field-selector__card-description` `.field-selector__card-row`
-- **.knowledge-pill** — `.knowledge-pill` `.knowledge-pill--selected` `.knowledge-pill__folder-icon` `.knowledge-pill__icon`
-- **.knowledge-pill-bar** — `.knowledge-pill-bar` `.knowledge-pill-bar__clear` `.knowledge-pill-bar__label` `.knowledge-pill-bar__scroll`
-- **.prompt-preview** — `.prompt-preview` `.prompt-preview__badge` `.prompt-preview__badges` `.prompt-preview__chevron` `.prompt-preview__chevron--expanded` `.prompt-preview__code` `.prompt-preview__empty` `.prompt-preview__footer-row` `.prompt-preview__header` `.prompt-preview__header-left` `.prompt-preview__header-row`
-- **.save-agent-modal** — `.save-agent-modal__content` `.save-agent-modal__footer` `.save-agent-modal__form` `.save-agent-modal__header-row` `.save-agent-modal__icon` `.save-agent-modal__icon-wrap`
-- **.saved-agents-list** — `.saved-agents-list` `.saved-agents-list__badge-sm` `.saved-agents-list__card-badges` `.saved-agents-list__card-content` `.saved-agents-list__card-description` `.saved-agents-list__card-footer` `.saved-agents-list__card-header` `.saved-agents-list__card-name` `.saved-agents-list__empty` `.saved-agents-list__empty-caption` `.saved-agents-list__empty-icon` `.saved-agents-list__grid` `.saved-agents-list__header` `.saved-agents-list__subtitle`
-- **.slash-action-card** — `.slash-action-card` `.slash-action-card--disabled` `.slash-action-card--enabled` `.slash-action-card__actions` `.slash-action-card__btn-icon` `.slash-action-card__content` `.slash-action-card__meta` `.slash-action-card__row` `.slash-action-card__toggle` `.slash-action-card__toggle--off` `.slash-action-card__toggle--on` `.slash-action-card__toggle-knob` `.slash-action-card__toggle-knob--off` `.slash-action-card__toggle-knob--on` `.slash-action-card__trigger-row`
-- **.slash-actions-panel** — `.slash-actions-panel` `.slash-actions-panel__add-icon` `.slash-actions-panel__empty` `.slash-actions-panel__empty-icon` `.slash-actions-panel__empty-icon-wrap` `.slash-actions-panel__header` `.slash-actions-panel__help` `.slash-actions-panel__help-code` `.slash-actions-panel__help-icon` `.slash-actions-panel__list`
-- **.thing-panel** — `.thing-panel` `.thing-panel__body` `.thing-panel__body-caption` `.thing-panel__body-icon` `.thing-panel__close-icon` `.thing-panel__header` `.thing-panel__header-icon` `.thing-panel__header-left`
-- **.tools-panel** — `.tools-panel` `.tools-panel__badge-sm` `.tools-panel__body` `.tools-panel__card` `.tools-panel__card-actions` `.tools-panel__card-content` `.tools-panel__card-description` `.tools-panel__card-icon` `.tools-panel__card-label` `.tools-panel__card-meta-row` `.tools-panel__card-row` `.tools-panel__card-title-row` `.tools-panel__empty` `.tools-panel__empty-btn` `.tools-panel__empty-caption` `.tools-panel__empty-icon` `.tools-panel__footer-caption` `.tools-panel__header-row`
+- **.agent-builder** — `.agent-builder`
+- **.agent-header** — `.agent-header` `.agent-header__desc-input` `.agent-header__name-input`
+- **.area-knowledge** — `.area-knowledge__card`
+- **.chat-fab** — `.chat-fab`
+- **.configuration-form** — `.configuration-form__toggle-knob` `.configuration-form__toggle-switch`
+- **.create-agent-inline** — `.create-agent-inline`
+- **.knowledge-pill** — `.knowledge-pill` `.knowledge-pill--selected`
+- **.knowledge-pill-bar** — `.knowledge-pill-bar__clear` `.knowledge-pill-bar__scroll`
+- **.prompt-preview** — `.prompt-preview` `.prompt-preview__chevron` `.prompt-preview__code`
+- **.save-agent-modal** — `.save-agent-modal__icon` `.save-agent-modal__icon-wrap`
+- **.saved-agents-list** — `.saved-agents-list__grid`
+- **.slash-action-card** — `.slash-action-card` `.slash-action-card__toggle` `.slash-action-card__toggle-knob`
+- **.slash-actions-panel** — `.slash-actions-panel` `.slash-actions-panel__list`
+- **.thing-panel** — `.thing-panel`
+- **.tools-panel** — `.tools-panel__card` `.tools-panel__card-actions`
 
-  Tokens: `--agent`, `--color-agent`, `--color-agent-foreground`, `--color-background`, `--color-border`, `--color-brand-1`, `--color-brand-2`, `--color-brand-3`, `--color-destructive`, `--color-foreground`, `--color-knowledge`, `--color-muted`, `--color-muted-foreground`, `--color-neutral`, `--color-primary`, `--radius-full`, `--radius-lg`, `--radius-md`
+  Tokens: `--agent`, `--color-agent`, `--color-agent-foreground`, `--color-background`, `--color-border`, `--color-foreground`, `--color-knowledge`, `--color-muted`, `--color-muted-foreground`, `--radius-full`, `--radius-lg`, `--radius-md`
 
 ### `components/component-editor/index.css`
 
-- **.component-editor** — `.component-editor` `.component-editor__empty` `.component-editor__header` `.component-editor__kind-badge` `.component-editor__kind-badge--form` `.component-editor__kind-badge--view` `.component-editor__list` `.component-editor__list-item` `.component-editor__list-item--active` `.component-editor__list-item-actions` `.component-editor__list-item-name` `.component-editor__new-form` `.component-editor__pane` `.component-editor__pane-header` `.component-editor__section-title` `.component-editor__textarea`
+- **.component-editor** — `.component-editor` `.component-editor__kind-badge` `.component-editor__list` `.component-editor__list-item` `.component-editor__list-item--active` `.component-editor__list-item-actions`
 
-  Tokens: `--color-border`, `--color-success`, `--color-surface-active`, `--color-surface-hover`, `--color-surface-subtle`, `--font-mono`, `--knowledge`, `--success`
+  Tokens: `--color-surface-active`, `--color-surface-hover`
 
 ### `components/computer/ide-file-tree.css`
 
-- **.ide-file-tree** — `.ide-file-tree` `.ide-file-tree__action-btn` `.ide-file-tree__context-item` `.ide-file-tree__context-item--danger` `.ide-file-tree__context-menu` `.ide-file-tree__dialog-actions` `.ide-file-tree__dialog-content` `.ide-file-tree__dialog-input` `.ide-file-tree__dialog-overlay` `.ide-file-tree__dialog-title` `.ide-file-tree__header` `.ide-file-tree__header-actions` `.ide-file-tree__header-title` `.ide-file-tree__icon` `.ide-file-tree__icon--folder` `.ide-file-tree__item` `.ide-file-tree__item--active` `.ide-file-tree__name`
+- **.ide-file-tree** — `.ide-file-tree` `.ide-file-tree__action-btn` `.ide-file-tree__context-menu` `.ide-file-tree__dialog-content` `.ide-file-tree__dialog-overlay` `.ide-file-tree__item--active`
 
-  Tokens: `accent`, `background`, `border`, `card`, `destructive`, `foreground`, `muted-foreground`, `popover`, `primary`
+  Tokens: `accent`, `border`, `card`, `foreground`, `muted-foreground`, `popover`, `primary`
 
 ### `components/functions/index.css`
 
-- **.functions-editor** — `.functions-editor` `.functions-editor__empty` `.functions-editor__header` `.functions-editor__list` `.functions-editor__list-item` `.functions-editor__list-item--active` `.functions-editor__list-item-actions` `.functions-editor__list-item-name` `.functions-editor__new-form` `.functions-editor__pane` `.functions-editor__pane-header` `.functions-editor__textarea`
+- **.functions-editor** — `.functions-editor` `.functions-editor__list` `.functions-editor__list-item` `.functions-editor__list-item--active` `.functions-editor__list-item-actions`
 
-  Tokens: `--color-border`, `--color-surface-active`, `--color-surface-hover`, `--color-surface-subtle`, `--font-mono`
+  Tokens: `--color-surface-active`, `--color-surface-hover`
 
 ### `components/markdown/index.css`
 
@@ -58,61 +54,57 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
 ### `components/presentation/index.css`
 
-- **.presentation** — `.presentation` `.presentation__counter` `.presentation__exit-btn` `.presentation__footer` `.presentation__nav-overlay` `.presentation__slide`
-- **.slide** — `.slide` `.slide--centered` `.slide--padded` `.slide--padded-lg` `.slide--padded-xl` `.slide--row` `.slide__badge` `.slide__card` `.slide__card-accent` `.slide__chip` `.slide__divider` `.slide__flow-node` `.slide__flow-node--hero` `.slide__flow-node--regular` `.slide__flow-row` `.slide__flow-sub` `.slide__flow-sub--hero` `.slide__grid-3` `.slide__grid-split` `.slide__headline` `.slide__headline--lg` `.slide__headline--md` `.slide__headline--sm` `.slide__headline--xl` `.slide__pill` `.slide__pill--lg` `.slide__pill--sm` `.slide__point` `.slide__point-icon` `.slide__qr` `.slide__screenshot` `.slide__screenshot-img` `.slide__section-label` `.slide__section-label--lg` `.slide__section-label--md` `.slide__section-label--sm` `.slide__strip` `.slide__strip-dot` `.slide__strip-text` `.slide__subtitle` `.slide__subtitle--lg` `.slide__team-grid` `.slide__team-member` `.slide__team-photo` `.slide__tier-desc` `.slide__tier-dot` `.slide__tier-item` `.slide__tier-name` `.slide__tier-tag` `.slide__video` `.slide__video-container`
+- **.presentation** — `.presentation` `.presentation__exit-btn` `.presentation__footer` `.presentation__slide`
+- **.slide** — `.slide` `.slide__flow-node--hero` `.slide__grid-3` `.slide__grid-split` `.slide__point-icon` `.slide__qr` `.slide__screenshot` `.slide__section-label` `.slide__video`
 
   Tokens: `--background`, `--muted-foreground`
 
 ### `components/setup-guide/index.css`
 
-- **.lm-markdown** — `.lm-markdown`
-- **.lm-setup-guide** — `.lm-setup-guide` `.lm-setup-guide__body` `.lm-setup-guide__summary`
+- **.lm-setup-guide** — `.lm-setup-guide` `.lm-setup-guide__summary`
 
-  Tokens: `background`, `border`, `foreground`, `muted`
+  Tokens: `foreground`
 
 ### `components/shell/index.css`
 
-- **.settings-view** — `.settings-view__env-actions` `.settings-view__env-grid` `.settings-view__env-label` `.settings-view__env-textarea` `.settings-view__header` `.settings-view__panel-container` `.settings-view__panel-container--env` `.settings-view__pkg-caption` `.settings-view__pkg-error` `.settings-view__pkg-footer` `.settings-view__pkg-textarea` `.settings-view__status--error` `.settings-view__status--success` `.settings-view__tab` `.settings-view__tab--active` `.settings-view__tab--inactive` `.settings-view__tab-icon` `.settings-view__tabs`
-- **.spaces-layout** — `.spaces-layout` `.spaces-layout__collapse-icon` `.spaces-layout__detail` `.spaces-layout__detail-header` `.spaces-layout__detail-icon` `.spaces-layout__detail-icon-wrapper` `.spaces-layout__detail-info` `.spaces-layout__empty` `.spaces-layout__empty-create-btn` `.spaces-layout__empty-create-icon` `.spaces-layout__empty-icon` `.spaces-layout__footer-btn` `.spaces-layout__footer-label` `.spaces-layout__github-icon` `.spaces-layout__grid` `.spaces-layout__grid-btn` `.spaces-layout__grid-caption` `.spaces-layout__grid-card` `.spaces-layout__grid-card-header` `.spaces-layout__grid-container` `.spaces-layout__grid-icon` `.spaces-layout__grid-icon-wrapper` `.spaces-layout__grid-name` `.spaces-layout__home-btn` `.spaces-layout__icon-sm` `.spaces-layout__modal` `.spaces-layout__modal-actions` `.spaces-layout__modal-backdrop` `.spaces-layout__modal-desc` `.spaces-layout__modal-fields` `.spaces-layout__modal-title` `.spaces-layout__new-space-btn` `.spaces-layout__search-icon` `.spaces-layout__search-input` `.spaces-layout__search-wrapper` `.spaces-layout__sidebar-footer` `.spaces-layout__sidebar-header` `.spaces-layout__sidebar-header-inner` `.spaces-layout__sidebar-list` `.spaces-layout__sidebar-search-section` `.spaces-layout__sidebar-title` `.spaces-layout__space-btn` `.spaces-layout__space-icon-wrapper` `.spaces-layout__space-name`
-- **.studio-sidebar** — `.studio-sidebar__body` `.studio-sidebar__collapsed-icon` `.studio-sidebar__collapsed-icon-inner` `.studio-sidebar__collapsed-icons` `.studio-sidebar__conversations-empty` `.studio-sidebar__create-btn` `.studio-sidebar__create-icon` `.studio-sidebar__create-label` `.studio-sidebar__device-code` `.studio-sidebar__footer` `.studio-sidebar__footer-icon` `.studio-sidebar__footer-items` `.studio-sidebar__footer-label` `.studio-sidebar__header` `.studio-sidebar__header-inner` `.studio-sidebar__home-link` `.studio-sidebar__item-icon--assistant` `.studio-sidebar__item-icon--knowledge` `.studio-sidebar__item-label` `.studio-sidebar__section-chevron` `.studio-sidebar__section-header` `.studio-sidebar__section-items` `.studio-sidebar__sections` `.studio-sidebar__space-name`
-- **.studios-layout** — `.studios-layout` `.studios-layout__breadcrumb-sep` `.studios-layout__card` `.studios-layout__card-arrow` `.studios-layout__card-arrow-icon` `.studios-layout__card-delete-btn` `.studios-layout__card-delete-icon` `.studios-layout__card-header` `.studios-layout__card-icon` `.studios-layout__card-icon-wrapper` `.studios-layout__card-id` `.studios-layout__content` `.studios-layout__create-card` `.studios-layout__create-card-icon` `.studios-layout__create-card-inner` `.studios-layout__delete-btn` `.studios-layout__empty` `.studios-layout__empty-caption` `.studios-layout__empty-create-btn` `.studios-layout__empty-create-icon` `.studios-layout__empty-icon` `.studios-layout__grid` `.studios-layout__header-row` `.studios-layout__home-btn` `.studios-layout__modal` `.studios-layout__modal--sm` `.studios-layout__modal-actions` `.studios-layout__modal-backdrop` `.studios-layout__modal-desc` `.studios-layout__modal-desc--lg` `.studios-layout__modal-fields` `.studios-layout__modal-title` `.studios-layout__topbar` `.studios-layout__topbar-icon` `.studios-layout__topbar-left` `.studios-layout__topbar-right` `.studios-layout__username`
+- **.settings-view** — `.settings-view__env-grid`
+- **.spaces-layout** — `.spaces-layout__grid`
+- **.studio-sidebar** — `.studio-sidebar__device-code`
+- **.studios-layout** — `.studios-layout__create-card` `.studios-layout__grid`
 
-  Tokens: `--agent`, `--background`, `--border`, `--destructive`, `--knowledge`, `--primary`, `--success`
+  Tokens: `--border`
 
 ### `components/space/index.css`
 
-- **.confirm-dialog** — `.confirm-dialog__action-btn` `.confirm-dialog__content` `.confirm-dialog__icon` `.confirm-dialog__icon-wrapper`
-- **.space-list** — `.space-list__avatar-fallback` `.space-list__avatar-wrapper` `.space-list__body` `.space-list__email` `.space-list__email-icon` `.space-list__email-row` `.space-list__empty` `.space-list__empty-icon` `.space-list__header` `.space-list__invite-action-btn` `.space-list__invite-actions` `.space-list__invite-dialog` `.space-list__invite-form-body` `.space-list__invite-icon` `.space-list__invite-role-item` `.space-list__invite-role-radio` `.space-list__last-active` `.space-list__last-active-icon` `.space-list__role-badge` `.space-list__role-badge--admin` `.space-list__role-badge--editor` `.space-list__role-badge--viewer` `.space-list__search-icon` `.space-list__search-input` `.space-list__search-wrapper` `.space-list__status-badge` `.space-list__status-col` `.space-list__status-dot` `.space-list__status-dot--active` `.space-list__status-dot--invited` `.space-list__status-dot--pending` `.space-list__user-btn` `.space-list__user-info` `.space-list__user-list` `.space-list__user-name` `.space-list__user-name-row`
-- **.space-selector** — `.space-selector` `.space-selector__avatar` `.space-selector__chevron` `.space-selector__create-btn` `.space-selector__create-form` `.space-selector__dropdown` `.space-selector__empty` `.space-selector__footer` `.space-selector__item` `.space-selector__item-icon` `.space-selector__item-name` `.space-selector__list` `.space-selector__new-btn` `.space-selector__new-icon` `.space-selector__search-icon` `.space-selector__search-input` `.space-selector__search-section` `.space-selector__search-wrapper` `.space-selector__trigger` `.space-selector__trigger-label`
-- **.user-detail** — `.user-detail__avatar-col` `.user-detail__avatar-fallback` `.user-detail__body` `.user-detail__empty` `.user-detail__empty-avatar` `.user-detail__empty-caption` `.user-detail__empty-icon` `.user-detail__empty-inner` `.user-detail__header-info` `.user-detail__header-row` `.user-detail__icon-sm` `.user-detail__info-card-row` `.user-detail__info-grid` `.user-detail__info-icon` `.user-detail__name` `.user-detail__panel` `.user-detail__permissions-heading` `.user-detail__role-badge` `.user-detail__role-badge--admin` `.user-detail__role-badge--editor` `.user-detail__role-badge--viewer` `.user-detail__role-btn` `.user-detail__role-check` `.user-detail__role-check-icon` `.user-detail__role-icon` `.user-detail__role-info` `.user-detail__section` `.user-detail__status-heading`
+- **.space-list** — `.space-list__avatar-fallback` `.space-list__role-badge` `.space-list__role-badge--admin` `.space-list__role-badge--editor` `.space-list__role-badge--viewer` `.space-list__status-dot`
+- **.space-selector** — `.space-selector`
+- **.user-detail** — `.user-detail__avatar-fallback` `.user-detail__info-grid` `.user-detail__role-badge` `.user-detail__role-badge--admin` `.user-detail__role-badge--editor` `.user-detail__role-badge--viewer`
 
-  Tokens: `--agent`, `--border`, `--destructive`, `--muted`, `border`, `brand-2`, `brand-3`, `muted`, `muted-foreground`, `neutral`, `primary-foreground`
+  Tokens: `--agent`, `border`, `brand-2`, `brand-3`, `muted`, `muted-foreground`, `primary-foreground`
 
 ### `components/workflow/step-card/index.css`
 
 - **.group** — `.group`
-- **.step-card** — `.step-card` `.step-card--expanded` `.step-card__action-icon` `.step-card__actions` `.step-card__body` `.step-card__body--invalid` `.step-card__connector-bottom` `.step-card__connector-top` `.step-card__content` `.step-card__drag-handle` `.step-card__drag-icon` `.step-card__expanded-content` `.step-card__info` `.step-card__inner` `.step-card__order-badge` `.step-card__passes-data-icon` `.step-card__title-row` `.step-card__type-indicator`
-- **.step-preview** — `.step-preview` `.step-preview__field-header` `.step-preview__field-icon` `.step-preview__field-value` `.step-preview__instructions` `.step-preview__model-icon` `.step-preview__model-info` `.step-preview__schema-brace` `.step-preview__schema-enum` `.step-preview__schema-key` `.step-preview__schema-required` `.step-preview__schema-row` `.step-preview__schema-separator` `.step-preview__schema-type` `.step-preview__section` `.step-preview__tag-list`
+- **.step-card** — `.step-card` `.step-card--expanded` `.step-card__actions` `.step-card__body` `.step-card__connector-bottom` `.step-card__connector-top` `.step-card__drag-handle` `.step-card__order-badge`
 
-  Tokens: `--border`, `--brand-1`, `--brand-2`, `--brand-3`, `--card`, `--destructive`, `--foreground`, `--muted`, `--muted-foreground`, `brand-3`
+  Tokens: `--border`, `--brand-3`, `--card`, `--muted`, `--muted-foreground`, `brand-3`
 
 ### `components/workflow/step-schema-editor/index.css`
 
-- **.nested-properties** — `.nested-properties` `.nested-properties__add-btn` `.nested-properties__add-icon`
-- **.property-row** — `.property-row` `.property-row__actions` `.property-row__add-item-btn` `.property-row__array-item` `.property-row__array-item-inner` `.property-row__array-spacer` `.property-row__delete-icon` `.property-row__description-hint` `.property-row__description-input` `.property-row__enum-input` `.property-row__expand-btn` `.property-row__expand-icon` `.property-row__expand-icon--open` `.property-row__icon` `.property-row__main` `.property-row__main--clickable` `.property-row__move-buttons` `.property-row__move-icon` `.property-row__name-input` `.property-row__nested` `.property-row__range-arrow` `.property-row__range-input` `.property-row__range-inputs` `.property-row__required-btn` `.property-row__required-btn--optional` `.property-row__required-btn--required` `.property-row__type-icon` `.property-row__type-icon--array` `.property-row__type-icon--boolean` `.property-row__type-icon--number` `.property-row__type-icon--object` `.property-row__type-icon--string` `.property-row__type-options` `.property-row__type-options-inner`
-- **.schema-editor** — `.schema-editor` `.schema-editor__add-btn` `.schema-editor__add-icon` `.schema-editor__body` `.schema-editor__code-error` `.schema-editor__code-textarea` `.schema-editor__empty` `.schema-editor__empty-caption` `.schema-editor__empty-icon` `.schema-editor__empty-icon-wrapper` `.schema-editor__header` `.schema-editor__mode-btn` `.schema-editor__mode-btn--active` `.schema-editor__mode-toggle` `.schema-editor__property-list`
+- **.property-row** — `.property-row` `.property-row__add-item-btn` `.property-row__expand-btn` `.property-row__expand-icon` `.property-row__expand-icon--open` `.property-row__main--clickable` `.property-row__name-input` `.property-row__required-btn` `.property-row__required-btn--optional` `.property-row__required-btn--required` `.property-row__type-icon` `.property-row__type-icon--boolean` `.property-row__type-icon--number`
+- **.schema-editor** — `.schema-editor` `.schema-editor__add-btn` `.schema-editor__mode-btn` `.schema-editor__mode-btn--active`
 
-  Tokens: `--border`, `--brand-1`, `--brand-2`, `--brand-3`, `--card`, `--color-red-500`, `--destructive`, `--foreground`, `--muted`, `--muted-foreground`
+  Tokens: `--border`, `--brand-2`, `--brand-3`, `--card`, `--destructive`, `--foreground`, `--muted`, `--muted-foreground`
 
 ### `components/workflow/workflow-card/index.css`
 
-- **.workflow-card** — `.workflow-card` `.workflow-card--selected` `.workflow-card__body` `.workflow-card__check` `.workflow-card__check-icon` `.workflow-card__dot` `.workflow-card__footer` `.workflow-card__footer-stats` `.workflow-card__header` `.workflow-card__header-content` `.workflow-card__icon` `.workflow-card__stat` `.workflow-card__tags` `.workflow-card__title-row`
-- **.workflow-list-item** — `.workflow-list-item` `.workflow-list-item--selected` `.workflow-list-item__chevron` `.workflow-list-item__chevron--open` `.workflow-list-item__content` `.workflow-list-item__status-dot` `.workflow-list-item__status-dot--active` `.workflow-list-item__status-dot--archived` `.workflow-list-item__status-dot--draft` `.workflow-list-item__tags` `.workflow-list-item__tags--responsive` `.workflow-list-item__title-row`
+- **.workflow-card** — `.workflow-card` `.workflow-card--selected`
+- **.workflow-list-item** — `.workflow-list-item` `.workflow-list-item__chevron` `.workflow-list-item__chevron--open`
 
-  Tokens: `--border`, `--brand-2`, `--brand-3`, `--card`, `--muted`, `--muted-foreground`
+  Tokens: `--border`, `--brand-3`, `--card`, `--muted`, `--muted-foreground`
 
 ### `components/workflow/workflow-list/index.css`
 
-- **.workflow-list** — `.workflow-list__body-inner` `.workflow-list__create-icon` `.workflow-list__empty-first` `.workflow-list__empty-first-caption` `.workflow-list__empty-first-icon` `.workflow-list__empty-first-icon-wrapper` `.workflow-list__empty-first-tags` `.workflow-list__empty-no-match` `.workflow-list__empty-no-match-icon` `.workflow-list__empty-no-match-icon-wrapper` `.workflow-list__filters` `.workflow-list__grid` `.workflow-list__header-inner` `.workflow-list__list` `.workflow-list__search-icon` `.workflow-list__search-input` `.workflow-list__search-wrapper` `.workflow-list__stat-count` `.workflow-list__stat-dot` `.workflow-list__stat-row` `.workflow-list__stats` `.workflow-list__tag-btn` `.workflow-list__tag-btn--active` `.workflow-list__tag-btn--inactive` `.workflow-list__tag-filters` `.workflow-list__title-row` `.workflow-list__view-btn` `.workflow-list__view-btn--active` `.workflow-list__view-btn--inactive` `.workflow-list__view-icon` `.workflow-list__view-toggle`
+- **.workflow-list** — `.workflow-list__empty-first-icon-wrapper` `.workflow-list__grid` `.workflow-list__tag-btn` `.workflow-list__tag-btn--active` `.workflow-list__tag-btn--inactive` `.workflow-list__view-btn` `.workflow-list__view-btn--active` `.workflow-list__view-btn--inactive`
 
-  Tokens: `--border`, `--brand-2`, `--brand-3`, `--card`, `--foreground`, `--muted`, `--muted-foreground`
+  Tokens: `--brand-3`, `--card`, `--foreground`, `--muted`

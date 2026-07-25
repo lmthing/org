@@ -1,17 +1,9 @@
 @reference "../../theme.css";
 
-/* ── FunctionsEditor ──────────────────────────────────────────────── */
-
 .functions-editor {
   @apply flex! flex-col;
   height: 100%;
   gap: 1rem;
-}
-
-.functions-editor__header {
-  @apply flex! items-center justify-between;
-  padding: 0 0 0.5rem;
-  border-bottom: 1px solid var(--color-border);
 }
 
 .functions-editor__list {
@@ -36,11 +28,6 @@
   background: var(--color-surface-active, rgba(0,0,0,0.07));
 }
 
-.functions-editor__list-item-name {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.875rem;
-}
-
 .functions-editor__list-item-actions {
   @apply flex! items-center;
   gap: 0.25rem;
@@ -50,38 +37,4 @@
 
 .functions-editor__list-item:hover .functions-editor__list-item-actions {
   opacity: 1;
-}
-
-.functions-editor__empty {
-  padding: 1rem 0;
-}
-
-/* editor pane */
-.functions-editor__pane {
-  @apply flex! flex-col;
-  flex: 1;
-  gap: 0.5rem;
-}
-
-.functions-editor__pane-header {
-  @apply flex! items-center justify-between;
-}
-
-.functions-editor__textarea {
-  flex: 1;
-  min-height: 20rem;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.8125rem;
-  resize: vertical;
-  width: 100%;
-}
-
-/* new-function inline form */
-.functions-editor__new-form {
-  @apply flex! items-center;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  background: var(--color-surface-subtle, rgba(0,0,0,0.02));
-  border-radius: 0.375rem;
-  border: 1px dashed var(--color-border);
 }

@@ -7,6 +7,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { cn } from '@lmthing/ui/lib/utils'
 import type { Property, PropertyType } from './use-schema-model'
+import { NESTED_PROPERTIES_ADD_BTN, NESTED_PROPERTIES_ADD_ICON, PROPERTY_ROW_DELETE_ICON, PROPERTY_ROW_DESCRIPTION_HINT, PROPERTY_ROW_DESCRIPTION_INPUT, PROPERTY_ROW_ICON, PROPERTY_ROW_MOVE_ICON, PROPERTY_ROW_RANGE_INPUT } from '../../step-schema-editor.props.js'
 
 const TYPE_OPTIONS: { value: PropertyType; label: string }[] = [
   { value: 'string', label: 'Text (Paragraph / Word)' },
@@ -30,29 +31,29 @@ const TYPE_ICON_STYLE: Record<PropertyType, { backgroundColor: string; color: st
 function TypeIcon({ type }: { type: PropertyType }) {
   const icons = {
     string: (
-      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <Prim.Svg {...PROPERTY_ROW_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <Prim.Path d="M4 7V4h16v3M9 20h6M12 4v16" />
       </Prim.Svg>
     ),
     number: (
-      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <Prim.Svg {...PROPERTY_ROW_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <Prim.Path d="M4 7V4h3M17 4h3v3M21 17v3h-3M7 20H4v-3M8 9h8M12 9v6" />
       </Prim.Svg>
     ),
     boolean: (
-      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <Prim.Svg {...PROPERTY_ROW_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <Prim.Path d="M12 2L2 7l10 5 10-5-10-5z" />
         <Prim.Path d="M2 17l10 5 10-5" />
         <Prim.Path d="M2 12l10 5 10-5" />
       </Prim.Svg>
     ),
     object: (
-      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <Prim.Svg {...PROPERTY_ROW_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <Prim.Path d="M7 7h10M7 12h10M7 17h6" />
       </Prim.Svg>
     ),
     array: (
-      <Prim.Svg className="property-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <Prim.Svg {...PROPERTY_ROW_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <Prim.Path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
       </Prim.Svg>
     ),
@@ -101,12 +102,12 @@ export function PropertyRow({
         {/* Move buttons */}
         <Prim.Box display="flex" flexDirection="column" gap="$0.5" onClick={(e) => e.stopPropagation()}>
           <Button variant="ghost" size="icon" onClick={onMoveUp} disabled={isFirst}>
-            <Prim.Svg className="property-row__move-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <Prim.Svg {...PROPERTY_ROW_MOVE_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <Prim.Path d="M12 19V5M5 12l7-7 7 7" />
             </Prim.Svg>
           </Button>
           <Button variant="ghost" size="icon" onClick={onMoveDown} disabled={isLast}>
-            <Prim.Svg className="property-row__move-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <Prim.Svg {...PROPERTY_ROW_MOVE_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <Prim.Path d="M12 5v14M5 12l7 7 7-7" />
             </Prim.Svg>
           </Button>
@@ -175,7 +176,7 @@ export function PropertyRow({
 
         {/* Description hint */}
         {property.description && (
-          <Caption muted className="property-row__description-hint" title={property.description}>
+          <Caption muted {...PROPERTY_ROW_DESCRIPTION_HINT} title={property.description}>
             {property.description}
           </Caption>
         )}
@@ -183,7 +184,7 @@ export function PropertyRow({
         {/* Actions */}
         <Prim.Box display="flex" alignItems="center" gap="$1">
           <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
-            <Prim.Svg className="property-row__delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <Prim.Svg {...PROPERTY_ROW_DELETE_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <Prim.Path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
             </Prim.Svg>
           </Button>
@@ -228,7 +229,7 @@ export function PropertyRow({
                   value={property.minimum ?? ''}
                   onChange={(e) => onUpdate({ ...property, minimum: e.target.value ? Number(e.target.value) : undefined })}
                   placeholder="Min"
-                  className="property-row__range-input"
+                  {...PROPERTY_ROW_RANGE_INPUT}
                 />
                 <Prim.Text color="$muted-foreground">&rarr;</Prim.Text>
                 <Input
@@ -236,7 +237,7 @@ export function PropertyRow({
                   value={property.maximum ?? ''}
                   onChange={(e) => onUpdate({ ...property, maximum: e.target.value ? Number(e.target.value) : undefined })}
                   placeholder="Max"
-                  className="property-row__range-input"
+                  {...PROPERTY_ROW_RANGE_INPUT}
                 />
               </Prim.Box>
             )}
@@ -246,7 +247,7 @@ export function PropertyRow({
               value={property.description || ''}
               onChange={(e) => onUpdate({ ...property, description: e.target.value || undefined })}
               placeholder="Description"
-              className="property-row__description-input"
+              {...PROPERTY_ROW_DESCRIPTION_INPUT}
             />
           </Prim.Box>
         </Prim.Box>
@@ -289,7 +290,7 @@ export function PropertyRow({
                 <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" />
 
                 <Button variant="ghost" size="icon" onClick={() => onUpdate({ ...property, items: undefined })}>
-                  <Prim.Svg className="property-row__delete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <Prim.Svg {...PROPERTY_ROW_DELETE_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <Prim.Path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                   </Prim.Svg>
                 </Button>
@@ -390,8 +391,8 @@ function NestedPropertiesEditor({
           onMoveDown={() => handleMoveProperty(index, index + 1)}
         />
       ))}
-      <Button variant="ghost" onClick={handleAddProperty} className="nested-properties__add-btn">
-        <Prim.Svg className="nested-properties__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <Button variant="ghost" onClick={handleAddProperty} {...NESTED_PROPERTIES_ADD_BTN}>
+        <Prim.Svg {...NESTED_PROPERTIES_ADD_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <Prim.Path d="M12 5v14M5 12h14" />
         </Prim.Svg>
         Add nested property

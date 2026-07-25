@@ -3,9 +3,9 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import '@lmthing/css/components/workflow/step-schema-editor/index.css'
 import { useSchemaModel, type JSONSchema } from './use-schema-model'
 import { PropertyRow } from './property-row'
+import { SCHEMA_EDITOR_ADD_ICON, SCHEMA_EDITOR_CODE_ERROR, SCHEMA_EDITOR_CODE_TEXTAREA, SCHEMA_EDITOR_EMPTY_CAPTION, SCHEMA_EDITOR_EMPTY_ICON } from '../../step-schema-editor.props.js'
 
 export type { JSONSchema }
 
@@ -95,13 +95,13 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
                 backgroundColor="$muted"
                 marginBottom="$3"
               >
-                <Prim.Svg className="schema-editor__empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <Prim.Svg {...SCHEMA_EDITOR_EMPTY_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <Prim.Path d="M9 18V5l12 7-12 7z" />
                 </Prim.Svg>
               </Prim.Box>
-              <Caption muted className="schema-editor__empty-caption">No properties defined yet</Caption>
+              <Caption muted {...SCHEMA_EDITOR_EMPTY_CAPTION}>No properties defined yet</Caption>
               <Button variant="primary" onClick={handleAddProperty}>
-                <Prim.Svg className="schema-editor__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <Prim.Svg {...SCHEMA_EDITOR_ADD_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <Prim.Path d="M12 5v14M5 12h14" />
                 </Prim.Svg>
                 Add Property
@@ -162,7 +162,7 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
                 // transition-colors awaits the animation driver (§5/P4)
                 hoverStyle={{ borderColor: '$brand-3', color: '$brand-3' }}
               >
-                <Prim.Svg className="schema-editor__add-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <Prim.Svg {...SCHEMA_EDITOR_ADD_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <Prim.Path d="M12 5v14M5 12h14" />
                 </Prim.Svg>
                 Add Property
@@ -178,7 +178,7 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
           <Textarea
             value={codeValue}
             onChange={(e) => handleCodeChange(e.target.value)}
-            className="schema-editor__code-textarea"
+            {...SCHEMA_EDITOR_CODE_TEXTAREA}
             placeholder='{\n  "type": "object",\n  "properties": {\n    "example": { "type": "string" }\n  }\n}'
           />
           {(() => {
@@ -187,7 +187,7 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
               return null
             } catch {
               return (
-                <Caption muted className="schema-editor__code-error">
+                <Caption muted {...SCHEMA_EDITOR_CODE_ERROR}>
                   Invalid JSON schema
                 </Caption>
               )

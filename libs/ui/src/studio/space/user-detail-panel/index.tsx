@@ -12,8 +12,8 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Avatar, AvatarImage, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
-import '@lmthing/css/components/space/index.css'
 import { DIALOG_BACKDROP, DIALOG_CONTENT } from '../../../elements/overlays/dialog/index.js'
+import { CONFIRM_DIALOG_ACTION_BTN, CONFIRM_DIALOG_CONTENT, CONFIRM_DIALOG_ICON, USER_DETAIL_BODY, USER_DETAIL_EMPTY, USER_DETAIL_EMPTY_AVATAR, USER_DETAIL_EMPTY_CAPTION, USER_DETAIL_EMPTY_ICON, USER_DETAIL_HEADER_ROW, USER_DETAIL_ICON_SM, USER_DETAIL_INFO_CARD_ROW, USER_DETAIL_INFO_ICON, USER_DETAIL_NAME, USER_DETAIL_PANEL, USER_DETAIL_PERMISSIONS_HEADING, USER_DETAIL_ROLE_CHECK_ICON, USER_DETAIL_ROLE_ICON, USER_DETAIL_STATUS_HEADING } from '../props.js'
 
 interface UserDetailPanelProps {
   user?: SpaceUser | null
@@ -28,7 +28,7 @@ function ConfirmDialog({ isOpen, userName, onConfirm, onClose }: { isOpen: boole
   return (
     <Prim.Box {...DIALOG_BACKDROP}>
       <Prim.Box {...DIALOG_CONTENT} maxWidth={448}>
-        <Stack gap="md" className="confirm-dialog__content">
+        <Stack gap="md" {...CONFIRM_DIALOG_CONTENT}>
           <Prim.Box
             width="$12"
             height="$12"
@@ -39,13 +39,13 @@ function ConfirmDialog({ isOpen, userName, onConfirm, onClose }: { isOpen: boole
             justifyContent="center"
             marginHorizontal="auto"
           >
-            <Trash2 className="confirm-dialog__icon" />
+            <Trash2 {...CONFIRM_DIALOG_ICON} />
           </Prim.Box>
           <Heading level={3}>Remove User</Heading>
           <Caption muted>Are you sure you want to remove <Prim.Text as="strong">{userName}</Prim.Text> from the space? This action cannot be undone.</Caption>
           <Stack row gap="sm">
-            <Button onClick={onClose} variant="ghost" className="confirm-dialog__action-btn">Cancel</Button>
-            <Button onClick={onConfirm} variant="destructive" className="confirm-dialog__action-btn">Remove</Button>
+            <Button onClick={onClose} variant="ghost" {...CONFIRM_DIALOG_ACTION_BTN}>Cancel</Button>
+            <Button onClick={onConfirm} variant="destructive" {...CONFIRM_DIALOG_ACTION_BTN}>Remove</Button>
           </Stack>
         </Stack>
       </Prim.Box>
@@ -55,9 +55,9 @@ function ConfirmDialog({ isOpen, userName, onConfirm, onClose }: { isOpen: boole
 
 function getRoleIcon(role: SpaceUserRole) {
   switch (role) {
-    case 'admin': return <Crown className="user-detail__icon-sm" />
-    case 'editor': return <Edit3 className="user-detail__icon-sm" />
-    case 'viewer': return <Eye className="user-detail__icon-sm" />
+    case 'admin': return <Crown {...USER_DETAIL_ICON_SM} />
+    case 'editor': return <Edit3 {...USER_DETAIL_ICON_SM} />
+    case 'viewer': return <Eye {...USER_DETAIL_ICON_SM} />
   }
 }
 
@@ -76,13 +76,13 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
 
   if (!user) {
     return (
-      <Panel className="user-detail__empty">
+      <Panel {...USER_DETAIL_EMPTY}>
         <Prim.Box textAlign="center">
-          <Avatar size="lg" className="user-detail__empty-avatar">
-            <AvatarFallback><UserIcon className="user-detail__empty-icon" /></AvatarFallback>
+          <Avatar size="lg" {...USER_DETAIL_EMPTY_AVATAR}>
+            <AvatarFallback><UserIcon {...USER_DETAIL_EMPTY_ICON} /></AvatarFallback>
           </Avatar>
           <Heading level={3}>No User Selected</Heading>
-          <Caption muted className="user-detail__empty-caption">Select a user from the sidebar to view and edit their profile and permissions</Caption>
+          <Caption muted {...USER_DETAIL_EMPTY_CAPTION}>Select a user from the sidebar to view and edit their profile and permissions</Caption>
         </Prim.Box>
       </Panel>
     )
@@ -119,9 +119,9 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
 
   return (
     <>
-      <Panel className="user-detail__panel">
+      <Panel {...USER_DETAIL_PANEL}>
         <PanelHeader>
-          <Stack row gap="md" className="user-detail__header-row">
+          <Stack row gap="md" {...USER_DETAIL_HEADER_ROW}>
             <Prim.Box flexShrink={0}>
               <Avatar size="lg">
                 {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
@@ -131,7 +131,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
               </Avatar>
             </Prim.Box>
             <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
-              <Heading level={2} className="user-detail__name">{user.name}</Heading>
+              <Heading level={2} {...USER_DETAIL_NAME}>{user.name}</Heading>
               {!isEditing && (
                 <Badge className={`${getRoleBadgeClass(user.role)} user-detail__role-badge`}>
                   {getRoleIcon(user.role)}
@@ -142,31 +142,31 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
           </Stack>
         </PanelHeader>
 
-        <PanelBody className="user-detail__body">
+        <PanelBody {...USER_DETAIL_BODY}>
           <Prim.Box display="grid" gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="$4" marginBottom="$8">
             <CardBody>
-              <Stack row gap="sm" className="user-detail__info-card-row">
-                <Mail className="user-detail__info-icon" />
+              <Stack row gap="sm" {...USER_DETAIL_INFO_CARD_ROW}>
+                <Mail {...USER_DETAIL_INFO_ICON} />
                 <Prim.Box><Caption muted>Email</Caption><Label>{user.email}</Label></Prim.Box>
               </Stack>
             </CardBody>
             <CardBody>
-              <Stack row gap="sm" className="user-detail__info-card-row">
-                <Calendar className="user-detail__info-icon" />
+              <Stack row gap="sm" {...USER_DETAIL_INFO_CARD_ROW}>
+                <Calendar {...USER_DETAIL_INFO_ICON} />
                 <Prim.Box><Caption muted>Joined</Caption><Label>{formatDate(user.joinedAt)}</Label></Prim.Box>
               </Stack>
             </CardBody>
             <CardBody>
-              <Stack row gap="sm" className="user-detail__info-card-row">
-                <Clock className="user-detail__info-icon" />
+              <Stack row gap="sm" {...USER_DETAIL_INFO_CARD_ROW}>
+                <Clock {...USER_DETAIL_INFO_ICON} />
                 <Prim.Box><Caption muted>Last Active</Caption><Label>{formatLastActive(user.lastActive)}</Label></Prim.Box>
               </Stack>
             </CardBody>
           </Prim.Box>
 
           <Prim.Box marginBottom="$8">
-            <Heading level={4} className="user-detail__permissions-heading">
-              <Shield className="user-detail__icon-sm" /> Permissions & Role
+            <Heading level={4} {...USER_DETAIL_PERMISSIONS_HEADING}>
+              <Shield {...USER_DETAIL_ICON_SM} /> Permissions & Role
             </Heading>
             {isEditing ? (
               <Stack gap="sm">
@@ -176,7 +176,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
                   return (
                     <Prim.Pressable key={role.value} onClick={() => setSelectedRole(role.value as SpaceUserRole)} cursor="pointer" display="block" width="100%">
                       <ListItem selected={isSelected}>
-                        <Icon className="user-detail__role-icon" />
+                        <Icon {...USER_DETAIL_ROLE_ICON} />
                         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%"><Label>{role.label}</Label><Caption muted>{role.description}</Caption></Prim.Box>
                         {isSelected && (
                           <Prim.Box
@@ -190,7 +190,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
                             justifyContent="center"
                             flexShrink={0}
                           >
-                            <Check className="user-detail__role-check-icon" />
+                            <Check {...USER_DETAIL_ROLE_CHECK_ICON} />
                           </Prim.Box>
                         )}
                       </ListItem>
@@ -200,7 +200,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
               </Stack>
             ) : (
               <CardBody>
-                <Stack row gap="sm" className="user-detail__info-card-row">
+                <Stack row gap="sm" {...USER_DETAIL_INFO_CARD_ROW}>
                   {getRoleIcon(user.role)}
                   <Prim.Box>
                     <Label>{roles.find(r => r.value === user.role)?.label || user.role}</Label>
@@ -212,7 +212,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
           </Prim.Box>
 
           <Prim.Box>
-            <Heading level={4} className="user-detail__status-heading">Account Status</Heading>
+            <Heading level={4} {...USER_DETAIL_STATUS_HEADING}>Account Status</Heading>
             <Badge variant={user.status === 'active' ? 'success' : user.status === 'invited' ? 'primary' : 'muted'}>
               {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
             </Badge>
@@ -223,13 +223,13 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
           <Stack row gap="sm">
             {isEditing ? (
               <>
-                <Button onClick={handleSaveRole} variant="primary"><Check className="user-detail__icon-sm" /> Save Changes</Button>
-                <Button onClick={handleCancelEdit} variant="ghost"><X className="user-detail__icon-sm" /> Cancel</Button>
+                <Button onClick={handleSaveRole} variant="primary"><Check {...USER_DETAIL_ICON_SM} /> Save Changes</Button>
+                <Button onClick={handleCancelEdit} variant="ghost"><X {...USER_DETAIL_ICON_SM} /> Cancel</Button>
               </>
             ) : (
               <>
-                <Button onClick={() => { setIsEditing(true); setSelectedRole(user.role) }} variant="primary"><Shield className="user-detail__icon-sm" /> Edit Role</Button>
-                <Button onClick={() => setShowConfirm(true)} variant="destructive"><Trash2 className="user-detail__icon-sm" /> Remove</Button>
+                <Button onClick={() => { setIsEditing(true); setSelectedRole(user.role) }} variant="primary"><Shield {...USER_DETAIL_ICON_SM} /> Edit Role</Button>
+                <Button onClick={() => setShowConfirm(true)} variant="destructive"><Trash2 {...USER_DETAIL_ICON_SM} /> Remove</Button>
               </>
             )}
           </Stack>
