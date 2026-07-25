@@ -6,20 +6,49 @@
 > [§0](#0-how-to-re-measure). It supersedes nothing: the other doc stays the record of *what
 > happened and why*, this one is *what is left and in what order*.
 
-> **Status.** Phases **0.5 ✅ · 1 ✅ · 2 ✅ · 3 ✅** (className axis closed; inline-`style` tail ◐) ·
+> **Status.** Phases **0.5 ✅ · 1 ✅ · 2 ✅ · 3 ✅** (className axis AND inline-`style` tail closed) ·
 > **4 ✅ TAILWIND IS DELETED** · **5a ✅ ONE CONFIG** · **5b ✅ REAL `tsc`** · **5c ✅ measured**.
 > Each completed phase keeps its section, rewritten to record what was actually done and **where this
 > plan was wrong** — the corrections matter more than the ticks, because several were load-bearing.
 >
-> **Definition of done: 4 of 5 met.**
+> **Definition of done: 5 of 5 met. The migration is complete.**
 >
 > - **(1) ✅** `@import "tailwindcss"` appears nowhere in the design system or the web surfaces —
 >   verified by stripping comments first, since several files now *discuss* the directive. `theme.css`
 >   is a vars-only file.
 > - **(2) ✅** No Tailwind utility className anywhere. Same caveat: the only textual matches left sit
 >   inside comments recording what was removed.
-> - **(3) ◐** 55 inline styles remain on Tamagui-backed targets (from 130). A further 78 are on
->   passthrough primitives / lucide / `.native.tsx`, where `style` is CORRECT and permanent.
+> - **(3) ✅** No inline `style` on a Tamagui-backed target carries a static style — 130 → 0
+>   convertible. Held by a standing gate,
+>   `libs/ui/scripts/no-inline-style-on-tamagui.test.mjs`.
+>
+>   **The blocker was never the call sites — it was the element prop TYPES.** Ten element components
+>   (`Input`, `Textarea`, `Select`, `Badge`, `Page`, `ListItem`, `Panel`, `Breadcrumb`,
+>   `Sidebar`/`SidebarItem`, `TabBar`) spread their props straight onto a Tamagui primitive, so style
+>   props had ALWAYS worked on them — but each typed itself as bare `React.ComponentProps<'div'>`, so
+>   a caller had no way to express one and fell back to `style`. Mixing the primitive style-prop
+>   types into those interfaces is what unlocked the whole tail.
+>
+>   Eleven inline styles remain and are **permanent**, for exactly two reasons the gate enforces:
+>
+>   1. **Tamagui drops the property.** `listStyleType`, `wordBreak`, `accentColor` produce no atomic
+>      class at all. `style` is the only thing that works.
+>   2. **The value is UNBOUNDED-dynamic.** Tamagui mints ONE atomic CSS rule per distinct value, so
+>      cursor coordinates, a drag-resized width or a live percentage would grow the stylesheet
+>      without limit. A bounded ternary (`opacity={busy ? 0.5 : 1}`) is NOT this case and belongs on
+>      a prop.
+>
+>   Reason 2 is a correction, not a rule known in advance: converting the context menu's `top`/`left`
+>   to props passed BOTH the typecheck and the P0 computed-style baseline, and was caught only by
+>   that element's own test reading `menu.style.left`. `DevPanel` and `metrics-card` had the same
+>   error. **P0 proves a conversion preserved rendering; it cannot prove the conversion was wise.**
+>
+>   Three probes changed the answer mid-flight: `textDecoration` is dropped (`textDecorationLine` is
+>   the real prop); `backdropFilter` emits its own `-webkit-` twin, so the hand-paired
+>   `WebkitBackdropFilter` was redundant; and **`transition="quick"` is applied by the animation
+>   driver as an INLINE STYLE, not a class** — a class-diff probe reports it as dropped and is WRONG.
+>   ~10 surfaces depend on it and nothing pinned it; there is now a test. That last one also retired
+>   `metrics-card`'s stale "stays inline until the P4 animation driver lands" comment: it landed.
 > - **(4) ✅** ONE Tamagui config, platform-split on `isWeb`.
 > - **(5) ✅** `libs/ui` runs `tsc --noEmit`. The script was not even NAMED `typecheck` — it was
 >   `typecheck:syntax`, so turbo's workspace `typecheck` task skipped the package entirely; the
@@ -97,7 +126,7 @@ Five conditions. Anything not on this list is out of scope and named in [§7](#7
 | | count | where |
 |---|---|---|
 | utility classNames | **0** | was 125. What remains is keyframes, BEM, `{className}`, and 2 `prose` boxes (§7) |
-| inline `style={{…}}` | **55** | on Tamagui-backed targets (was 130). A further **78** are on passthrough/lucide/`.native.tsx`, where `style` is CORRECT and permanent |
+| inline `style={{…}}` | **0** | convertible ones on Tamagui-backed targets (was 130). **11** remain and are permanent — a property Tamagui drops, or an unbounded-dynamic value; held by `libs/ui/scripts/no-inline-style-on-tamagui.test.mjs`. A further ~10 sit on passthrough primitives, where `style` is the only mechanism |
 | `@apply` directives | **0** | was 87 across 12 files |
 | Tailwind entry points | **0** | was 2. `libs/cli` keeps a compiler for project app pages — a product feature |
 | stylesheets | **14** | 180 rules — 11 component + `FieldTree.css` + the chat Tailwind entry + `animations.css`; 3 permanent |
