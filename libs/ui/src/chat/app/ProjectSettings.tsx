@@ -133,7 +133,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
     <Prim.Col gap="$2" padding="$4">
       {docs.length === 0 && <Prim.Text as="p" fontSize="$sm" color="$muted-foreground">No documents yet.</Prim.Text>}
       {docs.map(d => (
-        <Prim.Row key={d} className="bg-muted/40" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" alignItems="center">
+        <Prim.Row key={d} backgroundColor="color-mix(in srgb, var(--muted) 40%, transparent)" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" alignItems="center">
           <Prim.Text fontSize="$sm">📄</Prim.Text>
           <Prim.Text fontSize="$sm" color="$foreground" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={d}>{d}</Prim.Text>
         </Prim.Row>
@@ -176,8 +176,8 @@ function SpacesTab({ projectId }: { projectId: string }) {
               <Prim.Text fontSize="$xs" backgroundColor="$muted" color="$muted-foreground" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">{s.agents.length} agent{s.agents.length !== 1 && 's'}</Prim.Text>
               {s.functionCount > 0 && <Prim.Text fontSize="$xs" backgroundColor="$muted" color="$muted-foreground" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">{s.functionCount} fn</Prim.Text>}
               {s.componentCount > 0 && <Prim.Text fontSize="$xs" backgroundColor="$muted" color="$muted-foreground" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">{s.componentCount} comp</Prim.Text>}
-              {s.hasKnowledge && <Prim.Text className="bg-knowledge/15" fontSize="$xs" color="$knowledge" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">knowledge</Prim.Text>}
-              {actions.map(a => <Prim.Text key={a.id} className="bg-agent/15" fontSize="$xs" color="$agent" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">/{a.id}</Prim.Text>)}
+              {s.hasKnowledge && <Prim.Text backgroundColor="color-mix(in srgb, var(--knowledge) 15%, transparent)" fontSize="$xs" color="$knowledge" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">knowledge</Prim.Text>}
+              {actions.map(a => <Prim.Text key={a.id} backgroundColor="color-mix(in srgb, var(--agent) 15%, transparent)" fontSize="$xs" color="$agent" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">/{a.id}</Prim.Text>)}
             </Prim.Row>
           </Prim.Box>
         );

@@ -24,7 +24,7 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
 
   return (
     <Prim.Row position="fixed" top="$0" right="$0" bottom="$0" left="$0" zIndex={40}>
-      <Prim.Box className={cn("bg-foreground/10", side === 'left' ? 'right-0' : 'left-0')} position="absolute" top="$0" right="$0" bottom="$0" left="$0" onClick={onClose} />
+      <Prim.Box className={side === 'left' ? 'right-0' : 'left-0'} backgroundColor="color-mix(in srgb, var(--foreground) 10%, transparent)" position="absolute" top="$0" right="$0" bottom="$0" left="$0" onClick={onClose} />
       <Prim.Box
         display="flex"
         {...(side === 'right' ? { marginLeft: 'auto' } : { marginRight: 'auto' })}

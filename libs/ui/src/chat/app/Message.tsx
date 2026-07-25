@@ -245,7 +245,7 @@ export function Message({ block }: MessageProps) {
   if (block.type === 'error') {
     return (
       <Prim.Box className="lm-fade-in" paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
-        <Prim.Box className="border-destructive/30 bg-destructive/10" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$destructive" fontFamily="$mono">
+        <Prim.Box borderColor="color-mix(in srgb, var(--destructive) 30%, transparent)" backgroundColor="color-mix(in srgb, var(--destructive) 10%, transparent)" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$destructive" fontFamily="$mono">
           {block.message}
         </Prim.Box>
       </Prim.Box>
@@ -277,7 +277,7 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
   return (
     <Prim.Box className="group lm-fade-in" paddingVertical="$1" position="relative">
       <Prim.Row gap="$2" paddingHorizontal="$4" alignItems="flex-start">
-        <Prim.Text className="bg-brand-2/20" flexShrink={0} width="$6" height="$6" borderRadius="$radius-full" alignItems="center" justifyContent="center" fontSize="$xs" userSelect="none" marginTop="0.75rem" display="flex" aria-hidden="true">
+        <Prim.Text backgroundColor="color-mix(in srgb, var(--brand-2) 20%, transparent)" flexShrink={0} width="$6" height="$6" borderRadius="$radius-full" alignItems="center" justifyContent="center" fontSize="$xs" userSelect="none" marginTop="0.75rem" display="flex" aria-hidden="true">
           ✦
         </Prim.Text>
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>

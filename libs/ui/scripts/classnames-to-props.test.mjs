@@ -76,10 +76,19 @@ describe('colors → $color props', () => {
     expect(classToProps('text-center').props).toEqual({ textAlign: 'center' })
     expect(classToProps('text-muted-foreground').props).toEqual({ color: '$muted-foreground' })
   })
-  it('alpha modifiers are KEPT as className (no faithful $token/NN)', () => {
-    const r = classToProps('bg-brand-2/20')
-    expect(r.props).toEqual({})
-    expect(r.keep).toEqual(['bg-brand-2/20'])
+  it('alpha modifiers become a color-mix, matching the hand-written elements', () => {
+    // Badge `success`, Button `primary` hover and AppLinks hover all hand-wrote the alpha this
+    // way, so the codemod emits the same form rather than a third one.
+    expect(classToProps('bg-brand-2/20').props)
+      .toEqual({ backgroundColor: 'color-mix(in srgb, var(--brand-2) 20%, transparent)' })
+    expect(classToProps('hover:bg-muted/60').props)
+      .toEqual({ hoverStyle: { backgroundColor: 'color-mix(in srgb, var(--muted) 60%, transparent)' } })
+  })
+
+  it('black/white alpha stays a className — the value would be a raw literal', () => {
+    // No CSS var to mix, and a codemod cannot emit the `ds-lint-ok` escape into a JSX attribute.
+    // The sole use is the `bg-black/50` dialog wash, already hand-written on the Dialog element.
+    expect(classToProps('bg-black/50').keep).toContain('bg-black/50')
   })
   it('arbitrary color → literal', () => {
     expect(classToProps('bg-[var(--lm-x)]').props).toEqual({ backgroundColor: 'var(--lm-x)' })
@@ -203,7 +212,10 @@ describe('skip reporting (the manual tail)', () => {
     expect(classToProps('tracking-[0.16em]').props).toEqual({ letterSpacing: '0.16em' })
   })
   it('an alpha modifier under a variant is a skip (cannot be a plain className)', () => {
-    expect(classToProps('hover:border-foreground/30').skip).toContain('hover:border-foreground/30')
+    // an alpha modifier under a variant now nests a color-mix instead of bailing
+    expect(classToProps('hover:border-foreground/30').props).toEqual({
+      hoverStyle: { borderColor: 'color-mix(in srgb, var(--foreground) 30%, transparent)' },
+    })
   })
 })
 
@@ -218,10 +230,14 @@ describe('the real EmptyState className strings translate as expected', () => {
     expect(r.props).toEqual({ fontFamily: '$heading', fontSize: '$2xl', fontWeight: '$bold', color: '$foreground', marginBottom: '$2' })
     expect(r.skip).toEqual([])
   })
-  it('icon Row (bg alpha kept, rest lifted)', () => {
+  it('icon Row (bg alpha now mixes, rest lifted — nothing left as className)', () => {
     const r = classToProps('w-12 h-12 rounded-xl bg-brand-2/20 justify-center mb-5 text-2xl')
-    expect(r.props).toEqual({ width: '$12', height: '$12', borderRadius: '$radius-xl', justifyContent: 'center', marginBottom: '$5', fontSize: '$2xl' })
-    expect(r.keep).toEqual(['bg-brand-2/20'])
+    expect(r.props).toEqual({
+      width: '$12', height: '$12', borderRadius: '$radius-xl', justifyContent: 'center',
+      marginBottom: '$5', fontSize: '$2xl',
+      backgroundColor: 'color-mix(in srgb, var(--brand-2) 20%, transparent)',
+    })
+    expect(r.keep).toEqual([])
   })
 })
 
@@ -263,8 +279,9 @@ describe('regression: lm-* runtime palette never becomes a bogus $lm-* token', (
     }
   })
 
-  it('an lm-* colour with an alpha modifier is still kept (no faithful prop form)', () => {
-    expect(classToProps('bg-lm-accent/20').keep).toContain('bg-lm-accent/20')
+  it('an lm-* colour with an alpha modifier mixes over its var, keeping the runtime override', () => {
+    expect(classToProps('bg-lm-accent/20').props)
+      .toEqual({ backgroundColor: 'color-mix(in srgb, var(--lm-accent) 20%, transparent)' })
   })
   it('real design-token colors still lift', () => {
     expect(classToProps('bg-primary').props).toEqual({ backgroundColor: '$primary' })

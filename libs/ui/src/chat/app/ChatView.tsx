@@ -178,7 +178,7 @@ export function ChatView({
     <Prim.Box display="flex" className={className} flexDirection="column" height="100%" backgroundColor="$background">
       {/* Header */}
       <Prim.Row as="header"
-        className="bg-background/80 backdrop-blur-sm" gap="$3" paddingLeft="$12" paddingRight="$4" paddingVertical="$2.5" borderBottomWidth={1} borderColor="$border" $md={{ paddingLeft: "$4" }} alignItems="center" flexShrink={0}
+        className="backdrop-blur-sm" backgroundColor="color-mix(in srgb, var(--background) 80%, transparent)" gap="$3" paddingLeft="$12" paddingRight="$4" paddingVertical="$2.5" borderBottomWidth={1} borderColor="$border" $md={{ paddingLeft: "$4" }} alignItems="center" flexShrink={0}
         aria-label="chat header"
       >
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>

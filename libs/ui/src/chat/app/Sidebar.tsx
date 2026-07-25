@@ -223,9 +223,9 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                   title={displayTitle || s.sessionId}
                 >
                   <Prim.Text display="block" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{label}</Prim.Text>
-                  <Prim.Text className="text-muted-foreground/70" fontSize="$xs" fontWeight="$normal" display="block">
+                  <Prim.Text color="color-mix(in srgb, var(--muted-foreground) 70%, transparent)" fontSize="$xs" fontWeight="$normal" display="block">
                     {relativeTime(s.lastActivity)}
-                    {costLabel && <Prim.Text className="text-muted-foreground/50" marginLeft="0.375rem">{costLabel}</Prim.Text>}
+                    {costLabel && <Prim.Text color="color-mix(in srgb, var(--muted-foreground) 50%, transparent)" marginLeft="0.375rem">{costLabel}</Prim.Text>}
                   </Prim.Text>
                 </Prim.Pressable>
                 <Prim.Pressable
