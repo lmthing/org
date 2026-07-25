@@ -81,7 +81,7 @@ function VariablesTab({ node }: { node: ExecNode }): React.ReactElement {
   return (
     <Prim.Box className="space-y-1" fontFamily="$mono" color="11px">
       {entries.map(([k, v]) => (
-        <Prim.Box key={k} className="border-lm-border/50" borderBottomWidth={1} paddingVertical="$1">
+        <Prim.Box key={k} borderColor="color-mix(in srgb, var(--lm-border) 50%, transparent)" borderBottomWidth={1} paddingVertical="$1">
           <Prim.Text color="var(--lm-accent)">{k}</Prim.Text>: <Prim.Text color="var(--lm-green)" wordWrap="break-word">{preview(v, 600)}</Prim.Text>
         </Prim.Box>
       ))}

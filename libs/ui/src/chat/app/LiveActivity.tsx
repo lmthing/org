@@ -23,7 +23,7 @@ export function LiveActivity(): React.ReactElement | null {
 
   return (
     <Prim.Box
-      className="bg-muted/30 lm-fade-in" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" marginBottom="0.5rem" marginHorizontal="1rem"
+      className="lm-fade-in" backgroundColor="color-mix(in srgb, var(--muted) 30%, transparent)" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" marginBottom="0.5rem" marginHorizontal="1rem"
       data-testid="live-activity"
       aria-label="sub-agent activity"
     >

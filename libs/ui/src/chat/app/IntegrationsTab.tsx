@@ -247,16 +247,16 @@ export function IntegrationsTab({
               {integration.icon && <Prim.Text aria-hidden="true">{integration.icon}</Prim.Text>}
               <Prim.Text fontSize="$sm" fontWeight="$medium" color="$foreground" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{integration.title}</Prim.Text>
               {integration.configured ? (
-                <Prim.Text className="bg-success/15" fontSize="$xs" color="$success" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">configured</Prim.Text>
+                <Prim.Text backgroundColor="color-mix(in srgb, var(--success) 15%, transparent)" fontSize="$xs" color="$success" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">configured</Prim.Text>
               ) : (
-                <Prim.Text className="bg-warning/15" fontSize="$xs" color="$warning" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">
+                <Prim.Text backgroundColor="color-mix(in srgb, var(--warning) 15%, transparent)" fontSize="$xs" color="$warning" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">
                   {integration.missingRequired.length} key{integration.missingRequired.length !== 1 && 's'} needed
                 </Prim.Text>
               )}
             </Prim.Row>
 
             {integration.readme ? (
-              <Prim.Box as="details" className="bg-muted/40" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" paddingHorizontal="$3" paddingVertical="$2">
+              <Prim.Box as="details" backgroundColor="color-mix(in srgb, var(--muted) 40%, transparent)" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" paddingHorizontal="$3" paddingVertical="$2">
                 <Prim.Box as="summary" fontSize="$xs" color="$muted-foreground" cursor="pointer" userSelect="none">
                   Setup guide — how to get your keys
                 </Prim.Box>

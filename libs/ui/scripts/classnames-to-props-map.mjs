@@ -65,7 +65,21 @@ function sizeToken(raw) {
 
 /** color value → prop value. token name → `$name`; `[..]` → literal; alpha `/NN` → null (keep). */
 function colorToken(raw) {
-  if (raw.includes('/')) return null // alpha modifier — no faithful `$token/NN`; keep as className
+  // Alpha modifier (`bg-primary/20`, `border-agent/50`). There is no `$token/NN` form, but the
+  // element conversions all express it the same way — a web `color-mix` over the underlying CSS
+  // var (see Badge `success`, Button `primary` hover, AppLinks hover). Emit that, so the codemod
+  // and the hand-written elements agree. `lm-*` works here too: its var is what gets mixed.
+  if (raw.includes('/')) {
+    const [name, pct] = raw.split('/')
+    if (!/^\d+$/.test(pct) || isArbitrary(name)) return null
+    if (/^(inherit|current|transparent)$/.test(name)) return null
+    // `black`/`white` have no CSS var to mix, so the value would be a raw literal that
+    // `lint:tokens` rejects in a `.tsx` (and a codemod cannot emit the `ds-lint-ok` escape into a
+    // JSX attribute). The only use is the `bg-black/50` dialog wash, already hand-written on the
+    // Dialog element with the escape. Keep those.
+    if (/^(white|black)$/.test(name)) return null
+    return `color-mix(in srgb, var(--${name}) ${pct}%, transparent)`
+  }
   if (isArbitrary(raw)) return arbitraryValue(raw)
   if (/^(inherit|current|transparent|white|black)$/.test(raw)) {
     return { inherit: 'inherit', current: 'currentColor', transparent: 'transparent', white: '#fff', black: '#000' }[raw]

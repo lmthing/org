@@ -18,10 +18,12 @@ describe('static string className', () => {
     expect(text).toContain('height="100%"')
     expect(text).not.toContain('className')
   })
-  it('keeps residual (alpha/animation) classes in a string className', () => {
-    const { text } = run(`<Prim.Box className="rounded-md bg-brand-2/20" />`)
+  it('keeps residual (animation) classes in a string className', () => {
+    // NB: the example is an ANIMATION — alpha modifiers used to live here too, but they now map
+    // to a `color-mix` (matching the hand-written elements), so they are no longer residual.
+    const { text } = run(`<Prim.Box className="rounded-md animate-pulse" />`)
     expect(text).toContain('borderRadius="$radius-md"')
-    expect(text).toContain('className="bg-brand-2/20"')
+    expect(text).toContain('className="animate-pulse"')
   })
 })
 
@@ -37,10 +39,10 @@ describe('cn("literal", ...rest) className', () => {
     expect(text).not.toContain('cn(')
   })
   it('re-wraps residual + rest in cn() when both survive', () => {
-    const { text } = run(`<Prim.Box className={cn('rounded-md bg-brand-2/20', className)} />`)
+    const { text } = run(`<Prim.Box className={cn('rounded-md animate-pulse', className)} />`)
     expect(text).toContain('borderRadius="$radius-md"')
     // residual static class + passthrough both kept, still via cn()
-    expect(text).toContain('className={cn("bg-brand-2/20", className)}')
+    expect(text).toContain('className={cn("animate-pulse", className)}')
   })
   it('keeps a conditional rest arg verbatim', () => {
     const { text } = run(`<Prim.Box className={cn('overflow-auto', open && 'left-0')} />`)

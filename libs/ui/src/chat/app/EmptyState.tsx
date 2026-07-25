@@ -33,7 +33,7 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
       flexBasis="0%"
     >
       <Row
-        className="bg-brand-2/20" width="$12" height="$12" borderRadius="$radius-xl" justifyContent="center" marginBottom="$5" fontSize="$2xl"
+        backgroundColor="color-mix(in srgb, var(--brand-2) 20%, transparent)" width="$12" height="$12" borderRadius="$radius-xl" justifyContent="center" marginBottom="$5" fontSize="$2xl"
         alignItems="center"
         style={{ lineHeight: '2rem' }}
       >
@@ -51,7 +51,7 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
             <Pressable
               key={s}
               onClick={() => onSuggestion(s)}
-              className="px-3 py-1.5 rounded-full border border-border text-sm text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
+              className="transition-colors" paddingHorizontal="$3" paddingVertical="$1.5" borderRadius="$radius-full" borderWidth={1} borderColor="$border" fontSize="$sm" color="$muted-foreground" hoverStyle={{ color: "$foreground", borderColor: "color-mix(in srgb, var(--foreground) 30%, transparent)" }}
             >
               {s}
             </Pressable>
