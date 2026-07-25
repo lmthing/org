@@ -32,7 +32,7 @@ function ConnectionDot() {
   const dot = mode === 'replay' ? '⏵' : c === 'open' ? '●' : c === 'connecting' ? '◌' : '○';
   const label = mode === 'replay' ? 'replay' : c;
   return (
-    <Prim.Text display="flex" className={`items-center gap-1 text-xs ${color}`}>
+    <Prim.Text display="flex" alignItems="center" gap="$1" fontSize="$xs" color={color}>
       <Prim.Text>{dot}</Prim.Text>
       <Prim.Text color="$muted-foreground">{label}</Prim.Text>
     </Prim.Text>
@@ -207,7 +207,10 @@ export function ChatView({
             <Prim.Pressable
               onClick={() => setFollow(!follow)}
               data-testid="follow-toggle"
-              className={`text-xs ${follow ? 'text-agent' : 'text-muted-foreground hover:text-foreground'}`}
+              fontSize="$xs"
+              {...(follow
+                ? { color: '$agent' }
+                : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })}
               title="Follow mode"
             >
               {follow ? '⊙' : '○'}

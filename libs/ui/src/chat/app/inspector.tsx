@@ -64,7 +64,11 @@ function YieldsTab({ node }: { node: ExecNode }): React.ReactElement {
       {node.yields.map((y, i) => (
         <Prim.Box key={i} borderColor="var(--lm-border)" borderWidth={1} borderRadius="$radius" paddingHorizontal="$2" paddingVertical="$1">
           <Prim.Row gap="$2" fontSize="11px" alignItems="center">
-            <Prim.Text className={y.resolved ? 'text-lm-green' : 'text-lm-accent lm-spin'}>{y.resolved ? '✓' : '⟳'}</Prim.Text>
+            {/* `lm-spin` is a keyframe animation and stays a className until the driver lands (§5). */}
+            <Prim.Text
+              color={y.resolved ? 'var(--lm-green)' : 'var(--lm-accent)'}
+              className={y.resolved ? undefined : 'lm-spin'}
+            >{y.resolved ? '✓' : '⟳'}</Prim.Text>
             <Prim.Text color="var(--lm-cyan)" fontFamily="$mono">{y.kind}</Prim.Text>
           </Prim.Row>
           <Prim.Box color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem">args: {preview(y.args, 300)}</Prim.Box>

@@ -12,7 +12,10 @@ export function Separator({
   return (
     <Prim.Box
       role="separator"
-      className={cn(orientation === 'horizontal' ? 'h-px w-full' : 'w-px self-stretch', className)} backgroundColor="$border" flexShrink={0}
+      {...(orientation === 'horizontal'
+        ? { height: 1, width: '100%' }
+        : { width: 1, alignSelf: 'stretch' })}
+      className={className} backgroundColor="$border" flexShrink={0}
     />
   );
 }

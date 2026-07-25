@@ -37,9 +37,21 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
         data-status={node.status}
         onClick={() => selectNode(node.id, true)}
         display="flex"
-        className={`items-center gap-1.5 px-2 py-1 cursor-pointer rounded text-[12px] ${
-          selected ? 'bg-lm-accent/15 ring-1 ring-lm-accent/40' : 'hover:bg-lm-panel2'
-        }`}
+        alignItems="center"
+        gap="$1.5"
+        paddingHorizontal="$2"
+        paddingVertical="$1"
+        cursor="pointer"
+        borderRadius="$radius"
+        fontSize="12px"
+        {...(selected
+          ? {
+              backgroundColor: 'color-mix(in srgb, var(--lm-accent) 15%, transparent)',
+              outlineWidth: 1,
+              outlineStyle: 'solid' as const,
+              outlineColor: 'color-mix(in srgb, var(--lm-accent) 40%, transparent)',
+            }
+          : { hoverStyle: { backgroundColor: 'var(--lm-panel2)' } })}
         style={{ paddingLeft: `${depth * 14 + 8}px` }}
       >
         {childIds.length > 0 ? (

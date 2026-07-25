@@ -104,7 +104,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
         )}
         <Prim.Text
           display="inline-flex"
-          className={STATUS_COLOR[colorKey] ?? STATUS_COLOR.done} flexShrink={0} alignItems="center" gap="$1" borderRadius="$radius-full" borderWidth={1} paddingHorizontal="$1.5" paddingVertical="$0.5"
+          {...(STATUS_COLOR[colorKey] ?? STATUS_COLOR.done)} flexShrink={0} alignItems="center" gap="$1" borderRadius="$radius-full" borderWidth={1} paddingHorizontal="$1.5" paddingVertical="$0.5"
         >
           {isRunning && <Prim.Text className="lm-pulse">{STATUS_GLYPH[node.status] ?? '●'}</Prim.Text>}
           {!isRunning && <Prim.Text>{STATUS_GLYPH[node.status] ?? '◦'}</Prim.Text>}
@@ -126,7 +126,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
                   overflow="hidden"
                   textOverflow="ellipsis"
                   whiteSpace="nowrap"
-                  className={cn(s.errors.length > 0 && 'text-destructive')}
+                  {...(s.errors.length > 0 ? { color: '$destructive' } : {})}
                   title={text}
                 >
                   {text || '(no narration)'}

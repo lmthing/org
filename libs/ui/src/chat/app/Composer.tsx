@@ -313,7 +313,10 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
             {filteredCompletions.map((c, i) => (
               <Prim.ListItem
                 key={c}
-                className={i === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"} paddingHorizontal="$3" paddingVertical="$1.5" cursor="pointer"
+                {...(i === selectedIndex
+                  ? { backgroundColor: '$accent', color: '$accent-foreground' }
+                  : { hoverStyle: { backgroundColor: 'color-mix(in srgb, var(--accent) 50%, transparent)' } })}
+                paddingHorizontal="$3" paddingVertical="$1.5" cursor="pointer"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   applyCompletion(c);
