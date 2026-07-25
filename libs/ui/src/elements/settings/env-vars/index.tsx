@@ -117,7 +117,7 @@ export function EnvVars() {
         />
         <Button variant="outline" size="sm" onClick={addVar}>Add</Button>
       </Prim.Box>
-      {error && <Caption className="text-destructive">{error}</Caption>}
+      {error && <Caption color="$destructive">{error}</Caption>}
       {saved && <Caption muted>Saved. Pod is restarting to apply changes.</Caption>}
       <Button variant="primary" size="sm" onClick={save} disabled={saving}>
         {saving ? 'Saving...' : 'Save & Restart Pod'}

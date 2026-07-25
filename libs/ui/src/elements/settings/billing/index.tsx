@@ -49,7 +49,7 @@ export function Billing() {
       <Button variant="outline" size="sm" onClick={handleBillingPortal} disabled={loading}>
         {loading ? 'Redirecting…' : 'Manage Subscription'}
       </Button>
-      {error && <Caption className="text-destructive">{error}</Caption>}
+      {error && <Caption color="$destructive">{error}</Caption>}
     </Prim.Box>
   )
 }

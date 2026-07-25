@@ -36,7 +36,7 @@ export default function Slide7Team() {
       style={{ background: colors.bg }}
     >
       <Prim.Text as="h2" alignItems="center" justifyContent="center" gap="$3" fontSize="$7xl" fontWeight="$bold" marginBottom="4rem" display="flex" style={{ color: colors.text }}>
-        Team behind the <CozyThingText text="thing" className="text-7xl leading-loose" />
+        Team behind the <CozyThingText text="thing" fontSize="$7xl" lineHeight={2} />
       </Prim.Text>
 
       <Prim.Row gap="$16">

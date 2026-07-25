@@ -5,7 +5,10 @@ import * as Prim from '../../primitives/index'
  * Caption — the idiomatic `.caption`. Renders `Prim.Text` (real `<span>`) with the styling as
  * `$`-token PROPS from caption.styled.tsx. `muted` uses the `/70` alpha via web color-mix. CSS deleted.
  */
-export interface CaptionProps extends React.ComponentProps<'span'> {
+// `Prim.TextProps`, not `ComponentProps<'span'>`: the rest props are spread straight onto
+// `Prim.Text`, so idiomatic style props already WORK here at runtime — the narrower type was the
+// only thing stopping a caller (and the codemod) from writing them.
+export interface CaptionProps extends Prim.TextProps {
   muted?: boolean
 }
 

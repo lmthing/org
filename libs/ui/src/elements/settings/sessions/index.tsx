@@ -230,7 +230,7 @@ export function Sessions() {
         </Prim.Box>
       )}
 
-      {error && <Caption className="text-destructive">{error}</Caption>}
+      {error && <Caption color="$destructive">{error}</Caption>}
     </Prim.Box>
   )
 }

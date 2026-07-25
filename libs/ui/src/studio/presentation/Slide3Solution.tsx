@@ -18,7 +18,7 @@ export default function Slide3Solution() {
         </Prim.Box>
 
         <Prim.Box fontSize="$4xl" fontWeight="$bold">
-          lm<CozyThingText text="thing" className="text-4xl font-bold" />
+          lm<CozyThingText text="thing" fontSize="$4xl" fontWeight="$bold" />
         </Prim.Box>
 
         <Prim.Text as="h2" fontSize="$6xl" fontWeight="$bold" lineHeight={1.25} style={{ color: colors.text }}>
@@ -28,7 +28,7 @@ export default function Slide3Solution() {
         </Prim.Text>
 
         <Prim.Text as="p" fontSize="$2xl" lineHeight={1.625} style={{ color: colors.textSecondary }}>
-          lm<CozyThingText text="thing" className="text-2xl font-semibold" /> lets Dimitris &mdash; and anyone like him &mdash; build a specialized AI agent
+          lm<CozyThingText text="thing" fontSize="$2xl" fontWeight="$semibold" /> lets Dimitris &mdash; and anyone like him &mdash; build a specialized AI agent
           with just their knowledge. No engineers required.
         </Prim.Text>
 

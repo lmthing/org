@@ -20,7 +20,7 @@ export default function Slide6DemoVideo() {
           textAlign="center" fontSize="$6xl" fontWeight="$extrabold" lineHeight="1.15"
           style={{ color: colors.text, letterSpacing: '-0.025em' }}
         >
-          lm<CozyThingText text="thing" className="text-6xl font-extrabold" /> demo
+          lm<CozyThingText text="thing" fontSize="$6xl" fontWeight="$extrabold" /> demo
         </Prim.Text>
       </Prim.Col>
 
