@@ -77,7 +77,8 @@ export function PlaybackBar(): React.ReactElement | null {
         max={total}
         value={replay.cursor}
         onChange={(e) => seek(Number(e.target.value))}
-        className="flex-1 accent-[var(--agent)]"
+        flexGrow={1} flexShrink={1} flexBasis="0%"
+        style={{ accentColor: 'var(--agent)' }}
         data-testid="replay-scrubber"
       />
       <Prim.Text color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" width="$20" textAlign="right">{replay.cursor}/{total}</Prim.Text>

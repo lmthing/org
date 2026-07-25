@@ -38,6 +38,16 @@ function MarkdownText({ text }: { text: string }) {
   return <Prim.Box className="lm-prose" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+/**
+ * `border-border opacity-70` / `border-agent/50 bg-agent/5` — the answered-or-cancelled vs open ask
+ * frame. The `/50` and `/5` alphas become web `color-mix`, the convention used across this codebase.
+ */
+const BLOCK_INERT = { borderColor: '$border', opacity: 0.7 } as const;
+const BLOCK_LIVE = {
+  borderColor: 'color-mix(in srgb, var(--agent) 50%, transparent)',
+  backgroundColor: 'color-mix(in srgb, var(--agent) 5%, transparent)',
+} as const;
+
 // ─── Ask form ─────────────────────────────────────────────────────────────────
 
 function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
@@ -54,7 +64,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
       data-testid="ask-form"
       data-ask-id={block.askId}
       marginVertical="0.25rem"
-      className={inert ? 'border-border opacity-70' : 'border-agent/50 bg-agent/5'} transition="quick" animateOnly={["color", "background-color", "border-color"]} borderWidth={1} borderRadius="$radius-xl" padding="$3"
+      {...(inert ? BLOCK_INERT : BLOCK_LIVE)} transition="quick" animateOnly={["color", "background-color", "border-color"]} borderWidth={1} borderRadius="$radius-xl" padding="$3"
     >
       {block.state === 'answered' && (
         <Prim.Box fontSize="$xs" color="$knowledge" fontFamily="$mono" marginBottom="0.5rem">✓ {preview(block.answer, 200)}</Prim.Box>
@@ -167,7 +177,8 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
     return (
       <Prim.Col gap="$1" alignItems="flex-end">
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <Prim.Audio controls src={url} className="max-w-[260px]" />
+        {/* `Prim.Audio` is a host passthrough — it IGNORES style props, so this is a `style`. */}
+        <Prim.Audio controls src={url} style={{ maxWidth: 260 }} />
         {att.transcript && (
           <Prim.Box maxWidth="260px" fontSize="$xs" color="$muted-foreground" fontStyle="italic" textAlign="right">
             “{att.transcript}”

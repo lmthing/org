@@ -244,7 +244,63 @@ wants its own change, with a harness that can assert it.
 
 ---
 
-## Phase 3 — close the inline-`style` tail (130 → ~30)
+## Phase 3 — className→props ✅ DONE · inline-`style` tail ◐ PARTIAL
+
+### The className axis is closed
+
+**Zero real Tailwind utility classNames remain** on any surface component. The only `className=`
+values left in `libs/ui/src` + `apps/web/src` are:
+
+- keyframe classes — `lm-*`, `animate-spin`, `animate-pulse` — which resolve from the hand-written
+  `@lmthing/css/animations.css` and are **not Tailwind** (phase 2);
+- BEM component classNames (`ide-file-tree__*`, `workflow-list-item__*`, …), whose *stylesheets* are
+  phase 4's problem, not the classNames;
+- `{className}` pass-through props;
+- **`prose` / `prose-sm` / `prose-*:` on two injected-HTML boxes** — the one genuine remainder, and
+  §7 already assigns it to phase 4 (hand-written equivalents in `markdown/index.css`).
+
+The conversions, all as `$`-token prop bags rather than strings:
+
+| where | was |
+|---|---|
+| `chat/components/ui/Button` | the `variants` + `sizes` class maps → `VARIANT` / `SIZE` bags |
+| `chat/components/ui/Toast` | the `vc` variant map → `TOAST_VARIANT`; `/40` alphas → `color-mix` |
+| `chat/components/ui/Tabs`, `Input`, `Tooltip`, `Drawer`, `Dialog` | conditionals and inset/border utilities |
+| `chat/app/Sidebar`, `ChatView`, `Composer`, `Message` | active/idle and enabled/disabled conditionals |
+| `chat/app/AppShell` | `h-full`/`w-full`/`flex-1 min-h-0` → declared layout props on `Sidebar`/`DevPanel`/`ChatView` |
+| `chat/app/inspector`, `WorkBlock` | `space-y-*` → `display:flex; flexDirection:column; gap` |
+
+**`borderWidth: 0` is now explicit on every non-`outline` Button variant.** Under Tailwind it came
+from PREFLIGHT (`*, ::before, ::after { border-width: 0 }`); leaving it implicit would have made the
+buttons depend on a reset phase 4 removes, and surfaced a UA border app-wide.
+
+### A bug this turned up
+
+`ActivityStrip` passed `STATUS_COLOR[node.status]` to **`className`** — but `STATUS_COLOR` is a
+`Record<string, Record<string, string>>`, i.e. already a prop bag. React stringified it, so every
+activity chip has been rendering `class="[object Object]"` with **no status colour at all**. Now
+spread. This is the failure mode the migration keeps producing: a value in the right shape wired to
+the wrong channel, silent because CSS never errors.
+
+### What is NOT closed: the inline-`style` tail
+
+Measured, split by whether `style` is the *correct* destination:
+
+| | count | verdict |
+|---|---|---|
+| `style` on passthrough primitives / lucide / `.native.tsx` | **78** | **correct, permanent** — these ignore style props (§6), and RN styles *are* `style` |
+| `style` on Tamagui-backed targets | **127** | the remaining work |
+
+Of those 127, the codemod reports **40**; the rest are `style={styles.foo}` **references** to
+module-level `const styles = {…}` bags (`ReplChatView` alone has 20, plus `AgentChatPanel`,
+`Message`, `common`, `waking-screen`). The codemod only lifts inline object *literals*, so it cannot
+see them — closing this means converting those modules from `React.CSSProperties` to Tamagui prop
+bags (`padding: '4px 12px'` → `paddingVertical/Horizontal`, `borderBottom: '1px solid …'` → the three
+`borderBottom*` props, `flex: 1` → the grow/shrink/basis triple).
+
+This axis does **not** block phase 4 — inline styles do not depend on Tailwind existing.
+
+### Reference: the original plan for this phase
 
 `scripts/inline-style-to-props.mjs` reports **37**; the other ~93 sit on components it does not
 target. Three groups, in increasing effort:

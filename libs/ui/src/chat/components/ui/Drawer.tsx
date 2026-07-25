@@ -9,10 +9,14 @@ interface DrawerProps {
   children: React.ReactNode;
   className?: string;
   side?: 'right' | 'left';
+  /**
+   * Drawer width as a CSS length. This used to be a Tailwind CLASS (`'w-80'`) passed through to
+   * `className` — a utility in the public API, which could not survive the Tailwind deletion.
+   */
   width?: string;
 }
 
-export function Drawer({ open, onClose, title, children, className, side = 'right', width = 'w-80' }: DrawerProps) {
+export function Drawer({ open, onClose, title, children, className, side = 'right', width = '20rem' }: DrawerProps) {
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -31,7 +35,7 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
         display="flex"
         {...(side === 'right' ? { marginLeft: 'auto' } : { marginRight: 'auto' })}
         {...(side === 'right' ? { borderLeftWidth: 1 } : { borderRightWidth: 1 })}
-        className={cn("lm-slide-in-right", width, className)} position="relative" flexDirection="column" backgroundColor="$card" borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} height="100%">
+        className={cn("lm-slide-in-right", className)} width={width} position="relative" flexDirection="column" backgroundColor="$card" borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} height="100%">
         {title && (
           <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderBottomWidth={1} borderColor="$border" alignItems="center" flexShrink={0}>
             <Prim.Text fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>

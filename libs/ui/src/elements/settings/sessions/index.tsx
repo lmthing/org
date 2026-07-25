@@ -205,7 +205,7 @@ export function Sessions() {
                                 {qOpen ? 'Hide input' : 'Show input'}
                               </Prim.Pressable>
                               {qOpen && (
-                                <Code style={{ display: 'block', whiteSpace: 'pre-wrap', marginTop: '0.25rem' }}>
+                                <Code display="block" whiteSpace="pre-wrap" marginTop="0.25rem">
                                   {d.query}
                                 </Code>
                               )}

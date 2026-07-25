@@ -120,7 +120,7 @@ function FieldDetailPage() {
     <Prim.Box display="flex" flexDirection="column" height="100%" overflow="hidden">
       {/* Header */}
       <Prim.Box as="header" paddingVertical="0.75rem" paddingHorizontal="1rem" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--color-border)" display="flex" alignItems="center" justifyContent="space-between" flexShrink={0}>
-        <Stack row style={{ alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+        <Stack row alignItems="center" gap="0.75rem" flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
           <Button
             variant="ghost"
             size="icon"
@@ -129,7 +129,7 @@ function FieldDetailPage() {
             <ArrowLeft style={{ width: '1rem', height: '1rem' }} />
           </Button>
           <Prim.Box minWidth={0}>
-            <Heading level={3} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Heading level={3} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
               {field}
             </Heading>
           </Prim.Box>
@@ -177,7 +177,7 @@ function FieldDetailPage() {
                 >
                   <FileText style={{ width: '0.875rem', height: '0.875rem', flexShrink: 0 }} />
                   <Prim.Text fontSize="0.8125rem" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{slug}</Prim.Text>
-                  <Stack row style={{ gap: '0.125rem', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                  <Stack row gap="0.125rem" flexShrink={0} onClick={e => e.stopPropagation()}>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -248,16 +248,10 @@ function FieldDetailPage() {
               />
             </Prim.Box>
           ) : (
-            <Stack style={{
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '3rem',
-              flex: 1,
-              color: 'var(--color-muted-foreground)',
-            }}>
+            <Stack alignItems="center" justifyContent="center" padding="3rem" flexGrow={1} flexShrink={1} flexBasis="0%" color="var(--color-muted-foreground)">
               <FileText style={{ width: '3rem', height: '3rem', strokeWidth: 1, marginBottom: '1rem' }} />
-              <Heading level={3} style={{ color: 'var(--color-muted-foreground)' }}>No option selected</Heading>
-              <Caption muted style={{ maxWidth: '24rem', textAlign: 'center' }}>
+              <Heading level={3} color="var(--color-muted-foreground)">No option selected</Heading>
+              <Caption muted maxWidth="24rem" textAlign="center">
                 Select an option from the list, or click index.md to edit field settings.
               </Caption>
             </Stack>

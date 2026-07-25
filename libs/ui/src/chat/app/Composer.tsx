@@ -334,7 +334,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         <Prim.Text as="label"
           margin="-0.25rem"
           marginBottom="0.125rem"
-          className={(attaching || isDisabled) && 'opacity-50 pointer-events-none'} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} padding="$1" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
+          {...(attaching || isDisabled ? { opacity: 0.5, pointerEvents: 'none' as const } : {})} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} padding="$1" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
           title="Attach image, audio, or file to your message"
         >
           <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></Prim.Svg>
@@ -347,7 +347,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           onClick={() => void toggleRecord()}
           disabled={(isDisabled || attaching) && !recording}
           marginBottom="0.125rem"
-          className={recording ? 'text-destructive animate-pulse' : 'text-muted-foreground hover:text-foreground'} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} disabledStyle={{ opacity: 0.5 }}
+          className={recording ? 'animate-pulse' : undefined} {...(recording ? { color: '$destructive' } : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} disabledStyle={{ opacity: 0.5 }}
           title={recording ? 'Stop recording' : 'Record a voice message'}
           aria-label={recording ? 'Stop recording' : 'Record a voice message'}
           data-testid="mic-button"

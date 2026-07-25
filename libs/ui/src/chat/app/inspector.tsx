@@ -9,7 +9,7 @@ const TABS: readonly InspectorTab[] = ['llm', 'statements', 'yields', 'variables
 function LlmTab({ node }: { node: ExecNode }): React.ReactElement {
   if (node.llmCalls.length === 0) return <Empty>No LLM calls.</Empty>;
   return (
-    <Prim.Box className="space-y-3">
+    <Prim.Box display="flex" flexDirection="column" gap="$3">
       {node.llmCalls.map((c, i) => (
         <Prim.Box key={i} borderColor="var(--lm-border)" borderWidth={1} borderRadius="$radius">
           <Prim.Row backgroundColor="var(--lm-panel2)" gap="$2" paddingHorizontal="$2" paddingVertical="$1" fontSize="11px" alignItems="center">
@@ -42,7 +42,7 @@ function LlmTab({ node }: { node: ExecNode }): React.ReactElement {
 function StatementsTab({ node }: { node: ExecNode }): React.ReactElement {
   if (node.statements.length === 0) return <Empty>No statements.</Empty>;
   return (
-    <Prim.Box className="space-y-2">
+    <Prim.Box display="flex" flexDirection="column" gap="$2">
       {node.statements.map((s, i) => (
         <Prim.Box key={i}>
           <CodeBlock code={s.code} />
@@ -60,7 +60,7 @@ function StatementsTab({ node }: { node: ExecNode }): React.ReactElement {
 function YieldsTab({ node }: { node: ExecNode }): React.ReactElement {
   if (node.yields.length === 0) return <Empty>No yields.</Empty>;
   return (
-    <Prim.Box className="space-y-2">
+    <Prim.Box display="flex" flexDirection="column" gap="$2">
       {node.yields.map((y, i) => (
         <Prim.Box key={i} borderColor="var(--lm-border)" borderWidth={1} borderRadius="$radius" paddingHorizontal="$2" paddingVertical="$1">
           <Prim.Row gap="$2" fontSize="11px" alignItems="center">
@@ -83,7 +83,7 @@ function VariablesTab({ node }: { node: ExecNode }): React.ReactElement {
   const entries = Object.entries(node.variables);
   if (entries.length === 0) return <Empty>No variables captured.</Empty>;
   return (
-    <Prim.Box className="space-y-1" fontFamily="$mono" fontSize="11px">
+    <Prim.Box display="flex" flexDirection="column" gap="$1" fontFamily="$mono" fontSize="11px">
       {entries.map(([k, v]) => (
         <Prim.Box key={k} borderColor="color-mix(in srgb, var(--lm-border) 50%, transparent)" borderBottomWidth={1} paddingVertical="$1">
           <Prim.Text color="var(--lm-accent)">{k}</Prim.Text>: <Prim.Text color="var(--lm-green)" wordWrap="break-word">{preview(v, 600)}</Prim.Text>
@@ -98,7 +98,7 @@ function RawTab({ node }: { node: ExecNode }): React.ReactElement {
   const bySeq = React.useMemo(() => new Map(rawEvents.map((e) => [e.seq, e.event])), [rawEvents]);
   if (node.eventSeqs.length === 0) return <Empty>No events.</Empty>;
   return (
-    <Prim.Box className="space-y-1">
+    <Prim.Box display="flex" flexDirection="column" gap="$1">
       {node.eventSeqs.map((seq) => {
         const ev = bySeq.get(seq);
         if (!ev) return null;

@@ -7,7 +7,8 @@ import * as Prim from '../../primitives/index'
  * `card/index.css` is deleted; the prop bags are exported because callers carried `card`/`card__body`
  * directly on a `Prim.Box` rather than going through this element.
  */
-export interface CardProps extends React.ComponentProps<'div'> {
+// `Prim.BoxProps`, not `ComponentProps<'div'>` — see the note on `Caption`/`Heading`.
+export interface CardProps extends Prim.BoxProps {
   interactive?: boolean
 }
 
@@ -64,21 +65,21 @@ function Card({ interactive, ...props }: CardProps) {
     <Prim.Box
       {...CARD_BASE}
       {...(interactive ? CARD_INTERACTIVE : {})}
-      {...(props as Record<string, unknown>)}
+      {...props}
     />
   )
 }
 
-function CardHeader(props: React.ComponentProps<'div'>) {
-  return <Prim.Box {...CARD_HEADER} {...(props as Record<string, unknown>)} />
+function CardHeader(props: Prim.BoxProps) {
+  return <Prim.Box {...CARD_HEADER} {...props} />
 }
 
-function CardBody(props: React.ComponentProps<'div'>) {
-  return <Prim.Box {...CARD_BODY} {...(props as Record<string, unknown>)} />
+function CardBody(props: Prim.BoxProps) {
+  return <Prim.Box {...CARD_BODY} {...props} />
 }
 
-function CardFooter(props: React.ComponentProps<'div'>) {
-  return <Prim.Box {...CARD_FOOTER} {...(props as Record<string, unknown>)} />
+function CardFooter(props: Prim.BoxProps) {
+  return <Prim.Box {...CARD_FOOTER} {...props} />
 }
 
 export { Card, CardHeader, CardBody, CardFooter }

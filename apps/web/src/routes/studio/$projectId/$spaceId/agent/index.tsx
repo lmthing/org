@@ -26,7 +26,7 @@ function AgentListPage() {
   return (
     <Prim.Box padding="1.5rem">
       <Stack gap="lg">
-        <Stack row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <Stack row justifyContent="space-between" alignItems="center">
           <Prim.Box>
             <Heading level={2}>Agents</Heading>
             <Caption muted>{agents.length} agent{agents.length !== 1 ? 's' : ''}</Caption>
@@ -40,7 +40,7 @@ function AgentListPage() {
         </Stack>
 
         {agents.length === 0 ? (
-          <Stack style={{ alignItems: 'center', padding: '3rem 0' }}>
+          <Stack alignItems="center" paddingVertical="3rem" paddingHorizontal="0">
             <Caption muted>No agents yet. Create your first agent.</Caption>
           </Stack>
         ) : (

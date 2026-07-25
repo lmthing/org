@@ -122,7 +122,7 @@ function DataBrowser() {
       </Prim.Box>
 
       {error ? (
-        <Caption style={{ padding: '0.5rem 1.5rem', color: 'var(--color-destructive)' }}>
+        <Caption paddingVertical="0.5rem" paddingHorizontal="1.5rem" color="var(--color-destructive)">
           {error}
         </Caption>
       ) : null}

@@ -8,7 +8,8 @@ import * as Prim from '../../primitives/index'
  */
 export type StackGap = 'sm' | 'md' | 'lg'
 
-export interface StackProps extends React.ComponentProps<'div'> {
+// `Prim.BoxProps`, not `ComponentProps<'div'>` — see the note on `Caption`/`Heading`.
+export interface StackProps extends Omit<Prim.BoxProps, 'gap'> {
   row?: boolean
   gap?: StackGap
 }
@@ -22,7 +23,7 @@ function Stack({ row, gap, ...props }: StackProps) {
       display="flex"
       flexDirection={row ? 'row' : 'column'}
       {...(gap ? { gap: GAP[gap] } : {})}
-      {...(props as Record<string, unknown>)}
+      {...props}
     />
   )
 }

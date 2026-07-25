@@ -75,11 +75,24 @@ function groupSessionsByRecency(sessions: PersistedSessionMeta[]) {
 interface SidebarProps {
   onProjectSettings?: (projectId: string, name: string) => void;
   className?: string;
+  /** Forwarded to the sidebar shell — the mobile drawer needs `width: '100%'`. */
+  width?: number | string;
+  height?: number | string;
   /** Disable the whole-sidebar collapse control (e.g. inside a mobile drawer). */
   collapsible?: boolean;
 }
 
-export function Sidebar({ onProjectSettings, className, collapsible = true }: SidebarProps) {
+/** `.bg-muted text-foreground font-medium` / the idle row's hover pair, as prop bags. */
+const SESSION_ACTIVE = { backgroundColor: '$muted', color: '$foreground', fontWeight: '$medium' } as const;
+const SESSION_IDLE = {
+  color: '$muted-foreground',
+  hoverStyle: {
+    backgroundColor: 'color-mix(in srgb, var(--muted) 60%, transparent)',
+    color: '$foreground',
+  },
+} as const;
+
+export function Sidebar({ onProjectSettings, className, width, height, collapsible = true }: SidebarProps) {
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
   const activeSessionId = useStore(s => s.activeSessionId);
@@ -217,9 +230,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                   overflow="hidden"
                   textOverflow="ellipsis"
                   whiteSpace="nowrap"
-                  className={isActive
-                      ? 'bg-muted text-foreground font-medium'
-                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexGrow={1} flexShrink={1} flexBasis="0%" textAlign="left" paddingHorizontal="$2" paddingVertical="$1.5" borderRadius="$radius-lg" fontSize="$sm"
+                  {...(isActive ? SESSION_ACTIVE : SESSION_IDLE)} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexGrow={1} flexShrink={1} flexBasis="0%" textAlign="left" paddingHorizontal="$2" paddingVertical="$1.5" borderRadius="$radius-lg" fontSize="$sm"
                   title={displayTitle || s.sessionId}
                 >
                   <Prim.Text display="block" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{label}</Prim.Text>
@@ -246,6 +257,8 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
   return (
     <AppSidebar
       className={className}
+      width={width}
+      height={height}
       storageKey="chat-sidebar"
       collapsible={collapsible}
       spacesDefaultExpanded={false}

@@ -187,13 +187,13 @@ function FilesEditor() {
                 {selected}
                 {dirty ? ' •' : ''}
               </Prim.Text>
-              {notice ? <Caption style={{ color: 'var(--color-accent)' }}>{notice}</Caption> : null}
+              {notice ? <Caption color="var(--color-accent)">{notice}</Caption> : null}
               <Button variant="primary" disabled={!dirty || saving} onClick={save}>
                 {saving ? 'Saving…' : 'Save'}
               </Button>
             </Prim.Box>
             {error ? (
-              <Caption style={{ padding: '0.5rem 1rem', color: 'var(--color-destructive)' }}>{error}</Caption>
+              <Caption paddingVertical="0.5rem" paddingHorizontal="1rem" color="var(--color-destructive)">{error}</Caption>
             ) : null}
             <Prim.TextArea
               value={content}

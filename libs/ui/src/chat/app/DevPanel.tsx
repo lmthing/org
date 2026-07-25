@@ -9,6 +9,8 @@ import { cn } from '../lib/cn.js';
 interface DevPanelProps {
   onClose: () => void;
   className?: string;
+  /** Panel height. Callers used to pass `className="h-full"`, a Tailwind utility. */
+  height?: number | string;
 }
 
 function Resizer({ onDrag }: { onDrag: (dx: number) => void }) {
@@ -28,7 +30,7 @@ function Resizer({ onDrag }: { onDrag: (dx: number) => void }) {
   );
 }
 
-export function DevPanel({ onClose, className }: DevPanelProps) {
+export function DevPanel({ onClose, className, height }: DevPanelProps) {
   const mode = useStore(s => s.mode);
   const [width, setWidth] = React.useState(380);
   const [treeH, setTreeH] = React.useState(240);
@@ -37,7 +39,7 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
     <Prim.Box as="aside"
       aria-label="developer tools"
       display="flex"
-      className={className} backgroundColor="var(--lm-panel)" borderColor="var(--lm-border)" position="relative" flexDirection="column" borderLeftWidth={1} overflow="hidden" flexShrink={0}
+      className={className} {...(height !== undefined ? { height } : {})} backgroundColor="var(--lm-panel)" borderColor="var(--lm-border)" position="relative" flexDirection="column" borderLeftWidth={1} overflow="hidden" flexShrink={0}
       style={{ width }}
     >
       <Resizer onDrag={(dx) => setWidth(w => Math.max(280, Math.min(700, w - dx)))} />
