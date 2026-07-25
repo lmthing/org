@@ -1,0 +1,20 @@
+/*
+ * The harness's CSS entry. Imports the REAL theme.css (Tailwind + preflight + the token custom
+ * properties) and re-declares the source roots explicitly: Tailwind v4 auto-detects sources
+ * relative to the build root, which here is the harness directory — so without these the utility
+ * classes the shipped components still carry (`transition-*`, `lm-fade-in`, …) would be absent
+ * from the harness CSS and the baseline would understate what the Tailwind deletion removes.
+ *
+ * Mirrors apps/web/src/index.css. See docs/tamagui-idiomatic-migration.md §2 (P0).
+ */
+@import "@lmthing/css/theme.css";
+/* The `lm-*` keyframes + `.lm-spin`/`.lm-fade-in`/`.lm-pulse` live HERE, not in theme.css — this is
+   the chat surface's own Tailwind entry, and the second `@import "tailwindcss"` in the repo. */
+@import "../../../../../libs/ui/src/chat/app/styles.css";
+
+@source "../../../src";
+@source "../../../../../libs/ui/src";
+
+@layer base {
+  html, body, #root { height: 100%; }
+}
