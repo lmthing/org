@@ -5,8 +5,11 @@ import * as Prim from '../../primitives/index'
 /**
  * Sheet — a side-anchored modal panel, migrated off `@radix-ui/react-dialog` to the universal Tamagui
  * primitives + an open-state context (Part III / B3.4), mirroring the Dialog: portal to body, ESC +
- * backdrop dismiss. Keeps the `sheet*` CSS classes and the compound API. Native takes a `.native.tsx`
- * fork. (No web consumers today; kept as the universal Sheet vocabulary.)
+ * backdrop dismiss. Keeps the `sheet*` CSS classes and the compound API. (No web consumers today;
+ * kept as the universal Sheet vocabulary.)
+ *
+ * **Web-only** — the `react-dom` portal. `index.native.tsx` is the React Native fork (RN `Modal`,
+ * `animationType="slide"`), covered by `libs/ui/metro/suites/overlays.tsx`.
  */
 
 /**

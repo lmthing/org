@@ -8,8 +8,12 @@ import * as Prim from '../../primitives/index'
  * focus-first-on-open / ESC-to-close / backdrop-dismiss pattern already proven in the shipping chat
  * `components/ui/Dialog`, rendered through a `document.body` portal (web) so `position:fixed` escapes any
  * transformed ancestor. Keeps the compound API (Dialog/Trigger/Close/Content/Overlay/Header/Title/
- * Description) and the `dialog*` CSS classes. Behaviour is unit-tested in `dialog.test.tsx`; the native
- * app supplies a `.native.tsx` fork (RN Modal) behind the same names.
+ * Description) and the `dialog*` CSS classes. Behaviour is unit-tested in `dialog.test.tsx`.
+ *
+ * **This file is web-only** — the `react-dom` portal is why. `index.native.tsx` is the React Native
+ * fork (RN `Modal`, no portal) exporting the same names, including the `DIALOG_*` bags with
+ * native-valid values; Metro prefers it. Both are rendered by `libs/ui/metro/suites/overlays.tsx`
+ * and the graph gate there fails if this file ever reaches a native bundle.
  */
 
 /**
