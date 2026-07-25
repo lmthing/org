@@ -72,7 +72,10 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
                 <Prim.Pressable
                   key={space.id}
                   onClick={() => handleSelect(space.id)}
-                  {...DROPDOWN_ITEM} className={space.id === currentSpaceId ? 'list-item--selected' : undefined}
+                  {...DROPDOWN_ITEM}
+                  {...(space.id === currentSpaceId
+                    ? { backgroundColor: '$accent', color: '$accent-foreground', fontWeight: '$medium' }
+                    : {})}
                   width="100%"
                   textAlign="left"
                 >

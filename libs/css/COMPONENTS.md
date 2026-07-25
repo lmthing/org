@@ -27,23 +27,11 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `--agent`, `--color-agent`, `--color-agent-foreground`, `--color-background`, `--color-border`, `--color-foreground`, `--color-knowledge`, `--color-muted`, `--color-muted-foreground`, `--radius-full`, `--radius-lg`, `--radius-md`
 
-### `components/component-editor/index.css`
-
-- **.component-editor** — `.component-editor` `.component-editor__kind-badge` `.component-editor__list` `.component-editor__list-item` `.component-editor__list-item--active` `.component-editor__list-item-actions`
-
-  Tokens: `--color-surface-active`, `--color-surface-hover`
-
 ### `components/computer/ide-file-tree.css`
 
 - **.ide-file-tree** — `.ide-file-tree` `.ide-file-tree__action-btn` `.ide-file-tree__context-menu` `.ide-file-tree__dialog-content` `.ide-file-tree__dialog-overlay` `.ide-file-tree__item--active`
 
   Tokens: `accent`, `border`, `card`, `foreground`, `muted-foreground`, `popover`, `primary`
-
-### `components/functions/index.css`
-
-- **.functions-editor** — `.functions-editor` `.functions-editor__list` `.functions-editor__list-item` `.functions-editor__list-item--active` `.functions-editor__list-item-actions`
-
-  Tokens: `--color-surface-active`, `--color-surface-hover`
 
 ### `components/markdown/index.css`
 

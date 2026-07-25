@@ -270,4 +270,27 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     withProvider(<TextArea ref={taRef} defaultValue="v" />)
     expect(taRef.current?.tagName).toBe('TEXTAREA')
   })
+
+  /**
+   * The hover GROUP is how a `:hover .child` descendant combinator survives the CSS deletion
+   * (app-sidebar's delete button, the functions/component-editor list-item actions). Both halves
+   * fail SILENTLY if they come apart: a `group` prop that never reaches the host emits no
+   * `_groupR-row` marker, and a `$group-row-hover` block that Tamagui does not recognise is simply
+   * dropped — no error, no visible symptom until someone hovers.
+   * See docs/tamagui-idiomatic-migration.md §5.
+   */
+  it('group + $group-<name>-hover emit the paired marker/atomic classes', () => {
+    const el = withProvider(
+      <Box group={'row' as never} data-parent="1">
+        <Box data-child="1" opacity={0} $group-row-hover={{ opacity: 1 }} />
+      </Box>,
+    ).container
+    const parent = el.querySelector('[data-parent]')!
+    const child = el.querySelector('[data-child]')!
+    // The parent must carry the group marker the child's selector is scoped to.
+    expect(parent.className).toContain('t_group_row')
+    // The child must carry BOTH the base opacity and the group-scoped hover override.
+    expect(child.className).toContain('_o-0')
+    expect(child.className).toContain('_o-_grouprow-hover_1')
+  })
 })
