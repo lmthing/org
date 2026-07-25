@@ -196,7 +196,7 @@ export function ChatView({
   return (
     <Prim.Box display="flex" className={className} flexDirection="column" height="100%" backgroundColor="$background" {...(flexGrow !== undefined ? { flexGrow } : {})} {...(flexShrink !== undefined ? { flexShrink } : {})} {...(flexBasis !== undefined ? { flexBasis } : {})} {...(minHeight !== undefined ? { minHeight } : {})}>
       {/* Header */}
-      <Prim.Row as="header"
+      <Prim.Box as="header" display="flex" flexDirection="row"
         style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }} backgroundColor="color-mix(in srgb, var(--background) 80%, transparent)" gap="$3" paddingLeft="$12" paddingRight="$4" paddingVertical="$2.5" borderBottomWidth={1} borderColor="$border" $md={{ paddingLeft: "$4" }} alignItems="center" flexShrink={0}
         aria-label="chat header"
       >
@@ -270,7 +270,7 @@ export function ChatView({
             </Prim.Pressable>
           )}
         </Prim.Row>
-      </Prim.Row>
+      </Prim.Box>
 
       {/* Messages */}
       <Prim.Box as="main"

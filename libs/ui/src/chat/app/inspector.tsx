@@ -120,11 +120,11 @@ export function Inspector(): React.ReactElement {
   const setTab = useStore((s) => s.setTab);
 
   if (!node) {
-    return <Prim.Row as="aside" aria-label="inspector" color="var(--lm-muted)" height="100%" justifyContent="center" fontSize="12px" alignItems="center">Select a node to inspect.</Prim.Row>;
+    return <Prim.Box as="aside" display="flex" flexDirection="row" aria-label="inspector" color="var(--lm-muted)" height="100%" justifyContent="center" fontSize="12px" alignItems="center">Select a node to inspect.</Prim.Box>;
   }
 
   return (
-    <Prim.Col as="aside" aria-label="inspector" height="100%">
+    <Prim.Box as="aside" display="flex" flexDirection="column" aria-label="inspector" height="100%">
       <Prim.Box borderColor="var(--lm-border)" paddingHorizontal="$3" paddingVertical="$2" borderBottomWidth={1}>
         <Prim.Row gap="$2" alignItems="center">
           <StatusIcon status={node.status} />
@@ -147,6 +147,6 @@ export function Inspector(): React.ReactElement {
         {tab === 'variables' && <VariablesTab node={node} />}
         {tab === 'raw' && <RawTab node={node} />}
       </Prim.Box>
-    </Prim.Col>
+    </Prim.Box>
   );
 }
