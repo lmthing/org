@@ -206,10 +206,15 @@ Col.displayName = 'Col'
 // See docs/tamagui-idiomatic-migration.md §5/§6.
 const FONT_SCALE_PROPS = ['fontSize', 'fontWeight', 'lineHeight', 'letterSpacing'] as const
 
-function withFontScale<T extends Record<string, unknown>>(props: T): T {
-  if (props['fontFamily'] !== undefined) return props
+// Constrained to `object`, NOT `Record<string, unknown>`: every caller passes a props type built
+// from a React `*HTMLAttributes` INTERFACE, and an interface has no implicit index signature, so it
+// is not assignable to `Record<string, unknown>` (only type ALIASES are). The bodies index through
+// an explicit cast instead.
+function withFontScale<T extends object>(props: T): T {
+  const p = props as Record<string, unknown>
+  if (p['fontFamily'] !== undefined) return props
   const needsFamily = FONT_SCALE_PROPS.some(
-    (k) => typeof props[k] === 'string' && (props[k] as string).startsWith('$'),
+    (k) => typeof p[k] === 'string' && (p[k] as string).startsWith('$'),
   )
   // fontFamily must come FIRST: Tamagui resolves props in order, and a `$` font-scale token is
   // looked up against whatever family is already set — a family applied afterwards is too late.
@@ -550,7 +555,7 @@ const SelectComp = makeControl('select', 'Select')
  */
 const cssValue = (v: string) => (v.startsWith('$') ? `var(--${v.slice(1)})` : v)
 
-function withControlShim<T extends Record<string, unknown>>(props: T): T {
+function withControlShim<T extends object>(props: T): T {
   const { placeholderTextColor, selectionColor, resize, style, ...rest } = props as Record<string, unknown>
   if (placeholderTextColor === undefined && selectionColor === undefined && resize === undefined) {
     return props
@@ -597,7 +602,7 @@ const ImageComp = createComponent({
   componentName: 'Image',
 }) as unknown as React.ComponentType<any>
 
-function withImageShim<T extends Record<string, unknown>>(props: T): T {
+function withImageShim<T extends object>(props: T): T {
   const { objectFit, style, ...rest } = props as Record<string, unknown>
   if (objectFit === undefined) return props
   return { ...rest, style: { objectFit, ...(style as object) } } as unknown as T
