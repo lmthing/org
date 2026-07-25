@@ -44,6 +44,8 @@
   },
   "devDependencies": {
     "@lmthing/config": "workspace:*",
+    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-router": "^1.166.2",
     "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.6.1",
@@ -58,6 +60,10 @@
   },
   "peerDependencies": {
     "@monaco-editor/react": "*",
+    "@react-native-async-storage/async-storage": "*",
+    "@react-native-clipboard/clipboard": "*",
+    "@tanstack/react-query": "^5",
+    "@tanstack/react-router": "^1",
     "@xterm/addon-fit": "*",
     "@xterm/addon-web-links": "*",
     "@xterm/xterm": "*",
@@ -66,8 +72,40 @@
     "lucide-react": "*",
     "react": ">=19",
     "react-dom": ">=19",
+    "react-native": "*",
+    "react-native-svg": "*",
+    "react-native-webview": "*",
     "tailwind-merge": "*"
   },
   "author": "LMThing",
-  "license": "MIT"
+  "license": "MIT",
+  "peerDependenciesMeta": {
+    "react-native": {
+      "optional": true
+    },
+    "react-native-svg": {
+      "optional": true
+    },
+    "react-native-webview": {
+      "optional": true
+    },
+    "@react-native-clipboard/clipboard": {
+      "optional": true
+    },
+    "@react-native-async-storage/async-storage": {
+      "optional": true
+    },
+    "@monaco-editor/react": {
+      "optional": true
+    },
+    "@xterm/addon-fit": {
+      "optional": true
+    },
+    "@xterm/addon-web-links": {
+      "optional": true
+    },
+    "@xterm/xterm": {
+      "optional": true
+    }
+  }
 }
