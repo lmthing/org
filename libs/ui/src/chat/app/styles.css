@@ -115,73 +115,18 @@ body {
   outline-offset: 2px;
 }
 
-/* ── Animations ─────────────────────────────────────────────────── */
-@keyframes lm-spin { to { transform: rotate(360deg); } }
-@keyframes lm-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-@keyframes lm-slide-in-right { from { transform: translateX(100%); } to { transform: translateX(0); } }
-@keyframes lm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-@keyframes lm-stream-cursor { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+/* ── Animations ─────────────────────────────────────────────────────
+   MOVED OUT. The `lm-*` keyframes, their classes, `.streaming-cursor::after` and the
+   `prefers-reduced-motion` block now live in `@lmthing/css/animations.css`, and `.lm-prose` in
+   `@lmthing/css/components/markdown/index.css`.
 
-.lm-spin { animation: lm-spin 1.2s linear infinite; }
-.lm-fade-in { animation: lm-fade-in 150ms ease-out; }
-.lm-slide-in-right { animation: lm-slide-in-right 200ms ease-out; }
-.lm-pulse { animation: lm-pulse 2s ease-in-out infinite; }
-.streaming-cursor::after {
-  content: '▋';
-  animation: lm-stream-cursor 0.8s step-end infinite;
-  color: var(--muted-foreground);
-  font-size: 0.85em;
-}
+   They could not stay here. This file is an `@import "tailwindcss"` entry — the second one in the
+   repo — so everything in it dies with the Tailwind deletion (phase 4), and it is loaded by the
+   `/chat` ROUTE, so everything in it is route-scoped. Keyframes are neither Tailwind's job nor the
+   animation driver's (the driver handles transitions). See docs/tamagui-final-steps.md §2.
 
-/* ── Reduced motion ─────────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-  .lm-fade-in, .lm-slide-in-right, .lm-pulse, .lm-spin { animation: none; }
-  .streaming-cursor::after { animation: none; }
-  * { transition-duration: 0.01ms !important; }
-}
-
-/* ── Prose / markdown output ─────────────────────────────────────── */
-.lm-prose { line-height: 1.7; }
-.lm-prose p { margin: 0 0 0.75em; }
-.lm-prose p:last-child { margin-bottom: 0; }
-.lm-prose ul, .lm-prose ol { padding-left: 1.5em; margin: 0 0 0.75em; }
-.lm-prose li { margin-bottom: 0.25em; }
-.lm-prose code {
-  font-family: var(--font-mono);
-  font-size: 0.85em;
-  background: var(--muted);
-  color: var(--foreground);
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-}
-.lm-prose pre {
-  background: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.75em 1em;
-  overflow-x: auto;
-  font-family: var(--font-mono);
-  font-size: 0.85em;
-  margin: 0 0 0.75em;
-}
-.lm-prose pre code { background: none; padding: 0; }
-.lm-prose h1, .lm-prose h2, .lm-prose h3 {
-  font-family: var(--font-display);
-  font-weight: 700;
-  margin: 1em 0 0.4em;
-}
-.lm-prose h1 { font-size: 1.4em; }
-.lm-prose h2 { font-size: 1.2em; }
-.lm-prose h3 { font-size: 1.05em; }
-.lm-prose blockquote {
-  border-left: 3px solid var(--border);
-  padding-left: 1em;
-  color: var(--muted-foreground);
-  margin: 0 0 0.75em;
-}
-.lm-prose a { color: var(--agent); text-decoration: underline; }
-.lm-prose strong { font-weight: 600; }
-.lm-prose hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+   What is left below is base/reset styling and the `--lm-*` token bridge, which phase 4 has to
+   relocate rather than delete along with the file. */
 
 /* ── Safe area insets (mobile) ───────────────────────────────────── */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }

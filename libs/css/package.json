@@ -5,6 +5,9 @@
   "type": "module",
   "exports": {
     "./theme": "./src/theme.css",
+    "./theme.css": "./src/theme.css",
+    "./animations": "./src/animations.css",
+    "./animations.css": "./src/animations.css",
     "./tokens.json": "./src/tokens/tokens.json",
     "./tamagui-tokens": "./src/tamagui/tokens.generated.ts",
     "./tokens.manifest.json": "./tokens.manifest.json",

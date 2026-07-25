@@ -212,6 +212,22 @@ export const FIXTURES: Fixture[] = [
         <Prim.Box className="lm-fade-in" padding="$2">lm-fade-in</Prim.Box>
         <Prim.Text className="lm-spin">⟳</Prim.Text>
         <Prim.Box className="lm-pulse" padding="$2">lm-pulse</Prim.Box>
+        {/* The rest of the keyframe family, measured because phase 2 MOVES it out of the chat
+            route's Tailwind entry into `@lmthing/css/animations.css`. Without these rows that move
+            is unreviewable: `animation-name`/`-duration`/`-iteration-count` are in the audited set,
+            so a wrong timing or a dropped `@keyframes` shows up as a baseline delta instead of as
+            motion nobody notices until it ships. */}
+        <Prim.Box className="lm-slide-in-right" padding="$2">lm-slide-in-right</Prim.Box>
+        {/* `.streaming-cursor` animates its ::after, which the walk cannot reach (it reads
+            `getComputedStyle(el)`, no pseudo argument). The row pins the HOST element only — the
+            cursor's own motion is covered by `libs/css/src/animations.test.mjs`. */}
+        <Prim.Box className="streaming-cursor" padding="$2">streaming-cursor</Prim.Box>
+        {/* Tailwind's last two animation utilities. Phase 2 replaces these with hand-written
+            equivalents in `animations.css` so the Tailwind deletion cannot take them; they are
+            captured HERE, while Tailwind still generates them, so "equivalent" is a measured
+            zero-delta rather than a claim. */}
+        <Prim.Text className="animate-spin">⟳</Prim.Text>
+        <Prim.Box className="animate-pulse" padding="$2">animate-pulse</Prim.Box>
       </>
     ),
   },

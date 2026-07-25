@@ -148,3 +148,59 @@
   height: auto;
   border-radius: 0.5rem;
 }
+
+/*
+ * .lm-prose — the chat surface's container for `marked`-rendered message HTML
+ * (`chat/app/Message.tsx` sets it alongside `dangerouslySetInnerHTML`).
+ *
+ * Moved here from `libs/ui/src/chat/app/styles.css` by phase 2 of
+ * docs/tamagui-final-steps.md: that file is an `@import "tailwindcss"` entry, and these rules would
+ * have died with the Tailwind deletion. This file is where injected-HTML styling already lives, and
+ * it is permanently out of scope for the prop migration (§7) for the same reason `.lm-markdown` is —
+ * the elements are produced as a STRING by `marked`, so there is no React element to hold a prop.
+ *
+ * Kept as a separate class rather than folded into `.lm-markdown`: the two have different spacing
+ * and type scales, and merging them would change the chat transcript's layout. Every rule below is
+ * verbatim, plain CSS with token colors — no `@apply`, so it needs nothing from Tailwind.
+ */
+.lm-prose { line-height: 1.7; }
+.lm-prose p { margin: 0 0 0.75em; }
+.lm-prose p:last-child { margin-bottom: 0; }
+.lm-prose ul, .lm-prose ol { padding-left: 1.5em; margin: 0 0 0.75em; }
+.lm-prose li { margin-bottom: 0.25em; }
+.lm-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.lm-prose pre {
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  margin: 0 0 0.75em;
+}
+.lm-prose pre code { background: none; padding: 0; }
+.lm-prose h1, .lm-prose h2, .lm-prose h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 1em 0 0.4em;
+}
+.lm-prose h1 { font-size: 1.4em; }
+.lm-prose h2 { font-size: 1.2em; }
+.lm-prose h3 { font-size: 1.05em; }
+.lm-prose blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1em;
+  color: var(--muted-foreground);
+  margin: 0 0 0.75em;
+}
+.lm-prose a { color: var(--agent); text-decoration: underline; }
+.lm-prose strong { font-weight: 600; }
+.lm-prose hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
