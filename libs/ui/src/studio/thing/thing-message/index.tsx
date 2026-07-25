@@ -1,7 +1,5 @@
 import * as Prim from '../../../elements/primitives/index.js';
-import { cn } from '@lmthing/ui/lib/utils'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import '@lmthing/css/components/thing/thing-message/index.css'
 import { CARD_BASE, CARD_BODY } from '../../../elements/content/card/index.js'
 
 interface ThingMessageProps {
@@ -27,7 +25,10 @@ export function ThingMessage({ role, content }: ThingMessageProps) {
       <Prim.Box {...CARD_BODY}>
         <Caption
           muted={!isUser}
-          className={cn('thing-message__role', isUser && 'thing-message__role--user')}
+          marginBottom="0.25rem"
+          {...(isUser
+            ? { color: 'rgba(255, 255, 255, 0.7)' } // ds-lint-ok: literal white/70 on the primary bubble
+            : {})}
         >
           {isUser ? 'You' : 'Agent'}
         </Caption>

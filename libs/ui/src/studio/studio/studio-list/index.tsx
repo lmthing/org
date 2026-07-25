@@ -6,7 +6,6 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Badge } from '@lmthing/ui/elements/content/badge'
 import { useProjects } from '@lmthing/state'
-import '@lmthing/css/components/studio/index.css'
 
 /**
  * StudioList — legacy list surface.
@@ -21,7 +20,7 @@ export function StudioList() {
   return (
     <Page full>
       <PageHeader>
-        <Stack row className="studio-list__header">
+        <Stack row justifyContent="space-between" alignItems="center">
           <Prim.Box>
             <Heading level={2}>Projects</Heading>
             <Caption muted>Browse and manage your projects</Caption>
@@ -32,7 +31,7 @@ export function StudioList() {
 
       <PageBody>
         {projects.length === 0 ? (
-          <Stack className="studio-list__empty">
+          <Stack alignItems="center" justifyContent="center" padding="3rem">
             <Heading level={3}>No Projects</Heading>
             <Caption muted>Create a project to get started.</Caption>
           </Stack>

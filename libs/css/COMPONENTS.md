@@ -112,16 +112,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `--agent`, `--border`, `--destructive`, `--muted`, `border`, `brand-2`, `brand-3`, `muted`, `muted-foreground`, `neutral`, `primary-foreground`
 
-### `components/studio/index.css`
-
-- **.studio-list** — `.studio-list__empty` `.studio-list__header`
-
-### `components/thing/thing-message/index.css`
-
-- **.thing-message** — `.thing-message` `.thing-message--assistant` `.thing-message--user` `.thing-message__content` `.thing-message__role` `.thing-message__role--user`
-
-  Tokens: `--color-primary`
-
 ### `components/thing/thing-panel/index.css`
 
 - **.thing-msg** — `.thing-msg` `.thing-msg--assistant` `.thing-msg--user` `.thing-msg__processing` `.thing-msg__role` `.thing-msg__text`
@@ -129,10 +119,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.thing-tool-event** — `.thing-tool-event`
 
   Tokens: `--agent`, `--background`, `--border`, `--brand-2`, `--card`, `--destructive`, `--knowledge`, `--muted`, `--primary`, `--primary-foreground`
-
-### `components/workflow/save-workflow-modal/index.css`
-
-- **.save-workflow-modal** — `.save-workflow-modal__body` `.save-workflow-modal__dialog` `.save-workflow-modal__footer`
 
 ### `components/workflow/step-card/index.css`
 
