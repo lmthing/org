@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { styled, View } from '../_native'
+import { styled, View, nativeSafeProps } from '../_native'
 
 /**
  * Row (native fork). A Tamagui/RN `View` with an EXPLICIT `flexDirection: 'row'` — the native
@@ -13,8 +13,8 @@ const RowView: React.ComponentType<any> = styled(View, {
 
 export type RowProps = React.HTMLAttributes<HTMLDivElement>
 
-const Row = React.forwardRef<any, RowProps>(({ style, children }, ref) => (
-  <RowView ref={ref} style={style as never}>
+const Row = React.forwardRef<any, RowProps>(({ children, ...props }, ref) => (
+  <RowView ref={ref} {...nativeSafeProps(props)}>
     {children}
   </RowView>
 ))

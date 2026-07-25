@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { NativeView } from '../_native'
+import { NativeView, nativeSafeProps } from '../_native'
 
 /**
  * List / ListItem (native fork). Tamagui/RN `View`s (a column stack + rows). Same prop shapes as
@@ -12,8 +12,9 @@ export type ListProps = React.HTMLAttributes<HTMLElement> & {
 }
 
 const List = React.forwardRef<any, ListProps>(
-  ({ style, children }, ref) => (
-    <NativeView ref={ref} style={style as never}>
+  // `ordered` is consumed here, not forwarded: it is a numbering hint with no RN prop behind it.
+  ({ children, ordered: _ordered, ...props }, ref) => (
+    <NativeView ref={ref} {...nativeSafeProps(props)}>
       {children}
     </NativeView>
   ),
@@ -23,8 +24,8 @@ List.displayName = 'List'
 export type ListItemProps = React.LiHTMLAttributes<HTMLLIElement>
 
 const ListItem = React.forwardRef<any, ListItemProps>(
-  ({ style, children }, ref) => (
-    <NativeView ref={ref} style={style as never}>
+  ({ children, ...props }, ref) => (
+    <NativeView ref={ref} {...nativeSafeProps(props)}>
       {children}
     </NativeView>
   ),

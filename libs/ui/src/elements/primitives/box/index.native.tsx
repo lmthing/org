@@ -1,13 +1,13 @@
 import * as React from 'react'
-import { NativeView } from '../_native'
+import { NativeView, nativeSafeProps } from '../_native'
 
 /**
  * Box (native fork). Renders a Tamagui/RN `View`. Accepts the SAME prop shape as the web `Box`
- * so a surface component typechecks against both targets; web-only props (`className`, semantic
- * `as`, DOM events) are accepted and ignored/mapped. Layout for the className-driven surfaces
- * still needs a native styling story — see
- * `.issues/tamagui-web-swap-blocked-by-className-layout.md`. Web keeps `index.tsx` (Metro prefers
- * this `.native.tsx`). See docs/react-native-tamagui-migration.md §1.6 / §7.
+ * so a surface component typechecks against both targets. Props go through `nativeSafeProps`, so
+ * Tamagui style props (`padding="$4"`, `backgroundColor="$background"`) and `role`/`aria-*` reach
+ * the native view, while web-only attributes and DOM events are dropped or mapped. Web keeps
+ * `index.tsx` (Metro prefers this `.native.tsx`).
+ * See docs/react-native-tamagui-migration.md §1.6 / §7.
  */
 export type BoxAs =
   | 'div'
@@ -32,8 +32,8 @@ export type BoxProps = React.HTMLAttributes<HTMLElement> & {
 }
 
 const Box = React.forwardRef<any, BoxProps>(
-  ({ style, children }, ref) => (
-    <NativeView ref={ref} style={style as never}>
+  ({ children, ...props }, ref) => (
+    <NativeView ref={ref} {...nativeSafeProps(props)}>
       {children}
     </NativeView>
   ),

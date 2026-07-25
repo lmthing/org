@@ -23,7 +23,6 @@ import {
   flattenStyle,
   press,
   longPress,
-  actLike,
   NATIVE_VIEW,
 } from '../render'
 import {
@@ -365,31 +364,21 @@ test('selecting a Dropdown item fires onClick and closes the menu', () => {
 })
 
 test('the panel is placed under the measured trigger', () => {
-  const { tree, current, renderer } = render(
+  // A Modal detaches the panel from its trigger, so the anchor is measured back with
+  // `measureInWindow`. There is no layout pass here, so the harness says what the measurement
+  // returns and the assertion is on the arithmetic the component does with it.
+  const { tree, current } = render(
     <Dropdown>
       <DropdownTrigger>menu</DropdownTrigger>
       <DropdownContent>
         <DropdownItem>rename</DropdownItem>
       </DropdownContent>
     </Dropdown>,
+    { measureRect: { x: 12, y: 30, width: 100, height: 24 } },
   )
   press(findByProp(tree, 'accessibilityRole', 'button'))
 
-  // A Modal detaches the panel from its trigger, so the anchor has to be measured back. There is no
-  // layout pass here, so `measureInWindow` never calls back on its own — but it IS called, and the
-  // callback it was handed is the whole anchoring contract. Invoking it with a known rect proves
-  // the panel follows the trigger rather than that our own arithmetic is self-consistent.
-  const measured = renderer.root
-    .findAll((node) => typeof (node.instance as { measureInWindow?: unknown } | null)?.measureInWindow === 'function', {
-      deep: true,
-    })
-    .map((node) => (node.instance as { measureInWindow: { mock?: { calls: unknown[][] } } }).measureInWindow)
-    .find((fn) => (fn.mock?.calls.length ?? 0) > 0)
-  expect(measured).toBeDefined()
-
-  const callback = measured?.mock?.calls[0][0] as (x: number, y: number, w: number, h: number) => void
-  actLike(() => callback(12, 30, 100, 24))
-
   const panel = findByProp(current(), 'accessibilityRole', 'menu')
+  // Directly under the trigger: y + height, and left-aligned with it.
   expect(flattenStyle(panel?.props.style)).toMatchObject({ top: 54, left: 12 })
 })

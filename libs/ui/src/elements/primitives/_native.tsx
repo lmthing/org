@@ -12,10 +12,14 @@ import { styled, View, Text as TamaguiText } from '../../theme/tamagui.config'
  * Prop compatibility: the native forks accept the SAME prop shape as the web primitives
  * (`React.HTMLAttributes`-derived) so a single surface component typechecks against both targets.
  * Web-only props that have no RN meaning (`className`, `htmlFor`, DOM event handlers) are accepted
- * and dropped/mapped here rather than rejected. Layout still needs a native styling story for the
- * className-driven surfaces (NativeWind or a props migration) — see
- * `.issues/tamagui-web-swap-blocked-by-className-layout.md`; these forks are the element seam that
- * story plugs into.
+ * and dropped/mapped by {@link nativeSafeProps} rather than rejected.
+ *
+ * **Every fork forwards its props through `nativeSafeProps`.** That is the native styling story for
+ * the props axis: a surface writes `<Box padding="$4" backgroundColor="$background">` once, and it
+ * renders on both targets because both are Tamagui. The forks originally destructured only
+ * `style`/`children`, which meant a native screen mounted the right TREE with none of the styling —
+ * invisible to web CI, and caught by the Metro render harness (`libs/ui/metro`). What remains of the
+ * §1c decision is the CLASSNAME axis (surfaces still holding Tailwind classes), not this one.
  */
 
 /**
@@ -27,10 +31,31 @@ import { styled, View, Text as TamaguiText } from '../../theme/tamagui.config'
  * typed components unusable as JSX under a bare `tsc`. The thin native forks don't need Tamagui's
  * style-prop typing — the mobile app uses Tamagui directly with consistent types — so we widen
  * here to keep the forks compiling in any react-types configuration.
+ *
+ * **This is also what every native-only file builds on, and why.** There is one tsconfig, so inside
+ * a `.native.tsx` file TypeScript still resolves `Prim.Box` to the WEB component — whose props are
+ * `HTMLAttributes`-derived and have no `onPress`, `accessibilityRole`, `onLongPress` or
+ * `pressStyle`. Those are exactly the props a native-only file needs, so it reaches for `NativeView`
+ * / `NativeText` (RN-typed, `any`-widened) rather than the public primitives. Use `Prim.*` in a fork
+ * only where the prop bag really is the web-shaped public one — a trigger taking `onClick`, a title
+ * taking children.
  */
 export const NativeView: React.ComponentType<any> = styled(View, { name: 'NativeView' }) as unknown as React.ComponentType<any>
+
+/**
+ * `fontFamily: '$body'` is load-bearing, not decoration.
+ *
+ * A `$`-token font SIZE is looked up in the scale of the component's font face, so with no family
+ * set Tamagui has no scale to resolve against and **drops `fontSize="$sm"` silently** — the text
+ * renders at the platform default with no warning. Web never sees this: `theme.css` puts the family
+ * on `.font_body`/`.is_View`, so every element already has one.
+ *
+ * Setting it here gives native the same starting point web has. `Pre` overrides it with `$mono`,
+ * and any caller can.
+ */
 export const NativeText: React.ComponentType<any> = styled(TamaguiText, {
   name: 'NativeText',
+  fontFamily: '$body',
 }) as never
 
 /** The raw styled() factory + base, re-exported for forks that need an explicit flexDirection. */
@@ -45,11 +70,77 @@ export function toPressHandler(
 }
 
 /**
- * Strip web-only attributes (className, htmlFor, DOM events; data-attr/aria kept) so the remaining
- * props are safe to spread onto a Tamagui/RN element. `style` is passed through (RN style objects
- * are compatible; string/complex web styles are ignored by RN at runtime).
+ * Attributes that mean something to a DOM node and nothing to a native one. Everything NOT listed
+ * here is forwarded — including `role` and every `aria-*`, which Tamagui's native path translates
+ * into `accessibilityRole`/`accessibilityLabel`/`accessibilityState`
+ * (`@tamagui/core/src/createOptimizedView.native.tsx`). Dropping those would throw away the
+ * accessibility the surfaces already write.
  */
-export function nativeSafeProps<P extends Record<string, unknown>>(props: P): Record<string, unknown> {
-  const { className: _c, htmlFor: _h, onClick: _o, ...rest } = props as Record<string, unknown>
-  return rest
+const WEB_ONLY_ATTRIBUTES = new Set([
+  'className',
+  'htmlFor',
+  // `as` picks an HTML tag. There are no tags on native; the fork already chose the RN element.
+  'as',
+  'dangerouslySetInnerHTML',
+  'draggable',
+  'contentEditable',
+  'spellCheck',
+  'suppressHydrationWarning',
+])
+
+/**
+ * The event props a Tamagui/RN view understands. An `on*` prop outside this set is a DOM event
+ * (`onKeyDown`, `onSubmit`, `onContextMenu`, …) and is dropped rather than forwarded — React Native
+ * would keep an unknown `on*` prop as an ordinary prop on the native view, where it is dead weight
+ * that looks like it is wired up.
+ */
+const NATIVE_EVENT_PROPS = new Set([
+  'onPress', 'onPressIn', 'onPressOut', 'onLongPress',
+  'onHoverIn', 'onHoverOut',
+  'onFocus', 'onBlur',
+  'onLayout',
+  'onStartShouldSetResponder', 'onMoveShouldSetResponder',
+  'onResponderGrant', 'onResponderMove', 'onResponderRelease', 'onResponderTerminate',
+  'onResponderTerminationRequest',
+])
+
+/**
+ * Make a web prop bag safe to spread onto a Tamagui/RN element — **without throwing the styling
+ * away**.
+ *
+ * This is the whole point of the native forks: a surface writes `<Box padding="$4"
+ * backgroundColor="$background">` once and both targets honour it, because both are Tamagui. The
+ * forks that destructured only `style`/`children` silently dropped every one of those props on
+ * native, which is why a native screen rendered as unstyled boxes.
+ *
+ * What it does:
+ * - **forwards** style props, `$`-tokens, `style`, `role`/`aria-*`, `testID`, `disabled`, and the
+ *   native event props above — i.e. everything Tamagui or RN can act on;
+ * - **maps** `onClick` → `onPress` (an explicit `onPress` wins) and `onMouseEnter`/`onMouseLeave` →
+ *   Tamagui's `onHoverIn`/`onHoverOut`, which are inert on a touch device and correct under
+ *   react-native-web;
+ * - **drops** the web-only attributes and DOM-only event handlers listed above.
+ */
+export function nativeSafeProps(props: object): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  let fromClick: (() => void) | undefined
+  for (const [key, value] of Object.entries(props as Record<string, unknown>)) {
+    if (WEB_ONLY_ATTRIBUTES.has(key)) continue
+    if (key === 'onClick') {
+      fromClick = toPressHandler(value as React.MouseEventHandler)
+      continue
+    }
+    if (key === 'onMouseEnter') {
+      out.onHoverIn = value
+      continue
+    }
+    if (key === 'onMouseLeave') {
+      out.onHoverOut = value
+      continue
+    }
+    if (/^on[A-Z]/.test(key) && !NATIVE_EVENT_PROPS.has(key)) continue
+    out[key] = value
+  }
+  if (fromClick && out.onPress === undefined) out.onPress = fromClick
+  return out
 }

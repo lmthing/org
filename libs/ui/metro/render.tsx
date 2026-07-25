@@ -40,28 +40,62 @@ export const NATIVE_VIEW = 'RCTView'
 export const NATIVE_TEXT = 'RCTText'
 export const NATIVE_IMAGE = 'RCTImageView'
 
+export type MeasureRect = { x: number; y: number; width: number; height: number }
+
+/** The rect every node reports when a suite does not ask for a specific one. */
+const NO_LAYOUT: MeasureRect = { x: 0, y: 0, width: 0, height: 0 }
+
+/**
+ * The handle a `ref` on a host element resolves to.
+ *
+ * `react-test-renderer` gives host refs `null` unless it is handed a `createNodeMock` — and Tamagui
+ * renders `React.createElement('RCTView', …)` directly (`@tamagui/core/src/createOptimizedView`),
+ * so EVERY Tamagui component is a host element here. Without this, a ref through `Prim.Box` looks
+ * broken while the same ref through a plain RN `View` works, purely because RN's `View` resolves to
+ * a mocked class component — an artifact of the renderer, not a defect in the code. (It cost one
+ * wrongly-filed issue to learn that.)
+ *
+ * The methods are the ones RN puts on a host instance.
+ */
+export function createNodeMock(rect: MeasureRect = NO_LAYOUT) {
+  return () => ({
+    measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) =>
+      callback(rect.x, rect.y, rect.width, rect.height),
+    measure: (
+      callback: (x: number, y: number, w: number, h: number, px: number, py: number) => void,
+    ) => callback(0, 0, rect.width, rect.height, rect.x, rect.y),
+    measureLayout: () => {},
+    setNativeProps: () => {},
+    focus: () => {},
+    blur: () => {},
+  })
+}
+
+export type RenderOptions = {
+  theme?: 'light' | 'dark'
+  /**
+   * What every node reports from `measureInWindow`. There is no layout pass here, so a component
+   * that positions itself from a measurement (the Dropdown anchors its panel under the trigger)
+   * can only be tested by saying what the measurement returns.
+   */
+  measureRect?: MeasureRect
+}
+
 /** Render inside the shared Tamagui provider and return the RN element tree + the renderer. */
-export function render(element: React.ReactElement, theme: 'light' | 'dark' = 'light') {
+export function render(element: React.ReactElement, options: RenderOptions = {}) {
+  const { theme = 'light', measureRect } = options
   let renderer!: TestRenderer.ReactTestRenderer
   act(() => {
     renderer = TestRenderer.create(
       <TamaguiProvider config={tamaguiConfig} defaultTheme={theme}>
         {element}
       </TamaguiProvider>,
+      { createNodeMock: createNodeMock(measureRect) },
     )
   })
   /** Re-reads the tree after an interaction — state changes mount and unmount whole subtrees. */
   const tree = () => renderer.toJSON() as Rendered
   return { renderer, tree: tree(), current: tree }
-}
-
-/**
- * Run something that causes a React update and flush it — `act` under a name that says what it is
- * for. Suites need this when they drive a callback React Native would normally have called from
- * native (a `measureInWindow` result, say), which `press`/`longPress` do not cover.
- */
-export function actLike(fn: () => void): void {
-  act(fn)
 }
 
 /** Depth-first search for the first node whose host type satisfies `match`. */

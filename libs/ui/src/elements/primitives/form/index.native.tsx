@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { NativeView } from '../_native'
+import { NativeView, nativeSafeProps } from '../_native'
 
 /**
  * Form (native fork). RN has no `<form>`; renders a plain container. `onSubmit` is wired by the
@@ -8,8 +8,8 @@ import { NativeView } from '../_native'
  */
 export type FormProps = React.FormHTMLAttributes<HTMLFormElement>
 
-const Form = React.forwardRef<any, FormProps>(({ children, style }, ref) => (
-  <NativeView ref={ref} style={style as never}>
+const Form = React.forwardRef<any, FormProps>(({ children, ...props }, ref) => (
+  <NativeView ref={ref} {...nativeSafeProps(props)}>
     {children}
   </NativeView>
 ))

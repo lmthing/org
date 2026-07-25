@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { styled, View } from '../_native'
+import { styled, View, nativeSafeProps } from '../_native'
 
 /**
  * Col (native fork). A Tamagui/RN `View` with an EXPLICIT `flexDirection: 'column'` (RN's default,
@@ -13,8 +13,8 @@ const ColView: React.ComponentType<any> = styled(View, {
 
 export type ColProps = React.HTMLAttributes<HTMLDivElement>
 
-const Col = React.forwardRef<any, ColProps>(({ style, children }, ref) => (
-  <ColView ref={ref} style={style as never}>
+const Col = React.forwardRef<any, ColProps>(({ children, ...props }, ref) => (
+  <ColView ref={ref} {...nativeSafeProps(props)}>
     {children}
   </ColView>
 ))

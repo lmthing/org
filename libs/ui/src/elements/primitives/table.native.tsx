@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { styled, View } from './_native'
-import { NativeView, NativeText } from './_native'
+import { NativeView, NativeText, nativeSafeProps } from './_native'
 
 /**
  * Table-family primitives (native fork). RN has no table layout, so these render as flex
@@ -14,8 +14,8 @@ const RowView: React.ComponentType<any> = styled(View, {
 }) as unknown as React.ComponentType<any>
 
 const cell = (name: string) => {
-  const C = React.forwardRef<any, React.HTMLAttributes<HTMLElement>>(({ children, style }, ref) => (
-    <NativeView ref={ref} style={style as never}>
+  const C = React.forwardRef<any, React.HTMLAttributes<HTMLElement>>(({ children, ...props }, ref) => (
+    <NativeView ref={ref} {...nativeSafeProps(props)}>
       {children}
     </NativeView>
   ))
@@ -29,8 +29,8 @@ export const Tbody = cell('Tbody')
 export const Tfoot = cell('Tfoot')
 
 export const Tr = React.forwardRef<any, React.HTMLAttributes<HTMLElement>>(
-  ({ children, style }, ref) => (
-    <RowView ref={ref} style={style as never}>
+  ({ children, ...props }, ref) => (
+    <RowView ref={ref} {...nativeSafeProps(props)}>
       {children}
     </RowView>
   ),
@@ -41,8 +41,8 @@ export const Th = cell('Th')
 export const Td = cell('Td')
 
 export const Caption = React.forwardRef<any, React.HTMLAttributes<HTMLElement>>(
-  ({ children, style }, ref) => (
-    <NativeText ref={ref} style={style as never}>
+  ({ children, ...props }, ref) => (
+    <NativeText ref={ref} {...nativeSafeProps(props)}>
       {children}
     </NativeText>
   ),
