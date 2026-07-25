@@ -37,17 +37,17 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
     <Prim.Box as="aside"
       aria-label="developer tools"
       display="flex"
-      className={cn("bg-lm-panel border-lm-border", className)} position="relative" flexDirection="column" borderLeftWidth={1} overflow="hidden" flexShrink={0}
+      className={className} backgroundColor="var(--lm-panel)" borderColor="var(--lm-border)" position="relative" flexDirection="column" borderLeftWidth={1} overflow="hidden" flexShrink={0}
       style={{ width }}
     >
       <Resizer onDrag={(dx) => setWidth(w => Math.max(280, Math.min(700, w - dx)))} />
 
       {/* Header */}
-      <Prim.Row className="border-lm-border" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderBottomWidth={1} alignItems="center" flexShrink={0}>
-        <Prim.Text className="text-lm-text" fontSize="$xs" fontWeight="$semibold" flexGrow={1} flexShrink={1} flexBasis="0%">DevTools</Prim.Text>
+      <Prim.Row borderColor="var(--lm-border)" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderBottomWidth={1} alignItems="center" flexShrink={0}>
+        <Prim.Text color="var(--lm-text)" fontSize="$xs" fontWeight="$semibold" flexGrow={1} flexShrink={1} flexBasis="0%">DevTools</Prim.Text>
         <Prim.Pressable
           onClick={onClose}
-          className="text-lm-muted hover:text-lm-text text-base leading-none"
+          color="var(--lm-muted)" fontSize="$base" lineHeight={1} hoverStyle={{ color: "var(--lm-text)" }}
           aria-label="Close DevPanel"
         >
           ×
@@ -79,7 +79,7 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
 
       {/* Replay bar */}
       {mode === 'replay' && (
-        <Prim.Box className="border-lm-border" flexShrink={0} borderTopWidth={1}>
+        <Prim.Box borderColor="var(--lm-border)" flexShrink={0} borderTopWidth={1}>
           <PlaybackBar />
         </Prim.Box>
       )}

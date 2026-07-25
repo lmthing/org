@@ -31,7 +31,7 @@ export function TraceLoader(): React.ReactElement {
     loadReplay(parseTrace(text));
   };
   return (
-    <Prim.Text as="label" className="text-[11px] text-lm-muted cursor-pointer hover:text-lm-text">
+    <Prim.Text as="label" color="var(--lm-muted)" cursor="pointer" hoverStyle={{ color: "var(--lm-text)" }}>
       <Prim.TextField
         type="file"
         accept=".jsonl,.json,.ndjson"
@@ -67,7 +67,7 @@ export function PlaybackBar(): React.ReactElement | null {
   if (!replay) return null;
   const total = replay.events.length;
   return (
-    <Prim.Row className="border-lm-border bg-lm-panel" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderTopWidth={1} alignItems="center">
+    <Prim.Row borderColor="var(--lm-border)" backgroundColor="var(--lm-panel)" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderTopWidth={1} alignItems="center">
       <Prim.Pressable onClick={() => (replay.playing ? pause() : play())} className="text-lm-accent" color="13px" width="$6">
         {replay.playing ? '⏸' : '▶'}
       </Prim.Pressable>
@@ -88,7 +88,7 @@ export function PlaybackBar(): React.ReactElement | null {
       >
         {[1, 2, 4, 8].map((s) => <Prim.Option key={s} value={s}>{s}×</Prim.Option>)}
       </Prim.Select>
-      <Prim.Pressable onClick={exitReplay} className="text-[11px] text-lm-muted hover:text-lm-text">✕ live</Prim.Pressable>
+      <Prim.Pressable onClick={exitReplay} color="var(--lm-muted)" hoverStyle={{ color: "var(--lm-text)" }}>✕ live</Prim.Pressable>
     </Prim.Row>
   );
 }
