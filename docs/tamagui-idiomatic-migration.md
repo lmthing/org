@@ -1,8 +1,8 @@
 # Phase 2 — the idiomatic-Tamagui migration ("the Tamagui way", zero-Tailwind)
 
-> **Status: P5 SWEEP COMPLETE — every stylesheet in the repo is swept and the className codemod is
-> run to its ceiling. 15 trimmed stylesheets remain, holding only rules with no prop form. CSS
-> bundle 171 → 48 kB.**
+> **Status: P5 SWEEP COMPLETE, CODEMOD AT ITS CEILING — 15 trimmed stylesheets remain, holding only
+> rules with no prop form; what is left of the className tail is per-element manual work. CSS
+> bundle 171 → 45 kB.**
 > Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every surface primitive + overlay
 > *onto Tamagui components* while **keeping the Tailwind + `theme.css` + BEM styling engine**
 > underneath (coexistence). This Phase 2 replaces that styling engine with **idiomatic Tamagui** —
@@ -210,10 +210,28 @@ residue that has no prop form, so this is no longer a mechanical backlog:
 `markdown/index.css` is the one sheet that will likely never convert: it styles HTML produced by
 `marked` and injected as a string, so there are no React elements to put props on.
 
-- **The codemod tail is now at its floor.** Re-run after the sweep it migrates nothing further.
-  What is left is 41 **dynamic** classNames (template literals / `cn()` with expressions, which
-  need hand-written conditional prop objects) and 59 elements carrying residual BEM from the rules
-  that legitimately stay in CSS. Getting past this is per-element manual work, not tooling.
+- **The codemod tail is at its ceiling.** Four more mapping families were added after the sweep —
+  `ring-*` → the outline props the elements already used, `placeholder:` → the flat
+  `placeholderTextColor` prop, the `lm-*` palette → `var(--lm-…)`, and alpha modifiers → the same
+  `color-mix` the elements hand-wrote. Together they took **kept classNames from 202 to 69** and
+  migrated ~70 more elements. What remains is **120 elements that tooling cannot take**:
+
+  | Blocker | Count | What it needs |
+  |---|---|---|
+  | dynamic className (`cn()` / template literal) | 44 | hand-written conditional prop objects |
+  | element carries residual BEM | 48 | the owning rule has no prop form (see the table above) |
+  | element already sets that prop | 28 | a human decides which value wins |
+
+  Plus **69 deliberately-kept usages**, now almost entirely one category: ~46 animation classes
+  (`transition-*`, `animate-*`, `lm-fade-in`/`spin`/`pulse`). The animation driver is the single
+  remaining lever on that bucket. The rest is `group` (×5, a Tamagui-`group` rewrite), `prose`
+  (markdown), `backdrop-blur`, and `space-y-*`.
+
+**Two mapping decisions worth not re-litigating.** `lm-*` maps to `var(--lm-…)`, NOT to the token
+it aliases: `applyThemeTokens` (`theme/theme.ts`) overrides `--lm-*` directly from a space's
+`theme.json`, so mapping to `$agent` would silently disconnect per-space theming. And `black`/
+`white` alpha stays a className, because there is no var to mix and a codemod cannot emit the
+`ds-lint-ok` escape a raw literal needs in a `.tsx`.
 - **(historical)** Re-run across all 118 files, `classnames-to-props`
   can migrate almost nothing: of 219 reported elements, 181 skip for unmapped classes, and those
   are overwhelmingly BEM from these 16 stylesheets. The codemod refuses to half-migrate an
@@ -240,7 +258,7 @@ residue that has no prop form, so this is no longer a mechanical backlog:
 | **P3 — className → props codemod** | ✅ tool built + hardened + 🟡 **applied to chat+studio** | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + a 43-test gate (map + a new `-transform` suite). **Run for real**: chat + studio. Hardened after the first run surfaced two silent-drop bugs (both fixed + regression-tested, re-migrated clean): (a) directional `border-t/r/b/l/x/y` were misread as color tokens (`$t`) → widths dropped; (b) the `lm-*` runtime palette (`bg-lm-accent` …) became bogus `$lm-*` tokens → now kept as className. Also **added `cn("literal", …rest)` lifting** (the common dynamic shape). Alpha modifiers/animations/`lm-*`/dynamic `cn()` stay residual. Remaining className: chat ~223, studio ~589 (mostly BEM on shared elements + dynamic `cn()`), computer ~24 |
 | **P0 — real-surface visual harness** | 🟡 mechanism proven, baseline NOT built | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining. **This is now the gating item**: the animation driver (the biggest remaining unblock) changes visible motion app-wide, which is precisely the class of change P0 exists to review |
 | **P4 — element layer + primitives idiomatic** | ✅ **DONE — all 29 element blocks; `elements/**` has no stylesheets** | Every shipped element carries `$`-token PROPS on the `Prim.*` primitives (real host tags via `createComponent`). Both blockers this row used to name were wrong: extraction does NOT make `tag` real, and the overlay animations were DEAD rather than deferred. Form-control and `Image` primitives are Tamagui-backed too. Shipped-element suites gated for the first time (508 → 618 tests), plus a syntax-only typecheck gate for `libs/ui` |
-| **P5 — sweep, compiler ON, delete pipeline** | ✅ **sweep COMPLETE**; ⬜ compiler/pipeline | Every stylesheet in the repo is swept — including the two co-located ones inside `libs/ui` that the `libs/css` counts always missed. 613 rules converted; 176 stay as CSS with no prop form. The className codemod is at its floor: fixing the `keep`/`skip` split (deferred families were classified as *unrecognised*, so they held every mappable class on their element hostage) took it from 4 migratable elements to 37, and a further run migrates nothing. Residual Tailwind utilities 945 → 653 |
+| **P5 — sweep, compiler ON, delete pipeline** | ✅ **sweep COMPLETE**, codemod at its ceiling; ⬜ compiler/pipeline | Every stylesheet swept (613 rules converted, 176 left with no prop form). Codemod mapping extended four times after the sweep — `ring-*`, `placeholder:`, the `lm-*` palette → `var(--lm-…)`, alpha → `color-mix` — taking kept classNames 202 → 69 and residual utilities 945 → 539. The remaining 120 elements need hand work (44 dynamic classNames, 48 residual BEM, 28 prop conflicts); the ~46 animation usages need the driver |
 | **P6 — types + native on device** | ⬜ remaining | SPIKE C also unlocks a real `typecheck` for `libs/ui` (today only a syntax gate); native needs a Metro/device toolchain |
 
 ---
