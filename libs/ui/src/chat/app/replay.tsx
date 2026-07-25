@@ -68,7 +68,7 @@ export function PlaybackBar(): React.ReactElement | null {
   const total = replay.events.length;
   return (
     <Prim.Row borderColor="var(--lm-border)" backgroundColor="var(--lm-panel)" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderTopWidth={1} alignItems="center">
-      <Prim.Pressable onClick={() => (replay.playing ? pause() : play())} className="text-lm-accent" color="13px" width="$6">
+      <Prim.Pressable onClick={() => (replay.playing ? pause() : play())} color="var(--lm-accent)" fontSize="13px" width="$6">
         {replay.playing ? '⏸' : '▶'}
       </Prim.Pressable>
       <Prim.TextField
@@ -80,7 +80,7 @@ export function PlaybackBar(): React.ReactElement | null {
         className="flex-1 accent-[var(--agent)]"
         data-testid="replay-scrubber"
       />
-      <Prim.Text className="text-lm-muted" color="10px" fontFamily="$mono" width="$20" textAlign="right">{replay.cursor}/{total}</Prim.Text>
+      <Prim.Text color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" width="$20" textAlign="right">{replay.cursor}/{total}</Prim.Text>
       <Prim.Select
         value={replay.speed}
         onChange={(e) => setSpeed(Number(e.target.value))}
