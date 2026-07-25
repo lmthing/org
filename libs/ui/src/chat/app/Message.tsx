@@ -14,6 +14,13 @@ import { ActivityStrip } from './ActivityStrip.js';
 import { withAuthToken } from './auth.js';
 import { cn } from '../lib/cn.js';
 
+// `.lm-prose` (below) styles `marked`-produced HTML and lives in the shared markdown stylesheet —
+// phase 2 of docs/tamagui-final-steps.md moved it out of `chat/app/styles.css`, which is a Tailwind
+// entry. That stylesheet is side-effect-imported at the point of use (the convention
+// `elements/content/markdown/index.tsx` already follows), NOT relied on to arrive from some other
+// route's chunk: `.lm-prose` renders wherever a Message does, so the dependency is stated here.
+import '@lmthing/css/components/markdown/index.css';
+
 // ─── Space component registry ─────────────────────────────────────────────────
 
 declare const __SPACE_COMPONENTS__: Record<string, React.ComponentType<Record<string, unknown>>> | undefined;

@@ -6,6 +6,10 @@
 > [§0](#0-how-to-re-measure). It supersedes nothing: the other doc stays the record of *what
 > happened and why*, this one is *what is left and in what order*.
 
+> **Status.** Phase 0.5 ✅ · phase 2 ✅ · phases 1, 3, 4, 5 open. Each completed phase keeps its
+> section below, rewritten to record what was actually done and where this plan was wrong — the
+> corrections matter more than the ticks, because three of them were load-bearing.
+
 ## The definition of done
 
 Five conditions. Anything not on this list is out of scope and named in [§7](#7-explicitly-not-in-scope).
@@ -22,11 +26,12 @@ Five conditions. Anything not on this list is out of scope and named in [§7](#7
 |---|---|---|
 | utility classNames | **125** | 87 real Tailwind · 27 keyframes · 11 `prose` |
 | inline `style={{…}}` | **130** | 45 files, ~60% in `apps/web` studio routes |
-| stylesheets | **13** | 180 rules — 11 component + `FieldTree.css` + the chat Tailwind entry; 2 permanent |
+| stylesheets | **14** | 180 rules — 11 component + `FieldTree.css` + the chat Tailwind entry + `animations.css`; 3 permanent |
 | Tailwind entry points | **2** | `libs/css/src/theme.css`, `libs/ui/src/chat/app/styles.css` |
 | Tamagui configs | **2** | `tamagui.config.ts` (native hex), `tamagui-web.config.ts` (var-backed) |
 | compiler extraction | **off** | deliberate — `libs/utils/src/vite.mjs` |
-| CSS bundle | **32.56 kB** | from 171 kB |
+| CSS bundle | **31.10 kB** | from 171 kB — `apps/web` build; phase 0.5 took 1.46 kB of it |
+| P0 fixtures | **230** | 222 + the 8 animation rows phase 2 added |
 
 The work below is ordered so that **nothing is deleted before its replacement is proven**, and every
 phase ends at a green `pnpm test:surface`.
@@ -57,11 +62,11 @@ changes output, re-capture with `pnpm test:surface:update` and **put the baselin
 
 ---
 
-## Phase 0.5 — the free win, do it today
+## Phase 0.5 — the free win ✅ DONE
 
-`libs/css/src/theme.css:2` imports **`tw-animate-css`**, and **nothing uses it**. Its utilities
+`theme.css` imported **`tw-animate-css`** and **nothing used it**. Its utilities
 (`animate-in`/`animate-out`/`fade-in-*`/`zoom-in-*`/`slide-in-from-*`) appear zero times across
-`libs/ui/src` and `apps/web/src`. Delete the import and the dependency.
+`libs/ui/src` and `apps/web/src`.
 
 ```bash
 # the check, so this is not taken on faith
@@ -69,7 +74,19 @@ grep -rhno 'className="[^"]*"' libs/ui/src apps/web/src --include=*.tsx \
   | grep -oE 'animate-(in|out)|fade-in-[0-9]+|zoom-in[a-z0-9-]*|slide-in-from[a-z0-9-]*'
 ```
 
-**Gate:** P0 must be byte-identical. If it is not, something *was* using it.
+Removed in **three** places, not one — the third is the one that would have silently undone it:
+
+1. the `@import` in `libs/css/src/theme.css`;
+2. **the same line in `libs/css/scripts/generate-theme.mjs`**, which emits it. `theme.css` is
+   generated, so editing only the output is reverted by the next
+   `pnpm --filter @lmthing/css generate`;
+3. the `peerDependencies` entry in `libs/css/package.json` (+ `pnpm-lock.yaml`).
+
+**It was not free to ship.** tw-animate-css declares its `@keyframes` and custom properties at the
+top level, so Tailwind emitted them whether or not a utility referenced them: the P0 bundle went
+**37.95 kB → 35.13 kB** (gzip 7.34 → 6.95).
+
+**Gate met:** P0 byte-identical, so nothing was in fact using it.
 
 ---
 
@@ -95,34 +112,84 @@ means `size={16}` rather than `width: '1rem'`, and a wrong guess here is silent.
 
 ---
 
-## Phase 2 — free the keyframes from the Tailwind entry
+## Phase 2 — free the keyframes from the Tailwind entry ✅ DONE
 
 This is the ordering constraint the whole deletion hangs on, and it is easy to miss:
 **`libs/ui/src/chat/app/styles.css` is itself an `@import "tailwindcss"` entry.** It is the repo's
-second one, loaded by the `/chat` route, and it owns every `lm-*` keyframe plus the `.lm-prose`
+second one, loaded by the `/chat` route, and it owned every `lm-*` keyframe plus the `.lm-prose`
 block that styles `marked`-injected HTML.
 
-So the keyframes cannot survive the Tailwind deletion where they currently live.
+So the keyframes could not survive the Tailwind deletion where they lived.
 
-**Do:**
-1. Create `libs/css/src/animations.css` — a plain stylesheet, no `@import "tailwindcss"`. Move the
-   five `@keyframes` (`lm-spin`, `lm-fade-in`, `lm-slide-in-right`, `lm-pulse`, `lm-stream-cursor`),
-   their four classes, `.streaming-cursor::after` and the `prefers-reduced-motion` block.
-2. Add exact hand-written equivalents of Tailwind's last two animation utilities so
-   `animate-spin` (×3) and `animate-pulse` (×4) can go. Tailwind's are
-   `spin 1s linear infinite` and `pulse 2s cubic-bezier(0.4,0,0.6,1) infinite` (opacity → .5) —
-   **not** the same timings as the existing `lm-spin`/`lm-pulse`, so add new classes rather than
-   reusing them and quietly changing the motion.
-3. Move `.lm-prose` to `libs/css/src/components/markdown/index.css`, where the other
-   injected-HTML styling already lives.
-4. `chat/app/styles.css` is then only `@import "tailwindcss"` + two `@theme` blocks → delete it in
-   phase 4 and drop the `@lmthing/ui/chat/css` import from the `/chat` route.
+**Done:**
 
-**Watch:** these classes are used from `computer/` and `apps/web` too, which today only works
-because everything lands in one CSS file. `animations.css` must be imported from
-`apps/web/src/index.css`, not from a route.
+1. **`libs/css/src/animations.css`** — a plain stylesheet: no `@import "tailwindcss"`, no `@apply`,
+   no `@theme`, no `@reference`. Holds the five `@keyframes` (`lm-spin`, `lm-fade-in`,
+   `lm-slide-in-right`, `lm-pulse`, `lm-stream-cursor`), their four classes,
+   `.streaming-cursor::after` and the `prefers-reduced-motion` block, all moved verbatim.
+   Exported as `@lmthing/css/animations.css` and imported from **`apps/web/src/index.css`** — the
+   app entry, not a route.
+2. **Tailwind's `animate-spin` / `animate-pulse`, hand-written.** Values taken out of Tailwind v4's
+   compiled output rather than remembered: `spin 1s linear infinite` and
+   `pulse 2s cubic-bezier(.4,0,.6,1) infinite` (opacity → .5), longhand rather than
+   `var(--animate-*)` because those custom properties are generated by `@theme` and go with it.
+3. **`.lm-prose` → `libs/css/src/components/markdown/index.css`**, next to `.lm-markdown`.
+4. `chat/app/styles.css` **survives phase 2** with base/reset styling and the `--lm-*` bridge.
 
-**Gate:** P0 `animation` fixture must be byte-identical — it already measures all of these.
+### Where this plan was wrong
+
+Three corrections, each of which would have shipped a silent failure:
+
+- **"add new classes rather than reusing them" was half right.** Do not fold `animate-spin` into
+  `lm-spin` — the timings differ (1s vs 1.2s). But do **not** rename them either: `animation-name`
+  is in P0's audited property set, so a new name is a computed-style delta at every call site. The
+  hand-written rules therefore keep Tailwind's **class *and* keyframe names**, which also means zero
+  call-site churn. While Tailwind is still present the two definitions coexist; the content is
+  identical, so whichever wins the cascade computes the same. The counts were also off —
+  `animate-pulse` has **6** call sites, not 4.
+- **"`.lm-prose` → `markdown/index.css`" is not sufficient on its own.** That stylesheet is
+  **component-scoped**: its only importer is `elements/content/markdown/index.tsx`. `.lm-prose` is
+  used by `chat/app/Message.tsx`, which does *not* use that component — so the move alone would have
+  recreated exactly the route-scoping bug this phase exists to fix. `Message.tsx` now
+  side-effect-imports the stylesheet, the convention `markdown/index.tsx` already follows.
+- **"the P0 `animation` fixture already measures all of these" was false.** It measured three of the
+  six — `lm-fade-in`, `lm-spin`, `lm-pulse`. `lm-slide-in-right`, `.streaming-cursor`,
+  `animate-spin` and `animate-pulse` were *not* in it, i.e. the four rules this phase was riskiest
+  for were the unmeasured ones. They were **added first**, and the baseline re-captured **while
+  Tailwind still generated them**, so "equivalent" is a measured zero-delta rather than a claim.
+  222 → 230 rows, purely additive.
+
+Also: **`chat/app/styles.css` is not "only `@import "tailwindcss"` + two `@theme` blocks"** after
+this phase. It still owns base `html/body/#root` styles, the scrollbar rules, the `:focus-visible`
+ring, the `--lm-*` token bridge and the safe-area classes. Phase 4 must **relocate** those, not
+delete the file and expect nothing to move.
+
+### The route-scoping problem, stated precisely
+
+The stated risk — that these classes are used outside `/chat` and only work "because everything
+lands in one CSS file" — is **latent, not active**: today's `apps/web` build emits a single CSS
+bundle, so a route-module `@import` is in fact global. What was actively wrong is *ownership*: the
+rules lived in a file that dies in phase 4. The latent half becomes real the moment CSS code
+splitting is enabled, which is why `animations.css` is on the app entry.
+
+**Gate met:** P0 **230 elements, zero delta**; bundle 35.13 → 34.00 kB.
+
+**And a test, because P0 cannot see three of these things** —
+`libs/css/src/animations.test.ts` (27 assertions) pins what the computed-style gate structurally
+cannot: `.streaming-cursor`'s animation is on its `::after` and the P0 walk calls
+`getComputedStyle(el)` with no pseudo argument; a re-introduced Tailwind dependency compiles fine
+*today* and only breaks in phase 4, far from its cause; and a rule **copied** rather than **moved**
+leaves both files agreeing, so P0 passes while the chat entry quietly keeps ownership. It was
+verified against injected regressions (aliasing `animate-spin` onto `lm-spin`; dropping one class
+from the reduced-motion list) rather than assumed to work.
+
+### Known gap, deliberately not closed here
+
+The `prefers-reduced-motion` block covers the `lm-*` classes only — `.animate-spin` and
+`.animate-pulse` keep spinning, which is the behaviour that shipped when they came from Tailwind.
+Extending it is a real accessibility improvement, but it is a real motion change and **P0 does not
+emulate `prefers-reduced-motion`**, so it would be an unverifiable edit smuggled into a move. It
+wants its own change, with a harness that can assert it.
 
 ---
 
@@ -229,8 +296,10 @@ each will bite again in the phases above.
 
 ## 7. Explicitly not in scope
 
-- **`markdown/index.css`** (25 rules) — styles HTML `marked` produces as a string. There is no React
-  element to hold a prop. It stays CSS permanently.
+- **`markdown/index.css`** — styles HTML `marked` produces as a string. There is no React element to
+  hold a prop. It stays CSS permanently. Phase 2 added `.lm-prose` to it for exactly this reason.
+- **`animations.css`** — keyframes. Not Tailwind's job and not the animation driver's (the driver
+  handles *transitions*, via the `transition` prop). Plain CSS permanently, by design.
 - **`FieldTree.css`** (2 rules) — `.react-arborist*`, rendered by the library. Same reason.
 - **`prose-*`** (11 classNames) — `@tailwindcss/typography` descendant selectors over injected HTML.
   If Tailwind goes, these need hand-written equivalents in `markdown/index.css`, not props.
@@ -247,9 +316,9 @@ each will bite again in the phases above.
 Phases 1–3 are independent and can land in any order or in parallel; phase 4 needs all three.
 
 ```
-0.5 tw-animate-css   unused import          minutes
+0.5 tw-animate-css   unused import          ✅ DONE
+2. keyframes      unblocks phase 4          ✅ DONE
 1. icons          ~87 → ~45 classNames      small, mechanical, low risk
-2. keyframes      unblocks phase 4          small, but ORDERING-CRITICAL
 3. inline style   130 → ~30                 the largest, most parallelisable
                         ↓
 4. delete Tailwind      the only phase with an expected P0 delta
@@ -257,5 +326,16 @@ Phases 1–3 are independent and can land in any order or in parallel; phase 4 n
 5. one config + a real typecheck            touches everything; do it last
 ```
 
-Start with phase 0.5 (minutes, zero risk), then phase 2 — it is small, it is the one nothing else
-can proceed without, and it makes the shape of phase 4 concrete.
+**Next: phase 1, then phase 3** — independent of each other, and phase 4 needs both.
+
+What phase 2 hands to phase 4, concretely: the keyframes are out of the way, so the remaining
+question for `chat/app/styles.css` is no longer "how do the animations survive" but **"where do the
+base styles, the scrollbars, the `:focus-visible` ring, the `--lm-*` bridge and the safe-area classes
+go"** — see the correction in §2. `theme.css` remains the `@theme`-rewrite-plus-preflight problem it
+always was.
+
+One lesson worth carrying into 1, 3 and 4: **check what P0 actually renders before trusting it as
+the gate.** Phase 2's riskiest four rules were outside the fixtures, and the plan asserted the
+opposite. Extend the fixtures *first*, capture the baseline while the old implementation is still in
+place, and the change becomes a zero-delta proof instead of a claim. Phase 1 already says to add an
+icon fixture — that is the same move, and it is the right one.

@@ -8,8 +8,13 @@
  * Mirrors apps/web/src/index.css. See docs/tamagui-idiomatic-migration.md §2 (P0).
  */
 @import "@lmthing/css/theme.css";
-/* The `lm-*` keyframes + `.lm-spin`/`.lm-fade-in`/`.lm-pulse` live HERE, not in theme.css — this is
-   the chat surface's own Tailwind entry, and the second `@import "tailwindcss"` in the repo. */
+/* The keyframe layer, mirroring `apps/web/src/index.css`. Phase 2 moved these OUT of the chat
+   surface's Tailwind entry (below) into a plain stylesheet on the app entry — see
+   docs/tamagui-final-steps.md §2. Imported before chat/app/styles.css so that if that file ever
+   re-declares one of these classes, the chat entry wins here exactly as it would in the app. */
+@import "@lmthing/css/animations.css";
+/* Still the second `@import "tailwindcss"` in the repo, and still loaded by the `/chat` route, so it
+   stays in the baseline until phase 4 relocates the base styles + `--lm-*` bridge it still owns. */
 @import "../../../../../libs/ui/src/chat/app/styles.css";
 
 @source "../../../src";

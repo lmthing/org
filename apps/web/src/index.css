@@ -1,4 +1,10 @@
 @import "@lmthing/css/theme.css";
+/* The keyframe layer (`lm-*`, plus hand-written `animate-spin`/`animate-pulse`). Imported HERE, from
+   the app entry, and not from the `/chat` route where it used to live — these classes are used from
+   `chat/`, `computer/` and `apps/web`, and a route-scoped stylesheet leaves them unstyled until that
+   route's chunk loads. Plain CSS, so it survives the Tailwind deletion.
+   docs/tamagui-final-steps.md §2. */
+@import "@lmthing/css/animations.css";
 
 @font-face {
   font-family: 'TypeMates Cera Round Pro Bold';

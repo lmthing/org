@@ -7,8 +7,14 @@
 > The className tail is **87 real Tailwind utilities** (from 945), the animation family is **27
 > keyframes** with zero Tailwind transitions left, inline `style` objects are **130** (from 404),
 > and every change since P0 landed has been reviewed as a computed-style delta over the shipped
-> components. CSS bundle **171 → 32.56 kB**. Tailwind itself is not deleted yet — see
+> components. CSS bundle **171 → 31.10 kB**. Tailwind itself is not deleted yet — see
 > "What remains" for the three things that still hold it.
+>
+> **Closing-plan progress: phases 0.5 and 2 are done.** `tw-animate-css` was imported and unused
+> (−1.46 kB, zero P0 delta), and the keyframes now live in `@lmthing/css/animations.css` — a plain
+> Tailwind-free stylesheet on the *app* entry — so blocker 3 below is resolved. Details, and the
+> three places the plan turned out to be wrong, in
+> [`tamagui-final-steps.md`](./tamagui-final-steps.md) §0.5 and §2.
 > Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every surface primitive + overlay
 > *onto Tamagui components* while **keeping the Tailwind + `theme.css` + BEM styling engine**
 > underneath (coexistence). This Phase 2 replaces that styling engine with **idiomatic Tamagui** —
@@ -250,7 +256,7 @@ is migrated.
 | files gated by `lint:rn` | 138 | **201** ² |
 | raw host tags in `elements`+`components`+`apps/web` | 67 + 221 (ungated) | **0** |
 | parallel `styled()` proof files | 146 | **0** (retired) |
-| CSS bundle (`apps/web`) | 171 kB → 41.79 kB | **32.56 kB** |
+| CSS bundle (`apps/web`) | 171 kB → 41.79 kB | **31.10 kB** ⁴ |
 | `libs/ui` tests | 508 → 645 | **284** ³ |
 
 ¹ counts the literals inside `cn(...)` as well as static strings — the number the Tailwind deletion
@@ -259,7 +265,9 @@ actually has to answer for.
 and `components`, where it had been blind to 67 raw host tags).
 ³ likewise: 419 of the old tests gated the parallel `styled()` copy that nothing imported. Every
 test that remains gates shipped code, and five elements whose only coverage was a proof gate got
-real suites against the component the app renders.
+real suites against the component the app renders. (Plus 27 in `libs/css` covering the keyframe
+layer phase 2 extracted, which the P0 gate structurally cannot see — see `animations.test.ts`.)
+⁴ 32.56 → 31.10 kB from closing-plan phase 0.5 (the unused `tw-animate-css`), at zero P0 delta.
 
 **The de-HTML gap this uncovered.** `lint:rn`'s default scope was `chat`/`studio`/`computer` only,
 so it reported clean while `elements/**` and `components/**` — the SHARED vocabulary layer, the part
@@ -323,14 +331,19 @@ excluded because Tamagui drops them). 404 → 130.
    tag itself becomes Tamagui-backed. (`TextField`/`TextArea`/`Select` ARE Tamagui-backed and were
    added to the target list; that took 296 off the count on its own.) `render-descriptor.tsx` is
    the single densest file left, and it is almost entirely `Prim.Pre` + `prose-*`.
-3. **The keyframes need a home outside the Tailwind entry.** 27 `lm-*`/`animate-*` classNames
-   remain, all KEYFRAMES — not the transition driver's job. The `lm-*` ones are already
-   hand-written CSS, but they live in `libs/ui/src/chat/app/styles.css`, which is itself an
-   `@import "tailwindcss"` entry (the repo's second) loaded by the `/chat` route. They need moving
-   to a plain stylesheet, and `animate-spin`/`animate-pulse` (7 uses) need hand-written equivalents.
-   Also still Tailwind's: the PREFLIGHT resets the primitives rely on, and the `@theme`/`@theme
-   inline` blocks that generate the `--color-*` custom properties SPIKE A1 depends on — so
-   `theme.css` becomes a vars-only file rather than a deletion.
+3. ~~**The keyframes need a home outside the Tailwind entry.**~~ **RESOLVED** by closing-plan
+   phase 2. The `lm-*` keyframes, `.streaming-cursor`, the `prefers-reduced-motion` block and
+   hand-written `animate-spin`/`animate-pulse` equivalents now live in
+   **`libs/css/src/animations.css`** — plain CSS, no `@import "tailwindcss"`/`@apply`/`@theme` —
+   imported from `apps/web/src/index.css` (the app entry, not the `/chat` route). `.lm-prose` moved
+   to `components/markdown/index.css`. P0: 230 elements, zero delta.
+
+   Still Tailwind's, and now the whole of what holds it: the PREFLIGHT resets the primitives rely
+   on, and the `@theme`/`@theme inline` blocks that generate the `--color-*` custom properties
+   SPIKE A1 depends on — so `theme.css` becomes a vars-only file rather than a deletion. Plus what
+   phase 2 found still living in `chat/app/styles.css` besides its `@theme` blocks: the base
+   `html/body/#root` styles, the scrollbar rules, the `:focus-visible` ring, the `--lm-*` token
+   bridge and the safe-area classes. Phase 4 relocates those; it does not just delete the file.
 
 **Two mapping decisions worth not re-litigating.** `lm-*` maps to `var(--lm-…)`, NOT to the token
 it aliases: `applyThemeTokens` (`theme/theme.ts`) overrides `--lm-*` directly from a space's
