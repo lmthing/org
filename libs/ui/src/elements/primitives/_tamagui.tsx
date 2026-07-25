@@ -100,6 +100,11 @@ export type BoxStyleProps = {
   borderBottomColor?: string
   borderLeftColor?: string
   borderRadius?: number | string
+  // Per-corner radii — real props (`_btrr-`/`_btlr-`/`_bblr-`/`_bbrr-`), probed in index.test.tsx.
+  borderTopLeftRadius?: number | string
+  borderTopRightRadius?: number | string
+  borderBottomLeftRadius?: number | string
+  borderBottomRightRadius?: number | string
   borderStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
   // Per-side styles — real props (`_bbs-solid` &c). Needed once inline `border-bottom: 1px solid …`
   // shorthands were lifted out of `style`, which expands to the per-side width/style/colour trio.
@@ -113,6 +118,8 @@ export type BoxStyleProps = {
   opacity?: number
   cursor?: string
   pointerEvents?: 'auto' | 'none' | 'box-none' | 'box-only'
+  userSelect?: 'none' | 'auto' | 'text' | 'all' | 'contain'
+  backgroundImage?: string
   /**
    * The RN-shaped shadow quartet. Tamagui compiles these to a single web `box-shadow` (one `_bxsh-`
    * atomic, verified in `primitives/index.test.tsx`), which is why
@@ -159,11 +166,20 @@ export type BoxStyleProps = {
    */
   transition?: 'none' | 'quick' | 'medium' | 'slow'
   animateOnly?: readonly string[]
+  /**
+   * Marks this element as a Tamagui hover/press GROUP parent, so descendants can react to its state
+   * with a `$group-<name>-hover` bag — the replacement for Tailwind's `group`/`group-hover` pair
+   * that the sidebar's row-reveal leans on. A name yields `t_group_<name>`; `true` is the anonymous
+   * group. Not a style prop, but it lives here for the same reason `transition`/`animateOnly` and
+   * the pseudo-style bags do: this is the one type every primitive already intersects.
+   */
+  group?: string | boolean
   // pseudo-styles (state variants, §5)
   hoverStyle?: PseudoStyleProps
   pressStyle?: PseudoStyleProps
   focusStyle?: PseudoStyleProps
   focusVisibleStyle?: PseudoStyleProps
+  focusWithinStyle?: PseudoStyleProps
   disabledStyle?: PseudoStyleProps
   /**
    * Media (`$sm`), hover-group (`$group-row-hover`) and sub-theme (`$dark`) style bags. Tamagui

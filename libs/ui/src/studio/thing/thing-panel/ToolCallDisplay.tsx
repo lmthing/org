@@ -8,7 +8,7 @@ import { splitToolEventContent } from './use-tool-events'
 export function ToolCallDisplay({ content }: { content: string }) {
   const segments = splitToolEventContent(content)
   return (
-    <Prim.Text whiteSpace="pre-wrap" wordBreak="break-word">
+    <Prim.Text whiteSpace="pre-wrap" style={{ wordBreak: 'break-word' }}>
       {segments.map(segment => {
         if (segment.kind === 'text') return <Prim.Text key={segment.key}>{segment.text}</Prim.Text>
         return (

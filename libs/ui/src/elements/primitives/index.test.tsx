@@ -274,7 +274,7 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
    */
   it('group + $group-<name>-hover emit the paired marker/atomic classes', () => {
     const el = withProvider(
-      <Box group={'row' as never} data-parent="1">
+      <Box group="row" data-parent="1">
         <Box data-child="1" opacity={0} $group-row-hover={{ opacity: 1 }} />
       </Box>,
     ).container
@@ -307,14 +307,14 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
 
     // With the PROP, the marker appears and the pair is live.
     const withProp = withProvider(
-      <Box group={true as never} data-parent="1">
+      <Box group data-parent="1">
         <Box data-child="1" opacity={0} $group-hover={{ opacity: 1 }} />
       </Box>,
     ).container
     expect(withProp.querySelector('[data-parent]')!.className).toContain('t_group')
 
     // Text is a group parent too (Tooltip wraps its trigger in one).
-    const onText = withProvider(<Text group={true as never} data-parent="1">x</Text>).container
+    const onText = withProvider(<Text group data-parent="1">x</Text>).container
     expect(onText.querySelector('[data-parent]')!.className).toContain('t_group')
   })
 
