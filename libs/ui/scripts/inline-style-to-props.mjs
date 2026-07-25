@@ -67,6 +67,7 @@ const DIRECT = new Set([
   'alignItems', 'alignSelf', 'alignContent', 'justifyContent', 'gap', 'columnGap', 'rowGap',
   'gridTemplateColumns', 'gridTemplateRows',
   'color', 'backgroundColor', 'backgroundImage',
+  'outlineWidth', 'outlineStyle', 'outlineColor',
   'borderWidth', 'borderStyle', 'borderColor', 'borderRadius',
   'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
   'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
@@ -79,6 +80,13 @@ const DIRECT = new Set([
 /** `display: 'flex'` etc. are fine as-is; these need EXPANDING because Tamagui has no shorthand. */
 const EXPAND = {
   flex: (v) => (v === 1 || v === '1' ? { flexGrow: 1, flexShrink: 1, flexBasis: '0%' } : null),
+  /**
+   * `outline: none` ONLY. It is the one outline shorthand with an unambiguous prop form, and it is
+   * the form this codebase already writes by hand (`elements/overlays/dropdown/index.tsx`:
+   * `outlineWidth: 0, outlineStyle: 'none'`). Any other outline shorthand mixes width/style/colour in
+   * a way that needs a human, so it still returns null and the object is left as `style`.
+   */
+  outline: (v) => (v === 'none' ? { outlineWidth: 0, outlineStyle: 'none' } : null),
   background: (v) => (typeof v === 'string' && v.includes('gradient') ? { backgroundImage: v } : { backgroundColor: v }),
   inset: (v) => ({ top: v, right: v, bottom: v, left: v }),
 }

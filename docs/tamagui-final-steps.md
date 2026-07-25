@@ -19,7 +19,7 @@
 >   is a vars-only file.
 > - **(2) ✅** No Tailwind utility className anywhere. Same caveat: the only textual matches left sit
 >   inside comments recording what was removed.
-> - **(3) ◐** 67 inline styles remain on Tamagui-backed targets (from 130). A further 78 are on
+> - **(3) ◐** 55 inline styles remain on Tamagui-backed targets (from 130). A further 78 are on
 >   passthrough primitives / lucide / `.native.tsx`, where `style` is CORRECT and permanent.
 > - **(4) ✅** ONE Tamagui config, platform-split on `isWeb`.
 > - **(5) ◐ NOT met — and an earlier version of this line wrongly claimed it was.** `libs/ui` still
@@ -49,7 +49,7 @@ Five conditions. Anything not on this list is out of scope and named in [§7](#7
 | | count | where |
 |---|---|---|
 | utility classNames | **0** | was 125. What remains is keyframes, BEM, `{className}`, and 2 `prose` boxes (§7) |
-| inline `style={{…}}` | **67** | on Tamagui-backed targets (was 130). A further **78** are on passthrough/lucide/`.native.tsx`, where `style` is CORRECT and permanent |
+| inline `style={{…}}` | **55** | on Tamagui-backed targets (was 130). A further **78** are on passthrough/lucide/`.native.tsx`, where `style` is CORRECT and permanent |
 | `@apply` directives | **0** | was 87 across 12 files |
 | Tailwind entry points | **0** | was 2. `libs/cli` keeps a compiler for project app pages — a product feature |
 | stylesheets | **14** | 180 rules — 11 component + `FieldTree.css` + the chat Tailwind entry + `animations.css`; 3 permanent |
@@ -57,9 +57,9 @@ Five conditions. Anything not on this list is out of scope and named in [§7](#7
 | compiler extraction | **off** | measured no-op in §5c: identical output hashes AND build time |
 | CSS bundle | **19.52 kB** | from 171 kB — `apps/web` build, gzip 5.04 kB |
 | P0 fixtures | **246** | 222 + the animation/icon rows, minus the `tw:` halves phase 4 retired |
-| `libs/ui` tests | **287** | +3 `app-sidebar` RENDER tests, impossible before §5b |
+| `libs/ui` tests | **289** | +3 `app-sidebar` RENDER tests, impossible before §5b |
 | `libs/css` tests | **65** | keyframe layer (§2) + the standing Tailwind-free gate (§4) |
-| `apps/web` typecheck | **321 errors** | from 487. The plan's "8" was never right — see §5b |
+| `apps/web` typecheck | **316 errors** | from 487. The plan's "8" was never right — see §5b |
 
 The work below is ordered so that **nothing is deleted before its replacement is proven**, and every
 phase ends at a green `pnpm test:surface`.
@@ -71,13 +71,13 @@ phase ends at a green `pnpm test:surface`.
 Do this first and after every phase. If a number here is stale, trust the command.
 
 ```bash
-pnpm test:surface                      # P0 — 282 elements, light + dark. THE gate.
-pnpm --filter @lmthing/ui test         # 287 unit tests
-pnpm test libs/css                     # 50 — incl. the keyframe layer P0 cannot see (§2)
+pnpm test:surface                      # P0 — 246 elements, light + dark. THE gate.
+pnpm --filter @lmthing/ui test         # 289 unit tests
+pnpm test libs/css                     # 65 — incl. the keyframe layer P0 cannot see (§2)
 pnpm typecheck                         # workspace
 pnpm --filter @lmthing/ui run typecheck:syntax
 pnpm --filter @lmthing/ui run lint:tokens && pnpm --filter @lmthing/ui run lint:rn
-cd apps/web && pnpm build && npx tsc --noEmit -p tsconfig.app.json   # 321 errors, NOT 8 — §5b
+cd apps/web && pnpm build && npx tsc --noEmit -p tsconfig.app.json   # 316 errors, NOT 8 — §5b
 
 # the @apply expander (safe: --check writes nothing)
 node libs/css/scripts/expand-apply.mjs --check $(grep -rl '@apply' --include=*.css libs/css/src apps/web/src)
@@ -85,6 +85,7 @@ node libs/css/scripts/expand-apply.mjs --check $(grep -rl '@apply' --include=*.c
 # the two counters this plan is scored against
 node libs/ui/scripts/classnames-to-props.mjs --check $(find libs/ui/src apps/web/src -name '*.tsx' ! -name '*.test.tsx')
 node libs/ui/scripts/inline-style-to-props.mjs --check $(find libs/ui/src apps/web/src -name '*.tsx' ! -name '*.test.tsx')
+node libs/ui/scripts/style-bags-to-props.mjs   --check $(grep -rlE 'style=\{' libs/ui/src apps/web/src --include=*.tsx | grep -v '\.test\.')
 ```
 
 **`pnpm test:surface` is the review artefact for phases 1–4.** None of them can be reviewed by
@@ -361,9 +362,24 @@ getting wrong, each found by a gate:
   initializer turned `{ … } as React.CSSProperties` into `{ … } as const as React.CSSProperties` —
   still CSSProperties-typed, and it failed the moment it was spread onto a Tamagui component.
 
-**Still open: 67**, and now genuinely awkward rather than merely unreached: 16 in `CatalogForm`
-(`inputStyle` has an unmappable key, so its whole bag is correctly left alone), 7 in `waking-screen`
-(non-literal `transform`, an `animation` shorthand), and a long tail of 1–3 per file.
+**Then 67 → 55, by unblocking `CatalogForm`.** Its `inputStyle` bag held 16 call sites hostage on two
+keys, and both turned out to be answerable rather than judgement calls:
+
+- **`font: 'inherit'` was REDUNDANT.** `preflight.css` already declares
+  `button, input, select, optgroup, textarea, ::file-selector-button { font: inherit }`, and every
+  consumer of the bag is one of those tags. Verified in a browser rather than assumed — with and
+  without the declaration, an `<input>`/`<textarea>`/`<select>` compute identically across
+  font-family/size/weight/style/variant/line-height/letter-spacing/stretch. Deleted.
+- **`outline: 'none'` has exactly one safe prop form**, and this codebase already writes it by hand:
+  `outlineWidth: 0, outlineStyle: 'none'` (`elements/overlays/dropdown/index.tsx`). Added to the
+  codemod's `EXPAND` table for the literal `none` ONLY — any other outline shorthand mixes
+  width/style/colour and still refuses, because a wrong guess there silently removes or invents a
+  focus ring. The outline longhands joined `DIRECT` at the same time. Both pinned in
+  `inline-style-to-props.test.mjs`.
+
+**Still open: 55**, and now a genuine long tail — no cluster larger than 7, spread over 30 files.
+The blockers are the documented ones: non-literal `transform`, `animation`/`transition` shorthands,
+`wordBreak`/`resize`, and bags carrying a `React.CSSProperties` contract that cannot fully convert.
 
 This axis never blocked phase 4 — inline styles do not depend on Tailwind existing.
 

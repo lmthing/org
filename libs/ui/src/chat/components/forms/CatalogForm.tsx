@@ -10,16 +10,16 @@ import React from 'react';
 import { flattenForm, coerceValue, defaultFor } from '@lmthing/core/ui';
 import type { FieldSpec } from '@lmthing/core/ui';
 
-const inputStyle: React.CSSProperties = {
-  background: 'var(--lm-bg)',
-  color: 'var(--lm-text)',
-  border: '1px solid var(--lm-border)',
-  borderRadius: 'var(--radius-lm-md, 6px)',
-  padding: '4px 8px',
-  font: 'inherit',
-  outline: 'none',
-  width: '100%',
-};
+// `font: 'inherit'` used to sit here. It is REDUNDANT: preflight already declares
+// `button, input, select, optgroup, textarea, ::file-selector-button { font: inherit }`
+// (`@lmthing/css/preflight.css`), and every consumer of this bag is one of those tags. Verified in a
+// browser rather than assumed — an `<input>`/`<textarea>`/`<select>` with and without the declaration
+// compute identically across font-family/size/weight/style/variant/line-height/letter-spacing/stretch.
+//
+// It was also the ONE key blocking this bag from converting: `font` is a shorthand with no Tamagui
+// prop form, so `style-bags-to-props.mjs` correctly refused the whole thing, and 16 call sites stayed
+// on `style`.
+const inputStyle = { backgroundColor: "var(--lm-bg)", color: "var(--lm-text)", borderWidth: "1px", borderStyle: "solid", borderColor: "var(--lm-border)", borderRadius: "var(--radius-lm-md, 6px)", paddingVertical: "4px", paddingHorizontal: "8px", outlineWidth: 0, outlineStyle: "none", width: "100%" } as const;
 
 function Control({
   field,
@@ -37,10 +37,10 @@ function Control({
 
   switch (k) {
     case 'textarea':
-      return <Prim.TextArea style={{ ...inputStyle, minHeight: (field.rows ?? 3) * 20 }} value={String(value ?? '')} placeholder={field.placeholder} onChange={(e) => onChange(e.target.value)} />;
+      return <Prim.TextArea {...inputStyle} minHeight={(field.rows ?? 3) * 20} value={String(value ?? '')} placeholder={field.placeholder} onChange={(e) => onChange(e.target.value)} />;
     case 'select': case 'combobox':
       return (
-        <Prim.Select style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
+        <Prim.Select {...inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
           {field.options?.map((o, i) => <Prim.Option key={i} value={String(o.value)}>{o.label}</Prim.Option>)}
         </Prim.Select>
       );
@@ -73,7 +73,7 @@ function Control({
     case 'slider':
       return <Prim.TextField type="range" width="100%" min={field.min ?? 0} max={field.max ?? 100} step={field.step ?? 1} value={Number(value ?? 0)} onChange={(e) => onChange(Number(e.target.value))} />;
     case 'number': case 'stepper': case 'currency':
-      return <Prim.TextField type="number" style={inputStyle} min={field.min} max={field.max} step={field.step} value={value === undefined || value === '' ? '' : Number(value)} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+      return <Prim.TextField type="number" {...inputStyle} min={field.min} max={field.max} step={field.step} value={value === undefined || value === '' ? '' : Number(value)} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
     case 'rating': {
       const max = field.max ?? 5;
       const cur = Number(value ?? 0);
@@ -85,18 +85,18 @@ function Control({
         </Prim.Box>
       );
     }
-    case 'date': return <Prim.TextField type="date" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
-    case 'time': return <Prim.TextField type="time" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
-    case 'datetime': return <Prim.TextField type="datetime-local" style={inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
+    case 'date': return <Prim.TextField type="date" {...inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
+    case 'time': return <Prim.TextField type="time" {...inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
+    case 'datetime': return <Prim.TextField type="datetime-local" {...inputStyle} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
     case 'color': return <Prim.TextField type="color" value={String(value || '#000000')} onChange={(e) => onChange(e.target.value)} />; // ds-lint-ok: default value for a native color picker, not a UI theme color
-    case 'file': return <Prim.TextField type="text" style={inputStyle} placeholder={field.placeholder ?? 'path…'} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+    case 'file': return <Prim.TextField type="text" {...inputStyle} placeholder={field.placeholder ?? 'path…'} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
     case 'taginput':
-      return <Prim.TextField type="text" style={inputStyle} placeholder="comma,separated" value={Array.isArray(value) ? value.join(', ') : String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
-    case 'password': return <Prim.TextField type="password" style={inputStyle} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
-    case 'email': return <Prim.TextField type="email" style={inputStyle} placeholder={field.placeholder} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
-    case 'otp': return <Prim.TextField type="text" inputMode="numeric" style={{ ...inputStyle, letterSpacing: 4 }} maxLength={field.length ?? 6} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+      return <Prim.TextField type="text" {...inputStyle} placeholder="comma,separated" value={Array.isArray(value) ? value.join(', ') : String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+    case 'password': return <Prim.TextField type="password" {...inputStyle} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+    case 'email': return <Prim.TextField type="email" {...inputStyle} placeholder={field.placeholder} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+    case 'otp': return <Prim.TextField type="text" inputMode="numeric" {...inputStyle} letterSpacing={4} maxLength={field.length ?? 6} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
     default:
-      return <Prim.TextField type="text" style={inputStyle} placeholder={field.placeholder} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
+      return <Prim.TextField type="text" {...inputStyle} placeholder={field.placeholder} value={String(value ?? '')} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
   }
 }
 
