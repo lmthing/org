@@ -776,7 +776,13 @@ each will bite again in the phases above.
   primitives to keep its pre-swap baselines valid. It is not wrong, it just answers a different
   question. Leave it or delete it deliberately; do not "fix" it into a duplicate of
   `tests/visual-surface/`.
-- **Native on device.** Needs a Metro/device toolchain that does not exist in this repo yet.
+- **Native on device.** Needs a device/simulator toolchain that does not exist in this repo.
+  **The Metro half of that gap is now closed** — `libs/ui/metro/` runs Metro in the ordinary
+  workspace (`pnpm --filter @lmthing/ui test:native`) and proves the native graph resolves, the
+  right forks are selected, no web-only module leaks in, and the primitives mount on
+  `react-test-renderer` for `ios` and `android`. What still needs a device is layout (Yoga), paint,
+  and anything a native binary actually does — see `libs/ui/metro/README.md` § "What this does NOT
+  prove".
 
 ---
 

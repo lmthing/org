@@ -8,7 +8,13 @@ import { describe, it, expect } from 'vitest'
  * with the SAME `displayName` as their web counterpart, so a surface component is cross-target.
  * (Image/Link forks import `react-native` directly and are verified in the mobile app.)
  *
- * See docs/react-native-tamagui-migration.md §7 + .issues/tamagui-web-swap-blocked-by-className-layout.md.
+ * The OTHER half — the forks reached the way Metro reaches them (through the barrel, not by an
+ * explicit `.native` path), including the ones that import `react-native`/`-svg`/`-webview`, and
+ * actually RENDERED on the native target — lives in `libs/ui/metro/suites/primitives.tsx`
+ * (`pnpm --filter @lmthing/ui test:native`). Neither replaces the other: this suite is a fast
+ * structural guard in the default runner, that one needs a Metro bundle.
+ *
+ * See docs/react-native-tamagui-migration.md §7 + §8.
  */
 import * as BoxWeb from './box/index'
 import * as BoxNative from './box/index.native'

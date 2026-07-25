@@ -33,6 +33,7 @@ pnpm build                         # turbo run build → dist/
 pnpm typecheck                     # tsc --noEmit across all packages (strict)
 pnpm test                          # vitest run (co-located tests) — run from sdk/org, NOT the repo root
 pnpm test libs/core/src/tasklist   # one directory / substring filter
+pnpm test:native                   # Metro/React Native harness for @lmthing/ui (libs/ui/metro/)
 pnpm dev                           # turbo run dev --parallel (watch + rebuild)
 pnpm thing                         # CLI + web app on ONE port, both hot-reloading (scripts/thing-dev.mjs)
 ```
@@ -97,6 +98,10 @@ Each is one line; the grounded explanation is behind the link.
   (unit tests run from `src/` and miss it). → [`libs/cli/tsup.config.ts`](./libs/cli/tsup.config.ts)
 - **System spaces auto-adopt source/image updates** — a pristine materialized copy re-syncs on boot;
   locally-edited ones hold back (adopt with `--adopt-system-spaces`). → [`libs/cli/src/cli/runtime-init.ts`](./libs/cli/src/cli/runtime-init.ts) · [system-spaces/](../../org/docs/system-spaces/README.md)
+- **A jsdom test cannot see the native target** — `isWeb` is always true there, and importing
+  `./x.native` by path is not what Metro does. Anything about React Native (fork selection, a
+  `platform/*.native.ts` seam, a web-only import leaking into the native graph) is only proven by
+  `pnpm test:native`. → [`libs/ui/metro/README.md`](./libs/ui/metro/README.md)
 - **`pnpm --filter @lmthing/core test` is a silent no-op** — core has no `test` script. Use
   `cd sdk/org && pnpm test <path>`. → [contributing/testing](../../org/docs/contributing/testing.md)
 
@@ -133,6 +138,7 @@ Source of truth is the `org/docs` page. Skills (`@.claude/skills/*`) are local *
 | adding an AI provider | [org/docs/contributing/add-a-provider.md](../../org/docs/contributing/add-a-provider.md) |
 | writing / running tests | [org/docs/contributing/testing.md](../../org/docs/contributing/testing.md) |
 | debugging the eval/yield pipeline | [org/docs/contributing/debugging.md](../../org/docs/contributing/debugging.md) |
+| the React Native target — native forks, the `platform/` seams, whether it still bundles | [`libs/ui/metro/README.md`](./libs/ui/metro/README.md) (`pnpm test:native` — Metro graph gate + native render suites, no simulator needed) |
 | the design system (tokens, theme, component CSS) | [org/docs/design-system/](../../org/docs/design-system/README.md) · generated CSS-class catalog: [libs/css/COMPONENTS.md](./libs/css/COMPONENTS.md) |
 | the shared libs' public APIs (`state`, `ui`, `css`, `auth`) | [org/docs/libs/](../../org/docs/libs/README.md) |
 | the `/chat`, `/studio`, `/computer` surfaces | [chat/](../../org/docs/chat/README.md) · [studio/](../../org/docs/studio/README.md) · [computer/](../../org/docs/computer/README.md) |
