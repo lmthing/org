@@ -35,6 +35,21 @@ import { fileURLToPath } from 'node:url'
 const TARGETS = new Set([
   'Box', 'Row', 'Col', 'Text', 'Pressable', 'Link', 'Form', 'List', 'ListItem', 'Image', 'Label',
   'TextField', 'TextArea', 'Select', 'Pre', 'Table', 'Thead', 'Tbody', 'Tfoot', 'Tr', 'Th', 'Td',
+
+  /*
+   * Composites added in phase 3 (docs/tamagui-final-steps.md), each only AFTER READING IT and
+   * confirming two things: it spreads its rest props straight onto a Tamagui primitive, and its
+   * props interface now extends that primitive's prop type. The second half mattered — all of these
+   * already forwarded style props correctly at RUNTIME, behind an `as Record<string, unknown>` cast
+   * that existed purely because the declared type was `ComponentProps<'div'>`. Widening the type
+   * deleted the casts and is what makes lifting a style here type-safe rather than merely working.
+   *
+   * NOT added, and not addable: `Prim.Svg`/`Prim.Video`/`Prim.IFrame`/`Prim.Line`/`Prim.Polyline`
+   * (passthrough — they IGNORE style props, §6), every lucide icon (takes `style`, phase 1), and the
+   * `Native*`/`RN*`/`TextInput`/`WebView` tags in `.native.tsx` forks (React Native styles ARE
+   * `style`). For those, `style` is the correct destination, not a thing to migrate.
+   */
+  'Stack', 'Card', 'CardHeader', 'CardBody', 'CardFooter', 'Caption', 'Heading', 'Code',
 ])
 
 /**

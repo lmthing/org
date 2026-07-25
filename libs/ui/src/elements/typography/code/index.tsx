@@ -6,7 +6,8 @@ import * as Prim from '../../primitives/index'
  * (runtime tags via `createComponent`) with the styling as `$`-token PROPS transcribed from its retired `styled()` proof.
  * CSS deleted.
  */
-export interface CodeProps extends React.ComponentProps<'code'> {
+// `Prim.TextProps`, not `ComponentProps<'code'>` — see the note on `Caption`/`Heading`.
+export interface CodeProps extends Omit<Prim.TextProps, 'as'> {
   block?: boolean
 }
 
@@ -25,7 +26,7 @@ function Code({ block, children, ...props }: CodeProps) {
         color="$foreground"
         lineHeight={1.625}
       >
-        <Prim.Text as="code" {...(props as Record<string, unknown>)}>{children}</Prim.Text>
+        <Prim.Text as="code" {...props}>{children}</Prim.Text>
       </Prim.Text>
     )
   }
@@ -39,7 +40,7 @@ function Code({ block, children, ...props }: CodeProps) {
       paddingVertical="$0.5"
       borderRadius="$radius"
       color="$foreground"
-      {...(props as Record<string, unknown>)}
+      {...props}
     >
       {children}
     </Prim.Text>

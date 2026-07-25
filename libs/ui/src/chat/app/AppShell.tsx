@@ -88,14 +88,15 @@ export function AppShell({ singleSession }: AppShellProps) {
   const sidebarContent = (
     <Sidebar
       onProjectSettings={(id, name) => setProjectSettings({ id, name })}
-      className="h-full"
+      height="100%"
     />
   );
 
   const drawerSidebarContent = (
     <Sidebar
       onProjectSettings={(id, name) => setProjectSettings({ id, name })}
-      className="w-full h-full"
+      width="100%"
+      height="100%"
       collapsible={false}
     />
   );
@@ -103,7 +104,7 @@ export function AppShell({ singleSession }: AppShellProps) {
   const devPanelContent = (
     <DevPanel
       onClose={() => setDevPanelOpen(false)}
-      className="h-full"
+      height="100%"
     />
   );
 
@@ -120,7 +121,7 @@ export function AppShell({ singleSession }: AppShellProps) {
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           side="left"
-          width="w-64"
+          width="16rem"
         >
           {drawerSidebarContent}
         </Drawer>
@@ -152,7 +153,10 @@ export function AppShell({ singleSession }: AppShellProps) {
             devPanelOpen={devPanelOpen}
             projectId={activeProjectId}
             singleSession={singleSession}
-            className="flex-1 min-h-0"
+            flexGrow={1}
+            flexShrink={1}
+            flexBasis="0%"
+            minHeight={0}
           />
         )}
       </Prim.Col>
@@ -164,10 +168,10 @@ export function AppShell({ singleSession }: AppShellProps) {
           open={devPanelOpen}
           onClose={() => setDevPanelOpen(false)}
           side="right"
-          width="w-96"
+          width="24rem"
           title="DevTools"
         >
-          <DevPanel onClose={() => setDevPanelOpen(false)} className="h-full" />
+          <DevPanel onClose={() => setDevPanelOpen(false)} height="100%" />
         </Drawer>
       )}
 

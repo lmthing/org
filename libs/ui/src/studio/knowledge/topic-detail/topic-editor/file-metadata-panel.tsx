@@ -94,7 +94,7 @@ export function FileMetadataPanel({ topicPath }: FileMetadataPanelProps) {
         </Prim.Box>
 
         {parseError && (
-          <Caption muted style={{ color: 'var(--destructive)' }}>
+          <Caption muted color="var(--destructive)">
             {parseError}
           </Caption>
         )}

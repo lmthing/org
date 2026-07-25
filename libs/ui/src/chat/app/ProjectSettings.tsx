@@ -101,7 +101,7 @@ function InstructionsTab({ projectId }: { projectId: string }) {
         onChange={(e) => setContent(e.target.value)}
         placeholder="Instructions for THING in this project…"
       />
-      <Button variant="default" size="sm" loading={saving} onClick={() => void save()} className="self-end">
+      <Button variant="default" size="sm" loading={saving} onClick={() => void save()} alignSelf="flex-end">
         Save instructions
       </Button>
     </Prim.Col>
@@ -208,7 +208,7 @@ export function ProjectSettings({ open, onClose, projectId, projectName, onInteg
   ];
 
   return (
-    <Drawer open={open} onClose={onClose} title={`${projectName ?? 'Project'} settings`} width="w-96" side="right">
+    <Drawer open={open} onClose={onClose} title={`${projectName ?? 'Project'} settings`} width="24rem" side="right">
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
       {tab === 'instructions' && <InstructionsTab projectId={projectId} />}
       {tab === 'documents' && <DocumentsTab projectId={projectId} />}

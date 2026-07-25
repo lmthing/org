@@ -1,6 +1,5 @@
 import * as Prim from '../../../elements/primitives/index.js';
 import React from 'react';
-import { cn } from '../../lib/cn.js';
 
 interface TabsProps {
   tabs: { id: string; label: string }[];
@@ -8,6 +7,19 @@ interface TabsProps {
   onChange: (id: string) => void;
   className?: string;
 }
+
+/**
+ * `.border-primary text-foreground` / `.border-transparent text-muted-foreground hover:text-foreground`
+ * as prop bags. `border-*` in Tailwind sets all four border colours, so `borderColor` (not
+ * `borderBottomColor`) is the faithful translation — only the bottom edge has width, but P0 audits
+ * all four colours.
+ */
+const TAB_ACTIVE = { borderColor: '$primary', color: '$foreground' } as const;
+const TAB_IDLE = {
+  borderColor: 'transparent',
+  color: '$muted-foreground',
+  hoverStyle: { color: '$foreground' },
+} as const;
 
 export function Tabs({ tabs, active, onChange, className }: TabsProps) {
   return (
@@ -18,9 +30,7 @@ export function Tabs({ tabs, active, onChange, className }: TabsProps) {
           role="tab"
           aria-selected={t.id === active}
           onClick={() => onChange(t.id)}
-          className={t.id === active
-              ? 'border-primary text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground'} transition="quick" animateOnly={["color", "background-color", "border-color"]} paddingHorizontal="$3" paddingVertical="$2" fontSize="$xs" fontWeight="$medium" borderBottomWidth={2} marginBottom="-$px"
+          {...(t.id === active ? TAB_ACTIVE : TAB_IDLE)} transition="quick" animateOnly={["color", "background-color", "border-color"]} paddingHorizontal="$3" paddingVertical="$2" fontSize="$xs" fontWeight="$medium" borderBottomWidth={2} marginBottom="-$px"
         >
           {t.label}
         </Prim.Pressable>

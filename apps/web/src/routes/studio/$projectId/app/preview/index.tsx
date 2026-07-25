@@ -29,7 +29,7 @@ function AppPreview() {
       <Prim.Box
         display="flex" alignItems="center" gap="0.75rem" paddingVertical="0.5rem" paddingHorizontal="1.5rem" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--color-border)"
       >
-        <Caption muted style={{ flex: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <Caption muted flexGrow={1} flexShrink={1} flexBasis="0%" fontFamily="monospace" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
           {src}
         </Caption>
         <Button variant="ghost" onClick={() => setNonce((n) => n + 1)} aria-label="Refresh preview">

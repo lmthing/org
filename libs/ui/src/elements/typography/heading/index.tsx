@@ -7,7 +7,10 @@ import * as Prim from '../../primitives/index'
  */
 export type HeadingLevel = 1 | 2 | 3 | 4
 
-export interface HeadingProps extends React.HTMLAttributes<HTMLHeadingElement> {
+// `Prim.TextProps`, not `HTMLAttributes`: the rest props are spread straight onto `Prim.Text`, so
+// style props already work at runtime — the narrow type was what stopped callers using them, and
+// what forced the `as Record<string, unknown>` cast below. Same fix as `Caption`.
+export interface HeadingProps extends Omit<Prim.TextProps, 'as'> {
   level?: HeadingLevel
   muted?: boolean
 }
@@ -22,7 +25,7 @@ function Heading({ level = 2, muted, children, ...props }: HeadingProps) {
       letterSpacing="$tight"
       fontSize={LEVEL_SIZE[level]}
       color={muted ? '$muted-foreground' : '$foreground'}
-      {...(props as Record<string, unknown>)}
+      {...props}
     >
       {children}
     </Prim.Text>

@@ -292,6 +292,14 @@ export interface AppSidebarProps {
   flexShrink?: number
 
   /**
+   * Shell width/height overrides. The mobile DRAWER needs `width: '100%'` — it renders with
+   * `collapsible={false}`, so `SHELL_FIXED` is not applied and the shell has no width of its own.
+   * Spread AFTER `SHELL_FIXED` so an explicit value wins.
+   */
+  width?: number | string
+  height?: number | string
+
+  /**
    * Namespaces the persisted UI flags (section + whole-sidebar collapse) so the
    * chat and studio sidebars keep independent state. Defaults to `app-sidebar`.
    */
@@ -479,6 +487,8 @@ export function AppSidebar({
   footer,
   className,
   flexShrink,
+  width,
+  height,
   storageKey = 'app-sidebar',
   collapsible = true,
   defaultCollapsed = false,
@@ -494,7 +504,7 @@ export function AppSidebar({
   // Collapsed: a slim rail with just an expand affordance.
   if (isCollapsed) {
     return (
-      <Prim.Box as="nav" aria-label="sidebar (collapsed)" {...SIDEBAR_SHELL} {...SHELL_COLLAPSED} flexShrink={flexShrink} className={className}>
+      <Prim.Box as="nav" aria-label="sidebar (collapsed)" {...SIDEBAR_SHELL} {...SHELL_COLLAPSED} flexShrink={flexShrink} {...(width !== undefined ? { width } : {})} {...(height !== undefined ? { height } : {})} className={className}>
         <Prim.Box {...RAIL}>
           <CozyThingText text="lmt" {...RAIL_BRAND} />
           <Prim.Pressable
@@ -517,6 +527,8 @@ export function AppSidebar({
       {...SIDEBAR_SHELL}
       {...(collapsible ? SHELL_FIXED : {})}
       flexShrink={flexShrink}
+      {...(width !== undefined ? { width } : {})}
+      {...(height !== undefined ? { height } : {})}
       className={className}
     >
       {/* Brand + collapse toggle */}

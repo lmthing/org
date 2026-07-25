@@ -44,14 +44,14 @@ function BuildCard({
 }) {
   const status = build?.status ?? (build?.ok === false ? 'error' : build?.ok ? 'ok' : 'unknown')
   return (
-    <Card style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+    <Card padding="1rem" display="flex" alignItems="center" gap="1rem">
       <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%">
         <Prim.Box display="flex" alignItems="center" gap="0.5rem">
-          <Heading level={4} style={{ margin: 0 }}>Build</Heading>
+          <Heading level={4} margin={0}>Build</Heading>
           <Badge variant={statusVariant(status)}>{status}</Badge>
         </Prim.Box>
         {build?.error ? (
-          <Caption style={{ color: 'var(--color-destructive)' }}>{build.error}</Caption>
+          <Caption color="var(--color-destructive)">{build.error}</Caption>
         ) : build?.finishedAt ? (
           <Caption muted>Last built {formatTime(build.finishedAt)}</Caption>
         ) : (
@@ -77,13 +77,7 @@ function HookRow({
   const last = hook.lastRun
   return (
     <Card
-      style={{
-        padding: '0.75rem 1rem',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '1rem',
-        marginBottom: '0.5rem',
-      }}
+      paddingVertical="0.75rem" paddingHorizontal="1rem" display="flex" alignItems="center" gap="1rem" marginBottom="0.5rem"
     >
       <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
         <Prim.Box display="flex" alignItems="center" gap="0.5rem">
@@ -182,12 +176,12 @@ function ManifestView() {
   return (
     <Prim.Box height="100%" overflow="auto" padding="1.5rem">
       {notice ? (
-        <Caption style={{ display: 'block', marginBottom: '0.75rem', color: 'var(--color-accent)' }}>
+        <Caption display="block" marginBottom="0.75rem" color="var(--color-accent)">
           {notice}
         </Caption>
       ) : null}
       {error ? (
-        <Caption style={{ display: 'block', marginBottom: '0.75rem', color: 'var(--color-destructive)' }}>
+        <Caption display="block" marginBottom="0.75rem" color="var(--color-destructive)">
           {error}
         </Caption>
       ) : null}
@@ -203,7 +197,7 @@ function ManifestView() {
           <Caption muted>No tables.</Caption>
         ) : (
           m.tables!.map((t) => (
-            <Card key={t.name} style={{ padding: '0.75rem 1rem', marginBottom: '0.5rem' }}>
+            <Card key={t.name} paddingVertical="0.75rem" paddingHorizontal="1rem" marginBottom="0.5rem">
               <Prim.Box display="flex" alignItems="baseline" gap="0.5rem">
                 <Prim.Text style={{ ...MONO, fontWeight: 600 }}>{t.name}</Prim.Text>
                 {t.title ? <Caption muted>{t.title}</Caption> : null}
@@ -244,7 +238,7 @@ function ManifestView() {
         {(m.pages ?? []).length === 0 ? (
           <Caption muted>No pages.</Caption>
         ) : (
-          <Card style={{ padding: '0.5rem 1rem' }}>
+          <Card paddingVertical="0.5rem" paddingHorizontal="1rem">
             {m.pages!.map((p) => (
               <Prim.Box key={p.route} style={{ ...MONO, padding: '0.25rem 0' }}>
                 {p.route}
@@ -264,7 +258,7 @@ function ManifestView() {
           m.endpoints!.map((e) => (
             <Card
               key={`${e.method} ${e.name}`}
-              style={{ padding: '0.5rem 1rem', marginBottom: '0.375rem' }}
+              paddingVertical="0.5rem" paddingHorizontal="1rem" marginBottom="0.375rem"
             >
               <Prim.Box display="flex" alignItems="center" gap="0.5rem">
                 <Badge variant="primary">{e.method}</Badge>

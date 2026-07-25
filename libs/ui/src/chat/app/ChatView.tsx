@@ -75,7 +75,22 @@ interface ChatViewProps {
   projectId?: string | null;
   singleSession?: boolean;
   className?: string;
+  /** Flex-child sizing. Replaces `className="flex-1 min-h-0"` at the AppShell call site. */
+  flexGrow?: number;
+  flexShrink?: number;
+  flexBasis?: number | string;
+  minHeight?: number | string;
 }
+
+/** `bg-agent/15 text-agent` / `text-muted-foreground hover:text-foreground hover:bg-muted`. */
+const INSPECT_ON = {
+  backgroundColor: 'color-mix(in srgb, var(--agent) 15%, transparent)',
+  color: '$agent',
+} as const;
+const INSPECT_OFF = {
+  color: '$muted-foreground',
+  hoverStyle: { color: '$foreground', backgroundColor: '$muted' },
+} as const;
 
 export function ChatView({
   onOpenDevPanel,
@@ -83,6 +98,10 @@ export function ChatView({
   projectId,
   singleSession,
   className,
+  flexGrow,
+  flexShrink,
+  flexBasis,
+  minHeight,
 }: ChatViewProps) {
   const spaceName = useStore(s => s.spaceName);
   const agentSlug = useStore(s => s.agentSlug);
@@ -175,10 +194,10 @@ export function ChatView({
   const title = sessionTitle || fallbackTitle;
 
   return (
-    <Prim.Box display="flex" className={className} flexDirection="column" height="100%" backgroundColor="$background">
+    <Prim.Box display="flex" className={className} flexDirection="column" height="100%" backgroundColor="$background" {...(flexGrow !== undefined ? { flexGrow } : {})} {...(flexShrink !== undefined ? { flexShrink } : {})} {...(flexBasis !== undefined ? { flexBasis } : {})} {...(minHeight !== undefined ? { minHeight } : {})}>
       {/* Header */}
       <Prim.Row as="header"
-        className="backdrop-blur-sm" backgroundColor="color-mix(in srgb, var(--background) 80%, transparent)" gap="$3" paddingLeft="$12" paddingRight="$4" paddingVertical="$2.5" borderBottomWidth={1} borderColor="$border" $md={{ paddingLeft: "$4" }} alignItems="center" flexShrink={0}
+        style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }} backgroundColor="color-mix(in srgb, var(--background) 80%, transparent)" gap="$3" paddingLeft="$12" paddingRight="$4" paddingVertical="$2.5" borderBottomWidth={1} borderColor="$border" $md={{ paddingLeft: "$4" }} alignItems="center" flexShrink={0}
         aria-label="chat header"
       >
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
@@ -220,9 +239,7 @@ export function ChatView({
           <TraceLoader />
           <Prim.Pressable
             onClick={() => onOpenDevPanel?.()}
-            className={devPanelOpen
-                ? 'bg-agent/15 text-agent'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'} transition="quick" animateOnly={["color", "background-color", "border-color"]} fontSize="$xs" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius-lg"
+            {...(devPanelOpen ? INSPECT_ON : INSPECT_OFF)} transition="quick" animateOnly={["color", "background-color", "border-color"]} fontSize="$xs" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius-lg"
             title="Toggle DevPanel (⌥I)"
           >
             Inspect

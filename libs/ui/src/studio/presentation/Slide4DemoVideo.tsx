@@ -32,8 +32,10 @@ export default function Slide6DemoVideo() {
           autoPlay
           loop
           muted
-          className="w-full rounded-2xl shadow-2xl"
           style={{
+            width: '100%',
+            borderRadius: '1rem',
+            boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)', // ds-lint-ok: shadow alpha-black
             border: `1px solid ${colors.cardBorder}`,
             maxHeight: '65vh',
           }}

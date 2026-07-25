@@ -116,7 +116,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
       </Prim.Row>
 
       {expanded && (
-        <Prim.Box className="space-y-0.5" paddingLeft="26px" fontSize="$xs" color="$muted-foreground" marginTop="0.25rem">
+        <Prim.Box display="flex" flexDirection="column" gap="$0.5" paddingLeft="26px" fontSize="$xs" color="$muted-foreground" marginTop="0.25rem">
           {stmts.length > 0 ? (
             stmts.map((s, i) => {
               const text = narrationOf(s.code);

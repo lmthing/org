@@ -24,10 +24,10 @@ function FieldCard({ entry, spacePath }: { entry: FieldEntry; spacePath: string 
     <Card
       interactive
       onClick={() => navigate({ to: `${spacePath}/knowledge/${encodeURIComponent(entry.fieldId)}` })}
-      style={{ cursor: 'pointer' }}
+      cursor="pointer"
     >
       <CardBody>
-        <Stack row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <Stack row justifyContent="space-between" alignItems="center">
           <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
             <Label>{entry.field}</Label>
           </Prim.Box>
@@ -121,7 +121,7 @@ function KnowledgePage() {
   return (
     <Prim.Box maxWidth="48rem" marginVertical="0" marginHorizontal="auto" paddingVertical="2rem" paddingHorizontal="1.5rem">
       <Stack gap="lg">
-        <Stack row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <Stack row justifyContent="space-between" alignItems="center">
           <Prim.Box>
             <Heading level={2}>Knowledge</Heading>
             <Caption muted>
@@ -138,7 +138,7 @@ function KnowledgePage() {
           <Card>
             <CardBody>
               <Stack gap="sm">
-                <Stack row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                <Stack row justifyContent="space-between" alignItems="center">
                   <Heading level={4}>New Knowledge Field</Heading>
                   <Button variant="ghost" size="icon" onClick={() => setShowCreate(false)}>
                     <X style={{ width: '1rem', height: '1rem' }} />
@@ -184,7 +184,7 @@ function KnowledgePage() {
           <Stack gap="lg">
             {domains.map(domain => (
               <Prim.Box key={domain}>
-                <Heading level={4} style={{ marginBottom: '0.5rem', color: 'var(--color-muted-foreground)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <Heading level={4} marginBottom="0.5rem" color="var(--color-muted-foreground)" fontSize="0.75rem" textTransform="uppercase" letterSpacing="0.05em">
                   {domain}
                 </Heading>
                 <DomainFields domain={domain} fields={byDomain.get(domain) || []} spacePath={spacePath} />

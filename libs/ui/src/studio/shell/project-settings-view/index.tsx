@@ -174,7 +174,7 @@ export function ProjectSettingsView() {
                   {integrations.map((integration) => (
                     <Panel key={integration.spaceId}>
                       <PanelHeader>
-                        <Stack row gap="sm" style={{ alignItems: 'center' }}>
+                        <Stack row gap="sm" alignItems="center">
                           {integration.icon && <Prim.Text aria-hidden="true">{integration.icon}</Prim.Text>}
                           <Prim.Text>{integration.title}</Prim.Text>
                         </Stack>

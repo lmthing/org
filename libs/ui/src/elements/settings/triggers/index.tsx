@@ -95,11 +95,7 @@ export function Triggers() {
                 <Caption muted>{b.agentRef}</Caption>
                 <Prim.Box display="flex" alignItems="center" gap="0.5rem">
                   <Code
-                    style={{
-                      flex: 1,
-                      overflow: 'auto',
-                      whiteSpace: 'nowrap',
-                    }}
+                    flexGrow={1} flexShrink={1} flexBasis="0%" overflow="auto" whiteSpace="nowrap"
                   >
                     {url}
                   </Code>
