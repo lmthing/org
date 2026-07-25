@@ -10,7 +10,6 @@
 import * as Prim from '../../../elements/primitives/index.js';
 import { useNavigate } from '@tanstack/react-router'
 
-import '@lmthing/css/components/thing/thing-panel/index.css'
 
 import { useThingSession } from './use-thing-session'
 import { ThingSidebar } from './ThingSidebar'

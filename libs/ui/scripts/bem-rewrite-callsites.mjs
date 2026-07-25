@@ -16,6 +16,10 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { convertStylesheet } from './bem-to-props.mjs'
 
+// CLI — guarded so importing this module (e.g. from bem-sweep.mjs) does not execute it with the
+// importer's argv, which made it try to read a directory as a stylesheet.
+const isEntry = process.argv[1] && import.meta.url === `file://${process.argv[1]}`
+if (isEntry) {
 const args = process.argv.slice(2)
 const opt = (n) => (args.find((a) => a.startsWith(`--${n}=`)) ?? '').split('=').slice(1).join('=')
 const check = args.includes('--check')
@@ -66,3 +70,4 @@ for (const file of files) {
 
 for (const d of [...new Set(dynamic)]) console.log(`  DYNAMIC (manual) ${d}`)
 console.log(`\n[bem-rewrite-callsites] ${totalRewrites} className token(s) lifted across ${files.length} file(s)`)
+}

@@ -109,6 +109,20 @@ function baseClass(cls) {
   if (cls === 'flex-grow-0') return { flexGrow: 0 }
   if (cls === 'flex-grow') return { flexGrow: 1 }
 
+  // text flow — `whiteSpace` is a real Tamagui web style prop (the primitives already type it),
+  // and the codemod needs it because `.is_Text` sets `white-space` unlayered, so a class loses.
+  if (cls === 'whitespace-normal') return { whiteSpace: 'normal' }
+  if (cls === 'whitespace-nowrap') return { whiteSpace: 'nowrap' }
+  if (cls === 'whitespace-pre') return { whiteSpace: 'pre' }
+  if (cls === 'whitespace-pre-wrap') return { whiteSpace: 'pre-wrap' }
+  if (cls === 'whitespace-pre-line') return { whiteSpace: 'pre-line' }
+  if (cls === 'whitespace-break-spaces') return { whiteSpace: 'break-spaces' }
+  if (cls === 'outline-none') return { outlineWidth: 0, outlineStyle: 'none' }
+  if (cls === 'resize') return { resize: 'both' }
+  if (cls === 'resize-y') return { resize: 'vertical' }
+  if (cls === 'resize-x') return { resize: 'horizontal' }
+  if (cls === 'resize-none') return { resize: 'none' }
+
   // misc single-value utilities
   if (cls === 'cursor-pointer') return { cursor: 'pointer' }
   if (cls === 'cursor-default') return { cursor: 'default' }

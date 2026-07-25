@@ -88,14 +88,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `--agent`, `--border`, `--destructive`, `--muted`, `border`, `brand-2`, `brand-3`, `muted`, `muted-foreground`, `neutral`, `primary-foreground`
 
-### `components/thing/thing-panel/index.css`
-
-- **.thing-msg** — `.thing-msg` `.thing-msg--assistant` `.thing-msg--user` `.thing-msg__processing` `.thing-msg__role` `.thing-msg__text`
-- **.thing-panel** — `.thing-panel` `.thing-panel--embedded` `.thing-panel--full` `.thing-panel__chat-header` `.thing-panel__chat-status` `.thing-panel__chat-status-text` `.thing-panel__chat-title` `.thing-panel__conv-btn` `.thing-panel__conv-btn--active` `.thing-panel__env-warning` `.thing-panel__input-form` `.thing-panel__main` `.thing-panel__messages` `.thing-panel__sidebar` `.thing-panel__sidebar-brand` `.thing-panel__sidebar-brand-name` `.thing-panel__sidebar-header` `.thing-panel__sidebar-list` `.thing-panel__sidebar-title` `.thing-panel__status-dot` `.thing-panel__status-dot--error` `.thing-panel__status-dot--ready` `.thing-panel__status-dot--warn` `.thing-panel__status-dot--working` `.thing-panel__textarea`
-- **.thing-tool-event** — `.thing-tool-event`
-
-  Tokens: `--agent`, `--background`, `--border`, `--brand-2`, `--card`, `--destructive`, `--knowledge`, `--muted`, `--primary`, `--primary-foreground`
-
 ### `components/workflow/step-card/index.css`
 
 - **.group** — `.group`
