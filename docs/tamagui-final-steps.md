@@ -6,9 +6,14 @@
 > [§0](#0-how-to-re-measure). It supersedes nothing: the other doc stays the record of *what
 > happened and why*, this one is *what is left and in what order*.
 
-> **Status.** Phase 0.5 ✅ · phase 2 ✅ · phases 1, 3, 4, 5 open. Each completed phase keeps its
-> section below, rewritten to record what was actually done and where this plan was wrong — the
-> corrections matter more than the ticks, because three of them were load-bearing.
+> **Status.** Phases **0.5 ✅ · 1 ✅ · 2 ✅ · 3 ✅** (className axis; inline-`style` tail ◐) ·
+> **5b ✅** (pulled forward — see below) · **4 scoped, not executed** · **5a/5c** not started.
+> Each completed phase keeps its section, rewritten to record what was actually done and **where this
+> plan was wrong** — the corrections matter more than the ticks, because several were load-bearing.
+>
+> **Definition of done: 2 of 5 met** — (2) no Tailwind utility className anywhere, (5) `libs/ui` has a
+> real typecheck. Open: (1) `@import "tailwindcss"` still in 2 files, (3) 127 inline styles on
+> Tamagui-backed targets, (4) still two Tamagui configs.
 
 ## The definition of done
 
@@ -24,14 +29,17 @@ Five conditions. Anything not on this list is out of scope and named in [§7](#7
 
 | | count | where |
 |---|---|---|
-| utility classNames | **125** | 87 real Tailwind · 27 keyframes · 11 `prose` |
-| inline `style={{…}}` | **130** | 45 files, ~60% in `apps/web` studio routes |
+| utility classNames | **0** | was 125. What remains is keyframes, BEM, `{className}`, and 2 `prose` boxes (§7) |
+| inline `style={{…}}` | **127** | on Tamagui-backed targets. A further **78** are on passthrough/lucide/`.native.tsx`, where `style` is CORRECT |
+| `@apply` directives | **87** | 12 files · ~140 distinct utilities · 9 files need `--tw-*` machinery |
 | stylesheets | **14** | 180 rules — 11 component + `FieldTree.css` + the chat Tailwind entry + `animations.css`; 3 permanent |
 | Tailwind entry points | **2** | `libs/css/src/theme.css`, `libs/ui/src/chat/app/styles.css` |
 | Tamagui configs | **2** | `tamagui.config.ts` (native hex), `tamagui-web.config.ts` (var-backed) |
 | compiler extraction | **off** | deliberate — `libs/utils/src/vite.mjs` |
-| CSS bundle | **31.10 kB** | from 171 kB — `apps/web` build; phase 0.5 took 1.46 kB of it |
-| P0 fixtures | **230** | 222 + the 8 animation rows phase 2 added |
+| CSS bundle | **29.63 kB** | from 171 kB — `apps/web` build |
+| P0 fixtures | **282** | 222 + 8 animation rows (§2) + 52 icon rows (§1) |
+| `libs/ui` tests | **287** | +3 `app-sidebar` RENDER tests, impossible before §5b |
+| `apps/web` typecheck | **321 errors** | from 487. The plan's "8" was never right — see §5b |
 
 The work below is ordered so that **nothing is deleted before its replacement is proven**, and every
 phase ends at a green `pnpm test:surface`.
@@ -43,12 +51,16 @@ phase ends at a green `pnpm test:surface`.
 Do this first and after every phase. If a number here is stale, trust the command.
 
 ```bash
-pnpm test:surface                      # P0 — 222 elements, light + dark. THE gate.
-pnpm --filter @lmthing/ui test         # 284 unit tests
+pnpm test:surface                      # P0 — 282 elements, light + dark. THE gate.
+pnpm --filter @lmthing/ui test         # 287 unit tests
+pnpm test libs/css                     # 50 — incl. the keyframe layer P0 cannot see (§2)
 pnpm typecheck                         # workspace
 pnpm --filter @lmthing/ui run typecheck:syntax
 pnpm --filter @lmthing/ui run lint:tokens && pnpm --filter @lmthing/ui run lint:rn
-cd apps/web && pnpm build && npx tsc --noEmit -p tsconfig.app.json   # 8 errors = the known baseline
+cd apps/web && pnpm build && npx tsc --noEmit -p tsconfig.app.json   # 321 errors, NOT 8 — §5b
+
+# the @apply expander (safe: --check writes nothing)
+node libs/css/scripts/expand-apply.mjs --check $(grep -rl '@apply' --include=*.css libs/css/src apps/web/src)
 
 # the two counters this plan is scored against
 node libs/ui/scripts/classnames-to-props.mjs --check $(find libs/ui/src apps/web/src -name '*.tsx' ! -name '*.test.tsx')
@@ -320,10 +332,89 @@ excludes them and `primitives/index.test.tsx` pins why.
 
 ---
 
-## Phase 4 — delete Tailwind
+## Phase 4 — delete Tailwind ◐ SCOPED, NOT EXECUTED
 
-Only attempt this when phases 1–3 leave **fewer than ~15** utility classNames, all of them
-deliberate.
+**Entry condition met.** Phases 1–3 left **zero** Tailwind utility classNames (§3), well under the
+"fewer than ~15" bar. Nothing now blocks this phase; what follows is the measured shape of it, plus
+one decision that has to be made deliberately rather than discovered halfway through a deletion.
+
+### Scope boundary found first: `libs/cli` keeps Tailwind, permanently
+
+`libs/cli/src/app/build/pages.ts` runs the **Tailwind v4 compiler** (`@tailwindcss/node` +
+`@tailwindcss/oxide`) over agent-authored **project app pages**. That is a shipped PRODUCT feature —
+apps a user's agent writes are allowed to use Tailwind — and it has nothing to do with this
+migration. Phase 4 deletes Tailwind from the **design system and the web surfaces**
+(`libs/css`, `libs/ui`, `apps/web`) and must leave `libs/cli` alone. Its dependency is also useful:
+it is where the tooling below resolves the compiler from.
+
+### The `@apply` problem, measured — and why the plan's suggestion was wrong
+
+The plan proposed "a small second emitter over `classnames-to-props-map.mjs`". That map is the wrong
+source twice over: it emits Tamagui **props**, not declarations, and it only knows the utilities the
+codemod met on JSX. The stylesheets use **~140 distinct utilities** across **87 `@apply` directives in
+12 files**, including arbitrary values (`rounded-[9px]`, `tracking-[0.16em]`, `min-w-[160px]`), alpha
+shorthands (`bg-brand-3/10`, `shadow-brand-3/25`), gradients, `ring-*`, `rotate-*`, `-translate-*`.
+Hand-translating those is ~140 chances to be silently wrong, because CSS never errors.
+
+So **`libs/css/scripts/expand-apply.mjs`** asks Tailwind itself — the same compiler the app build
+uses — and splices its output back. Correct by construction. `--check` is safe; it runs clean over all
+12 files today.
+
+**But literal expansion is not sufficient, and this is the finding that shapes the phase.** Compiling
+`@apply` in place reveals that most utilities do not expand to plain declarations — they expand to
+declarations *referencing Tailwind's `--tw-*` custom properties*, which Tailwind declares separately
+in an `@layer properties` / `@property` preamble:
+
+```
+@apply shadow-brand-3/25   →  --tw-shadow-color: …color-mix(… var(--tw-shadow-alpha) …)
+@apply ring-2              →  --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 …
+@apply bg-gradient-to-r    →  background-image: linear-gradient(var(--tw-gradient-stops))
+@apply transition-all      →  transition-timing-function: var(--tw-ease, …)
+@apply space-y-2           →  :where(& > :not(:last-child)) { --tw-space-y-reverse: 0; … }
+```
+
+Measured per stylesheet: **9 of 12 need `--tw-*` machinery; 8 emit their own `@property` block.**
+Delete Tailwind and every one of those `var(--tw-…)` references resolves to nothing — shadows,
+rings and gradients vanish, and P0 would catch only the ones it renders.
+
+### The decision phase 4 has to make
+
+| | approach | cost |
+|---|---|---|
+| **A** | compile each stylesheet in full, accept 8 duplicated `@property` preambles | fastest, exact, self-contained — but ships Tailwind's `--tw-*` indirection forever, into files that are **hand-maintained BEM** and would become machine-generated |
+| **B** | as A, but hoist the shared `@property` block into one `libs/css/src/tw-vars.css` | less duplication, same indirection |
+| **C** | hand-simplify only the ~20 utilities that need `--tw-*` (shadow/ring/gradient/transition/leading/tracking/font-weight) into direct declarations | readable, maintainable, genuinely Tailwind-free — most work, and each is a chance to be wrong, though P0 covers what it renders |
+
+**Recommendation: C**, with A/B as a staging post if the phase has to land incrementally. These
+stylesheets are hand-edited BEM; leaving them as compiler output trades one dependency for a worse
+one. The `--tw-*` set needing hand treatment is ~20 utilities, not 140 — the expander handles the
+rest, so C is far smaller than it first looks.
+
+### The rest of phase 4, unchanged from the original plan
+
+Still to do after the `@apply` question is settled, in this order (nothing deleted before its
+replacement is proven):
+
+1. **`prose-*`** — 2 injected-HTML boxes, hand-written equivalents in `markdown/index.css` (§7).
+2. **preflight** — extract only the resets actually depended on into `libs/css/src/preflight.css`.
+   Phase 3 already removed one such dependency deliberately: `borderWidth: 0` is now explicit on the
+   chat Button variants, which used to lean on `*, ::before, ::after { border-width: 0 }`.
+3. **`theme.css` rewrite** — `@theme` / `@theme inline` → plain `:root` custom properties, keeping
+   every `--color-*` (SPIKE A1 resolves `$color` → `var(--color-<name>)`), via
+   `generate-theme.mjs`, not by hand.
+4. **`chat/app/styles.css`** — relocate what §2 found still living there (base `html/body/#root`,
+   scrollbars, `:focus-visible`, the `--lm-*` bridge, safe-area), then delete the file and the
+   `@lmthing/ui/chat/css` import.
+5. **build wiring** — drop `@tailwindcss/vite` from `libs/utils/src/vite.mjs` and the P0 harness
+   config, drop `@source`/`@layer`, remove the `tailwindcss` deps from `libs/css`/`apps/web`
+   (**not** `libs/cli`).
+
+**Gate:** a P0 delta is EXPECTED here and is the review artefact. Review it property by property. A
+delta on `box-sizing`/`margin`/`border-width` means preflight was under-extracted; a delta on any
+`color` means the `@theme` rewrite dropped a custom property; a delta on `box-shadow` means a
+`--tw-*` reference was left dangling.
+
+### Reference: the original notes for this phase
 
 `theme.css` is 266 lines in four parts. Two go, two stay — it is a **rewrite, not a deletion**:
 
@@ -423,17 +514,23 @@ each will bite again in the phases above.
 Phases 1–3 are independent and can land in any order or in parallel; phase 4 needs all three.
 
 ```
-0.5 tw-animate-css   unused import          ✅ DONE
-2. keyframes      unblocks phase 4          ✅ DONE
-1. icons          ~87 → ~45 classNames      small, mechanical, low risk
-3. inline style   130 → ~30                 the largest, most parallelisable
+0.5 tw-animate-css   unused import               ✅ DONE
+2. keyframes      out of the Tailwind entry      ✅ DONE
+1. icons          lucide props + Prim.Svg style  ✅ DONE
+3. classNames     zero Tailwind utilities left   ✅ DONE
+   inline style   127 still on Tamagui targets   ◐ PARTIAL
+5b. SPIKE C       one React 19, real renders     ✅ DONE (taken early — it
+                                                   unblocks verifying the rest)
                         ↓
-4. delete Tailwind      the only phase with an expected P0 delta
+4. delete Tailwind      SCOPED, not executed — needs the §4 decision first
                         ↓
-5. one config + a real typecheck            touches everything; do it last
+5a/5c one config + extraction               not started
 ```
 
-**Next: phase 1, then phase 3** — independent of each other, and phase 4 needs both.
+**Next: the §4 `@apply` decision, then phase 4.** 5b was pulled forward out of order on purpose:
+`libs/ui` could not be typechecked or render-tested at all, so every other phase was being verified
+with one hand tied. It cost one dependency bump and returned 133 typecheck errors and three
+previously-impossible render tests.
 
 What phase 2 hands to phase 4, concretely: the keyframes are out of the way, so the remaining
 question for `chat/app/styles.css` is no longer "how do the animations survive" but **"where do the
