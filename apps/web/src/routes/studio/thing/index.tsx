@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback } from 'react'
 import { useAuth } from '@lmthing/auth'
@@ -29,14 +30,14 @@ function ThingChatPage() {
   }, [getAccessToken])
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Prim.Box height="100vh" display="flex" flexDirection="column">
       <AgentChatPanel
         computeBaseUrl={COMPUTER_BASE_URL}
         getAccessToken={getToken}
         target={{ mode: 'agentOnly', agentSlug: 'thing' }}
         style={{ flex: 1, minHeight: 0 }}
       />
-    </div>
+    </Prim.Box>
   )
 }
 

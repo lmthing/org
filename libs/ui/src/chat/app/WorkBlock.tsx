@@ -75,11 +75,11 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
   return (
     <Prim.Box
       className="lm-fade-in" paddingVertical="$1"
-      style={{ paddingLeft: 16 + depth * 14, paddingRight: 16 }}
+      paddingLeft={16 + depth * 14} paddingRight={16}
       data-testid="work-block"
       data-node-id={nodeId}
     >
-      <Prim.Row gap="$1.5" fontSize="$xs" alignItems="center" style={{ lineHeight: '1rem' }}>
+      <Prim.Row gap="$1.5" fontSize="$xs" alignItems="center" lineHeight="1rem">
         <Prim.Pressable
           onClick={() => setExpanded((v) => !v)}
           width="$3" flexShrink={0} color="$muted-foreground" hoverStyle={{ color: "$foreground" }}

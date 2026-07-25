@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import {
   createFileRoute,
   Outlet,
@@ -35,19 +36,16 @@ function AppSectionLayout() {
   const activeTab = rest.replace(/^\//, '').split('/')[0] ?? ''
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div
-        style={{
-          padding: '1rem 1.5rem 0.75rem',
-          borderBottom: '1px solid var(--color-border)',
-        }}
+    <Prim.Box display="flex" flexDirection="column" height="100%" minHeight={0}>
+      <Prim.Box
+        paddingTop="1rem" paddingHorizontal="1.5rem" paddingBottom="0.75rem" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--color-border)"
       >
         <Heading level={3}>App</Heading>
         <Caption muted>
           Data model, pages, endpoints, hooks &amp; build for project{' '}
-          <code style={{ fontFamily: 'monospace' }}>{projectId}</code>.
+          <Prim.Text as="code" fontFamily="monospace">{projectId}</Prim.Text>.
         </Caption>
-        <div style={{ marginTop: '0.75rem' }}>
+        <Prim.Box marginTop="0.75rem">
           <TabBar
             tabs={TABS.map((t) => ({ id: t.id, label: t.label }))}
             activeTab={activeTab}
@@ -55,12 +53,12 @@ function AppSectionLayout() {
               navigate({ to: id ? `${appBase}/${id}` : appBase })
             }
           />
-        </div>
-      </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        </Prim.Box>
+      </Prim.Box>
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minHeight={0} overflow="hidden">
         <Outlet />
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

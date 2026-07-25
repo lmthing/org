@@ -84,7 +84,7 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
   return (
     <Dialog open={open} onClose={handleClose} title="Report a bug">
       {result ? (
-        <Prim.Col gap="$3" fontSize="$sm" style={{ lineHeight: '1.25rem' }}>
+        <Prim.Col gap="$3" fontSize="$sm" lineHeight="1.25rem">
           <Prim.Text as="p" color="$foreground">
             Thanks — issue #{result.number} was filed.
           </Prim.Text>

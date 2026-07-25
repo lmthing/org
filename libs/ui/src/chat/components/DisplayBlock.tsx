@@ -45,7 +45,7 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
       return <Prim.Text as="code" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
     case 'card':
       return (
-        <Prim.Box key={key} style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 12 }} {...omitChildren(props)}>
+        <Prim.Box key={key} borderWidth="1px" borderStyle="solid" borderColor="var(--border)" borderRadius={4} padding={12} {...omitChildren(props)}>
           {renderedChildren}
         </Prim.Box>
       );
@@ -58,7 +58,7 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
             ? 'color-mix(in srgb, var(--warning) 15%, transparent)'
             : 'color-mix(in srgb, var(--success) 15%, transparent)';
       return (
-        <Prim.Box key={key} style={{ backgroundColor: color, padding: 12, borderRadius: 4 }} {...omitChildren(props)}>
+        <Prim.Box key={key} backgroundColor={color} padding={12} borderRadius={4} {...omitChildren(props)}>
           {renderedChildren}
         </Prim.Box>
       );
@@ -68,7 +68,7 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
       return (
         <Prim.Text
           key={key}
-          style={{ backgroundColor: color ?? 'var(--agent)', color: 'var(--agent-foreground)', padding: '2px 6px', borderRadius: 4 }}
+          backgroundColor={color ?? 'var(--agent)'} color="var(--agent-foreground)" paddingVertical="2px" paddingHorizontal="6px" borderRadius={4}
           {...omitChildren(props)}
         >
           {renderedChildren}

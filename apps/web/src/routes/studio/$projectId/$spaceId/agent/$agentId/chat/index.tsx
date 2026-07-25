@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useAuth } from '@lmthing/auth'
@@ -134,42 +135,42 @@ function AgentChatPage() {
   }
 
   if (!session) {
-    return <div style={styles.center}>Signing in…</div>
+    return <Prim.Box style={styles.center}>Signing in…</Prim.Box>
   }
 
   if (podError) {
     return (
-      <div style={styles.center}>
-        <p style={{ color: 'var(--destructive)' }}>Failed to run space: {podError}</p>
-        <button onClick={() => void startSession()}>Retry</button>
-      </div>
+      <Prim.Box style={styles.center}>
+        <Prim.Text as="p" color="var(--destructive)">Failed to run space: {podError}</Prim.Text>
+        <Prim.Pressable onClick={() => void startSession()}>Retry</Prim.Pressable>
+      </Prim.Box>
     )
   }
 
   if (!sessionId) {
-    return <div style={styles.center}>{PHASE_LABEL[phase] ?? 'Starting agent session…'}</div>
+    return <Prim.Box style={styles.center}>{PHASE_LABEL[phase] ?? 'Starting agent session…'}</Prim.Box>
   }
 
   return (
-    <div style={styles.container}>
+    <Prim.Box style={styles.container}>
       {/* Connection status + re-sync control */}
-      <div style={styles.statusBar}>
-        <span style={{ color: isConnected ? 'var(--success)' : 'var(--destructive)' }}>
+      <Prim.Box style={styles.statusBar}>
+        <Prim.Text color={isConnected ? 'var(--success)' : 'var(--destructive)'}>
           {isConnected ? '● Connected' : '○ Connecting…'}
-        </span>
-        {isDone && <span style={{ marginLeft: 12, color: 'var(--muted-foreground)' }}>Done</span>}
-        <button
+        </Prim.Text>
+        {isDone && <Prim.Text marginLeft={12} color="var(--muted-foreground)">Done</Prim.Text>}
+        <Prim.Pressable
           onClick={() => void startSession()}
           disabled={runningRef.current || phase !== 'ready'}
           style={styles.resyncButton}
           title="Push the latest edits to your pod and restart the agent"
         >
           ↻ Re-sync &amp; restart
-        </button>
-      </div>
+        </Prim.Pressable>
+      </Prim.Box>
 
       {/* Block stream */}
-      <div style={styles.blocks}>
+      <Prim.Box style={styles.blocks}>
         {blocks.map((block) => {
           if (block.type === 'display') {
             return <DisplayBlock key={block.id} descriptor={block.data} />
@@ -190,18 +191,18 @@ function AgentChatPage() {
           }
           if (block.type === 'error') {
             return (
-              <div key={block.id} style={styles.errorBlock}>
+              <Prim.Box key={block.id} style={styles.errorBlock}>
                 {String(block.data)}
-              </div>
+              </Prim.Box>
             )
           }
           return null
         })}
-      </div>
+      </Prim.Box>
 
       {/* Message input */}
-      <div style={styles.inputRow}>
-        <textarea
+      <Prim.Box style={styles.inputRow}>
+        <Prim.TextArea
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -210,15 +211,15 @@ function AgentChatPage() {
           style={styles.textarea}
           rows={2}
         />
-        <button
+        <Prim.Pressable
           onClick={handleSend}
           disabled={!isConnected || !inputValue.trim()}
           style={styles.sendButton}
         >
           Send
-        </button>
-      </div>
-    </div>
+        </Prim.Pressable>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

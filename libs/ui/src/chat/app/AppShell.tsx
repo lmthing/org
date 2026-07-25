@@ -141,7 +141,7 @@ export function AppShell({ singleSession }: AppShellProps) {
 
         {/* No session selected in project mode */}
         {showSidebar && !activeSessionId ? (
-          <Prim.Row justifyContent="center" color="$muted-foreground" fontSize="$sm" alignItems="center" flexGrow={1} flexShrink={1} flexBasis="0%" style={{ lineHeight: '1.25rem' }}>
+          <Prim.Row justifyContent="center" color="$muted-foreground" fontSize="$sm" alignItems="center" flexGrow={1} flexShrink={1} flexBasis="0%" lineHeight="1.25rem">
             {activeProjectId
               ? 'Select or start a chat from the sidebar.'
               : 'Select or create a project to get started.'}

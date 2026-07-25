@@ -50,7 +50,7 @@ function IdeEditor({ openFiles, activeFile, fileContents, onFileSelect, onFileCl
             justifyContent="center"
             color="$muted-foreground"
             fontSize="$sm"
-            style={{ padding: '0.5rem 1rem' }}
+            paddingVertical="0.5rem" paddingHorizontal="1rem"
           >
             Select a file to edit
           </Prim.Text>

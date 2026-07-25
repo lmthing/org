@@ -35,7 +35,7 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
       <Row
         backgroundColor="color-mix(in srgb, var(--brand-2) 20%, transparent)" width="$12" height="$12" borderRadius="$radius-xl" justifyContent="center" marginBottom="$5" fontSize="$2xl"
         alignItems="center"
-        style={{ lineHeight: '2rem' }}
+        lineHeight="2rem"
       >
         ✦
       </Row>

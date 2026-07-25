@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { useEffect, useRef, useState } from 'react'
 import { useAuth, isPodEmbedded, isLocalRun } from '@lmthing/auth'
 import { LoginScreen } from '@lmthing/ui/components/auth/login-screen'
@@ -403,10 +404,10 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
 
   if (status === 'error') {
     return (
-      <div style={centerStyles}>
-        <p style={{ color: 'var(--destructive)' }}>Failed to start compute pod: {error}</p>
-        <button onClick={handleRetry}>Retry</button>
-      </div>
+      <Prim.Box style={centerStyles}>
+        <Prim.Text as="p" color="var(--destructive)">Failed to start compute pod: {error}</Prim.Text>
+        <Prim.Pressable onClick={handleRetry}>Retry</Prim.Pressable>
+      </Prim.Box>
     )
   }
 
@@ -420,23 +421,23 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
 
   if (status === 'upgrade-available') {
     return (
-      <div style={centerStyles}>
-        <div style={upgradeCardStyles.card}>
-          <p style={upgradeCardStyles.heading}>New version available</p>
-          <p style={upgradeCardStyles.sub}>
+      <Prim.Box style={centerStyles}>
+        <Prim.Box style={upgradeCardStyles.card}>
+          <Prim.Text as="p" style={upgradeCardStyles.heading}>New version available</Prim.Text>
+          <Prim.Text as="p" style={upgradeCardStyles.sub}>
             Your compute pod is running an older version. Upgrade now to get the
             latest features and fixes — this briefly restarts your pod.
-          </p>
-          <div style={upgradeCardStyles.actions}>
-            <button onClick={() => { void handleUpgrade() }} style={upgradeCardStyles.btnPrimary}>
+          </Prim.Text>
+          <Prim.Box style={upgradeCardStyles.actions}>
+            <Prim.Pressable onClick={() => { void handleUpgrade() }} style={upgradeCardStyles.btnPrimary}>
               Upgrade
-            </button>
-            <button onClick={handleContinueWithoutUpgrading} style={upgradeCardStyles.btn}>
+            </Prim.Pressable>
+            <Prim.Pressable onClick={handleContinueWithoutUpgrading} style={upgradeCardStyles.btn}>
               Continue without upgrading
-            </button>
-          </div>
-        </div>
-      </div>
+            </Prim.Pressable>
+          </Prim.Box>
+        </Prim.Box>
+      </Prim.Box>
     )
   }
 
@@ -444,22 +445,22 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     <>
       {children}
       {bannerTag && (
-        <div style={upgradeBannerStyles.bar} role="status">
-          <span style={upgradeBannerStyles.text}>
+        <Prim.Box style={upgradeBannerStyles.bar} role="status">
+          <Prim.Text style={upgradeBannerStyles.text}>
             A new version of your compute pod is available.
-          </span>
-          <div style={upgradeBannerStyles.actions}>
-            <button
+          </Prim.Text>
+          <Prim.Box style={upgradeBannerStyles.actions}>
+            <Prim.Pressable
               onClick={() => { void handleUpgrade(bannerTag) }}
               style={upgradeBannerStyles.btnPrimary}
             >
               Upgrade
-            </button>
-            <button onClick={handleDismissBanner} style={upgradeBannerStyles.btn}>
+            </Prim.Pressable>
+            <Prim.Pressable onClick={handleDismissBanner} style={upgradeBannerStyles.btn}>
               Dismiss
-            </button>
-          </div>
-        </div>
+            </Prim.Pressable>
+          </Prim.Box>
+        </Prim.Box>
       )}
     </>
   )

@@ -47,9 +47,9 @@ function Control({
     case 'multiselect': case 'checkboxgroup': {
       const arr = Array.isArray(value) ? value : [];
       return (
-        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Prim.Box display="flex" flexDirection="column" gap={2}>
           {field.options?.map((o, i) => (
-            <Prim.Text as="label" key={i} style={{ display: 'flex', gap: 6, cursor: 'pointer' }}>
+            <Prim.Text as="label" key={i} display="flex" gap={6} cursor="pointer">
               <Prim.TextField type="checkbox" checked={arr.includes(o.value)} onChange={(e) => onChange(e.target.checked ? [...arr, o.value] : arr.filter((v) => v !== o.value))} />
               <Prim.Text>{o.label}</Prim.Text>
             </Prim.Text>
@@ -59,9 +59,9 @@ function Control({
     }
     case 'radio':
       return (
-        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Prim.Box display="flex" flexDirection="column" gap={2}>
           {field.options?.map((o, i) => (
-            <Prim.Text as="label" key={i} style={{ display: 'flex', gap: 6, cursor: 'pointer' }}>
+            <Prim.Text as="label" key={i} display="flex" gap={6} cursor="pointer">
               <Prim.TextField type="radio" name={field.name} checked={value === o.value} onChange={() => onChange(o.value)} />
               <Prim.Text>{o.label}</Prim.Text>
             </Prim.Text>
@@ -71,16 +71,16 @@ function Control({
     case 'checkbox': case 'switch':
       return <Prim.TextField type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />;
     case 'slider':
-      return <Prim.TextField type="range" style={{ width: '100%' }} min={field.min ?? 0} max={field.max ?? 100} step={field.step ?? 1} value={Number(value ?? 0)} onChange={(e) => onChange(Number(e.target.value))} />;
+      return <Prim.TextField type="range" width="100%" min={field.min ?? 0} max={field.max ?? 100} step={field.step ?? 1} value={Number(value ?? 0)} onChange={(e) => onChange(Number(e.target.value))} />;
     case 'number': case 'stepper': case 'currency':
       return <Prim.TextField type="number" style={inputStyle} min={field.min} max={field.max} step={field.step} value={value === undefined || value === '' ? '' : Number(value)} onKeyDown={onKey} onChange={(e) => onChange(e.target.value)} />;
     case 'rating': {
       const max = field.max ?? 5;
       const cur = Number(value ?? 0);
       return (
-        <Prim.Box style={{ display: 'flex', gap: 2 }}>
+        <Prim.Box display="flex" gap={2}>
           {Array.from({ length: max }, (_, i) => (
-            <Prim.Pressable key={i} onClick={() => onChange(i + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: i < cur ? 'var(--lm-amber)' : 'var(--lm-muted)', fontSize: 16 }}>★</Prim.Pressable>
+            <Prim.Pressable key={i} onClick={() => onChange(i + 1)} backgroundColor="none" borderWidth={0} cursor="pointer" color={i < cur ? 'var(--lm-amber)' : 'var(--lm-muted)'} fontSize={16}>★</Prim.Pressable>
           ))}
         </Prim.Box>
       );
@@ -140,27 +140,27 @@ export function CatalogForm({
   if (spec.single && only && (only.kind === 'confirm' || only.kind === 'buttongroup')) {
     if (only.kind === 'confirm') {
       return (
-        <Prim.Box style={{ display: 'flex', gap: 8 }}>
+        <Prim.Box display="flex" gap={8}>
           <Prim.Pressable style={btnStyle(true)} onClick={() => onSubmit(true)}>Yes</Prim.Pressable>
           <Prim.Pressable style={btnStyle(false)} onClick={() => onSubmit(false)}>No</Prim.Pressable>
         </Prim.Box>
       );
     }
     return (
-      <Prim.Box style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <Prim.Box display="flex" gap={8} flexWrap="wrap">
         {only.options?.map((o, i) => <Prim.Pressable key={i} style={btnStyle(i === 0)} onClick={() => onSubmit(o.value)}>{o.label}</Prim.Pressable>)}
       </Prim.Box>
     );
   }
 
   return (
-    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <Prim.Box display="flex" flexDirection="column" gap={8}>
       {spec.fields.map((f) => (
-        <Prim.Text as="label" key={f.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {f.label ? <Prim.Text style={{ fontSize: 12, color: 'var(--lm-text)' }}>{f.label}</Prim.Text> : null}
+        <Prim.Text as="label" key={f.name} display="flex" flexDirection="column" gap={2}>
+          {f.label ? <Prim.Text fontSize={12} color="var(--lm-text)">{f.label}</Prim.Text> : null}
           <Control field={f} value={values[f.name]} onChange={(v) => set(f.name, v)} onEnter={submit} />
-          {f.help ? <Prim.Text style={{ fontSize: 10, color: 'var(--lm-muted)' }}>{f.help}</Prim.Text> : null}
-          {f.error ? <Prim.Text style={{ fontSize: 10, color: 'var(--lm-red)' }}>{f.error}</Prim.Text> : null}
+          {f.help ? <Prim.Text fontSize={10} color="var(--lm-muted)">{f.help}</Prim.Text> : null}
+          {f.error ? <Prim.Text fontSize={10} color="var(--lm-red)">{f.error}</Prim.Text> : null}
         </Prim.Text>
       ))}
       <Prim.Pressable style={{ ...btnStyle(true), alignSelf: 'flex-start' }} onClick={submit}>{spec.submitLabel}</Prim.Pressable>

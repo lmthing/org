@@ -142,7 +142,7 @@ export function Models() {
       : [{ code: current, label: current }, ...KNOWN_ALIASES]
 
   return (
-    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <Prim.Box display="flex" flexDirection="column" gap="0.75rem">
       <Caption muted>
         Pick which model powers each size tier. Agents and the CLI request a size (e.g. Medium) and
         the pod resolves it to the model you set here.
@@ -154,12 +154,12 @@ export function Models() {
         </Prim.DataList>
       )}
 
-      <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <Prim.Box display="flex" flexDirection="column" gap="0.5rem">
         {rows.length === 0 && <Caption muted>No models configured yet.</Caption>}
         {rows.map((r, i) => (
           <Prim.Box
             key={i}
-            style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}
+            display="flex" flexWrap="wrap" gap="0.5rem" alignItems="center"
           >
             <Select
               value={r.alias}
@@ -185,7 +185,7 @@ export function Models() {
         </Prim.Box>
       </Prim.Box>
 
-      <Prim.Box style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+      <Prim.Box display="flex" flexWrap="wrap" gap="0.5rem" alignItems="center">
         <Caption muted>Default size</Caption>
         <Select
           value={defaultAlias}

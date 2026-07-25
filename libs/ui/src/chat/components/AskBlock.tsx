@@ -34,17 +34,17 @@ interface TextFieldProps {
 
 function TextField({ label, placeholder, required, onChange }: TextFieldProps): React.ReactElement {
   return (
-    <Prim.Box style={{ marginBottom: 8 }}>
-      <Prim.Text as="label" style={{ display: 'block', marginBottom: 4 }}>
+    <Prim.Box marginBottom={8}>
+      <Prim.Text as="label" display="block" marginBottom={4}>
         {label}
-        {required && <Prim.Text style={{ color: 'red' }}> *</Prim.Text>}
+        {required && <Prim.Text color="red"> *</Prim.Text>}
       </Prim.Text>
       <Prim.TextField
         type="text"
         placeholder={placeholder}
         required={required}
         onChange={(e) => onChange(e.target.value)}
-        style={{ width: '100%', padding: '4px 8px' }}
+        width="100%" paddingVertical="4px" paddingHorizontal="8px"
       />
     </Prim.Box>
   );
@@ -58,9 +58,9 @@ interface SelectFieldProps {
 
 function SelectField({ label, options, onChange }: SelectFieldProps): React.ReactElement {
   return (
-    <Prim.Box style={{ marginBottom: 8 }}>
-      <Prim.Text as="label" style={{ display: 'block', marginBottom: 4 }}>{label}</Prim.Text>
-      <Prim.Select onChange={(e) => onChange(e.target.value)} style={{ width: '100%', padding: '4px 8px' }}>
+    <Prim.Box marginBottom={8}>
+      <Prim.Text as="label" display="block" marginBottom={4}>{label}</Prim.Text>
+      <Prim.Select onChange={(e) => onChange(e.target.value)} width="100%" paddingVertical="4px" paddingHorizontal="8px">
         {options.map((opt) => (
           <Prim.Option key={opt.value} value={opt.value}>
             {opt.label}
@@ -78,7 +78,7 @@ interface CheckboxFieldProps {
 
 function CheckboxField({ label, onChange }: CheckboxFieldProps): React.ReactElement {
   return (
-    <Prim.Box style={{ marginBottom: 8 }}>
+    <Prim.Box marginBottom={8}>
       <Prim.Text as="label">
         <Prim.TextField type="checkbox" onChange={(e) => onChange(e.target.checked)} />
         {' '}{label}
@@ -169,10 +169,10 @@ export function AskBlock({ id, descriptor, onSubmit, onCancel }: AskBlockProps):
             type="text"
             onChange={(e) => setFormData({ value: e.target.value })}
             placeholder="Enter value..."
-            style={{ width: '100%', padding: '4px 8px' }}
+            width="100%" paddingVertical="4px" paddingHorizontal="8px"
           />
-          <Prim.Pressable type="submit" style={{ marginTop: 8 }}>Submit</Prim.Pressable>
-          <Prim.Pressable type="button" onClick={() => onCancel(id)} style={{ marginTop: 8, marginLeft: 8 }}>
+          <Prim.Pressable type="submit" marginTop={8}>Submit</Prim.Pressable>
+          <Prim.Pressable type="button" onClick={() => onCancel(id)} marginTop={8} marginLeft={8}>
             Cancel
           </Prim.Pressable>
         </Prim.Form>
@@ -188,12 +188,12 @@ export function AskBlock({ id, descriptor, onSubmit, onCancel }: AskBlockProps):
     .map((child, i) => renderFormField(child, i, formData, setFormData));
 
   return (
-    <Prim.Box style={{ border: '1px solid var(--agent)', borderRadius: 4, padding: 16 }}>
-      {title && <Prim.Text as="h3" style={{ marginTop: 0 }}>{title}</Prim.Text>}
+    <Prim.Box borderWidth="1px" borderStyle="solid" borderColor="var(--agent)" borderRadius={4} padding={16}>
+      {title && <Prim.Text as="h3" marginTop={0}>{title}</Prim.Text>}
       <Prim.Form onSubmit={handleSubmit}>
         {formFields}
-        <Prim.Box style={{ marginTop: 12 }}>
-          <Prim.Pressable type="submit" style={{ marginRight: 8 }}>Submit</Prim.Pressable>
+        <Prim.Box marginTop={12}>
+          <Prim.Pressable type="submit" marginRight={8}>Submit</Prim.Pressable>
           <Prim.Pressable type="button" onClick={() => onCancel(id)}>Cancel</Prim.Pressable>
         </Prim.Box>
       </Prim.Form>

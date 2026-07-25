@@ -110,23 +110,16 @@ function FieldDetailPage() {
 
   if (!field) {
     return (
-      <Prim.Box style={{ padding: '2rem' }}>
+      <Prim.Box padding="2rem">
         <Caption muted>Invalid field ID: {fieldId}</Caption>
       </Prim.Box>
     )
   }
 
   return (
-    <Prim.Box style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <Prim.Box display="flex" flexDirection="column" height="100%" overflow="hidden">
       {/* Header */}
-      <Prim.Box as="header" style={{
-        padding: '0.75rem 1rem',
-        borderBottom: '1px solid var(--color-border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexShrink: 0,
-      }}>
+      <Prim.Box as="header" paddingVertical="0.75rem" paddingHorizontal="1rem" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--color-border)" display="flex" alignItems="center" justifyContent="space-between" flexShrink={0}>
         <Stack row style={{ alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
           <Button
             variant="ghost"
@@ -135,7 +128,7 @@ function FieldDetailPage() {
           >
             <ArrowLeft style={{ width: '1rem', height: '1rem' }} />
           </Button>
-          <Prim.Box style={{ minWidth: 0 }}>
+          <Prim.Box minWidth={0}>
             <Heading level={3} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {field}
             </Heading>
@@ -151,17 +144,10 @@ function FieldDetailPage() {
         </Button>
       </Prim.Box>
 
-      <Prim.Box style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <Prim.Box display="flex" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden">
         {/* Left pane: options list */}
-        <Prim.Box as="aside" style={{
-          width: '16rem',
-          flexShrink: 0,
-          borderRight: '1px solid var(--color-border)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}>
-          <Prim.Box style={{ flex: 1, overflow: 'auto', padding: '0.5rem 0' }}>
+        <Prim.Box as="aside" width="16rem" flexShrink={0} borderRightWidth="1px" borderRightStyle="solid" borderRightColor="var(--color-border)" display="flex" flexDirection="column" overflow="hidden">
+          <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflow="auto" paddingVertical="0.5rem" paddingHorizontal="0">
             {/* Field index entry */}
             <Prim.Box
               {...FIELD_TREE_NODE}
@@ -172,7 +158,7 @@ function FieldDetailPage() {
               onClick={selectFieldIndex}
             >
               <BookOpen style={{ width: '0.875rem', height: '0.875rem', flexShrink: 0 }} />
-              <Prim.Text style={{ fontSize: '0.8125rem' }}>index.md</Prim.Text>
+              <Prim.Text fontSize="0.8125rem">index.md</Prim.Text>
             </Prim.Box>
 
             {/* Option entries */}
@@ -190,7 +176,7 @@ function FieldDetailPage() {
                   onClick={() => selectOption(path)}
                 >
                   <FileText style={{ width: '0.875rem', height: '0.875rem', flexShrink: 0 }} />
-                  <Prim.Text style={{ fontSize: '0.8125rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slug}</Prim.Text>
+                  <Prim.Text fontSize="0.8125rem" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{slug}</Prim.Text>
                   <Stack row style={{ gap: '0.125rem', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                     <Button
                       variant="ghost"
@@ -215,7 +201,7 @@ function FieldDetailPage() {
 
             {/* New option inline form */}
             {showNewOption && (
-              <Prim.Box style={{ padding: '0.5rem 1rem' }}>
+              <Prim.Box paddingVertical="0.5rem" paddingHorizontal="1rem">
                 <Input
                   type="text"
                   value={newOptionSlug}
@@ -240,7 +226,7 @@ function FieldDetailPage() {
             )}
 
             {optionPaths.length === 0 && !showNewOption && (
-              <Prim.Box style={{ padding: '1rem', textAlign: 'center' }}>
+              <Prim.Box padding="1rem" textAlign="center">
                 <Caption muted>No options yet.</Caption>
               </Prim.Box>
             )}
@@ -248,13 +234,13 @@ function FieldDetailPage() {
         </Prim.Box>
 
         {/* Main content area */}
-        <Prim.Box as="main" style={{ flex: 1, overflow: 'auto', display: 'flex' }}>
+        <Prim.Box as="main" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="auto" display="flex">
           {panelType === 'field-index' && !selectedPath ? (
-            <Prim.Box style={{ flex: 1, padding: '1.5rem', overflow: 'auto' }}>
+            <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" padding="1.5rem" overflow="auto">
               <FieldIndexPanel domain={domain} field={field} />
             </Prim.Box>
           ) : panelType === 'option' && selectedPath ? (
-            <Prim.Box style={{ padding: '1.5rem', flex: 1 }}>
+            <Prim.Box padding="1.5rem" flexGrow={1} flexShrink={1} flexBasis="0%">
               <TopicEditor
                 ref={topicEditorRef}
                 topicPath={selectedPath}

@@ -143,7 +143,7 @@ export function WorkspaceBackup() {
   }
 
   return (
-    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <Prim.Box display="flex" flexDirection="column" gap="0.5rem">
       <Caption muted>
         Back up your pod workspace to a GitHub repository you own. Secrets, sessions and
         conversations are never included.
@@ -156,7 +156,7 @@ export function WorkspaceBackup() {
       ) : !cfg?.configured ? (
         <Caption muted>GitHub backup is not enabled on this server.</Caption>
       ) : !cfg.connected ? (
-        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <Prim.Box display="flex" flexDirection="column" gap="0.5rem">
           <Caption muted>
             Connecting installs the backup App on your GitHub account. Next you'll point it at
             an empty private repo you own — nothing is pushed until you choose one and save.
@@ -171,8 +171,8 @@ export function WorkspaceBackup() {
           </Button>
         </Prim.Box>
       ) : (
-        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        <Prim.Box display="flex" flexDirection="column" gap="0.75rem">
+          <Prim.Box display="flex" flexDirection="column" gap="0.35rem">
             <Caption>Point backups at an empty repo you own:</Caption>
             <Caption muted>
               1.{' '}
@@ -201,7 +201,7 @@ export function WorkspaceBackup() {
             <Caption muted>3. Enter it below as owner/name and save.</Caption>
           </Prim.Box>
 
-          <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <Prim.Box display="flex" flexDirection="column" gap="0.25rem">
             <Caption muted>Repository (owner/name)</Caption>
             <Input
               value={repo}
@@ -215,13 +215,13 @@ export function WorkspaceBackup() {
             </Caption>
           </Prim.Box>
 
-          <Prim.Text as="label" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <Prim.Text as="label" display="flex" gap="0.5rem" alignItems="center">
             <Prim.TextField type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
             <Caption>Automatic backup</Caption>
           </Prim.Text>
 
           {auto && (
-            <Prim.Box style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <Prim.Box display="flex" gap="0.5rem" alignItems="center">
               <Caption muted>Every</Caption>
               <Input
                 type="number"
@@ -235,7 +235,7 @@ export function WorkspaceBackup() {
             </Prim.Box>
           )}
 
-          <Prim.Box style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <Prim.Box display="flex" gap="0.5rem" flexWrap="wrap">
             <Button variant="primary" size="sm" onClick={save} disabled={saving}>
               {saving ? 'Saving…' : 'Save'}
             </Button>

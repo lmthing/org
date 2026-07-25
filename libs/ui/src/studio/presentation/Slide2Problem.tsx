@@ -21,7 +21,7 @@ export default function Slide2Problem() {
   return (
     <Prim.Col
       height="100%" width="100%"
-      style={{ background: colors.bgSection, padding: '3rem 4rem 3rem' }}
+      backgroundColor="colors.bgSection" paddingTop="3rem" paddingHorizontal="4rem" paddingBottom="3rem"
     >
       {/* Slide title — top-left */}
       {/* <h2 style={{ color: colors.text, fontSize: '4.5rem', fontWeight: 700, margin: 0, lineHeight: 1.1 }}>
@@ -29,60 +29,42 @@ export default function Slide2Problem() {
       </h2> */}
 
       {/* Three sections — each gets equal flex so they own 1/3 of remaining height */}
-      <Prim.Box style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingTop: '2rem' }}>
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" display="flex" flexDirection="column" paddingTop="2rem">
         {/* Top — The Opportunity */}
-        <Prim.Box style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.75rem' }}>
+        <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" display="flex" flexDirection="column" alignItems="center" justifyContent="center" gap="1.75rem">
           <Prim.Box
             fontWeight="$bold" textTransform="uppercase"
-            style={{ color: colors.brand, fontSize: '2rem', letterSpacing: '0.15em' }}
+            color={colors.brand} fontSize="2rem" letterSpacing="0.15em"
           >
             The Problem
           </Prim.Box>
 
           {/* Flow diagram */}
-          <Prim.Row alignItems="center" style={{ gap: '1.5rem' }}>
+          <Prim.Row alignItems="center" gap="1.5rem">
             <Prim.Box
               borderRadius="$radius-full" borderWidth={1}
-              style={{
-                background: colors.bgCard,
-                borderColor: colors.cardBorder,
-                color: colors.text,
-                fontSize: '1.4rem',
-                padding: '0.85rem 1.75rem',
-              }}
+              backgroundColor="colors.bgCard" borderColor={colors.cardBorder} color={colors.text} fontSize="1.4rem" paddingVertical="0.85rem" paddingHorizontal="1.75rem"
             >
               Domain Expert
             </Prim.Box>
             <Arrow />
             <Prim.Box
               borderRadius="$radius-full" borderWidth={2}
-              style={{
-                background: colors.bgCard,
-                borderColor: colors.brand,
-                color: colors.text,
-                fontSize: '1.4rem',
-                padding: '0.85rem 1.75rem',
-              }}
+              backgroundColor="colors.bgCard" borderColor={colors.brand} color={colors.text} fontSize="1.4rem" paddingVertical="0.85rem" paddingHorizontal="1.75rem"
             >
               🧱 Engineering Wall
             </Prim.Box>
             <Arrow />
             <Prim.Box
               borderRadius="$radius-full" borderWidth={1}
-              style={{
-                background: colors.bgCard,
-                borderColor: colors.cardBorder,
-                color: colors.text,
-                fontSize: '1.4rem',
-                padding: '0.85rem 1.75rem',
-              }}
+              backgroundColor="colors.bgCard" borderColor={colors.cardBorder} color={colors.text} fontSize="1.4rem" paddingVertical="0.85rem" paddingHorizontal="1.75rem"
             >
               ❌ Can't Build
             </Prim.Box>
           </Prim.Row>
 
           {/* Chips */}
-          <Prim.Row  style={{ gap: '1rem' }}>
+          <Prim.Row  gap="1rem">
             {chips.map((chip) => (
               <Prim.Box
                 key={chip}
@@ -106,38 +88,31 @@ export default function Slide2Problem() {
 
         {/* Center — Dividing Statement (hero line) */}
         <Prim.Box
-          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontWeight: 700, fontSize: '4rem', lineHeight: 1.15, color: colors.text }}
+          flexGrow={1} flexShrink={1} flexBasis="0%" display="flex" alignItems="center" justifyContent="center" textAlign="center" fontWeight={700} fontSize="4rem" lineHeight={1.15} color={colors.text}
         >
           The knowledge exists. The tools don't.
         </Prim.Box>
 
         {/* Bottom — The Wall */}
-        <Prim.Box style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+        <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" display="flex" flexDirection="column" alignItems="center" justifyContent="center" gap="1.5rem">
           <Prim.Box
             fontWeight="$bold" textTransform="uppercase"
-            style={{ color: colors.brand, fontSize: '2rem', letterSpacing: '0.15em' }}
+            color={colors.brand} fontSize="2rem" letterSpacing="0.15em"
           >
             The Opportunity
           </Prim.Box>
-          <Prim.Col alignItems="center" style={{ gap: '1.1rem' }}>
+          <Prim.Col alignItems="center" gap="1.1rem">
             {domains.map((row, ri) => (
               <Prim.Row
                 key={ri}
                 
-                style={{ gap: '1.1rem' }}
+                gap="1.1rem"
               >
                 {row.map((label) => (
                   <Prim.Box
                     key={label}
                     borderRadius="$radius-full" borderWidth={1}
-                    style={{
-                      background: colors.bgCard,
-                      borderColor: colors.cardBorder,
-                      color: colors.text,
-                      fontSize: '1.3rem',
-                      fontWeight: 400,
-                      padding: '0.6rem 1.5rem',
-                    }}
+                    backgroundColor="colors.bgCard" borderColor={colors.cardBorder} color={colors.text} fontSize="1.3rem" fontWeight={400} paddingVertical="0.6rem" paddingHorizontal="1.5rem"
                   >
                     {label}
                   </Prim.Box>

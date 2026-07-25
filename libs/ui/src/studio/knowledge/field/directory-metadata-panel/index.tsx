@@ -157,7 +157,7 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
 
         <Prim.Box>
           <Label compact>Required</Label>
-          <Prim.Text as="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+          <Prim.Text as="label" display="flex" alignItems="center" gap="0.5rem" cursor="pointer">
             <Prim.TextField
               type="checkbox"
               checked={required}

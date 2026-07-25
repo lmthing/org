@@ -6,32 +6,32 @@ export default function Slide1Cover() {
   return (
     <Prim.Col
       height="100%" width="100%" justifyContent="center" alignItems="center"
-      style={{ background: colors.bg }}
+      backgroundColor="colors.bg"
     >
       {/* Hackathon badge */}
       <Prim.Text
         borderRadius="$radius-full" borderWidth={2} paddingHorizontal="$5" paddingVertical="$1.5" fontSize="$sm" fontWeight="$semibold" letterSpacing="$wide" marginBottom="2.5rem"
-        style={{ borderColor: colors.brand, color: colors.brand }}
+        borderColor={colors.brand} color={colors.brand}
       >
         AI Hackathon
       </Prim.Text>
 
       {/* Headline */}
-      <Prim.Text as="h1" textAlign="center" fontSize="$6xl" fontWeight="$bold" lineHeight={1.25} letterSpacing="$tight" $sm={{ fontSize: "$7xl" }} style={{ color: colors.text }}>
+      <Prim.Text as="h1" textAlign="center" fontSize="$6xl" fontWeight="$bold" lineHeight={1.25} letterSpacing="$tight" $sm={{ fontSize: "$7xl" }} color={colors.text}>
         Your Knowledge. Your AI.
         <Prim.Br />
         Your Rules.
       </Prim.Text>
 
       {/* Subtitle */}
-      <Prim.Text as="p" textAlign="center" fontSize="$xl" marginTop="1.5rem" style={{ color: colors.textSecondary }}>
+      <Prim.Text as="p" textAlign="center" fontSize="$xl" marginTop="1.5rem" color={colors.textSecondary}>
         A no-code platform to turn domain expertise into specialized AI agents
       </Prim.Text>
 
       {/* Product tag */}
-      <Prim.Row marginTop="$16" gap="$2" fontSize="$lg" alignItems="center" style={{ lineHeight: '1.75rem' }}>
-        <Prim.Text fontWeight="$bold" style={{ color: colors.brand }}>Matilda</Prim.Text>
-        <Prim.Text style={{ color: colors.muted }}>powered by</Prim.Text>
+      <Prim.Row marginTop="$16" gap="$2" fontSize="$lg" alignItems="center" lineHeight="1.75rem">
+        <Prim.Text fontWeight="$bold" color={colors.brand}>Matilda</Prim.Text>
+        <Prim.Text color={colors.muted}>powered by</Prim.Text>
         <Prim.Text fontSize="$lg" fontWeight="$bold">
           lm<CozyThingText text="thing" fontSize="$lg" fontWeight="$bold" />
         </Prim.Text>

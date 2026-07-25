@@ -131,11 +131,11 @@ export function ReplChatView({
   return (
     <Prim.Box style={{ ...styles.container, ...style }} className={className}>
       <Prim.Box style={styles.statusBar}>
-        <Prim.Text style={{ color: isConnected ? 'var(--success)' : 'var(--destructive)', fontSize: 12 }}>
+        <Prim.Text color={isConnected ? 'var(--success)' : 'var(--destructive)'} fontSize={12}>
           {isConnected ? '● Connected' : '○ Connecting…'}
         </Prim.Text>
         {isDone && (
-          <Prim.Text style={{ marginLeft: 12, color: 'var(--muted-foreground)', fontSize: 12 }}>Done</Prim.Text>
+          <Prim.Text marginLeft={12} color="var(--muted-foreground)" fontSize={12}>Done</Prim.Text>
         )}
         {onRestart && (
           <Prim.Pressable
@@ -159,7 +159,7 @@ export function ReplChatView({
           <Prim.Box style={styles.activityHeader}>
             <Prim.Text style={styles.activityPulse}>●</Prim.Text>
             <Prim.Text>working…</Prim.Text>
-            <Prim.Text style={{ opacity: 0.6 }}>{activeWork.length} active</Prim.Text>
+            <Prim.Text opacity={0.6}>{activeWork.length} active</Prim.Text>
           </Prim.Box>
           <Prim.Box style={styles.activityList}>
             {activeWork.map((n) => (

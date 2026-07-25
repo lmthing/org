@@ -189,7 +189,7 @@ export function Text(props: TextProps): React.ReactElement {
 // ─── layout helpers ───────────────────────────────────────────────────────────
 
 export function Spacer(): React.ReactElement {
-  return <Prim.Box style={{ flexGrow: 1 }} />;
+  return <Prim.Box flexGrow={1} />;
 }
 
 export function Newline({ count = 1 }: { count?: number }): React.ReactElement {

@@ -88,9 +88,9 @@ export function EnvVars() {
   if (loading) return <Caption muted>Loading...</Caption>
 
   return (
-    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <Prim.Box display="flex" flexDirection="column" gap="0.5rem">
       {Object.entries(vars).map(([k, v]) => (
-        <Prim.Box key={k} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+        <Prim.Box key={k} display="flex" flexWrap="wrap" gap="0.5rem" alignItems="center">
           <Input value={k} readOnly style={{ flex: '1 1 8rem', minWidth: '6rem', fontFamily: 'monospace' }} />
           <Input
             value={v}
@@ -100,7 +100,7 @@ export function EnvVars() {
           <Button variant="ghost" size="sm" onClick={() => removeVar(k)}>Remove</Button>
         </Prim.Box>
       ))}
-      <Prim.Box style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+      <Prim.Box display="flex" flexWrap="wrap" gap="0.5rem" alignItems="center">
         <Input
           placeholder="KEY"
           value={newKey}

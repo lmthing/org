@@ -14,7 +14,7 @@ const techniques = ['RAG', 'Structured Prompt Engineering', 'Multi-Agent Orchest
 
 function Arrow() {
   return (
-    <Prim.Row paddingHorizontal="$5" alignItems="center" style={{ height: 76 }}>
+    <Prim.Row paddingHorizontal="$5" alignItems="center" height={76}>
       <Prim.Svg
         width="38"
         height="38"
@@ -35,23 +35,23 @@ export default function Slide4Technology() {
   return (
     <Prim.Col
       position="relative" height="100%" width="100%" justifyContent="center" alignItems="center"
-      style={{ background: colors.bg, padding: '60px 80px 56px' }}
+      backgroundColor="colors.bg" paddingTop="60px" paddingHorizontal="80px" paddingBottom="56px"
     >
       {/* TOP: headline */}
       <Prim.Col marginBottom="$16" alignItems="center">
         <Prim.Box
           fontSize="$xl" fontWeight="$bold" textTransform="uppercase" letterSpacing="0.16em" marginBottom="1.25rem"
-          style={{ color: colors.brand }}
+          color={colors.brand}
         >
           How it works
         </Prim.Box>
         <Prim.Text as="h1"
           textAlign="center" fontSize="$6xl" fontWeight="$extrabold" lineHeight="1.3"
-          style={{ color: colors.text, letterSpacing: '-0.025em' }}
+          color={colors.text} letterSpacing="-0.025em"
         >
           <CozyThingText text="THING" fontSize="$6xl" fontWeight="$extrabold" lineHeight="1.3" /> turns your knowledge into agents
           <Prim.Br />
-          that <Prim.Text as="em" fontStyle="normal" style={{ color: colors.brand }}>actually know your domain.</Prim.Text>
+          that <Prim.Text as="em" fontStyle="normal" color={colors.brand}>actually know your domain.</Prim.Text>
         </Prim.Text>
       </Prim.Col>
 
@@ -112,7 +112,7 @@ export default function Slide4Technology() {
       </Prim.Row>
 
       {/* Divider */}
-      <Prim.Box height="$px" width="100%" marginBottom="2.25rem" style={{ background: colors.cardBorder }} />
+      <Prim.Box height="$px" width="100%" marginBottom="2.25rem" backgroundColor="colors.cardBorder" />
 
       {/* BOTTOM: technique badges */}
       <Prim.Row gap="$5" alignItems="center">
@@ -120,7 +120,7 @@ export default function Slide4Technology() {
           <Prim.Text
             key={t}
             borderRadius="$radius-full" borderWidth={2} backgroundColor="$card" paddingHorizontal="$7" paddingVertical="$3.5" fontSize="$lg" fontWeight="$semibold"
-            style={{ borderColor: colors.brand, color: colors.text }}
+            borderColor={colors.brand} color={colors.text}
           >
             {t}
           </Prim.Text>

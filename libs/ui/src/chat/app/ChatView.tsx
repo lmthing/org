@@ -187,7 +187,7 @@ export function ChatView({
               activities are shown by the LiveActivity/WorkBlock panel, not here. */}
           {activity && (
             <Prim.Row
-              marginTop="$0.5" gap="$1.5" fontSize="$xs" color="$muted-foreground" alignItems="center" minWidth={0} style={{ lineHeight: '1rem' }}
+              marginTop="$0.5" gap="$1.5" fontSize="$xs" color="$muted-foreground" alignItems="center" minWidth={0} lineHeight="1rem"
               aria-live="polite"
               data-testid="activity"
               title={activity}

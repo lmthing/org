@@ -47,12 +47,12 @@ export function PinGate({ children }: { children: React.ReactNode }) {
         </Prim.Box>
 
         {error && (
-          <Prim.Text as="p" style={{ color: 'var(--color-destructive)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+          <Prim.Text as="p" color="var(--color-destructive)" fontSize="0.875rem" marginBottom="1rem">
             {error}
           </Prim.Text>
         )}
 
-        <Prim.Form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+        <Prim.Form onSubmit={handleSubmit} display="flex" flexDirection="column" gap="1rem" width="100%">
           <Prim.TextField
             type="password"
             value={pin}
@@ -61,15 +61,7 @@ export function PinGate({ children }: { children: React.ReactNode }) {
             required
             minLength={4}
             autoFocus
-            style={{
-              padding: '0.5rem 0.75rem',
-              borderRadius: '0.375rem',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-background)',
-              fontSize: '0.875rem',
-              textAlign: 'center',
-              letterSpacing: '0.25em',
-            }}
+            paddingVertical="0.5rem" paddingHorizontal="0.75rem" borderRadius="0.375rem" borderWidth="1px" borderStyle="solid" borderColor="var(--color-border)" backgroundColor="var(--color-background)" fontSize="0.875rem" textAlign="center" letterSpacing="0.25em"
           />
           <Button
             type="submit"

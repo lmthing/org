@@ -6,19 +6,19 @@ export default function Slide6DemoVideo() {
   return (
     <Prim.Col
       position="relative" height="100%" width="100%" justifyContent="center" alignItems="center"
-      style={{ background: colors.bg, padding: '48px 72px 52px' }}
+      backgroundColor="colors.bg" paddingTop="48px" paddingHorizontal="72px" paddingBottom="52px"
     >
       {/* TOP */}
       <Prim.Col marginBottom="$8" alignItems="center">
         <Prim.Box
           fontSize="$lg" fontWeight="$bold" textTransform="uppercase" letterSpacing="0.16em" marginBottom="1rem"
-          style={{ color: colors.brand }}
+          color={colors.brand}
         >
           See it in action
         </Prim.Box>
         <Prim.Text as="h1"
           textAlign="center" fontSize="$6xl" fontWeight="$extrabold" lineHeight="1.15"
-          style={{ color: colors.text, letterSpacing: '-0.025em' }}
+          color={colors.text} letterSpacing="-0.025em"
         >
           lm<CozyThingText text="thing" fontSize="$6xl" fontWeight="$extrabold" /> demo
         </Prim.Text>
@@ -43,13 +43,13 @@ export default function Slide6DemoVideo() {
       {/* BOTTOM STRIP */}
       <Prim.Row
         marginTop="$8" gap="$2.5" borderRadius="$radius-full" paddingHorizontal="$8" paddingVertical="$3.5" alignItems="center"
-        style={{ background: colors.bgSection }}
+        backgroundColor="colors.bgSection"
       >
-        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" style={{ background: colors.brand }} />
-        <Prim.Box fontSize="$base" fontWeight="$medium" letterSpacing="$wide" style={{ color: colors.textSecondary }}>
+        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" backgroundColor="colors.brand" />
+        <Prim.Box fontSize="$base" fontWeight="$medium" letterSpacing="$wide" color={colors.textSecondary}>
           Build custom AI agents in minutes, not days
         </Prim.Box>
-        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" style={{ background: colors.brand }} />
+        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" backgroundColor="colors.brand" />
       </Prim.Row>
     </Prim.Col>
   )
