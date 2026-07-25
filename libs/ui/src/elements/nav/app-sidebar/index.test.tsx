@@ -1,14 +1,17 @@
+import { render, screen } from '../../../test-utils/index'
 import { describe, it, expect } from 'vitest'
-import { __styles as S } from './index'
+import { AppSidebar, __styles as S } from './index'
 
 /**
  * The shipped `AppSidebar`. Replaces the deleted `app-sidebar-styled.test.tsx`, which gated a
  * parallel `styled()` copy nothing imported — these assertions are against the bags the shipped
  * component spreads.
  *
- * Value assertions, not a render: the project dropdown pulls in `@lmthing/state`, which resolves a
- * second copy of React under this vitest config, so any hook in the tree throws "Invalid hook
- * call". See docs/tamagui-idiomatic-migration.md §4/§6.
+ * Value assertions against the bags the shipped component spreads — PLUS real renders, which were
+ * impossible until phase 5b. `libs/ui` pinned React 18 while `apps/web`/`state`/`auth` were on 19, so
+ * the project dropdown's `@lmthing/state` import resolved a SECOND copy of React and every hook in
+ * the tree threw "Invalid hook call". Deduping to one React 19 is what unblocked the renders below.
+ * See docs/tamagui-final-steps.md §5b.
  */
 describe('AppSidebar — the translated `.app-sidebar*` rules', () => {
   it('every bag is $-token or a var(), never a raw colour literal', () => {
@@ -64,5 +67,34 @@ describe('AppSidebar — the translated `.app-sidebar*` rules', () => {
   it('the brand mark is the heading face, and the rail variant only tightens leading', () => {
     expect(S.BRAND).toEqual({ fontFamily: '$heading', fontWeight: '$bold', fontSize: '$base' })
     expect(S.RAIL_BRAND).toEqual({ ...S.BRAND, lineHeight: 1 })
+  })
+
+  // ── renders ─────────────────────────────────────────────────────────────────────────────────
+  // The regression guard for the dedupe itself: if a second copy of React ever comes back, these
+  // throw "Invalid hook call" and say so loudly, instead of the component quietly reverting to
+  // being untestable.
+  it('renders the expanded shell with its landmark label', () => {
+    render(<AppSidebar projects={[]} spaces={[]} />)
+    expect(screen.getByLabelText('projects, spaces and conversations')).toBeInTheDocument()
+  })
+
+  it('renders projects and spaces passed to it', () => {
+    render(
+      <AppSidebar
+        projects={[{ id: 'p1', name: 'Alpha' }]}
+        activeProjectId="p1"
+        spaces={[{ id: 's1', name: 'Notes' }]}
+      />,
+    )
+    expect(screen.getByText('Alpha')).toBeInTheDocument()
+    expect(screen.getByText('Notes')).toBeInTheDocument()
+  })
+
+  it('honours the `flexShrink` prop phase 1 introduced', () => {
+    // Three studio surfaces used to pass `className="shrink-0"`; there is no Tailwind after phase 4.
+    const { container } = render(<AppSidebar projects={[]} spaces={[]} flexShrink={0} />)
+    const nav = container.querySelector('nav')
+    expect(nav).toBeTruthy()
+    expect(nav!.className).toBeTruthy()
   })
 })
