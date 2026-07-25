@@ -798,11 +798,27 @@ layers.
     radius never got one, so every native corner was styled with a CSS unit RN cannot resolve.
     *Fixed* — `buildRadiusTokens(web)` in `theme/tamagui.config.ts`, exercised from both branches by
     `tamagui-config.test.ts` and asserted as a resolved number by the harness.
-  - **No Tamagui component exposes a host node on native** — `View`, `styled(View)`, `NativeView`
-    and `Prim.Box` all leave a ref `null`, while a plain RN `View` in the same tree is measurable.
-    *Open*, and it blocks anything needing measurement, imperative focus or `scrollTo` —
-    `.issues/tamagui-primitives-expose-no-native-node-handle.md`. The dropdown fork works around it
-    with a plain `RNView` wrapper; that is a workaround, not the pattern.
+  - **The native forks dropped every Tamagui style prop** — the big one, and the reason a native
+    screen mounted the right TREE with none of its styling. Each fork destructured `style`/`children`
+    and threw the rest away, so `<Box padding="$4" backgroundColor="$background">` — the whole point
+    of both targets being Tamagui — did nothing on native. `nativeSafeProps` had been written for
+    exactly this and was never called from anywhere. *Fixed* — every fork now forwards through it:
+    style props and `$`-tokens reach the view, `role`/`aria-*` become `accessibilityRole`/
+    `accessibilityLabel`/`accessibilityState` (Tamagui's native path translates them), `onClick` maps
+    to `onPress` and `onMouseEnter`/`Leave` to `onHoverIn`/`Out`, while web-only attributes and DOM
+    event handlers are dropped. **This closes the PROPS half of the §1c decision**; what remains is
+    the className half — surfaces still holding Tailwind classes.
+  - **A `$` font size needs a font family to resolve** — Tamagui looks `$sm` up in the scale of the
+    component's font face, so with none set it drops the size SILENTLY and the text renders at the
+    platform default. Web never sees it: `theme.css` puts the family on `.font_body`/`.is_View`.
+    *Fixed* — `NativeText` sets `fontFamily: '$body'`, which `Pre` overrides with `$mono`.
+
+  **One finding was withdrawn.** A ref through any Tamagui component came back `null` while the same
+  ref through a plain RN `View` worked, and that was filed as a product defect. It was not: Tamagui
+  renders `createElement('RCTView', …)` directly, and `react-test-renderer` gives HOST refs `null`
+  unless handed a `createNodeMock` — which RN's own jest preset supplies and this harness did not.
+  The harness now does (`libs/ui/metro/render.tsx`), refs work through `Prim.Box`, and the Dropdown
+  fork dropped the `RNView` wrapper it had grown to work around a problem that was never there.
 
 ---
 

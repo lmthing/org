@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Linking } from 'react-native'
-import { NativeText } from '../_native'
+import { NativeText, nativeSafeProps } from '../_native'
 
 /**
  * Link (native fork). A pressable Tamagui/RN `Text` that opens `href` via `Linking.openURL`.
@@ -13,11 +13,14 @@ export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement>
 // `NativeText` is a `ComponentType<any>`, not a `ForwardRefExoticComponent`, so `ElementRef` cannot
 // be applied to it — there is no element type to extract. The ref is forwarded opaquely.
 const Link = React.forwardRef<unknown, LinkProps>(
-  ({ href, style, children }, ref) => (
+  // `href` is consumed, not forwarded — on native it is the press handler, not an attribute. An
+  // explicit `onPress` from the caller still wins, since it is spread after.
+  ({ href, children, ...props }, ref) => (
     <NativeText
       ref={ref}
-      style={style as never}
+      accessibilityRole="link"
       onPress={href ? () => void Linking.openURL(href) : undefined}
+      {...nativeSafeProps(props)}
     >
       {children}
     </NativeText>

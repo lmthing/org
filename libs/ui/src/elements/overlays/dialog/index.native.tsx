@@ -116,8 +116,8 @@ function DialogClose({ asChild, children, ...props }: { asChild?: boolean; child
 }
 
 /**
- * The dismissing backdrop. `NativeView` rather than `Prim.Box`, because the Box fork forwards only
- * `style`/`children` — a `Prim.Box {...DIALOG_BACKDROP}` would render an unstyled, unpressable view.
+ * The dismissing backdrop. `NativeView` rather than `Prim.Box` because this file needs `onPress` —
+ * see `primitives/_native` for why the public primitives cannot type it inside a `.native.tsx`.
  */
 function DialogOverlay(props: Record<string, unknown>) {
   const { setOpen } = React.useContext(DialogContext)

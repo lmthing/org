@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Modal, Pressable as RNPressable, type GestureResponderEvent } from 'react-native'
+import { Modal, type GestureResponderEvent } from 'react-native'
 import { NativeView } from '../../primitives/_native'
 
 /**
@@ -18,9 +18,9 @@ import { NativeView } from '../../primitives/_native'
  * Two smaller divergences:
  *
  * - **`asChild` wraps instead of merging.** On web it clones the child with `onContextMenu` to avoid
- *   an extra DOM node. There is no handler to merge here (a native fork would drop `onContextMenu`
- *   silently), so the child is wrapped in a pressable either way. The prop is still accepted so call
- *   sites do not fork.
+ *   an extra DOM node. There is no handler to merge here — `onContextMenu` is a DOM event and
+ *   `nativeSafeProps` drops it — so the child is wrapped either way. The prop is still accepted so
+ *   call sites do not fork.
  * - **Dismissal** is a backdrop press or Android back (`onRequestClose`), replacing the web file's
  *   deferred `mousedown`/`keydown` document listeners.
  *
@@ -62,9 +62,9 @@ function Trigger({ asChild: _asChild, children, ...props }: { asChild?: boolean;
     openAt({ x: pageX, y: pageY })
   }
   return (
-    <RNPressable onLongPress={onLongPress} {...props}>
+    <NativeView onLongPress={onLongPress} {...props}>
       {children}
-    </RNPressable>
+    </NativeView>
   )
 }
 
@@ -81,9 +81,13 @@ function Content({ children, style, ...props }: Record<string, unknown> & { chil
         <NativeView
           accessibilityRole="menu"
           {...MENU_BASE}
-          // The touch point, so a Tamagui prop would mint one atomic rule per distinct value —
-          // the same reason the web file keeps these inline.
-          style={{ top: pos.y, left: pos.x, ...style }}
+          // The touch point, as PROPS. The web file keeps these inline because a Tamagui prop mints
+          // one atomic CSS rule per distinct value — an unbounded stylesheet for a menu that can open
+          // anywhere. There is no stylesheet on native: props resolve straight to a style object, so
+          // the reason does not carry over and the idiomatic form wins.
+          top={pos.y}
+          left={pos.x}
+          style={style}
           {...props}
         >
           {children}
@@ -94,13 +98,8 @@ function Content({ children, style, ...props }: Record<string, unknown> & { chil
 }
 
 /**
- * A menu row. `NativeView` rather than `Prim.Pressable`: the Pressable fork forwards only
- * `style`/`children`/`onClick`/`disabled`, so the `menuitem` accessibility role a menu row needs
- * would be dropped on the way through — and its prop type is web-shaped (`ButtonHTMLAttributes`),
- * which has no `accessibilityRole` to pass in the first place.
- *
- * The public prop stays `onClick`, web-shaped, so a call site does not fork; the empty event object
- * mirrors what `primitives/_native#toPressHandler` hands a web handler on this target.
+ * A menu row. The public prop stays `onClick`, web-shaped, so a call site does not fork; the empty
+ * event object mirrors what `primitives/_native#toPressHandler` hands a web handler on this target.
  */
 function Item({ onClick, children, ...props }: Record<string, unknown> & { onClick?: (event: unknown) => void; children?: React.ReactNode }) {
   const { close } = React.useContext(MenuContext)

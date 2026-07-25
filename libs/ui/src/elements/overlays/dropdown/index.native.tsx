@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Modal, View as RNView } from 'react-native'
+import { Modal } from 'react-native'
 import { NativeView } from '../../primitives/_native'
 
 /**
@@ -67,8 +67,14 @@ export const DROPDOWN_ITEM = {
 const DROPDOWN_TRIGGER = { flexDirection: 'row', alignItems: 'center', gap: '$1' } as const
 
 type Anchor = { x: number; y: number; width: number; height: number }
-/** Whatever an `RNView` ref yields — the node the anchor is measured from. */
-type TriggerHandle = React.ComponentRef<typeof RNView>
+/**
+ * The node the anchor is measured from, described by the ONE method this file calls rather than by
+ * an RN class type: a ref through a Tamagui component lands on a host instance (Tamagui renders
+ * `createElement('RCTView', …)` directly), which RN's `View` class type does not describe.
+ */
+type TriggerHandle = {
+  measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void
+}
 type Ctx = {
   open: boolean
   setOpen: (o: boolean) => void
@@ -129,22 +135,21 @@ function DropdownTrigger({ asChild, children, ...props }: { asChild?: boolean; c
     return React.cloneElement(children as React.ReactElement<any>, { onClick: toggle })
   }
   return (
-    // The ref is on a PLAIN RN View, not on the Tamagui one, because **no Tamagui component exposes
-    // a host node on native** — `View`, `styled(View)`, `NativeView` and `Prim.Box` all leave the
-    // ref null, so `measureInWindow` would never be reachable through one
-    // (`.issues/tamagui-primitives-expose-no-native-node-handle.md`). `collapsable={false}` keeps
-    // Android from optimising this wrapper away, which would make it unmeasurable.
-    <RNView ref={triggerRef} collapsable={false}>
-      <NativeView
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        {...DROPDOWN_TRIGGER}
-        onPress={toggle}
-        {...props}
-      >
-        {children}
-      </NativeView>
-    </RNView>
+    // `collapsable={false}` keeps Android from optimising the trigger away as a pure layout view —
+    // a collapsed view has no native node, and `measureInWindow` on it never calls back. The ref
+    // lands on the host node Tamagui renders (`createElement('RCTView', …)`), which is what carries
+    // the measurement methods.
+    <NativeView
+      ref={triggerRef}
+      collapsable={false}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      {...DROPDOWN_TRIGGER}
+      onPress={toggle}
+      {...props}
+    >
+      {children}
+    </NativeView>
   )
 }
 
@@ -157,9 +162,10 @@ function DropdownContent({ children, ...props }: Record<string, unknown> & { chi
         <NativeView
           accessibilityRole="menu"
           {...DROPDOWN_CONTENT}
-          // The measured anchor, so it stays an inline style rather than minting one atomic rule
-          // per position (same reasoning as the context menu's touch point).
-          style={{ top: anchor ? anchor.y + anchor.height : 0, left: anchor ? anchor.x : 0 }}
+          // The measured anchor, as props — see the context menu fork for why these are not inline
+          // styles on this target.
+          top={anchor ? anchor.y + anchor.height : 0}
+          left={anchor ? anchor.x : 0}
           {...props}
         >
           {children}

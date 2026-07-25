@@ -177,3 +177,68 @@ test('IFrame mounts a react-native-webview pointed at src', () => {
   expect(webView).toBeTruthy()
   expect((webView?.props.source as { uri?: string })?.uri).toBe('https://lmthing.org')
 })
+
+// ── the props axis (what `nativeSafeProps` restored) ──────────────────────────────────────────
+
+test('Box forwards Tamagui style props to the native view', () => {
+  const { tree } = render(<Box padding="$4" backgroundColor="$background" borderRadius="$radius-lg" />)
+  const style = styleOf(tree, NATIVE_VIEW)
+  // The whole point of both targets being Tamagui: one prop, styled on each. These forks used to
+  // destructure `style`/`children` only, so a native screen mounted the right tree with NO styling.
+  expect(style.paddingTop).toBe(16)
+  expect(style.paddingLeft).toBe(16)
+  expect(style.borderTopLeftRadius).toBe(8)
+  expect(typeof style.backgroundColor).toBe('string')
+  expect(String(style.backgroundColor).startsWith('var(')).toBe(false)
+})
+
+test('Text forwards typography tokens to the native text', () => {
+  const { tree } = render(<Text fontSize="$sm" fontWeight="$bold">tokens</Text>)
+  const style = styleOf(tree, NATIVE_TEXT)
+  expect(style.fontSize).toBe(14)
+  expect(style.fontWeight).toBe('700')
+})
+
+test('Row/Col style props compose with the fork own flexDirection', () => {
+  const { tree } = render(<Row gap="$2" alignItems="center" />)
+  const style = styleOf(tree, NATIVE_VIEW)
+  expect(style.flexDirection).toBe('row')
+  expect(style.gap).toBe(8)
+  expect(style.alignItems).toBe('center')
+})
+
+test('role and aria-* become native accessibility props', () => {
+  // Tamagui's native path translates these (`createOptimizedView.native.tsx`), so forwarding them
+  // keeps the accessibility the surfaces already write instead of dropping it at the fork.
+  const { tree } = render(<Box role="button" aria-label="save" aria-disabled />)
+  const view = findByType(tree, NATIVE_VIEW)
+  expect(view?.props.accessibilityRole).toBe('button')
+  expect(view?.props.accessibilityLabel).toBe('save')
+  expect(view?.props.accessibilityState).toMatchObject({ disabled: true })
+})
+
+test('web-only attributes and DOM-only handlers never reach the native view', () => {
+  const { tree } = render(
+    <Box
+      className="p-4 flex"
+      onKeyDown={() => {}}
+      onSubmit={() => {}}
+      onContextMenu={() => {}}
+      testID="kept"
+    />,
+  )
+  const props = findByType(tree, NATIVE_VIEW)?.props ?? {}
+  for (const dead of ['className', 'onKeyDown', 'onSubmit', 'onContextMenu']) {
+    expect(`${dead}=${String(dead in props)}`).toBe(`${dead}=false`)
+  }
+  // …while the props RN does understand still arrive.
+  expect(props.testID).toBe('kept')
+})
+
+test('a ref on a primitive yields a measurable native node', () => {
+  // Tamagui renders a host element directly, so this only works because `render()` supplies a
+  // `createNodeMock` — the same thing RN's jest preset does for anything that measures.
+  const handle: { current: { measureInWindow?: unknown } | null } = { current: null }
+  render(<Box ref={handle as never} />)
+  expect(typeof handle.current?.measureInWindow).toBe('function')
+})

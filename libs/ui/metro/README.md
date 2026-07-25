@@ -63,7 +63,7 @@ native views (`RNSVGSvgView` vs `RNSVGSvgViewAndroid`, `RCTSinglelineTextInputVi
 | `render.tsx` | `render`/`find`/`press`/`styleOf` over the RN element tree |
 | `cli.mjs` | the runner + exit code |
 
-## The three things worth knowing before editing this
+## The four things worth knowing before editing this
 
 **Mocks are applied at RESOLUTION, not at module registry.** A Metro bundle contains the real React
 Native, which expects a native host — the first `TurboModuleRegistry` call throws
@@ -83,6 +83,13 @@ tree as `RCTView`, a `Text` as `RCTText`. Use the `NATIVE_*` constants and the m
 responder system, so `onPress` becomes `onStartShouldSetResponder` / `onResponderGrant` /
 `onResponderRelease` on the host element. Asserting on an `onPress` prop tests nothing here — use
 `press(node)`, which drives the real sequence.
+
+**Every Tamagui component is a HOST element, so refs need `createNodeMock`.** Tamagui renders
+`createElement('RCTView', …)` directly, and `react-test-renderer` gives host refs `null` unless it is
+handed a node mock — so without one, a ref through `Prim.Box` looks broken while the same ref through
+a plain RN `View` (which resolves to a mocked class) works. `render()` supplies it, as RN's own jest
+preset does. Pass `render(el, { measureRect })` when a component positions itself from a
+`measureInWindow` result; there is no layout pass, so the rect has to be stated.
 
 ## What this does NOT prove
 
