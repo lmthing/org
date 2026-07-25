@@ -83,7 +83,7 @@ export function ComponentListItem({ name, kind, isActive, onSelect, onDelete, on
           }}
           onBlur={commitRename}
           onClick={e => e.stopPropagation()}
-          style={{ flex: 1 }}
+          flexGrow={1} flexShrink={1} flexBasis={0}
         />
       ) : (
         <Prim.Text fontFamily="monospace" fontSize="$sm">{name}.tsx</Prim.Text>

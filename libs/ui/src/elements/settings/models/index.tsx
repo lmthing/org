@@ -175,7 +175,7 @@ export function Models() {
               placeholder="azure:gpt-5.5"
               list={models.length > 0 ? listId : undefined}
               onChange={e => setRow(i, { spec: e.target.value })}
-              style={{ flex: '2 1 16rem', minWidth: '12rem', fontFamily: 'monospace' }}
+              flexGrow={2} flexShrink={1} flexBasis="16rem" minWidth="12rem" fontFamily="monospace"
             />
             <Button variant="ghost" size="sm" onClick={() => removeRow(i)}>Remove</Button>
           </Prim.Box>

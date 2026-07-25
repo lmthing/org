@@ -41,17 +41,20 @@ export function TextInput({
       onKeyDown={(e) => {
         if (e.key === 'Enter') onSubmit?.(value);
       }}
-      style={{
-        background: 'var(--lm-bg, #0d1117)',
-        color: 'var(--lm-text, #e6edf3)',
-        border: '1px solid var(--lm-border, #30363d)',
-        borderRadius: 6,
-        padding: '4px 8px',
-        font: 'inherit',
-        outline: 'none',
-        flex: 1,
-        minWidth: 0,
-      }}
+      backgroundColor="var(--lm-bg, #0d1117)"
+      color="var(--lm-text, #e6edf3)"
+      borderWidth={1}
+      borderStyle="solid"
+      borderColor="var(--lm-border, #30363d)"
+      borderRadius={6}
+      paddingVertical="4px"
+      paddingHorizontal="8px"
+      outlineWidth={0}
+      outlineStyle="none"
+      flexGrow={1}
+      flexShrink={1}
+      flexBasis={0}
+      minWidth={0}
     />
   );
 }

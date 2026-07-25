@@ -54,7 +54,12 @@ function Content({ className, children, style, ...props }: React.HTMLAttributes<
     <Prim.Box
       role="menu"
       className={cn(className)}
-      style={{ position: 'fixed', top: pos.y, left: pos.x, zIndex: 50, ...style }}
+      position="fixed"
+      zIndex={50}
+      // `top`/`left` stay INLINE on purpose: they are the cursor's coordinates, and a Tamagui prop
+      // mints one atomic CSS rule per distinct value — an unbounded stylesheet for a menu that can
+      // open anywhere. Pinned by this element's own test, which reads `menu.style.left`.
+      style={{ top: pos.y, left: pos.x, ...style }}
       onMouseDown={(e) => e.stopPropagation()}
       {...props}
     >
