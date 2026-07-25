@@ -762,6 +762,24 @@ layers.
   tags; the rule still forbids any web-only import from leaking into a non-`.web` file.
 - **Baseline update is a deliberate, reviewed act:** golden files change only via an explicit
   `--update-snapshots` PR with visual diff images in the description — never silently.
+- **The Metro / native gate — `pnpm --filter @lmthing/ui test:native`** (`libs/ui/metro/`, README
+  there). The gates above are all WEB gates: nothing in them can see the native module graph, which
+  is why every claim in this plan about native was, until now, an argument rather than a check. The
+  harness runs Metro itself in the ordinary workspace — no Expo, no simulator — and does two things
+  per platform (`ios` **and** `android`, which resolve different files):
+  - **resolution gate.** Builds the real graph for `libs/ui/metro/entries/surface.ts` and asserts
+    (a) every `*.native.tsx` fork is the file Metro picked and its web sibling is absent,
+    (b) the expected forks were all reached, (c) no web-only module (`react-dom`, Monaco, xterm,
+    `modern-screenshot`) and no `*.web.tsx` seam file leaked in. `entries/surface.ts` is the
+    **frontier marker** — what it imports is proven to bundle for native, and porting a surface
+    means adding it there and making the gate green.
+  - **render suites.** Bundles with RN's native modules mocked (RN's own jest mocks, applied as a
+    Metro `resolveRequest` redirect) and mounts the primitives through `react-test-renderer`,
+    asserting on the React Native element tree.
+
+  This is what §9's "Native fork rot" row and §10's native bullet were missing. **First finding:**
+  `dialog`/`sheet`/`context-menu` import `react-dom` and have no native fork despite claiming one —
+  `.issues/overlays-pull-react-dom-into-native-graph.md`.
 
 ---
 

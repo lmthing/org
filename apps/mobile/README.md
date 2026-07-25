@@ -7,6 +7,11 @@ consumes the SAME `tamagui.config` as web (generated from `tokens.json`, proven 
 
 > **Status: scaffold.** The config shell, the primitive native forks, and this shell exist and
 > typecheck; they have **not** been run on a device/simulator in CI (no native toolchain here).
+> The shared libs this shell renders ARE covered without a device by the Metro harness in
+> [`libs/ui/metro/`](../../libs/ui/metro/README.md) (`pnpm --filter @lmthing/ui test:native`): it
+> bundles `@lmthing/ui` for `ios`/`android` with Metro and mounts the primitives, so a fork that
+> stops resolving or rendering fails in ordinary CI rather than on a device. It does not cover this
+> app's own bootstrap (`App.tsx`, `index.js`, the Expo dependency tree), which is still unbuilt.
 > The className-driven surfaces need the native-styling decision in
 > `.issues/tamagui-web-swap-blocked-by-className-layout.md` (NativeWind or a props migration)
 > before the real chat/studio screens render fully — `DemoScreen` uses the primitives directly.
