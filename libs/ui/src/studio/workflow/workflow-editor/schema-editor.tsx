@@ -9,7 +9,7 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { FIELD_TYPES } from './schema-utils'
 import type { SchemaRow, TaskFieldType } from './types'
-import { TASKLIST_EDITOR_OUTPUT_ROW, TASKLIST_EDITOR_OUTPUT_ROWS } from './tasklist-editor.props.js'
+import { TASKLIST_EDITOR_ADD_OUTPUT_BTN, TASKLIST_EDITOR_OUTPUT_FIELD_INPUT, TASKLIST_EDITOR_OUTPUT_ROW, TASKLIST_EDITOR_OUTPUT_ROWS } from './tasklist-editor.props.js'
 
 export interface SchemaEditorProps {
   rows: SchemaRow[]
@@ -32,7 +32,7 @@ export function SchemaEditor({ rows, onChange, addLabel = '+ Add field', emptyHi
               onChange(next)
             }}
             placeholder="fieldName"
-            className="tasklist-editor__output-field-input"
+            {...(TASKLIST_EDITOR_OUTPUT_FIELD_INPUT as Record<string, unknown>)}
           />
           <Select
             value={row.type}
@@ -59,7 +59,8 @@ export function SchemaEditor({ rows, onChange, addLabel = '+ Add field', emptyHi
         </Prim.Box>
       ))}
       <Prim.Pressable
-        className="tasklist-editor__add-output-btn"
+        className="transition-colors"
+        {...TASKLIST_EDITOR_ADD_OUTPUT_BTN}
         onClick={() => onChange([...rows, { field: '', type: 'string' }])}
       >
         {addLabel}

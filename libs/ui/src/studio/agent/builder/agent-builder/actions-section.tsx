@@ -18,7 +18,7 @@ export function ActionsSection({ actions, tasklistNames, onAdd, onUpdate, onRemo
   return (
     <Prim.Box {...PANEL_BASE}>
       <Prim.Box {...PANEL_HEADER}>
-        <Stack row className="agent-builder__section-header-row">
+        <Stack row>
           <Label>Actions ({actions.length})</Label>
           <Button variant="ghost" size="sm" onClick={onAdd}>+ Add Action</Button>
         </Stack>

@@ -14,7 +14,7 @@ export function ActionRow({ action, tasklistNames, onChange, onRemove }: {
   onRemove: () => void
 }) {
   return (
-    <Prim.Box {...PANEL_BASE} className="agent-builder__action-row">
+    <Prim.Box {...PANEL_BASE}>
       <Prim.Box {...PANEL_BODY}>
         <Stack gap="sm">
           <Stack row gap="sm">

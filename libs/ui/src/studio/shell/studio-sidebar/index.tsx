@@ -217,7 +217,7 @@ export function StudioSidebar({
                     const isActive = pathname === href || activeAgentId === agent.id
                     return (
                       <NavLink key={agent.id} to={href} {...SIDEBAR_ITEM} {...(isActive ? SIDEBAR_ITEM_ACTIVE : {})}>
-                        <Bot className="studio-sidebar__item-icon--agent" />
+                        <Bot />
                         <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{agent.name}</Prim.Text>
                       </NavLink>
                     )
@@ -250,7 +250,7 @@ export function StudioSidebar({
                     const isActive = pathname.startsWith(href)
                     return (
                       <NavLink key={item.name} to={href} {...SIDEBAR_ITEM} {...(isActive ? SIDEBAR_ITEM_ACTIVE : {})}>
-                        <ListChecks className="studio-sidebar__item-icon--tasklist" />
+                        <ListChecks />
                         <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{item.name}</Prim.Text>
                       </NavLink>
                     )
@@ -314,7 +314,7 @@ export function StudioSidebar({
                     <NavLink key={`${c.kind}/${c.name}`} to={`${spacePath}/components`} {...SIDEBAR_ITEM}>
                       <Box {...STUDIO_SIDEBAR_ITEM_ICON_KNOWLEDGE} />
                       <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{c.name}</Prim.Text>
-                      <Prim.Text className="studio-sidebar__item-badge" style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 11 }}>{c.kind}</Prim.Text>
+                      <Prim.Text style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 11 }}>{c.kind}</Prim.Text>
                     </NavLink>
                   ))}
                   <NavLink to={`${spacePath}/components`} {...SIDEBAR_ITEM} {...STUDIO_SIDEBAR_CREATE_BTN}>

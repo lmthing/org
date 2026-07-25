@@ -16,11 +16,25 @@ export interface UnavailableOnMobileProps {
 
 export function UnavailableOnMobile({ feature }: UnavailableOnMobileProps) {
   return (
-    <Box className="unavailable-on-mobile" role="note">
-      <Text as="strong" className="unavailable-on-mobile__title">
+    // These were `unavailable-on-mobile*` classNames that NO stylesheet ever defined — the
+    // "themed" empty state above rendered completely unstyled, on web and native alike. Style
+    // props fix that and are the only form that works on native at all.
+    <Box
+      role="note"
+      display="flex"
+      flexDirection="column"
+      gap="$2"
+      alignItems="center"
+      justifyContent="center"
+      padding="$6"
+      height="100%"
+      backgroundColor="$background"
+      borderRadius="$radius-lg"
+    >
+      <Text as="strong" fontSize="$base" fontWeight="$semibold" color="$foreground" textAlign="center">
         {feature} is available on the web app
       </Text>
-      <Text block className="unavailable-on-mobile__body">
+      <Text block fontSize="$sm" color="$muted-foreground" textAlign="center">
         Open this workspace in a desktop browser to use the {feature.toLowerCase()}.
       </Text>
     </Box>

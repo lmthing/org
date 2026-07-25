@@ -8,10 +8,9 @@ import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { cn } from '@lmthing/ui/lib/utils'
 import { SchemaEditor } from './schema-editor'
 import type { TaskDraft } from './types'
-import { TASKLIST_EDITOR_DEPENDS_GRID, TASKLIST_EDITOR_FLAGS_ROW, TASKLIST_EDITOR_FLAG_ITEM, TASKLIST_EDITOR_GOAL_BADGE, TASKLIST_EDITOR_TASK_BODY, TASKLIST_EDITOR_TASK_CONTROLS, TASKLIST_EDITOR_TASK_HEADER, TASKLIST_EDITOR_TASK_ORDER } from './tasklist-editor.props.js'
+import { TASKLIST_EDITOR_DEPENDS_BTN, TASKLIST_EDITOR_DEPENDS_BTN_ACTIVE, TASKLIST_EDITOR_DEPENDS_BTN_INACTIVE, TASKLIST_EDITOR_DEPENDS_GRID, TASKLIST_EDITOR_FLAGS_ROW, TASKLIST_EDITOR_FLAG_CONDITION, TASKLIST_EDITOR_FLAG_ITEM, TASKLIST_EDITOR_GOAL_BADGE, TASKLIST_EDITOR_TASK_BODY, TASKLIST_EDITOR_TASK_CONTROLS, TASKLIST_EDITOR_TASK_FORM, TASKLIST_EDITOR_TASK_FORM_GOAL, TASKLIST_EDITOR_TASK_HEADER, TASKLIST_EDITOR_TASK_ORDER, TASKLIST_EDITOR_TOGGLE, TASKLIST_EDITOR_TOGGLE_KNOB, TASKLIST_EDITOR_TOGGLE_KNOB_OFF, TASKLIST_EDITOR_TOGGLE_KNOB_ON, TASKLIST_EDITOR_TOGGLE_OFF, TASKLIST_EDITOR_TOGGLE_ON } from './tasklist-editor.props.js'
 
 export interface TaskFormProps {
   draft: TaskDraft
@@ -48,7 +47,11 @@ export function TaskForm({
   }
 
   return (
-    <Prim.Box className={cn('tasklist-editor__task-form', draft.goal && 'tasklist-editor__task-form--goal')}>
+    <Prim.Box
+      className="transition-all"
+      {...TASKLIST_EDITOR_TASK_FORM}
+      {...(draft.goal ? TASKLIST_EDITOR_TASK_FORM_GOAL : null)}
+    >
       {/* Order + controls header */}
       <Prim.Box {...TASKLIST_EDITOR_TASK_HEADER}>
         <Prim.Text {...TASKLIST_EDITOR_TASK_ORDER}>{index + 1}</Prim.Text>
@@ -130,12 +133,11 @@ export function TaskForm({
                 <Prim.Pressable
                   key={taskId}
                   onClick={() => toggleDepends(taskId)}
-                  className={cn(
-                    'tasklist-editor__depends-btn',
-                    draft.dependsOn.includes(taskId)
-                      ? 'tasklist-editor__depends-btn--active'
-                      : 'tasklist-editor__depends-btn--inactive'
-                  )}
+                  className="transition-colors"
+                  {...TASKLIST_EDITOR_DEPENDS_BTN}
+                  {...(draft.dependsOn.includes(taskId)
+                    ? TASKLIST_EDITOR_DEPENDS_BTN_ACTIVE
+                    : TASKLIST_EDITOR_DEPENDS_BTN_INACTIVE)}
                 >
                   {taskId}
                 </Prim.Pressable>
@@ -150,16 +152,16 @@ export function TaskForm({
           <Prim.Box {...TASKLIST_EDITOR_FLAG_ITEM}>
             <Prim.Pressable
               onClick={onSetGoal}
-              className={cn(
-                'tasklist-editor__toggle',
-                draft.goal ? 'tasklist-editor__toggle--on' : 'tasklist-editor__toggle--off'
-              )}
+              className="transition-colors"
+              {...TASKLIST_EDITOR_TOGGLE}
+              {...(draft.goal ? TASKLIST_EDITOR_TOGGLE_ON : TASKLIST_EDITOR_TOGGLE_OFF)}
               title="Mark as goal task (exactly one per tasklist)"
             >
-              <Prim.Text className={cn(
-                'tasklist-editor__toggle-knob',
-                draft.goal ? 'tasklist-editor__toggle-knob--on' : 'tasklist-editor__toggle-knob--off'
-              )} />
+              <Prim.Text
+                className="transition-transform"
+                {...TASKLIST_EDITOR_TOGGLE_KNOB}
+                {...(draft.goal ? TASKLIST_EDITOR_TOGGLE_KNOB_ON : TASKLIST_EDITOR_TOGGLE_KNOB_OFF)}
+              />
             </Prim.Pressable>
             <Label compact>Goal</Label>
           </Prim.Box>
@@ -168,21 +170,21 @@ export function TaskForm({
           <Prim.Box {...TASKLIST_EDITOR_FLAG_ITEM}>
             <Prim.Pressable
               onClick={() => onChange({ ...draft, optional: !draft.optional })}
-              className={cn(
-                'tasklist-editor__toggle',
-                draft.optional ? 'tasklist-editor__toggle--on' : 'tasklist-editor__toggle--off'
-              )}
+              className="transition-colors"
+              {...TASKLIST_EDITOR_TOGGLE}
+              {...(draft.optional ? TASKLIST_EDITOR_TOGGLE_ON : TASKLIST_EDITOR_TOGGLE_OFF)}
             >
-              <Prim.Text className={cn(
-                'tasklist-editor__toggle-knob',
-                draft.optional ? 'tasklist-editor__toggle-knob--on' : 'tasklist-editor__toggle-knob--off'
-              )} />
+              <Prim.Text
+                className="transition-transform"
+                {...TASKLIST_EDITOR_TOGGLE_KNOB}
+                {...(draft.optional ? TASKLIST_EDITOR_TOGGLE_KNOB_ON : TASKLIST_EDITOR_TOGGLE_KNOB_OFF)}
+              />
             </Prim.Pressable>
             <Label compact>Optional</Label>
           </Prim.Box>
 
           {/* condition */}
-          <Prim.Box className="tasklist-editor__flag-condition">
+          <Prim.Box {...TASKLIST_EDITOR_FLAG_CONDITION}>
             <Label compact>Condition</Label>
             <Input
               type="text"

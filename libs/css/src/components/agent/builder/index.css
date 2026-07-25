@@ -123,13 +123,6 @@
   max-height: 400px;
 }
 
-.save-agent-modal__icon-wrap {
-  @apply flex! items-center justify-center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 0.75rem;
-  background: linear-gradient(135deg, var(--agent), color-mix(in srgb, var(--agent) 80%, black));
-}
 
 .save-agent-modal__icon {
   @apply w-5 h-5;

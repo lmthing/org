@@ -18,6 +18,20 @@ interface SaveAgentModalProps {
   onSave: (name: string, description: string) => void
 }
 
+/**
+ * `.save-agent-modal__icon-wrap` — the sweep skips it because a `linear-gradient` is not a colour
+ * the prop table maps; `backgroundImage` takes it verbatim.
+ */
+const ICON_WRAP = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '2.5rem',
+  height: '2.5rem',
+  borderRadius: '0.75rem',
+  backgroundImage: 'linear-gradient(135deg, var(--agent), color-mix(in srgb, var(--agent) 80%, black))',
+} as const
+
 export function SaveAgentModal({ isOpen, onClose, onSave }: SaveAgentModalProps) {
   const [name, setName] = useUIState('save-modal.name', '')
   const [description, setDescription] = useUIState('save-modal.description', '')
@@ -47,7 +61,7 @@ export function SaveAgentModal({ isOpen, onClose, onSave }: SaveAgentModalProps)
       <Prim.Box {...DIALOG_CONTENT} maxWidth={448}>
         <Prim.Box {...DIALOG_HEADER}>
           <Stack row gap="sm" {...SAVE_AGENT_MODAL_HEADER_ROW}>
-            <Prim.Box className="save-agent-modal__icon-wrap">
+            <Prim.Box {...ICON_WRAP}>
               <Prim.Svg {...SAVE_AGENT_MODAL_ICON} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <Prim.Path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
               </Prim.Svg>

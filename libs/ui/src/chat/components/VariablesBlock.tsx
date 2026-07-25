@@ -10,7 +10,6 @@ export function VariablesBlock({ vars }: VariablesBlockProps): React.ReactElemen
 
   return (
     <Prim.Box
-      className="repl-variables"
       style={{
         backgroundColor: 'var(--muted)',
         border: '1px solid var(--border)',

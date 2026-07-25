@@ -43,14 +43,7 @@
   background: var(--muted);
 }
 
-.step-card__actions {
-  @apply flex! items-center opacity-0 transition-opacity;
-  gap: 0.25rem;
-}
 
-.group:hover .step-card__actions {
-  opacity: 1;
-}
 
 .step-card__order-badge {
   @apply absolute w-6 h-6 rounded-full text-white text-xs font-bold flex! items-center justify-center;

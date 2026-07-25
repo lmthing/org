@@ -10,6 +10,20 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { STEP_CARD_ACTION_ICON, STEP_CARD_DRAG_ICON } from '../../step-card.props.js'
 
+/**
+ * `.step-card__actions` + `.group:hover .step-card__actions`, hand-migrated. NOTE: the reveal was
+ * already DEAD — no ancestor carried Tailwind's `group` class, so the buttons sat at `opacity: 0`
+ * permanently. The card body is now a Tamagui hover group, which is what the rule meant.
+ * See docs/tamagui-idiomatic-migration.md §5.
+ */
+const STEP_CARD_ACTIONS = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.25rem',
+  opacity: 0,
+  '$group-step-hover': { opacity: 1 },
+} as const
+
 interface TaskCardProps {
   task: TasklistTask
   isExpanded: boolean
@@ -41,6 +55,7 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
 
       <Prim.Box
         onClick={onClick}
+        {...({ group: 'step' } as Record<string, unknown>)}
         position="relative"
         cursor="pointer"
         backgroundColor="$card"
@@ -99,7 +114,7 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
             </Prim.Box>
 
             {/* Action buttons */}
-            <Prim.Box className="step-card__actions">
+            <Prim.Box {...STEP_CARD_ACTIONS}>
               {onEdit && (
                 <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); onEdit() }}>
                   <Prim.Svg {...STEP_CARD_ACTION_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

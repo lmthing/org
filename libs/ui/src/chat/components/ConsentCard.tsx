@@ -78,7 +78,7 @@ export function ConsentCard({
         <Prim.Box minWidth={0} flexGrow={1} flexShrink={1} flexBasis="0%">
           <Prim.Box fontSize="$sm" fontWeight="$semibold" color="$foreground">
             THING wants to run{' '}
-            <Prim.Text as="code" className="font-mono text-agent break-all">{fn}</Prim.Text>
+            <Prim.Text as="code" fontFamily="$mono" color="$agent" style={{ wordBreak: 'break-all' }}>{fn}</Prim.Text>
           </Prim.Box>
           {space && (
             <Prim.Box fontSize="$xs" color="$muted-foreground" marginTop="0.125rem">

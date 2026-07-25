@@ -26,8 +26,8 @@ export function CanDelegateToField({ refs, onChange }: {
       <Prim.Box {...PANEL_BODY}>
         <Stack gap="sm">
           {refs.map(ref => (
-            <Stack key={ref} row gap="sm" className="agent-builder__dep-row">
-              <Caption className="agent-builder__dep-text">{ref}</Caption>
+            <Stack key={ref} row gap="sm">
+              <Caption>{ref}</Caption>
               <Button variant="ghost" size="sm" onClick={() => remove(ref)}>✕</Button>
             </Stack>
           ))}
@@ -37,7 +37,6 @@ export function CanDelegateToField({ refs, onChange }: {
               onChange={e => setNewRef(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
               placeholder="space-ref/agent-slug or agent-slug#action"
-              className="agent-builder__dep-input"
             />
             <Button variant="ghost" size="sm" onClick={add} disabled={!newRef.trim()}>Add</Button>
           </Stack>
