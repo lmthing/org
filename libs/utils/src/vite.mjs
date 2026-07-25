@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite-plus'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { tamaguiPlugin } from '@tamagui/vite-plugin'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import path from 'path'
@@ -93,7 +94,17 @@ function ghPages404Plugin() {
  * @param {string} dirname
  * @param {import('vite-plus').UserConfig} [overrides]
  */
-export function createViteConfig(dirname, overrides) {
+/**
+ * @param dirname  the app's own directory
+ * @param overrides  merged into the returned config
+ * @param opts.tailwind  keep the Tailwind v4 vite plugin. DEFAULT TRUE, and that default matters:
+ *   the seven product SPAs (`com`/`social`/`team`/`store`/`space`/`blog`/`casa`) all call this factory
+ *   and all still use Tailwind — `@apply` in their own `src/index.css` plus hundreds of utility
+ *   classNames. Only `sdk/org`'s own `apps/web` was migrated off it (phase 4 of
+ *   docs/tamagui-final-steps.md), so `apps/web` opts OUT explicitly and everything else is unaffected.
+ */
+export function createViteConfig(dirname, overrides, opts = {}) {
+  const { tailwind = true } = opts
   const orgRoot = findOrgRoot(dirname)
   const libsDir = path.resolve(orgRoot, 'libs')
   const faviconDir = path.resolve(orgRoot, 'common/favicon.ico')
@@ -107,10 +118,10 @@ export function createViteConfig(dirname, overrides) {
         generatedRouteTree: './src/routeTree.gen.ts',
       }),
       react(),
-      // NOTE: `tailwindcss()` used to sit here. Phase 4 of docs/tamagui-final-steps.md removed it —
-      // every stylesheet is now plain CSS, so there is nothing for it to compile. Tailwind remains a
-      // dependency of `libs/cli` ONLY, where it compiles agent-authored project app pages (a product
-      // feature, not part of this app's styling).
+      // Tailwind, unless the caller opted out. `sdk/org`'s `apps/web` has no Tailwind directive left
+      // after phase 4, so the plugin there is dead weight; the product SPAs are NOT migrated and would
+      // render unstyled without it.
+      ...(tailwind ? [tailwindcss()] : []),
       // Tamagui plugin (§6 build integration). Loads the SHARED config so the RNW aliases + theme
       // are wired. No-op on output until a web component uses Tamagui.
       tamaguiPlugin({
