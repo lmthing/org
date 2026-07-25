@@ -37,4 +37,19 @@ describe('Stack', () => {
     render(<Stack data-testid="stack">Content</Stack>)
     expect(screen.getByTestId('stack').className).not.toMatch(/_gap-/)
   })
+
+  // A gap that is NOT one of the three semantic keys used to be looked up in `GAP` anyway, which
+  // returned `undefined` — so the gap was silently DROPPED rather than applied. That is reachable
+  // from real callsites: the `style-bags-to-props` codemod emitted bags carrying the old CSS class's
+  // literal `gap` (`{gap: '0.5rem'}`), and those bags are spread AFTER the semantic `gap="sm"`, so
+  // the literal wins the prop merge and lands here. A raw value must pass straight through.
+  it.each([
+    // Tamagui encodes `.` in a raw length as `--`, so `0.5rem` → `_gap-0--5rem`.
+    ['0.5rem', '_gap-0--5rem'],
+    ['$2', '_gap-c-space-2'],
+    [8, '_gap-8px'],
+  ] as const)('passes a non-semantic gap (%s) through to the primitive', (gap, atomic) => {
+    render(<Stack data-testid="stack" gap={gap}>Content</Stack>)
+    expect(screen.getByTestId('stack')).toHaveClass(atomic)
+  })
 })
