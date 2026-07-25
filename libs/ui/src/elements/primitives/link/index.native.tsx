@@ -10,7 +10,9 @@ import { NativeText } from '../_native'
  */
 export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement>
 
-const Link = React.forwardRef<React.ElementRef<typeof NativeText>, LinkProps>(
+// `NativeText` is a `ComponentType<any>`, not a `ForwardRefExoticComponent`, so `ElementRef` cannot
+// be applied to it — there is no element type to extract. The ref is forwarded opaquely.
+const Link = React.forwardRef<unknown, LinkProps>(
   ({ href, style, children }, ref) => (
     <NativeText
       ref={ref}

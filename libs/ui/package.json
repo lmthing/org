@@ -24,10 +24,10 @@
   "sideEffects": false,
   "scripts": {
     "test": "vitest run",
-    "typecheck:syntax": "tsc --noEmit --noCheck",
+    "typecheck": "tsc --noEmit",
     "lint:tokens": "lmthing-lint-tokens src",
     "lint:rn": "node scripts/lint-rn-safety.mjs",
-    "lint": "tsc --noEmit --noCheck && eslint . && lmthing-lint-tokens src && node scripts/lint-rn-safety.mjs",
+    "lint": "tsc --noEmit && eslint . && lmthing-lint-tokens src && node scripts/lint-rn-safety.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {
