@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute } from '@tanstack/react-router'
 import { useProjects } from '@lmthing/state'
 import { useAuth } from '@lmthing/auth'
@@ -22,45 +23,45 @@ function AppLauncher() {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-4xl flex-col gap-6 p-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">Your apps</h1>
-        <p className="text-sm text-muted-foreground">
+    <Prim.Box marginHorizontal="auto" display="flex" height="100%" width="100%" maxWidth={896} flexDirection="column" gap="$6" padding="$8">
+      <Prim.Box as="header" display="flex" flexDirection="column" gap="$1">
+        <Prim.Text as="h1" fontSize="$2xl" fontWeight="$semibold" color="$foreground">Your apps</Prim.Text>
+        <Prim.Text as="p" fontSize="$sm" color="$muted-foreground">
           Open an app installed in your workspace, or browse the{' '}
-          <a href="https://lmthing.store/projects" className="text-primary underline">
+          <Prim.Link href="https://lmthing.store/projects" color="$primary" textDecorationLine="underline">
             app store
-          </a>{' '}
+          </Prim.Link>{' '}
           to install more.
-        </p>
-      </header>
+        </Prim.Text>
+      </Prim.Box>
 
       {isLoading ? (
-        <div className="text-sm text-muted-foreground">Loading your apps…</div>
+        <Prim.Box fontSize="$sm" color="$muted-foreground">Loading your apps…</Prim.Box>
       ) : projects.length === 0 ? (
-        <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+        <Prim.Box borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$8" textAlign="center" fontSize="$sm" color="$muted-foreground">
           No apps yet. Install one from the{' '}
-          <a href="https://lmthing.store/projects" className="text-primary underline">
+          <Prim.Link href="https://lmthing.store/projects" color="$primary" textDecorationLine="underline">
             app store
-          </a>
+          </Prim.Link>
           .
-        </div>
+        </Prim.Box>
       ) : (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Prim.List display="grid" gridTemplateColumns="repeat(1, minmax(0, 1fr))" gap="$3" $sm={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
           {projects.map((p) => (
-            <li key={p.id}>
-              <button
+            <Prim.ListItem key={p.id}>
+              <Prim.Pressable
                 type="button"
                 onClick={() => openApp(p.id)}
-                className="flex w-full flex-col gap-1 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-muted"
+                className="transition-colors" display="flex" width="100%" flexDirection="column" gap="$1" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$4" textAlign="left" hoverStyle={{ backgroundColor: "$muted" }}
               >
-                <span className="font-medium text-foreground">{p.name ?? p.id}</span>
-                <span className="font-mono text-xs text-muted-foreground">{APP_PATH_PREFIX}/{p.id}/</span>
-              </button>
-            </li>
+                <Prim.Text fontWeight="$medium" color="$foreground">{p.name ?? p.id}</Prim.Text>
+                <Prim.Text fontFamily="$mono" fontSize="$xs" color="$muted-foreground">{APP_PATH_PREFIX}/{p.id}/</Prim.Text>
+              </Prim.Pressable>
+            </Prim.ListItem>
           ))}
-        </ul>
+        </Prim.List>
       )}
-    </div>
+    </Prim.Box>
   )
 }
 

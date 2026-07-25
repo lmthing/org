@@ -1,3 +1,4 @@
+import * as Prim from '../../primitives/index.js';
 import * as React from 'react'
 import { useAuth } from '@lmthing/auth'
 import { Badge, type BadgeVariant } from '../../content/badge'
@@ -104,7 +105,7 @@ export function Hooks() {
   })).filter((g) => g.rows.length > 0)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       <Caption muted>
         Automated hooks running on your pod — scheduled (cron), event-driven, and
         inbound webhooks — across every project and installed space. Toggle one off
@@ -119,15 +120,15 @@ export function Hooks() {
         <Caption muted>No automated hooks found.</Caption>
       ) : (
         groupsWithHooks.map((g) => (
-          <div key={g.type} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+          <Prim.Box key={g.type} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
               <Badge variant={typeVariant(g.type)}>{g.label}</Badge>
               <Caption muted>{g.rows.length}</Caption>
-            </div>
+            </Prim.Box>
             {g.rows.map((h) => {
               const key = rowKey(h)
               return (
-                <div
+                <Prim.Box
                   key={key}
                   style={{
                     display: 'flex',
@@ -138,17 +139,17 @@ export function Hooks() {
                     opacity: h.disabled ? 0.55 : 1,
                   }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1, minWidth: 0 }}>
+                    <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <Code>{h.slug}</Code>
                       <Badge variant="muted">{h.projectId}</Badge>
                       {h.owner && h.owner !== 'project' && <Badge variant="muted">{h.owner}</Badge>}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    </Prim.Box>
+                    <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <Caption muted>{scheduleOf(h)}</Caption>
                       <Caption muted>→ {h.trigger ?? (h.hasHandler ? 'handler' : '—')}</Caption>
-                    </div>
-                  </div>
+                    </Prim.Box>
+                  </Prim.Box>
                   <Button
                     variant="outline"
                     size="sm"
@@ -158,14 +159,14 @@ export function Hooks() {
                   >
                     {h.disabled ? 'Enable' : 'Disable'}
                   </Button>
-                </div>
+                </Prim.Box>
               )
             })}
-          </div>
+          </Prim.Box>
         ))
       )}
 
       {error && <Caption className="text-destructive">{error}</Caption>}
-    </div>
+    </Prim.Box>
   )
 }

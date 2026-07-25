@@ -77,6 +77,10 @@ function sizeToken(raw) {
   if (raw === 'full') return '100%'
   if (raw === 'screen') return '100vh'
   if (raw === 'auto') return 'auto'
+  // Intrinsic sizing keywords — `w-fit`, `h-min`, `w-max`.
+  if (raw === 'fit') return 'fit-content'
+  if (raw === 'min') return 'min-content'
+  if (raw === 'max') return 'max-content'
   if (SPACE_KEYS.has(raw)) return `$${raw}`
   const frac = raw.match(/^(\d+)\/(\d+)$/)
   if (frac) return `${((Number(frac[1]) / Number(frac[2])) * 100).toFixed(6).replace(/\.?0+$/, '')}%`

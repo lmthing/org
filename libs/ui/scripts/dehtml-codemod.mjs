@@ -22,6 +22,7 @@
 import ts from 'typescript';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { relative, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const NS = 'Prim';
 const PRIMITIVES_DIR = resolve(process.cwd(), 'libs/ui/src/elements/primitives');
@@ -64,7 +65,7 @@ const MAP = {
   stop: { c: 'Stop' }, text: { c: 'SvgText' }, tspan: { c: 'Tspan' }, use: { c: 'Use' },
   clipPath: { c: 'ClipPath' }, mask: { c: 'Mask' },
   // Misc
-  pre: { c: 'Pre' }, br: { c: 'Br' }, hr: { c: 'Hr' },
+  pre: { c: 'Pre' }, br: { c: 'Br' }, hr: { c: 'Hr' }, datalist: { c: 'DataList' },
 };
 
 /** Collect edits for one file. Returns { text, changed, count } (text unchanged if no edits). */
@@ -74,9 +75,24 @@ function transform(file, text) {
   const edits = [];
   let firstImportStart = null;
 
+  // A file may ALREADY import the namespace — under either specifier form (relative inside
+  // libs/ui, the package export from apps/web). Keying the check on the BINDING name rather than
+  // the path is what matters: inserting a second `import * as Prim` is a duplicate-identifier
+  // error, and `tsc --noCheck` (libs/ui's only gate) does not catch it — the Tamagui babel
+  // extractor does, at build time.
+  let hasNamespace = false;
+
   const visit = (node) => {
     if (firstImportStart === null && ts.isImportDeclaration(node)) {
       firstImportStart = node.getStart(sf);
+    }
+    if (
+      ts.isImportDeclaration(node) &&
+      node.importClause?.namedBindings &&
+      ts.isNamespaceImport(node.importClause.namedBindings) &&
+      node.importClause.namedBindings.name.text === NS
+    ) {
+      hasNamespace = true;
     }
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
       const t = node.tagName;
@@ -98,10 +114,25 @@ function transform(file, text) {
 
   if (edits.length === 0) return { text, changed: false, count: 0 };
 
-  // Inject the namespace import before the first import (or at file top).
-  let rel = relative(dirname(resolve(file)), PRIMITIVES_DIR).replace(/\\/g, '/');
-  if (!rel.startsWith('.')) rel = './' + rel;
-  const importLine = `import * as ${NS} from '${rel}/index.js';\n`;
+  if (hasNamespace) {
+    edits.sort((a, b) => b.start - a.start);
+    let out = text;
+    for (const e of edits) out = out.slice(0, e.start) + e.replacement + out.slice(e.end);
+    return { text: out, changed: true, count: edits.length };
+  }
+
+  // Inject the namespace import before the first import (or at file top). A file OUTSIDE
+  // libs/ui (apps/web) must go through the package export — a relative path would climb out of
+  // the package and resolve to source across a workspace boundary.
+  const UI_SRC = resolve(process.cwd(), 'libs/ui/src');
+  const inLibsUi = !relative(UI_SRC, resolve(file)).startsWith('..');
+  let spec = '@lmthing/ui/elements/primitives';
+  if (inLibsUi) {
+    let rel = relative(dirname(resolve(file)), PRIMITIVES_DIR).replace(/\\/g, '/');
+    if (!rel.startsWith('.')) rel = './' + rel;
+    spec = `${rel}/index.js`;
+  }
+  const importLine = `import * as ${NS} from '${spec}';\n`;
   const at = firstImportStart ?? 0;
   edits.push({ start: at, end: at, replacement: importLine });
 
@@ -113,7 +144,13 @@ function transform(file, text) {
   return { text: out, changed: true, count: tagEdits };
 }
 
-const args = process.argv.slice(2);
+export { transform }
+
+// CLI only when invoked directly — importing this module must not run the codemod with the
+// importer's argv (the same guard the bem-* scripts carry).
+const isEntry = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+
+const args = isEntry ? process.argv.slice(2) : [];
 const check = args[0] === '--check';
 const files = (check ? args.slice(1) : args).filter((a) => a.endsWith('.tsx'));
 let total = 0;
@@ -129,4 +166,4 @@ for (const file of files) {
     }
   }
 }
-console.log(`[dehtml-codemod] ${check ? 'would rewrite' : 'rewrote'} ${total} host tags in ${files.length} files`);
+if (isEntry) console.log(`[dehtml-codemod] ${check ? 'would rewrite' : 'rewrote'} ${total} host tags in ${files.length} files`);

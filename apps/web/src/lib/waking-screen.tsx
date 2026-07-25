@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { useEffect, useState } from 'react'
 
 /**
@@ -80,25 +81,25 @@ export function WakingScreen({
   }, [lines.length])
 
   return (
-    <div style={styles.root}>
+    <Prim.Box style={styles.root}>
       <style>{KEYFRAMES}</style>
-      <div className="lm-wake-orbit" style={styles.orbit} aria-hidden>
-        <div className="lm-wake-core" style={styles.core} />
-        <span style={{ ...styles.orb, ...styles.orbA }} />
-        <span style={{ ...styles.orb, ...styles.orbB }} />
-        <span style={{ ...styles.orb, ...styles.orbC }} />
-      </div>
-      <div style={styles.text}>
-        <p style={styles.heading}>{HEADINGS[mode]}</p>
+      <Prim.Box className="lm-wake-orbit" style={styles.orbit} aria-hidden>
+        <Prim.Box className="lm-wake-core" style={styles.core} />
+        <Prim.Text style={{ ...styles.orb, ...styles.orbA }} />
+        <Prim.Text style={{ ...styles.orb, ...styles.orbB }} />
+        <Prim.Text style={{ ...styles.orb, ...styles.orbC }} />
+      </Prim.Box>
+      <Prim.Box style={styles.text}>
+        <Prim.Text as="p" style={styles.heading}>{HEADINGS[mode]}</Prim.Text>
         {/* key on the index so each new line re-triggers the fade-in */}
-        <p key={i} style={styles.sub} role="status" aria-live="polite">
+        <Prim.Text as="p" key={i} style={styles.sub} role="status" aria-live="polite">
           {lines[i]}
-        </p>
-      </div>
+        </Prim.Text>
+      </Prim.Box>
       {/* Progress bar. Determinate when the gate feeds real milestone progress
           (fills to the current boot stage); otherwise an honest indeterminate
           loop — never a fake timed fill. */}
-      <div
+      <Prim.Box
         style={styles.track}
         role="progressbar"
         aria-label="Loading"
@@ -107,14 +108,14 @@ export function WakingScreen({
         aria-valuenow={determinate ? pct! : undefined}
         aria-valuetext={determinate ? `${pct}%` : lines[i]}
       >
-        <div
+        <Prim.Box
           className={determinate ? undefined : 'lm-wake-bar'}
           style={
             determinate ? { ...styles.bar, ...styles.barFill, width: `${pct}%` } : styles.bar
           }
         />
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

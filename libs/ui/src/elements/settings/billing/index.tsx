@@ -1,3 +1,4 @@
+import * as Prim from '../../primitives/index.js';
 import { useState } from 'react'
 import { useAuth } from '@lmthing/auth'
 import { Button } from '../../forms/button'
@@ -44,11 +45,11 @@ export function Billing() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       <Button variant="outline" size="sm" onClick={handleBillingPortal} disabled={loading}>
         {loading ? 'Redirecting…' : 'Manage Subscription'}
       </Button>
       {error && <Caption className="text-destructive">{error}</Caption>}
-    </div>
+    </Prim.Box>
   )
 }

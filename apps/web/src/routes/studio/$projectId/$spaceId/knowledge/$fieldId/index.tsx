@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { useCallback, useMemo, useRef } from 'react'
 import { useUIState, useToggle, useSpaceFS, useGlob } from '@lmthing/state'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
@@ -6,7 +7,7 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
-import { TopicEditor, FieldIndexPanel, DeleteModal, RenameModal } from '@lmthing/ui/studio'
+import { TopicEditor, FieldIndexPanel, DeleteModal, RenameModal, FIELD_TREE_NODE, FIELD_TREE_NODE_SELECTED } from '@lmthing/ui/studio'
 import type { TopicEditorHandle } from '@lmthing/ui/studio'
 import {
   ArrowLeft,
@@ -16,7 +17,6 @@ import {
   Trash2,
   Edit3,
 } from 'lucide-react'
-import { cn } from '@lmthing/ui/lib/utils'
 
 type PanelType = 'field-index' | 'option'
 
@@ -110,16 +110,16 @@ function FieldDetailPage() {
 
   if (!field) {
     return (
-      <div style={{ padding: '2rem' }}>
+      <Prim.Box style={{ padding: '2rem' }}>
         <Caption muted>Invalid field ID: {fieldId}</Caption>
-      </div>
+      </Prim.Box>
     )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <Prim.Box style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Header */}
-      <header style={{
+      <Prim.Box as="header" style={{
         padding: '0.75rem 1rem',
         borderBottom: '1px solid var(--color-border)',
         display: 'flex',
@@ -135,11 +135,11 @@ function FieldDetailPage() {
           >
             <ArrowLeft style={{ width: '1rem', height: '1rem' }} />
           </Button>
-          <div style={{ minWidth: 0 }}>
+          <Prim.Box style={{ minWidth: 0 }}>
             <Heading level={3} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {field}
             </Heading>
-          </div>
+          </Prim.Box>
         </Stack>
         <Button
           variant="ghost"
@@ -149,11 +149,11 @@ function FieldDetailPage() {
           <FilePlus style={{ width: '1rem', height: '1rem', marginRight: '0.375rem' }} />
           New Option
         </Button>
-      </header>
+      </Prim.Box>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <Prim.Box style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left pane: options list */}
-        <aside style={{
+        <Prim.Box as="aside" style={{
           width: '16rem',
           flexShrink: 0,
           borderRight: '1px solid var(--color-border)',
@@ -161,33 +161,36 @@ function FieldDetailPage() {
           flexDirection: 'column',
           overflow: 'hidden',
         }}>
-          <div style={{ flex: 1, overflow: 'auto', padding: '0.5rem 0' }}>
+          <Prim.Box style={{ flex: 1, overflow: 'auto', padding: '0.5rem 0' }}>
             {/* Field index entry */}
-            <div
-              className={cn(
-                'field-tree-node',
-                panelType === 'field-index' && !selectedPath && 'field-tree-node--selected',
-              )}
-              style={{ padding: '0.5rem 1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            <Prim.Box
+              {...FIELD_TREE_NODE}
+              {...(panelType === 'field-index' && !selectedPath ? FIELD_TREE_NODE_SELECTED : null)}
+              height="auto"
+              paddingVertical="0.5rem"
+              paddingHorizontal="1rem"
               onClick={selectFieldIndex}
             >
               <BookOpen style={{ width: '0.875rem', height: '0.875rem', flexShrink: 0 }} />
-              <span style={{ fontSize: '0.8125rem' }}>index.md</span>
-            </div>
+              <Prim.Text style={{ fontSize: '0.8125rem' }}>index.md</Prim.Text>
+            </Prim.Box>
 
             {/* Option entries */}
             {optionPaths.map(path => {
               const slug = optionSlugFromPath(path)
               const isSelected = selectedPath === path
               return (
-                <div
+                <Prim.Box
                   key={path}
-                  className={cn('field-tree-node', isSelected && 'field-tree-node--selected')}
-                  style={{ padding: '0.5rem 1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                  {...FIELD_TREE_NODE}
+                  {...(isSelected ? FIELD_TREE_NODE_SELECTED : null)}
+                  height="auto"
+                  paddingVertical="0.5rem"
+                  paddingHorizontal="1rem"
                   onClick={() => selectOption(path)}
                 >
                   <FileText style={{ width: '0.875rem', height: '0.875rem', flexShrink: 0 }} />
-                  <span style={{ fontSize: '0.8125rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slug}</span>
+                  <Prim.Text style={{ fontSize: '0.8125rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slug}</Prim.Text>
                   <Stack row style={{ gap: '0.125rem', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                     <Button
                       variant="ghost"
@@ -206,13 +209,13 @@ function FieldDetailPage() {
                       <Trash2 style={{ width: '0.75rem', height: '0.75rem' }} />
                     </Button>
                   </Stack>
-                </div>
+                </Prim.Box>
               )
             })}
 
             {/* New option inline form */}
             {showNewOption && (
-              <div style={{ padding: '0.5rem 1rem' }}>
+              <Prim.Box style={{ padding: '0.5rem 1rem' }}>
                 <Input
                   type="text"
                   value={newOptionSlug}
@@ -233,31 +236,31 @@ function FieldDetailPage() {
                     Cancel
                   </Button>
                 </Stack>
-              </div>
+              </Prim.Box>
             )}
 
             {optionPaths.length === 0 && !showNewOption && (
-              <div style={{ padding: '1rem', textAlign: 'center' }}>
+              <Prim.Box style={{ padding: '1rem', textAlign: 'center' }}>
                 <Caption muted>No options yet.</Caption>
-              </div>
+              </Prim.Box>
             )}
-          </div>
-        </aside>
+          </Prim.Box>
+        </Prim.Box>
 
         {/* Main content area */}
-        <main style={{ flex: 1, overflow: 'auto', display: 'flex' }}>
+        <Prim.Box as="main" style={{ flex: 1, overflow: 'auto', display: 'flex' }}>
           {panelType === 'field-index' && !selectedPath ? (
-            <div style={{ flex: 1, padding: '1.5rem', overflow: 'auto' }}>
+            <Prim.Box style={{ flex: 1, padding: '1.5rem', overflow: 'auto' }}>
               <FieldIndexPanel domain={domain} field={field} />
-            </div>
+            </Prim.Box>
           ) : panelType === 'option' && selectedPath ? (
-            <div style={{ padding: '1.5rem', flex: 1 }}>
+            <Prim.Box style={{ padding: '1.5rem', flex: 1 }}>
               <TopicEditor
                 ref={topicEditorRef}
                 topicPath={selectedPath}
                 onUnsavedChange={setHasUnsavedChanges}
               />
-            </div>
+            </Prim.Box>
           ) : (
             <Stack style={{
               alignItems: 'center',
@@ -273,8 +276,8 @@ function FieldDetailPage() {
               </Caption>
             </Stack>
           )}
-        </main>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
       <DeleteModal
         isOpen={!!deleteTarget}
@@ -291,7 +294,7 @@ function FieldDetailPage() {
         currentName={renameTarget?.name || ''}
         isDirectory={renameTarget?.isDirectory || false}
       />
-    </div>
+    </Prim.Box>
   )
 }
 

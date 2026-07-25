@@ -1,3 +1,4 @@
+import * as Prim from '../../primitives/index.js';
 import { useEffect, useState } from 'react'
 import { useAuth } from '@lmthing/auth'
 import { Button } from '../../forms/button'
@@ -87,9 +88,9 @@ export function EnvVars() {
   if (loading) return <Caption muted>Loading...</Caption>
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       {Object.entries(vars).map(([k, v]) => (
-        <div key={k} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+        <Prim.Box key={k} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
           <Input value={k} readOnly style={{ flex: '1 1 8rem', minWidth: '6rem', fontFamily: 'monospace' }} />
           <Input
             value={v}
@@ -97,9 +98,9 @@ export function EnvVars() {
             style={{ flex: '2 1 12rem', minWidth: '10rem', fontFamily: 'monospace' }}
           />
           <Button variant="ghost" size="sm" onClick={() => removeVar(k)}>Remove</Button>
-        </div>
+        </Prim.Box>
       ))}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+      <Prim.Box style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
         <Input
           placeholder="KEY"
           value={newKey}
@@ -115,12 +116,12 @@ export function EnvVars() {
           onKeyDown={e => e.key === 'Enter' && addVar()}
         />
         <Button variant="outline" size="sm" onClick={addVar}>Add</Button>
-      </div>
+      </Prim.Box>
       {error && <Caption className="text-destructive">{error}</Caption>}
       {saved && <Caption muted>Saved. Pod is restarting to apply changes.</Caption>}
       <Button variant="primary" size="sm" onClick={save} disabled={saving}>
         {saving ? 'Saving...' : 'Save & Restart Pod'}
       </Button>
-    </div>
+    </Prim.Box>
   )
 }

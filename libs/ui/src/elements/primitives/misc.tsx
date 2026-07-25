@@ -16,3 +16,11 @@ export const Br = hostPrimitive<HTMLBRElement, BrProps>('br', 'Br')
 
 export type HrProps = React.HTMLAttributes<HTMLHRElement>
 export const Hr = hostPrimitive<HTMLHRElement, HrProps>('hr', 'Hr')
+
+/**
+ * `<datalist>` — a web-only autocomplete source with no RN analogue (the native fork renders
+ * nothing). It exists as a primitive so the settings surfaces can stay raw-host-tag-free without
+ * being split into `.web.tsx` files; it renders no visible box on either platform.
+ */
+export type DataListProps = React.HTMLAttributes<HTMLDataListElement>
+export const DataList = hostPrimitive<HTMLDataListElement, DataListProps>('datalist', 'DataList')

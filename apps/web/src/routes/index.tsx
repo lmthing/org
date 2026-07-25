@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { useAuth } from '@lmthing/auth'
@@ -113,8 +114,8 @@ function RootRedirect() {
     navigate({ to: surfaceForHost(host), replace: true })
   }, [isLoading, isAuthenticated, navigate])
   return (
-    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+    <Prim.Box display="flex" height="100%" alignItems="center" justifyContent="center" fontSize="$sm" color="$muted-foreground">
       Signing you in…
-    </div>
+    </Prim.Box>
   )
 }

@@ -23,3 +23,8 @@ export const Hr = React.forwardRef<any, HrProps>(({ style }, ref) => (
   <NativeView ref={ref} style={style as never} />
 ))
 Hr.displayName = 'Hr'
+
+/** `<datalist>` has no RN analogue — the browser-only autocomplete source renders nothing. */
+export type DataListProps = React.HTMLAttributes<HTMLDataListElement>
+export const DataList = React.forwardRef<any, DataListProps>(() => null)
+DataList.displayName = 'DataList'

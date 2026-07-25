@@ -1,3 +1,4 @@
+import * as Prim from '../../primitives/index.js';
 import * as React from 'react'
 import { useAuth } from '@lmthing/auth'
 import { Badge, type BadgeVariant } from '../../content/badge'
@@ -113,7 +114,7 @@ export function Sessions() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       <Caption muted>
         Every session your pod ran — from the chat window or a delegate inside a
         project hook — with its total token cost and the delegates it made.
@@ -126,33 +127,33 @@ export function Sessions() {
       ) : !sessions || sessions.length === 0 ? (
         <Caption muted>No sessions recorded yet.</Caption>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           {sessions.map((s) => {
             const open = expanded.has(s.sessionId)
             return (
-              <div
+              <Prim.Box
                 key={s.sessionId}
                 style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--border)' }}
               >
-                <div
+                <Prim.Box
                   role="button"
                   tabIndex={0}
                   onClick={() => toggle(s.sessionId, expanded, setExpanded)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggle(s.sessionId, expanded, setExpanded) }}
                   style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', cursor: 'pointer' }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <span style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', width: '0.75rem' }}>
+                  <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <Prim.Text style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', width: '0.75rem' }}>
                       {open ? '▾' : '▸'}
-                    </span>
+                    </Prim.Text>
                     <Badge variant={sourceVariant(s.source)}>{s.source}</Badge>
                     {s.projectId && <Badge variant="muted">{s.projectId}</Badge>}
                     <Caption>{s.title ?? s.sessionId.slice(0, 8)}</Caption>
-                    <span style={{ marginLeft: 'auto' }}>
+                    <Prim.Text style={{ marginLeft: 'auto' }}>
                       <Caption muted>{relativeTime(s.startedAt, now)}</Caption>
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingLeft: '1.25rem', flexWrap: 'wrap' }}>
+                    </Prim.Text>
+                  </Prim.Box>
+                  <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingLeft: '1.25rem', flexWrap: 'wrap' }}>
                     <Caption muted>
                       {fmtInt(s.totalInputTokens)} in / {fmtInt(s.totalOutputTokens)} out
                     </Caption>
@@ -161,16 +162,16 @@ export function Sessions() {
                       {s.delegates.length} delegate{s.delegates.length === 1 ? '' : 's'}
                     </Caption>
                     {s.status !== 'done' && <Badge variant={statusVariant(s.status)}>{s.status}</Badge>}
-                  </div>
-                </div>
+                  </Prim.Box>
+                </Prim.Box>
 
                 {open && s.delegates.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1.25rem', marginTop: '0.5rem' }}>
+                  <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1.25rem', marginTop: '0.5rem' }}>
                     {s.delegates.map((d, i) => {
                       const key = `${s.sessionId}:${i}`
                       const qOpen = expandedQuery.has(key)
                       return (
-                        <div
+                        <Prim.Box
                           key={key}
                           style={{
                             display: 'flex',
@@ -182,22 +183,22 @@ export function Sessions() {
                             borderRadius: 'var(--radius, 0.375rem)',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <Code>{d.target}</Code>
                             {d.depth > 0 && <Badge variant="muted">depth {d.depth}</Badge>}
                             {d.status !== 'done' && <Badge variant={statusVariant(d.status)}>{d.status}</Badge>}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          </Prim.Box>
+                          <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                             <Caption muted>
                               {fmtInt(d.inputTokens)} in / {fmtInt(d.outputTokens)} out
                             </Caption>
                             <Caption muted>{fmtCost(d.costUsd)}</Caption>
                             <Caption muted>{fmtDuration(d.durationMs)}</Caption>
                             {d.model && <Caption muted>{d.model}</Caption>}
-                          </div>
+                          </Prim.Box>
                           {d.query && (
-                            <div>
-                              <button
+                            <Prim.Box>
+                              <Prim.Pressable
                                 onClick={() => toggle(key, expandedQuery, setExpandedQuery)}
                                 style={{
                                   background: 'none',
@@ -210,26 +211,26 @@ export function Sessions() {
                                 }}
                               >
                                 {qOpen ? 'Hide input' : 'Show input'}
-                              </button>
+                              </Prim.Pressable>
                               {qOpen && (
                                 <Code style={{ display: 'block', whiteSpace: 'pre-wrap', marginTop: '0.25rem' }}>
                                   {d.query}
                                 </Code>
                               )}
-                            </div>
+                            </Prim.Box>
                           )}
-                        </div>
+                        </Prim.Box>
                       )
                     })}
-                  </div>
+                  </Prim.Box>
                 )}
-              </div>
+              </Prim.Box>
             )
           })}
-        </div>
+        </Prim.Box>
       )}
 
       {error && <Caption className="text-destructive">{error}</Caption>}
-    </div>
+    </Prim.Box>
   )
 }
