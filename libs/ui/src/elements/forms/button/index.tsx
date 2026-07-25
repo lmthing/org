@@ -5,7 +5,7 @@ import * as Prim from '../../primitives/index'
  * Button — the idiomatic `.btn`. Renders the universal Tamagui `Prim.Pressable` (a real `<button>` at
  * runtime via `createComponent`) with the `.btn` styling applied as `$`-token style PROPS instead of a
  * className — the docs/tamagui-idiomatic-migration.md §4 swap. The prop maps below are the
- * `button.styled.tsx` proof's variant table verbatim; `button/index.css` is deleted (this element no
+ * `its retired `styled()` proof` proof's variant table verbatim; `button/index.css` is deleted (this element no
  * longer emits `btn*` classes, and its former direct callers were converted to `<Button variant=…>`).
  * `asChild` merges the styling onto the caller's single child (the codebase's only Slot use).
  */

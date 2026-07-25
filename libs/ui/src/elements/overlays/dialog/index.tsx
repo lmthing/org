@@ -13,7 +13,7 @@ import * as Prim from '../../primitives/index'
  */
 
 /**
- * `.dialog*` as `$`-token PROPS, transcribed from dialog.styled.tsx
+ * `.dialog*` as `$`-token PROPS, transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4). `dialog/index.css` is deleted.
  *
  * Its `data-[state=open]:animate-in`/`fade-*`/`zoom-*` rules are NOT carried over and did not need

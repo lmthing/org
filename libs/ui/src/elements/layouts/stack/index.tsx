@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Stack — the idiomatic `.stack`. Renders `Prim.Box` (a real `<div>` at runtime via
- * `createComponent`) with the `.stack` styling as `$`-token PROPS from the stack.styled.tsx variant
+ * `createComponent`) with the `.stack` styling as `$`-token PROPS from its retired `styled()` proof variant
  * table (docs/tamagui-idiomatic-migration.md §4). `stack/index.css` is deleted.
  */
 export type StackGap = 'sm' | 'md' | 'lg'

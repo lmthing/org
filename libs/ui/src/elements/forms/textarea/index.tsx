@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Textarea — the idiomatic `.textarea`. Renders `Prim.TextArea` (a real `<textarea>` at runtime via
- * `createComponent`) with the styling as `$`-token PROPS from textarea.styled.tsx
+ * `createComponent`) with the styling as `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4/§6). `textarea/index.css` is deleted.
  */
 export interface TextareaProps extends React.ComponentProps<'textarea'> {

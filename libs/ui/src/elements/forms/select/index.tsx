@@ -4,7 +4,7 @@ import * as Prim from '../../primitives/index'
 /**
  * Select — the idiomatic `.select`. Renders `Prim.Select` (a real `<select>` at runtime via
  * `createComponent`) inside a positioned `Prim.Box`, with the styling as `$`-token PROPS from
- * select.styled.tsx (docs/tamagui-idiomatic-migration.md §4/§6). `select/index.css` is deleted.
+ * its retired `styled()` proof (docs/tamagui-idiomatic-migration.md §4/§6). `select/index.css` is deleted.
  *
  * `.select__content` went with it: this element renders a NATIVE `<select>`, whose option list is
  * drawn by the browser, so the popover rules never applied to anything.

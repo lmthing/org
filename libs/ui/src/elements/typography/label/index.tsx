@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Label — the idiomatic `.label`, a form `<label>` (`Prim.Text as="label"`, real tag via
- * `createComponent`) styled by `$`-token PROPS from label.styled.tsx. The `required` marker renders a
+ * `createComponent`) styled by `$`-token PROPS transcribed from its retired `styled()` proof. The `required` marker renders a
  * destructive " *" span (replacing `.label--required::after`). The double-click text-selection guard
  * (Radix parity) is kept on `onMouseDown`. CSS deleted.
  */

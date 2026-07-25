@@ -4,7 +4,7 @@ import { Button } from './index'
 
 // NB: not in the libs/ui vitest include (only *-styled.test.tsx run in CI); kept in sync by hand.
 // Post-swap the Button renders a real <button> (Prim.Pressable) styled by $-token PROPS, not `btn*`
-// classNames — so these assert semantics/behaviour, and button.styled.tsx pins the variant table.
+// classNames — so these assert semantics/behaviour, and its retired `styled()` proof pins the variant table.
 describe('Button', () => {
   it('renders a real button with its children', () => {
     render(<Button>Click me</Button>)

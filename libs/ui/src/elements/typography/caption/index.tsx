@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Caption — the idiomatic `.caption`. Renders `Prim.Text` (real `<span>`) with the styling as
- * `$`-token PROPS from caption.styled.tsx. `muted` uses the `/70` alpha via web color-mix. CSS deleted.
+ * `$`-token PROPS transcribed from its retired `styled()` proof. `muted` uses the `/70` alpha via web color-mix. CSS deleted.
  */
 // `Prim.TextProps`, not `ComponentProps<'span'>`: the rest props are spread straight onto
 // `Prim.Text`, so idiomatic style props already WORK here at runtime — the narrower type was the

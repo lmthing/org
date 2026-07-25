@@ -10,7 +10,7 @@ import * as Prim from '../../primitives/index'
  */
 
 /**
- * `.sheet*` as `$`-token PROPS, transcribed from sheet.styled.tsx
+ * `.sheet*` as `$`-token PROPS, transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4). `sheet/index.css` is deleted.
  *
  * Its `transition ease-in-out` + `data-[state]:slide-in/out` rules are dropped, not deferred:

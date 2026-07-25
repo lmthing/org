@@ -603,3 +603,19 @@ export function AppSidebar({
     </Prim.Box>
   )
 }
+
+/**
+ * The prop bags above, grouped for the test suite. `app-sidebar` is the largest element in the
+ * layer and cannot be rendered under this vitest config (its project dropdown pulls in
+ * `@lmthing/state`, which resolves a second copy of React), so `index.test.tsx` asserts the
+ * translated VALUES directly — the same thing the deleted `app-sidebar-styled.test.tsx` did for
+ * the parallel `styled()` copy, but against the bags the shipped component actually spreads.
+ * See docs/tamagui-idiomatic-migration.md §4/§6.
+ */
+export const __styles = {
+  SIDEBAR_SHELL, SHELL_FIXED, SHELL_COLLAPSED, ICON_BTN, RAIL, RAIL_BTN, BRAND, RAIL_BRAND,
+  HEADER, COLLAPSE_BTN, TOP, PROJECT_ROW, PROJECT_ROW_DROPDOWN, PROJECT_SETTINGS, NEW_CHAT,
+  CONTENT, SECTION, SECTION_BODY, EMPTY, ITEM, ITEM_ACTIVE, FOOTER, SECTION_HEADER, SECTION_LABEL,
+  SECTION_COUNT, DROPDOWN, DROPDOWN_TRIGGER, DROPDOWN_MENU, DROPDOWN_LIST, DROPDOWN_ROW,
+  DROPDOWN_ITEM, DROPDOWN_ITEM_ACTIVE, DROPDOWN_DELETE, DROPDOWN_CREATE,
+} as const

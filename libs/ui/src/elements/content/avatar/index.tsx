@@ -8,7 +8,7 @@ import { spectrumColor } from '../../../lib/spectrum'
  * Radix's behaviour: the fallback shows until the image reports `load`, and stays if it `error`s.
  * Renders on native via the Box/Image forks.
  *
- * The idiomatic `.avatar`: styling is `$`-token PROPS from avatar.styled.tsx
+ * The idiomatic `.avatar`: styling is `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4); `avatar/index.css` is deleted. `AvatarImage` stays a
  * `Prim.Image` (a pure host `<img>` passthrough — a replaced element, so it takes `style`, not
  * Tamagui style props).

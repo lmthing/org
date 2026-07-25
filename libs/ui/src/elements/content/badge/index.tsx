@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Badge — the idiomatic `.badge`. Renders `Prim.Text` (a real `<span>` at runtime via
- * `createComponent`) with the `.badge` styling as `$`-token PROPS from the badge.styled.tsx variant
+ * `createComponent`) with the `.badge` styling as `$`-token PROPS from its retired `styled()` proof variant
  * table (docs/tamagui-idiomatic-migration.md §4). `badge/index.css` is deleted; the two former
  * `<a className="badge">` callers became `<Prim.Link>` carrying `BADGE_BASE`.
  */

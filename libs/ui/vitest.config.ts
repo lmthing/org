@@ -17,20 +17,12 @@ export default defineConfig({
     include: [
       'src/elements/primitives/**/*.test.tsx',
       'src/elements/overlays/**/*.test.tsx',
-      // P2 — the BEM→styled() variant conversions (elements/**/*-styled.test.tsx). See §4. Covers
-      // every leaf slice: forms (button/input/select/textarea), content (badge/card/panel/…),
-      // typography (heading/label/…), branding.
-      'src/elements/**/*-styled.test.tsx',
-      // P4 — the SHIPPED element layer. The `*-styled.test.tsx` proofs above gate a PARALLEL
-      // `*.styled.tsx` copy; these gate `index.tsx`, the component the app actually renders, which
-      // is what the element-layer swap edits. They were parked out while they still asserted BEM
-      // classNames and rendered without a Tamagui provider; both are fixed (`src/test-utils` wraps
-      // `render`, and the assertions now pin Tamagui's atomic classes). Enabling them immediately
-      // caught a shipped regression — `Code block` rendered `<span>` because `pre` was missing from
-      // the Text primitive's tag map. See docs/tamagui-idiomatic-migration.md §4/§6.
+      // The SHIPPED element layer — `index.tsx`, the component the app actually renders. P2's
+      // parallel `*.styled.tsx` proof tree and its `*-styled.test.tsx` gates are DELETED: they
+      // proved the BEM→`styled()` translation for a copy nothing imported, and the translation
+      // they proved now lives in the shipped elements as `$`-token props with the same provenance
+      // comments. These suites are the real gate. See docs/tamagui-idiomatic-migration.md §4/§6.
       'src/elements/**/index.test.tsx',
-      // P2 composite `components/**` conversions live in a flat mirror tree, components-styled/**.
-      'src/components-styled/**/*-styled.test.tsx',
       'src/**/*.parity.test.tsx',
       'src/theme/**/*.test.ts',
       'src/platform/**/*.test.ts',

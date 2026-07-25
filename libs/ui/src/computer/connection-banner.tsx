@@ -10,7 +10,7 @@ export interface ConnectionBannerProps {
 }
 
 // .computer-connection-banner--error / --booting tinted-surface modifiers → conditional props
-// (connection-banner.styled.tsx proof `state` variant). Alphas via web color-mix over runtime vars.
+// (its retired `styled()` proof proof `state` variant). Alphas via web color-mix over runtime vars.
 const BANNER_STATE = {
   error: {
     backgroundColor: 'color-mix(in srgb, var(--destructive) 10%, transparent)',

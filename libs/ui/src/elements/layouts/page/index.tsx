@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Page — the idiomatic `.page`. Renders `Prim.Box` (real `<div>`s at runtime via `createComponent`)
- * with the styling as `$`-token PROPS from page.styled.tsx (docs/tamagui-idiomatic-migration.md §4).
+ * with the styling as `$`-token PROPS transcribed from its retired `styled()` proof (docs/tamagui-idiomatic-migration.md §4).
  * `page/index.css` is deleted; the studio-shell callers that carried `page__body` on a `Prim.Box`
  * now spread `PAGE_BODY` instead.
  */

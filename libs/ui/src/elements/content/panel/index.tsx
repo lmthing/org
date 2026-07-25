@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Panel — the idiomatic `.panel`. Renders `Prim.Box` (real `<div>`s at runtime via
- * `createComponent`) with the styling as `$`-token PROPS from panel.styled.tsx
+ * `createComponent`) with the styling as `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4). `panel/index.css` is deleted; the prop bags are
  * exported because nine studio surfaces carried `panel`/`panel__header`/`panel__body` directly on a
  * `Prim.Box` instead of going through this element — they now spread the same bag.

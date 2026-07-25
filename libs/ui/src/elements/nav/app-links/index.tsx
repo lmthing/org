@@ -6,7 +6,7 @@ import { otherAppLinks, type LmthingApp } from '../../../lib/app-urls'
  * chat + studio sidebar footers. Uses {@link otherAppLinks} so local vs
  * production origins are resolved consistently.
  *
- * The idiomatic `.app-links`: styling is `$`-token PROPS from app-links.styled.tsx
+ * The idiomatic `.app-links`: styling is `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4); `app-links/index.css` is deleted. The
  * `.app-links--bordered` modifier — which no caller passed via className — is now the
  * `bordered` prop. (`transition-colors` awaits the animation driver, §5/P4.)

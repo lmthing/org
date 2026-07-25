@@ -19,7 +19,7 @@ const TYPE_OPTIONS: { value: PropertyType; label: string }[] = [
 
 const STRING_FORMATS = ['date', 'date-time', 'email', 'uri', 'uuid', 'time', 'duration']
 
-// .property-row__type-icon--<type> color modifiers → style lookup (step-schema-editor.styled.tsx proof)
+// .property-row__type-icon--<type> color modifiers → style lookup (its retired `styled()` proof proof)
 const TYPE_ICON_STYLE: Record<PropertyType, { backgroundColor: string; color: string }> = {
   string: { backgroundColor: 'color-mix(in srgb, var(--brand-1) 15%, transparent)', color: '$brand-1' },
   number: { backgroundColor: 'color-mix(in srgb, var(--brand-2) 15%, transparent)', color: '$brand-2' },

@@ -8,7 +8,7 @@ export type RuntimeStatus = 'booting' | 'running' | 'stopped' | 'error'
 export type RuntimeTier = 'webcontainer' | 'flyio'
 
 // .computer-status-card__indicator--<status> / __dot--<status> color modifiers → conditional props
-// (status-card.styled.tsx proof). The booting dot's `animate-pulse` is a Tailwind builtin (not from
+// (its retired `styled()` proof proof). The booting dot's `animate-pulse` is a Tailwind builtin (not from
 // this component's CSS) so it stays a residual className until the P4 animation driver.
 const INDICATOR_COLOR: Record<RuntimeStatus, string> = {
   running: '$success',
