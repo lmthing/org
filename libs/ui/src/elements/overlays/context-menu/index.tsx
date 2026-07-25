@@ -9,6 +9,11 @@ import { cn } from '../../../lib/utils'
  * cursor via `onContextMenu`; the content portals to `document.body` (fixed at the cursor) and closes
  * on select / ESC / click-outside. Exposes a Radix-shaped namespace (`ContextMenu.Root/Trigger/Portal/
  * Content/Item/Separator`) so `import * as ContextMenu` consumers swap with no call-site churn.
+ *
+ * **Web-only** — the `react-dom` portal and `onContextMenu`. `index.native.tsx` is the React Native
+ * fork: RN `Modal` instead of the portal, and LONG PRESS instead of right-click (there is no
+ * right-click on a touch device), still opening at the touch point. Covered by
+ * `libs/ui/metro/suites/overlays.tsx`.
  */
 type Pt = { x: number; y: number }
 type Ctx = { open: boolean; pos: Pt; openAt: (p: Pt) => void; close: () => void }

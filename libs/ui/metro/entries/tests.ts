@@ -8,6 +8,7 @@
  */
 import '../suites/theme'
 import '../suites/primitives'
+import '../suites/overlays'
 import '../suites/platform'
 import { runRegisteredCases } from '../harness'
 
