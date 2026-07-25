@@ -161,7 +161,7 @@ describe('skip reporting (the manual tail)', () => {
     // Marking them `skip` blocked every mappable class on the same element — the single change
     // that took the codemod from 4 migratable elements to 37.
     for (const c of ['transition-colors', 'animate-spin', 'duration-150', 'backdrop-blur-sm',
-                     'prose', 'space-y-2', 'ring-2', 'group', 'lm-fade-in']) {
+                     'prose', 'space-y-2', 'group', 'lm-fade-in']) {
       const r = classToProps(c)
       expect(r.keep, `${c} should be kept, not skipped`).toContain(c)
       expect(r.skip).toEqual([])
@@ -177,6 +177,29 @@ describe('skip reporting (the manual tail)', () => {
 
   it('maps shadow-* to the same approximation the hand conversions used', () => {
     expect(classToProps('shadow-lg').props).toMatchObject({ shadowRadius: 15 })
+  })
+
+  it('maps ring-* to the outline props the element conversions standardised on', () => {
+    // Tailwind implements a ring as a box-shadow; Button/Input/Select all hand-wrote it as an
+    // outline in `focusVisibleStyle`, so the map matches them rather than inventing a third form.
+    expect(classToProps('ring-2').props).toEqual({ outlineWidth: 2, outlineStyle: 'solid' })
+    expect(classToProps('ring-ring').props).toEqual({ outlineColor: '$ring' })
+    expect(classToProps('focus-visible:ring-2').props).toEqual({
+      focusVisibleStyle: { outlineWidth: 2, outlineStyle: 'solid' },
+    })
+  })
+
+  it('maps the `placeholder:` variant to the flat placeholderTextColor prop', () => {
+    // Not a nested style bag: Tamagui exposes the pseudo-element as one prop, which the
+    // form-control primitives turn into the CSS var its own `.is_Input::placeholder` rule reads.
+    expect(classToProps('placeholder:text-muted-foreground').props)
+      .toEqual({ placeholderTextColor: '$muted-foreground' })
+    // an `lm-*` colour has no `$token`, so it must not be silently invented
+    expect(classToProps('placeholder:text-lm-muted').skip).toContain('placeholder:text-lm-muted')
+  })
+
+  it('maps arbitrary tracking', () => {
+    expect(classToProps('tracking-[0.16em]').props).toEqual({ letterSpacing: '0.16em' })
   })
   it('an alpha modifier under a variant is a skip (cannot be a plain className)', () => {
     expect(classToProps('hover:border-foreground/30').skip).toContain('hover:border-foreground/30')

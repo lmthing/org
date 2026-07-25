@@ -306,7 +306,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         </Prim.Row>
       )}
 
-      <Prim.Row className="relative gap-2 bg-card border border-border rounded-2xl px-4 py-3 shadow-sm focus-within:ring-2 focus-within:ring-ring transition-shadow" alignItems="flex-end">
+      <Prim.Row className="transition-shadow" position="relative" gap="$2" backgroundColor="$card" borderWidth={1} borderColor="$border" borderRadius="$radius-xl" paddingHorizontal="$4" paddingVertical="$3" shadowColor="rgba(0,0,0,0.05)" shadowOffset={{ width: 0, height: 1 }} shadowRadius={2} focusWithinStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }} alignItems="flex-end">
         {/* Dropdown */}
         {dropdownOpen && (
           <Prim.List ref={dropdownRef} position="absolute" bottom="100%" left="$4" maxHeight="$60" overflow="auto" backgroundColor="$popover" color="$popover-foreground" borderWidth={1} borderColor="$border" borderRadius="$radius-md" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} zIndex={50} minWidth="200px" fontSize="$sm" paddingVertical="$1" marginBottom="0.5rem">
