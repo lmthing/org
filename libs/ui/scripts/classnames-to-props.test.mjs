@@ -152,7 +152,10 @@ describe('skip reporting (the manual tail)', () => {
   it('flags unmapped utilities for human review', () => {
     expect(classToProps('transition-colors').skip).toContain('transition-colors')
     expect(classToProps('animate-spin').skip).toContain('animate-spin')
-    expect(classToProps('shadow-lg').skip).toContain('shadow-lg')
+    // `shadow-*` used to be a skip; it now maps to the SAME single-layer approximation the
+    // card/dialog/dropdown/sheet conversions were written with by hand, so the two agree.
+    expect(classToProps('shadow-lg').props).toMatchObject({ shadowRadius: 15 })
+    expect(classToProps('backdrop-blur-sm').skip).toContain('backdrop-blur-sm')
   })
   it('an alpha modifier under a variant is a skip (cannot be a plain className)', () => {
     expect(classToProps('hover:border-foreground/30').skip).toContain('hover:border-foreground/30')

@@ -61,7 +61,7 @@ export default function Slide4Technology() {
           <Prim.Row key={node.label} alignItems="flex-start">
             <Prim.Col gap="$2.5" alignItems="center">
               <Prim.Row
-                className="justify-center whitespace-nowrap rounded-2xl border-2 text-xl font-semibold"
+                justifyContent="center" whiteSpace="nowrap" borderRadius="$radius-xl" borderWidth={2} fontSize="$xl" fontWeight="$semibold"
                 alignItems="center"
                 style={{
                   lineHeight: '1.75rem',

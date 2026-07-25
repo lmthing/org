@@ -21,6 +21,7 @@ import type { KnowledgeTreeNode } from '@lmthing/ui/hooks/knowledge/useKnowledge
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { cn } from '@lmthing/ui/lib/utils'
 import './FieldTree.css'
+import { FIELD_TREE_CONTEXT_MENU_BACKDROP, FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE, FIELD_TREE_CONTEXT_MENU_ITEM_ICON, FIELD_TREE_NODE_ICON, FIELD_TREE_NODE_ICON_CHEVRON, FIELD_TREE_NODE_ICON_FILE, FIELD_TREE_NODE_ICON_FOLDER, FIELD_TREE_NODE_LABEL, FIELD_TREE_NODE_SPACER } from './field-tree.props.js'
 
 export interface FieldTreeHandle {
   expandAll: () => void
@@ -60,7 +61,7 @@ function ContextMenu({
 }) {
   return (
     <>
-      <Prim.Box className="field-tree-context-menu__backdrop" onClick={onClose} />
+      <Prim.Box {...FIELD_TREE_CONTEXT_MENU_BACKDROP} onClick={onClose} />
       <Prim.Box
         className="field-tree-context-menu"
         style={{ left: position.x, top: position.y }}
@@ -70,7 +71,7 @@ function ContextMenu({
             onClick={() => { onCreateChild(); onClose() }}
             className="field-tree-context-menu__item"
           >
-            <Plus className="field-tree-context-menu__item-icon" />
+            <Plus {...FIELD_TREE_CONTEXT_MENU_ITEM_ICON} />
             {node.type === 'domain' ? 'New Field' : 'New Option'}
           </Prim.Pressable>
         )}
@@ -78,14 +79,14 @@ function ContextMenu({
           onClick={() => { onRename(); onClose() }}
           className="field-tree-context-menu__item"
         >
-          <Edit3 className="field-tree-context-menu__item-icon" />
+          <Edit3 {...FIELD_TREE_CONTEXT_MENU_ITEM_ICON} />
           Rename
         </Prim.Pressable>
         <Prim.Pressable
           onClick={() => { onDelete(); onClose() }}
-          className="field-tree-context-menu__item field-tree-context-menu__item--destructive"
+          {...FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE} className="field-tree-context-menu__item"
         >
-          <Trash2 className="field-tree-context-menu__item-icon" />
+          <Trash2 {...FIELD_TREE_CONTEXT_MENU_ITEM_ICON} />
           Delete
         </Prim.Pressable>
       </Prim.Box>
@@ -114,10 +115,10 @@ function OptionNode({
       )}
       onClick={() => onSelect(node.path, 'option')}
     >
-      <Prim.Text className="field-tree-node__spacer" />
-      <Prim.Text className="field-tree-node__spacer" />
-      <FileText className="field-tree-node__icon field-tree-node__icon--file" />
-      <Prim.Text className="field-tree-node__label">{node.slug}</Prim.Text>
+      <Prim.Text {...FIELD_TREE_NODE_SPACER} />
+      <Prim.Text {...FIELD_TREE_NODE_SPACER} />
+      <FileText {...FIELD_TREE_NODE_ICON} {...FIELD_TREE_NODE_ICON_FILE} />
+      <Prim.Text {...FIELD_TREE_NODE_LABEL}>{node.slug}</Prim.Text>
       <Prim.Box className="field-tree-node__actions">
         <Button
           variant="ghost"
@@ -128,7 +129,7 @@ function OptionNode({
             onContextMenu(node, { x: rect.left, y: rect.bottom + 4 })
           }}
         >
-          <MoreVertical className="field-tree-node__icon" />
+          <MoreVertical {...FIELD_TREE_NODE_ICON} />
         </Button>
       </Prim.Box>
     </Prim.Box>
@@ -162,18 +163,18 @@ function FieldNode({
         )}
         onClick={() => { onToggle(); onSelect(node.path, 'field') }}
       >
-        <Prim.Text className="field-tree-node__spacer" />
+        <Prim.Text {...FIELD_TREE_NODE_SPACER} />
         {hasChildren ? (
           isExpanded ? (
-            <ChevronDown className="field-tree-node__icon--chevron" />
+            <ChevronDown {...FIELD_TREE_NODE_ICON_CHEVRON} />
           ) : (
-            <ChevronRight className="field-tree-node__icon--chevron" />
+            <ChevronRight {...FIELD_TREE_NODE_ICON_CHEVRON} />
           )
         ) : (
-          <Prim.Text className="field-tree-node__spacer" />
+          <Prim.Text {...FIELD_TREE_NODE_SPACER} />
         )}
-        <Layers className="field-tree-node__icon field-tree-node__icon--folder" />
-        <Prim.Text className="field-tree-node__label">{node.slug}</Prim.Text>
+        <Layers {...FIELD_TREE_NODE_ICON} {...FIELD_TREE_NODE_ICON_FOLDER} />
+        <Prim.Text {...FIELD_TREE_NODE_LABEL}>{node.slug}</Prim.Text>
         <Prim.Box className="field-tree-node__actions">
           <Button
             variant="ghost"
@@ -184,7 +185,7 @@ function FieldNode({
               onContextMenu(node, { x: rect.left, y: rect.bottom + 4 })
             }}
           >
-            <MoreVertical className="field-tree-node__icon" />
+            <MoreVertical {...FIELD_TREE_NODE_ICON} />
           </Button>
         </Prim.Box>
       </Prim.Box>
@@ -238,15 +239,15 @@ function DomainNode({
       >
         {hasChildren ? (
           isExpanded ? (
-            <ChevronDown className="field-tree-node__icon--chevron" />
+            <ChevronDown {...FIELD_TREE_NODE_ICON_CHEVRON} />
           ) : (
-            <ChevronRight className="field-tree-node__icon--chevron" />
+            <ChevronRight {...FIELD_TREE_NODE_ICON_CHEVRON} />
           )
         ) : (
-          <Prim.Text className="field-tree-node__spacer" />
+          <Prim.Text {...FIELD_TREE_NODE_SPACER} />
         )}
-        <Database className="field-tree-node__icon field-tree-node__icon--folder" />
-        <Prim.Text className="field-tree-node__label">{node.slug}</Prim.Text>
+        <Database {...FIELD_TREE_NODE_ICON} {...FIELD_TREE_NODE_ICON_FOLDER} />
+        <Prim.Text {...FIELD_TREE_NODE_LABEL}>{node.slug}</Prim.Text>
         <Prim.Box className="field-tree-node__actions">
           <Button
             variant="ghost"
@@ -257,7 +258,7 @@ function DomainNode({
               onContextMenu(node, { x: rect.left, y: rect.bottom + 4 })
             }}
           >
-            <MoreVertical className="field-tree-node__icon" />
+            <MoreVertical {...FIELD_TREE_NODE_ICON} />
           </Button>
         </Prim.Box>
       </Prim.Box>

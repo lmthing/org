@@ -15,6 +15,7 @@ import { TaskForm } from './task-form'
 import { useTasklistEditor } from './useTasklistEditor'
 import type { TasklistEditorProps } from './types'
 import './tasklist-editor.css'
+import { TASKLIST_EDITOR, TASKLIST_EDITOR_BODY, TASKLIST_EDITOR_EMPTY, TASKLIST_EDITOR_HEADER, TASKLIST_EDITOR_HEADER_ACTIONS, TASKLIST_EDITOR_HEADER_INNER, TASKLIST_EDITOR_HEADER_TOP, TASKLIST_EDITOR_SECTION_DIVIDER, TASKLIST_EDITOR_TASK_LIST } from './tasklist-editor.props.js'
 
 export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
   const {
@@ -33,11 +34,11 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
   } = useTasklistEditor(name)
 
   return (
-    <Prim.Box className="tasklist-editor">
+    <Prim.Box {...TASKLIST_EDITOR}>
       {/* Header */}
-      <Prim.Box className="tasklist-editor__header">
-        <Prim.Box className="tasklist-editor__header-inner">
-          <Stack row gap="md" className="tasklist-editor__header-top">
+      <Prim.Box {...TASKLIST_EDITOR_HEADER}>
+        <Prim.Box {...TASKLIST_EDITOR_HEADER_INNER}>
+          <Stack row gap="md" {...TASKLIST_EDITOR_HEADER_TOP}>
             {onBack && (
               <Button variant="ghost" size="icon" onClick={onBack} title="Back">
                 <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
@@ -52,7 +53,7 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
                 {isDirty && ' • unsaved changes'}
               </Caption>
             </Prim.Box>
-            <Prim.Box className="tasklist-editor__header-actions">
+            <Prim.Box {...TASKLIST_EDITOR_HEADER_ACTIONS}>
               <Button
                 variant="primary"
                 onClick={handleSave}
@@ -66,7 +67,7 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
       </Prim.Box>
 
       {/* Body */}
-      <Prim.Box className="tasklist-editor__body">
+      <Prim.Box {...TASKLIST_EDITOR_BODY}>
         {/* Manifest section (index.md) */}
         <ManifestSection
           draft={manifestDraft}
@@ -74,17 +75,17 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
         />
 
         {/* Divider */}
-        <Prim.Box className="tasklist-editor__section-divider" />
+        <Prim.Box {...TASKLIST_EDITOR_SECTION_DIVIDER} />
 
         {/* Tasks */}
         {drafts.length === 0 ? (
-          <Prim.Box className="tasklist-editor__empty">
+          <Prim.Box {...TASKLIST_EDITOR_EMPTY}>
             <Heading level={3}>No tasks yet</Heading>
             <Caption muted>Add your first task to get started.</Caption>
             <Button variant="primary" onClick={addTask}>Add Task</Button>
           </Prim.Box>
         ) : (
-          <Prim.Box className="tasklist-editor__task-list">
+          <Prim.Box {...TASKLIST_EDITOR_TASK_LIST}>
             {drafts.map((draft, index) => (
               <TaskForm
                 key={`${index}-${draft.id}`}

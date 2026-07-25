@@ -9,6 +9,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { SchemaEditor } from './schema-editor'
 import type { ManifestDraft } from './types'
+import { TASKLIST_EDITOR_MANIFEST, TASKLIST_EDITOR_MANIFEST_BODY, TASKLIST_EDITOR_MANIFEST_HEADER } from './tasklist-editor.props.js'
 
 export interface ManifestSectionProps {
   draft: ManifestDraft
@@ -17,12 +18,12 @@ export interface ManifestSectionProps {
 
 export function ManifestSection({ draft, onChange }: ManifestSectionProps) {
   return (
-    <Prim.Box className="tasklist-editor__manifest">
-      <Prim.Box className="tasklist-editor__manifest-header">
+    <Prim.Box {...TASKLIST_EDITOR_MANIFEST}>
+      <Prim.Box {...TASKLIST_EDITOR_MANIFEST_HEADER}>
         <Heading level={3}>Manifest</Heading>
         <Caption muted>Tasklist-level input schema and description (index.md)</Caption>
       </Prim.Box>
-      <Prim.Box className="tasklist-editor__manifest-body">
+      <Prim.Box {...TASKLIST_EDITOR_MANIFEST_BODY}>
         {/* description */}
         <Prim.Box>
           <Label compact>Description</Label>

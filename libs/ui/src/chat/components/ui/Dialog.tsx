@@ -38,7 +38,7 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
   return (
     <Prim.Row position="fixed" top="$0" right="$0" bottom="$0" left="$0" zIndex={50} justifyContent="center" padding="$4" alignItems="center" role="dialog" aria-modal="true">
       <Prim.Box className="absolute inset-0 bg-foreground/20 backdrop-blur-sm" onClick={onClose} />
-      <Prim.Box ref={ref} display="flex" className={cn('relative bg-card border border-border rounded-xl shadow-lg max-w-lg w-full max-h-[85vh] flex-col', className)}>
+      <Prim.Box ref={ref} display="flex" className={className} position="relative" backgroundColor="$card" borderWidth={1} borderColor="$border" borderRadius="$radius-xl" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} maxWidth={512} width="100%" maxHeight="85vh" flexDirection="column">
         {title && (
           <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderBottomWidth={1} borderColor="$border" alignItems="center" flexShrink={0}>
             <Prim.Text as="h2" fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>

@@ -109,6 +109,15 @@ function baseClass(cls) {
   if (cls === 'flex-grow-0') return { flexGrow: 0 }
   if (cls === 'flex-grow') return { flexGrow: 1 }
 
+  // `shadow-*` → the SAME single-layer Tamagui approximations the hand conversions used for
+  // card/dialog/dropdown/sheet, so the codemod and those elements stay consistent. Shadow black
+  // follows the codebase's opaque-black-with-alpha convention (theme-independent, not a token).
+  if (cls === 'shadow-none') return { shadowColor: 'transparent', shadowRadius: 0 }
+  if (cls === 'shadow-sm') return { shadowColor: 'rgba(0,0,0,0.05)', shadowOffset: { width: 0, height: 1 }, shadowRadius: 2 }
+  if (cls === 'shadow' || cls === 'shadow-md') return { shadowColor: 'rgba(0,0,0,0.1)', shadowOffset: { width: 0, height: 4 }, shadowRadius: 6 }
+  if (cls === 'shadow-lg') return { shadowColor: 'rgba(0,0,0,0.1)', shadowOffset: { width: 0, height: 10 }, shadowRadius: 15 }
+  if (cls === 'shadow-xl') return { shadowColor: 'rgba(0,0,0,0.1)', shadowOffset: { width: 0, height: 20 }, shadowRadius: 25 }
+
   // text flow — `whiteSpace` is a real Tamagui web style prop (the primitives already type it),
   // and the codemod needs it because `.is_Text` sets `white-space` unlayered, so a class loses.
   if (cls === 'whitespace-normal') return { whiteSpace: 'normal' }
