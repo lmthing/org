@@ -10,11 +10,7 @@ export function Input({ className, error, ...props }: InputProps) {
   return (
     <Prim.TextField
       {...props}
-      className={cn(
-        'w-full bg-background border rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
-        error ? 'border-destructive' : 'border-border',
-        className,
-      )}
+      className={cn("transition-colors", error ? 'border-destructive' : 'border-border', className)} width="100%" backgroundColor="$background" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$1.5" fontSize="$sm" color="$foreground" placeholderTextColor="$muted-foreground" focusVisibleStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }} disabledStyle={{ opacity: 0.5 }}
     />
   );
 }

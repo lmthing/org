@@ -54,7 +54,7 @@ function EnvTab() {
     <Prim.Col gap="$3" padding="$4">
       <Prim.Text as="p" fontSize="$xs" color="$muted-foreground">Environment variables loaded by the pod at startup.</Prim.Text>
       <Prim.TextArea
-        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+        width="100%" backgroundColor="$background" borderWidth={1} borderColor="$border" borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$foreground" fontFamily="$mono" resize="none" focusStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }}
         rows={14}
         value={content}
         onChange={(e) => { setContent(e.target.value); setStatus('idle'); }}
@@ -95,7 +95,7 @@ function InstructionsTab({ projectId }: { projectId: string }) {
   return (
     <Prim.Col gap="$3" padding="$4">
       <Prim.TextArea
-        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground font-mono resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+        width="100%" backgroundColor="$background" borderWidth={1} borderColor="$border" borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$foreground" placeholderTextColor="$muted-foreground" fontFamily="$mono" resize="none" focusStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }}
         rows={12}
         value={content}
         onChange={(e) => setContent(e.target.value)}
@@ -142,7 +142,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
         <Button variant="outline" size="sm" loading={uploading}>
           {uploading ? 'Uploading…' : '+ Upload file'}
         </Button>
-        <Prim.TextField ref={fileRef} type="file" className="hidden" onChange={(e) => void handleFile(e)} />
+        <Prim.TextField ref={fileRef} type="file" display="none" onChange={(e) => void handleFile(e)} />
       </Prim.Text>
     </Prim.Col>
   );

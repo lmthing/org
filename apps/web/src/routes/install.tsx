@@ -308,7 +308,7 @@ function SpaceInstall({ spaceId }: { spaceId: string }) {
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
               disabled={projects === null}
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+              borderRadius="$radius-md" borderWidth={1} borderColor="$border" backgroundColor="$background" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$foreground"
             >
               {(projects ?? []).map((p) => (
                 <Prim.Option key={p.id} value={p.id}>
