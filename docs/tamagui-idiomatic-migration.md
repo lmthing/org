@@ -1,8 +1,8 @@
 # Phase 2 — the idiomatic-Tamagui migration ("the Tamagui way", zero-Tailwind)
 
-> **Status: ELEMENT-LAYER SWAP UNDERWAY — foundation landed, the whole surface sweep landed,
-> and 43 of 68 component/element CSS files deleted (25 stylesheets remain: 19 component, 6
-> element). CSS bundle 171 → 132 kB.**
+> **Status: ELEMENT-LAYER SWAP ALL BUT DONE — foundation landed, the whole surface sweep landed,
+> and 47 of 68 component/element CSS files deleted (21 stylesheets remain: 19 component, 2
+> element). CSS bundle 171 → 127 kB.**
 > Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every surface primitive + overlay
 > *onto Tamagui components* while **keeping the Tailwind + `theme.css` + BEM styling engine**
 > underneath (coexistence). This Phase 2 replaces that styling engine with **idiomatic Tamagui** —
@@ -24,10 +24,11 @@ most of the way through**.
   modifiers/animations/dynamic `cn()` left as residual className.
 - **Component-surface BEM sweep COMPLETE** — the entire `computer` surface plus every
   `components/**` area had its BEM classes on `Prim.*` converted to props.
-- **Element-layer swap (P4) — 18 of the 29 `elements/**` blocks are done.** Landed in slices:
+- **Element-layer swap (P4) — 27 of the 29 `elements/**` blocks are done.** Landed in slices:
   `btn` · `badge` · `heading`/`code`/`cozy-text`/`list-item` · `caption`/`label`/`separator` ·
   `stack`/`page`/`split-pane` · `card`/`panel`/`avatar`/`terminal` ·
-  `top-bar`/`tab-bar`/`breadcrumb`/`app-links` · `input`/`textarea`/`select`. Each block's
+  `top-bar`/`tab-bar`/`breadcrumb`/`app-links` · `input`/`textarea`/`select` ·
+  `dialog`/`dropdown`/`sheet`/`settings-dialog`. Each block's
   `@apply` rules become `$`-token style PROPS transcribed from its `*.styled.tsx` proof, applied to
   the `Prim.*` primitive that renders the real host tag.
 
@@ -82,22 +83,61 @@ Assertions pin Tamagui's deterministic ATOMIC classes (`_dsp-flex`, `_gap-c-spac
 AND the resolved design token — and necessary: jsdom cannot parse Tamagui's stylesheet at all (its
 `@scope` rule fails jsdom's CSS parser), so `toHaveStyle` is unusable here.
 
+### Two more things that turned out not to be blockers
+
+**The overlay animations were DEAD, not deferred.** `dialog`/`dropdown`/`sheet` were recorded here as
+blocked on a Tamagui animation driver because they are mostly
+`data-[state=open]:animate-in`/`fade-*`/`zoom-*`/`slide-*`. But **nothing in the repo has set
+`data-state` since Phase 1 B3.4 removed Radix** — Radix was what set it. Those selectors could never
+match, so the rules had been inert for the whole of Phase 2. They were deleted, not ported; no
+animation driver, no new dependency, and no motion change (there was no motion). `data-[disabled]`
+was the same, and is now Tamagui's `disabledStyle`, which keys off the real `disabled` prop.
+`.sheet--left` was likewise referenced by the component but never defined in the stylesheet.
+
+**`@media` needed no new machinery.** `settings-dialog`'s `@media (max-width: 640px)` block is now
+Tamagui media props. The generated media config is Tailwind's — min-width, mobile-first — so the
+query INVERTS: the narrow layout becomes the base and `$gtXs` restores the wide one. Its other CSS
+hack went too: `.dialog.settings-dialog` was a compound selector whose only job was to out-specify
+the base `.dialog` width cap. With the dialog on props, `DialogContent` spreads its base and then
+the caller's props, so passing `maxWidth`/`maxHeight` wins by spread order.
+
+### Compiler extraction: measured, and it does NOT do what this plan assumed
+
+The shortcut this doc implied — turn extraction ON and adopt the 68 `*.styled.tsx` proofs wholesale
+— **does not work.** Measured end to end against `apps/web`:
+
+- Extraction *runs* (448 files) once the plugin is given an entry it can bundle. It cannot be
+  pointed at `@lmthing/ui`: the extractor config-bundles each entry in `components:`, and the
+  package barrel reaches app-coupled modules (`components/auth/*` → `@tanstack/react-query`,
+  a `@/` alias) that do not resolve outside the app and hard-fail the build. A dedicated barrel
+  exporting only component definitions fixes that.
+- With that in place a `styled()` component **is** flattened to a host element with a precomputed
+  className — but to **`div`**, ignoring `tag: 'button'` in the `styled()` definition. Passing
+  `tag` as a JSX prop instead makes the extractor **bail entirely**.
+- So extraction does not make `tag` real. The per-tag `createComponent` primitives remain the only
+  thing that yields a correct host tag, which is what §6 now says.
+- Extraction is also nearly pointless here today: the primitives are `forwardRef` wrappers, so the
+  extractor cannot statically analyse them and leaves them alone. Every real surface goes through
+  those, so almost nothing is optimized. It is left OFF.
+
+Two gotchas worth keeping if anyone retries: an **import alias** (`import { X as Y }`) silently
+defeats extraction, and the plugin was loading the **native** config (`tamagui.config.ts`) for the
+web build, so the extractor never saw the web components at all.
+
 ### What remains
 
-- **6 element stylesheets.** `dialog`/`dropdown`/`sheet` are blocked on the **animation driver** —
-  they are mostly `data-[state=open]:animate-in`/`fade-*`/`zoom-*`/`slide-*`, which have no prop
-  form until a Tamagui animation driver is configured (§5). `app-sidebar` and `settings-dialog` are
-  the two largest blocks and carry `@media` rules and descendant combinators. `sidebar` is TRIMMED
-  to just `.sidebar__item`/`--active`: most call sites are TanStack Router `<Link>`s, which render
-  their own `<a>` and accept only `className` — no `asChild`, no style props — so the stylesheet
-  stays the single definition rather than being duplicated as a prop bag.
-- **19 component stylesheets**, all residual-blocked on the same three categories.
-- **The animation driver is now the single highest-leverage remaining item**: it unblocks the
-  overlays and every `transition-*`/`animate-*` residual across the repo. It is deliberately NOT
-  done here because it changes visible motion app-wide, and the P0 visual harness that is supposed
-  to gate exactly that kind of change does not exist yet — build P0 first.
-- Then: config convergence, compiler-ON extraction, the `theme.css`/Tailwind deletion, SPIKE C
-  (react 18/19 types), and native (needs a device toolchain).
+- **2 element stylesheets.** `app-sidebar` is the last big block (41 classes, descendant
+  combinators). `sidebar` is TRIMMED to `.sidebar__item`/`--active`: most call sites are TanStack
+  Router `<Link>`s, which render their own `<a>` and accept only `className` — no `asChild`, no
+  style props — so the stylesheet stays the single definition rather than being duplicated as a
+  prop bag. A `<NavLink>` wrapper (Tamagui props + the router's imperative `navigate` +
+  `useMatchRoute` for active state) is the way to finish it.
+- **19 component stylesheets**, blocked on descendant combinators, `::before`, gradients and
+  classes applied to third-party components.
+- **P0 is still the gating item for anything that changes output**, and is still not built.
+- Then: the `theme.css`/Tailwind deletion — note this CANNOT be a straight delete, because SPIKE A1
+  made every `$color` resolve to `var(--…)`; a custom-properties-only file has to survive or every
+  colour in the app resolves to nothing. Plus SPIKE C (react 18/19 types) and native.
 
 | Item | Status | Where |
 |---|---|---|
@@ -105,11 +145,10 @@ AND the resolved design token — and necessary: jsdom cannot parse Tamagui's st
 | **SPIKE B — token-scale reconciliation** | ✅ done | Tailwind `space`/`size`/`fontSizes`/`lineHeights`/`fontWeights`/`letterSpacings`/`zIndex`/`media` generated + pinned to Tailwind by `libs/css/src/__tests__/scale-parity.test.ts` |
 | **SPIKE C — react 18/19 types** | ⬜ open | not attempted; casts retained (documented in `_tamagui.tsx`). Blocks nothing above |
 | **P1 — token + theme foundation** | ✅ done | full Tamagui token set from `tokens.json`; `tamagui.config.ts` (native hex) + `tamagui-web.config.ts` (var-backed) both carry it; parity tests green. Config CONVERGENCE (one config, delete web config) deferred — it changes output, see §7 |
-| **P2 — BEM → styled()+variants** | ✅ 68 proofs + ✅ **component sweep COMPLETE** | Every BEM block has a `*.styled.tsx` proof + `*-styled.test.tsx` gate. **Every `components/**` + `computer` surface is swept**: all BEM on `Prim.Box/Text/Pressable` → props. `.css` deleted when a block was fully on `Prim.*`; KEPT when residuals sit on icons / third-party components / un-expressible CSS. **25 stylesheets remain** (19 component — all residual-blocked — + 6 element). The `!important`/`@apply` retirement waits until `theme.css` deletion (P6) |
+| **P2 — BEM → styled()+variants** | ✅ 68 proofs + ✅ **component sweep COMPLETE** | Every BEM block has a `*.styled.tsx` proof + `*-styled.test.tsx` gate. **Every `components/**` + `computer` surface is swept**: all BEM on `Prim.Box/Text/Pressable` → props. `.css` deleted when a block was fully on `Prim.*`; KEPT when residuals sit on icons / third-party components / un-expressible CSS. **21 stylesheets remain** (19 component — all residual-blocked — + 2 element). The `!important`/`@apply` retirement waits until `theme.css` deletion (P6) |
 | **P3 — className → props codemod** | ✅ tool built + hardened + 🟡 **applied to chat+studio** | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + a 43-test gate (map + a new `-transform` suite). **Run for real**: chat + studio. Hardened after the first run surfaced two silent-drop bugs (both fixed + regression-tested, re-migrated clean): (a) directional `border-t/r/b/l/x/y` were misread as color tokens (`$t`) → widths dropped; (b) the `lm-*` runtime palette (`bg-lm-accent` …) became bogus `$lm-*` tokens → now kept as className. Also **added `cn("literal", …rest)` lifting** (the common dynamic shape). Alpha modifiers/animations/`lm-*`/dynamic `cn()` stay residual. Remaining className: chat ~223, studio ~589 (mostly BEM on shared elements + dynamic `cn()`), computer ~24 |
 | **P0 — real-surface visual harness** | 🟡 mechanism proven, baseline NOT built | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining. **This is now the gating item**: the animation driver (the biggest remaining unblock) changes visible motion app-wide, which is precisely the class of change P0 exists to review |
-| **P4 — element layer + primitives idiomatic** | 🟡 **18 of 29 element blocks swapped**; form-control primitives landed | The shipped elements now carry `$`-token PROPS on the `Prim.*` primitives (real host tags via `createComponent`), transcribed from each block's proof variant table. `TextField`/`TextArea`/`Select` are Tamagui components now, which is what unblocked `input`/`textarea`/`select`. The earlier "blocked until compiler extraction is ON" note was wrong about the shipped path — see the Progress log. **Remaining: `dialog`/`dropdown`/`sheet` (animation driver), `app-sidebar`/`settings-dialog` (`@media` + descendant combinators), `sidebar` (trimmed; router-`<Link>` residual).** Shipped-element suites are gated for the first time (`elements/**/index.test.tsx`, 508 → 617 tests) |
-| **P5 — overlays on @tamagui/dialog, compiler ON, delete pipeline** | ⬜ remaining | Needs the animation driver first (which needs P0). Then config convergence + extraction + the `theme.css`/Tailwind deletion |
+| **P4 — element layer + primitives idiomatic** | 🟡 **27 of 29 element blocks swapped**; form-control primitives landed | The shipped elements carry `$`-token PROPS on the `Prim.*` primitives (real host tags via `createComponent`), transcribed from each block's proof variant table. Both blockers this row used to name were wrong: extraction does NOT make `tag` real (measured — see the Progress log), and the overlay animations were DEAD rather than deferred. **Remaining: `app-sidebar` (41 classes, descendant combinators) and `sidebar` (trimmed; router-`<Link>` residual).** Shipped-element suites gated for the first time (508 → 617 tests) |
 
 ---
 
@@ -302,10 +341,13 @@ still resolves against `theme.css` until `theme.css` is deleted last (P6).
 - **Font tokens need a family.** Any primitive accepting `$` font tokens must ensure a `fontFamily`
   is set first, or Tamagui silently drops them (`withFontScale`). Keep that invariant if these
   builders are ever rewritten.
-- **Overlays:** replace the hand-rolled `Prim.*` Dialog/Sheet/Dropdown/ContextMenu with `@tamagui/dialog`
-  /`popover`/`sheet` + `Adapt` (native → sheet). Now that theming is idiomatic (colored config +
-  animation driver from §3), the theme-token blocker Phase 1 hit is gone. Keep the same public component
-  names/API; verify with the harness + the jsdom behavior tests already written.
+- **Overlays — DONE, and they needed none of what this bullet planned.** The plan was to replace the
+  hand-rolled `Prim.*` Dialog/Sheet/Dropdown with `@tamagui/dialog`/`popover`/`sheet` + `Adapt` once
+  an animation driver existed. In fact their animation rules were all `data-[state=…]`-gated and
+  **nothing has set `data-state` since Radix was removed**, so they were inert: deleted, not ported,
+  with no driver and no new dependency. The hand-rolled components keep their API and now carry
+  `$`-token props; the jsdom behaviour tests still gate them. Swapping onto `@tamagui/dialog` is a
+  separate, optional refactor — worth doing for `Adapt` (native → sheet), not for styling.
 
 ## 7. P5 — Config convergence, compiler ON, delete the old pipeline
 

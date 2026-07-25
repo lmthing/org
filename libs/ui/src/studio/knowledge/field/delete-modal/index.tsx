@@ -4,6 +4,7 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { X, AlertTriangle } from 'lucide-react'
 import '@lmthing/css/components/knowledge/index.css'
+import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
 
 interface DeleteModalProps {
   isOpen: boolean
@@ -19,14 +20,14 @@ export function DeleteModal({ isOpen, onClose, onConfirm, nodePath, isDirectory 
   const name = nodePath.split('/').pop() || nodePath
 
   return (
-    <Prim.Box className="dialog__backdrop" onClick={onClose}>
+    <Prim.Box {...DIALOG_BACKDROP} onClick={onClose}>
       <Prim.Box
-        className="dialog"
+        {...DIALOG_BASE}
         maxWidth={384}
         onClick={e => e.stopPropagation()}
         onKeyDown={e => { if (e.key === 'Escape') onClose() }}
       >
-        <Prim.Box className="dialog__header" borderBottomWidth={2} borderBottomColor="$destructive">
+        <Prim.Box {...DIALOG_HEADER} borderBottomWidth={2} borderBottomColor="$destructive">
           <Prim.Box display="flex" alignItems="center" gap="$2">
             <AlertTriangle className="delete-modal__warning-icon" />
             <Heading level={3} className="delete-modal__title">Delete {isDirectory ? 'Folder' : 'File'}</Heading>
@@ -36,7 +37,7 @@ export function DeleteModal({ isOpen, onClose, onConfirm, nodePath, isDirectory 
           </Button>
         </Prim.Box>
 
-        <Prim.Box className="dialog__content">
+        <Prim.Box {...DIALOG_CONTENT}>
           <Prim.Box paddingVertical={0} paddingHorizontal="$6">
             <Caption>
               Are you sure you want to delete <Prim.Text as="strong">{name}</Prim.Text>?

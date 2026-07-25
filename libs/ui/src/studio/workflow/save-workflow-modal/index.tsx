@@ -15,6 +15,7 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { CardFooter } from '@lmthing/ui/elements/content/card'
 import '@lmthing/css/components/workflow/save-workflow-modal/index.css'
+import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../elements/overlays/dialog/index.js'
 
 interface SaveTasklistModalProps {
   isOpen: boolean
@@ -73,9 +74,9 @@ export function SaveTasklistModal({ isOpen, onClose, existingName, onSaved }: Sa
   const isValid = slug.length > 0
 
   return (
-    <Prim.Box className="dialog__backdrop">
-      <Prim.Box className="dialog__content" maxWidth="28rem">
-        <Prim.Box className="dialog__header">
+    <Prim.Box {...DIALOG_BACKDROP}>
+      <Prim.Box {...DIALOG_CONTENT} maxWidth="28rem">
+        <Prim.Box {...DIALOG_HEADER}>
           <Prim.Box>
             <Heading level={3}>{existingName ? 'Rename Tasklist' : 'New Tasklist'}</Heading>
             <Caption muted>

@@ -14,6 +14,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Avatar, AvatarImage, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
 import '@lmthing/css/components/space/index.css'
 import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index.js'
+import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../elements/overlays/dialog/index.js'
 
 export interface SpaceUser {
   id: string
@@ -82,9 +83,9 @@ function InviteDialog({ isOpen, onClose, onInvite }: InviteDialogProps) {
   }
 
   return (
-    <Prim.Box className="dialog__backdrop">
-      <Prim.Box className="dialog__content" maxWidth={448}>
-        <Prim.Box className="dialog__header">
+    <Prim.Box {...DIALOG_BACKDROP}>
+      <Prim.Box {...DIALOG_CONTENT} maxWidth={448}>
+        <Prim.Box {...DIALOG_HEADER}>
           <Heading level={3}>Invite User</Heading>
           <Caption muted>Add a new member to your space</Caption>
         </Prim.Box>

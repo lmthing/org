@@ -10,6 +10,7 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { CardFooter } from '@lmthing/ui/elements/content/card'
+import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
 
 interface SaveAgentModalProps {
   isOpen: boolean
@@ -42,9 +43,9 @@ export function SaveAgentModal({ isOpen, onClose, onSave }: SaveAgentModalProps)
   if (!isOpen) return null
 
   return (
-    <Prim.Box className="dialog__backdrop">
-      <Prim.Box className="dialog__content" maxWidth={448}>
-        <Prim.Box className="dialog__header">
+    <Prim.Box {...DIALOG_BACKDROP}>
+      <Prim.Box {...DIALOG_CONTENT} maxWidth={448}>
+        <Prim.Box {...DIALOG_HEADER}>
           <Stack row gap="sm" className="save-agent-modal__header-row">
             <Prim.Box className="save-agent-modal__icon-wrap">
               <Prim.Svg className="save-agent-modal__icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -13,6 +13,7 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Avatar, AvatarImage, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
 import '@lmthing/css/components/space/index.css'
+import { DIALOG_BACKDROP, DIALOG_CONTENT } from '../../../elements/overlays/dialog/index.js'
 
 interface UserDetailPanelProps {
   user?: SpaceUser | null
@@ -25,8 +26,8 @@ interface UserDetailPanelProps {
 function ConfirmDialog({ isOpen, userName, onConfirm, onClose }: { isOpen: boolean; userName: string; onConfirm: () => void; onClose: () => void }) {
   if (!isOpen) return null
   return (
-    <Prim.Box className="dialog__backdrop">
-      <Prim.Box className="dialog__content" maxWidth={448}>
+    <Prim.Box {...DIALOG_BACKDROP}>
+      <Prim.Box {...DIALOG_CONTENT} maxWidth={448}>
         <Stack gap="md" className="confirm-dialog__content">
           <Prim.Box
             width="$12"

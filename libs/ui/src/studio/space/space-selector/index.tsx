@@ -9,6 +9,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import '@lmthing/css/components/space/index.css'
 import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index.js'
+import { DROPDOWN_CONTENT, DROPDOWN_ITEM } from '../../../elements/overlays/dropdown/index.js'
 
 export interface SpaceEntry {
   id: string
@@ -48,7 +49,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
       </Button>
 
       {isOpen && (
-        <Prim.Box className="dropdown__content" position="absolute" top="100%" left={0} right={0} zIndex={50} marginTop="$1">
+        <Prim.Box {...DROPDOWN_CONTENT} position="absolute" top="100%" left={0} right={0} zIndex={50} marginTop="$1">
           <Prim.Box padding="$2" borderBottomWidth={1} borderBottomColor="$border">
             <Prim.Box position="relative">
               <Search className="space-selector__search-icon" />
@@ -71,7 +72,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
                 <Prim.Pressable
                   key={space.id}
                   onClick={() => handleSelect(space.id)}
-                  className={`dropdown__item ${space.id === currentSpaceId ? 'list-item--selected' : ''}`}
+                  {...DROPDOWN_ITEM} className={space.id === currentSpaceId ? 'list-item--selected' : undefined}
                   width="100%"
                   textAlign="left"
                 >
@@ -94,7 +95,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
                 </Stack>
               </Prim.Form>
             ) : (
-              <Prim.Pressable onClick={() => setShowCreate(true)} className="dropdown__item" width="100%">
+              <Prim.Pressable onClick={() => setShowCreate(true)} {...DROPDOWN_ITEM} width="100%">
                 <Plus className="space-selector__new-icon" /><Prim.Text>New Space</Prim.Text>
               </Prim.Pressable>
             )}
