@@ -197,7 +197,7 @@ export function Message({ block }: MessageProps) {
   if (block.type === 'user') {
     const attachments = block.attachments ?? [];
     return (
-      <Prim.Row className="lm-fade-in group" justifyContent="flex-end" paddingHorizontal="$4" paddingVertical="$2">
+      <Prim.Row className="lm-fade-in" {...({ group: true } as Record<string, unknown>)} justifyContent="flex-end" paddingHorizontal="$4" paddingVertical="$2">
         <Prim.Row maxWidth="75%" gap="$1.5" alignItems="flex-start">
           <CopyButton text={block.content} />
           <Prim.Col gap="$1.5" alignItems="flex-end">
@@ -209,7 +209,7 @@ export function Message({ block }: MessageProps) {
               </Prim.Col>
             )}
             {block.content && (
-              <Prim.Box className="bg-muted text-foreground rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed" whiteSpace="pre-wrap">
+              <Prim.Box backgroundColor="$muted" color="$foreground" borderRadius="$radius-xl" borderTopRightRadius="$radius-sm" paddingHorizontal="$4" paddingVertical="$2.5" fontSize="$sm" lineHeight={1.625} whiteSpace="pre-wrap">
                 {block.content}
               </Prim.Box>
             )}
@@ -224,7 +224,7 @@ export function Message({ block }: MessageProps) {
     const isString = typeof block.descriptor === 'string';
     const textForCopy = isString ? (block.descriptor as string) : preview(block.descriptor, 500);
     return (
-      <Prim.Box className="lm-fade-in group" paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
+      <Prim.Box className="lm-fade-in" {...({ group: true } as Record<string, unknown>)} paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
         <Prim.Row gap="$1.5" alignItems="flex-start">
           <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0} fontSize="$sm" color="$foreground">
             {showAttribution && (
@@ -275,7 +275,7 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
     .join('\n\n');
 
   return (
-    <Prim.Box className="group lm-fade-in" paddingVertical="$1" position="relative">
+    <Prim.Box className="lm-fade-in" {...({ group: true } as Record<string, unknown>)} paddingVertical="$1" position="relative">
       <Prim.Row gap="$2" paddingHorizontal="$4" alignItems="flex-start">
         <Prim.Text backgroundColor="color-mix(in srgb, var(--brand-2) 20%, transparent)" flexShrink={0} width="$6" height="$6" borderRadius="$radius-full" alignItems="center" justifyContent="center" fontSize="$xs" userSelect="none" marginTop="0.75rem" display="flex" aria-hidden="true">
           ✦

@@ -158,8 +158,9 @@ describe('variants → nested style props', () => {
     expect(classToProps('md:flex-row').props).toEqual({ $md: { flexDirection: 'row' } })
     expect(classToProps('lg:gap-8').props).toEqual({ $lg: { gap: '$8' } })
   })
-  it('group-hover → $group-hover', () => {
-    expect(classToProps('group-hover:text-foreground').props).toEqual({ '$group-hover': { color: '$foreground' } })
+  it('group-hover is NOT a nested style prop — see the dedicated case below', () => {
+    // It used to auto-convert to `$group-hover`, which silently broke every reveal it touched.
+    expect(classToProps('group-hover:text-foreground').props).toEqual({})
   })
   it('dark: is kept (the $token flips with the theme; theme.css rule applies meanwhile)', () => {
     const r = classToProps('dark:bg-card')
@@ -297,5 +298,74 @@ describe('regression: lm-* runtime palette never becomes a bogus $lm-* token', (
   it('real design-token colors still lift', () => {
     expect(classToProps('bg-primary').props).toEqual({ backgroundColor: '$primary' })
     expect(classToProps('text-muted-foreground').props).toEqual({ color: '$muted-foreground' })
+  })
+})
+
+describe('the second-wave families (unblocking the codemod’s manual tail)', () => {
+  it('the `!important` prefix strips: a style PROP already beats Tamagui’s unlayered base rule', () => {
+    // `!hidden` / `!flex` exist ONLY to out-specify `.is_Box { display:flex }`. As props that
+    // fight is gone, so the bang is noise.
+    expect(classToProps('!hidden').props).toEqual({ display: 'none' })
+    expect(classToProps('!flex').props).toEqual({ display: 'flex' })
+    // …and it composes with the variant prefixes, which is what actually held those elements back.
+    expect(classToProps('md:!hidden').props).toEqual({ $md: { display: 'none' } })
+  })
+
+  it('`group-hover:` is REPORTED, never auto-converted — the parent needs a coordinated change', () => {
+    // Tailwind group-hover keys off the `group` CLASS on an ancestor; Tamagui `$group-hover` keys
+    // off a `group` PROP (marker `t_group`). Converting only the child yields a selector that never
+    // matches — invisible until someone hovers. The codemod cannot touch the parent, so it reports.
+    expect(classToProps('group-hover:!flex').props).toEqual({})
+    expect(classToProps('group-hover:!flex').skip).toEqual(['group-hover:!flex'])
+    expect(classToProps('group-hover:opacity-100').skip).toEqual(['group-hover:opacity-100'])
+  })
+
+  it('the whole `cursor-*` family maps, not just the three that were hard-coded', () => {
+    expect(classToProps('cursor-col-resize').props).toEqual({ cursor: 'col-resize' })
+    expect(classToProps('cursor-row-resize').props).toEqual({ cursor: 'row-resize' })
+    expect(classToProps('cursor-grab').props).toEqual({ cursor: 'grab' })
+    expect(classToProps('cursor-pointer').props).toEqual({ cursor: 'pointer' })
+    // A typo is still REPORTED rather than emitted as a bogus CSS value.
+    expect(classToProps('cursor-pointr').skip).toEqual(['cursor-pointr'])
+  })
+
+  it('per-corner and arbitrary radius', () => {
+    expect(classToProps('rounded-tr-sm').props).toEqual({ borderTopRightRadius: '$radius-sm' })
+    expect(classToProps('rounded-t-lg').props)
+      .toEqual({ borderTopLeftRadius: '$radius-lg', borderTopRightRadius: '$radius-lg' })
+    expect(classToProps('rounded-[9px]').props).toEqual({ borderRadius: '9px' })
+    // The plain form is untouched by the new branches.
+    expect(classToProps('rounded-lg').props).toEqual({ borderRadius: '$radius-lg' })
+  })
+
+  it('grid columns', () => {
+    expect(classToProps('grid-cols-3').props).toEqual({ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' })
+    expect(classToProps('grid-cols-[1fr_1px_1fr]').props).toEqual({ gridTemplateColumns: '1fr 1px 1fr' })
+  })
+
+  it('insets take fractions, and translate becomes a transform string', () => {
+    expect(classToProps('left-1/2').props).toEqual({ left: '50%' })
+    expect(classToProps('-translate-x-1/2').props).toEqual({ transform: 'translateX(-50%)' })
+    expect(classToProps('translate-y-full').props).toEqual({ transform: 'translateY(100%)' })
+  })
+
+  it('a SECOND transform on the same element is reported, never silently overwritten', () => {
+    // CSS composes transforms in one declaration; `Object.assign` would drop the first.
+    const r = classToProps('-translate-x-1/2 -translate-y-1/2')
+    expect(r.props).toEqual({ transform: 'translateX(-50%)' })
+    expect(r.skip).toEqual(['-translate-y-1/2'])
+  })
+
+  it('line-clamp expands to the -webkit-box triple (Tamagui passes Webkit* keys through)', () => {
+    expect(classToProps('line-clamp-2').props).toEqual({
+      display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden',
+    })
+  })
+
+  it('`break-words` maps, `break-all` does NOT — wordBreak is not a Tamagui style prop', () => {
+    // Verified in elements/primitives/index.test.tsx: `wordWrap` emits `_ww-…`, `wordBreak` emits
+    // nothing at all. Mapping the latter would be a silent drop, so it stays a reported skip.
+    expect(classToProps('break-words').props).toEqual({ wordWrap: 'break-word' })
+    expect(classToProps('break-all').skip).toEqual(['break-all'])
   })
 })

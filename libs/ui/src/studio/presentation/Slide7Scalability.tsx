@@ -60,13 +60,13 @@ export default function Slide6Scalability() {
       </Prim.Col>
 
       {/* BODY */}
-      <Prim.Box className="w-full grid-cols-[1fr_1px_1fr] gap-x-9" display="grid" marginBottom="1.75rem">
+      <Prim.Box width="100%" gridTemplateColumns="1fr 1px 1fr" columnGap="$9" display="grid" marginBottom="1.75rem">
         {/* LEFT — Platform points */}
         <Prim.Col justifyContent="center" gap="$5">
           {points.map((p) => (
             <Prim.Row key={p.title} gap="$3" alignItems="flex-start">
               <Prim.Row
-                className="h-10 w-10 justify-center rounded-[9px] border text-xl"
+                height="$10" width="$10" justifyContent="center" borderRadius="9px" borderWidth={1} fontSize="$xl"
                 alignItems="center"
                 flexShrink={0}
                 style={{ lineHeight: '1.75rem', background: colors.bgCard, borderColor: colors.cardBorder }}

@@ -293,4 +293,72 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(child.className).toContain('_o-0')
     expect(child.className).toContain('_o-_grouprow-hover_1')
   })
+
+  /**
+   * The trap the codemod must NOT walk into: Tailwind's `group-hover:` keys off the `group` CLASS
+   * on an ancestor, Tamagui's `$group-hover` keys off the `group` PROP — which stamps `t_group`,
+   * a different marker. A child converted without its parent emits a selector nothing matches.
+   */
+  it('a Tailwind `group` className does NOT satisfy Tamagui’s $group-hover', () => {
+    const withClass = withProvider(
+      <Box className="group" data-parent="1">
+        <Box data-child="1" opacity={0} $group-hover={{ opacity: 1 }} />
+      </Box>,
+    ).container
+    // The child's atomic class is emitted either way — that is exactly why the break is silent.
+    expect(withClass.querySelector('[data-child]')!.className).toContain('_o-_grouphover_1')
+    // …but the parent carries Tailwind's bare `group`, never the `t_group` marker the selector needs.
+    const parentCls = withClass.querySelector('[data-parent]')!.className
+    expect(parentCls).toContain('group')
+    expect(parentCls).not.toContain('t_group')
+
+    // With the PROP, the marker appears and the pair is live.
+    const withProp = withProvider(
+      <Box group={true as never} data-parent="1">
+        <Box data-child="1" opacity={0} $group-hover={{ opacity: 1 }} />
+      </Box>,
+    ).container
+    expect(withProp.querySelector('[data-parent]')!.className).toContain('t_group')
+
+    // Text is a group parent too (Tooltip wraps its trigger in one).
+    const onText = withProvider(<Text group={true as never} data-parent="1">x</Text>).container
+    expect(onText.querySelector('[data-parent]')!.className).toContain('t_group')
+  })
+
+  /**
+   * Which style props Tamagui actually ACCEPTS is not documented and not guessable — an unknown key
+   * is dropped with no error and no style. The codemod's translation table
+   * (`scripts/classnames-to-props-map.mjs`) is written against these facts, so they are pinned
+   * here: if a Tamagui upgrade changes the accepted set, this fails instead of the app silently
+   * losing paint. See docs/tamagui-idiomatic-migration.md §5.
+   */
+  describe('accepted vs silently-dropped style props (the codemod’s mapping contract)', () => {
+    const cls = (props: Record<string, unknown>, C: typeof Box | typeof Text = Box) =>
+      withProvider(<C data-p="1" {...props} />).container.querySelector('[data-p]')!.className
+
+    it('ACCEPTS the props the codemod emits', () => {
+      expect(cls({ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }))
+        .toMatch(/_gridTemplateColumns-/)
+      expect(cls({ transform: 'translateX(-50%)' })).toMatch(/_tr-translateX/)
+      expect(cls({ left: '50%' })).toMatch(/_left-/)
+      expect(cls({ cursor: 'col-resize' })).toContain('_cur-col-resize')
+      expect(cls({ borderTopRightRadius: '$radius-sm' })).toMatch(/_btrr-/)
+      expect(cls({ wordWrap: 'break-word' }, Text)).toContain('_ww-break-word')
+      // Vendor-prefixed keys pass straight through, which is what makes `line-clamp-N` convertible.
+      const clamp = cls({ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2 })
+      expect(clamp).toContain('_dsp--webkit-box')
+      expect(clamp).toContain('_WebkitBoxOrient-vertical')
+      expect(clamp).toContain('_WebkitLineClamp-2')
+    })
+
+    it('SILENTLY DROPS these — so the codemod must NOT map them', () => {
+      // `wordBreak` (≠ `wordWrap`), `listStyleType` and `listStyle` produce no atomic class at all.
+      // `break-all` / `list-disc` / `list-decimal` therefore stay reported skips and get an inline
+      // `style` by hand.
+      for (const props of [{ wordBreak: 'break-all' }, { listStyleType: 'disc' }, { listStyle: 'disc' }]) {
+        const base = cls({})
+        expect(cls(props)).toBe(base)
+      }
+    })
+  })
 })

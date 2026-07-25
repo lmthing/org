@@ -132,7 +132,7 @@ export function AppShell({ singleSession }: AppShellProps) {
         {showSidebar && sidebarAsDrawer && (
           <Prim.Pressable
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="md:!hidden absolute top-3 left-3 z-10 w-8 h-8 !flex items-center justify-center text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted"
+            position="absolute" top="$3" left="$3" zIndex={10} width="$8" height="$8" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" borderRadius="$radius-lg" $md={{ display: "none" }} hoverStyle={{ color: "$foreground", backgroundColor: "$muted" }}
             aria-label="Toggle sidebar"
           >
             ☰
