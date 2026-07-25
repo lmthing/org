@@ -194,7 +194,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
         value={searchQuery}
         onChange={e => setSearchQuery(e.target.value)}
         placeholder="Search chats…"
-        className="w-full bg-muted border-0 rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        width="100%" backgroundColor="$muted" borderWidth={0} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$1.5" fontSize="$sm" color="$foreground" placeholderTextColor="$muted-foreground" focusStyle={{ outlineWidth: 1, outlineStyle: "solid", outlineColor: "$ring" }}
       />
       {grouped.length === 0 && activeProjectId && (
         <Prim.Text as="p" paddingHorizontal="$2" fontSize="$sm" color="$muted-foreground">No chats yet.</Prim.Text>

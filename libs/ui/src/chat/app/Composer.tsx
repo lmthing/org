@@ -338,7 +338,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           title="Attach image, audio, or file to your message"
         >
           <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></Prim.Svg>
-          <Prim.TextField ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple className="hidden" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
+          <Prim.TextField ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple display="none" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
         </Prim.Text>
 
         {/* Voice: record → transcribe → stage as an attachment (talk to THING) */}
@@ -369,7 +369,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           rows={1}
           placeholder={budgetBlocked ? 'Budget reached — try again after it resets' : 'Message THING…'}
           data-testid="message-input"
-          className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground text-sm resize-none focus:outline-none min-h-[24px] max-h-[180px] leading-6 disabled:opacity-50"
+          flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="transparent" color="$foreground" placeholderTextColor="$muted-foreground" fontSize="$sm" resize="none" minHeight="24px" maxHeight="180px" lineHeight="$6" focusStyle={{ outlineWidth: 0, outlineStyle: "none" }} disabledStyle={{ opacity: 0.5 }}
         />
 
         {/* Send */}

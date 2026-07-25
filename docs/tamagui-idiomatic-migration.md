@@ -241,11 +241,11 @@ is migrated.
 | component stylesheets | 15 | **12** |
 | orphan BEM classNames (dead, no rule anywhere) | 20 | **0** |
 | codemod skips needing hand work | 120 | **0** (30 legitimate passthroughs remain) |
-| residual Tailwind utility classNames | ~945 → 539 | **410 across 70 files** ¹ |
+| residual Tailwind utility classNames | ~945 → 539 | **296 across 66 files** ¹ |
 | …of which the animation family | — | **67** |
 | files gated by `lint:rn` | 138 | **230** |
 | raw host tags in `elements`+`components` | 67 (ungated) | **0** |
-| CSS bundle (`apps/web`) | 171 kB → 41.79 kB | **35.93 kB** |
+| CSS bundle (`apps/web`) | 171 kB → 41.79 kB | **32.84 kB** |
 | `libs/ui` tests | 508 → 645 | **664** |
 
 ¹ higher than the earlier 539 because that figure counted only static string classNames; this one
@@ -276,14 +276,21 @@ idiomatic prop surface it found three props the primitives never declared: `grid
 index signature), and `LayoutStyleProps` on `ListProps`, the one primitive missing it, which is why
 a `<ul>` used as a flex or grid container could not take `gap`.
 
-**What now blocks deleting Tailwind (P6).** Two things:
+**What now blocks deleting Tailwind (P6).** Three things:
 
-1. **The animation family** — 67 of the 410 remaining utility classNames are `transition-*`,
+1. **The animation family** — 67 of the 296 remaining utility classNames are `transition-*`,
    `animate-*`, `lm-fade-in`, `lm-spin`. This is the single biggest bucket and the one P0 exists to
    review, because the driver changes visible motion app-wide.
-2. **Composite `className` passthroughs** — `Caption`, `CozyThingText`, lucide icons and assorted
+2. **Host-passthrough primitives** — `Pre`, `Br`, `Hr`, `DataList`, `Option`, and the `Table`/`Svg`
+   families are `hostPrimitive`/`svgPrimitive` wrappers: they forward props to a raw host tag,
+   which ignores every style prop. Converting a className on one would silently delete the styling,
+   so the codemod's target list deliberately excludes them and they keep their classes until the
+   tag itself becomes Tamagui-backed. (`TextField`/`TextArea`/`Select` ARE Tamagui-backed and were
+   added to the target list; that took 296 off the count on its own.) `render-descriptor.tsx` is
+   the single densest file left, and it is almost entirely `Prim.Pre` + `prose-*`.
+3. **Composite `className` passthroughs** — `Caption`, `CozyThingText`, lucide icons and assorted
    others take a `className` the codemod will not touch because the target is not a primitive. Each
-   needs a decision: forward style props, or keep the class. This is the bulk of the other 343.
+   needs a decision: forward style props, or keep the class.
 
 **Two mapping decisions worth not re-litigating.** `lm-*` maps to `var(--lm-…)`, NOT to the token
 it aliases: `applyThemeTokens` (`theme/theme.ts`) overrides `--lm-*` directly from a space's

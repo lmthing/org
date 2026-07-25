@@ -30,8 +30,18 @@ import ts from 'typescript'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { classToProps } from './classnames-to-props-map.mjs'
 
+/**
+ * ONLY Tamagui-backed primitives belong here. A `hostPrimitive`/`svgPrimitive` passthrough
+ * (`Pre`, `Br`, `Hr`, `DataList`, `Option`, the `Table`/`Svg` families, `Audio`/`Video`/`IFrame`)
+ * forwards its props to a raw host tag, which ignores every style prop — converting a className
+ * on one of those would silently delete the styling. Those keep their classNames until the tag
+ * itself becomes Tamagui-backed.
+ */
 const DEFAULT_TARGETS = new Set([
   'Box', 'Row', 'Col', 'Text', 'Pressable', 'Link', 'Form', 'List', 'ListItem', 'Image', 'Label',
+  // The form controls — Tamagui-backed via `makeControl` (see `_tamagui.tsx`), which is what
+  // `elements/forms/input` already relies on when it spreads INPUT_BASE onto `Prim.TextField`.
+  'TextField', 'TextArea', 'Select',
 ])
 
 /** Serialize a prop value to JSX attribute source. */

@@ -35,7 +35,7 @@ export function TraceLoader(): React.ReactElement {
       <Prim.TextField
         type="file"
         accept=".jsonl,.json,.ndjson"
-        className="hidden"
+        display="none"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); }}
       />
       📂 Load trace
@@ -84,7 +84,7 @@ export function PlaybackBar(): React.ReactElement | null {
       <Prim.Select
         value={replay.speed}
         onChange={(e) => setSpeed(Number(e.target.value))}
-        className="bg-lm-bg border border-lm-border rounded text-[11px] text-lm-text px-1 py-0.5"
+        backgroundColor="var(--lm-bg)" borderWidth={1} borderColor="var(--lm-border)" borderRadius="$radius" fontSize="11px" color="var(--lm-text)" paddingHorizontal="$1" paddingVertical="$0.5"
       >
         {[1, 2, 4, 8].map((s) => <Prim.Option key={s} value={s}>{s}×</Prim.Option>)}
       </Prim.Select>

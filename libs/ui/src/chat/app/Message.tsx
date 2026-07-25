@@ -70,7 +70,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
         ) : (
           <Prim.Row gap="$2">
             <Prim.TextField
-              className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="$background" borderWidth={1} borderColor="$border" borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$1.5" fontSize="$sm" color="$foreground" placeholderTextColor="$muted-foreground" focusStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }}
               value={text}
               disabled={inert}
               onChange={(e) => setText(e.target.value)}
