@@ -34,6 +34,8 @@
     "@lmthing/auth": "workspace:*",
     "@lmthing/core": "workspace:*",
     "@lmthing/css": "workspace:*",
+    "@tamagui/animations-css": "2.5.1",
+    "@tamagui/animations-react-native": "2.5.1",
     "@tamagui/core": "^2.5.1",
     "@tamagui/lucide-icons": "2.0.0-rc.26",
     "marked": "^14.0.0",

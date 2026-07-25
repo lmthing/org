@@ -112,6 +112,12 @@ export function createViteConfig(dirname, overrides) {
       // Tamagui plugin (§6 build integration). Loads the SHARED config so the RNW aliases + theme
       // are wired; coexists with Tailwind. No-op on output until a web component uses Tamagui.
       tamaguiPlugin({
+        // NOTE: the plugin bundles this config to `<app>/.tamagui/tamagui.config.mjs` and then
+        // IMPORTS that file from the app root, leaving `@tamagui/web` external. Once the config
+        // gained an animation driver that import became load-bearing, so `@tamagui/web` is a
+        // devDependency of `apps/web` purely to make the bundled config resolvable — without it
+        // every build logs "No bundled config generated" 227 times (harmless with extraction off,
+        // but it buries real output).
         config: path.resolve(orgRoot, 'libs/ui/src/theme/tamagui.config.ts'),
         // `@tamagui/core` (not the `tamagui` kit, which isn't installed) is the component source the
         // extractor bundles; `@lmthing/ui` can't be listed here — config-bundling the whole package

@@ -92,7 +92,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
         </Prim.Text>
         <Prim.Pressable
           onClick={openInspector}
-          className="transition-colors" maxWidth="180px" flexShrink={1} minWidth={0} textAlign="left" fontFamily="$mono" color="$muted-foreground" hoverStyle={{ color: "$foreground" }} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"
+          transition="quick" animateOnly={["color", "background-color", "border-color"]} maxWidth="180px" flexShrink={1} minWidth={0} textAlign="left" fontFamily="$mono" color="$muted-foreground" hoverStyle={{ color: "$foreground" }} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"
           title={`${node.label} — open in inspector`}
         >
           {node.label}

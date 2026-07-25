@@ -187,7 +187,7 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
             padding="$1"
             borderRadius="$radius"
             color="$muted-foreground"
-            // transition-colors awaits the animation driver
+            transition="quick" animateOnly={["color", "background-color", "border-color"]}
             hoverStyle={{ backgroundColor: '$accent', color: '$foreground' }}
             title="New File"
             onClick={() => setDialogType('file')}
@@ -198,7 +198,7 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
             padding="$1"
             borderRadius="$radius"
             color="$muted-foreground"
-            // transition-colors awaits the animation driver
+            transition="quick" animateOnly={["color", "background-color", "border-color"]}
             hoverStyle={{ backgroundColor: '$accent', color: '$foreground' }}
             title="New Folder"
             onClick={() => setDialogType('folder')}

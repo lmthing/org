@@ -131,6 +131,16 @@ export type BoxStyleProps = {
   y?: number
   scale?: number
   rotate?: string
+  /**
+   * The animation driver's named transition (`quick`/`medium`/`slow`/`none`, declared in
+   * `theme/tamagui-web.config.ts`). NOTE the prop is `transition`, NOT `animation` — Tamagui 2.5
+   * renamed it, and `animation` is silently ignored (`useComponentState` gates on
+   * `'transition' in props`). `animateOnly` narrows it, and its entries must be **hyphenated CSS**
+   * property names: `background-color` works, `backgroundColor` emits an invalid declaration that
+   * the browser drops. Both pinned in `primitives/index.test.tsx`.
+   */
+  transition?: 'none' | 'quick' | 'medium' | 'slow'
+  animateOnly?: readonly string[]
   // pseudo-styles (state variants, §5)
   hoverStyle?: PseudoStyleProps
   pressStyle?: PseudoStyleProps

@@ -217,9 +217,9 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                   overflow="hidden"
                   textOverflow="ellipsis"
                   whiteSpace="nowrap"
-                  className={cn("transition-colors", isActive
+                  className={isActive
                       ? 'bg-muted text-foreground font-medium'
-                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground')} flexGrow={1} flexShrink={1} flexBasis="0%" textAlign="left" paddingHorizontal="$2" paddingVertical="$1.5" borderRadius="$radius-lg" fontSize="$sm"
+                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexGrow={1} flexShrink={1} flexBasis="0%" textAlign="left" paddingHorizontal="$2" paddingVertical="$1.5" borderRadius="$radius-lg" fontSize="$sm"
                   title={displayTitle || s.sessionId}
                 >
                   <Prim.Text display="block" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{label}</Prim.Text>

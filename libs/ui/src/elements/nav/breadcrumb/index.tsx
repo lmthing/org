@@ -8,7 +8,7 @@ import * as Prim from '../../primitives/index'
  *
  * The stylesheet's `.breadcrumb__segment:last-child` rule becomes an explicit `isCurrent` branch —
  * the component already knows which segment is last (it sets `aria-current` from the same test), so
- * the positional selector needs no CSS. (`transition-colors` awaits the animation driver, §5/P4.)
+ * the positional selector needs no CSS. `transition-colors` is the driver's `transition="quick"`.
  */
 export interface BreadcrumbSegment {
   label: string
@@ -30,7 +30,7 @@ const BREADCRUMB = {
 } as const
 
 /** `.breadcrumb__segment` — clickable, hovers to foreground. */
-const SEGMENT = { cursor: 'pointer', hoverStyle: { color: '$foreground' } } as const
+const SEGMENT = { cursor: 'pointer', transition: 'quick', animateOnly: ['color', 'background-color', 'border-color'], hoverStyle: { color: '$foreground' } } as const
 
 /** `.breadcrumb__segment:last-child` — the current page: foreground, not clickable. */
 const SEGMENT_CURRENT = { color: '$foreground', cursor: 'default' } as const

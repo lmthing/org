@@ -104,7 +104,7 @@ export function ConsentCard({
           disabled={inert}
           onClick={onApprove}
           data-testid="consent-approve"
-          className="transition-opacity" paddingHorizontal="$3" paddingVertical="$1.5" backgroundColor="$primary" color="$primary-foreground" borderRadius="$radius-lg" fontSize="$sm" fontWeight="$medium" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ opacity: 0.9 }}
+          transition="quick" animateOnly={["opacity"]} paddingHorizontal="$3" paddingVertical="$1.5" backgroundColor="$primary" color="$primary-foreground" borderRadius="$radius-lg" fontSize="$sm" fontWeight="$medium" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ opacity: 0.9 }}
         >
           Approve
         </Prim.Pressable>
@@ -113,7 +113,7 @@ export function ConsentCard({
           disabled={inert}
           onClick={onDeny}
           data-testid="consent-deny"
-          className="transition-colors" paddingHorizontal="$3" paddingVertical="$1.5" borderWidth={1} borderColor="$border" color="$foreground" borderRadius="$radius-lg" fontSize="$sm" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ backgroundColor: "$muted" }}
+          transition="quick" animateOnly={["color", "background-color", "border-color"]} paddingHorizontal="$3" paddingVertical="$1.5" borderWidth={1} borderColor="$border" color="$foreground" borderRadius="$radius-lg" fontSize="$sm" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ backgroundColor: "$muted" }}
         >
           Deny
         </Prim.Pressable>

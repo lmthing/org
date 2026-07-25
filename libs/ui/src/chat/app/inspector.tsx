@@ -64,7 +64,7 @@ function YieldsTab({ node }: { node: ExecNode }): React.ReactElement {
       {node.yields.map((y, i) => (
         <Prim.Box key={i} borderColor="var(--lm-border)" borderWidth={1} borderRadius="$radius" paddingHorizontal="$2" paddingVertical="$1">
           <Prim.Row gap="$2" fontSize="11px" alignItems="center">
-            {/* `lm-spin` is a keyframe animation and stays a className until the driver lands (§5). */}
+            {/* `lm-spin` is a KEYFRAME animation — not the driver's job; a hand-written class (§5). */}
             <Prim.Text
               color={y.resolved ? 'var(--lm-green)' : 'var(--lm-accent)'}
               className={y.resolved ? undefined : 'lm-spin'}

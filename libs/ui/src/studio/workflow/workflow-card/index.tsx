@@ -29,7 +29,7 @@ export function TasklistCard({ tasklist, isSelected, onSelect, onDelete }: Taskl
       cursor="pointer"
       backgroundColor="$card"
       borderColor="$border"
-      // transition-all duration-200 awaits the animation driver (§5/P4)
+      transition="medium"
       hoverStyle={{
         borderColor: 'color-mix(in srgb, var(--brand-3) 50%, transparent)',
         shadowColor: 'rgba(0,0,0,0.1)',
@@ -122,7 +122,7 @@ export function TasklistListItem({ tasklist, isSelected, onSelect, onDelete }: T
       cursor="pointer"
       backgroundColor="$card"
       borderColor="$border"
-      // transition-all duration-150 awaits the animation driver (§5/P4)
+      transition="quick"
       hoverStyle={{
         borderColor: 'color-mix(in srgb, var(--brand-3) 50%, transparent)',
         backgroundColor: '$muted',

@@ -29,7 +29,7 @@ export function Textarea({ className, autosize, onChange, ...props }: TextareaPr
       ref={ref}
       {...props}
       onChange={handleChange}
-      className={cn("transition-colors", className)} width="100%" backgroundColor="$background" borderWidth={1} borderColor="$border" borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$foreground" placeholderTextColor="$muted-foreground" resize="none" focusVisibleStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }} disabledStyle={{ opacity: 0.5 }}
+      className={className} transition="quick" animateOnly={["color", "background-color", "border-color"]} width="100%" backgroundColor="$background" borderWidth={1} borderColor="$border" borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$foreground" placeholderTextColor="$muted-foreground" resize="none" focusVisibleStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }} disabledStyle={{ opacity: 0.5 }}
     />
   );
 }

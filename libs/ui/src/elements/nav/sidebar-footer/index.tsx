@@ -34,7 +34,7 @@ export function SidebarFooter({ current, children, className }: SidebarFooterPro
 
       <Prim.Pressable
         onClick={() => setSettingsOpen(true)}
-        className="transition-colors" display="flex" alignItems="center" gap="$2" paddingHorizontal="$3" paddingVertical="$2" textAlign="left" color="$muted-foreground" hoverStyle={{ color: "$foreground", backgroundColor: "color-mix(in srgb, var(--muted) 60%, transparent)" }}
+        transition="quick" animateOnly={["color", "background-color", "border-color"]} display="flex" alignItems="center" gap="$2" paddingHorizontal="$3" paddingVertical="$2" textAlign="left" color="$muted-foreground" hoverStyle={{ color: "$foreground", backgroundColor: "color-mix(in srgb, var(--muted) 60%, transparent)" }}
         title="Settings"
       >
         {isAuthenticated && displayName ? (

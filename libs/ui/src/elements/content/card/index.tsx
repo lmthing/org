@@ -27,9 +27,11 @@ export const CARD_BASE = {
   shadowRadius: 2,
 } as const
 
-/** `.card--interactive` — cursor-pointer + hover:shadow-md. (`transition-shadow` awaits the animation driver, §5/P4.) */
+/** `.card--interactive` — cursor-pointer + hover:shadow-md + the `transition-shadow` it always had. */
 export const CARD_INTERACTIVE = {
   cursor: 'pointer',
+  transition: 'quick',
+  animateOnly: ['box-shadow'],
   hoverStyle: {
     shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
     shadowOffset: { width: 0, height: 4 },

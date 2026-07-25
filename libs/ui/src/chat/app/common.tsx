@@ -33,7 +33,8 @@ const KIND_COLOR: Record<NodeKind, string> = {
 export function StatusIcon({ status }: { status: NodeStatus }): React.ReactElement {
   const glyph = STATUS_GLYPH[status];
   return (
-    // `lm-spin` is a keyframe animation and stays a className until the driver lands (§5).
+    // `lm-spin` is a KEYFRAME animation, which the CSS driver does not cover — the driver's job
+    // is transitions. It stays a hand-written class in `chat/app/styles.css` (§5).
     <Prim.Text
       color={STATUS_COLOR[status]}
       className={status === 'running' ? 'lm-spin' : undefined}
@@ -119,7 +120,7 @@ export function Tabs<T extends string>({ tabs, active, onChange }: { tabs: reado
           aria-selected={active === t}
           data-testid={`inspector-tab-${t}`}
           onClick={() => onChange(t)}
-          className="transition-colors"
+          transition="quick" animateOnly={["color", "background-color", "border-color"]}
           paddingHorizontal="$3"
           paddingVertical="$1.5"
           fontSize="11px"

@@ -47,7 +47,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
       data-testid="ask-form"
       data-ask-id={block.askId}
       marginVertical="0.25rem"
-      className={cn("transition-colors", inert ? 'border-border opacity-70' : 'border-agent/50 bg-agent/5')} borderWidth={1} borderRadius="$radius-xl" padding="$3"
+      className={inert ? 'border-border opacity-70' : 'border-agent/50 bg-agent/5'} transition="quick" animateOnly={["color", "background-color", "border-color"]} borderWidth={1} borderRadius="$radius-xl" padding="$3"
     >
       {block.state === 'answered' && (
         <Prim.Box fontSize="$xs" color="$knowledge" fontFamily="$mono" marginBottom="0.5rem">✓ {preview(block.answer, 200)}</Prim.Box>
@@ -80,7 +80,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
             <Prim.Pressable
               disabled={inert}
               onClick={() => onSubmit(text)}
-              className="transition-opacity" paddingHorizontal="$3" paddingVertical="$1.5" backgroundColor="$agent" color="$agent-foreground" borderRadius="$radius-lg" fontSize="$sm" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ opacity: 0.9 }}
+              transition="quick" animateOnly={["opacity"]} paddingHorizontal="$3" paddingVertical="$1.5" backgroundColor="$agent" color="$agent-foreground" borderRadius="$radius-lg" fontSize="$sm" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ opacity: 0.9 }}
             >
               Send
             </Prim.Pressable>
@@ -99,7 +99,7 @@ function AttributionButton({ nodeId, label }: { nodeId: string; label: string })
   return (
     <Prim.Pressable
       onClick={() => { selectNode(nodeId, true); setDevPanelOpen(true); }}
-      className="transition-colors" fontSize="$xs" color="$muted-foreground" fontFamily="$mono" hoverStyle={{ color: "$foreground" }} marginBottom="0.25rem" display="block"
+      transition="quick" animateOnly={["color", "background-color", "border-color"]} fontSize="$xs" color="$muted-foreground" fontFamily="$mono" hoverStyle={{ color: "$foreground" }} marginBottom="0.25rem" display="block"
       data-node-id={nodeId}
     >
       {label}
@@ -121,7 +121,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <Prim.Pressable
       onClick={() => void copy()}
-      className="transition-opacity" flexShrink={0} opacity={0} color="$muted-foreground" padding="$1" borderRadius="$radius" $group-hover={{ opacity: 1 }} hoverStyle={{ color: "$foreground" }}
+      transition="quick" animateOnly={["opacity"]} flexShrink={0} opacity={0} color="$muted-foreground" padding="$1" borderRadius="$radius" $group-hover={{ opacity: 1 }} hoverStyle={{ color: "$foreground" }}
       title="Copy"
       aria-label="Copy message"
     >

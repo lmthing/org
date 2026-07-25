@@ -51,7 +51,7 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
             <Pressable
               key={s}
               onClick={() => onSuggestion(s)}
-              className="transition-colors" paddingHorizontal="$3" paddingVertical="$1.5" borderRadius="$radius-full" borderWidth={1} borderColor="$border" fontSize="$sm" color="$muted-foreground" hoverStyle={{ color: "$foreground", borderColor: "color-mix(in srgb, var(--foreground) 30%, transparent)" }}
+              transition="quick" animateOnly={["color", "background-color", "border-color"]} paddingHorizontal="$3" paddingVertical="$1.5" borderRadius="$radius-full" borderWidth={1} borderColor="$border" fontSize="$sm" color="$muted-foreground" hoverStyle={{ color: "$foreground", borderColor: "color-mix(in srgb, var(--foreground) 30%, transparent)" }}
             >
               {s}
             </Pressable>

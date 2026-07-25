@@ -59,7 +59,7 @@ export function SchemaEditor({ rows, onChange, addLabel = '+ Add field', emptyHi
         </Prim.Box>
       ))}
       <Prim.Pressable
-        className="transition-colors"
+        transition="quick" animateOnly={["color", "background-color", "border-color"]}
         {...TASKLIST_EDITOR_ADD_OUTPUT_BTN}
         onClick={() => onChange([...rows, { field: '', type: 'string' }])}
       >

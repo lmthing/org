@@ -29,6 +29,7 @@ import {
   zIndex as zIndexTokens,
   media as mediaConfig,
 } from '@lmthing/css/tamagui-tokens'
+import { createAnimations as createNativeAnimations } from '@tamagui/animations-react-native'
 
 // ── Color palette token ────────────────────────────────────────────────────────────────────
 // Tamagui's `tokens.color` is a flat palette; our themes reference raw hex directly, but a
@@ -61,7 +62,21 @@ const makeFont = (family: string) => ({
   letterSpacing: { ...letterSpacings } as Record<string, string>,
 })
 
+/**
+ * The NATIVE config gets the same animation NAMES as the web config so a surface's `animation="quick"`
+ * means the same thing on both platforms. The driver differs by necessity — this one is
+ * `animations-react-native`, since there is no CSS on native — but the names and durations line up.
+ * See docs/tamagui-idiomatic-migration.md §5.
+ */
+const nativeAnimations = createNativeAnimations({
+  none: { type: 'timing', duration: 0 },
+  quick: { type: 'timing', duration: 150 },
+  medium: { type: 'timing', duration: 200 },
+  slow: { type: 'timing', duration: 300 },
+})
+
 export const tamaguiConfig = createTamagui({
+  animations: nativeAnimations,
   // `themes.light`/`themes.dark` map design-token names → resolved hex, verbatim from the
   // generated module. `background`, `foreground`, `border`, … are directly usable as `$token`.
   // These are the NATIVE render target (resolved hex). The WEB config uses the `var(--name)`

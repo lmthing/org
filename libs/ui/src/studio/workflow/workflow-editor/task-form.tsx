@@ -48,7 +48,7 @@ export function TaskForm({
 
   return (
     <Prim.Box
-      className="transition-all"
+      transition="quick"
       {...TASKLIST_EDITOR_TASK_FORM}
       {...(draft.goal ? TASKLIST_EDITOR_TASK_FORM_GOAL : null)}
     >
@@ -133,7 +133,7 @@ export function TaskForm({
                 <Prim.Pressable
                   key={taskId}
                   onClick={() => toggleDepends(taskId)}
-                  className="transition-colors"
+                  transition="quick" animateOnly={["color", "background-color", "border-color"]}
                   {...TASKLIST_EDITOR_DEPENDS_BTN}
                   {...(draft.dependsOn.includes(taskId)
                     ? TASKLIST_EDITOR_DEPENDS_BTN_ACTIVE
@@ -152,13 +152,13 @@ export function TaskForm({
           <Prim.Box {...TASKLIST_EDITOR_FLAG_ITEM}>
             <Prim.Pressable
               onClick={onSetGoal}
-              className="transition-colors"
+              transition="quick" animateOnly={["color", "background-color", "border-color"]}
               {...TASKLIST_EDITOR_TOGGLE}
               {...(draft.goal ? TASKLIST_EDITOR_TOGGLE_ON : TASKLIST_EDITOR_TOGGLE_OFF)}
               title="Mark as goal task (exactly one per tasklist)"
             >
               <Prim.Text
-                className="transition-transform"
+                transition="quick" animateOnly={["transform"]}
                 {...TASKLIST_EDITOR_TOGGLE_KNOB}
                 {...(draft.goal ? TASKLIST_EDITOR_TOGGLE_KNOB_ON : TASKLIST_EDITOR_TOGGLE_KNOB_OFF)}
               />
@@ -170,12 +170,12 @@ export function TaskForm({
           <Prim.Box {...TASKLIST_EDITOR_FLAG_ITEM}>
             <Prim.Pressable
               onClick={() => onChange({ ...draft, optional: !draft.optional })}
-              className="transition-colors"
+              transition="quick" animateOnly={["color", "background-color", "border-color"]}
               {...TASKLIST_EDITOR_TOGGLE}
               {...(draft.optional ? TASKLIST_EDITOR_TOGGLE_ON : TASKLIST_EDITOR_TOGGLE_OFF)}
             >
               <Prim.Text
-                className="transition-transform"
+                transition="quick" animateOnly={["transform"]}
                 {...TASKLIST_EDITOR_TOGGLE_KNOB}
                 {...(draft.optional ? TASKLIST_EDITOR_TOGGLE_KNOB_ON : TASKLIST_EDITOR_TOGGLE_KNOB_OFF)}
               />
