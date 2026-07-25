@@ -1,8 +1,7 @@
 # Phase 2 — the idiomatic-Tamagui migration ("the Tamagui way", zero-Tailwind)
 
-> **Status: ELEMENT-LAYER SWAP ALL BUT DONE — foundation landed, the whole surface sweep landed,
-> and 47 of 68 component/element CSS files deleted (21 stylesheets remain: 19 component, 2
-> element). CSS bundle 171 → 127 kB.**
+> **Status: ELEMENT LAYER DONE — `elements/**` has ZERO stylesheets; 52 of 68 CSS files deleted.
+> 16 remain, every one under `components/**`. CSS bundle 171 → 111 kB.**
 > Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every surface primitive + overlay
 > *onto Tamagui components* while **keeping the Tailwind + `theme.css` + BEM styling engine**
 > underneath (coexistence). This Phase 2 replaces that styling engine with **idiomatic Tamagui** —
@@ -24,11 +23,12 @@ most of the way through**.
   modifiers/animations/dynamic `cn()` left as residual className.
 - **Component-surface BEM sweep COMPLETE** — the entire `computer` surface plus every
   `components/**` area had its BEM classes on `Prim.*` converted to props.
-- **Element-layer swap (P4) — 27 of the 29 `elements/**` blocks are done.** Landed in slices:
+- **Element-layer swap (P4) — COMPLETE, all 29 `elements/**` blocks.** Landed in slices:
   `btn` · `badge` · `heading`/`code`/`cozy-text`/`list-item` · `caption`/`label`/`separator` ·
   `stack`/`page`/`split-pane` · `card`/`panel`/`avatar`/`terminal` ·
   `top-bar`/`tab-bar`/`breadcrumb`/`app-links` · `input`/`textarea`/`select` ·
-  `dialog`/`dropdown`/`sheet`/`settings-dialog`. Each block's
+  `dialog`/`dropdown`/`sheet`/`settings-dialog` · `sidebar` (via `NavLink`) · `app-sidebar`.
+  Each block's
   `@apply` rules become `$`-token style PROPS transcribed from its `*.styled.tsx` proof, applied to
   the `Prim.*` primitive that renders the real host tag.
 
@@ -124,20 +124,54 @@ Two gotchas worth keeping if anyone retries: an **import alias** (`import { X as
 defeats extraction, and the plugin was loading the **native** config (`tamagui.config.ts`) for the
 web build, so the extractor never saw the web components at all.
 
-### What remains
+### The element layer is finished
 
-- **2 element stylesheets.** `app-sidebar` is the last big block (41 classes, descendant
-  combinators). `sidebar` is TRIMMED to `.sidebar__item`/`--active`: most call sites are TanStack
-  Router `<Link>`s, which render their own `<a>` and accept only `className` — no `asChild`, no
-  style props — so the stylesheet stays the single definition rather than being duplicated as a
-  prop bag. A `<NavLink>` wrapper (Tamagui props + the router's imperative `navigate` +
-  `useMatchRoute` for active state) is the way to finish it.
-- **19 component stylesheets**, blocked on descendant combinators, `::before`, gradients and
-  classes applied to third-party components.
+`elements/**` now contains no stylesheets at all. The last two blockers both dissolved:
+
+- **`sidebar__item`** was kept as CSS because most call sites were TanStack Router `<Link>`s,
+  which render their own `<a>` and accept only `className`. `studio/shell/nav-link` replaces them
+  with a `Prim.Link` that navigates via `useNavigate`, keeping a real `href` so middle-click,
+  ⌘/Ctrl-click and "open in new tab" still work. It lives in `studio/shell/` deliberately —
+  `@tanstack/react-router` is a surface dependency, and `elements/**` stays router-agnostic.
+- **`app-sidebar`**, the largest block (41 classes), needed only three non-obvious moves: the
+  descendant combinator became props at its one call site; the hover-reveal became Tamagui's
+  `group`/`$group-row-hover` (which is what the stylesheet's own comment said it was emulating);
+  and the `/60` alpha became a `color-mix`.
+
+### Two more silent-drop bugs
+
+The same failure mode as the font tokens — a prop that goes nowhere, with no error:
+
+- **`Prim.Image` dropped every style prop.** It was a host `<img>` passthrough, but it is in the
+  P3 codemod's target list, so the codemod had been turning `h-5 w-5 object-cover` into
+  `height="$5" width="$5" objectFit="cover"` — unknown DOM attributes on a host element. Seven
+  call sites had been shipping unstyled images, five since the original codemod runs. `Image` is
+  now a per-tag `createComponent` like the form controls.
+- **`libs/ui` was never typechecked.** It has no `typecheck` script, so 550 files — the whole
+  element layer and every surface — were unchecked, and an unbalanced JSX tag reached the bundler
+  during this work. A full `tsc --noEmit` reports ~1800 errors (SPIKE C plus drift) so it cannot
+  be a gate yet; `tsc --noEmit --noCheck` parses without type analysis, is clean today, and is
+  verified to fail on exactly that bug. Added as `typecheck:syntax` and wired into `lint`.
+
+### What remains — and the dependency that orders it
+
+**16 `components/**` stylesheets, ~810 classes.** They are the gate for everything else:
+
+- **The codemod tail is blocked behind them.** Re-run across all 118 files, `classnames-to-props`
+  can migrate almost nothing: of 219 reported elements, 181 skip for unmapped classes, and those
+  are overwhelmingly BEM from these 16 stylesheets. The codemod refuses to half-migrate an
+  element, so a single BEM class on it blocks the Tailwind utilities beside it. Extending the map
+  with the genuinely-missing utilities (legacy `flex-shrink-0`, `cursor-*`, `select-none`,
+  `leading-*` keywords, `object-*`, `size-*`) unblocked 30 elements — that is the whole ceiling
+  until the stylesheets go.
+- **Deleting Tailwind is blocked behind them too.** Measured: **945 residual Tailwind utility
+  classNames across 55 files**, plus these 16 stylesheets' `@apply`, plus the preflight resets the
+  Phase-1 primitives explicitly rely on (the `<button>` UA reset). Removing Tailwind today breaks
+  all three. And `theme.css` cannot be a straight delete either: SPIKE A1 makes every `$color`
+  resolve to `var(--…)`, so a custom-properties-only file has to survive it or every colour in the
+  app resolves to nothing.
 - **P0 is still the gating item for anything that changes output**, and is still not built.
-- Then: the `theme.css`/Tailwind deletion — note this CANNOT be a straight delete, because SPIKE A1
-  made every `$color` resolve to `var(--…)`; a custom-properties-only file has to survive or every
-  colour in the app resolves to nothing. Plus SPIKE C (react 18/19 types) and native.
+- Then SPIKE C (react 18/19 types — which also unlocks a real `typecheck`) and native.
 
 | Item | Status | Where |
 |---|---|---|
@@ -145,10 +179,10 @@ web build, so the extractor never saw the web components at all.
 | **SPIKE B — token-scale reconciliation** | ✅ done | Tailwind `space`/`size`/`fontSizes`/`lineHeights`/`fontWeights`/`letterSpacings`/`zIndex`/`media` generated + pinned to Tailwind by `libs/css/src/__tests__/scale-parity.test.ts` |
 | **SPIKE C — react 18/19 types** | ⬜ open | not attempted; casts retained (documented in `_tamagui.tsx`). Blocks nothing above |
 | **P1 — token + theme foundation** | ✅ done | full Tamagui token set from `tokens.json`; `tamagui.config.ts` (native hex) + `tamagui-web.config.ts` (var-backed) both carry it; parity tests green. Config CONVERGENCE (one config, delete web config) deferred — it changes output, see §7 |
-| **P2 — BEM → styled()+variants** | ✅ 68 proofs + ✅ **component sweep COMPLETE** | Every BEM block has a `*.styled.tsx` proof + `*-styled.test.tsx` gate. **Every `components/**` + `computer` surface is swept**: all BEM on `Prim.Box/Text/Pressable` → props. `.css` deleted when a block was fully on `Prim.*`; KEPT when residuals sit on icons / third-party components / un-expressible CSS. **21 stylesheets remain** (19 component — all residual-blocked — + 2 element). The `!important`/`@apply` retirement waits until `theme.css` deletion (P6) |
+| **P2 — BEM → styled()+variants** | ✅ 68 proofs + ✅ **component sweep COMPLETE** | Every BEM block has a `*.styled.tsx` proof + `*-styled.test.tsx` gate. **Every `components/**` + `computer` surface is swept**: all BEM on `Prim.Box/Text/Pressable` → props. `.css` deleted when a block was fully on `Prim.*`; KEPT when residuals sit on icons / third-party components / un-expressible CSS. **16 stylesheets remain**, all under `components/**` (`elements/**` is empty). The `!important`/`@apply` retirement waits until `theme.css` deletion (P6) |
 | **P3 — className → props codemod** | ✅ tool built + hardened + 🟡 **applied to chat+studio** | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + a 43-test gate (map + a new `-transform` suite). **Run for real**: chat + studio. Hardened after the first run surfaced two silent-drop bugs (both fixed + regression-tested, re-migrated clean): (a) directional `border-t/r/b/l/x/y` were misread as color tokens (`$t`) → widths dropped; (b) the `lm-*` runtime palette (`bg-lm-accent` …) became bogus `$lm-*` tokens → now kept as className. Also **added `cn("literal", …rest)` lifting** (the common dynamic shape). Alpha modifiers/animations/`lm-*`/dynamic `cn()` stay residual. Remaining className: chat ~223, studio ~589 (mostly BEM on shared elements + dynamic `cn()`), computer ~24 |
 | **P0 — real-surface visual harness** | 🟡 mechanism proven, baseline NOT built | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining. **This is now the gating item**: the animation driver (the biggest remaining unblock) changes visible motion app-wide, which is precisely the class of change P0 exists to review |
-| **P4 — element layer + primitives idiomatic** | 🟡 **27 of 29 element blocks swapped**; form-control primitives landed | The shipped elements carry `$`-token PROPS on the `Prim.*` primitives (real host tags via `createComponent`), transcribed from each block's proof variant table. Both blockers this row used to name were wrong: extraction does NOT make `tag` real (measured — see the Progress log), and the overlay animations were DEAD rather than deferred. **Remaining: `app-sidebar` (41 classes, descendant combinators) and `sidebar` (trimmed; router-`<Link>` residual).** Shipped-element suites gated for the first time (508 → 617 tests) |
+| **P4 — element layer + primitives idiomatic** | ✅ **DONE — all 29 element blocks; `elements/**` has no stylesheets** | Every shipped element carries `$`-token PROPS on the `Prim.*` primitives (real host tags via `createComponent`). Both blockers this row used to name were wrong: extraction does NOT make `tag` real, and the overlay animations were DEAD rather than deferred. Form-control and `Image` primitives are Tamagui-backed too. Shipped-element suites gated for the first time (508 → 618 tests), plus a syntax-only typecheck gate for `libs/ui` |
 
 ---
 
