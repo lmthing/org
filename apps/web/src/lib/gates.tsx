@@ -5,15 +5,7 @@ import { LoginScreen } from '@lmthing/ui/components/auth/login-screen'
 import { CLOUD_BASE_URL } from '@/lib/config'
 import { WakingScreen } from '@/lib/waking-screen'
 
-export const centerStyles: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  height: '100vh',
-  color: 'var(--muted-foreground)',
-  flexDirection: 'column',
-  gap: 12,
-}
+export const centerStyles = { display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "var(--muted-foreground)", flexDirection: "column", gap: 12 } as const
 
 /** Block rendering until auth has resolved; show login when not authenticated. */
 export function AuthGate({ children }: { children: React.ReactNode }) {
@@ -404,7 +396,7 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
 
   if (status === 'error') {
     return (
-      <Prim.Box style={centerStyles}>
+      <Prim.Box {...centerStyles}>
         <Prim.Text as="p" color="var(--destructive)">Failed to start compute pod: {error}</Prim.Text>
         <Prim.Pressable onClick={handleRetry}>Retry</Prim.Pressable>
       </Prim.Box>
@@ -421,18 +413,18 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
 
   if (status === 'upgrade-available') {
     return (
-      <Prim.Box style={centerStyles}>
-        <Prim.Box style={upgradeCardStyles.card}>
-          <Prim.Text as="p" style={upgradeCardStyles.heading}>New version available</Prim.Text>
-          <Prim.Text as="p" style={upgradeCardStyles.sub}>
+      <Prim.Box {...centerStyles}>
+        <Prim.Box {...upgradeCardStyles.card}>
+          <Prim.Text as="p" {...upgradeCardStyles.heading}>New version available</Prim.Text>
+          <Prim.Text as="p" {...upgradeCardStyles.sub}>
             Your compute pod is running an older version. Upgrade now to get the
             latest features and fixes — this briefly restarts your pod.
           </Prim.Text>
-          <Prim.Box style={upgradeCardStyles.actions}>
-            <Prim.Pressable onClick={() => { void handleUpgrade() }} style={upgradeCardStyles.btnPrimary}>
+          <Prim.Box {...upgradeCardStyles.actions}>
+            <Prim.Pressable onClick={() => { void handleUpgrade() }} {...upgradeCardStyles.btnPrimary}>
               Upgrade
             </Prim.Pressable>
-            <Prim.Pressable onClick={handleContinueWithoutUpgrading} style={upgradeCardStyles.btn}>
+            <Prim.Pressable onClick={handleContinueWithoutUpgrading} {...upgradeCardStyles.btn}>
               Continue without upgrading
             </Prim.Pressable>
           </Prim.Box>
@@ -513,50 +505,10 @@ const upgradeBannerStyles = {
 } satisfies Record<string, React.CSSProperties>
 
 const upgradeCardStyles = {
-  card: {
-    background: 'var(--color-card)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 12,
-    padding: '32px 40px',
-    maxWidth: 420,
-    textAlign: 'center' as const,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 12,
-  },
-  heading: {
-    fontSize: 18,
-    fontWeight: 600,
-    color: 'var(--color-foreground)',
-    margin: 0,
-  },
-  sub: {
-    fontSize: 14,
-    color: 'var(--color-muted-foreground)',
-    margin: 0,
-    lineHeight: 1.5,
-  },
-  actions: {
-    display: 'flex',
-    gap: 8,
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  btn: {
-    padding: '8px 16px',
-    borderRadius: 8,
-    border: '1px solid var(--color-border)',
-    background: 'transparent',
-    color: 'var(--color-foreground)',
-    cursor: 'pointer',
-  },
-  btnPrimary: {
-    padding: '8px 16px',
-    borderRadius: 8,
-    border: 'none',
-    background: 'var(--color-primary)',
-    color: 'var(--color-primary-foreground)',
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-} satisfies Record<string, React.CSSProperties>
+  card: { backgroundColor: "var(--color-card)", borderWidth: "1px", borderStyle: "solid", borderColor: "var(--color-border)", borderRadius: 12, paddingVertical: "32px", paddingHorizontal: "40px", maxWidth: 420, textAlign: "center", display: "flex", flexDirection: "column", gap: 12 } as const,
+  heading: { fontSize: 18, fontWeight: 600, color: "var(--color-foreground)", margin: 0 } as const,
+  sub: { fontSize: 14, color: "var(--color-muted-foreground)", margin: 0, lineHeight: 1.5 } as const,
+  actions: { display: "flex", gap: 8, justifyContent: "center", marginTop: 8 } as const,
+  btn: { paddingVertical: "8px", paddingHorizontal: "16px", borderRadius: 8, borderWidth: "1px", borderStyle: "solid", borderColor: "var(--color-border)", backgroundColor: "transparent", color: "var(--color-foreground)", cursor: "pointer" } as const,
+  btnPrimary: { paddingVertical: "8px", paddingHorizontal: "16px", borderRadius: 8, borderWidth: 0, backgroundColor: "var(--color-primary)", color: "var(--color-primary-foreground)", cursor: "pointer", fontWeight: 600 } as const,
+}
