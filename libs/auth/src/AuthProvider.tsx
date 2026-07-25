@@ -4,14 +4,32 @@ import { getSession, clearSession, storeSession, redirectToLogin, handleAuthCall
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+/**
+ * `import.meta.env` read through ONE local accessor rather than directly.
+ *
+ * This package ships SOURCE (`main: "./src/index.ts"`, no build step), so every consumer typechecks
+ * these files inside its OWN program — where `src/vite-env.d.ts` is not loaded and `vite/client` is
+ * not in `types`. Reading `import.meta.env` directly therefore handed 4 phantom
+ * "Property 'env' does not exist on type 'ImportMeta'" errors to each consumer, which is exactly
+ * how they reached `libs/ui`. Declaring the ambient `ImportMeta` here instead would collide with
+ * `vite/client` inside this package's own program (`env` optional vs required), so the shape is
+ * asserted at the single point of use. The `typeof` guard is retained: this runs under Node in
+ * tests and SSR, where `import.meta.env` is absent.
+ */
+const viteEnv = (): Record<string, string | boolean | undefined> =>
+  typeof import.meta === 'undefined'
+    ? {}
+    : (import.meta as unknown as { env?: Record<string, string | boolean | undefined> }).env ?? {}
+
 function resolveConfig(appName: string, callbackPath: string): AuthConfig {
-  const isDev = typeof import.meta !== 'undefined' && import.meta.env?.DEV
+  const env = viteEnv()
+  const isDev = Boolean(env.DEV)
   const protocol = typeof window !== 'undefined' ? window.location.protocol : 'https:'
 
   return {
-    comUrl: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_COM_URL)
+    comUrl: (env.VITE_COM_URL as string | undefined)
       || (isDev ? `${protocol}//com.test` : 'https://lmthing.com'),
-    cloudUrl: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUD_URL)
+    cloudUrl: (env.VITE_CLOUD_URL as string | undefined)
       || (isDev ? `${protocol}//cloud.test` : 'https://lmthing.cloud'),
     appName,
     callbackPath,
@@ -36,7 +54,7 @@ export function AuthProvider({ appName, callbackPath = '/', children }: AuthProv
   const config = useMemo(() => resolveConfig(appName, callbackPath), [appName, callbackPath])
   // Demo/local mode skips login + pin. VITE_DEMO_USER (build-time) or a local
   // run (localhost / *.test — the pod serves the app itself, no gateway auth).
-  const isDemo = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEMO_USER === 'true') || isLocalRun()
+  const isDemo = viteEnv().VITE_DEMO_USER === 'true' || isLocalRun()
   const [session, setSession] = useState<AuthSession | null>(isDemo ? DEMO_SESSION : null)
   const [isLoading, setIsLoading] = useState(!isDemo)
   const [pinUnlocked, setPinUnlocked] = useState(false)

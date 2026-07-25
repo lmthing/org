@@ -145,7 +145,12 @@ const makeFont = (family: string) => ({
   size: { ...fontSizes } as Record<string, number>,
   lineHeight: { ...lineHeights } as Record<string, number>,
   weight: { ...fontWeights } as Record<string, string>,
-  letterSpacing: { ...letterSpacings } as Record<string, string>,
+  // Tamagui types `GenericFont['letterSpacing']` as `number | Variable`, but Tailwind's `tracking-*`
+  // ramp is em-RELATIVE (`-0.05em`) and must stay a string — resolving it to px would break it at
+  // every font size. The runtime carries the string through unharmed; `tamagui-config.test.ts`
+  // asserts every entry round-trips and that `$tight` still ends in `em`, which is what makes this
+  // cast safe rather than a silent lie.
+  letterSpacing: { ...letterSpacings } as unknown as Record<string, number>,
 })
 
 export const tamaguiConfig = createTamagui({
