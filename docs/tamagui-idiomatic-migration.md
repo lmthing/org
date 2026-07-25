@@ -1,7 +1,7 @@
 # Phase 2 — the idiomatic-Tamagui migration ("the Tamagui way", zero-Tailwind)
 
-> **Status: ELEMENT LAYER DONE — `elements/**` has ZERO stylesheets; 52 of 68 CSS files deleted.
-> 16 remain, every one under `components/**`. CSS bundle 171 → 111 kB.**
+> **Status: ELEMENT LAYER DONE, COMPONENTS SWEEP AUTOMATED — 55 of 68 CSS files deleted; 13
+> remain, all under `components/**`. CSS bundle 171 → 105 kB.**
 > Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every surface primitive + overlay
 > *onto Tamagui components* while **keeping the Tailwind + `theme.css` + BEM styling engine**
 > underneath (coexistence). This Phase 2 replaces that styling engine with **idiomatic Tamagui** —
@@ -153,9 +153,40 @@ The same failure mode as the font tokens — a prop that goes nowhere, with no e
   be a gate yet; `tsc --noEmit --noCheck` parses without type analysis, is clean today, and is
   verified to fail on exactly that bug. Added as `typecheck:syntax` and wired into `lint`.
 
+### The components sweep is automated now
+
+Hand-converting the 16 remaining sheets was not viable — ~810 classes, 1446 plain declarations,
+1159 `@apply` utilities. Two codemods plus a driver replace it:
+
+- **`bem-to-props`** turns a BEM stylesheet into `$`-token prop bags. `@apply` goes through the
+  SAME map the P3 className codemod uses, so the two agree by construction; plain declarations go
+  through a property table that expands the padding/margin/border shorthands and `flex: 1`. The
+  load-bearing property is the **SAFETY RULE**: a rule converts only if EVERY declaration in it
+  maps. A half-converted rule would silently drop the rest — the failure this migration has now
+  hit four times. Anything unmapped is reported and stays in CSS.
+- **`bem-rewrite-callsites`** swaps `className="block__el"` for the bag, lifting only tokens whose
+  rule actually converted.
+- **`bem-sweep`** chains them: emit → rewrite → prune unused bags → drop the dead stylesheet
+  import → trim the sheet to its blocked rules (deleting it when none remain).
+
+**~600 of the remaining rules convert automatically.** What blocks the rest, in order: descendant/
+pseudo/state selectors (the majority), `transition`, `box-shadow`, `grid-template-columns`,
+gradients.
+
+Two things learned applying it. **Rule count badly overstates the work** — `auth` and `thing-panel`
+were 16 and 32 rules but only 5 and 2 were reachable; the rest was dead CSS behind stale imports.
+And there are **three co-located stylesheets inside `libs/ui`** (`chat/app/styles.css`,
+`FieldTree.css`, `tasklist-editor.css`) that the `libs/css` counts never included.
+
+Both codemods shipped with the same bug class they exist to prevent, now pinned by tests: a
+leading `@reference` glued onto the first selector (dropping one rule per sheet, 14 total), an
+import inserted inside a multi-line `import { … }`, and a CLI that ran at module scope so
+importing it executed with the importer's argv.
+
 ### What remains — and the dependency that orders it
 
-**16 `components/**` stylesheets, ~810 classes.** They are the gate for everything else:
+**13 `components/**` stylesheets.** They are still the gate for everything else, but the sweep is
+now mechanical — run `bem-sweep` per sheet, then hand-migrate only what it reports as blocked:
 
 - **The codemod tail is blocked behind them.** Re-run across all 118 files, `classnames-to-props`
   can migrate almost nothing: of 219 reported elements, 181 skip for unmapped classes, and those
@@ -183,6 +214,8 @@ The same failure mode as the font tokens — a prop that goes nowhere, with no e
 | **P3 — className → props codemod** | ✅ tool built + hardened + 🟡 **applied to chat+studio** | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + a 43-test gate (map + a new `-transform` suite). **Run for real**: chat + studio. Hardened after the first run surfaced two silent-drop bugs (both fixed + regression-tested, re-migrated clean): (a) directional `border-t/r/b/l/x/y` were misread as color tokens (`$t`) → widths dropped; (b) the `lm-*` runtime palette (`bg-lm-accent` …) became bogus `$lm-*` tokens → now kept as className. Also **added `cn("literal", …rest)` lifting** (the common dynamic shape). Alpha modifiers/animations/`lm-*`/dynamic `cn()` stay residual. Remaining className: chat ~223, studio ~589 (mostly BEM on shared elements + dynamic `cn()`), computer ~24 |
 | **P0 — real-surface visual harness** | 🟡 mechanism proven, baseline NOT built | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining. **This is now the gating item**: the animation driver (the biggest remaining unblock) changes visible motion app-wide, which is precisely the class of change P0 exists to review |
 | **P4 — element layer + primitives idiomatic** | ✅ **DONE — all 29 element blocks; `elements/**` has no stylesheets** | Every shipped element carries `$`-token PROPS on the `Prim.*` primitives (real host tags via `createComponent`). Both blockers this row used to name were wrong: extraction does NOT make `tag` real, and the overlay animations were DEAD rather than deferred. Form-control and `Image` primitives are Tamagui-backed too. Shipped-element suites gated for the first time (508 → 618 tests), plus a syntax-only typecheck gate for `libs/ui` |
+| **P5 — components sweep, compiler ON, delete pipeline** | 🟡 6 of 19 component blocks done; 13 remain, sweep AUTOMATED | `bem-to-props` + `bem-rewrite-callsites` + `bem-sweep` convert ~600 of the remaining rules mechanically (safety rule: a rule converts only if EVERY declaration maps). Blocked: descendant/pseudo selectors, `transition`, `box-shadow`, grid templates, gradients. These 13 still gate BOTH remaining fronts — the codemod skips 181 elements on their BEM classes, and deleting Tailwind would break 945 residual utility classNames across 55 files + their `@apply` + the preflight the primitives rely on |
+| **P6 — types + native on device** | ⬜ remaining | SPIKE C also unlocks a real `typecheck` for `libs/ui` (today only a syntax gate); native needs a Metro/device toolchain |
 
 ---
 
