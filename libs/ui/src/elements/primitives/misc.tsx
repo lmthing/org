@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { hostPrimitive } from './_host'
+import { PreLeaf, type PreLeafProps } from './_tamagui'
 
 /**
  * Misc block passthrough primitives (Phase 0): `<pre>`, `<br>`, `<hr>`. Pure passthroughs.
@@ -8,8 +9,13 @@ import { hostPrimitive } from './_host'
  *
  * See docs/react-native-tamagui-migration.md §1.5.
  */
-export type PreProps = React.HTMLAttributes<HTMLPreElement>
-export const Pre = hostPrimitive<HTMLPreElement, PreProps>('pre', 'Pre')
+/**
+ * `<pre>` is Tamagui-backed (`_tamagui.tsx`), not a passthrough: it was the single biggest className
+ * holdout in the codebase (40 utilities across the chat renderers) purely because a passthrough
+ * forwards props to a raw host tag, which ignores every style prop.
+ */
+export type PreProps = PreLeafProps
+export const Pre = PreLeaf
 
 export type BrProps = React.HTMLAttributes<HTMLBRElement>
 export const Br = hostPrimitive<HTMLBRElement, BrProps>('br', 'Br')

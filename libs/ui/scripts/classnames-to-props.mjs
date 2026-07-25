@@ -32,10 +32,12 @@ import { classToProps } from './classnames-to-props-map.mjs'
 
 /**
  * ONLY Tamagui-backed primitives belong here. A `hostPrimitive`/`svgPrimitive` passthrough
- * (`Pre`, `Br`, `Hr`, `DataList`, `Option`, the `Table`/`Svg` families, `Audio`/`Video`/`IFrame`)
- * forwards its props to a raw host tag, which ignores every style prop — converting a className
- * on one of those would silently delete the styling. Those keep their classNames until the tag
- * itself becomes Tamagui-backed.
+ * (`Br`, `Hr`, `DataList`, `Option`, the `Svg` family, `Audio`/`Video`/`IFrame`) forwards its props
+ * to a raw host tag, which ignores every style prop — converting a className on one of those would
+ * silently delete the styling. Those keep their classNames until the tag itself becomes
+ * Tamagui-backed. (`Svg` deliberately stays a passthrough even though it COULD be converted:
+ * Tamagui turns `width`/`height` into CSS classes and drops the geometry ATTRIBUTES, which is
+ * equivalent on `<svg>` but not on its children. Pinned in `primitives/index.test.tsx`.)
  */
 const DEFAULT_TARGETS = new Set([
   'Box', 'Row', 'Col', 'Text', 'Pressable', 'Link', 'Form', 'List', 'ListItem', 'Image', 'Label',
@@ -46,6 +48,8 @@ const DEFAULT_TARGETS = new Set([
   // style prop reaches Tamagui exactly as it would on the primitive itself. Verified per component
   // — this is NOT true of every element (many bind a fixed set), so add one only after reading it.
   'Caption', 'CozyThingText',
+  // Tamagui-backed as of the leaf conversion — `Pre` alone carried 40 utilities.
+  'Pre', 'Table', 'Thead', 'Tbody', 'Tfoot', 'Tr', 'Th', 'Td',
 ])
 
 /** Serialize a prop value to JSX attribute source. */

@@ -37,7 +37,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'muted': return <Prim.Text key={key} color="var(--lm-muted)">{body}</Prim.Text>;
     case 'kbd': return <Prim.Text as="kbd" key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel)" fontFamily="$mono" fontSize="11px" borderWidth={1} borderRadius="$radius" paddingHorizontal="$1">{body}</Prim.Text>;
     case 'code': return <Prim.Text as="code" key={key} color="var(--lm-cyan)" backgroundColor="var(--lm-bg)" fontFamily="$mono" paddingHorizontal="$1" borderRadius="$radius">{body}</Prim.Text>;
-    case 'codeblock': return <Prim.Pre key={key} className="font-mono text-[12px] text-lm-text bg-lm-bg border border-lm-border rounded p-2 my-1 overflow-x-auto"><Prim.Text as="code">{body}</Prim.Text></Prim.Pre>;
+    case 'codeblock': return <Prim.Pre key={key} fontFamily="$mono" fontSize="12px" color="var(--lm-text)" backgroundColor="var(--lm-bg)" borderWidth={1} borderColor="var(--lm-border)" borderRadius="$radius" padding="$2" marginVertical="$1" overflowX="auto"><Prim.Text as="code">{body}</Prim.Text></Prim.Pre>;
     case 'markdown': {
       let markdown = text;
       if (!markdown && d.children && d.children.length > 0) {
@@ -112,9 +112,9 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const columns = (props['columns'] as string[]) ?? [];
       const rows = (props['rows'] as (string | number)[][]) ?? [];
       return (
-        <Prim.Table key={key} className="my-1 text-[12px] border-collapse">
-          {columns.length > 0 && <Prim.Thead><Prim.Tr>{columns.map((c, i) => <Prim.Th key={i} className="text-left font-semibold text-lm-muted border-b border-lm-border px-2 py-1">{c}</Prim.Th>)}</Prim.Tr></Prim.Thead>}
-          <Prim.Tbody>{rows.map((r, ri) => <Prim.Tr key={ri}>{r.map((cell, ci) => <Prim.Td key={ci} className="border-b border-lm-border px-2 py-1 text-lm-text">{String(cell)}</Prim.Td>)}</Prim.Tr>)}</Prim.Tbody>
+        <Prim.Table key={key} marginVertical="$1" fontSize="12px" borderColor="$collapse">
+          {columns.length > 0 && <Prim.Thead><Prim.Tr>{columns.map((c, i) => <Prim.Th key={i} textAlign="left" fontWeight="$semibold" color="var(--lm-muted)" borderBottomWidth={1} borderColor="var(--lm-border)" paddingHorizontal="$2" paddingVertical="$1">{c}</Prim.Th>)}</Prim.Tr></Prim.Thead>}
+          <Prim.Tbody>{rows.map((r, ri) => <Prim.Tr key={ri}>{r.map((cell, ci) => <Prim.Td key={ci} borderBottomWidth={1} borderColor="var(--lm-border)" paddingHorizontal="$2" paddingVertical="$1" color="var(--lm-text)">{String(cell)}</Prim.Td>)}</Prim.Tr>)}</Prim.Tbody>
         </Prim.Table>
       );
     }

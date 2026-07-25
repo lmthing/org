@@ -605,3 +605,44 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectPrimitiveProps>(
   React.createElement(SelectComp, { ...withFontScale(withControlShim(props)), ref }),
 )
 Select.displayName = 'Select'
+
+// ── Pre + the table family ───────────────────────────────────────────────────────────────────────
+//
+// These were `hostPrimitive` passthroughs, which forward props to a raw host tag — so every style
+// prop was silently ignored and their callers had to keep classNames. `makeLeaf` gives each the
+// same per-tag `createComponent` treatment as Link/Form/List: the real tag, `isText:true` so font
+// and line-height inherit, and the tag's own `display` restored (Tamagui's base would otherwise
+// force `flex`, which destroys table layout).
+//
+// `Pre` was the single biggest className holdout in the codebase (40 utilities across the chat
+// renderers). The `Svg` family and the replaced media elements stay passthroughs: Tamagui treats
+// `width`/`height` as STYLE, which is equivalent on `<svg>` but wrong on `<rect>`/`<circle>`, where
+// they are geometry attributes — see the note in `svg.tsx`.
+export type PreLeafProps = React.HTMLAttributes<HTMLPreElement> &
+  TextStyleProps & MarginStyleProps & LayoutStyleProps & BoxStyleProps
+const PreComp = makeLeaf('pre', 'block', 'Pre')
+export const PreLeaf = React.forwardRef<HTMLPreElement, PreLeafProps>((props, ref) =>
+  React.createElement(PreComp, { ...withFontScale(props), ref }),
+)
+PreLeaf.displayName = 'Pre'
+
+export type TableLeafProps<E extends HTMLElement = HTMLElement, A = React.HTMLAttributes<E>> = A &
+  TextStyleProps & MarginStyleProps & LayoutStyleProps & BoxStyleProps
+
+/** One Tamagui-backed table leaf. `display` is the tag's own, not Tamagui's `flex` default. */
+function makeTableLeaf<E extends HTMLElement, A>(tag: string, display: string, name: string) {
+  const Comp = makeLeaf(tag, display, name)
+  const Wrapped = React.forwardRef<E, TableLeafProps<E, A>>((props, ref) =>
+    React.createElement(Comp, { ...withFontScale(props), ref }),
+  )
+  Wrapped.displayName = name
+  return Wrapped
+}
+
+export const TableLeaf = makeTableLeaf<HTMLTableElement, React.TableHTMLAttributes<HTMLTableElement>>('table', 'table', 'Table')
+export const TheadLeaf = makeTableLeaf<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>('thead', 'table-header-group', 'Thead')
+export const TbodyLeaf = makeTableLeaf<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>('tbody', 'table-row-group', 'Tbody')
+export const TfootLeaf = makeTableLeaf<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>('tfoot', 'table-footer-group', 'Tfoot')
+export const TrLeaf = makeTableLeaf<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>('tr', 'table-row', 'Tr')
+export const ThLeaf = makeTableLeaf<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement>>('th', 'table-cell', 'Th')
+export const TdLeaf = makeTableLeaf<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>('td', 'table-cell', 'Td')

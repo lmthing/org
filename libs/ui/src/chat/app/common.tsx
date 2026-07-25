@@ -88,22 +88,21 @@ export function fmtDuration(ms?: number): string {
 
 export function CodeBlock({ code }: { code: string }): React.ReactElement {
   return (
-    // `Prim.Pre` is a host passthrough (a replaced-ish block we never style via props), so this one
-    // keeps `break-words`, which has no prop form; the rest is inline style.
+    // `Prim.Pre` is Tamagui-backed now, so all of this is style PROPS — it used to be an inline
+    // `style` object because a host passthrough ignores them. See docs/tamagui-idiomatic-migration.md §5.
     <Prim.Pre
-      className="break-words"
-      style={{
-        fontFamily: 'ui-monospace, monospace',
-        fontSize: '11px',
-        lineHeight: 1.625,
-        whiteSpace: 'pre-wrap',
-        background: 'var(--lm-bg)',
-        border: '1px solid var(--lm-border)',
-        borderRadius: 'var(--radius)',
-        padding: '0.5rem',
-        overflowX: 'auto',
-        color: 'var(--lm-text)',
-      }}
+      fontFamily="$mono"
+      fontSize="11px"
+      lineHeight={1.625}
+      whiteSpace="pre-wrap"
+      wordWrap="break-word"
+      backgroundColor="var(--lm-bg)"
+      borderWidth={1}
+      borderColor="var(--lm-border)"
+      borderRadius="$radius"
+      padding="$2"
+      overflowX="auto"
+      color="var(--lm-text)"
     >
       {code}
     </Prim.Pre>

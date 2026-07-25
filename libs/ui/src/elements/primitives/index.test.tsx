@@ -212,25 +212,18 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(option.className).toBe('')
   })
 
-  it('media + misc + table primitives emit their tags verbatim', () => {
+  it('the remaining media + misc primitives emit their tags verbatim', () => {
+    // `Pre` and the table family USED to be asserted here too. They are Tamagui-backed leaves now
+    // (they needed style props — see the dedicated describe below), so they render with atomic
+    // classes and a provider, and byte-identity no longer applies to them.
     expect(html(<Audio controls src="/a.mp3" className="a" />)).toBe(
       html(<audio controls src="/a.mp3" className="a" />),
     )
     expect(html(<IFrame src="/x" title="t" className="f" />)).toBe(
       html(<iframe src="/x" title="t" className="f" />),
     )
-    expect(html(<Pre className="p">x</Pre>)).toBe(html(<pre className="p">x</pre>))
     expect(html(<Br />)).toBe(html(<br />))
     expect(html(<Hr className="h" />)).toBe(html(<hr className="h" />))
-    expect(
-      html(
-        <Table className="t"><Thead><Tr><Th>H</Th></Tr></Thead><Tbody><Tr><Td>D</Td></Tr></Tbody></Table>,
-      ),
-    ).toBe(
-      html(
-        <table className="t"><thead><tr><th>H</th></tr></thead><tbody><tr><td>D</td></tr></tbody></table>,
-      ),
-    )
   })
 
   it('svg primitives emit svg/path verbatim (react-native-svg-compatible names)', () => {
@@ -323,6 +316,54 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     // Text is a group parent too (Tooltip wraps its trigger in one).
     const onText = withProvider(<Text group={true as never} data-parent="1">x</Text>).container
     expect(onText.querySelector('[data-parent]')!.className).toContain('t_group')
+  })
+
+  /**
+   * `Pre` and the table family were `hostPrimitive` passthroughs, which forward props to a raw host
+   * tag — so every style prop was silently ignored and their callers had to keep classNames (`Pre`
+   * alone carried 40 utilities). They are Tamagui-backed leaves now. The two things that must hold:
+   * the REAL tag, and the tag's OWN `display` — Tamagui's base would force `flex`, which destroys
+   * table layout. See docs/tamagui-idiomatic-migration.md §5.
+   */
+  describe('Pre + the table family are Tamagui-backed leaves', () => {
+    it('Pre renders <pre>, keeps block display, and takes style props', () => {
+      const el = withProvider(
+        <Pre data-p="1" fontSize="$sm" backgroundColor="$muted" whiteSpace="pre-wrap">code</Pre>,
+      ).container.querySelector('[data-p]')!
+      expect(el.tagName).toBe('PRE')
+      expect(el.textContent).toBe('code')
+      expect(el).toHaveClass('_dsp-block', '_fs-f-size-sm', '_backgroundColor-muted', '_ws-pre-wrap')
+    })
+
+    it('each table leaf keeps its own display, not Tamagui’s flex', () => {
+      const c = withProvider(
+        <Table data-t="table" width="100%">
+          <Thead data-t2="thead"><Tr data-t3="tr"><Th data-t4="th" textAlign="left">H</Th></Tr></Thead>
+          <Tbody><Tr><Td data-t5="td" color="$muted-foreground">D</Td></Tr></Tbody>
+        </Table>,
+      ).container
+      expect(c.querySelector('[data-t]')!.tagName).toBe('TABLE')
+      expect(c.querySelector('[data-t]')!).toHaveClass('_dsp-table')
+      expect(c.querySelector('[data-t2]')!.className).toMatch(/_dsp-table-heade/)
+      expect(c.querySelector('[data-t3]')!.className).toMatch(/_dsp-table-row/)
+      expect(c.querySelector('[data-t4]')!).toHaveClass('_dsp-table-cell', '_textAlign-left')
+      expect(c.querySelector('[data-t5]')!.className).toMatch(/_col-muted-foreg/)
+    })
+
+    it('Svg deliberately stays a PASSTHROUGH — Tamagui would drop its geometry attributes', () => {
+      // A Tamagui-backed `<svg>` turns `width`/`height` into CSS classes and REMOVES the
+      // attributes. On the `<svg>` root that is equivalent; on `<rect>`/`<circle>` children it is
+      // not — there they are geometry, not style. So the family keeps its classNames, and the
+      // codemod's target list keeps excluding it. This test is the evidence for that decision.
+      const el = withProvider(
+        <Svg data-p="1" viewBox="0 0 24 24" width={16} height={16} stroke="currentColor">
+          <Path d="M5 15H4" />
+        </Svg>,
+      ).container.querySelector('[data-p]')!
+      expect(el.getAttribute('width')).toBe('16')
+      expect(el.getAttribute('height')).toBe('16')
+      expect(el.getAttribute('class')).toBeNull() // no atomic classes: it is a raw host tag
+    })
   })
 
   /**

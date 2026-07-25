@@ -19,11 +19,11 @@ function LlmTab({ node }: { node: ExecNode }): React.ReactElement {
           </Prim.Row>
           <Prim.Box as="details" paddingHorizontal="$2" paddingVertical="$1">
             <Prim.Box as="summary" color="var(--lm-muted)" cursor="pointer" fontSize="11px">system + {c.messages.length} messages</Prim.Box>
-            <Prim.Pre className="font-mono text-[10px] whitespace-pre-wrap text-lm-muted mt-1 max-h-48 overflow-y-auto">{c.system}</Prim.Pre>
+            <Prim.Pre fontFamily="$mono" fontSize="10px" whiteSpace="pre-wrap" color="var(--lm-muted)" marginTop="$1" maxHeight="$48" overflowY="auto">{c.system}</Prim.Pre>
             {c.messages.map((m, j) => (
               <Prim.Box key={j} marginTop="0.25rem">
                 <Prim.Text color="var(--lm-accent)" fontSize="10px" textTransform="uppercase">{m.role}</Prim.Text>
-                <Prim.Pre className="font-mono text-[10px] whitespace-pre-wrap text-lm-text">{preview(m.content, 1000)}</Prim.Pre>
+                <Prim.Pre fontFamily="$mono" fontSize="10px" whiteSpace="pre-wrap" color="var(--lm-text)">{preview(m.content, 1000)}</Prim.Pre>
               </Prim.Box>
             ))}
           </Prim.Box>
@@ -102,7 +102,7 @@ function RawTab({ node }: { node: ExecNode }): React.ReactElement {
       {node.eventSeqs.map((seq) => {
         const ev = bySeq.get(seq);
         if (!ev) return null;
-        return <Prim.Pre key={seq} className="font-mono text-[10px] whitespace-pre-wrap text-lm-muted border-b border-lm-border/40 pb-1">[{seq}] {preview(ev, 500)}</Prim.Pre>;
+        return <Prim.Pre key={seq} fontFamily="$mono" fontSize="10px" whiteSpace="pre-wrap" color="var(--lm-muted)" borderBottomWidth={1} borderColor="color-mix(in srgb, var(--lm-border) 40%, transparent)" paddingBottom="$1">[{seq}] {preview(ev, 500)}</Prim.Pre>;
       })}
     </Prim.Box>
   );
