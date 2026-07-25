@@ -191,6 +191,13 @@ function baseClass(cls) {
     // text-* is overloaded: size, color, or alignment.
     if (FONT_SIZES.has(m[1])) return { fontSize: `$${m[1]}` }
     if (['left', 'center', 'right', 'justify', 'start', 'end'].includes(m[1])) return { textAlign: m[1] }
+    // An ARBITRARY value is overloaded the same way: `text-[11px]` is a size, `text-[#fff]` is a
+    // colour. Falling straight through to the colour branch produced `color="11px"` — invalid CSS
+    // that the browser drops, AND the font size silently lost. 31 of those shipped.
+    if (isArbitrary(m[1])) {
+      const v = arbitraryValue(m[1])
+      return /^-?[\d.]+(px|rem|em|%|pt|ch|ex|vw|vh)?$/.test(v) ? { fontSize: v } : { color: v }
+    }
     const v = colorToken(m[1]); return v == null ? 'keep' : { color: v }
   }
   // border WIDTH — `border` | `border-{0,2,4,8}` | directional `border-{t,r,b,l,x,y}(-{0,2,4,8})?`.

@@ -93,6 +93,17 @@ describe('colors → $color props', () => {
   it('arbitrary color → literal', () => {
     expect(classToProps('bg-[var(--lm-x)]').props).toEqual({ backgroundColor: 'var(--lm-x)' })
   })
+
+  it('REGRESSION: an arbitrary `text-[…]` LENGTH is a font size, not a colour', () => {
+    // `text-*` is overloaded, and so is its arbitrary form. Falling through to the colour branch
+    // produced `color="11px"` — invalid CSS the browser drops, with the font size silently lost.
+    // 33 of those shipped across chat's inspector/tree/replay/render-descriptor.
+    expect(classToProps('text-[11px]').props).toEqual({ fontSize: '11px' })
+    expect(classToProps('text-[0.9rem]').props).toEqual({ fontSize: '0.9rem' })
+    // …while an arbitrary COLOUR still maps to colour.
+    expect(classToProps('text-[#fff]').props).toEqual({ color: '#fff' })
+    expect(classToProps('text-[var(--lm-text)]').props).toEqual({ color: 'var(--lm-text)' })
+  })
 })
 
 describe('typography', () => {

@@ -35,7 +35,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'strong': return <Prim.Text as="strong" key={key} fontWeight="$semibold">{body}</Prim.Text>;
     case 'em': return <Prim.Text as="em" key={key}>{body}</Prim.Text>;
     case 'muted': return <Prim.Text key={key} color="var(--lm-muted)">{body}</Prim.Text>;
-    case 'kbd': return <Prim.Text as="kbd" key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel)" fontFamily="$mono" color="11px" borderWidth={1} borderRadius="$radius" paddingHorizontal="$1">{body}</Prim.Text>;
+    case 'kbd': return <Prim.Text as="kbd" key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel)" fontFamily="$mono" fontSize="11px" borderWidth={1} borderRadius="$radius" paddingHorizontal="$1">{body}</Prim.Text>;
     case 'code': return <Prim.Text as="code" key={key} color="var(--lm-cyan)" backgroundColor="var(--lm-bg)" fontFamily="$mono" paddingHorizontal="$1" borderRadius="$radius">{body}</Prim.Text>;
     case 'codeblock': return <Prim.Pre key={key} className="font-mono text-[12px] text-lm-text bg-lm-bg border border-lm-border rounded p-2 my-1 overflow-x-auto"><Prim.Text as="code">{body}</Prim.Text></Prim.Pre>;
     case 'markdown': {
@@ -77,7 +77,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'columns': return <Prim.Box key={key} display="grid" marginVertical="0.25rem" style={{ gridTemplateColumns: `repeat(${(d.children ?? []).length || 1}, minmax(0,1fr))`, gap: ((props['gap'] as number) ?? 2) * 4 }}>{body}</Prim.Box>;
     case 'spacer': return <Prim.Box key={key} style={{ flexGrow: 1 }} />;
     case 'divider': return (
-      <Prim.Row key={key} className="text-lm-muted" gap="$2" marginVertical="$2" color="11px" alignItems="center">
+      <Prim.Row key={key} color="var(--lm-muted)" gap="$2" marginVertical="$2" fontSize="11px" alignItems="center">
         <Prim.Text borderColor="var(--lm-border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}<Prim.Text borderColor="var(--lm-border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />
       </Prim.Row>
     );
@@ -121,24 +121,24 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     }
     case 'keyvalue': {
       const pairs = (props['pairs'] as Record<string, unknown>) ?? {};
-      return <Prim.Box as="dl" key={key} color="12px" marginVertical="0.25rem">{Object.entries(pairs).map(([k, v]) => <Prim.Row key={k} gap="$2"><Prim.Text as="dt" color="var(--lm-muted)" minWidth="120px">{k}</Prim.Text><Prim.Text as="dd" color="var(--lm-text)">{String(v)}</Prim.Text></Prim.Row>)}</Prim.Box>;
+      return <Prim.Box as="dl" key={key} fontSize="12px" marginVertical="0.25rem">{Object.entries(pairs).map(([k, v]) => <Prim.Row key={k} gap="$2"><Prim.Text as="dt" color="var(--lm-muted)" minWidth="120px">{k}</Prim.Text><Prim.Text as="dd" color="var(--lm-text)">{String(v)}</Prim.Text></Prim.Row>)}</Prim.Box>;
     }
     case 'timeline': {
       const items = (props['items'] as { title: string; time?: string; detail?: string }[]) ?? [];
-      return <Prim.List key={key} borderColor="var(--lm-border)" borderLeftWidth={1} paddingLeft="$3" marginVertical="0.25rem">{items.map((it, i) => <Prim.ListItem key={i} marginBottom="0.25rem"><Prim.Box color="var(--lm-text)">{it.title}{it.time ? <Prim.Text className="text-lm-muted" color="10px" marginLeft="0.5rem">{it.time}</Prim.Text> : null}</Prim.Box>{it.detail ? <Prim.Box className="text-lm-muted" color="11px">{it.detail}</Prim.Box> : null}</Prim.ListItem>)}</Prim.List>;
+      return <Prim.List key={key} borderColor="var(--lm-border)" borderLeftWidth={1} paddingLeft="$3" marginVertical="0.25rem">{items.map((it, i) => <Prim.ListItem key={i} marginBottom="0.25rem"><Prim.Box color="var(--lm-text)">{it.title}{it.time ? <Prim.Text color="var(--lm-muted)" fontSize="10px" marginLeft="0.5rem">{it.time}</Prim.Text> : null}</Prim.Box>{it.detail ? <Prim.Box color="var(--lm-muted)" fontSize="11px">{it.detail}</Prim.Box> : null}</Prim.ListItem>)}</Prim.List>;
     }
 
     // ── indicators ──
     case 'progressbar': {
       const max = (props['max'] as number) ?? (Number(props['value']) <= 1 ? 1 : 100);
       const pct = Math.max(0, Math.min(100, (Number(props['value'] ?? 0) / max) * 100));
-      return <Prim.Box key={key} marginVertical="0.25rem"><Prim.Box backgroundColor="var(--lm-panel)" height="$2" borderRadius="$radius" overflow="hidden"><Prim.Box backgroundColor="var(--lm-accent)" height="100%" style={{ width: `${pct}%` }} /></Prim.Box>{props['label'] ? <Prim.Box className="text-lm-muted" color="10px" marginTop="0.125rem">{String(props['label'])}</Prim.Box> : null}</Prim.Box>;
+      return <Prim.Box key={key} marginVertical="0.25rem"><Prim.Box backgroundColor="var(--lm-panel)" height="$2" borderRadius="$radius" overflow="hidden"><Prim.Box backgroundColor="var(--lm-accent)" height="100%" style={{ width: `${pct}%` }} /></Prim.Box>{props['label'] ? <Prim.Box color="var(--lm-muted)" fontSize="10px" marginTop="0.125rem">{String(props['label'])}</Prim.Box> : null}</Prim.Box>;
     }
-    case 'spinner': return <Prim.Row key={key} className="text-lm-muted" gap="$2" color="12px" marginVertical="$1" alignItems="center"><Prim.Text className="lm-spin">◐</Prim.Text>{props['label'] ? String(props['label']) : null}</Prim.Row>;
-    case 'statcard': return <Prim.Box key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel2)" borderWidth={1} borderRadius="$radius" padding="$2" display="inline-block" marginVertical="0.25rem"><Prim.Box className="text-lm-muted" color="10px" textTransform="uppercase">{String(props['label'] ?? '')}</Prim.Box><Prim.Box color="var(--lm-text)" fontSize="$lg" fontWeight="$semibold">{String(props['value'] ?? '')}</Prim.Box>{props['delta'] ? <Prim.Box className="text-lm-green" color="11px">{String(props['delta'])}</Prim.Box> : null}</Prim.Box>;
+    case 'spinner': return <Prim.Row key={key} color="var(--lm-muted)" gap="$2" fontSize="12px" marginVertical="$1" alignItems="center"><Prim.Text className="lm-spin">◐</Prim.Text>{props['label'] ? String(props['label']) : null}</Prim.Row>;
+    case 'statcard': return <Prim.Box key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel2)" borderWidth={1} borderRadius="$radius" padding="$2" display="inline-block" marginVertical="0.25rem"><Prim.Box color="var(--lm-muted)" fontSize="10px" textTransform="uppercase">{String(props['label'] ?? '')}</Prim.Box><Prim.Box color="var(--lm-text)" fontSize="$lg" fontWeight="$semibold">{String(props['value'] ?? '')}</Prim.Box>{props['delta'] ? <Prim.Box color="var(--lm-green)" fontSize="11px">{String(props['delta'])}</Prim.Box> : null}</Prim.Box>;
     case 'details': return <Prim.Box as="details" key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel2)" borderWidth={1} borderRadius="$radius" padding="$2" marginVertical="0.25rem"><Prim.Box as="summary" color="var(--lm-text)" cursor="pointer">{String(props['summary'] ?? 'Details')}</Prim.Box><Prim.Box marginTop="0.25rem">{body}</Prim.Box></Prim.Box>;
 
     case 'fragment': return <React.Fragment key={key}>{body}</React.Fragment>;
-    default: return <Prim.Box key={key} className="text-lm-muted" fontFamily="$mono" color="11px">{d.type}: {preview(props, 200)}</Prim.Box>;
+    default: return <Prim.Box key={key} color="var(--lm-muted)" fontFamily="$mono" fontSize="11px">{d.type}: {preview(props, 200)}</Prim.Box>;
   }
 }
