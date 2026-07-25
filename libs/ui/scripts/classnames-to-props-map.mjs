@@ -37,6 +37,26 @@ const MAX_WIDTH = { none: 'none', xs: 320, sm: 384, md: 448, lg: 512, xl: 576, '
 
 const ALIGN = { start: 'flex-start', end: 'flex-end', center: 'center', between: 'space-between', around: 'space-around', evenly: 'space-evenly', stretch: 'stretch', baseline: 'baseline' }
 const ITEMS = { start: 'flex-start', end: 'flex-end', center: 'center', baseline: 'baseline', stretch: 'stretch' }
+// Tailwind's cursor utilities are named after the CSS keyword, so `cursor-<kw>` → `cursor: '<kw>'`
+// for the whole family. Listed explicitly so a typo'd class is REPORTED, not passed through.
+const CURSORS = new Set([
+  'auto', 'default', 'pointer', 'wait', 'text', 'move', 'help', 'not-allowed', 'none',
+  'context-menu', 'progress', 'cell', 'crosshair', 'vertical-text', 'alias', 'copy', 'no-drop',
+  'grab', 'grabbing', 'all-scroll', 'col-resize', 'row-resize', 'n-resize', 'e-resize', 's-resize',
+  'w-resize', 'ne-resize', 'nw-resize', 'se-resize', 'sw-resize', 'ew-resize', 'ns-resize',
+  'nesw-resize', 'nwse-resize', 'zoom-in', 'zoom-out',
+])
+// `rounded-{side}-*` corner groups → the Tamagui per-corner props.
+const RADIUS_SIDES = {
+  t: ['borderTopLeftRadius', 'borderTopRightRadius'],
+  r: ['borderTopRightRadius', 'borderBottomRightRadius'],
+  b: ['borderBottomLeftRadius', 'borderBottomRightRadius'],
+  l: ['borderTopLeftRadius', 'borderBottomLeftRadius'],
+  tl: ['borderTopLeftRadius'],
+  tr: ['borderTopRightRadius'],
+  bl: ['borderBottomLeftRadius'],
+  br: ['borderBottomRightRadius'],
+}
 
 // A design-token color name → `$token`. Everything the parity test proves exists.
 // (We don't hard-code the list; any bg-/text-/border- value that is a bare token name maps to
@@ -100,8 +120,14 @@ function colorToken(raw) {
 //   'keep'  → leave as className (faithful, but base-fought / paint kept during coexistence)
 //   null    → unmapped, report for manual review
 function baseClass(cls) {
+  // `!important` prefix (`!hidden`, `!flex`, `md:!hidden`). These exist ONLY to out-specify
+  // Tamagui's own unlayered `.is_Box { display:flex }` base rule — a problem a style PROP does not
+  // have, because props always beat classes. So strip the bang and map the rest; if the remainder
+  // is itself unmapped the caller still reports/keeps the ORIGINAL token, bang included.
+  if (cls.startsWith('!')) return baseClass(cls.slice(1))
+
   // display
-  const DISPLAY = { block: 'block', 'inline-block': 'inline-block', inline: 'inline', flex: 'flex', 'inline-flex': 'inline-flex', grid: 'grid', 'inline-grid': 'inline-grid', hidden: 'none', contents: 'contents' }
+  const DISPLAY ={ block: 'block', 'inline-block': 'inline-block', inline: 'inline', flex: 'flex', 'inline-flex': 'inline-flex', grid: 'grid', 'inline-grid': 'inline-grid', hidden: 'none', contents: 'contents' }
   if (cls in DISPLAY) return { display: DISPLAY[cls] }
 
   // flex-direction / wrap
@@ -149,10 +175,10 @@ function baseClass(cls) {
   if (cls === 'resize-x') return { resize: 'horizontal' }
   if (cls === 'resize-none') return { resize: 'none' }
 
-  // misc single-value utilities
-  if (cls === 'cursor-pointer') return { cursor: 'pointer' }
-  if (cls === 'cursor-default') return { cursor: 'default' }
-  if (cls === 'cursor-not-allowed') return { cursor: 'not-allowed' }
+  // misc single-value utilities. `cursor` is a real Tamagui web style prop (`_cur-<value>`), and
+  // every Tailwind cursor utility is named after its CSS keyword, so the whole family maps 1:1.
+  const cur = cls.match(/^cursor-(.+)$/)
+  if (cur && CURSORS.has(cur[1])) return { cursor: cur[1] }
   if (cls === 'select-none') return { userSelect: 'none' }
   if (cls === 'select-text') return { userSelect: 'text' }
   if (cls === 'pointer-events-none') return { pointerEvents: 'none' }
@@ -247,14 +273,47 @@ function baseClass(cls) {
   if (cls === 'line-through') return { textDecorationLine: 'line-through' }
   if (cls === 'no-underline') return { textDecorationLine: 'none' }
   if (cls === 'truncate') return { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+  // `wordWrap` IS a Tamagui style prop (`_ww-…`) — `wordBreak` and `listStyleType` are NOT, and are
+  // silently dropped, so they stay unmapped and get an inline `style` by hand. Verified in
+  // `elements/primitives/index.test.tsx`.
+  if (cls === 'break-words') return { wordWrap: 'break-word' }
+  if (cls === 'break-normal') return { wordWrap: 'normal' }
+  // `line-clamp-N` needs the `-webkit-box` triple. Tamagui passes `Webkit*` keys straight through
+  // to its atomic CSS (also verified), so the whole utility converts.
+  if ((m = cls.match(/^line-clamp-(\d+)$/))) {
+    return { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: Number(m[1]), overflow: 'hidden' }
+  }
+  if (cls === 'line-clamp-none') return { WebkitLineClamp: 'none' }
 
-  // radius / border-radius
+  // grid — `gridTemplateColumns` is a real Tamagui web style prop (verified). Tailwind's numeric
+  // form expands to its own `repeat()`; the arbitrary form passes its value through.
+  if ((m = cls.match(/^grid-cols-\[(.+)\]$/))) return { gridTemplateColumns: arbitraryValue(`[${m[1]}]`) }
+  if ((m = cls.match(/^grid-cols-(\d+)$/))) return { gridTemplateColumns: `repeat(${m[1]}, minmax(0, 1fr))` }
+  if (cls === 'grid-cols-none') return { gridTemplateColumns: 'none' }
+  if ((m = cls.match(/^grid-rows-(\d+)$/))) return { gridTemplateRows: `repeat(${m[1]}, minmax(0, 1fr))` }
+
+  // `translate-{x,y}-*` → the `transform` string prop (`_tr-…`, verified). ONE axis per element:
+  // two translate utilities on the same element would overwrite each other here, so the second is
+  // reported rather than silently lost — see the guard in `applyBase`.
+  if ((m = cls.match(/^(-?)translate-(x|y)-(.+)$/))) {
+    const v = sizeToken(m[3])
+    return v == null ? null : { transform: `translate${m[2].toUpperCase()}(${m[1] ? negate(v) : v})` }
+  }
+
+  // radius / border-radius — whole box, one corner group, or an arbitrary value.
+  if ((m = cls.match(/^rounded-\[(.+)\]$/))) return { borderRadius: arbitraryValue(`[${m[1]}]`) }
+  if ((m = cls.match(/^rounded-(t|r|b|l|tl|tr|bl|br)(-(\w+))?$/))) {
+    const key = m[3] || 'DEFAULT'
+    if (!(key in RADII)) return null
+    return Object.fromEntries(RADIUS_SIDES[m[1]].map((p) => [p, RADII[key]]))
+  }
   if ((m = cls.match(/^rounded(-(\w+))?$/))) { const key = m[2] || 'DEFAULT'; if (key in RADII) return { borderRadius: RADII[key] }; return null }
 
   // position / inset / z
   if (['absolute', 'relative', 'fixed', 'sticky', 'static'].includes(cls)) return { position: cls }
   const POS = { top: 'top', right: 'right', bottom: 'bottom', left: 'left' }
-  if ((m = cls.match(/^(-?)(top|right|bottom|left)-(.+)$/))) { const v = m[3] === 'full' ? '100%' : spaceToken(m[3]); return v == null ? null : { [POS[m[2]]]: m[1] ? negate(v) : v } }
+  // `sizeToken`, not `spaceToken`: insets take fractions too (`left-1/2` → `50%`).
+  if ((m = cls.match(/^(-?)(top|right|bottom|left)-(.+)$/))) { const v = sizeToken(m[3]); return v == null ? null : { [POS[m[2]]]: m[1] ? negate(v) : v } }
   if ((m = cls.match(/^(-?)inset-(.+)$/))) { const v = m[2] === 'full' ? '100%' : spaceToken(m[2]); return v == null ? null : { top: v, right: v, bottom: v, left: v } }
   if ((m = cls.match(/^z-(\d+|auto)$/))) return { zIndex: m[1] === 'auto' ? 'auto' : Number(m[1]) }
 
@@ -368,9 +427,12 @@ export function classToProps(className) {
       continue
     }
     if (variant === 'group-hover') {
-      const r = baseClass(rest)
-      if (r && typeof r === 'object') Object.assign((nested['$group-hover'] ||= {}), r)
-      else skip.push(raw)
+      // Tailwind's group-hover keys off the `group` CLASS on an ancestor; Tamagui's `$group-hover`
+      // keys off a `group` PROP, which stamps a different marker (`t_group`). Converting the child
+      // alone produces a selector that can never match — a silent, invisible-until-hovered break.
+      // The parent is a separate element the codemod cannot reach, so report BOTH halves for a
+      // deliberate hand migration. Proven in `elements/primitives/index.test.tsx`.
+      skip.push(raw)
       continue
     }
     skip.push(raw) // unknown variant (peer-, aria-, data-, …) → manual
@@ -384,7 +446,11 @@ function applyBase(raw, props, keep, skip) {
   const r = baseClass(raw)
   if (r === 'keep') keep.push(raw)
   else if (r === null) skip.push(raw)
-  else Object.assign(props, r)
+  else if (r.transform !== undefined && props.transform !== undefined) {
+    // CSS composes multiple transforms in ONE declaration; a second `translate-*`/`rotate-*` on the
+    // same element would overwrite the first here. Report it instead of losing it silently.
+    skip.push(raw)
+  } else Object.assign(props, r)
 }
 
 export const __internal = { baseClass, spaceToken, sizeToken, colorToken }

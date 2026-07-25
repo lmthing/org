@@ -11,16 +11,16 @@ interface TooltipProps {
 
 export function Tooltip({ children, content, className, side = 'top' }: TooltipProps) {
   return (
-    <Prim.Text display="inline-flex" className={cn("group", className)} position="relative">
+    // Tamagui's `group` PROP (marker `t_group`), not Tailwind's `group` class — `$group-hover` on
+    // the bubble below keys off the prop, and a class here would leave it dead.
+    // See docs/tamagui-idiomatic-migration.md §5.
+    <Prim.Text display="inline-flex" {...({ group: true } as Record<string, unknown>)} className={className} position="relative">
       {children}
       <Prim.Text
         display="block"
         whiteSpace="nowrap"
         {...(side === 'top' ? { marginBottom: '0.375rem' } : { marginTop: '0.375rem' })}
-        className={cn(
-          'pointer-events-none absolute z-50 px-2 py-1 text-xs rounded-md bg-foreground text-background opacity-0 group-hover:opacity-100 transition-opacity duration-150 -translate-x-1/2 left-1/2',
-          side === 'top' ? 'bottom-full' : 'top-full',
-        )}
+        className={cn("transition-opacity duration-150", side === 'top' ? 'bottom-full' : 'top-full')} pointerEvents="none" position="absolute" zIndex={50} paddingHorizontal="$2" paddingVertical="$1" fontSize="$xs" borderRadius="$radius-md" backgroundColor="$foreground" color="$background" opacity={0} transform="translateX(-50%)" left="50%" $group-hover={{ opacity: 1 }}
       >
         {content}
       </Prim.Text>

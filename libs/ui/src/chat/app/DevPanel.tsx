@@ -23,7 +23,7 @@ function Resizer({ onDrag }: { onDrag: (dx: number) => void }) {
   return (
     <Prim.Box
       onMouseDown={down}
-      className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-agent/40 transition-colors"
+      className="transition-colors" position="absolute" left="$0" top="$0" bottom="$0" width="$1" cursor="col-resize" hoverStyle={{ backgroundColor: "color-mix(in srgb, var(--agent) 40%, transparent)" }}
     />
   );
 }
@@ -61,7 +61,7 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
 
       {/* Tree/inspector resizer */}
       <Prim.Box
-        className="h-1 cursor-row-resize bg-lm-border hover:bg-lm-accent/40 shrink-0"
+        height="$1" cursor="row-resize" backgroundColor="var(--lm-border)" flexShrink={0} hoverStyle={{ backgroundColor: "color-mix(in srgb, var(--lm-accent) 40%, transparent)" }}
         onMouseDown={(e) => {
           e.preventDefault();
           let last = e.clientY;

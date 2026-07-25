@@ -211,7 +211,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
             const cost = isActive ? sessionCostUsd : s.totalCostUsd;
             const costLabel = cost !== undefined && cost > 0 ? formatCost(cost) : '';
             return (
-              <Prim.Row key={s.sessionId} className="group" gap="$1" alignItems="center">
+              <Prim.Row key={s.sessionId} {...({ group: true } as Record<string, unknown>)} gap="$1" alignItems="center">
                 <Prim.Pressable
                   onClick={() => void resumeSession(s.sessionId)}
                   overflow="hidden"
@@ -230,7 +230,7 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
                 </Prim.Pressable>
                 <Prim.Pressable
                   onClick={() => void deleteSession(s.sessionId)}
-                  className="!hidden group-hover:!flex w-5 h-5 items-center justify-center text-muted-foreground hover:text-destructive rounded text-xs shrink-0"
+                  display="none" width="$5" height="$5" alignItems="center" justifyContent="center" color="$muted-foreground" borderRadius="$radius" fontSize="$xs" flexShrink={0} $group-hover={{ display: "flex" }} hoverStyle={{ color: "$destructive" }}
                   title="Delete"
                 >×</Prim.Pressable>
               </Prim.Row>

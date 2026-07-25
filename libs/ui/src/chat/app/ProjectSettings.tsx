@@ -171,7 +171,7 @@ function SpacesTab({ projectId }: { projectId: string }) {
               <Prim.Text fontSize="$sm" fontWeight="$medium" color="$foreground" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{s.name}</Prim.Text>
               <Prim.Text fontSize="$xs" color="$muted-foreground" fontFamily="$mono">{s.id}</Prim.Text>
             </Prim.Row>
-            {s.description && <Prim.Text as="p" className="text-xs text-muted-foreground line-clamp-2" marginBottom="0.5rem">{s.description}</Prim.Text>}
+            {s.description && <Prim.Text as="p" fontSize="$xs" color="$muted-foreground" display="-webkit-box" WebkitBoxOrient="vertical" WebkitLineClamp={2} overflow="hidden" marginBottom="0.5rem">{s.description}</Prim.Text>}
             <Prim.Row flexWrap="wrap" gap="$1">
               <Prim.Text fontSize="$xs" backgroundColor="$muted" color="$muted-foreground" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">{s.agents.length} agent{s.agents.length !== 1 && 's'}</Prim.Text>
               {s.functionCount > 0 && <Prim.Text fontSize="$xs" backgroundColor="$muted" color="$muted-foreground" paddingHorizontal="$1.5" paddingVertical="$0.5" borderRadius="$radius-full">{s.functionCount} fn</Prim.Text>}

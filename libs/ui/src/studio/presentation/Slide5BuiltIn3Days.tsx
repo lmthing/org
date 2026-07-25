@@ -79,7 +79,7 @@ export default function Slide5BuiltIn3Days() {
       </Prim.Col>
 
       {/* CARDS */}
-      <Prim.Box className="w-full grid-cols-3 gap-5" display="grid" marginBottom="2.25rem">
+      <Prim.Box width="100%" gridTemplateColumns="repeat(3, minmax(0, 1fr))" gap="$5" display="grid" marginBottom="2.25rem">
         {cards.map((card) => (
           <Prim.Col
             key={card.title}
