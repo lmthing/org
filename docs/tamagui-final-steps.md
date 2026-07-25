@@ -7,12 +7,11 @@
 > happened and why*, this one is *what is left and in what order*.
 
 > **Status.** Phases **0.5 ✅ · 1 ✅ · 2 ✅ · 3 ✅** (className axis closed; inline-`style` tail ◐) ·
-> **4 ✅ TAILWIND IS DELETED** · **5a ✅ ONE CONFIG** · **5b ◐** (root cause fixed, the `--noCheck`
-> script is not yet flipped) · **5c ✅ measured**.
+> **4 ✅ TAILWIND IS DELETED** · **5a ✅ ONE CONFIG** · **5b ✅ REAL `tsc`** · **5c ✅ measured**.
 > Each completed phase keeps its section, rewritten to record what was actually done and **where this
 > plan was wrong** — the corrections matter more than the ticks, because several were load-bearing.
 >
-> **Definition of done: 3 of 5 met.**
+> **Definition of done: 4 of 5 met.**
 >
 > - **(1) ✅** `@import "tailwindcss"` appears nowhere in the design system or the web surfaces —
 >   verified by stripping comments first, since several files now *discuss* the directive. `theme.css`
@@ -22,31 +21,67 @@
 > - **(3) ◐** 55 inline styles remain on Tamagui-backed targets (from 130). A further 78 are on
 >   passthrough primitives / lucide / `.native.tsx`, where `style` is CORRECT and permanent.
 > - **(4) ✅** ONE Tamagui config, platform-split on `isWeb`.
-> - **(5) ◐ NOT met — and an earlier version of this line wrongly claimed it was.** `libs/ui` still
->   runs `tsc --noEmit --noCheck`. What §5b delivered is the *root cause*: one React 19, which is what
->   that section named as the blocker. It removed all **133** `TS2786`
->   ("cannot be used as a JSX component") errors from the `apps/web` typecheck, 487 → 318, and made
->   `app-sidebar` render-testable for the first time.
+> - **(5) ✅** `libs/ui` runs `tsc --noEmit`. The script was not even NAMED `typecheck` — it was
+>   `typecheck:syntax`, so turbo's workspace `typecheck` task skipped the package entirely; the
+>   workspace gate was green because `libs/ui` was never in it. It is now, and the task count went
+>   6 → 7.
 >
->   Flipping the script needs more, but **half of it was a tsconfig bug, not debt**: a real `tsc` over
->   `libs/ui` reported **223** errors, of which **112 were phantom**. `vitest.setup.ts` imports
->   `@testing-library/jest-dom/vitest` — whose entire job is to AUGMENT vitest's `Assertion` type with
->   `toBeInTheDocument`/`toHaveClass`/`toBeDisabled` — but `include: ["src"]` meant tsc never loaded
->   it. Adding the setup file to the program: **223 → 111**.
+>   The path was **223 → 0**, and roughly half of it was never debt:
 >
->   The remaining **111 is real**: 64 `TS2322` (prop-type mismatches on Tamagui components — the
->   actual SPIKE C payload), 22 `TS2307` (**undeclared imports**: `@tanstack/react-router` ×9 and
->   `@tanstack/react-query` ×2 are imported but appear in neither `dependencies` nor
->   `peerDependencies`, which is a genuine packaging bug, not just a typecheck one; the 8
->   `react-native*` are the `.native.tsx` forks' optional peers; 3 are app-local aliases/assets),
->   16 `TS2345`, and a small tail.
+>   | step | count | what it actually was |
+>   |---|---|---|
+>   | start (real `tsc`) | 223 | |
+>   | `vitest.setup.ts` into the program | 111 | **phantom.** The setup file imports `@testing-library/jest-dom/vitest`, whose whole job is to AUGMENT vitest's `Assertion` type; `include: ["src"]` meant tsc never loaded it |
+>   | declare the peers libs/ui imports | 93 | `@tanstack/react-router`/`react-query` were in NEITHER `dependencies` nor `peerDependencies` — a packaging bug |
+>   | `Stack` gap + shim constraints | 71 | see below |
+>   | shadow quartet + numeric bag values | 54 | |
+>   | tracking-ramp cast + `import.meta.env` | 40 | |
+>   | 8 style props declared, 3 wordBreaks fixed | 27 | |
+>   | semantic tags + 3 union widenings | 16 | |
+>   | inert props, rotted tests, `.ts` extension | 5 | |
+>   | `.native.tsx` forks | 3 | |
+>   | delete dead code (see below) | **0** | |
 >
->   A caution for whoever finishes this: `"types": ["vite/client"]` looks like the fix for the four
->   `import.meta.env` errors and is a trap. Setting `types` RESTRICTS which `@types` packages enter the
->   program, which silently suppressed ~111 of the remaining errors — the count fell to 1 and a
->   deliberately-wrong probe (`const bad: number = "…"`) went unreported. Verify any typecheck
->   improvement with a probe that must fail.
-
+>   **The typecheck was worth flipping because of what it found, not because the number reached
+>   zero.** Nine of these were silently-inert code, each verified by rendering the prop and reading
+>   the emitted atomic class rather than by assumption — the rule being that a prop Tamagui HONOURS
+>   is a missing declaration, while a prop it DROPS is a broken callsite, and the two have opposite
+>   fixes:
+>
+>   - **`Stack` dropped every non-semantic `gap`.** It looked all gaps up in a 3-key map, so anything
+>     outside `sm|md|lg` resolved to `undefined`. The `style-bags-to-props` codemod emitted bags
+>     carrying the retired class's literal `{gap:'0.5rem'}`, and JSX spreads them AFTER `gap="sm"` —
+>     so the literal won the merge and vanished. 11 callsites in 8 files rendered with NO gap.
+>   - **`as` on `Row`/`Col` was ignored** — `<Prim.Row as="header">` rendered a `<div>`. The chat
+>     header and both inspector panels shipped as plain divs with inert `aria-label`s.
+>   - **`Prim.IFrame` is a raw host `<iframe>`**; its style props were dropped as unknown DOM
+>     attributes, so the IDE preview had no flex sizing and no backdrop.
+>   - **`variant="ghost"` on `Prim.Pressable`** is `Button`'s prop — the settings tabs got neither
+>     transparent background nor accent hover, and it leaked to the DOM as an invalid attribute.
+>   - **`wordBreak` produces no atomic class at all**, so three log/tool-call renderers never broke
+>     long lines.
+>
+>   It also found two **rotted tests**: `app-sidebar` omitted three REQUIRED props (only possible
+>   under `--noCheck`), and `subject-item` passed `id`/`name` to a component taking `{slug, path}` so
+>   its assertion could never have matched. The latter has never executed — `vitest.config.ts`
+>   includes only `src/elements/**`, so **42 of this package's 85 test files run**. Widening that is
+>   real follow-up work, listed in §7.
+>
+>   The last 3 errors were **dead code with imports to modules that do not exist anywhere in either
+>   repo**, deleted with the user's agreement: `components/auth/github-login/` (+ its now-orphaned
+>   `props.ts`), which imported a `GithubContext` that was never in the tree yet was re-exported from
+>   `src/index.ts` — so the `@lmthing/ui` ROOT entry, the surface the component-editor templates and
+>   core's typecheck overlay both point users at, did not resolve; and `studio/presentation/`
+>   (10 slides), which nothing imported and two of which pulled in PNGs that are not on disk.
+>
+>   **The caution that made this trustworthy:** `"types": ["vite/client"]` looks like the fix for the
+>   four `import.meta.env` errors and is a trap. Setting `types` RESTRICTS which `@types` packages
+>   enter the program; it silently suppressed ~111 real errors, dropping the count to 1 while a
+>   deliberately-wrong probe (`const bad: number = "…"`) went unreported. The real fix was in
+>   `@lmthing/auth`, which ships SOURCE and so is typechecked inside every consumer's program, where
+>   its own `vite-env.d.ts` is never loaded. Every claim in this table was confirmed the same way:
+>   after flipping the script, a deliberately-wrong probe was re-run and DID fail with exit code 2.
+>
 ## The definition of done
 
 Five conditions. Anything not on this list is out of scope and named in [§7](#7-explicitly-not-in-scope).

@@ -16,7 +16,9 @@ const Image = React.forwardRef<React.ElementRef<typeof RNImage>, ImageProps>(
     <RNImage
       ref={ref}
       source={typeof src === 'string' ? { uri: src } : undefined}
-      accessibilityLabel={alt}
+      // `ImageProps` intersects `Record<string, unknown>` so surfaces can pass the web fork's style
+      // props, which widens every known prop to `unknown` — hence the guard, matching `src` above.
+      accessibilityLabel={typeof alt === 'string' ? alt : undefined}
       style={style as never}
     />
   ),
