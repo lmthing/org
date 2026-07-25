@@ -128,10 +128,25 @@ export function createViteConfig(dirname, overrides) {
         // back to Tamagui's runtime, which injects the same `:root`-boosted unlayered CSS the
         // compiler would (B0) — web correctness is identical, extraction is just a perf win.
         components: ['@tamagui/core'],
-        // Extraction OFF: the extractor can't optimize @lmthing/ui components anyway (they run via
-        // runtime fallback) and its per-file worker ~3×'d the build for no benefit. Runtime Tamagui
-        // is correctness-equivalent (B0). The config still loads (aliases/theme). Re-enable if a
-        // future config-bundle of the design-system package makes extraction worthwhile.
+        /*
+         * Extraction OFF — re-measured in phase 5c of docs/tamagui-final-steps.md, after the two
+         * Tamagui configs merged, because the plan said to measure rather than assume.
+         *
+         * The measurement: flipping this to `false` (extraction ON) is a NO-OP. Two builds each way
+         * produced BYTE-IDENTICAL output — same `index-*.css` and `index-*.js` content hashes — and
+         * the same wall clock (4.3–4.5 s off, 4.4–4.6 s on, i.e. inside the noise).
+         *
+         * So the reason to leave it off is not the one previously written here. The old comment
+         * claimed the per-file worker "~3×'d the build"; that is no longer reproducible under
+         * vite 8 / rolldown and would have been a misleading thing to act on. The real reason is
+         * scope: the components the surfaces actually render come from `@lmthing/ui`, which cannot be
+         * listed in `components` above (config-bundling the whole package pulls in app-only deps that
+         * do not resolve), so the extractor has nothing in range to optimise and produces the same
+         * output either way. Runtime Tamagui remains correctness-equivalent (B0).
+         *
+         * Worth revisiting only if `@lmthing/ui` becomes config-bundleable; until then the flag's
+         * value is cosmetic and `true` is the honest default.
+         */
         disableExtraction: true,
       }),
       {

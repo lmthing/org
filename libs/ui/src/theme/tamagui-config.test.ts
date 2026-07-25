@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tamaguiConfig } from './tamagui.config'
+import { tamaguiConfig, buildThemes, buildColorTokens } from './tamagui.config'
 import {
   themes as genThemes,
   radius as genRadius,
@@ -10,6 +10,14 @@ import {
   fontWeights as genFontWeights,
   zIndex as genZIndex,
 } from '@lmthing/css/tamagui-tokens'
+
+/**
+ * The NATIVE theme pair. Since phase 5a there is ONE config, and its `themes` are chosen by `isWeb` —
+ * which is always true under jsdom, so `tamaguiConfig.themes` here is the single empty `app` theme.
+ * The native branch is reached through the pure builder instead, so these assertions keep running
+ * rather than silently evaporating when the configs merged.
+ */
+const NATIVE_THEMES = buildThemes(false)
 
 /**
  * Layer-1 (runtime) parity for the buildable Tamagui config shell.
@@ -31,19 +39,19 @@ const val = (v: unknown): string =>
 describe('tamagui.config createTamagui shell', () => {
   it('constructs with both themes', () => {
     expect(tamaguiConfig).toBeTruthy()
-    expect(tamaguiConfig.themes.light).toBeTruthy()
-    expect(tamaguiConfig.themes.dark).toBeTruthy()
+    expect(NATIVE_THEMES.light).toBeTruthy()
+    expect(NATIVE_THEMES.dark).toBeTruthy()
   })
 
   it('light theme values equal the generated (theme.css-parity) tokens byte-for-byte', () => {
     for (const [name, expected] of Object.entries(genThemes.light)) {
-      expect(val(tamaguiConfig.themes.light[name]), `light.${name}`).toBe(expected)
+      expect(val(NATIVE_THEMES.light[name]), `light.${name}`).toBe(expected)
     }
   })
 
   it('dark theme values equal the generated (theme.css-parity) tokens byte-for-byte', () => {
     for (const [name, expected] of Object.entries(genThemes.dark)) {
-      expect(val(tamaguiConfig.themes.dark[name]), `dark.${name}`).toBe(expected)
+      expect(val(NATIVE_THEMES.dark[name]), `dark.${name}`).toBe(expected)
     }
   })
 
@@ -51,8 +59,8 @@ describe('tamagui.config createTamagui shell', () => {
     const names = Object.keys(genThemes.light)
     expect(names.length).toBeGreaterThan(90)
     for (const name of names) {
-      expect(tamaguiConfig.themes.light, `light missing ${name}`).toHaveProperty(name)
-      expect(tamaguiConfig.themes.dark, `dark missing ${name}`).toHaveProperty(name)
+      expect(NATIVE_THEMES.light, `light missing ${name}`).toHaveProperty(name)
+      expect(NATIVE_THEMES.dark, `dark missing ${name}`).toHaveProperty(name)
     }
   })
 
@@ -99,5 +107,28 @@ describe('tamagui.config createTamagui shell', () => {
     expect(tamaguiConfig.media).toBeTruthy()
     expect(tamaguiConfig.media.md).toEqual({ minWidth: 768 })
     expect(tamaguiConfig.media.gtSm).toEqual({ minWidth: 768 })
+  })
+
+  // ── the platform split (phase 5a) ──────────────────────────────────────────────────────────
+  it('web gets ONE EMPTY theme — a coloured pair would override theme.css in dark mode', () => {
+    // The bug this guards is in `.issues` history: a `light`/`dark` Tamagui theme injects
+    // `.t_light`-scoped custom properties that beat theme.css. Colours must arrive via var-backed
+    // TOKENS, never an injected theme. Merging the configs put this one boolean away.
+    const web = buildThemes(true)
+    expect(Object.keys(web)).toEqual(['app'])
+    expect(web.app).toEqual({})
+  })
+
+  it('web colour tokens are var(--…)-backed; native ones are resolved hex', () => {
+    const web = buildColorTokens(true)
+    const native = buildColorTokens(false)
+    // SPIKE A1: the indirection is what lets a runtime space override retheme the app.
+    expect(web['background']).toBe('var(--background)')
+    expect(web['agent']).toBe('var(--agent)')
+    // Native has no CSS variables, so it must be a literal.
+    expect(native['background']).toBe(val(genThemes.light['background']))
+    expect(native['background']).not.toContain('var(')
+    // Same key set either way — a token present on one platform and not the other is a silent gap.
+    expect(Object.keys(web).sort()).toEqual(Object.keys(native).sort())
   })
 })

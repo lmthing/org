@@ -1,25 +1,64 @@
 /**
- * tamagui.config.ts — the buildable `createTamagui` shell (Phase 1 of the Tamagui migration).
+ * tamagui.config.ts — THE Tamagui config. One config, both platforms (phase 5a of
+ * `docs/tamagui-final-steps.md`).
  *
- * This is the thin runtime counterpart of the PURE-DATA token module
- * `@lmthing/css/tamagui-tokens` (`libs/css/src/tamagui/tokens.generated.ts`, generated from
- * `tokens.json`). That module has NO `@tamagui/core` import so the Layer-1 token-parity vitest
- * can load it in a bare node env; THIS file feeds the same data into `createTamagui` so the
- * primitives (§4) can render on both web and native from one config.
+ * This replaces the PAIR that used to exist — `tamagui.config.ts` (native, resolved hex) and
+ * `tamagui-web.config.ts` (web, `var(--…)`-backed). Everything the two shared — the SPIKE-B Tailwind-parity scales, the
+ * radius/font/zIndex tokens, the media breakpoints, `settings` — was duplicated verbatim in both
+ * files, which is the drift risk the convergence exists to remove.
  *
- * Because every color / radius / font value here comes verbatim from the generated module —
- * which the token-parity test proves is byte-identical to `theme.css` — the Tamagui and Tailwind
- * (`theme.css`) render targets cannot drift. See docs/react-native-tamagui-migration.md §5 / §6.
+ * ## What genuinely differs by platform, and why
  *
- * Coexistence: the surfaces still carry their Tailwind classNames, which the primitives pass
- * through untouched. Tamagui's output and `theme.css` live side by side during the migration;
- * the Tamagui theme keys below are consumed by the primitives' block-compat resets and by native.
+ * Exactly three things, all branching on `isWeb` (a build-time-resolvable constant from
+ * `@tamagui/core`, so each bundle keeps only its own branch):
+ *
+ *  1. **Colour tokens.** Web uses `webColorTokens` — every value is `var(--<name>)`. Native has no
+ *     CSS variables, so it uses the resolved hex from `themes.light`.
+ *  2. **Themes.** Native gets the real `light`/`dark` pair. Web gets ONE EMPTY `app` theme — see the
+ *     warning below; that is not a simplification, it is load-bearing.
+ *  3. **Animation driver.** `@tamagui/animations-css` on web (every animation this app has is a CSS
+ *     transition, and a JS driver would move style off the atomic-class path the whole migration is
+ *     built on); `@tamagui/animations-react-native` on native. The NAMES and durations are identical
+ *     on both, so a surface's `transition="quick"` means the same thing either way.
+ *
+ * ## SPIKE A / A1 — the theming model, and the bug that must not come back
+ *
+ * The app themes at RUNTIME: `data-theme` on `<html>` flips light↔dark, and a space can inject
+ * arbitrary `--<name>` overrides (`theme.ts` `applyThemeTokens`). Tamagui themes are STATIC, baked at
+ * `createTamagui`, so they cannot represent an arbitrary user-supplied runtime theme. A1 resolves that
+ * without giving up idiomatic props:
+ *
+ *  - Colours are `var(--<name>)`-backed tokens, so `backgroundColor="$background"` emits atomic CSS
+ *    referencing `var(--color-background)` → `var(--background)` → whatever `theme.css` or a runtime
+ *    space override currently resolves it to. `theme.css` declares the same
+ *    `--color-<name>: var(--<name>)` aliases, so Tamagui injecting them is byte-identical — no cycle,
+ *    no collision. Verified by `apps/web/b0-probe/spike-a-runtime-theme.spec.ts`.
+ *  - **The web theme stays a single EMPTY theme.** A coloured `light`/`dark` pair injects
+ *    `.t_light`-scoped custom properties that OVERRIDE `theme.css` in dark mode. That was a real
+ *    shipped bug (see `.issues` history + the `theme-check` probe). Colours come from the var-backed
+ *    tokens, never from an injected Tamagui theme.
+ *
+ *    This is why the branch below covers `themes` and not only `tokens.color`: handing web the native
+ *    theme pair would resurrect that bug, and it is now one boolean away. `pnpm test:surface` captures
+ *    light AND dark, so it is the gate that catches it.
+ *
+ * ## Import discipline
+ *
+ * `@lmthing/ui` is `sideEffects: false`, so a bare `import '…/tamagui.config'` is tree-shaken away and
+ * Tamagui is left unconfigured (`getConfig()` → "Err0") at render time. Every primitive MUST import its
+ * `styled`/`View`/`Text`/`createComponent` FROM THIS MODULE — re-exported at the bottom — so the
+ * `createTamagui()` call is retained transitively.
+ *
+ * See docs/react-native-tamagui-migration.md §5 / §6 and docs/tamagui-idiomatic-migration.md §5.
  */
-import { createTamagui } from '@tamagui/core'
+import { createTamagui, isWeb } from '@tamagui/core'
+import { createAnimations as createCssAnimations } from '@tamagui/animations-css'
+import { createAnimations as createNativeAnimations } from '@tamagui/animations-react-native'
 import {
   radius,
   fonts,
   themes,
+  webColorTokens,
   space as spaceTokens,
   size as sizeTokens,
   fontSizes,
@@ -29,31 +68,78 @@ import {
   zIndex as zIndexTokens,
   media as mediaConfig,
 } from '@lmthing/css/tamagui-tokens'
-import { createAnimations as createNativeAnimations } from '@tamagui/animations-react-native'
 
-// ── Color palette token ────────────────────────────────────────────────────────────────────
-// Tamagui's `tokens.color` is a flat palette; our themes reference raw hex directly, but a
-// populated palette lets `$spectrum-1`… and `$brand-1`… resolve as tokens too. Keyed by the
-// same design-token names as the CSS custom properties (light value is the canonical token).
-const color = { ...themes.light } as Record<string, string>
+/**
+ * The animation names mirror the durations the surfaces used as Tailwind classes, so the swap was a
+ * rename rather than a redesign: `transition-*` (Tailwind's 150ms default) → `quick`,
+ * `duration-200` → `medium`, `duration-300` → `slow`. `none` exists so a component can opt out
+ * without dropping the prop. The easing is Tailwind's own curve, so the swap is not visible.
+ *
+ * NOTE the prop is `transition`, NOT `animation` — Tamagui 2.5 renamed it and silently ignores the
+ * old name, on every component including a raw `View` (§6).
+ */
+const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)' // Tailwind's `ease-in-out`, the curve the surfaces had
+const animations = isWeb
+  ? createCssAnimations({
+      none: `${EASE} 0ms`,
+      quick: `${EASE} 150ms`,
+      medium: `${EASE} 200ms`,
+      slow: `${EASE} 300ms`,
+    })
+  : createNativeAnimations({
+      none: { type: 'timing', duration: 0 },
+      quick: { type: 'timing', duration: 150 },
+      medium: { type: 'timing', duration: 200 },
+      slow: { type: 'timing', duration: 300 },
+    })
 
-// ── Radius token ───────────────────────────────────────────────────────────────────────────
-// Values are the exact CSS strings ("0.375rem", "9999px", …) from tokens.json. Kept as strings
-// so web output equals `--radius-*`; a numeric alias `true` gives styled() a sane default.
+/**
+ * The platform split, as PURE functions taking `web` rather than reading `isWeb` inline.
+ *
+ * This is not ceremony. Merging the two configs cost something real: the native branch is
+ * unreachable from a jsdom test, where `isWeb` is always true — so the native theme assertions that
+ * two separate files gave for free would simply have stopped running, silently. Parameterising the
+ * choice keeps BOTH branches unit-testable from either environment
+ * (`tamagui-config.test.ts` exercises each), which is strictly better than what the split had.
+ *
+ * Web: the `var(--<name>)` indirection (SPIKE A1) so runtime space themes keep working.
+ * Native: resolved hex, since there are no CSS variables. Either way a populated palette lets
+ * `$spectrum-1`…/`$brand-1`… resolve as tokens.
+ */
+export function buildColorTokens(web: boolean): Record<string, string> {
+  return (web ? { ...webColorTokens } : { ...themes.light }) as Record<string, string>
+}
+
+/** ONE empty theme on web — see the SPIKE A1 warning above. The real pair is native-only. */
+export function buildThemes(web: boolean): Record<string, Record<string, string>> {
+  return (
+    web ? { app: {} } : { light: themes.light, dark: themes.dark }
+  ) as Record<string, Record<string, string>>
+}
+
+const color = buildColorTokens(isWeb)
+const configThemes = buildThemes(isWeb)
+
+/**
+ * Radius values are the exact CSS strings from `tokens.json` ("0.375rem", "9999px", …) so web output
+ * equals `--radius-*`; the numeric `true` alias gives `styled()` a sane default.
+ */
 const radiusTokens = { ...radius, true: radius['radius-md'] } as Record<string, string | number>
 
-// ── Space / size scale (SPIKE B — Tailwind parity) ───────────────────────────────────────────
-// The Tailwind spacing scale, generated from `libs/css/scripts/tamagui-tokens.mjs` and proven
-// 1:1 with Tailwind by `scale-parity.test.ts`. `$4` === `p-4` === 16px, so the P3 class→prop
-// codemod is mechanical. Cast to a plain map for createTamagui's token typing.
+/**
+ * SPIKE B — the Tailwind-parity scales, generated by `libs/css/scripts/tamagui-tokens.mjs` and proven
+ * 1:1 with Tailwind by `scale-parity.test.ts`. `$4` === `p-4` === 16px, which is what made the
+ * class→prop codemod mechanical.
+ */
 const spaceScale = { ...spaceTokens } as Record<string, number>
 const sizeScale = { ...sizeTokens } as Record<string, number>
 const zIndexScale = { ...zIndexTokens } as Record<string, number>
 
-// ── Fonts (SPIKE B — Tailwind type ramp + weight + tracking) ──────────────────────────────────
-// Family strings are the exact `--font-*` values. size/lineHeight are Tailwind's `text-*` ramp
-// (`$sm` === `text-sm`); `weight` is Tailwind's `font-*` weights; `letterSpacing` is `tracking-*`.
-// All keyed by Tailwind's names so the codemod maps class→prop without a lookup table.
+/**
+ * Family strings are the exact `--font-*` values. `size`/`lineHeight` are Tailwind's `text-*` ramp
+ * (`$sm` === `text-sm`), `weight` its `font-*` weights, `letterSpacing` its `tracking-*` — all keyed
+ * by Tailwind's names, which is why the codemod needed no lookup table.
+ */
 const makeFont = (family: string) => ({
   family,
   size: { ...fontSizes } as Record<string, number>,
@@ -62,29 +148,9 @@ const makeFont = (family: string) => ({
   letterSpacing: { ...letterSpacings } as Record<string, string>,
 })
 
-/**
- * The NATIVE config gets the same animation NAMES as the web config so a surface's `animation="quick"`
- * means the same thing on both platforms. The driver differs by necessity — this one is
- * `animations-react-native`, since there is no CSS on native — but the names and durations line up.
- * See docs/tamagui-idiomatic-migration.md §5.
- */
-const nativeAnimations = createNativeAnimations({
-  none: { type: 'timing', duration: 0 },
-  quick: { type: 'timing', duration: 150 },
-  medium: { type: 'timing', duration: 200 },
-  slow: { type: 'timing', duration: 300 },
-})
-
 export const tamaguiConfig = createTamagui({
-  animations: nativeAnimations,
-  // `themes.light`/`themes.dark` map design-token names → resolved hex, verbatim from the
-  // generated module. `background`, `foreground`, `border`, … are directly usable as `$token`.
-  // These are the NATIVE render target (resolved hex). The WEB config uses the `var(--name)`
-  // indirection (SPIKE A1, see tamagui-web.config.ts) so runtime space themes keep working.
-  themes: {
-    light: themes.light as Record<string, string>,
-    dark: themes.dark as Record<string, string>,
-  },
+  animations,
+  themes: configThemes,
   tokens: {
     color,
     radius: radiusTokens,
@@ -97,24 +163,27 @@ export const tamaguiConfig = createTamagui({
     heading: makeFont(fonts['font-display']),
     mono: makeFont(fonts['font-mono']),
   },
-  // Tailwind breakpoints (SPIKE B) so `md:`→`$md`/`$gtSm` media props resolve identically.
+  // Tailwind breakpoints (SPIKE B) so `md:` → `$md`/`$gtSm` media props resolve identically.
   media: mediaConfig as Record<string, { minWidth: number }>,
   settings: {
-    // Web coexistence: allow className passthrough on all primitives so the surfaces' existing
-    // Tailwind/theme.css classes keep applying alongside Tamagui's output.
+    // Allows className passthrough on the primitives, which the host-passthrough leaves rely on.
     allowedStyleValues: 'somewhat-strict',
   },
 })
 
 export type TamaguiConfig = typeof tamaguiConfig
 
-// Re-export the styled runtime FROM this module so a primitive that does
-// `import { styled, View } from '…/theme/tamagui.config'` transitively retains this module —
-// and thus the `createTamagui()` call above that registers the config. A bare side-effect
-// `import '…/tamagui.config'` would be tree-shaken away because @lmthing/ui declares
-// `"sideEffects": false`, leaving Tamagui unconfigured (getConfig → "Err0") at render time.
-// Every Tamagui primitive MUST import its styled/View/Text from here, never from '@tamagui/core'.
-export { styled, View, Text } from '@tamagui/core'
+/**
+ * `tamaguiWebConfig` is the historical name for what is now the single config. Kept as an alias so the
+ * `<TamaguiProvider config={…}>` call sites and test harnesses did not all have to churn inside the
+ * same change that merged the two configs.
+ */
+export const tamaguiWebConfig = tamaguiConfig
+export type TamaguiWebConfig = TamaguiConfig
+
+// See "Import discipline" above — these re-exports are what keep `createTamagui()` from being
+// tree-shaken out of the bundle.
+export { styled, View, Text, createComponent } from '@tamagui/core'
 export type { GetProps } from '@tamagui/core'
 
 // Ambient module augmentation so `styled()` calls get typed `$token` autocompletion.

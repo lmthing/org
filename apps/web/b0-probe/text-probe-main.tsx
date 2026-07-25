@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { TamaguiProvider, styled, Text as TText, View as TView } from '@tamagui/core'
-import { tamaguiWebConfig } from '@lmthing/ui/theme/tamagui-web.config'
+import { tamaguiWebConfig } from '@lmthing/ui/theme/tamagui.config'
 import './surface.css'
 
 const TCand = styled(TText, { name: 'TCand' })
