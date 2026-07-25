@@ -178,7 +178,7 @@ export function ChatView({
     <Prim.Box display="flex" className={className} flexDirection="column" height="100%" backgroundColor="$background">
       {/* Header */}
       <Prim.Row as="header"
-        className="gap-3 pl-12 md:pl-4 pr-4 py-2.5 border-b border-border bg-background/80 backdrop-blur-sm" alignItems="center" flexShrink={0}
+        className="bg-background/80 backdrop-blur-sm" gap="$3" paddingLeft="$12" paddingRight="$4" paddingVertical="$2.5" borderBottomWidth={1} borderColor="$border" $md={{ paddingLeft: "$4" }} alignItems="center" flexShrink={0}
         aria-label="chat header"
       >
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
@@ -192,7 +192,7 @@ export function ChatView({
               data-testid="activity"
               title={activity}
             >
-              <Prim.Text className="w-1.5 h-1.5 rounded-full bg-agent animate-pulse shrink-0" aria-hidden />
+              <Prim.Text className="animate-pulse" width="$1.5" height="$1.5" borderRadius="$radius-full" backgroundColor="$agent" flexShrink={0} aria-hidden />
               <Prim.Text fontStyle="italic" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{activity}</Prim.Text>
             </Prim.Row>
           )}
@@ -217,12 +217,9 @@ export function ChatView({
           <TraceLoader />
           <Prim.Pressable
             onClick={() => onOpenDevPanel?.()}
-            className={cn(
-              'text-xs px-2 py-1 rounded-lg transition-colors',
-              devPanelOpen
+            className={cn("transition-colors", devPanelOpen
                 ? 'bg-agent/15 text-agent'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-            )}
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted')} fontSize="$xs" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius-lg"
             title="Toggle DevPanel (⌥I)"
           >
             Inspect
@@ -292,7 +289,7 @@ export function ChatView({
       {!atBottom && (
         <Prim.Pressable
           onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
-          className="absolute bottom-24 right-6 w-8 h-8 rounded-full bg-card border border-border shadow-md items-center justify-center text-muted-foreground hover:text-foreground transition-colors z-10" display="flex"
+          className="transition-colors" position="absolute" bottom="$24" right="$6" width="$8" height="$8" borderRadius="$radius-full" backgroundColor="$card" borderWidth={1} borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 4 }} shadowRadius={6} alignItems="center" justifyContent="center" color="$muted-foreground" zIndex={10} hoverStyle={{ color: "$foreground" }} display="flex"
           aria-label="Scroll to bottom"
         >
           ↓

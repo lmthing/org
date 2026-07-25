@@ -74,7 +74,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
 
   return (
     <Prim.Box
-      className="py-1 lm-fade-in"
+      className="lm-fade-in" paddingVertical="$1"
       style={{ paddingLeft: 16 + depth * 14, paddingRight: 16 }}
       data-testid="work-block"
       data-node-id={nodeId}
@@ -92,7 +92,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
         </Prim.Text>
         <Prim.Pressable
           onClick={openInspector}
-          className="max-w-[180px] shrink min-w-0 text-left font-mono text-muted-foreground transition-colors hover:text-foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"
+          className="transition-colors" maxWidth="180px" flexShrink={1} minWidth={0} textAlign="left" fontFamily="$mono" color="$muted-foreground" hoverStyle={{ color: "$foreground" }} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"
           title={`${node.label} — open in inspector`}
         >
           {node.label}
@@ -116,7 +116,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
       </Prim.Row>
 
       {expanded && (
-        <Prim.Box className="space-y-0.5 pl-[26px] text-xs text-muted-foreground" marginTop="0.25rem">
+        <Prim.Box className="space-y-0.5" paddingLeft="26px" fontSize="$xs" color="$muted-foreground" marginTop="0.25rem">
           {stmts.length > 0 ? (
             stmts.map((s, i) => {
               const text = narrationOf(s.code);

@@ -11,7 +11,7 @@ interface TooltipProps {
 
 export function Tooltip({ children, content, className, side = 'top' }: TooltipProps) {
   return (
-    <Prim.Text display="inline-flex" className={cn('relative group', className)}>
+    <Prim.Text display="inline-flex" className={cn("group", className)} position="relative">
       {children}
       <Prim.Text
         display="block"
