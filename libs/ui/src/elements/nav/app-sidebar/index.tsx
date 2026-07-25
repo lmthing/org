@@ -284,6 +284,14 @@ export interface AppSidebarProps {
   className?: string
 
   /**
+   * `flex-shrink` for the sidebar shell. A surface that places the sidebar in a flex ROW wants `0`,
+   * so a wide main pane cannot compress it. Declared as a real prop because the studio surfaces used
+   * to pass `className="shrink-0"` — a Tailwind utility, and there is no Tailwind after phase 4.
+   * Left undefined by default so chat's sidebar keeps the shell's own value.
+   */
+  flexShrink?: number
+
+  /**
    * Namespaces the persisted UI flags (section + whole-sidebar collapse) so the
    * chat and studio sidebars keep independent state. Defaults to `app-sidebar`.
    */
@@ -470,6 +478,7 @@ export function AppSidebar({
   conversations,
   footer,
   className,
+  flexShrink,
   storageKey = 'app-sidebar',
   collapsible = true,
   defaultCollapsed = false,
@@ -485,7 +494,7 @@ export function AppSidebar({
   // Collapsed: a slim rail with just an expand affordance.
   if (isCollapsed) {
     return (
-      <Prim.Box as="nav" aria-label="sidebar (collapsed)" {...SIDEBAR_SHELL} {...SHELL_COLLAPSED} className={className}>
+      <Prim.Box as="nav" aria-label="sidebar (collapsed)" {...SIDEBAR_SHELL} {...SHELL_COLLAPSED} flexShrink={flexShrink} className={className}>
         <Prim.Box {...RAIL}>
           <CozyThingText text="lmt" {...RAIL_BRAND} />
           <Prim.Pressable
@@ -507,6 +516,7 @@ export function AppSidebar({
       aria-label="projects, spaces and conversations"
       {...SIDEBAR_SHELL}
       {...(collapsible ? SHELL_FIXED : {})}
+      flexShrink={flexShrink}
       className={className}
     >
       {/* Brand + collapse toggle */}

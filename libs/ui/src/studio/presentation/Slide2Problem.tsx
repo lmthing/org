@@ -10,7 +10,7 @@ const chips = ['Structuring knowledge', 'Connecting it to the model']
 
 function Arrow() {
   return (
-    <Prim.Svg width="72" height="32" viewBox="0 0 72 32" fill="none" className="shrink-0">
+    <Prim.Svg width="72" height="32" viewBox="0 0 72 32" fill="none" style={{ flexShrink: 0 }}>
       <Prim.Line x1="0" y1="16" x2="56" y2="16" style={{ stroke: colors.brand }} strokeWidth="3" />
       <Prim.Polyline points="50,8 62,16 50,24" style={{ stroke: colors.brand }} strokeWidth="3" fill="none" />
     </Prim.Svg>

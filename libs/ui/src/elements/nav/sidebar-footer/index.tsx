@@ -42,12 +42,12 @@ export function SidebarFooter({ current, children, className }: SidebarFooterPro
             {initials(displayName)}
           </Prim.Text>
         ) : (
-          <Settings className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <Settings size={16} style={{ flexShrink: 0 }} aria-hidden="true" />
         )}
         <Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" fontSize="$sm">
           {isAuthenticated && displayName ? displayName : 'Settings'}
         </Prim.Text>
-        <Settings className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
+        <Settings size={16} style={{ flexShrink: 0, opacity: 0.6 }} aria-hidden="true" />
       </Prim.Pressable>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

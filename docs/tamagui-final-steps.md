@@ -90,7 +90,7 @@ top level, so Tailwind emitted them whether or not a utility referenced them: th
 
 ---
 
-## Phase 1 — the icon classNames (87 → ~45)
+## Phase 1 — the icon classNames ✅ DONE
 
 The single largest remaining className bucket is not on primitives at all. It is on **lucide icons**:
 `size-4` ×7, `shrink-0` ×7, `w-4`/`h-4` ×4, plus a few colour utilities, spread over `Settings`,
@@ -108,7 +108,58 @@ non-shrinking row.
 **Do not** add lucide components to the codemod's target list. It has no way to know that `size-4`
 means `size={16}` rather than `width: '1rem'`, and a wrong guess here is silent.
 
-**Gate:** P0 unchanged (icons are not in the fixtures — *add one* while doing this, so they are).
+### What was done
+
+An **`icons` P0 fixture** first, as §"suggested sequencing" says to: five `tw:` / `prop:` pairs
+rendered in the same capture, so each substitution is checked against the thing it replaces rather
+than against a memory of what the utility meant. All five agree on **every one of the ~70 audited
+properties**, in light *and* dark:
+
+| was | is | why |
+|---|---|---|
+| `className="size-4"` / `"h-4 w-4"` | `size={16}` | both compute to 16px; `size` sets the `<svg>` geometry attributes |
+| `className="shrink-0"` | `style={{ flexShrink: 0 }}` | lucide is not Tamagui-backed — it takes `style`, not style props |
+| `className="opacity-60"` | `style={{ opacity: 0.6 }}` | |
+| `className="mt-0.5"` | `style={{ marginTop: '0.125rem' }}` | Tailwind's 0.5 step = 0.125rem = 2px |
+| `className="text-agent"` | `style={{ color: 'var(--agent)' }}` | lucide paths are `stroke="currentColor"` |
+
+Converted: `nav/sidebar-footer` (2), `components/auth/github-deployment-status` (6),
+`components/auth/github-stars` (1), `chat/components/ConsentCard`,
+`studio/presentation/Slide2Problem`.
+
+**`style`, not props — and this is the trap, not a preference.** `Prim.Svg` is built by
+`svgPrimitive`, which applies props *verbatim* to a raw `<svg>`. It therefore **ignores Tamagui style
+props entirely**: converting a className on one to props deletes the styling with no error. The
+`icons` fixture pins both passthrough cases so this cannot regress silently.
+
+### The `shrink-0` that was not an icon
+
+Three studio surfaces passed `className="shrink-0"` to `StudioAppSidebar` — not an icon, and it
+would have died with Tailwind. It is now a declared `flexShrink?: number` prop threaded
+`StudioAppSidebar` → `AppSidebar` → the shell `Prim.Box`, left `undefined` by default so **chat's
+sidebar keeps exactly its current value**. Baking `flexShrink: 0` into the shared `SIDEBAR_SHELL`
+would have been smaller but would have silently changed chat, and `app-sidebar` is precisely the
+component P0 cannot render (SPIKE C, §5b) — so an unverifiable change there is the one to avoid.
+
+**Gate met:** P0 **282 elements, zero delta**. Note what this does and does not prove: the fixture
+proves the *substitutions* are equivalent; the call sites themselves are not all rendered by P0
+(`sidebar-footer` and `ConsentCard` are not fixtures), so their conversion rests on that equivalence
+plus `typecheck:syntax` + `lint:rn` + the 284 unit tests.
+
+### Still Tailwind, and now clearly separable
+
+The remaining classNames split three ways, and only the third is phase-3/4 work:
+
+- **keyframe classes** — `lm-*`, and `animate-spin`/`animate-pulse`. **No longer Tailwind at all**
+  after phase 2: they resolve from the hand-written `@lmthing/css/animations.css`. They satisfy the
+  definition of done as they stand.
+- **BEM component classNames** — `ide-file-tree__*`, `prompt-preview__code`, `workflow-list-item__*`,
+  `property-row__*`, `user-detail__*`, `space-list__*`, `topic-editor__*`,
+  `lm-setup-guide__summary`, `badge*`, `lm-markdown`. Not Tailwind utilities either. What is Tailwind
+  is the **`@apply` inside the stylesheets they name** — so phase 4 rewrites those 11 stylesheets and
+  leaves every one of these classNames alone. This is what makes phase 4 tractable.
+- **real Tailwind utilities on Tamagui-backed components** — ~20 files, mostly *conditional*
+  (`cn(a ? 'x' : 'y')`) and variant maps, which is why the codemod skipped all 42. → phase 3.
 
 ---
 

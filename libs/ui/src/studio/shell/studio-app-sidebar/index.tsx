@@ -22,9 +22,11 @@ import { SidebarFooter } from '@lmthing/ui/elements/nav/sidebar-footer'
 
 export interface StudioAppSidebarProps {
   className?: string
+  /** Forwarded to the sidebar shell. Every studio surface places it in a flex row and passes `0`. */
+  flexShrink?: number
 }
 
-export function StudioAppSidebar({ className }: StudioAppSidebarProps) {
+export function StudioAppSidebar({ className, flexShrink }: StudioAppSidebarProps) {
   const navigate = useNavigate()
   const { projectId, spaceId } = useParams({ strict: false }) as {
     projectId?: string
@@ -43,6 +45,7 @@ export function StudioAppSidebar({ className }: StudioAppSidebarProps) {
   return (
     <AppSidebar
       className={className}
+      flexShrink={flexShrink}
       storageKey="studio-sidebar"
       projects={projects}
       activeProjectId={projectId ?? null}
