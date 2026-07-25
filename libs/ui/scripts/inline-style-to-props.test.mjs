@@ -26,6 +26,16 @@ describe('pairToProps', () => {
       .toEqual({ borderBottomWidth: '2px', borderBottomStyle: 'solid', borderBottomColor: 'var(--border)' })
     expect(pairToProps('background', 'var(--muted)')).toEqual({ backgroundColor: 'var(--muted)' })
     expect(pairToProps('background', 'linear-gradient(red, blue)')).toEqual({ backgroundImage: 'linear-gradient(red, blue)' })
+    // `outline: none` — the form this codebase already writes by hand
+    // (`elements/overlays/dropdown/index.tsx`). Adding it unblocked `CatalogForm`'s `inputStyle`,
+    // whose 12 call sites were held hostage by this one key.
+    expect(pairToProps('outline', 'none')).toEqual({ outlineWidth: 0, outlineStyle: 'none' })
+  })
+
+  it('accepts the outline LONGHANDS, which map 1:1', () => {
+    expect(pairToProps('outlineWidth', 2)).toEqual({ outlineWidth: 2 })
+    expect(pairToProps('outlineStyle', 'solid')).toEqual({ outlineStyle: 'solid' })
+    expect(pairToProps('outlineColor', 'var(--ring)')).toEqual({ outlineColor: 'var(--ring)' })
   })
 
   it('REFUSES the keys Tamagui silently drops', () => {
@@ -41,6 +51,10 @@ describe('pairToProps', () => {
     expect(pairToProps('boxShadow', '0 1px 2px red')).toBeNull()
     expect(pairToProps('font', '12px monospace')).toBeNull()
     expect(pairToProps('flex', '2 1 auto')).toBeNull() // only `flex: 1` has a safe expansion
+    // Only `outline: none` expands. Anything else mixes width/style/colour and needs a human — a
+    // wrong guess here silently removes or invents a focus ring.
+    expect(pairToProps('outline', '2px solid red')).toBeNull()
+    expect(pairToProps('outline', '0')).toBeNull()
   })
 })
 
