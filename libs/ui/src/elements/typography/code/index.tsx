@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Code — the idiomatic `.code-inline` / `.code-block`. Renders `Prim.Text` as a real `<code>` / `<pre>`
- * (runtime tags via `createComponent`) with the styling as `$`-token PROPS from code.styled.tsx.
+ * (runtime tags via `createComponent`) with the styling as `$`-token PROPS transcribed from its retired `styled()` proof.
  * CSS deleted.
  */
 export interface CodeProps extends React.ComponentProps<'code'> {

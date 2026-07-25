@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Heading — the idiomatic `.heading-{level}`. Renders `Prim.Text` as a real `<h1..h4>` (runtime tag
- * via `createComponent`) with the styling as `$`-token PROPS from heading.styled.tsx. CSS deleted.
+ * via `createComponent`) with the styling as `$`-token PROPS transcribed from its retired `styled()` proof. CSS deleted.
  */
 export type HeadingLevel = 1 | 2 | 3 | 4
 

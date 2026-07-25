@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * ListItem — the idiomatic `.list-item`. Renders `Prim.Box` (real `<div>`) with the styling as
- * `$`-token PROPS from list-item.styled.tsx; label/meta render `Prim.Text` (`<span>`). CSS deleted.
+ * `$`-token PROPS transcribed from its retired `styled()` proof; label/meta render `Prim.Text` (`<span>`). CSS deleted.
  */
 export interface ListItemProps extends React.ComponentProps<'div'> {
   selected?: boolean

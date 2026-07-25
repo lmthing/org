@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Input — the idiomatic `.input`. Renders `Prim.TextField` (a real `<input>` at runtime via
- * `createComponent`) with the `.input` styling as `$`-token PROPS from input.styled.tsx
+ * `createComponent`) with the `.input` styling as `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4/§6). `input/index.css` is deleted.
  */
 export interface InputProps extends Omit<React.ComponentProps<'input'>, 'size'> {

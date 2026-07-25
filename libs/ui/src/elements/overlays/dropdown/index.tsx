@@ -10,7 +10,7 @@ import * as Prim from '../../primitives/index'
  */
 
 /**
- * `.dropdown*` as `$`-token PROPS, transcribed from dropdown.styled.tsx
+ * `.dropdown*` as `$`-token PROPS, transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4). `dropdown/index.css` is deleted.
  *
  * The `data-[state]:animate-in`/`fade`/`zoom` rules are dropped rather than deferred: nothing has

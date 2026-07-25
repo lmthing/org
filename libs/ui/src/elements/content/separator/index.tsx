@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Separator — the idiomatic `.separator`, a themed rule. Renders `Prim.Box` (a real
- * `<div role="separator">`) styled by `$`-token PROPS from separator.styled.tsx. CSS deleted.
+ * `<div role="separator">`) styled by `$`-token PROPS transcribed from its retired `styled()` proof. CSS deleted.
  */
 export interface SeparatorProps extends React.HTMLAttributes<HTMLDivElement> {
   vertical?: boolean

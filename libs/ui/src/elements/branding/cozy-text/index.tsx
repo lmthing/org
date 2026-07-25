@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * CozyThingText — the idiomatic `.cozy-text`. Renders `Prim.Text` (real `<span>`s via
- * `createComponent`) with the per-letter brand colors as `$`-token PROPS from cozy-text.styled.tsx
+ * `createComponent`) with the per-letter brand colors as `$`-token PROPS transcribed from its retired `styled()` proof
  * (`.cozy-text--neutral`/`--brand-1..5` → the `tone` map). CSS deleted.
  */
 export interface CozyThingTextProps extends Omit<Prim.TextProps, 'children'> {

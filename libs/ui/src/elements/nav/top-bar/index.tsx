@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * TopBar — the idiomatic `.top-bar`. Renders `Prim.Box as="header"` / `Prim.Text` (real host tags at
- * runtime via `createComponent`) with the styling as `$`-token PROPS from top-bar.styled.tsx
+ * runtime via `createComponent`) with the styling as `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4). `top-bar/index.css` is deleted.
  */
 export interface TopBarProps extends Omit<React.ComponentProps<'header'>, 'title'> {

@@ -34,14 +34,14 @@ worked through too** — `libs/ui` has no element left that tooling could migrat
   `top-bar`/`tab-bar`/`breadcrumb`/`app-links` · `input`/`textarea`/`select` ·
   `dialog`/`dropdown`/`sheet`/`settings-dialog` · `sidebar` (via `NavLink`) · `app-sidebar`.
   Each block's
-  `@apply` rules become `$`-token style PROPS transcribed from its `*.styled.tsx` proof, applied to
+  `@apply` rules become `$`-token style PROPS transcribed from its (now retired) `styled()` proof, applied to
   the `Prim.*` primitive that renders the real host tag.
 
 ### The two blockers this doc recorded, and what they actually were
 
 **1. "Blocked on the compiler."** The previous status said semantic elements (button/input/select)
 could not be swapped until `@tamagui/vite-plugin` extraction was ON, because `styled(View,{tag})`
-renders a `<div>` at runtime. That is true of the `*.styled.tsx` PROOFS, which use `tag`. It was
+renders a `<div>` at runtime. That was true of the `styled()` PROOFS, which used `tag`. It was
 never true of the shipped path: the Phase-1 primitives are built with `createComponent({Component:
 tag})`, which binds the real host element at component-build time, so `Prim.Pressable` already
 renders a real `<button>` with extraction OFF
@@ -74,7 +74,7 @@ base stylesheet actually reads.
 
 ### The verification spine (this is what changed most)
 
-The `*-styled.test.tsx` proofs gate a PARALLEL `*.styled.tsx` copy of each block. The
+The `*-styled.test.tsx` proofs gated a PARALLEL `*.styled.tsx` copy of each block. The
 `elements/**/index.test.tsx` suites — which gate `index.tsx`, the component the app actually renders
 and the one this swap edits — were **excluded from the vitest include**, so the shipped element layer
 had no coverage at all. They are wired in now
@@ -108,7 +108,7 @@ the caller's props, so passing `maxWidth`/`maxHeight` wins by spread order.
 
 ### Compiler extraction: measured, and it does NOT do what this plan assumed
 
-The shortcut this doc implied — turn extraction ON and adopt the 68 `*.styled.tsx` proofs wholesale
+The shortcut this doc implied — turn extraction ON and adopt the 68 `styled()` proofs wholesale
 — **does not work.** Measured end to end against `apps/web`:
 
 - Extraction *runs* (448 files) once the plugin is given an entry it can bundle. It cannot be
@@ -324,7 +324,7 @@ it aliases: `applyThemeTokens` (`theme/theme.ts`) overrides `--lm-*` directly fr
 | **SPIKE B — token-scale reconciliation** | ✅ done | Tailwind `space`/`size`/`fontSizes`/`lineHeights`/`fontWeights`/`letterSpacings`/`zIndex`/`media` generated + pinned to Tailwind by `libs/css/src/__tests__/scale-parity.test.ts` |
 | **SPIKE C — react 18/19 types** | ⬜ open | not attempted; casts retained (documented in `_tamagui.tsx`). Blocks nothing above |
 | **P1 — token + theme foundation** | ✅ done | full Tamagui token set from `tokens.json`; `tamagui.config.ts` (native hex) + `tamagui-web.config.ts` (var-backed) both carry it; parity tests green. Config CONVERGENCE (one config, delete web config) deferred — it changes output, see §7 |
-| **P2 — BEM → styled()+variants** | ✅ 68 proofs + ✅ **component sweep COMPLETE** | Every BEM block has a `*.styled.tsx` proof + `*-styled.test.tsx` gate. **Every `components/**` + `computer` surface is swept**: all BEM on `Prim.Box/Text/Pressable` → props. `.css` deleted when a block was fully on `Prim.*`; KEPT when residuals sit on icons / third-party components / un-expressible CSS. **16 stylesheets remain**, all under `components/**` (`elements/**` is empty). The `!important`/`@apply` retirement waits until `theme.css` deletion (P6) |
+| **P2 — BEM → styled()+variants** | ✅ **done, and the proof tree is RETIRED** | Every BEM block was converted to a `styled()` proof with a `*-styled.test.tsx` gate, then the shipped element carried the same translation as `$`-token props. Once the element layer shipped (P4) the proofs were a parallel copy NOTHING imported — 146 files, 419 tests, all gating dead code. Deleted. The translation they proved lives in the shipped elements with the same provenance comments, and the five elements whose only coverage was a proof gate (`cozy-text`, `app-links`, `app-sidebar`, `settings-dialog`, `terminal`) got real `index.test.tsx` suites against the SHIPPED component instead |
 | **P3 — className → props codemod** | ✅ tool built + hardened + 🟡 **applied to chat+studio** | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + a 43-test gate (map + a new `-transform` suite). **Run for real**: chat + studio. Hardened after the first run surfaced two silent-drop bugs (both fixed + regression-tested, re-migrated clean): (a) directional `border-t/r/b/l/x/y` were misread as color tokens (`$t`) → widths dropped; (b) the `lm-*` runtime palette (`bg-lm-accent` …) became bogus `$lm-*` tokens → now kept as className. Also **added `cn("literal", …rest)` lifting** (the common dynamic shape). Alpha modifiers/animations/`lm-*`/dynamic `cn()` stay residual. Remaining className: chat ~223, studio ~589 (mostly BEM on shared elements + dynamic `cn()`), computer ~24 |
 | **P0 — real-surface visual harness** | 🟡 mechanism proven, baseline NOT built | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining. **This is now the gating item**: the animation driver (the biggest remaining unblock) changes visible motion app-wide, which is precisely the class of change P0 exists to review |
 | **P4 — element layer + primitives idiomatic** | ✅ **DONE — all 29 element blocks; `elements/**` has no stylesheets** | Every shipped element carries `$`-token PROPS on the `Prim.*` primitives (real host tags via `createComponent`). Both blockers this row used to name were wrong: extraction does NOT make `tag` real, and the overlay animations were DEAD rather than deferred. Form-control and `Image` primitives are Tamagui-backed too. Shipped-element suites gated for the first time (508 → 618 tests), plus a syntax-only typecheck gate for `libs/ui` |

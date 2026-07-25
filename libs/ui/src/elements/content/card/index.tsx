@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Card — the idiomatic `.card`. Renders `Prim.Box` (real `<div>`s at runtime via `createComponent`)
- * with the styling as `$`-token PROPS from card.styled.tsx (docs/tamagui-idiomatic-migration.md §4).
+ * with the styling as `$`-token PROPS transcribed from its retired `styled()` proof (docs/tamagui-idiomatic-migration.md §4).
  * `card/index.css` is deleted; the prop bags are exported because callers carried `card`/`card__body`
  * directly on a `Prim.Box` rather than going through this element.
  */

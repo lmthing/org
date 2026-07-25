@@ -3,7 +3,7 @@ import * as Prim from '../../primitives/index'
 
 /**
  * Sidebar — the idiomatic `.sidebar`. `Prim.Box as="nav"` / `Prim.Box` (real host tags at runtime
- * via `createComponent`) with the styling as `$`-token PROPS from sidebar.styled.tsx
+ * via `createComponent`) with the styling as `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4). `sidebar/index.css` is deleted.
  *
  * `SIDEBAR_ITEM` is exported because the item look is needed on things that are not this component:

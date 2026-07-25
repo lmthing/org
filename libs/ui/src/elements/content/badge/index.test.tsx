@@ -4,7 +4,7 @@ import { Badge } from './index'
 
 // NB: not in the libs/ui vitest include (only *-styled.test.tsx run in CI); kept in sync by hand.
 // Post-swap the Badge renders a real <span> (Prim.Text) styled by $-token PROPS, not `badge*`
-// classNames — so these assert rendering/variants; badge.styled.tsx pins the variant table.
+// classNames — so these assert rendering/variants; its retired `styled()` proof pins the variant table.
 describe('Badge', () => {
   it('renders children', () => {
     render(<Badge>Active</Badge>)

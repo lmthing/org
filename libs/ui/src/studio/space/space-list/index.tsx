@@ -50,7 +50,7 @@ interface InviteDialogProps {
   onInvite: (email: string, role: SpaceUserRole) => void
 }
 
-// .space-list__status-dot--<status> fill modifier → token lookup (space.styled.tsx `status` variant).
+// .space-list__status-dot--<status> fill modifier → token lookup (its retired `styled()` proof `status` variant).
 const STATUS_DOT_BG: Record<SpaceUser['status'], string> = {
   active: '$brand-2',
   invited: '$brand-2',

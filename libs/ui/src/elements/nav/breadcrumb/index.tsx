@@ -4,7 +4,7 @@ import * as Prim from '../../primitives/index'
 /**
  * Breadcrumb — the idiomatic `.breadcrumb`. Renders `Prim.Box as="nav"` / `Prim.Text` (real host
  * tags at runtime via `createComponent`) with the styling as `$`-token PROPS from
- * breadcrumb.styled.tsx (docs/tamagui-idiomatic-migration.md §4). `breadcrumb/index.css` is deleted.
+ * its retired `styled()` proof (docs/tamagui-idiomatic-migration.md §4). `breadcrumb/index.css` is deleted.
  *
  * The stylesheet's `.breadcrumb__segment:last-child` rule becomes an explicit `isCurrent` branch —
  * the component already knows which segment is last (it sets `aria-current` from the same test), so

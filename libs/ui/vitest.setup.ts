@@ -10,3 +10,14 @@ import { cleanup } from '@testing-library/react'
 afterEach(() => {
   cleanup()
 })
+
+// jsdom ships no ResizeObserver, and xterm constructs one on mount — so the Terminal element could
+// not be rendered at all without it. A no-op is enough: these suites assert emitted atomic classes,
+// never geometry.
+if (!('ResizeObserver' in globalThis)) {
+  ;(globalThis as Record<string, unknown>)['ResizeObserver'] = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}

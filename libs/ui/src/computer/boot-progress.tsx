@@ -27,7 +27,7 @@ function getStepState(stepKey: string, currentStage: BootStage, steps: { key: st
 }
 
 // .computer-boot-progress__step--done / --active color modifiers → conditional prop
-// (boot-progress.styled.tsx proof `state` variant). `pending` has no modifier and inherits the
+// (its retired `styled()` proof proof `state` variant). `pending` has no modifier and inherits the
 // steps container color.
 const STEP_COLOR: Record<'done' | 'active' | 'pending', string | undefined> = {
   done: '$success',

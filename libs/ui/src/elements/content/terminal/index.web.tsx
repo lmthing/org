@@ -20,7 +20,7 @@ export interface TerminalProps {
 
 /**
  * `.terminal` container — flex, flex-col, w-full, h-full, bg-background, overflow-hidden,
- * rounded-md — as `$`-token PROPS from terminal.styled.tsx (docs/tamagui-idiomatic-migration.md §4).
+ * rounded-md — as `$`-token PROPS transcribed from its retired `styled()` proof (docs/tamagui-idiomatic-migration.md §4).
  * `terminal/index.css` is deleted. (The xterm stylesheet is a vendor import and stays.)
  */
 const TERMINAL_BASE = {
