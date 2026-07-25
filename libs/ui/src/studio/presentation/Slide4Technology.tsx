@@ -90,7 +90,7 @@ export default function Slide4Technology() {
                 {node.isThing ? <CozyThingText text={node.label} className="font-extrabold text-4xl" /> : node.label}
               </Prim.Row>
               <Prim.Box
-                className="max-w-[160px] text-center text-base leading-snug"
+                maxWidth="160px" textAlign="center" fontSize="$base" lineHeight={1.375}
                 style={
                   node.hero
                     ? {

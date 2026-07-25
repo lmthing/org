@@ -134,9 +134,21 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
     expect(col.getAttribute('data-y')).toBe('2')
   })
 
-  it('Image emits <img> verbatim', () => {
-    const props = { src: '/a.png', alt: 'a', width: 10, height: 10, className: 'i' } as const
-    expect(html(<Image {...props} />)).toBe(html(<img {...props} />))
+  // Image is Tamagui now (per-tag `createComponent`), because the P3 codemod treats it as a
+  // style-prop target and a host `<img>` silently dropped those props as unknown DOM attributes.
+  // It renders the real `<img>` and passes DOM props through; byte-identity no longer holds
+  // (Tamagui adds its base classes), so assert the tag + props + that style props actually apply.
+  it('Image renders a real <img>, keeps DOM props, and applies style props', () => {
+    const el = withProvider(
+      <Image src="/a.png" alt="a" className="i" width="$5" height="$5" objectFit="cover" />,
+    ).container.querySelector('img')!
+    expect(el.tagName).toBe('IMG')
+    expect(el.getAttribute('src')).toBe('/a.png')
+    expect(el.getAttribute('alt')).toBe('a')
+    expect(el).toHaveClass('i', '_width-c-size-5', '_height-c-size-5')
+    expect(el.style.objectFit).toBe('cover')
+    // the `$token` must NOT leak to the DOM as a width/height attribute
+    expect(el.getAttribute('width')).toBeNull()
   })
 
   // Part III B3.4-leaf: Link/Form/List/ListItem are real Tamagui primitives now — assert the DOM tag +

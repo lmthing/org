@@ -7,7 +7,9 @@ import { Image as RNImage } from 'react-native'
  * Web keeps `index.tsx`. (Typechecked in the mobile app, which provides react-native types.)
  * See docs/react-native-tamagui-migration.md §1.6 / §7.
  */
-export type ImageProps = React.ImgHTMLAttributes<HTMLImageElement>
+// Mirrors the web `ImagePrimitiveProps` surface so a surface can pass style props on both
+// targets; the RN fork consumes only `src`/`alt`/`style` and ignores the rest.
+export type ImageProps = React.ImgHTMLAttributes<HTMLImageElement> & Record<string, unknown>
 
 const Image = React.forwardRef<React.ElementRef<typeof RNImage>, ImageProps>(
   ({ src, alt, style }, ref) => (

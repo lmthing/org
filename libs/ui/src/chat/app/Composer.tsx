@@ -281,7 +281,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
               title={a.filename ?? a.mediaType}
             >
               {a.kind === 'image' ? (
-                <Prim.Image src={withAuthToken(a.url)} alt={a.filename ?? 'image'} className="h-5 w-5 rounded object-cover" />
+                <Prim.Image src={withAuthToken(a.url)} alt={a.filename ?? 'image'} height="$5" width="$5" borderRadius="$radius" objectFit="cover" />
               ) : (
                 <Prim.Text color="$muted-foreground">{a.kind === 'audio' ? '♪' : '📎'}</Prim.Text>
               )}
@@ -313,10 +313,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
             {filteredCompletions.map((c, i) => (
               <Prim.ListItem
                 key={c}
-                className={cn(
-                  "px-3 py-1.5 cursor-pointer",
-                  i === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
-                )}
+                className={i === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"} paddingHorizontal="$3" paddingVertical="$1.5" cursor="pointer"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   applyCompletion(c);

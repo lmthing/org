@@ -21,13 +21,13 @@ export default function Slide3Solution() {
           lm<CozyThingText text="thing" className="text-4xl font-bold" />
         </Prim.Box>
 
-        <Prim.Text as="h2" className="text-6xl font-bold leading-tight" style={{ color: colors.text }}>
+        <Prim.Text as="h2" fontSize="$6xl" fontWeight="$bold" lineHeight={1.25} style={{ color: colors.text }}>
           The no-code studio for
           <Prim.Br />
           <Prim.Text style={{ color: colors.brand }}>domain experts.</Prim.Text>
         </Prim.Text>
 
-        <Prim.Text as="p" className="text-2xl leading-relaxed" style={{ color: colors.textSecondary }}>
+        <Prim.Text as="p" fontSize="$2xl" lineHeight={1.625} style={{ color: colors.textSecondary }}>
           lm<CozyThingText text="thing" className="text-2xl font-semibold" /> lets Dimitris &mdash; and anyone like him &mdash; build a specialized AI agent
           with just their knowledge. No engineers required.
         </Prim.Text>

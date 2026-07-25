@@ -138,7 +138,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
           <Prim.Text fontSize="$sm" color="$foreground" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={d}>{d}</Prim.Text>
         </Prim.Row>
       ))}
-      <Prim.Text as="label" marginTop="0.5rem" className={cn('self-start cursor-pointer', uploading && 'opacity-50 pointer-events-none')}>
+      <Prim.Text as="label" marginTop="0.5rem" className={uploading && 'opacity-50 pointer-events-none'} alignSelf="flex-start" cursor="pointer">
         <Button variant="outline" size="sm" loading={uploading}>
           {uploading ? 'Uploading…' : '+ Upload file'}
         </Button>

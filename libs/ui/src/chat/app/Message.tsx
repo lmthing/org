@@ -154,7 +154,7 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
         <Prim.Image
           src={url}
           alt={att.filename ?? 'image attachment'}
-          className="max-w-[260px] max-h-[260px] rounded-xl border border-border object-cover"
+          maxWidth="260px" maxHeight="260px" borderRadius="$radius-xl" borderWidth={1} borderColor="$border" objectFit="cover"
         />
       </Prim.Link>
     );
@@ -280,7 +280,7 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
   return (
     <Prim.Box className="py-1 group relative lm-fade-in">
       <Prim.Row gap="$2" paddingHorizontal="$4" alignItems="flex-start">
-        <Prim.Text className="shrink-0 w-6 h-6 rounded-full bg-brand-2/20 items-center justify-center text-xs select-none" marginTop="0.75rem" display="flex" aria-hidden="true">
+        <Prim.Text className="bg-brand-2/20" flexShrink={0} width="$6" height="$6" borderRadius="$radius-full" alignItems="center" justifyContent="center" fontSize="$xs" userSelect="none" marginTop="0.75rem" display="flex" aria-hidden="true">
           ✦
         </Prim.Text>
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>

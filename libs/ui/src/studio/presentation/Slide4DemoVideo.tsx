@@ -45,11 +45,11 @@ export default function Slide6DemoVideo() {
         marginTop="$8" gap="$2.5" borderRadius="$radius-full" paddingHorizontal="$8" paddingVertical="$3.5" alignItems="center"
         style={{ background: colors.bgSection }}
       >
-        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" style={{ background: colors.brand }} />
         <Prim.Box fontSize="$base" fontWeight="$medium" letterSpacing="$wide" style={{ color: colors.textSecondary }}>
           Build custom AI agents in minutes, not days
         </Prim.Box>
-        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" style={{ background: colors.brand }} />
       </Prim.Row>
     </Prim.Col>
   )
