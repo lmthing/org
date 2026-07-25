@@ -163,7 +163,7 @@ export function AskBlock({ id, descriptor, onSubmit, onCancel }: AskBlockProps):
 
   if (!isDescriptor(descriptor)) {
     return (
-      <Prim.Box className="repl-ask">
+      <Prim.Box>
         <Prim.Form onSubmit={handleSubmit}>
           <Prim.TextField
             type="text"
@@ -188,7 +188,7 @@ export function AskBlock({ id, descriptor, onSubmit, onCancel }: AskBlockProps):
     .map((child, i) => renderFormField(child, i, formData, setFormData));
 
   return (
-    <Prim.Box className="repl-ask" style={{ border: '1px solid var(--agent)', borderRadius: 4, padding: 16 }}>
+    <Prim.Box style={{ border: '1px solid var(--agent)', borderRadius: 4, padding: 16 }}>
       {title && <Prim.Text as="h3" style={{ marginTop: 0 }}>{title}</Prim.Text>}
       <Prim.Form onSubmit={handleSubmit}>
         {formFields}

@@ -19,9 +19,74 @@ import {
 import { useKnowledgeTree } from '@lmthing/ui/hooks/knowledge/useKnowledgeTree'
 import type { KnowledgeTreeNode } from '@lmthing/ui/hooks/knowledge/useKnowledgeTree'
 import { Button } from '@lmthing/ui/elements/forms/button'
-import { cn } from '@lmthing/ui/lib/utils'
 import './FieldTree.css'
 import { FIELD_TREE_CONTEXT_MENU_BACKDROP, FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE, FIELD_TREE_CONTEXT_MENU_ITEM_ICON, FIELD_TREE_NODE_ICON, FIELD_TREE_NODE_ICON_CHEVRON, FIELD_TREE_NODE_ICON_FILE, FIELD_TREE_NODE_ICON_FOLDER, FIELD_TREE_NODE_LABEL, FIELD_TREE_NODE_SPACER } from './field-tree.props.js'
+
+/**
+ * The `.field-tree-*` rules the sweep could not take, hand-migrated. Three shapes defeat it:
+ * a `:hover .child` reveal (→ Tamagui hover group), a `--selected` modifier that also RE-STATES
+ * the hover background so hover can't win, and `--selected .child` descendant recolours (→ the
+ * colour is passed down as a prop, since `isSelected` is already in scope at every call site).
+ * The `--option`/`--field`/`--domain` modifiers had no rules at all and are simply dropped.
+ * `.react-arborist*` stays in the stylesheet: that markup belongs to the library.
+ * See docs/tamagui-idiomatic-migration.md §5.
+ */
+const NODE = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  paddingHorizontal: '0.625rem',
+  height: '100%',
+  borderRadius: '0.375rem',
+  cursor: 'pointer',
+  position: 'relative',
+  hoverStyle: { backgroundColor: 'var(--color-muted)' },
+} as const
+/** `--selected` also pins `hoverStyle`, mirroring the `--selected:hover` rule that re-stated it. */
+const NODE_SELECTED = {
+  backgroundColor: 'var(--color-primary)',
+  color: 'var(--color-primary-foreground)',
+  hoverStyle: { backgroundColor: 'var(--color-primary)' },
+} as const
+/** What `.field-tree-node--selected .field-tree-node__{label,icon--*}` used to do. */
+const NODE_CHILD_SELECTED = { color: 'var(--color-primary-foreground)' } as const
+const NODE_ACTIONS = { opacity: 0, '$group-node-hover': { opacity: 1 } } as const
+const CONTEXT_MENU = {
+  position: 'fixed',
+  zIndex: 50,
+  minWidth: 180,
+  backgroundColor: 'var(--color-card)',
+  borderRadius: '0.75rem',
+  borderWidth: 1,
+  borderColor: 'var(--color-border)',
+  overflow: 'hidden',
+  shadowColor: 'rgba(0,0,0,0.25)', // ds-lint-ok: shadow alpha-black
+  shadowOffset: { width: 0, height: 25 },
+  shadowRadius: 50,
+} as const
+const CONTEXT_MENU_ITEM = {
+  width: '100%',
+  paddingVertical: '0.625rem',
+  paddingHorizontal: '1rem',
+  textAlign: 'left',
+  fontSize: '0.875rem',
+  color: 'var(--color-foreground)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.75rem',
+  cursor: 'pointer',
+  borderWidth: 0,
+  backgroundColor: 'transparent',
+  hoverStyle: { backgroundColor: 'var(--color-muted)' },
+} as const
+const CONTEXT_MENU_ITEM_DESTRUCTIVE = {
+  ...FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE,
+  hoverStyle: { backgroundColor: 'color-mix(in srgb, var(--color-destructive) 10%, transparent)' },
+} as const
+/** The `--destructive .item-icon` descendant recolour. */
+const CONTEXT_MENU_ITEM_ICON_DESTRUCTIVE = { ...FIELD_TREE_CONTEXT_MENU_ITEM_ICON, color: 'var(--color-destructive)' } as const
+/** Every node row is the hover GROUP that reveals its actions. */
+const NODE_GROUP = { group: 'node' } as Record<string, unknown>
 
 export interface FieldTreeHandle {
   expandAll: () => void
@@ -62,14 +127,11 @@ function ContextMenu({
   return (
     <>
       <Prim.Box {...FIELD_TREE_CONTEXT_MENU_BACKDROP} onClick={onClose} />
-      <Prim.Box
-        className="field-tree-context-menu"
-        style={{ left: position.x, top: position.y }}
-      >
+      <Prim.Box {...CONTEXT_MENU} style={{ left: position.x, top: position.y }}>
         {onCreateChild && (
           <Prim.Pressable
             onClick={() => { onCreateChild(); onClose() }}
-            className="field-tree-context-menu__item"
+            {...CONTEXT_MENU_ITEM}
           >
             <Plus {...FIELD_TREE_CONTEXT_MENU_ITEM_ICON} />
             {node.type === 'domain' ? 'New Field' : 'New Option'}
@@ -77,16 +139,17 @@ function ContextMenu({
         )}
         <Prim.Pressable
           onClick={() => { onRename(); onClose() }}
-          className="field-tree-context-menu__item"
+          {...CONTEXT_MENU_ITEM}
         >
           <Edit3 {...FIELD_TREE_CONTEXT_MENU_ITEM_ICON} />
           Rename
         </Prim.Pressable>
         <Prim.Pressable
           onClick={() => { onDelete(); onClose() }}
-          {...FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE} className="field-tree-context-menu__item"
+          {...CONTEXT_MENU_ITEM}
+          {...CONTEXT_MENU_ITEM_DESTRUCTIVE}
         >
-          <Trash2 {...FIELD_TREE_CONTEXT_MENU_ITEM_ICON} />
+          <Trash2 {...CONTEXT_MENU_ITEM_ICON_DESTRUCTIVE} />
           Delete
         </Prim.Pressable>
       </Prim.Box>
@@ -109,17 +172,16 @@ function OptionNode({
 
   return (
     <Prim.Box
-      className={cn(
-        'field-tree-node field-tree-node--option',
-        isSelected && 'field-tree-node--selected',
-      )}
+      {...NODE}
+      {...(isSelected ? NODE_SELECTED : null)}
+      {...NODE_GROUP}
       onClick={() => onSelect(node.path, 'option')}
     >
       <Prim.Text {...FIELD_TREE_NODE_SPACER} />
       <Prim.Text {...FIELD_TREE_NODE_SPACER} />
-      <FileText {...FIELD_TREE_NODE_ICON} {...FIELD_TREE_NODE_ICON_FILE} />
-      <Prim.Text {...FIELD_TREE_NODE_LABEL}>{node.slug}</Prim.Text>
-      <Prim.Box className="field-tree-node__actions">
+      <FileText {...FIELD_TREE_NODE_ICON} {...FIELD_TREE_NODE_ICON_FILE} {...(isSelected ? NODE_CHILD_SELECTED : null)} />
+      <Prim.Text {...FIELD_TREE_NODE_LABEL} {...(isSelected ? NODE_CHILD_SELECTED : null)}>{node.slug}</Prim.Text>
+      <Prim.Box {...NODE_ACTIONS}>
         <Button
           variant="ghost"
           size="icon"
@@ -157,25 +219,24 @@ function FieldNode({
   return (
     <Prim.Box>
       <Prim.Box
-        className={cn(
-          'field-tree-node field-tree-node--field',
-          isSelected && 'field-tree-node--selected',
-        )}
+        {...NODE}
+        {...(isSelected ? NODE_SELECTED : null)}
+        {...NODE_GROUP}
         onClick={() => { onToggle(); onSelect(node.path, 'field') }}
       >
         <Prim.Text {...FIELD_TREE_NODE_SPACER} />
         {hasChildren ? (
           isExpanded ? (
-            <ChevronDown {...FIELD_TREE_NODE_ICON_CHEVRON} />
+            <ChevronDown {...FIELD_TREE_NODE_ICON_CHEVRON} {...(isSelected ? NODE_CHILD_SELECTED : null)} />
           ) : (
-            <ChevronRight {...FIELD_TREE_NODE_ICON_CHEVRON} />
+            <ChevronRight {...FIELD_TREE_NODE_ICON_CHEVRON} {...(isSelected ? NODE_CHILD_SELECTED : null)} />
           )
         ) : (
           <Prim.Text {...FIELD_TREE_NODE_SPACER} />
         )}
-        <Layers {...FIELD_TREE_NODE_ICON} {...FIELD_TREE_NODE_ICON_FOLDER} />
-        <Prim.Text {...FIELD_TREE_NODE_LABEL}>{node.slug}</Prim.Text>
-        <Prim.Box className="field-tree-node__actions">
+        <Layers {...FIELD_TREE_NODE_ICON} {...FIELD_TREE_NODE_ICON_FOLDER} {...(isSelected ? NODE_CHILD_SELECTED : null)} />
+        <Prim.Text {...FIELD_TREE_NODE_LABEL} {...(isSelected ? NODE_CHILD_SELECTED : null)}>{node.slug}</Prim.Text>
+        <Prim.Box {...NODE_ACTIONS}>
           <Button
             variant="ghost"
             size="icon"
@@ -231,24 +292,23 @@ function DomainNode({
   return (
     <Prim.Box>
       <Prim.Box
-        className={cn(
-          'field-tree-node field-tree-node--domain',
-          isSelected && 'field-tree-node--selected',
-        )}
+        {...NODE}
+        {...(isSelected ? NODE_SELECTED : null)}
+        {...NODE_GROUP}
         onClick={() => { onToggle(); onSelect(node.path, 'domain') }}
       >
         {hasChildren ? (
           isExpanded ? (
-            <ChevronDown {...FIELD_TREE_NODE_ICON_CHEVRON} />
+            <ChevronDown {...FIELD_TREE_NODE_ICON_CHEVRON} {...(isSelected ? NODE_CHILD_SELECTED : null)} />
           ) : (
-            <ChevronRight {...FIELD_TREE_NODE_ICON_CHEVRON} />
+            <ChevronRight {...FIELD_TREE_NODE_ICON_CHEVRON} {...(isSelected ? NODE_CHILD_SELECTED : null)} />
           )
         ) : (
           <Prim.Text {...FIELD_TREE_NODE_SPACER} />
         )}
-        <Database {...FIELD_TREE_NODE_ICON} {...FIELD_TREE_NODE_ICON_FOLDER} />
-        <Prim.Text {...FIELD_TREE_NODE_LABEL}>{node.slug}</Prim.Text>
-        <Prim.Box className="field-tree-node__actions">
+        <Database {...FIELD_TREE_NODE_ICON} {...FIELD_TREE_NODE_ICON_FOLDER} {...(isSelected ? NODE_CHILD_SELECTED : null)} />
+        <Prim.Text {...FIELD_TREE_NODE_LABEL} {...(isSelected ? NODE_CHILD_SELECTED : null)}>{node.slug}</Prim.Text>
+        <Prim.Box {...NODE_ACTIONS}>
           <Button
             variant="ghost"
             size="icon"

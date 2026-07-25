@@ -128,7 +128,6 @@ export function StudioShell({
 
       {rightPanel && thingOpen && (
         <Prim.Box
-          className="studio-shell__thing-dock"
           style={{
             width: 400,
             flex: '0 0 400px',

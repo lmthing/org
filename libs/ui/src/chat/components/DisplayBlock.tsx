@@ -103,5 +103,5 @@ interface DisplayBlockProps {
 }
 
 export function DisplayBlock({ descriptor }: DisplayBlockProps): React.ReactElement {
-  return <Prim.Box className="repl-display">{renderNode(descriptor)}</Prim.Box>;
+  return <Prim.Box>{renderNode(descriptor)}</Prim.Box>;
 }

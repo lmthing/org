@@ -435,6 +435,10 @@ export function classToProps(className) {
       skip.push(raw)
       continue
     }
+    // `prose-<el>:` styles HTML the component does not author (@tailwindcss/typography descendant
+    // selectors), so there is no element to put a prop on. The base `prose` class is already a
+    // `keep`; its variants have to be too, or one of them holds the whole element hostage.
+    if (/^prose-/.test(variant)) { keep.push(raw); continue }
     skip.push(raw) // unknown variant (peer-, aria-, data-, …) → manual
   }
 

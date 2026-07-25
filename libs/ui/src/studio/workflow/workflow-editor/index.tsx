@@ -14,8 +14,7 @@ import { ManifestSection } from './manifest-section'
 import { TaskForm } from './task-form'
 import { useTasklistEditor } from './useTasklistEditor'
 import type { TasklistEditorProps } from './types'
-import './tasklist-editor.css'
-import { TASKLIST_EDITOR, TASKLIST_EDITOR_BODY, TASKLIST_EDITOR_EMPTY, TASKLIST_EDITOR_HEADER, TASKLIST_EDITOR_HEADER_ACTIONS, TASKLIST_EDITOR_HEADER_INNER, TASKLIST_EDITOR_HEADER_TOP, TASKLIST_EDITOR_SECTION_DIVIDER, TASKLIST_EDITOR_TASK_LIST } from './tasklist-editor.props.js'
+import { TASKLIST_EDITOR, TASKLIST_EDITOR_ADD_TASK_BTN, TASKLIST_EDITOR_BODY, TASKLIST_EDITOR_EMPTY, TASKLIST_EDITOR_HEADER, TASKLIST_EDITOR_HEADER_ACTIONS, TASKLIST_EDITOR_HEADER_INNER, TASKLIST_EDITOR_HEADER_TOP, TASKLIST_EDITOR_SECTION_DIVIDER, TASKLIST_EDITOR_TASK_LIST } from './tasklist-editor.props.js'
 
 export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
   const {
@@ -104,7 +103,7 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
           </Prim.Box>
         )}
 
-        <Prim.Pressable className="tasklist-editor__add-task-btn" onClick={addTask}>
+        <Prim.Pressable className="transition-colors" {...TASKLIST_EDITOR_ADD_TASK_BTN} onClick={addTask}>
           <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
             <Prim.Path d="M12 5v14M5 12h14" />
           </Prim.Svg>

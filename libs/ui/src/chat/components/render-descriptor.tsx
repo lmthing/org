@@ -104,8 +104,8 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const items = props['items'] as (string | number)[] | undefined;
       const lis = items ? items.map((it, i) => <Prim.ListItem key={i}>{String(it)}</Prim.ListItem>) : kids;
       return ordered
-        ? <Prim.List ordered key={key} className="list-decimal text-lm-text" marginLeft="1.25rem" marginVertical="0.25rem">{lis}</Prim.List>
-        : <Prim.List key={key} className="list-disc text-lm-text" marginLeft="1.25rem" marginVertical="0.25rem">{lis}</Prim.List>;
+        ? <Prim.List ordered key={key} color="var(--lm-text)" marginLeft="1.25rem" marginVertical="0.25rem" style={{ listStyleType: 'decimal' }}>{lis}</Prim.List>
+        : <Prim.List key={key} color="var(--lm-text)" marginLeft="1.25rem" marginVertical="0.25rem" style={{ listStyleType: 'disc' }}>{lis}</Prim.List>;
     }
     case 'listitem': return <Prim.ListItem key={key}>{body}</Prim.ListItem>;
     case 'table': {

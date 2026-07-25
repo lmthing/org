@@ -18,14 +18,14 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.knowledge-pill** — `.knowledge-pill` `.knowledge-pill--selected`
 - **.knowledge-pill-bar** — `.knowledge-pill-bar__clear` `.knowledge-pill-bar__scroll`
 - **.prompt-preview** — `.prompt-preview` `.prompt-preview__chevron` `.prompt-preview__code`
-- **.save-agent-modal** — `.save-agent-modal__icon` `.save-agent-modal__icon-wrap`
+- **.save-agent-modal** — `.save-agent-modal__icon`
 - **.saved-agents-list** — `.saved-agents-list__grid`
 - **.slash-action-card** — `.slash-action-card` `.slash-action-card__toggle` `.slash-action-card__toggle-knob`
 - **.slash-actions-panel** — `.slash-actions-panel` `.slash-actions-panel__list`
 - **.thing-panel** — `.thing-panel`
 - **.tools-panel** — `.tools-panel__card` `.tools-panel__card-actions`
 
-  Tokens: `--agent`, `--color-agent`, `--color-agent-foreground`, `--color-background`, `--color-border`, `--color-foreground`, `--color-knowledge`, `--color-muted`, `--color-muted-foreground`, `--radius-full`, `--radius-lg`, `--radius-md`
+  Tokens: `--color-agent`, `--color-agent-foreground`, `--color-background`, `--color-border`, `--color-foreground`, `--color-knowledge`, `--color-muted`, `--color-muted-foreground`, `--radius-full`, `--radius-lg`, `--radius-md`
 
 ### `components/computer/ide-file-tree.css`
 
@@ -72,8 +72,7 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
 ### `components/workflow/step-card/index.css`
 
-- **.group** — `.group`
-- **.step-card** — `.step-card` `.step-card--expanded` `.step-card__actions` `.step-card__body` `.step-card__connector-bottom` `.step-card__connector-top` `.step-card__drag-handle` `.step-card__order-badge`
+- **.step-card** — `.step-card` `.step-card--expanded` `.step-card__body` `.step-card__connector-bottom` `.step-card__connector-top` `.step-card__drag-handle` `.step-card__order-badge`
 
   Tokens: `--border`, `--brand-3`, `--card`, `--muted`, `--muted-foreground`, `brand-3`
 
