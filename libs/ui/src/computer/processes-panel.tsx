@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 import { Panel, PanelHeader, PanelBody } from '../elements/content/panel'
 import { ListItem } from '../elements/content/list-item'
 import { Caption } from '../elements/typography/caption'

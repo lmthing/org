@@ -59,6 +59,7 @@ export const EXPECTED_NATIVE_FORKS = [
   'src/elements/overlays/dialog/index.native.tsx',
   'src/elements/overlays/sheet/index.native.tsx',
   'src/elements/overlays/context-menu/index.native.tsx',
+  'src/elements/overlays/dropdown/index.native.tsx',
   'src/platform/storage.native.ts',
   'src/platform/clipboard.native.ts',
   'src/platform/dimensions.native.ts',

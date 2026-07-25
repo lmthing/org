@@ -2,7 +2,7 @@
  * FieldTree - Simple expandable 3-level domain→field→option tree for knowledge management.
  * Replaces the react-arborist based tree with a lightweight React state implementation.
  */
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useState, useCallback, forwardRef, useImperativeHandle } from 'react'
 import type { Ref } from 'react'
 import {
@@ -20,7 +20,7 @@ import { useKnowledgeTree } from '@lmthing/ui/hooks/knowledge/useKnowledgeTree'
 import type { KnowledgeTreeNode } from '@lmthing/ui/hooks/knowledge/useKnowledgeTree'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import './FieldTree.css'
-import { FIELD_TREE_CONTEXT_MENU_BACKDROP, FIELD_TREE_CONTEXT_MENU_ITEM_ICON, FIELD_TREE_NODE_ICON, FIELD_TREE_NODE_ICON_CHEVRON, FIELD_TREE_NODE_ICON_FILE, FIELD_TREE_NODE_ICON_FOLDER, FIELD_TREE_NODE_LABEL, FIELD_TREE_NODE_SPACER } from './field-tree.props.js'
+import { FIELD_TREE_CONTEXT_MENU_BACKDROP, FIELD_TREE_CONTEXT_MENU_ITEM_ICON, FIELD_TREE_NODE_ICON, FIELD_TREE_NODE_ICON_CHEVRON, FIELD_TREE_NODE_ICON_FILE, FIELD_TREE_NODE_ICON_FOLDER, FIELD_TREE_NODE_LABEL, FIELD_TREE_NODE_SPACER } from './field-tree.props'
 import {
   FIELD_TREE_CONTEXT_MENU as CONTEXT_MENU,
   FIELD_TREE_CONTEXT_MENU_ITEM as CONTEXT_MENU_ITEM,
@@ -31,7 +31,7 @@ import {
   FIELD_TREE_NODE_CHILD_SELECTED as NODE_CHILD_SELECTED,
   FIELD_TREE_NODE_GROUP as NODE_GROUP,
   FIELD_TREE_NODE_SELECTED as NODE_SELECTED,
-} from './node.props.js'
+} from './node.props'
 
 export interface FieldTreeHandle {
   expandAll: () => void

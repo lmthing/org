@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useStore } from './store.js';
-import type { WireEvent } from './model.js';
+import { useStore } from './store';
+import type { WireEvent } from './model';
 import type { TraceEvent } from '@lmthing/core';
 
 let seq = 0;

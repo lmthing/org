@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 
 export type BootStage = 'booting' | 'connecting' | 'authenticating' | 'running' | 'error'
 

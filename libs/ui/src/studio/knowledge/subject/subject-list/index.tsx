@@ -2,7 +2,7 @@
 // Renders as TABS when the domain's index.md sets `renderAs: tabs`, otherwise
 // (default) as a flat LIST. This is a studio-only UI hint — the agent runtime
 // does not use it.
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useMemo, useState } from 'react'
 import { useGlob, useKnowledgeDomainIndex } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'

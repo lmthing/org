@@ -2,7 +2,7 @@
  * Renders an assistant message's text, expanding any embedded tool-event
  * markers into inline `.thing-tool-event` blocks.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { splitToolEventContent } from './use-tool-events'
 
 export function ToolCallDisplay({ content }: { content: string }) {

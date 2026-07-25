@@ -1,10 +1,10 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { useStore } from '../store/store.js';
-import { ExecutionTree } from './tree.js';
-import { Inspector } from './inspector.js';
-import { PlaybackBar } from './replay.js';
-import { cn } from '../lib/cn.js';
+import { useStore } from '../store/store';
+import { ExecutionTree } from './tree';
+import { Inspector } from './inspector';
+import { PlaybackBar } from './replay';
+import { cn } from '../lib/cn';
 
 interface DevPanelProps {
   onClose: () => void;

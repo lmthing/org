@@ -4,8 +4,8 @@
 // (trace_snapshot rebuild).
 
 import type { TraceEvent } from '@lmthing/core';
-import type { WireEvent } from './model.js';
-import type { AppState, ModelPricing } from './types.js';
+import type { WireEvent } from './model';
+import type { AppState, ModelPricing } from './types';
 
 export function computeEventCost(ev: TraceEvent, prices: Record<string, ModelPricing> | null): number {
   if (!prices || ev.type !== 'llm_response') return 0;

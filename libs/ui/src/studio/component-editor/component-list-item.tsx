@@ -2,7 +2,7 @@
  * ComponentListItem — a single row in the view/form component list, with
  * inline rename and delete controls.
  */
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import { useCallback, useEffect, useRef } from 'react'
 import { useUIState } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'

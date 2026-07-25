@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ReplRpcClient, type ReplClientConfig } from './rpc-client.js';
-import { buildModel, emptyModel, type SessionModel, type WireEvent } from '../store/model.js';
+import { ReplRpcClient, type ReplClientConfig } from './rpc-client';
+import { buildModel, emptyModel, type SessionModel, type WireEvent } from '../store/model';
 
 export interface ReplBlock {
   id: string;

@@ -1,4 +1,4 @@
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Mail, Calendar, Clock, Shield, Check, X, Trash2, User as UserIcon, Crown, Edit3, Eye } from 'lucide-react'
 import { useUIState, useToggle } from '@lmthing/state'
 import type { SpaceUser, SpaceUserRole, RoleDefinition } from '../space-list'
@@ -12,8 +12,8 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Avatar, AvatarImage, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
-import { DIALOG_BACKDROP, DIALOG_CONTENT } from '../../../elements/overlays/dialog/index.js'
-import { CONFIRM_DIALOG_ACTION_BTN, CONFIRM_DIALOG_CONTENT, CONFIRM_DIALOG_ICON, USER_DETAIL_BODY, USER_DETAIL_EMPTY, USER_DETAIL_EMPTY_AVATAR, USER_DETAIL_EMPTY_CAPTION, USER_DETAIL_EMPTY_ICON, USER_DETAIL_HEADER_ROW, USER_DETAIL_ICON_SM, USER_DETAIL_INFO_CARD_ROW, USER_DETAIL_INFO_ICON, USER_DETAIL_NAME, USER_DETAIL_PANEL, USER_DETAIL_PERMISSIONS_HEADING, USER_DETAIL_ROLE_CHECK_ICON, USER_DETAIL_ROLE_ICON, USER_DETAIL_STATUS_HEADING } from '../props.js'
+import { DIALOG_BACKDROP, DIALOG_CONTENT } from '../../../elements/overlays/dialog/index'
+import { CONFIRM_DIALOG_ACTION_BTN, CONFIRM_DIALOG_CONTENT, CONFIRM_DIALOG_ICON, USER_DETAIL_BODY, USER_DETAIL_EMPTY, USER_DETAIL_EMPTY_AVATAR, USER_DETAIL_EMPTY_CAPTION, USER_DETAIL_EMPTY_ICON, USER_DETAIL_HEADER_ROW, USER_DETAIL_ICON_SM, USER_DETAIL_INFO_CARD_ROW, USER_DETAIL_INFO_ICON, USER_DETAIL_NAME, USER_DETAIL_PANEL, USER_DETAIL_PERMISSIONS_HEADING, USER_DETAIL_ROLE_CHECK_ICON, USER_DETAIL_ROLE_ICON, USER_DETAIL_STATUS_HEADING } from '../props'
 
 interface UserDetailPanelProps {
   user?: SpaceUser | null

@@ -10,9 +10,9 @@
  * GET-merge-PUT convention the former global Integrations tab used
  * (`elements/settings/integrations`, now removed).
  */
-import * as Prim from '../../../elements/primitives/index.js';
-import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index.js'
-import { PAGE_BODY } from '../../../elements/layouts/page/index.js'
+import * as Prim from '../../../elements/primitives/index';
+import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index'
+import { PAGE_BODY } from '../../../elements/layouts/page/index'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useAuth } from '@lmthing/auth'
@@ -32,7 +32,7 @@ function storeOrigin(): string {
   return 'https://lmthing.store'
 }
 import { SettingsSchemaForm, type JsonSchema } from '../../integrations/SettingsSchemaForm'
-import { LM_SETUP_GUIDE } from '../../../components/setup-guide/props.js'
+import { LM_SETUP_GUIDE } from '../../../components/setup-guide/props'
 
 /** `InstalledIntegration` per INTEGRATIONS_PROGRESS.md §3. */
 interface InstalledIntegration {

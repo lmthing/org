@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useEffect, useCallback } from 'react'
 import { useSpaceFS } from '@lmthing/state'
 import { parseKnowledgeOption, serializeKnowledgeOption } from '@lmthing/state'

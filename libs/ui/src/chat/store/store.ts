@@ -5,13 +5,13 @@
 // API that previously lived here (same names/signatures — do not remove).
 
 import { create } from 'zustand';
-import { createSessionSlice } from './session-slice.js';
-import { createReplaySlice } from './replay-slice.js';
-import { createPricingSlice } from './pricing-slice.js';
-import { createProjectSlice } from './project-slice.js';
-import { createUiPanelSlice } from './ui-panel-slice.js';
-import { createConnectLive, type UiControl } from './ws-client.js';
-import type { AppState } from './types.js';
+import { createSessionSlice } from './session-slice';
+import { createReplaySlice } from './replay-slice';
+import { createPricingSlice } from './pricing-slice';
+import { createProjectSlice } from './project-slice';
+import { createUiPanelSlice } from './ui-panel-slice';
+import { createConnectLive, type UiControl } from './ws-client';
+import type { AppState } from './types';
 
 export const useStore = create<AppState>((set, get) => ({
   ...createSessionSlice(set, get),
@@ -23,6 +23,6 @@ export const useStore = create<AppState>((set, get) => ({
 
 // ─── Public API (re-exported for existing consumers of './store.js') ───────
 
-export type { InspectorTab, Mode, Connection, Project, SessionMeta, ModelPricing } from './types.js';
+export type { InspectorTab, Mode, Connection, Project, SessionMeta, ModelPricing } from './types';
 export type { UiControl };
 export const connectLive = createConnectLive(useStore);

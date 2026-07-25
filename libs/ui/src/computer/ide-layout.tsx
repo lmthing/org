@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 import { Badge } from '../elements/content/badge'
 import { Loader2 } from 'lucide-react'

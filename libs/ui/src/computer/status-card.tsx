@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 import { Card, CardHeader, CardBody } from '../elements/content/card'
 import { Badge } from '../elements/content/badge'
 import { Caption } from '../elements/typography/caption'

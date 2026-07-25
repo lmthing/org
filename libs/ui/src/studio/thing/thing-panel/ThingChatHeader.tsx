@@ -1,4 +1,4 @@
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 /**
  * Chat pane header: current conversation title plus a status dot reflecting
  * error / working / ready / needs-config state.

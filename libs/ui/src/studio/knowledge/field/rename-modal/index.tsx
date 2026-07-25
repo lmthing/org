@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useEffect, useCallback, useRef } from 'react'
 import { useUIState } from '@lmthing/state'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
@@ -7,8 +7,8 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { X } from 'lucide-react'
-import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
-import { RENAME_MODAL_CLOSE_ICON, RENAME_MODAL_ERROR } from '../../props.js'
+import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index'
+import { RENAME_MODAL_CLOSE_ICON, RENAME_MODAL_ERROR } from '../../props'
 
 interface RenameModalProps {
   isOpen: boolean

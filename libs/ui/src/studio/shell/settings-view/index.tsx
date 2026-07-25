@@ -2,7 +2,7 @@
  * SettingsView - Space settings panel (env files, package.json).
  * Uses new hooks from Phase 3 and element components.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Button } from '../../../elements/forms/button'
 import { useEffect, useMemo } from 'react'
 import { useLocation, useNavigate, useParams } from '@tanstack/react-router'
@@ -15,9 +15,9 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { useUIState } from '@lmthing/state'
 import { useFile } from '@lmthing/ui/hooks/fs/useFile'
 import { cn } from '@lmthing/ui/lib/utils'
-import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../elements/content/panel/index.js'
-import { INPUT_BASE } from '../../../elements/forms/input/index.js'
-import { SETTINGS_VIEW_ENV_TEXTAREA, SETTINGS_VIEW_HEADER, SETTINGS_VIEW_PKG_CAPTION, SETTINGS_VIEW_PKG_TEXTAREA, SETTINGS_VIEW_STATUS_ERROR, SETTINGS_VIEW_STATUS_SUCCESS, SETTINGS_VIEW_TAB_ICON } from '../props.js'
+import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../elements/content/panel/index'
+import { INPUT_BASE } from '../../../elements/forms/input/index'
+import { SETTINGS_VIEW_ENV_TEXTAREA, SETTINGS_VIEW_HEADER, SETTINGS_VIEW_PKG_CAPTION, SETTINGS_VIEW_PKG_TEXTAREA, SETTINGS_VIEW_STATUS_ERROR, SETTINGS_VIEW_STATUS_SUCCESS, SETTINGS_VIEW_TAB_ICON } from '../props'
 
 interface SettingsViewProps {
   isOpen: boolean

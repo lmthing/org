@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import * as Prim from '../../../elements/primitives/index.js'
+import * as Prim from '../../../elements/primitives/index'
 
 /**
  * NavLink — a router link that accepts Tamagui style props.

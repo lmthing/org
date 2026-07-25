@@ -2,7 +2,7 @@
 // Owns the project/session lists surfaced by the sidebar (Studio-style
 // multi-project chat) — independent of the live/replay execution state.
 
-import type { AppState, Project, SessionMeta } from './types.js';
+import type { AppState, Project, SessionMeta } from './types';
 
 export interface ProjectSlice {
   projects: Project[];

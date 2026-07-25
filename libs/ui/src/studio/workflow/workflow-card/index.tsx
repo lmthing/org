@@ -1,14 +1,14 @@
 /**
  * TasklistCard / TasklistListItem — card components for the tasklist list view.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import type { TasklistListItem } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { cn } from '../../../lib/utils'
 
-import { WORKFLOW_CARD_CHECK_ICON, WORKFLOW_CARD_ICON } from '../workflow-card.props.js'
+import { WORKFLOW_CARD_CHECK_ICON, WORKFLOW_CARD_ICON } from '../workflow-card.props'
 
 // ─── Card (grid view) ─────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 
 export function Avatar({
   src,

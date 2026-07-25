@@ -2,8 +2,8 @@
 // Owns `replay` (recorded-events scrubbing state) and its actions. Rebuilds
 // `model` from a bounded slice of the recorded events on every seek.
 
-import { buildModel, type SessionModel, type WireEvent } from './model.js';
-import type { AppState, ReplayState } from './types.js';
+import { buildModel, type SessionModel, type WireEvent } from './model';
+import type { AppState, ReplayState } from './types';
 
 export type { ReplayState };
 

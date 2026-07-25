@@ -1,13 +1,13 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { Button } from '../components/ui/Button.js';
-import { Spinner } from '../components/ui/Spinner.js';
-import { authHeaders } from './auth.js';
-import { useStore } from '../store/store.js';
-import { dataPlaneOrigin } from '../../lib/app-urls.js';
-import { SettingsSchemaForm, type JsonSchema } from '../../studio/integrations/SettingsSchemaForm.js';
-import { Markdown } from '../../elements/content/markdown/index.js';
-import { overlayEnvKeys, waitForPodReady, resumeMessage } from './auto-resume.js';
+import { Button } from '../components/ui/Button';
+import { Spinner } from '../components/ui/Spinner';
+import { authHeaders } from './auth';
+import { useStore } from '../store/store';
+import { dataPlaneOrigin } from '../../lib/app-urls';
+import { SettingsSchemaForm, type JsonSchema } from '../../studio/integrations/SettingsSchemaForm';
+import { Markdown } from '../../elements/content/markdown/index';
+import { overlayEnvKeys, waitForPodReady, resumeMessage } from './auto-resume';
 
 /** One installed integration space, as returned by the pod's
  *  `GET /api/projects/:projectId/integrations` (S13 adds `missingRequired`/`configured`). */

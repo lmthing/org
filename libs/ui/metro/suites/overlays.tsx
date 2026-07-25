@@ -23,6 +23,7 @@ import {
   flattenStyle,
   press,
   longPress,
+  actLike,
   NATIVE_VIEW,
 } from '../render'
 import {
@@ -38,6 +39,12 @@ import {
   DIALOG_CONTENT,
   DIALOG_HEADER,
 } from '../../src/elements/overlays/dialog'
+import {
+  Dropdown,
+  DropdownTrigger,
+  DropdownContent,
+  DropdownItem,
+} from '../../src/elements/overlays/dropdown'
 import {
   Sheet,
   SheetContent,
@@ -106,6 +113,25 @@ test('the open Dialog is centred by flex, since RN has no position: fixed', () =
     alignItems: 'center',
     justifyContent: 'center',
   })
+})
+
+test('the rendered panel carries numeric border radii, not CSS strings', () => {
+  const { tree } = render(
+    <Dialog defaultOpen>
+      <DialogContent>
+        <DialogTitle>rounded</DialogTitle>
+      </DialogContent>
+    </Dialog>,
+  )
+  // The end-to-end half of the radius split (`theme/tamagui.config#buildRadiusTokens`): this panel
+  // used to mount with `borderTopLeftRadius: "0.5rem"`, a CSS unit RN cannot resolve.
+  const withStringRadius = findAll(tree, () => true).filter((node) =>
+    Object.entries(flattenStyle(node.props.style)).some(
+      ([key, value]) => key.toLowerCase().includes('radius') && typeof value === 'string',
+    ),
+  )
+  expect(withStringRadius).toHaveLength(0)
+  expect(typeof flattenStyle(findByStyle(tree, 'maxWidth', 512)?.props.style).borderTopLeftRadius).toBe('number')
 })
 
 test('DialogTrigger opens it and DialogClose closes it again', () => {
@@ -261,4 +287,109 @@ test('selecting a ContextMenu item fires onClick and closes the menu', async () 
   press(findByText(current(), 'rename'))
   expect(chosen).toBe(1)
   expect(openModalOf(current())).toBeNull()
+})
+
+// ── Dropdown ──────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The dropdown's dismissing surface is invisible (no wash), so it cannot be found by colour like
+ * the other three — it is the full-screen view that is actually listening for a press.
+ */
+const outsideOf = (tree: Tree) =>
+  findAll(tree, () => true).find(
+    (n) => flattenStyle(n.props.style).flex === 1 && typeof n.props.onResponderRelease === 'function',
+  ) ?? null
+
+test('a closed Dropdown mounts its trigger and nothing else', () => {
+  const { tree } = render(
+    <Dropdown>
+      <DropdownTrigger>menu</DropdownTrigger>
+      <DropdownContent>
+        <DropdownItem>rename</DropdownItem>
+      </DropdownContent>
+    </Dropdown>,
+  )
+  expect(openModalOf(tree)).toBeNull()
+  expect(findByText(tree, 'menu')).toBeTruthy()
+  expect(findByText(tree, 'rename')).toBeNull()
+})
+
+test('the trigger opens the Dropdown and reports expanded to assistive tech', () => {
+  const { tree, current } = render(
+    <Dropdown>
+      <DropdownTrigger>menu</DropdownTrigger>
+      <DropdownContent>
+        <DropdownItem>rename</DropdownItem>
+      </DropdownContent>
+    </Dropdown>,
+  )
+  const trigger = findByProp(tree, 'accessibilityRole', 'button')
+  expect(trigger?.props.accessibilityState).toMatchObject({ expanded: false })
+
+  press(trigger)
+  expect(openModalOf(current())).toBeTruthy()
+  expect(findByText(current(), 'rename')).toBeTruthy()
+  expect(findByProp(current(), 'accessibilityRole', 'button')?.props.accessibilityState).toMatchObject({
+    expanded: true,
+  })
+})
+
+test('pressing outside the panel dismisses the Dropdown', () => {
+  const { tree, current } = render(
+    <Dropdown defaultOpen>
+      <DropdownTrigger>menu</DropdownTrigger>
+      <DropdownContent>
+        <DropdownItem>rename</DropdownItem>
+      </DropdownContent>
+    </Dropdown>,
+  )
+  // This is the case the web file used `document.addEventListener('mousedown', …)` for — the
+  // listener that had nothing to bind to on native, and left the menu undismissable.
+  press(outsideOf(tree))
+  expect(openModalOf(current())).toBeNull()
+})
+
+test('selecting a Dropdown item fires onClick and closes the menu', () => {
+  let chosen = 0
+  const { tree, current } = render(
+    <Dropdown defaultOpen>
+      <DropdownTrigger>menu</DropdownTrigger>
+      <DropdownContent>
+        <DropdownItem onClick={() => chosen++}>rename</DropdownItem>
+      </DropdownContent>
+    </Dropdown>,
+  )
+  press(findByText(tree, 'rename'))
+  expect(chosen).toBe(1)
+  expect(openModalOf(current())).toBeNull()
+})
+
+test('the panel is placed under the measured trigger', () => {
+  const { tree, current, renderer } = render(
+    <Dropdown>
+      <DropdownTrigger>menu</DropdownTrigger>
+      <DropdownContent>
+        <DropdownItem>rename</DropdownItem>
+      </DropdownContent>
+    </Dropdown>,
+  )
+  press(findByProp(tree, 'accessibilityRole', 'button'))
+
+  // A Modal detaches the panel from its trigger, so the anchor has to be measured back. There is no
+  // layout pass here, so `measureInWindow` never calls back on its own — but it IS called, and the
+  // callback it was handed is the whole anchoring contract. Invoking it with a known rect proves
+  // the panel follows the trigger rather than that our own arithmetic is self-consistent.
+  const measured = renderer.root
+    .findAll((node) => typeof (node.instance as { measureInWindow?: unknown } | null)?.measureInWindow === 'function', {
+      deep: true,
+    })
+    .map((node) => (node.instance as { measureInWindow: { mock?: { calls: unknown[][] } } }).measureInWindow)
+    .find((fn) => (fn.mock?.calls.length ?? 0) > 0)
+  expect(measured).toBeDefined()
+
+  const callback = measured?.mock?.calls[0][0] as (x: number, y: number, w: number, h: number) => void
+  actLike(() => callback(12, 30, 100, 24))
+
+  const panel = findByProp(current(), 'accessibilityRole', 'menu')
+  expect(flattenStyle(panel?.props.style)).toMatchObject({ top: 54, left: 12 })
 })

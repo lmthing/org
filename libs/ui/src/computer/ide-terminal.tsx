@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 import { Terminal } from '../elements/content/terminal'
 import type { TerminalSession } from '../elements/content/terminal'
 import { X, Plus } from 'lucide-react'

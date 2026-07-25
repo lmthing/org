@@ -1,8 +1,8 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { useStore, type InspectorTab } from '../store/store.js';
-import type { ExecNode } from '../store/model.js';
-import { Tabs, CodeBlock, StatusIcon, KindBadge, fmtDuration, Badge, preview } from './common.js';
+import { useStore, type InspectorTab } from '../store/store';
+import type { ExecNode } from '../store/model';
+import { Tabs, CodeBlock, StatusIcon, KindBadge, fmtDuration, Badge, preview } from './common';
 
 const TABS: readonly InspectorTab[] = ['llm', 'statements', 'yields', 'variables', 'raw'];
 

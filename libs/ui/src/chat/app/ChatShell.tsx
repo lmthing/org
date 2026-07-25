@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
-import { useStore, type Project } from '../store/store.js';
-import { authHeaders } from './auth.js';
-import { AppShell } from './AppShell.js';
-import { applyUrlToState, syncStateToUrl } from './url-state.js';
+import { useStore, type Project } from '../store/store';
+import { authHeaders } from './auth';
+import { AppShell } from './AppShell';
+import { applyUrlToState, syncStateToUrl } from './url-state';
 
 /**
  * The standalone agent-ui chat shell (sidebar + transcript + DevPanel), packaged

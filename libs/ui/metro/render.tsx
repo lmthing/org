@@ -55,6 +55,15 @@ export function render(element: React.ReactElement, theme: 'light' | 'dark' = 'l
   return { renderer, tree: tree(), current: tree }
 }
 
+/**
+ * Run something that causes a React update and flush it — `act` under a name that says what it is
+ * for. Suites need this when they drive a callback React Native would normally have called from
+ * native (a `measureInWindow` result, say), which `press`/`longPress` do not cover.
+ */
+export function actLike(fn: () => void): void {
+  act(fn)
+}
+
 /** Depth-first search for the first node whose host type satisfies `match`. */
 export function find(node: Rendered, match: (type: string) => boolean): NativeNode | null {
   if (!node || typeof node === 'string') return null

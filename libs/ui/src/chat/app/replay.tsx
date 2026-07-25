@@ -1,7 +1,7 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { useStore } from '../store/store.js';
-import type { WireEvent } from '../store/model.js';
+import { useStore } from '../store/store';
+import type { WireEvent } from '../store/model';
 
 /** Parse NDJSON text into WireEvents, tolerating a partial final line.
  *  Accepts both {seq,event} lines and bare TraceEvent lines (assigns seq by order). */

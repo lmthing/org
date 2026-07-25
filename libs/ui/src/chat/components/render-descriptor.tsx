@@ -1,7 +1,7 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { marked } from 'marked';
-import { preview } from '../app/common.js';
+import { preview } from '../app/common';
 
 export interface Descriptor { type: string; props?: Record<string, unknown>; children?: unknown[] }
 export function isDescriptor(v: unknown): v is Descriptor {

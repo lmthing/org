@@ -9,7 +9,7 @@
  * Provides create / rename / delete / raw-source editing in a code textarea,
  * following the same draft/save pattern as the agent-builder and topic-editor.
  */
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'

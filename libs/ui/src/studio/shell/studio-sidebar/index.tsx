@@ -8,7 +8,7 @@
  * Removed under the pod-backed architecture: all GitHub connect/repo UI and
  * the `useGithub` dependency. Route params are now `$projectId`/`$spaceId`.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { useMemo } from 'react'
 import { useToggle, useTasklistList, useGlob } from '@lmthing/state'
 import { useLocation, useParams } from '@tanstack/react-router'
@@ -27,8 +27,8 @@ import {
   Box,
   MessageSquare,
 } from 'lucide-react'
-import { SIDEBAR_BASE, SIDEBAR_COLLAPSED, SIDEBAR_ITEM, SIDEBAR_ITEM_ACTIVE } from '../../../elements/nav/sidebar/index.js'
-import { NavLink } from '../nav-link/index.js'
+import { SIDEBAR_BASE, SIDEBAR_COLLAPSED, SIDEBAR_ITEM, SIDEBAR_ITEM_ACTIVE } from '../../../elements/nav/sidebar/index'
+import { NavLink } from '../nav-link/index'
 import { buildSpacePath } from '@lmthing/ui/lib/space-path'
 import { useAgentList } from '@lmthing/ui/hooks/agent/useAgentList'
 import type { AgentListItem } from '@lmthing/ui/hooks/agent/useAgentList'
@@ -37,7 +37,7 @@ import type { KnowledgeFieldMeta } from '@lmthing/state'
 import { useAgent } from '@lmthing/ui/hooks/agent/useAgent'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
 import { otherAppLinks } from '@lmthing/ui/lib/app-urls'
-import { STUDIO_SIDEBAR_COLLAPSED_ICON_INNER, STUDIO_SIDEBAR_CREATE_BTN, STUDIO_SIDEBAR_CREATE_ICON, STUDIO_SIDEBAR_FOOTER_ICON, STUDIO_SIDEBAR_FOOTER_LABEL, STUDIO_SIDEBAR_HOME_LINK, STUDIO_SIDEBAR_ITEM_ICON_KNOWLEDGE, STUDIO_SIDEBAR_SECTION_CHEVRON } from '../props.js'
+import { STUDIO_SIDEBAR_COLLAPSED_ICON_INNER, STUDIO_SIDEBAR_CREATE_BTN, STUDIO_SIDEBAR_CREATE_ICON, STUDIO_SIDEBAR_FOOTER_ICON, STUDIO_SIDEBAR_FOOTER_LABEL, STUDIO_SIDEBAR_HOME_LINK, STUDIO_SIDEBAR_ITEM_ICON_KNOWLEDGE, STUDIO_SIDEBAR_SECTION_CHEVRON } from '../props'
 
 export interface StudioSidebarProps {
   isCollapsed?: boolean

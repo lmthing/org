@@ -1,4 +1,4 @@
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Card, CardBody } from '@lmthing/ui/elements/content/card'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'

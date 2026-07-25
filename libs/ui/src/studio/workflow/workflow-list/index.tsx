@@ -1,7 +1,7 @@
 /**
  * TasklistList — list view for all tasklists in the current space.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { useMemo } from 'react'
 import { useUIState } from '@lmthing/state'
 import type { TasklistListItem as TLItem } from '@lmthing/state'
@@ -12,7 +12,7 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { WORKFLOW_LIST_CREATE_ICON, WORKFLOW_LIST_EMPTY_FIRST_CAPTION, WORKFLOW_LIST_EMPTY_FIRST_ICON, WORKFLOW_LIST_FILTERS, WORKFLOW_LIST_SEARCH_ICON, WORKFLOW_LIST_SEARCH_INPUT, WORKFLOW_LIST_STATS, WORKFLOW_LIST_STAT_ROW, WORKFLOW_LIST_VIEW_ICON } from '../workflow-list.props.js'
+import { WORKFLOW_LIST_CREATE_ICON, WORKFLOW_LIST_EMPTY_FIRST_CAPTION, WORKFLOW_LIST_EMPTY_FIRST_ICON, WORKFLOW_LIST_FILTERS, WORKFLOW_LIST_SEARCH_ICON, WORKFLOW_LIST_SEARCH_INPUT, WORKFLOW_LIST_STATS, WORKFLOW_LIST_STAT_ROW, WORKFLOW_LIST_VIEW_ICON } from '../workflow-list.props'
 
 interface TasklistListProps {
   tasklists: TLItem[]

@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 import { useRef, useEffect, useState } from 'react'
 import { Panel, PanelHeader } from '../elements/content/panel'
 import { Button } from '../elements/forms/button'

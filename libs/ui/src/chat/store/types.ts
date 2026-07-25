@@ -2,7 +2,7 @@
 // project/ui-panel slices in this folder). Kept in one file so every slice
 // can share a single `AppState` shape without circular runtime imports. ────
 
-import type { SessionModel, WireEvent, UploadedAttachment } from './model.js';
+import type { SessionModel, WireEvent, UploadedAttachment } from './model';
 
 export type InspectorTab = 'llm' | 'statements' | 'yields' | 'variables' | 'raw';
 export type Mode = 'live' | 'replay';

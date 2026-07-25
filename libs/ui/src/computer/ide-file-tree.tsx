@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 import { Button } from '../elements/forms/button'
 import { useState } from 'react'
 import {
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import * as ContextMenu from '../elements/overlays/context-menu'
 import { Dialog, DialogContent, DialogTitle } from '../elements/overlays/dialog'
-import { IDE_FILE_TREE_CONTEXT_ITEM, IDE_FILE_TREE_CONTEXT_ITEM_DANGER, IDE_FILE_TREE_DIALOG_INPUT, IDE_FILE_TREE_DIALOG_TITLE, IDE_FILE_TREE_ICON, IDE_FILE_TREE_ICON_FOLDER } from './ide-file-tree.props.js'
+import { IDE_FILE_TREE_CONTEXT_ITEM, IDE_FILE_TREE_CONTEXT_ITEM_DANGER, IDE_FILE_TREE_DIALOG_INPUT, IDE_FILE_TREE_DIALOG_TITLE, IDE_FILE_TREE_ICON, IDE_FILE_TREE_ICON_FOLDER } from './ide-file-tree.props'
 
 export interface FileTreeNode {
   name: string

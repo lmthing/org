@@ -3,7 +3,7 @@
  * file, following the draft/save pattern shared with the agent-builder and
  * topic-editor.
  */
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import { useCallback, useEffect, useRef } from 'react'
 import { useSpaceFS, useFile, useUIState } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -11,8 +11,8 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { componentNameFromPath, type ComponentKind } from './component-editor-utils'
-import { INPUT_BASE } from '../../elements/forms/input/index.js'
-import { COMPONENT_EDITOR_TEXTAREA } from './props.js'
+import { INPUT_BASE } from '../../elements/forms/input/index'
+import { COMPONENT_EDITOR_TEXTAREA } from './props'
 
 /** `.component-editor__kind-badge--<kind>` tint modifier → per-kind style lookup. */
 const KIND_BADGE_STYLE: Record<ComponentKind, { backgroundColor: string; color: string }> = {

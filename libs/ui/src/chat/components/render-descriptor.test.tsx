@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderDescriptor } from './render-descriptor.js';
+import { renderDescriptor } from './render-descriptor';
 
 describe('renderDescriptor - Markdown component', () => {
   it('renders markdown text as HTML', () => {

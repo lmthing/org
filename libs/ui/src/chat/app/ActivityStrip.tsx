@@ -1,8 +1,8 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { cn } from '../lib/cn.js';
-import { useStore } from '../store/store.js';
-import { KIND_ICON, STATUS_COLOR, fmtDuration } from './node-meta.js';
+import { cn } from '../lib/cn';
+import { useStore } from '../store/store';
+import { KIND_ICON, STATUS_COLOR, fmtDuration } from './node-meta';
 
 interface ActivityStripProps {
   nodeIds?: string[];

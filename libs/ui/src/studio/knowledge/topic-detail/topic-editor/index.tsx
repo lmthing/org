@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { useSpaceFS } from '@lmthing/state'
 import { parseFrontmatter, serializeFrontmatter } from '@lmthing/state'
@@ -22,8 +22,8 @@ import {
   type TextState,
 } from './markdown-utils'
 import { Settings } from 'lucide-react'
-import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
-import { TOPIC_EDITOR_HEADER, TOPIC_EDITOR_HEADER_ACTIONS, TOPIC_EDITOR_SETTINGS_ICON, TOPIC_EDITOR_TEXTAREA } from '../../props.js'
+import { INPUT_BASE } from '../../../../elements/forms/input/index'
+import { TOPIC_EDITOR_HEADER, TOPIC_EDITOR_HEADER_ACTIONS, TOPIC_EDITOR_SETTINGS_ICON, TOPIC_EDITOR_TEXTAREA } from '../../props'
 
 export interface TopicEditorHandle {
   save: () => void

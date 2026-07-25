@@ -1,4 +1,4 @@
-import type { SessionModel, StatementEntry, NodeStatus, NodeKind, ExecNode } from '../store/model.js';
+import type { SessionModel, StatementEntry, NodeStatus, NodeKind, ExecNode } from '../store/model';
 
 /** Node kinds that represent sub-agent work (delegates/forks/tasklists/tasks). */
 export const WORK_KINDS = new Set<NodeKind>(['fork', 'delegate', 'tasklist', 'task']);

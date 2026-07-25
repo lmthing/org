@@ -1,12 +1,12 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { cn } from '../lib/cn.js';
-import { Drawer } from '../components/ui/Drawer.js';
-import { Button } from '../components/ui/Button.js';
-import { Spinner } from '../components/ui/Spinner.js';
-import { Tabs } from '../components/ui/Tabs.js';
-import { authHeaders } from './auth.js';
-import { IntegrationsTab } from './IntegrationsTab.js';
+import { cn } from '../lib/cn';
+import { Drawer } from '../components/ui/Drawer';
+import { Button } from '../components/ui/Button';
+import { Spinner } from '../components/ui/Spinner';
+import { Tabs } from '../components/ui/Tabs';
+import { authHeaders } from './auth';
+import { IntegrationsTab } from './IntegrationsTab';
 
 async function apiGet<T>(path: string): Promise<T> {
   const r = await fetch(path, { headers: authHeaders() }); if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);

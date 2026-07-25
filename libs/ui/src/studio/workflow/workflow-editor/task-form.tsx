@@ -2,7 +2,7 @@
  * TaskForm — the editor card for a single task within the tasklist:
  * id/instruction/input/output/dependsOn/goal/optional/condition.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -10,7 +10,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { SchemaEditor } from './schema-editor'
 import type { TaskDraft } from './types'
-import { TASKLIST_EDITOR_DEPENDS_BTN, TASKLIST_EDITOR_DEPENDS_BTN_ACTIVE, TASKLIST_EDITOR_DEPENDS_BTN_INACTIVE, TASKLIST_EDITOR_DEPENDS_GRID, TASKLIST_EDITOR_FLAGS_ROW, TASKLIST_EDITOR_FLAG_CONDITION, TASKLIST_EDITOR_FLAG_ITEM, TASKLIST_EDITOR_GOAL_BADGE, TASKLIST_EDITOR_TASK_BODY, TASKLIST_EDITOR_TASK_CONTROLS, TASKLIST_EDITOR_TASK_FORM, TASKLIST_EDITOR_TASK_FORM_GOAL, TASKLIST_EDITOR_TASK_HEADER, TASKLIST_EDITOR_TASK_ORDER, TASKLIST_EDITOR_TOGGLE, TASKLIST_EDITOR_TOGGLE_KNOB, TASKLIST_EDITOR_TOGGLE_KNOB_OFF, TASKLIST_EDITOR_TOGGLE_KNOB_ON, TASKLIST_EDITOR_TOGGLE_OFF, TASKLIST_EDITOR_TOGGLE_ON } from './tasklist-editor.props.js'
+import { TASKLIST_EDITOR_DEPENDS_BTN, TASKLIST_EDITOR_DEPENDS_BTN_ACTIVE, TASKLIST_EDITOR_DEPENDS_BTN_INACTIVE, TASKLIST_EDITOR_DEPENDS_GRID, TASKLIST_EDITOR_FLAGS_ROW, TASKLIST_EDITOR_FLAG_CONDITION, TASKLIST_EDITOR_FLAG_ITEM, TASKLIST_EDITOR_GOAL_BADGE, TASKLIST_EDITOR_TASK_BODY, TASKLIST_EDITOR_TASK_CONTROLS, TASKLIST_EDITOR_TASK_FORM, TASKLIST_EDITOR_TASK_FORM_GOAL, TASKLIST_EDITOR_TASK_HEADER, TASKLIST_EDITOR_TASK_ORDER, TASKLIST_EDITOR_TOGGLE, TASKLIST_EDITOR_TOGGLE_KNOB, TASKLIST_EDITOR_TOGGLE_KNOB_OFF, TASKLIST_EDITOR_TOGGLE_KNOB_ON, TASKLIST_EDITOR_TOGGLE_OFF, TASKLIST_EDITOR_TOGGLE_ON } from './tasklist-editor.props'
 
 export interface TaskFormProps {
   draft: TaskDraft

@@ -1,4 +1,4 @@
-import * as Prim from '../../primitives/index.js';
+import * as Prim from '../../primitives/index';
 import { useState } from 'react'
 import { useAuth } from '@lmthing/auth'
 import { Button } from '../../forms/button'

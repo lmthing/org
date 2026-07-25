@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useCallback } from 'react'
 import { useUIState } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -8,9 +8,9 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { X } from 'lucide-react'
 import { collectFolders } from '../new-file-modal'
-import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
-import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
-import { NEW_FILE_MODAL_CLOSE_ICON, NEW_FILE_MODAL_CREATE_BTN, NEW_FILE_MODAL_FIELDS, NEW_FILE_MODAL_SELECT, NEW_FILE_MODAL_TITLE } from '../../props.js'
+import { INPUT_BASE } from '../../../../elements/forms/input/index'
+import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index'
+import { NEW_FILE_MODAL_CLOSE_ICON, NEW_FILE_MODAL_CREATE_BTN, NEW_FILE_MODAL_FIELDS, NEW_FILE_MODAL_SELECT, NEW_FILE_MODAL_TITLE } from '../../props'
 
 interface NewFolderModalProps {
   isOpen: boolean

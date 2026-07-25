@@ -3,7 +3,7 @@
  * Phase 3: Auto-generates from instructions + selected knowledge content,
  * shows token count, copy to clipboard, collapsible.
  */
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useMemo, useCallback } from 'react'
 import { useToggle, useUIState, useGlobRead } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -14,8 +14,8 @@ import { PanelHeader } from '@lmthing/ui/elements/content/panel'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Code } from '@lmthing/ui/elements/typography/code'
-import { PANEL_BASE, PANEL_BODY } from '../../../../elements/content/panel/index.js'
-import { PROMPT_PREVIEW_BADGE, PROMPT_PREVIEW_EMPTY, PROMPT_PREVIEW_FOOTER_ROW, PROMPT_PREVIEW_HEADER, PROMPT_PREVIEW_HEADER_LEFT, PROMPT_PREVIEW_HEADER_ROW } from '../../props.js'
+import { PANEL_BASE, PANEL_BODY } from '../../../../elements/content/panel/index'
+import { PROMPT_PREVIEW_BADGE, PROMPT_PREVIEW_EMPTY, PROMPT_PREVIEW_FOOTER_ROW, PROMPT_PREVIEW_HEADER, PROMPT_PREVIEW_HEADER_LEFT, PROMPT_PREVIEW_HEADER_ROW } from '../../props'
 
 interface PromptPreviewPanelProps {
   instructions: string

@@ -1,7 +1,7 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { cn } from '../lib/cn.js';
-import { useStore } from '../store/store.js';
+import { cn } from '../lib/cn';
+import { useStore } from '../store/store';
 import {
   KIND_ICON,
   STATUS_COLOR,
@@ -11,7 +11,7 @@ import {
   recentSubtreeStatements,
   subtreeStmtCount,
   workDepth,
-} from './node-meta.js';
+} from './node-meta';
 
 const MAX_DEPTH_INDENT = 3;
 const STATUS_GLYPH: Record<string, string> = {

@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { Button } from '@lmthing/ui/elements/forms/button'
 import {
   Bold,
@@ -14,7 +14,7 @@ import {
   Eye,
   Pencil,
 } from 'lucide-react'
-import { MARKDOWN_TOOLBAR_ICON, MARKDOWN_TOOLBAR_MODE_BTN, MARKDOWN_TOOLBAR_MODE_ICON } from '../../props.js'
+import { MARKDOWN_TOOLBAR_ICON, MARKDOWN_TOOLBAR_MODE_BTN, MARKDOWN_TOOLBAR_MODE_ICON } from '../../props'
 
 export type FormatAction =
   | 'bold'

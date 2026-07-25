@@ -4,7 +4,7 @@
  * On save it creates tasklists/<name>/ (as a directory; the caller or
  * the editor adds actual task files).
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { useCallback, useEffect } from 'react'
 import { useUIState, useSpaceFS } from '@lmthing/state'
@@ -14,7 +14,7 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { CardFooter } from '@lmthing/ui/elements/content/card'
-import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../elements/overlays/dialog/index.js'
+import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../elements/overlays/dialog/index'
 
 interface SaveTasklistModalProps {
   isOpen: boolean

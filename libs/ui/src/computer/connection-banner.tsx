@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 import { Button } from '../elements/forms/button'
 
 export type ConnectionState = 'connected' | 'error' | 'booting'

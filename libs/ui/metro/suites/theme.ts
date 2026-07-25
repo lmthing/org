@@ -30,6 +30,20 @@ test('native color tokens are resolved values, never CSS var() indirection', () 
   expect(cssVars).toHaveLength(0)
 })
 
+test('radius tokens arrive as numbers of dp, not CSS rem strings', () => {
+  // The web scale is `"0.375rem"`/`"9999px"` so its output equals `--radius-*`. React Native takes
+  // radii as numbers and cannot resolve a `rem`; before `buildRadiusTokens` split the branch, every
+  // native corner was styled with a string. A jsdom test can check the BUILDER either way — only
+  // here is it the config the app actually gets.
+  const radius = tamaguiConfig.tokens.radius as Record<string, { val?: unknown }>
+  for (const [name, token] of Object.entries(radius)) {
+    const value = token?.val ?? token
+    if (typeof value !== 'number')
+      throw new Error(`radius.${name} is ${JSON.stringify(value)} — RN needs a number of dp`)
+  }
+  expect((radius['radius-lg']?.val ?? radius['radius-lg']) as number).toBe(8)
+})
+
 test('the Tailwind-parity space scale survives onto native ($4 === 16px)', () => {
   // Tamagui strips the `$` when it keys the token table; the VARIABLE it holds keeps `$4` as its
   // key and carries the resolved number.

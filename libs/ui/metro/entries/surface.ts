@@ -9,17 +9,17 @@
  * seam. Do not add an import "to be checked later": a red gate blocks the whole harness.
  *
  * Not yet here: `chat/`, `studio/`, `computer/` (still className-driven, see
- * `docs/react-native-tamagui-migration.md` §1c), `elements/overlays/dropdown` (subscribes to
- * `document` with no fork — `.issues/dropdown-uses-document-with-no-native-fork.md`) and the rest of
- * the `elements/` layer.
+ * `docs/react-native-tamagui-migration.md` §1c) and the rest of the `elements/` layer above the
+ * primitives and the overlays.
  */
 import * as Primitives from '../../src/elements/primitives'
 import * as Platform from '../../src/platform'
 import * as Dialog from '../../src/elements/overlays/dialog'
 import * as Sheet from '../../src/elements/overlays/sheet'
 import * as ContextMenu from '../../src/elements/overlays/context-menu'
+import * as Dropdown from '../../src/elements/overlays/dropdown'
 
 // Referenced, not just imported: Metro does not tree-shake in dev, but an unused namespace import
 // is exactly the kind of thing a future bundler flag would drop, and a gate that silently stops
 // covering its subject is worse than no gate.
-export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu }
+export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu, Dropdown }

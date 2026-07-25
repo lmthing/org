@@ -779,19 +779,30 @@ layers.
 
   This is what §9's "Native fork rot" row and §10's native bullet were missing.
 
-  **What it has found so far.** The first was `dialog`/`sheet`/`context-menu` importing `react-dom`
-  with no native fork despite a comment claiming one — **fixed**: each now has an `index.native.tsx`
-  built on RN `Modal` (step 7's overlay work, done ahead of the rest), with the overlays added to
-  the frontier entry and covered by `libs/ui/metro/suites/overlays.tsx`. Three findings are open and
-  filed:
-  - `.issues/metro-cannot-resolve-dot-js-import-specifiers.md` — **the blocker for step 7's surface
-    work.** `chat`/`studio`/`computer` import with an explicit `.js` extension against `.tsx` files;
-    Vite resolves it, Metro cannot, and it fails outright rather than falling back. Every surface
-    port hits this on its first file.
-  - `.issues/native-radius-tokens-are-css-rem-strings.md` — `$radius-*` reaches native as
-    `"0.375rem"`. Colors and themes take the `isWeb` branch (§5); radius was never given one.
-  - `.issues/dropdown-uses-document-with-no-native-fork.md` — the fourth overlay, which the graph
-    gate structurally cannot catch (a browser *global*, not a web *module*).
+  **What it has found, and what came of it.** Four defects so far, all invisible to web CI:
+
+  - **The overlays imported `react-dom`** with no native fork, despite a comment claiming one.
+    *Fixed* — `dialog`, `sheet`, `context-menu` and `dropdown` each have an `index.native.tsx` built
+    on RN `Modal` (step 7's overlay work, pulled forward), on the frontier entry and covered by
+    `libs/ui/metro/suites/overlays.tsx`. Each replaces a web MECHANISM with the platform's own: the
+    portal by `Modal`, `position: fixed` by flex inside it, ESC by `onRequestClose`, right-click by
+    long press, and the dropdown's `document` click-outside listener by a full-screen backdrop with
+    the anchor measured via `measureInWindow`.
+  - **`.js` import specifiers did not resolve under Metro** — 411 of them, the blocker for the whole
+    surface port. `libs/ui` resolves with `moduleResolution: "bundler"`, where the extension is
+    optional and was inherited from the NodeNext packages; Vite accepted it, Metro failed outright
+    rather than falling back. *Fixed* — extensions dropped across `libs/ui/src`, held by
+    `libs/ui/scripts/lint-import-extensions.mjs` (a `lint` gate, `--fix` to reapply). `core` and
+    `cli` are NodeNext and keep theirs.
+  - **`$radius-*` reached native as `"0.375rem"`** — colors and themes take the `isWeb` branch (§5),
+    radius never got one, so every native corner was styled with a CSS unit RN cannot resolve.
+    *Fixed* — `buildRadiusTokens(web)` in `theme/tamagui.config.ts`, exercised from both branches by
+    `tamagui-config.test.ts` and asserted as a resolved number by the harness.
+  - **No Tamagui component exposes a host node on native** — `View`, `styled(View)`, `NativeView`
+    and `Prim.Box` all leave a ref `null`, while a plain RN `View` in the same tree is measurable.
+    *Open*, and it blocks anything needing measurement, imperative focus or `scrollTo` —
+    `.issues/tamagui-primitives-expose-no-native-node-handle.md`. The dropdown fork works around it
+    with a plain `RNView` wrapper; that is a workaround, not the pattern.
 
 ---
 

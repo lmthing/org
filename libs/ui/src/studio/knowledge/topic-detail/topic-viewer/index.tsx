@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useCallback, useEffect } from 'react'
 import { useUIState, useSpaceFS } from '@lmthing/state'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
@@ -8,8 +8,8 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Badge } from '@lmthing/ui/elements/content/badge'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { useFile } from '@lmthing/ui/hooks/fs/useFile'
-import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
-import { TOPIC_VIEWER_EMPTY, TOPIC_VIEWER_EMPTY_CAPTION, TOPIC_VIEWER_HEADER, TOPIC_VIEWER_HEADER_ACTIONS, TOPIC_VIEWER_TEXTAREA } from '../../props.js'
+import { INPUT_BASE } from '../../../../elements/forms/input/index'
+import { TOPIC_VIEWER_EMPTY, TOPIC_VIEWER_EMPTY_CAPTION, TOPIC_VIEWER_HEADER, TOPIC_VIEWER_HEADER_ACTIONS, TOPIC_VIEWER_TEXTAREA } from '../../props'
 
 export interface TopicViewerProps {
   optionPath?: string

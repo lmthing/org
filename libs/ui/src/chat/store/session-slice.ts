@@ -7,9 +7,9 @@
 import {
   type SessionModel, type WireEvent, type UploadedAttachment, emptyModel, applyWireEvent,
   pushUserBlock, pushErrorBlock, pushAskBlock, resolveAskBlock,
-} from './model.js';
-import { computeEventCost, computeInflightCost, inflightTurns } from './pricing-slice.js';
-import type { AppState, Connection, InspectorTab } from './types.js';
+} from './model';
+import { computeEventCost, computeInflightCost, inflightTurns } from './pricing-slice';
+import type { AppState, Connection, InspectorTab } from './types';
 
 export interface SessionSlice {
   mode: AppState['mode'];

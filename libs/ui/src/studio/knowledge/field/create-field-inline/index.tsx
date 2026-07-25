@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useUIState } from '@lmthing/state'
 import { FolderPlus, X } from 'lucide-react'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -8,8 +8,8 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
-import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index.js'
-import { CREATE_FIELD_INLINE_ACTIONS, CREATE_FIELD_INLINE_ACTION_BTN, CREATE_FIELD_INLINE_CLOSE_ICON, CREATE_FIELD_INLINE_HEADER_ROW, CREATE_FIELD_INLINE_ICON, CREATE_FIELD_INLINE_TITLE_ROW } from '../../props.js'
+import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index'
+import { CREATE_FIELD_INLINE_ACTIONS, CREATE_FIELD_INLINE_ACTION_BTN, CREATE_FIELD_INLINE_CLOSE_ICON, CREATE_FIELD_INLINE_HEADER_ROW, CREATE_FIELD_INLINE_ICON, CREATE_FIELD_INLINE_TITLE_ROW } from '../../props'
 
 interface CreateFieldInlineProps {
     onSubmit: (name: string, description: string) => void
