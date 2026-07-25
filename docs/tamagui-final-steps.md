@@ -28,11 +28,24 @@
 >   ("cannot be used as a JSX component") errors from the `apps/web` typecheck, 487 → 318, and made
 >   `app-sidebar` render-testable for the first time.
 >
->   Flipping the script needs more. A real `tsc` over `libs/ui` reports **223** errors today, and they
->   are NOT the React problem: 116 `TS2339` (property does not exist), 64 `TS2322` (not assignable),
->   22 `TS2307` (unresolvable modules — `@tanstack/react-router`, the `react-native*` packages the
->   `.native.tsx` forks import, two `@/…` app aliases, two asset paths), 16 `TS2345`. That is
->   pre-existing type debt with its own shape, and it wants its own change.
+>   Flipping the script needs more, but **half of it was a tsconfig bug, not debt**: a real `tsc` over
+>   `libs/ui` reported **223** errors, of which **112 were phantom**. `vitest.setup.ts` imports
+>   `@testing-library/jest-dom/vitest` — whose entire job is to AUGMENT vitest's `Assertion` type with
+>   `toBeInTheDocument`/`toHaveClass`/`toBeDisabled` — but `include: ["src"]` meant tsc never loaded
+>   it. Adding the setup file to the program: **223 → 111**.
+>
+>   The remaining **111 is real**: 64 `TS2322` (prop-type mismatches on Tamagui components — the
+>   actual SPIKE C payload), 22 `TS2307` (**undeclared imports**: `@tanstack/react-router` ×9 and
+>   `@tanstack/react-query` ×2 are imported but appear in neither `dependencies` nor
+>   `peerDependencies`, which is a genuine packaging bug, not just a typecheck one; the 8
+>   `react-native*` are the `.native.tsx` forks' optional peers; 3 are app-local aliases/assets),
+>   16 `TS2345`, and a small tail.
+>
+>   A caution for whoever finishes this: `"types": ["vite/client"]` looks like the fix for the four
+>   `import.meta.env` errors and is a trap. Setting `types` RESTRICTS which `@types` packages enter the
+>   program, which silently suppressed ~111 of the remaining errors — the count fell to 1 and a
+>   deliberately-wrong probe (`const bad: number = "…"`) went unreported. Verify any typecheck
+>   improvement with a probe that must fail.
 
 ## The definition of done
 
