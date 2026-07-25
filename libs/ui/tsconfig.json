@@ -9,5 +9,12 @@
       "@lmthing/state/*": ["../state/src/*"]
     }
   },
-  "include": ["src"]
+  /*
+   * `vitest.setup.ts` is in the program on purpose, not by accident. It imports
+   * `@testing-library/jest-dom/vitest`, whose whole job is to AUGMENT vitest's `Assertion` type with
+   * `toBeInTheDocument`/`toHaveClass`/`toBeDisabled`/…. With `include: ["src"]` tsc never loaded it, so
+   * a real typecheck reported 112 phantom "Property 'toBeInTheDocument' does not exist" errors — half
+   * of everything standing between this package and dropping `--noCheck`.
+   */
+  "include": ["src", "vitest.setup.ts"]
 }
