@@ -31,7 +31,7 @@ Five conditions. Anything not on this list is out of scope and named in [§7](#7
 | | count | where |
 |---|---|---|
 | utility classNames | **0** | was 125. What remains is keyframes, BEM, `{className}`, and 2 `prose` boxes (§7) |
-| inline `style={{…}}` | **127** | on Tamagui-backed targets. A further **78** are on passthrough/lucide/`.native.tsx`, where `style` is CORRECT |
+| inline `style={{…}}` | **96** | on Tamagui-backed targets (was 127). A further **78** are on passthrough/lucide/`.native.tsx`, where `style` is CORRECT and permanent |
 | `@apply` directives | **0** | was 87 across 12 files |
 | Tailwind entry points | **0** | was 2. `libs/cli` keeps a compiler for project app pages — a product feature |
 | stylesheets | **14** | 180 rules — 11 component + `FieldTree.css` + the chat Tailwind entry + `animations.css`; 3 permanent |
@@ -305,14 +305,38 @@ Measured, split by whether `style` is the *correct* destination:
 | `style` on passthrough primitives / lucide / `.native.tsx` | **78** | **correct, permanent** — these ignore style props (§6), and RN styles *are* `style` |
 | `style` on Tamagui-backed targets | **127** | the remaining work |
 
-Of those 127, the codemod reports **40**; the rest are `style={styles.foo}` **references** to
-module-level `const styles = {…}` bags (`ReplChatView` alone has 20, plus `AgentChatPanel`,
-`Message`, `common`, `waking-screen`). The codemod only lifts inline object *literals*, so it cannot
-see them — closing this means converting those modules from `React.CSSProperties` to Tamagui prop
-bags (`padding: '4px 12px'` → `paddingVertical/Horizontal`, `borderBottom: '1px solid …'` → the three
-`borderBottom*` props, `flex: 1` → the grow/shrink/basis triple).
+**`scripts/style-bags-to-props.mjs`** closed the reference half. `inline-style-to-props.mjs` only
+lifts inline object *literals*, so `style={styles.container}` — a reference to a module-level
+`const styles = {…}` bag — was invisible to it, which was ~87 of the 127. The new pass converts the
+BAG (reusing `pairToProps`, imported rather than reimplemented, so there is no second mapping table to
+drift) and rewrites each call site to `{...styles.x}`. **29 bags, 37 call sites** across
+`ReplChatView`, `AgentChatPanel`, `waking-screen` and the agent-chat route.
 
-This axis does **not** block phase 4 — inline styles do not depend on Tailwind existing.
+Three things it had to get right, each found by a gate rather than by reading:
+
+- **`as const` is required, not cosmetic.** Without it TypeScript widens `alignSelf: 'flex-end'` to
+  `string`, which is not assignable to Tamagui's literal union — 23 typecheck errors' worth.
+- **Cast removal must be per-ENTRY.** A first version stripped every `as React.CSSProperties` in the
+  file with one regex, which also de-typed the entries that were *not* converted and are still passed
+  as `style`.
+- **`satisfies`, not just `as`.** `waking-screen`'s bag is
+  `const styles = {…} satisfies Record<…>`, so unwrapping only `as` reported "no styles object" and
+  skipped the file silently.
+
+Safety is per entry, not per file: one unmappable key (`wordBreak`, `resize`, `transition`, a
+non-literal `transform`) leaves that entry as `style` and reports it. Entry granularity is the right
+unit because each call site references exactly one entry, so no element ends up with half its styling
+on each channel — which would be worse than none, since Tamagui silently drops style props it does not
+understand.
+
+**Still open: 96.** They are dominated by spreads of a shared *local* bag —
+`style={{ ...MONO, fontWeight: 600 }}` (17 in `studio/$projectId/app/index.tsx`),
+`style={{ ...inputStyle, minHeight: (field.rows ?? 3) * 20 }}` (16 in `CatalogForm`), 13 in
+`gates.tsx` — where the extra members include computed values. Each wants its shared base extracted to
+a prop bag and the computed member passed as a prop; the pattern is uniform, so it is a further
+extension of the same script rather than 96 hand edits.
+
+This axis never blocked phase 4 — inline styles do not depend on Tailwind existing.
 
 ### Reference: the original plan for this phase
 
