@@ -39,7 +39,7 @@ describe('per-file builders smoke', () => {
     injectHostTools(vm, { renderHost: host, spaceDir: baseDir });
     for (const f of ['writeAgentFile', 'writeFunctionFile', 'writeTaskFile', 'writeKnowledgeIndex', 'writeKnowledgeOption', 'writeComponentFile', 'validateSpace']) injectFn(vm, f);
   });
-  afterEach(() => { vm.dispose(); rmSync(baseDir, { recursive: true, force: true }); });
+  afterEach(() => { vm.dispose(); rmSync(baseDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
   it('builds a valid, registerable space file-by-file', () => {
     const dir = join(baseDir, 'dog-expert');

@@ -12,7 +12,7 @@ import type { RenderHost } from '../session/types.js';
 describe('loadKnowledgeFile', () => {
   let dir: string;
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'kn-')); });
-  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
   it('returns a body-less markdown option file VERBATIM (no YAML mangling)', async () => {
     // This exact content used to be parsed as YAML: `- **MMLU-Pro**: 75.9` reads as an
@@ -103,8 +103,8 @@ describe('createLoadKnowledgeGlobal (multi-dir fallback)', () => {
     systemDir = mkdtempSync(join(tmpdir(), 'kn-system-'));
   });
   afterEach(() => {
-    rmSync(ownDir, { recursive: true, force: true });
-    rmSync(systemDir, { recursive: true, force: true });
+    rmSync(ownDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    rmSync(systemDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   // Reproduces the real bug: an agent's OWN runtime spaceDir (a project directory)
@@ -212,8 +212,8 @@ describe('loadKnowledge through a Session fork (end-to-end wiring regression)', 
 
       expect(displays, `logs:\n${logs.join('\n')}`).toContain('System household split guide.');
     } finally {
-      rmSync(projectDir, { recursive: true, force: true });
-      rmSync(sysDir, { recursive: true, force: true });
+      rmSync(projectDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      rmSync(sysDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 });

@@ -19,7 +19,7 @@ describe('saveTypecheckFile', () => {
     root = mkdtempSync(join(tmpdir(), 'lm-savetc-fn-'));
   });
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   function endpoint(dirSegs: string[], method: string, name: string) {

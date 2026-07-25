@@ -18,7 +18,7 @@ import type { StreamOpts } from '../eval/stream-types.js';
 
 const silentHost: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
 const tmpDirs: string[] = [];
-afterAll(async () => { await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true }))); });
+afterAll(async () => { await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))); });
 
 async function makeAgentSpace(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'lmthing-ctxseed-'));

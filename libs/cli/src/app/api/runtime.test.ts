@@ -28,7 +28,7 @@ async function scratch(): Promise<string> {
 }
 afterAll(async () => {
   for (const d of dbs) d.close();
-  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 // ── Schemas ───────────────────────────────────────────────────────────────────

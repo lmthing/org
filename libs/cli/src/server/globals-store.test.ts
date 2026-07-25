@@ -110,8 +110,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   vi.unstubAllGlobals();
-  await rm(storeDir, { recursive: true, force: true });
-  await rm(lmthingRoot, { recursive: true, force: true });
+  await rm(storeDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  await rm(lmthingRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 function makeResolver(over: { republished?: string[]; installed?: Array<[string, string | undefined]> } = {}) {
@@ -176,7 +176,7 @@ describe('createStoreResolver — install', () => {
     expect(installed).toEqual([]); // held back — no install notification
     // The local edit survives.
     expect(await readFile(join(dest, 'agents', 'demo', 'instruct.md'), 'utf8')).toBe('locally edited');
-    await rm(dest, { recursive: true, force: true }); // reset for later tests
+    await rm(dest, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); // reset for later tests
   });
 
   it('maps an unknown catalog id to a plain error outcome', async () => {
@@ -251,7 +251,7 @@ describe('installSpace end-to-end (router + real resolver + fixture store)', () 
     // Live-registered: the loaded Space sits in the session-shared map.
     expect(dynamicSpaces.get(dest)?.agents['demo']).toBeDefined();
     expect(republished).toEqual(['yes']);
-    await rm(dest, { recursive: true, force: true });
+    await rm(dest, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('DENIED consent = no install: refusal thrown, nothing written to disk', async () => {

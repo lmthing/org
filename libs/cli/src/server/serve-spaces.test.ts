@@ -28,7 +28,7 @@ const servers: SessionServerHandle[] = [];
 
 afterAll(async () => {
   await Promise.all(servers.map((s) => s.close()));
-  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 /** Mock: emit display(<tag>) on the first turn of a run, then stop. */

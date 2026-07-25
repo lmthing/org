@@ -62,7 +62,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(fixtureDir, { recursive: true, force: true });
+  await rm(fixtureDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 const installedDir = () => join(fixtureDir, 'spaces', 'integration-demo');

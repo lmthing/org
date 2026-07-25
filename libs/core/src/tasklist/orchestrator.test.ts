@@ -21,7 +21,7 @@ import type { StreamOpts } from '../eval/stream-types.js';
 
 const tmpDirs: string[] = [];
 afterAll(async () => {
-  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 /** Write a one-agent space whose `flow` tasklist is the given { filename: contents } map. */

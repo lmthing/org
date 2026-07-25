@@ -76,7 +76,7 @@ describe('system/memory functions (round-trip through host primitives)', () => {
 
   afterEach(() => {
     vm.dispose();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('remember then recall returns the stored value', () => {
@@ -128,7 +128,7 @@ describe('engineer scratch fs (readFile/writeFile/editFile/grep, jailed to a scr
 
   afterEach(() => {
     vm.dispose();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('createScratch returns a .lmthing/scratch/<random> dir under the project root', () => {
@@ -220,7 +220,7 @@ describe('system/web webFetch function (HTML → text)', () => {
 
   afterEach(() => {
     vm.dispose();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   const HTML =
@@ -382,7 +382,7 @@ describe('system/web webSearch function (DuckDuckGo fallback)', () => {
 
   afterEach(() => {
     vm.dispose();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     delete process.env['TAVILY_API_KEY'];
   });
 
@@ -576,7 +576,7 @@ describe('system/todo functions', () => {
 
   afterEach(() => {
     vm.dispose();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('todoWrite renders a checklist and todoRead returns it', () => {

@@ -51,7 +51,7 @@ export default function Item({ params }: { params: { id: string } }) {
 }
 
 afterAll(async () => {
-  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 async function exists(p: string): Promise<boolean> {

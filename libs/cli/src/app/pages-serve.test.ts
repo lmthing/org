@@ -47,7 +47,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(outDir, { recursive: true, force: true });
+  await rm(outDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 function handlerFor(bundle: { outDir: string; assetManifest: string[] } | null) {

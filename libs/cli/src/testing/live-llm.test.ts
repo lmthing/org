@@ -65,7 +65,7 @@ const record = (scenario: string, signal: string) => {
 };
 
 afterAll(() => {
-  for (const d of tmpDirs) rmSync(d, { recursive: true, force: true });
+  for (const d of tmpDirs) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   if (!ledger.length) return;
   const w = Math.max(...ledger.map((r) => r.scenario.length));
   process.stdout.write('\n──────── live-llm summary ────────\n');

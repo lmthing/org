@@ -64,7 +64,7 @@ describe('apiHandlerTypingError — the handler boundary must be REAL, never `an
       ].join('\n') + '\n',
     );
   });
-  afterEach(() => rmSync(projectRoot, { recursive: true, force: true }));
+  afterEach(() => rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
 
   // The exact escape that shipped the €0.00/"undefined" dashboard (scenario 07-life-admin run 26):
   // an `(input: any, ctx: ApiCtx): Promise<any>` handler returning fields the contract never declared.
@@ -188,7 +188,7 @@ describe('existingApiNames', () => {
     root = mkdtempSync(join(tmpdir(), 'lm-lint-'));
   });
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('maps each endpoint name to its file and EXCLUDES the target being written', () => {
@@ -256,7 +256,7 @@ describe('discoverApiEndpoints', () => {
     root = mkdtempSync(join(tmpdir(), 'lm-eps-'));
   });
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   function endpoint(dirSegs: string[], method: string, name: string) {

@@ -138,7 +138,7 @@ beforeEach(() => {
 
 afterEach(() => {
   pdb.close();
-  rmSync(dir, { recursive: true, force: true });
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 describe('schemaToCreateTableSql', () => {

@@ -16,7 +16,7 @@ describe('createProjectSync (live-project scaffold)', () => {
     root = mkdtempSync(join(tmpdir(), 'lmroot-'));
   });
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('scaffolds a live project on disk with project.json, instructions, spaces/ and documents/', () => {

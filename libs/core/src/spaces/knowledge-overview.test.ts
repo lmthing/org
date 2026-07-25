@@ -21,7 +21,7 @@ function makeSpace(): string {
 describe('knowledge field overview (index.md body)', () => {
   let dir: string;
   beforeEach(() => { dir = makeSpace(); });
-  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
   it('captures the field index.md body as field.description', async () => {
     const space = await loadSpace(dir);
