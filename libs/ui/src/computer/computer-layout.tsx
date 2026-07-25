@@ -6,6 +6,7 @@ import { Badge } from '../elements/content/badge'
 import { otherAppLinks } from '../lib/app-urls'
 import { ConnectionBanner } from './connection-banner'
 import type { RuntimeStatus, RuntimeTier } from './status-card'
+import { SIDEBAR_ITEM } from '../elements/nav/sidebar/index.js'
 
 export interface ComputerLayoutProps {
   status: RuntimeStatus
@@ -51,7 +52,7 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
             <Prim.Link
               key={link.app}
               href={link.url}
-              className="sidebar__item"
+              {...SIDEBAR_ITEM}
               title={`Open lmthing.${link.app}`}
               style={{ display: 'block', textDecoration: 'none' }}
             >

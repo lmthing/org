@@ -13,13 +13,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `border`, `destructive`, `foreground`, `muted`, `muted-foreground`, `popover`, `primary`, `primary-foreground`, `ring`, `sidebar`, `sidebar-border`
 
-### `elements/nav/sidebar/index.css`
-
-- **.md** — `.md`
-- **.sidebar** — `.sidebar` `.sidebar__item` `.sidebar__item--active`
-
-  Tokens: `sidebar-accent`, `sidebar-accent-foreground`, `sidebar-foreground`
-
 ## Components (features)
 
 ### `components/agent/builder/index.css`
