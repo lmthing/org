@@ -35,8 +35,7 @@
     "eslint": "^9.0.0"
   },
   "peerDependencies": {
-    "tailwindcss": "^4.0.0",
-    "tw-animate-css": "*"
+    "tailwindcss": "^4.0.0"
   },
   "author": "LMThing",
   "license": "MIT"
