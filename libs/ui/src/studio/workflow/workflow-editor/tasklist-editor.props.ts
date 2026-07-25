@@ -132,7 +132,7 @@ export const TASKLIST_EDITOR_TASK_ORDER = {
   "justifyContent": "center",
   "width": "1.5rem",
   "height": "1.5rem",
-  "flexShrink": "0",
+  "flexShrink": 0,
   "borderRadius": "9999px",
   "fontSize": "0.75rem",
   "fontWeight": "700",

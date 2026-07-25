@@ -7,14 +7,14 @@
 export const FIELD_TREE_NODE_ICON = {
   "width": "1rem",
   "height": "1rem",
-  "flexShrink": "0"
+  "flexShrink": 0
 } as const
 
 /** `.field-tree-node__icon--chevron` */
 export const FIELD_TREE_NODE_ICON_CHEVRON = {
   "width": "0.875rem",
   "height": "0.875rem",
-  "flexShrink": "0",
+  "flexShrink": 0,
   "color": "var(--color-muted-foreground)"
 } as const
 
@@ -31,7 +31,7 @@ export const FIELD_TREE_NODE_ICON_FILE = {
 /** `.field-tree-node__spacer` */
 export const FIELD_TREE_NODE_SPACER = {
   "width": "1.5rem",
-  "flexShrink": "0"
+  "flexShrink": 0
 } as const
 
 /** `.field-tree-node__label` */

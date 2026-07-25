@@ -55,7 +55,7 @@ export const STUDIO_SIDEBAR_HOME_LINK = {
   "justifyContent": "center",
   "width": "3rem",
   "height": "3rem",
-  "flexShrink": "0"
+  "flexShrink": 0
 } as const
 
 /** `.studio-sidebar__section-chevron` */
@@ -68,20 +68,20 @@ export const STUDIO_SIDEBAR_SECTION_CHEVRON = {
 export const STUDIO_SIDEBAR_ITEM_ICON_KNOWLEDGE = {
   "width": "16px",
   "height": "16px",
-  "flexShrink": "0",
+  "flexShrink": 0,
   "color": "var(--knowledge)"
 } as const
 
 /** `.studio-sidebar__create-btn` */
 export const STUDIO_SIDEBAR_CREATE_BTN = {
-  "opacity": "0.6"
+  "opacity": 0.6
 } as const
 
 /** `.studio-sidebar__create-icon` */
 export const STUDIO_SIDEBAR_CREATE_ICON = {
   "width": "16px",
   "height": "16px",
-  "flexShrink": "0"
+  "flexShrink": 0
 } as const
 
 /** `.studio-sidebar__collapsed-icon-inner` */
@@ -94,7 +94,7 @@ export const STUDIO_SIDEBAR_COLLAPSED_ICON_INNER = {
 export const STUDIO_SIDEBAR_FOOTER_ICON = {
   "width": "20px",
   "height": "20px",
-  "flexShrink": "0"
+  "flexShrink": 0
 } as const
 
 /** `.studio-sidebar__footer-label` */
