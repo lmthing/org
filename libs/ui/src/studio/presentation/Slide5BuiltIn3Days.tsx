@@ -64,7 +64,7 @@ export default function Slide5BuiltIn3Days() {
       {/* TOP */}
       <Prim.Col marginBottom="$10" alignItems="center">
         <Prim.Box
-          className="text-lg font-bold uppercase tracking-[0.16em]" marginBottom="1rem"
+          fontSize="$lg" fontWeight="$bold" textTransform="uppercase" letterSpacing="0.16em" marginBottom="1rem"
           style={{ color: colors.brand }}
         >
           What we achieved in 3 days

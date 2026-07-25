@@ -240,6 +240,18 @@ function baseClass(cls) {
   if ((m = cls.match(/^overflow-y-(auto|hidden|visible|scroll)$/))) return { overflowY: m[1] }
   if ((m = cls.match(/^opacity-(\d+)$/))) return { opacity: Number(m[1]) / 100 }
 
+  // `ring-*` → the outline props the element conversions already use for focus rings
+  // (`Button`/`Input`/`Select` all write `focusVisibleStyle: { outlineWidth, outlineStyle,
+  // outlineColor }`). Tailwind implements a ring as a box-shadow; an outline is the faithful
+  // Tamagui form and is what this codebase standardised on by hand.
+  if (cls === 'ring') return { outlineWidth: 3, outlineStyle: 'solid' }
+  if ((m = cls.match(/^ring-(\d+)$/))) return { outlineWidth: Number(m[1]), outlineStyle: 'solid' }
+  if ((m = cls.match(/^ring-offset-(\d+)$/))) return { outlineOffset: Number(m[1]) }
+  if ((m = cls.match(/^ring-(.+)$/))) { const v = colorToken(m[1]); return v == null ? null : { outlineColor: v } }
+
+  // arbitrary tracking — `tracking-[0.16em]`
+  if ((m = cls.match(/^tracking-\[(.+)\]$/))) return { letterSpacing: m[1] }
+
   // ── KNOWN-unmappable → 'keep', not null ────────────────────────────────────────────────────
   //
   // The difference matters: `null` means "unrecognised", and the transform bails on the WHOLE
@@ -255,7 +267,6 @@ function baseClass(cls) {
   if (/^prose(-|$)/.test(cls)) return 'keep'                                      // @tailwindcss/typography, styles injected HTML
   if (/^(space-[xy])-/.test(cls)) return 'keep'                                   // child margins, NOT `gap` — different semantics
   if (/^(backdrop-)?(blur|filter|brightness|contrast|saturate)(-|$)/.test(cls)) return 'keep'
-  if (/^ring(-|$)/.test(cls)) return 'keep'                                       // focus rings — outline props differ subtly
   if (cls === 'group' || /^group-/.test(cls)) return 'keep'                       // Tailwind group-hover; Tamagui `group` is a separate rewrite
   if (cls === 'sr-only' || cls === 'not-sr-only') return 'keep'
 
@@ -305,6 +316,17 @@ export function classToProps(className) {
       // `$token` colors flip with the theme automatically; keep dark: overrides on className so the
       // theme.css rule keeps applying until a `dark` sub-theme is authored (§5).
       keep.push(raw)
+      continue
+    }
+    // `placeholder:` is not a nested style object — Tamagui exposes the pseudo-element as a single
+    // prop (`placeholderTextColor`), which the form-control primitives translate to the CSS var
+    // Tamagui's own `.is_Input::placeholder` rule reads. So `placeholder:text-muted-foreground`
+    // becomes a flat prop, not a `placeholderStyle` bag.
+    if (variant === 'placeholder') {
+      const c = rest.match(/^text-(.+)$/)
+      const v = c && colorToken(c[1])
+      if (v) props.placeholderTextColor = v
+      else skip.push(raw)
       continue
     }
     if (variant in VARIANT_STYLE) {

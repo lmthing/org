@@ -43,7 +43,7 @@ export default function Slide6Scalability() {
       {/* TOP */}
       <Prim.Col marginBottom="$8" alignItems="center">
         <Prim.Box
-          className="text-lg font-bold uppercase tracking-[0.16em]" marginBottom="0.75rem"
+          fontSize="$lg" fontWeight="$bold" textTransform="uppercase" letterSpacing="0.16em" marginBottom="0.75rem"
           style={{ color: colors.brand }}
         >
           Scalability & Business Model
@@ -98,7 +98,7 @@ export default function Slide6Scalability() {
         {/* RIGHT — Pricing tiers */}
         <Prim.Col justifyContent="center" gap="$2">
           <Prim.Box
-            className="text-sm font-bold uppercase tracking-[0.12em]" marginBottom="0.5rem"
+            fontSize="$sm" fontWeight="$bold" textTransform="uppercase" letterSpacing="0.12em" marginBottom="0.5rem"
             style={{ color: colors.brand }}
           >
             Business Model

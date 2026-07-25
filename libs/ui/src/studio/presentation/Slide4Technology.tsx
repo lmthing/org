@@ -40,7 +40,7 @@ export default function Slide4Technology() {
       {/* TOP: headline */}
       <Prim.Col marginBottom="$16" alignItems="center">
         <Prim.Box
-          className="text-xl font-bold uppercase tracking-[0.16em]" marginBottom="1.25rem"
+          fontSize="$xl" fontWeight="$bold" textTransform="uppercase" letterSpacing="0.16em" marginBottom="1.25rem"
           style={{ color: colors.brand }}
         >
           How it works
