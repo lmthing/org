@@ -6,9 +6,8 @@ import * as Prim from '../../primitives/index'
  * `createComponent`) with the per-letter brand colors as `$`-token PROPS from cozy-text.styled.tsx
  * (`.cozy-text--neutral`/`--brand-1..5` → the `tone` map). CSS deleted.
  */
-export interface CozyThingTextProps {
+export interface CozyThingTextProps extends Omit<Prim.TextProps, 'children'> {
   text?: string
-  className?: string
 }
 
 type Tone = 'neutral' | 'brand-1' | 'brand-2' | 'brand-3' | 'brand-4' | 'brand-5'
@@ -49,22 +48,24 @@ const LmthingBrand = () => (
   </>
 )
 
-// The `.cozy-text` wrapper — a semibold span; `className` passes through (surface spacing/size).
-const Wrapper = ({ className, children }: { className?: string; children: React.ReactNode }) => (
-  <Prim.Text fontWeight="$semibold" className={className}>{children}</Prim.Text>
+// The `.cozy-text` wrapper — a semibold span. Callers' props pass through AFTER the default weight,
+// so a surface can restyle the brand mark (font face, size, line-height) with plain style props —
+// which is how `elements/nav/app-sidebar` carries what used to be `.app-sidebar__brand`.
+const Wrapper = ({ children, ...rest }: Prim.TextProps) => (
+  <Prim.Text fontWeight="$semibold" {...rest}>{children}</Prim.Text>
 )
 
-export function CozyThingText({ text = '', className }: CozyThingTextProps) {
+export function CozyThingText({ text = '', ...rest }: CozyThingTextProps) {
   const lowerText = text.toLowerCase().trim()
 
-  if (lowerText === 'lmt') return <Wrapper className={className}><LmtBrand /></Wrapper>
-  if (lowerText === 'lmthing') return <Wrapper className={className}><LmthingBrand /></Wrapper>
-  if (lowerText === 'thing') return <Wrapper className={className}><ThingBrand /></Wrapper>
+  if (lowerText === 'lmt') return <Wrapper {...rest}><LmtBrand /></Wrapper>
+  if (lowerText === 'lmthing') return <Wrapper {...rest}><LmthingBrand /></Wrapper>
+  if (lowerText === 'thing') return <Wrapper {...rest}><ThingBrand /></Wrapper>
 
   if (lowerText.startsWith('lmthing.')) {
     const suffix = text.trim().slice(8) // preserve original casing of suffix
     return (
-      <Wrapper className={className}>
+      <Wrapper {...rest}>
         <LmthingBrand />
         <Toned tone="neutral">.{suffix}</Toned>
       </Wrapper>
@@ -73,14 +74,14 @@ export function CozyThingText({ text = '', className }: CozyThingTextProps) {
   if (lowerText.startsWith('lmt.')) {
     const suffix = text.trim().slice(4)
     return (
-      <Wrapper className={className}>
+      <Wrapper {...rest}>
         <LmtBrand />
         <Toned tone="neutral">.{suffix}</Toned>
       </Wrapper>
     )
   }
 
-  return <Prim.Text className={className}>{text}</Prim.Text>
+  return <Prim.Text {...rest}>{text}</Prim.Text>
 }
 
 export default CozyThingText
