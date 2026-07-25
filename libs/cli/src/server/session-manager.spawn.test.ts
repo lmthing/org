@@ -18,7 +18,7 @@ import type { BuildSessionArgs } from './session-manager.js';
 
 const tmpDirs: string[] = [];
 afterAll(async () => {
-  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 const RUNS_SCHEMA = JSON.stringify({

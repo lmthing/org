@@ -20,6 +20,7 @@
  */
 import { describe, it, expect, afterAll, beforeAll, beforeEach } from 'vitest';
 import { mkdtemp, rm, cp, mkdir, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHmac } from 'node:crypto';
 import { join, dirname } from 'node:path';
@@ -34,7 +35,18 @@ import { clearIntegrationDescriptorCache } from './integration-manifests.js';
 import { clearInboundDedupe } from './webhook-dedupe.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+/**
+ * The REAL shipped space, six levels up: `<monorepo>/store/spaces/integration-demo`. That path is
+ * correct when this package sits at its normal `<monorepo>/sdk/org`, and `store/` lives in the OUTER
+ * repo, not in this one.
+ *
+ * So it is absent whenever `sdk/org` is checked out on its own (a submodule-only clone, or a CI job
+ * that fetches just this repo), and the suite then failed with a bare
+ * `ENOENT … /store/spaces/integration-demo` that reads like a broken test rather than a missing
+ * sibling checkout. Skip instead, the way `hasBin()` already guards the suites that need `dist/`.
+ */
 const DEMO_SPACE_SRC = join(HERE, '../../../../../../store/spaces/integration-demo');
+const hasDemoSpace = existsSync(DEMO_SPACE_SRC);
 
 const DEMO_BASE_TOKEN = 'tok-abc-123';
 const DEMO_WEBHOOK_SECRET = 'whsec-xyz-789';
@@ -75,7 +87,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((r) => mockProvider.close(() => r()));
-  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 const ORIGINAL_ENV = { ...process.env };
@@ -144,7 +156,7 @@ function fakeRes(): { res: ServerResponse; get: () => { status: number } } {
   return { res, get: () => ({ status }) };
 }
 
-describe('integration-demo — full contained loop against a mock provider (keyless)', () => {
+describe.skipIf(!hasDemoSpace)('integration-demo — full contained loop against a mock provider (keyless)', () => {
   it('verifies a signed inbound, emits message.received, runs the delegated handler agent, and posts the reply outbound via callConnection', async () => {
     // The events-pipeline path: inbound → HMAC verify → the space's webhook EMITTER
     // def `emit()` → `integration-demo/message.received` → a PROJECT event hook whose

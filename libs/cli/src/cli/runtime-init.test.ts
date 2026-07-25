@@ -7,7 +7,7 @@ import { materializeRuntime, runtimeNeedsInit, syncSystemSpaces, hashDir } from 
 describe('runtime-init', () => {
   let root: string;
   beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'lmthing-runtime-')); });
-  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+  afterEach(() => { rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
   it('runtimeNeedsInit is true for a fresh root', () => {
     expect(runtimeNeedsInit(root)).toBe(true);
@@ -57,7 +57,7 @@ describe('runtime-init', () => {
 describe('hashDir', () => {
   let dir: string;
   beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'hashdir-')); });
-  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
   it('is stable for identical content and changes when content changes', () => {
     writeFileSync(join(dir, 'a.md'), 'hello', 'utf8');
@@ -77,7 +77,7 @@ describe('syncSystemSpaces', () => {
   const archDir = (r: string) => join(r, 'system', 'spaces', 'system-architect');
   const readManifest = (r: string) => JSON.parse(readFileSync(join(r, 'system', '.shipped.json'), 'utf8')) as Record<string, string>;
   beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'sync-')); materializeRuntime(root); });
-  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+  afterEach(() => { rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
   it('is a no-op right after materialize (everything up to date)', () => {
     const r = syncSystemSpaces(root);

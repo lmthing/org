@@ -22,7 +22,7 @@ import type { StreamOpts } from '../eval/stream-types.js';
 
 const tmpDirs: string[] = [];
 afterAll(async () => {
-  for (const d of tmpDirs) await rm(d, { recursive: true, force: true });
+  for (const d of tmpDirs) await rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 async function makeTasklistSpace(files: Record<string, string>): Promise<string> {

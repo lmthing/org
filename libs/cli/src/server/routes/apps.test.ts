@@ -198,8 +198,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   vi.unstubAllGlobals();
-  await rm(storeDir, { recursive: true, force: true });
-  await rm(lmthingRoot, { recursive: true, force: true });
+  await rm(storeDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  await rm(lmthingRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 // ── GET /api/apps ────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ beforeEach(async () => {
   await writeFile(join(proot, 'hooks', 'on-insert.ts'), `export default { type: 'event', on: { event: 'project/db.items.insert' }, trigger: 'sp/agent#go' }`);
   await writeFile(join(proot, 'hooks', 'inbox.ts'), `export default { type: 'webhook', path: 'inbox', trigger: 'sp/agent#go' }`);
 });
-afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+afterEach(async () => { await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
 /** A capturing fake ServerResponse. */
 function fakeRes() {

@@ -29,6 +29,7 @@ const H = vi.hoisted(() => {
     sessionsCreated: [], // [{projectId}] — one per `new ThingSession(...)`, in construction order
     runJsonByRunId: new Map(),
     bumpCalls: [], // [{runId, stepCount, extra}]
+    bootWaits: [], // [{projectId, resumeSessionId}] — one per `waitBootReady` on a resume path
     seedDir: null, // an existing dir `snapshotDir` returns, so the runner's existsSync check passes
   };
 
@@ -38,6 +39,7 @@ const H = vi.hoisted(() => {
     state.sessionsCreated = [];
     state.runJsonByRunId = new Map();
     state.bumpCalls = [];
+    state.bootWaits = [];
   }
 
   class FakePod {
@@ -85,6 +87,15 @@ const H = vi.hoisted(() => {
     }
     async start() {
       return 'fake-session-id';
+    }
+    /**
+     * The runner calls this on every RESUME path (`runner.mjs`, `if (this.resumeFrom)`), so its
+     * absence here failed only the two resume cases and left the other six green — which is why the
+     * double drifted from `harness/lib/thing.mjs` unnoticed. Recording the calls rather than
+     * no-op'ing, so a resume that stops waiting for boot is a visible failure and not a silent one.
+     */
+    async waitBootReady({ resumeSessionId } = {}) {
+      state.bootWaits.push({ projectId: this.projectId, resumeSessionId });
     }
     async syncToTail() {}
     async send(content) {
@@ -240,6 +251,10 @@ describe('bootstrap: thing — discovery + rebind', () => {
     expect(results).toHaveLength(1);
     expect(H.state.sessionsCreated[0]).toEqual({ projectId: 'user' }); // resumed bound to `user`, not a guess
     expect(results[0].createdProject).toBe('discovered-trip');
+    // A resume MUST wait for the pod to finish booting before replaying, or the first message races
+    // the boot and 404s. Asserted, not just tolerated: this double silently lacked `waitBootReady`
+    // until now, so the call being made is exactly what went unnoticed.
+    expect(H.state.bootWaits).toHaveLength(1);
   });
 
   it('resuming AFTER discovery binds straight into the real project — never restarts in `user`', async () => {
@@ -269,6 +284,10 @@ describe('bootstrap: thing — discovery + rebind', () => {
     expect(H.state.sessionsCreated[0]).toEqual({ projectId: 'discovered-trip' });
     expect(results).toHaveLength(1);
     expect(results[0].createdProject).toBeUndefined(); // already known — no re-discovery bookkeeping
+    // Same contract as the previous case: a resume waits for boot before replaying, and it waits on
+    // the session bound to the REAL project.
+    expect(H.state.bootWaits).toHaveLength(1);
+    expect(H.state.bootWaits[0].projectId).toBe('discovered-trip');
   });
 });
 

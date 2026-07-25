@@ -28,7 +28,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'hooks-ctx-'));
   mkdirSync(join(root, PROJECT), { recursive: true });
 });
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
 
 function mockManager(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

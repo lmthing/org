@@ -17,7 +17,7 @@ describe('applyCwd', () => {
     base = mkdtempSync(join(tmpdir(), 'lmthing-cwd-'));
     moves = [];
   });
-  afterEach(() => { rmSync(base, { recursive: true, force: true }); });
+  afterEach(() => { rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
   it('returns undefined and does not chdir when --cwd is absent', () => {
     expect(applyCwd(['serve', '--port', '8080'], chdir)).toBeUndefined();

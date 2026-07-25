@@ -48,7 +48,7 @@ beforeEach(() => {
   clearEmitterDefCache();
 });
 afterEach(() => {
-  rmSync(root, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   clearEmitterDefCache();
   vi.restoreAllMocks();
   delete process.env['LMTHING_EMITTER_SCAN_TIMEOUT_MS'];

@@ -184,7 +184,7 @@ beforeAll(() => {
 });
 afterAll(async () => {
   delete process.env['LM_NO_CRONTAB'];
-  if (root) await rm(root, { recursive: true, force: true });
+  if (root) await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'hooks6c-'));

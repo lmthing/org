@@ -25,7 +25,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'space-hooks-'));
 });
 afterEach(() => {
-  rmSync(root, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   delete (globalThis as Record<string, unknown>)['__SPACE_HOOK_DEF_INPROC'];
   delete (globalThis as Record<string, unknown>)['__SPACE_HOOK_HANDLER_INPROC'];
 });

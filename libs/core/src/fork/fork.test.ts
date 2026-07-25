@@ -189,7 +189,7 @@ describe('ForkEngine', () => {
       expect(result.body).toBe('Hello knowledge');
       expect(result.loaded).toBe(true);
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
+      rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   });
 
@@ -407,7 +407,7 @@ describe('ForkEngine', () => {
         expect(dynamicSpaces.has(workerDir)).toBe(true);
         expect(dynamicSpaces.get(workerDir)!.agents['main']).toBeDefined();
       } finally {
-        rmSync(tmpDir, { recursive: true, force: true });
+        rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
       }
     });
 
@@ -436,7 +436,7 @@ describe('ForkEngine', () => {
         expect(result.available).toBe(false); // not injected for read-only roles
         expect(dynamicSpaces.size).toBe(0);
       } finally {
-        rmSync(tmpDir, { recursive: true, force: true });
+        rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
       }
     });
 
@@ -460,7 +460,7 @@ describe('ForkEngine', () => {
         });
         expect(result.available).toBe(true);
       } finally {
-        rmSync(tmpDir, { recursive: true, force: true });
+        rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
       }
     });
   });

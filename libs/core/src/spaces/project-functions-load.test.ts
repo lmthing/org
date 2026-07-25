@@ -21,7 +21,7 @@ async function makeProject(files: Record<string, string>): Promise<string> {
 }
 
 afterAll(async () => {
-  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 describe('loadProjectFunctions', () => {

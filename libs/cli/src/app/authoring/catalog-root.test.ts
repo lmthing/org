@@ -30,7 +30,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   if (originalEnv === undefined) delete process.env.LM_STORE_APPS_DIR;
   else process.env.LM_STORE_APPS_DIR = originalEnv;
-  rmSync(scratch, { recursive: true, force: true });
+  rmSync(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 describe('resolveCatalogRoot', () => {

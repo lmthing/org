@@ -401,7 +401,7 @@ describe('runDelegate — webSearch/webFetch are granted-only for the top-level 
  */
 const escalationTmpDirs: string[] = [];
 afterAll(async () => {
-  await Promise.all(escalationTmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(escalationTmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 /** A specialist with ONE action ("answer") whose tasklist resolves `{covered}`, plus a

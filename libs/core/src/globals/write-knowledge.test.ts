@@ -10,7 +10,7 @@ describe('writeKnowledge global', () => {
     base = mkdtempSync(join(tmpdir(), 'writeknow-'));
   });
   afterEach(() => {
-    rmSync(base, { recursive: true, force: true });
+    rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   it('writes an option file at knowledge/<domain>/<field>/<option>.md and mkdir -ps', () => {

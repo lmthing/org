@@ -33,7 +33,7 @@ describe('createProjectAuthoringGlobals', () => {
   });
 
   afterEach(() => {
-    rmSync(projectRoot, { recursive: true, force: true });
+    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   function make() {
@@ -621,7 +621,7 @@ describe('writeProjectPage / writeProjectComponent save-time checks', () => {
     projectRoot = mkdtempSync(join(tmpdir(), 'lm-partc-'));
   });
   afterEach(() => {
-    rmSync(projectRoot, { recursive: true, force: true });
+    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   function make() {
@@ -716,7 +716,7 @@ describe('writeProjectPage / writeProjectComponent / writeProjectApi save-time t
     projectRoot = mkdtempSync(join(tmpdir(), 'lm-savetc-'));
   });
   afterEach(() => {
-    rmSync(projectRoot, { recursive: true, force: true });
+    rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
   function make() {
     return createProjectAuthoringGlobals({ projectRoot });
@@ -843,7 +843,7 @@ describe('writeProjectApi — the endpoint boundary is TYPED and CHECKED at save
       ].join('\n') + '\n',
     );
   });
-  afterEach(() => rmSync(projectRoot, { recursive: true, force: true }));
+  afterEach(() => rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const make = () => createProjectAuthoringGlobals({ projectRoot });
 
   it('REJECTS the live escape — `(input: any, ctx: ApiCtx): Promise<any>` — and writes nothing', () => {
@@ -895,7 +895,7 @@ describe('writeProjectFile — the narrowly-scoped escape hatch', () => {
     return d;
   };
   afterEach(() => {
-    for (const d of roots.splice(0)) rmSync(d, { recursive: true, force: true });
+    for (const d of roots.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   // Every other artifact goes through a TYPED writer that validates its contract at write time.

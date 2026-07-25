@@ -35,7 +35,7 @@ import { HOOK_DEPTH_CAP } from '../app/hooks/loop-guard.js';
 
 const tmpDirs: string[] = [];
 afterAll(async () => {
-  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 // In-proc project-hook handlers share this process's globalThis — the fixture

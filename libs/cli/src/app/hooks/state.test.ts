@@ -26,7 +26,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'hooks-state-'));
 });
 afterEach(() => {
-  rmSync(root, { recursive: true, force: true });
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 describe('load / save', () => {

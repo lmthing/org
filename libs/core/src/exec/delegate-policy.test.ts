@@ -30,7 +30,7 @@ import type { Space, AgentDef } from '../spaces/load.js';
 
 const silentHost: RenderHost = { display: () => {}, ask: async () => undefined, log: () => {} };
 const tmpDirs: string[] = [];
-afterAll(async () => { await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true }))); });
+afterAll(async () => { await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))); });
 
 /** The LAST user message — what this turn is responding to (ERROR block,
  *  VARIABLES block, or the opening task). Branching on it (not the whole

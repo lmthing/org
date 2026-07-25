@@ -40,7 +40,7 @@ function fakeTracer() {
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'ledger-')); });
-afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
 describe('SessionLedger', () => {
   it('records a chat session with a delegate carrying inputs + per-delegate tokens', () => {
