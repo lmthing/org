@@ -45,7 +45,7 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
         {childIds.length > 0 ? (
           <Prim.Pressable
             onClick={(e) => { e.stopPropagation(); toggleExpand(node.id); }}
-            className="text-lm-muted" width="$3" textAlign="center" flexShrink={0}
+            color="var(--lm-muted)" width="$3" textAlign="center" flexShrink={0}
             aria-label={expanded ? 'collapse' : 'expand'}
           >
             {expanded ? '▾' : '▸'}
@@ -54,7 +54,7 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
           <Prim.Text width="$3" flexShrink={0} />
         )}
         <StatusIcon status={node.status} />
-        <Prim.Text className="text-lm-text" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
+        <Prim.Text color="var(--lm-text)" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
         <KindBadge kind={node.kind} />
         {dur && <Prim.Text className="text-lm-muted" color="10px" fontFamily="$mono" flexShrink={0} marginLeft="auto">{dur}</Prim.Text>}
         {retries > 0 && <Prim.Text className="text-lm-amber" color="10px" fontFamily="$mono" flexShrink={0} title={`${retries} retries`}>×{retries}</Prim.Text>}

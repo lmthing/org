@@ -70,11 +70,14 @@ function colorToken(raw) {
   if (/^(inherit|current|transparent|white|black)$/.test(raw)) {
     return { inherit: 'inherit', current: 'currentColor', transparent: 'transparent', white: '#fff', black: '#000' }[raw]
   }
-  // `lm-*` is the app-root runtime debug/space-theme palette (--lm-* vars injected in
-  // apps/web/src/routes/__root.tsx + Tailwind `bg-lm-*` utilities). It is NOT a Tamagui color
-  // token, so `$lm-accent` would resolve to nothing — keep those as className (they paint via
-  // Tailwind → var(--lm-*)) until the runtime-theme bridge exposes them as real tokens.
-  if (/^lm-/.test(raw)) return null
+  // `lm-*` is the runtime per-space palette. It is NOT a Tamagui token — `$lm-accent` resolves to
+  // nothing — and it must NOT be rewritten to the token it happens to alias today
+  // (`--lm-accent: var(--agent)`), because `applyThemeTokens` (theme.ts) overrides `--lm-*`
+  // directly from a space's theme.json: mapping to `$agent` would silently disconnect per-space
+  // theming. Emit the CSS var instead. Tamagui accepts a raw `var(...)` string on web — that is
+  // exactly the SPIKE-A1 mechanism the colour tokens themselves use — so the class becomes a prop
+  // while the runtime override keeps working.
+  if (/^lm-/.test(raw)) return `var(--${raw})`
   return `$${raw}`
 }
 

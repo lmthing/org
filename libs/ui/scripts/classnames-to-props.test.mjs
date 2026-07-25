@@ -194,8 +194,9 @@ describe('skip reporting (the manual tail)', () => {
     // form-control primitives turn into the CSS var its own `.is_Input::placeholder` rule reads.
     expect(classToProps('placeholder:text-muted-foreground').props)
       .toEqual({ placeholderTextColor: '$muted-foreground' })
-    // an `lm-*` colour has no `$token`, so it must not be silently invented
-    expect(classToProps('placeholder:text-lm-muted').skip).toContain('placeholder:text-lm-muted')
+    // an `lm-*` colour has no `$token`, but it does have a CSS var
+    expect(classToProps('placeholder:text-lm-muted').props)
+      .toEqual({ placeholderTextColor: 'var(--lm-muted)' })
   })
 
   it('maps arbitrary tracking', () => {
@@ -248,11 +249,22 @@ describe('regression: directional border WIDTH is not misread as a color token',
   })
 })
 
-describe('regression: lm-* runtime palette is kept as className, not a bogus $lm-* token', () => {
-  it('bg-/text-/border-lm-* stay residual', () => {
-    expect(classToProps('bg-lm-accent')).toMatchObject({ props: {}, keep: ['bg-lm-accent'] })
-    expect(classToProps('text-lm-text')).toMatchObject({ props: {}, keep: ['text-lm-text'] })
-    expect(classToProps('border-lm-border')).toMatchObject({ props: {}, keep: ['border-lm-border'] })
+describe('regression: lm-* runtime palette never becomes a bogus $lm-* token', () => {
+  it('maps to the CSS VAR, so the runtime per-space override still reaches it', () => {
+    // The original bug was emitting `$lm-accent`, which resolves to nothing. Emitting the var is
+    // the fix AND keeps `applyThemeTokens` (theme.ts) working: a space's theme.json overrides
+    // `--lm-accent` directly, so mapping to the token it currently aliases (`$agent`) would
+    // silently disconnect per-space theming.
+    expect(classToProps('bg-lm-accent').props).toEqual({ backgroundColor: 'var(--lm-accent)' })
+    expect(classToProps('text-lm-text').props).toEqual({ color: 'var(--lm-text)' })
+    expect(classToProps('border-lm-border').props).toEqual({ borderColor: 'var(--lm-border)' })
+    for (const c of ['bg-lm-accent', 'text-lm-text', 'border-lm-border']) {
+      expect(JSON.stringify(classToProps(c))).not.toContain('$lm-')
+    }
+  })
+
+  it('an lm-* colour with an alpha modifier is still kept (no faithful prop form)', () => {
+    expect(classToProps('bg-lm-accent/20').keep).toContain('bg-lm-accent/20')
   })
   it('real design-token colors still lift', () => {
     expect(classToProps('bg-primary').props).toEqual({ backgroundColor: '$primary' })
