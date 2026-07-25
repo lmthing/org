@@ -8,8 +8,8 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
-import '@lmthing/css/components/knowledge/index.css'
 import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index.js'
+import { CREATE_FIELD_INLINE_ACTIONS, CREATE_FIELD_INLINE_ACTION_BTN, CREATE_FIELD_INLINE_CLOSE_ICON, CREATE_FIELD_INLINE_HEADER_ROW, CREATE_FIELD_INLINE_ICON, CREATE_FIELD_INLINE_TITLE_ROW } from '../../props.js'
 
 interface CreateFieldInlineProps {
     onSubmit: (name: string, description: string) => void
@@ -32,16 +32,16 @@ export function CreateFieldInline({ onSubmit, onCancel }: CreateFieldInlineProps
     return (
         <Prim.Box {...PANEL_BASE} marginBottom="$6">
             <Prim.Box {...PANEL_HEADER}>
-                <Stack row gap="md" className="create-field-inline__header-row">
-                    <Stack row gap="md" className="create-field-inline__title-row">
-                        <FolderPlus className="create-field-inline__icon" />
+                <Stack row gap="md" {...CREATE_FIELD_INLINE_HEADER_ROW}>
+                    <Stack row gap="md" {...CREATE_FIELD_INLINE_TITLE_ROW}>
+                        <FolderPlus {...CREATE_FIELD_INLINE_ICON} />
                         <Prim.Box>
                             <Heading level={3}>Create Knowledge Field</Heading>
                             <Caption muted>Define a new field of knowledge</Caption>
                         </Prim.Box>
                     </Stack>
                     <Button variant="ghost" size="icon" onClick={onCancel}>
-                        <X className="create-field-inline__close-icon" />
+                        <X {...CREATE_FIELD_INLINE_CLOSE_ICON} />
                     </Button>
                 </Stack>
             </Prim.Box>
@@ -68,11 +68,11 @@ export function CreateFieldInline({ onSubmit, onCancel }: CreateFieldInlineProps
                                 compact
                             />
                         </Prim.Box>
-                        <Stack row gap="sm" className="create-field-inline__actions">
-                            <Button variant="outline" onClick={onCancel} className="create-field-inline__action-btn">
+                        <Stack row gap="sm" {...CREATE_FIELD_INLINE_ACTIONS}>
+                            <Button variant="outline" onClick={onCancel} {...CREATE_FIELD_INLINE_ACTION_BTN}>
                                 Cancel
                             </Button>
-                            <Button variant="primary" type="submit" disabled={!name.trim()} className="create-field-inline__action-btn">
+                            <Button variant="primary" type="submit" disabled={!name.trim()} {...CREATE_FIELD_INLINE_ACTION_BTN}>
                                 Create Field
                             </Button>
                         </Stack>

@@ -2,7 +2,6 @@
 
 import { useAuth } from '@lmthing/auth'
 
-import '@lmthing/css/components/auth/index.css'
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'

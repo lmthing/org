@@ -9,8 +9,8 @@ import { Input } from '@lmthing/ui/elements/forms/input'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { BookOpen } from 'lucide-react'
-import '@lmthing/css/components/knowledge/index.css'
 import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
+import { DIR_METADATA_HEADER, DIR_METADATA_ICON } from '../../props.js'
 
 interface FieldIndexPanelProps {
   domain: string
@@ -86,8 +86,8 @@ export function FieldIndexPanel({ domain, field }: FieldIndexPanelProps) {
   return (
     <Prim.Box padding="$6" maxWidth={512}>
       <Stack gap="md">
-        <Stack row className="dir-metadata__header">
-          <BookOpen className="dir-metadata__icon" />
+        <Stack row {...DIR_METADATA_HEADER}>
+          <BookOpen {...DIR_METADATA_ICON} />
           <Prim.Box>
             <Heading level={3}>{field}</Heading>
             <Caption muted>{indexPath}</Caption>

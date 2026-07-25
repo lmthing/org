@@ -1,5 +1,4 @@
 import * as Prim from '../../../../elements/primitives/index.js';
-import '@lmthing/css/components/knowledge/index.css'
 
 interface MarkdownPreviewProps {
   markdown: string

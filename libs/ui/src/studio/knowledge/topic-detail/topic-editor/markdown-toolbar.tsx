@@ -1,6 +1,5 @@
 import * as Prim from '../../../../elements/primitives/index.js';
 import { Button } from '@lmthing/ui/elements/forms/button'
-import '@lmthing/css/components/knowledge/index.css'
 import {
   Bold,
   Italic,
@@ -15,6 +14,7 @@ import {
   Eye,
   Pencil,
 } from 'lucide-react'
+import { MARKDOWN_TOOLBAR_ICON, MARKDOWN_TOOLBAR_MODE_BTN, MARKDOWN_TOOLBAR_MODE_ICON } from '../../props.js'
 
 export type FormatAction =
   | 'bold'
@@ -40,40 +40,40 @@ export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolba
   return (
     <Prim.Box display="flex" alignItems="center" flexWrap="wrap" gap="$0.5" paddingVertical="$1" paddingHorizontal="$2" borderBottomWidth={1} borderBottomColor="$border">
       <Button variant="ghost" size="icon" onClick={() => onFormat('bold')} title="Bold (Ctrl+B)" disabled={mode === 'preview'}>
-        <Bold className="markdown-toolbar__icon" />
+        <Bold {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
       <Button variant="ghost" size="icon" onClick={() => onFormat('italic')} title="Italic (Ctrl+I)" disabled={mode === 'preview'}>
-        <Italic className="markdown-toolbar__icon" />
+        <Italic {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
       <Button variant="ghost" size="icon" onClick={() => onFormat('heading')} title="Heading" disabled={mode === 'preview'}>
-        <Heading1 className="markdown-toolbar__icon" />
+        <Heading1 {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
 
       <Prim.Text width={1} height="$5" backgroundColor="$border" marginVertical={0} marginHorizontal="$1" />
 
       <Button variant="ghost" size="icon" onClick={() => onFormat('bullet-list')} title="Bullet list" disabled={mode === 'preview'}>
-        <List className="markdown-toolbar__icon" />
+        <List {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
       <Button variant="ghost" size="icon" onClick={() => onFormat('numbered-list')} title="Numbered list" disabled={mode === 'preview'}>
-        <ListOrdered className="markdown-toolbar__icon" />
+        <ListOrdered {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
       <Button variant="ghost" size="icon" onClick={() => onFormat('blockquote')} title="Blockquote" disabled={mode === 'preview'}>
-        <Quote className="markdown-toolbar__icon" />
+        <Quote {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
 
       <Prim.Text width={1} height="$5" backgroundColor="$border" marginVertical={0} marginHorizontal="$1" />
 
       <Button variant="ghost" size="icon" onClick={() => onFormat('inline-code')} title="Inline code" disabled={mode === 'preview'}>
-        <Code className="markdown-toolbar__icon" />
+        <Code {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
       <Button variant="ghost" size="icon" onClick={() => onFormat('code-block')} title="Code block" disabled={mode === 'preview'}>
-        <Code2 className="markdown-toolbar__icon" />
+        <Code2 {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
       <Button variant="ghost" size="icon" onClick={() => onFormat('link')} title="Link" disabled={mode === 'preview'}>
-        <Link className="markdown-toolbar__icon" />
+        <Link {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
       <Button variant="ghost" size="icon" onClick={() => onFormat('hr')} title="Horizontal rule" disabled={mode === 'preview'}>
-        <Minus className="markdown-toolbar__icon" />
+        <Minus {...MARKDOWN_TOOLBAR_ICON} />
       </Button>
 
       <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" />
@@ -83,18 +83,18 @@ export function MarkdownToolbar({ mode, onFormat, onModeChange }: MarkdownToolba
           variant={mode === 'edit' ? 'outline' : 'ghost'}
           size="sm"
           onClick={() => onModeChange('edit')}
-          className="markdown-toolbar__mode-btn"
+          {...MARKDOWN_TOOLBAR_MODE_BTN}
         >
-          <Pencil className="markdown-toolbar__mode-icon" />
+          <Pencil {...MARKDOWN_TOOLBAR_MODE_ICON} />
           Edit
         </Button>
         <Button
           variant={mode === 'preview' ? 'outline' : 'ghost'}
           size="sm"
           onClick={() => onModeChange('preview')}
-          className="markdown-toolbar__mode-btn"
+          {...MARKDOWN_TOOLBAR_MODE_BTN}
         >
-          <Eye className="markdown-toolbar__mode-icon" />
+          <Eye {...MARKDOWN_TOOLBAR_MODE_ICON} />
           Preview
         </Button>
       </Prim.Box>

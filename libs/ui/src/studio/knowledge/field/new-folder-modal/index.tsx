@@ -8,9 +8,9 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { X } from 'lucide-react'
 import { collectFolders } from '../new-file-modal'
-import '@lmthing/css/components/knowledge/index.css'
 import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
 import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
+import { NEW_FILE_MODAL_CLOSE_ICON, NEW_FILE_MODAL_CREATE_BTN, NEW_FILE_MODAL_FIELDS, NEW_FILE_MODAL_SELECT, NEW_FILE_MODAL_TITLE } from '../../props.js'
 
 interface NewFolderModalProps {
   isOpen: boolean
@@ -47,14 +47,14 @@ export function NewFolderModal({ isOpen, onClose, onCreate, folders, defaultLoca
         onClick={e => e.stopPropagation()}
       >
         <Prim.Box {...DIALOG_HEADER}>
-          <Heading level={3} className="new-file-modal__title">New Folder</Heading>
+          <Heading level={3} {...NEW_FILE_MODAL_TITLE}>New Folder</Heading>
           <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="new-file-modal__close-icon" />
+            <X {...NEW_FILE_MODAL_CLOSE_ICON} />
           </Button>
         </Prim.Box>
 
         <Prim.Box {...DIALOG_CONTENT}>
-          <Stack gap="md" className="new-file-modal__fields">
+          <Stack gap="md" {...NEW_FILE_MODAL_FIELDS}>
             <Prim.Box>
               <Label>Folder Name</Label>
               <Input
@@ -72,7 +72,7 @@ export function NewFolderModal({ isOpen, onClose, onCreate, folders, defaultLoca
             <Prim.Box>
               <Label>Parent Location</Label>
               <Prim.Select
-                {...INPUT_BASE} className="new-file-modal__select"
+                {...INPUT_BASE} {...NEW_FILE_MODAL_SELECT}
                 value={parentLocation}
                 onChange={e => setParentLocation(e.target.value)}
               >
@@ -92,7 +92,7 @@ export function NewFolderModal({ isOpen, onClose, onCreate, folders, defaultLoca
               variant="primary"
               onClick={handleCreate}
               disabled={!folderName.trim()}
-              className="new-file-modal__create-btn"
+              {...NEW_FILE_MODAL_CREATE_BTN}
             >
               Create
             </Button>
