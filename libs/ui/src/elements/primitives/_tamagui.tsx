@@ -1,7 +1,7 @@
 import * as React from 'react'
 // WEB primitives use the WEB config (empty theme → no theme-var injection; colors come from
-// theme.css/Tailwind). The `*.native.tsx` forks use the colored `tamagui.config`. See tamagui-web.config.ts.
-import { styled, View, createComponent } from '../../theme/tamagui-web.config'
+// theme.css/Tailwind). The `*.native.tsx` forks use the colored `tamagui.config`. See tamagui.config.ts.
+import { styled, View, createComponent } from '../../theme/tamagui.config'
 
 /**
  * Shared factory for the WEB Tamagui primitives (Phase-1 / Part III of the migration).
@@ -139,7 +139,7 @@ export type BoxStyleProps = {
   rotate?: string
   /**
    * The animation driver's named transition (`quick`/`medium`/`slow`/`none`, declared in
-   * `theme/tamagui-web.config.ts`). NOTE the prop is `transition`, NOT `animation` — Tamagui 2.5
+   * `theme/tamagui.config.ts`). NOTE the prop is `transition`, NOT `animation` — Tamagui 2.5
    * renamed it, and `animation` is silently ignored (`useComponentState` gates on
    * `'transition' in props`). `animateOnly` narrows it, and its entries must be **hyphenated CSS**
    * property names: `background-color` works, `backgroundColor` emits an invalid declaration that

@@ -7,7 +7,7 @@
 > happened and why*, this one is *what is left and in what order*.
 
 > **Status.** Phases **0.5 ✅ · 1 ✅ · 2 ✅ · 3 ✅** (className axis; inline-`style` tail ◐) ·
-> **4 ✅ TAILWIND IS DELETED** · **5b ✅** · **5a/5c** open.
+> **4 ✅ TAILWIND IS DELETED** · **5a ✅ ONE CONFIG** · **5b ✅** · **5c ✅ measured**.
 > Each completed phase keeps its section, rewritten to record what was actually done and **where this
 > plan was wrong** — the corrections matter more than the ticks, because several were load-bearing.
 >
@@ -35,8 +35,8 @@ Five conditions. Anything not on this list is out of scope and named in [§7](#7
 | `@apply` directives | **0** | was 87 across 12 files |
 | Tailwind entry points | **0** | was 2. `libs/cli` keeps a compiler for project app pages — a product feature |
 | stylesheets | **14** | 180 rules — 11 component + `FieldTree.css` + the chat Tailwind entry + `animations.css`; 3 permanent |
-| Tamagui configs | **2** | `tamagui.config.ts` (native hex), `tamagui-web.config.ts` (var-backed) |
-| compiler extraction | **off** | deliberate — `libs/utils/src/vite.mjs` |
+| Tamagui configs | **1** | `tamagui.config.ts`, platform-split on `isWeb` |
+| compiler extraction | **off** | measured no-op in §5c: identical output hashes AND build time |
 | CSS bundle | **19.52 kB** | from 171 kB — `apps/web` build, gzip 5.04 kB |
 | P0 fixtures | **246** | 222 + the animation/icon rows, minus the `tw:` halves phase 4 retired |
 | `libs/ui` tests | **287** | +3 `app-sidebar` RENDER tests, impossible before §5b |
@@ -540,6 +540,39 @@ delta on `box-sizing`/`margin`/`border-width` means preflight was under-extracte
 
 Independent of the above; do it last because it touches everything.
 
+### 5a ✅ DONE · 5c ✅ DONE
+
+**5a — one config.** `tamagui.config.ts` is now the only config; `tamagui-web.config.ts` is deleted
+and `tamaguiWebConfig` survives as an alias so ~19 call sites did not churn in the same change.
+Everything the two files shared — the SPIKE-B scales, radius/font/zIndex tokens, media breakpoints,
+`settings` — was duplicated verbatim, which was the whole drift risk. Exactly three things branch on
+`isWeb`: colour tokens (`var(--…)` vs resolved hex), themes (one empty `app` vs the `light`/`dark`
+pair), and the animation driver (CSS vs react-native).
+
+**The branch had to cover `themes`, not just `tokens.color`.** A coloured `light`/`dark` pair on web
+injects `.t_light`-scoped custom properties that override `theme.css` in dark mode — a real shipped
+bug with `.issues` history. Merging the configs puts that one boolean away, so it is now asserted:
+`buildThemes(true)` must be exactly `{ app: {} }`.
+
+**What convergence cost, and how it was paid.** The native branch is unreachable from a jsdom test
+(`isWeb` is always true there), so the native theme-parity assertions two files gave for free would
+have silently stopped running. The platform choice is therefore extracted as **pure exported
+functions** — `buildThemes(web)` / `buildColorTokens(web)` — and the tests exercise **both** branches,
+including that the two produce the same key set. That is strictly better coverage than the split had.
+
+**5c — extraction, measured rather than assumed.** The plan said "measure, don't assume", so:
+flipping `disableExtraction` to `false` is a **no-op**. Two builds each way gave **byte-identical
+output** (same `index-*.css`/`index-*.js` content hashes) and the same wall clock (4.3–4.5 s off vs
+4.4–4.6 s on — noise).
+
+The old justification in the code was wrong: it claimed the per-file worker "~3×'d the build", which
+is no longer reproducible under vite 8 / rolldown. The real reason is **scope** — the components the
+surfaces render come from `@lmthing/ui`, which cannot be listed in the plugin's `components` (config
+bundling it pulls app-only deps that do not resolve), so the extractor has nothing in range. It stays
+off, now with the measurement in the comment instead of a stale claim.
+
+### Original notes
+
 **5a — config convergence.** `tamagui.config.ts` (native, resolved hex) and `tamagui-web.config.ts`
 (web, `var(--…)`-backed) exist because SPIKE A1 needs var-backed colours on web and native has no
 CSS variables. Converge to one config with a platform-conditional colour token set. Note the vite
@@ -614,11 +647,11 @@ Phases 1–3 are independent and can land in any order or in parallel; phase 4 n
 5b. SPIKE C       one React 19, real renders     ✅ DONE (taken early — it
                                                    unblocks verifying the rest)
 4. delete Tailwind   0 directives, 19.52 kB CSS  ✅ DONE
-                        ↓
-5a/5c one config + extraction               not started
+5a. one config    platform-split on isWeb       ✅ DONE
+5c. extraction    measured — a no-op either way ✅ DONE
 ```
 
-**Next: phase 5a (one Tamagui config), then the inline-`style` tail, then 5c.** 5b was pulled forward out of order on purpose:
+**Next: the inline-`style` tail (§3) — the last open item.** 5b was pulled forward out of order on purpose:
 `libs/ui` could not be typechecked or render-tested at all, so every other phase was being verified
 with one hand tied. It cost one dependency bump and returned 133 typecheck errors and three
 previously-impossible render tests.

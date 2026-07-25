@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { TamaguiProvider } from '@tamagui/core'
-import { tamaguiWebConfig } from '@lmthing/ui/theme/tamagui-web.config'
+import { tamaguiWebConfig } from '@lmthing/ui/theme/tamagui.config'
 // The REAL shipped Pressable primitive — verifies the actual code (tag name + computed style).
 import { Pressable as Cand } from '@lmthing/ui/elements/primitives/index'
 import './surface.css'

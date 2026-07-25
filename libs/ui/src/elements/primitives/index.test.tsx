@@ -2,7 +2,7 @@ import { render } from '@testing-library/react'
 import * as React from 'react'
 import { describe, it, expect } from 'vitest'
 import { TamaguiProvider } from '@tamagui/core'
-import { tamaguiWebConfig } from '../../theme/tamagui-web.config'
+import { tamaguiWebConfig } from '../../theme/tamagui.config'
 import {
   Box,
   Text,

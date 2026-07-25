@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tamaguiWebConfig } from './tamagui-web.config'
+import { tamaguiWebConfig } from './tamagui.config'
 import {
   webColorTokens,
   space as genSpace,
@@ -18,7 +18,7 @@ import {
 const val = (v: unknown): string =>
   typeof v === 'object' && v !== null && 'val' in v ? String((v as { val: unknown }).val) : String(v)
 
-describe('tamagui-web.config createTamagui (SPIKE A1)', () => {
+describe('tamagui.config createTamagui (SPIKE A1)', () => {
   it('constructs with the single empty `app` theme', () => {
     expect(tamaguiWebConfig).toBeTruthy()
     expect(tamaguiWebConfig.themes.app).toBeTruthy()

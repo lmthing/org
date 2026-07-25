@@ -2,7 +2,7 @@ import { render, fireEvent, cleanup } from '@testing-library/react'
 import * as React from 'react'
 import { describe, it, expect, afterEach } from 'vitest'
 import { TamaguiProvider } from '@tamagui/core'
-import { tamaguiWebConfig } from '../../../theme/tamagui-web.config'
+import { tamaguiWebConfig } from '../../../theme/tamagui.config'
 import { Sheet, SheetContent, SheetTitle } from './index'
 
 const P = ({ children }: { children: React.ReactNode }) => (

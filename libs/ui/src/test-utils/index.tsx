@@ -5,7 +5,7 @@ import {
   type RenderResult,
 } from '@testing-library/react'
 import { TamaguiProvider } from '@tamagui/core'
-import { tamaguiWebConfig } from '../theme/tamagui-web.config'
+import { tamaguiWebConfig } from '../theme/tamagui.config'
 
 /**
  * Test render for the SHIPPED element layer (`elements/**` `index.test.tsx`).
