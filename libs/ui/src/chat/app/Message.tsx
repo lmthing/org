@@ -47,10 +47,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
       data-testid="ask-form"
       data-ask-id={block.askId}
       marginVertical="0.25rem"
-      className={cn(
-        'border rounded-xl p-3 transition-colors',
-        inert ? 'border-border opacity-70' : 'border-agent/50 bg-agent/5',
-      )}
+      className={cn("transition-colors", inert ? 'border-border opacity-70' : 'border-agent/50 bg-agent/5')} borderWidth={1} borderRadius="$radius-xl" padding="$3"
     >
       {block.state === 'answered' && (
         <Prim.Box fontSize="$xs" color="$knowledge" fontFamily="$mono" marginBottom="0.5rem">✓ {preview(block.answer, 200)}</Prim.Box>
@@ -83,7 +80,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
             <Prim.Pressable
               disabled={inert}
               onClick={() => onSubmit(text)}
-              className="px-3 py-1.5 bg-agent text-agent-foreground rounded-lg text-sm disabled:opacity-50 hover:opacity-90 transition-opacity"
+              className="transition-opacity" paddingHorizontal="$3" paddingVertical="$1.5" backgroundColor="$agent" color="$agent-foreground" borderRadius="$radius-lg" fontSize="$sm" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ opacity: 0.9 }}
             >
               Send
             </Prim.Pressable>
@@ -102,7 +99,7 @@ function AttributionButton({ nodeId, label }: { nodeId: string; label: string })
   return (
     <Prim.Pressable
       onClick={() => { selectNode(nodeId, true); setDevPanelOpen(true); }}
-      className="text-xs text-muted-foreground hover:text-foreground font-mono transition-colors" marginBottom="0.25rem" display="block"
+      className="transition-colors" fontSize="$xs" color="$muted-foreground" fontFamily="$mono" hoverStyle={{ color: "$foreground" }} marginBottom="0.25rem" display="block"
       data-node-id={nodeId}
     >
       {label}
@@ -124,7 +121,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <Prim.Pressable
       onClick={() => void copy()}
-      className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-1 rounded"
+      className="transition-opacity" flexShrink={0} opacity={0} color="$muted-foreground" padding="$1" borderRadius="$radius" $group-hover={{ opacity: 1 }} hoverStyle={{ color: "$foreground" }}
       title="Copy"
       aria-label="Copy message"
     >
@@ -200,7 +197,7 @@ export function Message({ block }: MessageProps) {
   if (block.type === 'user') {
     const attachments = block.attachments ?? [];
     return (
-      <Prim.Row className="justify-end px-4 py-2 lm-fade-in group">
+      <Prim.Row className="lm-fade-in group" justifyContent="flex-end" paddingHorizontal="$4" paddingVertical="$2">
         <Prim.Row maxWidth="75%" gap="$1.5" alignItems="flex-start">
           <CopyButton text={block.content} />
           <Prim.Col gap="$1.5" alignItems="flex-end">
@@ -227,7 +224,7 @@ export function Message({ block }: MessageProps) {
     const isString = typeof block.descriptor === 'string';
     const textForCopy = isString ? (block.descriptor as string) : preview(block.descriptor, 500);
     return (
-      <Prim.Box className="px-4 py-2 lm-fade-in group" data-testid="block">
+      <Prim.Box className="lm-fade-in group" paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
         <Prim.Row gap="$1.5" alignItems="flex-start">
           <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0} fontSize="$sm" color="$foreground">
             {showAttribution && (
@@ -247,7 +244,7 @@ export function Message({ block }: MessageProps) {
   // Error callout
   if (block.type === 'error') {
     return (
-      <Prim.Box className="px-4 py-2 lm-fade-in" data-testid="block">
+      <Prim.Box className="lm-fade-in" paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
         <Prim.Box className="border-destructive/30 bg-destructive/10" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$destructive" fontFamily="$mono">
           {block.message}
         </Prim.Box>
@@ -257,7 +254,7 @@ export function Message({ block }: MessageProps) {
 
   // Ask form
   return (
-    <Prim.Box className="px-4 py-2 lm-fade-in" data-testid="block">
+    <Prim.Box className="lm-fade-in" paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
       {showAttribution && (
         <AttributionButton nodeId={block.nodeId} label={node.label} />
       )}
@@ -278,7 +275,7 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
     .join('\n\n');
 
   return (
-    <Prim.Box className="py-1 group relative lm-fade-in">
+    <Prim.Box className="group lm-fade-in" paddingVertical="$1" position="relative">
       <Prim.Row gap="$2" paddingHorizontal="$4" alignItems="flex-start">
         <Prim.Text className="bg-brand-2/20" flexShrink={0} width="$6" height="$6" borderRadius="$radius-full" alignItems="center" justifyContent="center" fontSize="$xs" userSelect="none" marginTop="0.75rem" display="flex" aria-hidden="true">
           ✦

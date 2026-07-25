@@ -211,18 +211,15 @@ export function Sidebar({ onProjectSettings, className, collapsible = true }: Si
             const cost = isActive ? sessionCostUsd : s.totalCostUsd;
             const costLabel = cost !== undefined && cost > 0 ? formatCost(cost) : '';
             return (
-              <Prim.Row key={s.sessionId} className="group gap-1" alignItems="center">
+              <Prim.Row key={s.sessionId} className="group" gap="$1" alignItems="center">
                 <Prim.Pressable
                   onClick={() => void resumeSession(s.sessionId)}
                   overflow="hidden"
                   textOverflow="ellipsis"
                   whiteSpace="nowrap"
-                  className={cn(
-                    'flex-1 text-left px-2 py-1.5 rounded-lg text-sm transition-colors',
-                    isActive
+                  className={cn("transition-colors", isActive
                       ? 'bg-muted text-foreground font-medium'
-                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                  )}
+                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground')} flexGrow={1} flexShrink={1} flexBasis="0%" textAlign="left" paddingHorizontal="$2" paddingVertical="$1.5" borderRadius="$radius-lg" fontSize="$sm"
                   title={displayTitle || s.sessionId}
                 >
                   <Prim.Text display="block" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{label}</Prim.Text>

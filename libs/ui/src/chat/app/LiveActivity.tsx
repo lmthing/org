@@ -23,12 +23,12 @@ export function LiveActivity(): React.ReactElement | null {
 
   return (
     <Prim.Box
-      className="rounded-lg border border-border bg-muted/30 lm-fade-in" marginBottom="0.5rem" marginHorizontal="1rem"
+      className="bg-muted/30 lm-fade-in" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" marginBottom="0.5rem" marginHorizontal="1rem"
       data-testid="live-activity"
       aria-label="sub-agent activity"
     >
       <Prim.Row gap="$1.5" borderBottomWidth={1} borderColor="$border" paddingHorizontal="$3" paddingVertical="$1.5" fontSize="$xs" color="$muted-foreground" alignItems="center" style={{ lineHeight: '1rem' }}>
-        <Prim.Text className="lm-pulse text-brand-2">●</Prim.Text>
+        <Prim.Text className="lm-pulse" color="$brand-2">●</Prim.Text>
         <Prim.Text>working…</Prim.Text>
         <Prim.Text opacity={0.6}>{active.length} active</Prim.Text>
       </Prim.Row>

@@ -297,7 +297,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           ))}
           {recording && (
             <Prim.Text alignItems="center" gap="$1.5" fontSize="$xs" color="$destructive" display="inline-flex">
-              <Prim.Text className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+              <Prim.Text className="animate-pulse" height="$2" width="$2" borderRadius="$radius-full" backgroundColor="$destructive" />
               Recording… tap ■ to stop
             </Prim.Text>
           )}
@@ -331,10 +331,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         <Prim.Text as="label"
           margin="-0.25rem"
           marginBottom="0.125rem"
-          className={cn(
-            'shrink-0 p-1 text-muted-foreground hover:text-foreground cursor-pointer transition-colors',
-            (attaching || isDisabled) && 'opacity-50 pointer-events-none',
-          )}
+          className={cn("transition-colors", (attaching || isDisabled) && 'opacity-50 pointer-events-none')} flexShrink={0} padding="$1" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
           title="Attach image, audio, or file to your message"
         >
           <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></Prim.Svg>
@@ -347,10 +344,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           onClick={() => void toggleRecord()}
           disabled={(isDisabled || attaching) && !recording}
           marginBottom="0.125rem"
-          className={cn(
-            'shrink-0 transition-colors disabled:opacity-50',
-            recording ? 'text-destructive animate-pulse' : 'text-muted-foreground hover:text-foreground',
-          )}
+          className={cn("transition-colors", recording ? 'text-destructive animate-pulse' : 'text-muted-foreground hover:text-foreground')} flexShrink={0} disabledStyle={{ opacity: 0.5 }}
           title={recording ? 'Stop recording' : 'Record a voice message'}
           aria-label={recording ? 'Stop recording' : 'Record a voice message'}
           data-testid="mic-button"
@@ -379,7 +373,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         <Prim.Pressable
           onClick={handleSend}
           disabled={isDisabled || attaching || (!text.trim() && attachments.length === 0)}
-          className="shrink-0 w-7 h-7 rounded-lg bg-primary text-primary-foreground items-center justify-center transition-all disabled:opacity-40 hover:opacity-90" marginBottom="0.125rem" display="flex"
+          className="transition-all" flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" backgroundColor="$primary" color="$primary-foreground" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.4 }} hoverStyle={{ opacity: 0.9 }} marginBottom="0.125rem" display="flex"
           aria-label="Send message"
         >
           <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>

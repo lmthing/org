@@ -6,10 +6,7 @@ export function Spinner({ size = 16, className }: { size?: number; className?: s
   return (
     <Prim.Text
       display="inline-block"
-      className={cn(
-        'lm-spin border-2 border-current border-t-transparent rounded-full',
-        className
-      )}
+      className={cn("lm-spin", className)} borderWidth={2} borderColor="$t-transparent" borderRadius="$radius-full"
       style={{ width: size, height: size }}
       aria-label="loading"
     />

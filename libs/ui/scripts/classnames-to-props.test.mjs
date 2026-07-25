@@ -149,13 +149,34 @@ describe('variants → nested style props', () => {
 })
 
 describe('skip reporting (the manual tail)', () => {
-  it('flags unmapped utilities for human review', () => {
-    expect(classToProps('transition-colors').skip).toContain('transition-colors')
-    expect(classToProps('animate-spin').skip).toContain('animate-spin')
-    // `shadow-*` used to be a skip; it now maps to the SAME single-layer approximation the
-    // card/dialog/dropdown/sheet conversions were written with by hand, so the two agree.
+  it('flags genuinely UNRECOGNISED utilities for human review', () => {
+    // `skip` means "unrecognised" and bails the whole element. It must stay narrow: an
+    // over-eager skip holds the mappable classes beside it hostage.
+    expect(classToProps('totally-unknown-utility').skip).toContain('totally-unknown-utility')
+    expect(classToProps('aspect-[4/3]').skip.length + classToProps('aspect-[4/3]').keep.length).toBeGreaterThan(0)
+  })
+
+  it('KEEPS the known-but-deferred families instead of skipping them', () => {
+    // These are recognised and consciously left as classNames (Tailwind still ships their CSS).
+    // Marking them `skip` blocked every mappable class on the same element — the single change
+    // that took the codemod from 4 migratable elements to 37.
+    for (const c of ['transition-colors', 'animate-spin', 'duration-150', 'backdrop-blur-sm',
+                     'prose', 'space-y-2', 'ring-2', 'group', 'lm-fade-in']) {
+      const r = classToProps(c)
+      expect(r.keep, `${c} should be kept, not skipped`).toContain(c)
+      expect(r.skip).toEqual([])
+    }
+  })
+
+  it('migrates the mappable classes ALONGSIDE a kept one', () => {
+    const r = classToProps('text-sm px-3 rounded-lg transition-colors')
+    expect(r.props).toMatchObject({ fontSize: '$sm', paddingHorizontal: '$3', borderRadius: '$radius-lg' })
+    expect(r.keep).toEqual(['transition-colors'])
+    expect(r.skip).toEqual([])
+  })
+
+  it('maps shadow-* to the same approximation the hand conversions used', () => {
     expect(classToProps('shadow-lg').props).toMatchObject({ shadowRadius: 15 })
-    expect(classToProps('backdrop-blur-sm').skip).toContain('backdrop-blur-sm')
   })
   it('an alpha modifier under a variant is a skip (cannot be a plain className)', () => {
     expect(classToProps('hover:border-foreground/30').skip).toContain('hover:border-foreground/30')

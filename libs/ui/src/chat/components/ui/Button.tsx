@@ -38,7 +38,7 @@ export function Button({ variant = 'default', size = 'md', loading, className, c
         className,
       )}
     >
-      {loading && <Prim.Text className="lm-spin w-3.5 h-3.5 border border-current border-t-transparent rounded-full" />}
+      {loading && <Prim.Text className="lm-spin" width="$3.5" height="$3.5" borderWidth={1} borderColor="$t-transparent" borderRadius="$radius-full" />}
       {children}
     </Prim.Pressable>
   );

@@ -240,6 +240,25 @@ function baseClass(cls) {
   if ((m = cls.match(/^overflow-y-(auto|hidden|visible|scroll)$/))) return { overflowY: m[1] }
   if ((m = cls.match(/^opacity-(\d+)$/))) return { opacity: Number(m[1]) / 100 }
 
+  // ── KNOWN-unmappable → 'keep', not null ────────────────────────────────────────────────────
+  //
+  // The difference matters: `null` means "unrecognised", and the transform bails on the WHOLE
+  // element so a human migrates it deliberately. `'keep'` means "recognised, and deliberately
+  // staying as a className for now" — the element still migrates, this class just rides along.
+  //
+  // These families were all falling through to `null`, which held the mappable classes BESIDE
+  // them hostage: `text-sm px-3 rounded-lg transition-colors` migrated nothing because of the
+  // last token. They are all classes this migration has consciously deferred, and Tailwind still
+  // ships their CSS, so keeping them is faithful.
+  if (/^(transition|duration|ease|delay|animate)(-|$)/.test(cls)) return 'keep'   // awaiting the animation driver (§5)
+  if (/^lm-/.test(cls)) return 'keep'                                             // runtime `--lm-*` palette / keyframes
+  if (/^prose(-|$)/.test(cls)) return 'keep'                                      // @tailwindcss/typography, styles injected HTML
+  if (/^(space-[xy])-/.test(cls)) return 'keep'                                   // child margins, NOT `gap` — different semantics
+  if (/^(backdrop-)?(blur|filter|brightness|contrast|saturate)(-|$)/.test(cls)) return 'keep'
+  if (/^ring(-|$)/.test(cls)) return 'keep'                                       // focus rings — outline props differ subtly
+  if (cls === 'group' || /^group-/.test(cls)) return 'keep'                       // Tailwind group-hover; Tamagui `group` is a separate rewrite
+  if (cls === 'sr-only' || cls === 'not-sr-only') return 'keep'
+
   return null
 }
 

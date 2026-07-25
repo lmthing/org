@@ -28,12 +28,7 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
       <Prim.Box
         display="flex"
         {...(side === 'right' ? { marginLeft: 'auto' } : { marginRight: 'auto' })}
-        className={cn(
-        'relative flex-col bg-card border-border shadow-lg h-full lm-slide-in-right',
-        width,
-        side === 'right' ? 'border-l' : 'border-r',
-        className,
-      )}>
+        className={cn("lm-slide-in-right", width, side === 'right' ? 'border-l' : 'border-r', className)} position="relative" flexDirection="column" backgroundColor="$card" borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} height="100%">
         {title && (
           <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderBottomWidth={1} borderColor="$border" alignItems="center" flexShrink={0}>
             <Prim.Text fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>

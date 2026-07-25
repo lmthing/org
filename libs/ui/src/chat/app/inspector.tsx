@@ -79,7 +79,7 @@ function VariablesTab({ node }: { node: ExecNode }): React.ReactElement {
   const entries = Object.entries(node.variables);
   if (entries.length === 0) return <Empty>No variables captured.</Empty>;
   return (
-    <Prim.Box className="space-y-1 font-mono text-[11px]">
+    <Prim.Box className="space-y-1" fontFamily="$mono" color="11px">
       {entries.map(([k, v]) => (
         <Prim.Box key={k} className="border-lm-border/50" borderBottomWidth={1} paddingVertical="$1">
           <Prim.Text className="text-lm-accent">{k}</Prim.Text>: <Prim.Text className="text-lm-green" wordWrap="break-word">{preview(v, 600)}</Prim.Text>

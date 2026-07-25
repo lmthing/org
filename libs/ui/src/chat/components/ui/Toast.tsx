@@ -45,10 +45,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {items.map(t => (
           <Prim.Box
             key={t.id}
-            className={cn(
-              'px-4 py-3 rounded-xl border shadow-lg text-sm lm-fade-in max-w-sm',
-              vc[t.variant ?? 'default'],
-            )}
+            className={cn("lm-fade-in", vc[t.variant ?? 'default'])} paddingHorizontal="$4" paddingVertical="$3" borderRadius="$radius-xl" borderWidth={1} shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} fontSize="$sm" maxWidth={384}
           >
             {t.message}
           </Prim.Box>

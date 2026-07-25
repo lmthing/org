@@ -40,10 +40,7 @@ export function ActivityStrip({ nodeIds, className }: ActivityStripProps) {
             onClick={() => handleChip(node.id)}
             data-node-id={node.id}
             display="inline-flex"
-            className={cn(
-              'items-center gap-1 px-2 py-0.5 rounded-full border text-xs transition-all hover:opacity-80',
-              STATUS_COLOR[node.status] ?? STATUS_COLOR.done,
-            )}
+            className={cn("transition-all", STATUS_COLOR[node.status] ?? STATUS_COLOR.done)} alignItems="center" gap="$1" paddingHorizontal="$2" paddingVertical="$0.5" borderRadius="$radius-full" borderWidth={1} fontSize="$xs" hoverStyle={{ opacity: 0.8 }}
           >
             <Prim.Text>{KIND_ICON[node.kind] ?? '◦'}</Prim.Text>
             <Prim.Text maxWidth="120px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{node.label}</Prim.Text>
