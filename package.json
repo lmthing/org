@@ -17,7 +17,10 @@
     "test:computed-style": "node tests/visual/build.mjs && playwright test --config tests/visual/playwright.config.ts computed-style",
     "test:visual": "node tests/visual/build.mjs && playwright test --config tests/visual/playwright.config.ts visual.spec",
     "test:visual:all": "node tests/visual/build.mjs && playwright test --config tests/visual/playwright.config.ts",
-    "test:visual:update": "node tests/visual/build.mjs && UPDATE_VISUAL_BASELINE=1 playwright test --config tests/visual/playwright.config.ts computed-style && playwright test --config tests/visual/playwright.config.ts visual.spec --update-snapshots"
+    "test:visual:update": "node tests/visual/build.mjs && UPDATE_VISUAL_BASELINE=1 playwright test --config tests/visual/playwright.config.ts computed-style && playwright test --config tests/visual/playwright.config.ts visual.spec --update-snapshots",
+    "test:surface:build": "node apps/web/node_modules/vite/bin/vite.js build --config apps/web/tests/visual-surface/vite.config.mts",
+    "test:surface": "pnpm test:surface:build && node apps/web/tests/visual-surface/capture.mjs",
+    "test:surface:update": "pnpm test:surface:build && node apps/web/tests/visual-surface/capture.mjs --update"
   },
   "devDependencies": {
     "@lmthing/config": "workspace:*",
