@@ -1,25 +1,72 @@
-@reference "../../theme.css";
 
 .ide-file-tree {
-  @apply h-full bg-card overflow-auto;
+  height: 100%;
+  overflow: auto;
+  background-color: var(--card);
 }
 
 .ide-file-tree__action-btn {
-  @apply p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors;
+  border-radius: var(--radius, 0.375rem);
+  padding: 0.25rem;
+  color: var(--muted-foreground);
+  transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  &:hover {
+  @media (hover: hover) {
+  background-color: var(--accent);
+  }
+  }
+  &:hover {
+  @media (hover: hover) {
+  color: var(--foreground);
+  }
+  }
 }
 
 .ide-file-tree__item--active {
-  @apply bg-primary/20 text-primary;
+  background-color: var(--primary);
+  @supports (color: color-mix(in lab, red, red)) {
+  background-color: color-mix(in oklab, var(--primary) 20%, transparent);
+  }
+  color: var(--primary);
 }
 
 .ide-file-tree__context-menu {
-  @apply min-w-[160px] bg-popover rounded-md overflow-hidden p-1 shadow-lg border border-border;
+  min-width: 160px;
+  overflow: hidden;
+  border-radius: var(--radius-md, 0.375rem);
+  border-style: solid;
+  border-width: 1px;
+  border-color: var(--border);
+  background-color: var(--popover);
+  padding: 0.25rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 .ide-file-tree__dialog-overlay {
-  @apply fixed inset-0 bg-black/50;
+  position: fixed;
+  inset: 0;
+  /* ds-lint-ok: achromatic scrim with alpha — the documented exception. The source said
+     `bg-black/50`, i.e. Tailwind's STOCK palette, which the token linter could not see because it
+     only scans for raw values and `bg-black` is a class name. Expanding `@apply` surfaced it. */
+  background-color: color-mix(in srgb, #000 50%, transparent); /* ds-lint-ok: achromatic scrim */
+  @supports (color: color-mix(in lab, red, red)) {
+  background-color: color-mix(in oklab, #000 50%, transparent); /* ds-lint-ok: achromatic scrim */
+  }
 }
 
 .ide-file-tree__dialog-content {
-  @apply fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card rounded-lg p-6 w-96 shadow-xl border border-border;
+  position: fixed;
+  top: calc(1 / 2 * 100%);
+  left: calc(1 / 2 * 100%);
+  width: 24rem;
+  translate: calc(calc(1 / 2 * 100%) * -1) calc(calc(1 / 2 * 100%) * -1);
+  border-radius: var(--radius-lg, 0.5rem);
+  border-style: solid;
+  border-width: 1px;
+  border-color: var(--border);
+  background-color: var(--card);
+  padding: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 }

@@ -1,15 +1,22 @@
-@reference "../../../theme.css";
 
 .step-card {
-  @apply relative transition-all duration-200;
+  position: relative;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+  transition-duration: 200ms;
 }
 
 .step-card--expanded {
-  @apply ring-2 ring-brand-3 ring-offset-2;
+  /* ds-lint-ok: `#fff` is Tailwind's `--tw-ring-offset-color` DEFAULT, inherited from `ring-offset-2`
+     in the source — never an authored colour. It should arguably be `var(--background)`; that is a
+     visible change in dark mode, so it is filed in `.issues/` rather than folded into a CSS deletion. */
+  box-shadow: 0 0 0 2px #fff, 0 0 0 calc(2px + 2px) var(--brand-3); /* ds-lint-ok: ring-offset default */
 }
 
 .step-card__connector-top {
-  @apply absolute w-px;
+  position: absolute;
+  width: 1px;
   top: -1rem;
   left: 1.5rem;
   height: 1rem;
@@ -17,7 +24,12 @@
 }
 
 .step-card__body {
-  @apply relative transition-all duration-200 cursor-pointer;
+  position: relative;
+  cursor: pointer;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+  transition-duration: 200ms;
   background: var(--card);
   border-radius: 0.75rem;
   border: 2px solid var(--border);
@@ -29,7 +41,16 @@
 }
 
 .step-card__drag-handle {
-  @apply flex! items-center justify-center w-8 h-8 rounded-lg transition-colors cursor-grab;
+  display: flex !important;
+  height: 2rem;
+  width: 2rem;
+  cursor: grab;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg, 0.5rem);
+  transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
   margin-top: 0.25rem;
   background: var(--muted);
   color: var(--muted-foreground);
@@ -46,7 +67,19 @@
 
 
 .step-card__order-badge {
-  @apply absolute w-6 h-6 rounded-full text-white text-xs font-bold flex! items-center justify-center;
+  position: absolute;
+  display: flex !important;
+  height: 1.5rem;
+  width: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.75rem;
+  line-height: calc(1 / 0.75);
+  font-weight: 700;
+  /* ds-lint-ok: from `text-white` in the source — Tailwind's stock palette, invisible to the token
+     linter as a class name. Semantically wants `var(--primary-foreground)`; see the note above. */
+  color: #fff; /* ds-lint-ok: from `text-white` */
   top: -0.75rem;
   left: -0.75rem;
   background: var(--brand-3);
@@ -54,7 +87,8 @@
 }
 
 .step-card__connector-bottom {
-  @apply absolute w-px;
+  position: absolute;
+  width: 1px;
   bottom: -1rem;
   left: 1.5rem;
   height: 1rem;

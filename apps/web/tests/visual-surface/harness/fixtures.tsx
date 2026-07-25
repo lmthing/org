@@ -197,17 +197,15 @@ export const FIXTURES: Fixture[] = [
     name: 'animation',
     render: () => (
       <>
-        {/* The Tailwind utilities, and the `transition` prop that replaces each one, measured
-            side by side so the swap is a readable delta rather than a claim. */}
-        <Prim.Box className="transition-colors" padding="$2">tw:colors</Prim.Box>
+        {/* The `transition` prop that replaced each Tailwind `transition-*` utility.
+            The `tw:` half of each pair was REMOVED by phase 4: with Tailwind deleted those classes
+            produce nothing, so keeping them would pin dead classNames as if they still worked. Their
+            equivalence was proven while Tailwind still existed — the deletion's P0 delta touched only
+            those rows and left every `prop:` row here byte-identical, which is the actual evidence. */}
         <Prim.Box transition="quick" animateOnly={['color', 'background-color', 'border-color']} padding="$2">prop:colors</Prim.Box>
-        <Prim.Box className="transition-all duration-200" padding="$2">tw:all/200</Prim.Box>
         <Prim.Box transition="medium" padding="$2">prop:all/200</Prim.Box>
-        <Prim.Box className="transition-opacity duration-150" padding="$2">tw:opacity</Prim.Box>
         <Prim.Box transition="quick" animateOnly={['opacity']} padding="$2">prop:opacity</Prim.Box>
-        <Prim.Box className="transition-transform" padding="$2">tw:transform</Prim.Box>
         <Prim.Box transition="quick" animateOnly={['transform']} padding="$2">prop:transform</Prim.Box>
-        <Prim.Box className="transition-shadow" padding="$2">tw:shadow</Prim.Box>
         <Prim.Box transition="quick" animateOnly={['box-shadow']} padding="$2">prop:shadow</Prim.Box>
         {/* Keyframes are NOT the driver's job — these stay hand-written CSS. */}
         <Prim.Box className="lm-fade-in" padding="$2">lm-fade-in</Prim.Box>
@@ -247,22 +245,18 @@ export const FIXTURES: Fixture[] = [
     name: 'icons',
     render: () => (
       <>
-        {/* lucide: `h-4 w-4` / `size-4` are 1rem = 16px; `size` sets the width/height ATTRIBUTES,
-            and both compute to 16px on an <svg>. */}
-        <Settings className="h-4 w-4 shrink-0" aria-hidden="true" />
+        {/* lucide takes its own `size`; the `tw:` halves (`h-4 w-4 shrink-0`, `size-4`, `opacity-60`)
+            were removed by phase 4, since with Tailwind gone those classes style nothing and pinning
+            them would assert otherwise. The substitutions were proven equivalent across all ~70
+            audited properties while Tailwind still existed (§1), and the deletion's P0 delta hit only
+            those rows — every row below is unchanged by it. */}
         <Settings size={16} style={{ flexShrink: 0 }} aria-hidden="true" />
-        <Settings className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
         <Settings size={16} style={{ flexShrink: 0, opacity: 0.6 }} aria-hidden="true" />
-        <Clock className="size-4" />
         <Clock size={16} />
-        <Star className="size-4" />
         <Star size={16} />
         {/* `Prim.Svg` is a passthrough (`svgPrimitive`) — props land verbatim on a raw <svg>, so it
             IGNORES style props and takes `style`. Converting a className here to props would delete
             the styling outright; see the host-passthrough trap in §6. */}
-        <Prim.Svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="shrink-0 mt-0.5 text-agent" aria-hidden="true">
-          <Prim.Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
-        </Prim.Svg>
         <Prim.Svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: '0.125rem', color: 'var(--agent)' }} aria-hidden="true">
           <Prim.Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
         </Prim.Svg>

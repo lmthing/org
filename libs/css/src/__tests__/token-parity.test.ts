@@ -36,23 +36,31 @@ function parseDecls(body: string): Record<string, string> {
   return out;
 }
 
-/** Extract the body of the FIRST block matching a selector prefix (e.g. `:root`, `@theme`). */
-function block(css: string, re: RegExp): string {
+/**
+ * Extract a block by the generator's own `/* Auto-generated <label> …` marker.
+ *
+ * This used to match on the SELECTOR (`@theme`, then the first `:root`). Phase 4 of
+ * docs/tamagui-final-steps.md turned the `@theme` / `@theme inline` blocks into plain `:root` rules,
+ * so theme.css now has FOUR sibling `:root`-ish blocks and "the first `:root`" silently became the
+ * radius/font scales instead of the light palette. Anchoring on the emitted markers is both
+ * shape-independent and self-describing — and it fails loudly rather than comparing the wrong block.
+ */
+function block(css: string, label: string): string {
+  const re = new RegExp(`/\\* Auto-generated ${label}[^*]*\\*/\\s*[^{]*\\{([\\s\\S]*?)\\n\\}`);
   const m = css.match(re);
-  if (!m) throw new Error(`theme.css: block not found for ${re}`);
+  if (!m) throw new Error(`theme.css: no block labelled "${label}" — did generate-theme.mjs change?`);
   return m[1];
 }
 
-// The plain `@theme { … }` block (radius + fonts) — NOT `@theme inline { … }`.
-const themeBlock = parseDecls(block(themeCss, /@theme\s*\{([^}]*)\}/));
-const rootBlock = parseDecls(block(themeCss, /:root\s*\{([^}]*)\}/));
-const darkBlock = parseDecls(block(themeCss, /\[data-theme="dark"\]\s*\{([^}]*)\}/));
+const themeBlock = parseDecls(block(themeCss, 'scales'));
+const rootBlock = parseDecls(block(themeCss, ':root \\(light\\)'));
+const darkBlock = parseDecls(block(themeCss, 'dark theme'));
 
 // The fully-resolved dark theme the browser computes: :root ⊕ [data-theme="dark"] overrides.
 const resolvedDark = { ...rootBlock, ...darkBlock };
 
 describe('Layer 1 — Tamagui ⇄ theme.css token parity', () => {
-  it('radius scale matches @theme byte-for-byte', () => {
+  it('radius scale matches the generated scales block byte-for-byte', () => {
     for (const [name, value] of Object.entries(radius)) {
       expect(themeBlock[name], `radius token --${name}`).toBe(value);
     }

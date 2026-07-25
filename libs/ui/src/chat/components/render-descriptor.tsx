@@ -45,7 +45,17 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       }
       markdown = markdown || '';
       const html = marked.parse(markdown) as string;
-      return <Prim.Box key={key} className="prose prose-sm prose-headings:text-lm-text prose-a:text-lm-accent prose-code:text-lm-cyan prose-code:bg-lm-bg prose-pre:bg-lm-bg prose-pre:border prose-pre:border-lm-border" maxWidth="none" color="var(--lm-text)" dangerouslySetInnerHTML={{ __html: html }} />;
+      // The `prose*` classNames that were here are gone. They needed @tailwindcss/typography, which
+      // is NOT installed and never was (`@plugin` appears in no stylesheet), so the whole set —
+      // including `prose-headings:text-lm-text`, `prose-code:text-lm-cyan`, `prose-pre:border-lm-border`
+      // — produced no CSS at all. The shipped bundle contains zero `.prose` rules.
+      //
+      // Removing dead classes is behaviour-neutral, so it belongs in this phase. What does NOT belong
+      // here is the fix: someone clearly intended styled markdown, and `.lm-prose`
+      // (`@lmthing/css/components/markdown/index.css`) is the working class for exactly this content.
+      // Adopting it is a visible change to two surfaces and would muddy phase 4's P0 delta, so it is
+      // filed in `.issues/` instead.
+      return <Prim.Box key={key} maxWidth="none" color="var(--lm-text)" dangerouslySetInnerHTML={{ __html: html }} />;
     }
     case 'span': return <Prim.Text key={key}>{body}</Prim.Text>;
     case 'quote': return <Prim.Box as="blockquote" key={key} borderColor="var(--lm-border)" color="var(--lm-muted)" borderLeftWidth={2} paddingLeft="$2" fontStyle="italic" marginVertical="0.25rem">{body}</Prim.Box>;

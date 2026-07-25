@@ -8,6 +8,8 @@
     "./theme.css": "./src/theme.css",
     "./animations": "./src/animations.css",
     "./animations.css": "./src/animations.css",
+    "./preflight": "./src/preflight.css",
+    "./preflight.css": "./src/preflight.css",
     "./tokens.json": "./src/tokens/tokens.json",
     "./tamagui-tokens": "./src/tamagui/tokens.generated.ts",
     "./tokens.manifest.json": "./tokens.manifest.json",
@@ -36,9 +38,6 @@
   "devDependencies": {
     "@lmthing/config": "workspace:*",
     "eslint": "^9.0.0"
-  },
-  "peerDependencies": {
-    "tailwindcss": "^4.0.0"
   },
   "author": "LMThing",
   "license": "MIT"

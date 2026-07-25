@@ -1,7 +1,12 @@
-@reference "../../../theme.css";
 
 .workflow-list__tag-btn {
-  @apply text-sm font-medium whitespace-nowrap transition-all;
+  font-size: 0.875rem;
+  line-height: calc(1.25 / 0.875);
+  font-weight: 500;
+  white-space: nowrap;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
   padding: 0.25rem 0.75rem;
   border-radius: 0.5rem;
 }
@@ -9,8 +14,7 @@
 .workflow-list__tag-btn--active {
   background: color-mix(in srgb, var(--brand-3) 15%, transparent);
   color: var(--brand-3);
-  @apply ring-1;
-  --tw-ring-color: color-mix(in srgb, var(--brand-3) 30%, transparent);
+  box-shadow: 0 0 0 calc(1px + 0px) color-mix(in srgb, var(--brand-3) 30%, transparent);
 }
 
 .workflow-list__tag-btn--inactive:hover {
@@ -18,13 +22,17 @@
 }
 
 .workflow-list__view-btn {
-  @apply p-2 rounded-md transition-all;
+  border-radius: var(--radius-md, 0.375rem);
+  padding: 0.5rem;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
 }
 
 .workflow-list__view-btn--active {
   background: var(--card);
   color: var(--brand-3);
-  @apply shadow-sm;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 }
 
 .workflow-list__view-btn--inactive:hover {
@@ -32,11 +40,18 @@
 }
 
 .workflow-list__grid {
-  @apply grid! grid-cols-1 gap-4;
+  display: grid !important;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1rem;
 }
 
 .workflow-list__empty-first-icon-wrapper {
-  @apply w-20 h-20 flex! items-center justify-center mx-auto;
+  margin-inline: auto;
+  display: flex !important;
+  height: 5rem;
+  width: 5rem;
+  align-items: center;
+  justify-content: center;
   border-radius: 1rem;
   background: linear-gradient(to bottom right, var(--brand-3), var(--brand-3));
   margin-bottom: 1.5rem;

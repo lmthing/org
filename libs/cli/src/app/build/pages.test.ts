@@ -118,7 +118,7 @@ describe('buildProjectPages', () => {
       join(dir, 'pages', 'index.tsx'),
       `import { SidebarItem } from '@lmthing/ui/elements/nav/sidebar/index.tsx';
 export default function Home() {
-  return <SidebarItem className="p-4 bg-background text-foreground">styled</SidebarItem>;
+  return <SidebarItem className="p-4 bg-background text-foreground rounded-lg font-sans">styled</SidebarItem>;
 }
 `,
     );
@@ -138,14 +138,22 @@ export default function Home() {
     // The utility classes the page uses were generated.
     expect(css).toMatch(/\.p-4\b/);
     expect(css).toMatch(/\.bg-background\b/);
-    // The `@apply` element styles from `@lmthing/ui` were expanded, not passed through.
-    // NB: this needs an element that still SHIPS a BEM stylesheet. Most of `elements/**` has moved
-    // to Tamagui `$`-token style props and has no CSS left to compile
-    // (docs/tamagui-idiomatic-migration.md §4/§6); `sidebar__item` is one of the documented
-    // residuals — its call sites are router `<Link>`s, which take only `className`.
-    expect(css).toContain('.sidebar__item');
+    // The `.sidebar__item` assertion that used to sit here was STALE — and failing. It guarded
+    // "`@apply` from `@lmthing/ui` was expanded, not passed through", but the stylesheet defining
+    // `sidebar__item` was deleted when `elements/**` moved to Tamagui style props, so the class had
+    // no source at all. Phase 4 of docs/tamagui-final-steps.md then removed the last `@apply` from
+    // `@lmthing/css` entirely, which retires what the assertion was protecting.
+    //
+    // What still matters, and is what the build can now get wrong, is the token→utility BRIDGE.
+    // `theme.css` used to be a Tailwind entry with an `@theme inline` block; it is plain CSS now, so
+    // `renderTokenTheme` rebuilds that theme from `tokens.manifest.json`. If it regresses, a page's
+    // `bg-background` silently produces nothing — hence the `.bg-background` check above, plus:
+    expect(css).toMatch(/--color-background\s*:/); // the bridge emitted the utility name
+    expect(css).toMatch(/\.rounded-lg\b/); // a SCALE-driven utility, from the `@theme` half
+    // No raw directive may survive into the browser.
     expect(css).not.toMatch(/@apply\b/);
     expect(css).not.toMatch(/@reference\b/);
+    expect(css).not.toMatch(/@source\b/);
   }, 60_000);
 
   // Regression: the `@app/runtime` barrel re-exports `<Chat>` from `@lmthing/ui/chat`,

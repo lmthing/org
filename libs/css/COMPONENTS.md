@@ -25,33 +25,37 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.thing-panel** — `.thing-panel`
 - **.tools-panel** — `.tools-panel__card` `.tools-panel__card-actions`
 
-  Tokens: `--color-agent`, `--color-agent-foreground`, `--color-background`, `--color-border`, `--color-foreground`, `--color-knowledge`, `--color-muted`, `--color-muted-foreground`, `--radius-full`, `--radius-lg`, `--radius-md`
+  Tokens: `--color-agent`, `--color-agent-foreground`, `--color-background`, `--color-border`, `--color-foreground`, `--color-knowledge`, `--color-muted`, `--color-muted-foreground`, `--radius-full`, `--radius-lg`, `--radius-md`, `--radius-xl`
 
 ### `components/computer/ide-file-tree.css`
 
 - **.ide-file-tree** — `.ide-file-tree` `.ide-file-tree__action-btn` `.ide-file-tree__context-menu` `.ide-file-tree__dialog-content` `.ide-file-tree__dialog-overlay` `.ide-file-tree__item--active`
 
-  Tokens: `accent`, `border`, `card`, `foreground`, `muted-foreground`, `popover`, `primary`
+  Tokens: `--accent`, `--border`, `--card`, `--foreground`, `--muted-foreground`, `--popover`, `--primary`, `--radius`, `--radius-lg`, `--radius-md`
 
 ### `components/markdown/index.css`
 
+- **.css** — `.css`
 - **.g** — `.g`
 - **.lm-markdown** — `.lm-markdown`
+- **.lm-prose** — `.lm-prose`
+- **.md** — `.md`
+- **.tsx** — `.tsx`
 
-  Tokens: `border`, `foreground`, `muted`, `muted-foreground`, `primary`
+  Tokens: `--agent`, `--border`, `--font-display`, `--font-mono`, `--foreground`, `--muted`, `--muted-foreground`, `--primary`
 
 ### `components/presentation/index.css`
 
 - **.presentation** — `.presentation` `.presentation__exit-btn` `.presentation__footer` `.presentation__slide`
 - **.slide** — `.slide` `.slide__flow-node--hero` `.slide__grid-3` `.slide__grid-split` `.slide__point-icon` `.slide__qr` `.slide__screenshot` `.slide__section-label` `.slide__video`
 
-  Tokens: `--background`, `--muted-foreground`
+  Tokens: `--background`, `--muted-foreground`, `--radius-full`
 
 ### `components/setup-guide/index.css`
 
 - **.lm-setup-guide** — `.lm-setup-guide` `.lm-setup-guide__summary`
 
-  Tokens: `foreground`
+  Tokens: `--foreground`
 
 ### `components/shell/index.css`
 
@@ -68,30 +72,30 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.space-selector** — `.space-selector`
 - **.user-detail** — `.user-detail__avatar-fallback` `.user-detail__info-grid` `.user-detail__role-badge` `.user-detail__role-badge--admin` `.user-detail__role-badge--editor` `.user-detail__role-badge--viewer`
 
-  Tokens: `--agent`, `border`, `brand-2`, `brand-3`, `muted`, `muted-foreground`, `primary-foreground`
+  Tokens: `--agent`, `--border`, `--brand-2`, `--brand-3`, `--muted`, `--muted-foreground`, `--primary-foreground`
 
 ### `components/workflow/step-card/index.css`
 
 - **.step-card** — `.step-card` `.step-card--expanded` `.step-card__body` `.step-card__connector-bottom` `.step-card__connector-top` `.step-card__drag-handle` `.step-card__order-badge`
 
-  Tokens: `--border`, `--brand-3`, `--card`, `--muted`, `--muted-foreground`, `brand-3`
+  Tokens: `--border`, `--brand-3`, `--card`, `--muted`, `--muted-foreground`, `--radius-full`, `--radius-lg`
 
 ### `components/workflow/step-schema-editor/index.css`
 
 - **.property-row** — `.property-row` `.property-row__add-item-btn` `.property-row__expand-btn` `.property-row__expand-icon` `.property-row__expand-icon--open` `.property-row__main--clickable` `.property-row__name-input` `.property-row__required-btn` `.property-row__required-btn--optional` `.property-row__required-btn--required` `.property-row__type-icon` `.property-row__type-icon--boolean` `.property-row__type-icon--number`
 - **.schema-editor** — `.schema-editor` `.schema-editor__add-btn` `.schema-editor__mode-btn` `.schema-editor__mode-btn--active`
 
-  Tokens: `--border`, `--brand-2`, `--brand-3`, `--card`, `--destructive`, `--foreground`, `--muted`, `--muted-foreground`
+  Tokens: `--border`, `--brand-2`, `--brand-3`, `--card`, `--destructive`, `--foreground`, `--muted`, `--muted-foreground`, `--radius-lg`
 
 ### `components/workflow/workflow-card/index.css`
 
 - **.workflow-card** — `.workflow-card` `.workflow-card--selected`
 - **.workflow-list-item** — `.workflow-list-item` `.workflow-list-item__chevron` `.workflow-list-item__chevron--open`
 
-  Tokens: `--border`, `--brand-3`, `--card`, `--muted`, `--muted-foreground`
+  Tokens: `--border`, `--brand-3`, `--card`, `--muted`, `--muted-foreground`, `--radius-lg`, `--radius-xl`
 
 ### `components/workflow/workflow-list/index.css`
 
 - **.workflow-list** — `.workflow-list__empty-first-icon-wrapper` `.workflow-list__grid` `.workflow-list__tag-btn` `.workflow-list__tag-btn--active` `.workflow-list__tag-btn--inactive` `.workflow-list__view-btn` `.workflow-list__view-btn--active` `.workflow-list__view-btn--inactive`
 
-  Tokens: `--brand-3`, `--card`, `--foreground`, `--muted`
+  Tokens: `--brand-3`, `--card`, `--foreground`, `--muted`, `--radius-md`

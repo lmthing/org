@@ -7,13 +7,14 @@
 > happened and why*, this one is *what is left and in what order*.
 
 > **Status.** Phases **0.5 ✅ · 1 ✅ · 2 ✅ · 3 ✅** (className axis; inline-`style` tail ◐) ·
-> **5b ✅** (pulled forward — see below) · **4 scoped, not executed** · **5a/5c** not started.
+> **4 ✅ TAILWIND IS DELETED** · **5b ✅** · **5a/5c** open.
 > Each completed phase keeps its section, rewritten to record what was actually done and **where this
 > plan was wrong** — the corrections matter more than the ticks, because several were load-bearing.
 >
-> **Definition of done: 2 of 5 met** — (2) no Tailwind utility className anywhere, (5) `libs/ui` has a
-> real typecheck. Open: (1) `@import "tailwindcss"` still in 2 files, (3) 127 inline styles on
-> Tamagui-backed targets, (4) still two Tamagui configs.
+> **Definition of done: 3 of 5 met** — (1) `@import "tailwindcss"` appears nowhere in the design system
+> or the web surfaces and `theme.css` is a vars-only file, (2) no Tailwind utility className anywhere,
+> (5) `libs/ui` has a real typecheck. Open: (3) 127 inline styles on Tamagui-backed targets,
+> (4) still two Tamagui configs.
 
 ## The definition of done
 
@@ -31,14 +32,15 @@ Five conditions. Anything not on this list is out of scope and named in [§7](#7
 |---|---|---|
 | utility classNames | **0** | was 125. What remains is keyframes, BEM, `{className}`, and 2 `prose` boxes (§7) |
 | inline `style={{…}}` | **127** | on Tamagui-backed targets. A further **78** are on passthrough/lucide/`.native.tsx`, where `style` is CORRECT |
-| `@apply` directives | **87** | 12 files · ~140 distinct utilities · 9 files need `--tw-*` machinery |
+| `@apply` directives | **0** | was 87 across 12 files |
+| Tailwind entry points | **0** | was 2. `libs/cli` keeps a compiler for project app pages — a product feature |
 | stylesheets | **14** | 180 rules — 11 component + `FieldTree.css` + the chat Tailwind entry + `animations.css`; 3 permanent |
-| Tailwind entry points | **2** | `libs/css/src/theme.css`, `libs/ui/src/chat/app/styles.css` |
 | Tamagui configs | **2** | `tamagui.config.ts` (native hex), `tamagui-web.config.ts` (var-backed) |
 | compiler extraction | **off** | deliberate — `libs/utils/src/vite.mjs` |
-| CSS bundle | **29.63 kB** | from 171 kB — `apps/web` build |
-| P0 fixtures | **282** | 222 + 8 animation rows (§2) + 52 icon rows (§1) |
+| CSS bundle | **19.52 kB** | from 171 kB — `apps/web` build, gzip 5.04 kB |
+| P0 fixtures | **246** | 222 + the animation/icon rows, minus the `tw:` halves phase 4 retired |
 | `libs/ui` tests | **287** | +3 `app-sidebar` RENDER tests, impossible before §5b |
+| `libs/css` tests | **65** | keyframe layer (§2) + the standing Tailwind-free gate (§4) |
 | `apps/web` typecheck | **321 errors** | from 487. The plan's "8" was never right — see §5b |
 
 The work below is ordered so that **nothing is deleted before its replacement is proven**, and every
@@ -332,7 +334,97 @@ excludes them and `primitives/index.test.tsx` pins why.
 
 ---
 
-## Phase 4 — delete Tailwind ◐ SCOPED, NOT EXECUTED
+## Phase 4 — delete Tailwind ✅ DONE
+
+**Result: Tailwind is gone from the design system and every web surface.** The shipped CSS contains
+zero `--tw-*`, zero `@layer properties`, zero `@apply`, zero `tailwindcss`. Bundle **29.63 kB →
+19.52 kB** (gzip 6.94 → 5.04), from 171 kB at the start of the migration.
+
+### How it was verified — P0 alone was not enough
+
+P0 renders 15 fixtures. The 11 component stylesheets style studio/computer surfaces that are **not**
+in them, so inlining their `@apply` could have broken a rule nothing measured. Two new gates closed
+that:
+
+- **`scripts/css-equivalence.mjs`** — compares declaration TEXT (Tailwind-compiled source vs the
+  rewritten plain CSS). Enough while `@apply` is inlined verbatim; useless once values are
+  deliberately rewritten.
+- **`scripts/css-computed-equivalence.mjs`** — the real gate. Renders a probe element for every
+  selector in every stylesheet, twice (Tailwind-compiled vs plain), in Chromium, and diffs
+  `getComputedStyle` across ~75 properties. Independent of the rewriting logic: the "before" side never
+  goes through it. Final result: **7047 computed values identical**.
+
+Both took two rounds of fixing before they were trustworthy, which is the point of writing them:
+- the probe pages had no token definitions, so `var(--brand-3)` was undefined on both sides and a
+  `color-mix()` failed *differently* on each — an artefact that masked real differences;
+- three real resolver bugs surfaced only because the gate existed: rules with nested `&:hover`/`@media`
+  blocks had their top-level declarations skipped, `calc(1.25 / 0.875)` folded to six decimal places
+  moved a 20px line box to 19.9844px, and the gradient `@property` entries were missing so
+  `background-image` resolved to `none`.
+
+**P0's own delta** was exactly the 5 `tw:` rows in each of the `animation` and `icons` fixtures — the
+"before" halves that document what shipped. All **14 other fixtures byte-identical**, including
+`forms`, which is what proves the preflight extraction. Those `tw:` rows were then retired (with
+Tailwind gone they pin dead classes), and the **3358 surviving values verified identical to their
+pre-deletion counterparts**.
+
+### What the `@apply` problem actually needed
+
+`expand-apply.mjs` asks Tailwind to expand the 87 directives, then **`resolve-tw-vars.mjs`** resolves
+what expansion leaves behind. That second pass is the phase: `@apply` does not produce plain CSS, it
+produces declarations referencing Tailwind's own variables in two families — `--tw-*` (registered via
+`@property`) and Tailwind's default theme (`--spacing`, `--text-sm`, `--font-weight-medium`,
+`--default-transition-*`). Both vanish with Tailwind, so `box-shadow` computes to `none` and
+`border-left-style` to `none`. Measured before the fix: **72 computed breaks**.
+
+The resolver reads both variable tables **out of Tailwind itself** rather than hardcoding them, and
+deliberately leaves lmthing's own tokens as `var()` references — inlining `var(--border)` would break
+theming, which is the opposite of the goal. The plan's recommended approach (hand-simplify ~20
+utilities) turned out to be unnecessary: resolution is mechanical and exact.
+
+### The five things that were load-bearing and easy to miss
+
+1. **`@layer base` on the preflight import.** Tailwind put preflight in its `base` layer, which loses
+   to unlayered rules. A plain `@import "./preflight.css"` makes it **unlayered** and therefore
+   *stronger* than `apps/web/src/index.css`'s own `@layer base` — so preflight's `border: 0 solid`
+   would have beaten `* { border-color: var(--border) }` and reset every border to `currentcolor`.
+   `theme.css` now declares `@layer base, components, utilities;` and imports
+   `./preflight.css layer(base)`.
+2. **Preflight is kept WHOLE**, against the plan's "do not ship the whole of preflight". Those 38 rules
+   are a normalize-style reset; once components are written against them, every rule is load-bearing
+   for *some* element (`<hr>`, `<abbr>`, `<table>`, `::placeholder`, `<select>`) — most of which no P0
+   fixture renders. Trimming by what P0 happens to cover would silently break what it does not, for
+   3.9 kB.
+3. **`libs/cli` had to gain its own Tailwind.** Agent-authored project app pages got Tailwind *through*
+   `theme.css`. Making the design system Tailwind-free broke that product feature — the page build
+   failed with `Cannot apply unknown utility class 'bg-background'`. `renderAppCss` now imports
+   `tailwindcss/theme` + `tailwindcss/utilities` (not the barrel, which would ship preflight twice) and
+   **rebuilds the token→utility bridge** from `tokens.manifest.json`, because `bg-background` only
+   existed as a side effect of `@theme inline`.
+4. **Scales cannot go through `@theme inline`.** For a colour, `--color-background: var(--background)`
+   is two different names. For a radius or font it is the *same* name, so
+   `@theme inline { --font-sans: var(--font-sans) }` emits a self-referential custom property and the
+   whole declaration is invalid. Scales use a plain `@theme` with literal values.
+5. **`--color-*` is not decoration.** SPIKE A1 resolves every Tamagui `$color` to
+   `var(--color-<name>)`. `@theme inline` used to emit those as a side effect of registering colour
+   utilities; `theme.css` now states them directly, and `tailwind-free.test.ts` asserts all 98 survive.
+
+### Three bugs the deletion exposed
+
+Each was invisible while Tailwind hid it; each is filed in `.issues/` rather than fixed here, because
+each is a *visible* change and phase 4's reviewability depends on being behaviour-neutral.
+
+- **`prose`/`prose-sm`/`prose-*:` never worked.** `@tailwindcss/typography` is not installed and never
+  was; the pre-deletion bundle contains **zero** `.prose` rules. Two surfaces have been rendering
+  markdown completely unstyled. Dead classes removed here; `.lm-prose` is the fix.
+  → `.issues/markdown-descriptors-render-unstyled.md`
+- **`chat/app/styles.css` overrides the design system's fonts app-wide.** Its `--font-sans` wins over
+  the generated one globally, not just on `/chat`. → `.issues/chat-styles-overrides-font-tokens.md`
+- **Three stock-Tailwind colours** (`bg-black/50`, `ring-offset-2`'s `#fff`, `text-white`) that
+  `lint:tokens` could not see, because a utility is a class *name* and the linter scans for values.
+  → `.issues/stock-tailwind-colors-in-component-css.md`
+
+### Original scoping notes
 
 **Entry condition met.** Phases 1–3 left **zero** Tailwind utility classNames (§3), well under the
 "fewer than ~15" bar. Nothing now blocks this phase; what follows is the measured shape of it, plus
@@ -521,13 +613,12 @@ Phases 1–3 are independent and can land in any order or in parallel; phase 4 n
    inline style   127 still on Tamagui targets   ◐ PARTIAL
 5b. SPIKE C       one React 19, real renders     ✅ DONE (taken early — it
                                                    unblocks verifying the rest)
-                        ↓
-4. delete Tailwind      SCOPED, not executed — needs the §4 decision first
+4. delete Tailwind   0 directives, 19.52 kB CSS  ✅ DONE
                         ↓
 5a/5c one config + extraction               not started
 ```
 
-**Next: the §4 `@apply` decision, then phase 4.** 5b was pulled forward out of order on purpose:
+**Next: phase 5a (one Tamagui config), then the inline-`style` tail, then 5c.** 5b was pulled forward out of order on purpose:
 `libs/ui` could not be typechecked or render-tested at all, so every other phase was being verified
 with one hand tied. It cost one dependency bump and returned 133 typecheck errors and three
 previously-impossible render tests.

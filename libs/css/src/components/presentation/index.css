@@ -1,15 +1,20 @@
-@reference "../../theme.css";
 
 .slide {
-  @apply flex! h-full w-full flex-col;
+  display: flex !important;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
 }
 
 .slide__section-label {
-  @apply font-bold uppercase tracking-[0.16em];
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .slide__flow-node--hero {
-  @apply border-2;
+  border-style: solid;
+  border-width: 2px;
   font-size: 1.625rem;
   font-weight: 800;
   padding: 24px 40px;
@@ -20,39 +25,77 @@
 }
 
 .slide__grid-3 {
-  @apply grid! w-full grid-cols-3 gap-5;
+  display: grid !important;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
 }
 
 .slide__grid-split {
-  @apply grid! w-full gap-x-9;
+  display: grid !important;
+  width: 100%;
+  column-gap: 2.25rem;
   grid-template-columns: 1fr 1px 1fr;
 }
 
 .slide__screenshot {
-  @apply rounded-2xl border p-2;
+  border-radius: 1rem;
+  border-style: solid;
+  border-width: 1px;
+  padding: 0.5rem;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
 
 .slide__video {
-  @apply w-full rounded-2xl shadow-2xl;
+  width: 100%;
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
   max-height: 65vh;
 }
 
 .slide__qr {
-  @apply h-80 w-80 rounded-3xl shadow-xl;
+  height: 20rem;
+  width: 20rem;
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 }
 
 .slide__point-icon {
-  @apply flex! h-10 w-10 flex-shrink-0 items-center justify-center rounded-[9px] border text-xl;
+  display: flex !important;
+  height: 2.5rem;
+  width: 2.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  border-style: solid;
+  border-width: 1px;
+  font-size: 1.25rem;
+  line-height: calc(1.75 / 1.25);
 }
 
 .presentation {
-  @apply relative h-screen w-screen overflow-hidden;
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
   background: var(--background);
 }
 
 .presentation__exit-btn {
-  @apply absolute right-6 top-6 z-50 flex! size-10 items-center justify-center rounded-full transition-colors;
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 50;
+  display: flex !important;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full, 9999px);
+  transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
   color: rgba(0, 0, 0, 0.3);
 }
 
@@ -61,11 +104,19 @@
 }
 
 .presentation__slide {
-  @apply h-full w-full;
+  height: 100%;
+  width: 100%;
   animation: fade-in 0.3s ease-out;
 }
 
 .presentation__footer {
-  @apply absolute bottom-5 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap text-sm;
+  position: absolute;
+  bottom: 1.25rem;
+  left: calc(1 / 2 * 100%);
+  z-index: 50;
+  translate: calc(calc(1 / 2 * 100%) * -1) 0;
+  font-size: 0.875rem;
+  line-height: calc(1.25 / 0.875);
+  white-space: nowrap;
   color: var(--muted-foreground);
 }

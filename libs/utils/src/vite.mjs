@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite-plus'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 import { tamaguiPlugin } from '@tamagui/vite-plugin'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import path from 'path'
@@ -108,9 +107,12 @@ export function createViteConfig(dirname, overrides) {
         generatedRouteTree: './src/routeTree.gen.ts',
       }),
       react(),
-      tailwindcss(),
+      // NOTE: `tailwindcss()` used to sit here. Phase 4 of docs/tamagui-final-steps.md removed it —
+      // every stylesheet is now plain CSS, so there is nothing for it to compile. Tailwind remains a
+      // dependency of `libs/cli` ONLY, where it compiles agent-authored project app pages (a product
+      // feature, not part of this app's styling).
       // Tamagui plugin (§6 build integration). Loads the SHARED config so the RNW aliases + theme
-      // are wired; coexists with Tailwind. No-op on output until a web component uses Tamagui.
+      // are wired. No-op on output until a web component uses Tamagui.
       tamaguiPlugin({
         // NOTE: the plugin bundles this config to `<app>/.tamagui/tamagui.config.mjs` and then
         // IMPORTS that file from the app root, leaving `@tamagui/web` external. Once the config

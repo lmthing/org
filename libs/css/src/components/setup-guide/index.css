@@ -1,7 +1,6 @@
-@reference "../../theme.css";
 
 .lm-setup-guide__summary {
-  @apply text-foreground;
+  color: var(--foreground);
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 600;
