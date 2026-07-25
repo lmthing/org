@@ -4,7 +4,6 @@
  * shows token count, copy to clipboard, collapsible.
  */
 import * as Prim from '../../../../elements/primitives/index.js';
-import '@lmthing/css/components/agent/builder/index.css'
 import { useMemo, useCallback } from 'react'
 import { useToggle, useUIState, useGlobRead } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -16,6 +15,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Code } from '@lmthing/ui/elements/typography/code'
 import { PANEL_BASE, PANEL_BODY } from '../../../../elements/content/panel/index.js'
+import { PROMPT_PREVIEW_BADGE, PROMPT_PREVIEW_EMPTY, PROMPT_PREVIEW_FOOTER_ROW, PROMPT_PREVIEW_HEADER, PROMPT_PREVIEW_HEADER_LEFT, PROMPT_PREVIEW_HEADER_ROW } from '../../props.js'
 
 interface PromptPreviewPanelProps {
   instructions: string
@@ -69,10 +69,10 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
     <Prim.Box {...PANEL_BASE} overflow="hidden">
       <PanelHeader
         onClick={toggleExpanded}
-        className="prompt-preview__header"
+        {...PROMPT_PREVIEW_HEADER}
       >
-        <Stack row className="prompt-preview__header-row">
-          <Stack row gap="sm" className="prompt-preview__header-left">
+        <Stack row {...PROMPT_PREVIEW_HEADER_ROW}>
+          <Stack row gap="sm" {...PROMPT_PREVIEW_HEADER_LEFT}>
             <Label compact>System Prompt Preview</Label>
             {hasContent && (
               <Badge variant="muted">~{tokenCount} tokens</Badge>
@@ -93,7 +93,7 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
         <>
           <Prim.Box {...PANEL_BODY}>
             {!hasContent ? (
-              <Stack className="prompt-preview__empty">
+              <Stack {...PROMPT_PREVIEW_EMPTY}>
                 <Caption muted>
                   Add instructions or select knowledge fields to preview the generated prompt.
                 </Caption>
@@ -103,7 +103,7 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
                 {selectedFieldIds.length > 0 && (
                   <Prim.Box display="flex" flexWrap="wrap" gap="$1.5" marginBottom="$3">
                     {selectedFieldIds.map(fieldId => (
-                      <Badge key={fieldId} variant="muted" className="prompt-preview__badge">{fieldId}</Badge>
+                      <Badge key={fieldId} variant="muted" {...PROMPT_PREVIEW_BADGE}>{fieldId}</Badge>
                     ))}
                   </Prim.Box>
                 )}
@@ -116,7 +116,7 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
 
           {hasContent && (
             <CardFooter>
-              <Stack row className="prompt-preview__footer-row">
+              <Stack row {...PROMPT_PREVIEW_FOOTER_ROW}>
                 <Caption muted>Preview updates as you edit</Caption>
                 <Button onClick={handleCopy} variant="ghost" size="sm">
                   {copied ? 'Copied!' : 'Copy'}

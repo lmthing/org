@@ -12,9 +12,9 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Avatar, AvatarImage, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
-import '@lmthing/css/components/space/index.css'
 import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index.js'
 import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../elements/overlays/dialog/index.js'
+import { SPACE_LIST_EMAIL, SPACE_LIST_EMAIL_ICON, SPACE_LIST_EMAIL_ROW, SPACE_LIST_EMPTY, SPACE_LIST_EMPTY_ICON, SPACE_LIST_HEADER, SPACE_LIST_INVITE_ACTIONS, SPACE_LIST_INVITE_ACTION_BTN, SPACE_LIST_INVITE_FORM_BODY, SPACE_LIST_INVITE_ICON, SPACE_LIST_INVITE_ROLE_ITEM, SPACE_LIST_INVITE_ROLE_RADIO, SPACE_LIST_LAST_ACTIVE, SPACE_LIST_LAST_ACTIVE_ICON, SPACE_LIST_SEARCH_ICON, SPACE_LIST_SEARCH_INPUT, SPACE_LIST_STATUS_BADGE, SPACE_LIST_USER_LIST, SPACE_LIST_USER_NAME_ROW } from '../props.js'
 
 export interface SpaceUser {
   id: string
@@ -90,7 +90,7 @@ function InviteDialog({ isOpen, onClose, onInvite }: InviteDialogProps) {
           <Caption muted>Add a new member to your space</Caption>
         </Prim.Box>
         <Prim.Form onSubmit={handleSubmit}>
-          <Stack gap="md" className="space-list__invite-form-body">
+          <Stack gap="md" {...SPACE_LIST_INVITE_FORM_BODY}>
             <Prim.Box>
               <Label compact>Email Address</Label>
               <Input
@@ -110,14 +110,14 @@ function InviteDialog({ isOpen, onClose, onInvite }: InviteDialogProps) {
                   { value: 'admin' as const, label: 'Admin', desc: 'Full access including users' }
                 ].map((r) => (
                   <Prim.Text as="label" key={r.value}>
-                    <ListItem selected={role === r.value} className="space-list__invite-role-item">
+                    <ListItem selected={role === r.value} {...SPACE_LIST_INVITE_ROLE_ITEM}>
                       <Prim.TextField
                         type="radio"
                         name="role"
                         value={r.value}
                         checked={role === r.value}
                         onChange={(e) => setRole(e.target.value as SpaceUserRole)}
-                        className="space-list__invite-role-radio"
+                        {...SPACE_LIST_INVITE_ROLE_RADIO}
                       />
                       <Prim.Box>
                         <Label>{r.label}</Label>
@@ -128,9 +128,9 @@ function InviteDialog({ isOpen, onClose, onInvite }: InviteDialogProps) {
                 ))}
               </Stack>
             </Prim.Box>
-            <Stack row gap="sm" className="space-list__invite-actions">
-              <Button type="button" onClick={onClose} variant="ghost" className="space-list__invite-action-btn">Cancel</Button>
-              <Button type="submit" variant="primary" className="space-list__invite-action-btn">Send Invite</Button>
+            <Stack row gap="sm" {...SPACE_LIST_INVITE_ACTIONS}>
+              <Button type="button" onClick={onClose} variant="ghost" {...SPACE_LIST_INVITE_ACTION_BTN}>Cancel</Button>
+              <Button type="submit" variant="primary" {...SPACE_LIST_INVITE_ACTION_BTN}>Send Invite</Button>
             </Stack>
           </Stack>
         </Prim.Form>
@@ -172,35 +172,35 @@ export function SpaceList({
     <>
       <Sidebar>
         <PanelHeader>
-          <Stack row className="space-list__header">
+          <Stack row {...SPACE_LIST_HEADER}>
             <Prim.Box>
               <Heading level={3}>Members</Heading>
               <Caption muted>{users.length} {users.length === 1 ? 'member' : 'members'}</Caption>
             </Prim.Box>
             <Button onClick={() => setShowInvite(true)} variant="primary" size="sm" aria-label="Add user">
-              <UserPlus className="space-list__invite-icon" />
+              <UserPlus {...SPACE_LIST_INVITE_ICON} />
             </Button>
           </Stack>
           <Prim.Box position="relative" marginTop="$4">
-            <Search className="space-list__search-icon" />
+            <Search {...SPACE_LIST_SEARCH_ICON} />
             <Input
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange?.(e.target.value)}
               placeholder="Search by name or email..."
-              {...INPUT_BASE} {...INPUT_SM} className="space-list__search-input"
+              {...INPUT_BASE} {...INPUT_SM} {...SPACE_LIST_SEARCH_INPUT}
             />
           </Prim.Box>
         </PanelHeader>
 
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflowY="auto">
           {filteredUsers.length === 0 ? (
-            <Stack className="space-list__empty">
-              <Search className="space-list__empty-icon" />
+            <Stack {...SPACE_LIST_EMPTY}>
+              <Search {...SPACE_LIST_EMPTY_ICON} />
               <Caption muted>No users found</Caption>
             </Stack>
           ) : (
-            <Stack gap="sm" className="space-list__user-list">
+            <Stack gap="sm" {...SPACE_LIST_USER_LIST}>
               {filteredUsers.map((user) => (
                 <Prim.Pressable
                   key={user.id}
@@ -231,24 +231,24 @@ export function SpaceList({
                       />
                     </Prim.Box>
                     <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0} textAlign="left">
-                      <Stack row gap="sm" className="space-list__user-name-row">
+                      <Stack row gap="sm" {...SPACE_LIST_USER_NAME_ROW}>
                         <Prim.Text fontWeight="$medium" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{user.name}</Prim.Text>
                         <Badge className={`${getRoleBadgeColor(user.role)} space-list__role-badge`}>
                           {user.role.charAt(0).toUpperCase()}
                         </Badge>
                       </Stack>
-                      <Stack row gap="sm" className="space-list__email-row">
-                        <Mail className="space-list__email-icon" />
-                        <Caption muted className="space-list__email">{user.email}</Caption>
+                      <Stack row gap="sm" {...SPACE_LIST_EMAIL_ROW}>
+                        <Mail {...SPACE_LIST_EMAIL_ICON} />
+                        <Caption muted {...SPACE_LIST_EMAIL}>{user.email}</Caption>
                       </Stack>
                     </Prim.Box>
                     <Prim.Box display="flex" flexDirection="column" alignItems="flex-end" gap="$1">
-                      <Badge variant={user.status === 'active' ? 'success' : user.status === 'invited' ? 'primary' : 'muted'} className="space-list__status-badge">
+                      <Badge variant={user.status === 'active' ? 'success' : user.status === 'invited' ? 'primary' : 'muted'} {...SPACE_LIST_STATUS_BADGE}>
                         {user.status}
                       </Badge>
                       {user.lastActive && (
-                        <Caption muted className="space-list__last-active">
-                          <Clock className="space-list__last-active-icon" />
+                        <Caption muted {...SPACE_LIST_LAST_ACTIVE}>
+                          <Clock {...SPACE_LIST_LAST_ACTIVE_ICON} />
                           {formatDate(user.lastActive)}
                         </Caption>
                       )}

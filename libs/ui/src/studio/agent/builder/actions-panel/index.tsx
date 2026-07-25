@@ -1,5 +1,4 @@
 import * as Prim from '../../../../elements/primitives/index.js';
-import '@lmthing/css/components/agent/builder/index.css'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Card, CardBody, CardFooter } from '@lmthing/ui/elements/content/card'
 import { Badge } from '@lmthing/ui/elements/content/badge'
@@ -8,6 +7,7 @@ import { PanelHeader } from '@lmthing/ui/elements/content/panel'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Code } from '@lmthing/ui/elements/typography/code'
+import { ACTIONS_PANEL_BADGE_SM, ACTIONS_PANEL_CARD_DESCRIPTION, ACTIONS_PANEL_CARD_LABEL, ACTIONS_PANEL_CARD_META_ROW, ACTIONS_PANEL_CARD_ROW, ACTIONS_PANEL_CARD_TITLE_ROW, ACTIONS_PANEL_EMPTY, ACTIONS_PANEL_EMPTY_CAPTION, ACTIONS_PANEL_FOOTER_CAPTION, ACTIONS_PANEL_HEADER_ROW } from '../../props.js'
 
 export interface AttachedWorkflow {
   workflowId: string
@@ -40,7 +40,7 @@ export function ActionsPanel({
   return (
     <Prim.Box display="flex" flexDirection="column" height="100%">
       <PanelHeader>
-        <Stack row className="actions-panel__header-row">
+        <Stack row {...ACTIONS_PANEL_HEADER_ROW}>
           <Prim.Box>
             <Label compact>Slash Actions</Label>
             <Caption muted>Attach workflows with custom triggers</Caption>
@@ -51,10 +51,10 @@ export function ActionsPanel({
 
       <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflowY="auto" padding="$4">
         {attachedWorkflows.length === 0 ? (
-          <Stack className="actions-panel__empty">
+          <Stack {...ACTIONS_PANEL_EMPTY}>
             <Prim.Text fontSize={32} marginBottom="$2">⚡</Prim.Text>
             <Label>No actions attached</Label>
-            <Caption muted className="actions-panel__empty-caption">
+            <Caption muted {...ACTIONS_PANEL_EMPTY_CAPTION}>
               Attach workflows to give users quick access to multi-step tasks
             </Caption>
             <Button onClick={onOpenWorkflowBuilder} variant="ghost" size="sm">Attach Your First Workflow</Button>
@@ -75,7 +75,7 @@ export function ActionsPanel({
       </Prim.Box>
 
       <CardFooter>
-        <Caption muted className="actions-panel__footer-caption">
+        <Caption muted {...ACTIONS_PANEL_FOOTER_CAPTION}>
           Actions are invoked with <Code>/action</Code>
         </Caption>
       </CardFooter>
@@ -92,19 +92,19 @@ function SlashActionCard({ workflow, onToggleEnabled, onEdit, onDetach }: {
   return (
     <Card interactive>
       <CardBody>
-        <Stack row gap="sm" className="actions-panel__card-row">
+        <Stack row gap="sm" {...ACTIONS_PANEL_CARD_ROW}>
           <Prim.Box flexShrink={0} fontSize={20}>⚡</Prim.Box>
           <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
-            <Stack row gap="sm" className="actions-panel__card-title-row">
+            <Stack row gap="sm" {...ACTIONS_PANEL_CARD_TITLE_ROW}>
               <Code>/{workflow.slashAction.actionId}</Code>
-              <Badge variant={workflow.slashAction.enabled ? 'success' : 'muted'} className="actions-panel__badge-sm">
+              <Badge variant={workflow.slashAction.enabled ? 'success' : 'muted'} {...ACTIONS_PANEL_BADGE_SM}>
                 {workflow.slashAction.enabled ? 'Active' : 'Disabled'}
               </Badge>
             </Stack>
-            <Label className="actions-panel__card-label">{workflow.slashAction.name}</Label>
-            <Caption muted className="actions-panel__card-description">{workflow.slashAction.description}</Caption>
-            <Stack row gap="sm" className="actions-panel__card-meta-row">
-              <Badge variant="muted" className="actions-panel__badge-sm">{workflow.stepCount} step{workflow.stepCount > 1 ? 's' : ''}</Badge>
+            <Label {...ACTIONS_PANEL_CARD_LABEL}>{workflow.slashAction.name}</Label>
+            <Caption muted {...ACTIONS_PANEL_CARD_DESCRIPTION}>{workflow.slashAction.description}</Caption>
+            <Stack row gap="sm" {...ACTIONS_PANEL_CARD_META_ROW}>
+              <Badge variant="muted" {...ACTIONS_PANEL_BADGE_SM}>{workflow.stepCount} step{workflow.stepCount > 1 ? 's' : ''}</Badge>
               <Caption muted>{workflow.workflowName}</Caption>
             </Stack>
           </Prim.Box>

@@ -7,9 +7,9 @@ import { Input } from '@lmthing/ui/elements/forms/input'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import '@lmthing/css/components/space/index.css'
 import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index.js'
 import { DROPDOWN_CONTENT, DROPDOWN_ITEM } from '../../../elements/overlays/dropdown/index.js'
+import { SPACE_SELECTOR_CHEVRON, SPACE_SELECTOR_CREATE_BTN, SPACE_SELECTOR_CREATE_FORM, SPACE_SELECTOR_EMPTY, SPACE_SELECTOR_ITEM_ICON, SPACE_SELECTOR_NEW_ICON, SPACE_SELECTOR_SEARCH_ICON, SPACE_SELECTOR_SEARCH_INPUT, SPACE_SELECTOR_TRIGGER, SPACE_SELECTOR_TRIGGER_LABEL } from '../props.js'
 
 export interface SpaceEntry {
   id: string
@@ -41,24 +41,24 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
 
   return (
     <Prim.Box position="relative">
-      <Button onClick={toggleIsOpen} variant="ghost" className="space-selector__trigger">
-        <Label className="space-selector__trigger-label">
+      <Button onClick={toggleIsOpen} variant="ghost" {...SPACE_SELECTOR_TRIGGER}>
+        <Label {...SPACE_SELECTOR_TRIGGER_LABEL}>
           {currentSpace ? currentSpace.name : 'Select Space'}
         </Label>
-        <ChevronDown className="space-selector__chevron" />
+        <ChevronDown {...SPACE_SELECTOR_CHEVRON} />
       </Button>
 
       {isOpen && (
         <Prim.Box {...DROPDOWN_CONTENT} position="absolute" top="100%" left={0} right={0} zIndex={50} marginTop="$1">
           <Prim.Box padding="$2" borderBottomWidth={1} borderBottomColor="$border">
             <Prim.Box position="relative">
-              <Search className="space-selector__search-icon" />
+              <Search {...SPACE_SELECTOR_SEARCH_ICON} />
               <Input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search spaces..."
-                {...INPUT_BASE} {...INPUT_SM} className="space-selector__search-input"
+                {...INPUT_BASE} {...INPUT_SM} {...SPACE_SELECTOR_SEARCH_INPUT}
                 autoFocus
               />
             </Prim.Box>
@@ -66,7 +66,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
 
           <Prim.Box maxHeight="$64" overflowY="auto">
             {filteredSpaces.length === 0 ? (
-              <Caption muted className="space-selector__empty">No spaces found</Caption>
+              <Caption muted {...SPACE_SELECTOR_EMPTY}>No spaces found</Caption>
             ) : (
               filteredSpaces.map((space) => (
                 <Prim.Pressable
@@ -76,7 +76,7 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
                   width="100%"
                   textAlign="left"
                 >
-                  <FolderOpen className="space-selector__item-icon" />
+                  <FolderOpen {...SPACE_SELECTOR_ITEM_ICON} />
                   <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{space.name}</Prim.Text>
                 </Prim.Pressable>
               ))
@@ -86,17 +86,17 @@ export function SpaceSelector({ spaces, currentSpaceId, onSelectSpace, onCreateS
           <Prim.Box borderTopWidth={1} borderTopColor="$border" padding="$2">
             {showCreate ? (
               <Prim.Form onSubmit={handleCreate}>
-                <Stack gap="sm" className="space-selector__create-form">
+                <Stack gap="sm" {...SPACE_SELECTOR_CREATE_FORM}>
                   <Input type="text" value={newSpaceName} onChange={(e) => setNewSpaceName(e.target.value)} placeholder="Space name..." {...INPUT_BASE} {...INPUT_SM} autoFocus />
                   <Stack row gap="sm">
-                    <Button type="submit" variant="primary" size="sm" className="space-selector__create-btn">Create</Button>
-                    <Button type="button" onClick={() => setShowCreate(false)} variant="ghost" size="sm" className="space-selector__create-btn">Cancel</Button>
+                    <Button type="submit" variant="primary" size="sm" {...SPACE_SELECTOR_CREATE_BTN}>Create</Button>
+                    <Button type="button" onClick={() => setShowCreate(false)} variant="ghost" size="sm" {...SPACE_SELECTOR_CREATE_BTN}>Cancel</Button>
                   </Stack>
                 </Stack>
               </Prim.Form>
             ) : (
               <Prim.Pressable onClick={() => setShowCreate(true)} {...DROPDOWN_ITEM} width="100%">
-                <Plus className="space-selector__new-icon" /><Prim.Text>New Space</Prim.Text>
+                <Plus {...SPACE_SELECTOR_NEW_ICON} /><Prim.Text>New Space</Prim.Text>
               </Prim.Pressable>
             )}
           </Prim.Box>

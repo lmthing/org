@@ -10,7 +10,6 @@
  * following the same draft/save pattern as the agent-builder and topic-editor.
  */
 import * as Prim from '../../elements/primitives/index.js';
-import '@lmthing/css/components/component-editor/index.css'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'

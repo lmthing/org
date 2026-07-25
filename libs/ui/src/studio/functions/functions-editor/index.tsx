@@ -8,7 +8,6 @@
  * the agent-builder and topic-editor.
  */
 import * as Prim from '../../../elements/primitives/index.js';
-import '@lmthing/css/components/functions/index.css'
 import { useCallback, useEffect, useRef } from 'react'
 import { useSpaceFS, useGlob, useFile, useUIState, P } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -18,6 +17,7 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { Badge } from '@lmthing/ui/elements/content/badge'
 import { INPUT_BASE } from '../../../elements/forms/input/index.js'
+import { FUNCTIONS_EDITOR_TEXTAREA } from '../props.js'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -208,7 +208,7 @@ function FunctionCodeEditor({ functionPath }: FunctionCodeEditorProps) {
       </Prim.Box>
 
       <Prim.TextArea
-        {...INPUT_BASE} className="functions-editor__textarea"
+        {...INPUT_BASE} {...FUNCTIONS_EDITOR_TEXTAREA}
         value={draft}
         onChange={e => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}

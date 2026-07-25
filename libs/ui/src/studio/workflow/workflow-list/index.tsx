@@ -12,7 +12,7 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Page, PageHeader, PageBody } from '@lmthing/ui/elements/layouts/page'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import '@lmthing/css/components/workflow/workflow-list/index.css'
+import { WORKFLOW_LIST_CREATE_ICON, WORKFLOW_LIST_EMPTY_FIRST_CAPTION, WORKFLOW_LIST_EMPTY_FIRST_ICON, WORKFLOW_LIST_FILTERS, WORKFLOW_LIST_SEARCH_ICON, WORKFLOW_LIST_SEARCH_INPUT, WORKFLOW_LIST_STATS, WORKFLOW_LIST_STAT_ROW, WORKFLOW_LIST_VIEW_ICON } from '../workflow-list.props.js'
 
 interface TasklistListProps {
   tasklists: TLItem[]
@@ -58,7 +58,7 @@ export function TasklistList({
               <Caption muted>Define ordered task DAGs for agent action flows</Caption>
             </Prim.Box>
             <Button variant="primary" onClick={onCreateTasklist}>
-              <Prim.Svg className="workflow-list__create-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <Prim.Svg {...WORKFLOW_LIST_CREATE_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <Prim.Path d="M12 5v14M5 12h14" />
               </Prim.Svg>
               New Tasklist
@@ -66,18 +66,18 @@ export function TasklistList({
           </Prim.Box>
 
           {/* Stats */}
-          <Stack row gap="lg" className="workflow-list__stats">
-            <Stack row gap="sm" className="workflow-list__stat-row">
+          <Stack row gap="lg" {...WORKFLOW_LIST_STATS}>
+            <Stack row gap="sm" {...WORKFLOW_LIST_STAT_ROW}>
               <Prim.Text fontSize="$2xl" fontWeight="$bold" color="$foreground">{tasklists.length}</Prim.Text>
               <Caption muted>total</Caption>
             </Stack>
           </Stack>
 
           {/* Search + view toggle */}
-          <Stack row gap="md" className="workflow-list__filters">
+          <Stack row gap="md" {...WORKFLOW_LIST_FILTERS}>
             <Prim.Box position="relative" flexGrow={1} flexShrink={1} flexBasis="0%" maxWidth="28rem">
               <Prim.Svg
-                className="workflow-list__search-icon"
+                {...WORKFLOW_LIST_SEARCH_ICON}
                 viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               >
                 <Prim.Circle cx="11" cy="11" r="8" />
@@ -88,7 +88,7 @@ export function TasklistList({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search tasklists…"
-                className="workflow-list__search-input"
+                {...WORKFLOW_LIST_SEARCH_INPUT}
               />
             </Prim.Box>
 
@@ -110,7 +110,7 @@ export function TasklistList({
                   : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })}
                 title="Grid view"
               >
-                <Prim.Svg className="workflow-list__view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <Prim.Svg {...WORKFLOW_LIST_VIEW_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <Prim.Rect x="3" y="3" width="7" height="7" />
                   <Prim.Rect x="14" y="3" width="7" height="7" />
                   <Prim.Rect x="14" y="14" width="7" height="7" />
@@ -133,7 +133,7 @@ export function TasklistList({
                   : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })}
                 title="List view"
               >
-                <Prim.Svg className="workflow-list__view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <Prim.Svg {...WORKFLOW_LIST_VIEW_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <Prim.Path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
                 </Prim.Svg>
               </Prim.Pressable>
@@ -177,18 +177,18 @@ export function TasklistList({
                   shadowOffset={{ width: 0, height: 20 }}
                   shadowRadius={25}
                 >
-                  <Prim.Svg className="workflow-list__empty-first-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <Prim.Svg {...WORKFLOW_LIST_EMPTY_FIRST_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <Prim.Path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
                     <Prim.Rect x="9" y="3" width="6" height="4" rx="1" />
                     <Prim.Path d="M9 12h6M9 16h4" />
                   </Prim.Svg>
                 </Prim.Box>
                 <Heading level={2}>Create your first tasklist</Heading>
-                <Caption muted className="workflow-list__empty-first-caption">
+                <Caption muted {...WORKFLOW_LIST_EMPTY_FIRST_CAPTION}>
                   Tasklists define the ordered steps agents execute when a slash action is triggered.
                 </Caption>
                 <Button variant="primary" onClick={onCreateTasklist}>
-                  <Prim.Svg className="workflow-list__create-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <Prim.Svg {...WORKFLOW_LIST_CREATE_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <Prim.Path d="M12 5v14M5 12h14" />
                   </Prim.Svg>
                   Create Tasklist

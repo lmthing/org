@@ -1,6 +1,5 @@
 import * as Prim from '../elements/primitives/index.js';
 import { Button } from '../elements/forms/button'
-import '@lmthing/css/components/computer/ide-file-tree.css'
 import { useState } from 'react'
 import {
   ChevronRight,
@@ -14,6 +13,7 @@ import {
 } from 'lucide-react'
 import * as ContextMenu from '../elements/overlays/context-menu'
 import { Dialog, DialogContent, DialogTitle } from '../elements/overlays/dialog'
+import { IDE_FILE_TREE_CONTEXT_ITEM, IDE_FILE_TREE_CONTEXT_ITEM_DANGER, IDE_FILE_TREE_DIALOG_INPUT, IDE_FILE_TREE_DIALOG_TITLE, IDE_FILE_TREE_ICON, IDE_FILE_TREE_ICON_FOLDER } from './ide-file-tree.props.js'
 
 export interface FileTreeNode {
   name: string
@@ -85,16 +85,16 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
             {node.type === 'directory' ? (
               <>
                 {expanded
-                  ? <ChevronDown size={16} className="ide-file-tree__icon" />
-                  : <ChevronRight size={16} className="ide-file-tree__icon" />}
+                  ? <ChevronDown size={16} {...IDE_FILE_TREE_ICON} />
+                  : <ChevronRight size={16} {...IDE_FILE_TREE_ICON} />}
                 {expanded
-                  ? <FolderOpen size={16} className="ide-file-tree__icon ide-file-tree__icon--folder" />
-                  : <Folder size={16} className="ide-file-tree__icon ide-file-tree__icon--folder" />}
+                  ? <FolderOpen size={16} {...IDE_FILE_TREE_ICON} {...IDE_FILE_TREE_ICON_FOLDER} />
+                  : <Folder size={16} {...IDE_FILE_TREE_ICON} {...IDE_FILE_TREE_ICON_FOLDER} />}
               </>
             ) : (
               <>
                 <Prim.Text style={{ width: 16 }} />
-                <File size={16} className="ide-file-tree__icon" />
+                <File size={16} {...IDE_FILE_TREE_ICON} />
               </>
             )}
             <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{node.name}</Prim.Text>
@@ -102,14 +102,14 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
           <ContextMenu.Content className="ide-file-tree__context-menu">
-            <ContextMenu.Item className="ide-file-tree__context-item" onClick={() => setDialogType('file')}>
+            <ContextMenu.Item {...IDE_FILE_TREE_CONTEXT_ITEM} onClick={() => setDialogType('file')}>
               <FilePlus size={16} /> New File
             </ContextMenu.Item>
-            <ContextMenu.Item className="ide-file-tree__context-item" onClick={() => setDialogType('folder')}>
+            <ContextMenu.Item {...IDE_FILE_TREE_CONTEXT_ITEM} onClick={() => setDialogType('folder')}>
               <FolderPlus size={16} /> New Folder
             </ContextMenu.Item>
             <ContextMenu.Separator style={{ height: 1, margin: '4px 0', background: 'var(--color-border)' }} />
-            <ContextMenu.Item className="ide-file-tree__context-item ide-file-tree__context-item--danger" onClick={() => onDelete(node.path)}>
+            <ContextMenu.Item {...IDE_FILE_TREE_CONTEXT_ITEM} {...IDE_FILE_TREE_CONTEXT_ITEM_DANGER} onClick={() => onDelete(node.path)}>
               <Trash2 size={16} /> Delete
             </ContextMenu.Item>
           </ContextMenu.Content>
@@ -118,11 +118,11 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
 
       <Dialog open={dialogType !== null} onOpenChange={(open) => { if (!open) setDialogType(null) }}>
         <DialogContent className="ide-file-tree__dialog-content">
-          <DialogTitle className="ide-file-tree__dialog-title">
+          <DialogTitle {...IDE_FILE_TREE_DIALOG_TITLE}>
             New {dialogType === 'folder' ? 'Folder' : 'File'}
           </DialogTitle>
           <Prim.TextField
-            className="ide-file-tree__dialog-input"
+            {...IDE_FILE_TREE_DIALOG_INPUT}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
@@ -224,11 +224,11 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
 
       <Dialog open={dialogType !== null} onOpenChange={(open) => { if (!open) setDialogType(null) }}>
         <DialogContent className="ide-file-tree__dialog-content">
-          <DialogTitle className="ide-file-tree__dialog-title">
+          <DialogTitle {...IDE_FILE_TREE_DIALOG_TITLE}>
             New {dialogType === 'folder' ? 'Folder' : 'File'}
           </DialogTitle>
           <Prim.TextField
-            className="ide-file-tree__dialog-input"
+            {...IDE_FILE_TREE_DIALOG_INPUT}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}

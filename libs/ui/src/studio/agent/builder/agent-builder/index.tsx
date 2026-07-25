@@ -4,7 +4,6 @@
  * Fields: title, body, actions[], defaultAction, functions[], components[], knowledge[], canDelegateTo[]
  */
 import * as Prim from '../../../../elements/primitives/index.js';
-import '@lmthing/css/components/agent/builder/index.css'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { AgentHeader } from '../agent-header'
 import { useAgentForm } from './use-agent-form'

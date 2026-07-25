@@ -13,7 +13,6 @@
 import * as Prim from '../../../elements/primitives/index.js';
 import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index.js'
 import { PAGE_BODY } from '../../../elements/layouts/page/index.js'
-import '@lmthing/css/components/setup-guide/index.css'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useAuth } from '@lmthing/auth'
@@ -33,6 +32,7 @@ function storeOrigin(): string {
   return 'https://lmthing.store'
 }
 import { SettingsSchemaForm, type JsonSchema } from '../../integrations/SettingsSchemaForm'
+import { LM_SETUP_GUIDE } from '../../../components/setup-guide/props.js'
 
 /** `InstalledIntegration` per INTEGRATIONS_PROGRESS.md §3. */
 interface InstalledIntegration {
@@ -182,7 +182,7 @@ export function ProjectSettingsView() {
                       <PanelBody>
                         <Stack gap="md">
                           {integration.readme ? (
-                            <Prim.Box as="details" className="lm-setup-guide" open>
+                            <Prim.Box as="details" {...LM_SETUP_GUIDE} open>
                               <Prim.Box as="summary" className="lm-setup-guide__summary">
                                 How to get your keys — setup guide
                               </Prim.Box>

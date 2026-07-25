@@ -8,7 +8,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { cn } from '../../../lib/utils'
 
-import '@lmthing/css/components/workflow/workflow-card/index.css'
+import { WORKFLOW_CARD_CHECK_ICON, WORKFLOW_CARD_ICON } from '../workflow-card.props.js'
 
 // ─── Card (grid view) ─────────────────────────────────────────────────────────
 
@@ -63,7 +63,7 @@ export function TasklistCard({ tasklist, isSelected, onSelect, onDelete }: Taskl
             size="icon"
             onClick={(e) => { e.stopPropagation(); onDelete() }}
           >
-            <Prim.Svg className="workflow-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <Prim.Svg {...WORKFLOW_CARD_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <Prim.Path d="M3 6h18" />
               <Prim.Path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
               <Prim.Path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
@@ -91,7 +91,7 @@ export function TasklistCard({ tasklist, isSelected, onSelect, onDelete }: Taskl
           justifyContent="center"
           backgroundColor="$brand-3"
         >
-          <Prim.Svg className="workflow-card__check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+          <Prim.Svg {...WORKFLOW_CARD_CHECK_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
             <Prim.Path d="M5 13l4 4L19 7" />
           </Prim.Svg>
         </Prim.Box>
@@ -148,7 +148,7 @@ export function TasklistListItem({ tasklist, isSelected, onSelect, onDelete }: T
         size="icon"
         onClick={(e) => { e.stopPropagation(); onDelete() }}
       >
-        <Prim.Svg className="workflow-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <Prim.Svg {...WORKFLOW_CARD_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <Prim.Path d="M3 6h18" />
           <Prim.Path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
           <Prim.Path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
