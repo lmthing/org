@@ -83,7 +83,7 @@ function LogsViewer({ logs }: LogsViewerProps) {
               <Prim.Box key={i} display="flex" gap="$2">
                 <Prim.Text color="$muted-foreground" flexShrink={0}>{formatTime(entry.timestamp)}</Prim.Text>
                 <Prim.Text color="$primary" flexShrink={0}>[{entry.source}]</Prim.Text>
-                <Prim.Text wordBreak="break-all" color={MESSAGE_COLOR[entry.level]}>
+                <Prim.Text style={{ wordBreak: 'break-all' }} color={MESSAGE_COLOR[entry.level]}>
                   {entry.message}
                 </Prim.Text>
               </Prim.Box>

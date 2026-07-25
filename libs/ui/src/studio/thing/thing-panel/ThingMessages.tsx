@@ -70,7 +70,7 @@ export function ThingMessages({ hasEnv, messages, isWorking, messagesEndRef }: T
           {msg.role === 'assistant' ? (
             <ToolCallDisplay content={msg.content} />
           ) : (
-            <Prim.Text whiteSpace="pre-wrap" wordBreak="break-word">
+            <Prim.Text whiteSpace="pre-wrap" style={{ wordBreak: 'break-word' }}>
               {msg.content}
             </Prim.Text>
           )}
