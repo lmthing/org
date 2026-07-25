@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute, useParams } from '@tanstack/react-router'
 import { useState } from 'react'
 import { RefreshCw, ExternalLink } from 'lucide-react'
@@ -24,15 +25,9 @@ function AppPreview() {
   const [nonce, setNonce] = useState(0)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          padding: '0.5rem 1.5rem',
-          borderBottom: '1px solid var(--color-border)',
-        }}
+    <Prim.Box display="flex" flexDirection="column" height="100%" minHeight={0}>
+      <Prim.Box
+        display="flex" alignItems="center" gap="0.75rem" paddingVertical="0.5rem" paddingHorizontal="1.5rem" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--color-border)"
       >
         <Caption muted style={{ flex: 1, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {src}
@@ -43,8 +38,8 @@ function AppPreview() {
         <Button variant="ghost" onClick={() => window.open(src, '_blank', 'noopener')} aria-label="Open in new tab">
           <ExternalLink style={{ width: 15, height: 15 }} /> Open
         </Button>
-      </div>
-      <iframe
+      </Prim.Box>
+      <Prim.IFrame
         key={nonce}
         title="App preview"
         src={src}
@@ -55,7 +50,7 @@ function AppPreview() {
           background: 'var(--color-background)',
         }}
       />
-    </div>
+    </Prim.Box>
   )
 }
 

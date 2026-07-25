@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { useCallback, useMemo } from 'react'
 import { useToggle, useSpaceFS, useGlob, useUIState, useKnowledgeDomainIndex, serializeKnowledgeFieldIndex } from '@lmthing/state'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
@@ -27,9 +28,9 @@ function FieldCard({ entry, spacePath }: { entry: FieldEntry; spacePath: string 
     >
       <CardBody>
         <Stack row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
             <Label>{entry.field}</Label>
-          </div>
+          </Prim.Box>
         </Stack>
       </CardBody>
     </Card>
@@ -118,15 +119,15 @@ function KnowledgePage() {
   }, [spaceFS, newDomain, newField, spacePath, navigate])
 
   return (
-    <div style={{ maxWidth: '48rem', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <Prim.Box maxWidth="48rem" marginVertical="0" marginHorizontal="auto" paddingVertical="2rem" paddingHorizontal="1.5rem">
       <Stack gap="lg">
         <Stack row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
+          <Prim.Box>
             <Heading level={2}>Knowledge</Heading>
             <Caption muted>
               {entries.length} knowledge field{entries.length !== 1 ? 's' : ''} configured.
             </Caption>
-          </div>
+          </Prim.Box>
           <Button variant="primary" onClick={() => setShowCreate(true)}>
             <Plus style={{ width: '1rem', height: '1rem', marginRight: '0.25rem' }} />
             New Field
@@ -143,7 +144,7 @@ function KnowledgePage() {
                     <X style={{ width: '1rem', height: '1rem' }} />
                   </Button>
                 </Stack>
-                <div>
+                <Prim.Box>
                   <Label compact>Domain</Label>
                   <Input
                     type="text"
@@ -153,8 +154,8 @@ function KnowledgePage() {
                     autoFocus
                   />
                   <Caption muted>Groups related fields together</Caption>
-                </div>
-                <div>
+                </Prim.Box>
+                <Prim.Box>
                   <Label compact>Field</Label>
                   <Input
                     type="text"
@@ -163,7 +164,7 @@ function KnowledgePage() {
                     placeholder="e.g. writing-style, grade-level"
                     onKeyDown={e => { if (e.key === 'Enter') handleCreateField() }}
                   />
-                </div>
+                </Prim.Box>
                 <Stack row gap="sm">
                   <Button variant="primary" size="sm" onClick={handleCreateField} disabled={!newDomain.trim() || !newField.trim()}>
                     Create Field
@@ -182,17 +183,17 @@ function KnowledgePage() {
         ) : (
           <Stack gap="lg">
             {domains.map(domain => (
-              <div key={domain}>
+              <Prim.Box key={domain}>
                 <Heading level={4} style={{ marginBottom: '0.5rem', color: 'var(--color-muted-foreground)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {domain}
                 </Heading>
                 <DomainFields domain={domain} fields={byDomain.get(domain) || []} spacePath={spacePath} />
-              </div>
+              </Prim.Box>
             ))}
           </Stack>
         )}
       </Stack>
-    </div>
+    </Prim.Box>
   )
 }
 

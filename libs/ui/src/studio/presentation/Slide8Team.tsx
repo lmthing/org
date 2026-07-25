@@ -33,9 +33,9 @@ export default function Slide7Team() {
   return (
     <Prim.Col
       height="100%" width="100%" justifyContent="center" alignItems="center"
-      style={{ background: colors.bg }}
+      backgroundColor="colors.bg"
     >
-      <Prim.Text as="h2" alignItems="center" justifyContent="center" gap="$3" fontSize="$7xl" fontWeight="$bold" marginBottom="4rem" display="flex" style={{ color: colors.text }}>
+      <Prim.Text as="h2" alignItems="center" justifyContent="center" gap="$3" fontSize="$7xl" fontWeight="$bold" marginBottom="4rem" display="flex" color={colors.text}>
         Team behind the <CozyThingText text="thing" fontSize="$7xl" lineHeight={2} />
       </Prim.Text>
 
@@ -46,16 +46,16 @@ export default function Slide7Team() {
               src={m.image}
               alt={m.name}
               width="$40" height="$40" borderRadius="$radius-full" borderWidth={4} objectFit="cover"
-              style={{ borderColor: colors.brand }}
+              borderColor={colors.brand}
             />
-            <Prim.Text as="p" fontSize="$2xl" fontWeight="$bold" marginTop="1.5rem" style={{ color: colors.text }}>
+            <Prim.Text as="p" fontSize="$2xl" fontWeight="$bold" marginTop="1.5rem" color={colors.text}>
               {m.name}
             </Prim.Text>
-            <Prim.Text as="p" fontSize="$base" marginTop="0.5rem" style={{ color: colors.muted }}>
+            <Prim.Text as="p" fontSize="$base" marginTop="0.5rem" color={colors.muted}>
               {m.role}
             </Prim.Text>
             {m.subtitle && (
-              <Prim.Text as="p" fontSize="$sm" marginTop="0.25rem" style={{ color: colors.muted }}>
+              <Prim.Text as="p" fontSize="$sm" marginTop="0.25rem" color={colors.muted}>
                 {m.subtitle}
               </Prim.Text>
             )}

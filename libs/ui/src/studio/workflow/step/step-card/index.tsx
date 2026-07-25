@@ -141,7 +141,7 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
               {outputFields.length > 0 && (
                 <Prim.Box>
                   <Caption muted>Output:</Caption>
-                  <Prim.Box style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                  <Prim.Box display="flex" gap="0.25rem" flexWrap="wrap" marginTop="0.25rem">
                     {outputFields.map(([k, v]) => (
                       <Badge key={k} variant="muted">{k}: {v}</Badge>
                     ))}
@@ -151,7 +151,7 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
               {task.dependsOn && task.dependsOn.length > 0 && (
                 <Prim.Box>
                   <Caption muted>Depends on:</Caption>
-                  <Prim.Box style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                  <Prim.Box display="flex" gap="0.25rem" flexWrap="wrap" marginTop="0.25rem">
                     {task.dependsOn.map((d) => (
                       <Badge key={d} variant="primary">{d}</Badge>
                     ))}

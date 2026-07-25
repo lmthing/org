@@ -48,7 +48,7 @@ function AgentListPage() {
             {agents.map(a => (
               <Prim.Box
                 key={a.id}
-                style={{ cursor: 'pointer' }}
+                cursor="pointer"
                 onClick={() => navigate({ to: `${spacePath}/agent/${encodeURIComponent(a.id)}` })}
               >
                 <AgentCard id={a.id} />

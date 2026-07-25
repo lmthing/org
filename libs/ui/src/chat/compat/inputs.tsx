@@ -106,7 +106,7 @@ export function SelectInput<V = unknown>({
               else if (e.key === 'ArrowUp') { e.preventDefault(); move(active - 1); }
               else if (e.key === 'Enter') { e.preventDefault(); const cur = items[active]; if (cur) onSelect?.(cur); }
             }}
-            style={{ cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center', padding: '2px 4px', borderRadius: 4, background: selected ? 'color-mix(in srgb, var(--lm-accent, #58a6ff) 18%, transparent)' : undefined }}
+            cursor="pointer" display="flex" gap={6} alignItems="center" paddingVertical="2px" paddingHorizontal="4px" borderRadius={4} backgroundColor="selected ? 'color-mix(in srgb, var(--lm-accent, #58a6ff) 18%, transparent)' : undefined"
           >
             <Text color={selected ? 'cyan' : undefined}>{selected ? '❯' : ' '}</Text>
             <Text color={selected ? 'cyan' : undefined}>{it.label}</Text>
@@ -139,7 +139,7 @@ export function MultiSelect<V = unknown>({
       {items.map((it, i) => {
         const on = checked.has(it.value);
         return (
-          <Prim.Text as="label" key={it.key ?? String(i)} style={{ display: 'flex', gap: 6, cursor: 'pointer', padding: '1px 0' }}>
+          <Prim.Text as="label" key={it.key ?? String(i)} display="flex" gap={6} cursor="pointer" paddingVertical="1px" paddingHorizontal="0">
             <Prim.TextField type="checkbox" checked={on} onChange={() => toggle(it.value)} />
             <Text>{it.label}</Text>
           </Prim.Text>
@@ -147,7 +147,7 @@ export function MultiSelect<V = unknown>({
       })}
       <Prim.Pressable
         onClick={() => onSubmit?.(items.filter((it) => checked.has(it.value)))}
-        style={{ marginTop: 6, alignSelf: 'flex-start', background: inkColor('blue'), color: 'var(--lm-bg)', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+        marginTop={6} alignSelf="flex-start" backgroundColor="inkColor('blue')" color="var(--lm-bg)" borderWidth={0} borderRadius={6} paddingVertical="4px" paddingHorizontal="10px" cursor="pointer"
       >
         Submit
       </Prim.Pressable>

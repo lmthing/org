@@ -18,7 +18,7 @@ export function ActionRow({ action, tasklistNames, onChange, onRemove }: {
       <Prim.Box {...PANEL_BODY}>
         <Stack gap="sm">
           <Stack row gap="sm">
-            <Prim.Box style={{ flex: 1 }}>
+            <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%">
               <Label compact>ID</Label>
               <Input value={action.id} onChange={e => onChange({ ...action, id: e.target.value })} placeholder="action-id" />
             </Prim.Box>

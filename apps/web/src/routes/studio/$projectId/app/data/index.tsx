@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute, useParams } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
@@ -96,17 +97,10 @@ function DataBrowser() {
   )
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <Prim.Box height="100%" display="flex" flexDirection="column" minHeight={0}>
       {/* Table picker */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          padding: '0.75rem 1.5rem',
-          borderBottom: '1px solid var(--color-border)',
-          flexWrap: 'wrap',
-        }}
+      <Prim.Box
+        display="flex" alignItems="center" gap="0.5rem" paddingVertical="0.75rem" paddingHorizontal="1.5rem" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--color-border)" flexWrap="wrap"
       >
         {tables.length === 0 ? (
           <Caption muted>No tables in this project.</Caption>
@@ -125,7 +119,7 @@ function DataBrowser() {
             </Button>
           ))
         )}
-      </div>
+      </Prim.Box>
 
       {error ? (
         <Caption style={{ padding: '0.5rem 1.5rem', color: 'var(--color-destructive)' }}>
@@ -134,42 +128,33 @@ function DataBrowser() {
       ) : null}
 
       {/* Rows */}
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflow="auto" minHeight={0}>
         {loading && !data ? (
-          <div style={{ padding: '1.5rem', opacity: 0.6, fontSize: '0.875rem' }}>Loading rows…</div>
+          <Prim.Box padding="1.5rem" opacity={0.6} fontSize="0.875rem">Loading rows…</Prim.Box>
         ) : rows.length === 0 ? (
-          <div style={{ padding: '1.5rem', opacity: 0.6, fontSize: '0.875rem' }}>
+          <Prim.Box padding="1.5rem" opacity={0.6} fontSize="0.875rem">
             {table ? 'No rows.' : 'Select a table.'}
-          </div>
+          </Prim.Box>
         ) : (
-          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.8125rem' }}>
-            <thead>
-              <tr>
+          <Prim.Table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.8125rem' }}>
+            <Prim.Thead>
+              <Prim.Tr>
                 {columns.map((c) => (
-                  <th
+                  <Prim.Th
                     key={c}
-                    style={{
-                      textAlign: 'left',
-                      padding: '0.5rem 0.75rem',
-                      borderBottom: '1px solid var(--color-border)',
-                      fontFamily: 'monospace',
-                      position: 'sticky',
-                      top: 0,
-                      background: 'var(--color-background)',
-                      whiteSpace: 'nowrap',
-                    }}
+                    textAlign="left" paddingVertical="0.5rem" paddingHorizontal="0.75rem" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--color-border)" fontFamily="monospace" position="sticky" top={0} backgroundColor="var(--color-background)" whiteSpace="nowrap"
                   >
                     {c}
-                    {c === pkColumn ? <span style={{ opacity: 0.5 }}> (pk)</span> : null}
-                  </th>
+                    {c === pkColumn ? <Prim.Text opacity={0.5}> (pk)</Prim.Text> : null}
+                  </Prim.Th>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </Prim.Tr>
+            </Prim.Thead>
+            <Prim.Tbody>
               {rows.map((row, i) => {
                 const rowId = String(row[pkColumn] ?? row.id ?? i)
                 return (
-                  <tr key={rowId}>
+                  <Prim.Tr key={rowId}>
                     {columns.map((c) => (
                       <Cell
                         key={c}
@@ -178,23 +163,17 @@ function DataBrowser() {
                         onSave={(v) => saveCell(rowId, c, v)}
                       />
                     ))}
-                  </tr>
+                  </Prim.Tr>
                 )
               })}
-            </tbody>
-          </table>
+            </Prim.Tbody>
+          </Prim.Table>
         )}
-      </div>
+      </Prim.Box>
 
       {/* Pager */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          padding: '0.5rem 1.5rem',
-          borderTop: '1px solid var(--color-border)',
-        }}
+      <Prim.Box
+        display="flex" alignItems="center" gap="0.75rem" paddingVertical="0.5rem" paddingHorizontal="1.5rem" borderTopWidth="1px" borderTopStyle="solid" borderTopColor="var(--color-border)"
       >
         <Button variant="outline" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
           Prev
@@ -206,8 +185,8 @@ function DataBrowser() {
         <Button variant="outline" disabled={!hasNext} onClick={() => setPage((p) => p + 1)}>
           Next
         </Button>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 
@@ -237,7 +216,7 @@ function Cell({
 
   if (editing) {
     return (
-      <td style={{ ...td, padding: '0.125rem 0.25rem' }}>
+      <Prim.Td style={{ ...td, padding: '0.125rem 0.25rem' }}>
         <Input
           autoFocus
           value={draft}
@@ -257,12 +236,12 @@ function Cell({
           }}
           style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}
         />
-      </td>
+      </Prim.Td>
     )
   }
 
   return (
-    <td
+    <Prim.Td
       style={td}
       title={initial}
       onClick={() => {
@@ -272,8 +251,8 @@ function Cell({
         }
       }}
     >
-      {initial === '' ? <span style={{ opacity: 0.35 }}>∅</span> : initial}
-    </td>
+      {initial === '' ? <Prim.Text opacity={0.35}>∅</Prim.Text> : initial}
+    </Prim.Td>
   )
 }
 

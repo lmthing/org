@@ -105,7 +105,7 @@ export function Hooks() {
   })).filter((g) => g.rows.length > 0)
 
   return (
-    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <Prim.Box display="flex" flexDirection="column" gap="0.75rem">
       <Caption muted>
         Automated hooks running on your pod — scheduled (cron), event-driven, and
         inbound webhooks — across every project and installed space. Toggle one off
@@ -120,8 +120,8 @@ export function Hooks() {
         <Caption muted>No automated hooks found.</Caption>
       ) : (
         groupsWithHooks.map((g) => (
-          <Prim.Box key={g.type} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+          <Prim.Box key={g.type} display="flex" flexDirection="column" gap="0.25rem">
+            <Prim.Box display="flex" alignItems="center" gap="0.5rem" marginTop="0.25rem">
               <Badge variant={typeVariant(g.type)}>{g.label}</Badge>
               <Caption muted>{g.rows.length}</Caption>
             </Prim.Box>
@@ -130,22 +130,15 @@ export function Hooks() {
               return (
                 <Prim.Box
                   key={key}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.5rem 0',
-                    borderBottom: '1px solid var(--border)',
-                    opacity: h.disabled ? 0.55 : 1,
-                  }}
+                  display="flex" alignItems="center" gap="0.5rem" paddingVertical="0.5rem" paddingHorizontal="0" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--border)" opacity={h.disabled ? 0.55 : 1}
                 >
-                  <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1, minWidth: 0 }}>
-                    <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <Prim.Box display="flex" flexDirection="column" gap="0.2rem" flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
+                    <Prim.Box display="flex" alignItems="center" gap="0.5rem" flexWrap="wrap">
                       <Code>{h.slug}</Code>
                       <Badge variant="muted">{h.projectId}</Badge>
                       {h.owner && h.owner !== 'project' && <Badge variant="muted">{h.owner}</Badge>}
                     </Prim.Box>
-                    <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <Prim.Box display="flex" alignItems="center" gap="0.5rem" flexWrap="wrap">
                       <Caption muted>{scheduleOf(h)}</Caption>
                       <Caption muted>→ {h.trigger ?? (h.hasHandler ? 'handler' : '—')}</Caption>
                     </Prim.Box>

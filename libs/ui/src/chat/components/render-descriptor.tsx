@@ -66,16 +66,16 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     }
 
     // ── layout ──
-    case 'stack': return <Prim.Col key={key} marginVertical="$1" style={{ gap: ((props['gap'] as number) ?? 1) * 4 }}>{body}</Prim.Col>;
+    case 'stack': return <Prim.Col key={key} marginVertical="$1" gap={((props['gap'] as number) ?? 1) * 4}>{body}</Prim.Col>;
     case 'row': case 'inline': {
       const j = props['justify'] as string | undefined;
       const a = props['align'] as string | undefined;
       const jc = j === 'between' ? 'space-between' : j === 'center' ? 'center' : j === 'end' ? 'flex-end' : 'flex-start';
       const ai = a === 'center' ? 'center' : a === 'end' ? 'flex-end' : 'flex-start';
-      return <Prim.Row key={key} marginVertical="$1" style={{ gap: ((props['gap'] as number) ?? 1) * 4, justifyContent: jc, alignItems: ai }}>{body}</Prim.Row>;
+      return <Prim.Row key={key} marginVertical="$1" gap={((props['gap'] as number) ?? 1) * 4} justifyContent={jc} alignItems={ai}>{body}</Prim.Row>;
     }
-    case 'columns': return <Prim.Box key={key} display="grid" marginVertical="0.25rem" style={{ gridTemplateColumns: `repeat(${(d.children ?? []).length || 1}, minmax(0,1fr))`, gap: ((props['gap'] as number) ?? 2) * 4 }}>{body}</Prim.Box>;
-    case 'spacer': return <Prim.Box key={key} style={{ flexGrow: 1 }} />;
+    case 'columns': return <Prim.Box key={key} display="grid" marginVertical="0.25rem" gridTemplateColumns={`repeat(${(d.children ?? []).length || 1}, minmax(0,1fr))`} gap={((props['gap'] as number) ?? 2) * 4}>{body}</Prim.Box>;
+    case 'spacer': return <Prim.Box key={key} flexGrow={1} />;
     case 'divider': return (
       <Prim.Row key={key} color="var(--lm-muted)" gap="$2" marginVertical="$2" fontSize="11px" alignItems="center">
         <Prim.Text borderColor="var(--lm-border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}<Prim.Text borderColor="var(--lm-border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />
@@ -131,7 +131,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'progressbar': {
       const max = (props['max'] as number) ?? (Number(props['value']) <= 1 ? 1 : 100);
       const pct = Math.max(0, Math.min(100, (Number(props['value'] ?? 0) / max) * 100));
-      return <Prim.Box key={key} marginVertical="0.25rem"><Prim.Box backgroundColor="var(--lm-panel)" height="$2" borderRadius="$radius" overflow="hidden"><Prim.Box backgroundColor="var(--lm-accent)" height="100%" style={{ width: `${pct}%` }} /></Prim.Box>{props['label'] ? <Prim.Box color="var(--lm-muted)" fontSize="10px" marginTop="0.125rem">{String(props['label'])}</Prim.Box> : null}</Prim.Box>;
+      return <Prim.Box key={key} marginVertical="0.25rem"><Prim.Box backgroundColor="var(--lm-panel)" height="$2" borderRadius="$radius" overflow="hidden"><Prim.Box backgroundColor="var(--lm-accent)" height="100%" width={`${pct}%`} /></Prim.Box>{props['label'] ? <Prim.Box color="var(--lm-muted)" fontSize="10px" marginTop="0.125rem">{String(props['label'])}</Prim.Box> : null}</Prim.Box>;
     }
     case 'spinner': return <Prim.Row key={key} color="var(--lm-muted)" gap="$2" fontSize="12px" marginVertical="$1" alignItems="center"><Prim.Text className="lm-spin">◐</Prim.Text>{props['label'] ? String(props['label']) : null}</Prim.Row>;
     case 'statcard': return <Prim.Box key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel2)" borderWidth={1} borderRadius="$radius" padding="$2" display="inline-block" marginVertical="0.25rem"><Prim.Box color="var(--lm-muted)" fontSize="10px" textTransform="uppercase">{String(props['label'] ?? '')}</Prim.Box><Prim.Box color="var(--lm-text)" fontSize="$lg" fontWeight="$semibold">{String(props['value'] ?? '')}</Prim.Box>{props['delta'] ? <Prim.Box color="var(--lm-green)" fontSize="11px">{String(props['delta'])}</Prim.Box> : null}</Prim.Box>;

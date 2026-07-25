@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute, useParams } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronRight, ChevronDown, Folder, FolderOpen, FileText } from 'lucide-react'
@@ -35,20 +36,9 @@ function TreeItem({
   const isSelected = node.path === selectedPath
   return (
     <>
-      <div
+      <Prim.Box
         onClick={() => (isDir ? onToggle(node.path) : onSelect(node.path))}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.375rem',
-          padding: '0.25rem 0.5rem',
-          paddingLeft: `${depth + 0.5}rem`,
-          cursor: 'pointer',
-          fontSize: '0.8125rem',
-          borderRadius: '0.25rem',
-          background: isSelected ? 'var(--color-primary)' : 'transparent',
-          color: isSelected ? 'var(--color-primary-foreground)' : 'inherit',
-        }}
+        display="flex" alignItems="center" gap="0.375rem" paddingVertical="0.25rem" paddingHorizontal="0.5rem" paddingLeft={`${depth + 0.5}rem`} cursor="pointer" fontSize="0.8125rem" borderRadius="0.25rem" backgroundColor="isSelected ? 'var(--color-primary)' : 'transparent'" color={isSelected ? 'var(--color-primary-foreground)' : 'inherit'}
       >
         {isDir ? (
           <>
@@ -65,14 +55,14 @@ function TreeItem({
           </>
         ) : (
           <>
-            <span style={{ width: 14, flexShrink: 0 }} />
+            <Prim.Text width={14} flexShrink={0} />
             <FileText style={{ width: 15, height: 15, flexShrink: 0, opacity: 0.5 }} />
           </>
         )}
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
           {node.name}
-        </span>
-      </div>
+        </Prim.Text>
+      </Prim.Box>
       {isDir &&
         isOpen &&
         node.children?.map((child) => (
@@ -158,21 +148,14 @@ function FilesEditor() {
   const dirty = content !== original
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <Prim.Box display="flex" height="100%" overflow="hidden">
       {/* Tree */}
-      <div
-        style={{
-          width: 260,
-          minWidth: 200,
-          borderRight: '1px solid var(--color-border)',
-          overflowY: 'auto',
-          padding: '0.5rem 0',
-          flexShrink: 0,
-        }}
+      <Prim.Box
+        width={260} minWidth={200} borderRightWidth="1px" borderRightStyle="solid" borderRightColor="var(--color-border)" overflowY="auto" paddingVertical="0.5rem" paddingHorizontal="0" flexShrink={0}
       >
-        <div style={{ padding: '0.5rem 0.75rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5 }}>
+        <Prim.Box paddingTop="0.5rem" paddingHorizontal="0.75rem" paddingBottom="0.75rem" fontSize="0.6875rem" fontWeight={600} textTransform="uppercase" letterSpacing="0.05em" opacity={0.5}>
           App files ({paths.length})
-        </div>
+        </Prim.Box>
         {tree.map((node) => (
           <TreeItem
             key={node.path}
@@ -191,34 +174,28 @@ function FilesEditor() {
             }
           />
         ))}
-      </div>
+      </Prim.Box>
 
       {/* Editor */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" display="flex" flexDirection="column" minWidth={0}>
         {selected ? (
           <>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.5rem 1rem',
-                borderBottom: '1px solid var(--color-border)',
-              }}
+            <Prim.Box
+              display="flex" alignItems="center" gap="0.75rem" paddingVertical="0.5rem" paddingHorizontal="1rem" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--color-border)"
             >
-              <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-accent)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Prim.Text fontFamily="monospace" fontSize="0.75rem" fontWeight={600} color="var(--color-accent)" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
                 {selected}
                 {dirty ? ' •' : ''}
-              </span>
+              </Prim.Text>
               {notice ? <Caption style={{ color: 'var(--color-accent)' }}>{notice}</Caption> : null}
               <Button variant="primary" disabled={!dirty || saving} onClick={save}>
                 {saving ? 'Saving…' : 'Save'}
               </Button>
-            </div>
+            </Prim.Box>
             {error ? (
               <Caption style={{ padding: '0.5rem 1rem', color: 'var(--color-destructive)' }}>{error}</Caption>
             ) : null}
-            <textarea
+            <Prim.TextArea
               value={content}
               spellCheck={false}
               disabled={loadingFile}
@@ -239,16 +216,16 @@ function FilesEditor() {
             />
           </>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.4, fontSize: '0.875rem' }}>
+          <Prim.Box display="flex" alignItems="center" justifyContent="center" height="100%" opacity={0.4} fontSize="0.875rem">
             {error ? (
-              <span style={{ color: 'var(--color-destructive)', opacity: 1 }}>{error}</span>
+              <Prim.Text color="var(--color-destructive)" opacity={1}>{error}</Prim.Text>
             ) : (
               'Select an app file to edit.'
             )}
-          </div>
+          </Prim.Box>
         )}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

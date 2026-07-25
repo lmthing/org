@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { useState, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useGlobRead } from '@lmthing/state'
@@ -33,23 +34,12 @@ function TreeItem({
 
   return (
     <>
-      <div
+      <Prim.Box
         onClick={() => {
           if (isDir) onToggle(node.path)
           else onSelect(node.path)
         }}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.375rem',
-          padding: '0.25rem 0.5rem',
-          paddingLeft: `${depth + 0.5}rem`,
-          cursor: 'pointer',
-          fontSize: '0.8125rem',
-          borderRadius: '0.25rem',
-          background: isSelected ? 'var(--color-primary)' : 'transparent',
-          color: isSelected ? 'var(--color-primary-foreground)' : 'inherit',
-        }}
+        display="flex" alignItems="center" gap="0.375rem" paddingVertical="0.25rem" paddingHorizontal="0.5rem" paddingLeft={`${depth + 0.5}rem`} cursor="pointer" fontSize="0.8125rem" borderRadius="0.25rem" backgroundColor="isSelected ? 'var(--color-primary)' : 'transparent'" color={isSelected ? 'var(--color-primary-foreground)' : 'inherit'}
         onMouseEnter={(e) => {
           if (!isSelected) (e.currentTarget.style.background = 'var(--color-muted)')
         }}
@@ -68,14 +58,14 @@ function TreeItem({
           </>
         ) : (
           <>
-            <span style={{ width: 14, flexShrink: 0 }} />
+            <Prim.Text width={14} flexShrink={0} />
             <FileText style={{ width: 15, height: 15, flexShrink: 0, opacity: 0.5 }} />
           </>
         )}
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
           {node.name}
-        </span>
-      </div>
+        </Prim.Text>
+      </Prim.Box>
       {isDir && isOpen && node.children?.map((child) => (
         <TreeItem
           key={child.path}
@@ -111,21 +101,14 @@ function RawView() {
   const selectedContent = selectedPath ? snapshot[selectedPath] ?? null : null
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <Prim.Box display="flex" height="100%" overflow="hidden">
       {/* File tree sidebar */}
-      <div
-        style={{
-          width: 260,
-          minWidth: 200,
-          borderRight: '1px solid var(--color-border)',
-          overflowY: 'auto',
-          padding: '0.5rem 0',
-          flexShrink: 0,
-        }}
+      <Prim.Box
+        width={260} minWidth={200} borderRightWidth="1px" borderRightStyle="solid" borderRightColor="var(--color-border)" overflowY="auto" paddingVertical="0.5rem" paddingHorizontal="0" flexShrink={0}
       >
-        <div style={{ padding: '0.5rem 0.75rem 0.75rem', fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5 }}>
+        <Prim.Box paddingTop="0.5rem" paddingHorizontal="0.75rem" paddingBottom="0.75rem" fontSize="0.6875rem" fontWeight={600} textTransform="uppercase" letterSpacing="0.05em" opacity={0.5}>
           Files ({paths.length})
-        </div>
+        </Prim.Box>
         {tree.map((node) => (
           <TreeItem
             key={node.path}
@@ -137,28 +120,18 @@ function RawView() {
             onToggle={handleToggle}
           />
         ))}
-      </div>
+      </Prim.Box>
 
       {/* File content */}
-      <div style={{ flex: 1, overflow: 'auto', fontFamily: 'monospace', fontSize: '0.8125rem' }}>
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflow="auto" fontFamily="monospace" fontSize="0.8125rem">
         {selectedPath && selectedContent !== null ? (
           <>
-            <div
-              style={{
-                padding: '0.5rem 1rem',
-                borderBottom: '1px solid var(--color-border)',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: 'var(--color-accent)',
-                position: 'sticky',
-                top: 0,
-                background: 'var(--color-background)',
-                zIndex: 1,
-              }}
+            <Prim.Box
+              paddingVertical="0.5rem" paddingHorizontal="1rem" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--color-border)" fontSize="0.75rem" fontWeight={600} color="var(--color-accent)" position="sticky" top={0} backgroundColor="var(--color-background)" zIndex={1}
             >
               {selectedPath}
-            </div>
-            <pre
+            </Prim.Box>
+            <Prim.Pre
               style={{
                 margin: 0,
                 padding: '1rem',
@@ -168,15 +141,15 @@ function RawView() {
               }}
             >
               {selectedContent}
-            </pre>
+            </Prim.Pre>
           </>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.4, fontSize: '0.875rem' }}>
+          <Prim.Box display="flex" alignItems="center" justifyContent="center" height="100%" opacity={0.4} fontSize="0.875rem">
             {paths.length === 0 ? 'No files in this space.' : 'Select a file to view its content.'}
-          </div>
+          </Prim.Box>
         )}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 

@@ -55,7 +55,7 @@ export function DevPanel({ onClose, className }: DevPanelProps) {
       </Prim.Row>
 
       {/* Execution tree */}
-      <Prim.Box overflow="hidden" flexShrink={0} style={{ height: treeH }}>
+      <Prim.Box overflow="hidden" flexShrink={0} height={treeH}>
         <ExecutionTree />
       </Prim.Box>
 

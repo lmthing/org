@@ -45,7 +45,7 @@ export function Billing() {
   }
 
   return (
-    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <Prim.Box display="flex" flexDirection="column" gap="0.5rem">
       <Button variant="outline" size="sm" onClick={handleBillingPortal} disabled={loading}>
         {loading ? 'Redirecting…' : 'Manage Subscription'}
       </Button>

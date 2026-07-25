@@ -27,19 +27,19 @@ export function Account() {
   }
 
   return (
-    <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+    <Prim.Box display="flex" alignItems="center" gap="0.75rem">
       <Avatar>
         <AvatarFallback colorKey={session?.userId ?? displayName}>
           {initials(displayName)}
         </AvatarFallback>
       </Avatar>
-      <Prim.Box style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <Prim.Box display="flex" flexDirection="column" minWidth={0}>
         <Caption>{displayName}</Caption>
         {session?.email && username && session.email !== username && (
           <Caption muted>{session.email}</Caption>
         )}
       </Prim.Box>
-      <Prim.Box style={{ marginLeft: 'auto' }}>
+      <Prim.Box marginLeft="auto">
         <Button variant="ghost" size="sm" onClick={logout}>
           Log out
         </Button>

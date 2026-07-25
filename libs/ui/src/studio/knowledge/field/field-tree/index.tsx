@@ -72,7 +72,7 @@ function ContextMenu({
   return (
     <>
       <Prim.Box {...FIELD_TREE_CONTEXT_MENU_BACKDROP} onClick={onClose} />
-      <Prim.Box {...CONTEXT_MENU} style={{ left: position.x, top: position.y }}>
+      <Prim.Box {...CONTEXT_MENU} left={position.x} top={position.y}>
         {onCreateChild && (
           <Prim.Pressable
             onClick={() => { onCreateChild(); onClose() }}

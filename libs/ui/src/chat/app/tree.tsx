@@ -52,7 +52,7 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
               outlineColor: 'color-mix(in srgb, var(--lm-accent) 40%, transparent)',
             }
           : { hoverStyle: { backgroundColor: 'var(--lm-panel2)' } })}
-        style={{ paddingLeft: `${depth * 14 + 8}px` }}
+        paddingLeft={`${depth * 14 + 8}px`}
       >
         {childIds.length > 0 ? (
           <Prim.Pressable

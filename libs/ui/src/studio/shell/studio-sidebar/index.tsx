@@ -314,7 +314,7 @@ export function StudioSidebar({
                     <NavLink key={`${c.kind}/${c.name}`} to={`${spacePath}/components`} {...SIDEBAR_ITEM}>
                       <Box {...STUDIO_SIDEBAR_ITEM_ICON_KNOWLEDGE} />
                       <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{c.name}</Prim.Text>
-                      <Prim.Text style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 11 }}>{c.kind}</Prim.Text>
+                      <Prim.Text marginLeft="auto" opacity={0.6} fontSize={11}>{c.kind}</Prim.Text>
                     </NavLink>
                   ))}
                   <NavLink to={`${spacePath}/components`} {...SIDEBAR_ITEM} {...STUDIO_SIDEBAR_CREATE_BTN}>

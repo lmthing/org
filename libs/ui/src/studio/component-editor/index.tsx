@@ -93,7 +93,7 @@ export function ComponentEditor({ onChanged }: ComponentEditorProps) {
           <Select
             value={newKind}
             onChange={e => setNewKind(e.target.value as ComponentKind)}
-            style={{ width: '6rem' }}
+            width="6rem"
           >
             <SelectOption value="view">view</SelectOption>
             <SelectOption value="form">form</SelectOption>

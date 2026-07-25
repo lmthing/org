@@ -114,7 +114,7 @@ export function Sessions() {
   }
 
   return (
-    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <Prim.Box display="flex" flexDirection="column" gap="0.5rem">
       <Caption muted>
         Every session your pod ran — from the chat window or a delegate inside a
         project hook — with its total token cost and the delegates it made.
@@ -127,33 +127,33 @@ export function Sessions() {
       ) : !sessions || sessions.length === 0 ? (
         <Caption muted>No sessions recorded yet.</Caption>
       ) : (
-        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        <Prim.Box display="flex" flexDirection="column" gap="0.25rem">
           {sessions.map((s) => {
             const open = expanded.has(s.sessionId)
             return (
               <Prim.Box
                 key={s.sessionId}
-                style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--border)' }}
+                paddingVertical="0.5rem" paddingHorizontal="0" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--border)"
               >
                 <Prim.Box
                   role="button"
                   tabIndex={0}
                   onClick={() => toggle(s.sessionId, expanded, setExpanded)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggle(s.sessionId, expanded, setExpanded) }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', cursor: 'pointer' }}
+                  display="flex" flexDirection="column" gap="0.35rem" cursor="pointer"
                 >
-                  <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <Prim.Text style={{ color: 'var(--muted-foreground)', fontSize: '0.75rem', width: '0.75rem' }}>
+                  <Prim.Box display="flex" alignItems="center" gap="0.5rem" flexWrap="wrap">
+                    <Prim.Text color="var(--muted-foreground)" fontSize="0.75rem" width="0.75rem">
                       {open ? '▾' : '▸'}
                     </Prim.Text>
                     <Badge variant={sourceVariant(s.source)}>{s.source}</Badge>
                     {s.projectId && <Badge variant="muted">{s.projectId}</Badge>}
                     <Caption>{s.title ?? s.sessionId.slice(0, 8)}</Caption>
-                    <Prim.Text style={{ marginLeft: 'auto' }}>
+                    <Prim.Text marginLeft="auto">
                       <Caption muted>{relativeTime(s.startedAt, now)}</Caption>
                     </Prim.Text>
                   </Prim.Box>
-                  <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingLeft: '1.25rem', flexWrap: 'wrap' }}>
+                  <Prim.Box display="flex" alignItems="center" gap="0.75rem" paddingLeft="1.25rem" flexWrap="wrap">
                     <Caption muted>
                       {fmtInt(s.totalInputTokens)} in / {fmtInt(s.totalOutputTokens)} out
                     </Caption>
@@ -166,29 +166,21 @@ export function Sessions() {
                 </Prim.Box>
 
                 {open && s.delegates.length > 0 && (
-                  <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1.25rem', marginTop: '0.5rem' }}>
+                  <Prim.Box display="flex" flexDirection="column" gap="0.4rem" paddingLeft="1.25rem" marginTop="0.5rem">
                     {s.delegates.map((d, i) => {
                       const key = `${s.sessionId}:${i}`
                       const qOpen = expandedQuery.has(key)
                       return (
                         <Prim.Box
                           key={key}
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '0.25rem',
-                            padding: '0.4rem 0.5rem',
-                            borderLeft: '2px solid var(--border)',
-                            background: 'var(--muted)',
-                            borderRadius: 'var(--radius, 0.375rem)',
-                          }}
+                          display="flex" flexDirection="column" gap="0.25rem" paddingVertical="0.4rem" paddingHorizontal="0.5rem" borderLeftWidth="2px" borderLeftStyle="solid" borderLeftColor="var(--border)" backgroundColor="var(--muted)" borderRadius="var(--radius, 0.375rem)"
                         >
-                          <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <Prim.Box display="flex" alignItems="center" gap="0.5rem" flexWrap="wrap">
                             <Code>{d.target}</Code>
                             {d.depth > 0 && <Badge variant="muted">depth {d.depth}</Badge>}
                             {d.status !== 'done' && <Badge variant={statusVariant(d.status)}>{d.status}</Badge>}
                           </Prim.Box>
-                          <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <Prim.Box display="flex" alignItems="center" gap="0.75rem" flexWrap="wrap">
                             <Caption muted>
                               {fmtInt(d.inputTokens)} in / {fmtInt(d.outputTokens)} out
                             </Caption>

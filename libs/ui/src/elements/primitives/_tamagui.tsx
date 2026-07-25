@@ -101,6 +101,12 @@ export type BoxStyleProps = {
   borderLeftColor?: string
   borderRadius?: number | string
   borderStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
+  // Per-side styles — real props (`_bbs-solid` &c). Needed once inline `border-bottom: 1px solid …`
+  // shorthands were lifted out of `style`, which expands to the per-side width/style/colour trio.
+  borderTopStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
+  borderRightStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
+  borderBottomStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
+  borderLeftStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
   // colors / effects
   backgroundColor?: string
   color?: string
@@ -234,6 +240,10 @@ export type TextStyleProps = {
   whiteSpace?: 'normal' | 'nowrap' | 'pre' | 'pre-wrap' | 'pre-line' | 'break-spaces' | 'inherit'
   wordWrap?: 'normal' | 'break-word' | 'inherit'
   overflow?: 'visible' | 'hidden' | 'clip' | 'scroll' | 'auto'
+  // Per-axis overflow — real props (`_ox-`/`_oy-`). The codemod emits them from `overflow-x/y`
+  // utilities and from lifted inline styles; only the shorthand was declared before.
+  overflowX?: 'visible' | 'hidden' | 'clip' | 'scroll' | 'auto'
+  overflowY?: 'visible' | 'hidden' | 'clip' | 'scroll' | 'auto'
   textOverflow?: 'clip' | 'ellipsis'
 }
 

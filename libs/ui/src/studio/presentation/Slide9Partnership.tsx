@@ -7,13 +7,13 @@ export default function Slide8Partnership() {
   return (
     <Prim.Col
       height="100%" width="100%" justifyContent="center" alignItems="center"
-      style={{ background: colors.bg }}
+      backgroundColor="colors.bg"
     >
-      <Prim.Text as="h1" textAlign="center" fontSize="$5xl" fontWeight="$bold" lineHeight={1.25} letterSpacing="$tight" $sm={{ fontSize: "$7xl" }} style={{ color: colors.text }}>
+      <Prim.Text as="h1" textAlign="center" fontSize="$5xl" fontWeight="$bold" lineHeight={1.25} letterSpacing="$tight" $sm={{ fontSize: "$7xl" }} color={colors.text}>
         Are you building agents?
         <Prim.Br />
         <Prim.Br />
-        Visit <Prim.Text style={{ color: colors.brandDark   }}>lm</Prim.Text><CozyThingText text="thing" fontSize="$5xl" fontWeight="$bold" lineHeight={2} $sm={{ fontSize: "$7xl" }} /><Prim.Text style={{ color: colors.brandDark }}>.studio</Prim.Text>
+        Visit <Prim.Text color={colors.brandDark}>lm</Prim.Text><CozyThingText text="thing" fontSize="$5xl" fontWeight="$bold" lineHeight={2} $sm={{ fontSize: "$7xl" }} /><Prim.Text color={colors.brandDark}>.studio</Prim.Text>
         <Prim.Br />
         and join the community!
       </Prim.Text>

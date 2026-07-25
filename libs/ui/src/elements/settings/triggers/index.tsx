@@ -62,7 +62,7 @@ export function Triggers() {
   }
 
   return (
-    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <Prim.Box display="flex" flexDirection="column" gap="0.5rem">
       <Caption muted>
         These are inbound webhook URLs that trigger your agents. Point a service
         (Slack, GitHub, a cron provider, anything that can POST) at one of these
@@ -79,27 +79,21 @@ export function Triggers() {
           <Code>triggers:</Code> binding, then reload.
         </Caption>
       ) : (
-        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <Prim.Box display="flex" flexDirection="column" gap="0.5rem">
           {info.bindings.map((b) => {
             const url = `${info.baseUrl}/${b.path}`
             const isCopied = copiedPath === b.path
             return (
               <Prim.Box
                 key={`${b.projectId}/${b.path}`}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.35rem',
-                  padding: '0.5rem 0',
-                  borderBottom: '1px solid var(--border)',
-                }}
+                display="flex" flexDirection="column" gap="0.35rem" paddingVertical="0.5rem" paddingHorizontal="0" borderBottomWidth="1px" borderBottomStyle="solid" borderBottomColor="var(--border)"
               >
-                <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Prim.Box display="flex" alignItems="center" gap="0.5rem">
                   <Caption>{b.path}</Caption>
                   <Badge variant="muted">{b.provider}</Badge>
                 </Prim.Box>
                 <Caption muted>{b.agentRef}</Caption>
-                <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Prim.Box display="flex" alignItems="center" gap="0.5rem">
                   <Code
                     style={{
                       flex: 1,

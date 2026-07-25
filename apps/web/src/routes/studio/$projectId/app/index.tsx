@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute, useParams } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
@@ -44,11 +45,11 @@ function BuildCard({
   const status = build?.status ?? (build?.ok === false ? 'error' : build?.ok ? 'ok' : 'unknown')
   return (
     <Card style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%">
+        <Prim.Box display="flex" alignItems="center" gap="0.5rem">
           <Heading level={4} style={{ margin: 0 }}>Build</Heading>
           <Badge variant={statusVariant(status)}>{status}</Badge>
-        </div>
+        </Prim.Box>
         {build?.error ? (
           <Caption style={{ color: 'var(--color-destructive)' }}>{build.error}</Caption>
         ) : build?.finishedAt ? (
@@ -56,7 +57,7 @@ function BuildCard({
         ) : (
           <Caption muted>No build recorded yet.</Caption>
         )}
-      </div>
+      </Prim.Box>
       <Button variant="outline" disabled={busy} onClick={onRebuild}>
         {busy ? 'Rebuilding…' : 'Rebuild'}
       </Button>
@@ -84,18 +85,18 @@ function HookRow({
         marginBottom: '0.5rem',
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={MONO}>{hook.slug}</span>
+      <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
+        <Prim.Box display="flex" alignItems="center" gap="0.5rem">
+          <Prim.Text style={MONO}>{hook.slug}</Prim.Text>
           {hook.type ? <Badge variant="muted">{hook.type}</Badge> : null}
           {last?.status ? <Badge variant={statusVariant(last.status)}>{last.status}</Badge> : null}
-        </div>
+        </Prim.Box>
         <Caption muted>
-          {hook.trigger ? <span style={MONO}>{hook.trigger}</span> : hook.description ?? '—'}
+          {hook.trigger ? <Prim.Text style={MONO}>{hook.trigger}</Prim.Text> : hook.description ?? '—'}
           {last?.at ? ` · last run ${formatTime(last.at)}` : ' · never run'}
           {last?.error ? ` · ${last.error}` : ''}
         </Caption>
-      </div>
+      </Prim.Box>
       <Button variant="outline" disabled={busy} onClick={onRun}>
         {busy ? 'Running…' : 'Run now'}
       </Button>
@@ -179,7 +180,7 @@ function ManifestView() {
 
   const m = manifest ?? {}
   return (
-    <div style={{ height: '100%', overflow: 'auto', padding: '1.5rem' }}>
+    <Prim.Box height="100%" overflow="auto" padding="1.5rem">
       {notice ? (
         <Caption style={{ display: 'block', marginBottom: '0.75rem', color: 'var(--color-accent)' }}>
           {notice}
@@ -191,27 +192,27 @@ function ManifestView() {
         </Caption>
       ) : null}
 
-      <div style={SECTION}>
+      <Prim.Box style={SECTION}>
         <BuildCard build={m.build} onRebuild={rebuild} busy={buildBusy} />
-      </div>
+      </Prim.Box>
 
       {/* Tables + column schema */}
-      <div style={SECTION}>
-        <div style={SUBTLE}>Tables ({m.tables?.length ?? 0})</div>
+      <Prim.Box style={SECTION}>
+        <Prim.Box style={SUBTLE}>Tables ({m.tables?.length ?? 0})</Prim.Box>
         {(m.tables ?? []).length === 0 ? (
           <Caption muted>No tables.</Caption>
         ) : (
           m.tables!.map((t) => (
             <Card key={t.name} style={{ padding: '0.75rem 1rem', marginBottom: '0.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                <span style={{ ...MONO, fontWeight: 600 }}>{t.name}</span>
+              <Prim.Box display="flex" alignItems="baseline" gap="0.5rem">
+                <Prim.Text style={{ ...MONO, fontWeight: 600 }}>{t.name}</Prim.Text>
                 {t.title ? <Caption muted>{t.title}</Caption> : null}
-              </div>
+              </Prim.Box>
               {t.description ? <Caption muted>{t.description}</Caption> : null}
               {(t.columns ?? []).length > 0 ? (
-                <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+                <Prim.Box marginTop="0.5rem" display="flex" flexWrap="wrap" gap="0.375rem">
                   {t.columns!.map((c) => (
-                    <span
+                    <Prim.Text
                       key={c.name}
                       title={c.description}
                       style={{
@@ -222,41 +223,41 @@ function ManifestView() {
                       }}
                     >
                       {c.name}
-                      <span style={{ opacity: 0.6 }}>
+                      <Prim.Text opacity={0.6}>
                         :{c.type ?? 'string'}
                         {c.primaryKey ? ' pk' : ''}
                         {c.required ? ' req' : ''}
                         {c.unique ? ' uniq' : ''}
-                      </span>
-                    </span>
+                      </Prim.Text>
+                    </Prim.Text>
                   ))}
-                </div>
+                </Prim.Box>
               ) : null}
             </Card>
           ))
         )}
-      </div>
+      </Prim.Box>
 
       {/* Pages */}
-      <div style={SECTION}>
-        <div style={SUBTLE}>Pages ({m.pages?.length ?? 0})</div>
+      <Prim.Box style={SECTION}>
+        <Prim.Box style={SUBTLE}>Pages ({m.pages?.length ?? 0})</Prim.Box>
         {(m.pages ?? []).length === 0 ? (
           <Caption muted>No pages.</Caption>
         ) : (
           <Card style={{ padding: '0.5rem 1rem' }}>
             {m.pages!.map((p) => (
-              <div key={p.route} style={{ ...MONO, padding: '0.25rem 0' }}>
+              <Prim.Box key={p.route} style={{ ...MONO, padding: '0.25rem 0' }}>
                 {p.route}
-                {p.path ? <span style={{ opacity: 0.5 }}> — {p.path}</span> : null}
-              </div>
+                {p.path ? <Prim.Text opacity={0.5}> — {p.path}</Prim.Text> : null}
+              </Prim.Box>
             ))}
           </Card>
         )}
-      </div>
+      </Prim.Box>
 
       {/* Endpoints */}
-      <div style={SECTION}>
-        <div style={SUBTLE}>Endpoints ({m.endpoints?.length ?? 0})</div>
+      <Prim.Box style={SECTION}>
+        <Prim.Box style={SUBTLE}>Endpoints ({m.endpoints?.length ?? 0})</Prim.Box>
         {(m.endpoints ?? []).length === 0 ? (
           <Caption muted>No endpoints.</Caption>
         ) : (
@@ -265,33 +266,33 @@ function ManifestView() {
               key={`${e.method} ${e.name}`}
               style={{ padding: '0.5rem 1rem', marginBottom: '0.375rem' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Prim.Box display="flex" alignItems="center" gap="0.5rem">
                 <Badge variant="primary">{e.method}</Badge>
-                <span style={{ ...MONO, fontWeight: 600 }}>{e.name}</span>
+                <Prim.Text style={{ ...MONO, fontWeight: 600 }}>{e.name}</Prim.Text>
                 {e.route ? (
                   <Caption muted>
-                    <span style={MONO}>{e.route}</span>
+                    <Prim.Text style={MONO}>{e.route}</Prim.Text>
                   </Caption>
                 ) : null}
-              </div>
+              </Prim.Box>
               {e.description ? <Caption muted>{e.description}</Caption> : null}
               {e.input || e.output ? (
                 <Caption muted>
-                  <span style={MONO}>
+                  <Prim.Text style={MONO}>
                     {e.input ? `in: ${e.input}` : ''}
                     {e.input && e.output ? '  ' : ''}
                     {e.output ? `out: ${e.output}` : ''}
-                  </span>
+                  </Prim.Text>
                 </Caption>
               ) : null}
             </Card>
           ))
         )}
-      </div>
+      </Prim.Box>
 
       {/* Hooks */}
-      <div style={SECTION}>
-        <div style={SUBTLE}>Hooks ({m.hooks?.length ?? 0})</div>
+      <Prim.Box style={SECTION}>
+        <Prim.Box style={SUBTLE}>Hooks ({m.hooks?.length ?? 0})</Prim.Box>
         {(m.hooks ?? []).length === 0 ? (
           <Caption muted>No hooks.</Caption>
         ) : (
@@ -304,28 +305,20 @@ function ManifestView() {
             />
           ))
         )}
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }
 
 function Centered({ children, destructive }: { children: React.ReactNode; destructive?: boolean }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100%',
-        padding: '2rem',
-        textAlign: 'center',
-        opacity: destructive ? 1 : 0.6,
-        color: destructive ? 'var(--color-destructive)' : 'inherit',
-        fontSize: '0.875rem',
-      }}
+    <Prim.Box
+      display="flex" alignItems="center" justifyContent="center" height="100%" padding="2rem" textAlign="center" opacity={destructive ? 1 : 0.6} color={destructive ? 'var(--color-destructive)' : 'inherit'} fontSize="0.875rem"
     >
-      {children}
-    </div>
+      {/* SPIKE C: this file's `React.ReactNode` resolves to @types/react@19 while the primitives
+          are built against 18, and the two unions differ. Same class of cast as `_tamagui.tsx`. */}
+      {children as never}
+    </Prim.Box>
   )
 }
 

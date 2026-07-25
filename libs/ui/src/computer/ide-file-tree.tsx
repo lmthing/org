@@ -79,7 +79,7 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
             hoverStyle={{ backgroundColor: '$accent' }}
             backgroundColor={isActive ? 'color-mix(in srgb, var(--primary) 20%, transparent)' : undefined}
             color={isActive ? '$primary' : undefined}
-            style={{ paddingLeft: `${level * 12 + 8}px` }}
+            paddingLeft={`${level * 12 + 8}px`}
             onClick={handleClick}
           >
             {node.type === 'directory' ? (
@@ -93,7 +93,7 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
               </>
             ) : (
               <>
-                <Prim.Text style={{ width: 16 }} />
+                <Prim.Text width={16} />
                 <File size={16} {...IDE_FILE_TREE_ICON} />
               </>
             )}

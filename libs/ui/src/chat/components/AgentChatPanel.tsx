@@ -140,7 +140,7 @@ export function AgentChatPanel({
   if (sessionError) {
     return (
       <Prim.Box style={{ ...styles.container, ...styles.center, ...style }} className={className}>
-        <Prim.Text as="p" style={{ color: 'var(--destructive)', textAlign: 'center', marginBottom: 8 }}>
+        <Prim.Text as="p" color="var(--destructive)" textAlign="center" marginBottom={8}>
           Failed to start session: {sessionError}
         </Prim.Text>
         <Prim.Pressable
@@ -161,7 +161,7 @@ export function AgentChatPanel({
   if (!sessionId) {
     return (
       <Prim.Box style={{ ...styles.container, ...styles.center, ...style }} className={className}>
-        <Prim.Text style={{ color: 'var(--muted-foreground)' }}>{PHASE_LABEL[phase]}</Prim.Text>
+        <Prim.Text color="var(--muted-foreground)">{PHASE_LABEL[phase]}</Prim.Text>
       </Prim.Box>
     );
   }
