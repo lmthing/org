@@ -52,7 +52,7 @@ function AppLauncher() {
               <Prim.Pressable
                 type="button"
                 onClick={() => openApp(p.id)}
-                className="transition-colors" display="flex" width="100%" flexDirection="column" gap="$1" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$4" textAlign="left" hoverStyle={{ backgroundColor: "$muted" }}
+                transition="quick" animateOnly={["color", "background-color", "border-color"]} display="flex" width="100%" flexDirection="column" gap="$1" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$4" textAlign="left" hoverStyle={{ backgroundColor: "$muted" }}
               >
                 <Prim.Text fontWeight="$medium" color="$foreground">{p.name ?? p.id}</Prim.Text>
                 <Prim.Text fontFamily="$mono" fontSize="$xs" color="$muted-foreground">{APP_PATH_PREFIX}/{p.id}/</Prim.Text>

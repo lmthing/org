@@ -39,7 +39,7 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
   return (
     <Prim.Box
       position="relative"
-      // transition-all duration-200 awaits the animation driver (§5/P4)
+      transition="medium"
       {...(isExpanded
         ? { outlineWidth: 2, outlineStyle: 'solid', outlineColor: '$brand-3', outlineOffset: 2 }
         : {})}
@@ -62,7 +62,7 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
         borderRadius="0.75rem"
         borderWidth={2}
         borderColor="$border"
-        // transition-all duration-200 awaits the animation driver (§5/P4)
+        transition="medium"
         hoverStyle={{
           borderColor: 'color-mix(in srgb, var(--brand-3) 50%, transparent)',
           shadowColor: 'color-mix(in srgb, var(--brand-3) 5%, transparent)',
@@ -85,7 +85,7 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
                 marginTop="$1"
                 backgroundColor="$muted"
                 color="$muted-foreground"
-                // transition-colors awaits the animation driver (§5/P4)
+                transition="quick" animateOnly={["color", "background-color", "border-color"]}
                 hoverStyle={{ backgroundColor: '$muted' }}
                 pressStyle={{ cursor: 'grabbing' }}
               >

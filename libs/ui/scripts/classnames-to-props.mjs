@@ -54,6 +54,9 @@ const DEFAULT_TARGETS = new Set([
 
 /** Serialize a prop value to JSX attribute source. */
 function serialize(name, value) {
+  // `animateOnly` is an ARRAY of CSS property names — without this branch it would serialize
+  // through the object path as `{{ 0: "color", 1: … }}`.
+  if (Array.isArray(value)) return `${name}={[${value.map(lit).join(', ')}]}`
   if (value && typeof value === 'object') {
     const inner = Object.entries(value)
       .map(([k, v]) => `${JSON.stringify(k).replace(/^"([A-Za-z_$][\w$]*)"$/, '$1')}: ${lit(v)}`)

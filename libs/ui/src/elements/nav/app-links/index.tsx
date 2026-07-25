@@ -9,7 +9,7 @@ import { otherAppLinks, type LmthingApp } from '../../../lib/app-urls'
  * The idiomatic `.app-links`: styling is `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4); `app-links/index.css` is deleted. The
  * `.app-links--bordered` modifier — which no caller passed via className — is now the
- * `bordered` prop. (`transition-colors` awaits the animation driver, §5/P4.)
+ * `bordered` prop, and `transition-colors` is the driver's `transition="quick"`.
  */
 export interface AppLinksProps {
   /** The current surface — its own link is omitted from the row. */
@@ -33,6 +33,7 @@ const APP_LINKS_BORDERED = { borderBottomWidth: 1, borderBottomColor: '$sidebar-
 
 /** `.app-links__link` — an equal-width centred pill that hovers onto muted/60. */
 const APP_LINK = {
+  transition: 'quick', animateOnly: ['color', 'background-color', 'border-color'],
   flexGrow: 1,
   flexShrink: 1,
   flexBasis: '0%',

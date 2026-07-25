@@ -5,7 +5,7 @@ import * as Prim from '../../primitives/index'
  * TabBar — the idiomatic `.tab-bar`. Renders `Prim.Box` / `Prim.Pressable` (a real `<button>` at
  * runtime via `createComponent`) with the styling as `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4). `tab-bar/index.css` is deleted.
- * (`transition-colors` awaits the animation driver, §5/P4.)
+ * `transition-colors` is the driver's `transition="quick"`.
  */
 export interface TabBarTab {
   id: string
@@ -29,6 +29,7 @@ const TAB_BAR = {
 
 /** `.tab-bar__tab` — the inactive tab: transparent 2px underline, muted text, hover to foreground. */
 const TAB = {
+  transition: 'quick', animateOnly: ['color', 'background-color', 'border-color'],
   display: 'inline-flex',
   alignItems: 'center',
   gap: '$1.5',

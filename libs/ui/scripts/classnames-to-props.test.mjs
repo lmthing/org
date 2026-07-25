@@ -181,7 +181,9 @@ describe('skip reporting (the manual tail)', () => {
     // These are recognised and consciously left as classNames (Tailwind still ships their CSS).
     // Marking them `skip` blocked every mappable class on the same element — the single change
     // that took the codemod from 4 migratable elements to 37.
-    for (const c of ['transition-colors', 'animate-spin', 'duration-150', 'backdrop-blur-sm',
+    // `transition-*`/`duration-*` LEFT this list when the animation driver landed — they map to
+    // the `transition` prop now (see the dedicated describe below). Keyframes and easing stayed.
+    for (const c of ['animate-spin', 'backdrop-blur-sm',
                      'prose', 'space-y-2', 'group', 'lm-fade-in']) {
       const r = classToProps(c)
       expect(r.keep, `${c} should be kept, not skipped`).toContain(c)
@@ -190,9 +192,9 @@ describe('skip reporting (the manual tail)', () => {
   })
 
   it('migrates the mappable classes ALONGSIDE a kept one', () => {
-    const r = classToProps('text-sm px-3 rounded-lg transition-colors')
+    const r = classToProps('text-sm px-3 rounded-lg animate-spin')
     expect(r.props).toMatchObject({ fontSize: '$sm', paddingHorizontal: '$3', borderRadius: '$radius-lg' })
-    expect(r.keep).toEqual(['transition-colors'])
+    expect(r.keep).toEqual(['animate-spin'])
     expect(r.skip).toEqual([])
   })
 
@@ -377,5 +379,44 @@ describe('intrinsic sizing keywords', () => {
     expect(classToProps('w-max').props).toEqual({ width: 'max-content' })
     // `max-w-fit` already went through the MAX_WIDTH table and still does.
     expect(classToProps('max-w-fit').props).toEqual({ maxWidth: 'fit-content' })
+  })
+})
+
+describe('the animation family → the driver’s `transition` prop', () => {
+  it('`transition-*` maps to a named transition, scoped with hyphenated CSS property names', () => {
+    // The names mirror the Tailwind durations 1:1 (quick 150ms = Tailwind's default, medium 200ms,
+    // slow 300ms), so this is a rename rather than a redesign.
+    expect(classToProps('transition-colors').props).toEqual({
+      transition: 'quick', animateOnly: ['color', 'background-color', 'border-color'],
+    })
+    expect(classToProps('transition-opacity').props).toEqual({ transition: 'quick', animateOnly: ['opacity'] })
+    expect(classToProps('transition-transform').props).toEqual({ transition: 'quick', animateOnly: ['transform'] })
+    expect(classToProps('transition-shadow').props).toEqual({ transition: 'quick', animateOnly: ['box-shadow'] })
+    expect(classToProps('transition-all').props).toEqual({ transition: 'quick' })
+    expect(classToProps('transition-none').props).toEqual({ transition: 'none' })
+  })
+
+  it('`animateOnly` entries are HYPHENATED — camelCase emits an invalid declaration', () => {
+    // Tamagui writes `animateOnly` straight into the CSS `transition` shorthand WITHOUT
+    // hyphenating, so `backgroundColor` produces `transition: backgroundColor 150ms` and the
+    // browser drops it. Verified against a real render in `primitives/index.test.tsx`.
+    for (const v of classToProps('transition-colors').props.animateOnly) {
+      expect(v).not.toMatch(/[A-Z]/)
+    }
+  })
+
+  it('`duration-*` sets the NAME, so it merges with the transition beside it', () => {
+    expect(classToProps('duration-200').props).toEqual({ transition: 'medium' })
+    expect(classToProps('transition-all duration-200').props).toEqual({ transition: 'medium' })
+    expect(classToProps('transition-opacity duration-150').props)
+      .toEqual({ transition: 'quick', animateOnly: ['opacity'] })
+    // An unmapped duration is REPORTED, never rounded to the nearest name.
+    expect(classToProps('duration-75').skip).toEqual(['duration-75'])
+  })
+
+  it('keyframes and easing stay classNames — neither is the driver’s job', () => {
+    expect(classToProps('animate-pulse').keep).toEqual(['animate-pulse'])
+    expect(classToProps('lm-spin').keep).toEqual(['lm-spin'])
+    expect(classToProps('ease-out').keep).toEqual(['ease-out'])
   })
 })

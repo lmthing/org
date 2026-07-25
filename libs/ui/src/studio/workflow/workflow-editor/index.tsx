@@ -103,7 +103,7 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
           </Prim.Box>
         )}
 
-        <Prim.Pressable className="transition-colors" {...TASKLIST_EDITOR_ADD_TASK_BTN} onClick={addTask}>
+        <Prim.Pressable transition="quick" animateOnly={["color", "background-color", "border-color"]} {...TASKLIST_EDITOR_ADD_TASK_BTN} onClick={addTask}>
           <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
             <Prim.Path d="M12 5v14M5 12h14" />
           </Prim.Svg>

@@ -196,11 +196,19 @@ export const FIXTURES: Fixture[] = [
     name: 'animation',
     render: () => (
       <>
-        <Prim.Box className="transition-colors" padding="$2">transition-colors</Prim.Box>
-        <Prim.Box className="transition-all duration-200" padding="$2">transition-all/200</Prim.Box>
-        <Prim.Box className="transition-opacity duration-150" padding="$2">transition-opacity/150</Prim.Box>
-        <Prim.Box className="transition-transform" padding="$2">transition-transform</Prim.Box>
-        <Prim.Box className="transition-shadow" padding="$2">transition-shadow</Prim.Box>
+        {/* The Tailwind utilities, and the `transition` prop that replaces each one, measured
+            side by side so the swap is a readable delta rather than a claim. */}
+        <Prim.Box className="transition-colors" padding="$2">tw:colors</Prim.Box>
+        <Prim.Box transition="quick" animateOnly={['color', 'background-color', 'border-color']} padding="$2">prop:colors</Prim.Box>
+        <Prim.Box className="transition-all duration-200" padding="$2">tw:all/200</Prim.Box>
+        <Prim.Box transition="medium" padding="$2">prop:all/200</Prim.Box>
+        <Prim.Box className="transition-opacity duration-150" padding="$2">tw:opacity</Prim.Box>
+        <Prim.Box transition="quick" animateOnly={['opacity']} padding="$2">prop:opacity</Prim.Box>
+        <Prim.Box className="transition-transform" padding="$2">tw:transform</Prim.Box>
+        <Prim.Box transition="quick" animateOnly={['transform']} padding="$2">prop:transform</Prim.Box>
+        <Prim.Box className="transition-shadow" padding="$2">tw:shadow</Prim.Box>
+        <Prim.Box transition="quick" animateOnly={['box-shadow']} padding="$2">prop:shadow</Prim.Box>
+        {/* Keyframes are NOT the driver's job — these stay hand-written CSS. */}
         <Prim.Box className="lm-fade-in" padding="$2">lm-fade-in</Prim.Box>
         <Prim.Text className="lm-spin">⟳</Prim.Text>
         <Prim.Box className="lm-pulse" padding="$2">lm-pulse</Prim.Box>

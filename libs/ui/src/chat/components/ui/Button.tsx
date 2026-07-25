@@ -31,7 +31,7 @@ export function Button({ variant = 'default', size = 'md', loading, className, c
       {...props}
       disabled={disabled || loading}
       display="inline-flex"
-      className={cn("transition-all duration-150", variants[variant], sizes[size], className)} alignItems="center" justifyContent="center" gap="$1.5" fontWeight="$medium" userSelect="none" focusVisibleStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }} disabledStyle={{ opacity: 0.5, pointerEvents: "none" }}
+      className={cn(variants[variant], sizes[size], className)} transition="quick" alignItems="center" justifyContent="center" gap="$1.5" fontWeight="$medium" userSelect="none" focusVisibleStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }} disabledStyle={{ opacity: 0.5, pointerEvents: "none" }}
     >
       {loading && <Prim.Text className="lm-spin" width="$3.5" height="$3.5" borderWidth={1} borderColor="$t-transparent" borderRadius="$radius-full" />}
       {children}

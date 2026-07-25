@@ -18,9 +18,9 @@ export function Tabs({ tabs, active, onChange, className }: TabsProps) {
           role="tab"
           aria-selected={t.id === active}
           onClick={() => onChange(t.id)}
-          className={cn("transition-colors", t.id === active
+          className={t.id === active
               ? 'border-primary text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground')} paddingHorizontal="$3" paddingVertical="$2" fontSize="$xs" fontWeight="$medium" borderBottomWidth={2} marginBottom="-$px"
+              : 'border-transparent text-muted-foreground hover:text-foreground'} transition="quick" animateOnly={["color", "background-color", "border-color"]} paddingHorizontal="$3" paddingVertical="$2" fontSize="$xs" fontWeight="$medium" borderBottomWidth={2} marginBottom="-$px"
         >
           {t.label}
         </Prim.Pressable>

@@ -27,6 +27,7 @@
  * tree-shaken (`@lmthing/ui` is `sideEffects:false`).
  */
 import { createTamagui } from '@tamagui/core'
+import { createAnimations } from '@tamagui/animations-css'
 import {
   radius,
   fonts,
@@ -40,6 +41,25 @@ import {
   zIndex as zIndexTokens,
   media as mediaConfig,
 } from '@lmthing/css/tamagui-tokens'
+
+/**
+ * The animation driver (§5 / P4). The CSS driver is the right one here: every animation this app
+ * has is a CSS transition, the app ships `disableExtraction: true` so there is nothing to compile
+ * away, and a JS driver would move style off the atomic-class path the whole migration is built on.
+ *
+ * The names mirror the durations the surfaces actually used as Tailwind classes, so the swap is a
+ * rename rather than a redesign: `transition-*` (Tailwind's 150ms default) → `quick`,
+ * and the easing is Tailwind's own curve, so the swap is not visible.
+ * `duration-200` → `medium`, `duration-300`/`transition-all duration-300` → `slow`. `none` exists
+ * so a component can opt out without dropping the prop.
+ */
+const EASE = 'cubic-bezier(0.4, 0, 0.2, 1)' // Tailwind's `ease-in-out`, the curve the surfaces had
+const animations = createAnimations({
+  none: `${EASE} 0ms`,
+  quick: `${EASE} 150ms`,
+  medium: `${EASE} 200ms`,
+  slow: `${EASE} 300ms`,
+})
 
 const radiusTokens = { ...radius, true: radius['radius-md'] } as Record<string, string | number>
 
@@ -57,6 +77,7 @@ const makeFont = (family: string) => ({
 })
 
 export const tamaguiWebConfig = createTamagui({
+  animations,
   // ONE empty theme — no theme-scoped `--*` injection that would collide with theme.css.
   themes: { app: {} as Record<string, string> },
   tokens: {

@@ -98,7 +98,7 @@ export function TasklistList({
                 onClick={() => setViewMode('grid')}
                 padding="$2"
                 borderRadius="$radius-md"
-                // transition-all awaits the animation driver (§5/P4)
+                transition="quick"
                 {...(viewMode === 'grid'
                   ? {
                       backgroundColor: '$card',
@@ -121,7 +121,7 @@ export function TasklistList({
                 onClick={() => setViewMode('list')}
                 padding="$2"
                 borderRadius="$radius-md"
-                // transition-all awaits the animation driver (§5/P4)
+                transition="quick"
                 {...(viewMode === 'list'
                   ? {
                       backgroundColor: '$card',

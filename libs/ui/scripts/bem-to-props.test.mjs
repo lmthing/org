@@ -84,7 +84,9 @@ describe('convertStylesheet', () => {
   })
 
   it('blocks an @apply utility the className map keeps or skips', () => {
-    const { blocked } = convertStylesheet(`.y { @apply transition-colors; }`)
+    // `transition-colors` used to be the example here; it MAPS now that the animation driver
+    // landed, so this uses one that is still deliberately kept.
+    const { blocked } = convertStylesheet(`.y { @apply animate-spin; }`)
     expect(blocked).toHaveLength(1)
   })
 })

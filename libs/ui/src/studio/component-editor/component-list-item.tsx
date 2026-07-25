@@ -66,7 +66,7 @@ export function ComponentListItem({ name, kind, isActive, onSelect, onDelete, on
 
   return (
     <Prim.Box
-      className="transition-colors"
+      transition="quick" animateOnly={["color", "background-color", "border-color"]}
       {...LIST_ITEM}
       {...(isActive ? LIST_ITEM_ACTIVE : null)}
       {...({ group: 'row' } as Record<string, unknown>)}
@@ -89,7 +89,7 @@ export function ComponentListItem({ name, kind, isActive, onSelect, onDelete, on
         <Prim.Text fontFamily="monospace" fontSize="$sm">{name}.tsx</Prim.Text>
       )}
 
-      <Prim.Box className="transition-opacity" {...LIST_ITEM_ACTIONS} onClick={e => e.stopPropagation()}>
+      <Prim.Box transition="quick" animateOnly={["opacity"]} {...LIST_ITEM_ACTIONS} onClick={e => e.stopPropagation()}>
         <Button
           variant="ghost"
           size="icon"

@@ -23,7 +23,7 @@ function Resizer({ onDrag }: { onDrag: (dx: number) => void }) {
   return (
     <Prim.Box
       onMouseDown={down}
-      className="transition-colors" position="absolute" left="$0" top="$0" bottom="$0" width="$1" cursor="col-resize" hoverStyle={{ backgroundColor: "color-mix(in srgb, var(--agent) 40%, transparent)" }}
+      transition="quick" animateOnly={["color", "background-color", "border-color"]} position="absolute" left="$0" top="$0" bottom="$0" width="$1" cursor="col-resize" hoverStyle={{ backgroundColor: "color-mix(in srgb, var(--agent) 40%, transparent)" }}
     />
   );
 }

@@ -39,6 +39,9 @@ const ALIGN = { start: 'flex-start', end: 'flex-end', center: 'center', between:
 const ITEMS = { start: 'flex-start', end: 'flex-end', center: 'center', baseline: 'baseline', stretch: 'stretch' }
 // Tailwind's cursor utilities are named after the CSS keyword, so `cursor-<kw>` → `cursor: '<kw>'`
 // for the whole family. Listed explicitly so a typo'd class is REPORTED, not passed through.
+// Tailwind duration → the animation driver's transition NAME. Only the durations the surfaces
+// actually used are mapped; anything else is reported rather than rounded to the nearest name.
+const DURATION_NAME = { 0: 'none', 150: 'quick', 200: 'medium', 300: 'slow' }
 const CURSORS = new Set([
   'auto', 'default', 'pointer', 'wait', 'text', 'move', 'help', 'not-allowed', 'none',
   'context-menu', 'progress', 'cell', 'crosshair', 'vertical-text', 'alias', 'copy', 'no-drop',
@@ -124,6 +127,7 @@ function colorToken(raw) {
 //   'keep'  → leave as className (faithful, but base-fought / paint kept during coexistence)
 //   null    → unmapped, report for manual review
 function baseClass(cls) {
+  let m0
   // `!important` prefix (`!hidden`, `!flex`, `md:!hidden`). These exist ONLY to out-specify
   // Tamagui's own unlayered `.is_Box { display:flex }` base rule — a problem a style PROP does not
   // have, because props always beat classes. So strip the bang and map the rest; if the remainder
@@ -349,7 +353,26 @@ function baseClass(cls) {
   // them hostage: `text-sm px-3 rounded-lg transition-colors` migrated nothing because of the
   // last token. They are all classes this migration has consciously deferred, and Tailwind still
   // ships their CSS, so keeping them is faithful.
-  if (/^(transition|duration|ease|delay|animate)(-|$)/.test(cls)) return 'keep'   // awaiting the animation driver (§5)
+  // `transition-*` / `duration-*` → the animation driver's named transition. The names mirror the
+  // Tailwind durations 1:1 (`quick` 150ms = Tailwind's default, `medium` 200ms, `slow` 300ms), so
+  // this is a rename rather than a redesign. `duration-*` only sets the NAME, which is why it is
+  // merged rather than emitted as its own prop; a `duration` without a `transition-*` beside it is
+  // meaningless and stays reported.
+  if (cls === 'transition' || cls === 'transition-all') return { transition: 'quick' }
+  if (cls === 'transition-colors') {
+    return { transition: 'quick', animateOnly: ['color', 'background-color', 'border-color'] }
+  }
+  if (cls === 'transition-opacity') return { transition: 'quick', animateOnly: ['opacity'] }
+  if (cls === 'transition-transform') return { transition: 'quick', animateOnly: ['transform'] }
+  if (cls === 'transition-shadow') return { transition: 'quick', animateOnly: ['box-shadow'] }
+  if (cls === 'transition-none') return { transition: 'none' }
+  if ((m0 = cls.match(/^duration-(\d+)$/))) {
+    const name = DURATION_NAME[m0[1]]
+    return name ? { transition: name } : null
+  }
+  // `ease-*`/`delay-*` have no prop form — the driver's easing is baked into the named transition.
+  if (/^(ease|delay)(-|$)/.test(cls)) return 'keep'
+  if (/^animate(-|$)/.test(cls)) return 'keep'   // keyframes are not the driver's job (§5)
   if (/^lm-/.test(cls)) return 'keep'                                             // runtime `--lm-*` palette / keyframes
   if (/^prose(-|$)/.test(cls)) return 'keep'                                      // @tailwindcss/typography, styles injected HTML
   if (/^(space-[xy])-/.test(cls)) return 'keep'                                   // child margins, NOT `gap` — different semantics

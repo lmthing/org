@@ -156,7 +156,7 @@ export function PropertyRow({
           paddingVertical="$1.5"
           paddingHorizontal="$2.5"
           borderRadius="0.5rem"
-          // transition-all awaits the animation driver (§5/P4)
+          transition="quick"
           {...(property.required
             ? {
                 backgroundColor: 'color-mix(in srgb, var(--destructive) 15%, transparent)',
@@ -308,7 +308,7 @@ export function PropertyRow({
               borderStyle="dashed"
               borderColor="$border"
               color="$muted-foreground"
-              // transition-colors awaits the animation driver (§5/P4)
+              transition="quick" animateOnly={["color", "background-color", "border-color"]}
               hoverStyle={{ borderColor: '$brand-3', color: '$brand-3' }}
             >
               + Define array item type

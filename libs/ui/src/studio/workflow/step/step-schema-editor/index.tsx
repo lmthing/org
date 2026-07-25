@@ -40,7 +40,7 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
             paddingHorizontal="$3"
             borderRadius="0.375rem"
             color="$muted-foreground"
-            // transition-all awaits the animation driver (§5/P4)
+            transition="quick"
             hoverStyle={{ color: '$foreground' }}
             {...(viewMode === 'visual'
               ? {
@@ -62,7 +62,7 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
             paddingHorizontal="$3"
             borderRadius="0.375rem"
             color="$muted-foreground"
-            // transition-all awaits the animation driver (§5/P4)
+            transition="quick"
             hoverStyle={{ color: '$foreground' }}
             {...(viewMode === 'code'
               ? {
@@ -159,7 +159,7 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
                 borderStyle="dashed"
                 borderColor="$border"
                 color="$muted-foreground"
-                // transition-colors awaits the animation driver (§5/P4)
+                transition="quick" animateOnly={["color", "background-color", "border-color"]}
                 hoverStyle={{ borderColor: '$brand-3', color: '$brand-3' }}
               >
                 <Prim.Svg {...SCHEMA_EDITOR_ADD_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

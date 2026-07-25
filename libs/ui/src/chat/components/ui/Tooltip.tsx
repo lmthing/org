@@ -20,7 +20,7 @@ export function Tooltip({ children, content, className, side = 'top' }: TooltipP
         display="block"
         whiteSpace="nowrap"
         {...(side === 'top' ? { marginBottom: '0.375rem' } : { marginTop: '0.375rem' })}
-        className={cn("transition-opacity duration-150", side === 'top' ? 'bottom-full' : 'top-full')} pointerEvents="none" position="absolute" zIndex={50} paddingHorizontal="$2" paddingVertical="$1" fontSize="$xs" borderRadius="$radius-md" backgroundColor="$foreground" color="$background" opacity={0} transform="translateX(-50%)" left="50%" $group-hover={{ opacity: 1 }}
+        className={side === 'top' ? 'bottom-full' : 'top-full'} transition="quick" animateOnly={["opacity"]} pointerEvents="none" position="absolute" zIndex={50} paddingHorizontal="$2" paddingVertical="$1" fontSize="$xs" borderRadius="$radius-md" backgroundColor="$foreground" color="$background" opacity={0} transform="translateX(-50%)" left="50%" $group-hover={{ opacity: 1 }}
       >
         {content}
       </Prim.Text>

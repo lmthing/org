@@ -220,9 +220,9 @@ export function ChatView({
           <TraceLoader />
           <Prim.Pressable
             onClick={() => onOpenDevPanel?.()}
-            className={cn("transition-colors", devPanelOpen
+            className={devPanelOpen
                 ? 'bg-agent/15 text-agent'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted')} fontSize="$xs" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius-lg"
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'} transition="quick" animateOnly={["color", "background-color", "border-color"]} fontSize="$xs" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius-lg"
             title="Toggle DevPanel (⌥I)"
           >
             Inspect
@@ -292,7 +292,7 @@ export function ChatView({
       {!atBottom && (
         <Prim.Pressable
           onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
-          className="transition-colors" position="absolute" bottom="$24" right="$6" width="$8" height="$8" borderRadius="$radius-full" backgroundColor="$card" borderWidth={1} borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 4 }} shadowRadius={6} alignItems="center" justifyContent="center" color="$muted-foreground" zIndex={10} hoverStyle={{ color: "$foreground" }} display="flex"
+          transition="quick" animateOnly={["color", "background-color", "border-color"]} position="absolute" bottom="$24" right="$6" width="$8" height="$8" borderRadius="$radius-full" backgroundColor="$card" borderWidth={1} borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 4 }} shadowRadius={6} alignItems="center" justifyContent="center" color="$muted-foreground" zIndex={10} hoverStyle={{ color: "$foreground" }} display="flex"
           aria-label="Scroll to bottom"
         >
           ↓
