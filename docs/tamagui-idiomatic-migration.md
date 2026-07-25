@@ -1,5 +1,7 @@
 # Phase 2 — the idiomatic-Tamagui migration ("the Tamagui way", zero-Tailwind)
 
+> **The remaining work has its own plan → [`tamagui-final-steps.md`](./tamagui-final-steps.md).**
+>
 > **Status: P0 BUILT · the ANIMATION DRIVER is in · P5 complete across `libs/ui` and `apps/web` ·
 > the `styled()` proof tree is retired · inline `style` is being closed too.**
 > The className tail is **87 real Tailwind utilities** (from 945), the animation family is **27
