@@ -22,7 +22,7 @@ export default function Slide8Partnership() {
         <Prim.Image
           src={qrCode}
           alt="Scan to visit lmthing.studio"
-          className="h-80 w-80 rounded-3xl shadow-xl"
+          height="$80" width="$80" borderRadius="$radius-xl" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 20 }} shadowRadius={25}
           style={{ boxShadow: `0 10px 40px color-mix(in srgb, ${colors.brand} 20%, transparent)` }}
         />
       </Prim.Col>

@@ -1,29 +1,10 @@
-/* React Arborist Tree Styles */
+
+
 .react-arborist {
   height: 100%;
   width: 100%;
 }
 
-.react-arborist-tree {
-  height: 100%;
-  width: 100%;
-}
-
-.react-arborist-node {
-  cursor: pointer;
-}
-
-.react-arborist-node-content {
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.react-arborist-fill-handle {
-  width: 100%;
-}
-
-/* Drag and drop styles */
 .react-arborist-drag-preview {
   background-color: var(--color-accent);
   border: 1px solid var(--color-border);
@@ -32,18 +13,6 @@
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
 }
 
-.react-arborist-drop-target {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-/* Outer row: receives react-arborist absolute positioning */
-.field-tree-node__row {
-  padding: 2px 0.375rem;
-  height: 100%;
-}
-
-/* Inner node: visual styling and hover target */
 .field-tree-node {
   display: flex;
   align-items: center;
@@ -73,59 +42,16 @@
   color: var(--color-primary-foreground);
 }
 
-.field-tree-node--dragging {
-  opacity: 0.5;
-}
-
-.field-tree-node--drop-target {
-  outline: 2px solid var(--color-primary);
-}
-
-.field-tree-node__icon {
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-}
-
-.field-tree-node__icon--chevron {
-  width: 0.875rem;
-  height: 0.875rem;
-  flex-shrink: 0;
-  color: var(--color-muted-foreground);
-}
-
 .field-tree-node--selected .field-tree-node__icon--chevron {
   color: var(--color-primary-foreground);
-}
-
-.field-tree-node__icon--folder {
-  color: var(--color-primary);
 }
 
 .field-tree-node--selected .field-tree-node__icon--folder {
   color: var(--color-primary-foreground);
 }
 
-.field-tree-node__icon--file {
-  color: var(--color-muted-foreground);
-}
-
 .field-tree-node--selected .field-tree-node__icon--file {
   color: var(--color-primary-foreground);
-}
-
-.field-tree-node__spacer {
-  width: 1.5rem;
-  flex-shrink: 0;
-}
-
-.field-tree-node__label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
 }
 
 .field-tree-node__actions {
@@ -135,13 +61,6 @@
 
 .field-tree-node:hover .field-tree-node__actions {
   opacity: 1;
-}
-
-/* Context menu */
-.field-tree-context-menu__backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
 }
 
 .field-tree-context-menu {
@@ -174,18 +93,8 @@
   background: var(--color-muted);
 }
 
-.field-tree-context-menu__item--destructive {
-  color: var(--color-destructive);
-}
-
 .field-tree-context-menu__item--destructive:hover {
   background: color-mix(in srgb, var(--color-destructive) 10%, transparent);
-}
-
-.field-tree-context-menu__item-icon {
-  width: 1rem;
-  height: 1rem;
-  color: var(--color-muted-foreground);
 }
 
 .field-tree-context-menu__item--destructive .field-tree-context-menu__item-icon {

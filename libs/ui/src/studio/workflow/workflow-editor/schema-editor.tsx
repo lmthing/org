@@ -9,6 +9,7 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { FIELD_TYPES } from './schema-utils'
 import type { SchemaRow, TaskFieldType } from './types'
+import { TASKLIST_EDITOR_OUTPUT_ROW, TASKLIST_EDITOR_OUTPUT_ROWS } from './tasklist-editor.props.js'
 
 export interface SchemaEditorProps {
   rows: SchemaRow[]
@@ -19,9 +20,9 @@ export interface SchemaEditorProps {
 
 export function SchemaEditor({ rows, onChange, addLabel = '+ Add field', emptyHint }: SchemaEditorProps) {
   return (
-    <Prim.Box className="tasklist-editor__output-rows">
+    <Prim.Box {...TASKLIST_EDITOR_OUTPUT_ROWS}>
       {rows.map((row, i) => (
-        <Prim.Box key={i} className="tasklist-editor__output-row">
+        <Prim.Box key={i} {...TASKLIST_EDITOR_OUTPUT_ROW}>
           <Input
             type="text"
             value={row.field}

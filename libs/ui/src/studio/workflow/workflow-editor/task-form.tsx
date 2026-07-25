@@ -11,6 +11,7 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { cn } from '@lmthing/ui/lib/utils'
 import { SchemaEditor } from './schema-editor'
 import type { TaskDraft } from './types'
+import { TASKLIST_EDITOR_DEPENDS_GRID, TASKLIST_EDITOR_FLAGS_ROW, TASKLIST_EDITOR_FLAG_ITEM, TASKLIST_EDITOR_GOAL_BADGE, TASKLIST_EDITOR_TASK_BODY, TASKLIST_EDITOR_TASK_CONTROLS, TASKLIST_EDITOR_TASK_HEADER, TASKLIST_EDITOR_TASK_ORDER } from './tasklist-editor.props.js'
 
 export interface TaskFormProps {
   draft: TaskDraft
@@ -49,12 +50,12 @@ export function TaskForm({
   return (
     <Prim.Box className={cn('tasklist-editor__task-form', draft.goal && 'tasklist-editor__task-form--goal')}>
       {/* Order + controls header */}
-      <Prim.Box className="tasklist-editor__task-header">
-        <Prim.Text className="tasklist-editor__task-order">{index + 1}</Prim.Text>
+      <Prim.Box {...TASKLIST_EDITOR_TASK_HEADER}>
+        <Prim.Text {...TASKLIST_EDITOR_TASK_ORDER}>{index + 1}</Prim.Text>
         {draft.goal && (
-          <Prim.Text className="tasklist-editor__goal-badge">goal</Prim.Text>
+          <Prim.Text {...TASKLIST_EDITOR_GOAL_BADGE}>goal</Prim.Text>
         )}
-        <Prim.Box className="tasklist-editor__task-controls">
+        <Prim.Box {...TASKLIST_EDITOR_TASK_CONTROLS}>
           <Button variant="ghost" size="icon" onClick={onMoveUp} disabled={isFirst} title="Move up">
             <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
               <Prim.Path d="M12 19V5M5 12l7-7 7 7" />
@@ -73,7 +74,7 @@ export function TaskForm({
         </Prim.Box>
       </Prim.Box>
 
-      <Prim.Box className="tasklist-editor__task-body">
+      <Prim.Box {...TASKLIST_EDITOR_TASK_BODY}>
         {/* id */}
         <Prim.Box>
           <Label compact required>ID</Label>
@@ -124,7 +125,7 @@ export function TaskForm({
         {otherTaskIds.length > 0 && (
           <Prim.Box>
             <Label compact>Depends on</Label>
-            <Prim.Box className="tasklist-editor__depends-grid">
+            <Prim.Box {...TASKLIST_EDITOR_DEPENDS_GRID}>
               {otherTaskIds.map((taskId) => (
                 <Prim.Pressable
                   key={taskId}
@@ -144,9 +145,9 @@ export function TaskForm({
         )}
 
         {/* goal / optional / condition row */}
-        <Prim.Box className="tasklist-editor__flags-row">
+        <Prim.Box {...TASKLIST_EDITOR_FLAGS_ROW}>
           {/* goal radio */}
-          <Prim.Box className="tasklist-editor__flag-item">
+          <Prim.Box {...TASKLIST_EDITOR_FLAG_ITEM}>
             <Prim.Pressable
               onClick={onSetGoal}
               className={cn(
@@ -164,7 +165,7 @@ export function TaskForm({
           </Prim.Box>
 
           {/* optional toggle */}
-          <Prim.Box className="tasklist-editor__flag-item">
+          <Prim.Box {...TASKLIST_EDITOR_FLAG_ITEM}>
             <Prim.Pressable
               onClick={() => onChange({ ...draft, optional: !draft.optional })}
               className={cn(
