@@ -14,7 +14,6 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { CardFooter } from '@lmthing/ui/elements/content/card'
-import '@lmthing/css/components/workflow/save-workflow-modal/index.css'
 import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../elements/overlays/dialog/index.js'
 
 interface SaveTasklistModalProps {
@@ -88,7 +87,7 @@ export function SaveTasklistModal({ isOpen, onClose, existingName, onSaved }: Sa
           <Button onClick={onClose} variant="ghost" size="sm">✕</Button>
         </Prim.Box>
 
-        <Stack gap="md" className="save-workflow-modal__body">
+        <Stack gap="md" padding="1.5rem">
           <Prim.Box>
             <Label>Tasklist Name</Label>
             <Input
@@ -104,7 +103,7 @@ export function SaveTasklistModal({ isOpen, onClose, existingName, onSaved }: Sa
           </Prim.Box>
         </Stack>
 
-        <CardFooter className="save-workflow-modal__footer">
+        <CardFooter justifyContent="flex-end" gap="0.75rem">
           <Button onClick={onClose} variant="ghost">Cancel</Button>
           <Button onClick={handleSave} disabled={!isValid} variant="primary">
             {existingName ? 'Rename' : 'Create'}
