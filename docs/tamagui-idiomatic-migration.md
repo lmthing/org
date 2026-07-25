@@ -1,7 +1,8 @@
 # Phase 2 — the idiomatic-Tamagui migration ("the Tamagui way", zero-Tailwind)
 
-> **Status: BOTH SWEEPS DONE — every element block and every component block is swept. 13 much
-> smaller stylesheets remain, holding ONLY rules that cannot be props. CSS bundle 171 → 52 kB.**
+> **Status: P5 SWEEP COMPLETE — every stylesheet in the repo is swept and the className codemod is
+> run to its ceiling. 15 trimmed stylesheets remain, holding only rules with no prop form. CSS
+> bundle 171 → 48 kB.**
 > Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every surface primitive + overlay
 > *onto Tamagui components* while **keeping the Tailwind + `theme.css` + BEM styling engine**
 > underneath (coexistence). This Phase 2 replaces that styling engine with **idiomatic Tamagui** —
@@ -193,8 +194,10 @@ sheet it reads — so it now refuses to run over its own output.
 
 ### What remains — and the dependency that orders it
 
-**13 trimmed `components/**` stylesheets — 136 rules.** Every sheet has been swept; what is left
-is the residue that has no prop form, so this is no longer a mechanical backlog:
+**15 trimmed component stylesheets — 207 rules** (13 under `libs/css`, plus `FieldTree.css` and
+`tasklist-editor.css` co-located in `libs/ui`; `chat/app/styles.css` is the Tailwind entry and
+belongs to the pipeline deletion, not here). Every sheet has been swept; what is left is the
+residue that has no prop form, so this is no longer a mechanical backlog:
 
 | Blocker | Notes |
 |---|---|
@@ -207,7 +210,11 @@ is the residue that has no prop form, so this is no longer a mechanical backlog:
 `markdown/index.css` is the one sheet that will likely never convert: it styles HTML produced by
 `marked` and injected as a string, so there are no React elements to put props on.
 
-- **The codemod tail.** Re-run across all 118 files, `classnames-to-props`
+- **The codemod tail is now at its floor.** Re-run after the sweep it migrates nothing further.
+  What is left is 41 **dynamic** classNames (template literals / `cn()` with expressions, which
+  need hand-written conditional prop objects) and 59 elements carrying residual BEM from the rules
+  that legitimately stay in CSS. Getting past this is per-element manual work, not tooling.
+- **(historical)** Re-run across all 118 files, `classnames-to-props`
   can migrate almost nothing: of 219 reported elements, 181 skip for unmapped classes, and those
   are overwhelmingly BEM from these 16 stylesheets. The codemod refuses to half-migrate an
   element, so a single BEM class on it blocks the Tailwind utilities beside it. Extending the map
@@ -233,7 +240,7 @@ is the residue that has no prop form, so this is no longer a mechanical backlog:
 | **P3 — className → props codemod** | ✅ tool built + hardened + 🟡 **applied to chat+studio** | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + a 43-test gate (map + a new `-transform` suite). **Run for real**: chat + studio. Hardened after the first run surfaced two silent-drop bugs (both fixed + regression-tested, re-migrated clean): (a) directional `border-t/r/b/l/x/y` were misread as color tokens (`$t`) → widths dropped; (b) the `lm-*` runtime palette (`bg-lm-accent` …) became bogus `$lm-*` tokens → now kept as className. Also **added `cn("literal", …rest)` lifting** (the common dynamic shape). Alpha modifiers/animations/`lm-*`/dynamic `cn()` stay residual. Remaining className: chat ~223, studio ~589 (mostly BEM on shared elements + dynamic `cn()`), computer ~24 |
 | **P0 — real-surface visual harness** | 🟡 mechanism proven, baseline NOT built | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining. **This is now the gating item**: the animation driver (the biggest remaining unblock) changes visible motion app-wide, which is precisely the class of change P0 exists to review |
 | **P4 — element layer + primitives idiomatic** | ✅ **DONE — all 29 element blocks; `elements/**` has no stylesheets** | Every shipped element carries `$`-token PROPS on the `Prim.*` primitives (real host tags via `createComponent`). Both blockers this row used to name were wrong: extraction does NOT make `tag` real, and the overlay animations were DEAD rather than deferred. Form-control and `Image` primitives are Tamagui-backed too. Shipped-element suites gated for the first time (508 → 618 tests), plus a syntax-only typecheck gate for `libs/ui` |
-| **P5 — components sweep, compiler ON, delete pipeline** | ✅ **sweep DONE — all 19 blocks swept**; ⬜ compiler/pipeline | `bem-to-props` + `bem-rewrite-callsites` + `bem-sweep` converted 566 rules across the 12 remaining sheets. 136 rules stay as CSS because they have no prop form (descendant/pseudo selectors, `transition`, `box-shadow`, grid templates, gradients). Verified per sweep by an orphan-className diff, which caught the driver removing rules whose classes survived in dynamic call sites. Extraction was measured and stays OFF |
+| **P5 — sweep, compiler ON, delete pipeline** | ✅ **sweep COMPLETE**; ⬜ compiler/pipeline | Every stylesheet in the repo is swept — including the two co-located ones inside `libs/ui` that the `libs/css` counts always missed. 613 rules converted; 176 stay as CSS with no prop form. The className codemod is at its floor: fixing the `keep`/`skip` split (deferred families were classified as *unrecognised*, so they held every mappable class on their element hostage) took it from 4 migratable elements to 37, and a further run migrates nothing. Residual Tailwind utilities 945 → 653 |
 | **P6 — types + native on device** | ⬜ remaining | SPIKE C also unlocks a real `typecheck` for `libs/ui` (today only a syntax gate); native needs a Metro/device toolchain |
 
 ---
