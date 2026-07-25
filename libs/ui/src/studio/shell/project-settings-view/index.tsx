@@ -149,7 +149,7 @@ export function ProjectSettingsView() {
               ) : integrations === null ? (
                 <Caption muted>Loading…</Caption>
               ) : loadError ? (
-                <Caption className="text-destructive">{loadError}</Caption>
+                <Caption color="$destructive">{loadError}</Caption>
               ) : integrations.length === 0 ? (
                 <Panel>
                   <PanelBody>
@@ -210,7 +210,7 @@ export function ProjectSettingsView() {
 
             {integrations && integrations.length > 0 && (
               <Stack gap="sm">
-                {saveError && <Caption className="text-destructive">{saveError}</Caption>}
+                {saveError && <Caption color="$destructive">{saveError}</Caption>}
                 {saved && <Caption muted>Saved. Pod is restarting to apply changes.</Caption>}
                 <Button
                   variant="primary"

@@ -49,7 +49,7 @@ export default function Slide4Technology() {
           textAlign="center" fontSize="$6xl" fontWeight="$extrabold" lineHeight="1.3"
           style={{ color: colors.text, letterSpacing: '-0.025em' }}
         >
-          <CozyThingText text="THING" className="text-6xl font-extrabold leading-[1.3]" /> turns your knowledge into agents
+          <CozyThingText text="THING" fontSize="$6xl" fontWeight="$extrabold" lineHeight="1.3" /> turns your knowledge into agents
           <Prim.Br />
           that <Prim.Text as="em" fontStyle="normal" style={{ color: colors.brand }}>actually know your domain.</Prim.Text>
         </Prim.Text>
@@ -87,7 +87,7 @@ export default function Slide4Technology() {
                       }
                   ) }}
               >
-                {node.isThing ? <CozyThingText text={node.label} className="font-extrabold text-4xl" /> : node.label}
+                {node.isThing ? <CozyThingText text={node.label} fontWeight="$extrabold" fontSize="$4xl" /> : node.label}
               </Prim.Row>
               <Prim.Box
                 maxWidth="160px" textAlign="center" fontSize="$base" lineHeight={1.375}

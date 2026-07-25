@@ -130,7 +130,7 @@ export function Triggers() {
         <Code>GITHUB_WEBHOOK_SECRET</Code> or <Code>LMTHING_WEBHOOK_SECRET_&lt;PATH&gt;</Code>.
       </Caption>
 
-      {error && <Caption className="text-destructive">{error}</Caption>}
+      {error && <Caption color="$destructive">{error}</Caption>}
     </Prim.Box>
   )
 }

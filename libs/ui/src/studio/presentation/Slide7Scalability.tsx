@@ -152,7 +152,7 @@ export default function Slide6Scalability() {
           Next:{' '}
           <Prim.Text as="em" fontStyle="normal" fontWeight="$bold" style={{ color: colors.brand }}>
             Ship Matilda · Open-source lm
-            <CozyThingText text="thing" className="text-base font-bold" /> · Launch enterprise pilot
+            <CozyThingText text="thing" fontSize="$base" fontWeight="$bold" /> · Launch enterprise pilot
           </Prim.Text>
         </Prim.Box>
         <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" style={{ background: colors.brand }} />

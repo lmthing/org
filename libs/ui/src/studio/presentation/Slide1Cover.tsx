@@ -33,7 +33,7 @@ export default function Slide1Cover() {
         <Prim.Text fontWeight="$bold" style={{ color: colors.brand }}>Matilda</Prim.Text>
         <Prim.Text style={{ color: colors.muted }}>powered by</Prim.Text>
         <Prim.Text fontSize="$lg" fontWeight="$bold">
-          lm<CozyThingText text="thing" className="text-lg font-bold" />
+          lm<CozyThingText text="thing" fontSize="$lg" fontWeight="$bold" />
         </Prim.Text>
       </Prim.Row>
     </Prim.Col>

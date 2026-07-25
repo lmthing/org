@@ -13,7 +13,7 @@ export default function Slide8Partnership() {
         Are you building agents?
         <Prim.Br />
         <Prim.Br />
-        Visit <Prim.Text style={{ color: colors.brandDark   }}>lm</Prim.Text><CozyThingText text="thing" className="text-5xl font-bold sm:text-7xl leading-loose" /><Prim.Text style={{ color: colors.brandDark }}>.studio</Prim.Text>
+        Visit <Prim.Text style={{ color: colors.brandDark   }}>lm</Prim.Text><CozyThingText text="thing" fontSize="$5xl" fontWeight="$bold" lineHeight={2} $sm={{ fontSize: "$7xl" }} /><Prim.Text style={{ color: colors.brandDark }}>.studio</Prim.Text>
         <Prim.Br />
         and join the community!
       </Prim.Text>

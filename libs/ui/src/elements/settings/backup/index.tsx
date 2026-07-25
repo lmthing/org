@@ -270,12 +270,12 @@ export function WorkspaceBackup() {
             {status?.lastCommitSha ? ` · ${status.lastCommitSha.slice(0, 7)}` : ''}
           </Caption>
           {status?.status === 'error' && status.error && (
-            <Caption className="text-destructive">Last error: {status.error}</Caption>
+            <Caption color="$destructive">Last error: {status.error}</Caption>
           )}
         </Prim.Box>
       )}
 
-      {error && <Caption className="text-destructive">{error}</Caption>}
+      {error && <Caption color="$destructive">{error}</Caption>}
       {notice && <Caption muted>{notice}</Caption>}
     </Prim.Box>
   )

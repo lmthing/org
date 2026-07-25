@@ -42,6 +42,10 @@ const DEFAULT_TARGETS = new Set([
   // The form controls — Tamagui-backed via `makeControl` (see `_tamagui.tsx`), which is what
   // `elements/forms/input` already relies on when it spreads INPUT_BASE onto `Prim.TextField`.
   'TextField', 'TextArea', 'Select',
+  // Element-layer components that spread their rest props straight onto a `Prim.*` primitive, so a
+  // style prop reaches Tamagui exactly as it would on the primitive itself. Verified per component
+  // — this is NOT true of every element (many bind a fixed set), so add one only after reading it.
+  'Caption', 'CozyThingText',
 ])
 
 /** Serialize a prop value to JSX attribute source. */

@@ -241,7 +241,7 @@ is migrated.
 | component stylesheets | 15 | **12** |
 | orphan BEM classNames (dead, no rule anywhere) | 20 | **0** |
 | codemod skips needing hand work | 120 | **0** (30 legitimate passthroughs remain) |
-| residual Tailwind utility classNames | ~945 → 539 | **296 across 66 files** ¹ |
+| residual Tailwind utility classNames | ~945 → 539 | **261 across 55 files** ¹ |
 | …of which the animation family | — | **67** |
 | files gated by `lint:rn` | 138 | **230** |
 | raw host tags in `elements`+`components` | 67 (ungated) | **0** |
@@ -278,7 +278,7 @@ a `<ul>` used as a flex or grid container could not take `gap`.
 
 **What now blocks deleting Tailwind (P6).** Three things:
 
-1. **The animation family** — 67 of the 296 remaining utility classNames are `transition-*`,
+1. **The animation family** — 67 of the 261 remaining utility classNames are `transition-*`,
    `animate-*`, `lm-fade-in`, `lm-spin`. This is the single biggest bucket and the one P0 exists to
    review, because the driver changes visible motion app-wide.
 2. **Host-passthrough primitives** — `Pre`, `Br`, `Hr`, `DataList`, `Option`, and the `Table`/`Svg`
@@ -288,9 +288,14 @@ a `<ul>` used as a flex or grid container could not take `gap`.
    tag itself becomes Tamagui-backed. (`TextField`/`TextArea`/`Select` ARE Tamagui-backed and were
    added to the target list; that took 296 off the count on its own.) `render-descriptor.tsx` is
    the single densest file left, and it is almost entirely `Prim.Pre` + `prose-*`.
-3. **Composite `className` passthroughs** — `Caption`, `CozyThingText`, lucide icons and assorted
-   others take a `className` the codemod will not touch because the target is not a primitive. Each
-   needs a decision: forward style props, or keep the class.
+3. **Composite `className` passthroughs** — the two biggest, `Caption` and `CozyThingText`, are
+   done: both already spread their rest props straight onto a `Prim.*` primitive, so style props
+   worked at runtime and only `Caption`'s prop TYPE (`ComponentProps<'span'>`, not `Prim.TextProps`)
+   was stopping callers writing them. Both are in the codemod's target list now. What is left is a
+   long tail — lucide icons (`size-4` wants lucide's own `size` prop, not a style prop), `Tag`,
+   `Badge`, `DialogContent`, `AvatarFallback` — two or three call sites each, and each needs the
+   same read-the-component check before it can be added: many elements bind a FIXED prop set rather
+   than spreading, and adding one of those to the target list would delete its styling silently.
 
 **Two mapping decisions worth not re-litigating.** `lm-*` maps to `var(--lm-…)`, NOT to the token
 it aliases: `applyThemeTokens` (`theme/theme.ts`) overrides `--lm-*` directly from a space's

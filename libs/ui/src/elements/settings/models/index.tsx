@@ -202,7 +202,7 @@ export function Models() {
         </Select>
       </Prim.Box>
 
-      {error && <Caption className="text-destructive">{error}</Caption>}
+      {error && <Caption color="$destructive">{error}</Caption>}
       {saved && <Caption muted>Saved. Pod is restarting to apply changes.</Caption>}
       <Prim.Box>
         <Button variant="primary" size="sm" onClick={save} disabled={saving}>

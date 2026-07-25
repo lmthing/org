@@ -11,7 +11,7 @@ const cards = [
     body: (
       <>
         Dimitris uploaded past Panhellenic exam material.{' '}
-        <Prim.Text as="strong"><CozyThingText text="THING" className="text-base font-semibold" /> structured his knowledge.</Prim.Text> His custom agent now produces verified
+        <Prim.Text as="strong"><CozyThingText text="THING" fontSize="$base" fontWeight="$semibold" /> structured his knowledge.</Prim.Text> His custom agent now produces verified
         material on demand.
         <Prim.Br />
         <Prim.Br />
@@ -44,7 +44,7 @@ const cards = [
         Built the complete pitch deck — architecture, positioning, narrative — as a{' '}
         <Prim.Text as="strong">
           working proof of lm
-          <CozyThingText text="thing" className="text-lg font-semibold" />
+          <CozyThingText text="thing" fontSize="$lg" fontWeight="$semibold" />
           's value.
         </Prim.Text>
         <Prim.Br />
