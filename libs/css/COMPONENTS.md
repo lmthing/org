@@ -31,13 +31,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `--agent`, `--color-agent`, `--color-agent-foreground`, `--color-background`, `--color-border`, `--color-brand-1`, `--color-brand-2`, `--color-brand-3`, `--color-destructive`, `--color-foreground`, `--color-knowledge`, `--color-muted`, `--color-muted-foreground`, `--color-neutral`, `--color-primary`, `--radius-full`, `--radius-lg`, `--radius-md`
 
-### `components/auth/index.css`
-
-- **.github-login** — `.github-login__authenticated` `.github-login__device-code` `.github-login__device-code-hint` `.github-login__device-code-waiting` `.github-login__icon`
-- **.login-screen** — `.login-screen` `.login-screen__branding` `.login-screen__container` `.login-screen__error` `.login-screen__field` `.login-screen__form` `.login-screen__label` `.login-screen__new-account-hint` `.login-screen__submit` `.login-screen__subtitle` `.login-screen__title`
-
-  Tokens: `--destructive`
-
 ### `components/component-editor/index.css`
 
 - **.component-editor** — `.component-editor` `.component-editor__empty` `.component-editor__header` `.component-editor__kind-badge` `.component-editor__kind-badge--form` `.component-editor__kind-badge--view` `.component-editor__list` `.component-editor__list-item` `.component-editor__list-item--active` `.component-editor__list-item-actions` `.component-editor__list-item-name` `.component-editor__new-form` `.component-editor__pane` `.component-editor__pane-header` `.component-editor__section-title` `.component-editor__textarea`
@@ -55,23 +48,6 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 - **.functions-editor** — `.functions-editor` `.functions-editor__empty` `.functions-editor__header` `.functions-editor__list` `.functions-editor__list-item` `.functions-editor__list-item--active` `.functions-editor__list-item-actions` `.functions-editor__list-item-name` `.functions-editor__new-form` `.functions-editor__pane` `.functions-editor__pane-header` `.functions-editor__textarea`
 
   Tokens: `--color-border`, `--color-surface-active`, `--color-surface-hover`, `--color-surface-subtle`, `--font-mono`
-
-### `components/knowledge/index.css`
-
-- **.create-field-inline** — `.create-field-inline` `.create-field-inline__action-btn` `.create-field-inline__actions` `.create-field-inline__close-icon` `.create-field-inline__header-row` `.create-field-inline__icon` `.create-field-inline__title-row`
-- **.delete-modal** — `.delete-modal` `.delete-modal__body` `.delete-modal__close-icon` `.delete-modal__footer` `.delete-modal__header` `.delete-modal__header-content` `.delete-modal__note` `.delete-modal__title` `.delete-modal__warning-icon`
-- **.dir-metadata** — `.dir-metadata` `.dir-metadata__checkbox-label` `.dir-metadata__checkbox-row` `.dir-metadata__color-input` `.dir-metadata__color-row` `.dir-metadata__color-swatch` `.dir-metadata__footer` `.dir-metadata__header` `.dir-metadata__icon`
-- **.field-tree** — `.field-tree` `.field-tree__edit-input`
-- **.file-metadata** — `.file-metadata` `.file-metadata__footer`
-- **.markdown-preview** — `.markdown-preview`
-- **.markdown-toolbar** — `.markdown-toolbar` `.markdown-toolbar__icon` `.markdown-toolbar__mode-btn` `.markdown-toolbar__mode-icon` `.markdown-toolbar__modes` `.markdown-toolbar__separator` `.markdown-toolbar__spacer`
-- **.new-file-modal** — `.new-file-modal` `.new-file-modal__close-icon` `.new-file-modal__create-btn` `.new-file-modal__fields` `.new-file-modal__footer` `.new-file-modal__hint` `.new-file-modal__select` `.new-file-modal__title`
-- **.rename-modal** — `.rename-modal` `.rename-modal__body` `.rename-modal__close-icon` `.rename-modal__error` `.rename-modal__footer`
-- **.topic-editor** — `.topic-editor__container` `.topic-editor__header` `.topic-editor__header-actions` `.topic-editor__metadata-btn--active` `.topic-editor__settings-icon` `.topic-editor__textarea`
-- **.topic-viewer** — `.topic-viewer__empty` `.topic-viewer__empty-caption` `.topic-viewer__empty-fields` `.topic-viewer__header` `.topic-viewer__header-actions` `.topic-viewer__textarea`
-- **.unsaved-modal** — `.unsaved-modal` `.unsaved-modal__body` `.unsaved-modal__close-icon` `.unsaved-modal__footer` `.unsaved-modal__header-content` `.unsaved-modal__warning-icon`
-
-  Tokens: `--border`, `--destructive`, `--foreground`, `--muted`, `--muted-foreground`, `--success`, `--warning`
 
 ### `components/markdown/index.css`
 

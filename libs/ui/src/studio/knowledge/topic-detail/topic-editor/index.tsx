@@ -22,8 +22,8 @@ import {
   type TextState,
 } from './markdown-utils'
 import { Settings } from 'lucide-react'
-import '@lmthing/css/components/knowledge/index.css'
 import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
+import { TOPIC_EDITOR_HEADER, TOPIC_EDITOR_HEADER_ACTIONS, TOPIC_EDITOR_SETTINGS_ICON, TOPIC_EDITOR_TEXTAREA } from '../../props.js'
 
 export interface TopicEditorHandle {
   save: () => void
@@ -163,12 +163,12 @@ export const TopicEditor = forwardRef<TopicEditorHandle, TopicEditorProps>(
 
     return (
       <Stack gap="sm">
-        <Stack row className="topic-editor__header">
+        <Stack row {...TOPIC_EDITOR_HEADER}>
           <Prim.Box>
             <Heading level={3}>{topicName}</Heading>
             <Caption muted>{topicPath}</Caption>
           </Prim.Box>
-          <Stack row gap="sm" className="topic-editor__header-actions">
+          <Stack row gap="sm" {...TOPIC_EDITOR_HEADER_ACTIONS}>
             {hasUnsavedChanges && <Badge variant="muted">Unsaved changes</Badge>}
             <Button
               variant="ghost"
@@ -177,7 +177,7 @@ export const TopicEditor = forwardRef<TopicEditorHandle, TopicEditorProps>(
               title="Toggle metadata"
               className={showMetadata ? 'topic-editor__metadata-btn--active' : undefined}
             >
-              <Settings className="topic-editor__settings-icon" />
+              <Settings {...TOPIC_EDITOR_SETTINGS_ICON} />
             </Button>
             <Button variant="primary" size="sm" disabled={!hasUnsavedChanges} onClick={handleSave}>
               Save
@@ -193,7 +193,7 @@ export const TopicEditor = forwardRef<TopicEditorHandle, TopicEditorProps>(
           {mode === 'edit' ? (
             <Prim.TextArea
               ref={textareaRef}
-              {...INPUT_BASE} className="topic-editor__textarea"
+              {...INPUT_BASE} {...TOPIC_EDITOR_TEXTAREA}
               value={draftBody}
               onChange={e => handleChange(e.target.value)}
               onKeyDown={handleKeyDown}

@@ -9,7 +9,6 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { Button } from '@lmthing/ui/elements/forms/button'
-import '@lmthing/css/components/knowledge/index.css'
 
 interface FileMetadataPanelProps {
   topicPath: string

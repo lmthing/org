@@ -3,8 +3,8 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { X, AlertTriangle } from 'lucide-react'
-import '@lmthing/css/components/knowledge/index.css'
 import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
+import { UNSAVED_MODAL_CLOSE_ICON, UNSAVED_MODAL_WARNING_ICON } from '../../props.js'
 
 interface UnsavedChangesModalProps {
   isOpen: boolean
@@ -26,11 +26,11 @@ export function UnsavedChangesModal({ isOpen, onDiscard, onCancel, onSave }: Uns
       >
         <Prim.Box {...DIALOG_HEADER}>
           <Prim.Box display="flex" alignItems="center" gap="$2">
-            <AlertTriangle className="unsaved-modal__warning-icon" />
+            <AlertTriangle {...UNSAVED_MODAL_WARNING_ICON} />
             <Heading level={3}>Unsaved Changes</Heading>
           </Prim.Box>
           <Button variant="ghost" size="icon" onClick={onCancel}>
-            <X className="unsaved-modal__close-icon" />
+            <X {...UNSAVED_MODAL_CLOSE_ICON} />
           </Button>
         </Prim.Box>
 

@@ -7,8 +7,8 @@ import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { X } from 'lucide-react'
-import '@lmthing/css/components/knowledge/index.css'
 import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
+import { RENAME_MODAL_CLOSE_ICON, RENAME_MODAL_ERROR } from '../../props.js'
 
 interface RenameModalProps {
   isOpen: boolean
@@ -76,7 +76,7 @@ export function RenameModal({ isOpen, onClose, onRename, currentName, isDirector
         <Prim.Box {...DIALOG_HEADER}>
           <Heading level={3}>Rename {isDirectory ? 'Folder' : 'File'}</Heading>
           <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="rename-modal__close-icon" />
+            <X {...RENAME_MODAL_CLOSE_ICON} />
           </Button>
         </Prim.Box>
 
@@ -93,7 +93,7 @@ export function RenameModal({ isOpen, onClose, onRename, currentName, isDirector
               autoFocus
             />
             {error && (
-              <Caption className="rename-modal__error">
+              <Caption {...RENAME_MODAL_ERROR}>
                 {error}
               </Caption>
             )}

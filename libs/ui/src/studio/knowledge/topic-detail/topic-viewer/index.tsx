@@ -8,8 +8,8 @@ import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Badge } from '@lmthing/ui/elements/content/badge'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { useFile } from '@lmthing/ui/hooks/fs/useFile'
-import '@lmthing/css/components/knowledge/index.css'
 import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
+import { TOPIC_VIEWER_EMPTY, TOPIC_VIEWER_EMPTY_CAPTION, TOPIC_VIEWER_HEADER, TOPIC_VIEWER_HEADER_ACTIONS, TOPIC_VIEWER_TEXTAREA } from '../../props.js'
 
 export interface TopicViewerProps {
   optionPath?: string
@@ -51,9 +51,9 @@ export function TopicViewer({ optionPath, topicPath }: TopicViewerProps) {
     return (
       <Page full>
         <PageBody>
-          <Stack className="topic-viewer__empty">
+          <Stack {...TOPIC_VIEWER_EMPTY}>
             <Heading level={3}>Select an Option</Heading>
-            <Caption muted className="topic-viewer__empty-caption">
+            <Caption muted {...TOPIC_VIEWER_EMPTY_CAPTION}>
               Choose an option file from the tree to view and edit its content.
             </Caption>
           </Stack>
@@ -66,12 +66,12 @@ export function TopicViewer({ optionPath, topicPath }: TopicViewerProps) {
 
   return (
     <Page full>
-      <PageHeader className="topic-viewer__header">
+      <PageHeader {...TOPIC_VIEWER_HEADER}>
         <Prim.Box>
           <Heading level={3}>{name}</Heading>
           <Caption muted>{effectivePath}</Caption>
         </Prim.Box>
-        <Stack row gap="sm" className="topic-viewer__header-actions">
+        <Stack row gap="sm" {...TOPIC_VIEWER_HEADER_ACTIONS}>
           {hasUnsavedChanges && <Badge variant="muted">Unsaved changes</Badge>}
           {savedAt && <Caption muted>Saved at {savedAt}</Caption>}
           <Button variant="primary" size="sm" disabled={!hasUnsavedChanges} onClick={handleSave}>
@@ -82,7 +82,7 @@ export function TopicViewer({ optionPath, topicPath }: TopicViewerProps) {
 
       <PageBody>
         <Prim.TextArea
-          {...INPUT_BASE} className="topic-viewer__textarea"
+          {...INPUT_BASE} {...TOPIC_VIEWER_TEXTAREA}
           value={draft}
           onChange={e => handleChange(e.target.value)}
           onKeyDown={e => {
