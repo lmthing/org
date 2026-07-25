@@ -406,15 +406,63 @@ function renderEntry(
 }
 
 /**
- * Emit the design-system stylesheet entry (`app.css`). It imports `@lmthing/css`'s
- * theme (Tailwind base + `@theme` tokens) and declares `@source` globs so the
- * Tailwind compiler generates every utility class the pages, shared components and
- * `@lmthing/ui` actually use. A tiny base gives pages the token-driven background /
- * foreground / font by default. Compiled by {@link tailwindCssPlugin}.
+ * Emit the design-system stylesheet entry (`app.css`). It declares `@source` globs so the Tailwind
+ * compiler generates every utility class the pages, shared components and `@lmthing/ui` actually use.
+ * A tiny base gives pages the token-driven background / foreground / font by default. Compiled by
+ * {@link tailwindCssPlugin}.
+ *
+ * **This file now brings its own Tailwind.** It used to get it for free, because
+ * `@lmthing/css/theme.css` opened with `@import "tailwindcss"`. The design system is Tailwind-free as
+ * of phase 4 of `docs/tamagui-final-steps.md`, so without the two imports below an agent-authored page
+ * using `flex gap-2 rounded-lg` would compile to nothing and render unstyled — Tailwind for PROJECT
+ * APP PAGES is a product feature and outlives the migration.
+ *
+ * `theme` + `utilities` only, deliberately NOT the `tailwindcss` barrel: the barrel also pulls
+ * Tailwind's preflight, and `theme.css` already imports the design system's own `preflight.css` (which
+ * *is* that preflight, checked in with its variables resolved). Importing the barrel would ship the
+ * resets twice.
  */
+/**
+ * Re-declare the design system's tokens as a Tailwind theme, from `@lmthing/css`'s generated
+ * `tokens.manifest.json` — the same source `theme.css` is generated from, so the two cannot drift.
+ * `@theme inline` maps each utility name onto the custom property the theme already emits, which
+ * keeps light/dark working (the utility resolves through `var(--token)`, it does not copy a value).
+ */
+function renderTokenTheme(ds: DesignSystem): string {
+  if (!ds.tokensManifest) return '';
+  const { colors, scales } = ds.tokensManifest;
+  const lines: string[] = [];
+  // Colours go through `@theme inline` so the utility resolves as `var(--token)` and keeps following
+  // the light/dark override, rather than baking in one mode's value.
+  lines.push('@theme inline {');
+  for (const c of colors) lines.push(`  --color-${c.name}: var(${c.cssVar});`);
+  lines.push('}');
+  // Scales use a plain `@theme` with LITERAL values. They cannot use `inline`: Tailwind's theme key
+  // for a radius/font is the same name as ours (`--radius-sm`, `--font-sans`), so
+  // `@theme inline { --font-sans: var(--font-sans) }` emits a SELF-REFERENTIAL custom property and the
+  // whole declaration is invalid. Scales are mode-independent, so a literal is exact anyway.
+  lines.push('@theme {');
+  for (const sc of scales) lines.push(`  --${sc.name}: ${sc.value};`);
+  lines.push('}');
+  return lines.join('\n');
+}
+
 function renderAppCss(projectRoot: string, ds: DesignSystem): string {
   if (!ds.themeCss) return '';
-  const lines = [`@import ${JSON.stringify(ds.themeCss)};`];
+  const lines = [
+    '@import "tailwindcss/theme" layer(theme);',
+    '@import "tailwindcss/utilities" layer(utilities);',
+    `@import ${JSON.stringify(ds.themeCss)};`,
+  ];
+  // Bridge the design-system tokens back into Tailwind's theme so a page can still write
+  // `bg-background` / `text-agent` / `rounded-lg` / `font-sans`.
+  //
+  // `theme.css` used to carry this as an `@theme inline` block, which is how those utilities existed
+  // at all; phase 4 turned it into plain `--color-*` custom properties, so Tailwind stopped knowing
+  // the names and `@apply bg-background` failed with "Cannot apply unknown utility class". Rebuilding
+  // it HERE is the right place: the SPA needs no Tailwind, and only project-app pages do.
+  const themeBridge = renderTokenTheme(ds);
+  if (themeBridge) lines.push(themeBridge);
   for (const dir of [
     join(projectRoot, 'pages'),
     join(projectRoot, 'components'),
@@ -425,7 +473,14 @@ function renderAppCss(projectRoot: string, ds: DesignSystem): string {
   }
   lines.push('@layer base {');
   lines.push('  html, body, #root { height: 100%; }');
-  lines.push('  body { @apply bg-background text-foreground font-sans antialiased; }');
+  // Plain CSS, not `@apply`: this line must not depend on the token bridge above resolving.
+  lines.push('  body {');
+  lines.push('    background-color: var(--background);');
+  lines.push('    color: var(--foreground);');
+  lines.push('    font-family: var(--font-sans);');
+  lines.push('    -webkit-font-smoothing: antialiased;');
+  lines.push('    -moz-osx-font-smoothing: grayscale;');
+  lines.push('  }');
   lines.push('}');
   lines.push('');
   return lines.join('\n');
@@ -595,11 +650,21 @@ export function uiElementsDirResolve(uiSrcDir: string): Plugin {
 }
 
 /** Resolved design-system assets for the Tailwind CSS build. */
+interface TokensManifest {
+  colors: { name: string; cssVar: string }[];
+  scales: { name: string; cssVar: string; value: string }[];
+}
+
 interface DesignSystem {
   /** Absolute path to `@lmthing/css`'s theme stylesheet, if resolvable. */
   themeCss?: string;
   /** Source dirs to scan for Tailwind class candidates (`@lmthing/ui`/`@lmthing/css`). */
   sourceDirs: string[];
+  /**
+   * `@lmthing/css`'s generated token index. Needed since phase 4: the theme is plain CSS now, so the
+   * Tailwind theme that gives pages `bg-*`/`text-*`/`rounded-*` has to be rebuilt from the tokens.
+   */
+  tokensManifest?: TokensManifest;
 }
 
 /**
@@ -611,6 +676,7 @@ interface DesignSystem {
 function resolveDesignSystem(req: NodeRequire): DesignSystem {
   const sourceDirs: string[] = [];
   let themeCss: string | undefined;
+  let tokensManifest: TokensManifest | undefined;
   try {
     // `@lmthing/css` exports `./theme` → `src/theme.css`; scan its whole `src`.
     themeCss = req.resolve('@lmthing/css/theme');
@@ -619,13 +685,21 @@ function resolveDesignSystem(req: NodeRequire): DesignSystem {
     /* design system not resolvable (e.g. a minimal fixture) — skip */
   }
   try {
+    // The token index behind the Tailwind theme bridge (see `renderTokenTheme`).
+    tokensManifest = JSON.parse(
+      readFileSync(req.resolve('@lmthing/css/tokens.manifest.json'), 'utf8'),
+    ) as TokensManifest;
+  } catch {
+    /* no manifest (minimal fixture) — pages then get no token utilities, only the plain base */
+  }
+  try {
     // `@lmthing/ui` components carry raw utility classNames the theme must emit.
     // Its `.` export is `src/index.ts`, so its dir is the source tree to scan.
     sourceDirs.push(dirname(req.resolve('@lmthing/ui')));
   } catch {
     /* ui not resolvable — pages that avoid it still style correctly */
   }
-  return { themeCss, sourceDirs };
+  return { themeCss, sourceDirs, tokensManifest };
 }
 
 /** Walk up from `startDir` to the dir whose `package.json` is `@lmthing/cli`. */

@@ -121,10 +121,19 @@ describe('the move left nothing behind in the Tailwind entry', () => {
     expect(code(chatEntry)).not.toContain(fragment);
   });
 
-  it('chat/app/styles.css is still the second Tailwind entry — phase 2 does not delete it', () => {
-    // It still owns base/reset styling and the `--lm-*` bridge; phase 4 relocates those.
-    expect(chatEntry).toContain('@import "tailwindcss"');
+  it('chat/app/styles.css survives phase 4 as PLAIN css, still owning the base styles', () => {
+    // Phase 2 left this as the repo's second Tailwind entry; phase 4 removed the directive but kept
+    // the file, because what remains is not duplicated anywhere.
+    //
+    // NOTE the `code()` calls. The previous version of this assertion read the RAW text for
+    // `@import "tailwindcss"` and so kept passing after the directive was deleted — the string still
+    // occurs in this file's own explanatory comments. A test that cannot tell a directive from prose
+    // about a directive is not a test.
+    expect(code(chatEntry)).not.toContain('@import "tailwindcss"');
+    expect(code(chatEntry)).not.toContain('@theme');
+    expect(code(chatEntry)).not.toContain('@source');
     expect(code(chatEntry)).toContain('--lm-bg');
+    expect(code(chatEntry)).toContain('font-size: 14px');
   });
 });
 

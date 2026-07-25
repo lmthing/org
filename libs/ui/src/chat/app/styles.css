@@ -1,11 +1,26 @@
-@import "tailwindcss";
+/*
+ * The chat surface's base stylesheet — PLAIN CSS since phase 4 of
+ * docs/tamagui-final-steps.md. It used to open with `@import "tailwindcss"`, which made it the
+ * repo's SECOND Tailwind entry; that, plus two `@source` scan directives, is gone.
+ *
+ * The file itself survives rather than being deleted as the plan expected: once the keyframes and
+ * `.lm-prose` moved out (§2), what remained is not duplicated anywhere — the body type scale, the
+ * scrollbar rules, the `:focus-visible` ring, the `--lm-*` token bridge and the safe-area helpers.
+ * `@lmthing/ui/chat/css` therefore stays a valid export.
+ *
+ * Deleted as genuinely redundant: the `@theme inline { --color-* }` block, which restated aliases
+ * `theme.css` already emits, plus `--color-lm-*` aliases that nothing referenced (no `$lm-*` Tamagui
+ * token exists, and Tailwind was already tree-shaking them out of the bundle).
+ */
 
-/* Scan sources for Tailwind class names */
-@source "./";
-@source "../components/";
-
-/* ── Non-color theme tokens ───────────────────────────────────── */
-@theme {
+/* ── Non-color theme tokens ─────────────────────────────────────
+   WAS an `@theme` block. It is kept — rather than dropped in favour of theme.css's generated scales —
+   because the FONT values here differ from tokens.json and, being loaded later, they have been
+   WINNING app-wide: `--font-sans` resolves to `-apple-system, …` and not to the generated
+   `TypeMates Cera Round Pro Bold, …`. Preserving that keeps this phase's P0 delta reviewable; the
+   contradiction itself is a bug, filed in `.issues/`, not something to fix inside a CSS deletion.
+   The radius values are equivalent to the generated ones (2px = 0.125rem, 6px = 0.375rem, …). */
+:root {
   --radius-sm: 2px;
   --radius-md: 6px;
   --radius: 6px;
@@ -37,56 +52,6 @@
   --lm-amber: var(--warning);
   --lm-purple: var(--agent);
   --lm-cyan: var(--knowledge);
-}
-
-/* ── Tailwind color utilities (@theme inline binds classes to vars) ── */
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-knowledge: var(--knowledge);
-  --color-knowledge-foreground: var(--knowledge-foreground);
-  --color-agent: var(--agent);
-  --color-agent-foreground: var(--agent-foreground);
-  --color-brand-1: var(--brand-1);
-  --color-brand-2: var(--brand-2);
-  --color-brand-3: var(--brand-3);
-  --color-brand-4: var(--brand-4);
-  --color-brand-5: var(--brand-5);
-  /* Legacy lm-* color utilities (used by existing tree/inspector/replay) */
-  --color-lm-bg: var(--lm-bg);
-  --color-lm-panel: var(--lm-panel);
-  --color-lm-panel2: var(--lm-panel2);
-  --color-lm-border: var(--lm-border);
-  --color-lm-text: var(--lm-text);
-  --color-lm-muted: var(--lm-muted);
-  --color-lm-accent: var(--lm-accent);
-  --color-lm-green: var(--lm-green);
-  --color-lm-red: var(--lm-red);
-  --color-lm-amber: var(--lm-amber);
-  --color-lm-purple: var(--lm-purple);
-  --color-lm-cyan: var(--lm-cyan);
 }
 
 /* ── Base styles ────────────────────────────────────────────────── */

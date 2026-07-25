@@ -17,7 +17,6 @@
     "eslint": "^9.0.0"
   },
   "peerDependencies": {
-    "@tailwindcss/vite": "*",
     "@tanstack/router-plugin": "*",
     "@vitejs/plugin-react": "*",
     "vite-plus": "*"

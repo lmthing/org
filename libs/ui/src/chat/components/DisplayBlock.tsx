@@ -85,7 +85,9 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
       const text = props['text'] as string | undefined;
       const markdown = text || (renderedChildren.length > 0 ? renderedChildren.join('') : '');
       const html = marked.parse(String(markdown)) as string;
-      return <Prim.Box key={key} className="prose prose-sm" maxWidth="none" dangerouslySetInnerHTML={{ __html: html }} />;
+      // NO className: `prose prose-sm` needed @tailwindcss/typography, which is not installed and
+      // never was, so it styled nothing. See docs/tamagui-final-steps.md §4.
+      return <Prim.Box key={key} maxWidth="none" dangerouslySetInnerHTML={{ __html: html }} />;
     }
     case 'text':
     default:
