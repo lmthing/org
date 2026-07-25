@@ -1,7 +1,7 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { isDescriptor } from './render-descriptor.js';
-import type { Descriptor } from './render-descriptor.js';
+import { isDescriptor } from './render-descriptor';
+import type { Descriptor } from './render-descriptor';
 
 /**
  * Consent-card renderer for the host-enforced function-consent flow

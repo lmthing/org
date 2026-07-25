@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useUIState } from '@lmthing/state'
 import { Bot, X } from 'lucide-react'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -7,7 +7,7 @@ import { Card, CardHeader, CardBody } from '@lmthing/ui/elements/content/card'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { CREATE_AGENT_INLINE, CREATE_AGENT_INLINE_ACTIONS, CREATE_AGENT_INLINE_AVATAR_ICON, CREATE_AGENT_INLINE_BTN, CREATE_AGENT_INLINE_CLOSE_ICON, CREATE_AGENT_INLINE_HEADER_LEFT, CREATE_AGENT_INLINE_HEADER_ROW } from '../../props.js'
+import { CREATE_AGENT_INLINE, CREATE_AGENT_INLINE_ACTIONS, CREATE_AGENT_INLINE_AVATAR_ICON, CREATE_AGENT_INLINE_BTN, CREATE_AGENT_INLINE_CLOSE_ICON, CREATE_AGENT_INLINE_HEADER_LEFT, CREATE_AGENT_INLINE_HEADER_ROW } from '../../props'
 
 interface CreateAgentInlineProps {
   onSubmit: (title: string) => void

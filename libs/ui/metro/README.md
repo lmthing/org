@@ -95,6 +95,14 @@ responder system, so `onPress` becomes `onStartShouldSetResponder` / `onResponde
 - **The `@tamagui/babel-plugin` extraction path.** The harness bundles with the plain RN preset, the
   same as `disableExtraction: true` on web.
 
+## The gate that lives outside this directory
+
+`libs/ui/scripts/lint-import-extensions.mjs` (part of `pnpm --filter @lmthing/ui lint`) forbids a
+`.js` extension on a relative import of a TypeScript file. It is here in spirit: Metro appends
+platform extensions to the specifier as written, so `from './x.js'` against `x.tsx` fails the native
+build outright — it does not fall back. 411 of those were the blocker for porting the surfaces.
+`core` and `cli` use NodeNext, where the extension is required; the gate is scoped to `libs/ui`.
+
 ## Cost
 
 Roughly 20–35 s per platform cold, a few seconds warm (Metro caches transforms under

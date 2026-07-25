@@ -1,8 +1,8 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { useStore } from '../store/store.js';
-import type { ExecNode } from '../store/model.js';
-import { StatusIcon, KindBadge, fmtDuration } from './common.js';
+import { useStore } from '../store/store';
+import type { ExecNode } from '../store/model';
+import { StatusIcon, KindBadge, fmtDuration } from './common';
 
 /** A ticking "now" so running-node durations update live without re-rendering the tree. */
 function useNow(active: boolean): number {

@@ -1,6 +1,6 @@
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { CARD_BASE, CARD_BODY } from '../../../elements/content/card/index.js'
+import { CARD_BASE, CARD_BODY } from '../../../elements/content/card/index'
 
 interface ThingMessageProps {
   role: 'user' | 'assistant'

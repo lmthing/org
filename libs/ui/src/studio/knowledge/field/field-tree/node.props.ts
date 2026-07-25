@@ -12,7 +12,7 @@
  *
  * See docs/tamagui-idiomatic-migration.md §5.
  */
-import { FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE, FIELD_TREE_CONTEXT_MENU_ITEM_ICON } from './field-tree.props.js'
+import { FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE, FIELD_TREE_CONTEXT_MENU_ITEM_ICON } from './field-tree.props'
 
 export const FIELD_TREE_NODE = {
   display: 'flex',

@@ -3,7 +3,7 @@
  * Edits agents/<slug>/instruct.md ONLY.
  * Fields: title, body, actions[], defaultAction, functions[], components[], knowledge[], canDelegateTo[]
  */
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { AgentHeader } from '../agent-header'
 import { useAgentForm } from './use-agent-form'

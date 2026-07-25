@@ -1,4 +1,4 @@
-import { useStore, type InspectorTab } from '../store/store.js';
+import { useStore, type InspectorTab } from '../store/store';
 
 // ─── URL ↔ state sync (deep-linkable; LLM-friendly) ─────────────────────────
 // ?node=<id>&tab=<tab>&follow=0

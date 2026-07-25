@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { overlayEnvKeys, waitForPodReady, resumeMessage } from './auto-resume.js';
+import { overlayEnvKeys, waitForPodReady, resumeMessage } from './auto-resume';
 
 describe('overlayEnvKeys (Integrations tab merge-PUT)', () => {
   it('overlays only the owned keys onto the full env map, preserving the rest', () => {

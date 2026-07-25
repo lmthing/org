@@ -1,6 +1,6 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React, { useState } from 'react';
-import { ConsentCard, isConsentDescriptor, consentPropsFromDescriptor } from './ConsentCard.js';
+import { ConsentCard, isConsentDescriptor, consentPropsFromDescriptor } from './ConsentCard';
 
 interface JSXDescriptor {
   type: string;

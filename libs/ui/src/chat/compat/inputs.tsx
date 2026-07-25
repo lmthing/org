@@ -4,9 +4,9 @@
  * TextInput), `ink-select-input` (SelectInput), plus ConfirmInput / MultiSelect.
  * Same prop shape as the terminal packages so single-source components work.
  */
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { Box, Text, inkColor } from './ink.js';
+import { Box, Text, inkColor } from './ink';
 
 // ─── TextInput (mirrors ink-text-input) ───────────────────────────────────────
 

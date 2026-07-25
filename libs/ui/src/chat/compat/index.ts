@@ -4,6 +4,6 @@
  * `ink-text-input` / `ink-select-input` imports here so Ink-flavored source
  * runs in the browser unchanged. Everything is themed via `--lm-*` CSS vars.
  */
-export * from './ink.js';
-export * from './inputs.js';
-export { default as TextInput } from './inputs.js';
+export * from './ink';
+export * from './inputs';
+export { default as TextInput } from './inputs';

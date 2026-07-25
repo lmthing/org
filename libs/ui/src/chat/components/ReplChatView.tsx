@@ -1,9 +1,9 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useReplSession } from '../client/useReplSession.js';
-import { DisplayBlock } from './DisplayBlock.js';
-import { AskBlock } from './AskBlock.js';
-import { VariablesBlock } from './VariablesBlock.js';
+import { useReplSession } from '../client/useReplSession';
+import { DisplayBlock } from './DisplayBlock';
+import { AskBlock } from './AskBlock';
+import { VariablesBlock } from './VariablesBlock';
 import {
   selectActiveWork,
   latestSubtreeStatement,
@@ -11,8 +11,8 @@ import {
   workDepth,
   KIND_ICON,
   fmtDuration,
-} from '../app/node-meta.js';
-import type { SessionModel } from '../store/model.js';
+} from '../app/node-meta';
+import type { SessionModel } from '../store/model';
 
 export interface ReplChatViewProps {
   /** HTTP/WS origin of the pod (e.g. https://computer.test). */

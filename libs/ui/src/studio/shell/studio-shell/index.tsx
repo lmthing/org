@@ -3,9 +3,9 @@
  * Uses composite hooks and element CSS classes.
  * Orchestrates the sidebar, content area, and settings/knowledge views.
  */
-import * as Prim from '../../../elements/primitives/index.js';
-import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index.js'
-import { PAGE_BODY } from '../../../elements/layouts/page/index.js'
+import * as Prim from '../../../elements/primitives/index';
+import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index'
+import { PAGE_BODY } from '../../../elements/layouts/page/index'
 import { useCallback, useMemo } from 'react'
 import { useToggle } from '@lmthing/state'
 import { useParams, useLocation, useNavigate } from '@tanstack/react-router'

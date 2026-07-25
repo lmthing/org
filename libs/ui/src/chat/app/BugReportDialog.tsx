@@ -1,11 +1,11 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { Dialog } from '../components/ui/Dialog.js';
-import { Input } from '../components/ui/Input.js';
-import { Textarea } from '../components/ui/Textarea.js';
-import { Button } from '../components/ui/Button.js';
-import { useStore } from '../store/store.js';
-import { authHeaders } from './auth.js';
+import { Dialog } from '../components/ui/Dialog';
+import { Input } from '../components/ui/Input';
+import { Textarea } from '../components/ui/Textarea';
+import { Button } from '../components/ui/Button';
+import { useStore } from '../store/store';
+import { authHeaders } from './auth';
 
 interface BugReportDialogProps {
   open: boolean;

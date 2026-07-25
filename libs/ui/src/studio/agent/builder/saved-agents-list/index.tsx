@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Card, CardBody, CardFooter } from '@lmthing/ui/elements/content/card'
 import { Badge } from '@lmthing/ui/elements/content/badge'
@@ -7,7 +7,7 @@ import { PageBody } from '@lmthing/ui/elements/layouts/page'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { SAVED_AGENTS_LIST, SAVED_AGENTS_LIST_BADGE_SM, SAVED_AGENTS_LIST_CARD_DESCRIPTION, SAVED_AGENTS_LIST_CARD_FOOTER, SAVED_AGENTS_LIST_CARD_HEADER, SAVED_AGENTS_LIST_CARD_NAME, SAVED_AGENTS_LIST_EMPTY, SAVED_AGENTS_LIST_EMPTY_CAPTION, SAVED_AGENTS_LIST_HEADER, SAVED_AGENTS_LIST_SUBTITLE } from '../../props.js'
+import { SAVED_AGENTS_LIST, SAVED_AGENTS_LIST_BADGE_SM, SAVED_AGENTS_LIST_CARD_DESCRIPTION, SAVED_AGENTS_LIST_CARD_FOOTER, SAVED_AGENTS_LIST_CARD_HEADER, SAVED_AGENTS_LIST_CARD_NAME, SAVED_AGENTS_LIST_EMPTY, SAVED_AGENTS_LIST_EMPTY_CAPTION, SAVED_AGENTS_LIST_HEADER, SAVED_AGENTS_LIST_SUBTITLE } from '../../props'
 
 interface KnowledgeField {
   id: string

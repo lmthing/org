@@ -5,9 +5,9 @@
  * spaces) plus a welcome/overview in the main area prompting the user to pick a
  * space. Replaces the former project/space grid landings.
  */
-import * as Prim from '../../../elements/primitives/index.js';
-import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index.js'
-import { PAGE_BODY } from '../../../elements/layouts/page/index.js'
+import * as Prim from '../../../elements/primitives/index';
+import { SPLIT_PANE_BASE, SPLIT_PANE_PRIMARY } from '../../../elements/layouts/split-pane/index'
+import { PAGE_BODY } from '../../../elements/layouts/page/index'
 import { useProject } from '@lmthing/state'
 import { StudioAppSidebar } from '../studio-app-sidebar'
 

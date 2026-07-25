@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useEffect, useCallback } from 'react'
 import { useUIState, useSpaceFS, useKnowledgeFieldIndex, serializeKnowledgeFieldIndex } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
@@ -9,8 +9,8 @@ import { Input } from '@lmthing/ui/elements/forms/input'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Textarea } from '@lmthing/ui/elements/forms/textarea'
 import { BookOpen } from 'lucide-react'
-import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
-import { DIR_METADATA_HEADER, DIR_METADATA_ICON } from '../../props.js'
+import { INPUT_BASE } from '../../../../elements/forms/input/index'
+import { DIR_METADATA_HEADER, DIR_METADATA_ICON } from '../../props'
 
 interface FieldIndexPanelProps {
   domain: string

@@ -1,16 +1,16 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { useStore } from '../store/store.js';
-import type { ConvoBlock, UploadedAttachment } from '../store/model.js';
-import { Message, AssistantTurn } from './Message.js';
-import { Composer } from './Composer.js';
-import { LiveActivity } from './LiveActivity.js';
-import { EmptyState } from './EmptyState.js';
-import { useTheme } from '../../theme/theme.js';
-import { TraceLoader } from './replay.js';
-import { cn } from '../lib/cn.js';
-import { BugReportDialog } from './BugReportDialog.js';
-import { authHeaders } from './auth.js';
+import { useStore } from '../store/store';
+import type { ConvoBlock, UploadedAttachment } from '../store/model';
+import { Message, AssistantTurn } from './Message';
+import { Composer } from './Composer';
+import { LiveActivity } from './LiveActivity';
+import { EmptyState } from './EmptyState';
+import { useTheme } from '../../theme/theme';
+import { TraceLoader } from './replay';
+import { cn } from '../lib/cn';
+import { BugReportDialog } from './BugReportDialog';
+import { authHeaders } from './auth';
 
 function formatCost(usd: number): string {
   if (usd < 0.000001) return '';

@@ -6,9 +6,9 @@
 // `createConnectLive`) rather than importing it, so there's no circular
 // module dependency between this file and store.ts.
 
-import { buildModel, parentNodeIds, type WireEvent } from './model.js';
-import { computeTotalCostFromEvents, inflightTurns } from './pricing-slice.js';
-import type { AppState, InspectorTab } from './types.js';
+import { buildModel, parentNodeIds, type WireEvent } from './model';
+import { computeTotalCostFromEvents, inflightTurns } from './pricing-slice';
+import type { AppState, InspectorTab } from './types';
 import type { StoreApi } from 'zustand';
 import type { TraceEvent } from '@lmthing/core';
 

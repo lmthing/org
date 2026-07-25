@@ -5,7 +5,7 @@
  * value (single control) or an object keyed by field name (Form). Mirrors the
  * terminal `InkForm` so `ask(<Form>…</Form>)` behaves identically on both.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import React from 'react';
 import { flattenForm, coerceValue, defaultFor } from '@lmthing/core/ui';
 import type { FieldSpec } from '@lmthing/core/ui';

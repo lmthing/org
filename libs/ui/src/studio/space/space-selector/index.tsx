@@ -1,4 +1,4 @@
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { useCallback, useMemo } from 'react'
 import { useUIState, useToggle } from '@lmthing/state'
 import { ChevronDown, Plus, Search, FolderOpen } from 'lucide-react'
@@ -7,9 +7,9 @@ import { Input } from '@lmthing/ui/elements/forms/input'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index.js'
-import { DROPDOWN_CONTENT, DROPDOWN_ITEM } from '../../../elements/overlays/dropdown/index.js'
-import { SPACE_SELECTOR_CHEVRON, SPACE_SELECTOR_CREATE_BTN, SPACE_SELECTOR_CREATE_FORM, SPACE_SELECTOR_EMPTY, SPACE_SELECTOR_ITEM_ICON, SPACE_SELECTOR_NEW_ICON, SPACE_SELECTOR_SEARCH_ICON, SPACE_SELECTOR_SEARCH_INPUT, SPACE_SELECTOR_TRIGGER, SPACE_SELECTOR_TRIGGER_LABEL } from '../props.js'
+import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index'
+import { DROPDOWN_CONTENT, DROPDOWN_ITEM } from '../../../elements/overlays/dropdown/index'
+import { SPACE_SELECTOR_CHEVRON, SPACE_SELECTOR_CREATE_BTN, SPACE_SELECTOR_CREATE_FORM, SPACE_SELECTOR_EMPTY, SPACE_SELECTOR_ITEM_ICON, SPACE_SELECTOR_NEW_ICON, SPACE_SELECTOR_SEARCH_ICON, SPACE_SELECTOR_SEARCH_INPUT, SPACE_SELECTOR_TRIGGER, SPACE_SELECTOR_TRIGGER_LABEL } from '../props'
 
 export interface SpaceEntry {
   id: string

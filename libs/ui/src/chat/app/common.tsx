@@ -1,6 +1,6 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import type { NodeStatus, NodeKind } from '../store/model.js';
+import type { NodeStatus, NodeKind } from '../store/model';
 
 export const STATUS_GLYPH: Record<NodeStatus, string> = {
   queued: '○',

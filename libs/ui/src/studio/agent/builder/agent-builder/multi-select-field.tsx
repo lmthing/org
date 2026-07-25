@@ -1,8 +1,8 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index.js'
-import { BADGE_BASE, BADGE_VARIANT } from '../../../../elements/content/badge/index.js'
+import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index'
+import { BADGE_BASE, BADGE_VARIANT } from '../../../../elements/content/badge/index'
 
 /** Multiselect pill grid */
 export function MultiSelectField({ label, available, selected, onChange }: {

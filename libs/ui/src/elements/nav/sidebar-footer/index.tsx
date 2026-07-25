@@ -1,4 +1,4 @@
-import * as Prim from '../../primitives/index.js';
+import * as Prim from '../../primitives/index';
 import * as React from 'react'
 import { Settings } from 'lucide-react'
 import { useAuth } from '@lmthing/auth'

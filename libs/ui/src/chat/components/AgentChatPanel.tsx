@@ -1,7 +1,7 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ReplRpcClient } from '../client/rpc-client.js';
-import { ReplChatView } from './ReplChatView.js';
+import { ReplRpcClient } from '../client/rpc-client';
+import { ReplChatView } from './ReplChatView';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

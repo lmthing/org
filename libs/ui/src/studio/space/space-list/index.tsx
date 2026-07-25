@@ -1,4 +1,4 @@
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Search, UserPlus, Clock, Mail } from 'lucide-react'
 import { useUIState, useToggle } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -12,9 +12,9 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Avatar, AvatarImage, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
-import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index.js'
-import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../elements/overlays/dialog/index.js'
-import { SPACE_LIST_EMAIL, SPACE_LIST_EMAIL_ICON, SPACE_LIST_EMAIL_ROW, SPACE_LIST_EMPTY, SPACE_LIST_EMPTY_ICON, SPACE_LIST_HEADER, SPACE_LIST_INVITE_ACTIONS, SPACE_LIST_INVITE_ACTION_BTN, SPACE_LIST_INVITE_FORM_BODY, SPACE_LIST_INVITE_ICON, SPACE_LIST_INVITE_ROLE_ITEM, SPACE_LIST_INVITE_ROLE_RADIO, SPACE_LIST_LAST_ACTIVE, SPACE_LIST_LAST_ACTIVE_ICON, SPACE_LIST_SEARCH_ICON, SPACE_LIST_SEARCH_INPUT, SPACE_LIST_STATUS_BADGE, SPACE_LIST_USER_LIST, SPACE_LIST_USER_NAME_ROW } from '../props.js'
+import { INPUT_BASE, INPUT_SM } from '../../../elements/forms/input/index'
+import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../elements/overlays/dialog/index'
+import { SPACE_LIST_EMAIL, SPACE_LIST_EMAIL_ICON, SPACE_LIST_EMAIL_ROW, SPACE_LIST_EMPTY, SPACE_LIST_EMPTY_ICON, SPACE_LIST_HEADER, SPACE_LIST_INVITE_ACTIONS, SPACE_LIST_INVITE_ACTION_BTN, SPACE_LIST_INVITE_FORM_BODY, SPACE_LIST_INVITE_ICON, SPACE_LIST_INVITE_ROLE_ITEM, SPACE_LIST_INVITE_ROLE_RADIO, SPACE_LIST_LAST_ACTIVE, SPACE_LIST_LAST_ACTIVE_ICON, SPACE_LIST_SEARCH_ICON, SPACE_LIST_SEARCH_INPUT, SPACE_LIST_STATUS_BADGE, SPACE_LIST_USER_LIST, SPACE_LIST_USER_NAME_ROW } from '../props'
 
 export interface SpaceUser {
   id: string

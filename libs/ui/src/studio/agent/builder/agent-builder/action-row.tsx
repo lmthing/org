@@ -1,10 +1,10 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { Select, SelectOption } from '@lmthing/ui/elements/forms/select'
-import { PANEL_BASE, PANEL_BODY } from '../../../../elements/content/panel/index.js'
+import { PANEL_BASE, PANEL_BODY } from '../../../../elements/content/panel/index'
 
 /** One action row */
 export function ActionRow({ action, tasklistNames, onChange, onRemove }: {

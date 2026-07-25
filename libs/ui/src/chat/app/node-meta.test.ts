@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildModel, type WireEvent } from '../store/model.js';
+import { buildModel, type WireEvent } from '../store/model';
 import type { TraceEvent } from '@lmthing/core';
 import {
   narrationOf,
@@ -8,7 +8,7 @@ import {
   subtreeStmtCount,
   workDepth,
   selectActiveWork,
-} from './node-meta.js';
+} from './node-meta';
 
 let seq = 0;
 const ev = (event: TraceEvent): WireEvent => ({ seq: ++seq, event });

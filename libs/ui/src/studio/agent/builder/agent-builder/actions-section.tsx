@@ -1,11 +1,11 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import type { AgentInstruct } from '@lmthing/state'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { ActionRow } from './action-row'
-import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index.js'
+import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index'
 
 /** Actions list panel — add/edit/remove action rows linking the agent to tasklists */
 export function ActionsSection({ actions, tasklistNames, onAdd, onUpdate, onRemove }: {

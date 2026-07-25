@@ -2,7 +2,7 @@
  * THING panel sidebar: brand header (with optional back button for
  * full-page mode), "new chat" action, and the conversation switcher list.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Button } from '../../../elements/forms/button'
 import { Bot, Plus, ArrowLeft } from 'lucide-react'
 import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'

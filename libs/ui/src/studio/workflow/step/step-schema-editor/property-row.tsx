@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useUIState, useToggle } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
@@ -7,7 +7,7 @@ import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { cn } from '@lmthing/ui/lib/utils'
 import type { Property, PropertyType } from './use-schema-model'
-import { NESTED_PROPERTIES_ADD_BTN, NESTED_PROPERTIES_ADD_ICON, PROPERTY_ROW_DELETE_ICON, PROPERTY_ROW_DESCRIPTION_HINT, PROPERTY_ROW_DESCRIPTION_INPUT, PROPERTY_ROW_ICON, PROPERTY_ROW_MOVE_ICON, PROPERTY_ROW_RANGE_INPUT } from '../../step-schema-editor.props.js'
+import { NESTED_PROPERTIES_ADD_BTN, NESTED_PROPERTIES_ADD_ICON, PROPERTY_ROW_DELETE_ICON, PROPERTY_ROW_DESCRIPTION_HINT, PROPERTY_ROW_DESCRIPTION_INPUT, PROPERTY_ROW_ICON, PROPERTY_ROW_MOVE_ICON, PROPERTY_ROW_RANGE_INPUT } from '../../step-schema-editor.props'
 
 const TYPE_OPTIONS: { value: PropertyType; label: string }[] = [
   { value: 'string', label: 'Text (Paragraph / Word)' },

@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 import { StatusCard, type RuntimeStatus, type RuntimeTier } from './status-card'
 import { MetricsCard } from './metrics-card'
 import { ProcessesPanel, type RuntimeProcess } from './processes-panel'

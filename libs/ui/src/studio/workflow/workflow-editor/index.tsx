@@ -5,7 +5,7 @@
  * the manifest, per-task form, and field-schema rows are rendered by
  * ManifestSection / TaskForm / SchemaEditor.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { Stack } from '@lmthing/ui/elements/layouts/stack'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
@@ -14,7 +14,7 @@ import { ManifestSection } from './manifest-section'
 import { TaskForm } from './task-form'
 import { useTasklistEditor } from './useTasklistEditor'
 import type { TasklistEditorProps } from './types'
-import { TASKLIST_EDITOR, TASKLIST_EDITOR_ADD_TASK_BTN, TASKLIST_EDITOR_BODY, TASKLIST_EDITOR_EMPTY, TASKLIST_EDITOR_HEADER, TASKLIST_EDITOR_HEADER_ACTIONS, TASKLIST_EDITOR_HEADER_INNER, TASKLIST_EDITOR_HEADER_TOP, TASKLIST_EDITOR_SECTION_DIVIDER, TASKLIST_EDITOR_TASK_LIST } from './tasklist-editor.props.js'
+import { TASKLIST_EDITOR, TASKLIST_EDITOR_ADD_TASK_BTN, TASKLIST_EDITOR_BODY, TASKLIST_EDITOR_EMPTY, TASKLIST_EDITOR_HEADER, TASKLIST_EDITOR_HEADER_ACTIONS, TASKLIST_EDITOR_HEADER_INNER, TASKLIST_EDITOR_HEADER_TOP, TASKLIST_EDITOR_SECTION_DIVIDER, TASKLIST_EDITOR_TASK_LIST } from './tasklist-editor.props'
 
 export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
   const {

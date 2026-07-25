@@ -1,18 +1,18 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { marked } from 'marked';
 import { isFormDescriptor } from '@lmthing/core/ui';
-import { useStore } from '../store/store.js';
-import type { ConvoBlock } from '../store/model.js';
+import { useStore } from '../store/store';
+import type { ConvoBlock } from '../store/model';
 import type { TraceAttachment } from '@lmthing/core';
-import { preview } from './common.js';
-import { CatalogForm } from '../components/forms/CatalogForm.js';
-import { ConsentCard, isConsentDescriptor, consentPropsFromDescriptor } from '../components/ConsentCard.js';
-import { renderDescriptor, isDescriptor } from '../components/render-descriptor.js';
-import type { Descriptor } from '../components/render-descriptor.js';
-import { ActivityStrip } from './ActivityStrip.js';
-import { withAuthToken } from './auth.js';
-import { cn } from '../lib/cn.js';
+import { preview } from './common';
+import { CatalogForm } from '../components/forms/CatalogForm';
+import { ConsentCard, isConsentDescriptor, consentPropsFromDescriptor } from '../components/ConsentCard';
+import { renderDescriptor, isDescriptor } from '../components/render-descriptor';
+import type { Descriptor } from '../components/render-descriptor';
+import { ActivityStrip } from './ActivityStrip';
+import { withAuthToken } from './auth';
+import { cn } from '../lib/cn';
 
 // `.lm-prose` (below) styles `marked`-produced HTML and lives in the shared markdown stylesheet —
 // phase 2 of docs/tamagui-final-steps.md moved it out of `chat/app/styles.css`, which is a Tailwind

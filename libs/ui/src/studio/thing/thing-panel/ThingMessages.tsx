@@ -3,7 +3,7 @@
  * (assistant messages get tool-event parsing via `ToolCallDisplay`), and a
  * "processing" placeholder while the assistant's reply is still empty.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import type { Ref } from 'react'
 import { ToolCallDisplay } from './ToolCallDisplay'
 import type { ThingMessage } from './types'

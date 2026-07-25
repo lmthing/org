@@ -1,7 +1,7 @@
 // ─── UI panel slice ───────────────────────────────────────────────────────────
 // Owns purely presentational chrome toggles (dev panel / sidebar visibility).
 
-import type { AppState } from './types.js';
+import type { AppState } from './types';
 
 export interface UiPanelSlice {
   devPanelOpen: boolean;

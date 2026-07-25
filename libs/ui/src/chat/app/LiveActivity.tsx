@@ -1,8 +1,8 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { useStore } from '../store/store.js';
-import { selectActiveWork } from './node-meta.js';
-import { WorkBlock } from './WorkBlock.js';
+import { useStore } from '../store/store';
+import { selectActiveWork } from './node-meta';
+import { WorkBlock } from './WorkBlock';
 
 /**
  * Ephemeral, non-persistent status box pinned at the bottom of the chat. It

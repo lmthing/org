@@ -1,10 +1,10 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import { X, AlertTriangle } from 'lucide-react'
-import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
-import { UNSAVED_MODAL_CLOSE_ICON, UNSAVED_MODAL_WARNING_ICON } from '../../props.js'
+import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index'
+import { UNSAVED_MODAL_CLOSE_ICON, UNSAVED_MODAL_WARNING_ICON } from '../../props'
 
 interface UnsavedChangesModalProps {
   isOpen: boolean

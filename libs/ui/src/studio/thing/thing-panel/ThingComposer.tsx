@@ -2,11 +2,11 @@
  * The message composer: auto-growing textarea (Enter to send, Shift+Enter
  * for newline) plus the send button.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { Button } from '../../../elements/forms/button'
 import type { FormEvent } from 'react'
-import { INPUT_BASE } from '../../../elements/forms/input/index.js'
-import { THING_PANEL_INPUT_FORM, THING_PANEL_TEXTAREA } from '../props.js'
+import { INPUT_BASE } from '../../../elements/forms/input/index'
+import { THING_PANEL_INPUT_FORM, THING_PANEL_TEXTAREA } from '../props'
 
 export interface ThingComposerProps {
   input: string

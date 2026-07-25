@@ -1,12 +1,12 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { useStore } from '../store/store.js';
-import { ChatView } from './ChatView.js';
-import { Sidebar } from './Sidebar.js';
-import { DevPanel } from './DevPanel.js';
-import { ProjectSettings } from './ProjectSettings.js';
-import { Drawer } from '../components/ui/Drawer.js';
-import { cn } from '../lib/cn.js';
+import { useStore } from '../store/store';
+import { ChatView } from './ChatView';
+import { Sidebar } from './Sidebar';
+import { DevPanel } from './DevPanel';
+import { ProjectSettings } from './ProjectSettings';
+import { Drawer } from '../components/ui/Drawer';
+import { cn } from '../lib/cn';
 
 interface AppShellProps {
   singleSession?: boolean;

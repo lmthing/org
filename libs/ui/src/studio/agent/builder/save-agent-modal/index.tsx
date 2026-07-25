@@ -1,4 +1,4 @@
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { useCallback, useEffect } from 'react'
 import { useUIState } from '@lmthing/state'
 import { Button } from '@lmthing/ui/elements/forms/button'
@@ -9,8 +9,8 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { CardFooter } from '@lmthing/ui/elements/content/card'
-import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
-import { SAVE_AGENT_MODAL_FOOTER, SAVE_AGENT_MODAL_FORM, SAVE_AGENT_MODAL_HEADER_ROW, SAVE_AGENT_MODAL_ICON } from '../../props.js'
+import { DIALOG_BACKDROP, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index'
+import { SAVE_AGENT_MODAL_FOOTER, SAVE_AGENT_MODAL_FORM, SAVE_AGENT_MODAL_HEADER_ROW, SAVE_AGENT_MODAL_ICON } from '../../props'
 
 interface SaveAgentModalProps {
   isOpen: boolean

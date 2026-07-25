@@ -9,8 +9,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, it, expect } from 'vitest';
-import { renderDescriptor } from './render-descriptor.js';
-import { CatalogForm } from './forms/CatalogForm.js';
+import { renderDescriptor } from './render-descriptor';
+import { CatalogForm } from './forms/CatalogForm';
 
 const d = (type: string, props: Record<string, unknown> = {}, children: unknown[] = []) =>
   ({ type, props, children });

@@ -1,4 +1,4 @@
-import * as Prim from '../../primitives/index.js';
+import * as Prim from '../../primitives/index';
 import { useAuth } from '@lmthing/auth'
 import { Button } from '../../forms/button'
 import { Caption } from '../../typography/caption'

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildModel, parentNodeIds, type WireEvent } from './model.js';
+import { buildModel, parentNodeIds, type WireEvent } from './model';
 import type { TraceEvent } from '@lmthing/core';
 
 let seq = 0;

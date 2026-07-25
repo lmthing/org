@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tamaguiConfig, buildThemes, buildColorTokens } from './tamagui.config'
+import { tamaguiConfig, buildThemes, buildColorTokens, buildRadiusTokens, cssLengthToNative } from './tamagui.config'
 import {
   themes as genThemes,
   radius as genRadius,
@@ -130,6 +130,35 @@ describe('tamagui.config createTamagui shell', () => {
     const web = buildThemes(true)
     expect(Object.keys(web)).toEqual(['app'])
     expect(web.app).toEqual({})
+  })
+
+  it('web radius tokens are CSS strings; native ones are numbers of dp', () => {
+    const web = buildRadiusTokens(true)
+    const native = buildRadiusTokens(false)
+    // Web parity is byte-exact — this is what makes `$radius-lg` equal `--radius-lg`.
+    for (const [name, expected] of Object.entries(genRadius)) expect(web[name], name).toBe(expected)
+    // Native has no `rem`: RN takes border radii as numbers, and a string reaches the view as an
+    // unusable value nothing on web can observe. 0.5rem === 8dp.
+    for (const [name, value] of Object.entries(native)) {
+      expect(typeof value, `radius.${name} must be a number on native, got ${String(value)}`).toBe('number')
+    }
+    expect(native['radius-lg']).toBe(8)
+    expect(native['radius-sm']).toBe(2)
+    expect(native['radius-full']).toBe(9999)
+    // Same key set either way — a token present on one platform and not the other is a silent gap.
+    expect(Object.keys(web).sort()).toEqual(Object.keys(native).sort())
+    // The `true` alias tracks radius-md on both.
+    expect(web.true).toBe(web['radius-md'])
+    expect(native.true).toBe(native['radius-md'])
+  })
+
+  it('cssLengthToNative refuses a unit it cannot express rather than returning NaN', () => {
+    expect(cssLengthToNative('0.375rem')).toBe(6)
+    expect(cssLengthToNative('9999px')).toBe(9999)
+    expect(cssLengthToNative('0')).toBe(0)
+    // A silently-NaN radius is invisible on screen, which is exactly why this throws.
+    expect(() => cssLengthToNative('50%')).toThrow()
+    expect(() => cssLengthToNative('1em')).toThrow()
   })
 
   it('web colour tokens are var(--…)-backed; native ones are resolved hex', () => {

@@ -7,7 +7,7 @@
  * `use-thing-session.ts` (and the hooks it composes), JSX chunks live in the
  * sibling `Thing*` components.
  */
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import { useNavigate } from '@tanstack/react-router'
 
 

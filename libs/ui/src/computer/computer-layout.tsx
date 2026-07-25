@@ -1,4 +1,4 @@
-import * as Prim from '../elements/primitives/index.js';
+import * as Prim from '../elements/primitives/index';
 import { CozyThingText } from '../elements/branding/cozy-text'
 import { Sidebar, SidebarItem } from '../elements/nav/sidebar'
 import { TopBar } from '../elements/nav/top-bar'
@@ -6,7 +6,7 @@ import { Badge } from '../elements/content/badge'
 import { otherAppLinks } from '../lib/app-urls'
 import { ConnectionBanner } from './connection-banner'
 import type { RuntimeStatus, RuntimeTier } from './status-card'
-import { SIDEBAR_ITEM } from '../elements/nav/sidebar/index.js'
+import { SIDEBAR_ITEM } from '../elements/nav/sidebar/index'
 
 export interface ComputerLayoutProps {
   status: RuntimeStatus

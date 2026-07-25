@@ -1,9 +1,9 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { cn } from '../lib/cn.js';
-import { useStore, connectLive } from '../store/store.js';
-import type { Project, ModelPricing } from '../store/store.js';
-import { authHeaders, wsTokenSuffix } from './auth.js';
+import { cn } from '../lib/cn';
+import { useStore, connectLive } from '../store/store';
+import type { Project, ModelPricing } from '../store/store';
+import { authHeaders, wsTokenSuffix } from './auth';
 import { AppSidebar } from '../../elements/nav/app-sidebar';
 import { SidebarFooter } from '../../elements/nav/sidebar-footer';
 import { crossAppOrigin } from '../../lib/app-urls';

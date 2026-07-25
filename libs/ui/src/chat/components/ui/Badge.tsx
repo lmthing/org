@@ -1,6 +1,6 @@
-import * as Prim from '../../../elements/primitives/index.js';
+import * as Prim from '../../../elements/primitives/index';
 import React from 'react';
-import { cn } from '../../lib/cn.js';
+import { cn } from '../../lib/cn';
 
 type BadgeVariant = 'default' | 'muted' | 'knowledge' | 'agent' | 'destructive' | 'brand';
 

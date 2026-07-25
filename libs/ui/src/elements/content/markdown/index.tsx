@@ -6,7 +6,7 @@
  * Content is TRUSTED (shipped in-repo, not user-authored), so the parsed HTML is
  * injected directly. Do NOT feed untrusted input here without sanitizing.
  */
-import * as Prim from '../../primitives/index.js';
+import * as Prim from '../../primitives/index';
 import '@lmthing/css/components/markdown/index.css'
 import { useMemo } from 'react'
 import { marked } from 'marked'

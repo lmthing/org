@@ -10,7 +10,7 @@
  * `serve.ts` aliases `ink` / `ink-text-input` / `ink-select-input` to this
  * module, and `@lmthing/agent-ui/compat` re-exports it for direct authoring.
  */
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 
 // ─── color + dimension helpers ───────────────────────────────────────────────

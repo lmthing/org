@@ -1,10 +1,10 @@
-import * as Prim from '../../elements/primitives/index.js';
+import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { cn } from '../lib/cn.js';
-import { useStore } from '../store/store.js';
-import type { UploadedAttachment } from '../store/model.js';
-import { BudgetWindows } from './BudgetWindows.js';
-import { authHeaders, withAuthToken } from './auth.js';
+import { cn } from '../lib/cn';
+import { useStore } from '../store/store';
+import type { UploadedAttachment } from '../store/model';
+import { BudgetWindows } from './BudgetWindows';
+import { authHeaders, withAuthToken } from './auth';
 
 interface ComposerProps {
   onSend: (text: string, attachments?: UploadedAttachment[]) => void;

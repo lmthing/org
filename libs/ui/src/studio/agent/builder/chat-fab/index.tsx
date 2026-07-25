@@ -2,9 +2,9 @@
  * ChatFAB - Floating action button for testing agent in chat.
  * US-208 / C9: Fixed bottom-right, violet accent, icon + label.
  */
-import * as Prim from '../../../../elements/primitives/index.js';
+import * as Prim from '../../../../elements/primitives/index';
 import { MessageCircle } from 'lucide-react'
-import { CHAT_FAB_ICON } from '../../props.js'
+import { CHAT_FAB_ICON } from '../../props'
 
 export interface ChatFABProps {
   onClick: () => void

@@ -1,6 +1,6 @@
 import React from 'react';
-import { cn } from '../lib/cn.js';
-import { Row, Col, Text, Pressable } from '../../elements/primitives/index.js';
+import { cn } from '../lib/cn';
+import { Row, Col, Text, Pressable } from '../../elements/primitives/index';
 
 const SUGGESTIONS = [
   'Research a topic for me',

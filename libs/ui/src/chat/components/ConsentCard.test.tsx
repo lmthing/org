@@ -12,7 +12,7 @@ import {
   ConsentCard,
   isConsentDescriptor,
   consentPropsFromDescriptor,
-} from './ConsentCard.js';
+} from './ConsentCard';
 
 const consentDescriptor = {
   type: 'ConsentCard',
