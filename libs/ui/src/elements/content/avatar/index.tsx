@@ -59,13 +59,11 @@ function AvatarImage({ style, onLoad, onError, ...props }: React.ImgHTMLAttribut
   // Hidden (but still fetching) until the image successfully loads — same visible result as Radix.
   return (
     <Prim.Image
-      style={{
-        height: '100%',
-        width: '100%',
-        objectFit: 'cover',
-        ...(status === 'loaded' ? undefined : { display: 'none' }),
-        ...style,
-      }}
+      height="100%"
+      width="100%"
+      objectFit="cover"
+      {...(status === 'loaded' ? {} : { display: 'none' as const })}
+      style={style}
       onLoad={(e) => { setStatus('loaded'); onLoad?.(e) }}
       onError={(e) => { setStatus('error'); onError?.(e) }}
       {...props}

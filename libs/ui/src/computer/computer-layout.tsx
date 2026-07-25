@@ -34,7 +34,7 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
 
   return (
     <Prim.Box display="flex" height="100vh" overflow="hidden">
-      <Sidebar style={{ justifyContent: 'space-between' }}>
+      <Sidebar justifyContent="space-between">
         <Prim.Box>
           {navItems.map((item) => (
             <SidebarItem

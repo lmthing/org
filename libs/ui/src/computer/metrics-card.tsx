@@ -31,7 +31,7 @@ function MetricsCard({ cpuPercent, memoryUsedMB, memoryTotalMB }: MetricsCardPro
                 height="100%"
                 borderRadius="$radius-full"
                 backgroundColor="$primary"
-                width={`${cpuPercent}%`} transition="slow"
+                transition="slow" style={{ width: `${cpuPercent}%` }}
               />
             </Prim.Box>
           )}
@@ -49,7 +49,7 @@ function MetricsCard({ cpuPercent, memoryUsedMB, memoryTotalMB }: MetricsCardPro
                 height="100%"
                 borderRadius="$radius-full"
                 backgroundColor="$primary"
-                width={`${memPercent}%`} transition="slow"
+                transition="slow" style={{ width: `${memPercent}%` }}
               />
             </Prim.Box>
           )}

@@ -116,6 +116,12 @@ export type BoxStyleProps = {
   borderRightStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
   borderBottomStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
   borderLeftStyle?: 'solid' | 'dashed' | 'dotted' | 'none'
+  // outline — the focus ring. Every element's `focusVisibleStyle` already carries these, but that
+  // is a `PseudoStyleProps` index signature; as DIRECT props they were undeclared (all probed).
+  outlineWidth?: number | string
+  outlineStyle?: 'none' | 'solid' | 'dashed' | 'dotted' | 'auto'
+  outlineColor?: string
+  outlineOffset?: number | string
   // colors / effects
   backgroundColor?: string
   color?: string
