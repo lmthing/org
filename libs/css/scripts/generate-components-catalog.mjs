@@ -7,7 +7,7 @@
  *
  * Run: pnpm --filter @lmthing/css catalog   (or: node scripts/generate-components-catalog.mjs)
  */
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
 
@@ -16,6 +16,10 @@ const root = join(__dirname, '..');
 const SRC = join(root, 'src');
 
 function walk(dir, out = []) {
+  // `src/elements` no longer exists: the idiomatic-Tamagui migration swapped every element block
+  // to `$`-token style props, so the whole directory went with the last one. `src/components` will
+  // go the same way. Tolerate an absent root rather than crashing the generator.
+  if (!existsSync(dir)) return out;
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     const st = statSync(p);

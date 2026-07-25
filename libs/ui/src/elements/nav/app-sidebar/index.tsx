@@ -1,8 +1,245 @@
-import '@lmthing/css/elements/nav/app-sidebar/index.css'
 import * as React from 'react'
 import { ChevronDown, ChevronRight, ChevronLeft, Plus, X, PanelLeft, Settings } from 'lucide-react'
-import { cn } from '../../../lib/utils'
+import * as Prim from '../../primitives/index'
 import { CozyThingText } from '../../branding/cozy-text'
+
+/**
+ * `.app-sidebar*` as `$`-token PROPS (docs/tamagui-idiomatic-migration.md §4/§6).
+ * `app-sidebar/index.css` — the last `elements/**` stylesheet — is deleted.
+ *
+ * Three rules were CSS-shaped and are now expressed directly:
+ *
+ * - `.app-sidebar__project-row .app-sidebar__dropdown` (a descendant combinator that stretched the
+ *   dropdown inside its row) becomes props passed at that one call site.
+ * - `.app-sidebar__dropdown-row:hover .app-sidebar__dropdown-delete` — the stylesheet's own comment
+ *   called it "a BEM alternative to `group-hover`" — becomes exactly that: Tamagui `group="row"` on
+ *   the row and `$group-row-hover` on the delete button.
+ * - `text-muted-foreground/60` becomes a web `color-mix`, the same alpha treatment used elsewhere.
+ *
+ * `font-display` resolves to the same face as `$heading` (`theme.css:15`), so the brand marks use
+ * that token. Every `transition-colors`/`transition-opacity` had no animation to preserve.
+ */
+const SIDEBAR_SHELL = {
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+  backgroundColor: '$sidebar',
+  borderRightWidth: 1,
+  borderRightColor: '$sidebar-border',
+  overflow: 'hidden',
+} as const
+
+/** `.app-sidebar--fixed` — w-64 when the surface owns sizing. */
+const SHELL_FIXED = { width: '$64' } as const
+/** `.app-sidebar--collapsed` — the slim icon rail. */
+const SHELL_COLLAPSED = { width: '$12' } as const
+
+/** A muted icon button that hovers onto muted/60 — the rail, collapse and settings affordances. */
+const ICON_BTN = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: '$radius-lg',
+  color: '$muted-foreground',
+  borderWidth: 0,
+  backgroundColor: 'transparent',
+  cursor: 'pointer',
+  hoverStyle: {
+    backgroundColor: 'color-mix(in srgb, var(--muted) 60%, transparent)',
+    color: '$foreground',
+  },
+} as const
+
+const RAIL = { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingVertical: '$3', gap: '$2' } as const
+const RAIL_BTN = { ...ICON_BTN, width: '$8', height: '$8' } as const
+const BRAND = { fontFamily: '$heading', fontWeight: '$bold', fontSize: '$base' } as const
+const RAIL_BRAND = { ...BRAND, lineHeight: 1 } as const
+
+const HEADER = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '$2',
+  paddingHorizontal: '$4',
+  paddingVertical: '$3',
+  borderBottomWidth: 1,
+  borderBottomColor: '$sidebar-border',
+  flexShrink: 0,
+} as const
+const COLLAPSE_BTN = { ...ICON_BTN, marginLeft: 'auto', width: '$6', height: '$6' } as const
+
+const TOP = { paddingHorizontal: '$3', paddingVertical: '$2', display: 'flex', flexDirection: 'column', gap: '$2', flexShrink: 0 } as const
+const PROJECT_ROW = { display: 'flex', alignItems: 'center', gap: '$1' } as const
+/** The descendant rule `.app-sidebar__project-row .app-sidebar__dropdown` — applied at the call site. */
+const PROJECT_ROW_DROPDOWN = { flexGrow: 1, flexShrink: 1, flexBasis: '0%', minWidth: 0 } as const
+const PROJECT_SETTINGS = { ...ICON_BTN, flexShrink: 0, width: '$8', height: '$8' } as const
+
+const NEW_CHAT = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '$2',
+  paddingHorizontal: '$3',
+  paddingVertical: '$2',
+  borderRadius: '$radius-xl',
+  backgroundColor: '$primary',
+  color: '$primary-foreground',
+  fontSize: '$sm',
+  fontWeight: '$medium',
+  borderWidth: 0,
+  cursor: 'pointer',
+  hoverStyle: { opacity: 0.9 },
+  disabledStyle: { opacity: 0.5 },
+} as const
+
+const CONTENT = { flexGrow: 1, flexShrink: 1, flexBasis: '0%', overflow: 'auto', paddingHorizontal: '$2', paddingVertical: '$1' } as const
+const SECTION = { marginBottom: '$3' } as const
+const SECTION_BODY = { marginTop: '$0.5' } as const
+const EMPTY = { paddingHorizontal: '$2', paddingVertical: '$1', fontSize: '$sm', color: '$muted-foreground' } as const
+
+/** `.app-sidebar__item` — a truncating, full-width row. */
+const ITEM = {
+  width: '100%',
+  textAlign: 'left',
+  paddingHorizontal: '$2',
+  paddingVertical: '$1.5',
+  borderRadius: '$radius-lg',
+  fontSize: '$sm',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: '$muted-foreground',
+  borderWidth: 0,
+  backgroundColor: 'transparent',
+  cursor: 'pointer',
+  hoverStyle: {
+    backgroundColor: 'color-mix(in srgb, var(--muted) 60%, transparent)',
+    color: '$foreground',
+  },
+} as const
+const ITEM_ACTIVE = { backgroundColor: '$muted', color: '$foreground', fontWeight: '$medium' } as const
+
+const FOOTER = { flexShrink: 0, borderTopWidth: 1, borderTopColor: '$sidebar-border' } as const
+
+const SECTION_HEADER = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '$1',
+  paddingHorizontal: '$2',
+  paddingVertical: '$1',
+  fontSize: '$xs',
+  fontWeight: '$semibold',
+  color: '$muted-foreground',
+  textTransform: 'uppercase',
+  letterSpacing: '$wider',
+  borderWidth: 0,
+  backgroundColor: 'transparent',
+  cursor: 'pointer',
+  hoverStyle: { color: '$foreground' },
+} as const
+const SECTION_LABEL = { flexGrow: 1, flexShrink: 1, flexBasis: '0%', textAlign: 'left' } as const
+const SECTION_COUNT = {
+  color: 'color-mix(in srgb, var(--muted-foreground) 60%, transparent)',
+  fontWeight: '$normal',
+} as const
+
+/** `.app-sidebar__section-icon` / `__icon` — lucide SVGs, so a plain style. */
+const SECTION_ICON_STYLE = { width: 12, height: 12, flexShrink: 0 } as const
+const ICON_STYLE = { width: 12, height: 12 } as const
+const CHEVRON_STYLE = { width: 16, height: 16, flexShrink: 0 } as const
+
+const DROPDOWN = { position: 'relative' } as const
+const DROPDOWN_TRIGGER = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '$2',
+  paddingHorizontal: '$3',
+  paddingVertical: '$2',
+  borderRadius: '$radius-xl',
+  backgroundColor: '$muted',
+  color: '$foreground',
+  fontSize: '$sm',
+  fontWeight: '$medium',
+  borderWidth: 0,
+  cursor: 'pointer',
+  hoverStyle: { backgroundColor: 'color-mix(in srgb, var(--muted) 70%, transparent)' },
+} as const
+const DROPDOWN_LABEL = {
+  flexGrow: 1, flexShrink: 1, flexBasis: '0%',
+  textAlign: 'left',
+  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+} as const
+const DROPDOWN_MENU = {
+  position: 'absolute',
+  left: 0, right: 0, top: '100%',
+  marginTop: '$1',
+  zIndex: 20,
+  borderRadius: '$radius-xl',
+  borderWidth: 1,
+  borderColor: '$border',
+  backgroundColor: '$popover',
+  overflow: 'hidden',
+  shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
+  shadowOffset: { width: 0, height: 10 },
+  shadowRadius: 15,
+} as const
+const DROPDOWN_LIST = { maxHeight: '$64', overflow: 'auto', paddingVertical: '$1' } as const
+/** The row is the hover GROUP that reveals its delete button. */
+const DROPDOWN_ROW = { display: 'flex', alignItems: 'center', gap: '$1', paddingHorizontal: '$1' } as const
+const DROPDOWN_ITEM = { ...ITEM, flexGrow: 1, flexShrink: 1, flexBasis: '0%', width: undefined } as const
+const DROPDOWN_ITEM_ACTIVE = ITEM_ACTIVE
+/** `hidden!` until the row is hovered — the group-hover reveal. */
+const DROPDOWN_DELETE = {
+  display: 'none',
+  '$group-row-hover': { display: 'flex' },
+  width: '$5',
+  height: '$5',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: '$muted-foreground',
+  borderRadius: '$radius',
+  fontSize: '$xs',
+  flexShrink: 0,
+  borderWidth: 0,
+  backgroundColor: 'transparent',
+  cursor: 'pointer',
+  hoverStyle: { color: '$destructive' },
+} as const
+const DROPDOWN_CREATE = {
+  display: 'flex',
+  gap: '$1',
+  borderTopWidth: 1,
+  borderTopColor: '$border',
+  paddingHorizontal: '$2',
+  paddingVertical: '$2',
+} as const
+const DROPDOWN_INPUT = {
+  flexGrow: 1, flexShrink: 1, flexBasis: '0%',
+  minWidth: 0,
+  backgroundColor: '$muted',
+  borderRadius: '$radius-lg',
+  paddingHorizontal: '$2',
+  paddingVertical: '$1',
+  fontSize: '$xs',
+  color: '$foreground',
+  borderWidth: 0,
+  placeholderTextColor: '$muted-foreground',
+  focusStyle: { outlineWidth: 1, outlineStyle: 'solid', outlineColor: '$ring' },
+} as const
+const DROPDOWN_ADD = {
+  paddingHorizontal: '$2',
+  paddingVertical: '$1',
+  backgroundColor: '$muted',
+  color: '$foreground',
+  borderRadius: '$radius-lg',
+  fontSize: '$xs',
+  borderWidth: 0,
+  cursor: 'pointer',
+  hoverStyle: { opacity: 0.9 },
+  disabledStyle: { opacity: 0.4 },
+} as const
 
 export interface AppSidebarProject {
   id: string
@@ -90,17 +327,17 @@ function SectionHeader({
   onToggle: () => void
 }) {
   return (
-    <button onClick={onToggle} className="app-sidebar__section-header">
+    <Prim.Pressable onClick={onToggle} {...SECTION_HEADER}>
       {expanded ? (
-        <ChevronDown className="app-sidebar__section-icon" aria-hidden="true" />
+        <ChevronDown style={SECTION_ICON_STYLE} aria-hidden="true" />
       ) : (
-        <ChevronRight className="app-sidebar__section-icon" aria-hidden="true" />
+        <ChevronRight style={SECTION_ICON_STYLE} aria-hidden="true" />
       )}
-      <span className="app-sidebar__section-label">{label}</span>
+      <Prim.Text {...SECTION_LABEL}>{label}</Prim.Text>
       {count !== undefined && count > 0 && (
-        <span className="app-sidebar__section-count">{count}</span>
+        <Prim.Text {...SECTION_COUNT}>{count}</Prim.Text>
       )}
-    </button>
+    </Prim.Pressable>
   )
 }
 
@@ -142,52 +379,50 @@ function ProjectDropdown({
   }
 
   return (
-    <div ref={ref} className="app-sidebar__dropdown">
-      <button
+    <Prim.Box ref={ref as React.Ref<HTMLElement>} {...DROPDOWN} {...PROJECT_ROW_DROPDOWN}>
+      <Prim.Pressable
         onClick={() => setOpen((v) => !v)}
-        className="app-sidebar__dropdown-trigger"
+        {...DROPDOWN_TRIGGER}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="app-sidebar__dropdown-label">
+        <Prim.Text {...DROPDOWN_LABEL}>
           {active ? active.name || active.id : 'Select project'}
-        </span>
-        <ChevronDown className="app-sidebar__dropdown-chevron" aria-hidden="true" />
-      </button>
+        </Prim.Text>
+        <ChevronDown style={CHEVRON_STYLE} aria-hidden="true" />
+      </Prim.Pressable>
 
       {open && (
-        <div className="app-sidebar__dropdown-menu">
-          <div className="app-sidebar__dropdown-list">
+        <Prim.Box {...DROPDOWN_MENU}>
+          <Prim.Box {...DROPDOWN_LIST}>
             {projects.map((p) => (
-              <div key={p.id} className="app-sidebar__dropdown-row">
-                <button
+              <Prim.Box key={p.id} {...DROPDOWN_ROW} {...({ group: 'row' } as Record<string, unknown>)}>
+                <Prim.Pressable
                   onClick={() => {
                     onSelectProject(p.id)
                     setOpen(false)
                   }}
-                  className={cn(
-                    'app-sidebar__dropdown-item',
-                    p.id === activeProjectId && 'app-sidebar__dropdown-item--active',
-                  )}
+                  {...DROPDOWN_ITEM}
+                  {...(p.id === activeProjectId ? DROPDOWN_ITEM_ACTIVE : {})}
                 >
                   {p.name || p.id}
-                </button>
+                </Prim.Pressable>
                 {onDeleteProject && p.id !== activeProjectId && (
-                  <button
+                  <Prim.Pressable
                     onClick={() => void onDeleteProject(p.id)}
-                    className="app-sidebar__dropdown-delete"
+                    {...DROPDOWN_DELETE}
                     title="Delete project"
                   >
-                    <X className="app-sidebar__icon" />
-                  </button>
+                    <X style={ICON_STYLE} />
+                  </Prim.Pressable>
                 )}
-              </div>
+              </Prim.Box>
             ))}
-          </div>
+          </Prim.Box>
           {onCreateProject && (
-            <div className="app-sidebar__dropdown-create">
-              <input
-                className="app-sidebar__dropdown-input"
+            <Prim.Box {...DROPDOWN_CREATE}>
+              <Prim.TextField
+                {...DROPDOWN_INPUT}
                 placeholder="New project…"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
@@ -195,19 +430,19 @@ function ProjectDropdown({
                   if (e.key === 'Enter') void create()
                 }}
               />
-              <button
+              <Prim.Pressable
                 onClick={() => void create()}
                 disabled={creating || !newName.trim()}
-                className="app-sidebar__dropdown-add"
+                {...DROPDOWN_ADD}
                 title="Create project"
               >
-                <Plus className="app-sidebar__icon" />
-              </button>
-            </div>
+                <Plus style={ICON_STYLE} />
+              </Prim.Pressable>
+            </Prim.Box>
           )}
-        </div>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }
 
@@ -250,45 +485,48 @@ export function AppSidebar({
   // Collapsed: a slim rail with just an expand affordance.
   if (isCollapsed) {
     return (
-      <nav aria-label="sidebar (collapsed)" className={cn('app-sidebar app-sidebar--collapsed', className)}>
-        <div className="app-sidebar__rail">
-          <CozyThingText text="lmt" className="app-sidebar__rail-brand" />
-          <button
+      <Prim.Box as="nav" aria-label="sidebar (collapsed)" {...SIDEBAR_SHELL} {...SHELL_COLLAPSED} className={className}>
+        <Prim.Box {...RAIL}>
+          <CozyThingText text="lmt" {...RAIL_BRAND} />
+          <Prim.Pressable
             onClick={toggleCollapsed}
             title="Expand sidebar"
             aria-label="Expand sidebar"
-            className="app-sidebar__rail-btn"
+            {...RAIL_BTN}
           >
-            <PanelLeft className="app-sidebar__section-icon" aria-hidden="true" />
-          </button>
-        </div>
-      </nav>
+            <PanelLeft style={SECTION_ICON_STYLE} aria-hidden="true" />
+          </Prim.Pressable>
+        </Prim.Box>
+      </Prim.Box>
     )
   }
 
   return (
-    <nav
+    <Prim.Box
+      as="nav"
       aria-label="projects, spaces and conversations"
-      className={cn('app-sidebar', collapsible && 'app-sidebar--fixed', className)}
+      {...SIDEBAR_SHELL}
+      {...(collapsible ? SHELL_FIXED : {})}
+      className={className}
     >
       {/* Brand + collapse toggle */}
-      <div className="app-sidebar__header">
-        <CozyThingText text="lmthing" className="app-sidebar__brand" />
+      <Prim.Box {...HEADER}>
+        <CozyThingText text="lmthing" {...BRAND} />
         {collapsible && (
-          <button
+          <Prim.Pressable
             onClick={toggleCollapsed}
             title="Collapse sidebar"
             aria-label="Collapse sidebar"
-            className="app-sidebar__collapse-btn"
+            {...COLLAPSE_BTN}
           >
-            <ChevronLeft className="app-sidebar__section-icon" aria-hidden="true" />
-          </button>
+            <ChevronLeft style={SECTION_ICON_STYLE} aria-hidden="true" />
+          </Prim.Pressable>
         )}
-      </div>
+      </Prim.Box>
 
       {/* Project dropdown (+ optional project settings) + optional new chat */}
-      <div className="app-sidebar__top">
-        <div className="app-sidebar__project-row">
+      <Prim.Box {...TOP}>
+        <Prim.Box {...PROJECT_ROW}>
           <ProjectDropdown
             projects={projects}
             activeProjectId={activeProjectId}
@@ -297,31 +535,31 @@ export function AppSidebar({
             onDeleteProject={onDeleteProject}
           />
           {onProjectSettings && activeProjectId && (
-            <button
+            <Prim.Pressable
               onClick={onProjectSettings}
-              className="app-sidebar__project-settings"
+              {...PROJECT_SETTINGS}
               title="Project settings"
               aria-label="Project settings"
             >
-              <Settings className="app-sidebar__section-icon" aria-hidden="true" />
-            </button>
+              <Settings style={SECTION_ICON_STYLE} aria-hidden="true" />
+            </Prim.Pressable>
           )}
-        </div>
+        </Prim.Box>
         {onNewChat && (
-          <button
+          <Prim.Pressable
             onClick={onNewChat}
             disabled={!activeProjectId || newChatBusy}
-            className="app-sidebar__new-chat"
+            {...NEW_CHAT}
           >
             {newChatBusy ? '…' : '+ New chat'}
-          </button>
+          </Prim.Pressable>
         )}
-      </div>
+      </Prim.Box>
 
       {/* Scrollable content */}
-      <div className="app-sidebar__content">
+      <Prim.Box {...CONTENT}>
         {/* Spaces */}
-        <div className="app-sidebar__section">
+        <Prim.Box {...SECTION}>
           <SectionHeader
             label="Spaces"
             count={spaces.length}
@@ -329,41 +567,39 @@ export function AppSidebar({
             onToggle={toggleSpaces}
           />
           {spacesExpanded && (
-            <div className="app-sidebar__section-body">
+            <Prim.Box {...SECTION_BODY}>
               {spacesLoading && spaces.length === 0 ? (
-                <p className="app-sidebar__empty">Loading…</p>
+                <Prim.Text as="p" {...EMPTY}>Loading…</Prim.Text>
               ) : spaces.length === 0 ? (
-                <p className="app-sidebar__empty">No spaces yet.</p>
+                <Prim.Text as="p" {...EMPTY}>No spaces yet.</Prim.Text>
               ) : (
                 spaces.map((s) => (
-                  <button
+                  <Prim.Pressable
                     key={s.id}
                     onClick={() => onSelectSpace(s.id)}
-                    className={cn(
-                      'app-sidebar__item',
-                      s.id === activeSpaceId && 'app-sidebar__item--active',
-                    )}
+                    {...ITEM}
+                    {...(s.id === activeSpaceId ? ITEM_ACTIVE : {})}
                     title={s.name}
                   >
                     {s.name}
-                  </button>
+                  </Prim.Pressable>
                 ))
               )}
-            </div>
+            </Prim.Box>
           )}
-        </div>
+        </Prim.Box>
 
         {/* Conversations (chat only) */}
         {conversations !== undefined && (
-          <div className="app-sidebar__section">
+          <Prim.Box {...SECTION}>
             <SectionHeader label="Conversations" expanded={convExpanded} onToggle={toggleConv} />
-            {convExpanded && <div className="app-sidebar__section-body">{conversations}</div>}
-          </div>
+            {convExpanded && <Prim.Box {...SECTION_BODY}>{conversations}</Prim.Box>}
+          </Prim.Box>
         )}
-      </div>
+      </Prim.Box>
 
       {/* Footer */}
-      {footer && <div className="app-sidebar__footer">{footer}</div>}
-    </nav>
+      {footer && <Prim.Box {...FOOTER}>{footer}</Prim.Box>}
+    </Prim.Box>
   )
 }
