@@ -45,7 +45,7 @@ export const SPACE_LIST_EMPTY = {
 export const SPACE_LIST_EMPTY_ICON = {
   "width": "2.5rem",
   "height": "2.5rem",
-  "opacity": "0.5"
+  "opacity": 0.5
 } as const
 
 /** `.space-list__user-list` */
@@ -80,8 +80,8 @@ export const SPACE_LIST_EMAIL = {
 export const SPACE_LIST_EMAIL_ICON = {
   "width": "0.75rem",
   "height": "0.75rem",
-  "flexShrink": "0",
-  "opacity": "0.5"
+  "flexShrink": 0,
+  "opacity": 0.5
 } as const
 
 /** `.space-list__last-active-icon` */
@@ -148,8 +148,8 @@ export const SPACE_SELECTOR_TRIGGER_LABEL = {
 export const SPACE_SELECTOR_CHEVRON = {
   "width": "1rem",
   "height": "1rem",
-  "flexShrink": "0",
-  "opacity": "0.5"
+  "flexShrink": 0,
+  "opacity": 0.5
 } as const
 
 /** `.space-selector__search-icon` */
@@ -160,7 +160,7 @@ export const SPACE_SELECTOR_SEARCH_ICON = {
   "left": "0.5rem",
   "top": "50%",
   "transform": "translateY(-50%)",
-  "opacity": "0.5"
+  "opacity": 0.5
 } as const
 
 /** `.space-selector__search-input` */
@@ -180,8 +180,8 @@ export const SPACE_SELECTOR_EMPTY = {
 export const SPACE_SELECTOR_ITEM_ICON = {
   "width": "1rem",
   "height": "1rem",
-  "flexShrink": "0",
-  "opacity": "0.6"
+  "flexShrink": 0,
+  "opacity": 0.6
 } as const
 
 /** `.space-selector__new-icon` */
@@ -224,7 +224,7 @@ export const USER_DETAIL_EMPTY_AVATAR = {
 export const USER_DETAIL_EMPTY_ICON = {
   "width": "1.75rem",
   "height": "1.75rem",
-  "opacity": "0.5"
+  "opacity": 0.5
 } as const
 
 /** `.user-detail__empty-caption` */
@@ -268,7 +268,7 @@ export const USER_DETAIL_BODY = {
 export const USER_DETAIL_INFO_ICON = {
   "width": "1rem",
   "height": "1rem",
-  "opacity": "0.6"
+  "opacity": 0.6
 } as const
 
 /** `.user-detail__info-card-row` */
@@ -290,7 +290,7 @@ export const USER_DETAIL_PERMISSIONS_HEADING = {
 export const USER_DETAIL_ROLE_ICON = {
   "width": "1.25rem",
   "height": "1.25rem",
-  "flexShrink": "0"
+  "flexShrink": 0
 } as const
 
 /** `.user-detail__status-heading` */

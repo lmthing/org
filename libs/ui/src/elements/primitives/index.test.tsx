@@ -392,6 +392,23 @@ describe('Phase-0 primitives — byte-identical passthrough', () => {
       expect(clamp).toContain('_WebkitLineClamp-2')
     })
 
+    it('compiles the RN-shaped shadow quartet into ONE web box-shadow', () => {
+      // The overlays (dialog/sheet/dropdown/card/drawer/toast) express elevation as
+      // shadowColor/shadowOffset/shadowRadius rather than a `box-shadow` string. Those props were
+      // used in 10 files but were never declared on `BoxStyleProps`, so nothing checked that
+      // Tamagui actually honours them on web. It does — they collapse to a single `_bs-` atomic.
+      const shadow = cls({
+        shadowColor: 'rgba(0,0,0,0.1)',
+        shadowOffset: { width: 0, height: 10 },
+        shadowRadius: 15,
+      })
+      expect(shadow).toMatch(/_bxsh-/)
+      // …and each of the three genuinely contributes: drop any one and the atomic changes.
+      const full = shadow.match(/_bxsh-\S+/)![0]
+      expect(cls({ shadowColor: 'rgba(0,0,0,0.1)', shadowOffset: { width: 0, height: 10 } }))
+        .not.toContain(full)
+    })
+
     it('SILENTLY DROPS these — so the codemod must NOT map them', () => {
       // `wordBreak` (≠ `wordWrap`), `listStyleType` and `listStyle` produce no atomic class at all.
       // `break-all` / `list-disc` / `list-decimal` therefore stay reported skips and get an inline

@@ -113,6 +113,18 @@ export type BoxStyleProps = {
   opacity?: number
   cursor?: string
   pointerEvents?: 'auto' | 'none' | 'box-none' | 'box-only'
+  /**
+   * The RN-shaped shadow quartet. Tamagui compiles these to a single web `box-shadow` (one `_bxsh-`
+   * atomic, verified in `primitives/index.test.tsx`), which is why
+   * the overlays (dialog/sheet/dropdown/card/drawer/toast) express elevation this way instead of a
+   * `box-shadow` string — pinned in `nav/app-sidebar/index.test.tsx` ("a single-layer Tamagui
+   * shadow, not a box-shadow string"). They were in use across 10 files but undeclared here, so a
+   * real `tsc` scored every one of them against the `$`-bag index signature and failed.
+   */
+  shadowColor?: string
+  shadowOffset?: { width: number; height: number }
+  shadowRadius?: number
+  shadowOpacity?: number
   // typography (per-face; also valid on a `.is_Text` Box)
   fontFamily?: string
   fontSize?: number | string
