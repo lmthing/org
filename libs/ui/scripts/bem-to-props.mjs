@@ -18,7 +18,7 @@
  *   node libs/ui/scripts/bem-to-props.mjs <stylesheet.css> …    # report
  *   node libs/ui/scripts/bem-to-props.mjs --emit <stylesheet.css>   # print the prop-bag module
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
 import { classToProps } from './classnames-to-props-map.mjs'
 
 /** CSS property → Tamagui prop, for the non-shorthand cases. Hyphen→camel unless listed. */
@@ -80,7 +80,10 @@ export function declToProps(prop, value) {
     if (value === 'none') return { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' }
     return null
   }
-  if ((prop === 'background' || prop === 'background-color') && !isColorish(value)) return null
+  if (prop === 'background' || prop === 'background-color') {
+    if (value === 'none') return { backgroundColor: 'transparent' }
+    if (!isColorish(value)) return null
+  }
   if (prop === 'box-shadow') return null // single-layer approximation must be a human call
   return { [RENAME[prop] ?? camel(prop)]: value }
 }
@@ -140,14 +143,42 @@ export function convertStylesheet(css) {
   return { converted, blocked }
 }
 
+/**
+ * Rewrite a stylesheet down to ONLY the rules that could not convert, preserving their source text
+ * verbatim. A partially-converted block keeps a (much smaller) stylesheet for its residue.
+ */
+export function trimStylesheet(css, blockedSelectors) {
+  const keep = new Set(blockedSelectors)
+  const header = css.match(/^\s*@reference[^;]*;/)?.[0] ?? ''
+  const out = []
+  const re = /([^{}]+)\{([^}]*)\}/g
+  const src = css.replace(/\/\*[\s\S]*?\*\//g, '')
+  let m
+  while ((m = re.exec(src))) {
+    const selector = m[1].split(';').pop().trim()
+    if (selector.startsWith('@')) continue
+    if (keep.has(selector)) out.push(`${selector} {${m[2].replace(/\s+$/, '')}\n}`)
+  }
+  return out.length ? `${header}\n\n${out.join('\n\n')}\n` : ''
+}
+
+// CLI — guarded so importing this module (e.g. from bem-sweep.mjs) does not execute it with the
+// importer's argv, which made it try to read a directory as a stylesheet.
+const isEntry = process.argv[1] && import.meta.url === `file://${process.argv[1]}`
+if (isEntry) {
 const args = process.argv.slice(2)
 const emit = args.includes('--emit')
+const trim = args.includes('--trim')
 const files = args.filter((a) => !a.startsWith('--'))
 let totC = 0, totB = 0
 for (const f of files) {
   const { converted, blocked } = convertStylesheet(readFileSync(f, 'utf8'))
   totC += converted.length; totB += blocked.length
-  if (emit) {
+  if (trim) {
+    const rest = trimStylesheet(readFileSync(f, 'utf8'), blocked.map((b) => b.selector))
+    if (rest) writeFileSync(f, rest); else unlinkSync(f)
+    console.log(`${f}: kept ${blocked.length} blocked rule(s)${rest ? '' : ' → DELETED (all converted)'}`)
+  } else if (emit) {
     for (const c of converted) {
       console.log(`/** \`${c.selector}\` */\nexport const ${c.name} = ${JSON.stringify(c.props, null, 2)} as const\n`)
     }
@@ -157,3 +188,4 @@ for (const f of files) {
   }
 }
 if (!emit) console.log(`\n[bem-to-props] ${totC} convertible, ${totB} blocked across ${files.length} stylesheet(s)`)
+}
