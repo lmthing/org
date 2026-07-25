@@ -81,7 +81,7 @@ export function WakingScreen({
   }, [lines.length])
 
   return (
-    <Prim.Box style={styles.root}>
+    <Prim.Box {...styles.root}>
       <style>{KEYFRAMES}</style>
       <Prim.Box className="lm-wake-orbit" style={styles.orbit} aria-hidden>
         <Prim.Box className="lm-wake-core" style={styles.core} />
@@ -89,8 +89,8 @@ export function WakingScreen({
         <Prim.Text style={{ ...styles.orb, ...styles.orbB }} />
         <Prim.Text style={{ ...styles.orb, ...styles.orbC }} />
       </Prim.Box>
-      <Prim.Box style={styles.text}>
-        <Prim.Text as="p" style={styles.heading}>{HEADINGS[mode]}</Prim.Text>
+      <Prim.Box {...styles.text}>
+        <Prim.Text as="p" {...styles.heading}>{HEADINGS[mode]}</Prim.Text>
         {/* key on the index so each new line re-triggers the fade-in */}
         <Prim.Text as="p" key={i} style={styles.sub} role="status" aria-live="polite">
           {lines[i]}
@@ -100,7 +100,7 @@ export function WakingScreen({
           (fills to the current boot stage); otherwise an honest indeterminate
           loop — never a fake timed fill. */}
       <Prim.Box
-        style={styles.track}
+        {...styles.track}
         role="progressbar"
         aria-label="Loading"
         aria-valuemin={determinate ? 0 : undefined}
@@ -144,15 +144,7 @@ const ORB_SIZE = 14
 const RING = 64
 
 const styles = {
-  root: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100vh',
-    gap: 32,
-    background: 'var(--background)',
-  },
+  root: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: 32, backgroundColor: "var(--background)" } as const,
   orbit: {
     position: 'relative' as const,
     width: RING * 2,
@@ -194,33 +186,15 @@ const styles = {
     background: 'var(--knowledge)',
     transform: `rotate(240deg) translateX(${RING}px)`,
   },
-  text: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: 6,
-    textAlign: 'center' as const,
-  },
-  heading: {
-    margin: 0,
-    fontSize: 17,
-    fontWeight: 600,
-    color: 'var(--foreground)',
-  },
+  text: { display: "flex", flexDirection: "column", alignItems: "center", gap: 6, textAlign: "center" } as const,
+  heading: { margin: 0, fontSize: 17, fontWeight: 600, color: "var(--foreground)" } as const,
   sub: {
     margin: 0,
     fontSize: 14,
     color: 'var(--muted-foreground)',
     animation: 'lm-wake-fade 0.5s ease',
   },
-  track: {
-    position: 'relative' as const,
-    width: 200,
-    height: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
-    background: 'var(--muted)',
-  },
+  track: { position: "relative", width: 200, height: 4, borderRadius: 999, overflow: "hidden", backgroundColor: "var(--muted)" } as const,
   bar: {
     position: 'absolute' as const,
     top: 0,

@@ -148,7 +148,7 @@ export function AgentChatPanel({
             startedOnceRef.current = false;
             void startSession();
           }}
-          style={styles.sendButton}
+          {...styles.sendButton}
         >
           Retry
         </Prim.Pressable>
@@ -197,14 +197,5 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
   } as React.CSSProperties,
-  sendButton: {
-    padding: '0 16px',
-    borderRadius: 4,
-    border: 'none',
-    background: 'var(--primary)',
-    color: 'var(--primary-foreground)',
-    fontWeight: 500,
-    cursor: 'pointer',
-    alignSelf: 'flex-end',
-  } as React.CSSProperties,
+  sendButton: { paddingVertical: "0", paddingHorizontal: "16px", borderRadius: 4, borderWidth: 0, backgroundColor: "var(--primary)", color: "var(--primary-foreground)", fontWeight: 500, cursor: "pointer", alignSelf: "flex-end" } as const,
 };

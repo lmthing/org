@@ -107,7 +107,7 @@ export function ReplChatView({
       return <VariablesBlock key={block.id} vars={block.data as Record<string, unknown>} />;
     if (block.type === 'error')
       return (
-        <Prim.Box key={block.id} style={styles.errorBlock}>
+        <Prim.Box key={block.id} {...styles.errorBlock}>
           {String(block.data)}
         </Prim.Box>
       );
@@ -130,7 +130,7 @@ export function ReplChatView({
 
   return (
     <Prim.Box style={{ ...styles.container, ...style }} className={className}>
-      <Prim.Box style={styles.statusBar}>
+      <Prim.Box {...styles.statusBar}>
         <Prim.Text color={isConnected ? 'var(--success)' : 'var(--destructive)'} fontSize={12}>
           {isConnected ? '● Connected' : '○ Connecting…'}
         </Prim.Text>
@@ -141,7 +141,7 @@ export function ReplChatView({
           <Prim.Pressable
             onClick={onRestart}
             disabled={restartDisabled}
-            style={styles.resyncButton}
+            {...styles.resyncButton}
             title="Restart the agent session"
           >
             ↻ Restart
@@ -149,19 +149,19 @@ export function ReplChatView({
         )}
       </Prim.Box>
 
-      <Prim.Box style={styles.blocks}>
+      <Prim.Box {...styles.blocks}>
         {transcript}
         <Prim.Box ref={blocksEndRef} />
       </Prim.Box>
 
       {activeWork.length > 0 && (
-        <Prim.Box style={styles.activityBox} data-testid="repl-live-activity" aria-label="sub-agent activity">
-          <Prim.Box style={styles.activityHeader}>
-            <Prim.Text style={styles.activityPulse}>●</Prim.Text>
+        <Prim.Box {...styles.activityBox} data-testid="repl-live-activity" aria-label="sub-agent activity">
+          <Prim.Box {...styles.activityHeader}>
+            <Prim.Text {...styles.activityPulse}>●</Prim.Text>
             <Prim.Text>working…</Prim.Text>
             <Prim.Text opacity={0.6}>{activeWork.length} active</Prim.Text>
           </Prim.Box>
-          <Prim.Box style={styles.activityList}>
+          <Prim.Box {...styles.activityList}>
             {activeWork.map((n) => (
               <WorkRow key={n.id} node={n} model={model} />
             ))}
@@ -169,7 +169,7 @@ export function ReplChatView({
         </Prim.Box>
       )}
 
-      <Prim.Box style={styles.inputRow}>
+      <Prim.Box {...styles.inputRow}>
         <Prim.TextArea
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
@@ -179,7 +179,7 @@ export function ReplChatView({
           style={styles.textarea}
           rows={2}
         />
-        <Prim.Pressable onClick={handleSend} disabled={!isConnected || !inputValue.trim()} style={styles.sendButton}>
+        <Prim.Pressable onClick={handleSend} disabled={!isConnected || !inputValue.trim()} {...styles.sendButton}>
           Send
         </Prim.Pressable>
       </Prim.Box>
@@ -203,13 +203,13 @@ function WorkRow({
   const elapsed = node.startTs ? fmtDuration(Date.now() - node.startTs) : '';
   return (
     <Prim.Box style={{ ...styles.workRow, paddingLeft: 12 + depth * 14 }}>
-      <Prim.Text style={styles.workIcon}>{KIND_ICON[node.kind] ?? '•'}</Prim.Text>
-      <Prim.Box style={styles.workBody}>
-        <Prim.Box style={styles.workLabelLine}>
-          <Prim.Text style={styles.workLabel}>{node.label}</Prim.Text>
-          {elapsed && <Prim.Text style={styles.workElapsed}>{elapsed}</Prim.Text>}
+      <Prim.Text {...styles.workIcon}>{KIND_ICON[node.kind] ?? '•'}</Prim.Text>
+      <Prim.Box {...styles.workBody}>
+        <Prim.Box {...styles.workLabelLine}>
+          <Prim.Text {...styles.workLabel}>{node.label}</Prim.Text>
+          {elapsed && <Prim.Text {...styles.workElapsed}>{elapsed}</Prim.Text>}
         </Prim.Box>
-        {narration && <Prim.Box style={styles.workNarration}>{narration}</Prim.Box>}
+        {narration && <Prim.Box {...styles.workNarration}>{narration}</Prim.Box>}
       </Prim.Box>
     </Prim.Box>
   );
@@ -224,31 +224,9 @@ const styles = {
     height: '100%',
     overflow: 'hidden',
   } as React.CSSProperties,
-  statusBar: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '4px 12px',
-    borderBottom: '1px solid var(--border)',
-    flexShrink: 0,
-  } as React.CSSProperties,
-  resyncButton: {
-    marginLeft: 'auto',
-    padding: '2px 10px',
-    borderRadius: 4,
-    border: '1px solid var(--border)',
-    background: 'var(--secondary)',
-    color: 'var(--secondary-foreground)',
-    fontSize: 12,
-    cursor: 'pointer',
-  } as React.CSSProperties,
-  blocks: {
-    flex: 1,
-    overflowY: 'auto' as const,
-    padding: '12px',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '8px',
-  } as React.CSSProperties,
+  statusBar: { display: "flex", alignItems: "center", paddingVertical: "4px", paddingHorizontal: "12px", borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "var(--border)", flexShrink: 0 } as const,
+  resyncButton: { marginLeft: "auto", paddingVertical: "2px", paddingHorizontal: "10px", borderRadius: 4, borderWidth: "1px", borderStyle: "solid", borderColor: "var(--border)", backgroundColor: "var(--secondary)", color: "var(--secondary-foreground)", fontSize: 12, cursor: "pointer" } as const,
+  blocks: { flexGrow: 1, flexShrink: 1, flexBasis: "0%", overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" } as const,
   userMsg: {
     alignSelf: 'flex-end',
     maxWidth: '85%',
@@ -260,90 +238,24 @@ const styles = {
     whiteSpace: 'pre-wrap' as const,
     wordBreak: 'break-word' as const,
   } as React.CSSProperties,
-  errorBlock: {
-    background: 'color-mix(in srgb, var(--destructive) 12%, transparent)',
-    border: '1px solid color-mix(in srgb, var(--destructive) 35%, transparent)',
-    borderRadius: 4,
-    padding: '8px 12px',
-    color: 'var(--destructive)',
-    fontFamily: 'monospace',
-    fontSize: 13,
-  } as React.CSSProperties,
-  activityBox: {
-    margin: '0 12px 8px',
-    borderRadius: 8,
-    border: '1px solid var(--border)',
-    background: 'color-mix(in srgb, var(--muted) 30%, transparent)',
-    flexShrink: 0,
-    overflow: 'hidden',
-  } as React.CSSProperties,
-  activityHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '6px 12px',
-    borderBottom: '1px solid var(--border)',
-    fontSize: 12,
-    color: 'var(--muted-foreground)',
-  } as React.CSSProperties,
-  activityPulse: {
-    color: 'var(--brand-2, var(--primary))',
-  } as React.CSSProperties,
-  activityList: {
-    maxHeight: '40vh',
-    overflowY: 'auto' as const,
-    padding: '4px 0',
-  } as React.CSSProperties,
+  errorBlock: { backgroundColor: "color-mix(in srgb, var(--destructive) 12%, transparent)", borderWidth: "1px", borderStyle: "solid", borderColor: "color-mix(in srgb, var(--destructive) 35%, transparent)", borderRadius: 4, paddingVertical: "8px", paddingHorizontal: "12px", color: "var(--destructive)", fontFamily: "monospace", fontSize: 13 } as const,
+  activityBox: { marginTop: "0", marginHorizontal: "12px", marginBottom: "8px", borderRadius: 8, borderWidth: "1px", borderStyle: "solid", borderColor: "var(--border)", backgroundColor: "color-mix(in srgb, var(--muted) 30%, transparent)", flexShrink: 0, overflow: "hidden" } as const,
+  activityHeader: { display: "flex", alignItems: "center", gap: 6, paddingVertical: "6px", paddingHorizontal: "12px", borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "var(--border)", fontSize: 12, color: "var(--muted-foreground)" } as const,
+  activityPulse: { color: "var(--brand-2, var(--primary))" } as const,
+  activityList: { maxHeight: "40vh", overflowY: "auto", paddingVertical: "4px", paddingHorizontal: "0" } as const,
   workRow: {
     display: 'flex',
     gap: 8,
     alignItems: 'flex-start',
     padding: '4px 12px',
   } as React.CSSProperties,
-  workIcon: {
-    color: 'var(--brand-2, var(--primary))',
-    fontSize: 13,
-    lineHeight: '18px',
-    flexShrink: 0,
-  } as React.CSSProperties,
-  workBody: {
-    minWidth: 0,
-    flex: 1,
-  } as React.CSSProperties,
-  workLabelLine: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: 8,
-  } as React.CSSProperties,
-  workLabel: {
-    fontSize: 12,
-    fontWeight: 500,
-    color: 'var(--foreground)',
-    fontFamily: 'monospace',
-    whiteSpace: 'nowrap' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  } as React.CSSProperties,
-  workElapsed: {
-    fontSize: 11,
-    color: 'var(--muted-foreground)',
-    marginLeft: 'auto',
-    flexShrink: 0,
-  } as React.CSSProperties,
-  workNarration: {
-    fontSize: 12,
-    color: 'var(--muted-foreground)',
-    whiteSpace: 'nowrap' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  } as React.CSSProperties,
-  inputRow: {
-    display: 'flex',
-    gap: 8,
-    padding: '8px 12px',
-    borderTop: '1px solid var(--border)',
-    flexShrink: 0,
-  } as React.CSSProperties,
+  workIcon: { color: "var(--brand-2, var(--primary))", fontSize: 13, lineHeight: "18px", flexShrink: 0 } as const,
+  workBody: { minWidth: 0, flexGrow: 1, flexShrink: 1, flexBasis: "0%" } as const,
+  workLabelLine: { display: "flex", alignItems: "baseline", gap: 8 } as const,
+  workLabel: { fontSize: 12, fontWeight: 500, color: "var(--foreground)", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } as const,
+  workElapsed: { fontSize: 11, color: "var(--muted-foreground)", marginLeft: "auto", flexShrink: 0 } as const,
+  workNarration: { fontSize: 12, color: "var(--muted-foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } as const,
+  inputRow: { display: "flex", gap: 8, paddingVertical: "8px", paddingHorizontal: "12px", borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: "var(--border)", flexShrink: 0 } as const,
   textarea: {
     flex: 1,
     resize: 'none' as const,
@@ -353,14 +265,5 @@ const styles = {
     fontSize: 14,
     fontFamily: 'inherit',
   } as React.CSSProperties,
-  sendButton: {
-    padding: '0 16px',
-    borderRadius: 4,
-    border: 'none',
-    background: 'var(--primary)',
-    color: 'var(--primary-foreground)',
-    fontWeight: 500,
-    cursor: 'pointer',
-    alignSelf: 'flex-end',
-  } as React.CSSProperties,
+  sendButton: { paddingVertical: "0", paddingHorizontal: "16px", borderRadius: 4, borderWidth: 0, backgroundColor: "var(--primary)", color: "var(--primary-foreground)", fontWeight: 500, cursor: "pointer", alignSelf: "flex-end" } as const,
 };

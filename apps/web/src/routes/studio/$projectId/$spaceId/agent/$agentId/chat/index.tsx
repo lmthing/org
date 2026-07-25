@@ -135,12 +135,12 @@ function AgentChatPage() {
   }
 
   if (!session) {
-    return <Prim.Box style={styles.center}>Signing in…</Prim.Box>
+    return <Prim.Box {...styles.center}>Signing in…</Prim.Box>
   }
 
   if (podError) {
     return (
-      <Prim.Box style={styles.center}>
+      <Prim.Box {...styles.center}>
         <Prim.Text as="p" color="var(--destructive)">Failed to run space: {podError}</Prim.Text>
         <Prim.Pressable onClick={() => void startSession()}>Retry</Prim.Pressable>
       </Prim.Box>
@@ -148,13 +148,13 @@ function AgentChatPage() {
   }
 
   if (!sessionId) {
-    return <Prim.Box style={styles.center}>{PHASE_LABEL[phase] ?? 'Starting agent session…'}</Prim.Box>
+    return <Prim.Box {...styles.center}>{PHASE_LABEL[phase] ?? 'Starting agent session…'}</Prim.Box>
   }
 
   return (
-    <Prim.Box style={styles.container}>
+    <Prim.Box {...styles.container}>
       {/* Connection status + re-sync control */}
-      <Prim.Box style={styles.statusBar}>
+      <Prim.Box {...styles.statusBar}>
         <Prim.Text color={isConnected ? 'var(--success)' : 'var(--destructive)'}>
           {isConnected ? '● Connected' : '○ Connecting…'}
         </Prim.Text>
@@ -162,7 +162,7 @@ function AgentChatPage() {
         <Prim.Pressable
           onClick={() => void startSession()}
           disabled={runningRef.current || phase !== 'ready'}
-          style={styles.resyncButton}
+          {...styles.resyncButton}
           title="Push the latest edits to your pod and restart the agent"
         >
           ↻ Re-sync &amp; restart
@@ -170,7 +170,7 @@ function AgentChatPage() {
       </Prim.Box>
 
       {/* Block stream */}
-      <Prim.Box style={styles.blocks}>
+      <Prim.Box {...styles.blocks}>
         {blocks.map((block) => {
           if (block.type === 'display') {
             return <DisplayBlock key={block.id} descriptor={block.data} />
@@ -191,7 +191,7 @@ function AgentChatPage() {
           }
           if (block.type === 'error') {
             return (
-              <Prim.Box key={block.id} style={styles.errorBlock}>
+              <Prim.Box key={block.id} {...styles.errorBlock}>
                 {String(block.data)}
               </Prim.Box>
             )
@@ -201,7 +201,7 @@ function AgentChatPage() {
       </Prim.Box>
 
       {/* Message input */}
-      <Prim.Box style={styles.inputRow}>
+      <Prim.Box {...styles.inputRow}>
         <Prim.TextArea
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
@@ -214,7 +214,7 @@ function AgentChatPage() {
         <Prim.Pressable
           onClick={handleSend}
           disabled={!isConnected || !inputValue.trim()}
-          style={styles.sendButton}
+          {...styles.sendButton}
         >
           Send
         </Prim.Pressable>
@@ -232,61 +232,13 @@ const PHASE_LABEL: Record<RunPhase, string> = {
 }
 
 const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    height: '100%',
-    overflow: 'hidden',
-  },
-  center: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    color: 'var(--muted-foreground)',
-  } as React.CSSProperties,
-  statusBar: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '4px 12px',
-    borderBottom: '1px solid var(--border)',
-    fontSize: 12,
-    flexShrink: 0,
-  } as React.CSSProperties,
-  resyncButton: {
-    marginLeft: 'auto',
-    padding: '2px 10px',
-    borderRadius: 4,
-    border: '1px solid var(--border)',
-    background: 'var(--secondary)',
-    color: 'var(--secondary-foreground)',
-    fontSize: 12,
-    cursor: 'pointer',
-  } as React.CSSProperties,
-  blocks: {
-    flex: 1,
-    overflowY: 'auto' as const,
-    padding: '12px',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '8px',
-  },
-  errorBlock: {
-    background: 'color-mix(in srgb, var(--destructive) 12%, transparent)',
-    border: '1px solid color-mix(in srgb, var(--destructive) 30%, transparent)',
-    borderRadius: 4,
-    padding: '8px 12px',
-    color: 'var(--destructive)',
-    fontFamily: 'monospace',
-    fontSize: 13,
-  } as React.CSSProperties,
-  inputRow: {
-    display: 'flex',
-    gap: 8,
-    padding: '8px 12px',
-    borderTop: '1px solid var(--border)',
-    flexShrink: 0,
-  } as React.CSSProperties,
+  container: { display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" } as const,
+  center: { display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--muted-foreground)" } as const,
+  statusBar: { display: "flex", alignItems: "center", paddingVertical: "4px", paddingHorizontal: "12px", borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "var(--border)", fontSize: 12, flexShrink: 0 } as const,
+  resyncButton: { marginLeft: "auto", paddingVertical: "2px", paddingHorizontal: "10px", borderRadius: 4, borderWidth: "1px", borderStyle: "solid", borderColor: "var(--border)", backgroundColor: "var(--secondary)", color: "var(--secondary-foreground)", fontSize: 12, cursor: "pointer" } as const,
+  blocks: { flexGrow: 1, flexShrink: 1, flexBasis: "0%", overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" } as const,
+  errorBlock: { backgroundColor: "color-mix(in srgb, var(--destructive) 12%, transparent)", borderWidth: "1px", borderStyle: "solid", borderColor: "color-mix(in srgb, var(--destructive) 30%, transparent)", borderRadius: 4, paddingVertical: "8px", paddingHorizontal: "12px", color: "var(--destructive)", fontFamily: "monospace", fontSize: 13 } as const,
+  inputRow: { display: "flex", gap: 8, paddingVertical: "8px", paddingHorizontal: "12px", borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: "var(--border)", flexShrink: 0 } as const,
   textarea: {
     flex: 1,
     resize: 'none' as const,
@@ -296,16 +248,7 @@ const styles = {
     fontSize: 14,
     fontFamily: 'inherit',
   },
-  sendButton: {
-    padding: '0 16px',
-    borderRadius: 4,
-    border: 'none',
-    background: 'var(--primary)',
-    color: 'var(--primary-foreground)',
-    fontWeight: 500,
-    cursor: 'pointer',
-    alignSelf: 'flex-end',
-  } as React.CSSProperties,
+  sendButton: { paddingVertical: "0", paddingHorizontal: "16px", borderRadius: 4, borderWidth: 0, backgroundColor: "var(--primary)", color: "var(--primary-foreground)", fontWeight: 500, cursor: "pointer", alignSelf: "flex-end" } as const,
 }
 
 export const Route = createFileRoute('/studio/$projectId/$spaceId/agent/$agentId/chat/')({
