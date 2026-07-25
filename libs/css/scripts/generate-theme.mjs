@@ -72,7 +72,6 @@ const darkLines = colors
 
 const darkSel = tokens.$meta.darkSelector; // e.g. [data-theme="dark"]
 const css = `@import "tailwindcss";
-@import "tw-animate-css";
 
 @custom-variant dark (&:is(${darkSel} *));
 
