@@ -257,7 +257,7 @@ export function IntegrationsTab({
 
             {integration.readme ? (
               <Prim.Box as="details" className="bg-muted/40" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" paddingHorizontal="$3" paddingVertical="$2">
-                <Prim.Box as="summary" className="text-xs text-muted-foreground cursor-pointer select-none">
+                <Prim.Box as="summary" fontSize="$xs" color="$muted-foreground" cursor="pointer" userSelect="none">
                   Setup guide — how to get your keys
                 </Prim.Box>
                 <Prim.Box fontSize="$sm" color="$foreground" marginTop="0.5rem">

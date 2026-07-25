@@ -17,7 +17,7 @@ export default function Slide1Cover() {
       </Prim.Text>
 
       {/* Headline */}
-      <Prim.Text as="h1" className="text-center text-6xl font-bold leading-tight tracking-tight sm:text-7xl" style={{ color: colors.text }}>
+      <Prim.Text as="h1" textAlign="center" fontSize="$6xl" fontWeight="$bold" lineHeight={1.25} letterSpacing="$tight" $sm={{ fontSize: "$7xl" }} style={{ color: colors.text }}>
         Your Knowledge. Your AI.
         <Prim.Br />
         Your Rules.

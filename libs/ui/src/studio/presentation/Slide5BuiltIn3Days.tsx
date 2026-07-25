@@ -105,7 +105,7 @@ export default function Slide5BuiltIn3Days() {
             <Prim.Box fontSize="$5xl" marginBottom="0.75rem">{card.icon}</Prim.Box>
 
             <Prim.Box
-              className="text-6xl font-extrabold leading-none" marginBottom="0.25rem"
+              fontSize="$6xl" fontWeight="$extrabold" lineHeight={1} marginBottom="0.25rem"
               style={{
                 color: card.highlight ? colors.brand : colors.text,
                 letterSpacing: '-0.03em',
@@ -139,7 +139,7 @@ export default function Slide5BuiltIn3Days() {
         gap="$2.5" borderRadius="$radius-full" paddingHorizontal="$8" paddingVertical="$3.5" alignItems="center"
         style={{ background: colors.bgDark }}
       >
-        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" style={{ background: colors.brand }} />
         <Prim.Box fontSize="$base" fontWeight="$medium" letterSpacing="$wide" color="#fff" /* ds-lint-ok: literal text-white on the colored slide bg (theme-independent) */>
           Three days.{' '}
           <Prim.Text as="em" fontStyle="normal" fontWeight="$bold" style={{ color: colors.brand }}>
@@ -147,7 +147,7 @@ export default function Slide5BuiltIn3Days() {
           </Prim.Text>{' '}
           Five experts convinced.
         </Prim.Box>
-        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" style={{ background: colors.brand }} />
       </Prim.Row>
     </Prim.Col>
   )

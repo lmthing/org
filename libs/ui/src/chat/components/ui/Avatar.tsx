@@ -22,7 +22,7 @@ export function Avatar({
       style={style}
     >
       {src ? (
-        <Prim.Image src={src} className="w-full h-full rounded-full object-cover" alt="" />
+        <Prim.Image src={src} width="100%" height="100%" borderRadius="$radius-full" objectFit="cover" alt="" />
       ) : (
         fallback ?? '?'
       )}

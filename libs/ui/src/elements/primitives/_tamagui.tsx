@@ -535,6 +535,44 @@ function withControlShim<T extends Record<string, unknown>>(props: T): T {
   } as unknown as T
 }
 
+// ── Image ────────────────────────────────────────────────────────────────────────────────────────
+//
+// `<img>` was left a pure host passthrough on the grounds that a Tamagui wrapper "adds nothing on
+// web and would break replaced-content semantics". The first half turned out to be false and the
+// second half does not apply to the per-tag `createComponent` build: the P3 codemod treats `Image`
+// as a style-prop target, so it had been rewriting `className="h-5 w-5 object-cover"` into
+// `height="$5" width="$5" objectFit="cover"` on a host `<img>` — where those are not styles at all,
+// just unknown DOM attributes. Every codemod-touched image has been silently unstyled since.
+//
+// Built exactly like the form controls, so the real `<img>` (and its replaced-content behaviour) is
+// runtime-guaranteed while the style props actually apply. `objectFit` is web-only and has no RN
+// style key, so it rides on `style` via the shim below.
+export type ImagePrimitiveProps = React.ImgHTMLAttributes<HTMLImageElement> &
+  LayoutStyleProps &
+  MarginStyleProps &
+  BoxStyleProps & {
+    objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down'
+  }
+
+const ImageComp = createComponent({
+  Component: 'img' as never,
+  isText: true,
+  isReactNative: false,
+  acceptsClassName: true,
+  componentName: 'Image',
+}) as unknown as React.ComponentType<any>
+
+function withImageShim<T extends Record<string, unknown>>(props: T): T {
+  const { objectFit, style, ...rest } = props as Record<string, unknown>
+  if (objectFit === undefined) return props
+  return { ...rest, style: { objectFit, ...(style as object) } } as unknown as T
+}
+
+export const Image = React.forwardRef<HTMLImageElement, ImagePrimitiveProps>((props, ref) =>
+  React.createElement(ImageComp, { ...withFontScale(withImageShim(props)), ref }),
+)
+Image.displayName = 'Image'
+
 export type TextFieldPrimitiveProps = React.InputHTMLAttributes<HTMLInputElement> & ControlStyleProps
 export const TextField = React.forwardRef<HTMLInputElement, TextFieldPrimitiveProps>((props, ref) =>
   React.createElement(TextFieldComp, { ...withFontScale(withControlShim(props)), ref }),

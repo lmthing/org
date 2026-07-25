@@ -17,6 +17,9 @@
  */
 
 // ── scales the tokens reference (must match libs/css tamagui-tokens.mjs) ─────────────────────
+/** Tailwind's unitless `leading-*` keywords → their literal ratios. */
+const LEADING = { none: 1, tight: 1.25, snug: 1.375, normal: 1.5, relaxed: 1.625, loose: 2 }
+
 const SPACE_KEYS = new Set([
   '0', '0.5', '1', '1.5', '2', '2.5', '3', '3.5', '4', '5', '6', '7', '8', '9', '10', '11', '12',
   '14', '16', '20', '24', '28', '32', '36', '40', '44', '48', '52', '56', '60', '64', '72', '80',
@@ -100,9 +103,26 @@ function baseClass(cls) {
   if (cls === 'grow-0') return { flexGrow: 0 }
   if (cls === 'shrink') return { flexShrink: 1 }
   if (cls === 'shrink-0') return { flexShrink: 0 }
+  // Legacy Tailwind v2/v3 spellings still present in the surfaces.
+  if (cls === 'flex-shrink-0') return { flexShrink: 0 }
+  if (cls === 'flex-shrink') return { flexShrink: 1 }
+  if (cls === 'flex-grow-0') return { flexGrow: 0 }
+  if (cls === 'flex-grow') return { flexGrow: 1 }
+
+  // misc single-value utilities
+  if (cls === 'cursor-pointer') return { cursor: 'pointer' }
+  if (cls === 'cursor-default') return { cursor: 'default' }
+  if (cls === 'cursor-not-allowed') return { cursor: 'not-allowed' }
+  if (cls === 'select-none') return { userSelect: 'none' }
+  if (cls === 'select-text') return { userSelect: 'text' }
+  if (cls === 'pointer-events-none') return { pointerEvents: 'none' }
+  if (cls === 'pointer-events-auto') return { pointerEvents: 'auto' }
+  if (cls === 'object-cover') return { objectFit: 'cover' }
+  if (cls === 'object-contain') return { objectFit: 'contain' }
 
   // alignment
   let m
+  if ((m = cls.match(/^size-(.+)$/)) && SPACE_KEYS.has(m[1])) return { width: `$${m[1]}`, height: `$${m[1]}` }
   if ((m = cls.match(/^items-(\w+)$/)) && ITEMS[m[1]]) return { alignItems: ITEMS[m[1]] }
   if ((m = cls.match(/^justify-(\w+)$/)) && ALIGN[m[1]]) return { justifyContent: ALIGN[m[1]] }
   if ((m = cls.match(/^self-(\w+)$/)) && (m[1] === 'auto' ? true : ITEMS[m[1]])) return { alignSelf: m[1] === 'auto' ? 'auto' : ITEMS[m[1]] }
@@ -161,7 +181,14 @@ function baseClass(cls) {
     }
     return null
   }
-  if ((m = cls.match(/^leading-(.+)$/))) { if (SPACE_KEYS.has(m[1])) return { lineHeight: `$${m[1]}` }; if (isArbitrary(m[1])) return { lineHeight: arbitraryValue(m[1]) }; return null }
+  // `leading-*` is either the numeric $space scale, an arbitrary value, or one of Tailwind's
+  // unitless keywords — the keywords have no token, so they map to their literal ratio.
+  if ((m = cls.match(/^leading-(.+)$/))) {
+    if (SPACE_KEYS.has(m[1])) return { lineHeight: `$${m[1]}` }
+    if (isArbitrary(m[1])) return { lineHeight: arbitraryValue(m[1]) }
+    if (LEADING[m[1]] !== undefined) return { lineHeight: LEADING[m[1]] }
+    return null
+  }
   if ((m = cls.match(/^tracking-(\w+)$/)) && TRACKING.has(m[1])) return { letterSpacing: `$${m[1]}` }
   if (cls === 'uppercase') return { textTransform: 'uppercase' }
   if (cls === 'lowercase') return { textTransform: 'lowercase' }

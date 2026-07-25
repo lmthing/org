@@ -45,7 +45,7 @@ export default function Slide7Team() {
             <Prim.Image
               src={m.image}
               alt={m.name}
-              className="size-40 rounded-full border-4 object-cover"
+              width="$40" height="$40" borderRadius="$radius-full" borderWidth={4} objectFit="cover"
               style={{ borderColor: colors.brand }}
             />
             <Prim.Text as="p" fontSize="$2xl" fontWeight="$bold" marginTop="1.5rem" style={{ color: colors.text }}>

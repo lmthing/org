@@ -1,14 +1,12 @@
-import * as React from 'react'
-import { hostPrimitive } from '../_host'
-
 /**
- * Image — the `<img>` primitive (Phase 0). Pure passthrough. Phase 1 swaps its internals to a
- * Tamagui `Image` (web `<img>`, native `react-native` Image).
+ * Image — the `<img>` primitive. A real Tamagui component built per-tag with `createComponent`
+ * (see `_tamagui.tsx`), so the actual `<img>` and its replaced-content behaviour are
+ * runtime-guaranteed AND it accepts style props.
  *
- * See docs/react-native-tamagui-migration.md §1.5.
+ * It was a pure host passthrough until the P3 codemod was found to be rewriting image classNames
+ * (`h-5 w-5 object-cover`) into style props on it — which a host `<img>` treats as unknown DOM
+ * attributes, silently dropping the styling. See docs/tamagui-idiomatic-migration.md §6.
+ *
+ * The `index.native.tsx` fork is the RN target.
  */
-export type ImageProps = React.ImgHTMLAttributes<HTMLImageElement>
-
-const Image = hostPrimitive<HTMLImageElement, ImageProps>('img', 'Image')
-
-export { Image }
+export { Image, type ImagePrimitiveProps as ImageProps } from '../_tamagui'

@@ -9,7 +9,7 @@ export default function Slide8Partnership() {
       height="100%" width="100%" justifyContent="center" alignItems="center"
       style={{ background: colors.bg }}
     >
-      <Prim.Text as="h1" className="text-center text-5xl font-bold leading-tight tracking-tight sm:text-7xl" style={{ color: colors.text }}>
+      <Prim.Text as="h1" textAlign="center" fontSize="$5xl" fontWeight="$bold" lineHeight={1.25} letterSpacing="$tight" $sm={{ fontSize: "$7xl" }} style={{ color: colors.text }}>
         Are you building agents?
         <Prim.Br />
         <Prim.Br />

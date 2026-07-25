@@ -117,21 +117,21 @@ export default function Slide6Scalability() {
               }}
             >
               <Prim.Box
-                className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
+                height="$2.5" width="$2.5" flexShrink={0} borderRadius="$radius-full"
                 style={{ background: tier.featured ? colors.brand : colors.cardBorder }}
               />
               <Prim.Box
-                className="w-28 flex-shrink-0 text-base font-bold"
+                width="$28" flexShrink={0} fontSize="$base" fontWeight="$bold"
                 style={{ color: colors.text }}
               >
                 {tier.name}
               </Prim.Box>
-              <Prim.Box className="flex-1 text-sm leading-snug" style={{ color: colors.textSecondary }}>
+              <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" fontSize="$sm" lineHeight={1.375} style={{ color: colors.textSecondary }}>
                 {tier.desc}
               </Prim.Box>
               {tier.tag && (
                 <Prim.Text
-                  className="flex-shrink-0 rounded-full px-3 py-1 text-xs font-semibold" whiteSpace="nowrap"
+                  flexShrink={0} borderRadius="$radius-full" paddingHorizontal="$3" paddingVertical="$1" fontSize="$xs" fontWeight="$semibold" whiteSpace="nowrap"
                   style={{ background: `color-mix(in srgb, ${colors.brand} 10%, transparent)`, color: colors.brand }}
                 >
                   {tier.tag}
@@ -147,7 +147,7 @@ export default function Slide6Scalability() {
         gap="$2.5" borderRadius="$radius-full" paddingHorizontal="$8" paddingVertical="$3.5" alignItems="center"
         style={{ background: colors.bgDark }}
       >
-        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" style={{ background: colors.brand }} />
         <Prim.Box fontSize="$base" fontWeight="$medium" letterSpacing="$wide" color="#fff" /* ds-lint-ok: literal text-white on the colored slide bg (theme-independent) */>
           Next:{' '}
           <Prim.Text as="em" fontStyle="normal" fontWeight="$bold" style={{ color: colors.brand }}>
@@ -155,7 +155,7 @@ export default function Slide6Scalability() {
             <CozyThingText text="thing" className="text-base font-bold" /> · Launch enterprise pilot
           </Prim.Text>
         </Prim.Box>
-        <Prim.Box className="h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: colors.brand }} />
+        <Prim.Box height="$1.5" width="$1.5" flexShrink={0} borderRadius="$radius-full" style={{ background: colors.brand }} />
       </Prim.Row>
     </Prim.Col>
   )

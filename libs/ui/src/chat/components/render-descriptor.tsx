@@ -56,7 +56,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const src = String(props['src'] ?? props['url'] ?? '');
       const alt = String(props['alt'] ?? props['caption'] ?? 'image');
       if (!src) return null;
-      return <Prim.Image key={key} src={src} alt={alt} className="max-w-full max-h-[360px] rounded-lg border border-lm-border my-1 object-contain" />;
+      return <Prim.Image key={key} src={src} alt={alt} className="border-lm-border" maxWidth="100%" maxHeight="360px" borderRadius="$radius-lg" borderWidth={1} marginVertical="$1" objectFit="contain" />;
     }
     case 'audio': {
       const src = String(props['src'] ?? props['url'] ?? '');
@@ -136,7 +136,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     }
     case 'spinner': return <Prim.Row key={key} className="text-lm-muted" gap="$2" color="12px" marginVertical="$1" alignItems="center"><Prim.Text className="lm-spin">◐</Prim.Text>{props['label'] ? String(props['label']) : null}</Prim.Row>;
     case 'statcard': return <Prim.Box key={key} className="border-lm-border bg-lm-panel2" borderWidth={1} borderRadius="$radius" padding="$2" display="inline-block" marginVertical="0.25rem"><Prim.Box className="text-lm-muted" color="10px" textTransform="uppercase">{String(props['label'] ?? '')}</Prim.Box><Prim.Box className="text-lm-text" fontSize="$lg" fontWeight="$semibold">{String(props['value'] ?? '')}</Prim.Box>{props['delta'] ? <Prim.Box className="text-lm-green" color="11px">{String(props['delta'])}</Prim.Box> : null}</Prim.Box>;
-    case 'details': return <Prim.Box as="details" key={key} className="border-lm-border bg-lm-panel2" borderWidth={1} borderRadius="$radius" padding="$2" marginVertical="0.25rem"><Prim.Box as="summary" className="cursor-pointer text-lm-text">{String(props['summary'] ?? 'Details')}</Prim.Box><Prim.Box marginTop="0.25rem">{body}</Prim.Box></Prim.Box>;
+    case 'details': return <Prim.Box as="details" key={key} className="border-lm-border bg-lm-panel2" borderWidth={1} borderRadius="$radius" padding="$2" marginVertical="0.25rem"><Prim.Box as="summary" className="text-lm-text" cursor="pointer">{String(props['summary'] ?? 'Details')}</Prim.Box><Prim.Box marginTop="0.25rem">{body}</Prim.Box></Prim.Box>;
 
     case 'fragment': return <React.Fragment key={key}>{body}</React.Fragment>;
     default: return <Prim.Box key={key} className="text-lm-muted" fontFamily="$mono" color="11px">{d.type}: {preview(props, 200)}</Prim.Box>;

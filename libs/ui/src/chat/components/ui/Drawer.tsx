@@ -37,7 +37,7 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
         {title && (
           <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderBottomWidth={1} borderColor="$border" alignItems="center" flexShrink={0}>
             <Prim.Text fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>
-            <Prim.Pressable onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</Prim.Pressable>
+            <Prim.Pressable onClick={onClose} color="$muted-foreground" fontSize="$lg" lineHeight={1} hoverStyle={{ color: "$foreground" }}>&times;</Prim.Pressable>
           </Prim.Row>
         )}
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflow="auto">{children}</Prim.Box>

@@ -39,7 +39,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastCtx.Provider value={{ toast }}>
       {children}
       <Prim.Col
-        className="fixed bottom-4 right-4 z-50 gap-2 pointer-events-none"
+        position="fixed" bottom="$4" right="$4" zIndex={50} gap="$2" pointerEvents="none"
         aria-live="polite"
       >
         {items.map(t => (

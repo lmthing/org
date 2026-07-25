@@ -18,7 +18,7 @@ function LlmTab({ node }: { node: ExecNode }): React.ReactElement {
             {c.responses.length > 1 && <Badge tone="amber">×{c.responses.length} attempts</Badge>}
           </Prim.Row>
           <Prim.Box as="details" paddingHorizontal="$2" paddingVertical="$1">
-            <Prim.Box as="summary" className="cursor-pointer text-[11px] text-lm-muted">system + {c.messages.length} messages</Prim.Box>
+            <Prim.Box as="summary" className="text-lm-muted" cursor="pointer" color="11px">system + {c.messages.length} messages</Prim.Box>
             <Prim.Pre className="font-mono text-[10px] whitespace-pre-wrap text-lm-muted mt-1 max-h-48 overflow-y-auto">{c.system}</Prim.Pre>
             {c.messages.map((m, j) => (
               <Prim.Box key={j} marginTop="0.25rem">
