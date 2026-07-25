@@ -127,7 +127,7 @@ function DropdownItem({ onClick, ...props }: React.HTMLAttributes<HTMLDivElement
       as="div"
       role="menuitem"
       {...DROPDOWN_ITEM}
-      onClick={(e) => { onClick?.(e as unknown as React.MouseEvent<HTMLButtonElement>); setOpen(false) }}
+      onClick={(e) => { onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>); setOpen(false) }}
       {...(props as React.HTMLAttributes<HTMLElement>)}
     />
   )

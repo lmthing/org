@@ -85,12 +85,20 @@ function IdePreview({ url }: IdePreviewProps) {
         <Prim.IFrame
           key={iframeKey}
           src={iframeSrc}
-          flexGrow={1}
-          flexShrink={1}
-          flexBasis="0%"
-          width="100%"
-          borderWidth={0}
-          backgroundColor="white"
+          // `IFrame` is a `hostPrimitive` — a RAW <iframe> passthrough. Tamagui style props are not
+          // split out of the props here, so they reached the DOM as unknown attributes and were
+          // dropped: the preview had no flex sizing, kept the UA's inset border, and had no white
+          // backdrop. Layout for the passthrough leaves has to go through `style`.
+          style={{
+            flexGrow: 1,
+            flexShrink: 1,
+            flexBasis: '0%',
+            width: '100%',
+            borderWidth: 0,
+            // Deliberately not a theme token: this frames arbitrary user HTML, which assumes a
+            // white page, so it must NOT follow the app into dark mode.
+            backgroundColor: 'white',
+          }}
           title="Preview"
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
         />

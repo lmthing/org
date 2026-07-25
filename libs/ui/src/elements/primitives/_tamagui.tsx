@@ -124,6 +124,11 @@ export type BoxStyleProps = {
   pointerEvents?: 'auto' | 'none' | 'box-none' | 'box-only'
   userSelect?: 'none' | 'auto' | 'text' | 'all' | 'contain'
   backgroundImage?: string
+  // The `line-clamp-N` pair. Vendor-prefixed keys pass straight through Tamagui
+  // (`_WebkitBoxOrient-vertical`, `_WebkitLineClamp-2`) — already pinned in index.test.tsx, which
+  // is what made `line-clamp-*` convertible to props at all; they were just never declared.
+  WebkitBoxOrient?: 'vertical' | 'horizontal'
+  WebkitLineClamp?: number | string
   /**
    * The RN-shaped shadow quartet. Tamagui compiles these to a single web `box-shadow` (one `_bxsh-`
    * atomic, verified in `primitives/index.test.tsx`), which is why

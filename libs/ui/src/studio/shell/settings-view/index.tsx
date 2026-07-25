@@ -95,7 +95,12 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
       >
         <Prim.Pressable
           onClick={() => handleTabChange('env')}
-          variant="ghost"
+          // `variant` is `Button`'s prop; `Prim.Pressable` has no variant system, so `variant="ghost"`
+          // was inert here (and leaked to the DOM as an invalid attribute). Applying what ghost
+          // actually is — transparent + accent on hover — rather than adopting `Button`, whose size
+          // and padding defaults would change these hand-styled tabs' layout.
+          backgroundColor="transparent"
+          hoverStyle={{ backgroundColor: '$accent', color: '$accent-foreground' }}
           borderRadius="$0"
           {...(activeTab === 'env'
             ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }
@@ -105,7 +110,12 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
         </Prim.Pressable>
         <Prim.Pressable
           onClick={() => handleTabChange('packages')}
-          variant="ghost"
+          // `variant` is `Button`'s prop; `Prim.Pressable` has no variant system, so `variant="ghost"`
+          // was inert here (and leaked to the DOM as an invalid attribute). Applying what ghost
+          // actually is — transparent + accent on hover — rather than adopting `Button`, whose size
+          // and padding defaults would change these hand-styled tabs' layout.
+          backgroundColor="transparent"
+          hoverStyle={{ backgroundColor: '$accent', color: '$accent-foreground' }}
           borderRadius="$0"
           {...(activeTab === 'packages'
             ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }

@@ -9,7 +9,10 @@ import * as Prim from '../../primitives/index'
  * `.select__content` went with it: this element renders a NATIVE `<select>`, whose option list is
  * drawn by the browser, so the popover rules never applied to anything.
  */
-export interface SelectProps extends React.ComponentProps<'select'> {}
+// `Prim.ControlStyleProps` too, not just the DOM attrs: `Select` spreads its props straight onto
+// `Prim.Select`, which is a real Tamagui control and honours style props — so `<Select width="6rem">`
+// worked at runtime while failing to typecheck. `<select>` has no conflicting HTML attributes.
+export type SelectProps = React.ComponentProps<'select'> & Prim.ControlStyleProps
 
 /** `.select` — the positioning wrapper. */
 const WRAPPER = { position: 'relative' } as const

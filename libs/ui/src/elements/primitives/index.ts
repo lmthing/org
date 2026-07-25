@@ -2,7 +2,7 @@
 // chat/studio/computer speak a single component vocabulary (no raw host tags). In Phase 1 only
 // these components' internals swap to Tamagui; the surfaces are not edited again.
 // See docs/react-native-tamagui-migration.md §1.5.
-export type { LayoutStyleProps, BoxStyleProps, TextStyleProps, MarginStyleProps } from './_tamagui'
+export type { LayoutStyleProps, BoxStyleProps, TextStyleProps, MarginStyleProps, ControlStyleProps, PseudoStyleProps } from './_tamagui'
 export { Box, type BoxProps, type BoxAs } from './box/index'
 export { Text, type TextProps, type TextAs } from './text/index'
 export { Pressable, type PressableProps, type PressableAs } from './pressable/index'
