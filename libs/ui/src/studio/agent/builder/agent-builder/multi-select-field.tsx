@@ -2,6 +2,7 @@ import * as Prim from '../../../../elements/primitives/index.js';
 import { Label } from '@lmthing/ui/elements/typography/label'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index.js'
+import { BADGE_BASE, BADGE_VARIANT } from '../../../../elements/content/badge/index.js'
 
 /** Multiselect pill grid */
 export function MultiSelectField({ label, available, selected, onChange }: {
@@ -22,13 +23,15 @@ export function MultiSelectField({ label, available, selected, onChange }: {
         {available.length === 0 ? (
           <Caption muted>None available in this space.</Caption>
         ) : (
-          <Prim.Box className="agent-builder__pill-grid">
+          <Prim.Box display="flex" flexWrap="wrap" gap="$2">
             {available.map(item => (
               <Prim.Pressable
                 key={item}
                 type="button"
                 onClick={() => toggle(item)}
-                className={`badge ${selected.includes(item) ? 'badge--primary' : 'badge--muted'} agent-builder__pill`}
+                {...BADGE_BASE}
+                {...BADGE_VARIANT[selected.includes(item) ? 'primary' : 'muted']}
+                cursor="pointer"
               >
                 {item}
               </Prim.Pressable>

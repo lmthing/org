@@ -64,6 +64,33 @@ function functionRequiresConsent(source: string): boolean {
 
 // ── FunctionListItem ──────────────────────────────────────────────────────────
 
+/**
+ * The former `.functions-editor__list-item*` rules, hand-migrated (twin of
+ * `studio/component-editor/component-list-item.tsx`): the sweep cannot take them because the block
+ * mixes a dynamic `--active` modifier with a `:hover .child` descendant combinator. The combinator
+ * becomes a Tamagui hover GROUP (`group="row"` + `$group-row-hover`), the same shape proven on
+ * `elements/nav/app-sidebar`. `transition:` has no prop form and stays a utility className
+ * alongside the other 130-odd `transition-*` uses. See docs/tamagui-idiomatic-migration.md §5.
+ */
+const LIST_ITEM = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingVertical: '$1.5',
+  paddingHorizontal: '$2',
+  borderRadius: '$radius-md',
+  cursor: 'pointer',
+  hoverStyle: { backgroundColor: 'var(--color-surface-hover, rgba(0,0,0,0.04))' }, // ds-lint-ok: fallback alpha-black
+} as const
+const LIST_ITEM_ACTIVE = { backgroundColor: 'var(--color-surface-active, rgba(0,0,0,0.07))' } as const // ds-lint-ok: fallback alpha-black
+const LIST_ITEM_ACTIONS = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '$1',
+  opacity: 0,
+  '$group-row-hover': { opacity: 1 },
+} as const
+
 interface FunctionListItemProps {
   name: string
   isActive: boolean
@@ -94,7 +121,10 @@ function FunctionListItem({ name, isActive, onSelect, onDelete, onRename }: Func
 
   return (
     <Prim.Box
-      className={`functions-editor__list-item${isActive ? ' functions-editor__list-item--active' : ''}`}
+      className="transition-colors"
+      {...LIST_ITEM}
+      {...(isActive ? LIST_ITEM_ACTIVE : null)}
+      {...({ group: 'row' } as Record<string, unknown>)}
       onClick={() => { if (!renaming) onSelect() }}
     >
       {renaming ? (
@@ -121,7 +151,7 @@ function FunctionListItem({ name, isActive, onSelect, onDelete, onRename }: Func
         </Prim.Text>
       )}
 
-      <Prim.Box className="functions-editor__list-item-actions" onClick={e => e.stopPropagation()}>
+      <Prim.Box className="transition-opacity" {...LIST_ITEM_ACTIONS} onClick={e => e.stopPropagation()}>
         <Button
           variant="ghost"
           size="icon"
