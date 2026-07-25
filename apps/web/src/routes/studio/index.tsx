@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { useProjects } from '@lmthing/state'
@@ -19,9 +20,9 @@ function StudioIndex() {
   }, [projects, isLoading, navigate])
 
   return (
-    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+    <Prim.Box display="flex" height="100%" alignItems="center" justifyContent="center" fontSize="$sm" color="$muted-foreground">
       Loading…
-    </div>
+    </Prim.Box>
   )
 }
 

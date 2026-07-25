@@ -66,7 +66,7 @@ export function StyledAppLinks({ current, bordered }: StyledAppLinksProps) {
     <Frame bordered={bordered}>
       {otherAppLinks(current).map((link) => (
         <Link key={link.app} href={link.url} title={`Open lmthing.${link.app}`}>
-          <span aria-hidden="true">{link.emoji}</span>
+          <Text aria-hidden="true">{link.emoji}</Text>
           {link.label}
         </Link>
       ))}

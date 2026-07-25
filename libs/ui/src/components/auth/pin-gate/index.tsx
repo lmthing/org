@@ -47,13 +47,13 @@ export function PinGate({ children }: { children: React.ReactNode }) {
         </Prim.Box>
 
         {error && (
-          <p style={{ color: 'var(--color-destructive)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+          <Prim.Text as="p" style={{ color: 'var(--color-destructive)', fontSize: '0.875rem', marginBottom: '1rem' }}>
             {error}
-          </p>
+          </Prim.Text>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
-          <input
+        <Prim.Form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+          <Prim.TextField
             type="password"
             value={pin}
             onChange={e => setPin(e.target.value)}
@@ -80,7 +80,7 @@ export function PinGate({ children }: { children: React.ReactNode }) {
           >
             {loading ? 'Unlocking...' : 'Unlock'}
           </Button>
-        </form>
+        </Prim.Form>
       </Prim.Box>
     </Prim.Box>
   )

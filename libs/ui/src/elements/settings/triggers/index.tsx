@@ -1,3 +1,4 @@
+import * as Prim from '../../primitives/index.js';
 import * as React from 'react'
 import { useAuth } from '@lmthing/auth'
 import { Badge } from '../../content/badge'
@@ -61,7 +62,7 @@ export function Triggers() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
       <Caption muted>
         These are inbound webhook URLs that trigger your agents. Point a service
         (Slack, GitHub, a cron provider, anything that can POST) at one of these
@@ -78,12 +79,12 @@ export function Triggers() {
           <Code>triggers:</Code> binding, then reload.
         </Caption>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {info.bindings.map((b) => {
             const url = `${info.baseUrl}/${b.path}`
             const isCopied = copiedPath === b.path
             return (
-              <div
+              <Prim.Box
                 key={`${b.projectId}/${b.path}`}
                 style={{
                   display: 'flex',
@@ -93,12 +94,12 @@ export function Triggers() {
                   borderBottom: '1px solid var(--border)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Caption>{b.path}</Caption>
                   <Badge variant="muted">{b.provider}</Badge>
-                </div>
+                </Prim.Box>
                 <Caption muted>{b.agentRef}</Caption>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Code
                     style={{
                       flex: 1,
@@ -116,11 +117,11 @@ export function Triggers() {
                   >
                     {isCopied ? 'Copied' : 'Copy'}
                   </Button>
-                </div>
-              </div>
+                </Prim.Box>
+              </Prim.Box>
             )
           })}
-        </div>
+        </Prim.Box>
       )}
 
       <Caption muted>
@@ -130,6 +131,6 @@ export function Triggers() {
       </Caption>
 
       {error && <Caption className="text-destructive">{error}</Caption>}
-    </div>
+    </Prim.Box>
   )
 }

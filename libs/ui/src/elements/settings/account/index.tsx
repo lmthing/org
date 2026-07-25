@@ -1,3 +1,4 @@
+import * as Prim from '../../primitives/index.js';
 import { useAuth } from '@lmthing/auth'
 import { Button } from '../../forms/button'
 import { Caption } from '../../typography/caption'
@@ -26,23 +27,23 @@ export function Account() {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+    <Prim.Box style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
       <Avatar>
         <AvatarFallback colorKey={session?.userId ?? displayName}>
           {initials(displayName)}
         </AvatarFallback>
       </Avatar>
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <Prim.Box style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <Caption>{displayName}</Caption>
         {session?.email && username && session.email !== username && (
           <Caption muted>{session.email}</Caption>
         )}
-      </div>
-      <div style={{ marginLeft: 'auto' }}>
+      </Prim.Box>
+      <Prim.Box style={{ marginLeft: 'auto' }}>
         <Button variant="ghost" size="sm" onClick={logout}>
           Log out
         </Button>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

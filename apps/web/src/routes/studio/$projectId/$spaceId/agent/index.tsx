@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
 import { useAgentList } from '@lmthing/state'
 import { AgentCard } from '@lmthing/ui/studio'
@@ -23,13 +24,13 @@ function AgentListPage() {
     : ''
 
   return (
-    <div className="agent-list-page" style={{ padding: '1.5rem' }}>
+    <Prim.Box padding="1.5rem">
       <Stack gap="lg">
         <Stack row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
+          <Prim.Box>
             <Heading level={2}>Agents</Heading>
             <Caption muted>{agents.length} agent{agents.length !== 1 ? 's' : ''}</Caption>
-          </div>
+          </Prim.Box>
           <Button
             variant="primary"
             onClick={() => navigate({ to: `${spacePath}/agent/new` })}
@@ -45,17 +46,17 @@ function AgentListPage() {
         ) : (
           <Stack gap="sm">
             {agents.map(a => (
-              <div
+              <Prim.Box
                 key={a.id}
                 style={{ cursor: 'pointer' }}
                 onClick={() => navigate({ to: `${spacePath}/agent/${encodeURIComponent(a.id)}` })}
               >
                 <AgentCard id={a.id} />
-              </div>
+              </Prim.Box>
             ))}
           </Stack>
         )}
       </Stack>
-    </div>
+    </Prim.Box>
   )
 }

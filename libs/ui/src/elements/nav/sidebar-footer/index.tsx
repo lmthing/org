@@ -1,3 +1,4 @@
+import * as Prim from '../../primitives/index.js';
 import * as React from 'react'
 import { Settings } from 'lucide-react'
 import { useAuth } from '@lmthing/auth'
@@ -26,30 +27,30 @@ export function SidebarFooter({ current, children, className }: SidebarFooterPro
   const displayName = username ?? session?.email ?? null
 
   return (
-    <div className={cn('flex flex-col', className)}>
+    <Prim.Box className={className} display="flex" flexDirection="column">
       <AppLinks current={current} bordered />
 
       {children}
 
-      <button
+      <Prim.Pressable
         onClick={() => setSettingsOpen(true)}
-        className="flex items-center gap-2 px-3 py-2 text-left text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+        className="transition-colors" display="flex" alignItems="center" gap="$2" paddingHorizontal="$3" paddingVertical="$2" textAlign="left" color="$muted-foreground" hoverStyle={{ color: "$foreground", backgroundColor: "color-mix(in srgb, var(--muted) 60%, transparent)" }}
         title="Settings"
       >
         {isAuthenticated && displayName ? (
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground">
+          <Prim.Text display="flex" height="$6" width="$6" flexShrink={0} alignItems="center" justifyContent="center" borderRadius="$radius-full" backgroundColor="$muted" fontSize="$xs" fontWeight="$medium" color="$foreground">
             {initials(displayName)}
-          </span>
+          </Prim.Text>
         ) : (
           <Settings className="h-4 w-4 shrink-0" aria-hidden="true" />
         )}
-        <span className="flex-1 truncate text-sm">
+        <Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" fontSize="$sm">
           {isAuthenticated && displayName ? displayName : 'Settings'}
-        </span>
+        </Prim.Text>
         <Settings className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
-      </button>
+      </Prim.Pressable>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-    </div>
+    </Prim.Box>
   )
 }

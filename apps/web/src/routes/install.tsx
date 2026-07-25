@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@lmthing/auth'
@@ -146,82 +147,82 @@ function AppInstall({ appId }: { appId: string }) {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-xl flex-col gap-6 p-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">
-          Install {appId ? <span className="font-mono">{appId}</span> : 'app'}
-        </h1>
-        <p className="text-sm text-muted-foreground">Adding this app to your workspace.</p>
-      </header>
+    <Prim.Box marginHorizontal="auto" display="flex" height="100%" width="100%" maxWidth={576} flexDirection="column" gap="$6" padding="$8">
+      <Prim.Box as="header" display="flex" flexDirection="column" gap="$1">
+        <Prim.Text as="h1" fontSize="$2xl" fontWeight="$semibold" color="$foreground">
+          Install {appId ? <Prim.Text fontFamily="$mono">{appId}</Prim.Text> : 'app'}
+        </Prim.Text>
+        <Prim.Text as="p" fontSize="$sm" color="$muted-foreground">Adding this app to your workspace.</Prim.Text>
+      </Prim.Box>
 
       {state.status === 'installing' && (
-        <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-          Installing <span className="font-mono text-foreground">{appId}</span> to your pod…
-        </div>
+        <Prim.Box borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$6" fontSize="$sm" color="$muted-foreground">
+          Installing <Prim.Text fontFamily="$mono" color="$foreground">{appId}</Prim.Text> to your pod…
+        </Prim.Box>
       )}
 
       {state.status === 'done' && (
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-          <div className="text-sm text-foreground">
-            Installed <span className="font-mono">{appId}</span>
+        <Prim.Box display="flex" flexDirection="column" gap="$4" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$6">
+          <Prim.Box fontSize="$sm" color="$foreground">
+            Installed <Prim.Text fontFamily="$mono">{appId}</Prim.Text>
             {state.info.installed && (
-              <span className="text-muted-foreground">
+              <Prim.Text color="$muted-foreground">
                 {' '}
                 — {state.info.installed.tables?.length ?? 0} table(s),{' '}
                 {state.info.installed.endpoints?.length ?? 0} endpoint(s),{' '}
                 {state.info.installed.pages?.length ?? 0} page(s).
-              </span>
+              </Prim.Text>
             )}
-          </div>
-          <button
+          </Prim.Box>
+          <Prim.Pressable
             type="button"
             onClick={() => openApp(state.info.projectId ?? appId)}
-            className="w-fit rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            width="fit-content" borderRadius="$radius-md" backgroundColor="$primary" paddingHorizontal="$4" paddingVertical="$2" fontSize="$sm" fontWeight="$medium" color="$primary-foreground" hoverStyle={{ opacity: 0.9 }}
           >
             Open app
-          </button>
-        </div>
+          </Prim.Pressable>
+        </Prim.Box>
       )}
 
       {state.status === 'diverged' && (
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-          <div className="text-sm text-foreground">
-            <span className="font-mono">{appId}</span> is already installed and has local changes.
+        <Prim.Box display="flex" flexDirection="column" gap="$4" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$6">
+          <Prim.Box fontSize="$sm" color="$foreground">
+            <Prim.Text fontFamily="$mono">{appId}</Prim.Text> is already installed and has local changes.
             Upgrading replaces its app files (pages, API, hooks, database schema and spaces) with the
             latest version from the store. Your saved data is kept.
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button
+          </Prim.Box>
+          <Prim.Box display="flex" flexWrap="wrap" gap="$3">
+            <Prim.Pressable
               type="button"
               onClick={() => void runInstall(true)}
-              className="w-fit rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+              width="fit-content" borderRadius="$radius-md" backgroundColor="$primary" paddingHorizontal="$4" paddingVertical="$2" fontSize="$sm" fontWeight="$medium" color="$primary-foreground" hoverStyle={{ opacity: 0.9 }}
             >
               Upgrade &amp; replace files
-            </button>
-            <button
+            </Prim.Pressable>
+            <Prim.Pressable
               type="button"
               onClick={() => openApp(state.info.projectId ?? appId)}
-              className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              width="fit-content" borderRadius="$radius-md" borderWidth={1} borderColor="$border" paddingHorizontal="$4" paddingVertical="$2" fontSize="$sm" fontWeight="$medium" color="$foreground" hoverStyle={{ backgroundColor: "$muted" }}
             >
               Keep my version &amp; open
-            </button>
-          </div>
-        </div>
+            </Prim.Pressable>
+          </Prim.Box>
+        </Prim.Box>
       )}
 
       {state.status === 'error' && (
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-          <p className="text-sm text-destructive">{state.message}</p>
-          <button
+        <Prim.Box display="flex" flexDirection="column" gap="$4" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$6">
+          <Prim.Text as="p" fontSize="$sm" color="$destructive">{state.message}</Prim.Text>
+          <Prim.Pressable
             type="button"
             onClick={() => void runInstall()}
-            className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            width="fit-content" borderRadius="$radius-md" borderWidth={1} borderColor="$border" paddingHorizontal="$4" paddingVertical="$2" fontSize="$sm" fontWeight="$medium" color="$foreground" hoverStyle={{ backgroundColor: "$muted" }}
           >
             Try again
-          </button>
-        </div>
+          </Prim.Pressable>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }
 
@@ -289,107 +290,107 @@ function SpaceInstall({ spaceId }: { spaceId: string }) {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-xl flex-col gap-6 p-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">
-          Install <span className="font-mono">{spaceId}</span>
-        </h1>
-        <p className="text-sm text-muted-foreground">
+    <Prim.Box marginHorizontal="auto" display="flex" height="100%" width="100%" maxWidth={576} flexDirection="column" gap="$6" padding="$8">
+      <Prim.Box as="header" display="flex" flexDirection="column" gap="$1">
+        <Prim.Text as="h1" fontSize="$2xl" fontWeight="$semibold" color="$foreground">
+          Install <Prim.Text fontFamily="$mono">{spaceId}</Prim.Text>
+        </Prim.Text>
+        <Prim.Text as="p" fontSize="$sm" color="$muted-foreground">
           Add this integration to a project. You&apos;ll add your own token afterwards in the project&apos;s settings.
-        </p>
-      </header>
+        </Prim.Text>
+      </Prim.Box>
 
       {state.status === 'choose' && (
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-          <label className="flex flex-col gap-1.5 text-sm text-foreground">
+        <Prim.Box display="flex" flexDirection="column" gap="$4" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$6">
+          <Prim.Text as="label" display="flex" flexDirection="column" gap="$1.5" fontSize="$sm" color="$foreground">
             Install into project
-            <select
+            <Prim.Select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
               disabled={projects === null}
               className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
             >
               {(projects ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
+                <Prim.Option key={p.id} value={p.id}>
                   {p.name ?? p.id}
                   {p.id === 'user' ? ' (used by THING)' : ''}
-                </option>
+                </Prim.Option>
               ))}
-            </select>
-          </label>
-          <button
+            </Prim.Select>
+          </Prim.Text>
+          <Prim.Pressable
             type="button"
             onClick={() => void runInstall()}
             disabled={projects === null || !projectId}
-            className="w-fit rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            width="fit-content" borderRadius="$radius-md" backgroundColor="$primary" paddingHorizontal="$4" paddingVertical="$2" fontSize="$sm" fontWeight="$medium" color="$primary-foreground" hoverStyle={{ opacity: 0.9 }} disabledStyle={{ opacity: 0.5 }}
           >
             {projects === null ? 'Loading projects…' : 'Install'}
-          </button>
-        </div>
+          </Prim.Pressable>
+        </Prim.Box>
       )}
 
       {state.status === 'installing' && (
-        <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-          Installing <span className="font-mono text-foreground">{spaceId}</span> into{' '}
-          <span className="font-mono text-foreground">{projectId}</span>…
-        </div>
+        <Prim.Box borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$6" fontSize="$sm" color="$muted-foreground">
+          Installing <Prim.Text fontFamily="$mono" color="$foreground">{spaceId}</Prim.Text> into{' '}
+          <Prim.Text fontFamily="$mono" color="$foreground">{projectId}</Prim.Text>…
+        </Prim.Box>
       )}
 
       {state.status === 'done' && (
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-          <div className="text-sm text-foreground">
-            Installed <span className="font-mono">{spaceId}</span> into{' '}
-            <span className="font-mono">{state.info.projectId ?? projectId}</span>. Add your token in the
+        <Prim.Box display="flex" flexDirection="column" gap="$4" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$6">
+          <Prim.Box fontSize="$sm" color="$foreground">
+            Installed <Prim.Text fontFamily="$mono">{spaceId}</Prim.Text> into{' '}
+            <Prim.Text fontFamily="$mono">{state.info.projectId ?? projectId}</Prim.Text>. Add your token in the
             project&apos;s Settings → Integrations to finish.
-          </div>
-          <button
+          </Prim.Box>
+          <Prim.Pressable
             type="button"
             onClick={() => configure(state.info.projectId ?? projectId)}
-            className="w-fit rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            width="fit-content" borderRadius="$radius-md" backgroundColor="$primary" paddingHorizontal="$4" paddingVertical="$2" fontSize="$sm" fontWeight="$medium" color="$primary-foreground" hoverStyle={{ opacity: 0.9 }}
           >
             Add your token in Studio
-          </button>
-        </div>
+          </Prim.Pressable>
+        </Prim.Box>
       )}
 
       {state.status === 'diverged' && (
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-          <div className="text-sm text-foreground">
-            <span className="font-mono">{spaceId}</span> is already installed in{' '}
-            <span className="font-mono">{projectId}</span> with local changes. Reinstalling replaces its files
+        <Prim.Box display="flex" flexDirection="column" gap="$4" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$6">
+          <Prim.Box fontSize="$sm" color="$foreground">
+            <Prim.Text fontFamily="$mono">{spaceId}</Prim.Text> is already installed in{' '}
+            <Prim.Text fontFamily="$mono">{projectId}</Prim.Text> with local changes. Reinstalling replaces its files
             with the latest version from the store.
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button
+          </Prim.Box>
+          <Prim.Box display="flex" flexWrap="wrap" gap="$3">
+            <Prim.Pressable
               type="button"
               onClick={() => void runInstall(true)}
-              className="w-fit rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+              width="fit-content" borderRadius="$radius-md" backgroundColor="$primary" paddingHorizontal="$4" paddingVertical="$2" fontSize="$sm" fontWeight="$medium" color="$primary-foreground" hoverStyle={{ opacity: 0.9 }}
             >
               Reinstall &amp; replace files
-            </button>
-            <button
+            </Prim.Pressable>
+            <Prim.Pressable
               type="button"
               onClick={() => configure(projectId)}
-              className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              width="fit-content" borderRadius="$radius-md" borderWidth={1} borderColor="$border" paddingHorizontal="$4" paddingVertical="$2" fontSize="$sm" fontWeight="$medium" color="$foreground" hoverStyle={{ backgroundColor: "$muted" }}
             >
               Keep my version &amp; configure
-            </button>
-          </div>
-        </div>
+            </Prim.Pressable>
+          </Prim.Box>
+        </Prim.Box>
       )}
 
       {state.status === 'error' && (
-        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-          <p className="text-sm text-destructive">{state.message}</p>
-          <button
+        <Prim.Box display="flex" flexDirection="column" gap="$4" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$6">
+          <Prim.Text as="p" fontSize="$sm" color="$destructive">{state.message}</Prim.Text>
+          <Prim.Pressable
             type="button"
             onClick={() => void runInstall()}
-            className="w-fit rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            width="fit-content" borderRadius="$radius-md" borderWidth={1} borderColor="$border" paddingHorizontal="$4" paddingVertical="$2" fontSize="$sm" fontWeight="$medium" color="$foreground" hoverStyle={{ backgroundColor: "$muted" }}
           >
             Try again
-          </button>
-        </div>
+          </Prim.Pressable>
+        </Prim.Box>
       )}
-    </div>
+    </Prim.Box>
   )
 }

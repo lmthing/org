@@ -45,7 +45,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       }
       markdown = markdown || '';
       const html = marked.parse(markdown) as string;
-      return <Prim.Box key={key} className="prose prose-sm max-w-none text-lm-text prose-headings:text-lm-text prose-a:text-lm-accent prose-code:text-lm-cyan prose-code:bg-lm-bg prose-pre:bg-lm-bg prose-pre:border prose-pre:border-lm-border" dangerouslySetInnerHTML={{ __html: html }} />;
+      return <Prim.Box key={key} className="prose prose-sm prose-headings:text-lm-text prose-a:text-lm-accent prose-code:text-lm-cyan prose-code:bg-lm-bg prose-pre:bg-lm-bg prose-pre:border prose-pre:border-lm-border" maxWidth="none" color="var(--lm-text)" dangerouslySetInnerHTML={{ __html: html }} />;
     }
     case 'span': return <Prim.Text key={key}>{body}</Prim.Text>;
     case 'quote': return <Prim.Box as="blockquote" key={key} borderColor="var(--lm-border)" color="var(--lm-muted)" borderLeftWidth={2} paddingLeft="$2" fontStyle="italic" marginVertical="0.25rem">{body}</Prim.Box>;

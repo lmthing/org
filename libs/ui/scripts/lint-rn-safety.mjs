@@ -23,7 +23,13 @@ import { fileURLToPath } from 'node:url';
 // Anchored to this script's location (libs/ui/scripts/) so it works from any cwd — e.g. both
 // `node libs/ui/scripts/lint-rn-safety.mjs` (repo root) and `pnpm --filter @lmthing/ui lint:rn`.
 const uiSrc = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
-const DEFAULT_DIRS = [join(uiSrc, 'chat'), join(uiSrc, 'studio'), join(uiSrc, 'computer')];
+// `elements` and `components` were NOT in this list, which is how `sidebar-footer`, the `settings`
+// panels and the `auth` widgets kept 67 raw host tags while the gate reported clean — and
+// `elements/**` is the shared vocabulary layer, the part that most has to be RN-safe.
+const DEFAULT_DIRS = [
+  join(uiSrc, 'chat'), join(uiSrc, 'studio'), join(uiSrc, 'computer'),
+  join(uiSrc, 'elements'), join(uiSrc, 'components'),
+];
 
 const isExempt = (p) =>
   p.endsWith('.web.tsx') || p.endsWith('.native.tsx') || p.endsWith('.test.tsx');

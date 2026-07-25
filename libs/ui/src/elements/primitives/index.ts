@@ -45,4 +45,4 @@ export {
   ClipPath,
   Mask,
 } from './svg'
-export { Pre, type PreProps, Br, type BrProps, Hr, type HrProps } from './misc'
+export { Pre, type PreProps, Br, type BrProps, Hr, type HrProps, DataList, type DataListProps } from './misc'

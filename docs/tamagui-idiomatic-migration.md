@@ -1,11 +1,12 @@
 # Phase 2 — the idiomatic-Tamagui migration ("the Tamagui way", zero-Tailwind)
 
-> **Status: P5 COMPLETE for `libs/ui` — every element the codemod can reach IS migrated, and the
-> manual tail behind it is worked through. 12 stylesheets remain (two of them permanent:
-> react-arborist markup and `marked`-injected HTML); zero orphan BEM classNames; the codemod's only
-> remaining reports are 26 legitimate `{className}` passthroughs. CSS bundle 171 → 36.64 kB.
-> Deleting Tailwind (P6) is now blocked on three named things, not on unknown work — see
-> "What remains".**
+> **Status: P5 COMPLETE across `libs/ui` AND `apps/web` — every element the codemod can reach IS
+> migrated, and the manual tail behind it is worked through. 12 stylesheets remain (two of them
+> permanent: react-arborist markup and `marked`-injected HTML); zero orphan BEM classNames; the
+> codemod's only remaining reports are 30 legitimate `{className}` passthroughs. `lint:rn` now
+> covers `elements` + `components` too, where it had been silently blind to 67 raw host tags. CSS
+> bundle 171 → 35.93 kB. Deleting Tailwind (P6) is blocked on ONE named thing — the animation
+> family — plus the composite passthroughs. See "What remains".**
 > Phase 1 (`react-native-tamagui-migration.md`, Parts I–III) put every surface primitive + overlay
 > *onto Tamagui components* while **keeping the Tailwind + `theme.css` + BEM styling engine**
 > underneath (coexistence). This Phase 2 replaces that styling engine with **idiomatic Tamagui** —
@@ -239,26 +240,50 @@ is migrated.
 |---|---|---|
 | component stylesheets | 15 | **12** |
 | orphan BEM classNames (dead, no rule anywhere) | 20 | **0** |
-| codemod skips needing hand work | 120 | **0** (26 legitimate passthroughs remain) |
-| residual Tailwind utility classNames | ~945 → 539 | **749 across 78 files** ¹ |
-| CSS bundle (`apps/web`) | 171 kB → 41.79 kB | **36.64 kB** |
-| `libs/ui` tests | 508 → 645 | **658** |
+| codemod skips needing hand work | 120 | **0** (30 legitimate passthroughs remain) |
+| residual Tailwind utility classNames | ~945 → 539 | **410 across 70 files** ¹ |
+| …of which the animation family | — | **67** |
+| files gated by `lint:rn` | 138 | **230** |
+| raw host tags in `elements`+`components` | 67 (ungated) | **0** |
+| CSS bundle (`apps/web`) | 171 kB → 41.79 kB | **35.93 kB** |
+| `libs/ui` tests | 508 → 645 | **664** |
 
 ¹ higher than the earlier 539 because that figure counted only static string classNames; this one
 also counts the literals inside `cn(...)`. It is the number the Tailwind deletion actually has to
 answer for. Roughly a fifth of it is the animation family.
 
-**What now blocks deleting Tailwind (P6).** Three things, in order:
+**The de-HTML gap this uncovered.** `lint:rn`'s default scope was `chat`/`studio`/`computer` only,
+so it reported clean while `elements/**` and `components/**` — the SHARED vocabulary layer, the part
+that most has to be RN-safe — carried **67 raw host tags** (`sidebar-footer`, all seven `settings`
+panels, the three `auth` widgets). `apps/web` was never in scope at all. Both are fixed: 190 host
+tags de-HTML'd across `apps/web`'s 11 className-bearing route files and those 14 element/component
+files, and `DEFAULT_DIRS` now includes `elements` + `components` so it stays that way (230 files
+gated, up from 138). Two things the de-HTML needed on the way:
 
-1. **Raw host tags in `apps/web`** — ~70 elements still carry Tailwind utilities on `<div>`/`<span>`
-   /`<h1>` (`routes/install.tsx` alone has 48). `lint:rn` does not cover `apps/web`, so these were
-   never de-HTML'd. They must become `Prim.*` before the codemod can reach them.
-2. **Composite `className` passthroughs** — `Caption` ×11, `CozyThingText` ×11, lucide icons, and
-   assorted others take a `className` the codemod will not touch because the target is not a
-   primitive. Each needs a decision: forward style props, or keep the class.
-3. **The animation family** — ~130 `transition-*` plus `animate-*`/`lm-fade-in`/`lm-spin`. This is
-   the single biggest bucket and the one P0 exists to review, because the driver changes visible
-   motion app-wide.
+- a `DataList` primitive (`<datalist>` is web-only with no RN analogue; the native fork renders
+  nothing) so the settings surfaces need not be split into `.web.tsx` files;
+- a duplicate-import guard in the codemod, keyed on the BINDING name rather than the specifier.
+  `pin-gate` already imported `Prim` via the package export and got a relative one inserted beside
+  it. `tsc --noCheck` — `libs/ui`'s only typecheck — does not see duplicate identifiers, so it
+  reached the Tamagui babel extractor and broke the `apps/web` build. `dehtml-codemod.test.mjs` now
+  pins it, along with the relative-vs-package specifier choice.
+
+**Three typing holes `apps/web` exposed.** `apps/web` actually typechecks (`tsc -p
+tsconfig.app.json`); `libs/ui` only runs `--noCheck`. So the moment `apps/web` started using the
+idiomatic prop surface it found three props the primitives never declared: `gridTemplateColumns`/
+`gridTemplateRows`, the `$`-prefixed media/group/sub-theme bags (`$sm`, `$group-row-hover`,
+`$dark` — an open set Tamagui derives from the config, so they are typed as a `` `$${string}` ``
+index signature), and `LayoutStyleProps` on `ListProps`, the one primitive missing it, which is why
+a `<ul>` used as a flex or grid container could not take `gap`.
+
+**What now blocks deleting Tailwind (P6).** Two things:
+
+1. **The animation family** — 67 of the 410 remaining utility classNames are `transition-*`,
+   `animate-*`, `lm-fade-in`, `lm-spin`. This is the single biggest bucket and the one P0 exists to
+   review, because the driver changes visible motion app-wide.
+2. **Composite `className` passthroughs** — `Caption`, `CozyThingText`, lucide icons and assorted
+   others take a `className` the codemod will not touch because the target is not a primitive. Each
+   needs a decision: forward style props, or keep the class. This is the bulk of the other 343.
 
 **Two mapping decisions worth not re-litigating.** `lm-*` maps to `var(--lm-…)`, NOT to the token
 it aliases: `applyThemeTokens` (`theme/theme.ts`) overrides `--lm-*` directly from a space's
@@ -291,7 +316,7 @@ it aliases: `applyThemeTokens` (`theme/theme.ts`) overrides `--lm-*` directly fr
 | **P3 — className → props codemod** | ✅ tool built + hardened + 🟡 **applied to chat+studio** | `libs/ui/scripts/classnames-to-props{,-map}.mjs` + a 43-test gate (map + a new `-transform` suite). **Run for real**: chat + studio. Hardened after the first run surfaced two silent-drop bugs (both fixed + regression-tested, re-migrated clean): (a) directional `border-t/r/b/l/x/y` were misread as color tokens (`$t`) → widths dropped; (b) the `lm-*` runtime palette (`bg-lm-accent` …) became bogus `$lm-*` tokens → now kept as className. Also **added `cn("literal", …rest)` lifting** (the common dynamic shape). Alpha modifiers/animations/`lm-*`/dynamic `cn()` stay residual. Remaining className: chat ~223, studio ~589 (mostly BEM on shared elements + dynamic `cn()`), computer ~24 |
 | **P0 — real-surface visual harness** | 🟡 mechanism proven, baseline NOT built | the A1 probe + the b0-probe `measure-surface` computed-style pattern are the objective (non-human) parity gate; a full fixtured `tests/visual-surface/` baseline is remaining. **This is now the gating item**: the animation driver (the biggest remaining unblock) changes visible motion app-wide, which is precisely the class of change P0 exists to review |
 | **P4 — element layer + primitives idiomatic** | ✅ **DONE — all 29 element blocks; `elements/**` has no stylesheets** | Every shipped element carries `$`-token PROPS on the `Prim.*` primitives (real host tags via `createComponent`). Both blockers this row used to name were wrong: extraction does NOT make `tag` real, and the overlay animations were DEAD rather than deferred. Form-control and `Image` primitives are Tamagui-backed too. Shipped-element suites gated for the first time (508 → 618 tests), plus a syntax-only typecheck gate for `libs/ui` |
-| **P5 — sweep, compiler ON, delete pipeline** | ✅ **sweep + manual tail COMPLETE**; ⬜ compiler/pipeline | Every stylesheet swept, then the 120 elements tooling could not take were hand-migrated: the `:hover .child` reveals became Tamagui hover groups (`app-sidebar`, `functions`, `component-editor`, `field-tree`, `step-card`), the `--active`/`--on` runtime modifiers became conditional prop spreads, and 20 orphan BEM classNames — dead, defined by no rule anywhere — were deleted. A second mapping wave (`!important` prefix, all of `cursor-*`, per-corner/arbitrary `rounded-*`, `grid-cols-*`, `translate-*`, fractional insets, `line-clamp-N`, `break-words`) closed the rest, each family verified against what Tamagui actually accepts. Fixed a real break found on the way: `group-hover:` was auto-converting to `$group-hover`, which keys off a PROP Tailwind never set — three shipped reveals were dead. Stylesheets 15 → 12, codemod skips 120 → 0, CSS bundle 41.79 → 36.64 kB, tests 645 → 658 |
+| **P5 — sweep, compiler ON, delete pipeline** | ✅ **sweep + manual tail COMPLETE (libs/ui AND apps/web)**; ⬜ compiler/pipeline | Every stylesheet swept, then the 120 elements tooling could not take were hand-migrated: `:hover .child` reveals became Tamagui hover groups (`app-sidebar`, `functions`, `component-editor`, `field-tree`, `step-card`), the `--active`/`--on` runtime modifiers became conditional prop spreads, and 20 orphan BEM classNames — dead, defined by no rule anywhere — were deleted. Two mapping waves closed the rest, each family verified against what Tamagui actually accepts. Then `apps/web` and the `elements`/`components` layers were de-HTML'd (190 host tags) and codemodded, which is what took the count to zero. Three real breaks found on the way: `group-hover:` auto-converting to a `$group-hover` that keys off a PROP Tailwind never set (three shipped reveals dead); `lint:rn` blind to 67 raw host tags in the shared element layer; and the de-HTML codemod inserting a duplicate `Prim` import that only the babel extractor caught. Stylesheets 15 → 12, codemod skips 120 → 0, utility classNames 539 → 410 (67 of them animation), CSS bundle 41.79 → 35.93 kB, tests 645 → 664 |
 | **P6 — types + native on device** | ⬜ remaining | SPIKE C also unlocks a real `typecheck` for `libs/ui` (today only a syntax gate); native needs a Metro/device toolchain |
 
 ---

@@ -369,3 +369,13 @@ describe('the second-wave families (unblocking the codemod’s manual tail)', ()
     expect(classToProps('break-all').skip).toEqual(['break-all'])
   })
 })
+
+describe('intrinsic sizing keywords', () => {
+  it('w-fit / h-min / w-max', () => {
+    expect(classToProps('w-fit').props).toEqual({ width: 'fit-content' })
+    expect(classToProps('h-min').props).toEqual({ height: 'min-content' })
+    expect(classToProps('w-max').props).toEqual({ width: 'max-content' })
+    // `max-w-fit` already went through the MAX_WIDTH table and still does.
+    expect(classToProps('max-w-fit').props).toEqual({ maxWidth: 'fit-content' })
+  })
+})

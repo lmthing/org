@@ -20,73 +20,18 @@ import { useKnowledgeTree } from '@lmthing/ui/hooks/knowledge/useKnowledgeTree'
 import type { KnowledgeTreeNode } from '@lmthing/ui/hooks/knowledge/useKnowledgeTree'
 import { Button } from '@lmthing/ui/elements/forms/button'
 import './FieldTree.css'
-import { FIELD_TREE_CONTEXT_MENU_BACKDROP, FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE, FIELD_TREE_CONTEXT_MENU_ITEM_ICON, FIELD_TREE_NODE_ICON, FIELD_TREE_NODE_ICON_CHEVRON, FIELD_TREE_NODE_ICON_FILE, FIELD_TREE_NODE_ICON_FOLDER, FIELD_TREE_NODE_LABEL, FIELD_TREE_NODE_SPACER } from './field-tree.props.js'
-
-/**
- * The `.field-tree-*` rules the sweep could not take, hand-migrated. Three shapes defeat it:
- * a `:hover .child` reveal (→ Tamagui hover group), a `--selected` modifier that also RE-STATES
- * the hover background so hover can't win, and `--selected .child` descendant recolours (→ the
- * colour is passed down as a prop, since `isSelected` is already in scope at every call site).
- * The `--option`/`--field`/`--domain` modifiers had no rules at all and are simply dropped.
- * `.react-arborist*` stays in the stylesheet: that markup belongs to the library.
- * See docs/tamagui-idiomatic-migration.md §5.
- */
-const NODE = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.5rem',
-  paddingHorizontal: '0.625rem',
-  height: '100%',
-  borderRadius: '0.375rem',
-  cursor: 'pointer',
-  position: 'relative',
-  hoverStyle: { backgroundColor: 'var(--color-muted)' },
-} as const
-/** `--selected` also pins `hoverStyle`, mirroring the `--selected:hover` rule that re-stated it. */
-const NODE_SELECTED = {
-  backgroundColor: 'var(--color-primary)',
-  color: 'var(--color-primary-foreground)',
-  hoverStyle: { backgroundColor: 'var(--color-primary)' },
-} as const
-/** What `.field-tree-node--selected .field-tree-node__{label,icon--*}` used to do. */
-const NODE_CHILD_SELECTED = { color: 'var(--color-primary-foreground)' } as const
-const NODE_ACTIONS = { opacity: 0, '$group-node-hover': { opacity: 1 } } as const
-const CONTEXT_MENU = {
-  position: 'fixed',
-  zIndex: 50,
-  minWidth: 180,
-  backgroundColor: 'var(--color-card)',
-  borderRadius: '0.75rem',
-  borderWidth: 1,
-  borderColor: 'var(--color-border)',
-  overflow: 'hidden',
-  shadowColor: 'rgba(0,0,0,0.25)', // ds-lint-ok: shadow alpha-black
-  shadowOffset: { width: 0, height: 25 },
-  shadowRadius: 50,
-} as const
-const CONTEXT_MENU_ITEM = {
-  width: '100%',
-  paddingVertical: '0.625rem',
-  paddingHorizontal: '1rem',
-  textAlign: 'left',
-  fontSize: '0.875rem',
-  color: 'var(--color-foreground)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.75rem',
-  cursor: 'pointer',
-  borderWidth: 0,
-  backgroundColor: 'transparent',
-  hoverStyle: { backgroundColor: 'var(--color-muted)' },
-} as const
-const CONTEXT_MENU_ITEM_DESTRUCTIVE = {
-  ...FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE,
-  hoverStyle: { backgroundColor: 'color-mix(in srgb, var(--color-destructive) 10%, transparent)' },
-} as const
-/** The `--destructive .item-icon` descendant recolour. */
-const CONTEXT_MENU_ITEM_ICON_DESTRUCTIVE = { ...FIELD_TREE_CONTEXT_MENU_ITEM_ICON, color: 'var(--color-destructive)' } as const
-/** Every node row is the hover GROUP that reveals its actions. */
-const NODE_GROUP = { group: 'node' } as Record<string, unknown>
+import { FIELD_TREE_CONTEXT_MENU_BACKDROP, FIELD_TREE_CONTEXT_MENU_ITEM_ICON, FIELD_TREE_NODE_ICON, FIELD_TREE_NODE_ICON_CHEVRON, FIELD_TREE_NODE_ICON_FILE, FIELD_TREE_NODE_ICON_FOLDER, FIELD_TREE_NODE_LABEL, FIELD_TREE_NODE_SPACER } from './field-tree.props.js'
+import {
+  FIELD_TREE_CONTEXT_MENU as CONTEXT_MENU,
+  FIELD_TREE_CONTEXT_MENU_ITEM as CONTEXT_MENU_ITEM,
+  FIELD_TREE_CONTEXT_MENU_ITEM_DESTRUCTIVE_HOVER as CONTEXT_MENU_ITEM_DESTRUCTIVE,
+  FIELD_TREE_CONTEXT_MENU_ITEM_ICON_DESTRUCTIVE as CONTEXT_MENU_ITEM_ICON_DESTRUCTIVE,
+  FIELD_TREE_NODE as NODE,
+  FIELD_TREE_NODE_ACTIONS as NODE_ACTIONS,
+  FIELD_TREE_NODE_CHILD_SELECTED as NODE_CHILD_SELECTED,
+  FIELD_TREE_NODE_GROUP as NODE_GROUP,
+  FIELD_TREE_NODE_SELECTED as NODE_SELECTED,
+} from './node.props.js'
 
 export interface FieldTreeHandle {
   expandAll: () => void

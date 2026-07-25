@@ -84,6 +84,10 @@ export type BoxStyleProps = {
     | 'flex-start' | 'flex-end' | 'center' | 'stretch' | 'space-between' | 'space-around'
   columnGap?: number | string
   rowGap?: number | string
+  // grid — real Tamagui web style props (`_gridTemplateColumns-…`), verified in index.test.tsx.
+  // The codemod maps `grid-cols-*`/`grid-rows-*` onto them.
+  gridTemplateColumns?: string
+  gridTemplateRows?: string
   // borders
   borderWidth?: number | string
   borderTopWidth?: number | string
@@ -133,6 +137,14 @@ export type BoxStyleProps = {
   focusStyle?: PseudoStyleProps
   focusVisibleStyle?: PseudoStyleProps
   disabledStyle?: PseudoStyleProps
+  /**
+   * Media (`$sm`), hover-group (`$group-row-hover`) and sub-theme (`$dark`) style bags. Tamagui
+   * derives the valid set from the config AT RUNTIME, so it is open-ended; a `$`-prefixed index
+   * signature keeps them type-checked as style bags without hand-mirroring the media list here.
+   * `libs/ui` only runs a syntax-level `tsc`, so these went unchecked until `apps/web` — which does
+   * typecheck — started using them.
+   */
+  [prop: `$${string}`]: PseudoStyleProps | undefined
 }
 
 export type LayoutPrimitiveProps = React.HTMLAttributes<HTMLDivElement> &
@@ -432,6 +444,9 @@ Form.displayName = 'Form'
 export type ListProps = React.HTMLAttributes<HTMLElement> &
   TextStyleProps &
   MarginStyleProps &
+  // `LayoutStyleProps` (gap/flex/min-max) — the only primitive that was missing it, so a `<ul>`
+  // used as a flex or grid container could not take `gap`. `ListItem` already had it.
+  LayoutStyleProps &
   BoxStyleProps & { /** Render an ordered `<ol>` instead of an unordered `<ul>`. */ ordered?: boolean }
 const UlComp = makeLeaf('ul', 'block', 'List')
 const OlComp = makeLeaf('ol', 'block', 'List')

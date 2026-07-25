@@ -1,3 +1,4 @@
+import * as Prim from '../../primitives/index.js';
 import { useEffect, useId, useState } from 'react'
 import { useAuth } from '@lmthing/auth'
 import { Button } from '../../forms/button'
@@ -141,22 +142,22 @@ export function Models() {
       : [{ code: current, label: current }, ...KNOWN_ALIASES]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
       <Caption muted>
         Pick which model powers each size tier. Agents and the CLI request a size (e.g. Medium) and
         the pod resolves it to the model you set here.
       </Caption>
 
       {models.length > 0 && (
-        <datalist id={listId}>
-          {models.map(m => <option key={m} value={m} />)}
-        </datalist>
+        <Prim.DataList id={listId}>
+          {models.map(m => <Prim.Option key={m} value={m} />)}
+        </Prim.DataList>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <Prim.Box style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         {rows.length === 0 && <Caption muted>No models configured yet.</Caption>}
         {rows.map((r, i) => (
-          <div
+          <Prim.Box
             key={i}
             style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}
           >
@@ -177,14 +178,14 @@ export function Models() {
               style={{ flex: '2 1 16rem', minWidth: '12rem', fontFamily: 'monospace' }}
             />
             <Button variant="ghost" size="sm" onClick={() => removeRow(i)}>Remove</Button>
-          </div>
+          </Prim.Box>
         ))}
-        <div>
+        <Prim.Box>
           <Button variant="outline" size="sm" onClick={addRow}>Add model</Button>
-        </div>
-      </div>
+        </Prim.Box>
+      </Prim.Box>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+      <Prim.Box style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
         <Caption muted>Default size</Caption>
         <Select
           value={defaultAlias}
@@ -199,15 +200,15 @@ export function Models() {
               <SelectOption key={a} value={a}>{labelFor(a)}</SelectOption>
             ))}
         </Select>
-      </div>
+      </Prim.Box>
 
       {error && <Caption className="text-destructive">{error}</Caption>}
       {saved && <Caption muted>Saved. Pod is restarting to apply changes.</Caption>}
-      <div>
+      <Prim.Box>
         <Button variant="primary" size="sm" onClick={save} disabled={saving}>
           {saving ? 'Saving…' : 'Save & Restart Pod'}
         </Button>
-      </div>
-    </div>
+      </Prim.Box>
+    </Prim.Box>
   )
 }

@@ -1,3 +1,4 @@
+import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/computer/spaces/$spaceId/logs')({
@@ -7,8 +8,8 @@ export const Route = createFileRoute('/computer/spaces/$spaceId/logs')({
 function SpaceLogs() {
   const { spaceId } = Route.useParams()
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold">Logs: {spaceId}</h1>
-    </div>
+    <Prim.Box padding="$8">
+      <Prim.Text as="h1" fontSize="$2xl" fontWeight="$bold">Logs: {spaceId}</Prim.Text>
+    </Prim.Box>
   )
 }

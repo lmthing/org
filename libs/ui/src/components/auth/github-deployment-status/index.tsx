@@ -63,7 +63,7 @@ export function GithubDeploymentStatus({
     return (
       <Badge variant="muted">
         <Clock className="size-4 animate-spin" />
-        <span>Loading...</span>
+        <Prim.Text>Loading...</Prim.Text>
       </Badge>
     )
   }
@@ -89,7 +89,7 @@ export function GithubDeploymentStatus({
   if (hideWhenSuccess && data.status === 'completed' && data.conclusion === 'success') return null
 
   return (
-    <a
+    <Prim.Link
       href={data.html_url}
       target="_blank"
       rel="noopener noreferrer"
@@ -97,7 +97,7 @@ export function GithubDeploymentStatus({
       title={`Last deployment: ${new Date(data.created_at).toLocaleString()}`}
     >
       {statusInfo.icon}
-      <span>{statusInfo.label}</span>
-    </a>
+      <Prim.Text>{statusInfo.label}</Prim.Text>
+    </Prim.Link>
   )
 }
