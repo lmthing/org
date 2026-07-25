@@ -52,7 +52,11 @@ export type LayoutStyleProps = {
  * `disabledStyle`) — a permissive bag of style props, so the manual `hover:`/`focus:`/`active:`/
  * `disabled:` variant migrations (§5) type-check without re-listing the whole style surface.
  */
-export type PseudoStyleProps = { [prop: string]: string | number | undefined }
+export type PseudoStyleProps = {
+  // `shadowOffset` is the one style whose value is an OBJECT, and overlays raise their shadow on
+  // hover — so a `string | number` bag could not express `hoverStyle={{ shadowOffset: {…} }}`.
+  [prop: string]: string | number | { width: number; height: number } | undefined
+}
 
 /**
  * The remaining Tamagui style props the P3 codemod (`classnames-to-props`) can lift onto a
@@ -270,6 +274,9 @@ export type TextStyleProps = {
   display?:
     | 'inline' | 'block' | 'inline-block' | 'flex' | 'inline-flex' | 'grid' | 'inline-grid'
     | 'table' | 'list-item' | 'flow-root' | 'contents' | 'none'
+    // `-webkit-box` is what makes `line-clamp-N` expressible as props; `index.test.tsx` already
+    // pins that Tamagui emits `_dsp--webkit-box` for it, so it belongs in the union.
+    | '-webkit-box'
   whiteSpace?: 'normal' | 'nowrap' | 'pre' | 'pre-wrap' | 'pre-line' | 'break-spaces' | 'inherit'
   wordWrap?: 'normal' | 'break-word' | 'inherit'
   overflow?: 'visible' | 'hidden' | 'clip' | 'scroll' | 'auto'
@@ -539,7 +546,11 @@ ListItem.displayName = 'ListItem'
 /** Style props valid on a form control — the Box surface plus the two Tamagui pseudo-element hooks. */
 export type ControlStyleProps = LayoutStyleProps &
   MarginStyleProps &
-  BoxStyleProps & {
+  BoxStyleProps &
+  // `display` lives in `TextStyleProps`, which the controls do NOT mix in — but they honour it
+  // (`<TextField display="none">` emits `_dsp-none`, probed), and a visually-hidden file input
+  // behind a styled label is the standard upload pattern, used in Composer/ProjectSettings/replay.
+  Pick<TextStyleProps, 'display'> & {
     /** Colour of `::placeholder` (via the `.is_Input` base). Replaces `placeholder:text-*`. */
     placeholderTextColor?: string
     /** Colour of `::selection` (via the `.is_Input` base). */
