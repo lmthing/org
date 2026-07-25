@@ -32,13 +32,15 @@ describe('Dialog (Prim.*-based)', () => {
 
   it('ESC and backdrop click call onOpenChange(false)', () => {
     let open = true
-    render(
+    const { queryByRole } = render(
       <P><Dialog open onOpenChange={(o) => { open = o }}><DialogContent><DialogTitle>Hi</DialogTitle></DialogContent></Dialog></P>,
     )
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(open).toBe(false)
     open = true
-    fireEvent.click(document.querySelector('.dialog__backdrop')!)
+    // Post-swap the backdrop carries $-token props, not a `.dialog__backdrop` class. It is the
+    // first child of the portaled role="dialog" viewport (see DialogContent).
+    fireEvent.click(queryByRole('dialog')!.firstElementChild!)
     expect(open).toBe(false)
   })
 

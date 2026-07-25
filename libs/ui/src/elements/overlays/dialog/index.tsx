@@ -1,8 +1,6 @@
-import '@lmthing/css/elements/overlays/dialog/index.css'
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import * as Prim from '../../primitives/index'
-import { cn } from '../../../lib/utils'
 
 /**
  * Dialog — a modal, migrated off `@radix-ui/react-dialog` to the universal Tamagui primitives
@@ -13,6 +11,59 @@ import { cn } from '../../../lib/utils'
  * Description) and the `dialog*` CSS classes. Behaviour is unit-tested in `dialog.test.tsx`; the native
  * app supplies a `.native.tsx` fork (RN Modal) behind the same names.
  */
+
+/**
+ * `.dialog*` as `$`-token PROPS, transcribed from dialog.styled.tsx
+ * (docs/tamagui-idiomatic-migration.md §4). `dialog/index.css` is deleted.
+ *
+ * Its `data-[state=open]:animate-in`/`fade-*`/`zoom-*` rules are NOT carried over and did not need
+ * the animation driver: **nothing in the repo has set `data-state` since Phase 1 B3.4 removed Radix**,
+ * which was what set it. Those selectors could never match, so the rules were dead, not deferred.
+ *
+ * Shadows are the single-layer approximations from the proof; shadow black follows the codebase's
+ * opaque-black-with-alpha convention (theme-independent, so not a token).
+ */
+export const DIALOG_BACKDROP = {
+  position: 'fixed',
+  top: 0, right: 0, bottom: 0, left: 0,
+  zIndex: 50,
+  backgroundColor: 'rgba(0,0,0,0.5)', // ds-lint-ok: bg-black/50 wash, theme-independent
+} as const
+
+/** The portal viewport that centres the dialog (was inline Tailwind on a `Prim.Row`). */
+const DIALOG_VIEWPORT = {
+  position: 'fixed',
+  top: 0, right: 0, bottom: 0, left: 0,
+  zIndex: 50,
+  justifyContent: 'center',
+  padding: '$4',
+} as const
+
+/** `.dialog` — the panel. Exported so a caller can widen it (see the settings dialog). */
+export const DIALOG_BASE = {
+  position: 'fixed',
+  left: '50%',
+  top: '50%',
+  zIndex: 50,
+  width: '100%',
+  maxWidth: 512, // max-w-lg = 32rem (no size token)
+  transform: 'translate(-50%, -50%)',
+  backgroundColor: '$background',
+  borderRadius: '$radius-lg',
+  borderWidth: 1,
+  borderColor: '$border',
+  padding: '$6',
+  shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
+  shadowOffset: { width: 0, height: 10 },
+  shadowRadius: 15,
+} as const
+
+/** `.dialog__content` — grid, gap-4. */
+export const DIALOG_CONTENT = { display: 'grid', gap: '$4' } as const
+
+/** `.dialog__header` — flex, flex-col, gap-2. */
+export const DIALOG_HEADER = { display: 'flex', flexDirection: 'column', gap: '$2' } as const
+
 type Ctx = { open: boolean; setOpen: (o: boolean) => void }
 const DialogContext = React.createContext<Ctx>({ open: false, setOpen: () => {} })
 
@@ -53,12 +104,12 @@ function DialogClose({ asChild, children, ...props }: { asChild?: boolean; child
   return <Prim.Pressable onClick={close} {...props}>{children}</Prim.Pressable>
 }
 
-function DialogOverlay({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function DialogOverlay(props: React.HTMLAttributes<HTMLDivElement>) {
   const { setOpen } = React.useContext(DialogContext)
-  return <Prim.Box className={cn('dialog__backdrop', className)} onClick={() => setOpen(false)} {...props} />
+  return <Prim.Box {...DIALOG_BACKDROP} onClick={() => setOpen(false)} {...(props as Record<string, unknown>)} />
 }
 
-function DialogContent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function DialogContent({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const { open, setOpen } = React.useContext(DialogContext)
   const ref = React.useRef<HTMLDivElement>(null)
 
@@ -81,18 +132,18 @@ function DialogContent({ className, children, ...props }: React.HTMLAttributes<H
 
   if (!open || typeof document === 'undefined') return null
   return ReactDOM.createPortal(
-    <Prim.Row className="fixed inset-0 z-50 justify-center p-4" alignItems="center" role="dialog" aria-modal="true">
+    <Prim.Row {...DIALOG_VIEWPORT} alignItems="center" role="dialog" aria-modal="true">
       <DialogOverlay />
-      <Prim.Box ref={ref as React.Ref<HTMLElement>} className={cn('dialog', className)} {...props}>
-        <Prim.Box className="dialog__content">{children}</Prim.Box>
+      <Prim.Box ref={ref as React.Ref<HTMLElement>} {...DIALOG_BASE} {...(props as Record<string, unknown>)}>
+        <Prim.Box {...DIALOG_CONTENT}>{children}</Prim.Box>
       </Prim.Box>
     </Prim.Row>,
     document.body,
   )
 }
 
-function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <Prim.Box className={cn('dialog__header', className)} {...props} />
+function DialogHeader(props: React.HTMLAttributes<HTMLDivElement>) {
+  return <Prim.Box {...DIALOG_HEADER} {...(props as Record<string, unknown>)} />
 }
 
 /** Optional `asChild` renders the child as the title (for a custom Heading); else a Text `<h2>`. */

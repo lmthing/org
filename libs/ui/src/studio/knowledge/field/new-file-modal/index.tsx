@@ -9,6 +9,7 @@ import { Input } from '@lmthing/ui/elements/forms/input'
 import { X } from 'lucide-react'
 import '@lmthing/css/components/knowledge/index.css'
 import { INPUT_BASE } from '../../../../elements/forms/input/index.js'
+import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
 
 // Local type — replaces deprecated KnowledgeNode
 interface KnowledgeNode {
@@ -46,20 +47,20 @@ export function NewFileModal({ isOpen, onClose, onCreate, folders, defaultLocati
   if (!isOpen) return null
 
   return (
-    <Prim.Box className="dialog__backdrop" onClick={onClose} onKeyDown={handleKeyDown}>
+    <Prim.Box {...DIALOG_BACKDROP} onClick={onClose} onKeyDown={handleKeyDown}>
       <Prim.Box
-        className="dialog"
+        {...DIALOG_BASE}
         maxWidth={448}
         onClick={e => e.stopPropagation()}
       >
-        <Prim.Box className="dialog__header">
+        <Prim.Box {...DIALOG_HEADER}>
           <Heading level={3} className="new-file-modal__title">New Prompt Fragment</Heading>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="new-file-modal__close-icon" />
           </Button>
         </Prim.Box>
 
-        <Prim.Box className="dialog__content">
+        <Prim.Box {...DIALOG_CONTENT}>
           <Stack gap="md" className="new-file-modal__fields">
             <Prim.Box>
               <Label>Filename</Label>

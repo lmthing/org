@@ -8,6 +8,7 @@ import { Button } from '@lmthing/ui/elements/forms/button'
 import { Input } from '@lmthing/ui/elements/forms/input'
 import { X } from 'lucide-react'
 import '@lmthing/css/components/knowledge/index.css'
+import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index.js'
 
 interface RenameModalProps {
   isOpen: boolean
@@ -66,20 +67,20 @@ export function RenameModal({ isOpen, onClose, onRename, currentName, isDirector
   if (!isOpen) return null
 
   return (
-    <Prim.Box className="dialog__backdrop" onClick={onClose}>
+    <Prim.Box {...DIALOG_BACKDROP} onClick={onClose}>
       <Prim.Box
-        className="dialog"
+        {...DIALOG_BASE}
         maxWidth={384}
         onClick={e => e.stopPropagation()}
       >
-        <Prim.Box className="dialog__header">
+        <Prim.Box {...DIALOG_HEADER}>
           <Heading level={3}>Rename {isDirectory ? 'Folder' : 'File'}</Heading>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="rename-modal__close-icon" />
           </Button>
         </Prim.Box>
 
-        <Prim.Box className="dialog__content">
+        <Prim.Box {...DIALOG_CONTENT}>
           <Prim.Box paddingVertical={0} paddingHorizontal="$6">
             <Label>New name</Label>
             <Input

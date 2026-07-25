@@ -1,7 +1,5 @@
-import '@lmthing/css/elements/overlays/dropdown/index.css'
 import * as React from 'react'
 import * as Prim from '../../primitives/index'
-import { cn } from '../../../lib/utils'
 
 /**
  * Dropdown — a menu anchored to its trigger, migrated off `@radix-ui/react-dropdown-menu` to the
@@ -10,6 +8,61 @@ import { cn } from '../../../lib/utils'
  * item-select, ESC, or click-outside. Keeps the `dropdown*`/`separator` CSS classes and the compound
  * API. Native takes a `.native.tsx` fork. (No web consumers today; kept as the universal vocabulary.)
  */
+
+/**
+ * `.dropdown*` as `$`-token PROPS, transcribed from dropdown.styled.tsx
+ * (docs/tamagui-idiomatic-migration.md §4). `dropdown/index.css` is deleted.
+ *
+ * The `data-[state]:animate-in`/`fade`/`zoom` rules are dropped rather than deferred: nothing has
+ * set `data-state` since Radix was removed, so they could never match. `data-[disabled]` is the
+ * same — the item uses Tamagui's `disabledStyle` instead, which keys off the real `disabled` prop.
+ */
+const DROPDOWN_ROOT = { position: 'relative', display: 'inline-block' } as const
+
+/** `.dropdown__trigger`. */
+const DROPDOWN_TRIGGER = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '$1',
+  cursor: 'pointer',
+} as const
+
+/** `.dropdown__content` — the popover panel (absolute positioning was inline Tailwind). */
+export const DROPDOWN_CONTENT = {
+  position: 'absolute',
+  zIndex: 50,
+  minWidth: '$32',
+  overflow: 'hidden',
+  borderRadius: '$radius-md',
+  borderWidth: 1,
+  borderColor: '$border',
+  backgroundColor: '$popover',
+  color: '$popover-foreground',
+  padding: '$1',
+  shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
+  shadowOffset: { width: 0, height: 4 },
+  shadowRadius: 6,
+} as const
+
+/** `.dropdown__item`. (`transition-colors` had no matching rule to preserve — hover is instant.) */
+export const DROPDOWN_ITEM = {
+  position: 'relative',
+  display: 'flex',
+  cursor: 'pointer',
+  userSelect: 'none',
+  alignItems: 'center',
+  gap: '$2',
+  borderRadius: '$radius-sm',
+  paddingHorizontal: '$2',
+  paddingVertical: '$1.5',
+  fontSize: '$sm',
+  color: '$foreground',
+  outlineWidth: 0,
+  outlineStyle: 'none',
+  hoverStyle: { backgroundColor: '$accent', color: '$accent-foreground' },
+  disabledStyle: { pointerEvents: 'none', opacity: 0.5 },
+} as const
+
 type Ctx = { open: boolean; setOpen: (o: boolean) => void }
 const DropdownContext = React.createContext<Ctx>({ open: false, setOpen: () => {} })
 
@@ -39,41 +92,41 @@ function Dropdown({ open: openProp, defaultOpen = false, onOpenChange, children 
   }, [open, setOpen])
   return (
     <DropdownContext.Provider value={{ open, setOpen }}>
-      <Prim.Box ref={rootRef as React.Ref<HTMLElement>} className="relative inline-block">{children}</Prim.Box>
+      <Prim.Box ref={rootRef as React.Ref<HTMLElement>} {...DROPDOWN_ROOT}>{children}</Prim.Box>
     </DropdownContext.Provider>
   )
 }
 
-function DropdownTrigger({ className, asChild, children, ...props }: { className?: string; asChild?: boolean; children: React.ReactNode } & Record<string, unknown>) {
+function DropdownTrigger({ asChild, children, ...props }: { asChild?: boolean; children: React.ReactNode } & Record<string, unknown>) {
   const { open, setOpen } = React.useContext(DropdownContext)
   const toggle = () => setOpen(!open)
   if (asChild && React.isValidElement(children)) {
     return React.cloneElement(children as React.ReactElement<any>, { onClick: toggle, 'aria-expanded': open, 'aria-haspopup': 'menu' })
   }
   return (
-    <Prim.Pressable className={cn('dropdown__trigger', className)} aria-expanded={open} aria-haspopup="menu" onClick={toggle} {...props}>
+    <Prim.Pressable {...DROPDOWN_TRIGGER} aria-expanded={open} aria-haspopup="menu" onClick={toggle} {...(props as Record<string, unknown>)}>
       {children}
     </Prim.Pressable>
   )
 }
 
-function DropdownContent({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function DropdownContent({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const { open } = React.useContext(DropdownContext)
   if (!open) return null
   return (
-    <Prim.Box role="menu" className={cn('dropdown__content absolute z-50', className)} {...props}>
+    <Prim.Box role="menu" {...DROPDOWN_CONTENT} {...(props as Record<string, unknown>)}>
       {children}
     </Prim.Box>
   )
 }
 
-function DropdownItem({ className, onClick, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function DropdownItem({ onClick, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const { setOpen } = React.useContext(DropdownContext)
   return (
     <Prim.Pressable
       as="div"
       role="menuitem"
-      className={cn('dropdown__item', className)}
+      {...DROPDOWN_ITEM}
       onClick={(e) => { onClick?.(e as unknown as React.MouseEvent<HTMLButtonElement>); setOpen(false) }}
       {...(props as React.HTMLAttributes<HTMLElement>)}
     />

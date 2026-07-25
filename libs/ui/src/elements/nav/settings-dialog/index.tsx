@@ -1,5 +1,5 @@
-import '@lmthing/css/elements/nav/settings-dialog/index.css'
 import * as React from 'react'
+import * as Prim from '../../primitives/index'
 import { User, Cpu, Terminal, CreditCard, GitBranch, Webhook, Share2, Zap, type LucideIcon } from 'lucide-react'
 import {
   Dialog,
@@ -10,7 +10,6 @@ import {
 } from '../../overlays/dialog'
 import { Heading } from '../../typography/heading'
 import { Caption } from '../../typography/caption'
-import { cn } from '../../../lib/utils'
 import { Account } from '../../settings/account'
 import { Models } from '../../settings/models'
 import { EnvVars } from '../../settings/env-vars'
@@ -28,6 +27,96 @@ interface TabDef {
   description?: string
   render: () => React.ReactNode
 }
+
+
+/**
+ * `.settings-dialog*` as `$`-token PROPS (docs/tamagui-idiomatic-migration.md §4/§6).
+ * `settings-dialog/index.css` is deleted.
+ *
+ * Two CSS-shaped things become plain props here:
+ *
+ * - The stylesheet used a COMPOUND selector, `.dialog.settings-dialog`, purely to out-specify the
+ *   base `.dialog` width cap regardless of stylesheet order. With the dialog on props that hack is
+ *   unnecessary: `DialogContent` spreads `DIALOG_BASE` and then the caller's props, so passing
+ *   `maxWidth`/`maxHeight` here simply wins by spread order.
+ * - The `@media (max-width: 640px)` block becomes Tamagui MEDIA PROPS. The generated media config
+ *   is Tailwind's, which is min-width/mobile-first, so the query inverts: the narrow layout becomes
+ *   the BASE and `$gtXs` (min-width 640) restores the wide one.
+ */
+const PANEL_SIZE = { maxWidth: 'min(96vw, 72rem)', maxHeight: '88vh' } as const
+
+/** `.settings-dialog__body` — a column on narrow, a gap-6 row from 640px up. */
+const BODY = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '$3',
+  minHeight: 0,
+  $gtXs: { flexDirection: 'row', gap: '$6' },
+} as const
+
+/** `.settings-dialog__tabs` — a wrapping top bar on narrow, a fixed left rail from 640px up. */
+const TABS_RAIL = {
+  display: 'flex',
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: '$1',
+  flexShrink: 0,
+  width: '100%',
+  borderBottomWidth: 1,
+  borderBottomColor: '$border',
+  paddingBottom: '$3',
+  $gtXs: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    width: '$48',
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+    borderRightWidth: 1,
+    borderRightColor: '$border',
+    paddingRight: '$3',
+  },
+} as const
+
+/** `.settings-dialog__tab`. */
+const TAB = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '$2',
+  paddingHorizontal: '$3',
+  paddingVertical: '$2',
+  borderRadius: '$radius-lg',
+  fontSize: '$sm',
+  textAlign: 'left',
+  color: '$muted-foreground',
+  borderWidth: 0,
+  backgroundColor: 'transparent',
+  cursor: 'pointer',
+  hoverStyle: {
+    backgroundColor: 'color-mix(in srgb, var(--muted) 60%, transparent)', // hover:bg-muted/60
+    color: '$foreground',
+  },
+} as const
+
+/** `.settings-dialog__tab--active`. */
+const TAB_ACTIVE = { backgroundColor: '$muted', color: '$foreground', fontWeight: '$medium' } as const
+
+/** `.settings-dialog__panel` — the independently scrolling right pane. */
+const PANEL = {
+  flexGrow: 1,
+  flexShrink: 1,
+  flexBasis: '0%',
+  minWidth: 0,
+  overflow: 'auto',
+  paddingRight: '$1',
+  maxHeight: '74vh',
+} as const
+
+/** `.settings-dialog__section`. */
+const SECTION = { display: 'flex', flexDirection: 'column', gap: '$2' } as const
+
+/** `.settings-dialog__tab-icon` — w-4 h-4 shrink-0. Stays a style: the icon is a lucide SVG. */
+const TAB_ICON_STYLE = { width: 16, height: 16, flexShrink: 0 } as const
 
 const TABS: TabDef[] = [
   {
@@ -122,7 +211,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = 'account' }: S
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="settings-dialog">
+      <DialogContent {...PANEL_SIZE}>
         <DialogHeader>
           <DialogTitle asChild>
             <Heading level={2}>Settings</Heading>
@@ -132,36 +221,34 @@ export function SettingsDialog({ open, onOpenChange, initialTab = 'account' }: S
           </DialogDescription>
         </DialogHeader>
 
-        <div className="settings-dialog__body">
-          <nav className="settings-dialog__tabs" aria-label="Settings sections">
+        <Prim.Box {...BODY}>
+          <Prim.Box as="nav" {...TABS_RAIL} aria-label="Settings sections">
             {TABS.map((t) => {
               const Icon = t.icon
               return (
-                <button
+                <Prim.Pressable
                   key={t.id}
                   type="button"
                   onClick={() => setActive(t.id)}
-                  className={cn(
-                    'settings-dialog__tab',
-                    t.id === active && 'settings-dialog__tab--active',
-                  )}
+                  {...TAB}
+                  {...(t.id === active ? TAB_ACTIVE : {})}
                   aria-current={t.id === active ? 'page' : undefined}
                 >
-                  <Icon className="settings-dialog__tab-icon" aria-hidden="true" />
+                  <Icon style={TAB_ICON_STYLE} aria-hidden="true" />
                   {t.label}
-                </button>
+                </Prim.Pressable>
               )
             })}
-          </nav>
+          </Prim.Box>
 
-          <div className="settings-dialog__panel">
-            <section className="settings-dialog__section">
+          <Prim.Box {...PANEL}>
+            <Prim.Box as="section" {...SECTION}>
               <Heading level={4}>{current.title}</Heading>
               {current.description && <Caption muted>{current.description}</Caption>}
               {current.render()}
-            </section>
-          </div>
-        </div>
+            </Prim.Box>
+          </Prim.Box>
+        </Prim.Box>
       </DialogContent>
     </Dialog>
   )

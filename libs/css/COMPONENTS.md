@@ -13,37 +13,12 @@ Import a component's stylesheet with `import '@lmthing/css/<path>'` and use its 
 
   Tokens: `border`, `destructive`, `foreground`, `muted`, `muted-foreground`, `popover`, `primary`, `primary-foreground`, `ring`, `sidebar`, `sidebar-border`
 
-### `elements/nav/settings-dialog/index.css`
-
-- **.dialog** — `.dialog`
-- **.settings-dialog** — `.settings-dialog` `.settings-dialog__body` `.settings-dialog__panel` `.settings-dialog__section` `.settings-dialog__tab` `.settings-dialog__tab--active` `.settings-dialog__tab-icon` `.settings-dialog__tabs`
-
-  Tokens: `border`, `foreground`, `muted`, `muted-foreground`
-
 ### `elements/nav/sidebar/index.css`
 
 - **.md** — `.md`
 - **.sidebar** — `.sidebar` `.sidebar__item` `.sidebar__item--active`
 
   Tokens: `sidebar-accent`, `sidebar-accent-foreground`, `sidebar-foreground`
-
-### `elements/overlays/dialog/index.css`
-
-- **.dialog** — `.dialog` `.dialog__backdrop` `.dialog__content` `.dialog__header`
-
-  Tokens: `background`, `border`
-
-### `elements/overlays/dropdown/index.css`
-
-- **.dropdown** — `.dropdown` `.dropdown__content` `.dropdown__item` `.dropdown__trigger`
-
-  Tokens: `accent`, `accent-foreground`, `border`, `foreground`, `popover`, `popover-foreground`
-
-### `elements/overlays/sheet/index.css`
-
-- **.sheet** — `.sheet` `.sheet--right` `.sheet__content` `.sheet__header`
-
-  Tokens: `background`, `border`
 
 ## Components (features)
 
