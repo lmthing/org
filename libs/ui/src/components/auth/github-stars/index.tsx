@@ -31,7 +31,7 @@ export function GithubStars({ repo }: GithubStarsProps) {
 
   return (
     <Prim.Link href={`https://github.com/${repo}`} target="_blank" rel="noopener noreferrer" {...BADGE_BASE}>
-      <Star className="size-4" />
+      <Star size={16} />
       <Prim.Text>{formattedStars}</Prim.Text>
       <Caption muted>stars</Caption>
     </Prim.Link>

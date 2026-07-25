@@ -51,7 +51,9 @@ function ShieldIcon(): React.ReactElement {
       strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="shrink-0 mt-0.5 text-agent"
+      // `Prim.Svg` is a passthrough (`svgPrimitive`) — props land verbatim on a raw <svg>, which
+      // ignores Tamagui style props. So this is `style`, not props. Pinned by the P0 `icons` fixture.
+      style={{ flexShrink: 0, marginTop: '0.125rem', color: 'var(--agent)' }}
       aria-hidden="true"
     >
       <Prim.Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />

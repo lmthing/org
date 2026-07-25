@@ -132,7 +132,7 @@ export function ProjectSettingsView() {
 
   return (
     <Prim.Box {...SPLIT_PANE_BASE} height="100vh">
-      <StudioAppSidebar className="shrink-0" />
+      <StudioAppSidebar flexShrink={0} />
       <Prim.Box {...SPLIT_PANE_PRIMARY}>
         <Prim.Box {...PAGE_BODY}>
           <Stack gap="lg">

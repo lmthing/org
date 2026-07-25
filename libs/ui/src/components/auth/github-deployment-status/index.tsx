@@ -62,7 +62,7 @@ export function GithubDeploymentStatus({
   if (isLoading) {
     return (
       <Badge variant="muted">
-        <Clock className="size-4 animate-spin" />
+        <Clock size={16} className="animate-spin" />
         <Prim.Text>Loading...</Prim.Text>
       </Badge>
     )
@@ -71,18 +71,18 @@ export function GithubDeploymentStatus({
   if (error || !data) {
     return (
       <Prim.Link href={workflowsUrl} target="_blank" rel="noopener noreferrer" {...BADGE_BASE} {...BADGE_VARIANT.muted} title="Deployment status unavailable. Open GitHub Actions workflows.">
-        <AlertCircle className="size-4" />
+        <AlertCircle size={16} />
       </Prim.Link>
     )
   }
 
   const getStatusInfo = () => {
     if (data.status === 'completed') {
-      if (data.conclusion === 'success') return { icon: <CheckCircle2 className="size-4" />, label: 'Deployed', variant: 'success' as const }
-      if (data.conclusion === 'failure') return { icon: <XCircle className="size-4" />, label: 'Failed', variant: 'primary' as const }
-      return { icon: <AlertCircle className="size-4" />, label: data.conclusion || 'Unknown', variant: 'muted' as const }
+      if (data.conclusion === 'success') return { icon: <CheckCircle2 size={16} />, label: 'Deployed', variant: 'success' as const }
+      if (data.conclusion === 'failure') return { icon: <XCircle size={16} />, label: 'Failed', variant: 'primary' as const }
+      return { icon: <AlertCircle size={16} />, label: data.conclusion || 'Unknown', variant: 'muted' as const }
     }
-    return { icon: <Clock className="size-4 animate-pulse" />, label: 'In Progress', variant: 'muted' as const }
+    return { icon: <Clock size={16} className="animate-pulse" />, label: 'In Progress', variant: 'muted' as const }
   }
 
   const statusInfo = getStatusInfo()

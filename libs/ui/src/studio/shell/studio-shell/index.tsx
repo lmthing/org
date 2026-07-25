@@ -91,7 +91,7 @@ export function StudioShell({
   return (
     <Prim.Box {...SPLIT_PANE_BASE} height="100vh">
       {/* Outer shared sidebar: project dropdown + collapsible spaces (same in chat). */}
-      <StudioAppSidebar className="shrink-0" />
+      <StudioAppSidebar flexShrink={0} />
 
       {/* Inner rail: the open space's contents (knowledge / agents / tasklists). */}
       <StudioSidebar

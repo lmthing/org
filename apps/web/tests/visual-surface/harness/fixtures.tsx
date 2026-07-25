@@ -21,6 +21,7 @@ import { TopBar } from '@lmthing/ui/elements/nav/top-bar'
 import { TabBar } from '@lmthing/ui/elements/nav/tab-bar'
 import { Breadcrumb } from '@lmthing/ui/elements/nav/breadcrumb'
 import { AppLinks } from '@lmthing/ui/elements/nav/app-links'
+import { Settings, Clock, Star } from 'lucide-react'
 
 /**
  * The P0 real-surface fixtures.
@@ -228,6 +229,43 @@ export const FIXTURES: Fixture[] = [
             zero-delta rather than a claim. */}
         <Prim.Text className="animate-spin">⟳</Prim.Text>
         <Prim.Box className="animate-pulse" padding="$2">animate-pulse</Prim.Box>
+      </>
+    ),
+  },
+
+  // ── icons ─────────────────────────────────────────────────────────────────────────────────────
+  // Phase 1 of docs/tamagui-final-steps.md. The largest remaining className bucket is not on
+  // primitives at all — it is on LUCIDE ICONS and on the `Svg` passthrough family, neither of which
+  // is Tamagui-backed. They do not want style PROPS: lucide takes its own `size`, and both accept a
+  // plain `style` because they forward props verbatim to a raw `<svg>`.
+  //
+  // Each pair below is `tw:` (what shipped) beside `prop:` (what replaces it), measured side by side
+  // in the SAME capture, so the conversion is a zero-delta proof rather than a claim. `size-4` →
+  // `size={16}` is the substitution the codemod explicitly must not guess (a CSS width vs an SVG
+  // geometry attribute), which is exactly why it is pinned here instead.
+  {
+    name: 'icons',
+    render: () => (
+      <>
+        {/* lucide: `h-4 w-4` / `size-4` are 1rem = 16px; `size` sets the width/height ATTRIBUTES,
+            and both compute to 16px on an <svg>. */}
+        <Settings className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <Settings size={16} style={{ flexShrink: 0 }} aria-hidden="true" />
+        <Settings className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
+        <Settings size={16} style={{ flexShrink: 0, opacity: 0.6 }} aria-hidden="true" />
+        <Clock className="size-4" />
+        <Clock size={16} />
+        <Star className="size-4" />
+        <Star size={16} />
+        {/* `Prim.Svg` is a passthrough (`svgPrimitive`) — props land verbatim on a raw <svg>, so it
+            IGNORES style props and takes `style`. Converting a className here to props would delete
+            the styling outright; see the host-passthrough trap in §6. */}
+        <Prim.Svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="shrink-0 mt-0.5 text-agent" aria-hidden="true">
+          <Prim.Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+        </Prim.Svg>
+        <Prim.Svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: '0.125rem', color: 'var(--agent)' }} aria-hidden="true">
+          <Prim.Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+        </Prim.Svg>
       </>
     ),
   },
