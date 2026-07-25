@@ -31,8 +31,7 @@ function MetricsCard({ cpuPercent, memoryUsedMB, memoryTotalMB }: MetricsCardPro
                 height="100%"
                 borderRadius="$radius-full"
                 backgroundColor="$primary"
-                // transition-all duration-300 stays inline until the P4 animation driver lands
-                style={{ width: `${cpuPercent}%`, transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+                width={`${cpuPercent}%`} transition="slow"
               />
             </Prim.Box>
           )}
@@ -50,8 +49,7 @@ function MetricsCard({ cpuPercent, memoryUsedMB, memoryTotalMB }: MetricsCardPro
                 height="100%"
                 borderRadius="$radius-full"
                 backgroundColor="$primary"
-                // transition-all duration-300 stays inline until the P4 animation driver lands
-                style={{ width: `${memPercent}%`, transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+                width={`${memPercent}%`} transition="slow"
               />
             </Prim.Box>
           )}

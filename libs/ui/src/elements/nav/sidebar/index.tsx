@@ -13,7 +13,9 @@ import * as Prim from '../../primitives/index'
  * `studio/shell/nav-link`, a `Prim.Link` that navigates, so it takes style props like anything else.
  * (`transition-all`/`transition-colors` had no animation to preserve — hover is instant.)
  */
-export interface SidebarProps extends React.ComponentProps<'nav'> {
+// `Prim.*StyleProps` too: the body spreads props straight onto a Tamagui primitive, so style props
+// have always WORKED here — they just could not be typed, which is what forced callers into `style`.
+export interface SidebarProps extends React.ComponentProps<'nav'>, Prim.LayoutStyleProps, Prim.BoxStyleProps, Prim.MarginStyleProps, Prim.TextStyleProps {
   collapsed?: boolean
 }
 
@@ -63,7 +65,9 @@ function Sidebar({ collapsed, ...props }: SidebarProps) {
   )
 }
 
-export interface SidebarItemProps extends React.ComponentProps<'div'> {
+// `Prim.*StyleProps` too: the body spreads props straight onto a Tamagui primitive, so style props
+// have always WORKED here — they just could not be typed, which is what forced callers into `style`.
+export interface SidebarItemProps extends React.ComponentProps<'div'>, Prim.LayoutStyleProps, Prim.BoxStyleProps, Prim.MarginStyleProps, Prim.TextStyleProps {
   active?: boolean
 }
 

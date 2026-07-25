@@ -15,7 +15,9 @@ export interface BreadcrumbSegment {
   onClick?: () => void
 }
 
-export interface BreadcrumbProps extends React.ComponentProps<'nav'> {
+// `Prim.*StyleProps` too: the body spreads props straight onto a Tamagui primitive, so style props
+// have always WORKED here — they just could not be typed, which is what forced callers into `style`.
+export interface BreadcrumbProps extends React.ComponentProps<'nav'>, Prim.LayoutStyleProps, Prim.BoxStyleProps, Prim.MarginStyleProps, Prim.TextStyleProps {
   segments: BreadcrumbSegment[]
   separator?: React.ReactNode
 }

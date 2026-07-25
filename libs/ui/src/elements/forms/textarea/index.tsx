@@ -6,7 +6,8 @@ import * as Prim from '../../primitives/index'
  * `createComponent`) with the styling as `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4/§6). `textarea/index.css` is deleted.
  */
-export interface TextareaProps extends React.ComponentProps<'textarea'> {
+// See `Input`: the body spreads onto `Prim.TextArea`, so style props work and now type.
+export interface TextareaProps extends React.ComponentProps<'textarea'>, Prim.ControlStyleProps {
   compact?: boolean
 }
 

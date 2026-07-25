@@ -8,7 +8,9 @@ import * as Prim from '../../primitives/index'
  * exported because nine studio surfaces carried `panel`/`panel__header`/`panel__body` directly on a
  * `Prim.Box` instead of going through this element — they now spread the same bag.
  */
-export interface PanelProps extends React.ComponentProps<'div'> {
+// `Prim.*StyleProps` too: the body spreads props straight onto a Tamagui primitive, so style props
+// have always WORKED here — they just could not be typed, which is what forced callers into `style`.
+export interface PanelProps extends React.ComponentProps<'div'>, Prim.LayoutStyleProps, Prim.BoxStyleProps, Prim.MarginStyleProps, Prim.TextStyleProps {
   split?: boolean
 }
 

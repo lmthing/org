@@ -139,7 +139,7 @@ export function AgentChatPanel({
 
   if (sessionError) {
     return (
-      <Prim.Box style={{ ...styles.container, ...styles.center, ...style }} className={className}>
+      <Prim.Box {...CONTAINER} {...CENTER} style={style} className={className}>
         <Prim.Text as="p" color="var(--destructive)" textAlign="center" marginBottom={8}>
           Failed to start session: {sessionError}
         </Prim.Text>
@@ -160,7 +160,7 @@ export function AgentChatPanel({
 
   if (!sessionId) {
     return (
-      <Prim.Box style={{ ...styles.container, ...styles.center, ...style }} className={className}>
+      <Prim.Box {...CONTAINER} {...CENTER} style={style} className={className}>
         <Prim.Text color="var(--muted-foreground)">{PHASE_LABEL[phase]}</Prim.Text>
       </Prim.Box>
     );
@@ -186,16 +186,12 @@ export function AgentChatPanel({
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
+/** Was `styles.container`/`styles.center`, the last two `CSSProperties` bags here. Tamagui honours
+ *  every one of these as a PROP, so they no longer need an inline `style`. */
+const CONTAINER = { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' } as const
+const CENTER = { alignItems: 'center', justifyContent: 'center' } as const
+
 const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    height: '100%',
-    overflow: 'hidden',
-  },
-  center: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  } as React.CSSProperties,
+
   sendButton: { paddingVertical: "0", paddingHorizontal: "16px", borderRadius: 4, borderWidth: 0, backgroundColor: "var(--primary)", color: "var(--primary-foreground)", fontWeight: 500, cursor: "pointer", alignSelf: "flex-end" } as const,
 };

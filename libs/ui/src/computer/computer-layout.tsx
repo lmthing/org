@@ -41,7 +41,7 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
               key={item.path}
               active={currentPath === item.path}
               onClick={() => onNavigate(item.path)}
-              style={{ cursor: 'pointer' }}
+              cursor="pointer"
             >
               {item.label}
             </SidebarItem>
@@ -54,7 +54,7 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
               href={link.url}
               {...SIDEBAR_ITEM}
               title={`Open lmthing.${link.app}`}
-              style={{ display: 'block', textDecoration: 'none' }}
+              display="block" textDecorationLine="none"
             >
               {link.emoji} {link.label}
             </Prim.Link>
@@ -62,7 +62,7 @@ function ComputerLayout({ status, tier, currentPath, onNavigate, error, onRetry,
           {onRestart && (
             <SidebarItem
               onClick={restarting ? undefined : onRestart}
-              style={{ cursor: restarting ? 'default' : 'pointer', opacity: restarting ? 0.5 : 1 }}
+              cursor={restarting ? 'default' : 'pointer'} opacity={restarting ? 0.5 : 1}
               title="Restart CLI process (reloads .env)"
             >
               {restarting ? '↻ Restarting…' : '⏻ Restart'}

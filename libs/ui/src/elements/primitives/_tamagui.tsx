@@ -124,6 +124,10 @@ export type BoxStyleProps = {
   pointerEvents?: 'auto' | 'none' | 'box-none' | 'box-only'
   userSelect?: 'none' | 'auto' | 'text' | 'all' | 'contain'
   backgroundImage?: string
+  // Tamagui emits BOTH `_backdropFilter-` and `_WebkitBackdropFilter-` from this one prop, so the
+  // hand-paired `WebkitBackdropFilter` the surfaces carried alongside it is redundant (probed).
+  backdropFilter?: string
+  WebkitBackdropFilter?: string
   // The `line-clamp-N` pair. Vendor-prefixed keys pass straight through Tamagui
   // (`_WebkitBoxOrient-vertical`, `_WebkitLineClamp-2`) — already pinned in index.test.tsx, which
   // is what made `line-clamp-*` convertible to props at all; they were just never declared.
@@ -145,7 +149,7 @@ export type BoxStyleProps = {
   fontFamily?: string
   fontSize?: number | string
   fontWeight?: number | string
-  fontStyle?: 'normal' | 'italic'
+  fontStyle?: 'normal' | 'italic' | 'inherit'
   lineHeight?: number | string
   letterSpacing?: number | string
   textAlign?: 'left' | 'right' | 'center' | 'justify' | 'start' | 'end'

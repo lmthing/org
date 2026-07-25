@@ -9,7 +9,8 @@ import * as Prim from '../../primitives/index'
  */
 export type BadgeVariant = 'default' | 'primary' | 'muted' | 'success'
 
-export interface BadgeProps extends React.ComponentProps<'span'> {
+// See `Input`: the body spreads onto `Prim.Text`, so style props work and now type.
+export interface BadgeProps extends React.ComponentProps<'span'>, Prim.BoxStyleProps, Prim.MarginStyleProps {
   variant?: BadgeVariant
 }
 

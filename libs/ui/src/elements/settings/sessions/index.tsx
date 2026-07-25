@@ -190,17 +190,19 @@ export function Sessions() {
                           </Prim.Box>
                           {d.query && (
                             <Prim.Box>
+                              {/* The UA button reset, as props. `font: inherit` is NOT among them —
+                                  preflight already declares it for `button`
+                                  (`@lmthing/css/preflight.css:107-108`). */}
                               <Prim.Pressable
                                 onClick={() => toggle(key, expandedQuery, setExpandedQuery)}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  padding: 0,
-                                  cursor: 'pointer',
-                                  color: 'var(--muted-foreground)',
-                                  font: 'inherit',
-                                  fontSize: '0.75rem',
-                                }}
+                                backgroundColor="transparent"
+                                backgroundImage="none"
+                                borderWidth={0}
+                                borderStyle="none"
+                                padding={0}
+                                cursor="pointer"
+                                color="var(--muted-foreground)"
+                                fontSize="0.75rem"
                               >
                                 {qOpen ? 'Hide input' : 'Show input'}
                               </Prim.Pressable>

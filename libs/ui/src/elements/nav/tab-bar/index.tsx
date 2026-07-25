@@ -12,7 +12,9 @@ export interface TabBarTab {
   label: React.ReactNode
 }
 
-export interface TabBarProps extends React.ComponentProps<'div'> {
+// `Prim.*StyleProps` too: the body spreads props straight onto a Tamagui primitive, so style props
+// have always WORKED here — they just could not be typed, which is what forced callers into `style`.
+export interface TabBarProps extends React.ComponentProps<'div'>, Prim.LayoutStyleProps, Prim.BoxStyleProps, Prim.MarginStyleProps, Prim.TextStyleProps {
   tabs: TabBarTab[]
   activeTab?: string
   onTabChange?: (id: string) => void

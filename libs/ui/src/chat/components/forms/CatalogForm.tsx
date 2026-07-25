@@ -100,15 +100,22 @@ function Control({
   }
 }
 
-function btnStyle(primary: boolean): React.CSSProperties {
+/** Tamagui PROP bag, not `CSSProperties` — every key here is a real style prop, so the buttons no
+ *  longer need an inline `style`. Shorthands are expanded the way the codemod does it: `border` to
+ *  the width/style/colour trio and `padding: '4px 12px'` to the vertical/horizontal pair.
+ *  `font: 'inherit'` is DROPPED for the same reason it was dropped from `inputStyle` above —
+ *  preflight already declares it for `button` (`@lmthing/css/preflight.css:107-108`). */
+function btnProps(primary: boolean) {
   return {
-    background: primary ? 'color-mix(in srgb, var(--lm-accent) 20%, transparent)' : 'transparent',
+    backgroundColor: primary ? 'color-mix(in srgb, var(--lm-accent) 20%, transparent)' : 'transparent',
     color: primary ? 'var(--lm-accent)' : 'var(--lm-text)',
-    border: `1px solid ${primary ? 'var(--lm-accent)' : 'var(--lm-border)'}`,
+    borderWidth: 1,
+    borderStyle: 'solid' as const,
+    borderColor: primary ? 'var(--lm-accent)' : 'var(--lm-border)',
     borderRadius: 'var(--radius-lm-md, 6px)',
-    padding: '4px 12px',
+    paddingVertical: '4px',
+    paddingHorizontal: '12px',
     cursor: 'pointer',
-    font: 'inherit',
   };
 }
 
@@ -141,14 +148,14 @@ export function CatalogForm({
     if (only.kind === 'confirm') {
       return (
         <Prim.Box display="flex" gap={8}>
-          <Prim.Pressable style={btnStyle(true)} onClick={() => onSubmit(true)}>Yes</Prim.Pressable>
-          <Prim.Pressable style={btnStyle(false)} onClick={() => onSubmit(false)}>No</Prim.Pressable>
+          <Prim.Pressable {...btnProps(true)} onClick={() => onSubmit(true)}>Yes</Prim.Pressable>
+          <Prim.Pressable {...btnProps(false)} onClick={() => onSubmit(false)}>No</Prim.Pressable>
         </Prim.Box>
       );
     }
     return (
       <Prim.Box display="flex" gap={8} flexWrap="wrap">
-        {only.options?.map((o, i) => <Prim.Pressable key={i} style={btnStyle(i === 0)} onClick={() => onSubmit(o.value)}>{o.label}</Prim.Pressable>)}
+        {only.options?.map((o, i) => <Prim.Pressable key={i} {...btnProps(i === 0)} onClick={() => onSubmit(o.value)}>{o.label}</Prim.Pressable>)}
       </Prim.Box>
     );
   }
@@ -163,7 +170,7 @@ export function CatalogForm({
           {f.error ? <Prim.Text fontSize={10} color="var(--lm-red)">{f.error}</Prim.Text> : null}
         </Prim.Text>
       ))}
-      <Prim.Pressable style={{ ...btnStyle(true), alignSelf: 'flex-start' }} onClick={submit}>{spec.submitLabel}</Prim.Pressable>
+      <Prim.Pressable {...btnProps(true)} alignSelf="flex-start" onClick={submit}>{spec.submitLabel}</Prim.Pressable>
     </Prim.Box>
   );
 }

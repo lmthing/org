@@ -7,7 +7,9 @@ import * as Prim from '../../primitives/index'
  * `page/index.css` is deleted; the studio-shell callers that carried `page__body` on a `Prim.Box`
  * now spread `PAGE_BODY` instead.
  */
-export interface PageProps extends React.ComponentProps<'div'> {
+// `Prim.*StyleProps` too: the body spreads props straight onto a Tamagui primitive, so style props
+// have always WORKED here — they just could not be typed, which is what forced callers into `style`.
+export interface PageProps extends React.ComponentProps<'div'>, Prim.LayoutStyleProps, Prim.BoxStyleProps, Prim.MarginStyleProps, Prim.TextStyleProps {
   full?: boolean
 }
 

@@ -69,7 +69,7 @@ export function SettingsSchemaForm({ schema, values, onChange, className }: Sett
               value={values[key] ?? ''}
               onChange={(event) => onChange(key, event.target.value)}
               placeholder={prop.description}
-              style={{ fontFamily: 'monospace' }}
+              fontFamily="monospace"
             />
           </Stack>
         )

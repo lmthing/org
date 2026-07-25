@@ -128,16 +128,18 @@ export function StudioShell({
 
       {rightPanel && thingOpen && (
         <Prim.Box
-          style={{
-            width: 400,
-            flex: '0 0 400px',
-            height: '100%',
-            borderLeft: '1px solid var(--border)',
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: 0,
-            overflow: 'hidden',
-          }}
+          width={400}
+          flexGrow={0}
+          flexShrink={0}
+          flexBasis="400px"
+          height="100%"
+          borderLeftWidth={1}
+          borderLeftStyle="solid"
+          borderLeftColor="var(--border)"
+          display="flex"
+          flexDirection="column"
+          minWidth={0}
+          overflow="hidden"
         >
           {rightPanel}
         </Prim.Box>

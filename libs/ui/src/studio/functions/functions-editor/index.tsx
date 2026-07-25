@@ -138,13 +138,13 @@ function FunctionListItem({ name, isActive, onSelect, onDelete, onRename }: Func
           }}
           onBlur={commitRename}
           onClick={e => e.stopPropagation()}
-          style={{ flex: 1 }}
+          flexGrow={1} flexShrink={1} flexBasis={0}
         />
       ) : (
         <Prim.Text fontFamily="monospace" fontSize="$sm">
           {name}.ts
           {requiresConsent && (
-            <Badge variant="primary" title="Runs only after the user approves a consent card (@consent)" style={{ marginLeft: 6 }}>
+            <Badge variant="primary" title="Runs only after the user approves a consent card (@consent)" marginLeft={6}>
               consent
             </Badge>
           )}
@@ -347,7 +347,7 @@ export function FunctionsEditor({ onChanged }: FunctionsEditorProps) {
               if (e.key === 'Escape') { setShowNewForm(false); setNewName('') }
             }}
             placeholder="functionName"
-            style={{ flex: 1 }}
+            flexGrow={1} flexShrink={1} flexBasis={0}
           />
           <Caption muted>.ts</Caption>
           <Button size="sm" variant="primary" disabled={!newName.trim()} onClick={handleCreate}>

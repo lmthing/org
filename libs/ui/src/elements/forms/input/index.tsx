@@ -6,7 +6,9 @@ import * as Prim from '../../primitives/index'
  * `createComponent`) with the `.input` styling as `$`-token PROPS transcribed from its retired `styled()` proof
  * (docs/tamagui-idiomatic-migration.md §4/§6). `input/index.css` is deleted.
  */
-export interface InputProps extends Omit<React.ComponentProps<'input'>, 'size'> {
+// `Prim.ControlStyleProps` too: the body spreads props straight onto `Prim.TextField`, a real
+// Tamagui control, so style props work here — they just could not be typed. Same gap as `Select`.
+export interface InputProps extends Omit<React.ComponentProps<'input'>, 'size'>, Prim.ControlStyleProps {
   error?: boolean
   /** `.input--sm` — the compact row height. */
   size?: 'default' | 'sm'

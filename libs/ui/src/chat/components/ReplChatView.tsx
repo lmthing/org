@@ -129,7 +129,7 @@ export function ReplChatView({
   while (u < userMsgs.length) transcript.push(userBubble(userMsgs[u++]!));
 
   return (
-    <Prim.Box style={{ ...styles.container, ...style }} className={className}>
+    <Prim.Box {...CONTAINER} style={style} className={className}>
       <Prim.Box {...styles.statusBar}>
         <Prim.Text color={isConnected ? 'var(--success)' : 'var(--destructive)'} fontSize={12}>
           {isConnected ? '● Connected' : '○ Connecting…'}
@@ -217,13 +217,11 @@ function WorkRow({
 
 // ── Styles (design tokens only — no raw colors) ──────────────────────────────
 
+/** Was `styles.container`, the last `CSSProperties` bag here — every key is a real Tamagui prop. */
+const CONTAINER = { display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' } as const
+
 const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    height: '100%',
-    overflow: 'hidden',
-  } as React.CSSProperties,
+
   statusBar: { display: "flex", alignItems: "center", paddingVertical: "4px", paddingHorizontal: "12px", borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "var(--border)", flexShrink: 0 } as const,
   resyncButton: { marginLeft: "auto", paddingVertical: "2px", paddingHorizontal: "10px", borderRadius: 4, borderWidth: "1px", borderStyle: "solid", borderColor: "var(--border)", backgroundColor: "var(--secondary)", color: "var(--secondary-foreground)", fontSize: 12, cursor: "pointer" } as const,
   blocks: { flexGrow: 1, flexShrink: 1, flexBasis: "0%", overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" } as const,
