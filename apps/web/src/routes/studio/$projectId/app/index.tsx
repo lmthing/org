@@ -13,16 +13,9 @@ import {
   type AppBuildStatus,
 } from './-lib/appApi'
 
-const SECTION: React.CSSProperties = { marginBottom: '1.5rem' }
-const SUBTLE: React.CSSProperties = {
-  fontSize: '0.6875rem',
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  opacity: 0.5,
-  marginBottom: '0.5rem',
-}
-const MONO: React.CSSProperties = { fontFamily: 'monospace', fontSize: '0.8125rem' }
+const SECTION = { marginBottom: "1.5rem" } as const
+const SUBTLE = { fontSize: "0.6875rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.5, marginBottom: "0.5rem" } as const
+const MONO = { fontFamily: "monospace", fontSize: "0.8125rem" } as const
 
 /** Colour a build/hook status word onto a Badge variant (design tokens only). */
 function statusVariant(status?: string): 'default' | 'success' | 'muted' | 'primary' {
@@ -81,12 +74,12 @@ function HookRow({
     >
       <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
         <Prim.Box display="flex" alignItems="center" gap="0.5rem">
-          <Prim.Text style={MONO}>{hook.slug}</Prim.Text>
+          <Prim.Text {...MONO}>{hook.slug}</Prim.Text>
           {hook.type ? <Badge variant="muted">{hook.type}</Badge> : null}
           {last?.status ? <Badge variant={statusVariant(last.status)}>{last.status}</Badge> : null}
         </Prim.Box>
         <Caption muted>
-          {hook.trigger ? <Prim.Text style={MONO}>{hook.trigger}</Prim.Text> : hook.description ?? '—'}
+          {hook.trigger ? <Prim.Text {...MONO}>{hook.trigger}</Prim.Text> : hook.description ?? '—'}
           {last?.at ? ` · last run ${formatTime(last.at)}` : ' · never run'}
           {last?.error ? ` · ${last.error}` : ''}
         </Caption>
@@ -186,20 +179,20 @@ function ManifestView() {
         </Caption>
       ) : null}
 
-      <Prim.Box style={SECTION}>
+      <Prim.Box {...SECTION}>
         <BuildCard build={m.build} onRebuild={rebuild} busy={buildBusy} />
       </Prim.Box>
 
       {/* Tables + column schema */}
-      <Prim.Box style={SECTION}>
-        <Prim.Box style={SUBTLE}>Tables ({m.tables?.length ?? 0})</Prim.Box>
+      <Prim.Box {...SECTION}>
+        <Prim.Box {...SUBTLE}>Tables ({m.tables?.length ?? 0})</Prim.Box>
         {(m.tables ?? []).length === 0 ? (
           <Caption muted>No tables.</Caption>
         ) : (
           m.tables!.map((t) => (
             <Card key={t.name} paddingVertical="0.75rem" paddingHorizontal="1rem" marginBottom="0.5rem">
               <Prim.Box display="flex" alignItems="baseline" gap="0.5rem">
-                <Prim.Text style={{ ...MONO, fontWeight: 600 }}>{t.name}</Prim.Text>
+                <Prim.Text {...MONO} fontWeight={600}>{t.name}</Prim.Text>
                 {t.title ? <Caption muted>{t.title}</Caption> : null}
               </Prim.Box>
               {t.description ? <Caption muted>{t.description}</Caption> : null}
@@ -209,12 +202,7 @@ function ManifestView() {
                     <Prim.Text
                       key={c.name}
                       title={c.description}
-                      style={{
-                        ...MONO,
-                        padding: '0.125rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        background: 'var(--color-muted)',
-                      }}
+                      {...MONO} paddingVertical="0.125rem" paddingHorizontal="0.5rem" borderRadius="0.25rem" backgroundColor="var(--color-muted)"
                     >
                       {c.name}
                       <Prim.Text opacity={0.6}>
@@ -233,14 +221,14 @@ function ManifestView() {
       </Prim.Box>
 
       {/* Pages */}
-      <Prim.Box style={SECTION}>
-        <Prim.Box style={SUBTLE}>Pages ({m.pages?.length ?? 0})</Prim.Box>
+      <Prim.Box {...SECTION}>
+        <Prim.Box {...SUBTLE}>Pages ({m.pages?.length ?? 0})</Prim.Box>
         {(m.pages ?? []).length === 0 ? (
           <Caption muted>No pages.</Caption>
         ) : (
           <Card paddingVertical="0.5rem" paddingHorizontal="1rem">
             {m.pages!.map((p) => (
-              <Prim.Box key={p.route} style={{ ...MONO, padding: '0.25rem 0' }}>
+              <Prim.Box key={p.route} {...MONO} paddingVertical="0.25rem" paddingHorizontal="0">
                 {p.route}
                 {p.path ? <Prim.Text opacity={0.5}> — {p.path}</Prim.Text> : null}
               </Prim.Box>
@@ -250,8 +238,8 @@ function ManifestView() {
       </Prim.Box>
 
       {/* Endpoints */}
-      <Prim.Box style={SECTION}>
-        <Prim.Box style={SUBTLE}>Endpoints ({m.endpoints?.length ?? 0})</Prim.Box>
+      <Prim.Box {...SECTION}>
+        <Prim.Box {...SUBTLE}>Endpoints ({m.endpoints?.length ?? 0})</Prim.Box>
         {(m.endpoints ?? []).length === 0 ? (
           <Caption muted>No endpoints.</Caption>
         ) : (
@@ -262,17 +250,17 @@ function ManifestView() {
             >
               <Prim.Box display="flex" alignItems="center" gap="0.5rem">
                 <Badge variant="primary">{e.method}</Badge>
-                <Prim.Text style={{ ...MONO, fontWeight: 600 }}>{e.name}</Prim.Text>
+                <Prim.Text {...MONO} fontWeight={600}>{e.name}</Prim.Text>
                 {e.route ? (
                   <Caption muted>
-                    <Prim.Text style={MONO}>{e.route}</Prim.Text>
+                    <Prim.Text {...MONO}>{e.route}</Prim.Text>
                   </Caption>
                 ) : null}
               </Prim.Box>
               {e.description ? <Caption muted>{e.description}</Caption> : null}
               {e.input || e.output ? (
                 <Caption muted>
-                  <Prim.Text style={MONO}>
+                  <Prim.Text {...MONO}>
                     {e.input ? `in: ${e.input}` : ''}
                     {e.input && e.output ? '  ' : ''}
                     {e.output ? `out: ${e.output}` : ''}
@@ -285,8 +273,8 @@ function ManifestView() {
       </Prim.Box>
 
       {/* Hooks */}
-      <Prim.Box style={SECTION}>
-        <Prim.Box style={SUBTLE}>Hooks ({m.hooks?.length ?? 0})</Prim.Box>
+      <Prim.Box {...SECTION}>
+        <Prim.Box {...SUBTLE}>Hooks ({m.hooks?.length ?? 0})</Prim.Box>
         {(m.hooks ?? []).length === 0 ? (
           <Caption muted>No hooks.</Caption>
         ) : (

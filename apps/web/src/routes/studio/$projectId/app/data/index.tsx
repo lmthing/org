@@ -204,19 +204,11 @@ function Cell({
   const initial = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value)
   const [draft, setDraft] = useState(initial)
 
-  const td: React.CSSProperties = {
-    padding: '0.375rem 0.75rem',
-    borderBottom: '1px solid var(--color-border)',
-    maxWidth: 320,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    cursor: editable ? 'text' : 'default',
-  }
+  const td = { paddingVertical: "0.375rem", paddingHorizontal: "0.75rem", borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "var(--color-border)", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: editable ? 'text' : 'default' } as const
 
   if (editing) {
     return (
-      <Prim.Td style={{ ...td, padding: '0.125rem 0.25rem' }}>
+      <Prim.Td {...td} paddingVertical="0.125rem" paddingHorizontal="0.25rem">
         <Input
           autoFocus
           value={draft}
@@ -242,7 +234,7 @@ function Cell({
 
   return (
     <Prim.Td
-      style={td}
+      {...td}
       title={initial}
       onClick={() => {
         if (editable) {

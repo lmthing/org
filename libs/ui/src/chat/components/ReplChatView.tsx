@@ -202,7 +202,7 @@ function WorkRow({
     node.activity?.trim() || narrationOf(latestSubtreeStatement(model, node.id)?.code ?? '');
   const elapsed = node.startTs ? fmtDuration(Date.now() - node.startTs) : '';
   return (
-    <Prim.Box style={{ ...styles.workRow, paddingLeft: 12 + depth * 14 }}>
+    <Prim.Box {...styles.workRow} paddingLeft={12 + depth * 14}>
       <Prim.Text {...styles.workIcon}>{KIND_ICON[node.kind] ?? '•'}</Prim.Text>
       <Prim.Box {...styles.workBody}>
         <Prim.Box {...styles.workLabelLine}>
@@ -243,12 +243,7 @@ const styles = {
   activityHeader: { display: "flex", alignItems: "center", gap: 6, paddingVertical: "6px", paddingHorizontal: "12px", borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "var(--border)", fontSize: 12, color: "var(--muted-foreground)" } as const,
   activityPulse: { color: "var(--brand-2, var(--primary))" } as const,
   activityList: { maxHeight: "40vh", overflowY: "auto", paddingVertical: "4px", paddingHorizontal: "0" } as const,
-  workRow: {
-    display: 'flex',
-    gap: 8,
-    alignItems: 'flex-start',
-    padding: '4px 12px',
-  } as React.CSSProperties,
+  workRow: { display: "flex", gap: 8, alignItems: "flex-start", paddingVertical: "4px", paddingHorizontal: "12px" } as const,
   workIcon: { color: "var(--brand-2, var(--primary))", fontSize: 13, lineHeight: "18px", flexShrink: 0 } as const,
   workBody: { minWidth: 0, flexGrow: 1, flexShrink: 1, flexBasis: "0%" } as const,
   workLabelLine: { display: "flex", alignItems: "baseline", gap: 8 } as const,

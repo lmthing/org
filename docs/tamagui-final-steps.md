@@ -19,7 +19,7 @@
 >   is a vars-only file.
 > - **(2) ✅** No Tailwind utility className anywhere. Same caveat: the only textual matches left sit
 >   inside comments recording what was removed.
-> - **(3) ◐** 96 inline styles remain on Tamagui-backed targets (from 130). A further 78 are on
+> - **(3) ◐** 67 inline styles remain on Tamagui-backed targets (from 130). A further 78 are on
 >   passthrough primitives / lucide / `.native.tsx`, where `style` is CORRECT and permanent.
 > - **(4) ✅** ONE Tamagui config, platform-split on `isWeb`.
 > - **(5) ◐ NOT met — and an earlier version of this line wrongly claimed it was.** `libs/ui` still
@@ -49,7 +49,7 @@ Five conditions. Anything not on this list is out of scope and named in [§7](#7
 | | count | where |
 |---|---|---|
 | utility classNames | **0** | was 125. What remains is keyframes, BEM, `{className}`, and 2 `prose` boxes (§7) |
-| inline `style={{…}}` | **96** | on Tamagui-backed targets (was 127). A further **78** are on passthrough/lucide/`.native.tsx`, where `style` is CORRECT and permanent |
+| inline `style={{…}}` | **67** | on Tamagui-backed targets (was 130). A further **78** are on passthrough/lucide/`.native.tsx`, where `style` is CORRECT and permanent |
 | `@apply` directives | **0** | was 87 across 12 files |
 | Tailwind entry points | **0** | was 2. `libs/cli` keeps a compiler for project app pages — a product feature |
 | stylesheets | **14** | 180 rules — 11 component + `FieldTree.css` + the chat Tailwind entry + `animations.css`; 3 permanent |
@@ -347,12 +347,23 @@ unit because each call site references exactly one entry, so no element ends up 
 on each channel — which would be worse than none, since Tamagui silently drops style props it does not
 understand.
 
-**Still open: 96.** They are dominated by spreads of a shared *local* bag —
-`style={{ ...MONO, fontWeight: 600 }}` (17 in `studio/$projectId/app/index.tsx`),
-`style={{ ...inputStyle, minHeight: (field.rows ?? 3) * 20 }}` (16 in `CatalogForm`), 13 in
-`gates.tsx` — where the extra members include computed values. Each wants its shared base extracted to
-a prop bag and the computed member passed as a prop; the pattern is uniform, so it is a further
-extension of the same script rather than 96 hand edits.
+**Then 96 → 67**, by generalising the same script rather than hand-editing. Three things it had been
+getting wrong, each found by a gate:
+
+- **It only looked for the identifier `styles`.** The three densest files name their bags `MONO`,
+  `inputStyle`, `upgradeCardStyles`, `centerStyles` — so discovery is by SHAPE now (any module-level
+  object literal), not by name. That alone reached the 17 sites in `studio/$projectId/app/index.tsx`.
+- **A `React.CSSProperties` contract makes a bag all-or-nothing.** `gates.tsx` closes its bags with
+  `} satisfies Record<string, React.CSSProperties>`. Converting *some* entries leaves the converted
+  ones failing that constraint (`paddingVertical` is not a CSS property), and stripping the constraint
+  de-types the entries that stayed `style`. Six typecheck errors' worth, before the guard.
+- **The cast is part of the value.** Replacing the object literal's extent rather than the whole
+  initializer turned `{ … } as React.CSSProperties` into `{ … } as const as React.CSSProperties` —
+  still CSSProperties-typed, and it failed the moment it was spread onto a Tamagui component.
+
+**Still open: 67**, and now genuinely awkward rather than merely unreached: 16 in `CatalogForm`
+(`inputStyle` has an unmappable key, so its whole bag is correctly left alone), 7 in `waking-screen`
+(non-literal `transform`, an `animation` shorthand), and a long tail of 1–3 per file.
 
 This axis never blocked phase 4 — inline styles do not depend on Tailwind existing.
 
