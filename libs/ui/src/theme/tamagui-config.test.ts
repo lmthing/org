@@ -8,6 +8,7 @@ import {
   size as genSize,
   fontSizes as genFontSizes,
   fontWeights as genFontWeights,
+  letterSpacings as genLetterSpacings,
   zIndex as genZIndex,
 } from '@lmthing/css/tamagui-tokens'
 
@@ -101,6 +102,18 @@ describe('tamagui.config createTamagui shell', () => {
     for (const [name, expected] of Object.entries(genFontWeights)) {
       expect(val(tamaguiConfig.fonts.body.weight[name]), `body.weight.${name}`).toBe(expected)
     }
+  })
+
+  it('carries the tracking ramp as em STRINGS, which Tamagui types as number-only', () => {
+    // `GenericFont['letterSpacing']` is typed `number | Variable`, so the config assigns it through
+    // a cast. That cast is only safe because the runtime genuinely keeps the `em` string — this is
+    // what guards it. Tailwind's `tracking-*` ramp is em-relative; converting to px would break it
+    // at every font size.
+    for (const [name, expected] of Object.entries(genLetterSpacings)) {
+      expect(val(tamaguiConfig.fonts.body.letterSpacing![name]), `body.letterSpacing.${name}`)
+        .toBe(expected)
+    }
+    expect(String(val(tamaguiConfig.fonts.body.letterSpacing!.tight))).toMatch(/em$/)
   })
 
   it('registers the Tailwind breakpoint media config', () => {
