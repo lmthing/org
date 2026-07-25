@@ -89,7 +89,7 @@ export function ConsentCard({
       </Prim.Row>
 
       {argsSummary && (
-        <Prim.Pre className="text-xs font-mono text-muted-foreground bg-muted rounded-lg px-2 py-1.5 mt-2 overflow-x-auto whitespace-pre-wrap break-words">
+        <Prim.Pre fontSize="$xs" fontFamily="$mono" color="$muted-foreground" backgroundColor="$muted" borderRadius="$radius-lg" paddingHorizontal="$2" paddingVertical="$1.5" marginTop="$2" overflowX="auto" whiteSpace="pre-wrap" wordWrap="break-word">
           {argsSummary}
         </Prim.Pre>
       )}
