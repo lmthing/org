@@ -1,22 +1,17 @@
-// The `.sidebar` shell is props now, but `SidebarItem` still emits `sidebar__item` (router-
-// `<Link>` residual — see below), so this element still owns that stylesheet import.
-import '@lmthing/css/elements/nav/sidebar/index.css'
 import * as React from 'react'
 import * as Prim from '../../primitives/index'
-import { cn } from '../../../lib/utils'
 
 /**
- * Sidebar — the idiomatic `.sidebar` shell: `Prim.Box as="nav"` (a real `<nav>` at runtime via
- * `createComponent`) with the styling as `$`-token PROPS from sidebar.styled.tsx
- * (docs/tamagui-idiomatic-migration.md §4). (`transition-all duration-200` awaits the animation
- * driver, §5/P4.)
+ * Sidebar — the idiomatic `.sidebar`. `Prim.Box as="nav"` / `Prim.Box` (real host tags at runtime
+ * via `createComponent`) with the styling as `$`-token PROPS from sidebar.styled.tsx
+ * (docs/tamagui-idiomatic-migration.md §4). `sidebar/index.css` is deleted.
  *
- * `SidebarItem` is the ONE residual in this block and deliberately still className-driven: most
- * `sidebar__item` call sites in `studio/shell/studio-sidebar` are TanStack Router `<Link>`s, which
- * render their own `<a>` and accept only `className` — no `asChild`, no style props. Defining the
- * item look as BOTH a prop bag and a stylesheet rule would mean two definitions to keep in sync, so
- * `sidebar/index.css` is TRIMMED to just `.sidebar__item`/`--active` and stays the single source
- * for it. It deletes when those links can take style props (P4 overlays/router follow-up).
+ * `SIDEBAR_ITEM` is exported because the item look is needed on things that are not this component:
+ * a plain `Prim.Link` in the computer shell, and — the reason this block outlived the rest of the
+ * element swap — router links in `studio/shell/studio-sidebar`. Those used to be TanStack `<Link>`s,
+ * which render their own `<a>` and accept only `className`; they now go through
+ * `studio/shell/nav-link`, a `Prim.Link` that navigates, so it takes style props like anything else.
+ * (`transition-all`/`transition-colors` had no animation to preserve — hover is instant.)
  */
 export interface SidebarProps extends React.ComponentProps<'nav'> {
   collapsed?: boolean
@@ -36,6 +31,27 @@ export const SIDEBAR_BASE = {
 /** `.sidebar--collapsed` — w-12. */
 export const SIDEBAR_COLLAPSED = { width: '$12' } as const
 
+/** `.sidebar__item` — the padded, rounded row that hovers onto the sidebar accent. */
+export const SIDEBAR_ITEM = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '$2',
+  paddingHorizontal: '$3',
+  paddingVertical: '$2',
+  borderRadius: '$radius-md',
+  fontSize: '$sm',
+  color: '$sidebar-foreground',
+  cursor: 'pointer',
+  hoverStyle: { backgroundColor: '$sidebar-accent', color: '$sidebar-accent-foreground' },
+} as const
+
+/** `.sidebar__item--active` — pinned to the hover look, medium weight. */
+export const SIDEBAR_ITEM_ACTIVE = {
+  backgroundColor: '$sidebar-accent',
+  color: '$sidebar-accent-foreground',
+  fontWeight: '$medium',
+} as const
+
 function Sidebar({ collapsed, ...props }: SidebarProps) {
   return (
     <Prim.Box
@@ -51,10 +67,11 @@ export interface SidebarItemProps extends React.ComponentProps<'div'> {
   active?: boolean
 }
 
-function SidebarItem({ className, active, ...props }: SidebarItemProps) {
+function SidebarItem({ active, ...props }: SidebarItemProps) {
   return (
     <Prim.Box
-      className={cn('sidebar__item', active && 'sidebar__item--active', className)}
+      {...SIDEBAR_ITEM}
+      {...(active ? SIDEBAR_ITEM_ACTIVE : {})}
       {...(props as Record<string, unknown>)}
     />
   )

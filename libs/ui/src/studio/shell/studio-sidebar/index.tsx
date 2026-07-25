@@ -11,7 +11,7 @@
 import * as Prim from '../../../elements/primitives/index.js';
 import { useMemo } from 'react'
 import { useToggle, useTasklistList, useGlob } from '@lmthing/state'
-import { Link, useLocation, useParams } from '@tanstack/react-router'
+import { useLocation, useParams } from '@tanstack/react-router'
 import {
   Plus,
   Settings,
@@ -27,8 +27,8 @@ import {
   Box,
   MessageSquare,
 } from 'lucide-react'
-import '@lmthing/css/elements/nav/sidebar/index.css'
-import { SIDEBAR_BASE, SIDEBAR_COLLAPSED } from '../../../elements/nav/sidebar/index.js'
+import { SIDEBAR_BASE, SIDEBAR_COLLAPSED, SIDEBAR_ITEM, SIDEBAR_ITEM_ACTIVE } from '../../../elements/nav/sidebar/index.js'
+import { NavLink } from '../nav-link/index.js'
 import '@lmthing/css/components/shell/index.css'
 import { buildSpacePath } from '@lmthing/ui/lib/space-path'
 import { useAgentList } from '@lmthing/ui/hooks/agent/useAgentList'
@@ -138,13 +138,13 @@ export function StudioSidebar({
       {!asRail && (
         <Prim.Box padding="$0" borderBottomWidth={1} borderBottomColor="$border">
           <Prim.Box display="flex" alignItems="center" gap="$8" paddingLeft="$3">
-            <Link
+            <NavLink
               to="/studio"
               className="studio-sidebar__home-link"
               title="lmthing"
             >
               <CozyThingText text="lmthing" />
-            </Link>
+            </NavLink>
             {!isCollapsed && (
               <Prim.Text fontSize="$sm" fontWeight="$semibold" flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
                 {spaceId || 'Space'}
@@ -167,7 +167,7 @@ export function StudioSidebar({
             <Prim.Box as="section">
               <Prim.Pressable
                 onClick={toggleFieldsExpanded}
-                className="sidebar__item"
+                {...SIDEBAR_ITEM}
                 fontSize={10}
                 fontWeight="$semibold"
                 textTransform="uppercase"
@@ -183,13 +183,13 @@ export function StudioSidebar({
                     const href = `${spacePath}/knowledge/${encodeURIComponent(field.id)}`
                     const isActive = pathname === href || activeFieldId === field.id
                     return (
-                      <Link key={field.id} to={href} className={`sidebar__item ${isActive ? 'sidebar__item--active' : ''}`}>
+                      <NavLink key={field.id} to={href} {...SIDEBAR_ITEM} {...(isActive ? SIDEBAR_ITEM_ACTIVE : {})}>
                         <Folder className="studio-sidebar__item-icon--knowledge" />
                         <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{field.label}</Prim.Text>
-                      </Link>
+                      </NavLink>
                     )
                   })}
-                  <Prim.Pressable onClick={onCreateField} className="sidebar__item" opacity={0.6}>
+                  <Prim.Pressable onClick={onCreateField} {...SIDEBAR_ITEM} opacity={0.6}>
                     <Plus className="studio-sidebar__create-icon" />
                     <Prim.Text fontWeight="$medium">Create Field</Prim.Text>
                   </Prim.Pressable>
@@ -200,7 +200,7 @@ export function StudioSidebar({
             <Prim.Box as="section">
               <Prim.Pressable
                 onClick={toggleAgentsExpanded}
-                className="sidebar__item"
+                {...SIDEBAR_ITEM}
                 fontSize={10}
                 fontWeight="$semibold"
                 textTransform="uppercase"
@@ -216,13 +216,13 @@ export function StudioSidebar({
                     const href = `${spacePath}/agent/${agent.id}`
                     const isActive = pathname === href || activeAgentId === agent.id
                     return (
-                      <Link key={agent.id} to={href} className={`sidebar__item ${isActive ? 'sidebar__item--active' : ''}`}>
+                      <NavLink key={agent.id} to={href} {...SIDEBAR_ITEM} {...(isActive ? SIDEBAR_ITEM_ACTIVE : {})}>
                         <Bot className="studio-sidebar__item-icon--agent" />
                         <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{agent.name}</Prim.Text>
-                      </Link>
+                      </NavLink>
                     )
                   })}
-                  <Prim.Pressable onClick={onCreateAgent} className="sidebar__item" opacity={0.6}>
+                  <Prim.Pressable onClick={onCreateAgent} {...SIDEBAR_ITEM} opacity={0.6}>
                     <Plus className="studio-sidebar__create-icon" />
                     <Prim.Text fontWeight="$medium">Create Agent</Prim.Text>
                   </Prim.Pressable>
@@ -233,7 +233,7 @@ export function StudioSidebar({
             <Prim.Box as="section">
               <Prim.Pressable
                 onClick={toggleTasklistsExpanded}
-                className="sidebar__item"
+                {...SIDEBAR_ITEM}
                 fontSize={10}
                 fontWeight="$semibold"
                 textTransform="uppercase"
@@ -249,13 +249,13 @@ export function StudioSidebar({
                     const href = `${spacePath}/workflow/${item.name}`
                     const isActive = pathname.startsWith(href)
                     return (
-                      <Link key={item.name} to={href} className={`sidebar__item ${isActive ? 'sidebar__item--active' : ''}`}>
+                      <NavLink key={item.name} to={href} {...SIDEBAR_ITEM} {...(isActive ? SIDEBAR_ITEM_ACTIVE : {})}>
                         <ListChecks className="studio-sidebar__item-icon--tasklist" />
                         <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{item.name}</Prim.Text>
-                      </Link>
+                      </NavLink>
                     )
                   })}
-                  <Prim.Pressable onClick={onCreateAgent} className="sidebar__item" opacity={0.6}>
+                  <Prim.Pressable onClick={onCreateAgent} {...SIDEBAR_ITEM} opacity={0.6}>
                     <Plus className="studio-sidebar__create-icon" />
                     <Prim.Text fontWeight="$medium">Create Tasklist</Prim.Text>
                   </Prim.Pressable>
@@ -266,7 +266,7 @@ export function StudioSidebar({
             <Prim.Box as="section">
               <Prim.Pressable
                 onClick={toggleFunctionsExpanded}
-                className="sidebar__item"
+                {...SIDEBAR_ITEM}
                 fontSize={10}
                 fontWeight="$semibold"
                 textTransform="uppercase"
@@ -281,16 +281,16 @@ export function StudioSidebar({
                   {functions.map(name => {
                     const href = `${spacePath}/functions`
                     return (
-                      <Link key={name} to={href} className="sidebar__item">
+                      <NavLink key={name} to={href} {...SIDEBAR_ITEM}>
                         <FunctionSquare className="studio-sidebar__item-icon--knowledge" />
                         <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{name}</Prim.Text>
-                      </Link>
+                      </NavLink>
                     )
                   })}
-                  <Link to={`${spacePath}/functions`} className="sidebar__item studio-sidebar__create-btn">
+                  <NavLink to={`${spacePath}/functions`} {...SIDEBAR_ITEM} className="studio-sidebar__create-btn">
                     <Plus className="studio-sidebar__create-icon" />
                     <Prim.Text fontWeight="$medium">Edit Functions</Prim.Text>
-                  </Link>
+                  </NavLink>
                 </Prim.Box>
               )}
             </Prim.Box>
@@ -298,7 +298,7 @@ export function StudioSidebar({
             <Prim.Box as="section">
               <Prim.Pressable
                 onClick={toggleComponentsExpanded}
-                className="sidebar__item"
+                {...SIDEBAR_ITEM}
                 fontSize={10}
                 fontWeight="$semibold"
                 textTransform="uppercase"
@@ -311,16 +311,16 @@ export function StudioSidebar({
               {componentsExpanded && (
                 <Prim.Box display="flex" flexDirection="column" gap={2}>
                   {components.map(c => (
-                    <Link key={`${c.kind}/${c.name}`} to={`${spacePath}/components`} className="sidebar__item">
+                    <NavLink key={`${c.kind}/${c.name}`} to={`${spacePath}/components`} {...SIDEBAR_ITEM}>
                       <Box className="studio-sidebar__item-icon--knowledge" />
                       <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{c.name}</Prim.Text>
                       <Prim.Text className="studio-sidebar__item-badge" style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 11 }}>{c.kind}</Prim.Text>
-                    </Link>
+                    </NavLink>
                   ))}
-                  <Link to={`${spacePath}/components`} className="sidebar__item studio-sidebar__create-btn">
+                  <NavLink to={`${spacePath}/components`} {...SIDEBAR_ITEM} className="studio-sidebar__create-btn">
                     <Plus className="studio-sidebar__create-icon" />
                     <Prim.Text fontWeight="$medium">Edit Components</Prim.Text>
-                  </Link>
+                  </NavLink>
                 </Prim.Box>
               )}
             </Prim.Box>
@@ -329,7 +329,7 @@ export function StudioSidebar({
               <Prim.Box as="section">
                 <Prim.Pressable
                   onClick={toggleConversationsExpanded}
-                  className="sidebar__item"
+                  {...SIDEBAR_ITEM}
                   fontSize={10}
                   fontWeight="$semibold"
                   textTransform="uppercase"
@@ -340,7 +340,7 @@ export function StudioSidebar({
                   Conversations (0)
                 </Prim.Pressable>
                 {conversationsExpanded && (
-                  <Prim.Box className="sidebar__item" opacity={0.5} fontSize="$xs" cursor="default">
+                  <Prim.Box {...SIDEBAR_ITEM} opacity={0.5} fontSize="$xs" cursor="default">
                     No conversations yet.
                   </Prim.Box>
                 )}
@@ -349,10 +349,10 @@ export function StudioSidebar({
           </Prim.Box>
         ) : (
           <Prim.Box display="flex" flexDirection="column" alignItems="center" gap="$4">
-            <Prim.Box className="sidebar__item" justifyContent="center" title={`${fields.length} knowledge fields`}>
+            <Prim.Box {...SIDEBAR_ITEM} justifyContent="center" title={`${fields.length} knowledge fields`}>
               <Folder className="studio-sidebar__collapsed-icon-inner" />
             </Prim.Box>
-            <Prim.Box className="sidebar__item" justifyContent="center" title={`${agents.length} agents`}>
+            <Prim.Box {...SIDEBAR_ITEM} justifyContent="center" title={`${agents.length} agents`}>
               <Bot className="studio-sidebar__collapsed-icon-inner" />
             </Prim.Box>
           </Prim.Box>
@@ -364,38 +364,38 @@ export function StudioSidebar({
           {onToggleThing ? (
             <Prim.Pressable
               onClick={onToggleThing}
-              className={`sidebar__item ${thingOpen ? 'sidebar__item--active' : ''}`}
+              {...SIDEBAR_ITEM} {...(thingOpen ? SIDEBAR_ITEM_ACTIVE : {})}
               title={thingOpen ? 'Hide THING chat' : 'Show THING chat'}
             >
               <MessageSquare className="studio-sidebar__footer-icon" />
               {!isCollapsed && <CozyThingText text="THING" className="studio-sidebar__footer-label" />}
             </Prim.Pressable>
           ) : (
-            <Link to="/studio/thing" className={`sidebar__item ${pathname.startsWith('/studio/thing') ? 'sidebar__item--active' : ''}`}>
+            <NavLink to="/studio/thing" {...SIDEBAR_ITEM} {...(pathname.startsWith('/studio/thing') ? SIDEBAR_ITEM_ACTIVE : {})}>
               <Prim.Text width={20} height={20} flexShrink={0} aria-hidden="true">🤖</Prim.Text>
               {!isCollapsed && <CozyThingText text="THING" className="studio-sidebar__footer-label" />}
-            </Link>
+            </NavLink>
           )}
-          <Link to={`${spacePath}/raw`} className={`sidebar__item ${pathname.includes('/raw') ? 'sidebar__item--active' : ''}`}>
+          <NavLink to={`${spacePath}/raw`} {...SIDEBAR_ITEM} {...(pathname.includes('/raw') ? SIDEBAR_ITEM_ACTIVE : {})}>
             <FileCode className="studio-sidebar__footer-icon" />
             {!isCollapsed && <Prim.Text fontSize="$sm" fontWeight="$medium">Raw Files</Prim.Text>}
-          </Link>
+          </NavLink>
           {!asRail && otherAppLinks('studio').map((link) => (
             <Prim.Link
               key={link.app}
               href={link.url}
-              className="sidebar__item"
+              {...SIDEBAR_ITEM}
               title={`Open lmthing.${link.app}`}
             >
               <Prim.Text width={20} height={20} flexShrink={0} aria-hidden="true">{link.emoji}</Prim.Text>
               {!isCollapsed && <Prim.Text fontSize="$sm" fontWeight="$medium">{link.label}</Prim.Text>}
             </Prim.Link>
           ))}
-          <Prim.Pressable onClick={onOpenSettings} className="sidebar__item">
+          <Prim.Pressable onClick={onOpenSettings} {...SIDEBAR_ITEM}>
             <Settings className="studio-sidebar__footer-icon" />
             {!isCollapsed && <Prim.Text fontSize="$sm" fontWeight="$medium">Settings</Prim.Text>}
           </Prim.Pressable>
-          <Prim.Pressable onClick={onToggleCollapse} className="sidebar__item">
+          <Prim.Pressable onClick={onToggleCollapse} {...SIDEBAR_ITEM}>
             {isCollapsed ? (
               <ChevronRight className="studio-sidebar__footer-icon" />
             ) : (
