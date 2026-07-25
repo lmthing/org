@@ -6,15 +6,33 @@
 > [§0](#0-how-to-re-measure). It supersedes nothing: the other doc stays the record of *what
 > happened and why*, this one is *what is left and in what order*.
 
-> **Status.** Phases **0.5 ✅ · 1 ✅ · 2 ✅ · 3 ✅** (className axis; inline-`style` tail ◐) ·
-> **4 ✅ TAILWIND IS DELETED** · **5a ✅ ONE CONFIG** · **5b ✅** · **5c ✅ measured**.
+> **Status.** Phases **0.5 ✅ · 1 ✅ · 2 ✅ · 3 ✅** (className axis closed; inline-`style` tail ◐) ·
+> **4 ✅ TAILWIND IS DELETED** · **5a ✅ ONE CONFIG** · **5b ◐** (root cause fixed, the `--noCheck`
+> script is not yet flipped) · **5c ✅ measured**.
 > Each completed phase keeps its section, rewritten to record what was actually done and **where this
 > plan was wrong** — the corrections matter more than the ticks, because several were load-bearing.
 >
-> **Definition of done: 3 of 5 met** — (1) `@import "tailwindcss"` appears nowhere in the design system
-> or the web surfaces and `theme.css` is a vars-only file, (2) no Tailwind utility className anywhere,
-> (5) `libs/ui` has a real typecheck. Open: (3) 127 inline styles on Tamagui-backed targets,
-> (4) still two Tamagui configs.
+> **Definition of done: 3 of 5 met.**
+>
+> - **(1) ✅** `@import "tailwindcss"` appears nowhere in the design system or the web surfaces —
+>   verified by stripping comments first, since several files now *discuss* the directive. `theme.css`
+>   is a vars-only file.
+> - **(2) ✅** No Tailwind utility className anywhere. Same caveat: the only textual matches left sit
+>   inside comments recording what was removed.
+> - **(3) ◐** 96 inline styles remain on Tamagui-backed targets (from 130). A further 78 are on
+>   passthrough primitives / lucide / `.native.tsx`, where `style` is CORRECT and permanent.
+> - **(4) ✅** ONE Tamagui config, platform-split on `isWeb`.
+> - **(5) ◐ NOT met — and an earlier version of this line wrongly claimed it was.** `libs/ui` still
+>   runs `tsc --noEmit --noCheck`. What §5b delivered is the *root cause*: one React 19, which is what
+>   that section named as the blocker. It removed all **133** `TS2786`
+>   ("cannot be used as a JSX component") errors from the `apps/web` typecheck, 487 → 318, and made
+>   `app-sidebar` render-testable for the first time.
+>
+>   Flipping the script needs more. A real `tsc` over `libs/ui` reports **223** errors today, and they
+>   are NOT the React problem: 116 `TS2339` (property does not exist), 64 `TS2322` (not assignable),
+>   22 `TS2307` (unresolvable modules — `@tanstack/react-router`, the `react-native*` packages the
+>   `.native.tsx` forks import, two `@/…` app aliases, two asset paths), 16 `TS2345`. That is
+>   pre-existing type debt with its own shape, and it wants its own change.
 
 ## The definition of done
 
@@ -668,8 +686,10 @@ Phases 1–3 are independent and can land in any order or in parallel; phase 4 n
 1. icons          lucide props + Prim.Svg style  ✅ DONE
 3. classNames     zero Tailwind utilities left   ✅ DONE
    inline style   127 still on Tamagui targets   ◐ PARTIAL
-5b. SPIKE C       one React 19, real renders     ✅ DONE (taken early — it
-                                                   unblocks verifying the rest)
+5b. SPIKE C       one React 19, real renders     ◐ root cause fixed; the
+                                                   `libs/ui` script is still
+                                                   --noCheck (223 errors of
+                                                   pre-existing type debt)
 4. delete Tailwind   0 directives, 19.52 kB CSS  ✅ DONE
 5a. one config    platform-split on isWeb       ✅ DONE
 5c. extraction    measured — a no-op either way ✅ DONE
