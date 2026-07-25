@@ -15,11 +15,25 @@ export const KIND_ICON: Record<string, string> = {
   session: '◉',
 };
 
-export const STATUS_COLOR: Record<string, string> = {
-  running: 'text-brand-2 bg-brand-2/10 border-brand-2/30',
-  done: 'text-muted-foreground bg-muted border-border',
-  error: 'text-destructive bg-destructive/10 border-destructive/30',
-  pending: 'text-muted-foreground bg-muted border-border',
+/**
+ * Status chip styling as `$`-token PROP BAGS rather than class strings — a lookup table of
+ * classNames is still a className at the call site, so it blocked the P3 codemod
+ * (docs/tamagui-idiomatic-migration.md §5). Alpha values use the same web `color-mix` the element
+ * conversions use.
+ */
+export const STATUS_COLOR: Record<string, Record<string, string>> = {
+  running: {
+    color: '$brand-2',
+    backgroundColor: 'color-mix(in srgb, var(--brand-2) 10%, transparent)',
+    borderColor: 'color-mix(in srgb, var(--brand-2) 30%, transparent)',
+  },
+  done: { color: '$muted-foreground', backgroundColor: '$muted', borderColor: '$border' },
+  error: {
+    color: '$destructive',
+    backgroundColor: 'color-mix(in srgb, var(--destructive) 10%, transparent)',
+    borderColor: 'color-mix(in srgb, var(--destructive) 30%, transparent)',
+  },
+  pending: { color: '$muted-foreground', backgroundColor: '$muted', borderColor: '$border' },
 };
 
 /** Map a node status onto a STATUS_COLOR key (queued → pending, skipped → done). */

@@ -31,7 +31,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'h2': return <Prim.Text as="h2" key={key} color="var(--lm-text)" fontSize="$base" fontWeight="$semibold" marginVertical="0.25rem">{body}</Prim.Text>;
     case 'h3': return <Prim.Text as="h3" key={key} color="var(--lm-text)" fontSize="$sm" fontWeight="$semibold" marginVertical="0.25rem">{body}</Prim.Text>;
     case 'p': case 'paragraph': return <Prim.Text as="p" key={key} color="var(--lm-text)" marginVertical="0.25rem">{body}</Prim.Text>;
-    case 'text': return <Prim.Text key={key} style={color ? { color: `var(--lm-${color}, ${color})` } : undefined} className={`${props['bold'] ? 'font-semibold' : ''} ${props['dim'] ? 'text-lm-muted' : ''} ${props['italic'] ? 'italic' : ''}`}>{body}</Prim.Text>;
+    case 'text': return <Prim.Text key={key} style={color ? { color: `var(--lm-${color}, ${color})` } : undefined} {...(props['bold'] ? { fontWeight: '$semibold' } : {})} {...(props['dim'] ? { color: 'var(--lm-muted)' } : {})} {...(props['italic'] ? { fontStyle: 'italic' as const } : {})}>{body}</Prim.Text>;
     case 'strong': return <Prim.Text as="strong" key={key} fontWeight="$semibold">{body}</Prim.Text>;
     case 'em': return <Prim.Text as="em" key={key}>{body}</Prim.Text>;
     case 'muted': return <Prim.Text key={key} color="var(--lm-muted)">{body}</Prim.Text>;
@@ -90,13 +90,12 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     );
     case 'callout': case 'alert': case 'banner': {
       const variant = props['variant'] as string | undefined;
-      const c = variant === 'error' ? 'border-lm-red text-lm-red' : variant === 'success' ? 'border-lm-green text-lm-green' : variant === 'warning' ? 'border-lm-amber text-lm-amber' : 'border-lm-accent text-lm-accent';
-      return <Prim.Box key={key} marginVertical="0.25rem" className={`border-l-2 ${c} bg-lm-panel2 px-2 py-1 rounded`}>{props['title'] ? <Prim.Box fontWeight="$semibold">{String(props['title'])}</Prim.Box> : null}{body}</Prim.Box>;
+      const tone = variant === 'error' ? 'red' : variant === 'success' ? 'green' : variant === 'warning' ? 'amber' : 'accent';
+      return <Prim.Box key={key} marginVertical="0.25rem" borderLeftWidth={2} borderLeftColor={`var(--lm-${tone})`} color={`var(--lm-${tone})`} backgroundColor="var(--lm-panel2)" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius">{props['title'] ? <Prim.Box fontWeight="$semibold">{String(props['title'])}</Prim.Box> : null}{body}</Prim.Box>;
     }
     case 'badge': case 'tag': case 'pill': {
-      const rounded = d.type.toLowerCase() === 'pill' ? 'rounded-full' : 'rounded';
-      const cv = color ? `bg-[var(--lm-${color})]/20 text-[var(--lm-${color})]` : 'bg-lm-accent/20 text-lm-accent';
-      return <Prim.Text key={key} display="inline-block" className={`${rounded} px-1.5 py-0.5 text-[10px] ${cv}`}>{body}</Prim.Text>;
+      const tone = `var(--lm-${color ?? 'accent'})`;
+      return <Prim.Text key={key} display="inline-block" borderRadius={d.type.toLowerCase() === 'pill' ? '$radius-full' : '$radius'} paddingHorizontal="$1.5" paddingVertical="$0.5" fontSize="10px" color={tone} backgroundColor={`color-mix(in srgb, ${tone} 20%, transparent)`}>{body}</Prim.Text>;
     }
 
     // ── collections ──

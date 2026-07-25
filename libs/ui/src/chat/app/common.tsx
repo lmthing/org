@@ -10,41 +10,71 @@ export const STATUS_GLYPH: Record<NodeStatus, string> = {
   skipped: '⊘',
 };
 
+// Colour tables hold the VALUE, not a className — a lookup of class strings is still a className
+// at the call site. `var(--lm-…)` (not the token it aliases) so a space's runtime theme override
+// still reaches them. See docs/tamagui-idiomatic-migration.md §5.
 const STATUS_COLOR: Record<NodeStatus, string> = {
-  queued: 'text-lm-muted',
-  running: 'text-lm-accent',
-  done: 'text-lm-green',
-  error: 'text-lm-red',
-  skipped: 'text-lm-muted',
+  queued: 'var(--lm-muted)',
+  running: 'var(--lm-accent)',
+  done: 'var(--lm-green)',
+  error: 'var(--lm-red)',
+  skipped: 'var(--lm-muted)',
 };
 
 const KIND_COLOR: Record<NodeKind, string> = {
-  session: 'text-lm-text',
-  run: 'text-lm-muted',
-  fork: 'text-lm-cyan',
-  delegate: 'text-lm-purple',
-  tasklist: 'text-lm-amber',
-  task: 'text-lm-amber',
+  session: 'var(--lm-text)',
+  run: 'var(--lm-muted)',
+  fork: 'var(--lm-cyan)',
+  delegate: 'var(--lm-purple)',
+  tasklist: 'var(--lm-amber)',
+  task: 'var(--lm-amber)',
 };
 
 export function StatusIcon({ status }: { status: NodeStatus }): React.ReactElement {
-  const cls = STATUS_COLOR[status];
   const glyph = STATUS_GLYPH[status];
   return (
-    <Prim.Text className={`${cls} ${status === 'running' ? 'lm-spin' : ''}`} aria-label={status} data-status={status}>
+    // `lm-spin` is a keyframe animation and stays a className until the driver lands (§5).
+    <Prim.Text
+      color={STATUS_COLOR[status]}
+      className={status === 'running' ? 'lm-spin' : undefined}
+      aria-label={status}
+      data-status={status}
+    >
       {glyph}
     </Prim.Text>
   );
 }
 
 export function KindBadge({ kind }: { kind: NodeKind }): React.ReactElement {
-  return <Prim.Text className={`${KIND_COLOR[kind]} font-mono text-[10px] uppercase tracking-wide`}>{kind}</Prim.Text>;
+  return (
+    <Prim.Text
+      color={KIND_COLOR[kind]}
+      fontFamily="$mono"
+      fontSize="10px"
+      textTransform="uppercase"
+      letterSpacing="$wide"
+    >{kind}</Prim.Text>
+  );
 }
 
 export function Badge({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'amber' | 'red' }): React.ReactElement {
-  const cls = tone === 'amber' ? 'text-lm-amber border-lm-amber/40' : tone === 'red' ? 'text-lm-red border-lm-red/40' : 'text-lm-muted border-lm-border';
+  const TONE = {
+    amber: { color: 'var(--lm-amber)', borderColor: 'color-mix(in srgb, var(--lm-amber) 40%, transparent)' },
+    red: { color: 'var(--lm-red)', borderColor: 'color-mix(in srgb, var(--lm-red) 40%, transparent)' },
+    muted: { color: 'var(--lm-muted)', borderColor: 'var(--lm-border)' },
+  } as const;
   return (
-    <Prim.Text display="inline-flex" className={`items-center rounded px-1.5 py-0.5 text-[10px] font-mono border ${cls}`}>
+    <Prim.Text
+      display="inline-flex"
+      alignItems="center"
+      borderRadius="$radius"
+      paddingHorizontal="$1.5"
+      paddingVertical="$0.5"
+      fontSize="10px"
+      fontFamily="$mono"
+      borderWidth={1}
+      {...TONE[tone]}
+    >
       {children}
     </Prim.Text>
   );
@@ -58,7 +88,23 @@ export function fmtDuration(ms?: number): string {
 
 export function CodeBlock({ code }: { code: string }): React.ReactElement {
   return (
-    <Prim.Pre className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words bg-lm-bg border border-lm-border rounded p-2 overflow-x-auto text-lm-text">
+    // `Prim.Pre` is a host passthrough (a replaced-ish block we never style via props), so this one
+    // keeps `break-words`, which has no prop form; the rest is inline style.
+    <Prim.Pre
+      className="break-words"
+      style={{
+        fontFamily: 'ui-monospace, monospace',
+        fontSize: '11px',
+        lineHeight: 1.625,
+        whiteSpace: 'pre-wrap',
+        background: 'var(--lm-bg)',
+        border: '1px solid var(--lm-border)',
+        borderRadius: 'var(--radius)',
+        padding: '0.5rem',
+        overflowX: 'auto',
+        color: 'var(--lm-text)',
+      }}
+    >
       {code}
     </Prim.Pre>
   );
@@ -74,9 +120,17 @@ export function Tabs<T extends string>({ tabs, active, onChange }: { tabs: reado
           aria-selected={active === t}
           data-testid={`inspector-tab-${t}`}
           onClick={() => onChange(t)}
-          className={`px-3 py-1.5 text-[11px] font-mono capitalize border-b-2 -mb-px transition-colors ${
-            active === t ? 'border-lm-accent text-lm-text' : 'border-transparent text-lm-muted hover:text-lm-text'
-          }`}
+          className="transition-colors"
+          paddingHorizontal="$3"
+          paddingVertical="$1.5"
+          fontSize="11px"
+          fontFamily="$mono"
+          textTransform="capitalize"
+          borderBottomWidth={2}
+          marginBottom={-1}
+          {...(active === t
+            ? { borderBottomColor: 'var(--lm-accent)', color: 'var(--lm-text)' }
+            : { borderBottomColor: 'transparent', color: 'var(--lm-muted)', hoverStyle: { color: 'var(--lm-text)' } })}
         >
           {t}
         </Prim.Pressable>

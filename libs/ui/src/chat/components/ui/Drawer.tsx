@@ -24,11 +24,14 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
 
   return (
     <Prim.Row position="fixed" top="$0" right="$0" bottom="$0" left="$0" zIndex={40}>
-      <Prim.Box className={side === 'left' ? 'right-0' : 'left-0'} backgroundColor="color-mix(in srgb, var(--foreground) 10%, transparent)" position="absolute" top="$0" right="$0" bottom="$0" left="$0" onClick={onClose} />
+      {/* The backdrop already pins all four insets, so the old side-specific `right-0`/`left-0`
+          was inert — dropped rather than translated. */}
+      <Prim.Box backgroundColor="color-mix(in srgb, var(--foreground) 10%, transparent)" position="absolute" top="$0" right="$0" bottom="$0" left="$0" onClick={onClose} />
       <Prim.Box
         display="flex"
         {...(side === 'right' ? { marginLeft: 'auto' } : { marginRight: 'auto' })}
-        className={cn("lm-slide-in-right", width, side === 'right' ? 'border-l' : 'border-r', className)} position="relative" flexDirection="column" backgroundColor="$card" borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} height="100%">
+        {...(side === 'right' ? { borderLeftWidth: 1 } : { borderRightWidth: 1 })}
+        className={cn("lm-slide-in-right", width, className)} position="relative" flexDirection="column" backgroundColor="$card" borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} height="100%">
         {title && (
           <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderBottomWidth={1} borderColor="$border" alignItems="center" flexShrink={0}>
             <Prim.Text fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>

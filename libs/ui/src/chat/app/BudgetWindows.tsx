@@ -71,7 +71,7 @@ export function BudgetWindows(): React.ReactElement | null {
           <Prim.Text key={w.duration}>
             {' · '}
             {w.label}{' '}
-            <Prim.Text className={low ? 'text-destructive' : undefined}>
+            <Prim.Text {...(low ? { color: '$destructive' } : {})}>
               {pct == null ? '—' : pct === 0 ? '0%' : `${Math.max(1, Math.round(pct))}%`}
             </Prim.Text>
           </Prim.Text>
