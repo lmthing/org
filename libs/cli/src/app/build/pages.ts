@@ -26,7 +26,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -631,6 +631,15 @@ function resolveEnv(projectRoot: string): {
  * radius on the Vite surfaces) rewrites such a directory import to its concrete `index.*` file;
  * a specifier that already resolves is left untouched (the plugin returns nothing and esbuild
  * proceeds normally).
+ *
+ * It also resolves a specifier that names the FILE outright
+ * (`@lmthing/ui/elements/nav/sidebar/index.tsx`), which an authored page is free to write. That
+ * used to fall through to esbuild and work, because `"./elements/*"` was a single wildcard onto the
+ * directory. It is now an ARRAY of candidates — added so Metro, which does no directory-index
+ * resolution, could resolve the same subpaths for the React Native target. Node and Metro treat
+ * such an array as alternatives and try each; **esbuild takes the first entry and stops**, so the
+ * file form started failing against `src/elements/nav/sidebar/index.tsx/index.tsx`. Resolving it
+ * here keeps both forms working on every bundler instead of picking one.
  */
 export function uiElementsDirResolve(uiSrcDir: string): Plugin {
   const prefix = '@lmthing/ui/elements/';
@@ -643,7 +652,10 @@ export function uiElementsDirResolve(uiSrcDir: string): Plugin {
           const candidate = join(uiSrcDir, 'elements', rest, ext);
           if (existsSync(candidate)) return { path: candidate };
         }
-        return undefined; // not a directory-with-index — let esbuild resolve normally
+        // The specifier already names a file (`.../sidebar/index.tsx`, `.../typography.tsx`).
+        const asFile = join(uiSrcDir, 'elements', rest);
+        if (existsSync(asFile) && statSync(asFile).isFile()) return { path: asFile };
+        return undefined; // neither — let esbuild resolve normally
       });
     },
   };
