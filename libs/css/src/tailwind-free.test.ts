@@ -55,8 +55,10 @@ describe('the design system and web surfaces are Tailwind-free', () => {
   const files = TREES.flatMap((t) => cssFiles(join(ORG, t)));
 
   it('finds the stylesheets it means to check', () => {
-    // Guards against the walk silently matching nothing and the suite passing vacuously.
-    expect(files.length).toBeGreaterThan(10);
+    // Guards against the walk silently matching nothing and the suite passing vacuously. The count
+    // dropped from ~17 to 7 when the dead `libs/css/src/components/**` stylesheets were deleted —
+    // every one of them had been superseded by a `props.ts` bag and imported by nothing.
+    expect(files.length).toBeGreaterThan(5);
   });
 
   it.each(DIRECTIVES)('no stylesheet uses %s', (directive) => {

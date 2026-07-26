@@ -21,5 +21,10 @@
     "@vitejs/plugin-react": "*",
     "vite-plus": "*",
     "@tailwindcss/vite": "*"
+  },
+  "peerDependenciesMeta": {
+    "@tailwindcss/vite": {
+      "optional": true
+    }
   }
 }

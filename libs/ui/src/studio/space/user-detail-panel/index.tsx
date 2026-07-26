@@ -125,7 +125,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
             <Prim.Box flexShrink={0}>
               <Avatar size="lg">
                 {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
-                <AvatarFallback className="user-detail__avatar-fallback">
+                <AvatarFallback>
                   {user.name.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>

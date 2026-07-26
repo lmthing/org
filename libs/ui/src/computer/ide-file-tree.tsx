@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import * as ContextMenu from '../elements/overlays/context-menu'
 import { Dialog, DialogContent, DialogTitle } from '../elements/overlays/dialog'
-import { IDE_FILE_TREE_CONTEXT_ITEM, IDE_FILE_TREE_CONTEXT_ITEM_DANGER, IDE_FILE_TREE_DIALOG_INPUT, IDE_FILE_TREE_DIALOG_TITLE, IDE_FILE_TREE_ICON, IDE_FILE_TREE_ICON_FOLDER } from './ide-file-tree.props'
+import { IDE_FILE_TREE_CONTEXT_ITEM, IDE_FILE_TREE_CONTEXT_ITEM_DANGER, IDE_FILE_TREE_CONTEXT_MENU, IDE_FILE_TREE_DIALOG_CONTENT, IDE_FILE_TREE_DIALOG_INPUT, IDE_FILE_TREE_DIALOG_TITLE, IDE_FILE_TREE_ICON, IDE_FILE_TREE_ICON_FOLDER } from './ide-file-tree.props'
 
 export interface FileTreeNode {
   name: string
@@ -101,7 +101,7 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
           </Prim.Box>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>
-          <ContextMenu.Content className="ide-file-tree__context-menu">
+          <ContextMenu.Content {...IDE_FILE_TREE_CONTEXT_MENU}>
             <ContextMenu.Item {...IDE_FILE_TREE_CONTEXT_ITEM} onClick={() => setDialogType('file')}>
               <FilePlus size={16} /> New File
             </ContextMenu.Item>
@@ -117,7 +117,7 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
       </ContextMenu.Root>
 
       <Dialog open={dialogType !== null} onOpenChange={(open) => { if (!open) setDialogType(null) }}>
-        <DialogContent className="ide-file-tree__dialog-content">
+        <DialogContent {...IDE_FILE_TREE_DIALOG_CONTENT}>
           <DialogTitle {...IDE_FILE_TREE_DIALOG_TITLE}>
             New {dialogType === 'folder' ? 'Folder' : 'File'}
           </DialogTitle>
@@ -223,7 +223,7 @@ function IdeFileTree({ fileTree, activeFile, onFileSelect, onCreateFile, onCreat
       </Prim.Box>
 
       <Dialog open={dialogType !== null} onOpenChange={(open) => { if (!open) setDialogType(null) }}>
-        <DialogContent className="ide-file-tree__dialog-content">
+        <DialogContent {...IDE_FILE_TREE_DIALOG_CONTENT}>
           <DialogTitle {...IDE_FILE_TREE_DIALOG_TITLE}>
             New {dialogType === 'folder' ? 'Folder' : 'File'}
           </DialogTitle>

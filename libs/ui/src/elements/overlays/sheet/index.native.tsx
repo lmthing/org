@@ -47,7 +47,7 @@ const SHEET_VIEWPORT = { flex: 1, flexDirection: 'row' } as const
 const SHEET_BACKDROP = {
   position: 'absolute',
   top: 0, right: 0, bottom: 0, left: 0,
-  backgroundColor: 'rgba(0,0,0,0.5)', // ds-lint-ok: bg-black/50 wash, theme-independent
+  backgroundColor: '$scrim',
 } as const
 
 /** `.sheet__content` — flex column, full height. */

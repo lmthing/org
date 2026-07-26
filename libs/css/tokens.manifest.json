@@ -414,6 +414,15 @@
       "description": "Disabled text"
     },
     {
+      "name": "scrim",
+      "cssVar": "--scrim",
+      "utility": "--color-scrim",
+      "group": "intent",
+      "light": "rgba(0,0,0,0.5)",
+      "dark": "rgba(0,0,0,0.5)",
+      "description": "Modal/overlay wash — achromatic and identical in both themes, so a dialog behind it dims the same way on either"
+    },
+    {
       "name": "sidebar-background",
       "cssVar": "--sidebar-background",
       "utility": "--color-sidebar-background",

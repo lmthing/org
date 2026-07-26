@@ -1,4 +1,0 @@
-@import 'tailwindcss';
-
-/* Force Tailwind v4 to emit the utilities the probe uses (it only emits scanned classes). */
-@source inline("items-center items-stretch items-start flex flex-row flex-col justify-end justify-start justify-between hidden gap-4 gap-3 gap-2 flex-1 min-w-0 bg-black");

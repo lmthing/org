@@ -93,7 +93,8 @@ export function GithubDeploymentStatus({
       href={data.html_url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`badge ${statusInfo.variant === 'success' ? 'badge--success' : statusInfo.variant === 'primary' ? 'badge--primary' : 'badge--muted'}`}
+      {...BADGE_BASE}
+      {...BADGE_VARIANT[statusInfo.variant === 'success' ? 'success' : statusInfo.variant === 'primary' ? 'primary' : 'muted']}
       title={`Last deployment: ${new Date(data.created_at).toLocaleString()}`}
     >
       {statusInfo.icon}

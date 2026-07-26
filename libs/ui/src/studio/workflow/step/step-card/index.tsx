@@ -171,7 +171,10 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
           width="$6"
           height="$6"
           borderRadius="$radius-full"
-          color="#fff" /* ds-lint-ok: literal text-white on the colored order badge (theme-independent) */
+          /* Was a literal white (Tailwind's `text-white`). `$primary-foreground` is the warm
+             near-black the palette defines as the AA-contrast pair for coral — white on `$brand-3`
+             is roughly 2.4:1, below AA at this size. */
+          color="$primary-foreground"
           fontSize="$xs"
           fontWeight="$bold"
           display="flex"

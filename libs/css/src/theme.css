@@ -85,6 +85,7 @@
   --color-focus: var(--focus);
   --color-disabled: var(--disabled);
   --color-disabled-foreground: var(--disabled-foreground);
+  --color-scrim: var(--scrim);
   --color-sidebar-background: var(--sidebar-background);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -188,6 +189,7 @@
   --focus: rgba(243, 131, 88, 0.4);
   --disabled: #e7e0da;
   --disabled-foreground: #a8a29e;
+  --scrim: rgba(0,0,0,0.5);
   --sidebar-background: #fdf5ef;
   --sidebar-foreground: #1c1917;
   --sidebar-primary: #f38358;

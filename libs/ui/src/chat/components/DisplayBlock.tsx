@@ -1,6 +1,9 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { marked } from 'marked';
+// `.lm-prose` lives in the shared markdown stylesheet; state the dependency where it is used so
+// the class cannot go missing from a route that renders a `markdown` block.
+import '@lmthing/css/components/markdown/index.css';
 
 interface JSXDescriptor {
   type: string;
@@ -85,9 +88,12 @@ function renderNode(node: unknown, key?: number): React.ReactNode {
       const text = props['text'] as string | undefined;
       const markdown = text || (renderedChildren.length > 0 ? renderedChildren.join('') : '');
       const html = marked.parse(String(markdown)) as string;
-      // NO className: `prose prose-sm` needed @tailwindcss/typography, which is not installed and
-      // never was, so it styled nothing. See docs/tamagui-final-steps.md §4.
-      return <Prim.Box key={key} maxWidth="none" dangerouslySetInnerHTML={{ __html: html }} />;
+      // `.lm-prose` is the working class for `marked`-produced HTML — the same one `chat/app/Message`
+      // uses. It replaces the `prose prose-sm` that was here, which needed @tailwindcss/typography:
+      // never installed, so it styled nothing and this block rendered unformatted.
+      return (
+        <Prim.Box key={key} className="lm-prose" maxWidth="none" dangerouslySetInnerHTML={{ __html: html }} />
+      );
     }
     case 'text':
     default:
