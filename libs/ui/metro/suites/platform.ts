@@ -8,7 +8,21 @@
  * exactly the mechanism that has to work on a device.
  */
 import { test, expect } from '../harness'
-import { storage, clipboard, getWindowSize, subscribeWindowSize, apiBase, apiUrl, wsUrl } from '../../src/platform'
+import {
+  storage,
+  clipboard,
+  getWindowSize,
+  subscribeWindowSize,
+  apiBase,
+  apiUrl,
+  wsUrl,
+  readLinkParams,
+  writeLinkParams,
+} from '../../src/platform'
+import * as Linking from 'expo-linking'
+
+/** The mock's control surface — see \`metro/mocks/expo-linking.js\`. */
+const linking = Linking as unknown as { __setLinkingURL: (url: string | null) => void }
 
 test('getWindowSize reads RN Dimensions and returns numbers', () => {
   const size = getWindowSize()
@@ -54,4 +68,38 @@ test('the ws url swaps the scheme rather than the host', () => {
   expect(url.startsWith('ws')).toBe(true)
   expect(url.includes('http')).toBe(false)
   expect(url.endsWith('/api/ws?sessionId=abc')).toBe(true)
+})
+
+test('deep-link params are seeded from the URL that OPENED the app', () => {
+  // `?node=…` in an `lmthing://` link has to reach the surface the same way a web query string
+  // does, or a shared link opens the app on the wrong node. The web half would read
+  // `window.location.search` — undefined here — and silently return nothing.
+  linking.__setLinkingURL('lmthing://chat?node=n-9&tab=code&follow=0')
+  const params = readLinkParams()
+  expect(params.node).toBe('n-9')
+  expect(params.tab).toBe('code')
+  expect(params.follow).toBe('0')
+})
+
+test('a write PATCHES the params and takes over from the launch url', () => {
+  linking.__setLinkingURL('lmthing://chat?node=n-9&keep=yes')
+  writeLinkParams({ node: 'n-10', follow: '0' })
+
+  const params = readLinkParams()
+  expect(params.node).toBe('n-10')
+  expect(params.follow).toBe('0')
+  // The first write must not drop what the deep link set — the surface owns node/tab/follow only.
+  expect(params.keep).toBe('yes')
+})
+
+test('a null value removes a param', () => {
+  linking.__setLinkingURL('lmthing://chat?node=n-9')
+  writeLinkParams({ node: null })
+  expect(readLinkParams().node).toBe(undefined)
+})
+
+test('no launch url means no params, not a crash on first render', () => {
+  linking.__setLinkingURL(null)
+  writeLinkParams({ node: null, tab: null, follow: null, keep: null })
+  expect(Object.keys(readLinkParams()).length).toBe(0)
 })

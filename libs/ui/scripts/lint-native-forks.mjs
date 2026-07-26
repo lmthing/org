@@ -72,6 +72,7 @@ const ALLOWED = {
   // `platform` — a browser global with no direct RN equivalent, behind a narrow API.
   'libs/ui/src/platform/api-base.native.ts': 'platform',
   'libs/ui/src/platform/clipboard.native.ts': 'platform',
+  'libs/ui/src/platform/deep-link.native.ts': 'platform',
   'libs/ui/src/platform/dimensions.native.ts': 'platform',
   'libs/ui/src/platform/storage.native.ts': 'platform',
 

@@ -16,6 +16,7 @@ import { cn } from '../lib/cn';
 // The transcript's markdown is rendered as ELEMENTS, not injected HTML, so it needs no stylesheet
 // and works on both targets. `preset="prose"` is the former `.lm-prose` scale.
 import { Markdown } from '../../elements/content/markdown';
+import { getLiveSend } from './live-send';
 
 // ─── Space component registry ─────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ const BLOCK_LIVE = {
 // ─── Ask form ─────────────────────────────────────────────────────────────────
 
 function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
-  const send = (window as unknown as { __LM_SEND__?: (m: unknown) => void }).__LM_SEND__;
+  const send = getLiveSend();
   const inert = block.state !== 'open';
   const comps = spaceComponents();
   const d = block.descriptor as Descriptor | undefined;

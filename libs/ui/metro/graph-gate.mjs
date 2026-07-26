@@ -75,6 +75,7 @@ export const EXPECTED_NATIVE_FORKS = [
   'libs/ui/src/platform/clipboard.native.ts',
   'libs/ui/src/platform/dimensions.native.ts',
   'libs/ui/src/platform/api-base.native.ts',
+  'libs/ui/src/platform/deep-link.native.ts',
   'libs/auth/src/platform/session-store.native.ts',
   'libs/auth/src/platform/crypto.native.ts',
   'libs/auth/src/platform/sso.native.ts',

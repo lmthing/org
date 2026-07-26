@@ -7,6 +7,7 @@ import { DevPanel } from './DevPanel';
 import { ProjectSettings } from './ProjectSettings';
 import { Drawer } from '../components/ui/Drawer';
 import { cn } from '../lib/cn';
+import { getLiveSend } from './live-send';
 
 interface AppShellProps {
   singleSession?: boolean;
@@ -30,7 +31,7 @@ export function AppShell({ singleSession }: AppShellProps) {
   // only calls this once the socket is open, so the send is never a silent drop.
   const onIntegrationConfigured = React.useCallback((_spaceId: string, message: string) => {
     noteUser(message);
-    const send = (window as unknown as { __LM_SEND__?: (m: unknown) => void }).__LM_SEND__;
+    const send = getLiveSend();
     send?.({ type: 'sendMessage', content: message });
   }, [noteUser]);
 

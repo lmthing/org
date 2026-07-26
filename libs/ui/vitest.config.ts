@@ -26,6 +26,10 @@ export default defineConfig({
       'src/**/*.parity.test.tsx',
       'src/theme/**/*.test.ts',
       'src/platform/**/*.test.ts',
+      // The chat surface's NODE-safe suites (auth, url-state, node-meta, auto-resume, the store).
+      // These ran nowhere at all: the root config excludes libs/ui, and this include never named
+      // `chat/`. `.ts` only — the `.tsx` component suites still need peers that are not installed.
+      'src/chat/**/*.test.ts',
       // Pure codemod-mapping tests (node-safe, no DOM) — the objective correctness gate for the
       // P3 classnames-to-props codemod. See docs/tamagui-idiomatic-migration.md §5.
       'scripts/**/*.test.mjs',

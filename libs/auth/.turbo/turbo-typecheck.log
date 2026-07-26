@@ -1,4 +1,4 @@
 
-> @lmthing/auth@1.0.0 typecheck /home/user/org/libs/auth
+> @lmthing/auth@1.0.0 typecheck /home/vasilis/LMTHING/lmthing/sdk/org/libs/auth
 > tsc --noEmit
 

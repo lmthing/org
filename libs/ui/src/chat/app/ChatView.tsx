@@ -12,6 +12,7 @@ import { cn } from '../lib/cn';
 import { BugReportDialog } from './BugReportDialog';
 import { authHeaders } from './auth';
 import { apiUrl } from '../../platform/api-base';
+import { getLiveSend } from './live-send';
 
 function formatCost(usd: number): string {
   if (usd < 0.000001) return '';
@@ -140,7 +141,7 @@ export function ChatView({
     // A budget window is exhausted (0% left) — LiteLLM would 429 the turn anyway.
     if (useStore.getState().budgetBlocked) return;
     noteUser(text, attachments);
-    const send = (window as unknown as { __LM_SEND__?: (m: unknown) => void }).__LM_SEND__;
+    const send = getLiveSend();
     send?.({ type: 'sendMessage', content: text, ...(attachments && attachments.length ? { attachments } : {}) });
   };
 

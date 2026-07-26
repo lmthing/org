@@ -5,6 +5,7 @@ import { useStore, connectLive } from '../store/store';
 import type { Project, ModelPricing } from '../store/store';
 import { wsTokenSuffix } from './auth';
 import { apiGet, apiPost, apiDelete } from './api';
+import { setLiveSend } from './live-send';
 import { wsUrl } from '../../platform/api-base';
 import { AppSidebar } from '../../elements/nav/app-sidebar';
 import { SidebarFooter } from '../../elements/nav/sidebar-footer';
@@ -30,7 +31,7 @@ function switchSession(sessionId: string): void {
   if (activeConn) { activeConn.close(); activeConn = null; }
   useStore.getState().resetSession();
   activeConn = connectLive(wsUrl(`/api/ws?sessionId=${encodeURIComponent(sessionId)}${wsTokenSuffix()}`));
-  (window as unknown as { __LM_SEND__?: (m: unknown) => void }).__LM_SEND__ = activeConn.send;
+  setLiveSend(activeConn.send);
   useStore.getState().setActiveSessionId(sessionId);
   // On mobile the sidebar is an overlay drawer — close it so the conversation shows.
   if (window.innerWidth < 768) useStore.getState().setSidebarOpen(false);
@@ -174,7 +175,9 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
     if (activeProjectId) loadSessions(activeProjectId);
     if (activeSessionId === sessionId) {
       useStore.getState().setActiveSessionId(null);
-      if (activeConn) { activeConn.close(); activeConn = null; }
+      // Clear the send with the socket. The old `window.__LM_SEND__` was left pointing at a closed
+      // connection here, so a composer submit after deleting the active session dropped silently.
+      if (activeConn) { activeConn.close(); activeConn = null; setLiveSend(null); }
     }
   };
 

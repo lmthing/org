@@ -32,12 +32,24 @@ function parse(url) {
   }
 }
 
+let linkingUrl = null
+
+/** The URL that opened the app. `getLinkingURL` is SYNCHRONOUS in expo-linking — which is exactly
+ *  what lets `platform/deep-link.native.ts` present the same synchronous API as its web sibling. */
+function getLinkingURL() {
+  return linkingUrl
+}
+
+function __setLinkingURL(url) {
+  linkingUrl = url
+}
+
 async function getInitialURL() {
-  return null
+  return linkingUrl
 }
 
 function addEventListener() {
   return { remove() {} }
 }
 
-module.exports = { createURL, parse, getInitialURL, addEventListener }
+module.exports = { createURL, parse, getInitialURL, getLinkingURL, addEventListener, __setLinkingURL }
