@@ -1,4 +1,5 @@
 import type { AuthConfig, AuthSession } from './types'
+import { readItem, writeItem, removeItem, hydrate, isHydrated } from './platform/session-store'
 
 const SESSION_KEY = 'lmthing_session'
 const PIN_HASH_KEY = 'lmthing_pin_hash'
@@ -8,8 +9,29 @@ const PIN_SET_KEY = 'lmthing_pin_set'
 const REFRESH_BUFFER = 60
 
 // Pub/sub so React state stays in sync when a token is rotated out-of-band
-// (e.g. by authFetch's 401-retry, which writes to localStorage directly).
+// (e.g. by authFetch's 401-retry, which writes to the session store directly).
 const sessionListeners = new Set<(session: AuthSession | null) => void>()
+
+/** Everything `readItem` must be able to answer for synchronously. */
+const HYDRATED_KEYS = [SESSION_KEY, PIN_HASH_KEY, PIN_SET_KEY] as const
+
+/**
+ * Load persisted auth state into the synchronous store.
+ *
+ * A no-op on web, where `localStorage` is already synchronous. On native it reads the OS keystore,
+ * which is async — so **this must be awaited before anything that reads a session renders**, or the
+ * app paints a logged-out shell and then flips. Listeners are notified afterwards, so a provider
+ * that subscribed early converges either way.
+ */
+export async function hydrateAuth(): Promise<void> {
+  await hydrate(HYDRATED_KEYS)
+  emitSessionChange(getSession())
+}
+
+/** Whether {@link hydrateAuth} has completed. Always true on web. */
+export function isAuthHydrated(): boolean {
+  return isHydrated()
+}
 
 export function onSessionChange(cb: (session: AuthSession | null) => void): () => void {
   sessionListeners.add(cb)
@@ -85,7 +107,7 @@ export async function handleAuthCallback(config: AuthConfig): Promise<AuthSessio
     githubUsername: data.user.github_username ?? null,
   }
 
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  writeItem(SESSION_KEY, JSON.stringify(session))
   emitSessionChange(session)
   return session
 }
@@ -110,7 +132,7 @@ export async function refreshSession(config: AuthConfig): Promise<AuthSession | 
     expiresAt: data.expires_at ?? undefined,
   }
 
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  writeItem(SESSION_KEY, JSON.stringify(session))
   emitSessionChange(session)
   return session
 }
@@ -204,7 +226,7 @@ export async function authFetch(
 }
 
 export function getAuthHeaders(): Record<string, string> {
-  const raw = localStorage.getItem(SESSION_KEY)
+  const raw = readItem(SESSION_KEY)
   if (!raw) return {}
 
   try {
@@ -216,7 +238,7 @@ export function getAuthHeaders(): Record<string, string> {
 }
 
 export function getSession(): AuthSession | null {
-  const raw = localStorage.getItem(SESSION_KEY)
+  const raw = readItem(SESSION_KEY)
   if (!raw) return null
 
   try {
@@ -252,23 +274,23 @@ export function isLocalRun(): boolean {
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(SESSION_KEY)
+  removeItem(SESSION_KEY)
   emitSessionChange(null)
 }
 
 export function storeSession(session: AuthSession): void {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+  writeItem(SESSION_KEY, JSON.stringify(session))
   emitSessionChange(session)
 }
 
 // PIN utilities for client-side encryption
 
 export function isPinSet(): boolean {
-  return localStorage.getItem(PIN_SET_KEY) === 'true'
+  return readItem(PIN_SET_KEY) === 'true'
 }
 
 export function getPinHash(): string | null {
-  return localStorage.getItem(PIN_HASH_KEY)
+  return readItem(PIN_HASH_KEY)
 }
 
 export async function hashPin(pin: string): Promise<string> {

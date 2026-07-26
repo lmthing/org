@@ -21,7 +21,18 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { repoRoot, redirectedStylesheets } from './config.cjs'
 
-const uiSrc = path.join(repoRoot, 'libs', 'ui', 'src')
+/**
+ * Every package whose sources may hold a `.native` fork. It stopped being just `libs/ui` when the
+ * auth client got a session-store seam — a fork outside this list is invisible to check 1, which is
+ * exactly the silent-drift this gate exists to prevent.
+ */
+const FORK_ROOTS = [
+  path.join(repoRoot, 'libs', 'ui', 'src'),
+  path.join(repoRoot, 'libs', 'auth', 'src'),
+]
+
+/** True when `filePath` is OUR source (as opposed to a dependency) — see {@link FORK_ROOTS}. */
+const isOwnSource = (filePath) => FORK_ROOTS.some((root) => filePath.startsWith(root))
 
 /**
  * Modules that must NEVER appear in a native graph, with the reason reported on failure.
@@ -42,35 +53,40 @@ const WEB_ONLY = [
  * stops being reachable is a regression, not a cleanup — deleting an entry here is a deliberate act.
  */
 export const EXPECTED_NATIVE_FORKS = [
-  'src/elements/primitives/box/index.native.tsx',
-  'src/elements/primitives/text/index.native.tsx',
-  'src/elements/primitives/row/index.native.tsx',
-  'src/elements/primitives/col/index.native.tsx',
-  'src/elements/primitives/pressable/index.native.tsx',
-  'src/elements/primitives/image/index.native.tsx',
-  'src/elements/primitives/link/index.native.tsx',
-  'src/elements/primitives/list/index.native.tsx',
-  'src/elements/primitives/form/index.native.tsx',
-  'src/elements/primitives/controls.native.tsx',
-  'src/elements/primitives/media.native.tsx',
-  'src/elements/primitives/misc.native.tsx',
-  'src/elements/primitives/svg.native.tsx',
-  'src/elements/primitives/table.native.tsx',
-  'src/elements/overlays/dialog/index.native.tsx',
-  'src/elements/overlays/sheet/index.native.tsx',
-  'src/elements/overlays/context-menu/index.native.tsx',
-  'src/elements/overlays/dropdown/index.native.tsx',
-  'src/platform/storage.native.ts',
-  'src/platform/clipboard.native.ts',
-  'src/platform/dimensions.native.ts',
+  'libs/ui/src/elements/primitives/box/index.native.tsx',
+  'libs/ui/src/elements/primitives/text/index.native.tsx',
+  'libs/ui/src/elements/primitives/row/index.native.tsx',
+  'libs/ui/src/elements/primitives/col/index.native.tsx',
+  'libs/ui/src/elements/primitives/pressable/index.native.tsx',
+  'libs/ui/src/elements/primitives/image/index.native.tsx',
+  'libs/ui/src/elements/primitives/link/index.native.tsx',
+  'libs/ui/src/elements/primitives/list/index.native.tsx',
+  'libs/ui/src/elements/primitives/form/index.native.tsx',
+  'libs/ui/src/elements/primitives/controls.native.tsx',
+  'libs/ui/src/elements/primitives/media.native.tsx',
+  'libs/ui/src/elements/primitives/misc.native.tsx',
+  'libs/ui/src/elements/primitives/svg.native.tsx',
+  'libs/ui/src/elements/primitives/table.native.tsx',
+  'libs/ui/src/elements/overlays/dialog/index.native.tsx',
+  'libs/ui/src/elements/overlays/sheet/index.native.tsx',
+  'libs/ui/src/elements/overlays/context-menu/index.native.tsx',
+  'libs/ui/src/elements/overlays/dropdown/index.native.tsx',
+  'libs/ui/src/platform/storage.native.ts',
+  'libs/ui/src/platform/clipboard.native.ts',
+  'libs/ui/src/platform/dimensions.native.ts',
+  'libs/ui/src/platform/api-base.native.ts',
+  'libs/auth/src/platform/session-store.native.ts',
 ]
 
-/** Every `*.native.ts(x)` under `libs/ui/src`, as repo-relative paths. */
-export function findNativeForks(dir = uiSrc, out = []) {
-  for (const name of fs.readdirSync(dir)) {
-    const p = path.join(dir, name)
-    if (fs.statSync(p).isDirectory()) findNativeForks(p, out)
-    else if (/\.native\.tsx?$/.test(name)) out.push(p)
+/** Every `*.native.ts(x)` under {@link FORK_ROOTS}, as absolute paths. */
+export function findNativeForks(roots = FORK_ROOTS, out = []) {
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue
+    for (const name of fs.readdirSync(root)) {
+      const p = path.join(root, name)
+      if (fs.statSync(p).isDirectory()) findNativeForks([p], out)
+      else if (/\.native\.tsx?$/.test(name)) out.push(p)
+    }
   }
   return out
 }
@@ -92,7 +108,7 @@ function webSiblingOf(forkPath) {
 export function checkNativeGraph({ modules, platform, expectForks = EXPECTED_NATIVE_FORKS }) {
   const inGraph = new Set(modules)
   const failures = []
-  const rel = (p) => path.relative(path.join(repoRoot, 'libs', 'ui'), p)
+  const rel = (p) => path.relative(repoRoot, p)
 
   // 1. Fork selection — for every fork pair, native in, web out.
   const forksSelected = []
@@ -134,7 +150,7 @@ export function checkNativeGraph({ modules, platform, expectForks = EXPECTED_NAT
   }
 
   // 4. A `*.web.tsx` file is by definition the web half of a platform seam.
-  const webFork = modules.find((m) => m.startsWith(uiSrc) && m.endsWith('.web.tsx'))
+  const webFork = modules.find((m) => isOwnSource(m) && m.endsWith('.web.tsx'))
   if (webFork) {
     failures.push({
       check: 'web-only-leak',
@@ -148,7 +164,7 @@ export function checkNativeGraph({ modules, platform, expectForks = EXPECTED_NAT
   //    to be silent: any redirect from a file INSIDE `libs/ui/src` is a failure.
   for (const entry of redirectedStylesheets) {
     const [importer] = entry.split(' → ')
-    if (importer.startsWith(uiSrc)) {
+    if (isOwnSource(importer)) {
       failures.push({
         check: 'stylesheet-drop',
         detail:

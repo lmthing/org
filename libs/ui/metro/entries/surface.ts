@@ -8,7 +8,7 @@
  * the gate green — which is also the moment its web-only imports have to move behind a `*.web.tsx`
  * seam. Do not add an import "to be checked later": a red gate blocks the whole harness.
  *
- * Not yet here: `chat/`, `studio/`, `computer/` and the rest of the `elements/` layer above the
+ * Not yet here: the rest of `chat/`, `studio/`, `computer/` and the `elements/` layer above the
  * primitives, the overlays and markdown. (The §1c className blocker this note used to cite is gone
  * — Tailwind was deleted; see docs/mobile-native-chat.md.)
  */
@@ -22,8 +22,13 @@ import * as Dropdown from '../../src/elements/overlays/dropdown'
 // it renders `marked` tokens as primitives, so the transcript no longer depends on a DOM to inject
 // HTML into. Everything it touches (Text/Box/List/Link/Image/Table) is already proven above.
 import * as Markdown from '../../src/elements/content/markdown'
+// The first file of `chat/` on the native graph, and the smallest possible one: the token accessors
+// every other chat module calls before it can talk to a pod. It drags in `@lmthing/auth`, which is
+// the point — that package reads the session, and reading it on native means the keystore seam
+// (`libs/auth/src/platform/session-store.native.ts`) has to be the half Metro picks.
+import * as ChatAuth from '../../src/chat/app/auth'
 
 // Referenced, not just imported: Metro does not tree-shake in dev, but an unused namespace import
 // is exactly the kind of thing a future bundler flag would drop, and a gate that silently stops
 // covering its subject is worse than no gate.
-export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu, Dropdown, Markdown }
+export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu, Dropdown, Markdown, ChatAuth }

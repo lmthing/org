@@ -11,6 +11,7 @@ import '../suites/primitives'
 import '../suites/overlays'
 import '../suites/platform'
 import '../suites/markdown'
+import '../suites/auth'
 import { runRegisteredCases } from '../harness'
 
 void runRegisteredCases()

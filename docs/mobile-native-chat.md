@@ -245,6 +245,62 @@ Still relative, and deliberately so: `chat/client/rpc-client.ts` takes its `base
 `ReplClientConfig`, threaded from the app, so it was never origin-bound. Noted for step 7:
 `lib/app-urls.ts` reads `import.meta.env`, which is the next thing the graph will object to.
 
+**2026-07-26 — the session reads on native (step 4a), and the first chat file on the graph.**
+
+Measured before building, and it shrank the step: **`chat/` imports exactly one symbol from
+`@lmthing/auth` — `getSession`.** The provider, the PIN machinery and `useRepoSync` belong to
+`apps/web`. And a probe showed `@lmthing/auth` already *resolves* for android — 21 modules, no
+error. So there was no bundling problem to solve at all; there was a runtime one, and a nastier kind
+than a crash.
+
+`getSession()` read `localStorage` directly. On React Native that is not an exception —
+`globalThis.localStorage?.getItem(k)` is `undefined ?? null` — so the web half would have returned
+**null forever, silently**, and every authenticated request in the surface would have looked merely
+logged-out. Nothing would throw and nothing would say why. This is the same silent-degradation class
+as the `.css` redirect and the empty markdown box, and it is why the new suite asserts a
+store-then-read ROUND-TRIP rather than an import: the round-trip is the one thing the web fork cannot
+pass on this target.
+
+`libs/auth/src/platform/session-store` is the seam. It is a *keystore*, not `AsyncStorage`: the
+session is a bearer token, so native persists it with `expo-secure-store`. The design tension worth
+recording is that `getSession()` is **synchronous** — it is called from inside
+`fetch(url, { headers: authHeaders() })` in a dozen places, so making it async would make all of
+`chat/` async with it — while SecureStore is not. The resolution is a read-through cache: `hydrate()`
+loads the keystore once at boot, reads come from memory, writes update memory first. The cost is
+stated rather than hidden: **reads before `hydrateAuth()` resolves return null**, so `apps/mobile`
+must await it before mounting, and `isAuthHydrated()` exists so that contract can be asserted.
+
+Three gates grew to match, and each had been quietly blind:
+
+- `graph-gate.mjs` scanned only `libs/ui/src` for forks. A fork in `libs/auth` was invisible to
+  fork-selection — the one failure mode a fork gate cannot have. It now takes `FORK_ROOTS`, and its
+  `.web.tsx`-leak and stylesheet-drop checks cover both packages too.
+- `lint-native-forks.mjs` had the same blind spot; its paths are repo-relative now.
+- `entries/surface.ts` gained `chat/app/auth.ts` — the first file of `chat/` on the native graph, and
+  deliberately the smallest. The gate is what forced it: listing the new fork as expected while
+  nothing reached it failed with *"the native entry no longer reaches it"*, which is the correct
+  complaint.
+
+`mocks/expo-secure-store.js` is the **one hand-written mock** in the harness — the package publishes
+none, because it is an Expo module that needs a native host. Its header says what it does not prove:
+not that the keystore is reached, not that anything is encrypted at rest, not that a session survives
+a real restart. Those stay device claims.
+
+Verified separately, at the code level rather than by assumption (the plan asked for exactly this):
+`new URL('lmthing://auth/callback')` parses, `searchParams.set` round-trips it byte-identically, and
+the gateway stores `redirect_uri` verbatim (`/sso/create`) and requires an exact match on consume
+(`findAndConsumeSsoCode`) with no allowlist. So a custom-scheme redirect needs no gateway or `com/`
+change. **A real device login is still what proves it** and has not been done.
+
+Evidence: native gate PASS both platforms including 5 new session assertions; 302 unit tests;
+workspace `typecheck` and `build` clean; `pnpm install --frozen-lockfile` clean;
+`expo export --platform android` bundles (880 modules, 2.1 MB); full suite at 2273 passing with the
+two documented pre-existing failures; P0 unchanged.
+
+**Not done in this step:** login itself. `redirectToLogin`/`handleAuthCallback` still use
+`window.location` and `sessionStorage`, which is correct for web and inert on native — the app can
+*read* a session but cannot yet *obtain* one. That is step 4b.
+
 ## Step 0 — unblock the gate (nothing else is verifiable without it)
 
 1. Raise the watch limit on the dev machine: `sudo sysctl -w fs.inotify.max_user_watches=524288`
