@@ -11,8 +11,16 @@
     "./chat/css": "./src/chat/app/styles.css",
     "./studio": "./src/studio/index.ts",
     "./computer": "./src/computer/index.ts",
-    "./components/*": "./src/components/*/index.ts",
-    "./elements/*": "./src/elements/*",
+    "./components/*": [
+      "./src/components/*/index.tsx",
+      "./src/components/*/index.ts"
+    ],
+    "./elements/*": [
+      "./src/elements/*/index.tsx",
+      "./src/elements/*/index.ts",
+      "./src/elements/*.tsx",
+      "./src/elements/*.ts"
+    ],
     "./elements/primitives": "./src/elements/primitives/index.ts",
     "./lib/*": "./src/lib/*",
     "./theme": "./src/theme/index.ts",

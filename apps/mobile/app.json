@@ -7,7 +7,7 @@
     "userInterfaceStyle": "automatic",
     "scheme": "lmthing",
     "newArchEnabled": true,
-    "ios": { "supportsTablet": true },
-    "android": {}
+    "ios": { "supportsTablet": true, "bundleIdentifier": "org.lmthing.mobile" },
+    "android": { "package": "org.lmthing.mobile" }
   }
 }

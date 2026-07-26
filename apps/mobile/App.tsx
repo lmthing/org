@@ -1,27 +1,28 @@
 import * as React from 'react'
-import { TamaguiProvider } from '@tamagui/core'
 import { useColorScheme } from 'react-native'
+import { TamaguiProvider } from '@tamagui/core'
 import { StatusBar } from 'expo-status-bar'
 import { tamaguiConfig } from '@lmthing/ui/theme/tamagui.config'
-import { DemoScreen } from './src/screens/DemoScreen'
+import { HomeScreen } from './src/screens/HomeScreen'
 
 /**
- * Root of the LMThing mobile shell. Wraps the app in `TamaguiProvider` with the SHARED
- * `tamagui.config` (generated from the same tokens.json as the web `theme.css`, proven byte-equal
- * by the Layer-1 parity tests), following the light/dark system scheme. The screens live in
- * `@lmthing/ui`; this shell is the native entry + provider.
+ * Root of the LMThing mobile app.
  *
- * Status: scaffold. Bootstrap with `expo install` in this directory (it is excluded from the pnpm
- * workspace) and run on a device/simulator — see README. The shared className-driven surfaces need
- * the §1c native styling decision before they render fully; `DemoScreen` uses the primitives'
- * native forks directly.
+ * The provider is the ONLY thing this shell contributes: the config is the shared one, generated
+ * from the same `tokens.json` as the web `theme.css` and proven byte-equal by the Layer-1 parity
+ * tests, so a colour or radius cannot mean one thing here and another on web.
+ *
+ * The shell is deliberately this thin. Screens belong in `@lmthing/ui`, where both targets render
+ * them from one source; a screen written HERE would be a fork of the product that no gate could
+ * see. `scripts/lint-barrel-imports.mjs` enforces that by refusing deep imports into the shared
+ * package's internals.
  */
 export default function App() {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light'
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
       <StatusBar style="auto" />
-      <DemoScreen />
+      <HomeScreen />
     </TamaguiProvider>
   )
 }
