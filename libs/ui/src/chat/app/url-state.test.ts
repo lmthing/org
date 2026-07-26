@@ -17,16 +17,16 @@ function setSearch(search: string): void {
 describe('url-state (web)', () => {
   beforeEach(() => {
     setSearch('')
-    useStore.setState({ selectedNodeId: null, tab: 'output', follow: true })
+    useStore.setState({ selectedNodeId: null, tab: 'llm', follow: true })
   })
 
   it('applies node, tab and follow from the query string', () => {
-    setSearch('?node=n-7&tab=code&follow=0')
+    setSearch('?node=n-7&tab=statements&follow=0')
     applyUrlToState()
 
     const s = useStore.getState()
     expect(s.selectedNodeId).toBe('n-7')
-    expect(s.tab).toBe('code')
+    expect(s.tab).toBe('statements')
     expect(s.follow).toBe(false)
   })
 
@@ -41,18 +41,18 @@ describe('url-state (web)', () => {
 
   it('writes the store back in the original key order', () => {
     const unsub = syncStateToUrl()
-    useStore.setState({ selectedNodeId: 'n-1', tab: 'code', follow: false })
+    useStore.setState({ selectedNodeId: 'n-1', tab: 'statements', follow: false })
     unsub()
 
     // node, then tab, then follow — `URLSearchParams.set` appends, so a different order here would
     // reorder the query string of every chat URL for no reason.
-    expect(window.location.search).toBe('?node=n-1&tab=code&follow=0')
+    expect(window.location.search).toBe('?node=n-1&tab=statements&follow=0')
   })
 
   it('PATCHES the query string, preserving params the surface does not own', () => {
     setSearch('?keep=yes')
     const unsub = syncStateToUrl()
-    useStore.setState({ selectedNodeId: 'n-2', tab: 'output', follow: true })
+    useStore.setState({ selectedNodeId: 'n-2', tab: 'llm', follow: true })
     unsub()
 
     // The surface owns node/tab/follow and nothing else; a replace would drop `keep`.
@@ -65,7 +65,7 @@ describe('url-state (web)', () => {
   it('drops node from the link when nothing is selected', () => {
     setSearch('?node=stale')
     const unsub = syncStateToUrl()
-    useStore.setState({ selectedNodeId: null, tab: 'output', follow: true })
+    useStore.setState({ selectedNodeId: null, tab: 'llm', follow: true })
     unsub()
 
     expect(window.location.search).not.toContain('node')

@@ -73,6 +73,7 @@
     "@types/react-dom": "^19.2.2",
     "clsx": "^2.1.1",
     "eslint": "^9.0.0",
+    "expo-linking": "^57.0.4",
     "jsdom": "^24.1.3",
     "metro": "^0.87.0",
     "react": "^19.2.0",
@@ -95,7 +96,8 @@
     "react-dom": ">=19",
     "react-native": "*",
     "react-native-svg": "*",
-    "react-native-webview": "*"
+    "react-native-webview": "*",
+    "expo-linking": "*"
   },
   "author": "LMThing",
   "license": "MIT",
@@ -125,6 +127,9 @@
       "optional": true
     },
     "@xterm/xterm": {
+      "optional": true
+    },
+    "expo-linking": {
       "optional": true
     }
   }

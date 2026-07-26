@@ -21,7 +21,7 @@ import {
 } from '../../src/platform'
 import * as Linking from 'expo-linking'
 
-/** The mock's control surface — see \`metro/mocks/expo-linking.js\`. */
+/** The mock control surface — see metro/mocks/expo-linking.js. */
 const linking = Linking as unknown as { __setLinkingURL: (url: string | null) => void }
 
 test('getWindowSize reads RN Dimensions and returns numbers', () => {

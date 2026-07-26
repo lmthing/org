@@ -352,6 +352,46 @@ tests; workspace typecheck and build clean; `expo export --platform android` bun
 is registered and intercepted, and that a real login completes end-to-end against the live gateway.
 No harness can show those. `app.json` already declares `"scheme": "lmthing"`.
 
+**2026-07-26 — deep links and the global bridge (step 5), and a whole test directory that ran
+nowhere.**
+
+Two unrelated web-isms, both in `chat/app/`.
+
+`url-state.ts` used the URL as a state channel (`?node=…&tab=…&follow=0`), which is a good design on
+web and simply absent on native. The CHANNEL is now behind `platform/deep-link` and the file stays
+**one file**: web keeps the query string, so a copied link behaves exactly as before; native seeds
+from the URL that opened the app and holds changes in memory. `Linking.getLinkingURL()` is what makes
+that possible — it is **synchronous**, so the fork presents the same synchronous API as the web half.
+An async read would have forced `url-state.ts` to fork, and a data path forking is the thing the
+invariant exists to forbid.
+
+The write is a **patch, not a replacement** (a `null` value deletes), because the surface owns
+`node`/`tab`/`follow` and nothing else; replacing would drop any other query parameter on the way
+past. The key order (node, tab, follow) is preserved deliberately — `URLSearchParams.set` appends, so
+a different order would reorder the query string of every chat URL for no reason. Both are pinned by
+tests.
+
+`window.__LM_SEND__` — one writer (`Sidebar`), three readers (`AppShell`, `ChatView`, `Message`) —
+became a module-level reference in `chat/app/live-send.ts`. It only ever worked because a web page
+has exactly one global object. The replacement is better on web too: private to the package rather
+than writable by anything sharing the page, and typed instead of cast at each of four sites.
+Deliberately NOT in the zustand store — it is a live connection handle, not state, and putting it
+there would re-render the surface whenever a socket was swapped. It also **fixed a latent bug**: the
+global was left pointing at a closed connection when the active session was deleted, so a composer
+submit after that dropped silently. `setLiveSend(null)` now goes with the close.
+
+**The finding worth recording: `libs/ui/src/chat/**` tests ran nowhere at all.** The root vitest
+config excludes `libs/ui`, and `libs/ui`'s own config listed `elements/`, `theme/`, `platform/` and
+`scripts/` — never `chat/`. So `auth.test.ts`, `node-meta.test.ts`, `auto-resume.test.ts` and the
+store suites had been dead files. Adding `src/chat/**/*.test.ts` (`.ts` only — the `.tsx` component
+suites still need peers that are not installed) took the package from 43 files / 302 tests to
+**50 / 348**, and every one of the previously-dead suites passes. The plan said "existing `url-state`
+tests pass"; there were none, which is why this step wrote them.
+
+Evidence: native gate PASS both platforms (+4 deep-link assertions through the `platform` barrel, so
+fork selection is what is under test); 348 unit tests; workspace typecheck clean; `expo export`
+bundles; P0 shows only the three known animation-opacity samples.
+
 ## Step 0 — unblock the gate (nothing else is verifiable without it)
 
 1. Raise the watch limit on the dev machine: `sudo sysctl -w fs.inotify.max_user_watches=524288`
