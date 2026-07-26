@@ -70,7 +70,12 @@ export class Router {
       for (let i = 0; i < route.keys.length; i++) {
         params[route.keys[i]!] = decodeURIComponent(m[i + 1] ?? '');
       }
-      void route.handler(req, res, params, ctx).catch((err) => {
+      // Promise.resolve() so a handler that is synchronous — or that throws
+      // before its first await — is a 500, not an unhandled TypeError that
+      // takes the whole single-process pod down with it.
+      void Promise.resolve()
+        .then(() => route.handler(req, res, params, ctx))
+        .catch((err) => {
         try {
           res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
