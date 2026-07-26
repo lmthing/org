@@ -9,6 +9,7 @@ import { dataPlaneOrigin } from '../../lib/app-urls';
 import { SettingsSchemaForm, type JsonSchema } from '../../elements/forms/settings-schema-form';
 import { Markdown } from '../../elements/content/markdown/index';
 import { overlayEnvKeys, waitForPodReady, resumeMessage } from './auto-resume';
+import { clipboard } from '../../platform/clipboard';
 
 /** One installed integration space, as returned by the pod's
  *  `GET /api/projects/:projectId/integrations` (S13 adds `missingRequired`/`configured`). */
@@ -139,7 +140,7 @@ export function IntegrationsTab({
   }, [CLOUD]);
 
   const copy = (key: string, url: string) => {
-    void navigator.clipboard?.writeText(url);
+    void clipboard.writeText(url);
     setCopied(key);
     setTimeout(() => setCopied((c) => (c === key ? null : c)), 2000);
   };

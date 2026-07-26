@@ -35,14 +35,15 @@
     "typecheck": "tsc --noEmit",
     "lint:tokens": "lmthing-lint-tokens src",
     "lint:rn": "node scripts/lint-rn-safety.mjs",
-    "lint": "tsc --noEmit && eslint . && lmthing-lint-tokens src && node scripts/lint-rn-safety.mjs && node scripts/lint-import-extensions.mjs && node scripts/lint-self-imports.mjs && node scripts/lint-relative-transport.mjs && node scripts/lint-native-forks.mjs && node scripts/lint-no-tailwind.mjs",
+    "lint": "tsc --noEmit && eslint . && lmthing-lint-tokens src && node scripts/lint-rn-safety.mjs && node scripts/lint-import-extensions.mjs && node scripts/lint-self-imports.mjs && node scripts/lint-relative-transport.mjs && node scripts/lint-dom-globals.mjs && node scripts/lint-native-forks.mjs && node scripts/lint-no-tailwind.mjs",
     "format": "prettier --write .",
     "test:native": "node metro/cli.mjs",
     "test:native:gate": "node metro/cli.mjs --gate",
     "lint:imports": "node scripts/lint-import-extensions.mjs",
     "lint:tailwind": "node scripts/lint-no-tailwind.mjs",
     "lint:self-imports": "node scripts/lint-self-imports.mjs",
-    "lint:forks": "node scripts/lint-native-forks.mjs"
+    "lint:forks": "node scripts/lint-native-forks.mjs",
+    "lint:dom": "node scripts/lint-dom-globals.mjs"
   },
   "dependencies": {
     "@lmthing/auth": "workspace:*",
@@ -53,7 +54,6 @@
     "@tamagui/core": "^2.5.1",
     "@tamagui/lucide-icons": "2.0.0-rc.26",
     "marked": "^14.0.0",
-    "modern-screenshot": "^4.6.0",
     "zustand": "^4.5.7"
   },
   "devDependencies": {
@@ -91,13 +91,13 @@
     "@xterm/xterm": "*",
     "class-variance-authority": "*",
     "clsx": "*",
+    "expo-linking": "*",
     "lucide-react": "*",
     "react": ">=19",
     "react-dom": ">=19",
     "react-native": "*",
     "react-native-svg": "*",
-    "react-native-webview": "*",
-    "expo-linking": "*"
+    "react-native-webview": "*"
   },
   "author": "LMThing",
   "license": "MIT",

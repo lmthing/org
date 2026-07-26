@@ -1,6 +1,8 @@
 import * as Prim from '../../../elements/primitives/index';
 import React from 'react';
 import { cn } from '../../lib/cn';
+import { onDismiss } from '../../../platform/keyboard';
+import { isWeb } from '@tamagui/core';
 
 interface DialogProps {
   open: boolean;
@@ -19,8 +21,12 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
   // first focusable node (the × button), making inputs impossible to type in.
   React.useEffect(() => {
     if (!open) return;
+    // DOM-only: autofocus here means "find the first field and focus it", which is a document
+    // query. React Native has no querySelector and no focus order — a native dialog gets focus from
+    // `autoFocus` on the input itself. Guarded rather than seamed because there is no native
+    // behaviour to implement, only an absence.
     const el = ref.current;
-    if (!el) return;
+    if (!el || !isWeb) return;
     const preferred = el.querySelector<HTMLElement>('input,textarea,select');
     const fallback = el.querySelector<HTMLElement>('button,[tabindex]:not([tabindex="-1"])');
     (preferred ?? fallback)?.focus();
@@ -28,9 +34,8 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
 
   React.useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    // Escape on web; the Android back gesture on native — same one line, see platform/keyboard.
+    return onDismiss(onClose);
   }, [open, onClose]);
 
   if (!open) return null;

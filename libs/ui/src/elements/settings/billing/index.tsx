@@ -4,6 +4,7 @@ import { useAuth } from '@lmthing/auth'
 import { Button } from '../../forms/button'
 import { Caption } from '../../typography/caption'
 import { dataPlaneOrigin } from '../../../lib/app-urls'
+import { currentUrl, openUrl } from '../../../platform/navigation'
 
 async function openBillingPortal(
   authFetch: (url: string, options?: RequestInit) => Promise<Response>,
@@ -12,14 +13,14 @@ async function openBillingPortal(
   const res = await authFetch(`${cloud}/api/billing/portal`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ return_url: window.location.href }),
+    body: JSON.stringify({ return_url: currentUrl() }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error(body?.error?.message ?? 'Failed to open billing portal')
   }
   const { portal_url } = await res.json()
-  window.location.href = portal_url
+  openUrl(portal_url)
 }
 
 /** Billing section content (no heading/card): opens the Stripe customer portal. */

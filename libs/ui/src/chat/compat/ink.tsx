@@ -12,6 +12,7 @@
  */
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
+import { onKeyDown } from '../../platform/keyboard';
 
 // ─── color + dimension helpers ───────────────────────────────────────────────
 
@@ -263,8 +264,7 @@ export function useInput(
       const input = e.key.length === 1 ? e.key : '';
       ref.current(input, k);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return onKeyDown(onKey);
   }, [opts?.isActive]);
 }
 

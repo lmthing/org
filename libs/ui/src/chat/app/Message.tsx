@@ -17,12 +17,14 @@ import { cn } from '../lib/cn';
 // and works on both targets. `preset="prose"` is the former `.lm-prose` scale.
 import { Markdown } from '../../elements/content/markdown';
 import { getLiveSend } from './live-send';
+import { clipboard } from '../../platform/clipboard';
 
 // ─── Space component registry ─────────────────────────────────────────────────
 
 declare const __SPACE_COMPONENTS__: Record<string, React.ComponentType<Record<string, unknown>>> | undefined;
 function spaceComponents(): Record<string, React.ComponentType<Record<string, unknown>>> {
-  const w = window as unknown as { __SPACE_COMPONENTS__?: Record<string, React.ComponentType<Record<string, unknown>>> };
+  // `globalThis`, not `window`: the pod injects this global, and there is no `window` on native.
+  const w = globalThis as unknown as { __SPACE_COMPONENTS__?: Record<string, React.ComponentType<Record<string, unknown>>> };
   return w.__SPACE_COMPONENTS__ ?? (typeof __SPACE_COMPONENTS__ !== 'undefined' ? __SPACE_COMPONENTS__ : {}) ?? {};
 }
 
@@ -124,7 +126,7 @@ function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = React.useState(false);
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch { /* */ }

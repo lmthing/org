@@ -13,6 +13,7 @@ import { BugReportDialog } from './BugReportDialog';
 import { authHeaders } from './auth';
 import { apiUrl } from '../../platform/api-base';
 import { getLiveSend } from './live-send';
+import { reloadApp } from '../../platform/navigation';
 
 function formatCost(usd: number): string {
   if (usd < 0.000001) return '';
@@ -148,17 +149,13 @@ export function ChatView({
   const handleSuggestion = (text: string) => handleSend(text);
 
   const [bugOpen, setBugOpen] = React.useState(false);
-  const [shot, setShot] = React.useState<string | null>(null);
-  const openBugReport = async () => {
-    let dataUrl: string | null = null;
-    try {
-      const { domToPng } = await import('modern-screenshot'); // dynamic import keeps it out of the main bundle
-      const root = document.getElementById('root') ?? document.body;
-      dataUrl = await domToPng(root);
-    } catch { /* capture failed; proceed without screenshot */ }
-    setShot(dataUrl);
-    setBugOpen(true);
-  };
+  // No screenshot is captured any more: `modern-screenshot` was the only implementation and it is
+  // gone (it walks the DOM, so it could never run on native, and its `await import()` did NOT keep
+  // it out of Metro's graph — Metro resolves dynamic imports statically). The dialog already renders
+  // "Screenshot unavailable" for null and the gateway treats the field as optional, so the report
+  // itself is unaffected. The prop stays so a real capture (Screen Capture API, or
+  // react-native-view-shot) is one line to reinstate.
+  const openBugReport = () => setBugOpen(true);
 
   const [restarting, setRestarting] = React.useState(false);
   const handleRestart = async () => {
@@ -170,7 +167,7 @@ export function ChatView({
     const poll = async () => {
       try {
         const r = await fetch(apiUrl('/api/env'), { headers: authHeaders() });
-        if (r.ok) { setTimeout(() => window.location.reload(), 1500); return; }
+        if (r.ok) { setTimeout(reloadApp, 1500); return; }
       } catch { /* still down */ }
       setTimeout(poll, 800);
     };
@@ -321,7 +318,7 @@ export function ChatView({
       {/* Composer */}
       <Composer onSend={handleSend} projectId={projectId} />
 
-      <BugReportDialog open={bugOpen} onClose={() => setBugOpen(false)} screenshot={shot} />
+      <BugReportDialog open={bugOpen} onClose={() => setBugOpen(false)} screenshot={null} />
     </Prim.Box>
   );
 }

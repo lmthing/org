@@ -10,6 +10,8 @@ import { wsUrl } from '../../platform/api-base';
 import { AppSidebar } from '../../elements/nav/app-sidebar';
 import { SidebarFooter } from '../../elements/nav/sidebar-footer';
 import { crossAppOrigin } from '../../lib/app-urls';
+import { getWindowSize } from '../../platform/dimensions';
+import { openUrl } from '../../platform/navigation';
 
 interface PersistedSessionMeta {
   sessionId: string; projectId?: string; agentSlug: string; spaceDir: string;
@@ -34,7 +36,7 @@ function switchSession(sessionId: string): void {
   setLiveSend(activeConn.send);
   useStore.getState().setActiveSessionId(sessionId);
   // On mobile the sidebar is an overlay drawer — close it so the conversation shows.
-  if (window.innerWidth < 768) useStore.getState().setSidebarOpen(false);
+  if (getWindowSize().width < 768) useStore.getState().setSidebarOpen(false);
 }
 
 function relativeTime(ts: number): string {
@@ -185,7 +187,7 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
   // the same origin; production → the lmthing.studio domain.
   const openSpaceInStudio = (spaceId: string) => {
     if (!activeProjectId) return;
-    window.location.href = `${crossAppOrigin('studio')}/studio/${encodeURIComponent(activeProjectId)}/${encodeURIComponent(spaceId)}`;
+    openUrl(`${crossAppOrigin('studio')}/studio/${encodeURIComponent(activeProjectId)}/${encodeURIComponent(spaceId)}`);
   };
 
   const filteredSessions = searchQuery

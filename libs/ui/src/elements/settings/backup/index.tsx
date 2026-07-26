@@ -5,6 +5,7 @@ import { Button } from '../../forms/button'
 import { Input } from '../../forms/input'
 import { Caption } from '../../typography/caption'
 import { dataPlaneOrigin } from '../../../lib/app-urls'
+import { currentUrl, openUrl } from '../../../platform/navigation'
 
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/
 
@@ -84,11 +85,11 @@ export function WorkspaceBackup() {
     setError(null)
     try {
       const res = await authFetch(
-        `${CLOUD}/api/backup/install-url?redirect_to=${encodeURIComponent(window.location.href)}`,
+        `${CLOUD}/api/backup/install-url?redirect_to=${encodeURIComponent(currentUrl())}`,
       )
       const d = await res.json()
       if (!res.ok || !d.url) throw new Error(d.error ?? 'Failed to start GitHub connect')
-      window.location.href = d.url
+      openUrl(d.url)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect GitHub')
     }

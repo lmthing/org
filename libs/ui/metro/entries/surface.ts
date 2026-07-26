@@ -27,8 +27,12 @@ import * as Markdown from '../../src/elements/content/markdown'
 // the point — that package reads the session, and reading it on native means the keystore seam
 // (`libs/auth/src/platform/session-store.native.ts`) has to be the half Metro picks.
 import * as ChatAuth from '../../src/chat/app/auth'
+// The chat surface itself — the thing the app exists to show. Everything above had to land first:
+// the primitives, the markdown renderer, the transport seam, the session store and the deep-link
+// seam are all reached THROUGH this import now.
+import * as Chat from '../../src/chat'
 
 // Referenced, not just imported: Metro does not tree-shake in dev, but an unused namespace import
 // is exactly the kind of thing a future bundler flag would drop, and a gate that silently stops
 // covering its subject is worse than no gate.
-export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu, Dropdown, Markdown, ChatAuth }
+export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu, Dropdown, Markdown, ChatAuth, Chat }

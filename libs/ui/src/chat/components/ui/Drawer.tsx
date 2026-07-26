@@ -1,6 +1,7 @@
 import * as Prim from '../../../elements/primitives/index';
 import React from 'react';
 import { cn } from '../../lib/cn';
+import { onDismiss } from '../../../platform/keyboard';
 
 interface DrawerProps {
   open: boolean;
@@ -19,9 +20,8 @@ interface DrawerProps {
 export function Drawer({ open, onClose, title, children, className, side = 'right', width = '20rem' }: DrawerProps) {
   React.useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    // Escape on web; the Android back gesture on native — same one line, see platform/keyboard.
+    return onDismiss(onClose);
   }, [open, onClose]);
 
   if (!open) return null;

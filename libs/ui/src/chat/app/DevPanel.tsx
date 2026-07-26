@@ -13,14 +13,22 @@ interface DevPanelProps {
   height?: number | string;
 }
 
+/**
+ * Drag-to-resize, which is a MOUSE interaction and therefore web-only.
+ *
+ * Optional-chained off `globalThis.window` rather than put behind a seam: the DevPanel is opened
+ * with Alt+I, a key combination that cannot be pressed on a phone, so this whole panel is
+ * unreachable on native. A seam here would be inventing a native behaviour for something the user
+ * can never reach. What matters is that it does not THROW if it is ever mounted.
+ */
 function Resizer({ onDrag }: { onDrag: (dx: number) => void }) {
   const down = (e: React.MouseEvent) => {
     e.preventDefault();
     let last = e.clientX;
     const move = (ev: MouseEvent) => { onDrag(ev.clientX - last); last = ev.clientX; };
-    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    const up = () => { globalThis.window?.removeEventListener('mousemove', move); globalThis.window?.removeEventListener('mouseup', up); };
+    globalThis.window?.addEventListener('mousemove', move);
+    globalThis.window?.addEventListener('mouseup', up);
   };
   return (
     <Prim.Box
@@ -68,9 +76,9 @@ export function DevPanel({ onClose, className, height }: DevPanelProps) {
           e.preventDefault();
           let last = e.clientY;
           const move = (ev: MouseEvent) => { setTreeH(h => Math.max(80, Math.min(600, h + ev.clientY - last))); last = ev.clientY; };
-          const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
-          window.addEventListener('mousemove', move);
-          window.addEventListener('mouseup', up);
+          const up = () => { globalThis.window?.removeEventListener('mousemove', move); globalThis.window?.removeEventListener('mouseup', up); };
+          globalThis.window?.addEventListener('mousemove', move);
+          globalThis.window?.addEventListener('mouseup', up);
         }}
       />
 

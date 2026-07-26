@@ -314,14 +314,14 @@ export interface AppSidebarProps {
 function usePersistentBool(key: string, initial: boolean): [boolean, () => void] {
   const [value, setValue] = React.useState<boolean>(() => {
     if (typeof window === 'undefined') return initial
-    const raw = window.localStorage.getItem(key)
+    const raw = globalThis.window?.localStorage?.getItem(key) ?? null
     return raw === null ? initial : raw === '1'
   })
   const toggle = React.useCallback(() => {
     setValue((v) => {
       const next = !v
       try {
-        window.localStorage.setItem(key, next ? '1' : '0')
+        globalThis.window?.localStorage?.setItem(key, next ? '1' : '0')
       } catch {
         /* ignore quota / unavailable storage */
       }
@@ -378,8 +378,10 @@ function ProjectDropdown({
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
+    // Click-outside is a pointer concept the web owns. On native the overlay primitives dismiss
+    // themselves (RN `Modal` + a backdrop press), so there is nothing to bind here.
+    globalThis.document?.addEventListener('mousedown', onDown)
+    return () => globalThis.document?.removeEventListener('mousedown', onDown)
   }, [open])
 
   const create = async () => {

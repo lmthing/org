@@ -73,6 +73,8 @@ const ALLOWED = {
   'libs/ui/src/platform/api-base.native.ts': 'platform',
   'libs/ui/src/platform/clipboard.native.ts': 'platform',
   'libs/ui/src/platform/deep-link.native.ts': 'platform',
+  'libs/ui/src/platform/keyboard.native.ts': 'platform',
+  'libs/ui/src/platform/navigation.native.ts': 'platform',
   'libs/ui/src/platform/dimensions.native.ts': 'platform',
   'libs/ui/src/platform/storage.native.ts': 'platform',
 

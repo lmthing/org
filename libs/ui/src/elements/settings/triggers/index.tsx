@@ -6,6 +6,7 @@ import { Button } from '../../forms/button'
 import { Caption } from '../../typography/caption'
 import { Code } from '../../typography/code'
 import { dataPlaneOrigin } from '../../../lib/app-urls'
+import { clipboard } from '../../../platform/clipboard'
 
 interface Binding {
   path: string
@@ -56,7 +57,7 @@ export function Triggers() {
   }, [authFetch, isAuthenticated, CLOUD])
 
   const copy = (path: string, url: string) => {
-    navigator.clipboard.writeText(url)
+    void clipboard.writeText(url)
     setCopiedPath(path)
     setTimeout(() => setCopiedPath((current) => (current === path ? null : current)), 2000)
   }

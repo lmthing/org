@@ -52,8 +52,8 @@ export function BudgetWindows(): React.ReactElement | null {
   React.useEffect(() => {
     if (mode === 'replay') return;
     void load();
-    const timer = window.setInterval(() => void load(), POLL_MS);
-    return () => window.clearInterval(timer);
+    const timer = setInterval(() => void load(), POLL_MS);
+    return () => clearInterval(timer);
   }, [mode, load]);
 
   React.useEffect(() => {

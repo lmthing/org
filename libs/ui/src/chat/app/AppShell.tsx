@@ -8,6 +8,10 @@ import { ProjectSettings } from './ProjectSettings';
 import { Drawer } from '../components/ui/Drawer';
 import { cn } from '../lib/cn';
 import { getLiveSend } from './live-send';
+import { readLinkParams } from '../../platform/deep-link';
+import { getWindowSize, subscribeWindowSize } from '../../platform/dimensions';
+import { setAppTitle } from '../../platform/navigation';
+import { onKeyDown } from '../../platform/keyboard';
 
 interface AppShellProps {
   singleSession?: boolean;
@@ -41,30 +45,29 @@ export function AppShell({ singleSession }: AppShellProps) {
 
   // Check for ?inspect=1 on load
   React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('inspect') === '1') setDevPanelOpen(true);
+    if (readLinkParams().inspect === '1') setDevPanelOpen(true);
   }, [setDevPanelOpen]);
 
   // Responsive breakpoints
   React.useEffect(() => {
     const check = () => {
-      setIsMobile(window.innerWidth < 768);
-      setIsTablet(window.innerWidth < 1024);
+      const { width } = getWindowSize();
+      setIsMobile(width < 768);
+      setIsTablet(width < 1024);
     };
     check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
+    return subscribeWindowSize(check);
   }, []);
 
   // Document title
   React.useEffect(() => {
-    document.title = mode === 'replay'
+    setAppTitle(mode === 'replay'
       ? '⏵ replay · THING'
       : running > 0
       ? `⟳ ${running} running · THING`
       : done
       ? '✓ done · THING'
-      : 'THING';
+      : 'THING');
   }, [running, done, mode]);
 
   // Alt+I shortcut
@@ -72,8 +75,7 @@ export function AppShell({ singleSession }: AppShellProps) {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey && e.key === 'i') { e.preventDefault(); setDevPanelOpen(!devPanelOpen); }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return onKeyDown(onKey);
   }, [devPanelOpen, setDevPanelOpen]);
 
   const showSidebar = !singleSession;
