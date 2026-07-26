@@ -21,6 +21,8 @@ import { TopBar } from '@lmthing/ui/elements/nav/top-bar'
 import { TabBar } from '@lmthing/ui/elements/nav/tab-bar'
 import { Breadcrumb } from '@lmthing/ui/elements/nav/breadcrumb'
 import { AppLinks } from '@lmthing/ui/elements/nav/app-links'
+import { Markdown } from '@lmthing/ui/elements/content/markdown'
+import { DisplayBlock } from '@lmthing/ui/chat'
 import { Settings, Clock, Star } from 'lucide-react'
 
 /**
@@ -38,6 +40,37 @@ import { Settings, Clock, Star } from 'lucide-react'
  *
  * See docs/tamagui-idiomatic-migration.md §2 (P0).
  */
+
+
+/** Covers every `marked` token type the renderer must handle, plus a raw-HTML line. */
+const MARKDOWN_SAMPLE = [
+  '# Heading one',
+  '## Heading two',
+  '### Heading three',
+  '',
+  'A paragraph with **bold**, *italic*, `inline code` and a [link](https://lmthing.org).',
+  '',
+  '- first bullet',
+  '- second bullet',
+  '',
+  '1. first numbered',
+  '2. second numbered',
+  '',
+  '> a blockquote line',
+  '',
+  '```ts',
+  'const x: number = 1',
+  'const y = x + 1',
+  '```',
+  '',
+  '| column a | column b |',
+  '| --- | --- |',
+  '| cell 1 | cell 2 |',
+  '',
+  '---',
+  '',
+  '<div class="raw">raw html block</div>',
+].join('\n')
 
 export interface Fixture {
   name: string
@@ -260,6 +293,32 @@ export const FIXTURES: Fixture[] = [
         <Prim.Svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: '0.125rem', color: 'var(--agent)' }} aria-hidden="true">
           <Prim.Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
         </Prim.Svg>
+      </>
+    ),
+  },
+
+  // ── markdown ──────────────────────────────────────────────────────────────────────────────
+  //
+  // The two SHIPPED components that render markdown, captured before the token renderer replaces
+  // the `marked.parse(...) -> dangerouslySetInnerHTML` path they both use today:
+  //
+  //   - `Markdown`      -> the `.lm-markdown` document scale (space READMEs, store detail pages)
+  //   - `DisplayBlock`  -> the `.lm-prose` chat scale, for an agent `display()` markdown block
+  //
+  // They are deliberately BOTH here: the two stylesheets have different type and spacing scales on
+  // purpose, so a renderer that merges them would move the chat transcript's layout, and only a
+  // baseline that holds both can show it.
+  //
+  // The sample exercises every token type the renderer has to cover, and ends with a raw `<div>`:
+  // injected HTML renders live today, and the token renderer shows it as escaped text instead. That
+  // is a deliberate behaviour change, so it belongs in the artefact that reviews it rather than in
+  // a commit message.
+  {
+    name: 'markdown',
+    render: () => (
+      <>
+        <Markdown source={MARKDOWN_SAMPLE} />
+        <DisplayBlock descriptor={{ type: 'markdown', props: { text: MARKDOWN_SAMPLE }, children: [] }} />
       </>
     ),
   },
