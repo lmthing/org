@@ -5,21 +5,9 @@ import { Drawer } from '../components/ui/Drawer';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { Tabs } from '../components/ui/Tabs';
-import { authHeaders } from './auth';
+import { apiGet, apiPost, apiPut } from './api';
 import { IntegrationsTab } from './IntegrationsTab';
 
-async function apiGet<T>(path: string): Promise<T> {
-  const r = await fetch(path, { headers: authHeaders() }); if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
-  return r.json() as Promise<T>;
-}
-async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const r = await fetch(path, { method: 'POST', headers: {'content-type':'application/json', ...authHeaders()}, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(`POST ${path} → ${r.status}`); return r.json() as Promise<T>;
-}
-async function apiPut(path: string, body: unknown): Promise<void> {
-  const r = await fetch(path, { method: 'PUT', headers: {'content-type':'application/json', ...authHeaders()}, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(`PUT ${path} → ${r.status}`);
-}
 
 function EnvTab() {
   const [content, setContent] = React.useState('');

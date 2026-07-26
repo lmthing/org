@@ -2,6 +2,7 @@ import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { useStore } from '../store/store';
 import { authHeaders } from './auth';
+import { apiUrl } from '../../platform/api-base';
 
 interface BudgetWindow {
   duration: string;
@@ -36,7 +37,7 @@ export function BudgetWindows(): React.ReactElement | null {
 
   const load = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/budget', { headers: authHeaders() });
+      const res = await fetch(apiUrl('/api/budget'), { headers: authHeaders() });
       if (!res.ok) {
         setWindows(null);
         return;

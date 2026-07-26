@@ -3,7 +3,9 @@ import React from 'react';
 import { cn } from '../lib/cn';
 import { useStore, connectLive } from '../store/store';
 import type { Project, ModelPricing } from '../store/store';
-import { authHeaders, wsTokenSuffix } from './auth';
+import { wsTokenSuffix } from './auth';
+import { apiGet, apiPost, apiDelete } from './api';
+import { wsUrl } from '../../platform/api-base';
 import { AppSidebar } from '../../elements/nav/app-sidebar';
 import { SidebarFooter } from '../../elements/nav/sidebar-footer';
 import { crossAppOrigin } from '../../lib/app-urls';
@@ -22,24 +24,12 @@ function formatCost(usd: number): string {
   return `$${usd.toFixed(3)}`;
 }
 
-async function apiGet<T>(path: string): Promise<T> {
-  const r = await fetch(path, { headers: authHeaders() }); if (!r.ok) throw new Error(`GET ${path} → ${r.status}`); return r.json() as Promise<T>;
-}
-async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const r = await fetch(path, { method: 'POST', headers: {'content-type':'application/json', ...authHeaders()}, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(`POST ${path} → ${r.status}`); return r.json() as Promise<T>;
-}
-async function apiDelete(path: string): Promise<void> {
-  const r = await fetch(path, { method: 'DELETE', headers: authHeaders() }); if (!r.ok) throw new Error(`DELETE ${path} → ${r.status}`);
-}
-
 let activeConn: ReturnType<typeof connectLive> | null = null;
 
 function switchSession(sessionId: string): void {
   if (activeConn) { activeConn.close(); activeConn = null; }
   useStore.getState().resetSession();
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  activeConn = connectLive(`${proto}//${window.location.host}/api/ws?sessionId=${encodeURIComponent(sessionId)}${wsTokenSuffix()}`);
+  activeConn = connectLive(wsUrl(`/api/ws?sessionId=${encodeURIComponent(sessionId)}${wsTokenSuffix()}`));
   (window as unknown as { __LM_SEND__?: (m: unknown) => void }).__LM_SEND__ = activeConn.send;
   useStore.getState().setActiveSessionId(sessionId);
   // On mobile the sidebar is an overlay drawer — close it so the conversation shows.

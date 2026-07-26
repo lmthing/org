@@ -214,6 +214,37 @@ The fourth is **architectural and belongs to the surface, not the harness**:
 **Not yet done in step 0:** `apps/mobile` is still present — it is deleted as part of step 2, where
 its replacement lands, rather than leaving the tree with no mobile app at all in between.
 
+**2026-07-26 — the transport seam (step 3), and the duplication it uncovered.**
+
+`platform/api-base` is the fourth seam: `apiBase`/`apiUrl`/`wsUrl`, identity on web and an absolute
+pod URL on native (`EXPO_PUBLIC_API_BASE`, defaulting to `https://lmthing.chat`). The default host is
+not a preference — `devops/argocd/envoy/chat-policies.yaml` validates the gateway JWT on that host's
+`/api` route and routes on the `sub` claim, so the **host selects the route and the token selects the
+pod**. Nothing in the gateway or in `com/` needs to change for a device to reach it.
+
+Fifteen call sites moved behind it, and four of them were the same four functions written twice:
+`apiGet`/`apiPost`/`apiPut`/`apiDelete` existed character-for-character in both `Sidebar.tsx` and
+`ProjectSettings.tsx`. They are `chat/app/api.ts` now — a transport seam is exactly the thing that
+must not be threaded through a copy. `withAuthToken` resolves through the seam too, because an
+`<Image source>` has no origin to be relative to any more than a `fetch` does.
+
+The gate is `scripts/lint-relative-transport.mjs`, and it is deliberately narrow: it fails only on a
+`fetch`/`new WebSocket` whose URL argument's **statically known leading text starts with `/`**. That
+is decidable without type information and it names the actual defect — `fetch(apiUrl('/api/x'))` and
+`` fetch(`${baseUrl}/api/x`) `` both pass, `` fetch(`/api/${id}`) `` does not. Verified by probe in
+all four forms. Its scope is a `NATIVE_BOUND` list, currently `chat` + `platform`; a surface joins
+when it actually reaches the native graph, so the gate always states what is true rather than what is
+hoped.
+
+Evidence: native gate PASS both platforms with two new assertions reached through the `platform`
+barrel (so Metro's fork preference is what selects them — the web half would return `''` and fail
+them); 302 unit tests; `tsc` clean; P0 shows only the three known in-flight animation-opacity samples,
+no element added and no computed style changed — the zero delta this step promised.
+
+Still relative, and deliberately so: `chat/client/rpc-client.ts` takes its `baseUrl` from
+`ReplClientConfig`, threaded from the app, so it was never origin-bound. Noted for step 7:
+`lib/app-urls.ts` reads `import.meta.env`, which is the next thing the graph will object to.
+
 ## Step 0 — unblock the gate (nothing else is verifiable without it)
 
 1. Raise the watch limit on the dev machine: `sudo sysctl -w fs.inotify.max_user_watches=524288`
@@ -405,5 +436,13 @@ do not let it block the surface port.
 
 ## Explicitly not in scope
 
-`studio/`, `computer/`, offline mode, a local pod on the device, tablet-specific layout, and push
-(step 9 is a separate plan). Anything not on the done list above.
+`computer/`, offline mode, a local pod on the device, tablet-specific layout, and push (step 9 is a
+separate plan). Anything not on the done list above.
+
+**`studio/` is out of scope for THIS plan, not for the product** (decided 2026-07-26). The mobile app
+is intended to carry chat *and* studio; chat goes first because it is the surface worth having on a
+phone and because it is the smaller graph. Nothing here should assume studio stays on web — the seams
+are written surface-agnostic for that reason, and `lint-relative-transport.mjs`'s `NATIVE_BOUND` list
+is one line away from including it. What studio will additionally need, already visible from the
+divergence audit: the two `absent` forks (Monaco, xterm) become real decisions rather than fallbacks,
+and its 280 self-referencing deep imports are already fixed.

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { storage } from './storage'
 import { clipboard } from './clipboard'
 import { getWindowSize, subscribeWindowSize } from './dimensions'
+import { apiBase, apiUrl, wsUrl } from './api-base'
 
 /**
  * Runtime verification of the WEB platform shims (jsdom). The native mirrors (`*.native.ts`) are
@@ -29,6 +30,22 @@ describe('platform (web)', () => {
     const s = getWindowSize()
     expect(typeof s.width).toBe('number')
     expect(typeof s.height).toBe('number')
+  })
+
+  it('apiUrl is the IDENTITY on web — the seam changes no request the browser makes', () => {
+    // The zero-delta claim for this step, stated as a test. Every `/api/*` call site now goes
+    // through `apiUrl`, so if this were ever anything but identity, every fetch in the app would
+    // change at once.
+    expect(apiBase()).toBe('')
+    expect(apiUrl('/api/env')).toBe('/api/env')
+    expect(apiUrl('/api/projects/p1/sessions')).toBe('/api/projects/p1/sessions')
+  })
+
+  it('wsUrl derives an absolute socket url from the page origin', () => {
+    // WebSocket never accepted a relative url, so this reproduces what Sidebar built inline.
+    const url = wsUrl('/api/ws?sessionId=abc')
+    expect(url.startsWith('ws://') || url.startsWith('wss://')).toBe(true)
+    expect(url.endsWith(`//${window.location.host}/api/ws?sessionId=abc`)).toBe(true)
   })
 
   it('subscribeWindowSize returns an unsubscribe fn and fires on resize', () => {

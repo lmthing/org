@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useStore, type Project } from '../store/store';
 import { authHeaders } from './auth';
+import { apiUrl } from '../../platform/api-base';
 import { AppShell } from './AppShell';
 import { applyUrlToState, syncStateToUrl } from './url-state';
 
@@ -18,7 +19,7 @@ export function ChatShell(): React.ReactElement {
       // confirmed the pod's edge is serving before mounting us, so a single
       // fetch is safe here (no cold-wake race to retry around).
       try {
-        const res = await fetch('/api/projects', { headers: authHeaders() });
+        const res = await fetch(apiUrl('/api/projects'), { headers: authHeaders() });
         if (res.ok) {
           const { projects } = (await res.json()) as { projects: Project[] };
           useStore.getState().setProjects(projects);

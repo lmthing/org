@@ -8,7 +8,7 @@
  * exactly the mechanism that has to work on a device.
  */
 import { test, expect } from '../harness'
-import { storage, clipboard, getWindowSize, subscribeWindowSize } from '../../src/platform'
+import { storage, clipboard, getWindowSize, subscribeWindowSize, apiBase, apiUrl, wsUrl } from '../../src/platform'
 
 test('getWindowSize reads RN Dimensions and returns numbers', () => {
   const size = getWindowSize()
@@ -37,4 +37,21 @@ test('the clipboard seam writes through RN Clipboard and reports success', async
   // The seam swallows failures and returns '' — proving the happy path returns the string is what
   // distinguishes "wired up" from "silently degraded".
   expect(typeof (await clipboard.readText())).toBe('string')
+})
+
+test('the api base is ABSOLUTE here — the web half would resolve to nothing', () => {
+  // This is the whole point of the seam, and the assertion that fails if Metro ever picks the `.ts`
+  // sibling: on web `apiBase()` is '' and `apiUrl('/api/env')` is '/api/env', which React Native's
+  // fetch cannot resolve against anything. Asserting the PREFIX rather than a fixed host keeps
+  // `EXPO_PUBLIC_API_BASE` free to point a dev build at a local pod.
+  expect(apiBase().startsWith('http')).toBe(true)
+  expect(apiUrl('/api/env').endsWith('/api/env')).toBe(true)
+  expect(apiUrl('/api/env').startsWith('http')).toBe(true)
+})
+
+test('the ws url swaps the scheme rather than the host', () => {
+  const url = wsUrl('/api/ws?sessionId=abc')
+  expect(url.startsWith('ws')).toBe(true)
+  expect(url.includes('http')).toBe(false)
+  expect(url.endsWith('/api/ws?sessionId=abc')).toBe(true)
 })

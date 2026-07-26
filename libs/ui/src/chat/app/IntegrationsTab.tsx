@@ -3,6 +3,7 @@ import React from 'react';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { authHeaders } from './auth';
+import { apiUrl } from '../../platform/api-base';
 import { useStore } from '../store/store';
 import { dataPlaneOrigin } from '../../lib/app-urls';
 import { SettingsSchemaForm, type JsonSchema } from '../../elements/forms/settings-schema-form';
@@ -87,7 +88,7 @@ export function IntegrationsTab({
     let cancelled = false;
     setIntegrations(null);
     setLoadError(null);
-    fetch(`/api/projects/${encodeURIComponent(projectId)}/integrations`, { headers: authHeaders() })
+    fetch(apiUrl(`/api/projects/${encodeURIComponent(projectId)}/integrations`), { headers: authHeaders() })
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
@@ -147,7 +148,7 @@ export function IntegrationsTab({
    *  message actually reaches the agent, never dropped on a closed socket). */
   const probeReady = async (): Promise<boolean> => {
     try {
-      const r = await fetch('/api/env', { headers: authHeaders() });
+      const r = await fetch(apiUrl('/api/env'), { headers: authHeaders() });
       if (!r.ok) return false;
     } catch {
       return false;
@@ -163,7 +164,7 @@ export function IntegrationsTab({
       setResume((s) => ({ ...s, [spaceId]: { kind: 'done' } }));
       // Refresh status so the badge flips to "configured".
       try {
-        const d = await fetch(`/api/projects/${encodeURIComponent(projectId)}/integrations`, {
+        const d = await fetch(apiUrl(`/api/projects/${encodeURIComponent(projectId)}/integrations`), {
           headers: authHeaders(),
         }).then((r) => r.json());
         if (Array.isArray(d?.integrations)) setIntegrations(d.integrations);

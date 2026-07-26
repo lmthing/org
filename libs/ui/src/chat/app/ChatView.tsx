@@ -11,6 +11,7 @@ import { TraceLoader } from './replay';
 import { cn } from '../lib/cn';
 import { BugReportDialog } from './BugReportDialog';
 import { authHeaders } from './auth';
+import { apiUrl } from '../../platform/api-base';
 
 function formatCost(usd: number): string {
   if (usd < 0.000001) return '';
@@ -162,12 +163,12 @@ export function ChatView({
   const handleRestart = async () => {
     setRestarting(true);
     try {
-      await fetch('/api/restart', { method: 'POST', headers: authHeaders() });
+      await fetch(apiUrl('/api/restart'), { method: 'POST', headers: authHeaders() });
     } catch { /* expected — server exits */ }
     // Poll until the server is back up, then reload.
     const poll = async () => {
       try {
-        const r = await fetch('/api/env', { headers: authHeaders() });
+        const r = await fetch(apiUrl('/api/env'), { headers: authHeaders() });
         if (r.ok) { setTimeout(() => window.location.reload(), 1500); return; }
       } catch { /* still down */ }
       setTimeout(poll, 800);

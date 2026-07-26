@@ -6,6 +6,7 @@ import { Textarea } from '../components/ui/Textarea';
 import { Button } from '../components/ui/Button';
 import { useStore } from '../store/store';
 import { authHeaders } from './auth';
+import { apiUrl } from '../../platform/api-base';
 
 interface BugReportDialogProps {
   open: boolean;
@@ -56,7 +57,7 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/report-bug', {
+      const res = await fetch(apiUrl('/api/report-bug'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({

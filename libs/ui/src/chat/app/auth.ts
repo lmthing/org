@@ -1,4 +1,5 @@
 import { getSession } from '@lmthing/auth'
+import { apiUrl } from '../../platform/api-base'
 
 /**
  * Auth token access for the served web UI.
@@ -33,10 +34,14 @@ export function wsTokenSuffix(): string {
  * query param (there is no cookie source) and uses the `sub` claim to route to
  * the user's pod, so an unauthenticated `<img>` GET is 401'd before routing.
  * No-op (returns the url unchanged) in local/demo mode where no token exists.
+ *
+ * The url is resolved through {@link apiUrl} first — identity on web, absolute on native, where an
+ * `<Image source>` has no origin to be relative to any more than a `fetch` does.
  */
 export function withAuthToken(url: string): string {
+  const resolved = apiUrl(url)
   const token = getAccessToken()
-  if (!token) return url
-  const sep = url.includes('?') ? '&' : '?'
-  return `${url}${sep}access_token=${encodeURIComponent(token)}`
+  if (!token) return resolved
+  const sep = resolved.includes('?') ? '&' : '?'
+  return `${resolved}${sep}access_token=${encodeURIComponent(token)}`
 }

@@ -63,6 +63,7 @@ const ALLOWED = {
   'elements/overlays/sheet/index.native.tsx': 'primitive',
 
   // `platform` — a browser global with no direct RN equivalent, behind a narrow API.
+  'platform/api-base.native.ts': 'platform',
   'platform/clipboard.native.ts': 'platform',
   'platform/dimensions.native.ts': 'platform',
   'platform/storage.native.ts': 'platform',

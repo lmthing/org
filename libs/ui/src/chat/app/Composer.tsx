@@ -5,6 +5,7 @@ import { useStore } from '../store/store';
 import type { UploadedAttachment } from '../store/model';
 import { BudgetWindows } from './BudgetWindows';
 import { authHeaders, withAuthToken } from './auth';
+import { apiUrl } from '../../platform/api-base';
 
 interface ComposerProps {
   onSend: (text: string, attachments?: UploadedAttachment[]) => void;
@@ -82,7 +83,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
 
   React.useEffect(() => {
     if (!projectId) return;
-    fetch(`/api/projects/${projectId}/completions`, { headers: authHeaders() })
+    fetch(apiUrl(`/api/projects/${projectId}/completions`), { headers: authHeaders() })
       .then((r) => r.json())
       .then((d: { completions?: string[] }) => { if (d.completions) setCompletions(d.completions); })
       .catch(() => {});
@@ -110,7 +111,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
    *  is transcribed server-side; the returned ref carries the transcript. */
   const uploadFile = async (file: File): Promise<void> => {
     const dataUrl = await readAsDataUrl(file);
-    const res = await fetch('/api/uploads', {
+    const res = await fetch(apiUrl('/api/uploads'), {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...authHeaders() },
       body: JSON.stringify({
