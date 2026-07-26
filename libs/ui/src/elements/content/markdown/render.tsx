@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { marked, type Token, type Tokens } from 'marked'
+import { isWeb } from '@tamagui/core'
 import * as Prim from '../../primitives/index'
 import { PRESETS, type MarkdownPreset, type MarkdownPresetName } from './presets'
 
@@ -134,9 +135,28 @@ function renderBlock(token: Token, p: MarkdownPreset, key: string): React.ReactN
               {item.tokens.map((t, j) =>
                 // A tight list item holds inline tokens under a `text` token; rendering it as a
                 // paragraph would add the paragraph's margins inside every bullet.
-                t.type === 'text'
-                  ? <React.Fragment key={`${key}-li${i}-${j}`}>{renderInline((t as Tokens.Text).tokens ?? [t], p, `${key}-li${i}-${j}-`)}</React.Fragment>
-                  : renderBlock(t, p, `${key}-li${i}-${j}`),
+                //
+                // The wrapper is a `Text`, not a Fragment, and that is load-bearing: `ListItem` is
+                // a VIEW on native, and React Native refuses to render a bare string inside a View
+                // ("Text strings must be rendered within a <Text> component"). With a Fragment the
+                // three bullets of a list simply did not appear on a device — while the render
+                // suite passed, because react-test-renderer does not enforce that rule. Only
+                // running it on the emulator showed it.
+                //
+                // The MARKER goes INSIDE that same Text, not beside it. `list-style: disc|decimal`
+                // is a CSS concept with no React Native equivalent, so items rendered with no
+                // bullet at all on a device; but a marker as a SIBLING would stack above the text,
+                // since a native ListItem is a column View. As a text prefix it simply reads as
+                // part of the line. `isWeb` leaves the browser on its own native marker — drawing
+                // a second one there would move the P0 baseline for every list in the web app.
+                t.type === 'text' ? (
+                  <Prim.Text key={`${key}-li${i}-${j}`} {...p.text}>
+                    {!isWeb && `${list.ordered ? `${(list.start || 1) + i}.` : '\u2022'} `}
+                    {renderInline((t as Tokens.Text).tokens ?? [t], p, `${key}-li${i}-${j}-`)}
+                  </Prim.Text>
+                ) : (
+                  renderBlock(t, p, `${key}-li${i}-${j}`)
+                ),
               )}
             </Prim.ListItem>
           ))}

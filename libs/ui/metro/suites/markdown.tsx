@@ -41,11 +41,17 @@ test('inline tokens survive as separate native text nodes', () => {
   expect(findByText(tree, 'plain ')).toBeTruthy()
 })
 
-test('a list renders one node per item', () => {
+test('a list renders each item inside a native Text, not bare in a View', () => {
   const { tree } = render(<Markdown source={'- alpha\n- beta\n- gamma'} />)
-  expect(findByText(tree, 'alpha')).toBeTruthy()
-  expect(findByText(tree, 'beta')).toBeTruthy()
-  expect(findByText(tree, 'gamma')).toBeTruthy()
+  // `findByText` alone is NOT enough, and this is the assertion that proves it. `ListItem` is a
+  // View on native; React Native refuses to render a bare string inside one, so with the content
+  // in a Fragment every bullet vanished on a device while this suite stayed green —
+  // react-test-renderer does not enforce the rule. Asserting on the host TYPE is what closes it.
+  for (const word of ['alpha', 'beta', 'gamma']) {
+    const node = findByText(tree, word)
+    expect(node).toBeTruthy()
+    expect(node?.type).toBe(NATIVE_TEXT)
+  }
 })
 
 test('a fenced code block keeps its source and takes the mono face', () => {
