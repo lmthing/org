@@ -6,8 +6,10 @@
  * (approve → `true`, deny → `false`) so the agent never hangs.
  */
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, it, expect, vi } from 'vitest';
+// The provider-wrapped render: post-Tamagui every primitive calls `useTheme()`
+// and throws `Missing theme.` outside one.
+import { render } from '../../test-utils/index';
 import {
   ConsentCard,
   isConsentDescriptor,
@@ -47,7 +49,7 @@ describe('consentPropsFromDescriptor', () => {
 
 describe('ConsentCard', () => {
   it('renders the function, space and args summary', () => {
-    const html = renderToStaticMarkup(
+    const { container } = render(
       <ConsentCard
         fn="installSpace"
         space="system-global"
@@ -56,6 +58,7 @@ describe('ConsentCard', () => {
         onDeny={() => {}}
       />,
     );
+    const html = container.innerHTML;
     expect(html).toContain('THING wants to run');
     expect(html).toContain('installSpace');
     expect(html).toContain('system-global');

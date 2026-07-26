@@ -1,108 +1,35 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { Markdown } from '../../elements/content/markdown';
+import { renderDescriptor, toRenderableDescriptor } from './render-descriptor';
 
-interface JSXDescriptor {
-  type: string;
-  props: Record<string, unknown>;
-  children: unknown[];
-}
-
-function isDescriptor(v: unknown): v is JSXDescriptor {
-  return (
-    typeof v === 'object' &&
-    v !== null &&
-    'type' in v &&
-    'props' in v &&
-    'children' in v
-  );
-}
-
-function renderNode(node: unknown, key?: number): React.ReactNode {
-  if (node === null || node === undefined) return null;
-  if (typeof node === 'string') return node;
-  if (typeof node === 'number') return String(node);
-
-  if (!isDescriptor(node)) {
-    return <Prim.Text key={key}>{JSON.stringify(node)}</Prim.Text>;
-  }
-
-  const { type, props, children } = node;
-  const renderedChildren = children.map((child, i) => renderNode(child, i));
-
-  switch (type.toLowerCase()) {
-    case 'h1':
-      return <Prim.Text as="h1" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
-    case 'h2':
-      return <Prim.Text as="h2" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
-    case 'h3':
-      return <Prim.Text as="h3" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
-    case 'p':
-      return <Prim.Text as="p" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
-    case 'span':
-      return <Prim.Text key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
-    case 'code':
-      return <Prim.Text as="code" key={key} {...omitChildren(props)}>{renderedChildren}</Prim.Text>;
-    case 'card':
-      return (
-        <Prim.Box key={key} borderWidth="1px" borderStyle="solid" borderColor="var(--border)" borderRadius={4} padding={12} {...omitChildren(props)}>
-          {renderedChildren}
-        </Prim.Box>
-      );
-    case 'alert': {
-      const variant = props['variant'] as string | undefined;
-      const color =
-        variant === 'error'
-          ? 'color-mix(in srgb, var(--destructive) 15%, transparent)'
-          : variant === 'warning'
-            ? 'color-mix(in srgb, var(--warning) 15%, transparent)'
-            : 'color-mix(in srgb, var(--success) 15%, transparent)';
-      return (
-        <Prim.Box key={key} backgroundColor={color} padding={12} borderRadius={4} {...omitChildren(props)}>
-          {renderedChildren}
-        </Prim.Box>
-      );
-    }
-    case 'badge': {
-      const color = props['color'] as string | undefined;
-      return (
-        <Prim.Text
-          key={key}
-          backgroundColor={color ?? 'var(--agent)'} color="var(--agent-foreground)" paddingVertical="2px" paddingHorizontal="6px" borderRadius={4}
-          {...omitChildren(props)}
-        >
-          {renderedChildren}
-        </Prim.Text>
-      );
-    }
-    case 'button':
-      return (
-        <Prim.Pressable key={key} {...omitChildren(props)}>
-          {renderedChildren}
-        </Prim.Pressable>
-      );
-    case 'markdown': {
-      const text = props['text'] as string | undefined;
-      const markdown = text || (renderedChildren.length > 0 ? renderedChildren.join('') : '');
-      // Same renderer and same scale as `chat/app/Message`, so an agent `display()` block and a
-      // chat message cannot drift apart.
-      return <Markdown key={key} source={String(markdown)} preset="prose" />;
-    }
-    case 'text':
-    default:
-      return <Prim.Text key={key}>{renderedChildren}</Prim.Text>;
-  }
-}
-
-function omitChildren(props: Record<string, unknown>): Record<string, unknown> {
-  const { children: _c, ...rest } = props;
-  return rest as Record<string, unknown>;
-}
-
+/**
+ * A `display()` block for the connected-session views — `ReplChatView` (the
+ * Studio THING dock, project-app `<Chat>` pages) and the CLI's `--web` DevTools
+ * app.
+ *
+ * It used to carry its OWN, much smaller descriptor switch: h1–h3, p, span,
+ * code, card, alert, badge, button, markdown, and `<span>{children}</span>` for
+ * everything else. That meant the components an agent actually reaches for —
+ * `Stack`, `Table`, `KeyValue`, `List`, `Callout`, `StatCard` — rendered as
+ * bare text with their props thrown away, and the prop-only ones (a `Table` has
+ * no children, only `columns`/`rows`) rendered as **nothing at all**. Anything
+ * that wasn't a descriptor was `JSON.stringify`d straight at the reader.
+ *
+ * There is one descriptor vocabulary, so there is one renderer: this delegates
+ * to `renderDescriptor`, the same function `/chat`'s transcript uses. Two
+ * renderers for one catalog is two behaviours for one agent answer.
+ */
 interface DisplayBlockProps {
   descriptor: unknown;
 }
 
 export function DisplayBlock({ descriptor }: DisplayBlockProps): React.ReactElement {
-  return <Prim.Box>{renderNode(descriptor)}</Prim.Box>;
+  // A string display is prose — markdown, the same as the chat transcript
+  // treats it — UNLESS it is a descriptor that was serialized on the way here.
+  if (typeof descriptor === 'string') {
+    const parsed = toRenderableDescriptor(descriptor);
+    return <Prim.Box>{parsed ? renderDescriptor(parsed) : <Markdown source={descriptor} preset="prose" />}</Prim.Box>;
+  }
+  return <Prim.Box>{renderDescriptor(descriptor)}</Prim.Box>;
 }
