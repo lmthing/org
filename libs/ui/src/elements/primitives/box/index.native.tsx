@@ -26,10 +26,22 @@ export type BoxAs =
   | 'dl'
   | 'fieldset'
 
-export type BoxProps = React.HTMLAttributes<HTMLElement> & {
-  as?: BoxAs
-  open?: boolean
-}
+/**
+ * The SAME props type the web `Box` exports, imported rather than redeclared.
+ *
+ * This used to be `React.HTMLAttributes<HTMLElement>`, which was never true and never checked: a
+ * surface writes `<Box padding="$4">`, `tsc` only ever resolves `index.tsx`, and the fork forwards
+ * the prop through `nativeSafeProps` at runtime — so the declaration here disagreed with both the
+ * caller and the implementation, and nothing could notice. One component, one props type.
+ *
+ * `import type` is erased by the transform, so `_tamagui.tsx` does not enter the native graph —
+ * verified directly against the graph rather than assumed, because nothing would catch it if it
+ * did: `_tamagui.tsx` has no `.native` sibling for the fork check to fire on, and it pulls no
+ * web-only package for the leak check.
+ */
+import type { BoxPrimitiveProps } from '../_tamagui'
+
+export type BoxProps = BoxPrimitiveProps
 
 const Box = React.forwardRef<any, BoxProps>(
   ({ children, ...props }, ref) => (

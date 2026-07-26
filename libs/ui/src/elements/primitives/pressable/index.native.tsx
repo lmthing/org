@@ -10,13 +10,16 @@ import { NativeView, nativeSafeProps } from '../_native'
  */
 export type PressableAs = 'button' | 'a' | 'div'
 
-export type PressableProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
-  Pick<
-    React.AnchorHTMLAttributes<HTMLAnchorElement>,
-    'href' | 'target' | 'rel' | 'download' | 'referrerPolicy' | 'hrefLang'
-  > & {
-    as?: PressableAs
-  }
+/**
+ * The SAME props type the web sibling exports, imported rather than redeclared. A redeclared
+ * `React.*HTMLAttributes` was never checked against anything: `tsc` only ever resolves `index.tsx`,
+ * so the fork's own claim about its props could disagree with both the caller and the
+ * implementation. `import type` is erased by the transform, so `_tamagui.tsx` stays out of the
+ * native graph (verified against the graph, not assumed).
+ */
+import type { PressablePrimitiveProps } from '../_tamagui'
+
+export type PressableProps = PressablePrimitiveProps
 
 const Pressable = React.forwardRef<any, PressableProps>(
   ({ children, disabled, ...props }, ref) => {

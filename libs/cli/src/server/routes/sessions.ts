@@ -2,7 +2,27 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { handleAgentApi, agentApiContextFromEntry } from '../../web/agent-api.js';
 import { readBody, sendJson } from './utils.js';
 import { isUnderMemoryPressure } from '../mem-watchdog.js';
+import { readCaller } from '../team-guard.js';
 import type { RouteHandler } from '../router.js';
+import type { SessionEntry } from '../session-manager.js';
+
+/**
+ * On a TEAM pod every member reaches the same server, so a session belongs to
+ * whoever opened it: one member must not read, drive or close another's
+ * conversation. Editors are exempt — configuring the workspace includes
+ * clearing it out — as are sessions with no recorded owner (created before this
+ * existed, or on a personal pod, where there is only one user anyway).
+ */
+function callerMayUseSession(
+  req: IncomingMessage,
+  entry: SessionEntry,
+): boolean {
+  const caller = readCaller(req);
+  if (!caller) return true; // personal pod — no team identity in play
+  if (caller.role === 'editor') return true;
+  if (!entry.ownerId) return true;
+  return entry.ownerId === caller.userId;
+}
 
 export const handleCreateSession: RouteHandler = async (
   req: IncomingMessage,
@@ -32,6 +52,9 @@ export const handleCreateSession: RouteHandler = async (
       budget: parsed.budget,
       projectId: parsed.projectId,
       resumeSessionId: parsed.resumeSessionId,
+      // Stamp the verified caller so team members can't reach each other's
+      // conversations. Undefined on a personal pod.
+      ...(readCaller(req) ? { ownerId: readCaller(req)!.userId } : {}),
     });
     sendJson(res, 201, { sessionId });
   } catch (err) {
@@ -49,7 +72,7 @@ export const handleListSessions: RouteHandler = async (
 };
 
 export const handleDeleteSession: RouteHandler = async (
-  _req: IncomingMessage,
+  req: IncomingMessage,
   res: ServerResponse,
   params: Record<string, string>,
   ctx,
@@ -57,6 +80,10 @@ export const handleDeleteSession: RouteHandler = async (
   const id = params['id']!;
   const entry = ctx.manager.getSession(id);
   if (!entry) { sendJson(res, 404, { error: `unknown session "${id}"` }); return; }
+  if (!callerMayUseSession(req, entry)) {
+    sendJson(res, 403, { error: 'that conversation belongs to another member' });
+    return;
+  }
   await ctx.manager.disposeSession(id);
   sendJson(res, 200, { ok: true });
 };
@@ -76,6 +103,10 @@ export const handleSessionSubRoute: RouteHandler = async (
   const rest = params['rest'] ? `/${params['rest']}` : '';
   const entry = ctx.manager.getSession(id);
   if (!entry) { sendJson(res, 404, { error: `unknown session "${id}"` }); return; }
+  if (!callerMayUseSession(req, entry)) {
+    sendJson(res, 403, { error: 'that conversation belongs to another member' });
+    return;
+  }
   const pathOverride = `/api${rest}`;
   const agentCtx = agentApiContextFromEntry(entry, {
     // `sendMessage` is fire-and-forget (POST /message returns 202 while the turn runs).

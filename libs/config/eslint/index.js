@@ -24,5 +24,14 @@ export default [
       'no-prototype-builtins': 'warn',
     },
   },
+  {
+    // Plain-JS Node files — codemods, lint gates, the Metro harness runners. They are executed by
+    // `node` directly and never bundled, but the block above only gives globals to `.ts`/`.tsx`, so
+    // every one of them tripped `no-undef` on `console` and `process`. That is why
+    // `libs/ui/scripts/lint-rn-safety.mjs` — a gate that has been in `pnpm lint` for months —
+    // contributed six errors to its own lint run.
+    files: ['**/*.mjs', '**/*.cjs'],
+    languageOptions: { globals: { ...globals.node } },
+  },
   { ignores: ['**/dist/**', '**/node_modules/**', '**/*.gen.ts'] },
 ];

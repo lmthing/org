@@ -1,6 +1,12 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import * as Prim from '../../primitives/index'
+import {
+  DIALOG_BACKDROP_SHARED,
+  DIALOG_PANEL_SHARED,
+  DIALOG_CONTENT_SHARED,
+  DIALOG_HEADER_SHARED,
+} from './styles'
 
 /**
  * Dialog — a modal, migrated off `@radix-ui/react-dialog` to the universal Tamagui primitives
@@ -27,12 +33,7 @@ import * as Prim from '../../primitives/index'
  * Shadows are the single-layer approximations from the proof; shadow black follows the codebase's
  * opaque-black-with-alpha convention (theme-independent, so not a token).
  */
-export const DIALOG_BACKDROP = {
-  position: 'fixed',
-  top: 0, right: 0, bottom: 0, left: 0,
-  zIndex: 50,
-  backgroundColor: '$scrim',
-} as const
+export const DIALOG_BACKDROP = { position: 'fixed', ...DIALOG_BACKDROP_SHARED } as const
 
 /** The portal viewport that centres the dialog (was inline Tailwind on a `Prim.Row`). */
 const DIALOG_VIEWPORT = {
@@ -45,28 +46,19 @@ const DIALOG_VIEWPORT = {
 
 /** `.dialog` — the panel. Exported so a caller can widen it (see the settings dialog). */
 export const DIALOG_BASE = {
+  ...DIALOG_PANEL_SHARED,
   position: 'fixed',
   left: '50%',
   top: '50%',
   zIndex: 50,
-  width: '100%',
-  maxWidth: 512, // max-w-lg = 32rem (no size token)
   transform: 'translate(-50%, -50%)',
-  backgroundColor: '$background',
-  borderRadius: '$radius-lg',
-  borderWidth: 1,
-  borderColor: '$border',
-  padding: '$6',
-  shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
-  shadowOffset: { width: 0, height: 10 },
-  shadowRadius: 15,
 } as const
 
 /** `.dialog__content` — grid, gap-4. */
-export const DIALOG_CONTENT = { display: 'grid', gap: '$4' } as const
+export const DIALOG_CONTENT = { display: 'grid', ...DIALOG_CONTENT_SHARED } as const
 
 /** `.dialog__header` — flex, flex-col, gap-2. */
-export const DIALOG_HEADER = { display: 'flex', flexDirection: 'column', gap: '$2' } as const
+export const DIALOG_HEADER = { display: 'flex', ...DIALOG_HEADER_SHARED } as const
 
 type Ctx = { open: boolean; setOpen: (o: boolean) => void }
 const DialogContext = React.createContext<Ctx>({ open: false, setOpen: () => {} })

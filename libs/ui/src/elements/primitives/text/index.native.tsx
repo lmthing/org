@@ -29,11 +29,16 @@ export type TextAs =
   | 'h6'
   | 'pre'
 
-export type TextProps = React.HTMLAttributes<HTMLElement> & {
-  as?: TextAs
-  block?: boolean
-  htmlFor?: string
-}
+/**
+ * The SAME props type the web sibling exports, imported rather than redeclared. A redeclared
+ * `React.*HTMLAttributes` was never checked against anything: `tsc` only ever resolves `index.tsx`,
+ * so the fork's own claim about its props could disagree with both the caller and the
+ * implementation. `import type` is erased by the transform, so `_tamagui.tsx` stays out of the
+ * native graph (verified against the graph, not assumed).
+ */
+import type { TextPrimitiveProps } from '../_tamagui'
+
+export type TextProps = TextPrimitiveProps
 
 const Text = React.forwardRef<any, TextProps>(
   // `block` is a web display hint with no RN equivalent (an RN Text is already a block box).

@@ -11,7 +11,16 @@ const RowView: React.ComponentType<any> = styled(View, {
   flexDirection: 'row',
 }) as unknown as React.ComponentType<any>
 
-export type RowProps = React.HTMLAttributes<HTMLDivElement>
+/**
+ * The SAME props type the web sibling exports, imported rather than redeclared. A redeclared
+ * `React.*HTMLAttributes` was never checked against anything: `tsc` only ever resolves `index.tsx`,
+ * so the fork's own claim about its props could disagree with both the caller and the
+ * implementation. `import type` is erased by the transform, so `_tamagui.tsx` stays out of the
+ * native graph (verified against the graph, not assumed).
+ */
+import type { LayoutPrimitiveProps } from '../_tamagui'
+
+export type RowProps = LayoutPrimitiveProps
 
 const Row = React.forwardRef<any, RowProps>(({ children, ...props }, ref) => (
   <RowView ref={ref} {...nativeSafeProps(props)}>

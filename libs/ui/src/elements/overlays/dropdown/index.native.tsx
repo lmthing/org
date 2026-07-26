@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Modal } from 'react-native'
 import { NativeView } from '../../primitives/_native'
+import { DROPDOWN_CONTENT_SHARED, DROPDOWN_ITEM_SHARED } from './styles'
 
 /**
  * Dropdown (native fork). Same compound API as `index.tsx` — Dropdown/Trigger/Content/Item/Separator
@@ -33,20 +34,7 @@ import { NativeView } from '../../primitives/_native'
  * may spread it on either target; `color` is dropped because it styles TEXT and this is a View (RN
  * does not inherit it the way CSS does — a text child carries its own color).
  */
-export const DROPDOWN_CONTENT = {
-  position: 'absolute',
-  zIndex: 50,
-  minWidth: '$32',
-  overflow: 'hidden',
-  borderRadius: '$radius-md',
-  borderWidth: 1,
-  borderColor: '$border',
-  backgroundColor: '$popover',
-  padding: '$1',
-  shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
-  shadowOffset: { width: 0, height: 4 },
-  shadowRadius: 6,
-} as const
+export const DROPDOWN_CONTENT = { ...DROPDOWN_CONTENT_SHARED } as const
 
 /**
  * `.dropdown__item`. `hoverStyle` becomes `pressStyle` — there is no hover on a touch device, and
@@ -54,11 +42,8 @@ export const DROPDOWN_CONTENT = {
  * dropped; `fontSize`/`color` belong on the text child, not on this View.
  */
 export const DROPDOWN_ITEM = {
-  alignItems: 'center',
-  gap: '$2',
-  borderRadius: '$radius-sm',
-  paddingHorizontal: '$2',
-  paddingVertical: '$1.5',
+  ...DROPDOWN_ITEM_SHARED,
+  // A touch device has no hover; press is the analogue.
   pressStyle: { backgroundColor: '$accent' },
   disabledStyle: { opacity: 0.5 },
 } as const

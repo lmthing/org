@@ -8,7 +8,16 @@ import { NativeText, nativeSafeProps } from '../_native'
  * (Typechecked in the mobile app, which provides react-native types.)
  * See docs/react-native-tamagui-migration.md §1.6 / §7.
  */
-export type LinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement>
+/**
+ * The SAME props type the web sibling exports, imported rather than redeclared. A redeclared
+ * `React.*HTMLAttributes` was never checked against anything: `tsc` only ever resolves `index.tsx`,
+ * so the fork's own claim about its props could disagree with both the caller and the
+ * implementation. `import type` is erased by the transform, so `_tamagui.tsx` stays out of the
+ * native graph (verified against the graph, not assumed).
+ */
+import type { LinkProps as LinkPrimitiveProps } from '../_tamagui'
+
+export type LinkProps = LinkPrimitiveProps
 
 // `NativeText` is a `ComponentType<any>`, not a `ForwardRefExoticComponent`, so `ElementRef` cannot
 // be applied to it — there is no element type to extract. The ref is forwarded opaquely.

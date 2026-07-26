@@ -45,12 +45,17 @@ import {
   handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild, handleAppCheck,
 } from './routes/app-admin.js';
 import { handleListApps, handleInstallApp } from './routes/apps.js';
+import {
+  handleListChannels, handleCreateChannel, handleListMessages, handlePostMessage,
+} from './routes/team-channels.js';
+import { guardRequest, guardWebSocket, isTeamMode } from './team-guard.js';
 import { handleListStoreSpaces, handleInstallStoreSpace, handleListProjectIntegrations } from './routes/store-spaces.js';
 import { listProjects } from './projects.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
 import { handleAgentWsUpgrade } from './ws/agent.js';
 import { handleTerminalWsUpgrade } from './ws/terminal.js';
+import { handleChannelWsUpgrade } from './ws/team-channels.js';
 
 export interface SessionServerOpts {
   port: number;
@@ -84,7 +89,7 @@ export interface SessionServerHandle {
  */
 const RESERVED_ROOT_SEGMENTS = new Set([
   'api', 'app', 'assets', 'favicon.ico', 'install',
-  'chat', 'studio', 'computer',
+  'chat', 'studio', 'computer', 'team',
 ]);
 
 export async function startSessionServer(opts: SessionServerOpts): Promise<SessionServerHandle> {
@@ -199,6 +204,17 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
 
   // Spaces sync
   router.add('POST', '/api/spaces', handleCreateSpace);
+
+  // Team channels — the shared chat surface, registered ONLY on a team pod so a
+  // personal pod's API is byte-identical to what it was before teams existed.
+  // Creating a channel is configuring the team, so team-guard makes it
+  // editor-only; posting and reading are open to every member.
+  if (isTeamMode()) {
+    router.add('GET', '/api/team/channels', handleListChannels(effectiveLmthingRoot));
+    router.add('POST', '/api/team/channels', handleCreateChannel(effectiveLmthingRoot));
+    router.add('GET', '/api/team/channels/:channelId/messages', handleListMessages(effectiveLmthingRoot));
+    router.add('POST', '/api/team/channels/:channelId/messages', handlePostMessage(manager, effectiveLmthingRoot));
+  }
 
   // Per-session routes (DELETE session + all sub-routes via catch-all)
   router.add('DELETE', '/api/sessions/:id', handleDeleteSession);
@@ -371,6 +387,16 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // ─── HTTP server ──────────────────────────────────────────────────────────
   const httpServer = createServer((req, res) => {
     const method = (req.method ?? 'GET').toUpperCase();
+
+    // On a TEAM pod, decide who is calling and whether their role permits this
+    // before any handler runs. Inert on a personal pod (see team-guard.ts).
+    const verdict = guardRequest(req, new URL(req.url ?? '/', 'http://localhost').pathname);
+    if (!verdict.ok) {
+      res.writeHead(verdict.status ?? 403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: verdict.error ?? 'forbidden' }));
+      return;
+    }
+
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
       inFlightMutating++;
       lastMutatingRequestAt = Date.now();
@@ -407,6 +433,21 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     // the `vite-hmr` subprotocol); don't claim it for the agent WS.
     if (devWeb && String(req.headers['sec-websocket-protocol'] ?? '').includes('vite-hmr')) return;
     const url = new URL(req.url ?? '/', 'http://localhost');
+
+    // Same role gating as HTTP — a viewer may talk, but not open a terminal.
+    const verdict = guardWebSocket(req, url.pathname);
+    if (!verdict.ok) {
+      socket.write(
+        `HTTP/1.1 ${verdict.status ?? 403} Forbidden\r\nConnection: close\r\n\r\n`,
+      );
+      socket.destroy();
+      return;
+    }
+
+    if (url.pathname === '/api/team/ws') {
+      handleChannelWsUpgrade(req, socket, head, wss);
+      return;
+    }
     const termMatch = url.pathname.match(/^\/api\/terminals\/([^/]+)$/);
     if (termMatch) {
       handleTerminalWsUpgrade(req, socket, head, wss, terminalCwd, termMatch[1]!);

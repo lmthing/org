@@ -115,6 +115,10 @@ export interface SessionEntry {
   snapshotDir?: string;
   /** Accumulated LLM cost in USD across all turns in this session. */
   totalCostUsd: number;
+  /** On a TEAM pod, the member who opened this session. Absent on a personal
+   *  pod, where every session belongs to the pod's only user. Lets the session
+   *  routes keep one member out of another's conversation. */
+  ownerId?: string;
 }
 
 /** Lightweight metadata for listSessions() — never exposes the Session object. */
@@ -1148,6 +1152,8 @@ export class SessionManager {
     projectId?: string;
     /** Resume a previously saved session by id (project mode only). */
     resumeSessionId?: string;
+    /** TEAM pods: the member opening this session (from the verified caller). */
+    ownerId?: string;
   }): { sessionId: string } {
     // ── Resume path (project mode + resumeSessionId) ──────────────────────────
     if (this.lmthingRoot && opts.resumeSessionId) {
@@ -1206,6 +1212,7 @@ export class SessionManager {
         createdAt: now,
         messageCount: 0,
         totalCostUsd: 0,
+        ...(opts.ownerId ? { ownerId: opts.ownerId } : {}),
         needsResume: true,
         snapshotDir,
       };
@@ -1273,6 +1280,7 @@ export class SessionManager {
         createdAt: Date.now(),
         messageCount: 0,
         totalCostUsd: 0,
+        ...(opts.ownerId ? { ownerId: opts.ownerId } : {}),
         snapshotDir,
       };
       this.sessions.set(sessionId, placeholderEntry);
@@ -1323,6 +1331,7 @@ export class SessionManager {
       createdAt: Date.now(),
       messageCount: 0,
       totalCostUsd: 0,
+      ...(opts.ownerId ? { ownerId: opts.ownerId } : {}),
     };
 
     // Subscribe this session's tracer to its OWN hub so trace events stay scoped.

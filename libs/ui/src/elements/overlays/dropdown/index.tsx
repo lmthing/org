@@ -1,5 +1,6 @@
 import * as React from 'react'
 import * as Prim from '../../primitives/index'
+import { DROPDOWN_CONTENT_SHARED, DROPDOWN_ITEM_SHARED } from './styles'
 
 /**
  * Dropdown — a menu anchored to its trigger, migrated off `@radix-ui/react-dropdown-menu` to the
@@ -29,32 +30,18 @@ const DROPDOWN_TRIGGER = {
 
 /** `.dropdown__content` — the popover panel (absolute positioning was inline Tailwind). */
 export const DROPDOWN_CONTENT = {
-  position: 'absolute',
-  zIndex: 50,
-  minWidth: '$32',
-  overflow: 'hidden',
-  borderRadius: '$radius-md',
-  borderWidth: 1,
-  borderColor: '$border',
-  backgroundColor: '$popover',
+  ...DROPDOWN_CONTENT_SHARED,
+  // An RN `View` does not inherit color into its text children, so native omits this.
   color: '$popover-foreground',
-  padding: '$1',
-  shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
-  shadowOffset: { width: 0, height: 4 },
-  shadowRadius: 6,
 } as const
 
 /** `.dropdown__item`. (`transition-colors` had no matching rule to preserve — hover is instant.) */
 export const DROPDOWN_ITEM = {
+  ...DROPDOWN_ITEM_SHARED,
   position: 'relative',
   display: 'flex',
   cursor: 'pointer',
   userSelect: 'none',
-  alignItems: 'center',
-  gap: '$2',
-  borderRadius: '$radius-sm',
-  paddingHorizontal: '$2',
-  paddingVertical: '$1.5',
   fontSize: '$sm',
   color: '$foreground',
   outlineWidth: 0,

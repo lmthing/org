@@ -2,6 +2,12 @@ import * as React from 'react'
 import { Modal } from 'react-native'
 import { NativeView } from '../../primitives/_native'
 import * as Prim from '../../primitives/index'
+import {
+  DIALOG_BACKDROP_SHARED,
+  DIALOG_PANEL_SHARED,
+  DIALOG_CONTENT_SHARED,
+  DIALOG_HEADER_SHARED,
+} from './styles'
 
 /**
  * Dialog (native fork). Same compound API as `index.tsx` — Dialog/Trigger/Close/Overlay/Content/
@@ -37,32 +43,16 @@ import * as Prim from '../../primitives/index'
  * `transform: 'translate(%)'`. Each is replaced by its native equivalent rather than passed through
  * as a value Tamagui would drop on the floor.
  */
-export const DIALOG_BACKDROP = {
-  position: 'absolute',
-  top: 0, right: 0, bottom: 0, left: 0,
-  zIndex: 50,
-  backgroundColor: '$scrim',
-} as const
+export const DIALOG_BACKDROP = { position: 'absolute', ...DIALOG_BACKDROP_SHARED } as const
 
 /** `.dialog` — the panel. Centred by {@link DIALOG_VIEWPORT}, so it carries no positioning itself. */
-export const DIALOG_BASE = {
-  width: '100%',
-  maxWidth: 512, // max-w-lg = 32rem (no size token)
-  backgroundColor: '$background',
-  borderRadius: '$radius-lg',
-  borderWidth: 1,
-  borderColor: '$border',
-  padding: '$6',
-  shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
-  shadowOffset: { width: 0, height: 10 },
-  shadowRadius: 15,
-} as const
+export const DIALOG_BASE = { ...DIALOG_PANEL_SHARED } as const
 
 /** `.dialog__content` — `display: grid` has no native analogue; a flex column with the same gap does. */
-export const DIALOG_CONTENT = { gap: '$4' } as const
+export const DIALOG_CONTENT = { ...DIALOG_CONTENT_SHARED } as const
 
 /** `.dialog__header` — flex column, gap-2 (RN views are already column). */
-export const DIALOG_HEADER = { flexDirection: 'column', gap: '$2' } as const
+export const DIALOG_HEADER = { ...DIALOG_HEADER_SHARED } as const
 
 /** Centres the panel inside the Modal — the native replacement for the fixed/translate trick. */
 const DIALOG_VIEWPORT = {
