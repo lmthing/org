@@ -1,4 +1,6 @@
 import * as Prim from '@lmthing/ui/elements/primitives'
+import { renderDescriptor, toRenderableDescriptor } from '@lmthing/ui/chat'
+import { Markdown } from '@lmthing/ui/elements/content/markdown'
 import { createFileRoute, useParams } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTeamAuth, teamWsTokenSuffix, type TeamAuth } from '@/lib/team-auth'
@@ -24,6 +26,8 @@ interface ChannelMessage {
   channelId: string
   kind: 'user' | 'thing' | 'system'
   text: string
+  /** THING's JSX answer, as `display()` descriptors. See `MessageBody`. */
+  blocks?: unknown[]
   userId?: string
   email?: string
   threadId?: string
@@ -315,6 +319,40 @@ function ChannelsPage() {
   )
 }
 
+/**
+ * The body of one channel message.
+ *
+ * THING answers in JSX, so a `thing` message is usually a tree of design-system
+ * components, not a paragraph — it carries `blocks`, and those go through the
+ * SAME `renderDescriptor` the `/chat` transcript uses, so an answer looks the
+ * same wherever it is read and works on both targets (the renderer draws
+ * `@lmthing/ui` primitives, which fork per platform; there is no DOM in it).
+ *
+ * `blocks` is recent, and the channel log is append-only, so a thread from
+ * before it existed still holds the descriptor stringified into `text` — parse
+ * that back rather than showing a member the braces forever.
+ *
+ * A member's own message is prose and stays prose: rendering a colleague's text
+ * as markdown would let a stray `#` or `_` restyle what they typed.
+ */
+function MessageBody({ message }: { message: ChannelMessage }) {
+  const blocks = message.blocks?.length ? message.blocks : null
+  const legacy = blocks ? null : toRenderableDescriptor(message.text)
+  const descriptors = blocks ?? legacy
+
+  if (descriptors) {
+    return <Prim.Col gap="$1">{renderDescriptor(descriptors)}</Prim.Col>
+  }
+  if (message.kind === 'thing') {
+    return <Markdown source={message.text} preset="prose" />
+  }
+  return (
+    <Prim.Text fontSize="$sm" whiteSpace="pre-wrap">
+      {message.text}
+    </Prim.Text>
+  )
+}
+
 function MessageRow({ message }: { message: ChannelMessage }) {
   const who =
     message.kind === 'thing' ? 'THING' : message.kind === 'system' ? 'system' : message.email
@@ -326,9 +364,7 @@ function MessageRow({ message }: { message: ChannelMessage }) {
       >
         {who}
       </Prim.Text>
-      <Prim.Text fontSize="$sm" whiteSpace="pre-wrap">
-        {message.text}
-      </Prim.Text>
+      <MessageBody message={message} />
     </Prim.Box>
   )
 }

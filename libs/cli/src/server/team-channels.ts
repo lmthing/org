@@ -48,7 +48,22 @@ export interface ChannelMessage {
   ts: string;
   channelId: string;
   kind: MessageKind;
+  /**
+   * The message body as plain text. For a `thing` message that answered with
+   * JSX this is the flattened fallback — what a client that cannot draw
+   * components shows, and what a search or a notification reads.
+   */
   text: string;
+  /**
+   * For `thing` messages that answered with JSX: the `display()` descriptors of
+   * the turn, in order, already reduced to allowed components.
+   *
+   * The reply is STORED as structure, not as the string it flattens to.
+   * `JSON.stringify`ing the descriptor into `text` was the whole bug — the log
+   * is the only record of the answer, so a channel that stores braces can only
+   * ever render braces, no matter what the client does later.
+   */
+  blocks?: unknown[];
   /** The member who sent it (absent for `thing`/`system`). */
   userId?: string;
   email?: string;

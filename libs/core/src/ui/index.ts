@@ -13,3 +13,8 @@ export {
   flattenForm, normalizeOptions, coerceValue, defaultFor, isFormDescriptor, isCatalogForm,
 } from './form.js';
 export type { FieldSpec, FieldKind, FormSpec, Option } from './form.js';
+export {
+  RENDER_ALIASES, isRenderableType, renderableTypes, isJsxDescriptor,
+  parseDescriptorPayload, sanitizeDescriptor, descriptorToText,
+} from './descriptor.js';
+export type { JsxDescriptor } from './descriptor.js';

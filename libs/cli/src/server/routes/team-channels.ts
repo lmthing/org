@@ -10,8 +10,14 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import {
+  descriptorToText,
+  isJsxDescriptor,
+  parseDescriptorPayload,
+  sanitizeDescriptor,
+} from '@lmthing/core/ui';
 import type { RouteHandler } from '../router.js';
-import type { SessionManager } from '../session-manager.js';
+import type { HeadlessRunResult, SessionManager } from '../session-manager.js';
 import { readBody, sendJson } from './utils.js';
 import { readCaller } from '../team-guard.js';
 import { getOrCreateThreadSession } from '../webhook-threads.js';
@@ -214,14 +220,14 @@ async function runThingReply(
       message: promptFor(message),
     });
 
-    const text = result.ok
-      ? renderResult(result.result)
-      : `THING could not answer: ${result.error ?? 'unknown error'}`;
+    const answer = result.ok
+      ? renderResult(result)
+      : { text: `THING could not answer: ${result.error ?? 'unknown error'}` };
 
     const reply = await appendMessage(root, {
       channelId: message.channelId,
       kind: result.ok ? 'thing' : 'system',
-      text,
+      ...answer,
       threadId,
       sessionId,
     });
@@ -249,14 +255,60 @@ async function runThingReply(
   }
 }
 
-/** Flatten whatever the agent returned into channel text. */
-function renderResult(result: unknown): string {
-  if (typeof result === 'string') return result;
-  if (result === undefined || result === null) return '(no answer)';
-  if (typeof result === 'object') {
-    const descriptor = result as { text?: unknown; content?: unknown };
-    if (typeof descriptor.text === 'string') return descriptor.text;
-    if (typeof descriptor.content === 'string') return descriptor.content;
+/**
+ * Turn what the agent returned into the fields of a channel message.
+ *
+ * THING answers in JSX far more often than in prose — `display(<Stack>…)` is
+ * the house style — and a JSX answer is a `{type, props, children}` descriptor,
+ * not a string. This used to end at `JSON.stringify(result)`, so the channel
+ * stored the descriptor's source and the reader got a wall of braces where the
+ * card should have been.
+ *
+ * So: descriptors are kept as `blocks` (reduced to allowed components, since a
+ * channel is not the place to discover a component nobody ships), and `text`
+ * carries the flattened prose for every client and index that wants a string.
+ * A prose answer still stores just `text` — nothing changes for those.
+ */
+function renderResult(result: HeadlessRunResult): { text: string; blocks?: unknown[] } {
+  // Prefer every display of the turn over the single `result`: an agent that
+  // displayed a heading and then a table said both things, and the channel post
+  // is the whole answer, not its last paragraph.
+  const raw = result.displays?.length ? result.displays : [result.result];
+  const blocks: unknown[] = [];
+  const prose: string[] = [];
+
+  for (const value of raw) {
+    if (value === undefined || value === null) continue;
+    // A descriptor may arrive already serialized (an older writer, a resumed
+    // snapshot) — that is still a descriptor, not prose.
+    const descriptor = typeof value === 'string' ? parseDescriptorPayload(value) : value;
+    if (typeof value === 'string' && !descriptor) {
+      prose.push(value);
+      continue;
+    }
+    if (isJsxDescriptor(descriptor) || Array.isArray(descriptor)) {
+      const clean = sanitizeDescriptor(descriptor);
+      const asList = Array.isArray(clean) ? clean : [clean];
+      for (const node of asList) {
+        if (node === undefined || node === null) continue;
+        // Unwrapping an unrecognised component can leave a bare string where a
+        // node was. Keep it in place as a Paragraph so the answer stays a list
+        // of components and the reading order survives.
+        const block = typeof node === 'string' ? { type: 'Paragraph', props: {}, children: [node] } : node;
+        blocks.push(block);
+        prose.push(descriptorToText(block));
+      }
+      continue;
+    }
+    // Not a descriptor and not a string: an agent that returned data. Keep the
+    // old string-ish reading before falling back to JSON — a `{text}` or
+    // `{content}` envelope is prose someone wrapped.
+    const envelope = value as { text?: unknown; content?: unknown };
+    if (typeof envelope.text === 'string') prose.push(envelope.text);
+    else if (typeof envelope.content === 'string') prose.push(envelope.content);
+    else prose.push(JSON.stringify(value));
   }
-  return JSON.stringify(result);
+
+  const text = prose.filter((p) => p.trim()).join('\n\n').trim() || '(no answer)';
+  return blocks.length ? { text, blocks } : { text };
 }
