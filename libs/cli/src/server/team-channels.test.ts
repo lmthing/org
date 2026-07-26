@@ -173,6 +173,24 @@ describe('the channel store', () => {
     expect((await ensureDefaultChannel(root)).length).toBe(1);
   });
 
+  // Whichever entry point a fresh team hits first must not decide whether it
+  // gets a #general. Seeding on "the list is empty" meant creating a channel
+  // before anyone listed wrote the file WITHOUT #general, permanently.
+  it('still seeds #general when the first act is creating another channel', async () => {
+    const made = await createChannel(root, 'standup', 'u1');
+    expect(made.created).toBe(true);
+    expect((await listChannels(root)).map((c) => c.id).sort()).toEqual(['general', 'standup']);
+  });
+
+  it('does not resurrect #general once a team has deliberately removed it', async () => {
+    await ensureDefaultChannel(root);
+    await createChannel(root, 'standup', 'u1');
+    // Drop #general the way a future delete would: rewrite the file without it.
+    const remaining = (await listChannels(root)).filter((c) => c.id !== 'general');
+    await writeFile(join(teamDir(root), 'channels.json'), JSON.stringify(remaining), 'utf8');
+    expect((await ensureDefaultChannel(root)).map((c) => c.id)).toEqual(['standup']);
+  });
+
   it('creates channels and is idempotent on the id', async () => {
     await ensureDefaultChannel(root);
     const first = await createChannel(root, 'Product Design', 'u1');
@@ -358,6 +376,7 @@ describe('THING in a thread', () => {
 
   it('separates threads that share an id across different channels', async () => {
     const { manager, runs } = mkManager();
+    await createChannel(root, 'design', 'u1'); // a message needs a real channel
     for (const channelId of ['general', 'design']) {
       const res = mkRes();
       await handlePostMessage(manager, root)(
@@ -369,6 +388,20 @@ describe('THING in a thread', () => {
       await settle();
     }
     expect(runs[0]!.sessionId).not.toBe(runs[1]!.sessionId);
+  });
+
+  it('refuses a message to a channel that does not exist', async () => {
+    // Without this, a typo'd id silently created an invisible channel: messages
+    // accumulated and were broadcast, but nothing ever listed it.
+    const { manager, runs } = mkManager();
+    const res = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/typo/messages', { text: '@thing hello' }),
+      res, { channelId: 'typo' }, {} as any,
+    );
+    await settle();
+    expect(res.statusCode).toBe(404);
+    expect(runs).toHaveLength(0);
   });
 
   it('reports a failed turn in the channel instead of swallowing it', async () => {

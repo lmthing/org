@@ -23,7 +23,7 @@
  * dropped without losing history.
  */
 
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -111,12 +111,22 @@ async function saveChannels(root: string, channels: Channel[]): Promise<void> {
 }
 
 /**
- * Ensure the team has at least one channel. Called on first read so a fresh
- * team pod is immediately usable rather than showing an empty shell.
+ * Give a fresh team its #general, so the chat surface is usable the moment the
+ * pod boots rather than showing an empty shell.
+ *
+ * The trigger is the channels FILE not existing yet — not the list being empty.
+ * Keying off emptiness meant whichever entry point ran first decided: create a
+ * channel before anyone listed, and the file was written without #general and
+ * the team never got one. It also means a team that deliberately deletes every
+ * channel stays deleted instead of having #general resurrected under it.
  */
 export async function ensureDefaultChannel(root: string): Promise<Channel[]> {
-  const existing = await listChannels(root);
-  if (existing.length > 0) return existing;
+  try {
+    await stat(channelsFile(root));
+    return await listChannels(root);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
   const channel: Channel = {
     ...DEFAULT_CHANNEL,
     createdBy: 'system',
@@ -136,7 +146,9 @@ export async function createChannel(
   if (!isValidChannelId(id)) {
     throw new Error(`invalid channel name: ${JSON.stringify(name)}`);
   }
-  const channels = await listChannels(root);
+  // Seed first, so a team whose very first act is creating a channel still ends
+  // up with its #general alongside it.
+  const channels = await ensureDefaultChannel(root);
   const existing = channels.find((c) => c.id === id);
   if (existing) return { channel: existing, created: false };
 

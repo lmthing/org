@@ -149,6 +149,15 @@ export function handlePostMessage(
       return;
     }
 
+    // A message must land in a channel that exists. Without this a typo'd id
+    // silently created an invisible channel: the transcript accumulated, the
+    // socket broadcast it, and nothing ever listed it.
+    const channels = await ensureDefaultChannel(root);
+    if (!channels.some((c) => c.id === channelId)) {
+      sendJson(res, 404, { error: `no such channel: ${channelId}` });
+      return;
+    }
+
     const caller = readCaller(req);
     const message = await appendMessage(root, {
       channelId,
