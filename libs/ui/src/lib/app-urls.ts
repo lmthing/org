@@ -10,13 +10,14 @@
  * the standalone per-host origin, but the cross-app switcher links use the
  * relative route paths below.
  */
-export type LmthingApp = 'studio' | 'chat' | 'computer'
+export type LmthingApp = 'studio' | 'chat' | 'computer' | 'team'
 
 interface ViteEnv {
   DEV?: boolean
   VITE_STUDIO_URL?: string
   VITE_CHAT_URL?: string
   VITE_COMPUTER_URL?: string
+  VITE_TEAM_URL?: string
   VITE_COMPUTER_BASE_URL?: string
   VITE_CLOUD_BASE_URL?: string
   VITE_CLOUD_URL?: string
@@ -34,6 +35,7 @@ const ENV_KEY: Record<LmthingApp, keyof ViteEnv> = {
   studio: 'VITE_STUDIO_URL',
   chat: 'VITE_CHAT_URL',
   computer: 'VITE_COMPUTER_URL',
+  team: 'VITE_TEAM_URL',
 }
 
 /** Absolute origin for one of the lmthing apps (explicit env override only). */
@@ -111,6 +113,7 @@ const APP_META: Record<LmthingApp, { label: string; emoji: string }> = {
   studio: { label: 'Studio', emoji: '🎛️' },
   chat: { label: 'Chat', emoji: '💬' },
   computer: { label: 'Computer', emoji: '🖥️' },
+  team: { label: 'Team', emoji: '👥' },
 }
 
 /**

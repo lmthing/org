@@ -3,24 +3,27 @@ import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { useAuth } from '@lmthing/auth'
 
-const HOST_SURFACE: Record<string, '/chat' | '/studio' | '/computer' | '/apps'> = {
+export type Surface = '/chat' | '/studio' | '/computer' | '/apps' | '/team'
+
+const HOST_SURFACE: Record<string, Surface> = {
   'lmthing.chat': '/chat',
   'lmthing.studio': '/studio',
   'lmthing.computer': '/computer',
   'lmthing.app': '/apps',
+  'lmthing.team': '/team',
 }
 
 /**
  * The unified-app surface for a hostname: lmthing.chat → /chat,
  * lmthing.studio → /studio, lmthing.computer → /computer, lmthing.app → /apps
- * (the app launcher). On lmthing.app the prefixed history shows this surface at a
+ * (the app launcher), lmthing.team → /team (a team's shared workspace). On lmthing.app the prefixed history shows this surface at a
  * clean browser `/`, and installed apps open at the pod's mount — clean
  * `/<project>/` in prod (Envoy catch-all → pod), `/app/<project>/` on localhost.
  * Unknown hosts (localhost, the `*.test` dev proxy, …) fall back to /studio.
  * Each product domain is served the same unified app statically; the surface is
  * chosen client-side, here, from the hostname.
  */
-export function surfaceForHost(host: string): '/chat' | '/studio' | '/computer' | '/apps' {
+export function surfaceForHost(host: string): Surface {
   return HOST_SURFACE[host] ?? '/studio'
 }
 
@@ -35,6 +38,7 @@ const PREFIX_HOST: Record<string, string> = {
   '/studio': 'lmthing.studio',
   '/computer': 'lmthing.computer',
   '/app': 'lmthing.app',
+  '/team': 'lmthing.team',
 }
 
 /** The production domain hosts — each serves the same unified app. */

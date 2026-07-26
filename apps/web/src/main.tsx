@@ -5,7 +5,9 @@ import type { RouterHistory, HistoryLocation } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
 import { surfaceForHost, foreignSurfaceRedirect } from './routes/index'
 
-const DOMAIN_HOSTS = new Set(['lmthing.computer', 'lmthing.chat', 'lmthing.studio', 'lmthing.app'])
+const DOMAIN_HOSTS = new Set([
+  'lmthing.computer', 'lmthing.chat', 'lmthing.studio', 'lmthing.app', 'lmthing.team',
+])
 
 /**
  * Top-level routes that must NOT receive the surface prefix — they are served by the

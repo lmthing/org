@@ -34,11 +34,11 @@ export interface WakeProgress {
 
 /** Ensure the user's compute pod is running before any pod API call. */
 async function ensurePod(
-  cloudBaseUrl: string,
+  computeBase: string,
   getAccessToken: () => Promise<string>,
 ): Promise<EnsurePodResult> {
   const token = await getAccessToken()
-  const res = await fetch(`${cloudBaseUrl}/api/compute/ensure`, {
+  const res = await fetch(`${computeBase}/ensure`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
   })
@@ -49,9 +49,11 @@ async function ensurePod(
 }
 
 /** Latest compute image tag CI has built, per the gateway. `null` if unknown. */
-async function fetchLatestTag(cloudBaseUrl: string): Promise<string | null> {
+async function fetchLatestTag(): Promise<string | null> {
   try {
-    const res = await fetch(`${cloudBaseUrl}/api/compute/version`)
+    // Always the shared, unauthenticated gateway route — the latest built image
+    // tag is a property of CI, not of any one pod.
+    const res = await fetch(`${CLOUD_BASE_URL}/api/compute/version`)
     if (!res.ok) return null
     const data = (await res.json()) as { tag?: string | null }
     return data.tag ?? null
@@ -61,11 +63,11 @@ async function fetchLatestTag(cloudBaseUrl: string): Promise<string | null> {
 }
 
 async function upgradePod(
-  cloudBaseUrl: string,
+  computeBase: string,
   getAccessToken: () => Promise<string>,
 ): Promise<void> {
   const token = await getAccessToken()
-  const res = await fetch(`${cloudBaseUrl}/api/compute/upgrade`, {
+  const res = await fetch(`${computeBase}/upgrade`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
   })
@@ -81,7 +83,7 @@ async function upgradePod(
  * against a not-serving pod (which would hit Envoy "connection refused" 503s).
  */
 async function pollUntilReady(
-  cloudBaseUrl: string,
+  computeBase: string,
   getAccessToken: () => Promise<string>,
   onProgress?: (p: WakeProgress) => void,
 ): Promise<void> {
@@ -89,7 +91,7 @@ async function pollUntilReady(
   while (Date.now() < deadline) {
     try {
       const token = await getAccessToken()
-      const res = await fetch(`${cloudBaseUrl}/api/compute/status`, {
+      const res = await fetch(`${computeBase}/status`, {
         headers: { authorization: `Bearer ${token}` },
       })
       if (res.ok) {
@@ -152,7 +154,7 @@ export async function waitForPodEdge(
 
 /** Poll pod status until it's ready on `expectedTag`, or give up after ~2 minutes. */
 async function pollUntilUpgraded(
-  cloudBaseUrl: string,
+  computeBase: string,
   getAccessToken: () => Promise<string>,
   expectedTag: string,
   onProgress?: (p: WakeProgress) => void,
@@ -162,7 +164,7 @@ async function pollUntilUpgraded(
     await new Promise((r) => setTimeout(r, 2000))
     try {
       const token = await getAccessToken()
-      const res = await fetch(`${cloudBaseUrl}/api/compute/status`, {
+      const res = await fetch(`${computeBase}/status`, {
         headers: { authorization: `Bearer ${token}` },
       })
       if (res.ok) {
@@ -206,11 +208,38 @@ type PodGateStatus = 'pending' | 'ready' | 'error' | 'upgrade-available' | 'upgr
  * silently forcing a restart — the user chooses when to take the pod down.
  * Pod-embedded (iframe) runs skip the fetch and render children immediately.
  */
-export function PodEnsureGate({ children }: { children: React.ReactNode }) {
+/**
+ * Which compute pod this gate is responsible for.
+ *
+ * `base` is the gateway route prefix that provisions it, and `getToken` the
+ * token those (control-plane) calls carry. `edgeToken` is a different thing: the
+ * token used for SAME-ORIGIN probes and keepalives, which go through this
+ * domain's Envoy proxy into the pod itself. For a personal surface both are the
+ * user's own token; on lmthing.team the control plane still takes the personal
+ * token (membership is checked gateway-side) while the edge needs the
+ * team-scoped one, because Envoy routes by its `team` claim.
+ */
+export interface PodTarget {
+  base: string
+  getToken: () => Promise<string>
+  edgeToken: () => Promise<string>
+}
+
+export function PodEnsureGate({
+  children,
+  target,
+}: {
+  children: React.ReactNode
+  /** Defaults to the signed-in user's own pod. */
+  target?: PodTarget
+}) {
   // Pod-embedded (token injected) or local run (the pod is the server itself):
   // no need to ensure the pod via the cloud gateway.
   if (isPodEmbedded() || isLocalRun()) return <>{children}</>
   const { session, getAccessToken } = useAuth()
+  const computeBase = target?.base ?? `${CLOUD_BASE_URL}/api/compute`
+  const controlToken = target?.getToken ?? getAccessToken
+  const edgeToken = target?.edgeToken ?? getAccessToken
   const [status, setStatus] = useState<PodGateStatus>('pending')
   const [error, setError] = useState<string | null>(null)
   // Live cold-boot progress from /api/compute/status, clamped monotonic so the
@@ -240,8 +269,8 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     async function init() {
       try {
         const [ensureResult, latest] = await Promise.all([
-          ensurePod(CLOUD_BASE_URL, getAccessToken),
-          fetchLatestTag(CLOUD_BASE_URL),
+          ensurePod(computeBase, controlToken),
+          fetchLatestTag(),
         ])
         if (cancelled) return
 
@@ -254,7 +283,7 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
         if (ensureResult.pod && ensureResult.pod.ready === false) {
           // Seed the bar with the milestone /ensure already observed.
           reportProgress({ progress: ensureResult.pod.progress, stage: ensureResult.pod.stage })
-          await pollUntilReady(CLOUD_BASE_URL, getAccessToken, (p) => {
+          await pollUntilReady(computeBase, controlToken, (p) => {
             if (!cancelled) reportProgress(p)
           })
           if (cancelled) return
@@ -264,7 +293,7 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
         // (no readinessProbe; EDS propagation lag). Confirm the same-origin pod
         // edge responds before mounting any surface, so children never race a
         // not-yet-wired data path and render empty. Cheap no-op for a warm pod.
-        await waitForPodEdge(getAccessToken)
+        await waitForPodEdge(edgeToken)
         if (cancelled) return
 
         const dismissed = sessionStorage.getItem(UPGRADE_DISMISSED_KEY)
@@ -302,7 +331,7 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     let cancelled = false
     const id = setInterval(() => {
       void (async () => {
-        const latest = await fetchLatestTag(CLOUD_BASE_URL)
+        const latest = await fetchLatestTag()
         if (cancelled || !latest) return
         const current = currentTagRef.current
         const dismissed = sessionStorage.getItem(UPGRADE_DISMISSED_KEY)
@@ -327,7 +356,7 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     const ping = async () => {
       if (document.visibilityState !== 'visible') return
       try {
-        const token = await getAccessToken()
+        const token = await edgeToken()
         // Same-origin (pod edge, via Envoy), not the gateway.
         await fetch('/api/keepalive', {
           method: 'POST',
@@ -367,11 +396,11 @@ export function PodEnsureGate({ children }: { children: React.ReactNode }) {
     setWake({})
     setStatus('upgrading')
     try {
-      await upgradePod(CLOUD_BASE_URL, getAccessToken)
-      await pollUntilUpgraded(CLOUD_BASE_URL, getAccessToken, tag, reportProgress)
+      await upgradePod(computeBase, controlToken)
+      await pollUntilUpgraded(computeBase, controlToken, tag, reportProgress)
       // Same edge race as cold wake: the restarted pod reports ready before
       // Envoy re-wires it. Wait for the pod edge before returning to the surface.
-      await waitForPodEdge(getAccessToken)
+      await waitForPodEdge(edgeToken)
       currentTagRef.current = tag
       setStatus('ready')
     } catch (err) {

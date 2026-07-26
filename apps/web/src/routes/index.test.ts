@@ -14,6 +14,7 @@ describe('surfaceForHost', () => {
     expect(surfaceForHost('lmthing.studio')).toBe('/studio')
     expect(surfaceForHost('lmthing.computer')).toBe('/computer')
     expect(surfaceForHost('lmthing.app')).toBe('/apps')
+    expect(surfaceForHost('lmthing.team')).toBe('/team')
   })
 
   it('falls back to /studio for unknown / dev hosts', () => {
@@ -25,6 +26,16 @@ describe('surfaceForHost', () => {
 })
 
 describe('foreignSurfaceRedirect', () => {
+  it('bounces a team path off the wrong product domain', () => {
+    expect(foreignSurfaceRedirect(loc('lmthing.chat', '/team/abc/channels'))).toBe(
+      'https://lmthing.team/abc/channels',
+    )
+  })
+
+  it('leaves a team path alone on lmthing.team', () => {
+    expect(foreignSurfaceRedirect(loc('lmthing.team', '/team/abc'))).toBeNull()
+  })
+
   it('bounces a foreign surface path to its canonical domain, stripping the prefix', () => {
     expect(foreignSurfaceRedirect(loc('lmthing.chat', '/studio/foo'))).toBe(
       'https://lmthing.studio/foo',
