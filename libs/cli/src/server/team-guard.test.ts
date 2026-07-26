@@ -169,6 +169,21 @@ describe('team mode on', () => {
     });
   });
 
+  describe('the health probe', () => {
+    // A team pod that 401s its own startup probe never becomes ready and
+    // crash-loops forever. The kubelet probes from inside the cluster, so it
+    // arrives with no identity headers at all.
+    it('answers the kubelet, which carries no identity', () => {
+      expect(guardRequest(req('GET', {}), '/api/health').ok).toBe(true);
+    });
+
+    it('is the ONLY path served without a caller', () => {
+      for (const path of ['/api/sessions', '/api/projects', '/api/team/channels', '/']) {
+        expect(guardRequest(req('GET', {}), path)).toMatchObject({ ok: false, status: 401 });
+      }
+    });
+  });
+
   describe('websockets', () => {
     it('lets both roles open the agent and channel sockets', () => {
       for (const who of [VIEWER, EDITOR]) {

@@ -86,6 +86,25 @@ const VIEWER_ALLOWED: ReadonlyArray<{ method: string; path: RegExp; why: string 
 
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+/**
+ * Paths served WITHOUT a caller, even in team mode.
+ *
+ * The kubelet's startup probe is the reason this exists. It comes from inside
+ * the cluster, not through Envoy, so it carries no identity headers — and a
+ * team pod that 401s its own probe never becomes ready and crash-loops forever.
+ * A probe target must therefore be reachable by an anonymous in-cluster caller,
+ * which means it must disclose nothing: `/api/health` answers a bare 200.
+ *
+ * Nothing else belongs here. Adding a path is granting the whole cluster
+ * unauthenticated access to it.
+ */
+const PUBLIC_PATHS: ReadonlySet<string> = new Set(['/api/health']);
+
+/** True for a path served without any caller identity — see PUBLIC_PATHS. */
+export function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.has(pathname);
+}
+
 export interface GuardDecision {
   ok: boolean;
   /** Set when ok — the verified caller, to stamp onto whatever the request creates. */
@@ -100,6 +119,8 @@ export interface GuardDecision {
  */
 export function guardRequest(req: IncomingMessage, pathname: string): GuardDecision {
   if (!isTeamMode()) return { ok: true };
+  // The kubelet probes this one anonymously, from inside the cluster.
+  if (isPublicPath(pathname)) return { ok: true };
 
   const caller = readCaller(req);
   if (!caller) {

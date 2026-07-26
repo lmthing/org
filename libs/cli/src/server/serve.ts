@@ -202,6 +202,15 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   router.add('GET', '/api/projects/:projectId/completions', handleGetProjectCompletions);
   router.add('GET', '/api/projects/:projectId/integrations', handleListProjectIntegrations(effectiveLmthingRoot));
 
+  // Liveness. The kubelet's startup probe targets this: it comes from inside the
+  // cluster rather than through Envoy, so it carries no identity and must stay
+  // answerable without one (team-guard.ts#PUBLIC_PATHS). It therefore discloses
+  // nothing — reaching this line already proves the server is listening.
+  router.add('GET', '/api/health', (_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ ok: true }));
+  });
+
   // Spaces sync
   router.add('POST', '/api/spaces', handleCreateSpace);
 
