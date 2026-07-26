@@ -23,7 +23,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ORG = join(HERE, '../../..');
 
 const animations = readFileSync(join(HERE, 'animations.css'), 'utf8');
-const markdown = readFileSync(join(HERE, 'components/markdown/index.css'), 'utf8');
 const chatEntry = readFileSync(join(ORG, 'libs/ui/src/chat/app/styles.css'), 'utf8');
 const appEntry = readFileSync(join(ORG, 'apps/web/src/index.css'), 'utf8');
 const message = readFileSync(join(ORG, 'libs/ui/src/chat/app/Message.tsx'), 'utf8');
@@ -142,16 +141,16 @@ describe('every moved rule is reachable from where it is used', () => {
     expect(appEntry).toContain('@import "@lmthing/css/animations.css"');
   });
 
-  it('.lm-prose lives in the markdown stylesheet', () => {
-    expect(code(markdown)).toContain('.lm-prose {');
-    expect(code(markdown)).toContain('.lm-prose pre code { background: none; padding: 0; }');
-  });
-
-  it('Message.tsx imports the stylesheet that now owns .lm-prose', () => {
-    // `.lm-prose` renders wherever a Message does; the markdown stylesheet is component-scoped
-    // (side-effect imported), so without this import it would only arrive if some OTHER component
-    // pulled it in first.
-    expect(message).toContain("className=\"lm-prose\"");
-    expect(message).toContain("import '@lmthing/css/components/markdown/index.css'");
+  it('the transcript renders markdown as ELEMENTS, with no stylesheet to arrive', () => {
+    // `.lm-prose` and `.lm-markdown` are gone: markdown is React elements now, styled by the
+    // `prose`/`document` presets in `elements/content/markdown/presets.ts`. The rule these two
+    // assertions protected — "a component-scoped stylesheet must be imported where it is used, not
+    // relied on to arrive from another route's chunk" — cannot be violated when there is no
+    // stylesheet, which is the better version of the guarantee.
+    expect(message).toContain("preset=\"prose\"");
+    // The CLASS and the IMPORT, not the string — the file still NAMES `.lm-prose` in a comment
+    // explaining what the preset replaced, and a bare substring check would fail on the prose.
+    expect(message).not.toContain('className="lm-prose"');
+    expect(message).not.toContain("import '@lmthing/css/components/markdown/index.css'");
   });
 });

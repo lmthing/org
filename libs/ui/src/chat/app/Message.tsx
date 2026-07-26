@@ -1,6 +1,5 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { marked } from 'marked';
 import { isFormDescriptor } from '@lmthing/core/ui';
 import { useStore } from '../store/store';
 import type { ConvoBlock } from '../store/model';
@@ -14,12 +13,9 @@ import { ActivityStrip } from './ActivityStrip';
 import { withAuthToken } from './auth';
 import { cn } from '../lib/cn';
 
-// `.lm-prose` (below) styles `marked`-produced HTML and lives in the shared markdown stylesheet —
-// phase 2 of docs/tamagui-final-steps.md moved it out of `chat/app/styles.css`, which is a Tailwind
-// entry. That stylesheet is side-effect-imported at the point of use (the convention
-// `elements/content/markdown/index.tsx` already follows), NOT relied on to arrive from some other
-// route's chunk: `.lm-prose` renders wherever a Message does, so the dependency is stated here.
-import '@lmthing/css/components/markdown/index.css';
+// The transcript's markdown is rendered as ELEMENTS, not injected HTML, so it needs no stylesheet
+// and works on both targets. `preset="prose"` is the former `.lm-prose` scale.
+import { Markdown } from '../../elements/content/markdown';
 
 // ─── Space component registry ─────────────────────────────────────────────────
 
@@ -32,10 +28,7 @@ function spaceComponents(): Record<string, React.ComponentType<Record<string, un
 // ─── Markdown renderer ────────────────────────────────────────────────────────
 
 function MarkdownText({ text }: { text: string }) {
-  const html = React.useMemo(() => {
-    try { return marked.parse(text) as string; } catch { return text; }
-  }, [text]);
-  return <Prim.Box className="lm-prose" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <Markdown source={text} preset="prose" />;
 }
 
 /**

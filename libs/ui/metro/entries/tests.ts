@@ -10,6 +10,7 @@ import '../suites/theme'
 import '../suites/primitives'
 import '../suites/overlays'
 import '../suites/platform'
+import '../suites/markdown'
 import { runRegisteredCases } from '../harness'
 
 void runRegisteredCases()

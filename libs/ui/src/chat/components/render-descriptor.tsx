@@ -1,9 +1,8 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { marked } from 'marked';
+import { Markdown } from '../../elements/content/markdown';
 import { preview } from '../app/common';
 // `.lm-prose` lives in the shared markdown stylesheet; state the dependency where it is used.
-import '@lmthing/css/components/markdown/index.css';
 
 export interface Descriptor { type: string; props?: Record<string, unknown>; children?: unknown[] }
 export function isDescriptor(v: unknown): v is Descriptor {
@@ -46,19 +45,9 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
         markdown = d.children.map(c => typeof c === 'string' ? c : '').join('');
       }
       markdown = markdown || '';
-      const html = marked.parse(markdown) as string;
-      // `.lm-prose` — the working class for `marked`-produced HTML. It replaces a full set of
-      // `prose-headings:…`/`prose-code:…` classNames that needed @tailwindcss/typography: never
-      // installed, so they produced no CSS and this descriptor rendered unformatted.
-      return (
-        <Prim.Box
-          key={key}
-          className="lm-prose"
-          maxWidth="none"
-          color="var(--lm-text)"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      );
+      // The same renderer and scale the transcript uses, so a `markdown` descriptor and a chat
+      // message cannot render differently.
+      return <Markdown key={key} source={markdown} preset="prose" />;
     }
     case 'span': return <Prim.Text key={key}>{body}</Prim.Text>;
     case 'quote': return <Prim.Box as="blockquote" key={key} borderColor="var(--lm-border)" color="var(--lm-muted)" borderLeftWidth={2} paddingLeft="$2" fontStyle="italic" marginVertical="0.25rem">{body}</Prim.Box>;

@@ -1,39 +1,18 @@
 /**
- * Markdown — renders a trusted markdown string (e.g. an integration space's
- * bundled `README.md`) into token-styled HTML. Uses the `marked` parser (already
- * a dep of this package) and the `.lm-markdown` design-token stylesheet.
+ * Markdown — renders a markdown string as React elements, on web and on React Native.
  *
- * Content is TRUSTED (shipped in-repo, not user-authored), so the parsed HTML is
- * injected directly. Do NOT feed untrusted input here without sanitizing.
+ * Was `marked.parse(source)` handed to `dangerouslySetInnerHTML` under a `.lm-markdown`
+ * stylesheet. That rendered nothing at all on native (the native primitives drop
+ * `dangerouslySetInnerHTML` by design, because there is no DOM to inject into) and it required
+ * every caller to guarantee the source was trusted. Both problems are gone: the tokens become
+ * primitives, so nothing is injected and a hostile string renders as text rather than as markup.
+ * See `render.tsx` for the reasoning, including why raw `html` tokens are shown as escaped text.
+ *
+ * `preset` picks the scale — `document` (the old `.lm-markdown`, long-form page content) or
+ * `prose` (the old `.lm-prose`, the denser chat transcript). They stay separate on purpose; see
+ * `presets.ts`.
  */
-import * as Prim from '../../primitives/index';
-import '@lmthing/css/components/markdown/index.css'
-import { useMemo } from 'react'
-import { marked } from 'marked'
-
-export interface MarkdownProps {
-  /** Raw markdown source. */
-  source: string
-  className?: string
-}
-
-/** Renders `source` as HTML inside a `.lm-markdown` container. */
-export function Markdown({ source, className }: MarkdownProps) {
-  const html = useMemo(() => {
-    try {
-      // `gfm` for tables/task-lists; `breaks` so single newlines render as <br>.
-      return marked.parse(source ?? '', { gfm: true, breaks: true, async: false }) as string
-    } catch {
-      return ''
-    }
-  }, [source])
-
-  return (
-    <Prim.Box
-      className={className ? `lm-markdown ${className}` : 'lm-markdown'}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  )
-}
-
-export { Markdown as default }
+export { MarkdownRender as Markdown, MarkdownRender as default } from './render'
+export type { MarkdownRenderProps as MarkdownProps } from './render'
+export { PRESETS, DOCUMENT, PROSE } from './presets'
+export type { MarkdownPreset, MarkdownPresetName } from './presets'
