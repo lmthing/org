@@ -171,11 +171,13 @@ export const TopicEditor = forwardRef<TopicEditorHandle, TopicEditorProps>(
           <Stack row gap="sm" {...TOPIC_EDITOR_HEADER_ACTIONS}>
             {hasUnsavedChanges && <Badge variant="muted">Unsaved changes</Badge>}
             <Button
-              variant="ghost"
+              // The active state was a `--active` class whose stylesheet was deleted in Phase 0, so
+              // the toggle has looked identical either way since. `outline` is the button's own
+              // pressed-looking variant, which keeps the affordance inside the design system.
+              variant={showMetadata ? 'outline' : 'ghost'}
               size="icon"
               onClick={() => toggleShowMetadata()}
               title="Toggle metadata"
-              className={showMetadata ? 'topic-editor__metadata-btn--active' : undefined}
             >
               <Settings {...TOPIC_EDITOR_SETTINGS_ICON} />
             </Button>

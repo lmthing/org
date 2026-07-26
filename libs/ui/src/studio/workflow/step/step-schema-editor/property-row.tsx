@@ -116,9 +116,13 @@ export function PropertyRow({
         {/* Expand/collapse for nested types */}
         {hasNestedConfig && (
           <Prim.Pressable padding="$1" borderRadius="$radius" color="$muted-foreground" hoverStyle={{ backgroundColor: '$muted' }} onClick={(e) => { e.stopPropagation(); toggleIsExpanded() }}>
-            <Prim.Svg className={cn('property-row__expand-icon', isExpanded && 'property-row__expand-icon--open')} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <Prim.Path d="M9 18l6-6-6-6" />
-            </Prim.Svg>
+            {/* Rotation on a Tamagui wrapper, size as SVG geometry: `Prim.Svg` is a host
+                passthrough and drops style props. Restores `.property-row__expand-icon--open`. */}
+            <Prim.Box transition="quick" rotate={isExpanded ? '90deg' : '0deg'}>
+              <Prim.Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <Prim.Path d="M9 18l6-6-6-6" />
+              </Prim.Svg>
+            </Prim.Box>
           </Prim.Pressable>
         )}
 
@@ -129,7 +133,10 @@ export function PropertyRow({
           onChange={(e) => onUpdate({ ...property, name: e.target.value })}
           placeholder="property_name"
           onClick={(e) => e.stopPropagation()}
-          className="property-row__name-input"
+          flexGrow={1}
+          flexShrink={1}
+          flexBasis={120}
+          fontFamily="$mono"
         />
 
         {/* Type selector */}

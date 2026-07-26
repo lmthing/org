@@ -104,7 +104,7 @@ function SheetContent({ children, side = 'right', ...props }: React.HTMLAttribut
   if (!open || typeof document === 'undefined') return null
   return ReactDOM.createPortal(
     <Prim.Box {...SHEET_VIEWPORT} role="dialog" aria-modal="true">
-      <Prim.Box {...SHEET_VIEWPORT} backgroundColor="rgba(0,0,0,0.5)" onClick={() => setOpen(false)} />
+      <Prim.Box {...SHEET_VIEWPORT} backgroundColor="$scrim" onClick={() => setOpen(false)} />
       <Prim.Box {...SHEET_BASE} {...(side === 'right' ? SHEET_RIGHT : SHEET_LEFT)} {...(props as Record<string, unknown>)}>
         <Prim.Box {...SHEET_CONTENT}>{children}</Prim.Box>
       </Prim.Box>

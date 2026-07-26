@@ -213,7 +213,7 @@ export function SpaceList({
                     <Prim.Box position="relative" flexShrink={0}>
                       <Avatar>
                         {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
-                        <AvatarFallback className="space-list__avatar-fallback" colorKey={user.id}>
+                        <AvatarFallback colorKey={user.id}>
                           {user.name.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>

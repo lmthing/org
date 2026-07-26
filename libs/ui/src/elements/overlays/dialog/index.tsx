@@ -31,7 +31,7 @@ export const DIALOG_BACKDROP = {
   position: 'fixed',
   top: 0, right: 0, bottom: 0, left: 0,
   zIndex: 50,
-  backgroundColor: 'rgba(0,0,0,0.5)', // ds-lint-ok: bg-black/50 wash, theme-independent
+  backgroundColor: '$scrim',
 } as const
 
 /** The portal viewport that centres the dialog (was inline Tailwind on a `Prim.Row`). */

@@ -35,7 +35,15 @@ export function AgentHeader({
           value={title}
           onChange={e => onTitleChange(e.target.value)}
           placeholder="Agent title"
-          {...INPUT_BASE} {...INPUT_SM} className="agent-header__name-input"
+          {...INPUT_BASE}
+          {...INPUT_SM}
+          borderWidth={0}
+          backgroundColor="transparent"
+          shadowOpacity={0}
+          fontWeight="$semibold"
+          fontSize="$lg"
+          paddingLeft={0}
+          height="auto"
         />
       </Stack>
       <Stack row gap="sm" {...AGENT_HEADER_RIGHT}>

@@ -107,7 +107,7 @@ export function PromptPreviewPanel({ instructions, selectedFieldIds }: PromptPre
                     ))}
                   </Prim.Box>
                 )}
-                <Code block className="prompt-preview__code">
+                <Code block overflowY="auto" whiteSpace="pre-wrap" maxHeight={400}>
                   {generatedPrompt}
                 </Code>
               </Prim.Box>

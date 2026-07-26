@@ -1,13 +1,35 @@
 import { defineConfig } from 'vite-plus'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 import { tamaguiPlugin } from '@tamagui/vite-plugin'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import path from 'path'
+import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
 import { copyFileSync, createReadStream, existsSync, readdirSync, readFileSync } from 'fs'
 
 const __utilsDir = path.dirname(fileURLToPath(import.meta.url))
+const __require = createRequire(import.meta.url)
+
+/**
+ * Load `@tailwindcss/vite` ONLY when a caller keeps Tailwind.
+ *
+ * It is a peerDependency, so at module scope its import had to resolve from every caller — which is
+ * why `apps/web` carried the package as a devDependency long after phase 4 left it with nothing to
+ * compile. Requiring it inside the branch makes the peer genuinely optional: the seven product SPAs
+ * that still use Tailwind supply it, and a migrated app does not need it on disk at all.
+ */
+function loadTailwindPlugin() {
+  try {
+    const mod = __require('@tailwindcss/vite')
+    return mod.default ?? mod
+  } catch (error) {
+    throw new Error(
+      'createViteConfig({ tailwind: true }) needs the `@tailwindcss/vite` peer dependency ' +
+        'installed in this app. Pass `{ tailwind: false }` if the app has no Tailwind directives ' +
+        `left (see sdk/org's apps/web). Original error: ${error.message}`,
+    )
+  }
+}
 
 /**
  * Locate the `sdk/org` root — the directory holding `libs/` (the shared
@@ -102,6 +124,8 @@ function ghPages404Plugin() {
  *   and all still use Tailwind — `@apply` in their own `src/index.css` plus hundreds of utility
  *   classNames. Only `sdk/org`'s own `apps/web` was migrated off it (phase 4 of
  *   docs/tamagui-final-steps.md), so `apps/web` opts OUT explicitly and everything else is unaffected.
+ *   The plugin is loaded lazily (see {@link loadTailwindPlugin}), so opting out also means the app
+ *   does not need the peer dependency installed.
  */
 export function createViteConfig(dirname, overrides, opts = {}) {
   const { tailwind = true } = opts
@@ -121,7 +145,7 @@ export function createViteConfig(dirname, overrides, opts = {}) {
       // Tailwind, unless the caller opted out. `sdk/org`'s `apps/web` has no Tailwind directive left
       // after phase 4, so the plugin there is dead weight; the product SPAs are NOT migrated and would
       // render unstyled without it.
-      ...(tailwind ? [tailwindcss()] : []),
+      ...(tailwind ? [loadTailwindPlugin()()] : []),
       // Tamagui plugin (§6 build integration). Loads the SHARED config so the RNW aliases + theme
       // are wired. No-op on output until a web component uses Tamagui.
       tamaguiPlugin({

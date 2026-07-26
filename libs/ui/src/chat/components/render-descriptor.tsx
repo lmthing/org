@@ -2,6 +2,8 @@ import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { marked } from 'marked';
 import { preview } from '../app/common';
+// `.lm-prose` lives in the shared markdown stylesheet; state the dependency where it is used.
+import '@lmthing/css/components/markdown/index.css';
 
 export interface Descriptor { type: string; props?: Record<string, unknown>; children?: unknown[] }
 export function isDescriptor(v: unknown): v is Descriptor {
@@ -45,17 +47,18 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       }
       markdown = markdown || '';
       const html = marked.parse(markdown) as string;
-      // The `prose*` classNames that were here are gone. They needed @tailwindcss/typography, which
-      // is NOT installed and never was (`@plugin` appears in no stylesheet), so the whole set —
-      // including `prose-headings:text-lm-text`, `prose-code:text-lm-cyan`, `prose-pre:border-lm-border`
-      // — produced no CSS at all. The shipped bundle contains zero `.prose` rules.
-      //
-      // Removing dead classes is behaviour-neutral, so it belongs in this phase. What does NOT belong
-      // here is the fix: someone clearly intended styled markdown, and `.lm-prose`
-      // (`@lmthing/css/components/markdown/index.css`) is the working class for exactly this content.
-      // Adopting it is a visible change to two surfaces and would muddy phase 4's P0 delta, so it is
-      // filed in `.issues/` instead.
-      return <Prim.Box key={key} maxWidth="none" color="var(--lm-text)" dangerouslySetInnerHTML={{ __html: html }} />;
+      // `.lm-prose` — the working class for `marked`-produced HTML. It replaces a full set of
+      // `prose-headings:…`/`prose-code:…` classNames that needed @tailwindcss/typography: never
+      // installed, so they produced no CSS and this descriptor rendered unformatted.
+      return (
+        <Prim.Box
+          key={key}
+          className="lm-prose"
+          maxWidth="none"
+          color="var(--lm-text)"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      );
     }
     case 'span': return <Prim.Text key={key}>{body}</Prim.Text>;
     case 'quote': return <Prim.Box as="blockquote" key={key} borderColor="var(--lm-border)" color="var(--lm-muted)" borderLeftWidth={2} paddingLeft="$2" fontStyle="italic" marginVertical="0.25rem">{body}</Prim.Box>;

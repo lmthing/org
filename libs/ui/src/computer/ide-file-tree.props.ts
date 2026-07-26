@@ -60,3 +60,33 @@ export const IDE_FILE_TREE_DIALOG_INPUT = {
   "fontSize": "$sm"
 } as const
 
+
+/**
+ * `.ide-file-tree__context-menu` — the floating menu panel. Recovered from the stylesheet as props;
+ * the class had stopped applying when the stylesheet stopped being imported.
+ */
+export const IDE_FILE_TREE_CONTEXT_MENU = {
+  minWidth: 160,
+  overflow: 'hidden',
+  borderRadius: '$radius-md',
+  borderWidth: 1,
+  borderColor: '$border',
+  backgroundColor: '$popover',
+  padding: '$1',
+  shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
+  shadowOffset: { width: 0, height: 10 },
+  shadowRadius: 15,
+} as const
+
+/** `.ide-file-tree__dialog-content` — the centred dialog panel (the `translate(-50%)` trick). */
+export const IDE_FILE_TREE_DIALOG_CONTENT = {
+  width: 384,
+  borderRadius: '$radius-lg',
+  borderWidth: 1,
+  borderColor: '$border',
+  backgroundColor: '$card',
+  padding: '$6',
+  shadowColor: 'rgba(0,0,0,0.1)', // ds-lint-ok: shadow alpha-black
+  shadowOffset: { width: 0, height: 20 },
+  shadowRadius: 25,
+} as const
