@@ -12,6 +12,7 @@ import '../suites/overlays'
 import '../suites/platform'
 import '../suites/markdown'
 import '../suites/auth'
+import '../suites/auth-login'
 import { runRegisteredCases } from '../harness'
 
 void runRegisteredCases()

@@ -301,6 +301,57 @@ two documented pre-existing failures; P0 unchanged.
 `window.location` and `sessionStorage`, which is correct for web and inert on native — the app can
 *read* a session but cannot yet *obtain* one. That is step 4b.
 
+**2026-07-26 — login (step 4b). No public API changed.**
+
+The targets diverge in exactly one place: **how the user reaches the identity provider and how the
+code comes back.** Web leaves the page and is re-entered at `callbackPath`; native opens an in-app
+browser and gets the redirect handed straight back. Everything after the code arrives — one HTTP
+call and one object mapping — is `sso-exchange.ts`, shared. A session mapping that drifted between
+targets is precisely the duplicated *value* the fork ratchet exists to prevent.
+
+So `platform/sso` is a fork with an asymmetric shape, and the asymmetry is the honest part:
+`startLogin` never resolves on web (the page is unloading; resolving would be a lie) and resolves
+with the session on native; `completeRedirect` does the work on web and is a deliberate no-op on
+native, where doing anything would double-spend the code.
+
+`platform/crypto` is the second fork, and it is not incidental. React Native ships **no `crypto`
+global** and Expo does not polyfill one — checked, `expo/build/winter` installs `fetch`, `FormData`,
+`TextDecoder`… and no `crypto`. So `generateState()` would have thrown on the first login attempt.
+A `Math.random()` fallback was the tempting wrong answer: it still yields a distinct string, so
+nothing would look broken while CSRF protection was quietly gone.
+
+**No caller changed.** `redirectToLogin` stays `void`-returning — which is what `AuthProvider`'s
+`login: () => void` needs — and on native the completed session is stored, so subscribers hear about
+it through `onSessionChange`, the same channel that already carries an out-of-band token rotation.
+
+Two things checked rather than assumed, both of which could have been silently wrong:
+
+- **RN's `URLSearchParams` is real**, not a stub — a subset implementation with correct
+  `encodeURIComponent` — so building the auth URL needs no polyfill. Its `URL`, by contrast, is
+  string-backed and validates against an http/https/ftp regex, so the seam parses the redirect with
+  `Linking.parse` instead. That choice is a device-behaviour claim, not a preference.
+- **`Linking.createURL`, not a hardcoded `lmthing://auth/callback`.** Under Expo Go the app is
+  reachable at `exp://<host>:8081/--/auth/callback`; since the gateway stores whatever string it was
+  given and exact-matches it on consume, a dev build works with no special case.
+
+The suite asserts what can be wrong in our code: the auth URL carries the app scheme, `app` and
+`state`; a dismissal is not an error; a returned code is exchanged **with the same `redirect_uri`
+the gateway stored**; and a mismatched `state` is rejected *before* the code is spent. That last one
+was mutation-tested — replacing the check with `if (false)` fails it on both platforms, so it is not
+decorative.
+
+Three more hand-written mocks (`expo-web-browser`, `expo-linking`, `expo-crypto`), each stating its
+own limits. `expo-crypto`'s reaches for `globalThis.crypto` rather than `require('node:crypto')`,
+which Metro cannot resolve for a native platform — the first attempt failed the whole graph on it.
+
+Evidence: native gate PASS both platforms with 6 new login assertions (mutation-verified); 302 unit
+tests; workspace typecheck and build clean; `expo export --platform android` bundles 880 modules
+(2.2 MB) **with the four Expo modules linked**; P0 unchanged.
+
+**Still a device claim, and deliberately so:** that an OS browser opens, that the `lmthing://` scheme
+is registered and intercepted, and that a real login completes end-to-end against the live gateway.
+No harness can show those. `app.json` already declares `"scheme": "lmthing"`.
+
 ## Step 0 — unblock the gate (nothing else is verifiable without it)
 
 1. Raise the watch limit on the dev machine: `sudo sysctl -w fs.inotify.max_user_watches=524288`

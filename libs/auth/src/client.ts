@@ -1,5 +1,8 @@
 import type { AuthConfig, AuthSession } from './types'
 import { readItem, writeItem, removeItem, hydrate, isHydrated } from './platform/session-store'
+import { getRandomValues } from './platform/crypto'
+import { startLogin, completeRedirect } from './platform/sso'
+import { stateFromBytes } from './sso-exchange'
 
 const SESSION_KEY = 'lmthing_session'
 const PIN_HASH_KEY = 'lmthing_pin_hash'
@@ -43,72 +46,39 @@ function emitSessionChange(session: AuthSession | null): void {
 }
 
 function generateState(): string {
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  return stateFromBytes(getRandomValues(new Uint8Array(16)))
 }
 
+/**
+ * Begin an interactive login.
+ *
+ * Stays `void`-returning, which is what `AuthProvider`'s `login: () => void` needs and what web
+ * always did (the page unloads). On native the flow completes IN this call, so the result is stored
+ * here and subscribers hear about it through {@link onSessionChange} — the same channel that already
+ * carries an out-of-band token rotation. No caller had to change.
+ */
 export function redirectToLogin(config: AuthConfig): void {
-  const state = generateState()
-  sessionStorage.setItem('sso_state', state)
-
-  const callbackUrl = `${window.location.origin}${config.callbackPath}`
-  const params = new URLSearchParams({
-    redirect_uri: callbackUrl,
-    app: config.appName,
-    state,
-  })
-
-  window.location.href = `${config.comUrl}/auth/sso?${params.toString()}`
+  void startLogin(config, generateState())
+    .then(session => {
+      if (session) storeSession(session)
+    })
+    .catch(err => {
+      console.error('login failed:', err)
+    })
 }
 
+/**
+ * Finish a login that a redirect handed back to the app (web). Native resolves null — its
+ * {@link redirectToLogin} already stored the session.
+ *
+ * Returning the CURRENT session when nothing was consumed preserves the previous behaviour for the
+ * case that actually occurs: React StrictMode double-invokes the effect in dev, so the second run
+ * finds the state already cleared and must not be read as "logged out".
+ */
 export async function handleAuthCallback(config: AuthConfig): Promise<AuthSession | null> {
-  const url = new URL(window.location.href)
-  const code = url.searchParams.get('code')
-  const state = url.searchParams.get('state')
-
-  if (!code) return null
-
-  // Verify state to prevent CSRF
-  // Note: don't remove from sessionStorage until exchange succeeds,
-  // because React StrictMode double-invokes effects in dev
-  const savedState = sessionStorage.getItem('sso_state')
-  if (state !== savedState) {
-    // If state is missing entirely, this is likely a StrictMode re-run after
-    // a successful exchange already cleared it — treat as no-op
-    if (!savedState) return getSession()
-    throw new Error('Invalid state parameter — possible CSRF attack')
-  }
-
-  const callbackUrl = `${window.location.origin}${config.callbackPath}`
-
-  const res = await fetch(`${config.cloudUrl}/api/auth/sso/exchange`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, redirect_uri: callbackUrl }),
-  })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: { message: 'SSO exchange failed' } }))
-    throw new Error(body.error?.message || 'SSO exchange failed')
-  }
-
-  // Exchange succeeded — now safe to clear the state
-  sessionStorage.removeItem('sso_state')
-
-  const data = await res.json()
-  const session: AuthSession = {
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token ?? undefined,
-    expiresAt: data.expires_at ?? undefined,
-    userId: data.user.id,
-    email: data.user.email,
-    githubRepo: data.user.github_repo ?? null,
-    githubUsername: data.user.github_username ?? null,
-  }
-
-  writeItem(SESSION_KEY, JSON.stringify(session))
-  emitSessionChange(session)
+  const session = await completeRedirect(config)
+  if (!session) return getSession()
+  storeSession(session)
   return session
 }
 

@@ -79,6 +79,12 @@ const ALLOWED = {
   // rather than the plaintext store the other seams use, and bridges that async API to the
   // synchronous `getSession()` every request already depends on.
   'libs/auth/src/platform/session-store.native.ts': 'platform',
+
+  // `platform` — React Native ships no `crypto` global (Expo does not polyfill one), and login is
+  // an in-app browser session rather than a page redirect. Both are capability seams; everything
+  // after the code comes back is shared in `sso-exchange.ts`.
+  'libs/auth/src/platform/crypto.native.ts': 'platform',
+  'libs/auth/src/platform/sso.native.ts': 'platform',
 }
 
 const CATEGORIES = new Set(['primitive', 'platform', 'absent'])

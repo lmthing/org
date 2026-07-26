@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useColorScheme } from 'react-native'
 import { TamaguiProvider } from '@tamagui/core'
 import { StatusBar } from 'expo-status-bar'
+import { hydrateAuth } from '@lmthing/auth'
 import { tamaguiConfig } from '@lmthing/ui/theme/tamagui.config'
 import { HomeScreen } from './src/screens/HomeScreen'
 
@@ -16,13 +17,26 @@ import { HomeScreen } from './src/screens/HomeScreen'
  * them from one source; a screen written HERE would be a fork of the product that no gate could
  * see. `scripts/lint-barrel-imports.mjs` enforces that by refusing deep imports into the shared
  * package's internals.
+ *
+ * The one other thing it owns is the BOOT ORDER. `getSession()` is synchronous everywhere, but on
+ * native it is answered from a cache that `hydrateAuth()` fills from the OS keystore — so rendering
+ * before that resolves would paint a logged-out app to a logged-in user and then flip. Holding the
+ * tree back is the whole contract; `libs/auth/src/platform/session-store.native.ts` states it and
+ * `isAuthHydrated()` exists so it can be asserted rather than assumed.
  */
 export default function App() {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light'
+  const [authReady, setAuthReady] = React.useState(false)
+
+  React.useEffect(() => {
+    // Never rejects — an unreadable keystore entry is treated as "logged out", not a boot loop.
+    void hydrateAuth().finally(() => setAuthReady(true))
+  }, [])
+
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
       <StatusBar style="auto" />
-      <HomeScreen />
+      {authReady ? <HomeScreen /> : null}
     </TamaguiProvider>
   )
 }

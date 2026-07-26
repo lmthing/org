@@ -79,15 +79,18 @@ const EMPTY_MODULE = path.join(__dirname, 'mocks', 'empty.js')
  * Keyed by SPECIFIER (the bare package name), which is how the seams import them — no path
  * comparison, so pnpm's several physical copies of a package are all covered by one entry.
  *
- * `expo-secure-store` is the exception to "their own mocks": it publishes none, because it is an
- * Expo module that talks to `expo-modules-core` and the device keystore. Ours is written locally and
- * says exactly what it does and does not prove — see `mocks/expo-secure-store.js`.
+ * The `expo-*` entries are the exception to "their own mocks": Expo modules publish none, because
+ * the real implementations talk to `expo-modules-core` and a native host. Ours are written locally
+ * and each says exactly what it does and does not prove — see `mocks/expo-*.js`.
  */
 const THIRD_PARTY_MOCKS = {
   '@react-native-async-storage/async-storage':
     '@react-native-async-storage/async-storage/jest',
   '@react-native-clipboard/clipboard': '@react-native-clipboard/clipboard/jest/clipboard-mock.js',
   'expo-secure-store': path.join(__dirname, 'mocks', 'expo-secure-store.js'),
+  'expo-web-browser': path.join(__dirname, 'mocks', 'expo-web-browser.js'),
+  'expo-linking': path.join(__dirname, 'mocks', 'expo-linking.js'),
+  'expo-crypto': path.join(__dirname, 'mocks', 'expo-crypto.js'),
 }
 
 /** The marker a path inside any installed copy of react-native contains, exactly once. */
