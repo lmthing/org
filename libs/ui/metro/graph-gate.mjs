@@ -19,7 +19,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { repoRoot } from './config.cjs'
+import { repoRoot, redirectedStylesheets } from './config.cjs'
 
 const uiSrc = path.join(repoRoot, 'libs', 'ui', 'src')
 
@@ -140,6 +140,22 @@ export function checkNativeGraph({ modules, platform, expectForks = EXPECTED_NAT
       check: 'web-only-leak',
       detail: `${rel(webFork)} is a *.web.tsx seam file and must never be in the ${platform} graph.`,
     })
+  }
+
+  // 5. Stylesheet imports. `.css` cannot resolve on native, so `config.cjs` redirects it to the
+  //    empty module to keep the graph buildable — which would otherwise mean a shared file's
+  //    styling vanishes on a device while this gate reports green. Allowed to happen, not allowed
+  //    to be silent: any redirect from a file INSIDE `libs/ui/src` is a failure.
+  for (const entry of redirectedStylesheets) {
+    const [importer] = entry.split(' → ')
+    if (importer.startsWith(uiSrc)) {
+      failures.push({
+        check: 'stylesheet-drop',
+        detail:
+          `${entry} — a stylesheet import in shared source. It resolves to nothing on ${platform}, ` +
+          `so whatever it styles is unstyled on a device. Move the styling to props.`,
+      })
+    }
   }
 
   return { failures, forksSelected, moduleCount: modules.length }

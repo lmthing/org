@@ -1,7 +1,7 @@
 import * as Prim from '../../../../elements/primitives/index';
-import { Heading } from '@lmthing/ui/elements/typography/heading'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Button } from '@lmthing/ui/elements/forms/button'
+import { Heading } from '../../../../elements/typography/heading'
+import { Caption } from '../../../../elements/typography/caption'
+import { Button } from '../../../../elements/forms/button'
 import { X, AlertTriangle } from 'lucide-react'
 import { DIALOG_BACKDROP, DIALOG_BASE, DIALOG_CONTENT, DIALOG_HEADER } from '../../../../elements/overlays/dialog/index'
 import { DELETE_MODAL_CLOSE_ICON, DELETE_MODAL_NOTE, DELETE_MODAL_TITLE, DELETE_MODAL_WARNING_ICON } from '../../props'

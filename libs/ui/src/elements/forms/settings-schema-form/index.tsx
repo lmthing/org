@@ -9,11 +9,16 @@
  * map (the schema's property keys ARE pod env-var names, per contract), and
  * `onChange(key, value)` is called per keystroke so the caller can merge it
  * into whatever it eventually PUTs to `/api/compute/env`.
+ *
+ * **Lives in `elements/` because both surfaces render it** — `chat/app/IntegrationsTab` and
+ * `studio/shell/project-settings-view`. It sat in `studio/integrations/` and was the single import
+ * dragging the whole studio surface into chat's module graph, which the native resolution gate is
+ * what caught (docs/mobile-native-chat.md).
  */
-import { Input } from '@lmthing/ui/elements/forms/input'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
+import { Input } from '../input'
+import { Label } from '../../typography/label'
+import { Caption } from '../../typography/caption'
+import { Stack } from '../../layouts/stack'
 
 /** One property of a {@link JsonSchema} — string fields only. */
 export interface JsonSchemaProperty {
@@ -39,11 +44,10 @@ export interface SettingsSchemaFormProps {
   values: Record<string, string>
   /** Called with `(key, value)` whenever a field changes. */
   onChange: (key: string, value: string) => void
-  className?: string
 }
 
 /** Renders labeled `@lmthing/ui` inputs for every property in `schema`. */
-export function SettingsSchemaForm({ schema, values, onChange, className }: SettingsSchemaFormProps) {
+export function SettingsSchemaForm({ schema, values, onChange }: SettingsSchemaFormProps) {
   const properties = schema?.properties ?? {}
   const requiredKeys = new Set(schema?.required ?? [])
   const keys = Object.keys(properties)
@@ -53,7 +57,7 @@ export function SettingsSchemaForm({ schema, values, onChange, className }: Sett
   }
 
   return (
-    <Stack gap="md" className={className}>
+    <Stack gap="md">
       {keys.map((key) => {
         const prop = properties[key] ?? {}
         const fieldId = `settings-schema-form-field-${key}`

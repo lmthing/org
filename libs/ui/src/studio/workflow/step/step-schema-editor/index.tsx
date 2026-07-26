@@ -1,8 +1,8 @@
 import * as Prim from '../../../../elements/primitives/index';
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Textarea } from '@lmthing/ui/elements/forms/textarea'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { Button } from '../../../../elements/forms/button'
+import { Textarea } from '../../../../elements/forms/textarea'
+import { Label } from '../../../../elements/typography/label'
+import { Caption } from '../../../../elements/typography/caption'
 import { useSchemaModel, type JSONSchema } from './use-schema-model'
 import { PropertyRow } from './property-row'
 import { SCHEMA_EDITOR_ADD_ICON, SCHEMA_EDITOR_CODE_ERROR, SCHEMA_EDITOR_CODE_TEXTAREA, SCHEMA_EDITOR_EMPTY_CAPTION, SCHEMA_EDITOR_EMPTY_ICON } from '../../step-schema-editor.props'

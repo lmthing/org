@@ -3,10 +3,10 @@
  * input/output schemas and the tasklist manifest input schema.
  */
 import * as Prim from '../../../elements/primitives/index';
-import { Input } from '@lmthing/ui/elements/forms/input'
-import { Select, SelectOption } from '@lmthing/ui/elements/forms/select'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { Input } from '../../../elements/forms/input'
+import { Select, SelectOption } from '../../../elements/forms/select'
+import { Button } from '../../../elements/forms/button'
+import { Caption } from '../../../elements/typography/caption'
 import { FIELD_TYPES } from './schema-utils'
 import type { SchemaRow, TaskFieldType } from './types'
 import { TASKLIST_EDITOR_ADD_OUTPUT_BTN, TASKLIST_EDITOR_OUTPUT_FIELD_INPUT, TASKLIST_EDITOR_OUTPUT_ROW, TASKLIST_EDITOR_OUTPUT_ROWS } from './tasklist-editor.props'

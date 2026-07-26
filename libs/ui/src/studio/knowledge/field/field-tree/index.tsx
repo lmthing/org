@@ -16,9 +16,9 @@ import {
   Trash2,
   Plus,
 } from 'lucide-react'
-import { useKnowledgeTree } from '@lmthing/ui/hooks/knowledge/useKnowledgeTree'
-import type { KnowledgeTreeNode } from '@lmthing/ui/hooks/knowledge/useKnowledgeTree'
-import { Button } from '@lmthing/ui/elements/forms/button'
+import { useKnowledgeTree } from '../../../../hooks/knowledge/useKnowledgeTree'
+import type { KnowledgeTreeNode } from '../../../../hooks/knowledge/useKnowledgeTree'
+import { Button } from '../../../../elements/forms/button'
 import './FieldTree.css'
 import { FIELD_TREE_CONTEXT_MENU_BACKDROP, FIELD_TREE_CONTEXT_MENU_ITEM_ICON, FIELD_TREE_NODE_ICON, FIELD_TREE_NODE_ICON_CHEVRON, FIELD_TREE_NODE_ICON_FILE, FIELD_TREE_NODE_ICON_FOLDER, FIELD_TREE_NODE_LABEL, FIELD_TREE_NODE_SPACER } from './field-tree.props'
 import {

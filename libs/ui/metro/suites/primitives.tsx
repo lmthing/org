@@ -8,10 +8,10 @@
  * forks reached the way a device reaches them (through the barrel, Metro picking the fork), mounted
  * through the real React reconciler, asserted on the React Native element tree.
  *
- * Note what the forks deliberately do NOT do: they destructure `style`/`children` only, so Tamagui
- * style PROPS (`padding="$4"`) are dropped on native. That is the open item in
- * `docs/react-native-tamagui-migration.md` §1c; the assertions below record the behaviour as it is,
- * not as it should end up.
+ * The forks FORWARD Tamagui style props (`padding="$4"`) through `nativeSafeProps`, so one surface
+ * prop styles both targets — asserted below for `Box`, `Text`, `Row`/`Col` and `TextField`. (This
+ * comment used to say the opposite, describing the forks before `b49471d`; the styling half of the
+ * §1c decision is closed, and the assertions here are what keeps it closed.)
  */
 import * as React from 'react'
 import { Linking } from 'react-native'
@@ -23,6 +23,7 @@ import {
   findTextInput,
   press,
   styleOf,
+  flattenStyle,
   hostTypes,
   NATIVE_VIEW,
   NATIVE_TEXT,
@@ -126,6 +127,39 @@ test('Form mounts a native view (there is no <form> on native)', () => {
 test('TextField mounts a text input; TextArea is the multiline one', () => {
   expect(findTextInput(render(<TextField />).tree)).toBeTruthy()
   expect(findTextInput(render(<TextArea />).tree)?.props.multiline).toBe(true)
+})
+
+test('TextField forwards Tamagui style props to the native input', () => {
+  // The fork used to destructure `value`/`placeholder`/`onChange`/`style` and drop the rest, so
+  // `Input`'s INPUT_BASE (height/border/radius/background/fontSize) never reached the device and
+  // every field rendered as an unstyled system input. Nothing on web could see it.
+  const input = findTextInput(render(<TextField height={36} borderWidth={1} fontSize={14} />).tree)
+  const style = flattenStyle(input?.props?.style)
+  expect(style.height).toBe(36)
+  // Tamagui expands `borderWidth` into the four per-side properties on native.
+  expect(style.borderTopWidth).toBe(1)
+  // `fontSize` reaching STYLE rather than sitting on the node as a prop is the `isInput: true`
+  // half — an RN TextInput ignores a `fontSize` prop, so this assertion is the whole reason to
+  // know that flag exists.
+  expect(style.fontSize).toBe(14)
+})
+
+test('type="password" becomes secureTextEntry, not a plain-text field', () => {
+  // SettingsSchemaForm renders every integration API token with type="password". `type` means
+  // nothing to an RN TextInput, so without the translation the token is displayed in the clear.
+  expect(findTextInput(render(<TextField type="password" />).tree)?.props.secureTextEntry).toBe(true)
+  expect(findTextInput(render(<TextField type="text" />).tree)?.props.secureTextEntry).toBe(undefined)
+})
+
+test('onChange is translated to onChangeText, keeping the web event shape', () => {
+  let seen
+  const input = findTextInput(render(<TextField onChange={(e) => (seen = e.target.value)} />).tree)
+  input?.props.onChangeText('typed')
+  expect(seen).toBe('typed')
+})
+
+test('disabled becomes editable={false}', () => {
+  expect(findTextInput(render(<TextField disabled />).tree)?.props.editable).toBe(false)
 })
 
 test('Select falls back to rendering its options as text on native', () => {

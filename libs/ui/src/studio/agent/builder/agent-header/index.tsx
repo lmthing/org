@@ -1,7 +1,7 @@
 import * as Prim from '../../../../elements/primitives/index';
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Input } from '@lmthing/ui/elements/forms/input'
+import { Stack } from '../../../../elements/layouts/stack'
+import { Button } from '../../../../elements/forms/button'
+import { Input } from '../../../../elements/forms/input'
 import { ArrowLeft } from 'lucide-react'
 import { INPUT_BASE, INPUT_SM } from '../../../../elements/forms/input/index'
 import { AGENT_HEADER_ICON, AGENT_HEADER_LEFT, AGENT_HEADER_RIGHT } from '../../props'

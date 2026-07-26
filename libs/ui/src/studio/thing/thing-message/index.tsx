@@ -1,5 +1,5 @@
 import * as Prim from '../../../elements/primitives/index';
-import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { Caption } from '../../../elements/typography/caption'
 import { CARD_BASE, CARD_BODY } from '../../../elements/content/card/index'
 
 interface ThingMessageProps {

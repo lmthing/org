@@ -5,7 +5,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { authHeaders } from './auth';
 import { useStore } from '../store/store';
 import { dataPlaneOrigin } from '../../lib/app-urls';
-import { SettingsSchemaForm, type JsonSchema } from '../../studio/integrations/SettingsSchemaForm';
+import { SettingsSchemaForm, type JsonSchema } from '../../elements/forms/settings-schema-form';
 import { Markdown } from '../../elements/content/markdown/index';
 import { overlayEnvKeys, waitForPodReady, resumeMessage } from './auto-resume';
 

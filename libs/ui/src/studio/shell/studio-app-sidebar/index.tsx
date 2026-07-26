@@ -15,10 +15,10 @@ import {
   buildProjectPath,
   buildSpacePath,
   buildProjectSettingsPath,
-} from '@lmthing/ui/lib/space-path'
-import { AppSidebar } from '@lmthing/ui/elements/nav/app-sidebar'
-import type { AppSidebarSpace } from '@lmthing/ui/elements/nav/app-sidebar'
-import { SidebarFooter } from '@lmthing/ui/elements/nav/sidebar-footer'
+} from '../../../lib/space-path'
+import { AppSidebar } from '../../../elements/nav/app-sidebar'
+import type { AppSidebarSpace } from '../../../elements/nav/app-sidebar'
+import { SidebarFooter } from '../../../elements/nav/sidebar-footer'
 
 export interface StudioAppSidebarProps {
   className?: string

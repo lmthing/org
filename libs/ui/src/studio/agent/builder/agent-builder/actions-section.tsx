@@ -1,9 +1,9 @@
 import * as Prim from '../../../../elements/primitives/index';
 import type { AgentInstruct } from '@lmthing/state'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Button } from '@lmthing/ui/elements/forms/button'
+import { Stack } from '../../../../elements/layouts/stack'
+import { Label } from '../../../../elements/typography/label'
+import { Caption } from '../../../../elements/typography/caption'
+import { Button } from '../../../../elements/forms/button'
 import { ActionRow } from './action-row'
 import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index'
 

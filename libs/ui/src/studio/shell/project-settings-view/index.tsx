@@ -16,13 +16,13 @@ import { PAGE_BODY } from '../../../elements/layouts/page/index'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { useAuth } from '@lmthing/auth'
-import { Heading } from '@lmthing/ui/elements/typography/heading'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Panel, PanelHeader, PanelBody } from '@lmthing/ui/elements/content/panel'
-import { Markdown } from '@lmthing/ui/elements/content/markdown'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { dataPlaneOrigin } from '@lmthing/ui/lib/app-urls'
+import { Heading } from '../../../elements/typography/heading'
+import { Caption } from '../../../elements/typography/caption'
+import { Button } from '../../../elements/forms/button'
+import { Panel, PanelHeader, PanelBody } from '../../../elements/content/panel'
+import { Markdown } from '../../../elements/content/markdown'
+import { Stack } from '../../../elements/layouts/stack'
+import { dataPlaneOrigin } from '../../../lib/app-urls'
 import { StudioAppSidebar } from '../studio-app-sidebar'
 
 /** lmthing.store origin, resolved from the current host (prod → lmthing.store,
@@ -31,7 +31,7 @@ function storeOrigin(): string {
   if (typeof window !== 'undefined' && window.location.hostname.endsWith('.test')) return 'https://store.test'
   return 'https://lmthing.store'
 }
-import { SettingsSchemaForm, type JsonSchema } from '../../integrations/SettingsSchemaForm'
+import { SettingsSchemaForm, type JsonSchema } from '../../../elements/forms/settings-schema-form'
 import { LM_SETUP_GUIDE } from '../../../components/setup-guide/props'
 
 /** `InstalledIntegration` per INTEGRATIONS_PROGRESS.md §3. */

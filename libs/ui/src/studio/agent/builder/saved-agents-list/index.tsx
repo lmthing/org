@@ -1,12 +1,12 @@
 import * as Prim from '../../../../elements/primitives/index';
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Card, CardBody, CardFooter } from '@lmthing/ui/elements/content/card'
-import { Badge } from '@lmthing/ui/elements/content/badge'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { PageBody } from '@lmthing/ui/elements/layouts/page'
-import { Heading } from '@lmthing/ui/elements/typography/heading'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { Button } from '../../../../elements/forms/button'
+import { Card, CardBody, CardFooter } from '../../../../elements/content/card'
+import { Badge } from '../../../../elements/content/badge'
+import { Stack } from '../../../../elements/layouts/stack'
+import { PageBody } from '../../../../elements/layouts/page'
+import { Heading } from '../../../../elements/typography/heading'
+import { Label } from '../../../../elements/typography/label'
+import { Caption } from '../../../../elements/typography/caption'
 import { SAVED_AGENTS_LIST, SAVED_AGENTS_LIST_BADGE_SM, SAVED_AGENTS_LIST_CARD_DESCRIPTION, SAVED_AGENTS_LIST_CARD_FOOTER, SAVED_AGENTS_LIST_CARD_HEADER, SAVED_AGENTS_LIST_CARD_NAME, SAVED_AGENTS_LIST_EMPTY, SAVED_AGENTS_LIST_EMPTY_CAPTION, SAVED_AGENTS_LIST_HEADER, SAVED_AGENTS_LIST_SUBTITLE } from '../../props'
 
 interface KnowledgeField {

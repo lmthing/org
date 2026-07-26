@@ -4,7 +4,7 @@
  * Fields: title, body, actions[], defaultAction, functions[], components[], knowledge[], canDelegateTo[]
  */
 import * as Prim from '../../../../elements/primitives/index';
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
+import { Stack } from '../../../../elements/layouts/stack'
 import { AgentHeader } from '../agent-header'
 import { useAgentForm } from './use-agent-form'
 import { SystemPromptPanel } from './system-prompt-panel'

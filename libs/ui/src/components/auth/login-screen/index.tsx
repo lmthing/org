@@ -2,9 +2,9 @@
 
 import { useAuth } from '@lmthing/auth'
 
-import * as Prim from '@lmthing/ui/elements/primitives'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
+import * as Prim from '../../../elements/primitives'
+import { Button } from '../../../elements/forms/button'
+import { CozyThingText } from '../../../elements/branding/cozy-text'
 
 export function LoginScreen() {
   const { login } = useAuth()

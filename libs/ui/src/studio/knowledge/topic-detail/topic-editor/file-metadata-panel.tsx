@@ -3,12 +3,12 @@ import { useEffect, useCallback } from 'react'
 import { useSpaceFS } from '@lmthing/state'
 import { parseKnowledgeOption, serializeKnowledgeOption } from '@lmthing/state'
 import { useUIState } from '@lmthing/state'
-import { useFile } from '@lmthing/ui/hooks/fs/useFile'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Input } from '@lmthing/ui/elements/forms/input'
-import { Button } from '@lmthing/ui/elements/forms/button'
+import { useFile } from '../../../../hooks/fs/useFile'
+import { Stack } from '../../../../elements/layouts/stack'
+import { Label } from '../../../../elements/typography/label'
+import { Caption } from '../../../../elements/typography/caption'
+import { Input } from '../../../../elements/forms/input'
+import { Button } from '../../../../elements/forms/button'
 
 interface FileMetadataPanelProps {
   topicPath: string

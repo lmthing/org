@@ -38,21 +38,36 @@ function jestRequireActualToRequire({ types: t }) {
   }
 }
 
+/**
+ * `export * as ns from '…'` (ES2020) is NOT handled by `@react-native/babel-preset@0.86` — its
+ * plugin list has `export-default-from` but no `export-namespace-from`, and
+ * `transform-modules-commonjs` then fails with "should be first transformed by
+ * @babel/plugin-transform-export-namespace-from". `src/chat/index.ts` uses the syntax
+ * (`export * as compat from './compat/index'`), so without this the whole chat barrel is
+ * untransformable for native while being perfectly valid everywhere else.
+ *
+ * Enabled for ALL files rather than scoped, because it is standard syntax rather than a workaround.
+ * `apps/mobile`'s own babel config must enable it too — the harness proving the graph transforms
+ * says nothing about a device build whose preset lacks the plugin.
+ */
+const exportNamespaceFrom = require('@babel/plugin-transform-export-namespace-from').default
+
 module.exports = {
   ...upstream,
   transform(params) {
+    const plugins = [...(params.plugins ?? []), exportNamespaceFrom]
     if (params.filename.includes(JEST_PRESET_DIR)) {
       return upstream.transform({
         ...params,
-        plugins: [...(params.plugins ?? []), jestRequireActualToRequire],
+        plugins: [...plugins, jestRequireActualToRequire],
       })
     }
-    return upstream.transform(params)
+    return upstream.transform({ ...params, plugins })
   },
   // Metro caches transform output keyed by the transformer's cache key. Without mixing this file
   // in, editing the rewrite above would serve stale, un-rewritten mocks from the cache.
   getCacheKey() {
     const upstreamKey = typeof upstream.getCacheKey === 'function' ? upstream.getCacheKey() : ''
-    return `${upstreamKey}$lmthing-jest-requireactual-1`
+    return `${upstreamKey}$lmthing-jest-requireactual-1-exportns-1`
   },
 }

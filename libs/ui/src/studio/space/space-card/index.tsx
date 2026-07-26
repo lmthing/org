@@ -1,5 +1,5 @@
-import { Card, CardBody } from '@lmthing/ui/elements/content/card'
-import { Heading } from '@lmthing/ui/elements/typography/heading'
+import { Card, CardBody } from '../../../elements/content/card'
+import { Heading } from '../../../elements/typography/heading'
 
 interface SpaceCardProps {
   id: string

@@ -1,5 +1,5 @@
 import * as Prim from '../../../../elements/primitives/index';
-import { Label } from '@lmthing/ui/elements/typography/label'
+import { Label } from '../../../../elements/typography/label'
 import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index'
 import { INPUT_BASE } from '../../../../elements/forms/input/index'
 import { AGENT_BUILDER_TEXTAREA } from '../../props'

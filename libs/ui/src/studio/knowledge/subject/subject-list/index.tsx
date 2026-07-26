@@ -5,11 +5,11 @@
 import * as Prim from '../../../../elements/primitives/index';
 import { useMemo, useState } from 'react'
 import { useGlob, useKnowledgeDomainIndex } from '@lmthing/state'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { Heading } from '@lmthing/ui/elements/typography/heading'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Card, CardBody } from '@lmthing/ui/elements/content/card'
-import { TabBar } from '@lmthing/ui/elements/nav/tab-bar'
+import { Stack } from '../../../../elements/layouts/stack'
+import { Heading } from '../../../../elements/typography/heading'
+import { Caption } from '../../../../elements/typography/caption'
+import { Card, CardBody } from '../../../../elements/content/card'
+import { TabBar } from '../../../../elements/nav/tab-bar'
 
 interface SubjectListProps {
   domain: string

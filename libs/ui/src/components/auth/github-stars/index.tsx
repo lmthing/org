@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
-import * as Prim from '@lmthing/ui/elements/primitives'
-import { BADGE_BASE } from '@lmthing/ui/elements/content/badge'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
+import * as Prim from '../../../elements/primitives'
+import { BADGE_BASE } from '../../../elements/content/badge'
+import { Caption } from '../../../elements/typography/caption'
 
 interface GithubStarsProps {
   repo: string

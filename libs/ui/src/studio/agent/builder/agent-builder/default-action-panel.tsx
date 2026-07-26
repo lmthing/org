@@ -1,7 +1,7 @@
 import * as Prim from '../../../../elements/primitives/index';
 import type { AgentInstruct } from '@lmthing/state'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Select, SelectOption } from '@lmthing/ui/elements/forms/select'
+import { Label } from '../../../../elements/typography/label'
+import { Select, SelectOption } from '../../../../elements/forms/select'
 import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index'
 
 /** Default Action selector — only shown once at least one action exists */

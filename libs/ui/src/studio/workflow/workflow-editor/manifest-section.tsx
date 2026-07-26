@@ -3,10 +3,10 @@
  * description + input schema.
  */
 import * as Prim from '../../../elements/primitives/index';
-import { Textarea } from '@lmthing/ui/elements/forms/textarea'
-import { Heading } from '@lmthing/ui/elements/typography/heading'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { Textarea } from '../../../elements/forms/textarea'
+import { Heading } from '../../../elements/typography/heading'
+import { Label } from '../../../elements/typography/label'
+import { Caption } from '../../../elements/typography/caption'
 import { SchemaEditor } from './schema-editor'
 import type { ManifestDraft } from './types'
 import { TASKLIST_EDITOR_MANIFEST, TASKLIST_EDITOR_MANIFEST_BODY, TASKLIST_EDITOR_MANIFEST_HEADER } from './tasklist-editor.props'

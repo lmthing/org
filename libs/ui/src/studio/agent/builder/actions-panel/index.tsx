@@ -1,12 +1,12 @@
 import * as Prim from '../../../../elements/primitives/index';
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Card, CardBody, CardFooter } from '@lmthing/ui/elements/content/card'
-import { Badge } from '@lmthing/ui/elements/content/badge'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { PanelHeader } from '@lmthing/ui/elements/content/panel'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Code } from '@lmthing/ui/elements/typography/code'
+import { Button } from '../../../../elements/forms/button'
+import { Card, CardBody, CardFooter } from '../../../../elements/content/card'
+import { Badge } from '../../../../elements/content/badge'
+import { Stack } from '../../../../elements/layouts/stack'
+import { PanelHeader } from '../../../../elements/content/panel'
+import { Label } from '../../../../elements/typography/label'
+import { Caption } from '../../../../elements/typography/caption'
+import { Code } from '../../../../elements/typography/code'
 import { ACTIONS_PANEL_BADGE_SM, ACTIONS_PANEL_CARD_DESCRIPTION, ACTIONS_PANEL_CARD_LABEL, ACTIONS_PANEL_CARD_META_ROW, ACTIONS_PANEL_CARD_ROW, ACTIONS_PANEL_CARD_TITLE_ROW, ACTIONS_PANEL_EMPTY, ACTIONS_PANEL_EMPTY_CAPTION, ACTIONS_PANEL_FOOTER_CAPTION, ACTIONS_PANEL_HEADER_ROW } from '../../props'
 
 export interface AttachedWorkflow {

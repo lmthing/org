@@ -9,13 +9,13 @@ import { PAGE_BODY } from '../../../elements/layouts/page/index'
 import { useCallback, useMemo } from 'react'
 import { useToggle } from '@lmthing/state'
 import { useParams, useLocation, useNavigate } from '@tanstack/react-router'
-import { buildSpacePath } from '@lmthing/ui/lib/space-path'
+import { buildSpacePath } from '../../../lib/space-path'
 import { StudioSidebar } from '../studio-sidebar'
 import { StudioAppSidebar } from '../studio-app-sidebar'
 import { SettingsView } from '../settings-view'
-import { useAgentList } from '@lmthing/ui/hooks/agent/useAgentList'
-import { useKnowledgeFields } from '@lmthing/ui/hooks/knowledge/useKnowledgeFields'
-import { useWorkflowList } from '@lmthing/ui/hooks/workflow/useWorkflowList'
+import { useAgentList } from '../../../hooks/agent/useAgentList'
+import { useKnowledgeFields } from '../../../hooks/knowledge/useKnowledgeFields'
+import { useWorkflowList } from '../../../hooks/workflow/useWorkflowList'
 
 export interface StudioShellProps {
   defaultSidebarCollapsed?: boolean

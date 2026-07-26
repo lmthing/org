@@ -1,10 +1,10 @@
 import * as Prim from '../../../../elements/primitives/index';
 import { useUIState } from '@lmthing/state'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Input } from '@lmthing/ui/elements/forms/input'
+import { Stack } from '../../../../elements/layouts/stack'
+import { Label } from '../../../../elements/typography/label'
+import { Caption } from '../../../../elements/typography/caption'
+import { Button } from '../../../../elements/forms/button'
+import { Input } from '../../../../elements/forms/input'
 import { PANEL_BASE, PANEL_BODY, PANEL_HEADER } from '../../../../elements/content/panel/index'
 
 /** Delegation editor (add/remove canDelegateTo string entries) */

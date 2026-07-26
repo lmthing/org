@@ -6,10 +6,10 @@
  * ManifestSection / TaskForm / SchemaEditor.
  */
 import * as Prim from '../../../elements/primitives/index';
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { Heading } from '@lmthing/ui/elements/typography/heading'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { Button } from '../../../elements/forms/button'
+import { Stack } from '../../../elements/layouts/stack'
+import { Heading } from '../../../elements/typography/heading'
+import { Caption } from '../../../elements/typography/caption'
 import { ManifestSection } from './manifest-section'
 import { TaskForm } from './task-form'
 import { useTasklistEditor } from './useTasklistEditor'

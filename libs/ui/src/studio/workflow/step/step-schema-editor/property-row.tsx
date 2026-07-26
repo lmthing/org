@@ -1,11 +1,11 @@
 import * as Prim from '../../../../elements/primitives/index';
 import { useUIState, useToggle } from '@lmthing/state'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Input } from '@lmthing/ui/elements/forms/input'
-import { Select, SelectOption } from '@lmthing/ui/elements/forms/select'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { cn } from '@lmthing/ui/lib/utils'
+import { Button } from '../../../../elements/forms/button'
+import { Input } from '../../../../elements/forms/input'
+import { Select, SelectOption } from '../../../../elements/forms/select'
+import { Label } from '../../../../elements/typography/label'
+import { Caption } from '../../../../elements/typography/caption'
+import { cn } from '../../../../lib/utils'
 import type { Property, PropertyType } from './use-schema-model'
 import { NESTED_PROPERTIES_ADD_BTN, NESTED_PROPERTIES_ADD_ICON, PROPERTY_ROW_DELETE_ICON, PROPERTY_ROW_DESCRIPTION_HINT, PROPERTY_ROW_DESCRIPTION_INPUT, PROPERTY_ROW_ICON, PROPERTY_ROW_MOVE_ICON, PROPERTY_ROW_RANGE_INPUT } from '../../step-schema-editor.props'
 

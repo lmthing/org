@@ -10,12 +10,12 @@
  * following the same draft/save pattern as the agent-builder and topic-editor.
  */
 import * as Prim from '../../elements/primitives/index';
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Input } from '@lmthing/ui/elements/forms/input'
-import { Select, SelectOption } from '@lmthing/ui/elements/forms/select'
+import { Stack } from '../../elements/layouts/stack'
+import { Label } from '../../elements/typography/label'
+import { Caption } from '../../elements/typography/caption'
+import { Button } from '../../elements/forms/button'
+import { Input } from '../../elements/forms/input'
+import { Select, SelectOption } from '../../elements/forms/select'
 import { ComponentListItem } from './component-list-item'
 import { ComponentCodeEditor } from './component-code-editor'
 import { useComponentEditor } from './use-component-editor'

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react'
-import * as Prim from '@lmthing/ui/elements/primitives'
-import { Badge, BADGE_BASE, BADGE_VARIANT } from '@lmthing/ui/elements/content/badge'
+import * as Prim from '../../../elements/primitives'
+import { Badge, BADGE_BASE, BADGE_VARIANT } from '../../../elements/content/badge'
 
 interface GithubDeploymentStatusProps {
   repo: string

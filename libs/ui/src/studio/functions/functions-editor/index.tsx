@@ -10,12 +10,12 @@
 import * as Prim from '../../../elements/primitives/index';
 import { useCallback, useEffect, useRef } from 'react'
 import { useSpaceFS, useGlob, useFile, useUIState, P } from '@lmthing/state'
-import { Stack } from '@lmthing/ui/elements/layouts/stack'
-import { Label } from '@lmthing/ui/elements/typography/label'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Input } from '@lmthing/ui/elements/forms/input'
-import { Badge } from '@lmthing/ui/elements/content/badge'
+import { Stack } from '../../../elements/layouts/stack'
+import { Label } from '../../../elements/typography/label'
+import { Caption } from '../../../elements/typography/caption'
+import { Button } from '../../../elements/forms/button'
+import { Input } from '../../../elements/forms/input'
+import { Badge } from '../../../elements/content/badge'
 import { INPUT_BASE } from '../../../elements/forms/input/index'
 import { FUNCTIONS_EDITOR_TEXTAREA } from '../props'
 

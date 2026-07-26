@@ -27,12 +27,13 @@
     "typecheck": "tsc --noEmit",
     "lint:tokens": "lmthing-lint-tokens src",
     "lint:rn": "node scripts/lint-rn-safety.mjs",
-    "lint": "tsc --noEmit && eslint . && lmthing-lint-tokens src && node scripts/lint-rn-safety.mjs && node scripts/lint-import-extensions.mjs && node scripts/lint-no-tailwind.mjs",
+    "lint": "tsc --noEmit && eslint . && lmthing-lint-tokens src && node scripts/lint-rn-safety.mjs && node scripts/lint-import-extensions.mjs && node scripts/lint-self-imports.mjs && node scripts/lint-no-tailwind.mjs",
     "format": "prettier --write .",
     "test:native": "node metro/cli.mjs",
     "test:native:gate": "node metro/cli.mjs --gate",
     "lint:imports": "node scripts/lint-import-extensions.mjs",
-    "lint:tailwind": "node scripts/lint-no-tailwind.mjs"
+    "lint:tailwind": "node scripts/lint-no-tailwind.mjs",
+    "lint:self-imports": "node scripts/lint-self-imports.mjs"
   },
   "dependencies": {
     "@lmthing/auth": "workspace:*",
@@ -47,6 +48,7 @@
     "zustand": "^4.5.7"
   },
   "devDependencies": {
+    "@babel/plugin-transform-export-namespace-from": "^7.29.7",
     "@babel/runtime": "^7.29.7",
     "@lmthing/config": "workspace:*",
     "@react-native/babel-preset": "0.86.0",
@@ -63,7 +65,7 @@
     "clsx": "^2.1.1",
     "eslint": "^9.0.0",
     "jsdom": "^24.1.3",
-    "metro": "^0.84.4",
+    "metro": "^0.87.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-test-renderer": "19.2.0"

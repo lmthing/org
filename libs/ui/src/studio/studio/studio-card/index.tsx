@@ -1,6 +1,6 @@
-import { Card, CardBody } from '@lmthing/ui/elements/content/card'
-import { Heading } from '@lmthing/ui/elements/typography/heading'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { Card, CardBody } from '../../../elements/content/card'
+import { Heading } from '../../../elements/typography/heading'
+import { Caption } from '../../../elements/typography/caption'
 
 interface StudioCardProps {
   id: string

@@ -5,11 +5,11 @@
 import { useCallback, useEffect } from 'react'
 import { useParams, useLocation, useNavigate } from '@tanstack/react-router'
 import { StudioShell } from '../studio-shell'
-import { useAgentList } from '@lmthing/ui/hooks/agent/useAgentList'
-import { useTasklistList } from '@lmthing/ui/hooks/workflow/useWorkflowList'
+import { useAgentList } from '../../../hooks/agent/useAgentList'
+import { useTasklistList } from '../../../hooks/workflow/useWorkflowList'
 import { useUIState, useSpaceFS } from '@lmthing/state'
 import { serializeAgentInstruct } from '@lmthing/state'
-import { buildSpacePath } from '@lmthing/ui/lib/space-path'
+import { buildSpacePath } from '../../../lib/space-path'
 
 type StudioState = {
   sidebarCollapsed: boolean

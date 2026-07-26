@@ -5,8 +5,8 @@
 import * as Prim from '../../elements/primitives/index';
 import { useCallback, useEffect, useRef } from 'react'
 import { useUIState } from '@lmthing/state'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Input } from '@lmthing/ui/elements/forms/input'
+import { Button } from '../../elements/forms/button'
+import { Input } from '../../elements/forms/input'
 import type { ComponentKind } from './component-editor-utils'
 
 /**

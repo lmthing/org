@@ -13,7 +13,7 @@ import {
   serializeAgentInstruct,
 } from '@lmthing/state'
 import type { AgentInstruct } from '@lmthing/state'
-import { buildSpacePath } from '@lmthing/ui/lib/space-path'
+import { buildSpacePath } from '../../../../lib/space-path'
 
 function slugify(text: string): string {
   return text.toLowerCase().trim()

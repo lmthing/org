@@ -5,7 +5,7 @@
 import * as Prim from '../../../elements/primitives/index';
 import { Button } from '../../../elements/forms/button'
 import { Bot, Plus, ArrowLeft } from 'lucide-react'
-import { CozyThingText } from '@lmthing/ui/elements/branding/cozy-text'
+import { CozyThingText } from '../../../elements/branding/cozy-text'
 import type { ThingConversation } from './types'
 
 export interface ThingSidebarProps {

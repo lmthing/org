@@ -1,5 +1,5 @@
 import * as Prim from '../../../../elements/primitives/index';
-import { Button } from '@lmthing/ui/elements/forms/button'
+import { Button } from '../../../../elements/forms/button'
 import {
   Bold,
   Italic,
