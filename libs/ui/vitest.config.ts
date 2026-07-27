@@ -30,6 +30,11 @@ export default defineConfig({
       // These ran nowhere at all: the root config excludes libs/ui, and this include never named
       // `chat/`. `.ts` only — the `.tsx` component suites still need peers that are not installed.
       'src/chat/**/*.test.ts',
+      // The descriptor renderers. These are `.tsx` and so were outside the include above —
+      // which is exactly how `DisplayBlock` kept its own half-finished switch (no `Table`, no
+      // `Stack`, `JSON.stringify` for anything else) with three suites sitting next to it that
+      // ran nowhere. They need only jsdom + react-dom, both already here.
+      'src/chat/components/*.test.tsx',
       // Pure codemod-mapping tests (node-safe, no DOM) — the objective correctness gate for the
       // P3 classnames-to-props codemod. See docs/tamagui-idiomatic-migration.md §5.
       'scripts/**/*.test.mjs',

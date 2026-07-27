@@ -30,6 +30,11 @@ export {
   flattenForm, normalizeOptions, coerceValue, defaultFor, isFormDescriptor, isCatalogForm,
 } from './ui/form.js';
 export type { FieldSpec, FieldKind, FormSpec, Option } from './ui/form.js';
+export {
+  RENDER_ALIASES, isRenderableType, renderableTypes, isJsxDescriptor,
+  parseDescriptorPayload, sanitizeDescriptor, descriptorToText,
+} from './ui/descriptor.js';
+export type { JsxDescriptor } from './ui/descriptor.js';
 
 // Globals
 export { serialize } from './globals/serialize.js';

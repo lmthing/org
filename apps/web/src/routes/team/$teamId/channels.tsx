@@ -1,4 +1,5 @@
 import * as Prim from '@lmthing/ui/elements/primitives'
+import { renderDescriptor, toRenderableDescriptor } from '@lmthing/ui/chat'
 import { Markdown } from '@lmthing/ui/elements/content/markdown'
 import { ListItem } from '@lmthing/ui/elements/content/list-item'
 import { Separator } from '@lmthing/ui/elements/content/separator'
@@ -33,6 +34,8 @@ interface ChannelMessage {
   channelId: string
   kind: 'user' | 'thing' | 'system'
   text: string
+  /** THING's JSX answer, as `display()` descriptors. See `MessageBody`. */
+  blocks?: unknown[]
   userId?: string
   email?: string
   threadId?: string
@@ -453,6 +456,40 @@ function TypingStrip({ labels }: { labels: string[] }) {
   )
 }
 
+/**
+ * The body of one channel message.
+ *
+ * THING answers in JSX, so a `thing` message is usually a tree of design-system
+ * components, not a paragraph — it carries `blocks`, and those go through the
+ * SAME `renderDescriptor` the `/chat` transcript uses, so an answer looks the
+ * same wherever it is read and works on both targets (the renderer draws
+ * `@lmthing/ui` primitives, which fork per platform; there is no DOM in it).
+ *
+ * `blocks` is recent, and the channel log is append-only, so a thread from
+ * before it existed still holds the descriptor stringified into `text` — parse
+ * that back rather than showing a member the braces forever.
+ *
+ * A member's own message is prose and stays prose: rendering a colleague's text
+ * as markdown would let a stray `#` or `_` restyle what they typed.
+ */
+function MessageBody({ message }: { message: ChannelMessage }) {
+  const blocks = message.blocks?.length ? message.blocks : null
+  const legacy = blocks ? null : toRenderableDescriptor(message.text)
+  const descriptors = blocks ?? legacy
+
+  if (descriptors) {
+    return <Prim.Col gap="$1">{renderDescriptor(descriptors)}</Prim.Col>
+  }
+  if (message.kind === 'thing') {
+    return <Markdown source={message.text} preset="prose" />
+  }
+  return (
+    <Prim.Text fontSize="$sm" whiteSpace="pre-wrap">
+      {message.text}
+    </Prim.Text>
+  )
+}
+
 function SenderAvatar({ kind, senderId, email }: { kind: ChannelMessage['kind']; senderId: string; email?: string }) {
   if (kind === 'thing') {
     return (
@@ -520,7 +557,7 @@ function MessageRow({ message, showHeader }: { message: ChannelMessage; showHead
   if (!showHeader) {
     return (
       <Prim.Box paddingLeft="$11">
-        <Markdown source={message.text} preset="prose" />
+        <MessageBody message={message} />
       </Prim.Box>
     )
   }
@@ -529,7 +566,7 @@ function MessageRow({ message, showHeader }: { message: ChannelMessage; showHead
       <SenderAvatar kind={message.kind} senderId={senderKey(message)} email={message.email} />
       <Prim.Col flex={1} minWidth={0} gap="$1">
         <MessageHeader kind={message.kind} senderId={senderKey(message)} email={message.email} ts={message.ts} />
-        <Markdown source={message.text} preset="prose" />
+        <MessageBody message={message} />
       </Prim.Col>
     </Prim.Row>
   )
@@ -556,7 +593,7 @@ function MessageGroupView({ group }: { group: MessageGroup }) {
       <Prim.Col flex={1} minWidth={0} gap="$1">
         <MessageHeader kind={group.kind} senderId={group.senderId} email={group.email} ts={first.ts} />
         {group.messages.map((m) => (
-          <Markdown key={m.id} source={m.text} preset="prose" />
+          <MessageBody key={m.id} message={m} />
         ))}
       </Prim.Col>
     </Prim.Row>

@@ -208,6 +208,24 @@ export interface SessionManagerOpts {
   defaultModelAlias?: string;
 }
 
+/**
+ * What a headless turn hands back — `runHeadless` and `runHeadlessThreaded`
+ * return the same shape.
+ *
+ * `result` is the turn's single answer: the LAST `display()` descriptor, or the
+ * final history entry when the agent displayed nothing. `displays` is EVERY
+ * descriptor the turn emitted, in order, for a caller that renders the whole
+ * answer rather than summarising it — a channel post is a transcript, and an
+ * agent that displays a heading and then a table has said both things.
+ */
+export interface HeadlessRunResult {
+  ok: boolean;
+  result?: unknown;
+  /** Every `display()` of the turn, in order. Empty on a failed turn. */
+  displays?: unknown[];
+  error?: string;
+  sessionId: string;
+}
 
 /** Parse a `space/agent#action` spawn ref → the pieces `runHeadless` wants
  *  (mirrors the hook `parseTrigger`). No `#` ⇒ the whole ref is the space, no action. */
@@ -1823,7 +1841,7 @@ export class SessionManager {
     /** Where this headless run came from — recorded as the ledger session `source`
      *  (`hook:<slug>` / `code-node`). Defaults to `headless`. */
     origin?: { source: string };
-  }): Promise<{ ok: boolean; result?: unknown; error?: string; sessionId: string }> {
+  }): Promise<HeadlessRunResult> {
     const sessionId = randomUUID();
     let session: Session | undefined;
     const displays: unknown[] = [];
@@ -1860,7 +1878,7 @@ export class SessionManager {
       }
       emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId, ok: true, durationMs: Date.now() - headlessStartedAt });
       this.sessionLedger.finalize(sessionId, 'done');
-      return { ok: true, result, sessionId };
+      return { ok: true, result, displays: [...displays], sessionId };
     } catch (err) {
       emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId, ok: false, durationMs: Date.now() - headlessStartedAt });
       this.sessionLedger.finalize(sessionId, 'error');
@@ -2006,7 +2024,7 @@ export class SessionManager {
     agentSlug: string;
     message: string;
     budget?: BuildSessionArgs['budget'];
-  }): Promise<{ ok: boolean; result?: unknown; error?: string; sessionId: string }> {
+  }): Promise<HeadlessRunResult> {
     return this.runExclusive(opts.sessionId, async () => {
       let session: Session | undefined;
       const displays: unknown[] = [];
@@ -2082,7 +2100,7 @@ export class SessionManager {
           result = history.length ? history[history.length - 1]?.content : undefined;
         }
         emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId: opts.sessionId, ok: true, durationMs: Date.now() - threadedStartedAt });
-        return { ok: true, result, sessionId: opts.sessionId };
+        return { ok: true, result, displays: [...displays], sessionId: opts.sessionId };
       } catch (err) {
         emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId: opts.sessionId, ok: false, durationMs: Date.now() - threadedStartedAt });
         return { ok: false, error: err instanceof Error ? err.message : String(err), sessionId: opts.sessionId };

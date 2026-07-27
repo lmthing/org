@@ -446,3 +446,122 @@ describe('THING in a thread', () => {
     expect(messages.map((m) => m.kind)).toEqual(['user', 'thing']);
   });
 });
+
+// ─── A JSX answer ────────────────────────────────────────────────────────────
+//
+// THING answers in JSX far more often than in prose, and the channel log is the
+// only record of what it said. The reply used to be `JSON.stringify(result)`,
+// so every component answer reached the reader as a wall of braces — and, worse,
+// was STORED that way, so no client fix could ever recover it.
+
+/** A SessionManager stub whose turn answers with `display()` descriptors. */
+function mkJsxManager(displays: unknown[], result?: unknown) {
+  return {
+    runHeadlessThreaded: vi.fn(async (opts: any) => ({
+      ok: true,
+      displays,
+      result: result ?? displays[displays.length - 1],
+      sessionId: opts.sessionId,
+    })),
+  } as any;
+}
+
+async function askThing(manager: unknown, text = '@thing report'): Promise<ChannelMessage> {
+  const res = mkRes();
+  await handlePostMessage(manager as any, root)(
+    mkReq('POST', '/api/team/channels/general/messages', { text }),
+    res, { channelId: 'general' }, {} as any,
+  );
+  await settle();
+  const { messages } = await readMessages(root, 'general');
+  return messages[messages.length - 1]!;
+}
+
+describe('THING answering with JSX', () => {
+  const card = {
+    type: 'Card',
+    props: { title: 'Totals' },
+    children: [{ type: 'KeyValue', props: { pairs: { Open: 3 } }, children: [] }],
+  };
+
+  it('stores the descriptor as blocks, not as its own JSON', async () => {
+    const reply = await askThing(mkJsxManager([card]));
+    expect(reply.blocks).toEqual([card]);
+    // The regression: the answer must never reach the log as its source.
+    expect(reply.text).not.toContain('"type"');
+    expect(reply.text).not.toContain('{');
+  });
+
+  it('keeps a readable plain-text fallback for clients that cannot draw components', async () => {
+    const reply = await askThing(mkJsxManager([card]));
+    expect(reply.text).toContain('Totals');
+    expect(reply.text).toContain('Open: 3');
+  });
+
+  it('keeps every display of the turn, not just the last', async () => {
+    const heading = { type: 'Heading', props: {}, children: ['Weekly'] };
+    const reply = await askThing(mkJsxManager([heading, card]));
+    expect(reply.blocks).toEqual([heading, card]);
+    expect(reply.text).toContain('Weekly');
+    expect(reply.text).toContain('Totals');
+  });
+
+  it('drops a component nobody ships but keeps what it wrapped', async () => {
+    const sneaky = {
+      type: 'iframe',
+      props: { src: 'http://evil' },
+      children: [{ type: 'Paragraph', props: {}, children: ['the actual answer'] }],
+    };
+    const reply = await askThing(mkJsxManager([sneaky]));
+    expect(reply.blocks).toEqual([{ type: 'Paragraph', props: {}, children: ['the actual answer'] }]);
+    expect(reply.text).toBe('the actual answer');
+  });
+
+  it('recovers a descriptor that reached it already serialized', async () => {
+    // An older writer, or a resumed snapshot, hands back the JSON string. It is
+    // still a descriptor and must not be posted as prose.
+    const reply = await askThing(mkJsxManager([JSON.stringify(card)]));
+    expect(reply.blocks).toEqual([card]);
+    expect(reply.text).toContain('Totals');
+  });
+
+  it('leaves a prose answer exactly as it was — no blocks, no reformatting', async () => {
+    const reply = await askThing(mkJsxManager(['The answer is 42.']));
+    expect(reply.blocks).toBeUndefined();
+    expect(reply.text).toBe('The answer is 42.');
+  });
+
+  it('still falls back to JSON for data that is not a descriptor at all', async () => {
+    const reply = await askThing(mkJsxManager([{ total: 42 }]));
+    expect(reply.blocks).toBeUndefined();
+    expect(reply.text).toBe('{"total":42}');
+  });
+
+  it('reads `result` when the manager reported no displays', async () => {
+    // Older callers (and a turn whose answer came from history) set only `result`.
+    const manager = {
+      runHeadlessThreaded: vi.fn(async (opts: any) => ({ ok: true, result: card, sessionId: opts.sessionId })),
+    } as any;
+    const reply = await askThing(manager);
+    expect(reply.blocks).toEqual([card]);
+  });
+
+  it('survives a round trip through the append-only log', async () => {
+    await askThing(mkJsxManager([card]));
+    const { messages } = await readMessages(root, 'general');
+    expect(messages[messages.length - 1]!.blocks).toEqual([card]);
+  });
+});
+
+describe('THING answering with JSX — content that survives an unwrap', () => {
+  it('keeps a stray string as a Paragraph so blocks stay a list of components', async () => {
+    // Unwrapping an unrecognised component can leave a bare string where a node
+    // was; a channel client renders blocks inside a container, and a bare string
+    // in a container is nothing at all on React Native.
+    const reply = await askThing(
+      mkJsxManager([{ type: 'Marquee', props: {}, children: ['just some words'] }]),
+    );
+    expect(reply.blocks).toEqual([{ type: 'Paragraph', props: {}, children: ['just some words'] }]);
+    expect(reply.text).toBe('just some words');
+  });
+});
