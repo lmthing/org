@@ -1,7 +1,10 @@
 import * as Prim from '@lmthing/ui/elements/primitives'
-import { createFileRoute, Link, Outlet, useParams } from '@tanstack/react-router'
+import { createFileRoute, Link, Outlet, useNavigate, useLocation, useParams } from '@tanstack/react-router'
 import { AppProvider } from '@lmthing/state'
 import { useAuth } from '@lmthing/auth'
+import { TabBar } from '@lmthing/ui/elements/nav/tab-bar'
+import { Badge } from '@lmthing/ui/elements/content/badge'
+import { ArrowLeft, Hash, FolderKanban, Users, Settings } from 'lucide-react'
 import { PodEnsureGate } from '@/lib/gates'
 import { WakingScreen } from '@/lib/waking-screen'
 import { TeamAuthProvider, useTeamAuth } from '@/lib/team-auth'
@@ -63,15 +66,21 @@ function TeamPod() {
 }
 
 const TABS = [
-  { to: '/team/$teamId/channels', label: 'Channels' },
-  { to: '/team/$teamId/projects', label: 'Projects' },
-  { to: '/team/$teamId/members', label: 'Members' },
-  { to: '/team/$teamId/settings', label: 'Settings' },
+  { id: 'channels', label: 'Channels', icon: Hash },
+  { id: 'projects', label: 'Projects', icon: FolderKanban },
+  { id: 'members', label: 'Members', icon: Users },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ] as const
 
 function TeamChrome() {
   const { teamId } = useParams({ from: '/team/$teamId' })
   const team = useTeamAuth()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+
+  const base = `/team/${teamId}`
+  const activeTab = TABS.find((tab) => pathname.startsWith(`${base}/${tab.id}`))?.id ?? 'channels'
+
   return (
     <Prim.Col height="100%">
       <Prim.Row
@@ -83,21 +92,32 @@ function TeamChrome() {
         borderColor="$border"
       >
         <Link to="/team">
-          <Prim.Text fontSize="$sm" color="$muted-foreground">
-            ← Teams
-          </Prim.Text>
+          <Prim.Row alignItems="center" gap="$1">
+            <ArrowLeft size={14} aria-hidden={true} />
+            <Prim.Text fontSize="$sm" color="$muted-foreground">
+              Teams
+            </Prim.Text>
+          </Prim.Row>
         </Link>
-        {TABS.map((tab) => (
-          <Link key={tab.to} to={tab.to} params={{ teamId }}>
-            <Prim.Text fontSize="$sm">{tab.label}</Prim.Text>
-          </Link>
-        ))}
-        <Prim.Box flex={1} />
+        <Prim.Box flex={1}>
+          <TabBar
+            tabs={TABS.map((tab) => ({
+              id: tab.id,
+              label: (
+                <Prim.Row alignItems="center" gap="$1.5">
+                  <tab.icon size={14} aria-hidden={true} />
+                  <Prim.Text fontSize="$sm">{tab.label}</Prim.Text>
+                </Prim.Row>
+              ),
+            }))}
+            activeTab={activeTab}
+            onTabChange={(id) => void navigate({ to: `${base}/${id}` })}
+            borderBottomWidth={0}
+          />
+        </Prim.Box>
         {/* The role is the member's own, read from the token they hold. The
             server enforces it regardless; this only explains the UI. */}
-        <Prim.Text fontSize="$xs" color="$muted-foreground">
-          {team.role}
-        </Prim.Text>
+        <Badge variant={team.role === 'editor' ? 'primary' : 'muted'}>{team.role}</Badge>
       </Prim.Row>
       <Prim.Box flex={1} overflow="hidden">
         <Outlet />

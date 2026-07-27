@@ -41,6 +41,19 @@ export interface TeamDetail {
   invites: Array<{ id: string; email: string; role: TeamRole; expires_at: string }>
 }
 
+export interface TeamBudgetWindow {
+  duration: string
+  max_budget: number
+  spend: number
+}
+
+export interface TeamBillingUsage {
+  tier: string
+  spend: number
+  budgets: TeamBudgetWindow[]
+  models: string[]
+}
+
 type Fetcher = (url: string, options?: RequestInit) => Promise<Response>
 
 async function call<T>(
@@ -117,6 +130,18 @@ export const teamApi = {
       method: 'PUT',
       body: JSON.stringify({ vars }),
     }),
+
+  getBillingUsage: (f: Fetcher, teamId: string) =>
+    call<TeamBillingUsage>(f, `/${teamId}/billing/usage`),
+
+  startCheckout: (f: Fetcher, teamId: string, tier: string, returnUrl: string) =>
+    call<{ client_secret: string }>(f, `/${teamId}/billing/checkout`, {
+      method: 'POST',
+      body: JSON.stringify({ tier, return_url: returnUrl }),
+    }),
+
+  deleteTeam: (f: Fetcher, teamId: string) =>
+    call<{ deleted: string }>(f, `/${teamId}`, { method: 'DELETE' }),
 }
 
 /** The gateway route prefix that provisions a team's pod (for PodEnsureGate). */

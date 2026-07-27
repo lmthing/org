@@ -2,6 +2,17 @@ import * as Prim from '@lmthing/ui/elements/primitives'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@lmthing/auth'
+import { Page, PageBody } from '@lmthing/ui/elements/layouts/page'
+import { Card } from '@lmthing/ui/elements/content/card'
+import { ListItem } from '@lmthing/ui/elements/content/list-item'
+import { Badge } from '@lmthing/ui/elements/content/badge'
+import { Button } from '@lmthing/ui/elements/forms/button'
+import { Input } from '@lmthing/ui/elements/forms/input'
+import { Heading } from '@lmthing/ui/elements/typography/heading'
+import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { Avatar, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
+import { Mail, Plus, Users } from 'lucide-react'
+import { initials } from '@/lib/team-format'
 import {
   teamApi,
   type TeamInviteSummary,
@@ -69,124 +80,136 @@ function TeamsIndex() {
   }
 
   return (
-    <Prim.Box padding="$6" maxWidth={720} marginHorizontal="auto" width="100%">
-      <Prim.Text as="h1" fontSize="$2xl" fontWeight="600" marginBottom="$2">
-        Teams
-      </Prim.Text>
-      <Prim.Text as="p" color="$muted-foreground" fontSize="$sm" marginBottom="$6">
-        A shared workspace with its own runtime, subscription and credentials.
-      </Prim.Text>
+    <Page>
+      <PageBody>
+      <Prim.Box maxWidth={720} marginHorizontal="auto" width="100%">
+        <Heading level={1}>Teams</Heading>
+        <Caption marginBottom="$6">
+          A shared workspace with its own runtime, subscription and credentials.
+        </Caption>
 
-      {error ? (
-        <Prim.Text as="p" color="$destructive" fontSize="$sm" marginBottom="$4">
-          {error}
-        </Prim.Text>
-      ) : null}
+        {error ? (
+          <Caption color="$destructive" marginBottom="$4">
+            {error}
+          </Caption>
+        ) : null}
 
-      {invites.length > 0 ? (
-        <Prim.Box marginBottom="$6">
-          <Prim.Text as="h2" fontSize="$sm" fontWeight="600" marginBottom="$2">
-            Invitations
-          </Prim.Text>
-          <Prim.Col gap="$2">
-            {invites.map((invite) => (
-              <Prim.Row
-                key={invite.id}
-                alignItems="center"
-                justifyContent="space-between"
-                gap="$3"
-                padding="$3"
-                borderWidth={1}
-                borderColor="$border"
-                borderRadius="$md"
-              >
-                <Prim.Box>
-                  <Prim.Text fontWeight="500">{invite.team_name}</Prim.Text>
-                  <Prim.Text fontSize="$xs" color="$muted-foreground">
-                    as {invite.role}
-                  </Prim.Text>
+        {invites.length > 0 ? (
+          <Prim.Box marginBottom="$6">
+            <Heading level={4} marginBottom="$2">
+              Invitations
+            </Heading>
+            <Card>
+              {invites.map((invite, i) => (
+                <Prim.Box key={invite.id}>
+                  <ListItem
+                    paddingHorizontal="$4"
+                    paddingVertical="$3"
+                    cursor="default"
+                    hoverStyle={{ backgroundColor: 'transparent' }}
+                  >
+                    <Avatar size="sm">
+                      <AvatarFallback colorKey={invite.team_id}>
+                        <Mail size={14} aria-hidden={true} />
+                      </AvatarFallback>
+                    </Avatar>
+                    <Prim.Box flex={1} minWidth={0} marginLeft="$3">
+                      <Prim.Text fontSize="$sm" fontWeight="$medium">
+                        {invite.team_name}
+                      </Prim.Text>
+                      <Badge variant="muted">{invite.role}</Badge>
+                    </Prim.Box>
+                    <Button
+                      size="sm"
+                      onClick={() => void accept(invite)}
+                      disabled={busy}
+                    >
+                      Accept
+                    </Button>
+                  </ListItem>
+                  {i < invites.length - 1 ? (
+                    <Prim.Box height={1} backgroundColor="$border" />
+                  ) : null}
                 </Prim.Box>
-                <Prim.Pressable
-                  onClick={() => void accept(invite)}
-                  disabled={busy}
-                  paddingHorizontal="$3"
-                  paddingVertical="$2"
-                  borderRadius="$md"
-                  backgroundColor="$primary"
-                >
-                  <Prim.Text color="$primary-foreground" fontSize="$sm">
-                    Accept
-                  </Prim.Text>
-                </Prim.Pressable>
-              </Prim.Row>
-            ))}
-          </Prim.Col>
-        </Prim.Box>
-      ) : null}
+              ))}
+            </Card>
+          </Prim.Box>
+        ) : null}
 
-      <Prim.Box marginBottom="$6">
-        <Prim.Text as="h2" fontSize="$sm" fontWeight="600" marginBottom="$2">
-          Your teams
-        </Prim.Text>
-        {loading ? (
-          <Prim.Text color="$muted-foreground" fontSize="$sm">
-            Loading…
-          </Prim.Text>
-        ) : teams.length === 0 ? (
-          <Prim.Text color="$muted-foreground" fontSize="$sm">
-            You are not on a team yet. Create one below.
-          </Prim.Text>
-        ) : (
-          <Prim.Col gap="$2">
-            {teams.map((team) => (
-              <Prim.Pressable
-                key={team.id}
-                onClick={() =>
-                  void navigate({ to: '/team/$teamId', params: { teamId: team.id } })
-                }
-                padding="$3"
-                borderWidth={1}
-                borderColor="$border"
-                borderRadius="$md"
-                hoverStyle={{ backgroundColor: '$accent' }}
+        <Prim.Box marginBottom="$6">
+          <Heading level={4} marginBottom="$2">
+            Your teams
+          </Heading>
+          {loading ? (
+            <Caption>Loading…</Caption>
+          ) : teams.length === 0 ? (
+            <Card padding="$6" display="flex" flexDirection="column" alignItems="center">
+              <Prim.Box
+                backgroundColor="$muted"
+                borderRadius="$radius-full"
+                width="$10"
+                height="$10"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                marginBottom="$3"
               >
-                <Prim.Text fontWeight="500">{team.name}</Prim.Text>
-                <Prim.Text fontSize="$xs" color="$muted-foreground">
-                  {team.role}
-                </Prim.Text>
-              </Prim.Pressable>
-            ))}
-          </Prim.Col>
-        )}
-      </Prim.Box>
+                <Users size={20} color="var(--muted-foreground)" aria-hidden={true} />
+              </Prim.Box>
+              <Caption>You are not on a team yet. Create one below.</Caption>
+            </Card>
+          ) : (
+            <Card>
+              {teams.map((team, i) => (
+                <Prim.Box key={team.id}>
+                  <ListItem
+                    paddingHorizontal="$4"
+                    paddingVertical="$3"
+                    onClick={() =>
+                      void navigate({ to: '/team/$teamId', params: { teamId: team.id } })
+                    }
+                  >
+                    <Avatar size="sm">
+                      <AvatarFallback colorKey={team.id}>{initials(team.name)}</AvatarFallback>
+                    </Avatar>
+                    <Prim.Box flex={1} minWidth={0} marginLeft="$3">
+                      <Prim.Text fontSize="$sm" fontWeight="$medium">
+                        {team.name}
+                      </Prim.Text>
+                    </Prim.Box>
+                    <Badge variant={team.role === 'editor' ? 'primary' : 'muted'}>
+                      {team.role}
+                    </Badge>
+                  </ListItem>
+                  {i < teams.length - 1 ? (
+                    <Prim.Box height={1} backgroundColor="$border" />
+                  ) : null}
+                </Prim.Box>
+              ))}
+            </Card>
+          )}
+        </Prim.Box>
 
-      <Prim.Box>
-        <Prim.Text as="h2" fontSize="$sm" fontWeight="600" marginBottom="$2">
-          New team
-        </Prim.Text>
-        <Prim.Row gap="$2">
-          <Prim.TextField
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Team name"
-            flex={1}
-          />
-          <Prim.Pressable
-            onClick={() => void create()}
-            disabled={busy || !name.trim()}
-            paddingHorizontal="$4"
-            paddingVertical="$2"
-            borderRadius="$md"
-            backgroundColor="$primary"
-            opacity={busy || !name.trim() ? 0.5 : 1}
-          >
-            <Prim.Text color="$primary-foreground" fontSize="$sm">
+        <Prim.Box>
+          <Heading level={4} marginBottom="$2">
+            New team
+          </Heading>
+          <Prim.Row gap="$2">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Team name"
+              flex={1}
+            />
+            <Button onClick={() => void create()} disabled={busy || !name.trim()}>
+              <Plus size={14} aria-hidden={true} />
               Create
-            </Prim.Text>
-          </Prim.Pressable>
-        </Prim.Row>
+            </Button>
+          </Prim.Row>
+        </Prim.Box>
       </Prim.Box>
-    </Prim.Box>
+      </PageBody>
+    </Page>
   )
 }
 

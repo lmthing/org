@@ -37,3 +37,12 @@ export const CLOUD_BASE_URL =
  * (`serve.ts` `servesUnifiedSpa`) and the injected `<base href>` (`pages-serve.ts`).
  */
 export const APP_PATH_PREFIX = loc.hostname === 'lmthing.app' ? '' : '/app'
+
+/**
+ * Stripe's publishable key, for the team billing embedded-checkout flow
+ * (mirrors `com/`'s `checkout.tsx`). Not currently wired into any build —
+ * see `settings.tsx`'s Billing section for the caveat.
+ */
+export const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as
+  | string
+  | undefined
