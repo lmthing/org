@@ -10,7 +10,9 @@
  *
  * On disk, under `<lmthingRoot>/.team/`:
  *
- *   .team/channels.json                 [{ id, name, createdBy, createdAt }]
+ *   .team/channels.json                 [{ id, name, createdBy, createdAt, … }]
+ *   .team/categories.json               [{ id, name, order }]
+ *   .team/members.json                  the directory — see ./team-members.ts
  *   .team/channels/<channelId>.jsonl    one message per line, append-only
  *   .team/.data/webhook-threads.json    threadRootId → THING's sessionId
  *
@@ -21,11 +23,18 @@
  * Append-only JSONL rather than a database: a channel is a log, reads are
  * overwhelmingly "the last N", and a partially-written trailing line can be
  * dropped without losing history.
+ *
+ * A **direct message is a channel too** — same record, same log file, same
+ * socket, distinguished only by `kind:'dm'` and the `members` it is visible to.
+ * Giving DMs their own storage and transport would have duplicated history
+ * paging, THING threading and the fan-out socket for no behavioural difference;
+ * what genuinely differs is who may see it, and that is one predicate
+ * ({@link isVisibleTo}) rather than a second implementation.
  */
 
 import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
@@ -33,11 +42,37 @@ export const TEAM_DIR = '.team';
 /** Seeded on first use so a new team has somewhere to talk immediately. */
 export const DEFAULT_CHANNEL = { id: 'general', name: 'general' };
 
+/** A named channel everyone can see, or a private conversation between members. */
+export type ChannelKind = 'channel' | 'dm';
+
 export interface Channel {
   id: string;
   name: string;
   createdBy: string;
   createdAt: string;
+  /** Absent on records written before DMs existed — read as `'channel'`. */
+  kind?: ChannelKind;
+  /**
+   * For a DM: exactly the user ids that may see it. Absent on a named channel,
+   * which every member of the team can see.
+   */
+  members?: string[];
+  /** The category this channel is filed under, if any. See {@link Category}. */
+  categoryId?: string;
+  /**
+   * Project ids whose app is pinned to this channel, so it can be opened beside
+   * the conversation that produced it. Ids, not copies: the app is the project's,
+   * and a channel only records that it is worth having open here.
+   */
+  apps?: string[];
+}
+
+/** A collapsible group of channels in the sidebar. */
+export interface Category {
+  id: string;
+  name: string;
+  /** Ascending; ties break on name so the order is always total. */
+  order: number;
 }
 
 /** Who or what produced a message. */
@@ -69,6 +104,25 @@ export interface ChannelMessage {
   email?: string;
   /** The id of the message that opened this thread; absent for a channel-level post. */
   threadId?: string;
+  /**
+   * The user ids of members this message named with `@handle`, resolved against
+   * the directory at post time.
+   *
+   * Resolved when the message is WRITTEN, not when it is read: a handle can be
+   * given up and claimed by somebody else, and a message must keep naming the
+   * person it named, not whoever holds the handle today.
+   */
+  mentions?: string[];
+  /**
+   * For the `system` card posted when THING finishes building an app: which app,
+   * so the card renders as an "open it beside the channel" affordance rather than
+   * a sentence about something that happened.
+   *
+   * In the LOG, not only on the socket: a member who was away when it was built
+   * scrolls back to a card they can still open, and the record of which
+   * conversation produced which app survives a reload.
+   */
+  app?: { projectId: string; name: string };
   /** For `thing` messages: the session the reply came from. */
   sessionId?: string;
 }
@@ -78,6 +132,9 @@ export function teamDir(root: string): string {
 }
 function channelsFile(root: string): string {
   return join(teamDir(root), 'channels.json');
+}
+function categoriesFile(root: string): string {
+  return join(teamDir(root), 'categories.json');
 }
 function channelLog(root: string, channelId: string): string {
   return join(teamDir(root), 'channels', `${channelId}.jsonl`);
@@ -156,6 +213,7 @@ export async function createChannel(
   root: string,
   name: string,
   createdBy: string,
+  categoryId?: string,
 ): Promise<{ channel: Channel; created: boolean }> {
   const id = channelIdFromName(name);
   if (!isValidChannelId(id)) {
@@ -172,9 +230,181 @@ export async function createChannel(
     name: name.trim(),
     createdBy,
     createdAt: new Date().toISOString(),
+    kind: 'channel',
+    ...(categoryId ? { categoryId } : {}),
   };
   await saveChannels(root, [...channels, channel]);
   return { channel, created: true };
+}
+
+/**
+ * Apply a partial update to a channel. Only the fields a member can meaningfully
+ * change are reachable — the id never moves (it is the log's filename), and
+ * neither `kind` nor `members` is editable, because turning a DM into a public
+ * channel would retroactively expose a private log.
+ */
+export async function patchChannel(
+  root: string,
+  channelId: string,
+  patch: { name?: string; categoryId?: string | null; apps?: string[] },
+): Promise<Channel> {
+  const channels = await ensureDefaultChannel(root);
+  const channel = channels.find((c) => c.id === channelId);
+  if (!channel) throw new Error(`no such channel: ${channelId}`);
+
+  if (patch.name !== undefined) {
+    const name = patch.name.trim();
+    if (!name) throw new Error('name cannot be empty');
+    channel.name = name.slice(0, 80);
+  }
+  if (patch.categoryId !== undefined) {
+    if (patch.categoryId === null || patch.categoryId === '') delete channel.categoryId;
+    else channel.categoryId = patch.categoryId;
+  }
+  if (patch.apps !== undefined) {
+    // Deduplicated and order-preserving: the sidebar renders them in this order,
+    // and a project pinned twice would render twice.
+    const seen = new Set<string>();
+    const apps = patch.apps.filter((id) => typeof id === 'string' && id && !seen.has(id) && seen.add(id));
+    if (apps.length) channel.apps = apps;
+    else delete channel.apps;
+  }
+  await saveChannels(root, channels);
+  return channel;
+}
+
+/** Whether `userId` may see this channel at all. A DM is visible only to its participants. */
+export function isVisibleTo(channel: Channel, userId: string): boolean {
+  if (channel.kind !== 'dm') return true;
+  return (channel.members ?? []).includes(userId);
+}
+
+/**
+ * The channel id for a direct conversation between a set of members.
+ *
+ * Derived from the sorted participant ids, so the two people who open a DM with
+ * each other from opposite ends land in the SAME channel rather than each
+ * creating their own half of the conversation. Hashed rather than concatenated
+ * because a raw user id is not constrained to {@link isValidChannelId}'s
+ * alphabet and a pair of them would blow the 64-character budget.
+ */
+export function dmChannelId(userIds: readonly string[]): string {
+  const key = [...new Set(userIds)].sort().join(' ');
+  return `dm-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`;
+}
+
+/**
+ * Get (or create) the direct-message channel between exactly these members.
+ *
+ * `name` is the fallback label only; a DM is named by who is in it, so clients
+ * render the other participant's own name rather than anything stored here.
+ */
+export async function ensureDmChannel(
+  root: string,
+  userIds: readonly string[],
+  createdBy: string,
+): Promise<{ channel: Channel; created: boolean }> {
+  const members = [...new Set(userIds)].filter(Boolean).sort();
+  if (members.length < 2) throw new Error('a direct message needs two members');
+  const id = dmChannelId(members);
+  const channels = await ensureDefaultChannel(root);
+  const existing = channels.find((c) => c.id === id);
+  if (existing) return { channel: existing, created: false };
+
+  const channel: Channel = {
+    id,
+    name: 'Direct message',
+    createdBy,
+    createdAt: new Date().toISOString(),
+    kind: 'dm',
+    members,
+  };
+  await saveChannels(root, [...channels, channel]);
+  return { channel, created: true };
+}
+
+// ─── Categories ──────────────────────────────────────────────────────────────
+
+export async function listCategories(root: string): Promise<Category[]> {
+  let text: string;
+  try {
+    text = await readFile(categoriesFile(root), 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+  try {
+    const raw: unknown = JSON.parse(text);
+    if (!Array.isArray(raw)) return [];
+    const list = raw.filter(
+      (c): c is Category =>
+        !!c && typeof c === 'object' && typeof (c as Category).id === 'string',
+    );
+    return list.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+
+async function saveCategories(root: string, categories: Category[]): Promise<void> {
+  await mkdir(teamDir(root), { recursive: true });
+  await writeFile(categoriesFile(root), JSON.stringify(categories, null, 2), 'utf8');
+}
+
+/** Create a category. Returns the existing one if the name is already used. */
+export async function createCategory(
+  root: string,
+  name: string,
+): Promise<{ category: Category; created: boolean }> {
+  const id = channelIdFromName(name);
+  if (!isValidChannelId(id)) {
+    throw new Error(`invalid category name: ${JSON.stringify(name)}`);
+  }
+  const categories = await listCategories(root);
+  const existing = categories.find((c) => c.id === id);
+  if (existing) return { category: existing, created: false };
+  const order = categories.reduce((max, c) => Math.max(max, c.order), -1) + 1;
+  const category: Category = { id, name: name.trim().slice(0, 60), order };
+  await saveCategories(root, [...categories, category]);
+  return { category, created: true };
+}
+
+export async function patchCategory(
+  root: string,
+  categoryId: string,
+  patch: { name?: string; order?: number },
+): Promise<Category> {
+  const categories = await listCategories(root);
+  const category = categories.find((c) => c.id === categoryId);
+  if (!category) throw new Error(`no such category: ${categoryId}`);
+  if (patch.name !== undefined) {
+    const name = patch.name.trim();
+    if (!name) throw new Error('name cannot be empty');
+    category.name = name.slice(0, 60);
+  }
+  if (patch.order !== undefined && Number.isFinite(patch.order)) category.order = patch.order;
+  await saveCategories(root, categories);
+  return category;
+}
+
+/**
+ * Delete a category. Its channels are NOT deleted — they fall back to
+ * uncategorized, which is the only non-destructive reading of "remove this
+ * group" and the one a misclick can be undone from.
+ */
+export async function deleteCategory(root: string, categoryId: string): Promise<Channel[]> {
+  const categories = await listCategories(root);
+  await saveCategories(
+    root,
+    categories.filter((c) => c.id !== categoryId),
+  );
+  const channels = await ensureDefaultChannel(root);
+  const orphaned = channels.filter((c) => c.categoryId === categoryId);
+  if (orphaned.length) {
+    for (const channel of orphaned) delete channel.categoryId;
+    await saveChannels(root, channels);
+  }
+  return orphaned;
 }
 
 // ─── Messages ────────────────────────────────────────────────────────────────

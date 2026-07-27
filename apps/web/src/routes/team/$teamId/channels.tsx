@@ -1,605 +1,362 @@
 import * as Prim from '@lmthing/ui/elements/primitives'
-import { renderDescriptor, toRenderableDescriptor } from '@lmthing/ui/chat'
-import { Markdown } from '@lmthing/ui/elements/content/markdown'
-import { ListItem } from '@lmthing/ui/elements/content/list-item'
-import { Separator } from '@lmthing/ui/elements/content/separator'
-import { Avatar, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
 import { Button } from '@lmthing/ui/elements/forms/button'
-import { Input } from '@lmthing/ui/elements/forms/input'
-import { Textarea } from '@lmthing/ui/elements/forms/textarea'
-import { createFileRoute, useParams } from '@tanstack/react-router'
+import { Caption } from '@lmthing/ui/elements/typography/caption'
+import { createFileRoute, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Hash, Plus, Send } from 'lucide-react'
-import { useTeamAuth, teamWsTokenSuffix, type TeamAuth } from '@/lib/team-auth'
-import { initials, relativeTime } from '@/lib/team-format'
+import { AppWindow, MessageSquare, X } from 'lucide-react'
+import { useTeamAuth } from '@/lib/team-auth'
+import { dmPartner, memberLabel, type ChannelMessage } from '@/lib/team-pod'
+import { useTeamChat } from '@/components/team/use-team-chat'
+import { ChannelSidebar } from '@/components/team/sidebar'
+import { Composer } from '@/components/team/composer'
+import {
+  AppFrame,
+  ChannelHeader,
+  OpenAppExternally,
+  RailPane,
+  type Rail,
+} from '@/components/team/rail'
+import {
+  MessageGroupView,
+  MessageRow,
+  ThreadSummary,
+  TypingStrip,
+  groupMessages,
+  showsHeader,
+  type MessageContext,
+} from '@/components/team/messages'
 
 /**
- * The team's chat: channels down the side, a transcript in the middle, threads
- * opened in a rail. Members talk to each other here and call THING with an
- * `@thing` mention; it answers in the thread and remembers the conversation
- * across messages.
+ * The team's chat: channels down the side, the conversation in the middle, and
+ * a rail on the right holding either a thread or an app.
+ *
+ * Members talk to each other here and call THING with an `@thing` mention; it
+ * answers in the thread and remembers the conversation across messages. When a
+ * turn produces an app, the app is pinned to the channel and opens beside it —
+ * asking for something and receiving it in the same place is the whole idea.
  *
  * All of this talks to the TEAM's pod at the same origin — Envoy routes
  * lmthing.team by the team claim in the token this surface holds.
  */
-
-interface Channel {
-  id: string
-  name: string
-}
-
-interface ChannelMessage {
-  id: string
-  ts: string
-  channelId: string
-  kind: 'user' | 'thing' | 'system'
-  text: string
-  /** THING's JSX answer, as `display()` descriptors. See `MessageBody`. */
-  blocks?: unknown[]
-  userId?: string
-  email?: string
-  threadId?: string
-}
-
-type ChannelEvent =
-  | { type: 'message'; message: ChannelMessage }
-  | { type: 'thing_status'; channelId: string; threadId: string; status: string }
-  | { type: 'typing'; channelId: string; userId: string }
-
-/** How long a `typing` event is believed without a follow-up (the server has
- * no explicit "stopped typing" event — it just stops sending). */
-const TYPING_TTL_MS = 4000
-
-/** Consecutive same-sender messages within this window collapse under one
- * avatar/name/timestamp header, Slack-style. */
-const GROUP_WINDOW_MS = 5 * 60_000
-
-async function podFetch(
-  team: TeamAuth,
-  path: string,
-  options: RequestInit = {},
-): Promise<Response> {
-  const token = await team.getTeamToken()
-  return fetch(path, {
-    ...options,
-    headers: {
-      authorization: `Bearer ${token}`,
-      ...(options.body ? { 'content-type': 'application/json' } : {}),
-      ...(options.headers ?? {}),
-    },
-  })
-}
-
-interface MessageGroup {
-  key: string
-  kind: ChannelMessage['kind']
-  senderId: string
-  email?: string
-  messages: ChannelMessage[]
-}
-
-function senderKey(m: ChannelMessage): string {
-  return m.kind === 'thing' ? 'thing' : m.kind === 'system' ? 'system' : (m.userId ?? m.email ?? 'unknown')
-}
-
-function sameSender(a: ChannelMessage, b: ChannelMessage): boolean {
-  return a.kind === b.kind && senderKey(a) === senderKey(b)
-}
-
-/** Whether `cur` should get its own avatar/name/timestamp header, vs. stacking
- * quietly under the previous message's header (Slack-style run collapsing). */
-function showsHeader(prev: ChannelMessage | undefined, cur: ChannelMessage): boolean {
-  if (!prev) return true
-  if (!sameSender(prev, cur)) return true
-  return new Date(cur.ts).getTime() - new Date(prev.ts).getTime() >= GROUP_WINDOW_MS
-}
-
-/**
- * Fold a run of consecutive same-sender messages (within GROUP_WINDOW_MS)
- * into one group — one avatar/header, several message bodies underneath.
- *
- * Only safe for REPLIES: a reply can never itself be a thread root (this data
- * model has no reply-to-a-reply), so collapsing several into one header loses
- * no per-message affordance. Root messages are rendered individually instead
- * (see `showsHeader`) because any one of them can be its own thread with its
- * own replies — grouping them would hide that on every message but the last.
- */
-function groupMessages(msgs: ChannelMessage[]): MessageGroup[] {
-  const groups: MessageGroup[] = []
-  for (const m of msgs) {
-    const senderId = senderKey(m)
-    const last = groups[groups.length - 1]
-    const lastMsg = last?.messages[last.messages.length - 1]
-    if (last && lastMsg && showsHeader(lastMsg, m) === false) {
-      last.messages.push(m)
-    } else {
-      groups.push({ key: m.id, kind: m.kind, senderId, email: m.email, messages: [m] })
-    }
-  }
-  return groups
-}
-
 function ChannelsPage() {
   const { teamId } = useParams({ from: '/team/$teamId' })
   const team = useTeamAuth()
-  const [channels, setChannels] = useState<Channel[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChannelMessage[]>([])
-  const [draft, setDraft] = useState('')
-  const [thread, setThread] = useState<string | null>(null)
-  const [thinking, setThinking] = useState<Set<string>>(new Set())
-  const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map()) // userId -> channelId
-  const [error, setError] = useState<string | null>(null)
-  const [newChannel, setNewChannel] = useState('')
-  const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const navigate = useNavigate()
+  const search = useSearch({ from: '/team/$teamId/channels' })
+  const [fallbackId, setFallbackId] = useState<string | null>(null)
+  const activeId = search.channel ?? fallbackId
+  const chat = useTeamChat(team, activeId)
+  const meId = chat.meId
+  const transcriptRef = useRef<HTMLDivElement>(null)
 
-  // Load channels once the team pod is reachable.
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await podFetch(team, '/api/team/channels')
-        if (!res.ok) throw new Error(`channels: ${res.status}`)
-        const data = (await res.json()) as { channels: Channel[] }
-        if (cancelled) return
-        setChannels(data.channels)
-        setActiveId((current) => current ?? data.channels[0]?.id ?? null)
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [team, teamId])
+  const isEditor = team.role === 'editor'
 
-  // History for the selected channel.
-  useEffect(() => {
-    if (!activeId) return
-    let cancelled = false
-    setMessages([])
-    setThread(null)
-    void (async () => {
-      try {
-        const res = await podFetch(team, `/api/team/channels/${activeId}/messages`)
-        if (!res.ok) throw new Error(`history: ${res.status}`)
-        const data = (await res.json()) as { messages: ChannelMessage[] }
-        if (!cancelled) setMessages(data.messages)
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [activeId, team])
-
-  // One socket for the whole surface: the pod broadcasts every channel's events
-  // and we keep the ones for the channel on screen.
-  useEffect(() => {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${proto}//${window.location.host}/api/team/ws?t=1${teamWsTokenSuffix(team)}`
-    let ws: WebSocket
-    try {
-      ws = new WebSocket(url)
-    } catch {
-      return
-    }
-    ws.onmessage = (event) => {
-      let parsed: ChannelEvent
-      try {
-        parsed = JSON.parse(String(event.data)) as ChannelEvent
-      } catch {
-        return
-      }
-      if (parsed.type === 'message') {
-        const incoming = parsed.message
-        setMessages((prev) =>
-          prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming],
-        )
-        setTypingUsers((prev) => {
-          if (!incoming.userId || !prev.has(incoming.userId)) return prev
-          const next = new Map(prev)
-          next.delete(incoming.userId)
-          return next
-        })
-      } else if (parsed.type === 'thing_status') {
-        setThinking((prev) => {
-          const next = new Set(prev)
-          if (parsed.status === 'running') next.add(parsed.threadId)
-          else next.delete(parsed.threadId)
-          return next
-        })
-      } else if (parsed.type === 'typing') {
-        setTypingUsers((prev) => new Map(prev).set(parsed.userId, parsed.channelId))
-        const existing = typingTimers.current.get(parsed.userId)
-        if (existing) clearTimeout(existing)
-        typingTimers.current.set(
-          parsed.userId,
-          setTimeout(() => {
-            setTypingUsers((prev) => {
-              const next = new Map(prev)
-              next.delete(parsed.userId)
-              return next
-            })
-            typingTimers.current.delete(parsed.userId)
-          }, TYPING_TTL_MS),
-        )
-      }
-    }
-    const timers = typingTimers.current
-    return () => {
-      ws.close()
-      timers.forEach((t) => clearTimeout(t))
-      timers.clear()
-    }
-  }, [team])
-
-  const adjustHeight = useCallback(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 180)}px`
-  }, [])
-
-  const send = useCallback(async () => {
-    const text = draft.trim()
-    if (!text || !activeId) return
-    setDraft('')
-    requestAnimationFrame(adjustHeight)
-    try {
-      const res = await podFetch(team, `/api/team/channels/${activeId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ text, ...(thread ? { threadId: thread } : {}) }),
+  // The channel and the rail live in the URL, so "here, look at this" pastes
+  // into the same view rather than the other person's default one.
+  const setSearch = useCallback(
+    (next: { channel?: string; thread?: string; app?: string }) => {
+      void navigate({
+        to: '/team/$teamId/channels',
+        params: { teamId },
+        search: next,
+        replace: true,
       })
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(body.error ?? `send failed (${res.status})`)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      setDraft(text)
-    }
-  }, [draft, activeId, thread, team, adjustHeight])
-
-  const createChannel = async () => {
-    const name = newChannel.trim()
-    if (!name) return
-    try {
-      const res = await podFetch(team, '/api/team/channels', {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      })
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(body.error ?? `could not create the channel (${res.status})`)
-      }
-      const data = (await res.json()) as { channel: Channel }
-      setNewChannel('')
-      setChannels((prev) =>
-        prev.some((c) => c.id === data.channel.id) ? prev : [...prev, data.channel],
-      )
-      setActiveId(data.channel.id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  // A channel-level message opens its own thread; replies hang off it.
-  const visible = useMemo(
-    () => messages.filter((m) => m.channelId === activeId),
-    [messages, activeId],
+    },
+    [navigate, teamId],
   )
-  const roots = useMemo(() => visible.filter((m) => !m.threadId), [visible])
+
+  // Land on a channel when the URL names none — the first named one, since a
+  // direct message is a poor thing to open somebody into by default.
+  useEffect(() => {
+    if (search.channel || fallbackId || !chat.channels.length) return
+    setFallbackId(chat.channels.find((c) => c.kind !== 'dm')?.id ?? chat.channels[0]!.id)
+  }, [search.channel, fallbackId, chat.channels])
+
+  const rail: Rail = search.thread
+    ? { kind: 'thread', threadId: search.thread }
+    : search.app
+      ? { kind: 'app', projectId: search.app }
+      : null
+
+  // A thread belongs to the channel it is in, so switching channels closes it.
+  // A pinned app does not survive the move either — it is pinned to the channel
+  // you just left.
+  const selectChannel = (channelId: string) => setSearch({ channel: channelId })
+  const openThread = (threadId: string) =>
+    setSearch({ ...(activeId ? { channel: activeId } : {}), thread: threadId })
+  const openApp = useCallback(
+    (projectId: string) => setSearch({ ...(activeId ? { channel: activeId } : {}), app: projectId }),
+    [setSearch, activeId],
+  )
+  const closeRail = () => setSearch({ ...(activeId ? { channel: activeId } : {}) })
+
+  const channel = useMemo(
+    () => chat.channels.find((c) => c.id === activeId),
+    [chat.channels, activeId],
+  )
+
+  const ctx: MessageContext = useMemo(
+    () => ({
+      members: chat.directory.members,
+      appProjects: new Set(chat.directory.projects.filter((p) => p.hasApp).map((p) => p.id)),
+      onOpenApp: openApp,
+    }),
+    [chat.directory, openApp],
+  )
+
+  // An app THING just built opens beside the person who ASKED for it. Everyone
+  // else gets the tab in the header and the card in the thread — an offer, not a
+  // pane thrown open over work they were in the middle of.
+  const lastMessageId = chat.messages[chat.messages.length - 1]?.id
+  useEffect(() => {
+    const last = chat.messages[chat.messages.length - 1]
+    if (!last?.app) return
+    // The card is threaded under the message that asked for it, so the root of
+    // its thread is who asked.
+    const ask = chat.messages.find((m) => m.id === last.threadId)
+    if (ask?.userId === meId) openApp(last.app.projectId)
+    // Keyed on the last message's id ALONE, deliberately: this must fire on the
+    // ARRIVAL of a card, not on every re-render that happens to have one at the
+    // end — which is what depending on `chat.messages` would do, reopening a
+    // pane the member had just closed.
+  }, [lastMessageId])
+
+  // Follow the conversation, the way a chat surface is expected to.
+  useEffect(() => {
+    const el = transcriptRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [chat.messages.length, activeId])
+
+  const roots = useMemo(() => chat.messages.filter((m) => !m.threadId), [chat.messages])
   const repliesOf = useCallback(
-    (rootId: string) => visible.filter((m) => m.threadId === rootId),
-    [visible],
+    (rootId: string) => chat.messages.filter((m) => m.threadId === rootId),
+    [chat.messages],
   )
 
-  // Best-effort display name for a typing indicator: the most recent message
-  // seen from that user in this channel.
-  const emailByUserId = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const m of visible) if (m.userId && m.email) map.set(m.userId, m.email)
-    return map
-  }, [visible])
-  const typingInChannel = useMemo(
-    () =>
-      [...typingUsers.entries()]
-        .filter(([, channelId]) => channelId === activeId)
-        .map(([userId]) => emailByUserId.get(userId) ?? 'Someone'),
-    [typingUsers, activeId, emailByUserId],
-  )
+  const title = channelTitle(channel, chat.directory.members, meId)
 
   return (
-    <Prim.Row height="100%">
-      <Prim.Col
-        width={200}
-        borderRightWidth={1}
-        borderColor="$border"
-        padding="$2"
-        gap="$0.5"
-        overflow="auto"
-      >
-        {channels.map((channel) => (
-          <ListItem
-            key={channel.id}
-            selected={channel.id === activeId}
-            onClick={() => setActiveId(channel.id)}
+    <Prim.Row height="100%" minWidth={0}>
+      <ChannelSidebar
+        channels={chat.channels}
+        categories={chat.categories}
+        members={chat.directory.members}
+        meId={meId}
+        activeId={activeId}
+        isEditor={isEditor}
+        onSelect={selectChannel}
+        onCreateChannel={(name, categoryId) => void chat.createChannel(name, categoryId)}
+        onCreateCategory={(name) => void chat.createCategory(name)}
+        onDeleteCategory={(id) => void chat.deleteCategory(id)}
+        onMoveChannel={(channelId, categoryId) => void chat.patchChannel(channelId, { categoryId })}
+        onOpenDm={(userId) => {
+          void chat.openDm(userId).then((channel) => channel && selectChannel(channel.id))
+        }}
+      />
+
+      <Prim.Col flex={1} minWidth={0} height="100%">
+        <ChannelHeader
+          channel={channel}
+          title={title}
+          {...(channel?.kind === 'dm' ? { subtitle: 'Direct message' } : {})}
+          projects={chat.directory.projects}
+          rail={rail}
+          isEditor={isEditor}
+          onOpenApp={openApp}
+          onAttachApp={(projectId) => {
+            void chat.patchChannel(activeId!, { apps: [...(channel?.apps ?? []), projectId] })
+            openApp(projectId)
+          }}
+          onDetachApp={(projectId) => {
+            void chat.patchChannel(activeId!, {
+              apps: (channel?.apps ?? []).filter((id) => id !== projectId),
+            })
+            if (rail?.kind === 'app' && rail.projectId === projectId) closeRail()
+          }}
+        />
+
+        {chat.error ? (
+          <Prim.Row
+            alignItems="center"
+            gap="$2"
+            paddingHorizontal="$4"
+            paddingVertical="$2"
+            backgroundColor="color-mix(in srgb, var(--destructive) 12%, transparent)"
           >
-            <Hash size={14} aria-hidden={true} />
-            <Prim.Text fontSize="$sm" marginLeft="$1.5">
-              {channel.name}
+            <Prim.Text color="$destructive" fontSize="$xs" flex={1} minWidth={0}>
+              {chat.error}
             </Prim.Text>
-          </ListItem>
-        ))}
-        {team.role === 'editor' ? (
-          <Prim.Row gap="$1" marginTop="$2" paddingHorizontal="$1">
-            <Input
-              size="sm"
-              value={newChannel}
-              onChange={(e) => setNewChannel(e.target.value)}
-              placeholder="New channel"
-              flex={1}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void createChannel()
-              }}
-            />
-            <Button size="icon" variant="ghost" onClick={() => void createChannel()}>
-              <Plus size={14} aria-hidden={true} />
+            <Button size="icon" variant="ghost" onClick={chat.dismissError} aria-label="Dismiss">
+              <X size={12} aria-hidden={true} />
             </Button>
           </Prim.Row>
         ) : null}
-      </Prim.Col>
 
-      <Prim.Col flex={1} minWidth={0}>
-        {error ? (
-          <Prim.Text color="$destructive" fontSize="$xs" padding="$2">
-            {error}
-          </Prim.Text>
-        ) : null}
-        <Prim.Col flex={1} overflow="auto" padding="$4" gap="$4">
+        <Prim.Col ref={transcriptRef} flex={1} minHeight={0} overflow="auto" padding="$4" gap="$4">
           {roots.length === 0 ? (
-            <Prim.Text color="$muted-foreground" fontSize="$sm">
-              Nothing here yet. Say something — mention @thing to bring THING in.
-            </Prim.Text>
+            <Prim.Col alignItems="center" justifyContent="center" flex={1} gap="$1">
+              <Prim.Text fontSize="$sm" color="$muted-foreground">
+                {channel?.kind === 'dm'
+                  ? `This is the start of your conversation with ${title}.`
+                  : `This is the start of #${title}.`}
+              </Prim.Text>
+              <Caption>Say something — mention @thing to bring THING in.</Caption>
+            </Prim.Col>
           ) : null}
           {roots.map((root, i) => {
             const replies = repliesOf(root.id)
-            const replyGroups = groupMessages(replies)
             return (
               <Prim.Col key={root.id} gap="$1">
-                <MessageRow message={root} showHeader={showsHeader(roots[i - 1], root)} />
-                {replyGroups.length > 0 || thinking.has(root.id) ? (
-                  <Prim.Col marginLeft="$8" paddingLeft="$3" gap="$3">
-                    <Separator />
-                    {replyGroups.map((rg) => (
-                      <MessageGroupView key={rg.key} group={rg} />
-                    ))}
-                    {thinking.has(root.id) ? <TypingStrip labels={['THING']} /> : null}
-                  </Prim.Col>
-                ) : null}
-                <Prim.Pressable
-                  onClick={() => setThread(thread === root.id ? null : root.id)}
-                  alignSelf="flex-start"
-                  marginLeft="$11"
-                >
-                  <Prim.Text fontSize="$xs" color="$muted-foreground">
-                    {thread === root.id ? 'replying in thread — cancel' : 'reply in thread'}
-                  </Prim.Text>
-                </Prim.Pressable>
+                <MessageRow message={root} showHeader={showsHeader(roots[i - 1], root)} ctx={ctx} />
+                <ThreadSummary
+                  replies={replies}
+                  busy={chat.thinking.has(root.id)}
+                  onOpen={() => openThread(root.id)}
+                  ctx={ctx}
+                />
               </Prim.Col>
             )
           })}
         </Prim.Col>
 
-        {typingInChannel.length > 0 ? <TypingStrip labels={typingInChannel} /> : null}
+        {chat.typingHere.length > 0 ? <TypingStrip labels={chat.typingHere} /> : null}
 
-        <Prim.Row gap="$2" padding="$3" borderTopWidth={1} borderColor="$border" alignItems="flex-end">
-          <Textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value)
-              adjustHeight()
-            }}
-            placeholder={
-              thread ? 'Reply in thread… (@thing to ask THING)' : 'Message… (@thing to ask THING)'
-            }
-            flex={1}
-            rows={1}
-            minHeight="$9"
-            resize="none"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                void send()
-              }
-            }}
-          />
-          <Button size="icon" onClick={() => void send()} disabled={!draft.trim()}>
-            <Send size={14} aria-hidden={true} />
-          </Button>
-        </Prim.Row>
+        <Composer
+          placeholder={
+            channel?.kind === 'dm'
+              ? `Message ${title}… (@thing to ask THING)`
+              : `Message #${title}… (@thing to ask THING)`
+          }
+          directory={chat.directory}
+          meId={meId}
+          disabled={!activeId}
+          onTyping={() => activeId && chat.notifyTyping(activeId)}
+          onSend={(text) => chat.send(text)}
+        />
       </Prim.Col>
-    </Prim.Row>
-  )
-}
 
-/** A pulsing-dot strip above the composer — mirrors the chat surface's
- * LiveActivity treatment for "something is happening" (THING thinking, or a
- * teammate typing), kept out of the transcript itself. */
-function TypingStrip({ labels }: { labels: string[] }) {
-  const text =
-    labels.length === 1
-      ? `${labels[0]} is typing…`
-      : labels.length === 2
-        ? `${labels[0]} and ${labels[1]} are typing…`
-        : `${labels.length} people are typing…`
-  return (
-    <Prim.Row
-      gap="$1.5"
-      alignItems="center"
-      paddingHorizontal="$4"
-      paddingVertical="$1"
-      fontSize="$xs"
-      color="$muted-foreground"
-    >
-      <Prim.Text className="lm-pulse" color="$primary">
-        ●
-      </Prim.Text>
-      <Prim.Text fontSize="$xs" color="$muted-foreground">
-        {text}
-      </Prim.Text>
+      {rail?.kind === 'thread' ? (
+        <ThreadRail
+          root={chat.messages.find((m) => m.id === rail.threadId)}
+          replies={repliesOf(rail.threadId)}
+          busy={chat.thinking.has(rail.threadId)}
+          directory={chat.directory}
+          meId={meId}
+          ctx={ctx}
+          onClose={closeRail}
+          onSend={(text) => chat.send(text, rail.threadId)}
+          onTyping={() => activeId && chat.notifyTyping(activeId)}
+        />
+      ) : null}
+
+      {rail?.kind === 'app' ? (
+        <RailPane
+          title={
+            chat.directory.projects.find((p) => p.id === rail.projectId)?.name ?? rail.projectId
+          }
+          icon={<AppWindow size={14} aria-hidden={true} />}
+          headerExtra={<OpenAppExternally projectId={rail.projectId} />}
+          onClose={closeRail}
+        >
+          <AppFrame
+            projectId={rail.projectId}
+            name={
+              chat.directory.projects.find((p) => p.id === rail.projectId)?.name ?? rail.projectId
+            }
+          />
+        </RailPane>
+      ) : null}
     </Prim.Row>
   )
 }
 
 /**
- * The body of one channel message.
+ * A thread, in the rail: the message that started it, then every reply, then a
+ * composer of its own.
  *
- * THING answers in JSX, so a `thing` message is usually a tree of design-system
- * components, not a paragraph — it carries `blocks`, and those go through the
- * SAME `renderDescriptor` the `/chat` transcript uses, so an answer looks the
- * same wherever it is read and works on both targets (the renderer draws
- * `@lmthing/ui` primitives, which fork per platform; there is no DOM in it).
- *
- * `blocks` is recent, and the channel log is append-only, so a thread from
- * before it existed still holds the descriptor stringified into `text` — parse
- * that back rather than showing a member the braces forever.
- *
- * A member's own message is prose and stays prose: rendering a colleague's text
- * as markdown would let a stray `#` or `_` restyle what they typed.
+ * This is the Slack shape, and the reason for it is that a thread is a
+ * conversation about one message — inlining it under the message meant a busy
+ * thread pushed the channel apart and a reader lost the channel's own thread of
+ * argument between two long tangents.
  */
-function MessageBody({ message }: { message: ChannelMessage }) {
-  const blocks = message.blocks?.length ? message.blocks : null
-  const legacy = blocks ? null : toRenderableDescriptor(message.text)
-  const descriptors = blocks ?? legacy
-
-  if (descriptors) {
-    return <Prim.Col gap="$1">{renderDescriptor(descriptors)}</Prim.Col>
-  }
-  if (message.kind === 'thing') {
-    return <Markdown source={message.text} preset="prose" />
-  }
-  return (
-    <Prim.Text fontSize="$sm" whiteSpace="pre-wrap">
-      {message.text}
-    </Prim.Text>
-  )
-}
-
-function SenderAvatar({ kind, senderId, email }: { kind: ChannelMessage['kind']; senderId: string; email?: string }) {
-  if (kind === 'thing') {
-    return (
-      <Prim.Text
-        backgroundColor="color-mix(in srgb, var(--brand-2) 20%, transparent)"
-        flexShrink={0}
-        width="$8"
-        height="$8"
-        borderRadius="$radius-full"
-        alignItems="center"
-        justifyContent="center"
-        fontSize="$sm"
-        userSelect="none"
-        display="flex"
-        aria-hidden="true"
-      >
-        ✦
-      </Prim.Text>
-    )
-  }
-  return (
-    <Avatar size="sm">
-      <AvatarFallback colorKey={senderId}>{initials(email ?? senderId)}</AvatarFallback>
-    </Avatar>
-  )
-}
-
-/** The avatar/name/timestamp row shared by a single root message and a
- * collapsed reply group. */
-function MessageHeader({
-  kind,
-  senderId,
-  email,
-  ts,
+function ThreadRail({
+  root,
+  replies,
+  busy,
+  directory,
+  meId,
+  ctx,
+  onClose,
+  onSend,
+  onTyping,
 }: {
-  kind: ChannelMessage['kind']
-  senderId: string
-  email?: string
-  ts: string
+  root: ChannelMessage | undefined
+  replies: ChannelMessage[]
+  busy: boolean
+  directory: ReturnType<typeof useTeamChat>['directory']
+  meId: string
+  ctx: MessageContext
+  onClose: () => void
+  onSend: (text: string) => Promise<void>
+  onTyping: () => void
 }) {
-  const who = kind === 'thing' ? 'THING' : (email ?? senderId)
+  const groups = useMemo(() => groupMessages(replies), [replies])
   return (
-    <Prim.Row alignItems="baseline" gap="$2">
-      <Prim.Text fontSize="$sm" fontWeight="$medium" color={kind === 'thing' ? '$primary' : '$foreground'}>
-        {who}
-      </Prim.Text>
-      <Prim.Text fontSize="$xs" color="$muted-foreground">
-        {relativeTime(new Date(ts).getTime())}
-      </Prim.Text>
-    </Prim.Row>
+    <RailPane title="Thread" icon={<MessageSquare size={14} aria-hidden={true} />} onClose={onClose}>
+      <Prim.Col flex={1} minHeight={0} overflow="auto" padding="$3" gap="$3">
+        {root ? <MessageRow message={root} showHeader={true} ctx={ctx} /> : null}
+        <Prim.Row alignItems="center" gap="$2">
+          <Prim.Box flex={1} height={1} backgroundColor="$border" />
+          <Caption>
+            {replies.length === 0
+              ? 'No replies yet'
+              : replies.length === 1
+                ? '1 reply'
+                : `${replies.length} replies`}
+          </Caption>
+          <Prim.Box flex={1} height={1} backgroundColor="$border" />
+        </Prim.Row>
+        {groups.map((group) => (
+          <MessageGroupView key={group.key} group={group} ctx={ctx} />
+        ))}
+        {busy ? <TypingStrip labels={['THING']} /> : null}
+      </Prim.Col>
+      <Composer
+        placeholder="Reply in thread… (@thing to ask THING)"
+        directory={directory}
+        meId={meId}
+        onTyping={onTyping}
+        onSend={onSend}
+      />
+    </RailPane>
   )
 }
 
-/** A body row, with a header (avatar/name/timestamp) only when `showHeader` —
- * used for ROOT messages, one per exact message so thread affordance never
- * gets lost to visual grouping (see `groupMessages`'s docstring). */
-function MessageRow({ message, showHeader }: { message: ChannelMessage; showHeader: boolean }) {
-  if (message.kind === 'system') {
-    return (
-      <Prim.Text fontSize="$xs" color="$muted-foreground" fontStyle="italic" textAlign="center">
-        {message.text}
-      </Prim.Text>
-    )
-  }
-  if (!showHeader) {
-    return (
-      <Prim.Box paddingLeft="$11">
-        <MessageBody message={message} />
-      </Prim.Box>
-    )
-  }
-  return (
-    <Prim.Row gap="$3" alignItems="flex-start">
-      <SenderAvatar kind={message.kind} senderId={senderKey(message)} email={message.email} />
-      <Prim.Col flex={1} minWidth={0} gap="$1">
-        <MessageHeader kind={message.kind} senderId={senderKey(message)} email={message.email} ts={message.ts} />
-        <MessageBody message={message} />
-      </Prim.Col>
-    </Prim.Row>
-  )
-}
-
-/** A collapsed run of consecutive same-sender REPLIES under one header — safe
- * because a reply can't itself have a thread (see `groupMessages`). */
-function MessageGroupView({ group }: { group: MessageGroup }) {
-  if (group.kind === 'system') {
-    return (
-      <Prim.Col gap="$0.5" alignItems="center">
-        {group.messages.map((m) => (
-          <Prim.Text key={m.id} fontSize="$xs" color="$muted-foreground" fontStyle="italic">
-            {m.text}
-          </Prim.Text>
-        ))}
-      </Prim.Col>
-    )
-  }
-  const first = group.messages[0]
-  return (
-    <Prim.Row gap="$3" alignItems="flex-start">
-      <SenderAvatar kind={group.kind} senderId={group.senderId} email={group.email} />
-      <Prim.Col flex={1} minWidth={0} gap="$1">
-        <MessageHeader kind={group.kind} senderId={group.senderId} email={group.email} ts={first.ts} />
-        {group.messages.map((m) => (
-          <MessageBody key={m.id} message={m} />
-        ))}
-      </Prim.Col>
-    </Prim.Row>
+/** A named channel is its name; a DM is whoever it is with. */
+function channelTitle(
+  channel: { kind?: string; name: string; members?: string[] } | undefined,
+  members: ReturnType<typeof useTeamChat>['directory']['members'],
+  meId: string,
+): string {
+  if (!channel) return 'Channels'
+  if (channel.kind !== 'dm') return channel.name
+  const partnerId = dmPartner(channel as never, meId)
+  return memberLabel(
+    members.find((m) => m.userId === partnerId),
+    partnerId ?? 'Direct message',
   )
 }
 
 export const Route = createFileRoute('/team/$teamId/channels')({
+  /**
+   * The channel on screen and what the rail is showing are URL state, not
+   * component state: a member pastes a link to "this thread" or "this app beside
+   * this channel" and the other end lands on the same view.
+   */
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...(typeof search['channel'] === 'string' ? { channel: search['channel'] } : {}),
+    ...(typeof search['thread'] === 'string' ? { thread: search['thread'] } : {}),
+    ...(typeof search['app'] === 'string' ? { app: search['app'] } : {}),
+  }),
   component: ChannelsPage,
 })

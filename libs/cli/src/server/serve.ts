@@ -46,7 +46,10 @@ import {
 } from './routes/app-admin.js';
 import { handleListApps, handleInstallApp } from './routes/apps.js';
 import {
-  handleListChannels, handleCreateChannel, handleListMessages, handlePostMessage,
+  handleListChannels, handleCreateChannel, handlePatchChannel, handleCreateDm,
+  handleListCategories, handleCreateCategory, handlePatchCategory, handleDeleteCategory,
+  handleDirectory, handleGetProfile, handlePutProfile,
+  handleListMessages, handlePostMessage,
 } from './routes/team-channels.js';
 import { guardRequest, guardWebSocket, isTeamMode } from './team-guard.js';
 import { handleListStoreSpaces, handleInstallStoreSpace, handleListProjectIntegrations } from './routes/store-spaces.js';
@@ -218,13 +221,23 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
 
   // Team channels — the shared chat surface, registered ONLY on a team pod so a
   // personal pod's API is byte-identical to what it was before teams existed.
-  // Creating a channel is configuring the team, so team-guard makes it
-  // editor-only; posting and reading are open to every member.
+  // Structuring the team (channels, categories) is configuring it, so team-guard
+  // makes those editor-only; reading, posting, opening a DM and setting your own
+  // handle are open to every member.
   if (isTeamMode()) {
     router.add('GET', '/api/team/channels', handleListChannels(effectiveLmthingRoot));
     router.add('POST', '/api/team/channels', handleCreateChannel(effectiveLmthingRoot));
+    router.add('PATCH', '/api/team/channels/:channelId', handlePatchChannel(effectiveLmthingRoot));
     router.add('GET', '/api/team/channels/:channelId/messages', handleListMessages(effectiveLmthingRoot));
     router.add('POST', '/api/team/channels/:channelId/messages', handlePostMessage(manager, effectiveLmthingRoot));
+    router.add('POST', '/api/team/dms', handleCreateDm(effectiveLmthingRoot));
+    router.add('GET', '/api/team/categories', handleListCategories(effectiveLmthingRoot));
+    router.add('POST', '/api/team/categories', handleCreateCategory(effectiveLmthingRoot));
+    router.add('PATCH', '/api/team/categories/:categoryId', handlePatchCategory(effectiveLmthingRoot));
+    router.add('DELETE', '/api/team/categories/:categoryId', handleDeleteCategory(effectiveLmthingRoot));
+    router.add('GET', '/api/team/directory', handleDirectory(effectiveLmthingRoot));
+    router.add('GET', '/api/team/profile', handleGetProfile(effectiveLmthingRoot));
+    router.add('PUT', '/api/team/profile', handlePutProfile(effectiveLmthingRoot));
   }
 
   // Per-session routes (DELETE session + all sub-routes via catch-all)

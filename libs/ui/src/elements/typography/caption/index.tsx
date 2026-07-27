@@ -17,7 +17,11 @@ function Caption({ muted, ...props }: CaptionProps) {
     <Prim.Text
       fontSize="$xs"
       color={muted ? 'color-mix(in srgb, var(--muted-foreground) 70%, transparent)' : '$muted-foreground'}
-      lineHeight={1.375}
+      // A bare number here compiles to `1.375px` (not a unitless ×1.375 multiplier) under this
+      // component's styling engine, which appends `px` to any raw number regardless of property —
+      // unlike a browser's own unitless-lineHeight allowance. `em` keeps the same visual ratio
+      // (relative to Caption's own font-size) while resolving correctly.
+      lineHeight="1.375em"
       {...(props as Record<string, unknown>)}
     />
   )

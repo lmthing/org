@@ -23,6 +23,7 @@ import {
 import { Trash2 } from 'lucide-react'
 import { STRIPE_PUBLISHABLE_KEY } from '@/lib/config'
 import { teamApi, type TeamBillingUsage } from '@/lib/team-api'
+import { teamPod } from '@/lib/team-pod'
 import { useTeamAuth } from '@/lib/team-auth'
 
 /**
@@ -46,6 +47,98 @@ const UPGRADE_TIERS = [
 ] as const
 
 const stripePromise = STRIPE_PUBLISHABLE_KEY ? loadStripe(STRIPE_PUBLISHABLE_KEY) : null
+
+/**
+ * What you are called in this team, and the `@handle` colleagues type to reach
+ * you.
+ *
+ * First on the page, and open to a viewer as well as an editor, because it is
+ * the one section here that is about the MEMBER rather than the team — a viewer
+ * who cannot be addressed cannot really be talked to, and everything below this
+ * is configuration they are only reading.
+ *
+ * It talks to the team's POD (`/api/team/profile`), not the gateway: a handle is
+ * per-team, so the same person is `@ana` in one team and `@ana.k` in another,
+ * and the gateway's membership row has no business holding it.
+ */
+function YourProfile({ team }: { team: ReturnType<typeof useTeamAuth> }) {
+  const [handle, setHandle] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const { profile } = await teamPod.profile(team)
+        if (cancelled) return
+        setHandle(profile?.handle ?? '')
+        setDisplayName(profile?.displayName ?? '')
+      } catch {
+        /* an unreachable pod is already reported by the surrounding page */
+      } finally {
+        if (!cancelled) setLoaded(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [team])
+
+  const save = async () => {
+    setBusy(true)
+    setError(null)
+    setSaved(false)
+    try {
+      await teamPod.setProfile(team, { handle: handle.trim() || null, displayName: displayName.trim() || null })
+      setSaved(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Prim.Box marginBottom="$6">
+      <Heading level={4} marginBottom="$1">
+        Your profile
+      </Heading>
+      <Caption>How you appear in this team, and the handle colleagues type to reach you.</Caption>
+      <Prim.Row gap="$2" marginTop="$3" alignItems="flex-start">
+        <Prim.Col flex={1} gap="$1">
+          <Input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Display name"
+            disabled={!loaded}
+          />
+        </Prim.Col>
+        <Prim.Col flex={1} gap="$1">
+          <Input
+            value={handle}
+            onChange={(e) => setHandle(e.target.value.replace(/^@+/, '').toLowerCase())}
+            placeholder="handle"
+            disabled={!loaded}
+          />
+          <Caption>{handle ? `Mentioned as @${handle}` : 'Without one, nobody can @-mention you.'}</Caption>
+        </Prim.Col>
+        <Button onClick={() => void save()} disabled={busy || !loaded}>
+          Save
+        </Button>
+      </Prim.Row>
+      {error ? (
+        <Caption color="$destructive" marginTop="$2">
+          {error}
+        </Caption>
+      ) : null}
+      {saved && !error ? <Caption marginTop="$2">Saved.</Caption> : null}
+    </Prim.Box>
+  )
+}
 
 function SettingsPage() {
   const { teamId } = useParams({ from: '/team/$teamId' })
@@ -145,6 +238,12 @@ function SettingsPage() {
         </Caption>
       ) : null}
       {notice ? <Caption marginBottom="$3">{notice}</Caption> : null}
+
+      <YourProfile team={team} />
+
+      <Prim.Box marginBottom="$6">
+        <Separator />
+      </Prim.Box>
 
       <Prim.Box marginBottom="$6">
         <Heading level={4} marginBottom="$2">

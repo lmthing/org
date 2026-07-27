@@ -74,6 +74,12 @@ const VIEWER_ALLOWED: ReadonlyArray<{ method: string; path: RegExp; why: string 
   // Talking in a channel — the point of the team chat surface.
   { method: 'POST', path: /^\/api\/team\/channels\/[^/]+\/messages$/, why: 'post to a channel' },
   { method: 'POST', path: /^\/api\/team\/channels\/[^/]+\/read$/, why: 'mark a channel read' },
+  // Choosing what you are called is not configuring the team, and a viewer with
+  // no handle cannot be addressed by the colleagues they are here to talk to.
+  { method: 'PUT', path: /^\/api\/team\/profile$/, why: 'set your own handle' },
+  // Opening a direct message. A DM is between two people and grants nothing
+  // beyond itself — refusing viewers would make the surface one-way for them.
+  { method: 'POST', path: /^\/api\/team\/dms$/, why: 'open a direct message' },
   // Attachments for those messages, and the keep-warm ping.
   { method: 'POST', path: /^\/api\/uploads$/, why: 'attach a file to a message' },
   { method: 'POST', path: /^\/api\/keepalive$/, why: 'keep the workspace warm' },

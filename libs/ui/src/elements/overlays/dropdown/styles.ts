@@ -22,11 +22,13 @@ export const DROPDOWN_CONTENT_SHARED = {
   minWidth: '$32',
   // Anchor to the trigger's right edge, extending leftward, not the left edge
   // extending rightward. Every trigger this component has today is a trailing
-  // icon button (a row's "⋮" menu) sitting near the right edge of its row —
-  // opening rightward runs the panel past whatever ancestor scroll container
-  // clips it. This isn't full collision-aware positioning (there is no portal
-  // here — see the module docstring), just the right default for the shape
-  // every current call site actually has.
+  // icon button (a row's "⋮" menu) sitting near the right edge of its row, so a
+  // panel growing rightward runs off the end of that row.
+  //
+  // This is what NATIVE uses. The web fork portals the panel to the document and
+  // computes `left`/`top` from the trigger's measured rect instead (see
+  // `./index.tsx`), because an in-flow absolute panel is clipped by any ancestor
+  // that scrolls — which every real call site turned out to have.
   right: 0,
   overflow: 'hidden',
   borderRadius: '$radius-md',
