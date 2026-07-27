@@ -44,7 +44,8 @@ export interface TeamDetail {
 export interface TeamBudgetWindow {
   duration: string
   max_budget: number
-  spend: number
+  /** `null` when LiteLLM has no per-window spend figure yet. */
+  spend: number | null
 }
 
 export interface TeamBillingUsage {

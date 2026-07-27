@@ -127,9 +127,13 @@ function SpacesList() {
         Spaces
       </Heading>
       {isLoadingSpaces ? (
-        <Caption>Loading…</Caption>
+        <Prim.Box marginBottom="$2">
+          <Caption>Loading…</Caption>
+        </Prim.Box>
       ) : spaces.length === 0 ? (
-        <Caption>No spaces yet.</Caption>
+        <Prim.Box marginBottom="$2">
+          <Caption>No spaces yet.</Caption>
+        </Prim.Box>
       ) : (
         <Card marginBottom="$2">
           {spaces.map((space, i) => (

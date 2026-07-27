@@ -176,13 +176,16 @@ function SettingsPage() {
             </Prim.Row>
             <Prim.Col gap="$2">
               {usage.budgets.map((b) => {
-                const pct = b.max_budget > 0 ? Math.min(100, (b.spend / b.max_budget) * 100) : 0
+                // LiteLLM doesn't always have a per-window spend figure yet — `spend`
+                // can be `null` even though `max_budget` is always set.
+                const spend = b.spend ?? 0
+                const pct = b.max_budget > 0 ? Math.min(100, (spend / b.max_budget) * 100) : 0
                 return (
                   <Prim.Box key={b.duration}>
                     <Prim.Row justifyContent="space-between" marginBottom="$1">
                       <Caption>{b.duration} window</Caption>
                       <Caption>
-                        ${b.spend.toFixed(2)} / ${b.max_budget.toFixed(2)}
+                        {b.spend === null ? '—' : `$${spend.toFixed(2)}`} / ${b.max_budget.toFixed(2)}
                       </Caption>
                     </Prim.Row>
                     <Prim.Box backgroundColor="$muted" borderRadius="$radius-full" height="$1.5" overflow="hidden">

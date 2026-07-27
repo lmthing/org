@@ -152,7 +152,7 @@ function MembersPage() {
               </Avatar>
               <Prim.Box flex={1} minWidth={0} marginLeft="$3">
                 <Prim.Text fontSize="$sm">{member.email}</Prim.Text>
-                {member.user_id === session?.userId ? <Caption>you</Caption> : null}
+                {member.user_id === session?.userId ? <Caption marginLeft="$1.5">you</Caption> : null}
               </Prim.Box>
               <Badge variant={member.role === 'editor' ? 'primary' : 'muted'}>{member.role}</Badge>
               {isEditor ? (

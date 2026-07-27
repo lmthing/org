@@ -12,6 +12,13 @@
 export const DROPDOWN_CONTENT_SHARED = {
   position: 'absolute',
   zIndex: 50,
+  // `width: auto` on an absolutely-positioned box shrink-wraps to the *containing*
+  // block (the trigger's own box, per `DROPDOWN_ROOT`'s `display: inline-block`)
+  // when neither `left` nor `right` is set — not to the menu's own content. An
+  // icon-only trigger is narrower than its menu, so items clipped silently. Web's
+  // first real consumer (the team surface) caught this; `width: max-content`
+  // sizes the panel to its own content instead, with `minWidth` as the floor.
+  width: 'max-content',
   minWidth: '$32',
   overflow: 'hidden',
   borderRadius: '$radius-md',
